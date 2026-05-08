@@ -4,6 +4,7 @@ import { persistentAtom } from "@nanostores/persistent"
 import {
   CORE_APP_IDS,
   DEFAULT_INSTALLED_APP_IDS,
+  PUBLISHED_BUILTIN_APP_IDS,
   isCoreAppId,
   isRemovedAppId,
   normalizeAppId,
@@ -12,6 +13,7 @@ import {
 export {
   CORE_APP_IDS,
   DEFAULT_INSTALLED_APP_IDS,
+  PUBLISHED_BUILTIN_APP_IDS,
   normalizeAppId,
 }
 

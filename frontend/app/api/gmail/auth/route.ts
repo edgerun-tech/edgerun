@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { runtimeEnv } from "@/lib/server-runtime-env"
 
 const GMAIL_SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
@@ -7,8 +8,8 @@ const GMAIL_SCOPES = [
 ]
 
 export async function GET(req: NextRequest) {
-  const clientId = process.env.GMAIL_CLIENT_ID
-  const redirectUri = process.env.GMAIL_REDIRECT_URI ||
+  const clientId = await runtimeEnv("GMAIL_CLIENT_ID")
+  const redirectUri = await runtimeEnv("GMAIL_REDIRECT_URI") ||
     `${req.nextUrl.origin}/api/gmail/callback`
 
   if (!clientId) {

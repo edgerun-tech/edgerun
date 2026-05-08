@@ -66,8 +66,10 @@ export const CommandPalette = () => {
   }, [messages]);
 
   React.useEffect(() => {
-    if (open) setTimeout(() => inputRef.current?.focus(), 50);
-  }, [open]);
+    if (!open || loading) return;
+    const timeout = window.setTimeout(() => inputRef.current?.focus(), 50);
+    return () => window.clearTimeout(timeout);
+  }, [open, loading]);
 
   React.useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -81,8 +83,9 @@ export const CommandPalette = () => {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  const sendMessage = async () => {
-    if (!input.trim()) return;
+  const sendMessage = React.useCallback(async (overrideInput?: string) => {
+    const userMsg = (overrideInput ?? input).trim();
+    if (!userMsg) return;
     if (serverOk === false) {
       setMessages((prev) => [...prev, {
         id: `m-${Date.now()}`,
@@ -93,7 +96,6 @@ export const CommandPalette = () => {
       return;
     }
 
-    const userMsg = input.trim();
     setInput("");
     setMessages((prev) => [...prev, { id: `u-${Date.now()}`, role: "user", content: userMsg, timestamp: new Date() }]);
     setLoading(true);
@@ -124,7 +126,24 @@ export const CommandPalette = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [input, messages, serverOk]);
+
+  React.useEffect(() => {
+    const handler = (event: Event) => {
+      const detail = (event as CustomEvent<{ message?: string; submit?: boolean }>).detail;
+      const message = detail?.message?.trim();
+      setOpen(true);
+      if (!message) return;
+      setInput(message);
+      window.setTimeout(() => inputRef.current?.focus(), 50);
+      if (detail?.submit) {
+        window.setTimeout(() => void sendMessage(message), 0);
+      }
+    };
+
+    window.addEventListener("edgerun:assistant-input", handler);
+    return () => window.removeEventListener("edgerun:assistant-input", handler);
+  }, [sendMessage]);
 
   const renderContent = (content: string) => {
     return content.split("\n").map((line, i) => line ? (
@@ -192,7 +211,7 @@ export const CommandPalette = () => {
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
                       e.preventDefault();
-                      sendMessage();
+                      void sendMessage();
                     }
                   }}
                   placeholder="Ask anything..."
@@ -201,7 +220,7 @@ export const CommandPalette = () => {
                   disabled={loading}
                 />
                 <button
-                  onClick={sendMessage}
+                  onClick={() => void sendMessage()}
                   disabled={!input.trim() || loading}
                   className="p-1.5 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
                 >

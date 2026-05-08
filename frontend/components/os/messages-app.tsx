@@ -8,6 +8,7 @@ import { useAuth, type ContactRecord, type LocalQueuedMessage, type UnlockedProf
 type MessagesAppProps = {
   onClose: () => void
   initialRecipientId?: string
+  surface?: "modal" | "embedded"
 }
 
 type OpenedMessage = {
@@ -41,7 +42,7 @@ function senderName(profile: UnlockedProfileContainer, message: LocalQueuedMessa
   return profile.contacts.find((contact) => contact.identityIdHex === message.fromId)?.label ?? "Contact"
 }
 
-export function MessagesApp({ onClose, initialRecipientId }: MessagesAppProps) {
+export function MessagesApp({ onClose, initialRecipientId, surface = "modal" }: MessagesAppProps) {
   const auth = useAuth()
   const profile = auth.unlockedProfile as UnlockedProfileContainer | null
   const [activeContactId, setActiveContactId] = useState(initialRecipientId ?? "")
@@ -93,16 +94,23 @@ export function MessagesApp({ onClose, initialRecipientId }: MessagesAppProps) {
   }
 
   return (
-    <div className="fixed left-1/2 top-1/2 z-40 flex h-[calc(100vh-6rem)] max-h-[680px] w-[calc(100vw-2rem)] max-w-[980px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border bg-background/96 shadow-2xl backdrop-blur-xl">
-      <div className="flex h-12 flex-shrink-0 items-center justify-between border-b border-[var(--window-border)] px-4 sm:h-14 sm:px-5">
-        <div className="flex items-center gap-2">
-          <Send className="h-4 w-4 text-primary" />
-          <span className="text-sm font-medium text-foreground">Messages</span>
+    <div className={cn(
+      "flex flex-col overflow-hidden bg-background/96",
+      surface === "modal"
+        ? "fixed left-1/2 top-1/2 z-40 h-[calc(100vh-6rem)] max-h-[680px] w-[calc(100vw-2rem)] max-w-[980px] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border shadow-2xl backdrop-blur-xl"
+        : "h-full min-h-0",
+    )}>
+      {surface === "modal" ? (
+        <div className="flex h-12 flex-shrink-0 items-center justify-between border-b border-[var(--window-border)] px-4 sm:h-14 sm:px-5">
+          <div className="flex items-center gap-2">
+            <Send className="h-4 w-4 text-primary" />
+            <span className="text-sm font-medium text-foreground">Messages</span>
+          </div>
+          <button onClick={onClose} className="rounded-md border border-border bg-background/80 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground" aria-label="Close Messages">
+            Close
+          </button>
         </div>
-        <button onClick={onClose} className="rounded-md border border-border bg-background/80 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground" aria-label="Close Messages">
-          Close
-        </button>
-      </div>
+      ) : null}
 
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <div className="flex h-32 flex-shrink-0 flex-col border-b border-[var(--window-border)] py-2 md:h-auto md:w-48 md:border-b-0 md:border-r">

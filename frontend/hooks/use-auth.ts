@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useRef } from "react"
 import { useStore } from "@nanostores/react"
 import {
   authStore,
@@ -9,6 +10,7 @@ import {
   registerAuth,
   authenticateAuth,
   authenticateWithWebAuthn,
+  resumeSessionAuth,
   continueAsGuest,
   lockAuth,
   signOutAuth,
@@ -18,12 +20,16 @@ import {
   switchProfile,
   createNestedSealedContainer,
   createProfileNode,
+  publishBrowserNodeRelayRoute,
   addContactToProfile,
+  saveContactToProfile,
   openLocalQueuedMessage,
   updateProfilePreferences,
   bindWebAuthnToProfile,
   saveGmailProfileSecret,
   removeGmailProfileSecret,
+  saveOAuthProfileSecret,
+  removeOAuthProfileSecret,
   type AuthState,
   type NodeProvisionInput,
   type StoredNodeRegistration,
@@ -33,15 +39,27 @@ import {
   type RoutedSealedEnvelope,
   type ProfileSummary,
   type LocalQueuedMessage,
+  type NodeRelayPublishResult,
   type ProfilePreferences,
   type ProfileEvent,
   type GmailProfileSecret,
+  type GoogleDriveProfileSecret,
+  type GitHubProfileSecret,
+  type CloudflareProfileSecret,
+  type OAuthProfileSecret,
 } from "@/stores/auth-store"
 
-export type { AuthState, NodeProvisionInput, StoredNodeRegistration, UnlockedProfileContainer, SealedNestedContainer, ContactRecord, RoutedSealedEnvelope, ProfileSummary, LocalQueuedMessage, ProfilePreferences, ProfileEvent, GmailProfileSecret }
+export type { AuthState, NodeProvisionInput, StoredNodeRegistration, UnlockedProfileContainer, SealedNestedContainer, ContactRecord, RoutedSealedEnvelope, ProfileSummary, LocalQueuedMessage, NodeRelayPublishResult, ProfilePreferences, ProfileEvent, GmailProfileSecret, GoogleDriveProfileSecret, GitHubProfileSecret, CloudflareProfileSecret, OAuthProfileSecret }
 
 export function useAuth() {
   const store = useStore(authStore)
+  const resumeAttemptedRef = useRef(false)
+
+  useEffect(() => {
+    if (store.authState !== "locked" || resumeAttemptedRef.current) return
+    resumeAttemptedRef.current = true
+    void resumeSessionAuth()
+  }, [store.authState])
 
   return {
     authState: store.authState,
@@ -59,6 +77,7 @@ export function useAuth() {
     register: registerAuth,
     authenticate: authenticateAuth,
     authenticateWithWebAuthn,
+    resumeSession: resumeSessionAuth,
     continueAsGuest,
     lock: lockAuth,
     signOut: signOutAuth,
@@ -67,13 +86,17 @@ export function useAuth() {
     importProfile: importProfileContainer,
     switchProfile,
     createNode: createProfileNode,
+    publishNodeRelayRoute: publishBrowserNodeRelayRoute,
     createSealedContainer: createNestedSealedContainer,
     addContact: addContactToProfile,
+    saveContact: saveContactToProfile,
     openLocalMessage: openLocalQueuedMessage,
     updateProfilePreferences,
     bindWebAuthn: bindWebAuthnToProfile,
     saveGmailSecret: saveGmailProfileSecret,
     removeGmailSecret: removeGmailProfileSecret,
+    saveOAuthSecret: saveOAuthProfileSecret,
+    removeOAuthSecret: removeOAuthProfileSecret,
   }
 }
 

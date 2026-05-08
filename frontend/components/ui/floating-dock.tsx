@@ -187,7 +187,8 @@ const FloatingDockDesktop = ({
 
   useEffect(() => {
     if (page !== "command") return;
-    inputRef.current?.focus();
+    const frame = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
   }, [page]);
 
   useEffect(() => {
@@ -338,7 +339,7 @@ const FloatingDockDesktop = ({
           )}
         </AnimatePresence>
 
-        <div className="pointer-events-none absolute left-1/2 top-[calc(100%+6px)] flex -translate-x-1/2 items-center gap-1.5" role="tablist" aria-label="Dock pages">
+        <div className="pointer-events-none absolute left-1/2 top-[calc(100%+12px)] flex -translate-x-1/2 items-center gap-1.5" role="tablist" aria-label="Dock pages">
           {hasPeoplePage && <span className={cn("h-1.5 w-1.5 rounded-full transition-colors", page === "people" ? "bg-primary" : "bg-muted-foreground/35")} role="tab" aria-selected={page === "people"} aria-label="People" />}
           <span className={cn("h-1.5 w-1.5 rounded-full transition-colors", page === "launcher" ? "bg-primary" : "bg-muted-foreground/35")} role="tab" aria-selected={page === "launcher"} aria-label="Launcher" />
           <span className={cn("h-1.5 w-1.5 rounded-full transition-colors", page === "command" ? "bg-primary" : "bg-muted-foreground/35")} role="tab" aria-selected={page === "command"} aria-label="Command" />

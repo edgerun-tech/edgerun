@@ -4,10 +4,10 @@ import { useState } from "react"
 import { Users, MessageSquare, Phone } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { ContactsApp } from "@/components/os/contacts-app"
-import { DemoChatApp } from "@/components/os/chat-app"
+import { MessagesApp } from "@/components/os/messages-app"
 import { CallingApp } from "@/components/os/calling-app"
 
-type PeopleTab = "contacts" | "messages" | "calls"
+export type PeopleTab = "contacts" | "messages" | "calls"
 
 const TABS: { id: PeopleTab; label: string; icon: React.ReactNode }[] = [
   { id: "contacts", label: "Contacts", icon: <Users className="h-3.5 w-3.5" /> },
@@ -15,8 +15,15 @@ const TABS: { id: PeopleTab; label: string; icon: React.ReactNode }[] = [
   { id: "calls", label: "Calls", icon: <Phone className="h-3.5 w-3.5" /> },
 ]
 
-export function PeopleApp() {
-  const [tab, setTab] = useState<PeopleTab>("contacts")
+export function PeopleApp({
+  initialTab = "contacts",
+  initialRecipientId,
+}: {
+  initialTab?: PeopleTab
+  initialRecipientId?: string
+}) {
+  const [tab, setTab] = useState<PeopleTab>(initialTab)
+  const [recipientId, setRecipientId] = useState(initialRecipientId)
 
   return (
     <div className="flex h-full flex-col bg-background text-foreground">
@@ -42,10 +49,13 @@ export function PeopleApp() {
         {tab === "contacts" && (
           <ContactsApp
             onCall={() => setTab("calls")}
-            onMessage={() => setTab("messages")}
+            onMessage={(contact) => {
+              setRecipientId(contact.identityIdHex)
+              setTab("messages")
+            }}
           />
         )}
-        {tab === "messages" && <DemoChatApp />}
+        {tab === "messages" && <MessagesApp surface="embedded" onClose={() => setTab("contacts")} initialRecipientId={recipientId} />}
         {tab === "calls" && <CallingApp />}
       </div>
     </div>

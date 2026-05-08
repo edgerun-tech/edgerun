@@ -1,7 +1,7 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import { ChevronRight, Copy, Fingerprint, Mail, MessageSquare, Plus, Search, User, UserPlus, X } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import { ChevronRight, Copy, Fingerprint, Mail, MessageSquare, Plus, Save, Search, User, UserPlus, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth, type ContactRecord, type UnlockedProfileContainer } from "@/hooks/use-auth"
 
@@ -44,10 +44,12 @@ function Avatar({ name, size = "md" }: { name: string; size?: "sm" | "md" | "lg"
 }
 
 function routeLabel(contact: ContactRecord) {
+  if (contact.routeHint === "address-book") return "Address book"
   return contact.routeHint === "local-profile" ? "Local profile" : "Network contact"
 }
 
 function shortId(value: string) {
+  if (value.length <= 22) return value
   return `${value.slice(0, 12)}...${value.slice(-6)}`
 }
 
@@ -61,6 +63,12 @@ export function ContactsApp({ onClose, onMessage }: ContactsAppProps) {
   const [contactLabel, setContactLabel] = useState("")
   const [contactPublicKey, setContactPublicKey] = useState("")
   const [localProfileId, setLocalProfileId] = useState("")
+  const [editPassword, setEditPassword] = useState("")
+  const [editLabel, setEditLabel] = useState("")
+  const [editEmail, setEditEmail] = useState("")
+  const [editPhone, setEditPhone] = useState("")
+  const [editNodeIds, setEditNodeIds] = useState("")
+  const [editNotes, setEditNotes] = useState("")
 
   const contacts = useMemo(() => {
     if (!profile) return []
@@ -70,6 +78,9 @@ export function ContactsApp({ onClose, onMessage }: ContactsAppProps) {
       .filter((contact) => (
         !normalizedQuery
         || contact.label.toLowerCase().includes(normalizedQuery)
+        || contact.email?.toLowerCase().includes(normalizedQuery)
+        || contact.phone?.toLowerCase().includes(normalizedQuery)
+        || contact.knownNodeIds?.some((nodeId) => nodeId.toLowerCase().includes(normalizedQuery))
         || routeLabel(contact).toLowerCase().includes(normalizedQuery)
       ))
   }, [profile, query])
@@ -83,11 +94,28 @@ export function ContactsApp({ onClose, onMessage }: ContactsAppProps) {
     ))
   }, [auth.profileSummaries, profile])
 
-  if (!profile) return null
-
   const selected = contacts.find((contact) => contact.identityIdHex === selectedId) ?? contacts[0] ?? null
+  const selectedCanMessage = Boolean(selected?.publicKeyRawBase64)
   const canAddLocal = Boolean(password && localProfileOptions.length > 0)
   const canAddExternal = Boolean(password && contactPublicKey.trim())
+  const canSaveSelected = Boolean(selected && editPassword && editLabel.trim())
+  const selectedContactId = selected?.id
+  const selectedLabel = selected?.label ?? ""
+  const selectedEmail = selected?.email ?? ""
+  const selectedPhone = selected?.phone ?? ""
+  const selectedNodeIds = selected?.knownNodeIds?.join("\n") ?? ""
+  const selectedNotes = selected?.notes ?? ""
+
+  useEffect(() => {
+    if (!selectedContactId) return
+    setEditLabel(selectedLabel)
+    setEditEmail(selectedEmail)
+    setEditPhone(selectedPhone)
+    setEditNodeIds(selectedNodeIds)
+    setEditNotes(selectedNotes)
+  }, [selectedContactId, selectedLabel, selectedEmail, selectedPhone, selectedNotes, selectedNodeIds])
+
+  if (!profile) return null
 
   async function addLocalProfileContact() {
     const local = localProfileOptions.find((item) => item.profileId === localProfileId) ?? localProfileOptions[0]
@@ -112,6 +140,20 @@ export function ContactsApp({ onClose, onMessage }: ContactsAppProps) {
     setContactPublicKey("")
   }
 
+  async function saveSelectedContact() {
+    if (!selected) return
+    const ok = await auth.saveContact({
+      ...selected,
+      label: editLabel,
+      email: editEmail,
+      phone: editPhone,
+      knownNodeIds: editNodeIds.split(/\r?\n|,/).map((item) => item.trim()).filter(Boolean),
+      notes: editNotes,
+      password: editPassword,
+    })
+    if (ok) setEditPassword("")
+  }
+
   async function copyMyContact() {
     if (!profile) return
     await navigator.clipboard.writeText(contactCard(profile.handle, profile.ownerEncryption.publicKeyRawBase64))
@@ -119,7 +161,7 @@ export function ContactsApp({ onClose, onMessage }: ContactsAppProps) {
 
   const app = (
     <div className="flex h-full min-h-0 flex-col bg-background text-foreground md:flex-row">
-      <div className="flex h-[42%] min-h-0 flex-shrink-0 flex-col border-b border-[var(--window-border)] md:h-auto md:w-64 md:border-b-0 md:border-r">
+      <div className="flex h-[42%] min-h-0 flex-shrink-0 flex-col border-b border-[var(--window-border)] md:h-auto md:w-72 md:border-b-0 md:border-r">
         <div className="flex items-center gap-2 border-b border-[var(--window-border)] p-3">
           <div className="relative flex-1">
             <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -200,14 +242,16 @@ export function ContactsApp({ onClose, onMessage }: ContactsAppProps) {
               key={contact.identityIdHex}
               onClick={() => setSelectedId(contact.identityIdHex)}
               className={cn(
-                "flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-secondary/70",
+                "flex w-full items-center gap-2 px-2.5 py-1.5 text-left transition-colors hover:bg-secondary/70",
                 selected?.identityIdHex === contact.identityIdHex && "bg-secondary",
               )}
             >
               <Avatar name={contact.label} size="sm" />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-xs font-medium text-foreground">{contact.label}</p>
-                <p className="truncate text-[10px] text-muted-foreground">{routeLabel(contact)}</p>
+                <p className="truncate text-[10px] text-muted-foreground">
+                  {contact.email || contact.knownNodeIds?.[0] || routeLabel(contact)}
+                </p>
               </div>
               {selected?.identityIdHex === contact.identityIdHex && <ChevronRight className="h-3 w-3 flex-shrink-0 text-primary" />}
             </button>
@@ -227,7 +271,8 @@ export function ContactsApp({ onClose, onMessage }: ContactsAppProps) {
 
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto p-4 sm:p-6">
         {selected ? (
-          <div className="flex w-full max-w-md flex-col items-center gap-4">
+          <div className="grid w-full max-w-2xl gap-4 lg:grid-cols-[220px_1fr]">
+            <div className="flex flex-col items-center gap-4 rounded-lg border border-[var(--window-border)] bg-card/55 p-4">
             <Avatar name={selected.label} size="lg" />
             <div className="text-center">
               <h2 className="text-lg font-semibold text-foreground">{selected.label}</h2>
@@ -241,11 +286,20 @@ export function ContactsApp({ onClose, onMessage }: ContactsAppProps) {
                 <p className="font-mono text-xs text-foreground">{shortId(selected.identityIdHex)}</p>
               </div>
             </div>
+            {selected.knownNodeIds?.length ? (
+              <div className="w-full rounded-lg bg-secondary/50 px-3 py-2">
+                <p className="mb-1 text-[10px] text-muted-foreground">Known node IDs</p>
+                <div className="space-y-1">
+                  {selected.knownNodeIds.map((nodeId) => <p key={nodeId} className="truncate font-mono text-[10px] text-foreground">{nodeId}</p>)}
+                </div>
+              </div>
+            ) : null}
 
             <div className="flex w-full gap-2">
               <button
                 onClick={() => onMessage?.(selected)}
-                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-medium text-primary-foreground transition-colors hover:opacity-90"
+                disabled={!selectedCanMessage}
+                className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-xs font-medium text-primary-foreground transition-colors hover:opacity-90 disabled:opacity-40"
               >
                 <MessageSquare className="h-3.5 w-3.5" />
                 Message
@@ -257,6 +311,25 @@ export function ContactsApp({ onClose, onMessage }: ContactsAppProps) {
                 <Mail className="h-3.5 w-3.5" />
                 Email me
               </button>
+            </div>
+
+            {!selectedCanMessage && <p className="text-center text-[11px] text-muted-foreground">Add an Edgerun public key before encrypted messaging.</p>}
+            </div>
+
+            <div className="space-y-2 rounded-lg border border-[var(--window-border)] bg-card/55 p-4">
+              <div className="mb-3 text-xs font-semibold text-foreground">Edit contact</div>
+              <input value={editLabel} onChange={(event) => setEditLabel(event.target.value)} placeholder="Name" className="h-8 w-full rounded-md bg-secondary px-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-primary" />
+              <input value={editEmail} onChange={(event) => setEditEmail(event.target.value)} placeholder="Email" className="h-8 w-full rounded-md bg-secondary px-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-primary" />
+              <input value={editPhone} onChange={(event) => setEditPhone(event.target.value)} placeholder="Phone" className="h-8 w-full rounded-md bg-secondary px-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-primary" />
+              <textarea value={editNodeIds} onChange={(event) => setEditNodeIds(event.target.value)} placeholder="Known node IDs, one per line" className="min-h-20 w-full rounded-md bg-secondary px-2 py-2 font-mono text-[11px] text-foreground outline-none focus:ring-1 focus:ring-primary" />
+              <textarea value={editNotes} onChange={(event) => setEditNotes(event.target.value)} placeholder="Notes" className="min-h-16 w-full rounded-md bg-secondary px-2 py-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-primary" />
+              <div className="flex gap-2">
+                <input value={editPassword} onChange={(event) => setEditPassword(event.target.value)} type="password" placeholder="Profile password" className="h-8 min-w-0 flex-1 rounded-md bg-secondary px-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-primary" />
+                <button onClick={saveSelectedContact} disabled={!canSaveSelected || auth.isLoading} className="flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground disabled:opacity-40">
+                  <Save className="h-3.5 w-3.5" />
+                  Save
+                </button>
+              </div>
             </div>
           </div>
         ) : (

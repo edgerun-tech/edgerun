@@ -13,6 +13,11 @@ name = "edged"
 path = "src/main.rs"
 required-features = ["std"]
 
+[[bin]]
+name = "edgerun-server"
+path = "src/bin/edgerun-server.rs"
+required-features = ["std", "http", "smtp", "imap", "dns"]
+
 [features]
 std = ["edgerun-tpm/std"]
 default = [
@@ -129,7 +134,7 @@ edgerun-mesh = { version = "0.1", path = "../../mesh/edgerun-mesh" }
 edgerun-mesh-link = { version = "0.1", path = "../../mesh/edgerun-mesh-link" }
 edgerun-mesh-capability = { version = "0.1", path = "../../capability/edgerun-mesh-capability" }
 edgerun-mesh-session = { version = "0.1", path = "../../mesh/edgerun-mesh-session" }
-edgerun-crypto = { workspace = true, default-features = false, features = ["ed25519"] }
+edgerun-crypto = { workspace = true, default-features = false, features = ["ed25519", "p256"] }
 edgerun-log = { version = "0.1", path = "../../utility/edgerun-log" }
 edgerun-platform = { version = "0.1", path = "../../edgerun-platform" }
 edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-hardware-signing", default-features = false }

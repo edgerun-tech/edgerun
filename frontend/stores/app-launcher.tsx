@@ -16,6 +16,11 @@ import { isAppInstalled } from "@/stores/installed-apps-store"
 import { getMissingCapabilities } from "@/stores/local-capability-grants-store"
 import type { AppDefinition } from "@/platform/types/app-definition"
 
+function notifyAppSurfaceOpening(appId: string) {
+  if (typeof window === "undefined") return
+  window.dispatchEvent(new CustomEvent("edgerun:app-surface-opening", { detail: { appId } }))
+}
+
 export function getAppIcon(appId: string): React.ReactNode {
   const app = getBuiltinApp(appId)
   if (app) {
@@ -65,6 +70,8 @@ export function launchApp(app: AppDefinition, component?: React.ReactNode): AppS
     component = plan.component
     addLog("info", `${app.name} runtime: ${plan.runtime}`)
   }
+
+  notifyAppSurfaceOpening(app.appId)
 
   const surfaceId = `surface-${app.appId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 

@@ -25,6 +25,7 @@ import {
   installApp,
   uninstallApp,
   isCoreApp,
+  PUBLISHED_BUILTIN_APP_IDS,
   normalizeAppId,
 } from "@/stores/installed-apps-store"
 import {
@@ -120,7 +121,7 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
     const merged = new Map<string, AppDefinition>()
     for (const app of catalogAppState) merged.set(app.appId, app)
     for (const app of listBuiltinApps()) {
-      if (isCoreApp(app.appId)) merged.set(app.appId, app)
+      if ((PUBLISHED_BUILTIN_APP_IDS as readonly string[]).includes(normalizeAppId(app.appId))) merged.set(app.appId, app)
     }
     return Array.from(merged.values()).sort((a, b) => appGroupRank(a) - appGroupRank(b) || a.name.localeCompare(b.name))
   }, [catalogAppState])
@@ -205,12 +206,12 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
               <span className="h-1 w-1 rounded-full bg-border" />
               <span>{normalizedInstalledIds.length} installed</span>
               <span className="h-1 w-1 rounded-full bg-border" />
-              <span>edgerun-node verified</span>
+          <span>sealed profile keys</span>
             </div>
           </div>
         </div>
         <div className="w-fit rounded-md border border-border bg-secondary/35 px-3 py-1.5 text-[11px] font-medium text-muted-foreground sm:mr-16">
-          CLI submissions only
+          Verified catalog plus sealed-profile apps
         </div>
       </div>
 
@@ -384,6 +385,9 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
                 )}
 
                 <SectionTitle>Permissions</SectionTitle>
+                <div className="mb-2 rounded-md border border-border bg-secondary/25 px-3 py-2 text-xs leading-5 text-muted-foreground">
+                  Install records stay in this browser. OAuth keys for Google apps are saved only after you unlock and reseal your Trust Container; packaged catalog apps are hash-checked through edgerun-node before launch.
+                </div>
                 <div className="flex flex-wrap gap-2">
                   {selectedApp.requiredCapabilityIds.length > 0 ? capabilityChips(selectedApp, selectedInstalled) : (
                     <span className="text-xs text-muted-foreground">No required capabilities</span>

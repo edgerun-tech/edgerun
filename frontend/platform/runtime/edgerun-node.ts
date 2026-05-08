@@ -1,5 +1,7 @@
 "use client"
 
+import { atom } from "nanostores"
+
 type EdgerunNodeExports = WebAssembly.Exports & {
   memory: WebAssembly.Memory
   edgerun_node_alloc(len: number): number
@@ -21,8 +23,25 @@ const encoder = new TextEncoder()
 const decoder = new TextDecoder()
 const EDGERUN_NODE_WASM_PATH = "/runtime/edgerun_node.wasm"
 
+export type EdgerunNodeRuntimeStatus = {
+  state: "idle" | "loading" | "ready" | "error"
+  wasmPath: string
+  loadedAtIso?: string
+  instantiateMs?: number
+  exports: string[]
+  error?: string
+}
+
+export const edgerunNodeRuntimeStore = atom<EdgerunNodeRuntimeStatus>({
+  state: "idle",
+  wasmPath: EDGERUN_NODE_WASM_PATH,
+  exports: [],
+})
+
 async function loadEdgerunNode(): Promise<EdgerunNodeExports> {
   if (!exportsPromise) {
+    const started = performance.now()
+    edgerunNodeRuntimeStore.set({ state: "loading", wasmPath: EDGERUN_NODE_WASM_PATH, exports: [] })
     exportsPromise = WebAssembly.instantiateStreaming(fetch(EDGERUN_NODE_WASM_PATH), {})
       .then((result) => result.instance.exports as EdgerunNodeExports)
       .catch(async () => {
@@ -30,8 +49,33 @@ async function loadEdgerunNode(): Promise<EdgerunNodeExports> {
         const result = await WebAssembly.instantiate(bytes, {})
         return result.instance.exports as EdgerunNodeExports
       })
+      .then((node) => {
+        edgerunNodeRuntimeStore.set({
+          state: "ready",
+          wasmPath: EDGERUN_NODE_WASM_PATH,
+          loadedAtIso: new Date().toISOString(),
+          instantiateMs: performance.now() - started,
+          exports: Object.keys(node),
+        })
+        return node
+      })
+      .catch((error) => {
+        exportsPromise = null
+        edgerunNodeRuntimeStore.set({
+          state: "error",
+          wasmPath: EDGERUN_NODE_WASM_PATH,
+          exports: [],
+          error: error instanceof Error ? error.message : String(error),
+        })
+        throw error
+      })
   }
   return exportsPromise
+}
+
+export async function ensureEdgerunNodeRuntime(): Promise<EdgerunNodeRuntimeStatus> {
+  await loadEdgerunNode()
+  return edgerunNodeRuntimeStore.get()
 }
 
 function readLastJsonResult<T>(node: EdgerunNodeExports): T {

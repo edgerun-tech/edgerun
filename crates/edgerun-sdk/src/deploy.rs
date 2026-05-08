@@ -261,7 +261,7 @@ pub(crate) fn build_edgerun_server_for_remote() -> Result<PathBuf, String> {
             "edgerun-server",
             "--no-default-features",
             "--features",
-            "std,smtp,imap,dns,tls,acme",
+            "std,http,smtp,imap,dns,tls,acme",
             "--release",
             "--target",
             target,

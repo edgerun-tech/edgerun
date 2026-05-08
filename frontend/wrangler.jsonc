@@ -20,6 +20,16 @@
       "binding": "GMAIL_CLIENT_SECRET",
       "store_id": "c7add8f0635f44b7a9b154c4715bbd94",
       "secret_name": "GMAIL_CLIENT_SECRET"
+    },
+    {
+      "binding": "GITHUB_OAUTH_ID",
+      "store_id": "c7add8f0635f44b7a9b154c4715bbd94",
+      "secret_name": "GITHUB_OAUTH_ID"
+    },
+    {
+      "binding": "GITHUB_OAUTH_SECRET",
+      "store_id": "c7add8f0635f44b7a9b154c4715bbd94",
+      "secret_name": "GITHUB_OAUTH_SECRET"
     }
   ],
   "observability": {

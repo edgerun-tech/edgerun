@@ -170,7 +170,7 @@ export function AuthOverlay({
                 <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Locked</p>
                 <h2 className="mt-1 text-base font-semibold text-foreground">Open your profile</h2>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Select a profile and enter its password.
+                  Select a profile and enter its password. A recent unlock can survive one refresh for about 30 seconds in this tab.
                 </p>
               </div>
               {profileSummaries.length > 0 && (

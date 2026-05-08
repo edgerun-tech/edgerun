@@ -1,0 +1,290 @@
+"use client"
+
+import { useCallback, useEffect, useState } from "react"
+import { AlertCircle, CheckCircle2, ExternalLink, FileText, Folder, LogOut, RefreshCw, ShieldCheck } from "lucide-react"
+import { cn } from "@/lib/utils"
+import { useAuth, type OAuthProfileSecret } from "@/hooks/use-auth"
+
+type PendingDriveSecret = Omit<OAuthProfileSecret, "appId" | "kind" | "updatedAtIso">
+
+type DriveFile = {
+  id: string
+  name: string
+  mimeType: string
+  modifiedTime?: string
+  size?: string
+  webViewLink?: string
+}
+
+function readCookie(name: string): string | null {
+  const prefix = `${name}=`
+  return document.cookie.split("; ").find((cookie) => cookie.startsWith(prefix))?.slice(prefix.length) ?? null
+}
+
+function deleteCookie(name: string) {
+  document.cookie = `${name}=; Max-Age=0; path=/`
+}
+
+function readPendingDriveSecret(): PendingDriveSecret | null {
+  const raw = readCookie("google_drive_profile_pending")
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(atob(raw.replace(/-/g, "+").replace(/_/g, "/"))) as PendingDriveSecret
+    return parsed.accessToken && parsed.expiresAtIso ? { ...parsed, scopes: parsed.scopes ?? [] } : null
+  } catch {
+    deleteCookie("google_drive_profile_pending")
+    return null
+  }
+}
+
+async function restoreDriveSession(secret: PendingDriveSecret): Promise<boolean> {
+  const res = await fetch("/api/google-drive/session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(secret),
+  })
+  return res.ok
+}
+
+function GoogleMark({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+    </svg>
+  )
+}
+
+function formatBytes(value?: string): string {
+  const bytes = Number(value ?? 0)
+  if (!Number.isFinite(bytes) || bytes <= 0) return "folder or Google doc"
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+export function GoogleDriveApp({ className }: { className?: string }) {
+  const auth = useAuth()
+  const savedSecret = auth.unlockedProfile?.appSecrets.find((secret) => secret.appId === "google-drive")
+  const [connected, setConnected] = useState<boolean | null>(null)
+  const [email, setEmail] = useState("")
+  const [files, setFiles] = useState<DriveFile[]>([])
+  const [pendingSecret, setPendingSecret] = useState<PendingDriveSecret | null>(null)
+  const [profilePassword, setProfilePassword] = useState("")
+  const [nextPage, setNextPage] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const fetchFiles = useCallback(async (pageToken?: string) => {
+    setLoading(true)
+    setError(null)
+    try {
+      const url = new URL("/api/google-drive/files", window.location.origin)
+      if (pageToken) url.searchParams.set("pageToken", pageToken)
+      const res = await fetch(url.toString())
+      const data = await res.json()
+      if (res.status === 401 && data.needReauth) {
+        setConnected(false)
+        setError("Google Drive session expired. Reconnect or save a fresh secret to your profile.")
+        return
+      }
+      if (!res.ok) {
+        setError(data.error || "Failed to fetch Google Drive files")
+        return
+      }
+      setFiles((current) => pageToken ? [...current, ...(data.files ?? [])] : (data.files ?? []))
+      setNextPage(data.nextPageToken ?? null)
+      setConnected(true)
+    } catch (err) {
+      setError(`Failed to fetch Google Drive files: ${err}`)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    const pending = readPendingDriveSecret()
+    if (pending) {
+      setPendingSecret(pending)
+      setEmail(pending.email)
+    }
+    const connectedParam = new URLSearchParams(window.location.search)
+    if (connectedParam.get("google_drive_connected") === "true") {
+      setConnected(true)
+      window.history.replaceState({}, "", "/")
+      void fetchFiles()
+    } else if (connectedParam.get("google_drive_error")) {
+      setError(`OAuth error: ${connectedParam.get("google_drive_error")}`)
+      window.history.replaceState({}, "", "/")
+    }
+  }, [fetchFiles])
+
+  useEffect(() => {
+    if (connected !== false || !savedSecret) return
+    let cancelled = false
+    async function restore() {
+      if (!savedSecret) return
+      setLoading(true)
+      setError(null)
+      try {
+        const ok = await restoreDriveSession(savedSecret)
+        if (cancelled) return
+        if (ok) {
+          setEmail(savedSecret.email)
+          setConnected(true)
+          await fetchFiles()
+        }
+      } catch (err) {
+        if (!cancelled) setError(`Saved Drive session restore failed: ${err}`)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    void restore()
+    return () => {
+      cancelled = true
+    }
+  }, [connected, fetchFiles, savedSecret])
+
+  useEffect(() => {
+    if (connected !== null) return
+    const emailCookie = readCookie("google_drive_email")
+    if (emailCookie) setEmail(decodeURIComponent(emailCookie))
+    setConnected(Boolean(emailCookie || savedSecret || pendingSecret))
+  }, [connected, pendingSecret, savedSecret])
+
+  const connect = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch("/api/google-drive/auth")
+      const data = await res.json()
+      if (data.authUrl) window.location.href = data.authUrl
+      else setError(data.error || "Failed to start Google Drive connection")
+    } catch (err) {
+      setError(`Connection failed: ${err}`)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const savePendingSecret = useCallback(async () => {
+    if (!pendingSecret || !profilePassword) return
+    const ok = await auth.saveOAuthSecret({ appId: "google-drive", password: profilePassword, secret: pendingSecret })
+    if (ok) {
+      await restoreDriveSession(pendingSecret)
+      deleteCookie("google_drive_profile_pending")
+      setPendingSecret(null)
+      setProfilePassword("")
+      setConnected(true)
+      setEmail(pendingSecret.email)
+      await fetchFiles()
+    }
+  }, [auth, fetchFiles, pendingSecret, profilePassword])
+
+  const removeSavedSecret = useCallback(async () => {
+    if (!profilePassword) return
+    const ok = await auth.removeOAuthSecret("google-drive", profilePassword)
+    if (ok) setProfilePassword("")
+  }, [auth, profilePassword])
+
+  const disconnect = useCallback(() => {
+    void fetch("/api/google-drive/session", { method: "DELETE" })
+    deleteCookie("google_drive_profile_pending")
+    setConnected(false)
+    setEmail("")
+    setFiles([])
+    setPendingSecret(null)
+  }, [])
+
+  if (connected === null) {
+    return <div className="flex h-full items-center justify-center"><RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+  }
+
+  if (!connected) {
+    return (
+      <div className={cn("flex h-full items-center justify-center bg-background p-6", className)}>
+        <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-sm">
+          <div className="mb-4 flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-md bg-background ring-1 ring-border"><GoogleMark className="h-6 w-6" /></div>
+            <div>
+              <h2 className="text-base font-semibold text-foreground">Connect Google Drive</h2>
+              <p className="text-xs text-muted-foreground">Drive tokens can be sealed into your Trust Container after Google returns consent.</p>
+            </div>
+          </div>
+          <div className="mb-4 space-y-2 rounded-md border border-border bg-background/70 p-3 text-xs">
+            <div className="flex items-center gap-2"><ShieldCheck className="h-3.5 w-3.5 text-primary" /> EdgeRun asks Google for Drive browse access and app-file write access.</div>
+            <div className="flex items-center gap-2"><CheckCircle2 className="h-3.5 w-3.5 text-[var(--status-online)]" /> Save the refresh token only inside your encrypted profile container.</div>
+            <div className="flex items-center gap-2 text-muted-foreground"><ExternalLink className="h-3.5 w-3.5" /> Google hosts the final consent screen.</div>
+          </div>
+          {error && <div className="mb-4 flex items-center gap-2 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive"><AlertCircle className="h-3.5 w-3.5" />{error}</div>}
+          <button onClick={connect} disabled={loading} className="flex h-11 w-full items-center justify-center gap-2 rounded-md border border-border bg-background text-sm font-medium text-foreground hover:bg-secondary disabled:opacity-50">
+            {loading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <GoogleMark className="h-4 w-4" />}
+            Continue with Google
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className={cn("flex h-full flex-col bg-background", className)}>
+      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <GoogleMark className="h-4 w-4 shrink-0" />
+          <span className="truncate text-sm font-medium text-foreground">{email || "Google Drive"}</span>
+        </div>
+        <button onClick={disconnect} className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground" title="Disconnect Google session">
+          <LogOut className="h-3.5 w-3.5" />
+          Disconnect
+        </button>
+      </div>
+      <div className="border-b border-border px-4 py-2 text-[11px] text-muted-foreground">
+        {savedSecret ? "Refresh token saved in sealed profile" : "Connected for this browser session"} · Drive, Contacts, and Photos Picker scopes
+      </div>
+      {pendingSecret && (
+        <div className="border-b border-border bg-primary/5 p-3">
+          <div className="mb-1 text-xs font-medium text-foreground">Save Google Drive secret to Trust Container</div>
+          <p className="mb-2 text-[11px] leading-4 text-muted-foreground">Your profile password decrypts and reseals the local container. The refresh token is removed from the temporary browser cookie after saving.</p>
+          <input value={profilePassword} onChange={(event) => setProfilePassword(event.target.value)} type="password" placeholder="Profile password" className="mb-2 h-8 w-full rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary" />
+          <button onClick={savePendingSecret} disabled={!profilePassword || auth.isLoading} className="w-full rounded-md bg-primary px-2 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-45">Save to Trust Container</button>
+        </div>
+      )}
+      {savedSecret && !pendingSecret && (
+        <div className="border-b border-border p-3">
+          <div className="mb-2 text-xs font-medium text-foreground">Saved Google secret</div>
+          <p className="mb-2 text-[11px] leading-4 text-muted-foreground">Disconnect clears this browser session for Drive, Contacts, and Photos. Removing the saved secret also deletes the refresh token copy sealed in your Trust Container.</p>
+          <input value={profilePassword} onChange={(event) => setProfilePassword(event.target.value)} type="password" placeholder="Profile password to remove saved Google secret" className="mb-2 h-8 w-full rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary" />
+          <button onClick={removeSavedSecret} disabled={!profilePassword || auth.isLoading} className="w-full rounded-md border border-border bg-secondary/50 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground disabled:opacity-45">Remove saved Drive secret</button>
+        </div>
+      )}
+      <div className="flex items-center gap-2 border-b border-border px-4 py-2">
+        <button onClick={() => fetchFiles()} disabled={loading} className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-50">
+          <RefreshCw className={cn("h-3 w-3", loading && "animate-spin")} />{loading ? "Loading..." : "Refresh"}
+        </button>
+      </div>
+      {error && <div className="m-3 flex items-center gap-2 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive"><AlertCircle className="h-3.5 w-3.5" />{error}</div>}
+      <div className="min-h-0 flex-1 overflow-auto p-3">
+        {files.length === 0 && !loading ? <p className="p-6 text-center text-xs text-muted-foreground">No Drive files loaded yet</p> : null}
+        <div className="grid gap-2">
+          {files.map((file) => {
+            const folder = file.mimeType === "application/vnd.google-apps.folder"
+            const Icon = folder ? Folder : FileText
+            return (
+              <a key={file.id} href={file.webViewLink} target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-md border border-border bg-card p-3 hover:bg-secondary/45">
+                <Icon className="h-4 w-4 shrink-0 text-primary" />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium text-foreground">{file.name}</div>
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">{formatBytes(file.size)} · {file.modifiedTime ? new Date(file.modifiedTime).toLocaleString() : "modified time unavailable"}</div>
+                </div>
+                <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              </a>
+            )
+          })}
+        </div>
+        {nextPage && <button onClick={() => fetchFiles(nextPage)} disabled={loading} className="mt-3 w-full rounded-md border border-border py-2 text-center text-xs text-primary hover:bg-secondary disabled:opacity-50">Load more</button>}
+      </div>
+    </div>
+  )
+}

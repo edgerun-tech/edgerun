@@ -50,6 +50,26 @@ const GmailApp = dynamic(
   () => import("@/components/os/gmail-app").then((mod) => mod.GmailApp),
   { ssr: false, loading: LoadingApp },
 )
+const GoogleDriveApp = dynamic(
+  () => import("@/components/os/google-drive-app").then((mod) => mod.GoogleDriveApp),
+  { ssr: false, loading: LoadingApp },
+)
+const GooglePhotosApp = dynamic(
+  () => import("@/components/os/google-photos-app").then((mod) => mod.GooglePhotosApp),
+  { ssr: false, loading: LoadingApp },
+)
+const GoogleContactsApp = dynamic(
+  () => import("@/components/os/google-contacts-app").then((mod) => mod.GoogleContactsApp),
+  { ssr: false, loading: LoadingApp },
+)
+const GitHubApp = dynamic(
+  () => import("@/components/os/github-app").then((mod) => mod.GitHubApp),
+  { ssr: false, loading: LoadingApp },
+)
+const CloudflareApp = dynamic(
+  () => import("@/components/os/cloudflare-app").then((mod) => mod.CloudflareApp),
+  { ssr: false, loading: LoadingApp },
+)
 const SettingsApp = dynamic(
   () => import("@/components/os/settings-app").then((mod) => mod.SettingsApp),
   { ssr: false, loading: LoadingApp },
@@ -92,6 +112,16 @@ export function BuiltinAppHost({ app, onLaunchApp }: BuiltinAppHostProps) {
       return <StorageDashboard />
     case "gmail":
       return <GmailApp />
+    case "google-drive":
+      return <GoogleDriveApp />
+    case "google-photos":
+      return <GooglePhotosApp />
+    case "google-contacts":
+      return <GoogleContactsApp />
+    case "github":
+      return <GitHubApp />
+    case "cloudflare":
+      return <CloudflareApp />
     case "settings":
       return <SettingsApp />
     case "compute-node":

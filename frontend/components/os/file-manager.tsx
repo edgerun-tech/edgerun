@@ -1,174 +1,240 @@
 "use client"
 
-import { useState, useRef, useCallback, useEffect } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import type React from "react"
 import {
-  Folder, FileText, FileImage, FileVideo, FileAudio, FileCode, FileArchive,
-  ChevronRight, ChevronDown, Grid3x3, List, ArrowLeft, ArrowRight, ArrowUp,
-  Search, Star, HardDrive, Home, Trash2, Copy, Scissors, Clipboard, Eye,
-  MoreHorizontal, RefreshCw, SortAsc, Info, Download, Upload,
+  ArrowLeft,
+  ArrowUp,
+  Cloud,
+  Database,
+  Download,
+  Eye,
+  FileArchive,
+  FileAudio,
+  FileCode,
+  FileImage,
+  FileText,
+  FileVideo,
+  Folder,
+  HardDrive,
+  Info,
+  MemoryStick,
+  Plus,
+  RefreshCw,
+  Save,
+  Search,
+  Upload,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 
-// ─── Types ──────────────────────────────────────────────────────────────────
-
+type ProviderId = "drive" | "browser-fs" | "local-storage" | "memory"
 type FileType = "folder" | "text" | "image" | "video" | "audio" | "code" | "archive" | "unknown"
+type ViewMode = "grid" | "list"
 
-interface FSEntry {
+type FSEntry = {
   id: string
   name: string
   type: FileType
   size?: string
   modified: string
-  children?: FSEntry[]
-  preview?: string   // data url or description for preview panel
-  starred?: boolean
+  preview?: string
   mimeHint?: string
+  webUrl?: string
+  downloadUrl?: string
+  handle?: FileSystemHandle
 }
 
-type ViewMode = "grid" | "list"
-type SortKey = "name" | "modified" | "type" | "size"
+type StoredNode = {
+  id: string
+  name: string
+  kind: "folder" | "file"
+  updatedAtIso: string
+  mime?: string
+  content?: string
+  children?: StoredNode[]
+}
 
-// ─── Mock Filesystem ─────────────────────────────────────────────────────────
+type DriveFile = {
+  id: string
+  name: string
+  mimeType: string
+  modifiedTime?: string
+  size?: string
+  webViewLink?: string
+  webContentLink?: string
+}
 
-const FS_ROOT: FSEntry[] = [
-  {
-    id: "home", name: "Home", type: "folder", modified: "2026-04-28", children: [
-      {
-        id: "docs", name: "Documents", type: "folder", modified: "2026-04-27", children: [
-          { id: "doc1", name: "whitepaper.md", type: "text", size: "14 KB", modified: "2026-04-26", preview: "# Edgerun Whitepaper\n\nEdgerun is a distributed WASI runtime for edge compute. Nodes are authenticated via WebAuthn biometrics and communicate over encrypted WebRTC channels...", mimeHint: "text/markdown" },
-          { id: "doc2", name: "onboarding.txt", type: "text", size: "3 KB", modified: "2026-04-20", preview: "Welcome to Edgerun.\n\nThis guide walks you through your first deployment.", mimeHint: "text/plain" },
-          { id: "doc3", name: "LICENSE", type: "text", size: "1 KB", modified: "2026-01-01", preview: "MIT License\n\nCopyright (c) 2026 Edgerun", mimeHint: "text/plain" },
-        ]
-      },
-      {
-        id: "images", name: "Images", type: "folder", modified: "2026-04-25", children: [
-          { id: "img1", name: "globe-render.png", type: "image", size: "2.4 MB", modified: "2026-04-24", preview: "globe-render" },
-          { id: "img2", name: "node-diagram.svg", type: "image", size: "48 KB", modified: "2026-04-22", preview: "node-diagram" },
-          { id: "img3", name: "screenshot.jpg", type: "image", size: "1.1 MB", modified: "2026-04-18", preview: "screenshot" },
-        ]
-      },
-      {
-        id: "projects", name: "Projects", type: "folder", modified: "2026-04-29", children: [
-          {
-            id: "proj1", name: "edge-agent", type: "folder", modified: "2026-04-29", children: [
-              { id: "main-rs", name: "main.rs", type: "code", size: "8 KB", modified: "2026-04-29", preview: 'use wasmtime::*;\n\nfn main() -> anyhow::Result<()> {\n    let engine = Engine::default();\n    let module = Module::from_file(&engine, "agent.wasm")?;\n    // ...\n    Ok(())\n}', mimeHint: "text/rust" },
-              { id: "cargo", name: "Cargo.toml", type: "code", size: "1 KB", modified: "2026-04-28", preview: '[package]\nname = "edge-agent"\nversion = "0.1.0"\nedition = "2021"', mimeHint: "text/toml" },
-              { id: "agent-wasm", name: "agent.wasm", type: "archive", size: "312 KB", modified: "2026-04-29" },
-            ]
-          },
-          { id: "deploy-sh", name: "deploy.sh", type: "code", size: "2 KB", modified: "2026-04-27", preview: "#!/bin/bash\nset -e\necho 'Deploying edge agent...'\nedgerun push ./agent.wasm --nodes 12", mimeHint: "text/bash" },
-        ]
-      },
-      {
-        id: "media", name: "Media", type: "folder", modified: "2026-04-10", children: [
-          { id: "vid1", name: "demo-call.mp4", type: "video", size: "48 MB", modified: "2026-04-10" },
-          { id: "aud1", name: "ambient.wav", type: "audio", size: "22 MB", modified: "2026-03-30" },
-        ]
-      },
-      { id: "readme", name: "README.md", type: "text", size: "2 KB", modified: "2026-04-29", preview: "# My Edgerun Workspace\n\nThis is my personal edge compute workspace.", starred: true },
-    ]
-  },
-  {
-    id: "system", name: "System", type: "folder", modified: "2026-04-01", children: [
-      { id: "runtime", name: "runtime.wasm", type: "archive", size: "1.2 MB", modified: "2026-04-01" },
-      { id: "config-json", name: "config.json", type: "code", size: "4 KB", modified: "2026-04-28", preview: '{\n  "nodeId": "edge-0xdeadbeef",\n  "region": "eu-west",\n  "maxRAM": "2GB",\n  "peers": 12\n}', mimeHint: "application/json" },
-    ]
-  },
-  {
-    id: "trash", name: "Trash", type: "folder", modified: "2026-04-15", children: [
-      { id: "old-log", name: "old-log.txt", type: "text", size: "88 KB", modified: "2026-04-15" },
-    ]
-  },
+const LOCAL_STORAGE_KEY = "edgerun:file-manager:local-storage:v1"
+
+const PROVIDERS: Array<{ id: ProviderId; label: string; icon: React.ReactNode; detail: string }> = [
+  { id: "drive", label: "Google Drive", icon: <Cloud className="h-3.5 w-3.5" />, detail: "OAuth session" },
+  { id: "browser-fs", label: "Browser FS", icon: <HardDrive className="h-3.5 w-3.5" />, detail: "picked folder" },
+  { id: "local-storage", label: "Local Storage", icon: <Database className="h-3.5 w-3.5" />, detail: "persistent browser store" },
+  { id: "memory", label: "Memory", icon: <MemoryStick className="h-3.5 w-3.5" />, detail: "temporary workspace" },
 ]
 
-// ─── Icon helper ─────────────────────────────────────────────────────────────
+function nowIso() {
+  return new Date().toISOString()
+}
 
-function FileIcon({ type, className }: { type: FileType; className?: string }) {
-  const cls = cn("shrink-0", className)
-  switch (type) {
-    case "folder": return <Folder className={cn(cls, "text-[oklch(0.7_0.18_80)]")} />
-    case "image":  return <FileImage className={cn(cls, "text-[oklch(0.6_0.2_270)]")} />
-    case "video":  return <FileVideo className={cn(cls, "text-[oklch(0.6_0.2_310)]")} />
-    case "audio":  return <FileAudio className={cn(cls, "text-[oklch(0.65_0.2_200)]")} />
-    case "code":   return <FileCode className={cn(cls, "text-primary")} />
-    case "archive":return <FileArchive className={cn(cls, "text-[oklch(0.65_0.18_45)]")} />
-    default:       return <FileText className={cn(cls, "text-muted-foreground")} />
+function defaultTree(): StoredNode {
+  return {
+    id: "root",
+    name: "Workspace",
+    kind: "folder",
+    updatedAtIso: nowIso(),
+    children: [
+      {
+        id: "readme",
+        name: "README.md",
+        kind: "file",
+        updatedAtIso: nowIso(),
+        mime: "text/markdown",
+        content: "# EdgeRun File Manager\n\nUse the source picker to browse Drive, a local folder, localStorage, or memory.",
+      },
+      {
+        id: "notes",
+        name: "Notes",
+        kind: "folder",
+        updatedAtIso: nowIso(),
+        children: [
+          {
+            id: "first-note",
+            name: "first-note.txt",
+            kind: "file",
+            updatedAtIso: nowIso(),
+            mime: "text/plain",
+            content: "This file is stored by the selected provider.",
+          },
+        ],
+      },
+    ],
   }
 }
 
-// ─── Preview Panel ────────────────────────────────────────────────────────────
+function safeId(name: string) {
+  return `${name.toLowerCase().replace(/[^a-z0-9._-]+/g, "-")}-${crypto.randomUUID().slice(0, 8)}`
+}
+
+function fileType(name: string, mime = ""): FileType {
+  const lower = name.toLowerCase()
+  if (mime.includes("folder")) return "folder"
+  if (mime.startsWith("image/") || /\.(png|jpg|jpeg|gif|webp|svg)$/.test(lower)) return "image"
+  if (mime.startsWith("video/") || /\.(mp4|mov|webm|mkv)$/.test(lower)) return "video"
+  if (mime.startsWith("audio/") || /\.(mp3|wav|flac|ogg)$/.test(lower)) return "audio"
+  if (/\.(ts|tsx|js|jsx|rs|go|py|json|toml|yaml|yml|css|html|md|sh)$/.test(lower)) return "code"
+  if (/\.(txt|log|csv)$/.test(lower) || mime.startsWith("text/")) return "text"
+  if (/\.(zip|tar|gz|wasm|bin)$/.test(lower)) return "archive"
+  return "unknown"
+}
+
+function formatBytes(bytes?: number | string): string | undefined {
+  const value = typeof bytes === "string" ? Number(bytes) : bytes
+  if (!Number.isFinite(value ?? NaN)) return undefined
+  if ((value ?? 0) < 1024) return `${value} B`
+  if ((value ?? 0) < 1024 * 1024) return `${((value ?? 0) / 1024).toFixed(1)} KB`
+  return `${((value ?? 0) / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function nodeToEntry(node: StoredNode): FSEntry {
+  const size = node.kind === "file" ? new TextEncoder().encode(node.content ?? "").byteLength : undefined
+  return {
+    id: node.id,
+    name: node.name,
+    type: node.kind === "folder" ? "folder" : fileType(node.name, node.mime),
+    size: formatBytes(size),
+    modified: new Date(node.updatedAtIso).toLocaleString(),
+    preview: node.content,
+    mimeHint: node.mime,
+  }
+}
+
+function childrenAt(root: StoredNode, path: string[]): StoredNode[] {
+  let current = root
+  for (const segment of path) {
+    const next = current.children?.find((child) => child.id === segment)
+    if (!next || next.kind !== "folder") return current.children ?? []
+    current = next
+  }
+  return current.children ?? []
+}
+
+function mutateChildren(root: StoredNode, path: string[], fn: (children: StoredNode[]) => StoredNode[]): StoredNode {
+  if (path.length === 0) return { ...root, children: fn(root.children ?? []), updatedAtIso: nowIso() }
+  const [head, ...tail] = path
+  return {
+    ...root,
+    children: (root.children ?? []).map((child) => {
+      if (child.id !== head || child.kind !== "folder") return child
+      return mutateChildren(child, tail, fn)
+    }),
+    updatedAtIso: nowIso(),
+  }
+}
+
+function loadLocalTree(): StoredNode {
+  if (typeof window === "undefined") return defaultTree()
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(LOCAL_STORAGE_KEY) ?? "null") as StoredNode | null
+    return parsed?.kind === "folder" ? parsed : defaultTree()
+  } catch {
+    return defaultTree()
+  }
+}
+
+function FileIcon({ type, className }: { type: FileType; className?: string }) {
+  const cls = cn("shrink-0", className)
+  if (type === "folder") return <Folder className={cn(cls, "text-[oklch(0.7_0.18_80)]")} />
+  if (type === "image") return <FileImage className={cn(cls, "text-[oklch(0.6_0.2_270)]")} />
+  if (type === "video") return <FileVideo className={cn(cls, "text-[oklch(0.6_0.2_310)]")} />
+  if (type === "audio") return <FileAudio className={cn(cls, "text-[oklch(0.65_0.2_200)]")} />
+  if (type === "code") return <FileCode className={cn(cls, "text-primary")} />
+  if (type === "archive") return <FileArchive className={cn(cls, "text-[oklch(0.65_0.18_45)]")} />
+  return <FileText className={cn(cls, "text-muted-foreground")} />
+}
 
 function PreviewPanel({ entry }: { entry: FSEntry | null }) {
   if (!entry) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
         <Eye className="h-10 w-10 opacity-20" />
-        <span className="text-xs">Select a file to preview</span>
+        <span className="text-xs">Select a file</span>
       </div>
     )
   }
-
-  const isText = ["text", "code"].includes(entry.type) && entry.preview
-  const isImage = entry.type === "image"
-  const isMedia = ["video", "audio"].includes(entry.type)
-
   return (
     <div className="flex h-full flex-col">
-      {/* Header */}
       <div className="flex items-center gap-2 border-b border-[var(--window-border)] p-3">
         <FileIcon type={entry.type} className="h-5 w-5" />
         <div className="min-w-0">
           <p className="truncate text-sm font-medium text-foreground">{entry.name}</p>
-          <p className="text-[10px] text-muted-foreground">{entry.size ?? "—"} · {entry.modified}</p>
+          <p className="text-[10px] text-muted-foreground">{entry.size ?? "folder or remote file"} · {entry.modified}</p>
         </div>
       </div>
-
-      {/* Content */}
-      <div className="flex-1 overflow-auto p-3">
-        {isText && (
-          <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-muted-foreground">
-            {entry.preview}
-          </pre>
-        )}
-        {isImage && (
-          <div className="flex h-full flex-col items-center justify-center gap-3">
-            <div className="flex h-32 w-full items-center justify-center rounded-lg bg-secondary/30">
-              <FileImage className="h-12 w-12 text-muted-foreground/30" />
-            </div>
-            <span className="text-[10px] text-muted-foreground">{entry.name}</span>
-          </div>
-        )}
-        {isMedia && (
-          <div className="flex h-full flex-col items-center justify-center gap-2">
+      <div className="min-h-0 flex-1 overflow-auto p-3">
+        {entry.preview ? (
+          <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-muted-foreground">{entry.preview}</pre>
+        ) : entry.webUrl ? (
+          <a href={entry.webUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs text-primary hover:bg-secondary">
+            Open remote file
+          </a>
+        ) : (
+          <div className="flex h-full flex-col items-center justify-center gap-2 text-muted-foreground">
             <FileIcon type={entry.type} className="h-12 w-12 opacity-30" />
-            <span className="text-[10px] text-muted-foreground">{entry.type === "video" ? "Video file" : "Audio file"}</span>
-            <span className="text-[10px] text-muted-foreground">{entry.size}</span>
-          </div>
-        )}
-        {entry.type === "folder" && (
-          <div className="flex h-full flex-col items-center justify-center gap-2">
-            <Folder className="h-12 w-12 text-[oklch(0.7_0.18_80)]/30" />
-            <span className="text-[10px] text-muted-foreground">{entry.children?.length ?? 0} items</span>
-          </div>
-        )}
-        {entry.type === "archive" && (
-          <div className="flex h-full flex-col items-center justify-center gap-2">
-            <FileArchive className="h-12 w-12 opacity-30" />
-            <span className="text-[10px] text-muted-foreground">{entry.size}</span>
+            <span className="text-[10px]">No inline preview</span>
           </div>
         )}
       </div>
-
-      {/* Info rows */}
-      <div className="border-t border-[var(--window-border)] p-3 space-y-1">
+      <div className="space-y-1 border-t border-[var(--window-border)] p-3">
         {[
           ["Kind", entry.type],
-          ["Size", entry.size ?? "—"],
+          ["Size", entry.size ?? "-"],
           ["Modified", entry.modified],
-        ].map(([k, v]) => (
-          <div key={k} className="flex justify-between text-[10px]">
-            <span className="text-muted-foreground">{k}</span>
-            <span className="text-foreground font-mono">{v}</span>
+          ["MIME", entry.mimeHint ?? "-"],
+        ].map(([key, value]) => (
+          <div key={key} className="flex justify-between gap-3 text-[10px]">
+            <span className="text-muted-foreground">{key}</span>
+            <span className="truncate font-mono text-foreground">{value}</span>
           </div>
         ))}
       </div>
@@ -176,361 +242,393 @@ function PreviewPanel({ entry }: { entry: FSEntry | null }) {
   )
 }
 
-// ─── Context Menu ─────────────────────────────────────────────────────────────
+export function FileManager() {
+  const [provider, setProvider] = useState<ProviderId>("local-storage")
+  const [view, setView] = useState<ViewMode>("grid")
+  const [search, setSearch] = useState("")
+  const [selected, setSelected] = useState<string | null>(null)
+  const [path, setPath] = useState<string[]>([])
+  const [status, setStatus] = useState("")
+  const [memoryTree, setMemoryTree] = useState<StoredNode>(() => defaultTree())
+  const [localTree, setLocalTree] = useState<StoredNode>(() => loadLocalTree())
+  const [browserRoot, setBrowserRoot] = useState<FileSystemDirectoryHandle | null>(null)
+  const [browserPath, setBrowserPath] = useState<FileSystemDirectoryHandle[]>([])
+  const [browserEntries, setBrowserEntries] = useState<FSEntry[]>([])
+  const [driveFolderId, setDriveFolderId] = useState("root")
+  const [driveCrumbs, setDriveCrumbs] = useState<Array<{ id: string; name: string }>>([{ id: "root", name: "My Drive" }])
+  const [driveEntries, setDriveEntries] = useState<FSEntry[]>([])
+  const [loading, setLoading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-interface ContextMenuState { x: number; y: number; entry: FSEntry | null }
-
-function ContextMenu({
-  state, onClose, onAction,
-}: {
-  state: ContextMenuState
-  onClose: () => void
-  onAction: (action: string, entry: FSEntry | null) => void
-}) {
-  const ref = useRef<HTMLDivElement>(null)
+  const tree = provider === "memory" ? memoryTree : localTree
+  const treeEntries = useMemo(() => childrenAt(tree, path).map(nodeToEntry), [path, tree])
+  const entries = provider === "drive" ? driveEntries : provider === "browser-fs" ? browserEntries : treeEntries
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase()
+    return entries
+      .filter((entry) => !term || entry.name.toLowerCase().includes(term))
+      .sort((a, b) => (a.type === "folder" && b.type !== "folder" ? -1 : a.type !== "folder" && b.type === "folder" ? 1 : a.name.localeCompare(b.name)))
+  }, [entries, search])
+  const selectedEntry = filtered.find((entry) => entry.id === selected) ?? null
 
   useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    window.localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(localTree))
+  }, [localTree])
+
+  const loadDrive = useCallback(async (folderId = driveFolderId) => {
+    setLoading(true)
+    setStatus("")
+    try {
+      const url = new URL("/api/google-drive/files", window.location.origin)
+      url.searchParams.set("folderId", folderId)
+      if (search.trim()) url.searchParams.set("q", search.trim())
+      const res = await fetch(url)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Drive request failed")
+      setDriveEntries((data.files ?? []).map((file: DriveFile) => ({
+        id: file.id,
+        name: file.name,
+        type: file.mimeType === "application/vnd.google-apps.folder" ? "folder" : fileType(file.name, file.mimeType),
+        size: formatBytes(file.size),
+        modified: file.modifiedTime ? new Date(file.modifiedTime).toLocaleString() : "unknown",
+        mimeHint: file.mimeType,
+        webUrl: file.webViewLink,
+        downloadUrl: file.webContentLink,
+      })))
+      setStatus(`Loaded ${data.files?.length ?? 0} Drive item${data.files?.length === 1 ? "" : "s"}`)
+    } catch (error) {
+      setDriveEntries([])
+      setStatus(error instanceof Error ? error.message : String(error))
+    } finally {
+      setLoading(false)
     }
-    document.addEventListener("mousedown", handler)
-    return () => document.removeEventListener("mousedown", handler)
-  }, [onClose])
+  }, [driveFolderId, search])
 
-  const isFolder = state.entry?.type === "folder"
-
-  const items = state.entry ? [
-    { label: "Open", icon: <Eye className="h-3.5 w-3.5" />, action: "open" },
-    { label: "Get Info", icon: <Info className="h-3.5 w-3.5" />, action: "info" },
-    null,
-    ...(state.entry.starred
-      ? [{ label: "Unstar", icon: <Star className="h-3.5 w-3.5" />, action: "unstar" }]
-      : [{ label: "Star", icon: <Star className="h-3.5 w-3.5" />, action: "star" }]
-    ),
-    null,
-    { label: "Copy", icon: <Copy className="h-3.5 w-3.5" />, action: "copy" },
-    { label: "Cut", icon: <Scissors className="h-3.5 w-3.5" />, action: "cut" },
-    { label: isFolder ? "Compress Folder" : "Download", icon: <Download className="h-3.5 w-3.5" />, action: "download" },
-    null,
-    { label: "Move to Trash", icon: <Trash2 className="h-3.5 w-3.5" />, action: "trash", danger: true },
-  ] : [
-    { label: "New Folder", icon: <Folder className="h-3.5 w-3.5" />, action: "new-folder" },
-    { label: "New File", icon: <FileText className="h-3.5 w-3.5" />, action: "new-file" },
-    null,
-    { label: "Paste", icon: <Clipboard className="h-3.5 w-3.5" />, action: "paste" },
-    { label: "Upload Here", icon: <Upload className="h-3.5 w-3.5" />, action: "upload" },
-    null,
-    { label: "Refresh", icon: <RefreshCw className="h-3.5 w-3.5" />, action: "refresh" },
-    { label: "Sort By", icon: <SortAsc className="h-3.5 w-3.5" />, action: "sort" },
-  ]
-
-  return (
-    <div
-      ref={ref}
-      className="fixed z-[999] min-w-44 overflow-hidden rounded-lg border border-[var(--window-border)] bg-[var(--window-bg)]/95 py-1 shadow-2xl backdrop-blur-md"
-      style={{ left: state.x, top: state.y }}
-    >
-      {items.map((item, i) =>
-        item === null ? (
-          <div key={i} className="my-1 border-t border-[var(--window-border)]" />
-        ) : (
-          <button
-            key={item.action}
-            onClick={() => { onAction(item.action, state.entry); onClose() }}
-            className={cn(
-              "flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-xs transition-colors",
-              (item as any).danger
-                ? "text-destructive hover:bg-destructive/10"
-                : "text-foreground hover:bg-secondary"
-            )}
-          >
-            <span className="text-muted-foreground">{item.icon}</span>
-            {item.label}
-          </button>
-        )
-      )}
-    </div>
-  )
-}
-
-// ─── Sidebar ──────────────────────────────────────────────────────────────────
-
-function Sidebar({
-  starred, currentPath, onNavigate,
-}: {
-  starred: FSEntry[]
-  currentPath: string[]
-  onNavigate: (path: string[]) => void
-}) {
-  const sections = [
-    { label: "Locations", items: [
-      { icon: <Home className="h-3.5 w-3.5" />, label: "Home", path: ["home"] },
-      { icon: <HardDrive className="h-3.5 w-3.5" />, label: "System", path: ["system"] },
-      { icon: <Trash2 className="h-3.5 w-3.5" />, label: "Trash", path: ["trash"] },
-    ]},
-    ...(starred.length > 0 ? [{ label: "Starred", items: starred.map(e => ({
-      icon: <Star className="h-3.5 w-3.5 fill-current text-[oklch(0.75_0.18_80)]" />,
-      label: e.name,
-      path: ["home"],
-    }))}] : []),
-  ]
-
-  return (
-    <div className="flex h-full w-36 flex-col border-r border-[var(--window-border)] py-2">
-      {sections.map((sec) => (
-        <div key={sec.label} className="mb-3">
-          <p className="px-3 pb-1 font-mono text-[9px] font-semibold uppercase tracking-widest text-muted-foreground/60">
-            {sec.label}
-          </p>
-          {sec.items.map((item) => {
-            const active = JSON.stringify(currentPath) === JSON.stringify(item.path)
-            return (
-              <button
-                key={item.label}
-                onClick={() => onNavigate(item.path)}
-                className={cn(
-                  "flex w-full items-center gap-2 px-3 py-1.5 text-xs transition-colors",
-                  active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-secondary hover:text-foreground"
-                )}
-              >
-                {item.icon}
-                <span className="truncate">{item.label}</span>
-              </button>
-            )
-          })}
-        </div>
-      ))}
-    </div>
-  )
-}
-
-// ─── Main Component ───────────────────────────────────────────────────────────
-
-export function FileManager() {
-  const [view, setView] = useState<ViewMode>("grid")
-  const [path, setPath] = useState<string[]>(["home"])
-  const [history, setHistory] = useState<string[][]>([["home"]])
-  const [historyIdx, setHistoryIdx] = useState(0)
-  const [selected, setSelected] = useState<string | null>(null)
-  const [search, setSearch] = useState("")
-  const [sortKey, setSortKey] = useState<SortKey>("name")
-  const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null)
-  const [starred, setStarred] = useState<FSEntry[]>([])
-  const [statusMsg, setStatusMsg] = useState("")
-  const containerRef = useRef<HTMLDivElement>(null)
-
-  // Resolve current folder from path
-  const resolve = useCallback((p: string[]): FSEntry[] => {
-    let cur: FSEntry[] = FS_ROOT
-    for (const seg of p) {
-      const found = cur.find(e => e.id === seg)
-      if (!found || found.type !== "folder") return cur
-      cur = found.children ?? []
-    }
-    return cur
-  }, [])
-
-  const entries = resolve(path)
-
-  const filtered = entries
-    .filter(e => e.name.toLowerCase().includes(search.toLowerCase()))
-    .sort((a, b) => {
-      if (sortKey === "name") return a.name.localeCompare(b.name)
-      if (sortKey === "modified") return b.modified.localeCompare(a.modified)
-      if (sortKey === "type") return a.type.localeCompare(b.type)
-      return 0
-    })
-
-  const selectedEntry = filtered.find(e => e.id === selected) ?? null
-
-  const navigate = useCallback((newPath: string[]) => {
-    setPath(newPath)
-    setSelected(null)
-    const newHistory = history.slice(0, historyIdx + 1)
-    newHistory.push(newPath)
-    setHistory(newHistory)
-    setHistoryIdx(newHistory.length - 1)
-  }, [history, historyIdx])
-
-  const goBack = () => {
-    if (historyIdx > 0) { setHistoryIdx(i => i - 1); setPath(history[historyIdx - 1]); setSelected(null) }
-  }
-  const goForward = () => {
-    if (historyIdx < history.length - 1) { setHistoryIdx(i => i + 1); setPath(history[historyIdx + 1]); setSelected(null) }
-  }
-  const goUp = () => { if (path.length > 1) navigate(path.slice(0, -1)) }
-
-  const handleOpen = (entry: FSEntry) => {
-    if (entry.type === "folder") navigate([...path, entry.id])
-    else setSelected(entry.id)
-  }
-
-  const handleContextMenu = useCallback((e: React.MouseEvent, entry: FSEntry | null) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setContextMenu({ x: e.clientX, y: e.clientY, entry })
-  }, [])
-
-  const handleContextAction = (action: string, entry: FSEntry | null) => {
-    if (!entry) {
-      if (action === "refresh") setStatusMsg("Refreshed")
+  const loadBrowserDirectory = useCallback(async (handle?: FileSystemDirectoryHandle | null) => {
+    const dir = handle ?? browserPath.at(-1) ?? browserRoot
+    if (!dir) {
+      setBrowserEntries([])
       return
     }
-    if (action === "open") handleOpen(entry)
-    else if (action === "star") {
-      setStarred(s => [...s.filter(e => e.id !== entry.id), { ...entry, starred: true }])
-      setStatusMsg(`Starred "${entry.name}"`)
-    } else if (action === "unstar") {
-      setStarred(s => s.filter(e => e.id !== entry.id))
-      setStatusMsg(`Unstarred "${entry.name}"`)
-    } else if (action === "trash") {
-      setStatusMsg(`"${entry.name}" moved to Trash`)
-    } else if (action === "copy") {
-      setStatusMsg(`Copied "${entry.name}"`)
-    } else if (action === "download") {
-      setStatusMsg(`Downloading "${entry.name}"`)
+    setLoading(true)
+    try {
+      const next: FSEntry[] = []
+      for await (const child of dir.values()) {
+        const file = child.kind === "file" ? await (child as FileSystemFileHandle).getFile() : null
+        next.push({
+          id: child.name,
+          name: child.name,
+          type: child.kind === "directory" ? "folder" : fileType(child.name, file?.type ?? ""),
+          size: formatBytes(file?.size),
+          modified: file ? new Date(file.lastModified).toLocaleString() : "folder",
+          mimeHint: file?.type,
+          handle: child,
+        })
+      }
+      setBrowserEntries(next)
+      setStatus(`Loaded ${next.length} browser filesystem item${next.length === 1 ? "" : "s"}`)
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error))
+    } finally {
+      setLoading(false)
     }
+  }, [browserPath, browserRoot])
+
+  useEffect(() => {
+    if (provider === "drive") void loadDrive()
+  }, [provider, loadDrive])
+
+  useEffect(() => {
+    if (provider === "browser-fs") void loadBrowserDirectory()
+  }, [provider, loadBrowserDirectory])
+
+  const switchProvider = (nextProvider: ProviderId) => {
+    setProvider(nextProvider)
+    setPath([])
+    setSelected(null)
+    setSearch("")
+    setStatus("")
   }
 
-  // Breadcrumb labels
-  const breadcrumb = path.map(seg => {
-    const find = (list: FSEntry[]): string => {
-      for (const e of list) { if (e.id === seg) return e.name; if (e.children) { const r = find(e.children); if (r) return r } }
-      return seg
+  const openEntry = async (entry: FSEntry) => {
+    setSelected(entry.id)
+    if (provider === "drive") {
+      if (entry.type === "folder") {
+        setDriveFolderId(entry.id)
+        setDriveCrumbs((crumbs) => [...crumbs, { id: entry.id, name: entry.name }])
+        await loadDrive(entry.id)
+      } else if (entry.webUrl) {
+        window.open(entry.webUrl, "_blank", "noreferrer")
+      }
+      return
     }
-    return find(FS_ROOT)
-  })
+    if (provider === "browser-fs") {
+      if (entry.type === "folder" && entry.handle?.kind === "directory") {
+        const dir = entry.handle as FileSystemDirectoryHandle
+        setBrowserPath((current) => [...current, dir])
+        await loadBrowserDirectory(dir)
+      } else if (entry.handle?.kind === "file") {
+        const file = await (entry.handle as FileSystemFileHandle).getFile()
+        if (entry.type === "text" || entry.type === "code") {
+          setBrowserEntries((current) => current.map((item) => item.id === entry.id ? { ...item, preview: file.size < 512_000 ? undefined : "File is too large for inline preview." } : item))
+          const text = file.size < 512_000 ? await file.text() : "File is too large for inline preview."
+          setBrowserEntries((current) => current.map((item) => item.id === entry.id ? { ...item, preview: text } : item))
+        }
+      }
+      return
+    }
+    if (entry.type === "folder") setPath((current) => [...current, entry.id])
+  }
+
+  const goUp = async () => {
+    setSelected(null)
+    if (provider === "drive") {
+      if (driveCrumbs.length <= 1) return
+      const next = driveCrumbs.slice(0, -1)
+      setDriveCrumbs(next)
+      setDriveFolderId(next[next.length - 1].id)
+      await loadDrive(next[next.length - 1].id)
+      return
+    }
+    if (provider === "browser-fs") {
+      const next = browserPath.slice(0, -1)
+      setBrowserPath(next)
+      await loadBrowserDirectory(next.at(-1) ?? browserRoot)
+      return
+    }
+    if (path.length > 0) setPath((current) => current.slice(0, -1))
+  }
+
+  const chooseBrowserFolder = async () => {
+    if (!("showDirectoryPicker" in window)) {
+      setStatus("This browser does not expose the File System Access API.")
+      return
+    }
+    const handle = await window.showDirectoryPicker({ mode: "readwrite" })
+    setBrowserRoot(handle)
+    setBrowserPath([])
+    await loadBrowserDirectory(handle)
+  }
+
+  const updateTree = (fn: (root: StoredNode) => StoredNode) => {
+    if (provider === "memory") setMemoryTree(fn)
+    if (provider === "local-storage") setLocalTree(fn)
+  }
+
+  const createFolder = async () => {
+    const name = window.prompt("Folder name")
+    if (!name) return
+    if (provider === "browser-fs") {
+      const dir = browserPath.at(-1) ?? browserRoot
+      if (!dir) return setStatus("Pick a browser folder first.")
+      await dir.getDirectoryHandle(name, { create: true })
+      await loadBrowserDirectory(dir)
+      return
+    }
+    if (provider === "drive") {
+      const form = new FormData()
+      form.set("action", "create-folder")
+      form.set("folderId", driveFolderId)
+      form.set("name", name)
+      const res = await fetch("/api/google-drive/files", { method: "POST", body: form })
+      const data = await res.json().catch(() => null)
+      if (!res.ok) return setStatus(data?.error || "Drive folder create failed")
+      await loadDrive()
+      return
+    }
+    updateTree((root) => mutateChildren(root, path, (children) => [...children, { id: safeId(name), name, kind: "folder", updatedAtIso: nowIso(), children: [] }]))
+  }
+
+  const createFile = async () => {
+    const name = window.prompt("File name")
+    if (!name) return
+    const content = window.prompt("Initial content") ?? ""
+    if (provider === "browser-fs") {
+      const dir = browserPath.at(-1) ?? browserRoot
+      if (!dir) return setStatus("Pick a browser folder first.")
+      const handle = await dir.getFileHandle(name, { create: true })
+      const writable = await handle.createWritable()
+      await writable.write(content)
+      await writable.close()
+      await loadBrowserDirectory(dir)
+      return
+    }
+    if (provider === "drive") {
+      const file = new File([content], name, { type: "text/plain" })
+      await uploadFileArray([file])
+      return
+    }
+    updateTree((root) => mutateChildren(root, path, (children) => [...children, { id: safeId(name), name, kind: "file", mime: "text/plain", content, updatedAtIso: nowIso() }]))
+  }
+
+  const uploadFileArray = async (files: File[]) => {
+    if (!files.length) return
+    if (provider === "drive") {
+      setLoading(true)
+      try {
+        for (const file of files) {
+          const form = new FormData()
+          form.set("folderId", driveFolderId)
+          form.set("file", file)
+          const res = await fetch("/api/google-drive/files", { method: "POST", body: form })
+          const data = await res.json().catch(() => null)
+          if (!res.ok) throw new Error(data?.error || `Drive upload failed for ${file.name}`)
+        }
+        await loadDrive()
+        setStatus(`Uploaded ${files.length} file${files.length === 1 ? "" : "s"} to Drive`)
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : String(error))
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+    if (provider === "browser-fs") {
+      const dir = browserPath.at(-1) ?? browserRoot
+      if (!dir) return setStatus("Pick a browser folder first.")
+      for (const file of Array.from(files)) {
+        const handle = await dir.getFileHandle(file.name, { create: true })
+        const writable = await handle.createWritable()
+        await writable.write(file)
+        await writable.close()
+      }
+      await loadBrowserDirectory(dir)
+      return
+    }
+    const nodes = await Promise.all(files.map(async (file) => ({
+      id: safeId(file.name),
+      name: file.name,
+      kind: "file" as const,
+      mime: file.type || "application/octet-stream",
+      content: file.size < 512_000 ? await file.text().catch(() => "") : `[binary file: ${file.name}]`,
+      updatedAtIso: nowIso(),
+    })))
+    updateTree((root) => mutateChildren(root, path, (children) => [...children, ...nodes]))
+  }
+
+  const uploadFiles = async (files: FileList | null) => {
+    if (!files?.length) return
+    await uploadFileArray(Array.from(files))
+  }
+
+  const refresh = async () => {
+    if (provider === "drive") await loadDrive()
+    else if (provider === "browser-fs") await loadBrowserDirectory()
+    else setStatus("Refreshed")
+  }
+
+  const breadcrumb = provider === "drive"
+    ? driveCrumbs.map((crumb) => crumb.name)
+    : provider === "browser-fs"
+      ? [browserRoot?.name ?? "No folder", ...browserPath.map((handle) => handle.name)]
+      : ["Workspace", ...path]
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* Toolbar */}
       <div className="flex items-center gap-1.5 border-b border-[var(--window-border)] bg-[var(--window-header)] px-2 py-1.5">
-        <button onClick={goBack} disabled={historyIdx === 0} className="widget-icon-btn h-7 w-7 disabled:opacity-30"><ArrowLeft className="h-3.5 w-3.5" /></button>
-        <button onClick={goForward} disabled={historyIdx >= history.length - 1} className="widget-icon-btn h-7 w-7 disabled:opacity-30"><ArrowRight className="h-3.5 w-3.5" /></button>
-        <button onClick={goUp} disabled={path.length <= 1} className="widget-icon-btn h-7 w-7 disabled:opacity-30"><ArrowUp className="h-3.5 w-3.5" /></button>
-
-        {/* Breadcrumb */}
+        <button onClick={goUp} disabled={(provider === "drive" && driveCrumbs.length <= 1) || (provider === "browser-fs" && !browserPath.length) || (!["drive", "browser-fs"].includes(provider) && path.length === 0)} className="widget-icon-btn h-7 w-7 disabled:opacity-30" title="Up">
+          <ArrowUp className="h-3.5 w-3.5" />
+        </button>
+        <button onClick={refresh} className="widget-icon-btn h-7 w-7" title="Refresh">
+          <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+        </button>
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-2">
-          {breadcrumb.map((seg, i) => (
-            <span key={i} className="flex items-center gap-1">
-              {i > 0 && <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground/40" />}
-              <button
-                onClick={() => navigate(path.slice(0, i + 1))}
-                className={cn("whitespace-nowrap text-xs transition-colors hover:text-foreground",
-                  i === breadcrumb.length - 1 ? "text-foreground font-medium" : "text-muted-foreground"
-                )}
-              >
-                {seg}
-              </button>
+          {breadcrumb.map((segment, index) => (
+            <span key={`${segment}-${index}`} className="whitespace-nowrap text-xs text-muted-foreground">
+              {index > 0 ? " / " : ""}{segment}
             </span>
           ))}
         </div>
-
-        {/* Search */}
         <div className="relative">
           <Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search..."
-            className="h-6 w-32 rounded-md bg-secondary/60 pl-6 pr-2 font-mono text-[11px] text-foreground placeholder:text-muted-foreground/50 outline-none focus:ring-1 focus:ring-primary/40"
-          />
+          <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search" className="h-7 w-32 rounded-md bg-secondary/60 pl-6 pr-2 text-[11px] text-foreground outline-none focus:ring-1 focus:ring-primary/40" />
         </div>
-
-        {/* View + Sort */}
-        <button onClick={() => setView(v => v === "grid" ? "list" : "grid")} className="widget-icon-btn h-7 w-7">
-          {view === "grid" ? <List className="h-3.5 w-3.5" /> : <Grid3x3 className="h-3.5 w-3.5" />}
-        </button>
-        <button onClick={() => setSortKey(k => k === "name" ? "modified" : k === "modified" ? "type" : "name")} className="widget-icon-btn h-7 w-7" title={`Sort: ${sortKey}`}>
-          <SortAsc className="h-3.5 w-3.5" />
+        <button onClick={() => setView((current) => current === "grid" ? "list" : "grid")} className="h-7 rounded-md border border-border px-2 text-[11px] text-muted-foreground hover:text-foreground">
+          {view}
         </button>
       </div>
 
-      {/* Body */}
       <div className="flex min-h-0 flex-1">
-        {/* Sidebar */}
-        <Sidebar starred={starred} currentPath={path} onNavigate={navigate} />
-
-        {/* File grid/list */}
-        <div
-          ref={containerRef}
-          className="flex-1 overflow-auto p-3"
-          onContextMenu={e => handleContextMenu(e, null)}
-          onClick={() => setSelected(null)}
-        >
-          {filtered.length === 0 && (
-            <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-              {search ? "No results" : "Empty folder"}
-            </div>
-          )}
-
-          {view === "grid" ? (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(88px,1fr))] gap-2">
-              {filtered.map(entry => (
-                <button
-                  key={entry.id}
-                  onClick={e => { e.stopPropagation(); setSelected(entry.id) }}
-                  onDoubleClick={() => handleOpen(entry)}
-                  onContextMenu={e => handleContextMenu(e, entry)}
-                  className={cn(
-                    "group flex flex-col items-center gap-1.5 rounded-lg p-2 text-center transition-all",
-                    selected === entry.id ? "bg-primary/15 ring-1 ring-primary/40" : "hover:bg-secondary/60"
-                  )}
-                >
-                  <FileIcon type={entry.type} className="h-9 w-9" />
-                  <span className="line-clamp-2 text-[10px] leading-tight text-foreground">{entry.name}</span>
-                  {entry.starred && <Star className="h-2.5 w-2.5 fill-current text-[oklch(0.75_0.18_80)]" />}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="space-y-px">
-              {filtered.map(entry => (
-                <button
-                  key={entry.id}
-                  onClick={e => { e.stopPropagation(); setSelected(entry.id) }}
-                  onDoubleClick={() => handleOpen(entry)}
-                  onContextMenu={e => handleContextMenu(e, entry)}
-                  className={cn(
-                    "flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-all",
-                    selected === entry.id ? "bg-primary/15 ring-1 ring-primary/30" : "hover:bg-secondary/60"
-                  )}
-                >
-                  <FileIcon type={entry.type} className="h-4 w-4" />
-                  <span className="flex-1 truncate text-xs text-foreground">{entry.name}</span>
-                  {entry.starred && <Star className="h-3 w-3 shrink-0 fill-current text-[oklch(0.75_0.18_80)]" />}
-                  {entry.type !== "folder" && <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{entry.size}</span>}
-                  <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{entry.modified}</span>
-                  <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground/30" />
-                </button>
-              ))}
-            </div>
-          )}
+        <div className="flex w-44 shrink-0 flex-col border-r border-[var(--window-border)] py-2">
+          <p className="px-3 pb-1 font-mono text-[9px] font-semibold uppercase tracking-widest text-muted-foreground/60">Sources</p>
+          {PROVIDERS.map((item) => (
+            <button key={item.id} onClick={() => switchProvider(item.id)} className={cn("flex w-full items-center gap-2 px-3 py-2 text-left text-xs", provider === item.id ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-secondary hover:text-foreground")}>
+              {item.icon}
+              <span className="min-w-0 flex-1 truncate">{item.label}</span>
+            </button>
+          ))}
+          <div className="mt-2 border-t border-[var(--window-border)] p-2">
+            {provider === "browser-fs" && (
+              <button onClick={chooseBrowserFolder} className="flex w-full items-center justify-center gap-1.5 rounded-md border border-border px-2 py-1.5 text-[11px] text-foreground hover:bg-secondary">
+                <HardDrive className="h-3 w-3" /> Pick folder
+              </button>
+            )}
+            {provider === "drive" && (
+              <div className="rounded-md border border-border bg-secondary/30 p-2 text-[11px] leading-4 text-muted-foreground">
+                Uses the sealed Google Drive OAuth session when present.
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Preview Panel */}
-        <div className="w-44 shrink-0 border-l border-[var(--window-border)]">
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="flex shrink-0 items-center gap-1 border-b border-[var(--window-border)] px-3 py-2">
+            <button onClick={createFolder} className="inline-flex h-7 items-center gap-1 rounded-md border border-border px-2 text-[11px] text-foreground hover:bg-secondary"><Folder className="h-3 w-3" />Folder</button>
+            <button onClick={createFile} className="inline-flex h-7 items-center gap-1 rounded-md border border-border px-2 text-[11px] text-foreground hover:bg-secondary"><Plus className="h-3 w-3" />File</button>
+            <button onClick={() => fileInputRef.current?.click()} className="inline-flex h-7 items-center gap-1 rounded-md border border-border px-2 text-[11px] text-foreground hover:bg-secondary"><Upload className="h-3 w-3" />Upload</button>
+            <input ref={fileInputRef} type="file" multiple className="hidden" onChange={(event) => void uploadFiles(event.target.files)} />
+            <div className="ml-auto flex items-center gap-1 text-[11px] text-muted-foreground">
+              {PROVIDERS.find((item) => item.id === provider)?.detail}
+            </div>
+          </div>
+          <div className="min-h-0 flex-1 overflow-auto p-3">
+            {provider === "browser-fs" && !browserRoot ? (
+              <div className="flex h-full items-center justify-center">
+                <button onClick={chooseBrowserFolder} className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-xs text-foreground hover:bg-secondary">
+                  <HardDrive className="h-4 w-4" /> Pick a local folder
+                </button>
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="flex h-full items-center justify-center text-xs text-muted-foreground">{loading ? "Loading..." : "Empty folder"}</div>
+            ) : view === "grid" ? (
+              <div className="grid grid-cols-[repeat(auto-fill,minmax(96px,1fr))] gap-2">
+                {filtered.map((entry) => (
+                  <button key={entry.id} onClick={() => setSelected(entry.id)} onDoubleClick={() => void openEntry(entry)} className={cn("group flex min-h-24 flex-col items-center gap-1.5 rounded-lg p-2 text-center transition-all", selected === entry.id ? "bg-primary/15 ring-1 ring-primary/40" : "hover:bg-secondary/60")}>
+                    <FileIcon type={entry.type} className="h-9 w-9" />
+                    <span className="line-clamp-2 text-[10px] leading-tight text-foreground">{entry.name}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="space-y-px">
+                {filtered.map((entry) => (
+                  <button key={entry.id} onClick={() => setSelected(entry.id)} onDoubleClick={() => void openEntry(entry)} className={cn("flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left transition-all", selected === entry.id ? "bg-primary/15 ring-1 ring-primary/30" : "hover:bg-secondary/60")}>
+                    <FileIcon type={entry.type} className="h-4 w-4" />
+                    <span className="min-w-0 flex-1 truncate text-xs text-foreground">{entry.name}</span>
+                    <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{entry.size ?? "-"}</span>
+                    <span className="hidden shrink-0 font-mono text-[10px] text-muted-foreground md:inline">{entry.modified}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="w-52 shrink-0 border-l border-[var(--window-border)]">
           <PreviewPanel entry={selectedEntry} />
         </div>
       </div>
 
-      {/* Status bar */}
       <div className="flex items-center justify-between border-t border-[var(--window-border)] bg-[var(--window-header)] px-3 py-1">
-        <span className="font-mono text-[10px] text-muted-foreground">
-          {filtered.length} item{filtered.length !== 1 ? "s" : ""}
-          {selected && selectedEntry ? ` · "${selectedEntry.name}" selected` : ""}
-        </span>
-        {statusMsg && <span className="font-mono text-[10px] text-primary">{statusMsg}</span>}
-        <span className="font-mono text-[10px] text-muted-foreground/40">{path.join(" / ")}</span>
+        <span className="font-mono text-[10px] text-muted-foreground">{filtered.length} item{filtered.length === 1 ? "" : "s"}{selectedEntry ? ` · ${selectedEntry.name}` : ""}</span>
+        {status && <span className="truncate px-3 font-mono text-[10px] text-primary">{status}</span>}
+        <div className="flex items-center gap-2 text-muted-foreground/60">
+          {selectedEntry?.downloadUrl && <a href={selectedEntry.downloadUrl} target="_blank" rel="noreferrer" title="Download"><Download className="h-3.5 w-3.5" /></a>}
+          {provider !== "drive" && <Save className="h-3.5 w-3.5" />}
+          <Info className="h-3.5 w-3.5" />
+          <ArrowLeft className="hidden" />
+        </div>
       </div>
-
-      {contextMenu && (
-        <ContextMenu
-          state={contextMenu}
-          onClose={() => setContextMenu(null)}
-          onAction={handleContextAction}
-        />
-      )}
     </div>
   )
 }

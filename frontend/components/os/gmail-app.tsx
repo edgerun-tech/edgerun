@@ -282,7 +282,7 @@ export function GmailApp({ className }: GmailAppProps) {
             </div>
             <div>
               <h2 className="text-base font-semibold text-foreground">Connect Google Mail</h2>
-              <p className="text-xs text-muted-foreground">Use Gmail inside EdgeRun without sharing your mailbox with apps directly.</p>
+              <p className="text-xs text-muted-foreground">Gmail tokens can be sealed into your Trust Container after Google returns consent.</p>
             </div>
           </div>
 
@@ -300,7 +300,7 @@ export function GmailApp({ className }: GmailAppProps) {
 
           <div className="mb-4 space-y-2 rounded-xl border border-border bg-background/70 p-3 text-xs">
             <div className="flex items-center gap-2"><CheckCircle2 className="h-3.5 w-3.5 text-[var(--status-online)]" /> Read mailbox messages you choose to load</div>
-            <div className="flex items-center gap-2"><CheckCircle2 className="h-3.5 w-3.5 text-[var(--status-online)]" /> Send mail only through this Gmail app flow</div>
+            <div className="flex items-center gap-2"><CheckCircle2 className="h-3.5 w-3.5 text-[var(--status-online)]" /> Save the refresh token only inside your encrypted profile container</div>
             <div className="flex items-center gap-2 text-muted-foreground"><ExternalLink className="h-3.5 w-3.5" /> Google will show the final OAuth consent screen</div>
           </div>
 
@@ -327,15 +327,18 @@ export function GmailApp({ className }: GmailAppProps) {
             <GoogleMark className="h-4 w-4 flex-shrink-0" />
             <span className="truncate text-xs font-medium text-foreground">{email || "Google Mail"}</span>
           </div>
-          <button onClick={disconnect} className="rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground" title="Disconnect Google Mail"><LogOut className="h-3.5 w-3.5" /></button>
+          <button onClick={disconnect} className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground" title="Disconnect Gmail session">
+            <LogOut className="h-3.5 w-3.5" />
+            Disconnect
+          </button>
         </div>
         <div className="border-b border-[var(--window-border)] px-3 py-2 text-[10px] text-muted-foreground">
-          {savedSecret ? "Saved in sealed profile" : "Connected for this browser session"} · Gmail scope
+          {savedSecret ? "Refresh token saved in sealed profile" : "Connected for this browser session"} · Gmail scope
         </div>
         {pendingSecret && (
           <div className="border-b border-[var(--window-border)] bg-primary/5 p-3">
-            <div className="mb-2 text-xs font-medium text-foreground">Save Gmail secret to this profile</div>
-            <p className="mb-2 text-[10px] leading-4 text-muted-foreground">Seal the OAuth refresh token into your unlocked Edgerun profile so Gmail can restore after reload.</p>
+            <div className="mb-2 text-xs font-medium text-foreground">Save Gmail secret to Trust Container</div>
+            <p className="mb-2 text-[10px] leading-4 text-muted-foreground">Your profile password decrypts and reseals the local container. The refresh token is removed from the temporary browser cookie after saving.</p>
             <input
               value={profilePassword}
               onChange={(event) => setProfilePassword(event.target.value)}
@@ -344,17 +347,19 @@ export function GmailApp({ className }: GmailAppProps) {
               className="mb-2 h-8 w-full rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary"
             />
             <button onClick={savePendingSecret} disabled={!profilePassword || auth.isLoading} className="w-full rounded-md bg-primary px-2 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-45">
-              Save to profile
+              Save to Trust Container
             </button>
           </div>
         )}
         {savedSecret && !pendingSecret && (
           <div className="border-b border-[var(--window-border)] p-3">
+            <div className="mb-2 text-xs font-medium text-foreground">Saved Gmail secret</div>
+            <p className="mb-2 text-[10px] leading-4 text-muted-foreground">Disconnect clears this browser session. Removing the saved secret also deletes the refresh token copy sealed in your Trust Container.</p>
             <input
               value={profilePassword}
               onChange={(event) => setProfilePassword(event.target.value)}
               type="password"
-              placeholder="Profile password to remove saved Gmail"
+              placeholder="Profile password to remove saved Gmail secret"
               className="mb-2 h-8 w-full rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary"
             />
             <button onClick={removeSavedSecret} disabled={!profilePassword || auth.isLoading} className="w-full rounded-md border border-border bg-secondary/50 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground disabled:opacity-45">

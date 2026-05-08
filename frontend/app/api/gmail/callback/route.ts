@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { runtimeEnv } from "@/lib/server-runtime-env"
 
 interface TokenResponse {
   access_token: string
@@ -6,6 +7,10 @@ interface TokenResponse {
   expires_in: number
   token_type: string
   scope?: string
+}
+
+function base64UrlJson(value: unknown): string {
+  return Buffer.from(JSON.stringify(value), "utf8").toString("base64url")
 }
 
 export async function GET(req: NextRequest) {
@@ -28,9 +33,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "No authorization code" }, { status: 400 })
   }
 
-  const clientId = process.env.GMAIL_CLIENT_ID
-  const clientSecret = process.env.GMAIL_CLIENT_SECRET
-  const redirectUri = process.env.GMAIL_REDIRECT_URI || `${req.nextUrl.origin}/api/gmail/callback`
+  const clientId = await runtimeEnv("GMAIL_CLIENT_ID")
+  const clientSecret = await runtimeEnv("GMAIL_CLIENT_SECRET")
+  const redirectUri = await runtimeEnv("GMAIL_REDIRECT_URI") || `${req.nextUrl.origin}/api/gmail/callback`
 
   if (!clientId || !clientSecret) {
     return NextResponse.json(
@@ -99,7 +104,19 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    res.cookies.delete("gmail_profile_pending")
+    res.cookies.set("gmail_profile_pending", base64UrlJson({
+      email: userInfo?.email || "",
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      expiresAtIso: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
+      scopes: tokens.scope?.split(/\s+/).filter(Boolean) ?? [],
+    }), {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 600,
+      path: "/",
+    })
 
     res.cookies.delete("gmail_oauth_state")
 

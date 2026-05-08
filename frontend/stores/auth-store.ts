@@ -36,6 +36,14 @@ export type ContactRecord = {
   identityIdHex: string
   routeHint: string
   addedAtIso: string
+  email?: string
+  phone?: string
+  photoUrl?: string
+  source?: "edgerun" | "google" | "manual"
+  sourceId?: string
+  knownNodeIds?: string[]
+  notes?: string
+  updatedAtIso?: string
 }
 
 export type ProfilePreferences = {
@@ -51,8 +59,10 @@ export type WebAuthnBinding = {
   unlockMethod: "prf-local-vault"
 }
 
-export type GmailProfileSecret = {
-  appId: "gmail"
+export type OAuthAppId = "gmail" | "google-drive" | "github" | "cloudflare"
+
+export type OAuthProfileSecret = {
+  appId: OAuthAppId
   kind: "oauth2"
   email: string
   accessToken: string
@@ -61,6 +71,11 @@ export type GmailProfileSecret = {
   scopes: string[]
   updatedAtIso: string
 }
+
+export type GmailProfileSecret = OAuthProfileSecret & { appId: "gmail" }
+export type GoogleDriveProfileSecret = OAuthProfileSecret & { appId: "google-drive" }
+export type GitHubProfileSecret = OAuthProfileSecret & { appId: "github" }
+export type CloudflareProfileSecret = OAuthProfileSecret & { appId: "cloudflare" }
 
 type NodeGenesisEvent = {
   seq: number
@@ -143,7 +158,7 @@ export type UnlockedProfileContainer = {
   eventLog: ProfileEvent[]
   profilePreferences: ProfilePreferences
   webAuthnBinding?: WebAuthnBinding
-  appSecrets: GmailProfileSecret[]
+  appSecrets: OAuthProfileSecret[]
   sealedContainers: SealedNestedContainer[]
   outbox: RoutedSealedEnvelope[]
 }
@@ -192,6 +207,16 @@ export type LocalQueuedMessage = {
   status: "queued"
 }
 
+export type NodeRelayPublishResult = {
+  ok: boolean
+  nodeId: string
+  relayHost: string
+  updatedAtIso: string
+  expiresAtIso: string
+}
+
+const NODE_RELAY_DOMAIN = "nodes.edgerun.tech"
+
 export interface AuthStore {
   authState: AuthState
   username: string
@@ -212,8 +237,11 @@ const ACTIVE_PROFILE_KEY = "edgerun:active-profile-id:v1"
 const PROFILE_RECORD_PREFIX = "edgerun:sealed-profile:"
 const LOCAL_MESSAGE_QUEUE_KEY = "edgerun:local-message-queue:v1"
 const WEBAUTHN_VAULT_PREFIX = "edgerun:webauthn-profile-vault:"
+const SESSION_RESUME_KEY = "edgerun:session-resume-ticket:v1"
 const LEGACY_KEYS = ["edgerun_credential_id", "edgerun_username", "edgerun_node_registration_v1"]
 const PBKDF2_ROUNDS = 210_000
+const SESSION_RESUME_TTL_MS = 30_000
+const SESSION_RESUME_REFRESH_MS = 15_000
 const ZERO_HASH = "00".repeat(32)
 const DEFAULT_PROFILE_PREFERENCES: ProfilePreferences = {
   avatarInitials: "ID",
@@ -224,6 +252,7 @@ const DEFAULT_PROFILE_PREFERENCES: ProfilePreferences = {
 
 const textEncoder = new TextEncoder()
 const textDecoder = new TextDecoder()
+let sessionResumeTimer: ReturnType<typeof setInterval> | null = null
 
 function bytesToBase64(bytes: Uint8Array): string {
   let binary = ""
@@ -310,6 +339,146 @@ async function deriveAesKey(password: string, salt: Uint8Array, rounds: number):
 
 async function importAesGcmKey(raw: BufferSource): Promise<CryptoKey> {
   return crypto.subtle.importKey("raw", raw, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"])
+}
+
+type SessionResumeTicket = {
+  version: 1
+  profileId: string
+  expiresAtIso: string
+  handle: string
+}
+
+type SessionResumeWorkerResponse = {
+  ok: boolean
+  handle?: string
+  profileId?: string
+  expiresAtIso?: string
+  profileJson?: string
+  error?: string
+}
+
+async function sessionResumeWorker(): Promise<ServiceWorker | null> {
+  if (typeof window === "undefined" || !("serviceWorker" in navigator)) return null
+  try {
+    const registration = await navigator.serviceWorker.register("/session-resume-sw.js", { scope: "/" })
+    const ready = await navigator.serviceWorker.ready
+    return ready.active ?? registration.active ?? null
+  } catch {
+    return null
+  }
+}
+
+async function postSessionResumeWorker(message: Record<string, unknown>): Promise<SessionResumeWorkerResponse | null> {
+  const worker = await sessionResumeWorker()
+  if (!worker) return null
+  return new Promise((resolve) => {
+    const channel = new MessageChannel()
+    const timeout = window.setTimeout(() => {
+      channel.port1.close()
+      resolve(null)
+    }, 1500)
+    channel.port1.onmessage = (event: MessageEvent<SessionResumeWorkerResponse>) => {
+      window.clearTimeout(timeout)
+      channel.port1.close()
+      resolve(event.data)
+    }
+    worker.postMessage(message, [channel.port2])
+  })
+}
+
+function clearSessionResumeTicket() {
+  if (typeof window === "undefined") return
+  if (sessionResumeTimer) {
+    clearInterval(sessionResumeTimer)
+    sessionResumeTimer = null
+  }
+  const raw = sessionStorage.getItem(SESSION_RESUME_KEY)
+  if (raw) {
+    try {
+      const ticket = JSON.parse(raw) as SessionResumeTicket
+      if (ticket.handle) void postSessionResumeWorker({ type: "CLEAR_SESSION_RESUME", handle: ticket.handle })
+    } catch {
+      // Ignore malformed local handle records.
+    }
+  }
+  sessionStorage.removeItem(SESSION_RESUME_KEY)
+}
+
+async function writeSessionResumeTicket(profile: UnlockedProfileContainer) {
+  if (typeof window === "undefined") return
+  let previousHandle: string | undefined
+  const existing = sessionStorage.getItem(SESSION_RESUME_KEY)
+  if (existing) {
+    try {
+      previousHandle = (JSON.parse(existing) as SessionResumeTicket).handle
+    } catch {
+      previousHandle = undefined
+    }
+  }
+  const response = await postSessionResumeWorker({
+    type: "STORE_SESSION_RESUME",
+    profileId: profile.ownerEncryption.identityIdHex,
+    profileJson: canonicalJson(profile),
+    ttlMs: SESSION_RESUME_TTL_MS,
+    previousHandle,
+  })
+  if (!response?.ok || !response.handle || !response.expiresAtIso) {
+    sessionStorage.removeItem(SESSION_RESUME_KEY)
+    return
+  }
+  const ticket: SessionResumeTicket = {
+    version: 1,
+    profileId: profile.ownerEncryption.identityIdHex,
+    expiresAtIso: response.expiresAtIso,
+    handle: response.handle,
+  }
+  sessionStorage.setItem(SESSION_RESUME_KEY, JSON.stringify(ticket))
+}
+
+function startSessionResumeHeartbeat(profile: UnlockedProfileContainer) {
+  if (typeof window === "undefined") return
+  if (sessionResumeTimer) clearInterval(sessionResumeTimer)
+  void writeSessionResumeTicket(profile)
+  sessionResumeTimer = setInterval(() => {
+    const current = authStore.get()
+    if (current.authState !== "authenticated" || !current.unlockedProfile) {
+      clearSessionResumeTicket()
+      return
+    }
+    void writeSessionResumeTicket(current.unlockedProfile)
+  }, SESSION_RESUME_REFRESH_MS)
+}
+
+async function consumeSessionResumeTicket(): Promise<UnlockedProfileContainer | null> {
+  if (typeof window === "undefined") return null
+  const raw = sessionStorage.getItem(SESSION_RESUME_KEY)
+  if (!raw) return null
+  sessionStorage.removeItem(SESSION_RESUME_KEY)
+  try {
+    const ticket = JSON.parse(raw) as SessionResumeTicket
+    if (ticket.version !== 1 || !ticket.profileId || !ticket.handle || Date.parse(ticket.expiresAtIso) <= Date.now()) return null
+    const response = await postSessionResumeWorker({ type: "CONSUME_SESSION_RESUME", handle: ticket.handle })
+    if (!response?.ok || response.profileId !== ticket.profileId || !response.profileJson) return null
+    const profile = JSON.parse(response.profileJson) as UnlockedProfileContainer
+    if (profile.ownerEncryption.identityIdHex !== ticket.profileId) return null
+    const sealed = readSealedProfile()
+    if (!sealed || profileIdFor(sealed) !== ticket.profileId) return null
+    await importP256PrivateKey(profile.owner)
+    await importP256PrivateKey(profile.browserNode)
+    return {
+      ...profile,
+      nodes: profile.nodes ?? [profile.browserNode],
+      contacts: profile.contacts ?? [selfContact(profile)],
+      eventLog: profile.eventLog ?? [],
+      profilePreferences: deriveProfilePreferences(profile.eventLog ?? [], profile.profilePreferences, profile.handle),
+      webAuthnBinding: deriveWebAuthnBinding(profile.eventLog ?? [], profile.webAuthnBinding),
+      appSecrets: profile.appSecrets ?? [],
+      sealedContainers: profile.sealedContainers ?? [],
+      outbox: profile.outbox ?? [],
+    }
+  } catch {
+    return null
+  }
 }
 
 async function generateP256Identity(): Promise<{ keyPair: CryptoKeyPair; material: P256KeyMaterial }> {
@@ -852,6 +1021,7 @@ export async function registerAuth(name: string, nodeProvision?: NodeProvisionIn
     profile.contacts = [selfContact(profile)]
     const sealed = await sealProfile(profile, password)
     persistSealedProfile(sealed)
+    startSessionResumeHeartbeat(profile)
     authStore.set({
       authState: "authenticated",
       username: profile.handle,
@@ -886,6 +1056,7 @@ export async function authenticateAuth(password?: string): Promise<boolean> {
     const profile = await openProfile(sealed, password ?? "")
     await importP256PrivateKey(profile.owner)
     await importP256PrivateKey(profile.browserNode)
+    startSessionResumeHeartbeat(profile)
     authStore.set({
       authState: "authenticated",
       username: profile.handle,
@@ -923,6 +1094,7 @@ export async function authenticateWithWebAuthn(): Promise<boolean> {
     const profile = await openProfile(sealed, password)
     await importP256PrivateKey(profile.owner)
     await importP256PrivateKey(profile.browserNode)
+    startSessionResumeHeartbeat(profile)
     authStore.set({
       authState: "authenticated",
       username: profile.handle,
@@ -943,11 +1115,45 @@ export async function authenticateWithWebAuthn(): Promise<boolean> {
   }
 }
 
+export async function resumeSessionAuth(): Promise<boolean> {
+  const state = authStore.get()
+  if (state.isLoading || state.authState === "authenticated") return false
+  const sealed = readSealedProfile()
+  if (!sealed) return false
+  authStore.set({ ...state, authState: "authenticating", isLoading: true, error: null, sealedProfile: sealed })
+  try {
+    const profile = await consumeSessionResumeTicket()
+    if (!profile) {
+      authStore.set({ ...authStore.get(), authState: "locked", isLoading: false, error: null, sealedProfile: sealed })
+      return false
+    }
+    startSessionResumeHeartbeat(profile)
+    authStore.set({
+      authState: "authenticated",
+      username: profile.handle,
+      isLoading: false,
+      error: null,
+      webAuthnAvailable: webAuthnAvailable(),
+      nodeRegistration: registrationFor(profile),
+      unlockedProfile: profile,
+      sealedProfile: sealed,
+      profileSummaries: readProfileIndex(),
+      activeProfileId: profileIdFor(sealed),
+      localMessages: localMessagesFor(profile),
+    })
+    return true
+  } catch {
+    authStore.set({ ...authStore.get(), authState: "locked", isLoading: false, error: null, sealedProfile: sealed })
+    return false
+  }
+}
+
 export function continueAsGuest() {
   authStore.set({ ...authStore.get(), authState: "unauthenticated", username: "", error: null })
 }
 
 export function lockAuth() {
+  clearSessionResumeTicket()
   const current = authStore.get()
   authStore.set({
     ...current,
@@ -980,6 +1186,7 @@ export async function importProfileContainer(serialized: string): Promise<boolea
       throw new Error("Not an Edgerun sealed profile container.")
     }
     persistSealedProfile(parsed)
+    clearSessionResumeTicket()
     const sealed = readSealedProfile() ?? parsed
     authStore.set({
       ...authStore.get(),
@@ -1007,6 +1214,7 @@ export function switchProfile(profileId: string) {
     authStore.set({ ...authStore.get(), error: "Profile container was not found." })
     return
   }
+  clearSessionResumeTicket()
   localStorage.setItem(ACTIVE_PROFILE_KEY, profileId)
   authStore.set({
     ...authStore.get(),
@@ -1028,6 +1236,7 @@ async function persistUnlockedProfile(profile: UnlockedProfileContainer, passwor
   await openProfile(current, password)
   const sealed = await sealProfile(profile, password)
   persistSealedProfile(sealed)
+  startSessionResumeHeartbeat(profile)
   authStore.set({
     ...authStore.get(),
     authState: "authenticated",
@@ -1067,6 +1276,52 @@ export async function createProfileNode(label: string, password: string): Promis
   } catch (err) {
     authStore.set({ ...authStore.get(), isLoading: false, error: err instanceof Error ? err.message : "Node creation failed." })
     return false
+  }
+}
+
+export async function publishBrowserNodeRelayRoute(input: { reachableTarget: string; expiresInSeconds?: number }): Promise<NodeRelayPublishResult | null> {
+  const state = authStore.get()
+  const profile = state.unlockedProfile
+  if (!profile) return null
+  const reachableTarget = input.reachableTarget.trim()
+  if (!reachableTarget) {
+    authStore.set({ ...state, error: "Reachable target is required." })
+    return null
+  }
+  authStore.set({ ...state, isLoading: true, error: null })
+  try {
+    const updatedAtIso = new Date().toISOString()
+    const expiresAtIso = new Date(Date.now() + (input.expiresInSeconds ?? 3600) * 1000).toISOString()
+    const signedPayload = JSON.stringify({
+      version: 1,
+      nodeId: profile.browserNode.identityIdHex,
+      publicKeyRawBase64: profile.browserNode.publicKeyRawBase64,
+      reachableTarget,
+      updatedAtIso,
+      expiresAtIso,
+      protocols: ["edgerun-msg-v1"],
+      nonce: crypto.randomUUID(),
+    })
+    const privateKey = await importP256PrivateKey(profile.browserNode)
+    const signature = new Uint8Array(await crypto.subtle.sign(
+      { name: "ECDSA", hash: "SHA-256" },
+      privateKey,
+      textEncoder.encode(signedPayload),
+    ))
+    const response = await fetch(`https://${NODE_RELAY_DOMAIN}/nodes/update`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ signedPayload, signatureBase64: bytesToBase64(signature) }),
+    })
+    const data = await response.json().catch(() => null) as NodeRelayPublishResult | { error?: string } | null
+    if (!response.ok || !data || !("ok" in data)) {
+      throw new Error(data && "error" in data ? data.error : "Relay publish failed.")
+    }
+    authStore.set({ ...authStore.get(), isLoading: false })
+    return data
+  } catch (err) {
+    authStore.set({ ...authStore.get(), isLoading: false, error: err instanceof Error ? err.message : "Relay publish failed." })
+    return null
   }
 }
 
@@ -1175,6 +1430,83 @@ export async function addContactToProfile(input: {
   }
 }
 
+function sanitizeKnownNodeIds(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return Array.from(new Set(value
+    .map((item) => typeof item === "string" ? item.trim() : "")
+    .filter(Boolean)))
+}
+
+export async function saveContactToProfile(input: {
+  id?: string
+  label: string
+  password: string
+  publicKeyRawBase64?: string
+  identityIdHex?: string
+  routeHint?: string
+  email?: string
+  phone?: string
+  photoUrl?: string
+  source?: ContactRecord["source"]
+  sourceId?: string
+  knownNodeIds?: string[]
+  notes?: string
+}): Promise<boolean> {
+  const state = authStore.get()
+  const profile = state.unlockedProfile
+  if (!profile) return false
+  authStore.set({ ...state, isLoading: true, error: null })
+  try {
+    await persistUnlockedProfile(profile, input.password)
+    const now = new Date().toISOString()
+    const existing = profile.contacts.find((item) =>
+      (input.id && item.id === input.id)
+      || (input.identityIdHex && item.identityIdHex === input.identityIdHex)
+      || (input.source && input.sourceId && item.source === input.source && item.sourceId === input.sourceId)
+    )
+    const publicKeyRawBase64 = input.publicKeyRawBase64?.trim() ?? existing?.publicKeyRawBase64 ?? ""
+    let identityIdHex = input.identityIdHex?.trim() || existing?.identityIdHex || ""
+
+    if (publicKeyRawBase64) {
+      const raw = base64ToBytes(publicKeyRawBase64)
+      const identityBytes = raw[0] === 0x04 && raw.length === 65 ? raw.slice(1) : raw
+      identityIdHex = bytesToHex(identityBytes)
+      await importP256EcdhPublicKey(publicKeyRawBase64)
+    }
+
+    if (!identityIdHex) {
+      identityIdHex = await sha256Hex(`${input.source ?? "manual"}:${input.sourceId ?? input.email ?? input.phone ?? input.label}`)
+    }
+
+    const contact: ContactRecord = {
+      id: existing?.id ?? input.id ?? identityIdHex,
+      label: input.label.trim() || existing?.label || "Contact",
+      publicKeyRawBase64,
+      identityIdHex,
+      routeHint: input.routeHint?.trim() || existing?.routeHint || (publicKeyRawBase64 ? "mesh" : "address-book"),
+      addedAtIso: existing?.addedAtIso ?? now,
+      email: input.email !== undefined ? input.email.trim() || undefined : existing?.email,
+      phone: input.phone !== undefined ? input.phone.trim() || undefined : existing?.phone,
+      photoUrl: input.photoUrl !== undefined ? input.photoUrl.trim() || undefined : existing?.photoUrl,
+      source: input.source ?? existing?.source ?? (publicKeyRawBase64 ? "edgerun" : "manual"),
+      sourceId: input.sourceId?.trim() || existing?.sourceId,
+      knownNodeIds: sanitizeKnownNodeIds(input.knownNodeIds ?? existing?.knownNodeIds),
+      notes: input.notes !== undefined ? input.notes.trim() || undefined : existing?.notes,
+      updatedAtIso: now,
+    }
+
+    const contacts = profile.contacts.some((item) => item.id === contact.id || item.identityIdHex === contact.identityIdHex)
+      ? profile.contacts.map((item) => item.id === contact.id || item.identityIdHex === contact.identityIdHex ? contact : item)
+      : [...profile.contacts, contact]
+    await persistUnlockedProfile({ ...profile, contacts }, input.password)
+    authStore.set({ ...authStore.get(), isLoading: false })
+    return true
+  } catch (err) {
+    authStore.set({ ...authStore.get(), isLoading: false, error: err instanceof Error ? err.message : "Contact save failed." })
+    return false
+  }
+}
+
 export async function updateProfilePreferences(input: {
   password: string
   patch: Partial<ProfilePreferences>
@@ -1241,15 +1573,15 @@ export async function bindWebAuthnToProfile(password: string): Promise<boolean> 
   }
 }
 
-export async function saveGmailProfileSecret(input: { password: string; secret: Omit<GmailProfileSecret, "appId" | "kind" | "updatedAtIso"> }): Promise<boolean> {
+export async function saveOAuthProfileSecret(input: { appId: OAuthAppId; password: string; secret: Omit<OAuthProfileSecret, "appId" | "kind" | "updatedAtIso"> }): Promise<boolean> {
   const state = authStore.get()
   const profile = state.unlockedProfile
   if (!profile) return false
   authStore.set({ ...state, isLoading: true, error: null })
   try {
     await persistUnlockedProfile(profile, input.password)
-    const nextSecret: GmailProfileSecret = {
-      appId: "gmail",
+    const nextSecret: OAuthProfileSecret = {
+      appId: input.appId,
       kind: "oauth2",
       ...input.secret,
       updatedAtIso: new Date().toISOString(),
@@ -1257,19 +1589,19 @@ export async function saveGmailProfileSecret(input: { password: string; secret: 
     await persistUnlockedProfile({
       ...profile,
       appSecrets: [
-        ...profile.appSecrets.filter((secret) => secret.appId !== "gmail"),
+        ...profile.appSecrets.filter((secret) => secret.appId !== input.appId),
         nextSecret,
       ],
     }, input.password)
     authStore.set({ ...authStore.get(), isLoading: false })
     return true
   } catch (err) {
-    authStore.set({ ...authStore.get(), isLoading: false, error: err instanceof Error ? err.message : "Gmail profile secret save failed." })
+    authStore.set({ ...authStore.get(), isLoading: false, error: err instanceof Error ? err.message : "OAuth profile secret save failed." })
     return false
   }
 }
 
-export async function removeGmailProfileSecret(password: string): Promise<boolean> {
+export async function removeOAuthProfileSecret(appId: OAuthAppId, password: string): Promise<boolean> {
   const state = authStore.get()
   const profile = state.unlockedProfile
   if (!profile) return false
@@ -1278,14 +1610,22 @@ export async function removeGmailProfileSecret(password: string): Promise<boolea
     await persistUnlockedProfile(profile, password)
     await persistUnlockedProfile({
       ...profile,
-      appSecrets: profile.appSecrets.filter((secret) => secret.appId !== "gmail"),
+      appSecrets: profile.appSecrets.filter((secret) => secret.appId !== appId),
     }, password)
     authStore.set({ ...authStore.get(), isLoading: false })
     return true
   } catch (err) {
-    authStore.set({ ...authStore.get(), isLoading: false, error: err instanceof Error ? err.message : "Gmail profile secret removal failed." })
+    authStore.set({ ...authStore.get(), isLoading: false, error: err instanceof Error ? err.message : "OAuth profile secret removal failed." })
     return false
   }
+}
+
+export async function saveGmailProfileSecret(input: { password: string; secret: Omit<GmailProfileSecret, "appId" | "kind" | "updatedAtIso"> }): Promise<boolean> {
+  return saveOAuthProfileSecret({ appId: "gmail", ...input })
+}
+
+export async function removeGmailProfileSecret(password: string): Promise<boolean> {
+  return removeOAuthProfileSecret("gmail", password)
 }
 
 export async function openLocalQueuedMessage(messageId: string): Promise<string | null> {

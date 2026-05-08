@@ -1,20 +1,24 @@
 "use client"
 
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import type React from "react"
+import { useStore } from "@nanostores/react"
 import { Contact, IdCard, Inbox, Settings, Store } from "lucide-react"
 import { AuthOverlay } from "./auth-overlay"
-import { AppStore } from "./app-store"
-import { ContactsApp } from "./contacts-app"
+import { AppOverlayHost } from "./app-overlay-host"
 import { IdentityApp } from "./identity-app"
-import { MessagesApp } from "./messages-app"
-import { SettingsApp } from "./settings-app"
+import { PeopleApp, type PeopleTab } from "./people-app"
 import { ProfileMenu } from "./profile-menu"
-import { useAuth, type ContactRecord } from "@/hooks/use-auth"
+import { CapabilityGatePrompt } from "@/components/capability-gate-prompt"
+import { useAuth } from "@/hooks/use-auth"
 import { FloatingDock, type FloatingDockContext, type FloatingDockItem } from "@/components/ui/floating-dock"
-import { addLog, terminalLogsStore } from "@/stores/desktop-store"
-import type { AppDefinition } from "@/platform/types/app-definition"
-import { createAppLaunchPlan } from "@/platform/runtime/app-manager"
+import { addLog, appSurfaceOrderStore, appSurfacesStore, closeAppSurface, focusedAppSurfaceStore, focusAppSurface, pendingGateStore, terminalLogsStore } from "@/stores/desktop-store"
+import { getAppIcon, handleCloseAppSurface, launchApp, launchAppById } from "@/stores/app-launcher"
+import { getBuiltinApp } from "@/platform/registries/builtin-app-registry"
+import { listBuiltinApps } from "@/platform/registries/builtin-app-registry"
+import { catalogApps, getCatalogApp } from "@/platform/registries/app-catalog-registry"
+import { grantLocalCapabilities } from "@/stores/local-capability-grants-store"
+import { installedAppIdsStore, normalizeAppId } from "@/stores/installed-apps-store"
 
 function DockIcon({ children }: { children: React.ReactNode }) {
   return (
@@ -24,65 +28,161 @@ function DockIcon({ children }: { children: React.ReactNode }) {
   )
 }
 
+function resolveCommandAppId(value: string): string | null {
+  const normalized = normalizeAppId(value)
+  if (listBuiltinApps().some((app) => app.appId === normalized) || getCatalogApp(normalized)) return normalized
+
+  const term = value.trim().toLowerCase()
+  const builtin = listBuiltinApps().find((app) => app.name.toLowerCase() === term || app.name.toLowerCase().startsWith(term))
+  return builtin?.appId ?? null
+}
+
+function sendAssistantInput(message: string) {
+  window.dispatchEvent(new CustomEvent("edgerun:assistant-input", {
+    detail: { message, submit: true },
+  }))
+}
+
+const PINNED_DOCK_APP_IDS = new Set(["app-store", "settings"])
+
 export function Desktop() {
   const auth = useAuth()
-  const [openApp, setOpenApp] = useState<"identity" | "contacts" | "messages" | "app-store" | "settings" | null>(null)
-  const [launchedApp, setLaunchedApp] = useState<AppDefinition | null>(null)
-  const [messageRecipientId, setMessageRecipientId] = useState<string | undefined>(undefined)
+  const appSurfaces = useStore(appSurfacesStore)
+  const appSurfaceOrder = useStore(appSurfaceOrderStore)
+  const focusedAppSurfaceId = useStore(focusedAppSurfaceStore)
+  const pendingGate = useStore(pendingGateStore)
+  const installedAppIds = useStore(installedAppIdsStore)
+  const catalogAppList = useStore(catalogApps)
+  const [openApp, setOpenApp] = useState<"identity" | null>(null)
   const showDesktop = auth.authState === "authenticated"
 
-  const dockItems = useMemo<FloatingDockItem[]>(() => [
-    {
-      title: "Identity",
-      icon: <DockIcon><IdCard className="h-5 w-5" /></DockIcon>,
-      kind: "trigger",
-      onClick: () => setOpenApp("identity"),
-    },
-    {
-      title: "Contacts",
-      icon: <DockIcon><Contact className="h-5 w-5" /></DockIcon>,
-      kind: "trigger",
-      onClick: () => setOpenApp("contacts"),
-    },
-    {
-      title: "Messages",
-      icon: <DockIcon><Inbox className="h-5 w-5" /></DockIcon>,
-      kind: "trigger",
-      onClick: () => {
-        setMessageRecipientId(undefined)
-        setOpenApp("messages")
-      },
-    },
-    {
-      title: "App Store",
-      icon: <DockIcon><Store className="h-5 w-5" /></DockIcon>,
-      kind: "trigger",
-      onClick: () => setOpenApp("app-store"),
-    },
-    {
-      title: "Settings",
-      icon: <DockIcon><Settings className="h-5 w-5" /></DockIcon>,
-      kind: "trigger",
-      onClick: () => setOpenApp("settings"),
-    },
-  ], [])
-
-  const openMessagesForContact = useCallback((contact: ContactRecord) => {
-    setMessageRecipientId(contact.identityIdHex)
-    setOpenApp("messages")
+  useEffect(() => {
+    const closeLocalApp = () => setOpenApp(null)
+    window.addEventListener("edgerun:app-surface-opening", closeLocalApp)
+    return () => window.removeEventListener("edgerun:app-surface-opening", closeLocalApp)
   }, [])
 
+  const closeLocalWindow = useCallback(() => {
+    setOpenApp(null)
+  }, [])
+
+  const closeOverlayWindows = useCallback(() => {
+    for (const surface of appSurfacesStore.get()) {
+      if (surface.kind === "overlay") closeAppSurface(surface.id)
+    }
+  }, [])
+
+  const openIdentity = useCallback(() => {
+    closeOverlayWindows()
+    setOpenApp("identity")
+  }, [closeOverlayWindows])
+
+  const openSurfaceById = useCallback((appId: string) => {
+    closeLocalWindow()
+    return launchAppById(appId)
+  }, [closeLocalWindow])
+
+  const openPeople = useCallback((initialTab: PeopleTab, initialRecipientId?: string) => {
+    closeLocalWindow()
+    const app = getBuiltinApp("people")
+    if (!app) return null
+    return launchApp(app, <PeopleApp initialTab={initialTab} initialRecipientId={initialRecipientId} />)
+  }, [closeLocalWindow])
+
+  const grantPendingGate = useCallback(() => {
+    const pending = pendingGateStore.get()
+    if (!pending) return
+    grantLocalCapabilities(pending.app.appId, pending.blocked, "Approved from app launch prompt")
+    pendingGateStore.set(null)
+    closeLocalWindow()
+    launchApp(pending.app)
+  }, [closeLocalWindow])
+
+  const dockItems = useMemo<FloatingDockItem[]>(() => {
+    const builtinApps = listBuiltinApps()
+    const appsById = new Map([...builtinApps, ...catalogAppList].map((app) => [normalizeAppId(app.appId), app]))
+    const installedItems = Array.from(new Set(installedAppIds.map(normalizeAppId)))
+      .filter((appId) => !PINNED_DOCK_APP_IDS.has(appId))
+      .map((appId) => appsById.get(appId))
+      .filter((app): app is NonNullable<typeof app> => Boolean(app))
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map<FloatingDockItem>((app) => ({
+        title: app.name,
+        subtitle: "Installed",
+        icon: <DockIcon>{getAppIcon(app.appId)}</DockIcon>,
+        kind: "app",
+        onClick: () => openSurfaceById(app.appId),
+      }))
+
+    return [
+      {
+        title: "Identity",
+        icon: <DockIcon><IdCard className="h-5 w-5" /></DockIcon>,
+        kind: "trigger",
+        onClick: openIdentity,
+      },
+      {
+        title: "Contacts",
+        icon: <DockIcon><Contact className="h-5 w-5" /></DockIcon>,
+        kind: "trigger",
+        onClick: () => openPeople("contacts"),
+      },
+      {
+        title: "Messages",
+        icon: <DockIcon><Inbox className="h-5 w-5" /></DockIcon>,
+        kind: "trigger",
+        onClick: () => openPeople("messages"),
+      },
+      ...installedItems,
+      {
+        title: "App Store",
+        icon: <DockIcon><Store className="h-5 w-5" /></DockIcon>,
+        kind: "trigger",
+        onClick: () => openSurfaceById("app-store"),
+      },
+      {
+        title: "Settings",
+        icon: <DockIcon><Settings className="h-5 w-5" /></DockIcon>,
+        kind: "trigger",
+        onClick: () => openSurfaceById("settings"),
+      },
+    ]
+  }, [catalogAppList, installedAppIds, openIdentity, openPeople, openSurfaceById])
+
   const dockContext = useMemo<FloatingDockContext>(() => ({ mode: "apps" }), [])
-  const launchedAppPlan = useMemo(
-    () => launchedApp ? createAppLaunchPlan(launchedApp, { launchApp: setLaunchedApp }) : null,
-    [launchedApp],
-  )
 
   const handleDockCommand = useCallback((command: string) => {
     if (command === "/lock") {
       auth.lock()
       return
     }
+
+    if (command.startsWith("~")) {
+      const message = command.slice(1).trim()
+      if (message) sendAssistantInput(message)
+      return
+    }
+
+    if (command.startsWith("/open ")) {
+      const target = command.slice("/open ".length).trim().toLowerCase()
+      if (target.includes("contact")) {
+        openPeople("contacts")
+        return
+      }
+      if (target.includes("message") || target.includes("chat")) {
+        openPeople("messages")
+        return
+      }
+      const appId = resolveCommandAppId(target)
+      closeLocalWindow()
+      if (appId && launchAppById(appId)) {
+        addLog("success", `Opened ${appId}`)
+      } else {
+        addLog("warning", `Could not open app: ${command.slice("/open ".length).trim()}`)
+      }
+      return
+    }
+
     addLog("info", `Dock command: ${command}`)
     terminalLogsStore.set([
       ...terminalLogsStore.get(),
@@ -93,7 +193,7 @@ export function Desktop() {
         message: `dock> ${command}`,
       },
     ])
-  }, [auth])
+  }, [auth, closeLocalWindow, openPeople])
 
   if (!showDesktop) {
     return (
@@ -138,38 +238,26 @@ export function Desktop() {
         mobileClassName="fixed bottom-5 left-1/2 z-50 -translate-x-1/2"
       />
       <ProfileMenu />
+      <AppOverlayHost
+        surfaces={appSurfaces}
+        surfaceOrder={appSurfaceOrder}
+        focusedSurfaceId={focusedAppSurfaceId}
+        onFocus={focusAppSurface}
+        onClose={handleCloseAppSurface}
+      />
+      {pendingGate ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
+          <div className="h-[min(620px,calc(100vh-2rem))] w-[min(460px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-border bg-background shadow-2xl">
+            <CapabilityGatePrompt
+              appName={pendingGate.app.name}
+              blockedCapabilities={pendingGate.blocked}
+              onGrant={grantPendingGate}
+              onDismiss={() => pendingGateStore.set(null)}
+            />
+          </div>
+        </div>
+      ) : null}
       {openApp === "identity" ? <IdentityApp onClose={() => setOpenApp(null)} /> : null}
-      {openApp === "contacts" ? <ContactsApp onClose={() => setOpenApp(null)} onMessage={openMessagesForContact} /> : null}
-      {openApp === "messages" ? <MessagesApp onClose={() => setOpenApp(null)} initialRecipientId={messageRecipientId} /> : null}
-      {openApp === "app-store" ? (
-        <div className="fixed left-1/2 top-1/2 z-40 flex h-[calc(100vh-6rem)] max-h-[780px] w-[calc(100vw-2rem)] max-w-[1160px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border bg-background/96 shadow-2xl backdrop-blur-xl">
-          <button onClick={() => setOpenApp(null)} aria-label="Close App Store" className="absolute right-3 top-3 z-10 rounded-md border border-border bg-background/90 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground">
-            Close
-          </button>
-          <AppStore onLaunchApp={(app) => setLaunchedApp(app)} />
-        </div>
-      ) : null}
-      {openApp === "settings" ? (
-        <div className="fixed left-1/2 top-1/2 z-40 flex h-[min(760px,calc(100vh-5rem))] w-[min(1040px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border bg-background/96 shadow-2xl backdrop-blur-xl">
-          <button onClick={() => setOpenApp(null)} aria-label="Close Settings" className="absolute right-3 top-3 z-10 rounded-md border border-border bg-background/90 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground">
-            Close
-          </button>
-          <SettingsApp />
-        </div>
-      ) : null}
-      {launchedApp && launchedAppPlan ? (
-        <div className="fixed left-1/2 top-1/2 z-50 flex h-[calc(100vh-4rem)] max-h-[820px] w-[calc(100vw-2rem)] max-w-[1240px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl">
-          <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
-            <div className="min-w-0 truncate text-sm font-semibold text-foreground">{launchedApp.name}</div>
-            <button onClick={() => setLaunchedApp(null)} aria-label={`Close ${launchedApp.name}`} className="rounded-md border border-border bg-background/80 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground">
-              Close
-            </button>
-          </div>
-          <div className="min-h-0 flex-1">
-            {launchedAppPlan.component}
-          </div>
-        </div>
-      ) : null}
     </div>
   )
 }

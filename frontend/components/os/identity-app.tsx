@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Copy, IdCard, KeyRound, Mail, ShieldCheck, X } from "lucide-react"
+import { Copy, IdCard, KeyRound, Lock, Mail, ShieldCheck, X } from "lucide-react"
 import { useAuth, type UnlockedProfileContainer } from "@/hooks/use-auth"
 
 type IdentityAppProps = {
@@ -73,7 +73,7 @@ export function IdentityApp({ onClose }: IdentityAppProps) {
             </div>
             <div className="min-w-0 flex-1">
               <div className="text-lg font-semibold text-foreground">{profile.handle}</div>
-              <div className="mt-1 text-sm text-muted-foreground">Ready to receive encrypted messages</div>
+              <div className="mt-1 text-sm text-muted-foreground">Ready to receive encrypted messages and seal app keys locally</div>
               <div className="mt-4 grid gap-2 sm:grid-cols-2">
                 <button onClick={copyContact} className="flex items-center justify-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">
                   <Copy className="h-4 w-4" />
@@ -103,6 +103,26 @@ export function IdentityApp({ onClose }: IdentityAppProps) {
             <KeyRound className="mb-3 h-4 w-4 text-primary" />
             <div className="text-xs text-muted-foreground">Devices</div>
             <div className="mt-1 text-lg font-semibold text-foreground">{profile.nodes.length}</div>
+          </div>
+        </section>
+
+        <section className="mt-4 rounded-lg border border-border bg-card p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <Lock className="h-4 w-4 text-primary" />
+            <h2 className="text-sm font-semibold text-foreground">Trust Container</h2>
+          </div>
+          <p className="text-xs leading-5 text-muted-foreground">
+            This browser stores your profile as one AES-GCM sealed container. Your identity keys, messaging keys, contacts, device records, and saved app OAuth secrets are readable only after profile unlock and are resealed when you save changes.
+          </p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <div className="rounded-md border border-border bg-background/60 px-3 py-2">
+              <div className="text-[11px] text-muted-foreground">Saved app keys</div>
+              <div className="mt-1 text-sm font-semibold text-foreground">{profile.appSecrets.length}</div>
+            </div>
+            <div className="rounded-md border border-border bg-background/60 px-3 py-2">
+              <div className="text-[11px] text-muted-foreground">Sealed messages/data</div>
+              <div className="mt-1 text-sm font-semibold text-foreground">{profile.sealedContainers.length}</div>
+            </div>
           </div>
         </section>
 

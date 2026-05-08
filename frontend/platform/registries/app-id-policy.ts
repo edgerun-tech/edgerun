@@ -17,7 +17,6 @@ export const REMOVED_APP_IDS = new Set([
   "calling",
   "chat",
   "code-runner",
-  "file-browser",
   "storage",
   "db-explorer",
   "git-sync",
@@ -29,6 +28,18 @@ export const REMOVED_APP_IDS = new Set([
 ])
 
 export const CORE_APP_IDS = ["app-store", "settings"] as const
+
+export const PUBLISHED_BUILTIN_APP_IDS = [
+  "app-store",
+  "settings",
+  "file-browser",
+  "gmail",
+  "google-drive",
+  "google-photos",
+  "google-contacts",
+  "github",
+  "cloudflare",
+] as const
 
 export const DEFAULT_INSTALLED_APP_IDS = [
   "app-store",

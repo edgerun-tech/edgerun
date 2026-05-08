@@ -28,6 +28,14 @@ pub struct BoundNodeRuntime {
 }
 
 impl BoundNodeRuntime {
+    /// Install or replace an authoritative DNS zone before or during runtime.
+    #[cfg(feature = "dns")]
+    pub async fn add_dns_zone(&self, zone: edgerun_protocols::dns::DnsZone) {
+        if let Some(ref dns) = self.dns {
+            dns.add_zone(zone).await;
+        }
+    }
+
     /// Run all realized native services until `shutdown` is cancelled.
     pub async fn run(&mut self, shutdown: CancellationToken) -> io::Result<()> {
         let mut tasks: Vec<crate::rt::JoinHandle<io::Result<()>>> = Vec::new();
