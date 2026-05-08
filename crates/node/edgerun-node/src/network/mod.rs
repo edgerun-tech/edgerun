@@ -12,8 +12,9 @@ mod types;
 
 pub use bare::BareFrameTransport;
 pub use bindings::{
-    binding_intents, decide_binding, decide_bindings, native_socket_bind, native_socket_binds,
-    NativeSocketBind, NodeTransportSurface, ServiceBindingDecision, ServiceBindingIntent,
+    binding_intents, decide_binding, decide_bindings, native_socket_bind,
+    native_socket_binding_is_supported, native_socket_binds, NativeSocketBind,
+    NodeTransportSurface, ServiceBindingDecision, ServiceBindingIntent,
 };
 pub use host::{HostConnectFuture, HostSocketTransport};
 pub use provider::{

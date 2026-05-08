@@ -138,20 +138,21 @@ impl MeshSession {
         counter_bytes.copy_from_slice(&nonce_bytes[4..12]);
         let counter = u64::from_be_bytes(counter_bytes);
 
-        // Replay detection
         if self.highest_seen_counter.is_some_and(|max| counter <= max) {
             return Err(SessionError::ReplayDetected);
         }
-        self.highest_seen_counter = Some(counter);
 
         let nonce_arr: [u8; 12] = nonce_bytes.try_into().unwrap();
         let payload = &ciphertext[NONCE_SIZE..];
 
         use edgerun_crypto::Nonce;
         let nonce = Nonce::from(nonce_arr);
-        self.cipher
+        let plaintext = self
+            .cipher
             .decrypt(&nonce, payload)
-            .map_err(|_| SessionError::DecryptionFailed)
+            .map_err(|_| SessionError::DecryptionFailed)?;
+        self.highest_seen_counter = Some(counter);
+        Ok(plaintext)
     }
 
     /// Returns `true` if this session should be rekeyed.

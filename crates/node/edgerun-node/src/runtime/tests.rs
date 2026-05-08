@@ -677,12 +677,26 @@ fn same_service_plan_decides_native_and_wasm_boundaries() {
     let wasm = decide_runtime_boundary(&plan, RuntimeBoundarySurface::WASM);
 
     assert_eq!(native.bindings.len(), wasm.bindings.len());
-    assert!(native
-        .bindings
-        .iter()
-        .all(|decision| matches!(decision, ServiceBindingDecision::NativeSocket(_))));
+    assert!(native.bindings.iter().any(|decision| {
+        matches!(
+            decision,
+            ServiceBindingDecision::Denied(binding) if binding.port == 0
+        )
+    }));
+    assert!(native.bindings.iter().all(|decision| match decision {
+        ServiceBindingDecision::NativeSocket(binding) => binding.port != 0,
+        ServiceBindingDecision::Denied(binding) => binding.port == 0,
+        ServiceBindingDecision::Routed(_) => false,
+    }));
     let native_binds = native_socket_binds(&native.bindings);
-    assert_eq!(native_binds.len(), native.bindings.len());
+    assert_eq!(
+        native_binds.len(),
+        native
+            .bindings
+            .iter()
+            .filter(|decision| matches!(decision, ServiceBindingDecision::NativeSocket(_)))
+            .count()
+    );
     assert!(native_binds
         .iter()
         .all(|bind| bind.address.carrier == TransportCarrier::HostSocket));

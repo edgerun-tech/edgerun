@@ -1,7 +1,6 @@
 "use client"
 
 import { ArrowDownLeft, ArrowUpRight, TrendingUp, WalletCards } from "lucide-react"
-import { Label, Pie, PieChart } from "recharts"
 import { cn } from "@/lib/utils"
 
 const ASSET_COLORS: Record<string, string> = {
@@ -42,6 +41,19 @@ function MiniMetric({ label, value, tone }: { label: string; value: string; tone
   )
 }
 
+function donutGradient(segments: Array<{ value: number; fill: string }>) {
+  const total = segments.reduce((acc, segment) => acc + segment.value, 0)
+  if (total <= 0) return "var(--muted)"
+  let cursor = 0
+  return segments
+    .map((segment) => {
+      const start = cursor
+      cursor += (segment.value / total) * 100
+      return `${segment.fill} ${start.toFixed(2)}% ${cursor.toFixed(2)}%`
+    })
+    .join(", ")
+}
+
 export function FinancesOverviewWidget() {
   const chartData = portfolioAssets.filter((asset) => asset.value > 0)
   const totalValue = chartData.reduce((acc, asset) => acc + asset.value, 0)
@@ -64,23 +76,16 @@ export function FinancesOverviewWidget() {
         </div>
       </div>
 
-      <div className="relative mx-auto h-[122px] w-[122px] shrink-0">
-        <PieChart width={122} height={122}>
-          <Pie data={chartData} dataKey="value" nameKey="symbol" innerRadius={36} outerRadius={52} stroke="transparent" strokeWidth={0} />
-          <Label
-            content={({ viewBox }) => {
-              if (viewBox && "cx" in viewBox && "cy" in viewBox) {
-                return (
-                  <text x={viewBox.cx} y={viewBox.cy} textAnchor="middle" dominantBaseline="middle">
-                    <tspan x={viewBox.cx} y={viewBox.cy} className="fill-foreground text-[15px] font-bold">{formatUsd(totalValue)}</tspan>
-                    <tspan x={viewBox.cx} y={(viewBox.cy || 0) + 16} className="fill-muted-foreground text-[9px]">total</tspan>
-                  </text>
-                )
-              }
-              return null
-            }}
-          />
-        </PieChart>
+      <div className="relative mx-auto flex h-[122px] w-[122px] shrink-0 items-center justify-center">
+        <div
+          className="flex h-[104px] w-[104px] items-center justify-center rounded-full"
+          style={{ background: `conic-gradient(${donutGradient(chartData)})` }}
+        >
+          <div className="flex h-[72px] w-[72px] flex-col items-center justify-center rounded-full bg-background">
+            <span className="text-[15px] font-bold text-foreground">{formatUsd(totalValue)}</span>
+            <span className="text-[9px] text-muted-foreground">total</span>
+          </div>
+        </div>
       </div>
 
       <div className="mt-2 grid grid-cols-2 gap-2">

@@ -14,7 +14,6 @@ import {
   Shield,
   TrendingUp,
 } from "lucide-react"
-import { Label, Pie, PieChart, Tooltip } from "recharts"
 import { cn } from "@/lib/utils"
 
 type TxType = "send" | "receive" | "earn" | "exchange"
@@ -206,6 +205,19 @@ function TxIcon({ type }: { type: TxType }) {
   return <div className={cn("flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full", config.color)}>{config.icon}</div>
 }
 
+function donutGradient(segments: Array<{ value: number; fill: string }>) {
+  const total = segments.reduce((acc, segment) => acc + segment.value, 0)
+  if (total <= 0) return "var(--muted)"
+  let cursor = 0
+  return segments
+    .map((segment) => {
+      const start = cursor
+      cursor += (segment.value / total) * 100
+      return `${segment.fill} ${start.toFixed(2)}% ${cursor.toFixed(2)}%`
+    })
+    .join(", ")
+}
+
 function AllocationCard({ totalValue }: { totalValue: number }) {
   const chartData = portfolioAssets.filter((asset) => asset.value > 0)
   const total = chartData.reduce((acc, asset) => acc + asset.value, 0)
@@ -215,24 +227,16 @@ function AllocationCard({ totalValue }: { totalValue: number }) {
         <h3 className="text-sm font-semibold">Allocation</h3>
         <p className="text-xs text-muted-foreground">Current finance workspace</p>
       </div>
-      <div className="mx-auto h-[210px] w-[210px]">
-        <PieChart width={210} height={210}>
-          <Tooltip contentStyle={{ background: "var(--card)", border: "1px solid var(--border)", borderRadius: 12 }} />
-          <Pie data={chartData} dataKey="value" nameKey="symbol" innerRadius={58} outerRadius={82} strokeWidth={4}>
-            <Label
-              content={({ viewBox }) => {
-                if (viewBox && "cx" in viewBox && "cy" in viewBox) {
-                  return (
-                    <text x={viewBox.cx} y={viewBox.cy} textAnchor="middle" dominantBaseline="middle">
-                      <tspan x={viewBox.cx} y={viewBox.cy} className="fill-foreground text-xl font-bold">${total.toFixed(0)}</tspan>
-                      <tspan x={viewBox.cx} y={(viewBox.cy || 0) + 22} className="fill-muted-foreground text-xs">Portfolio</tspan>
-                    </text>
-                  )
-                }
-              }}
-            />
-          </Pie>
-        </PieChart>
+      <div className="mx-auto flex h-[210px] w-[210px] items-center justify-center">
+        <div
+          className="flex h-[164px] w-[164px] items-center justify-center rounded-full"
+          style={{ background: `conic-gradient(${donutGradient(chartData)})` }}
+        >
+          <div className="flex h-[112px] w-[112px] flex-col items-center justify-center rounded-full bg-card">
+            <span className="text-xl font-bold text-foreground">${total.toFixed(0)}</span>
+            <span className="text-xs text-muted-foreground">Portfolio</span>
+          </div>
+        </div>
       </div>
       <div className="mt-auto flex items-center justify-center gap-2 text-xs text-muted-foreground">
         <TrendingUp className="h-3.5 w-3.5 text-[var(--status-online)]" />

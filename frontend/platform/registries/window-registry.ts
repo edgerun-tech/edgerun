@@ -25,7 +25,6 @@ const registry: Map<string, WindowSpec> = new Map()
 
 const BUILTIN_SPECS: Record<string, WindowSpec> = {
   terminal: { defaultWidth: 700, defaultHeight: 450 },
-  "code-runner": { defaultWidth: 800, defaultHeight: 500 },
   "db-explorer": { defaultWidth: 700, defaultHeight: 450 },
   "network-monitor": { defaultWidth: 600, defaultHeight: 400 },
   "resource-monitor": { defaultWidth: 700, defaultHeight: 500 },

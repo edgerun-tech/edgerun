@@ -1,6 +1,5 @@
-.PHONY: check test build release docker-build install-ert version
+.PHONY: check test test-rust test-frontend test-all build release docker-build install-ert version
 .PHONY: marketplace-localnet marketplace-localnet-status marketplace-localnet-stop marketplace-stress
-.PHONY: e2e e2e-full e2e-mesh e2e-conformance e2e-runner
 
 # Run local CI checks (format, clippy, check, release build)
 check:
@@ -17,6 +16,17 @@ release:
 # Run all Rust tests and print an aggregate pass/fail summary
 test:
 	./scripts/test-summary.py
+
+# Run Rust workspace tests directly
+test-rust:
+	cargo test --workspace
+
+# Run frontend tests
+test-frontend:
+	cd frontend && bun run test:run
+
+# Run the local test suites that are part of the current workspace
+test-all: test-rust test-frontend
 
 # Start a local Solana validator with marketplace programs preloaded
 marketplace-localnet:
@@ -48,27 +58,3 @@ install-ert:
 # Build container image from Rust source
 docker-build:
 	docker build -t edgerun-reference-core:local .
-
-# ===========================================================================
-# End-to-End Testing Targets
-# ===========================================================================
-
-# Run comprehensive E2E test suite (software only, no hardware required)
-e2e:
-	cargo test -p edgerun-e2e -- --ignored
-
-# Run full E2E suite including hardware tests (requires HARDWARE_E2E=1)
-e2e-full:
-	HARDWARE_E2E=1 bash scripts/e2e-test-runner.sh --all
-
-# Run mesh integration tests (requires root for network namespaces)
-e2e-mesh:
-	sudo bash scripts/mesh-integration-test.sh
-
-# Run protocol conformance corpus tests
-e2e-conformance:
-	cargo test -- conformance --ignored
-
-# Run the interactive E2E test runner with menu
-e2e-runner:
-	bash scripts/e2e-test-runner.sh

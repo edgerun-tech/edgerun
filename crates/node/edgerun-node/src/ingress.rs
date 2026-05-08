@@ -78,8 +78,8 @@ impl TokenBucket {
 /// the oldest entry is evicted. This prevents redundant expensive work
 /// (signature verification, etc.) on duplicate messages.
 pub struct RecentHashCache {
-    hashes: VecDeque<u64>,
-    set: HashSet<u64>,
+    hashes: VecDeque<[u8; 32]>,
+    set: HashSet<[u8; 32]>,
     capacity: usize,
 }
 
@@ -94,12 +94,15 @@ impl RecentHashCache {
     }
 
     /// Checks if a hash is already in the cache.
-    pub fn contains(&self, hash: u64) -> bool {
-        self.set.contains(&hash)
+    pub fn contains(&self, hash: &[u8; 32]) -> bool {
+        self.set.contains(hash)
     }
 
     /// Inserts a hash, evicting the oldest if at capacity.
-    pub fn insert(&mut self, hash: u64) {
+    pub fn insert(&mut self, hash: [u8; 32]) {
+        if self.capacity == 0 || self.set.contains(&hash) {
+            return;
+        }
         if self.hashes.len() >= self.capacity {
             if let Some(oldest) = self.hashes.pop_front() {
                 self.set.remove(&oldest);
@@ -110,20 +113,10 @@ impl RecentHashCache {
     }
 }
 
-/// Computes a fast 64-bit hash of the message bytes for dedup purposes.
-/// This is NOT cryptographic — it's only for quick duplicate detection
-/// before expensive signature verification.
+/// Computes the SHA-256 hash used for duplicate detection before authority work.
 #[inline]
-pub fn quick_message_hash(bytes: &[u8]) -> u64 {
-    // FNV-1a 64-bit: fast enough for dedup, no crypto dependency
-    const FNV_OFFSET: u64 = 0xcbf29ce484222325;
-    const FNV_PRIME: u64 = 0x100000001b3;
-    let mut hash = FNV_OFFSET;
-    for &b in bytes {
-        hash ^= b as u64;
-        hash = hash.wrapping_mul(FNV_PRIME);
-    }
-    hash
+pub fn quick_message_hash(bytes: &[u8]) -> [u8; 32] {
+    edgerun_protocols::core_protocol::crypto::sha256(bytes)
 }
 
 // ---------------------------------------------------------------------------
@@ -192,7 +185,7 @@ pub fn screen_message(
 
     // Step 3: Duplicate detection (before rate limit to avoid wasting tokens on dups)
     let msg_hash = quick_message_hash(message_bytes);
-    if recent_hashes.contains(msg_hash) {
+    if recent_hashes.contains(&msg_hash) {
         return IngressResult::Duplicate;
     }
 

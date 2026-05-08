@@ -1,21 +1,11 @@
 "use client"
 
-export interface NodeInstallResult {
-  ok: boolean
-  appId?: string
-  releaseId?: string
-  manifestSha256?: string
-  developerId?: string
-  error?: string
-}
-
 type EdgerunNodeExports = WebAssembly.Exports & {
   memory: WebAssembly.Memory
   edgerun_node_alloc(len: number): number
   edgerun_node_dealloc(ptr: number, len: number): void
   edgerun_node_install_eapp(ptr: number, len: number, timeMs: bigint): bigint
   edgerun_node_decode_app_store_catalog(ptr: number, len: number): bigint
-  edgerun_node_decode_app_manifest(ptr: number, len: number): bigint
   edgerun_node_protocol_request(ptr: number, len: number, timeMs: bigint): bigint
   edgerun_node_add_locator(ptr: number, len: number, timeMs: bigint): bigint
   edgerun_node_ingest_transport_bytes(ptr: number, len: number, timeMs: bigint): bigint
@@ -44,11 +34,15 @@ async function loadEdgerunNode(): Promise<EdgerunNodeExports> {
   return exportsPromise
 }
 
-function readLastResult<T>(node: EdgerunNodeExports): T {
+function readLastJsonResult<T>(node: EdgerunNodeExports): T {
   const ptr = node.edgerun_node_last_result_ptr()
   const len = node.edgerun_node_last_result_len()
   const bytes = new Uint8Array(node.memory.buffer, ptr, len).slice()
   return JSON.parse(decoder.decode(bytes)) as T
+}
+
+function readLastTextResult(node: EdgerunNodeExports): string {
+  return decoder.decode(readLastResultBytes(node))
 }
 
 function readLastResultBytes(node: EdgerunNodeExports): Uint8Array {
@@ -71,16 +65,14 @@ function withNodeBytes<T>(
   }
 }
 
-export async function installEappWithEdgerunNode(eappBytes: Uint8Array): Promise<NodeInstallResult> {
+export async function installEappWithEdgerunNode(eappBytes: Uint8Array): Promise<void> {
   const node = await loadEdgerunNode()
-  return withNodeBytes(node, eappBytes, (ptr) => {
+  withNodeBytes(node, eappBytes, (ptr) => {
     const packed = node.edgerun_node_install_eapp(ptr, eappBytes.byteLength, BigInt(Date.now()))
     const status = Number(packed >> 32n)
-    const result = readLastResult<NodeInstallResult>(node)
-    if (status !== 200 || !result.ok) {
-      throw new Error(result.error || `edgerun-node rejected eapp: ${status}`)
+    if (status !== 200) {
+      throw new Error(readLastTextResult(node) || `edgerun-node rejected eapp: ${status}`)
     }
-    return result
   })
 }
 
@@ -116,39 +108,17 @@ export interface NodeCatalogDecodeResult {
   error?: string
 }
 
-export interface NodeManifestDecodeResult {
-  ok: boolean
-  appId?: string
-  developerId?: string
-  slug?: string
-  name?: string
-  version?: string
-  summary?: string
-  codeSha256?: string
-  error?: string
-}
-
 export async function decodeAppStoreCatalogWithEdgerunNode(catalogBytes: Uint8Array): Promise<NodeCatalogDecodeResult> {
   const node = await loadEdgerunNode()
   return withNodeBytes(node, catalogBytes, (ptr) => {
     const packed = node.edgerun_node_decode_app_store_catalog(ptr, catalogBytes.byteLength)
     const status = Number(packed >> 32n)
-    const result = readLastResult<NodeCatalogDecodeResult>(node)
-    if (status !== 200 || !result.ok) {
-      throw new Error(result.error || `edgerun-node rejected app store catalog: ${status}`)
+    if (status !== 200) {
+      throw new Error(readLastTextResult(node) || `edgerun-node rejected app store catalog: ${status}`)
     }
-    return result
-  })
-}
-
-export async function decodeAppManifestWithEdgerunNode(manifestBytes: Uint8Array): Promise<NodeManifestDecodeResult> {
-  const node = await loadEdgerunNode()
-  return withNodeBytes(node, manifestBytes, (ptr) => {
-    const packed = node.edgerun_node_decode_app_manifest(ptr, manifestBytes.byteLength)
-    const status = Number(packed >> 32n)
-    const result = readLastResult<NodeManifestDecodeResult>(node)
-    if (status !== 200 || !result.ok) {
-      throw new Error(result.error || `edgerun-node rejected app manifest: ${status}`)
+    const result = readLastJsonResult<NodeCatalogDecodeResult>(node)
+    if (!result.ok) {
+      throw new Error(result.error || "edgerun-node rejected app store catalog")
     }
     return result
   })
@@ -209,9 +179,8 @@ export async function registerNodeLocator(reg: NodeLocatorRegistration): Promise
   withNodeBytes(node, bytes, (ptr, len) => {
     const packed = node.edgerun_node_add_locator(ptr, len, BigInt(Date.now()))
     const status = Number(packed >> 32n)
-    const result = readLastResult<{ ok?: boolean; error?: string }>(node)
-    if (status !== 200 || !result.ok) {
-      throw new Error(result.error || `edgerun-node rejected locator: ${status}`)
+    if (status !== 200) {
+      throw new Error(readLastTextResult(node) || `edgerun-node rejected locator: ${status}`)
     }
   })
 }
@@ -222,8 +191,7 @@ export async function ingestNodeTransportBytes(bytes: Uint8Array): Promise<void>
     const packed = node.edgerun_node_ingest_transport_bytes(ptr, len, BigInt(Date.now()))
     const status = Number(packed >> 32n)
     if (status !== 200) {
-      const result = readLastResult<{ error?: string }>(node)
-      throw new Error(result.error || `edgerun-node rejected transport frame: ${status}`)
+      throw new Error(readLastTextResult(node) || `edgerun-node rejected transport frame: ${status}`)
     }
   })
 }

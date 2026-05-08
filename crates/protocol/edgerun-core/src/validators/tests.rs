@@ -140,7 +140,7 @@ fn stream_append_rejects_overflowed_head_sequence() {
             ("envelope_version", yi64(1)),
             ("event_version", yi64(1)),
             ("recorded_at", ystr("2030-01-01T00:00:00Z")),
-            ("signature", mapping([])),
+            ("signature", mapping(core::iter::empty::<(&str, Value)>())),
             ("event_type", ystr("EVENT_TYPE_CUSTOM")),
             ("stream_id", ystr("node-stream")),
             ("seq", yi64(i64::MAX)),

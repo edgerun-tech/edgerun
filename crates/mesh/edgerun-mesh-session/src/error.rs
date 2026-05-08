@@ -33,7 +33,9 @@ impl core::fmt::Display for SessionError {
             Self::DecryptionFailed => write!(f, "AES-GCM decryption failed"),
             Self::CiphertextTooShort => write!(f, "ciphertext too short"),
             Self::ReplayDetected => write!(f, "replay attack detected"),
-            Self::ReplayOnlyInput => write!(f, "replay-only input requires replayable session manager"),
+            Self::ReplayOnlyInput => {
+                write!(f, "replay-only input requires replayable session manager")
+            }
         }
     }
 }

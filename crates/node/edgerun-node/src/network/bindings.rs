@@ -57,7 +57,13 @@ pub fn binding_intents(
 
 pub fn decide_binding(intent: ServiceBindingIntent) -> ServiceBindingDecision {
     match intent.surface {
-        NodeTransportSurface::NativeSocket => ServiceBindingDecision::NativeSocket(intent.binding),
+        NodeTransportSurface::NativeSocket => {
+            if native_socket_binding_is_supported(&intent.binding) {
+                ServiceBindingDecision::NativeSocket(intent.binding)
+            } else {
+                ServiceBindingDecision::Denied(intent.binding)
+            }
+        }
         NodeTransportSurface::BrowserMessage
         | NodeTransportSurface::Mesh
         | NodeTransportSurface::InProcess => ServiceBindingDecision::Routed(intent.binding),
@@ -91,6 +97,25 @@ pub fn native_socket_bind(decision: &ServiceBindingDecision) -> Option<NativeSoc
 
 pub fn native_socket_binds(decisions: &[ServiceBindingDecision]) -> Vec<NativeSocketBind> {
     decisions.iter().filter_map(native_socket_bind).collect()
+}
+
+pub fn native_socket_binding_is_supported(binding: &RuntimeProtocolBinding) -> bool {
+    if binding.port == 0 {
+        return false;
+    }
+    matches!(
+        binding.protocol,
+        edgerun_protocols::wire::RUNTIME_PROTOCOL_HTTP
+            | edgerun_protocols::wire::RUNTIME_PROTOCOL_HTTPS
+            | edgerun_protocols::wire::RUNTIME_PROTOCOL_DNS_UDP
+            | edgerun_protocols::wire::RUNTIME_PROTOCOL_DNS_TCP
+            | edgerun_protocols::wire::RUNTIME_PROTOCOL_SMTP
+            | edgerun_protocols::wire::RUNTIME_PROTOCOL_SUBMISSION
+            | edgerun_protocols::wire::RUNTIME_PROTOCOL_IMAP
+            | edgerun_protocols::wire::RUNTIME_PROTOCOL_IMAPS
+            | edgerun_protocols::wire::RUNTIME_PROTOCOL_LMTP
+            | edgerun_protocols::wire::RUNTIME_PROTOCOL_TFTP
+    )
 }
 
 fn socket_endpoint(binding: &RuntimeProtocolBinding) -> Vec<u8> {

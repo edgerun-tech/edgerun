@@ -299,12 +299,41 @@ impl<S: BlockStorage> BlockEventLog<S> {
 
 impl<S: BlockStorage> EventLog for BlockEventLog<S> {
     fn append_event(&mut self, event: &EventEnvelope) -> Result<AppendReceipt, StorageError> {
+        let event_hash = canonical_event_hash(event).value.clone();
+        let scanned = self.scan()?;
+
+        if let Some(existing) = scanned
+            .iter()
+            .find(|scanned| scanned.location.stream_id == event.stream_id && scanned.location.seq == event.seq)
+        {
+            if existing.location.event_hash == event_hash {
+                return Ok(AppendReceipt {
+                    stream_id: existing.location.stream_id.clone(),
+                    seq: existing.location.seq,
+                    event_hash: existing.location.event_hash.clone(),
+                    file_offset: existing.location.file_offset,
+                    envelope_version: existing.location.envelope_version,
+                });
+            }
+
+            return Err(StorageError::Stream(format!(
+                "refusing to append stream {} seq {}: seq already exists with a different hash",
+                edgerun_protocols::core_protocol::util::bytes_to_hex(&event.stream_id),
+                event.seq
+            )));
+        }
+
+        let head = scanned
+            .iter()
+            .filter(|scanned| scanned.location.stream_id == event.stream_id)
+            .last();
+        validate_event_follows_stream_head(event, head)?;
+
         let (len_prefix, event_bytes) = encode_event_frame(event)?;
         let mut frame = Vec::with_capacity(len_prefix.len() + event_bytes.len());
         frame.extend_from_slice(&len_prefix);
         frame.extend_from_slice(&event_bytes);
 
-        let event_hash = canonical_event_hash(event).value.clone();
         let file_offset = self.append_raw_frame(&frame)?;
 
         Ok(AppendReceipt {
@@ -377,6 +406,53 @@ impl<S: BlockStorage> EventLog for BlockEventLog<S> {
 
     fn sync(&mut self) -> Result<(), StorageError> {
         self.write_header()
+    }
+}
+
+fn validate_event_follows_stream_head(
+    event: &EventEnvelope,
+    head: Option<&ScannedEvent>,
+) -> Result<(), StorageError> {
+    let stream_id_hex = edgerun_protocols::core_protocol::util::bytes_to_hex(&event.stream_id);
+
+    match head {
+        None => {
+            if event.seq != 0 {
+                return Err(StorageError::Stream(format!(
+                    "refusing to append stream {stream_id_hex} seq {}: first event must have seq 0",
+                    event.seq
+                )));
+            }
+            if event.prev_event_hash.is_some() {
+                return Err(StorageError::Stream(format!(
+                    "refusing to append stream {stream_id_hex} seq 0: genesis event must not have prev_event_hash"
+                )));
+            }
+            Ok(())
+        }
+        Some(head) => {
+            let expected_seq = head.location.seq.saturating_add(1);
+            if event.seq != expected_seq {
+                return Err(StorageError::Stream(format!(
+                    "refusing to append stream {stream_id_hex} seq {}: expected next seq {expected_seq}",
+                    event.seq
+                )));
+            }
+
+            let Some(prev_event_hash) = &event.prev_event_hash else {
+                return Err(StorageError::Stream(format!(
+                    "refusing to append stream {stream_id_hex} seq {}: missing prev_event_hash",
+                    event.seq
+                )));
+            };
+            if prev_event_hash.algorithm != 1 || prev_event_hash.value != head.location.event_hash {
+                return Err(StorageError::Stream(format!(
+                    "refusing to append stream {stream_id_hex} seq {}: prev_event_hash does not match seq {}",
+                    event.seq, head.location.seq
+                )));
+            }
+            Ok(())
+        }
     }
 }
 
@@ -479,13 +555,22 @@ mod tests {
         }
     }
 
+    fn with_prev_hash(mut event: EventEnvelope, prev: &[u8]) -> EventEnvelope {
+        event.prev_event_hash = Some(edgerun_protocols::core_protocol::protocol::Digest {
+            algorithm: 1,
+            value: prev.to_vec(),
+        });
+        event
+    }
+
     #[test]
     fn block_event_log_append_read_scan() {
         let device = InMemoryBlockDevice::new(16, 96);
         let mut log = BlockEventLog::open(device).unwrap();
 
         let e1 = envelope(b"stream-a", 0, 1);
-        let e2 = envelope(b"stream-a", 1, 1);
+        let e1_hash = canonical_event_hash(&e1).value;
+        let e2 = with_prev_hash(envelope(b"stream-a", 1, 1), &e1_hash);
         let e3 = envelope(b"stream-b", 0, 1);
 
         let r1 = log.append_event(&e1).unwrap();
@@ -520,7 +605,8 @@ mod tests {
         let mut device = InMemoryBlockDevice::new(16, 96);
         let mut log = BlockEventLog::open(device.clone()).unwrap();
         let e1 = envelope(b"stream", 0, 1);
-        let e2 = envelope(b"stream", 1, 1);
+        let e1_hash = canonical_event_hash(&e1).value;
+        let e2 = with_prev_hash(envelope(b"stream", 1, 1), &e1_hash);
         let r1 = log.append_event(&e1).unwrap();
         let r2 = log.append_event(&e2).unwrap();
         assert_eq!(r1.file_offset, 0);
@@ -533,7 +619,8 @@ mod tests {
         assert_eq!(scanned[1].event.seq, 1);
 
         let r3 = reopened.append_event(&e1).unwrap();
-        assert!(r3.file_offset > r2.file_offset);
+        assert_eq!(r3.file_offset, r1.file_offset);
+        assert!(r2.file_offset > r1.file_offset);
     }
 
     #[test]
@@ -577,6 +664,38 @@ mod tests {
             .read_event(&event.stream_id, event.seq, &bad_location)
             .unwrap_err();
         assert!(matches!(err, StorageError::Decode(_)));
+    }
+
+    #[test]
+    fn block_event_log_rejects_non_genesis_gap() {
+        let device = InMemoryBlockDevice::new(16, 32);
+        let mut log = BlockEventLog::open(device).unwrap();
+        let result = log.append_event(&envelope(b"stream", 1, 1));
+        assert!(matches!(result, Err(StorageError::Stream(_))));
+    }
+
+    #[test]
+    fn block_event_log_rejects_wrong_prev_hash() {
+        let device = InMemoryBlockDevice::new(16, 32);
+        let mut log = BlockEventLog::open(device).unwrap();
+        let e0 = envelope(b"stream", 0, 1);
+        let e1 = with_prev_hash(envelope(b"stream", 1, 1), &[0xAA; 32]);
+        log.append_event(&e0).unwrap();
+        let result = log.append_event(&e1);
+        assert!(matches!(result, Err(StorageError::Stream(_))));
+    }
+
+    #[test]
+    fn block_event_log_is_idempotent_for_same_seq_same_hash() {
+        let device = InMemoryBlockDevice::new(16, 32);
+        let mut log = BlockEventLog::open(device).unwrap();
+        let event = envelope(b"stream", 0, 1);
+
+        let first = log.append_event(&event).unwrap();
+        let second = log.append_event(&event).unwrap();
+
+        assert_eq!(first, second);
+        assert_eq!(log.scan().unwrap().len(), 1);
     }
 }
 

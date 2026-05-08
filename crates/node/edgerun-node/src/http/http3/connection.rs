@@ -89,11 +89,6 @@ impl Http3Connection {
         &mut self.quic
     }
 
-    /// Get mutable access to known_uni_stream_types (for testing).
-    pub(crate) fn known_uni_stream_types_mut(&mut self) -> &mut BTreeMap<u64, u64> {
-        &mut self.known_uni_stream_types
-    }
-
     /// Get sent GOAWAY ID (for testing).
     pub(crate) fn sent_goaway_id(&self) -> Option<u64> {
         if self.sent_goaway_id == u64::MAX {
@@ -1587,17 +1582,6 @@ impl Http3Connection {
                     frame_type, stream_id
                 ))),
             },
-        }
-    }
-
-    /// Determine the stream type from a stream ID.
-    fn stream_type_for_id(stream_id: u64) -> StreamType {
-        // Unidirectional streams: stream_id % 4 == 2 or 3
-        match stream_id % 4 {
-            0 | 1 => StreamType::Request, // Bidirectional
-            2 => StreamType::Control,     // First uni stream (usually control)
-            3 => StreamType::Push,        // Server-initiated (could be push, QPACK, etc.)
-            _ => StreamType::Request,
         }
     }
 

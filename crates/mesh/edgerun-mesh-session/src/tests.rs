@@ -378,6 +378,15 @@ fn session_error_display_replay_detected() {
 }
 
 #[test]
+fn session_error_display_replay_only_input() {
+    let err = SessionError::ReplayOnlyInput;
+    assert_eq!(
+        format!("{}", err),
+        "replay-only input requires replayable session manager"
+    );
+}
+
+#[test]
 fn session_error_implements_error_trait() {
     fn assert_error<T: std::error::Error>() {}
     assert_error::<SessionError>();
@@ -871,6 +880,30 @@ fn replay_detection_rejects_lower_counter_after_higher() {
     ));
 }
 
+#[test]
+fn failed_authentication_does_not_advance_replay_counter() {
+    let alice_id = node_id(0xAA);
+    let bob_id = node_id(0xBB);
+
+    let mut alice_mgr = SessionManager::new(alice_id);
+    let mut bob_mgr = SessionManager::new(bob_id);
+
+    let (init, secret) = alice_mgr.initiate_handshake(bob_id);
+    let (accept, _) = bob_mgr.respond_to_handshake(&init).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &secret)
+        .unwrap();
+
+    let valid = alice_mgr.encrypt_for(bob_id, b"valid").unwrap();
+    let mut forged = vec![0u8; 28];
+    forged[4..12].copy_from_slice(&u64::MAX.to_be_bytes());
+    assert!(matches!(
+        bob_mgr.decrypt_from(alice_id, &forged),
+        Err(SessionError::DecryptionFailed)
+    ));
+    assert_eq!(bob_mgr.decrypt_from(alice_id, &valid).unwrap(), b"valid");
+}
+
 // ── Session expiry after max frames ──
 
 #[test]
@@ -937,11 +970,15 @@ fn replayable_clock_drives_age_expiry_deterministically() {
         .complete_handshake_initiator(&accept, &secret)
         .unwrap();
 
-    alice_mgr.set_logical_time(MAX_SESSION_AGE - Duration::from_millis(1));
+    alice_mgr
+        .set_logical_time(MAX_SESSION_AGE - Duration::from_millis(1))
+        .unwrap();
     let ct = alice_mgr.encrypt_for(bob_id, b"x").unwrap();
     assert_eq!(bob_mgr.decrypt_from(alice_id, &ct).unwrap(), b"x");
 
-    alice_mgr.advance_logical_time(Duration::from_millis(1));
+    alice_mgr
+        .advance_logical_time(Duration::from_millis(1))
+        .unwrap();
     assert!(matches!(
         alice_mgr.encrypt_for(bob_id, b"x"),
         Err(SessionError::SessionExpired)
@@ -953,18 +990,26 @@ fn explicit_replay_inputs_produce_repeatable_ciphertext() {
     fn run_once() -> Vec<u8> {
         let alice_id = node_id(0xAA);
         let bob_id = node_id(0xBB);
-        let alice_secret = SessionManager::ephemeral_secret_from_bytes([1u8; 32]).unwrap();
-        let bob_secret = SessionManager::ephemeral_secret_from_bytes([2u8; 32]).unwrap();
+        let alice_secret =
+            SessionManager::ephemeral_secret_from_replay_scalar_bytes([1u8; 32]).unwrap();
+        let bob_secret =
+            SessionManager::ephemeral_secret_from_replay_scalar_bytes([2u8; 32]).unwrap();
 
         let mut alice_mgr = SessionManager::new_replayable(alice_id);
         let mut bob_mgr = SessionManager::new_replayable(bob_id);
 
         let (init, alice_secret) = alice_mgr.initiate_handshake_with_secret(bob_id, alice_secret);
         let (accept, _) = bob_mgr
-            .respond_to_handshake_with_secret_and_nonce_prefix(&init, bob_secret, [0xB0; 4])
+            .respond_to_handshake_with_secret_and_nonce_prefix_for_replay(
+                &init, bob_secret, [0xB0; 4],
+            )
             .unwrap();
         alice_mgr
-            .complete_handshake_initiator_with_nonce_prefix(&accept, &alice_secret, [0xA0; 4])
+            .complete_handshake_initiator_with_nonce_prefix_for_replay(
+                &accept,
+                &alice_secret,
+                [0xA0; 4],
+            )
             .unwrap();
 
         let ciphertext = alice_mgr.encrypt_for(bob_id, b"replay me").unwrap();
@@ -976,6 +1021,42 @@ fn explicit_replay_inputs_produce_repeatable_ciphertext() {
     }
 
     assert_eq!(run_once(), run_once());
+}
+
+#[test]
+fn replay_inputs_are_rejected_on_host_clock_manager() {
+    let alice_id = node_id(0xAA);
+    let bob_id = node_id(0xBB);
+    let mut alice_mgr = SessionManager::new(alice_id);
+    let mut bob_mgr = SessionManager::new(bob_id);
+    let alice_secret =
+        SessionManager::ephemeral_secret_from_replay_scalar_bytes([1u8; 32]).unwrap();
+    let bob_secret = SessionManager::ephemeral_secret_from_replay_scalar_bytes([2u8; 32]).unwrap();
+
+    assert!(matches!(
+        alice_mgr.set_logical_time(Duration::ZERO),
+        Err(SessionError::ReplayOnlyInput)
+    ));
+
+    let (init, alice_secret) = alice_mgr.initiate_handshake_with_secret(bob_id, alice_secret);
+    assert!(matches!(
+        bob_mgr.respond_to_handshake_with_secret_and_nonce_prefix_for_replay(
+            &init, bob_secret, [0xB0; 4],
+        ),
+        Err(SessionError::ReplayOnlyInput)
+    ));
+    let accept = HandshakeAccept {
+        responder: bob_id,
+        ephemeral_pub: [0x04; ECDH_PUBLIC_KEY_SIZE],
+    };
+    assert!(matches!(
+        alice_mgr.complete_handshake_initiator_with_nonce_prefix_for_replay(
+            &accept,
+            &alice_secret,
+            [0xA0; 4],
+        ),
+        Err(SessionError::ReplayOnlyInput)
+    ));
 }
 
 #[test]

@@ -12,8 +12,8 @@ use super::RuntimeServicePlan;
 /// Host/runtime adapter surfaces used to realize a deployment plan.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RuntimeBoundarySurface {
-    pub transport: NodeTransportSurface,
-    pub storage: RuntimeStorageSurface,
+    transport: NodeTransportSurface,
+    storage: RuntimeStorageSurface,
 }
 
 impl RuntimeBoundarySurface {
@@ -31,6 +31,14 @@ impl RuntimeBoundarySurface {
         transport: NodeTransportSurface::InProcess,
         storage: RuntimeStorageSurface::Memory,
     };
+
+    pub const fn transport(self) -> NodeTransportSurface {
+        self.transport
+    }
+
+    pub const fn storage(self) -> RuntimeStorageSurface {
+        self.storage
+    }
 }
 
 /// Boundary-neutral deployment intent derived from the rkyv runtime config.
@@ -50,8 +58,8 @@ pub struct RuntimeBoundaryDecision {
 impl RuntimeBoundaryIntent {
     pub fn from_service_plan(plan: &RuntimeServicePlan, surface: RuntimeBoundarySurface) -> Self {
         Self {
-            bindings: plan.requested_bindings(surface.transport),
-            storage: plan.requested_storage(surface.storage),
+            bindings: plan.requested_bindings(surface.transport()),
+            storage: plan.requested_storage(surface.storage()),
         }
     }
 

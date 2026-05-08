@@ -941,11 +941,6 @@ impl ConnectionPool {
         }
     }
 
-    /// Resolve hostname and connect TCP.
-    async fn resolve_and_connect(&self, host: &str, port: u16) -> Result<Arc<AsyncTcpStream>> {
-        Self::resolve_and_connect_static(self.connect_timeout, self.dns_timeout, host, port).await
-    }
-
     async fn connect_sock(&self, addr: &SocketAddr) -> Result<Arc<AsyncTcpStream>> {
         Self::connect_sock_static(self.connect_timeout, addr).await
     }

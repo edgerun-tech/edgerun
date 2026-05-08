@@ -13,7 +13,6 @@
  *   - widget: pinned widget (224×260)
  */
 
-import type { AppDefinition } from "@/platform/types/app-definition"
 import type { AppSurfaceKind, AppSurfaceSlot } from "@/stores/desktop-store"
 
 export interface AppSurfaceSpec {
@@ -32,7 +31,6 @@ const registry = new Map<string, AppSurfaceSpec>()
 
 const BUILTIN_SPECS: Record<string, AppSurfaceSpec> = {
   terminal: { kind: "overlay", ...SIZE.md, dismissOnOutsideClick: true },
-  "code-runner": { kind: "overlay", ...SIZE.md, dismissOnOutsideClick: true },
   "db-explorer": { kind: "overlay", ...SIZE.md, dismissOnOutsideClick: true },
   "network-monitor": { kind: "pinned-widget", ...SIZE.widget, dismissOnOutsideClick: false, preferredSlot: "left-top" },
   "file-browser": { kind: "overlay", ...SIZE.md, dismissOnOutsideClick: true },

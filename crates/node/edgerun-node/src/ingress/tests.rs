@@ -1,5 +1,9 @@
 use super::*;
 
+fn h(byte: u8) -> [u8; 32] {
+    [byte; 32]
+}
+
 #[test]
 fn token_bucket_allows_burst() {
     let mut bucket = TokenBucket::new(5, 1); // burst of 5, 1/sec refill
@@ -23,20 +27,20 @@ fn token_bucket_refills_over_time() {
 #[test]
 fn recent_hash_cache_dedup() {
     let mut cache = RecentHashCache::new(3);
-    cache.insert(42);
-    assert!(cache.contains(42));
-    assert!(!cache.contains(99));
+    cache.insert(h(42));
+    assert!(cache.contains(&h(42)));
+    assert!(!cache.contains(&h(99)));
 }
 
 #[test]
 fn recent_hash_cache_evicts_oldest() {
     let mut cache = RecentHashCache::new(2);
-    cache.insert(1);
-    cache.insert(2);
-    cache.insert(3); // evicts 1
-    assert!(!cache.contains(1));
-    assert!(cache.contains(2));
-    assert!(cache.contains(3));
+    cache.insert(h(1));
+    cache.insert(h(2));
+    cache.insert(h(3)); // evicts 1
+    assert!(!cache.contains(&h(1)));
+    assert!(cache.contains(&h(2)));
+    assert!(cache.contains(&h(3)));
 }
 
 #[test]
@@ -144,55 +148,58 @@ fn token_bucket_debug_repr() {
 #[test]
 fn recent_hash_cache_capacity_zero() {
     let mut cache = RecentHashCache::new(0);
-    // With capacity 0, len >= capacity is true (0 >= 0),
-    // but pop_front from empty VecDeque returns None (no-op),
-    // then the item gets pushed. So it stores 1 item.
-    cache.insert(42);
-    assert!(cache.contains(42));
+    cache.insert(h(42));
+    assert!(!cache.contains(&h(42)));
+    assert_eq!(cache.set.len(), 0);
+    assert_eq!(cache.hashes.len(), 0);
 }
 
 #[test]
 fn recent_hash_cache_capacity_one() {
     let mut cache = RecentHashCache::new(1);
-    cache.insert(100);
-    assert!(cache.contains(100));
-    cache.insert(200); // evicts 100
-    assert!(!cache.contains(100));
-    assert!(cache.contains(200));
+    cache.insert(h(100));
+    assert!(cache.contains(&h(100)));
+    cache.insert(h(200)); // evicts 100
+    assert!(!cache.contains(&h(100)));
+    assert!(cache.contains(&h(200)));
 }
 
 #[test]
 fn recent_hash_cache_multiple_evictions() {
     let mut cache = RecentHashCache::new(3);
-    cache.insert(1);
-    cache.insert(2);
-    cache.insert(3);
-    cache.insert(4); // evicts 1
-    cache.insert(5); // evicts 2
-    assert!(!cache.contains(1));
-    assert!(!cache.contains(2));
-    assert!(cache.contains(3));
-    assert!(cache.contains(4));
-    assert!(cache.contains(5));
+    cache.insert(h(1));
+    cache.insert(h(2));
+    cache.insert(h(3));
+    cache.insert(h(4)); // evicts 1
+    cache.insert(h(5)); // evicts 2
+    assert!(!cache.contains(&h(1)));
+    assert!(!cache.contains(&h(2)));
+    assert!(cache.contains(&h(3)));
+    assert!(cache.contains(&h(4)));
+    assert!(cache.contains(&h(5)));
 }
 
 #[test]
 fn recent_hash_cache_reinsert_same_hash_no_eviction() {
     let mut cache = RecentHashCache::new(2);
-    cache.insert(1);
-    cache.insert(1); // re-insert same, set dedup but VecDeque still grows
-                     // The hash is still in the cache
-    assert!(cache.contains(1));
-    // VecDeque has 2 entries but set has 1
+    cache.insert(h(1));
+    cache.insert(h(1));
+    assert!(cache.contains(&h(1)));
     assert_eq!(cache.set.len(), 1);
-    assert_eq!(cache.hashes.len(), 2);
+    assert_eq!(cache.hashes.len(), 1);
 }
 
 #[test]
 fn quick_hash_empty_input() {
     let hash = quick_message_hash(&[]);
-    // FNV-1a of empty input is the offset basis
-    assert_eq!(hash, 0xcbf29ce484222325u64);
+    assert_eq!(
+        hash,
+        [
+            0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4, 0xc8, 0x99,
+            0x6f, 0xb9, 0x24, 0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c, 0xa4, 0x95,
+            0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55
+        ]
+    );
 }
 
 #[test]

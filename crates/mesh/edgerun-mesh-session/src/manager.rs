@@ -27,15 +27,26 @@ impl SessionClock {
         }
     }
 
-    fn set_logical(&mut self, now: Duration) {
-        *self = Self::Logical(now);
+    fn is_logical(self) -> bool {
+        matches!(self, Self::Logical(_))
     }
 
-    fn advance_logical(&mut self, delta: Duration) {
-        let Self::Logical(now) = self else {
-            return;
-        };
-        *now = now.saturating_add(delta);
+    fn set_logical(&mut self, now: Duration) -> Result<(), SessionError> {
+        if !self.is_logical() {
+            return Err(SessionError::ReplayOnlyInput);
+        }
+        *self = Self::Logical(now);
+        Ok(())
+    }
+
+    fn advance_logical(&mut self, delta: Duration) -> Result<(), SessionError> {
+        match self {
+            Self::Logical(now) => {
+                *now = now.saturating_add(delta);
+                Ok(())
+            }
+            Self::Host => Err(SessionError::ReplayOnlyInput),
+        }
     }
 }
 
@@ -77,13 +88,13 @@ impl SessionManager {
     }
 
     /// Sets the logical clock used by replayable managers.
-    pub fn set_logical_time(&mut self, now: Duration) {
-        self.clock.set_logical(now);
+    pub fn set_logical_time(&mut self, now: Duration) -> Result<(), SessionError> {
+        self.clock.set_logical(now)
     }
 
     /// Advances the logical clock used by replayable managers.
-    pub fn advance_logical_time(&mut self, delta: Duration) {
-        self.clock.advance_logical(delta);
+    pub fn advance_logical_time(&mut self, delta: Duration) -> Result<(), SessionError> {
+        self.clock.advance_logical(delta)
     }
 
     /// Generate a random EphemeralSecret using OS randomness.
@@ -92,10 +103,10 @@ impl SessionManager {
     }
 
     /// Construct a P-256 ephemeral secret from explicit scalar bytes for replay.
-    pub fn ephemeral_secret_from_bytes(
+    pub fn ephemeral_secret_from_replay_scalar_bytes(
         bytes: [u8; 32],
     ) -> Result<EphemeralSecret, edgerun_crypto::elliptic_curve::Error> {
-        EphemeralSecret::from_bytes(bytes.into())
+        EphemeralSecret::from_replay_scalar_bytes(bytes.into())
     }
 
     // -----------------------------------------------------------------------
@@ -140,11 +151,31 @@ impl SessionManager {
     ) -> Result<(), SessionError> {
         let mut nonce_prefix = [0u8; NONCE_PREFIX_SIZE];
         edgerun_crypto::fill_random(&mut nonce_prefix).expect("random generation failed");
-        self.complete_handshake_initiator_with_nonce_prefix(accept, our_secret, nonce_prefix)
+        self.complete_handshake_initiator_with_nonce_prefix_unchecked(
+            accept,
+            our_secret,
+            nonce_prefix,
+        )
     }
 
     /// Completes an initiator handshake using an explicit nonce prefix for replay.
-    pub fn complete_handshake_initiator_with_nonce_prefix(
+    pub fn complete_handshake_initiator_with_nonce_prefix_for_replay(
+        &mut self,
+        accept: &HandshakeAccept,
+        our_secret: &EphemeralSecret,
+        nonce_prefix: [u8; NONCE_PREFIX_SIZE],
+    ) -> Result<(), SessionError> {
+        if !self.clock.is_logical() {
+            return Err(SessionError::ReplayOnlyInput);
+        }
+        self.complete_handshake_initiator_with_nonce_prefix_unchecked(
+            accept,
+            our_secret,
+            nonce_prefix,
+        )
+    }
+
+    fn complete_handshake_initiator_with_nonce_prefix_unchecked(
         &mut self,
         accept: &HandshakeAccept,
         our_secret: &EphemeralSecret,
@@ -180,11 +211,31 @@ impl SessionManager {
         let our_secret = Self::random_ephemeral_secret();
         let mut nonce_prefix = [0u8; NONCE_PREFIX_SIZE];
         edgerun_crypto::fill_random(&mut nonce_prefix).expect("random generation failed");
-        self.respond_to_handshake_with_secret_and_nonce_prefix(init, our_secret, nonce_prefix)
+        self.respond_to_handshake_with_secret_and_nonce_prefix_unchecked(
+            init,
+            our_secret,
+            nonce_prefix,
+        )
     }
 
     /// Responds to a handshake with explicit secret material for replay.
-    pub fn respond_to_handshake_with_secret_and_nonce_prefix(
+    pub fn respond_to_handshake_with_secret_and_nonce_prefix_for_replay(
+        &mut self,
+        init: &HandshakeInit,
+        our_secret: EphemeralSecret,
+        nonce_prefix: [u8; NONCE_PREFIX_SIZE],
+    ) -> Result<(HandshakeAccept, EphemeralSecret), SessionError> {
+        if !self.clock.is_logical() {
+            return Err(SessionError::ReplayOnlyInput);
+        }
+        self.respond_to_handshake_with_secret_and_nonce_prefix_unchecked(
+            init,
+            our_secret,
+            nonce_prefix,
+        )
+    }
+
+    fn respond_to_handshake_with_secret_and_nonce_prefix_unchecked(
         &mut self,
         init: &HandshakeInit,
         our_secret: EphemeralSecret,

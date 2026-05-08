@@ -3,7 +3,7 @@
 import { atom, computed } from "nanostores"
 import { runtimeEventLog } from "./runtime-event-log"
 import { sha256Hex } from "./browser-capability-types"
-import { decodeAppStoreCatalogWithEdgerunNode, decodeAppManifestWithEdgerunNode, installEappWithEdgerunNode } from "./edgerun-node"
+import { decodeAppStoreCatalogWithEdgerunNode, installEappWithEdgerunNode } from "./edgerun-node"
 
 const APP_STORE_CATALOG_URL = "/apps/catalog.ecat"
 const DB_NAME = "edgerun-browser-apps"
@@ -214,21 +214,12 @@ async function loadCatalogThroughNode(): Promise<BrowserAppCatalog> {
 }
 
 export async function installBrowserCatalogApp(app: BrowserCatalogApp): Promise<InstalledBrowserApp> {
-  const [eappBytes, manifestBytes] = await Promise.all([
+  const [eappBytes] = await Promise.all([
     expectHash(app.packageUrl, app.eappSha256),
     expectHash(app.manifestUrl, app.manifestSha256),
   ])
-  const nodeInstall = await installEappWithEdgerunNode(eappBytes)
-  if (nodeInstall.manifestSha256 !== app.manifestSha256) {
-    throw new Error(`${app.appId} node install manifest hash does not match catalog`)
-  }
-  if (app.runtimeAppId && nodeInstall.appId !== app.runtimeAppId) {
-    throw new Error(`${app.appId} node install app id does not match catalog`)
-  }
-  const manifest = await decodeManifestMetadata(app, manifestBytes)
-  if (manifest.name !== app.name || manifest.version !== app.version) {
-    throw new Error(`${app.appId} manifest metadata does not match catalog`)
-  }
+  await installEappWithEdgerunNode(eappBytes)
+  const manifest = catalogManifestMetadata(app)
 
   const verifiedAssets: BrowserCatalogAsset[] = []
   for (const asset of app.assets) {
@@ -249,9 +240,9 @@ export async function installBrowserCatalogApp(app: BrowserCatalogApp): Promise<
     eappSha256: app.eappSha256,
     manifestSha256: app.manifestSha256,
     packageBytes: eappBytes.byteLength,
-    runtimeAppId: nodeInstall.appId || "",
-    releaseId: nodeInstall.releaseId || "",
-    developerId: nodeInstall.developerId || "",
+    runtimeAppId: app.runtimeAppId || "",
+    releaseId: app.releaseId || "",
+    developerId: app.developerId || "",
     installedAt: new Date().toISOString(),
     manifest,
     eappBytes: bytesToArrayBuffer(eappBytes),
@@ -280,26 +271,15 @@ export async function installBrowserCatalogApp(app: BrowserCatalogApp): Promise<
   return installed
 }
 
-async function decodeManifestMetadata(app: BrowserCatalogApp, manifestBytes: Uint8Array): Promise<Record<string, unknown> & { name: string; version: string }> {
-  const decoded = await decodeAppManifestWithEdgerunNode(manifestBytes)
-  if (decoded.slug && decoded.slug !== app.slug) {
-    throw new Error(`${app.appId} manifest slug does not match catalog`)
-  }
-  if (decoded.appId && app.runtimeAppId && decoded.appId !== app.runtimeAppId) {
-    throw new Error(`${app.appId} manifest app id does not match catalog`)
-  }
-  if (decoded.developerId && app.developerId && decoded.developerId !== app.developerId) {
-    throw new Error(`${app.appId} manifest developer id does not match catalog`)
-  }
+function catalogManifestMetadata(app: BrowserCatalogApp): Record<string, unknown> & { name: string; version: string } {
   return {
-    format: "edgerun-app-manifest-rkyv-v1",
-    appId: decoded.appId,
-    developerId: decoded.developerId,
-    slug: decoded.slug,
-    name: decoded.name || app.name,
-    version: decoded.version || app.version,
-    summary: decoded.summary || app.description,
-    codeSha256: decoded.codeSha256,
+    format: "edgerun-app-manifest-from-signed-catalog-v1",
+    appId: app.runtimeAppId,
+    developerId: app.developerId,
+    slug: app.slug,
+    name: app.name,
+    version: app.version,
+    summary: app.description,
   }
 }
 

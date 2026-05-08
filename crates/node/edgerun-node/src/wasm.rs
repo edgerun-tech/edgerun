@@ -93,12 +93,12 @@ pub unsafe extern "C" fn edgerun_node_install_eapp(
     let owned = bytes.to_vec();
     let graph = match from_bytes::<SdkWireRecord, WireError>(&owned) {
         Ok(SdkWireRecord::AppGraph(graph)) => graph,
-        Ok(_) => return write_result(400, br#"{"ok":false,"error":"not_app_graph"}"#.to_vec()),
-        Err(_) => return write_result(400, br#"{"ok":false,"error":"invalid_rkyv"}"#.to_vec()),
+        Ok(_) => return write_result(400, b"not_app_graph".to_vec()),
+        Err(_) => return write_result(400, b"invalid_rkyv".to_vec()),
     };
 
     if !app_graph_is_structurally_bound(&graph) {
-        return write_result(400, br#"{"ok":false,"error":"unbound_app_graph"}"#.to_vec());
+        return write_result(400, b"unbound_app_graph".to_vec());
     }
 
     let install = graph.runtime_install.clone();
@@ -109,14 +109,7 @@ pub unsafe extern "C" fn edgerun_node_install_eapp(
     let node = NODE.get_or_init(|| Mutex::new(BrowserNodeState::new()));
     let mut node = node.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     if let Err(error) = node.runtime.install_app_graph(graph, time_ms) {
-        return write_result(
-            400,
-            format!(
-                r#"{{"ok":false,"error":"{}"}}"#,
-                escape_json(&error.to_string())
-            )
-            .into_bytes(),
-        );
+        return write_result(400, error.to_string().into_bytes());
     }
     node.installed.insert(
         app_id,
@@ -128,72 +121,25 @@ pub unsafe extern "C" fn edgerun_node_install_eapp(
         },
     );
 
-    write_result(
-        200,
-        format!(
-            r#"{{"ok":true,"appId":"{}","releaseId":"{}","manifestSha256":"{}","developerId":"{}"}}"#,
-            hex32(&app_id),
-            hex32(&release_id),
-            hex32(&manifest_sha256),
-            hex32(&developer_id),
-        )
-        .into_bytes(),
-    )
+    write_result(200, Vec::new())
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn edgerun_node_decode_app_store_catalog(
-    ptr: *const u8,
-    len: usize,
-) -> u64 {
+pub unsafe extern "C" fn edgerun_node_decode_app_store_catalog(ptr: *const u8, len: usize) -> u64 {
     let bytes = core::slice::from_raw_parts(ptr, len);
     let owned = bytes.to_vec();
     let catalog = match from_bytes::<SdkWireRecord, WireError>(&owned) {
         Ok(SdkWireRecord::AppStoreCatalog(catalog)) => catalog,
-        Ok(_) => return write_result(400, br#"{"ok":false,"error":"not_app_store_catalog"}"#.to_vec()),
-        Err(_) => return write_result(400, br#"{"ok":false,"error":"invalid_rkyv"}"#.to_vec()),
+        Ok(_) => return write_result(400, b"not_app_store_catalog".to_vec()),
+        Err(_) => return write_result(400, b"invalid_rkyv".to_vec()),
     };
     if catalog.abi_version != SDK_WIRE_ABI_VERSION || catalog.flags & 1 != 1 {
-        return write_result(400, br#"{"ok":false,"error":"invalid_catalog_abi"}"#.to_vec());
+        return write_result(400, b"invalid_catalog_abi".to_vec());
     }
     if !app_store_catalog_signature_is_valid(&catalog) {
-        return write_result(
-            400,
-            br#"{"ok":false,"error":"invalid_catalog_signature"}"#.to_vec(),
-        );
+        return write_result(400, b"invalid_catalog_signature".to_vec());
     }
     write_result(200, app_store_catalog_json(&catalog).into_bytes())
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn edgerun_node_decode_app_manifest(
-    ptr: *const u8,
-    len: usize,
-) -> u64 {
-    let bytes = core::slice::from_raw_parts(ptr, len);
-    let owned = bytes.to_vec();
-    let manifest = match from_bytes::<SdkWireRecord, WireError>(&owned) {
-        Ok(SdkWireRecord::AppManifest(manifest)) => manifest,
-        Ok(_) => return write_result(400, br#"{"ok":false,"error":"not_app_manifest"}"#.to_vec()),
-        Err(_) => return write_result(400, br#"{"ok":false,"error":"invalid_rkyv"}"#.to_vec()),
-    };
-    if manifest.abi_version != SDK_WIRE_ABI_VERSION || manifest.flags & 1 != 1 {
-        return write_result(400, br#"{"ok":false,"error":"invalid_manifest_abi"}"#.to_vec());
-    }
-    write_result(
-        200,
-        format!(
-            r#"{{"ok":true,"appId":"{}","developerId":"{}","slug":"{}","name":"{}","version":"{}","summary":"{}","codeSha256":"{}"}}"#,
-            hex32(&manifest.app_id),
-            hex32(&manifest.developer_id),
-            json_bytes(&manifest.app_slug),
-            json_bytes(&manifest.name),
-            json_bytes(&manifest.version),
-            json_bytes(&manifest.summary),
-            hex32(&manifest.code_sha256),
-        )
-        .into_bytes(),
-    )
 }
 
 #[no_mangle]
@@ -225,19 +171,14 @@ pub unsafe extern "C" fn edgerun_node_add_locator(ptr: *const u8, len: usize, ti
     let bytes = core::slice::from_raw_parts(ptr, len);
     let raw = match core::str::from_utf8(bytes) {
         Ok(raw) => raw,
-        Err(_) => {
-            return write_result(
-                400,
-                br#"{"ok":false,"error":"invalid_locator_utf8"}"#.to_vec(),
-            )
-        }
+        Err(_) => return write_result(400, b"invalid_locator_utf8".to_vec()),
     };
     let mut lines = raw.lines();
     let node_id = lines.next().unwrap_or_default().trim();
     let transport = lines.next().unwrap_or_default().trim();
     let locator = lines.next().unwrap_or_default().trim();
     if node_id.is_empty() || transport.is_empty() || locator.is_empty() {
-        return write_result(400, br#"{"ok":false,"error":"invalid_locator"}"#.to_vec());
+        return write_result(400, b"invalid_locator".to_vec());
     }
 
     let node = NODE.get_or_init(|| Mutex::new(BrowserNodeState::new()));
@@ -253,7 +194,7 @@ pub unsafe extern "C" fn edgerun_node_add_locator(ptr: *const u8, len: usize, ti
                 registered_at_ms: time_ms,
             },
         );
-    write_result(200, br#"{"ok":true}"#.to_vec())
+    write_result(200, Vec::new())
 }
 
 #[no_mangle]
@@ -266,11 +207,8 @@ pub unsafe extern "C" fn edgerun_node_ingest_transport_bytes(
     let node = NODE.get_or_init(|| Mutex::new(BrowserNodeState::new()));
     let mut node = node.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
     match ingest_edgerun_protocol_record(&mut node, bytes, time_ms) {
-        Ok(status) => write_result(200, status.into_bytes()),
-        Err(error) => write_result(
-            400,
-            format!(r#"{{"ok":false,"error":"{}"}}"#, escape_json(&error)).into_bytes(),
-        ),
+        Ok(()) => write_result(200, Vec::new()),
+        Err(error) => write_result(400, error.into_bytes()),
     }
 }
 
@@ -381,7 +319,7 @@ fn ingest_edgerun_protocol_record(
     node: &mut BrowserNodeState,
     bytes: Vec<u8>,
     time_ms: u64,
-) -> Result<String, String> {
+) -> Result<(), String> {
     let record = from_bytes::<SdkWireRecord, WireError>(&bytes)
         .map_err(|_| "invalid_rkyv_protocol_record".to_string())?;
     match record {
@@ -394,13 +332,13 @@ fn ingest_edgerun_protocol_record(
                 RuntimeMessageDelivery::Local(message) => {
                     node.inbound_frames
                         .push(sdk_wire_bytes(&SdkWireRecord::RuntimeAppMessage(message)));
-                    Ok(r#"{"ok":true,"delivery":"local"}"#.to_string())
+                    Ok(())
                 }
                 RuntimeMessageDelivery::Remote(routed) => {
                     node.outbound_frames.push(sdk_wire_bytes(
                         &SdkWireRecord::RuntimeRoutedAppMessage(routed),
                     ));
-                    Ok(r#"{"ok":true,"delivery":"remote"}"#.to_string())
+                    Ok(())
                 }
             }
         }
@@ -410,7 +348,7 @@ fn ingest_edgerun_protocol_record(
                     .push(sdk_wire_bytes(&SdkWireRecord::RuntimeRoutedAppMessage(
                         routed,
                     )));
-                return Ok(r#"{"ok":true,"delivery":"forwarded"}"#.to_string());
+                return Ok(());
             }
             let message = node
                 .runtime
@@ -418,7 +356,7 @@ fn ingest_edgerun_protocol_record(
                 .map_err(|error| error.to_string())?;
             node.inbound_frames
                 .push(sdk_wire_bytes(&SdkWireRecord::RuntimeAppMessage(message)));
-            Ok(r#"{"ok":true,"delivery":"local"}"#.to_string())
+            Ok(())
         }
         _ => Err("unsupported_transport_protocol_record".to_string()),
     }
