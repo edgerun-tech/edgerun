@@ -10,12 +10,8 @@ import {
   Database,
   FileCode,
   FolderGit2,
-  FolderOpen,
-  GitBranch,
   Globe2,
   HardDrive,
-  KeyRound,
-  Lock,
   Network,
   Plus,
   RefreshCw,
@@ -23,7 +19,6 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
-  Trash2,
   UploadCloud,
   Workflow,
   XCircle,
@@ -160,7 +155,7 @@ const initialSources: StorageSource[] = [
     details: [
       "Treat repos as versioned datasets for agent coding, graphing, and explanation.",
       "Write operations should be explicit text-edit proposals first, then user-approved commits.",
-      "Good default pipeline: repo snapshot → codelyzer → graph index → AS visualization runtime.",
+      "Good default pipeline: repo snapshot -> codelyzer -> graph index -> local visualization projection.",
     ],
   },
   {
@@ -211,10 +206,10 @@ const initialPipelines: Pipeline[] = [
     name: "GitHub repo → graph visualization",
     status: "ready",
     sourceIds: ["github", "edgerun-vfs"],
-    transform: "codelyzer.indexRepo() → graph.pack()",
+    transform: "codelyzer.indexRepo() -> graph.pack()",
     sink: "browser://origin/xray/projections",
     permissionSummary: "read repo, write local graph cache, ask before code edits",
-    runtime: "AssemblyScript interpreter + hostcall bridge",
+    runtime: "WASI module + scoped hostcalls",
     lastRun: "not run yet",
   },
   {
@@ -222,10 +217,10 @@ const initialPipelines: Pipeline[] = [
     name: "Google Drive → lifegraph dataset",
     status: "draft",
     sourceIds: ["google-drive", "edgerun-vfs"],
-    transform: "normalizeDocs() → extractMetadata() → signSourceRefs()",
+    transform: "normalizeDocs() -> extractMetadata() -> signSourceRefs()",
     sink: "edgerun://vfs/ken/lifegraph/imports/google-drive",
     permissionSummary: "read selected Drive folders, ask before exporting or deleting",
-    runtime: "AssemblyScript interpreter, deterministic mode",
+    runtime: "WASI module, deterministic mode",
     lastRun: "draft",
   },
   {
@@ -233,10 +228,10 @@ const initialPipelines: Pipeline[] = [
     name: "Local folder → private analysis sandbox",
     status: "blocked",
     sourceIds: ["local-disk", "browser-storage"],
-    transform: "scanFiles() → classify() → buildTimeline()",
+    transform: "scanFiles() -> classify() -> buildTimeline()",
     sink: "browser://origin/private/local-analysis",
     permissionSummary: "folder handle required, destructive writes disabled",
-    runtime: "AssemblyScript interpreter, no network hostcalls",
+    runtime: "WASI module, no network hostcalls",
     lastRun: "blocked by folder permission",
   },
 ]
@@ -317,7 +312,7 @@ function PipelineCard({ pipeline, sources, active, onSelect }: { pipeline: Pipel
       <div className="grid grid-cols-[1fr_auto_1fr_auto_1fr] items-center gap-2 rounded-lg border border-border bg-background/60 p-2 font-mono text-[10px] text-muted-foreground">
         <span className="truncate">sources</span>
         <ArrowRight className="h-3 w-3" />
-        <span className="truncate">AS transform</span>
+        <span className="truncate">WASI transform</span>
         <ArrowRight className="h-3 w-3" />
         <span className="truncate">sink</span>
       </div>
@@ -422,8 +417,8 @@ function RuntimePanel() {
   return (
     <div className="grid h-full min-h-0 grid-cols-[1fr_320px] gap-3 p-3">
       <section className="min-h-0 overflow-auto rounded-xl border border-border bg-card p-4">
-        <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-foreground"><FileCode className="h-4 w-4 text-primary" />AssemblyScript data runtime</div>
-        <p className="mb-4 text-xs text-muted-foreground">Storage adapters should not feed raw credentials or unrestricted handles into WASM. The interpreter receives capability-scoped hostcalls and signed source references.</p>
+        <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-foreground"><FileCode className="h-4 w-4 text-primary" />WASI data runtime</div>
+        <p className="mb-4 text-xs text-muted-foreground">Storage adapters should not feed raw credentials or unrestricted handles into modules. Each module receives capability-scoped hostcalls and signed source references.</p>
         <div className="space-y-2">
           {hostcalls.map(([name, description, mode]) => (
             <div key={name} className="grid grid-cols-[150px_1fr_88px] items-center gap-3 rounded-lg border border-border bg-background/60 p-2 text-xs">
@@ -439,7 +434,7 @@ function RuntimePanel() {
         <div className="space-y-2 text-xs leading-relaxed text-muted-foreground">
           <div className="rounded-lg border border-border bg-background/60 p-2">Connectors authenticate and mount data.</div>
           <div className="rounded-lg border border-border bg-background/60 p-2">Permission controller approves exact source, operation, sink, and transform.</div>
-          <div className="rounded-lg border border-border bg-background/60 p-2">AssemblyScript code receives only approved hostcalls.</div>
+          <div className="rounded-lg border border-border bg-background/60 p-2">WASI modules receive only approved hostcalls.</div>
           <div className="rounded-lg border border-border bg-background/60 p-2">Xray/GL visualization consumes emitted graph projections, not raw secrets.</div>
         </div>
       </section>
@@ -521,10 +516,10 @@ export function StorageApp() {
       name: "New configurable data pipeline",
       status: "draft",
       sourceIds: [selectedSource?.id ?? "edgerun-vfs"],
-      transform: "input.records() → transform() → graph.emit()",
+      transform: "input.records() -> transform() -> graph.emit()",
       sink: "browser://origin/pipelines/draft",
       permissionSummary: "draft: no permission granted yet",
-      runtime: "AssemblyScript interpreter",
+      runtime: "WASI module",
       lastRun: "never",
     }
     setPipelines((prev) => [next, ...prev])
@@ -567,7 +562,7 @@ export function StorageApp() {
         <header className="flex h-14 flex-shrink-0 items-center justify-between border-b border-border bg-[var(--window-header)]/40 px-3">
           <div>
             <h2 className="text-sm font-semibold">Configurable data pipelines</h2>
-            <p className="text-[11px] text-muted-foreground">Mount any source, scope it through permission control, then feed safe data into AssemblyScript transforms and visualization.</p>
+            <p className="text-[11px] text-muted-foreground">Mount any source, scope it through permission control, then feed safe data into WASI transforms and visualization.</p>
           </div>
           <div className="flex items-center gap-2">
             <div className="relative"><Search className="absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" /><input value={query} onChange={(event) => setQuery(event.target.value)} className="h-8 w-56 rounded-md border border-border bg-background pl-7 pr-2 text-xs outline-none focus:border-primary/50" placeholder="Search sources or pipelines..." /></div>

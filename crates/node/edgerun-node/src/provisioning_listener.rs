@@ -17,7 +17,7 @@ pub(crate) async fn run_provisioning_listener(
     config_path: Option<std::path::PathBuf>,
     cancel: CancellationToken,
 ) {
-    let addr = format!("0.0.0.0:{PROVISION_PORT}");
+    let addr = format!("127.0.0.1:{PROVISION_PORT}");
     let listen_addr: std::net::SocketAddr = match addr.parse() {
         Ok(a) => a,
         Err(e) => {
@@ -36,7 +36,7 @@ pub(crate) async fn run_provisioning_listener(
         }
     };
 
-    crate::node_info!("Provisioning listener ready on :{PROVISION_PORT}");
+    crate::node_info!("Provisioning listener ready on 127.0.0.1:{PROVISION_PORT}");
     if let Some(path) = &config_path {
         crate::node_info!("Provisioning persistence enabled via {}", path.display());
     }
@@ -54,14 +54,12 @@ pub(crate) async fn run_provisioning_listener(
                 let pin = pairing_pin.clone();
                 let pubkey = public_key_hex.clone();
                 let target_config_path = config_path.clone();
-                let peer_loopback = peer_addr.ip().is_loopback();
                 edgerun_node::rt::spawn(async move {
                     if let Err(e) = handle_provisioning_connection(
                         stream,
                         &pin,
                         &pubkey,
                         target_config_path.as_deref(),
-                        peer_loopback,
                     )
                     .await
                     {
@@ -101,7 +99,6 @@ pub(crate) async fn handle_provisioning_connection(
     expected_pin: &Option<String>,
     public_key_hex: &str,
     config_path: Option<&Path>,
-    peer_loopback: bool,
 ) -> Result<(), String> {
     let mut buf = [0u8; 512];
     let n = stream
@@ -113,7 +110,7 @@ pub(crate) async fn handle_provisioning_connection(
     }
 
     let request = String::from_utf8_lossy(&buf[..n]).to_string();
-    crate::node_debug!("Provisioning request: {request}");
+    crate::node_debug!("Provisioning request received: {} bytes", n);
 
     let payload: JsonValue = match edgerun_json::from_json_slice(request.as_bytes()) {
         Ok(payload) => payload,
@@ -130,16 +127,11 @@ pub(crate) async fn handle_provisioning_connection(
     let msg_type = json_text(payload.get("type"), "type").unwrap_or_default();
     let pin = json_text(payload.get("pin"), "pin").unwrap_or_default();
     let node_id = json_text(payload.get("node_id"), "node_id").unwrap_or_default();
-    let skip_local_checks = payload
-        .get("skip_checks")
-        .and_then(JsonValue::as_bool)
-        .unwrap_or(false);
-    let bypass_security = skip_local_checks && peer_loopback;
 
     let response = if msg_type == "provision" {
         if node_id != public_key_hex {
             response_err("node_id mismatch")
-        } else if !bypass_security {
+        } else {
             if let Some(expected) = expected_pin {
                 if pin != *expected {
                     response_err("PIN mismatch")
@@ -149,8 +141,6 @@ pub(crate) async fn handle_provisioning_connection(
             } else {
                 persist_provisioning_response(config_path, public_key_hex)
             }
-        } else {
-            persist_provisioning_response(config_path, public_key_hex)
         }
     } else if msg_type == "complete" {
         response_ok("genesis_completed")

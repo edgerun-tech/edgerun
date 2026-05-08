@@ -8,11 +8,11 @@ import { useAuth, type ProfilePreferences, type UnlockedProfileContainer } from 
 type Panel = "menu" | "share" | "events" | "settings" | "confirm-logout"
 
 const AVATAR_COLORS = [
-  "oklch(0.3 0.1 145)",
-  "oklch(0.32 0.12 230)",
-  "oklch(0.34 0.12 30)",
-  "oklch(0.32 0.12 320)",
-  "oklch(0.3 0.1 190)",
+  "oklch(0.34 0.14 245)",
+  "oklch(0.36 0.13 215)",
+  "oklch(0.34 0.12 285)",
+  "oklch(0.36 0.13 25)",
+  "oklch(0.34 0.12 190)",
 ]
 
 function contactCard(handle: string, publicKey: string) {
@@ -86,10 +86,10 @@ export function ProfileMenu() {
   }
 
   return (
-    <div className="fixed left-4 top-4 z-50">
+    <div className="fixed left-4 top-4 z-50 sm:left-5 sm:top-5">
       <button
         onClick={() => setOpen((value) => !value)}
-        className="flex h-12 w-12 items-center justify-center rounded-full border border-white/10 text-sm font-semibold text-white shadow-2xl ring-1 ring-black/30 transition hover:ring-primary/30"
+        className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 text-sm font-semibold text-white shadow-2xl ring-1 ring-black/30 transition hover:ring-primary/40 sm:h-12 sm:w-12"
         style={{ background: preferences.avatarColor }}
         aria-label="Open profile menu"
       >
@@ -97,7 +97,7 @@ export function ProfileMenu() {
       </button>
 
       {open && (
-        <div className="mt-3 w-[min(340px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-border bg-background/96 shadow-2xl backdrop-blur-xl">
+        <div className="mt-3 max-h-[calc(100vh-5.5rem)] w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-border bg-background/96 shadow-2xl backdrop-blur-xl">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold text-foreground">{profile.handle}</div>
@@ -109,7 +109,7 @@ export function ProfileMenu() {
           </div>
 
           {panel === "menu" && (
-            <div className="p-2">
+            <div className="p-2.5">
               <button onClick={() => showPanel("share")} className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm text-foreground hover:bg-secondary">
                 <Share2 className="h-4 w-4 text-primary" />
                 Share profile
@@ -132,7 +132,7 @@ export function ProfileMenu() {
 
           {panel === "share" && (
             <div className="grid gap-3 p-4">
-              <div className="rounded-lg border border-border bg-secondary/35 p-3 font-mono text-[11px] text-muted-foreground">
+              <div className="max-h-36 overflow-auto rounded-lg border border-border bg-secondary/35 p-3 font-mono text-[11px] leading-4 text-muted-foreground">
                 {contactText}
               </div>
               <div className="grid grid-cols-2 gap-2">
@@ -150,7 +150,7 @@ export function ProfileMenu() {
           )}
 
           {panel === "events" && (
-            <div className="max-h-[420px] overflow-auto p-4">
+            <div className="max-h-[min(420px,calc(100vh-10rem))] overflow-auto p-4">
               <div className="grid gap-2">
                 {profile.eventLog.map((event) => (
                   <div key={event.eventHash} className="rounded-lg border border-border bg-card p-3">
@@ -167,7 +167,8 @@ export function ProfileMenu() {
           )}
 
           {panel === "settings" && (
-            <div className="grid gap-4 p-4">
+            <div className="max-h-[min(560px,calc(100vh-10rem))] overflow-auto p-4">
+              <div className="grid gap-4">
               <label className="grid gap-1 text-xs text-muted-foreground">
                 Avatar initials
                 <input
@@ -232,6 +233,7 @@ export function ProfileMenu() {
                 <button disabled={!password || auth.isLoading} onClick={saveSettings} className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground disabled:opacity-45">
                   Save
                 </button>
+              </div>
               </div>
             </div>
           )}

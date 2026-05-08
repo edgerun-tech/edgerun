@@ -302,10 +302,9 @@ impl<S: BlockStorage> EventLog for BlockEventLog<S> {
         let event_hash = canonical_event_hash(event).value.clone();
         let scanned = self.scan()?;
 
-        if let Some(existing) = scanned
-            .iter()
-            .find(|scanned| scanned.location.stream_id == event.stream_id && scanned.location.seq == event.seq)
-        {
+        if let Some(existing) = scanned.iter().find(|scanned| {
+            scanned.location.stream_id == event.stream_id && scanned.location.seq == event.seq
+        }) {
             if existing.location.event_hash == event_hash {
                 return Ok(AppendReceipt {
                     stream_id: existing.location.stream_id.clone(),

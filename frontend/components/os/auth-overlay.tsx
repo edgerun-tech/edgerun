@@ -97,12 +97,12 @@ export function AuthOverlay({
         <div className="auth-vignette absolute inset-0" />
       </div>
 
-      <div className="relative z-10 m-auto flex w-[min(420px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-border bg-[var(--window-bg)]/92 shadow-2xl shadow-black/60 backdrop-blur-xl">
-        <div className="flex items-center justify-center border-b border-border px-6 py-5">
+      <div className="relative z-10 m-auto flex w-[min(440px,calc(100vw-2rem))] max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-2xl border border-border bg-[var(--window-bg)]/94 shadow-2xl shadow-black/60 backdrop-blur-xl">
+        <div className="flex items-center justify-center border-b border-border px-6 py-5 sm:py-6">
           <EdgerunLogo variant="full" size="md" className="text-primary" />
         </div>
 
-        <div className="flex flex-col gap-5 px-7 py-7">
+        <div className="flex min-h-0 flex-col gap-5 overflow-auto px-5 py-6 sm:px-7 sm:py-7">
           {screen === "welcome" && (
             <>
               <div>
@@ -111,11 +111,11 @@ export function AuthOverlay({
                   Create a local identity for this browser. You can lock it, switch profiles, and bring it back later with your password.
                 </p>
               </div>
-              <button onClick={() => setScreen("create")} className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90">
+              <button onClick={() => setScreen("create")} className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90">
                 <KeyRound className="h-4 w-4" />
                 New profile
               </button>
-              <button onClick={() => fileInputRef.current?.click()} className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-secondary/50 px-4 py-2.5 text-sm font-medium text-foreground hover:bg-secondary">
+              <button onClick={() => fileInputRef.current?.click()} className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-border bg-secondary/50 px-4 text-sm font-medium text-foreground hover:bg-secondary">
                 <Upload className="h-4 w-4" />
                 Import profile
               </button>
@@ -130,10 +130,10 @@ export function AuthOverlay({
                   Choose a name and password. The keys stay sealed on this device.
                 </p>
               </div>
-              <input value={handle} onChange={(event) => setHandle(event.target.value)} placeholder="Handle" className="w-full rounded-lg border border-border bg-secondary/50 px-3 py-2 text-sm outline-none focus:border-primary" />
-              <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" placeholder="Profile password" className="w-full rounded-lg border border-border bg-secondary/50 px-3 py-2 text-sm outline-none focus:border-primary" />
-              <input value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} type="password" placeholder="Confirm password" className="w-full rounded-lg border border-border bg-secondary/50 px-3 py-2 text-sm outline-none focus:border-primary" onKeyDown={(event) => event.key === "Enter" && createProfile()} />
-              <button disabled={!canCreate || isLoading} onClick={createProfile} className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-45">
+              <input value={handle} onChange={(event) => setHandle(event.target.value)} placeholder="Handle" className="h-10 w-full rounded-lg border border-border bg-secondary/50 px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+              <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" placeholder="Profile password" className="h-10 w-full rounded-lg border border-border bg-secondary/50 px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+              <input value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} type="password" placeholder="Confirm password" className="h-10 w-full rounded-lg border border-border bg-secondary/50 px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" onKeyDown={(event) => event.key === "Enter" && createProfile()} />
+              <button disabled={!canCreate || isLoading} onClick={createProfile} className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 disabled:cursor-not-allowed disabled:opacity-45">
                 <LockKeyhole className="h-4 w-4" />
                 {isLoading ? "Sealing..." : "Create and unlock"}
               </button>
@@ -157,7 +157,7 @@ export function AuthOverlay({
                     setPassword("")
                     onSwitchProfile(event.target.value)
                   }}
-                  className="w-full rounded-lg border border-border bg-secondary/50 px-3 py-2 text-sm outline-none focus:border-primary"
+                  className="h-10 w-full rounded-lg border border-border bg-secondary/50 px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 >
                   {profileSummaries.map((profile) => (
                     <option key={profile.profileId} value={profile.profileId}>
@@ -166,13 +166,13 @@ export function AuthOverlay({
                   ))}
                 </select>
               )}
-              <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" placeholder="Profile password" className="w-full rounded-lg border border-border bg-secondary/50 px-3 py-2 text-sm outline-none focus:border-primary" onKeyDown={(event) => event.key === "Enter" && unlockProfile()} />
-              <button disabled={!canUnlock || isLoading} onClick={unlockProfile} className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-45">
+              <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" placeholder="Profile password" className="h-10 w-full rounded-lg border border-border bg-secondary/50 px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" onKeyDown={(event) => event.key === "Enter" && unlockProfile()} />
+              <button disabled={!canUnlock || isLoading} onClick={unlockProfile} className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 disabled:cursor-not-allowed disabled:opacity-45">
                 <LockKeyhole className="h-4 w-4" />
                 {isLoading ? "Opening..." : "Unlock"}
               </button>
               {canUnlockWithPasskey && (
-                <button disabled={isLoading} onClick={onAuthenticateWithWebAuthn} className="flex w-full items-center justify-center gap-2 rounded-lg border border-border bg-secondary/50 px-4 py-2.5 text-sm font-medium text-foreground hover:bg-secondary disabled:opacity-45">
+                <button disabled={isLoading} onClick={onAuthenticateWithWebAuthn} className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-border bg-secondary/50 px-4 text-sm font-medium text-foreground hover:bg-secondary disabled:opacity-45">
                   <KeyRound className="h-4 w-4" />
                   Unlock with passkey
                 </button>

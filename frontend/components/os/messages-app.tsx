@@ -93,19 +93,19 @@ export function MessagesApp({ onClose, initialRecipientId }: MessagesAppProps) {
   }
 
   return (
-    <div className="fixed left-1/2 top-1/2 z-40 flex h-[min(640px,calc(100vh-7rem))] w-[min(960px,calc(100vw-3rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-border bg-background/96 shadow-2xl backdrop-blur-xl">
-      <div className="flex h-12 flex-shrink-0 items-center justify-between border-b border-[var(--window-border)] px-4">
+    <div className="fixed left-1/2 top-1/2 z-40 flex h-[min(680px,calc(100vh-6rem))] w-[min(980px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border bg-background/96 shadow-2xl backdrop-blur-xl">
+      <div className="flex h-12 flex-shrink-0 items-center justify-between border-b border-[var(--window-border)] px-4 sm:h-14 sm:px-5">
         <div className="flex items-center gap-2">
           <Send className="h-4 w-4 text-primary" />
           <span className="text-sm font-medium text-foreground">Messages</span>
         </div>
-        <button onClick={onClose} className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground" aria-label="Close Messages">
+        <button onClick={onClose} className="rounded-md border border-border bg-background/80 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground" aria-label="Close Messages">
           Close
         </button>
       </div>
 
-      <div className="flex min-h-0 flex-1">
-        <div className="flex w-44 flex-shrink-0 flex-col border-r border-[var(--window-border)] py-2">
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        <div className="flex h-32 flex-shrink-0 flex-col border-b border-[var(--window-border)] py-2 md:h-auto md:w-48 md:border-b-0 md:border-r">
           <div className="mb-1 px-3">
             <p className="text-[9px] font-semibold uppercase tracking-widest text-muted-foreground/70">Direct</p>
           </div>
@@ -189,7 +189,7 @@ export function MessagesApp({ onClose, initialRecipientId }: MessagesAppProps) {
             <div ref={bottomRef} />
           </div>
 
-          <div className="border-t border-[var(--window-border)] p-3">
+          <div className="border-t border-[var(--window-border)] p-3 sm:p-4">
             <div className="mb-2 grid gap-2 sm:grid-cols-[1fr_180px]">
               <input
                 value={subject}

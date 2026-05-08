@@ -1,9 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { ChevronLeft, ChevronRight, Globe, Cpu, Code2, Fingerprint, LayoutGrid, Check } from "lucide-react"
+import { ChevronLeft, ChevronRight, Globe, Cpu, TerminalSquare, Fingerprint, LayoutGrid, Check } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { EdgerunLogo } from "./edgerun-logo"
 
 interface Step {
   id: number
@@ -122,7 +121,7 @@ function FingerprintVisual() {
 function AppsVisual() {
   const apps = [
     { name: "Terminal", price: "Free" },
-    { name: "Code Runner", price: "Free" },
+    { name: "App Store", price: "Free" },
     { name: "DB Explorer", price: "$5/mo" },
     { name: "Git Sync", price: "$3/mo" },
   ]
@@ -165,10 +164,10 @@ const STEPS: Step[] = [
   },
   {
     id: 3,
-    icon: <Code2 className="h-5 w-5" />,
-    title: "Write, compile, execute",
-    subtitle: "Code Runner is your scratchpad",
-    body: "Open Code Runner from the App Store to write TypeScript or Rust, compile it to WASM in-browser, and run it on any node in your session. See stdout and timing inline.",
+    icon: <TerminalSquare className="h-5 w-5" />,
+    title: "Install signed apps",
+    subtitle: "Catalog proofs first",
+    body: "Use the App Store or Terminal to install cataloged apps. Packages are verified against signed catalog records before the node accepts them.",
     visual: <CodeVisual />,
   },
   {

@@ -321,8 +321,7 @@ pub fn cmd_init_provisioned(path: &PathBuf, name: Option<String>, controller: Op
     let key_hex = edgerun_protocols::core_protocol::util::bytes_to_hex(&signing_key.to_bytes());
 
     let pairing_pin = generate_pairing_pin();
-    let stream_id = format!("stream-{}", node_id.short());
-    let node_name = name.unwrap_or_else(|| format!("edgerun-{}", node_id.short()));
+    let _node_name = name.unwrap_or_else(|| format!("edgerun-{}", node_id.short()));
     if let Some(controller) = controller {
         eprintln!("Controller bootstrap input must be recorded by a signed bootstrap contract: {controller}");
     }
@@ -353,14 +352,15 @@ pub fn cmd_init_provisioned(path: &PathBuf, name: Option<String>, controller: Op
     eprintln!();
     eprintln!("Event log created at: {}", path.join("events").display());
     eprintln!();
-    eprintln!("FROM YOUR LAPTOP, run:");
+    eprintln!("FROM THIS HOST, while a provisioning listener is running, run:");
     eprintln!(
         "  edged provision --config {} --pin {}",
         path.display(),
         pairing_pin
     );
     eprintln!();
-    eprintln!("The node is now advertising in provisioning mode.");
+    eprintln!("The node identity and genesis stream are initialized.");
+    eprintln!("Provisioning listeners bind to loopback by default; use an explicit tunnel for remote setup.");
     eprintln!("Control is bound to the generated node private key.");
     eprintln!("Protect and back up local key material; there is no account recovery path.");
 }

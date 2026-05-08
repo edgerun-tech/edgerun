@@ -1,4 +1,4 @@
-.PHONY: check test test-rust test-frontend test-all build release docker-build install-ert version
+.PHONY: check test test-rust test-frontend test-all coverage coverage-frontend bench bench-list integration-test integration-test-list build release docker-build install-ert version
 .PHONY: marketplace-localnet marketplace-localnet-status marketplace-localnet-stop marketplace-stress
 
 # Run local CI checks (format, clippy, check, release build)
@@ -27,6 +27,30 @@ test-frontend:
 
 # Run the local test suites that are part of the current workspace
 test-all: test-rust test-frontend
+
+# Generate Rust and frontend coverage reports
+coverage:
+	./scripts/coverage-report.sh
+
+# Generate frontend coverage only
+coverage-frontend:
+	./scripts/coverage-report.sh --frontend-only
+
+# Run benchmark entry points and save a report under target/benchmarks
+bench:
+	./scripts/benchmark-report.py
+
+# List benchmark entry points without running them
+bench-list:
+	./scripts/benchmark-report.py --list
+
+# Run current Cargo integration test targets
+integration-test:
+	./scripts/integration-tests.py
+
+# List current Cargo integration test targets
+integration-test-list:
+	./scripts/integration-tests.py --list
 
 # Start a local Solana validator with marketplace programs preloaded
 marketplace-localnet:

@@ -290,14 +290,18 @@ fn route_wasm_protocol(
 ) -> (u32, String) {
     let clean_path = path.split('?').next().unwrap_or(path);
     if let Some((approval_id, decision)) = parse_approval_decision_path(clean_path) {
-        return (
-            200,
-            format!(
-                r#"{{"approvalId":"{}","decision":"{}"}}"#,
-                escape_json(approval_id),
-                decision
-            ),
-        );
+        return if method == "POST" {
+            (
+                200,
+                format!(
+                    r#"{{"approvalId":"{}","decision":"{}"}}"#,
+                    escape_json(approval_id),
+                    decision
+                ),
+            )
+        } else {
+            (405, r#"{"error":"method_not_allowed"}"#.to_string())
+        };
     }
 
     match (method, clean_path) {
@@ -662,6 +666,21 @@ mod tests {
 
         catalog.sequence = 2;
         assert!(!app_store_catalog_signature_is_valid(&catalog));
+    }
+
+    #[test]
+    fn wasm_approval_decisions_reject_get() {
+        let mut node = BrowserNodeState::new();
+        let (status, body) = route_wasm_protocol(
+            &mut node,
+            "GET",
+            "/protocol/approvals/approval-1/approve",
+            "",
+            1,
+        );
+
+        assert_eq!(status, 405);
+        assert_eq!(body, r#"{"error":"method_not_allowed"}"#);
     }
 }
 

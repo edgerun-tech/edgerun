@@ -68,6 +68,7 @@ export function TopBar({
         {mounted && username ? (
           <button
             onClick={onLock}
+            aria-label="Lock desktop"
             className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:text-foreground"
           >
             <Lock className="h-3 w-3" />
@@ -76,6 +77,7 @@ export function TopBar({
         ) : (
           <button
             onClick={onSignIn}
+            aria-label="Sign in"
             className="flex items-center gap-1 rounded bg-primary/10 px-2 py-1 text-xs font-medium text-primary hover:bg-primary/20"
           >
             Sign In

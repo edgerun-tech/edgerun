@@ -140,7 +140,7 @@ export function Globe({ nodeCount = 24, className }: GlobeProps) {
     const angle = rotationRef.current
 
     // Colors (matching CSS tokens)
-    const primaryRgb = "101, 212, 141"   // approx oklch(0.65 0.2 145) → green
+    const primaryRgb = "82, 145, 255"
     const mutedRgb = "80, 80, 95"
 
     // ---- Draw lat/lng grid lines ----

@@ -125,16 +125,14 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
     return Array.from(merged.values()).sort((a, b) => appGroupRank(a) - appGroupRank(b) || a.name.localeCompare(b.name))
   }, [catalogAppState])
 
-  const normalizedInstalledIds = useMemo(
-    () => installedIds.map(normalizeAppId),
-    [installedIds],
-  )
+  const normalizedInstalledIds = useMemo(() => installedIds.map(normalizeAppId), [installedIds])
+  const installedIdSet = useMemo(() => new Set(normalizedInstalledIds), [normalizedInstalledIds])
 
   const filteredApps = useMemo(() => {
     const term = query.trim().toLowerCase()
     return apps.filter((app) => {
       const normalizedAppId = normalizeAppId(app.appId)
-      const installed = normalizedInstalledIds.includes(normalizedAppId) || isCoreApp(normalizedAppId)
+      const installed = installedIdSet.has(normalizedAppId) || isCoreApp(normalizedAppId)
       if (filter === "catalog" && app.source !== "catalog") return false
       if (filter === "builtin" && app.source !== "builtin") return false
       if (filter === "installed" && !installed) return false
@@ -143,7 +141,7 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(term))
     })
-  }, [apps, filter, normalizedInstalledIds, query])
+  }, [apps, filter, installedIdSet, query])
 
   const selectedApp = useMemo(() => {
     if (!filteredApps.length) return undefined
@@ -151,7 +149,7 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
   }, [filteredApps, selectedAppId])
 
   const selectedNormalizedId = selectedApp ? normalizeAppId(selectedApp.appId) : ""
-  const selectedInstalled = selectedApp ? normalizedInstalledIds.includes(selectedNormalizedId) || isCoreApp(selectedNormalizedId) : false
+  const selectedInstalled = selectedApp ? installedIdSet.has(selectedNormalizedId) || isCoreApp(selectedNormalizedId) : false
   const selectedCore = selectedApp ? isCoreApp(selectedNormalizedId) : false
   const selectedMissingCount = selectedApp
     ? selectedApp.requiredCapabilityIds.filter((id) => !hasLocalCapabilityGrant(selectedNormalizedId, id)).length
@@ -195,7 +193,7 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-3">
+      <div className="flex shrink-0 flex-col gap-3 border-b border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary text-primary-foreground">
             <Package className="h-4 w-4" />
@@ -211,13 +209,13 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
             </div>
           </div>
         </div>
-        <div className="rounded-md border border-border bg-secondary/35 px-3 py-1.5 text-[11px] font-medium text-muted-foreground">
+        <div className="w-fit rounded-md border border-border bg-secondary/35 px-3 py-1.5 text-[11px] font-medium text-muted-foreground sm:mr-16">
           CLI submissions only
         </div>
       </div>
 
-      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,4fr)_minmax(260px,1fr)]">
-          <div className="flex min-h-0 flex-col border-r border-border">
+      <div className="grid min-h-0 flex-1 grid-rows-[minmax(240px,0.9fr)_minmax(300px,1.1fr)] lg:grid-cols-[minmax(0,4fr)_minmax(320px,1.2fr)] lg:grid-rows-1">
+          <div className="flex min-h-0 flex-col border-b border-border lg:border-b-0 lg:border-r">
             <div className="shrink-0 border-b border-border p-3">
               <div className="flex h-9 items-center gap-2 rounded-md border border-border bg-secondary/35 px-3">
                 <Search className="h-3.5 w-3.5 text-muted-foreground" />
@@ -225,15 +223,17 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="Search apps"
+                  aria-label="Search apps"
                   className="min-w-0 flex-1 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground"
                 />
               </div>
-              <div className="mt-2 flex items-center gap-1 overflow-x-auto">
+              <div className="mt-2 flex items-center gap-1 overflow-x-auto pb-0.5">
                 <Filter className="mr-1 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                 {(["all", "catalog", "installed", "builtin"] as StoreFilter[]).map((item) => (
                   <button
                     key={item}
                     onClick={() => setFilter(item)}
+                    aria-pressed={filter === item}
                     className={cn(
                       "h-7 shrink-0 rounded border px-2 text-[11px] font-medium capitalize",
                       filter === item
@@ -247,18 +247,19 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
               </div>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-auto p-2">
+            <div className="min-h-0 flex-1 overflow-auto p-2.5">
               {filteredApps.map((app) => {
                 const normalizedAppId = normalizeAppId(app.appId)
-                const installed = normalizedInstalledIds.includes(normalizedAppId) || isCoreApp(normalizedAppId)
+                const installed = installedIdSet.has(normalizedAppId) || isCoreApp(normalizedAppId)
                 const missingCount = app.requiredCapabilityIds.filter((id) => !hasLocalCapabilityGrant(normalizedAppId, id)).length
                 const selected = selectedApp?.appId === app.appId
                 return (
                   <button
                     key={app.appId}
                     onClick={() => setSelectedAppId(app.appId)}
+                    aria-current={selected ? "true" : undefined}
                     className={cn(
-                      "mb-1 flex w-full items-start gap-3 rounded-md border p-2.5 text-left transition-colors",
+                      "mb-1.5 flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors",
                       selected
                         ? "border-primary/35 bg-primary/10"
                         : "border-transparent bg-transparent hover:border-border hover:bg-secondary/25",
@@ -300,7 +301,7 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
 
           <div className="min-h-0 overflow-auto">
             {selectedApp ? (
-              <div className="p-4">
+              <div className="p-4 sm:p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex min-w-0 items-start gap-3">
                     <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
@@ -329,7 +330,7 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
                   </span>
                 </div>
 
-                <div className="mt-4 grid grid-cols-3 gap-2">
+                <div className="mt-4 grid gap-2 sm:grid-cols-3">
                   <InfoCell label="Runtime" value={runtime ?? selectedApp.kind} />
                   <InfoCell label="Package" value={formatBytes(packageBytes)} />
                   <InfoCell label="Assets" value={typeof verifiedAssets === "number" ? `${verifiedAssets} verified` : "on install"} />
@@ -449,6 +450,7 @@ function ProofRow({ label, value, raw }: { label: string; value: string; raw?: s
         {raw && raw !== "unknown" && (
           <button
             onClick={() => void navigator.clipboard?.writeText(raw)}
+            aria-label={`Copy ${label} proof`}
             className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-secondary hover:text-foreground"
             title="Copy"
           >

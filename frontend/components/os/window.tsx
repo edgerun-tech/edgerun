@@ -52,6 +52,8 @@ export function Window({
   const dragOffset = useRef({ x: 0, y: 0 })
   const resizeStart = useRef({ x: 0, y: 0, width: 0, height: 0 })
   const preMaximizeState = useRef({ position, size })
+  const frameRef = useRef<number | null>(null)
+  const pendingMouseRef = useRef<{ clientX: number; clientY: number } | null>(null)
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest("[data-window-controls]")) return
@@ -80,23 +82,39 @@ export function Window({
   }, [onFocus, isMaximized, size.width, size.height])
 
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
+    const applyPointerFrame = () => {
+      frameRef.current = null
+      const next = pendingMouseRef.current
+      if (!next) return
+
       if (isDragging) {
-        const newX = Math.max(0, Math.min(window.innerWidth - 100, e.clientX - dragOffset.current.x))
-        const newY = Math.max(0, Math.min(window.innerHeight - 50, e.clientY - dragOffset.current.y))
+        const newX = Math.max(0, Math.min(window.innerWidth - 100, next.clientX - dragOffset.current.x))
+        const newY = Math.max(0, Math.min(window.innerHeight - 50, next.clientY - dragOffset.current.y))
         setPosition({ x: newX, y: newY })
       }
 
       if (isResizing) {
-        const deltaX = e.clientX - resizeStart.current.x
-        const deltaY = e.clientY - resizeStart.current.y
+        const deltaX = next.clientX - resizeStart.current.x
+        const deltaY = next.clientY - resizeStart.current.y
         const newWidth = Math.max(minSize.width, resizeStart.current.width + deltaX)
         const newHeight = Math.max(minSize.height, resizeStart.current.height + deltaY)
         setSize({ width: newWidth, height: newHeight })
       }
     }
 
+    const handleMouseMove = (e: MouseEvent) => {
+      pendingMouseRef.current = { clientX: e.clientX, clientY: e.clientY }
+      if (frameRef.current === null) {
+        frameRef.current = requestAnimationFrame(applyPointerFrame)
+      }
+    }
+
     const handleMouseUp = () => {
+      if (frameRef.current !== null) {
+        cancelAnimationFrame(frameRef.current)
+        frameRef.current = null
+      }
+      pendingMouseRef.current = null
       setIsDragging(false)
       setIsResizing(false)
       if (appId && !isMaximized) {
@@ -110,6 +128,10 @@ export function Window({
     }
 
     return () => {
+      if (frameRef.current !== null) {
+        cancelAnimationFrame(frameRef.current)
+        frameRef.current = null
+      }
       document.removeEventListener("mousemove", handleMouseMove)
       document.removeEventListener("mouseup", handleMouseUp)
     }
@@ -180,12 +202,14 @@ export function Window({
         <div className="flex items-center gap-1" data-window-controls>
           <button
             onClick={handleMinimize}
+            aria-label={`Minimize ${title}`}
             className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-secondary"
           >
             <Minus className="h-3.5 w-3.5 text-muted-foreground" />
           </button>
           <button
             onClick={handleMaximize}
+            aria-label={isMaximized ? `Restore ${title}` : `Maximize ${title}`}
             className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-secondary"
           >
             {isMaximized ? (
@@ -196,6 +220,7 @@ export function Window({
           </button>
           <button
             onClick={handleClose}
+            aria-label={`Close ${title}`}
             className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-destructive hover:text-destructive-foreground"
           >
             <X className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive-foreground" />

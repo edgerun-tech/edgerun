@@ -37,7 +37,7 @@ type CommandSuggestion = {
 
 const COMMAND_PREFIXES: Record<CommandPrefix, { label: string; title: string; className: string }> = {
   "/": { label: "General", title: "General command", className: "bg-sky-500 text-white shadow-[0_0_18px_rgba(14,165,233,0.35)]" },
-  "#": { label: "Terminal", title: "Send to terminal", className: "bg-emerald-500 text-white shadow-[0_0_18px_rgba(16,185,129,0.35)]" },
+  "#": { label: "Terminal", title: "Send to terminal", className: "bg-cyan-500 text-white shadow-[0_0_18px_rgba(6,182,212,0.35)]" },
   "?": { label: "Help", title: "Help topics", className: "bg-amber-400 text-black shadow-[0_0_18px_rgba(251,191,36,0.35)]" },
   "~": { label: "AI", title: "AI input", className: "bg-fuchsia-500 text-white shadow-[0_0_18px_rgba(217,70,239,0.35)]" },
 };
@@ -112,7 +112,7 @@ const FloatingDockMobile = ({
         {open && (
           <motion.div
             layoutId="nav"
-            className="absolute bottom-full mb-2 flex flex-col gap-2"
+            className="absolute bottom-full left-1/2 mb-3 flex -translate-x-1/2 flex-col gap-2"
           >
             {items.map((item, idx) => (
               <motion.div
@@ -128,7 +128,7 @@ const FloatingDockMobile = ({
                     item.onClick?.();
                     setOpen(false);
                   }}
-                  className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/8 text-white hover:bg-primary/10"
+                  className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/10 text-white shadow-lg backdrop-blur-xl hover:bg-primary/15"
                   aria-label={item.title}
                   title={item.title}
                 >
@@ -142,7 +142,7 @@ const FloatingDockMobile = ({
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-white/8 text-white hover:bg-primary/10"
+        className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/10 text-white shadow-lg backdrop-blur-xl hover:bg-primary/15"
         aria-label="Open app dock"
       >
         <PanelTopClose className="h-5 w-5" />
@@ -249,7 +249,7 @@ const FloatingDockDesktop = ({
       onMouseMove={(e) => mouseX.set(e.pageX)}
       onMouseLeave={() => mouseX.set(Infinity)}
       className={cn(
-        "mx-auto hidden h-[58px] items-end rounded-2xl border border-white/10 bg-black/55 px-4 pb-2 shadow-2xl backdrop-blur-xl md:flex",
+        "mx-auto hidden h-16 items-end rounded-2xl border border-white/10 bg-black/50 px-4 pb-2.5 shadow-2xl shadow-black/40 backdrop-blur-xl md:flex",
         className,
       )}
       data-dock-page={page}
@@ -266,7 +266,7 @@ const FloatingDockDesktop = ({
               exit={{ opacity: 0, x: 42 }}
               transition={{ type: "spring", stiffness: 320, damping: 30 }}
               onSubmit={submitCommand}
-              className="relative flex h-10 w-[min(520px,calc(100vw-8rem))] items-center gap-2 rounded-full border border-border bg-card px-2"
+              className="relative flex h-11 w-[min(540px,calc(100vw-8rem))] items-center gap-2 rounded-full border border-border bg-card px-2.5 shadow-xl"
               role="search"
               aria-label="Command input"
             >
@@ -299,16 +299,16 @@ const FloatingDockDesktop = ({
                   }
                 }}
                 placeholder={`${commandMode.label.toLowerCase()}...`}
-                className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/45"
+                className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/55"
               />
               {suggestions.length > 0 && (
-                <div className="absolute bottom-[calc(100%+8px)] left-0 right-0 overflow-hidden rounded-2xl border border-border bg-card/95 p-1 shadow-2xl backdrop-blur-md">
+                <div className="absolute bottom-[calc(100%+10px)] left-0 right-0 overflow-hidden rounded-xl border border-border bg-card/95 p-1 shadow-2xl backdrop-blur-md">
                   {suggestions.map((item) => (
                     <button
                       key={item.value}
                       type="button"
                       onClick={() => applySuggestion(item.value)}
-                      className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-xs hover:bg-accent"
+                      className="flex h-9 w-full items-center gap-2 rounded-lg px-3 text-left text-xs hover:bg-accent/20"
                     >
                       <span className={cn("flex h-5 w-5 items-center justify-center rounded-full font-mono text-[10px]", COMMAND_PREFIXES[item.prefix].className)}>{item.prefix}</span>
                       <span className="min-w-0 flex-1 truncate">{item.label}</span>
@@ -325,7 +325,7 @@ const FloatingDockDesktop = ({
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: page === "people" ? -42 : 42 }}
               transition={{ type: "spring", stiffness: 320, damping: 30 }}
-              className="flex items-end gap-4"
+              className="flex items-end gap-3"
             >
               {(page === "people" ? peopleItems : launcherItemsStable).map((item, index) => (
                 <IconContainer
@@ -369,10 +369,10 @@ function IconContainer({
     return val - bounds.x - bounds.width / 2;
   });
 
-  const widthTransform = useTransform(distance, [-150, 0, 150], [40, 80, 40]);
-  const heightTransform = useTransform(distance, [-150, 0, 150], [40, 80, 40]);
-  const widthTransformIcon = useTransform(distance, [-150, 0, 150], [20, 40, 20]);
-  const heightTransformIcon = useTransform(distance, [-150, 0, 150], [20, 40, 20]);
+  const widthTransform = useTransform(distance, [-150, 0, 150], [42, 72, 42]);
+  const heightTransform = useTransform(distance, [-150, 0, 150], [42, 72, 42]);
+  const widthTransformIcon = useTransform(distance, [-150, 0, 150], [20, 34, 20]);
+  const heightTransformIcon = useTransform(distance, [-150, 0, 150], [20, 34, 20]);
 
   const width = useSpring(widthTransform, { mass: 0.1, stiffness: 150, damping: 12 });
   const height = useSpring(heightTransform, { mass: 0.1, stiffness: 150, damping: 12 });
@@ -398,7 +398,7 @@ function IconContainer({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       onClick={onClick}
-      className="relative flex cursor-pointer items-center justify-center rounded-full border border-white/10 bg-white/8 text-white transition-colors hover:border-primary/20 hover:bg-primary/10"
+      className="relative flex cursor-pointer items-center justify-center rounded-full border border-white/10 bg-white/10 text-white shadow-md transition-colors hover:border-primary/30 hover:bg-primary/15"
       aria-label={title}
       title={title}
       role="button"
@@ -410,7 +410,7 @@ function IconContainer({
             initial={{ opacity: 0, y: 10, x: "-50%" }}
             animate={{ opacity: 1, y: 0, x: "-50%" }}
             exit={{ opacity: 0, y: 2, x: "-50%" }}
-            className="absolute -top-10 left-1/2 whitespace-nowrap rounded-md border border-border bg-card px-2 py-0.5 text-xs text-card-foreground"
+            className="absolute -top-10 left-1/2 whitespace-nowrap rounded-md border border-border bg-card px-2.5 py-1 text-xs text-card-foreground shadow-xl"
           >
             {title}
             {subtitle && <span className="ml-1 text-muted-foreground">· {subtitle}</span>}

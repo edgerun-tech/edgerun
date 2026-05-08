@@ -75,6 +75,7 @@ export const desktopTelemetryVisibleStore = persistentAtom("edgerun:legacyDeskto
 })
 
 export const terminalLogsStore = atom<LogEntry[]>([])
+const MAX_TERMINAL_LOGS = 200
 
 export const systemStatsStore = atom({
   nodeCount: 12,
@@ -101,7 +102,7 @@ export function addLog(type: LogEntry["type"], message: string) {
     timestamp: new Date(),
     type,
     message,
-  }])
+  }].slice(-MAX_TERMINAL_LOGS))
 }
 
 export function openAppSurface(surface: AppSurfaceDef) {
@@ -117,12 +118,12 @@ export const openWindow = openAppSurface
 export function closeAppSurface(surfaceId: string) {
   const surfaces = appSurfacesStore.get()
   const closed = surfaces.find((surface) => surface.id === surfaceId)
+  const nextOrder = appSurfaceOrderStore.get().filter((id) => id !== surfaceId)
   appSurfacesStore.set(surfaces.filter((surface) => surface.id !== surfaceId))
-  appSurfaceOrderStore.set(appSurfaceOrderStore.get().filter((id) => id !== surfaceId))
+  appSurfaceOrderStore.set(nextOrder)
 
   if (focusedAppSurfaceStore.get() === surfaceId) {
-    const remainingOrder = appSurfaceOrderStore.get().filter((id) => id !== surfaceId)
-    focusedAppSurfaceStore.set(remainingOrder[remainingOrder.length - 1] || null)
+    focusedAppSurfaceStore.set(nextOrder[nextOrder.length - 1] || null)
   }
 
   return closed

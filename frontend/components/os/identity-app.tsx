@@ -51,8 +51,8 @@ export function IdentityApp({ onClose }: IdentityAppProps) {
   }
 
   return (
-    <div className="fixed left-1/2 top-1/2 z-40 flex h-[min(600px,calc(100vh-7rem))] w-[min(820px,calc(100vw-3rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-border bg-background/96 shadow-2xl backdrop-blur-xl">
-      <div className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4">
+    <div className="fixed left-1/2 top-1/2 z-40 flex h-[min(640px,calc(100vh-6rem))] w-[min(860px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border bg-background/96 shadow-2xl backdrop-blur-xl">
+      <div className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4 sm:px-5">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/12 text-primary"><IdCard className="h-4 w-4" /></div>
           <div>
@@ -65,9 +65,9 @@ export function IdentityApp({ onClose }: IdentityAppProps) {
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-auto p-5">
+      <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-5">
         <section className="rounded-lg border border-border bg-card p-5">
-          <div className="flex items-start gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
             <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary/12 text-lg font-semibold text-primary">
               {profile.handle.slice(0, 2).toUpperCase()}
             </div>

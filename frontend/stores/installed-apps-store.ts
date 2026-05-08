@@ -1,47 +1,24 @@
 "use client"
 
 import { persistentAtom } from "@nanostores/persistent"
+import {
+  CORE_APP_IDS,
+  DEFAULT_INSTALLED_APP_IDS,
+  isCoreAppId,
+  isRemovedAppId,
+  normalizeAppId,
+} from "@/platform/registries/app-id-policy"
 
-const APP_ID_ALIASES: Record<string, string> = {
-  wallet: "finances",
-}
-
-const REMOVED_APP_IDS = new Set([
-  "resource-monitor",
-  "network-monitor",
-  "terminal",
-  "people",
-  "trust-manager",
-  "finances",
-  "wallet",
-  "code-runner",
-  "file-browser",
-  "storage",
-  "db-explorer",
-  "git-sync",
-  "web-server",
-  "compute-node",
-  "workflow-builder",
-  "calculator",
-  "help",
-  "gmail",
-])
-
-export const CORE_APP_IDS = ["app-store", "settings"] as const
-
-export const DEFAULT_INSTALLED_APP_IDS = [
-  "app-store",
-  "settings",
-] as const
-
-export function normalizeAppId(appId: string): string {
-  return APP_ID_ALIASES[appId] || appId
+export {
+  CORE_APP_IDS,
+  DEFAULT_INSTALLED_APP_IDS,
+  normalizeAppId,
 }
 
 function normalizeInstalledIds(ids: unknown[]): string[] {
   return ids
     .map((id) => typeof id === "string" ? normalizeAppId(id) : "")
-    .filter((id) => id && !REMOVED_APP_IDS.has(id))
+    .filter((id) => id && !isRemovedAppId(id))
 }
 
 export const installedAppIdsStore = persistentAtom<string[]>(
@@ -59,18 +36,18 @@ export const installedAppIdsStore = persistentAtom<string[]>(
 )
 
 export function isCoreApp(appId: string): boolean {
-  return (CORE_APP_IDS as readonly string[]).includes(normalizeAppId(appId))
+  return isCoreAppId(appId)
 }
 
 export function isAppInstalled(appId: string): boolean {
   const normalized = normalizeAppId(appId)
-  if (REMOVED_APP_IDS.has(normalized)) return false
+  if (isRemovedAppId(normalized)) return false
   return installedAppIdsStore.get().map(normalizeAppId).includes(normalized) || isCoreApp(normalized)
 }
 
 export function installApp(appId: string): void {
   const normalized = normalizeAppId(appId)
-  if (REMOVED_APP_IDS.has(normalized)) return
+  if (isRemovedAppId(normalized)) return
   const ids = normalizeInstalledIds(installedAppIdsStore.get())
   if (ids.includes(normalized)) return
   installedAppIdsStore.set([...ids, normalized])

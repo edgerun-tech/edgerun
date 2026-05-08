@@ -162,6 +162,17 @@ Workspace inventory:
 cargo metadata --no-deps --format-version 1
 ```
 
+Repo-level quality entry points:
+
+```bash
+make test-all          # Rust workspace tests plus frontend tests
+make integration-test  # Cargo integration test targets; hardware tests stay opt-in
+make coverage          # Rust llvm-cov report when installed, plus frontend coverage
+make bench             # Benchmark entry points with a saved report
+make integration-test-list
+make bench-list
+```
+
 The unikernel path requires nightly and `build-std`:
 
 ```bash

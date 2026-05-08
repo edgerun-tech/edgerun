@@ -2,12 +2,11 @@ import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
 import { CommandPalette } from '../components/os/command-input'
-import { ContextMenuProvider } from '../components/contextmenu-provider'
 import { PlatformProvider } from '@/platform/ui/PlatformProvider'
 import { TooltipProvider } from '@radix-ui/react-tooltip'
 
-const _geist = Geist({ subsets: ["latin"] });
-const _geistMono = Geist_Mono({ subsets: ["latin"] });
+const geist = Geist({ subsets: ["latin"], variable: "--font-geist-sans" });
+const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--font-geist-mono" });
 
 export const metadata: Metadata = {
   title: 'Edgerun — Distributed Runtime',
@@ -38,15 +37,13 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="bg-background">
-      <body className="font-sans antialiased overflow-hidden">
-        <ContextMenuProvider>
-          <TooltipProvider>
+      <body className={`${geist.variable} ${geistMono.variable} font-sans antialiased overflow-hidden`}>
+        <TooltipProvider>
           <PlatformProvider>
             {children}
             <CommandPalette />
           </PlatformProvider>
-          </TooltipProvider>
-        </ContextMenuProvider>
+        </TooltipProvider>
       </body>
     </html>
   )

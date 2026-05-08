@@ -116,7 +116,10 @@ impl RecentHashCache {
 /// Computes the SHA-256 hash used for duplicate detection before authority work.
 #[inline]
 pub fn quick_message_hash(bytes: &[u8]) -> [u8; 32] {
-    edgerun_protocols::core_protocol::crypto::sha256(bytes)
+    let digest = edgerun_protocols::core_protocol::crypto::sha256(bytes);
+    let mut out = [0u8; 32];
+    out.copy_from_slice(&digest);
+    out
 }
 
 // ---------------------------------------------------------------------------

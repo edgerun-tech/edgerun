@@ -21,6 +21,14 @@ export {
 } from "./app-surface-registry"
 
 export {
+  CORE_APP_IDS,
+  DEFAULT_INSTALLED_APP_IDS,
+  isCoreAppId,
+  isRemovedAppId,
+  normalizeAppId,
+} from "./app-id-policy"
+
+export {
   componentRegistry,
   registerComponent,
   getComponent,

@@ -1,5 +1,6 @@
 import type React from "react"
 import type { AppDefinition, AppSource } from "@/platform/types/app-definition"
+import { normalizeAppId } from "./app-id-policy"
 import {
   Store,
   Terminal,
@@ -21,13 +22,6 @@ import {
   Shield,
   HardDrive,
 } from "lucide-react"
-
-const APP_ID_ALIASES: Record<string, string> = {
-  wallet: "finances",
-  contacts: "people",
-  calling: "people",
-  chat: "people",
-}
 
 export const BUILTIN_ICON_MAP: Record<string, React.ReactNode> = {
   "app-store": <Store className="h-5 w-5" />,
@@ -54,7 +48,7 @@ export const BUILTIN_ICON_MAP: Record<string, React.ReactNode> = {
 }
 
 export function normalizeBuiltinAppId(appId: string): string {
-  return APP_ID_ALIASES[appId] || appId
+  return normalizeAppId(appId)
 }
 
 export function getIconById(iconId: string): React.ReactNode {

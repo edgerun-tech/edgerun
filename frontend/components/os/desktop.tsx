@@ -72,6 +72,10 @@ export function Desktop() {
   }, [])
 
   const dockContext = useMemo<FloatingDockContext>(() => ({ mode: "apps" }), [])
+  const launchedAppPlan = useMemo(
+    () => launchedApp ? createAppLaunchPlan(launchedApp, { launchApp: setLaunchedApp }) : null,
+    [launchedApp],
+  )
 
   const handleDockCommand = useCallback((command: string) => {
     if (command === "/lock") {
@@ -114,44 +118,45 @@ export function Desktop() {
   }
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-zinc-950">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_42%,rgba(80,120,120,0.16),transparent_34%)]" />
-      <div className="absolute left-1/2 top-1/2 w-[min(760px,calc(100vw-3rem))] -translate-x-1/2 -translate-y-1/2 text-center">
-        <div className="mx-auto mb-4 h-2 w-2 rounded-full bg-primary shadow-[0_0_28px_var(--primary)]" />
-        <p className="font-mono text-xs uppercase tracking-[0.24em] text-muted-foreground">Identity unlocked</p>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Your profile is open in memory. Locking it removes usable key material from this session.
-        </p>
+    <div className="relative h-screen w-screen overflow-hidden bg-[oklch(0.075_0.018_255)]">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_36%,rgba(62,128,255,0.20),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.035),transparent_28%,rgba(0,0,0,0.24))]" />
+      <div className="absolute inset-x-4 top-4 flex items-center justify-center sm:top-6">
+        <div className="max-w-[min(560px,calc(100vw-2rem))] rounded-full border border-white/10 bg-white/[0.055] px-4 py-2 text-center shadow-2xl backdrop-blur-xl">
+          <p className="text-xs font-medium text-foreground">Identity unlocked</p>
+          <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
+            Your keys are available until you lock this browser session.
+          </p>
+        </div>
       </div>
       <FloatingDock
         items={dockItems}
         context={dockContext}
         onCommandSubmit={handleDockCommand}
-        desktopClassName="fixed bottom-4 left-1/2 z-50 -translate-x-1/2"
-        mobileClassName="fixed bottom-4 left-1/2 z-50 -translate-x-1/2"
+        desktopClassName="fixed bottom-5 left-1/2 z-50 -translate-x-1/2"
+        mobileClassName="fixed bottom-5 left-1/2 z-50 -translate-x-1/2"
       />
       <ProfileMenu />
       {openApp === "identity" ? <IdentityApp onClose={() => setOpenApp(null)} /> : null}
       {openApp === "contacts" ? <ContactsApp onClose={() => setOpenApp(null)} onMessage={openMessagesForContact} /> : null}
       {openApp === "messages" ? <MessagesApp onClose={() => setOpenApp(null)} initialRecipientId={messageRecipientId} /> : null}
       {openApp === "app-store" ? (
-        <div className="fixed left-1/2 top-1/2 z-40 flex h-[min(760px,calc(100vh-7rem))] w-[min(1120px,calc(100vw-3rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-border bg-background/96 shadow-2xl backdrop-blur-xl">
-          <button onClick={() => setOpenApp(null)} className="absolute right-3 top-3 z-10 rounded-md border border-border bg-background/80 px-2 py-1 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground">
+        <div className="fixed left-1/2 top-1/2 z-40 flex h-[min(780px,calc(100vh-6rem))] w-[min(1160px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border bg-background/96 shadow-2xl backdrop-blur-xl">
+          <button onClick={() => setOpenApp(null)} aria-label="Close App Store" className="absolute right-3 top-3 z-10 rounded-md border border-border bg-background/90 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground">
             Close
           </button>
           <AppStore onLaunchApp={(app) => setLaunchedApp(app)} />
         </div>
       ) : null}
-      {launchedApp ? (
-        <div className="fixed left-1/2 top-1/2 z-50 flex h-[min(820px,calc(100vh-5rem))] w-[min(1240px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-border bg-background shadow-2xl">
-          <div className="flex h-10 shrink-0 items-center justify-between border-b border-border px-3">
-            <div className="min-w-0 truncate text-xs font-semibold text-foreground">{launchedApp.name}</div>
-            <button onClick={() => setLaunchedApp(null)} className="rounded-md border border-border bg-background/80 px-2 py-1 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground">
+      {launchedApp && launchedAppPlan ? (
+        <div className="fixed left-1/2 top-1/2 z-50 flex h-[min(820px,calc(100vh-4rem))] w-[min(1240px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border bg-background shadow-2xl">
+          <div className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
+            <div className="min-w-0 truncate text-sm font-semibold text-foreground">{launchedApp.name}</div>
+            <button onClick={() => setLaunchedApp(null)} aria-label={`Close ${launchedApp.name}`} className="rounded-md border border-border bg-background/80 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground">
               Close
             </button>
           </div>
           <div className="min-h-0 flex-1">
-            {createAppLaunchPlan(launchedApp, { launchApp: setLaunchedApp }).component}
+            {launchedAppPlan.component}
           </div>
         </div>
       ) : null}

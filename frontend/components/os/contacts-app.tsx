@@ -118,8 +118,8 @@ export function ContactsApp({ onClose, onMessage }: ContactsAppProps) {
   }
 
   const app = (
-    <div className="flex h-full bg-background text-foreground">
-      <div className="flex w-60 flex-shrink-0 flex-col border-r border-[var(--window-border)]">
+    <div className="flex h-full min-h-0 flex-col bg-background text-foreground md:flex-row">
+      <div className="flex h-[42%] min-h-0 flex-shrink-0 flex-col border-b border-[var(--window-border)] md:h-auto md:w-64 md:border-b-0 md:border-r">
         <div className="flex items-center gap-2 border-b border-[var(--window-border)] p-3">
           <div className="relative flex-1">
             <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
@@ -225,9 +225,9 @@ export function ContactsApp({ onClose, onMessage }: ContactsAppProps) {
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col items-center justify-center p-6">
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-auto p-4 sm:p-6">
         {selected ? (
-          <div className="flex w-full max-w-sm flex-col items-center gap-4">
+          <div className="flex w-full max-w-md flex-col items-center gap-4">
             <Avatar name={selected.label} size="lg" />
             <div className="text-center">
               <h2 className="text-lg font-semibold text-foreground">{selected.label}</h2>
@@ -272,8 +272,8 @@ export function ContactsApp({ onClose, onMessage }: ContactsAppProps) {
   if (!onClose) return app
 
   return (
-    <div className="fixed left-1/2 top-1/2 z-40 flex h-[min(640px,calc(100vh-7rem))] w-[min(960px,calc(100vw-3rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-lg border border-border bg-background/96 shadow-2xl backdrop-blur-xl">
-      <div className="flex h-12 flex-shrink-0 items-center justify-between border-b border-[var(--window-border)] px-4">
+    <div className="fixed left-1/2 top-1/2 z-40 flex h-[min(680px,calc(100vh-6rem))] w-[min(980px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border bg-background/96 shadow-2xl backdrop-blur-xl">
+      <div className="flex h-12 flex-shrink-0 items-center justify-between border-b border-[var(--window-border)] px-4 sm:h-14 sm:px-5">
         <div className="flex items-center gap-2">
           <UserPlus className="h-4 w-4 text-primary" />
           <span className="text-sm font-medium text-foreground">Contacts</span>
