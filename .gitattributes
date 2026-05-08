@@ -12,3 +12,4 @@ gen/go/** linguist-generated=true
 proto/go/** linguist-generated=true
 
 crates/edgerun-crypto/vendor/** linguist-vendored=true
+vendor/cargo/** -text -eol linguist-vendored=true
