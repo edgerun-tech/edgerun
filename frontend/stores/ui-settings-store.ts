@@ -3,8 +3,10 @@
 import { persistentAtom } from "@nanostores/persistent"
 
 export type UiAccent = "green" | "blue" | "orange" | "pink" | "cyan"
+export type UiColorScheme = "system" | "dark" | "light"
 
 export interface UiSettings {
+  colorScheme: UiColorScheme
   accent: UiAccent
   windowBlur: boolean
   animations: boolean
@@ -20,6 +22,7 @@ export interface UiSettings {
 }
 
 export const DEFAULT_UI_SETTINGS: UiSettings = {
+  colorScheme: "dark",
   accent: "green",
   windowBlur: true,
   animations: true,
@@ -47,6 +50,7 @@ function sanitize(value: unknown): UiSettings {
   return {
     ...DEFAULT_UI_SETTINGS,
     ...input,
+    colorScheme: input.colorScheme === "system" || input.colorScheme === "dark" || input.colorScheme === "light" ? input.colorScheme : DEFAULT_UI_SETTINGS.colorScheme,
     accent: input.accent && input.accent in ACCENTS ? input.accent : DEFAULT_UI_SETTINGS.accent,
     fontSize: clampNumber(input.fontSize, 11, 18, DEFAULT_UI_SETTINGS.fontSize),
     maxCpuUsage: clampNumber(input.maxCpuUsage, 10, 100, DEFAULT_UI_SETTINGS.maxCpuUsage),
@@ -80,6 +84,11 @@ export function applyUiSettings(settings: UiSettings): void {
   if (typeof document === "undefined") return
   const root = document.documentElement
   const accent = ACCENTS[settings.accent]
+  const resolvedScheme = settings.colorScheme === "system"
+    ? window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark"
+    : settings.colorScheme
+  root.classList.toggle("dark", resolvedScheme === "dark")
+  root.dataset.edgerunColorScheme = resolvedScheme
   root.style.setProperty("--primary", accent.primary)
   root.style.setProperty("--accent", accent.primary)
   root.style.setProperty("--ring", accent.primary)

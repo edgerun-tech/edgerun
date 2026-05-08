@@ -17,6 +17,7 @@ interface AuthOverlayProps {
   onRegister: (name: string, nodeProvision?: NodeProvisionInput) => Promise<boolean>
   onAuthenticate: (password?: string) => Promise<boolean>
   onAuthenticateWithWebAuthn: () => Promise<boolean>
+  onBindWebAuthn: (password: string) => Promise<boolean>
   onSwitchProfile: (profileId: string) => void
   onClearError: () => void
   onExportProfile: () => string | null
@@ -35,6 +36,7 @@ export function AuthOverlay({
   onRegister,
   onAuthenticate,
   onAuthenticateWithWebAuthn,
+  onBindWebAuthn,
   onSwitchProfile,
   onClearError,
   onExportProfile,
@@ -45,6 +47,7 @@ export function AuthOverlay({
   const [handle, setHandle] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
+  const [bindPasskeyAfterCreate, setBindPasskeyAfterCreate] = useState(false)
 
   useEffect(() => {
     if (authState === "locked" || hasRegistered()) setScreen("unlock")
@@ -59,7 +62,15 @@ export function AuthOverlay({
   async function createProfile() {
     if (!canCreate) return
     onClearError()
-    await onRegister(handle.trim(), { passphrase: password })
+    const profilePassword = password
+    const ok = await onRegister(handle.trim(), { passphrase: profilePassword })
+    if (ok && bindPasskeyAfterCreate) {
+      await onBindWebAuthn(profilePassword)
+    }
+    if (ok) {
+      setPassword("")
+      setConfirmPassword("")
+    }
   }
 
   async function unlockProfile() {
@@ -133,6 +144,18 @@ export function AuthOverlay({
               <input value={handle} onChange={(event) => setHandle(event.target.value)} placeholder="Handle" className="h-10 w-full rounded-lg border border-border bg-secondary/50 px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
               <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" placeholder="Profile password" className="h-10 w-full rounded-lg border border-border bg-secondary/50 px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
               <input value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} type="password" placeholder="Confirm password" className="h-10 w-full rounded-lg border border-border bg-secondary/50 px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" onKeyDown={(event) => event.key === "Enter" && createProfile()} />
+              <label className="flex items-start gap-3 rounded-lg border border-border bg-secondary/35 px-3 py-2 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={bindPasskeyAfterCreate}
+                  onChange={(event) => setBindPasskeyAfterCreate(event.target.checked)}
+                  className="mt-0.5"
+                />
+                <span>
+                  <span className="block text-foreground">Bind passkey after creating</span>
+                  <span className="block">Use fingerprint, Face ID, Windows Hello, or a security key for future unlocks.</span>
+                </span>
+              </label>
               <button disabled={!canCreate || isLoading} onClick={createProfile} className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 disabled:cursor-not-allowed disabled:opacity-45">
                 <LockKeyhole className="h-4 w-4" />
                 {isLoading ? "Sealing..." : "Create and unlock"}

@@ -266,7 +266,7 @@ const FloatingDockDesktop = ({
               exit={{ opacity: 0, x: 42 }}
               transition={{ type: "spring", stiffness: 320, damping: 30 }}
               onSubmit={submitCommand}
-              className="relative flex h-11 w-[min(540px,calc(100vw-8rem))] items-center gap-2 rounded-full border border-border bg-card px-2.5 shadow-xl"
+              className="relative flex h-11 w-[calc(100vw-8rem)] max-w-[540px] items-center gap-2 rounded-full border border-border bg-card px-2.5 shadow-xl"
               role="search"
               aria-label="Command input"
             >

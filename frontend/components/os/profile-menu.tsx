@@ -97,7 +97,7 @@ export function ProfileMenu() {
       </button>
 
       {open && (
-        <div className="mt-3 max-h-[calc(100vh-5.5rem)] w-[min(360px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-border bg-background/96 shadow-2xl backdrop-blur-xl">
+        <div className="mt-3 max-h-[calc(100vh-5.5rem)] w-[calc(100vw-2rem)] max-w-[360px] overflow-hidden rounded-xl border border-border bg-background/96 shadow-2xl backdrop-blur-xl">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold text-foreground">{profile.handle}</div>

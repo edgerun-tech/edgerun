@@ -8,6 +8,7 @@ import { AppStore } from "./app-store"
 import { ContactsApp } from "./contacts-app"
 import { IdentityApp } from "./identity-app"
 import { MessagesApp } from "./messages-app"
+import { SettingsApp } from "./settings-app"
 import { ProfileMenu } from "./profile-menu"
 import { useAuth, type ContactRecord } from "@/hooks/use-auth"
 import { FloatingDock, type FloatingDockContext, type FloatingDockItem } from "@/components/ui/floating-dock"
@@ -25,7 +26,7 @@ function DockIcon({ children }: { children: React.ReactNode }) {
 
 export function Desktop() {
   const auth = useAuth()
-  const [openApp, setOpenApp] = useState<"identity" | "contacts" | "messages" | "app-store" | null>(null)
+  const [openApp, setOpenApp] = useState<"identity" | "contacts" | "messages" | "app-store" | "settings" | null>(null)
   const [launchedApp, setLaunchedApp] = useState<AppDefinition | null>(null)
   const [messageRecipientId, setMessageRecipientId] = useState<string | undefined>(undefined)
   const showDesktop = auth.authState === "authenticated"
@@ -62,7 +63,7 @@ export function Desktop() {
       title: "Settings",
       icon: <DockIcon><Settings className="h-5 w-5" /></DockIcon>,
       kind: "trigger",
-      onClick: () => addLog("info", "Settings UI is hidden in the onboarding-only shell."),
+      onClick: () => setOpenApp("settings"),
     },
   ], [])
 
@@ -108,6 +109,7 @@ export function Desktop() {
           onRegister={auth.register}
           onAuthenticate={auth.authenticate}
           onAuthenticateWithWebAuthn={auth.authenticateWithWebAuthn}
+          onBindWebAuthn={auth.bindWebAuthn}
           onSwitchProfile={auth.switchProfile}
           onClearError={auth.clearError}
           onExportProfile={auth.exportProfile}
@@ -145,6 +147,14 @@ export function Desktop() {
             Close
           </button>
           <AppStore onLaunchApp={(app) => setLaunchedApp(app)} />
+        </div>
+      ) : null}
+      {openApp === "settings" ? (
+        <div className="fixed left-1/2 top-1/2 z-40 flex h-[min(760px,calc(100vh-5rem))] w-[min(1040px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border bg-background/96 shadow-2xl backdrop-blur-xl">
+          <button onClick={() => setOpenApp(null)} aria-label="Close Settings" className="absolute right-3 top-3 z-10 rounded-md border border-border bg-background/90 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground">
+            Close
+          </button>
+          <SettingsApp />
         </div>
       ) : null}
       {launchedApp && launchedAppPlan ? (

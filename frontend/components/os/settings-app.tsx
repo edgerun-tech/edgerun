@@ -37,8 +37,10 @@ import {
   uiSettingsStore,
   updateUiSettings,
   type UiAccent,
+  type UiColorScheme,
 } from "@/stores/ui-settings-store"
 import { EdgerunLogo } from "./edgerun-logo"
+import { useAuth } from "@/hooks/use-auth"
 
 type SettingsSection =
   | "appearance"
@@ -138,6 +140,22 @@ function AppearancePanel() {
       <div className="space-y-4">
         <SettingsCard title="Desktop" description="Keep the shell beautiful, calm, and useful.">
           <div className="space-y-3">
+            <SettingRow
+              label="Color scheme"
+              sub="Choose light, dark, or follow the operating system."
+              right={
+                <Select value={settings.colorScheme} onValueChange={(colorScheme: UiColorScheme) => updateUiSettings({ colorScheme })}>
+                  <SelectTrigger size="sm" className="w-32 font-mono text-xs" aria-label="Color scheme">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="dark">Dark</SelectItem>
+                    <SelectItem value="light">Light</SelectItem>
+                    <SelectItem value="system">System</SelectItem>
+                  </SelectContent>
+                </Select>
+              }
+            />
             <div className="grid grid-cols-5 gap-2">
               {accents.map(a => (
                 <AccentButton
@@ -195,12 +213,22 @@ function AppearancePanel() {
 }
 
 function PrivacyPanel() {
+  const auth = useAuth()
+  const profile = auth.unlockedProfile
   const [biometricLock, setBiometricLock] = useState(true)
   const [autoLock, setAutoLock] = useState(true)
   const [autoLockTime, setAutoLockTime] = useState(5)
   const [analytics, setAnalytics] = useState(false)
   const [crashReports, setCrashReports] = useState(false)
   const [locationAccess, setLocationAccess] = useState(false)
+  const [password, setPassword] = useState("")
+  const passkeyBound = Boolean(profile?.webAuthnBinding)
+
+  async function bindPasskey() {
+    if (!password) return
+    const ok = await auth.bindWebAuthn(password)
+    if (ok) setPassword("")
+  }
 
   return (
     <div className="space-y-4">
@@ -211,14 +239,35 @@ function PrivacyPanel() {
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-foreground">Fingerprint locked</p>
-            <p className="text-xs text-muted-foreground">WebAuthn credential active on this device.</p>
+            <p className="text-xs text-muted-foreground">
+              {passkeyBound ? "A local passkey unlock vault is bound to this profile." : "Bind a passkey to unlock this profile without typing the password."}
+            </p>
           </div>
-          <Badge variant="outline" className="border-primary/20 text-primary">local</Badge>
+          <Badge variant="outline" className="border-primary/20 text-primary">{passkeyBound ? "bound" : "not bound"}</Badge>
         </CardContent>
       </Card>
 
       <SettingsCard title="Identity lock" description="Device trust should be clear and low-friction.">
         <SettingRow label="Biometric lock" sub="Require fingerprint or passkey to unlock." right={<Switch checked={biometricLock} onCheckedChange={setBiometricLock} size="sm" />} />
+        <SettingRow
+          label={passkeyBound ? "Rebind passkey" : "Bind passkey"}
+          sub={auth.webAuthnAvailable ? "Stores a local encrypted unlock vault protected by WebAuthn PRF/hmac-secret." : "This browser does not expose WebAuthn credentials."}
+          right={
+            <div className="flex items-center gap-2">
+              <input
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                type="password"
+                placeholder="Profile password"
+                className="h-8 w-36 rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary"
+              />
+              <Button size="xs" disabled={!password || auth.isLoading || !auth.webAuthnAvailable} onClick={bindPasskey}>
+                <Fingerprint className="h-3.5 w-3.5" />
+                {passkeyBound ? "Rebind" : "Bind"}
+              </Button>
+            </div>
+          }
+        />
         <SettingRow label="Auto-lock" sub="Lock the shell when idle." right={<Switch checked={autoLock} onCheckedChange={setAutoLock} size="sm" />} />
         {autoLock && <SettingRow label="Auto-lock delay" sub={`${autoLockTime} minute${autoLockTime !== 1 ? "s" : ""}.`} right={<SliderControl value={autoLockTime} onChange={setAutoLockTime} min={1} max={60} suffix="m" />} />}
       </SettingsCard>
