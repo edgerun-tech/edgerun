@@ -13,7 +13,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -29,7 +29,7 @@ jobs:
           cp LICENSE LICENSE-MIT LICENSE-APACHE NOTICE release/
           (cd release && sha256sum * > SHA256SUMS)
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: edgerun-release
           path: release/*
