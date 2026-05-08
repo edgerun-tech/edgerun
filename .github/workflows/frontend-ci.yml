@@ -42,8 +42,8 @@ jobs:
 
       - name: Test (if configured)
         run: |
-          if node -e "const s=require('./package.json').scripts||{}; process.exit(s.test && s.test !== 'echo \"No frontend tests configured\"' ? 0 : 1)"; then
-            bun run test
+          if node -e "const s=require('./package.json').scripts||{}; process.exit(s['test:run'] ? 0 : 1)"; then
+            bun run test:run
           else
             echo "No tests configured for frontend."
           fi

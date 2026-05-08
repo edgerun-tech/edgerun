@@ -99,19 +99,7 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    res.cookies.set("gmail_profile_pending", Buffer.from(JSON.stringify({
-      email: userInfo?.email || "",
-      accessToken: tokens.access_token,
-      refreshToken: tokens.refresh_token,
-      expiresAtIso: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
-      scopes: (tokens.scope || "").split(/\s+/).filter(Boolean),
-    })).toString("base64url"), {
-      httpOnly: false,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 600,
-      path: "/",
-    })
+    res.cookies.delete("gmail_profile_pending")
 
     res.cookies.delete("gmail_oauth_state")
 

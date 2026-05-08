@@ -1,7 +1,7 @@
 .PHONY: check test test-rust test-frontend test-all coverage coverage-frontend bench bench-list integration-test integration-test-list build release docker-build install-ert version
 .PHONY: marketplace-localnet marketplace-localnet-status marketplace-localnet-stop marketplace-stress
 
-# Run local CI checks (format, clippy, check, release build)
+# Run local CI checks (Rust format/lint/build plus frontend lock/lint/typecheck/test/build)
 check:
 	./scripts/ci-local.sh check
 

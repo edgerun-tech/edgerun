@@ -18,7 +18,7 @@ jobs:
 
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt
+          components: rustfmt, clippy
           targets: x86_64-unknown-linux-musl
 
       - uses: Swatinem/rust-cache@v2
@@ -28,6 +28,9 @@ jobs:
 
       - name: Format check
         run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --workspace
 
       - name: Workspace metadata
         run: cargo metadata --no-deps --format-version 1 >/tmp/edgerun_metadata.json
@@ -69,6 +72,9 @@ jobs:
 
       - name: Release binary check
         run: cargo check -p edgerun-node
+
+      - name: Docker build check
+        run: docker build --target builder --file Dockerfile .
 
   quality:
     runs-on: ubuntu-latest
