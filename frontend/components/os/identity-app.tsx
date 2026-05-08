@@ -51,7 +51,7 @@ export function IdentityApp({ onClose }: IdentityAppProps) {
   }
 
   return (
-    <div className="fixed left-1/2 top-1/2 z-40 flex h-[min(640px,calc(100vh-6rem))] w-[min(860px,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border bg-background/96 shadow-2xl backdrop-blur-xl">
+    <div className="fixed left-1/2 top-1/2 z-40 flex h-[calc(100vh-6rem)] max-h-[640px] w-[calc(100vw-2rem)] max-w-[860px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border bg-background/96 shadow-2xl backdrop-blur-xl">
       <div className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4 sm:px-5">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/12 text-primary"><IdCard className="h-4 w-4" /></div>
