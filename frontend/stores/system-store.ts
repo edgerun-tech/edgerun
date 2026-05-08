@@ -5,15 +5,7 @@ export { systemStatsStore }
 let statsInterval: ReturnType<typeof setInterval> | null = null
 
 export function startSystemStatsSimulation() {
-  if (statsInterval) return
-
-  statsInterval = setInterval(() => {
-    const stats = systemStatsStore.get()
-    systemStatsStore.set({
-      ...stats,
-      nodeCount: Math.max(5, Math.min(24, stats.nodeCount + Math.floor(Math.random() * 3) - 1)),
-    })
-  }, 5000)
+  statsInterval = null
 }
 
 export function stopSystemStatsSimulation() {
@@ -26,6 +18,6 @@ export function stopSystemStatsSimulation() {
 export function generateInitialLogs() {
   return [
     { id: `log-${Date.now()}-1`, timestamp: new Date(), type: "system" as const, message: "System initialized" },
-    { id: `log-${Date.now()}-2`, timestamp: new Date(), type: "success" as const, message: "Connected to Edgerun network — 12 peers online" },
+    { id: `log-${Date.now()}-2`, timestamp: new Date(), type: "warning" as const, message: "No node connection detected" },
   ]
 }

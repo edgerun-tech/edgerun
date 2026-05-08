@@ -128,8 +128,6 @@ These are visual/runtime experiments until wired into a production app surface.
 
 These names are now ambiguous or superseded:
 
-- `components/os/window.tsx` — old draggable chrome window model
-- `components/os/stage-manager.tsx` — old stage-manager window strip model
 - `components/os/desktop-telemetry.tsx` — old conky background layer; superseded by `xray-desktop-surface.tsx`
 - `components/os/globe.tsx` — older desktop visual; xray is now the primary desktop stage
 - `components/os/wallet-app.tsx` — old wallet-specific surface; finance hub is `finances-app.tsx`
@@ -137,7 +135,7 @@ These names are now ambiguous or superseded:
 - `lib/xray/*` — older JS xray renderer/adapter/layout implementation; prefer `features/xray/*`
 - `platform/registries/window-registry.ts` — old draggable window metadata; prefer `platform/registries/app-surface-registry.ts`
 
-Do not delete these until imports are verified locally with a build. Move them to a `legacy/` folder only after no production imports remain.
+Do not import these into production surfaces without re-validating ownership and mode boundaries.
 
 ## Demo / scaffold components
 

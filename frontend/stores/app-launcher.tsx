@@ -10,7 +10,7 @@ import {
 } from "./desktop-store"
 import { getBuiltinApp, BUILTIN_ICON_MAP } from "@/platform/registries/builtin-app-registry"
 import { getCatalogApp } from "@/platform/registries/app-catalog-registry"
-import { getAppSurfaceSpec, getDefaultSurfaceSize } from "@/platform/registries/app-surface-registry"
+import { getAppSurfaceSpec, getDefaultSurfaceVariant } from "@/platform/registries/app-surface-registry"
 import { createAppLaunchPlan } from "@/platform/runtime/app-manager"
 import { isAppInstalled } from "@/stores/installed-apps-store"
 import { getMissingCapabilities } from "@/stores/local-capability-grants-store"
@@ -42,6 +42,15 @@ export function launchApp(app: AppDefinition, component?: React.ReactNode): AppS
   const spec = getAppSurfaceSpec(app.appId)
   const surfaces = appSurfacesStore.get()
 
+  if (!component) {
+    const missing = getMissingCapabilities(app.appId, app.requiredCapabilityIds)
+    if (missing.length > 0) {
+      pendingGateStore.set({ app, blocked: missing })
+      addLog("warning", `${app.name} requires permission: ${missing.join(", ")}`)
+      return null
+    }
+  }
+
   if (spec.kind === "pinned-widget") {
     const existing = surfaces.find((candidate) => candidate.appId === app.appId && candidate.kind === "pinned-widget")
     if (existing) {
@@ -59,13 +68,6 @@ export function launchApp(app: AppDefinition, component?: React.ReactNode): AppS
   }
 
   if (!component) {
-    const missing = getMissingCapabilities(app.appId, app.requiredCapabilityIds)
-    if (missing.length > 0) {
-      pendingGateStore.set({ app, blocked: missing })
-      addLog("warning", `${app.name} requires permission: ${missing.join(", ")}`)
-      return null
-    }
-
     const plan = createAppLaunchPlan(app, { launchApp })
     component = plan.component
     addLog("info", `${app.name} runtime: ${plan.runtime}`)
@@ -82,10 +84,9 @@ export function launchApp(app: AppDefinition, component?: React.ReactNode): AppS
     icon: getAppIcon(app.appId),
     component,
     kind: spec.kind,
+    variant: getDefaultSurfaceVariant(app.appId),
     dismissOnOutsideClick: spec.dismissOnOutsideClick,
     preferredSlot: spec.preferredSlot,
-    defaultSize: getDefaultSurfaceSize(app.appId),
-    defaultPosition: { x: 0, y: 0 },
   }
 
   openAppSurface(surface)

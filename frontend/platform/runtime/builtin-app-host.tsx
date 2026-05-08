@@ -74,6 +74,10 @@ const SettingsApp = dynamic(
   () => import("@/components/os/settings-app").then((mod) => mod.SettingsApp),
   { ssr: false, loading: LoadingApp },
 )
+const IdentityApp = dynamic(
+  () => import("@/components/os/identity-app").then((mod) => mod.IdentityApp),
+  { ssr: false, loading: LoadingApp },
+)
 const ComputeNodeApp = dynamic(
   () => import("@/components/os/compute-node").then((mod) => mod.ComputeNode),
   { ssr: false, loading: LoadingApp },
@@ -86,6 +90,8 @@ interface BuiltinAppHostProps {
 
 export function BuiltinAppHost({ app, onLaunchApp }: BuiltinAppHostProps) {
   switch (app.appId) {
+    case "identity":
+      return <IdentityApp />
     case "terminal":
       return <TerminalApp logs={[]} onCommand={() => {}} />
     case "app-store":

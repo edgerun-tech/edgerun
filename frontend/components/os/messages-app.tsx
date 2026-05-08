@@ -6,9 +6,7 @@ import { cn } from "@/lib/utils"
 import { useAuth, type ContactRecord, type LocalQueuedMessage, type UnlockedProfileContainer } from "@/hooks/use-auth"
 
 type MessagesAppProps = {
-  onClose: () => void
   initialRecipientId?: string
-  surface?: "modal" | "embedded"
 }
 
 type OpenedMessage = {
@@ -42,13 +40,14 @@ function senderName(profile: UnlockedProfileContainer, message: LocalQueuedMessa
   return profile.contacts.find((contact) => contact.identityIdHex === message.fromId)?.label ?? "Contact"
 }
 
-export function MessagesApp({ onClose, initialRecipientId, surface = "modal" }: MessagesAppProps) {
+export function MessagesApp({ initialRecipientId }: MessagesAppProps) {
   const auth = useAuth()
   const profile = auth.unlockedProfile as UnlockedProfileContainer | null
   const [activeContactId, setActiveContactId] = useState(initialRecipientId ?? "")
   const [subject, setSubject] = useState("")
   const [input, setInput] = useState("")
   const [password, setPassword] = useState("")
+  const [authorizedPassword, setAuthorizedPassword] = useState("")
   const [openedMessages, setOpenedMessages] = useState<Record<string, string>>({})
   const bottomRef = useRef<HTMLDivElement>(null)
 
@@ -58,6 +57,10 @@ export function MessagesApp({ onClose, initialRecipientId, surface = "modal" }: 
   }, [profile])
 
   const activeContact = contacts.find((contact) => contact.identityIdHex === activeContactId) ?? contacts[0] ?? null
+
+  useEffect(() => {
+    if (initialRecipientId) setActiveContactId(initialRecipientId)
+  }, [initialRecipientId])
 
   useEffect(() => {
     if (!activeContactId && activeContact) setActiveContactId(activeContact.identityIdHex)
@@ -73,7 +76,13 @@ export function MessagesApp({ onClose, initialRecipientId, surface = "modal" }: 
     .filter((message) => !activeContact || message.fromId === activeContact.identityIdHex || message.toId === activeContact.identityIdHex)
     .map((message) => ({ message, text: openedMessages[message.id] }))
 
-  const canSend = Boolean(password && input.trim() && activeContact)
+  const unreadByContactId = auth.localMessages.reduce<Record<string, number>>((acc, message) => {
+    if (openedMessages[message.id] !== undefined) return acc
+    acc[message.fromId] = (acc[message.fromId] ?? 0) + 1
+    return acc
+  }, {})
+  const canAuthorize = Boolean(password)
+  const canSend = Boolean((authorizedPassword || password) && input.trim() && activeContact)
 
   async function openMessage(messageId: string) {
     const opened = await auth.openLocalMessage(messageId)
@@ -87,31 +96,16 @@ export function MessagesApp({ onClose, initialRecipientId, surface = "modal" }: 
       label: subject.trim() || "Message",
       recipientId: activeContact.identityIdHex,
       plaintext: input,
-      password,
+      password: authorizedPassword || password,
     })
+    if (!authorizedPassword && password) setAuthorizedPassword(password)
+    setPassword("")
     setInput("")
     setSubject("")
   }
 
   return (
-    <div className={cn(
-      "flex flex-col overflow-hidden bg-background/96",
-      surface === "modal"
-        ? "fixed left-1/2 top-1/2 z-40 h-[calc(100vh-6rem)] max-h-[680px] w-[calc(100vw-2rem)] max-w-[980px] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border shadow-2xl backdrop-blur-xl"
-        : "h-full min-h-0",
-    )}>
-      {surface === "modal" ? (
-        <div className="flex h-12 flex-shrink-0 items-center justify-between border-b border-[var(--window-border)] px-4 sm:h-14 sm:px-5">
-          <div className="flex items-center gap-2">
-            <Send className="h-4 w-4 text-primary" />
-            <span className="text-sm font-medium text-foreground">Messages</span>
-          </div>
-          <button onClick={onClose} className="rounded-md border border-border bg-background/80 px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-secondary hover:text-foreground" aria-label="Close Messages">
-            Close
-          </button>
-        </div>
-      ) : null}
-
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background/96">
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <div className="flex h-32 flex-shrink-0 flex-col border-b border-[var(--window-border)] py-2 md:h-auto md:w-48 md:border-b-0 md:border-r">
           <div className="mb-1 px-3">
@@ -121,7 +115,7 @@ export function MessagesApp({ onClose, initialRecipientId, surface = "modal" }: 
             <p className="px-3 py-4 text-center text-xs text-muted-foreground">Add a contact first.</p>
           )}
           {contacts.map((contact) => {
-            const unread = auth.localMessages.filter((message) => message.fromId === contact.identityIdHex && openedMessages[message.id] === undefined).length
+            const unread = unreadByContactId[contact.identityIdHex] ?? 0
             return (
               <button
                 key={contact.identityIdHex}
@@ -209,10 +203,24 @@ export function MessagesApp({ onClose, initialRecipientId, surface = "modal" }: 
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 type="password"
-                placeholder="Profile password"
+                placeholder={authorizedPassword ? "Authorized" : "Profile password"}
                 className="h-8 rounded-md bg-secondary px-3 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
               />
             </div>
+            {!authorizedPassword && (
+              <button
+                onClick={() => {
+                  if (canAuthorize) {
+                    setAuthorizedPassword(password)
+                    setPassword("")
+                  }
+                }}
+                disabled={!canAuthorize}
+                className="mb-2 h-7 rounded-md border border-border bg-secondary/35 px-2 text-[11px] font-medium text-muted-foreground hover:text-foreground disabled:opacity-40"
+              >
+                Authorize sending for this session
+              </button>
+            )}
             <div className="flex items-center gap-2 rounded-lg bg-secondary px-3 py-2">
               <input
                 value={input}

@@ -11,6 +11,7 @@ export interface LogEntry {
 
 export type AppSurfaceKind = "overlay" | "pinned-widget"
 export type AppSurfaceSlot = "left-top" | "left-bottom" | "right-top" | "right-bottom"
+export type AppSurfaceVariant = "compact" | "standard" | "wide" | "full" | "widget"
 
 export interface AppSurfaceDef {
   id: string
@@ -19,32 +20,13 @@ export interface AppSurfaceDef {
   icon: React.ReactNode
   component: React.ReactNode
   kind: AppSurfaceKind
+  variant: AppSurfaceVariant
   dismissOnOutsideClick: boolean
   preferredSlot?: AppSurfaceSlot
-  defaultSize?: { width: number; height: number }
-  /** @deprecated Draggable window positioning is legacy. App surfaces are layout-managed. */
-  defaultPosition?: { x: number; y: number }
 }
 
 /** @deprecated Use AppSurfaceDef. Kept as a transition alias for older launcher call sites. */
 export type OpenWindowDef = AppSurfaceDef
-
-/** @deprecated Draggable window layout is legacy. */
-export interface WindowLayoutState {
-  position: { x: number; y: number }
-  size: { width: number; height: number }
-  maximized: boolean
-}
-
-/** @deprecated Draggable window layout is legacy. Kept only so old components fail less loudly during migration. */
-export const windowLayoutStore = persistentAtom<Record<string, WindowLayoutState>>(
-  "edgerun:legacyWindowLayout",
-  {},
-  {
-    encode: JSON.stringify,
-    decode: JSON.parse,
-  }
-)
 
 /** @deprecated Stage manager is no longer part of the desktop model. Apps open as overlays or pinned surfaces. */
 export const stageModeStore = persistentAtom("edgerun:legacyStageMode", false, {
@@ -78,10 +60,10 @@ export const terminalLogsStore = atom<LogEntry[]>([])
 const MAX_TERMINAL_LOGS = 200
 
 export const systemStatsStore = atom({
-  nodeCount: 12,
-  activeSessions: 3,
-  ramUsage: { used: 4.2, total: 8 },
-  isConnected: true,
+  nodeCount: 0,
+  activeSessions: 0,
+  ramUsage: { used: 0, total: 0 },
+  isConnected: false,
 })
 
 export const hasBootedStore = atom(false)
@@ -141,14 +123,3 @@ export function focusAppSurface(surfaceId: string) {
 
 /** @deprecated Use focusAppSurface. */
 export const focusWindow = focusAppSurface
-
-/** @deprecated Draggable window layout is legacy. */
-export function saveWindowLayout(appId: string, layout: WindowLayoutState) {
-  const store = windowLayoutStore.get()
-  windowLayoutStore.set({ ...store, [appId]: layout })
-}
-
-/** @deprecated Draggable window layout is legacy. */
-export function getWindowLayout(appId: string): WindowLayoutState | null {
-  return windowLayoutStore.get()[appId] || null
-}

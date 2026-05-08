@@ -27,7 +27,7 @@ export const REMOVED_APP_IDS = new Set([
   "help",
 ])
 
-export const CORE_APP_IDS = ["app-store", "settings"] as const
+export const CORE_APP_IDS = ["identity", "app-store", "settings"] as const
 
 export const PUBLISHED_BUILTIN_APP_IDS = [
   "app-store",

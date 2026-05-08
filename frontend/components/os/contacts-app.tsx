@@ -1,12 +1,11 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { ChevronRight, Copy, Fingerprint, Mail, MessageSquare, Plus, Save, Search, User, UserPlus, X } from "lucide-react"
+import { ChevronRight, Copy, Fingerprint, Mail, MessageSquare, Plus, Save, Search, User, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth, type ContactRecord, type UnlockedProfileContainer } from "@/hooks/use-auth"
 
 type ContactsAppProps = {
-  onClose?: () => void
   onMessage?: (contact: ContactRecord) => void
   onCall?: (contact: ContactRecord) => void
 }
@@ -53,7 +52,7 @@ function shortId(value: string) {
   return `${value.slice(0, 12)}...${value.slice(-6)}`
 }
 
-export function ContactsApp({ onClose, onMessage }: ContactsAppProps) {
+export function ContactsApp({ onMessage }: ContactsAppProps) {
   const auth = useAuth()
   const profile = auth.unlockedProfile as UnlockedProfileContainer | null
   const [query, setQuery] = useState("")
@@ -159,7 +158,7 @@ export function ContactsApp({ onClose, onMessage }: ContactsAppProps) {
     await navigator.clipboard.writeText(contactCard(profile.handle, profile.ownerEncryption.publicKeyRawBase64))
   }
 
-  const app = (
+  return (
     <div className="flex h-full min-h-0 flex-col bg-background text-foreground md:flex-row">
       <div className="flex h-[42%] min-h-0 flex-shrink-0 flex-col border-b border-[var(--window-border)] md:h-auto md:w-72 md:border-b-0 md:border-r">
         <div className="flex items-center gap-2 border-b border-[var(--window-border)] p-3">
@@ -339,23 +338,6 @@ export function ContactsApp({ onClose, onMessage }: ContactsAppProps) {
           </div>
         )}
       </div>
-    </div>
-  )
-
-  if (!onClose) return app
-
-  return (
-    <div className="fixed left-1/2 top-1/2 z-40 flex h-[calc(100vh-6rem)] max-h-[680px] w-[calc(100vw-2rem)] max-w-[980px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border bg-background/96 shadow-2xl backdrop-blur-xl">
-      <div className="flex h-12 flex-shrink-0 items-center justify-between border-b border-[var(--window-border)] px-4 sm:h-14 sm:px-5">
-        <div className="flex items-center gap-2">
-          <UserPlus className="h-4 w-4 text-primary" />
-          <span className="text-sm font-medium text-foreground">Contacts</span>
-        </div>
-        <button onClick={onClose} className="rounded-md p-2 text-muted-foreground hover:bg-secondary hover:text-foreground" aria-label="Close Contacts">
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-      <div className="min-h-0 flex-1">{app}</div>
     </div>
   )
 }

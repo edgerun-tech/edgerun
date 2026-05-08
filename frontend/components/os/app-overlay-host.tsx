@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react"
 import { X } from "lucide-react"
 import type { AppSurfaceDef } from "@/stores/desktop-store"
+import { cn } from "@/lib/utils"
 
 type AppOverlayHostProps = {
   surfaces: AppSurfaceDef[]
@@ -37,19 +38,46 @@ export function AppOverlayHost({
 }: AppOverlayHostProps) {
   const activeSurface = getActiveOverlay(surfaces, surfaceOrder, focusedSurfaceId)
   const dialogRef = useRef<HTMLDivElement>(null)
+  const previousFocusRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     if (!activeSurface) return
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     dialogRef.current?.focus()
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return
-      event.preventDefault()
-      onClose(activeSurface.id)
+      if (event.key === "Escape") {
+        event.preventDefault()
+        onClose(activeSurface.id)
+        return
+      }
+
+      if (event.key !== "Tab" || !dialogRef.current) return
+      const focusable = Array.from(dialogRef.current.querySelectorAll<HTMLElement>(
+        "a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex='-1'])",
+      )).filter((element) => !element.hasAttribute("disabled") && element.offsetParent !== null)
+      if (focusable.length === 0) {
+        event.preventDefault()
+        dialogRef.current.focus()
+        return
+      }
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
     }
 
     window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
+    return () => {
+      window.removeEventListener("keydown", onKeyDown)
+      previousFocusRef.current?.focus()
+      previousFocusRef.current = null
+    }
   }, [activeSurface, onClose])
 
   if (!activeSurface) return null
@@ -71,15 +99,15 @@ export function AppOverlayHost({
         tabIndex={-1}
         data-app-overlay-id={activeSurface.id}
         data-app-id={activeSurface.appId}
-        className="relative h-[calc(100vh-2rem)] max-h-[920px] w-[min(1280px,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-white/10 bg-background/92 shadow-[0_32px_120px_rgba(0,0,0,0.78)] outline-none ring-1 ring-white/5 animate-in zoom-in-95 duration-150 sm:h-[calc(100vh-7rem)] sm:w-[min(1280px,calc(100vw-3rem))] sm:rounded-[28px]"
-        style={{
-          width: activeSurface.defaultSize?.width
-            ? `min(${activeSurface.defaultSize.width}px, calc(100vw - 1.5rem))`
-            : undefined,
-          height: activeSurface.defaultSize?.height
-            ? `min(${activeSurface.defaultSize.height}px, calc(100vh - 2rem))`
-            : undefined,
-        }}
+        data-surface-variant={activeSurface.variant}
+        className={cn(
+          "relative overflow-hidden border border-white/10 bg-background/92 shadow-[0_32px_120px_rgba(0,0,0,0.78)] outline-none ring-1 ring-white/5 animate-in zoom-in-95 duration-150",
+          "h-[calc(100vh-2rem)] w-[calc(100vw-1.5rem)] rounded-2xl sm:h-[calc(100vh-7rem)] sm:w-[calc(100vw-3rem)] sm:rounded-[28px]",
+          activeSurface.variant === "compact" && "sm:h-[min(620px,calc(100vh-7rem))] sm:max-w-[560px]",
+          activeSurface.variant === "standard" && "sm:max-w-[980px]",
+          activeSurface.variant === "wide" && "sm:max-w-[1180px]",
+          activeSurface.variant === "full" && "sm:max-w-[1440px]",
+        )}
         onPointerDown={(event) => {
           event.stopPropagation()
           onFocus(activeSurface.id)

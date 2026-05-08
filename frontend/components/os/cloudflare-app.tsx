@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { AlertCircle, CheckCircle2, Cloud, Edit3, LogOut, Plus, RefreshCw, Save, ShieldCheck, Trash2 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { useAuth, type OAuthProfileSecret } from "@/hooks/use-auth"
+import { useAuth, type CloudflareProfileSecret } from "@/hooks/use-auth"
 
-type PendingCloudflareSecret = Omit<OAuthProfileSecret, "appId" | "kind" | "updatedAtIso">
+type PendingCloudflareSecret = Omit<CloudflareProfileSecret, "appId" | "kind" | "updatedAtIso">
 
 type CloudflareZone = {
   id: string
@@ -24,7 +24,18 @@ type CloudflareDnsRecord = {
   comment?: string
 }
 
+type CloudflareSessionResult = {
+  ok: true
+  label: string
+  accountId: string | null
+  tokenId: string | null
+  zoneId: string | null
+  zoneName: string | null
+  tokenStatus: string
+}
+
 const DNS_TYPES = ["A", "AAAA", "CNAME", "TXT", "MX", "SRV", "CAA"] as const
+type CloudflareSessionState = "checking" | "disconnected" | "ready" | "error"
 
 function readCookie(name: string): string | null {
   const prefix = `${name}=`
@@ -35,25 +46,40 @@ function deleteCookie(name: string) {
   document.cookie = `${name}=; Max-Age=0; path=/`
 }
 
-async function restoreCloudflareSession(secret: PendingCloudflareSecret): Promise<boolean> {
+function writeCookie(name: string, value: string) {
+  document.cookie = `${name}=${encodeURIComponent(value)}; Max-Age=31536000; path=/; SameSite=Lax`
+}
+
+async function restoreCloudflareSession(secret: PendingCloudflareSecret): Promise<CloudflareSessionResult> {
   const res = await fetch("/api/cloudflare/session", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(secret),
   })
-  return res.ok
+  const data = await res.json().catch(() => null)
+  if (!res.ok) throw new Error(data?.error || "Cloudflare session setup failed")
+  return data
 }
 
 function emptyRecord(zoneName = "") {
   return { type: "A", name: zoneName, content: "", ttl: 1, proxied: true }
 }
 
+function currentZoneId(zones: CloudflareZone[], currentZoneId: string, savedZoneId: string | null | undefined) {
+  if (currentZoneId && zones.some((zone) => zone.id === currentZoneId)) return currentZoneId
+  if (savedZoneId && zones.some((zone) => zone.id === savedZoneId)) return savedZoneId
+  return zones[0]?.id || savedZoneId || ""
+}
+
 export function CloudflareApp({ className }: { className?: string }) {
   const auth = useAuth()
-  const savedSecret = auth.unlockedProfile?.appSecrets.find((secret) => secret.appId === "cloudflare")
-  const [connected, setConnected] = useState<boolean | null>(null)
+  const savedSecret = auth.unlockedProfile?.appSecrets.find((secret) => secret.appId === "cloudflare") as CloudflareProfileSecret | undefined
+  const [sessionState, setSessionState] = useState<CloudflareSessionState>("checking")
   const [label, setLabel] = useState("")
   const [apiToken, setApiToken] = useState("")
+  const [accountId, setAccountId] = useState("")
+  const [tokenId, setTokenId] = useState("")
+  const [defaultZoneId, setDefaultZoneId] = useState("")
   const [profilePassword, setProfilePassword] = useState("")
   const [zones, setZones] = useState<CloudflareZone[]>([])
   const [selectedZoneId, setSelectedZoneId] = useState("")
@@ -72,21 +98,26 @@ export function CloudflareApp({ className }: { className?: string }) {
       const res = await fetch("/api/cloudflare/zones")
       const data = await res.json()
       if (res.status === 401 && data.needReauth) {
-        setConnected(false)
+        setSessionState("disconnected")
+        setZones([])
+        setRecords([])
         setError("Cloudflare token expired or lacks access. Reconnect with a DNS-scoped API token.")
         return
       }
       if (!res.ok) throw new Error(data.error || "Failed to fetch Cloudflare zones")
       const nextZones = data.result ?? []
+      const savedZoneId = savedSecret?.zoneId || readCookie("cloudflare_zone_id")
+      const nextSelectedZoneId = currentZoneId(nextZones, selectedZoneId, savedZoneId)
       setZones(nextZones)
-      setSelectedZoneId((current) => current || nextZones[0]?.id || "")
-      setConnected(true)
+      setSelectedZoneId(nextSelectedZoneId)
+      setSessionState("ready")
     } catch (err) {
+      setSessionState("error")
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [savedSecret?.zoneId, selectedZoneId])
 
   const fetchRecords = useCallback(async (zoneId = selectedZone?.id) => {
     if (!zoneId) return
@@ -107,41 +138,32 @@ export function CloudflareApp({ className }: { className?: string }) {
   useEffect(() => {
     const labelCookie = readCookie("cloudflare_label")
     if (labelCookie) setLabel(decodeURIComponent(labelCookie))
-    setConnected(Boolean(labelCookie || savedSecret))
+    else if (savedSecret?.email) setLabel(savedSecret.email)
+    const tokenIdCookie = readCookie("cloudflare_token_id")
+    if (tokenIdCookie) setTokenId(decodeURIComponent(tokenIdCookie))
+    else if (savedSecret?.tokenId) setTokenId(savedSecret.tokenId)
+    const accountIdCookie = readCookie("cloudflare_account_id")
+    if (accountIdCookie) setAccountId(decodeURIComponent(accountIdCookie))
+    else if (savedSecret?.accountId) setAccountId(savedSecret.accountId)
+    const zoneCookie = readCookie("cloudflare_zone_id")
+    if (zoneCookie) {
+      setDefaultZoneId(zoneCookie)
+      setSelectedZoneId(zoneCookie)
+    } else if (savedSecret?.zoneId) {
+      setDefaultZoneId(savedSecret.zoneId)
+      setSelectedZoneId(savedSecret.zoneId)
+    }
+    setSessionState(labelCookie ? "ready" : "disconnected")
   }, [savedSecret])
 
   useEffect(() => {
-    if (connected !== false || !savedSecret) return
-    let cancelled = false
-    async function restore() {
-      if (!savedSecret) return
-      setLoading(true)
-      try {
-        const ok = await restoreCloudflareSession(savedSecret)
-        if (cancelled) return
-        if (ok) {
-          setLabel(savedSecret.email)
-          setConnected(true)
-          await fetchZones()
-        }
-      } catch (err) {
-        if (!cancelled) setError(`Saved Cloudflare session restore failed: ${err}`)
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    void restore()
-    return () => {
-      cancelled = true
-    }
-  }, [connected, fetchZones, savedSecret])
-
-  useEffect(() => {
-    if (connected) void fetchZones()
-  }, [connected, fetchZones])
+    if (sessionState === "ready") void fetchZones()
+  }, [fetchZones, sessionState])
 
   useEffect(() => {
     if (selectedZone?.id) {
+      writeCookie("cloudflare_zone_id", selectedZone.id)
+      writeCookie("cloudflare_zone_name", selectedZone.name)
       setDraft((current) => ({ ...current, name: current.name || selectedZone.name }))
       void fetchRecords(selectedZone.id)
     }
@@ -149,6 +171,14 @@ export function CloudflareApp({ className }: { className?: string }) {
 
   const connect = useCallback(async () => {
     if (!apiToken.trim()) return
+    if (defaultZoneId.trim() && defaultZoneId.trim() === apiToken.trim()) {
+      setError("Cloudflare token value and zone ID are different values. Paste the bearer token in token value and the 32-character zone ID in zone ID.")
+      return
+    }
+    if (accountId.trim() && accountId.trim() === apiToken.trim()) {
+      setError("Cloudflare token value and account ID are different values. Paste the bearer token in token value and the 32-character account ID in account ID.")
+      return
+    }
     setLoading(true)
     setError(null)
     try {
@@ -157,10 +187,13 @@ export function CloudflareApp({ className }: { className?: string }) {
         accessToken: apiToken.trim(),
         expiresAtIso: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
         scopes: ["Zone:Read", "DNS:Edit"],
+        accountId: accountId.trim() || undefined,
+        zoneId: defaultZoneId.trim() || undefined,
       }
-      const ok = await restoreCloudflareSession(secret)
-      if (!ok) throw new Error("Cloudflare token verification failed")
-      setConnected(true)
+      const session = await restoreCloudflareSession(secret)
+      setAccountId(session.accountId || accountId.trim())
+      setTokenId(session.tokenId || "")
+      setSessionState("ready")
       setApiToken("")
       await fetchZones()
     } catch (err) {
@@ -168,25 +201,98 @@ export function CloudflareApp({ className }: { className?: string }) {
     } finally {
       setLoading(false)
     }
-  }, [apiToken, fetchZones, label])
+  }, [accountId, apiToken, defaultZoneId, fetchZones, label])
 
   const saveSecret = useCallback(async () => {
     if (!apiToken.trim() || !profilePassword) return
+    if (defaultZoneId.trim() && defaultZoneId.trim() === apiToken.trim()) {
+      setError("Cloudflare token value and zone ID are different values. Paste the bearer token in token value and the 32-character zone ID in zone ID.")
+      return
+    }
+    if (accountId.trim() && accountId.trim() === apiToken.trim()) {
+      setError("Cloudflare token value and account ID are different values. Paste the bearer token in token value and the 32-character account ID in account ID.")
+      return
+    }
     const secret: PendingCloudflareSecret = {
       email: label.trim() || "Cloudflare API token",
       accessToken: apiToken.trim(),
       expiresAtIso: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
       scopes: ["Zone:Read", "DNS:Edit"],
+      accountId: accountId.trim() || undefined,
+      zoneId: defaultZoneId.trim() || undefined,
+    }
+    setLoading(true)
+    setError(null)
+    try {
+      const session = await restoreCloudflareSession(secret)
+      const ok = await auth.saveOAuthSecret({
+        appId: "cloudflare",
+        password: profilePassword,
+        secret: {
+          ...secret,
+          accountId: session.accountId || secret.accountId,
+          tokenId: session.tokenId || undefined,
+          zoneId: session.zoneId || secret.zoneId,
+          zoneName: session.zoneName || secret.zoneName,
+        },
+      })
+    if (ok) {
+      setAccountId(session.accountId || accountId.trim())
+      setTokenId(session.tokenId || "")
+      setProfilePassword("")
+      setApiToken("")
+      setSessionState("ready")
+      await fetchZones()
+    }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setLoading(false)
+    }
+  }, [accountId, apiToken, auth, defaultZoneId, fetchZones, label, profilePassword])
+
+  const saveSelectedZone = useCallback(async () => {
+    if (!savedSecret || !selectedZone?.id || !profilePassword) return
+    const secret: PendingCloudflareSecret = {
+      email: savedSecret.email,
+      accessToken: savedSecret.accessToken,
+      refreshToken: savedSecret.refreshToken,
+      expiresAtIso: savedSecret.expiresAtIso,
+      scopes: savedSecret.scopes,
+      accountId: savedSecret.accountId,
+      tokenId: savedSecret.tokenId,
+      zoneId: selectedZone.id,
+      zoneName: selectedZone.name,
     }
     const ok = await auth.saveOAuthSecret({ appId: "cloudflare", password: profilePassword, secret })
     if (ok) {
-      await restoreCloudflareSession(secret)
+      const session = await restoreCloudflareSession(secret)
+      setAccountId(session.accountId || savedSecret.accountId || accountId)
+      setTokenId(savedSecret.tokenId || tokenId)
+      setDefaultZoneId(selectedZone.id)
       setProfilePassword("")
-      setApiToken("")
-      setConnected(true)
-      await fetchZones()
     }
-  }, [apiToken, auth, fetchZones, label, profilePassword])
+  }, [accountId, auth, profilePassword, savedSecret, selectedZone, tokenId])
+
+  const reconnectSavedSecret = useCallback(async () => {
+    if (!savedSecret) return
+    setLoading(true)
+    setError(null)
+    try {
+      const session = await restoreCloudflareSession(savedSecret)
+      setLabel(savedSecret.email)
+      setAccountId(session.accountId || savedSecret.accountId || "")
+      setTokenId(session.tokenId || savedSecret.tokenId || "")
+      setDefaultZoneId(session.zoneId || savedSecret.zoneId || "")
+      setSessionState("ready")
+      await fetchZones()
+    } catch (err) {
+      setSessionState("error")
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setLoading(false)
+    }
+  }, [fetchZones, savedSecret])
 
   const removeSavedSecret = useCallback(async () => {
     if (!profilePassword) return
@@ -197,10 +303,17 @@ export function CloudflareApp({ className }: { className?: string }) {
   const disconnect = useCallback(() => {
     void fetch("/api/cloudflare/session", { method: "DELETE" })
     deleteCookie("cloudflare_label")
-    setConnected(false)
+    deleteCookie("cloudflare_account_id")
+    deleteCookie("cloudflare_token_id")
+    deleteCookie("cloudflare_zone_id")
+    deleteCookie("cloudflare_zone_name")
+    setSessionState("disconnected")
     setZones([])
     setRecords([])
     setSelectedZoneId("")
+    setAccountId("")
+    setDefaultZoneId("")
+    setTokenId("")
   }, [])
 
   const saveRecord = useCallback(async () => {
@@ -249,11 +362,11 @@ export function CloudflareApp({ className }: { className?: string }) {
     }
   }, [fetchRecords, selectedZone?.id])
 
-  if (connected === null) {
+  if (sessionState === "checking") {
     return <div className="flex h-full items-center justify-center"><RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" /></div>
   }
 
-  if (!connected) {
+  if (sessionState !== "ready") {
     return (
       <div className={cn("flex h-full items-center justify-center bg-background p-6", className)}>
         <div className="w-full max-w-md rounded-lg border border-border bg-card p-5 shadow-sm">
@@ -266,11 +379,40 @@ export function CloudflareApp({ className }: { className?: string }) {
           </div>
           <div className="mb-4 space-y-2 rounded-md border border-border bg-background/70 p-3 text-xs">
             <div className="flex items-center gap-2"><ShieldCheck className="h-3.5 w-3.5 text-primary" /> Create a Cloudflare token with Zone:Read and DNS:Edit for selected zones.</div>
+            <div className="flex items-center gap-2"><Cloud className="h-3.5 w-3.5 text-muted-foreground" /> Account-scoped tokens need the account ID for verification.</div>
             <div className="flex items-center gap-2"><CheckCircle2 className="h-3.5 w-3.5 text-[var(--status-online)]" /> Saving stores the token only inside your encrypted profile container.</div>
+            <div className="flex items-center gap-2"><Cloud className="h-3.5 w-3.5 text-muted-foreground" /> Add a zone ID to bind this connector directly to one DNS zone.</div>
           </div>
-          <input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="Label, e.g. Edgerun DNS" className="mb-2 h-10 w-full rounded-md border border-border bg-background px-3 text-sm outline-none focus:border-primary" />
-          <input value={apiToken} onChange={(event) => setApiToken(event.target.value)} type="password" placeholder="Cloudflare API token" className="mb-2 h-10 w-full rounded-md border border-border bg-background px-3 text-sm outline-none focus:border-primary" />
-          <input value={profilePassword} onChange={(event) => setProfilePassword(event.target.value)} type="password" placeholder="Profile password to save token" className="mb-3 h-10 w-full rounded-md border border-border bg-background px-3 text-sm outline-none focus:border-primary" />
+          {savedSecret && (
+            <div className="mb-4 rounded-md border border-border bg-background/70 p-3 text-xs">
+              <div className="font-medium text-foreground">Saved connector is separate from API session</div>
+              <div className="mt-1 text-muted-foreground">Your profile is unlocked. Reconnect only affects Cloudflare API access.</div>
+              <button onClick={reconnectSavedSecret} disabled={loading} className="mt-3 flex h-9 w-full items-center justify-center gap-2 rounded-md border border-border bg-secondary/50 text-xs font-medium text-foreground hover:bg-secondary disabled:opacity-50">
+                {loading ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Cloud className="h-3.5 w-3.5" />}
+                Reconnect saved token
+              </button>
+            </div>
+          )}
+          <label className="mb-2 block text-xs font-medium text-foreground">
+            Connector label
+            <input value={label} onChange={(event) => setLabel(event.target.value)} placeholder="Edgerun DNS" className="mt-1 h-10 w-full rounded-md border border-border bg-background px-3 text-sm font-normal outline-none focus:border-primary" />
+          </label>
+          <label className="mb-2 block text-xs font-medium text-foreground">
+            API token value
+            <input value={apiToken} onChange={(event) => setApiToken(event.target.value)} type="password" autoComplete="off" placeholder="Bearer token value from Cloudflare" className="mt-1 h-10 w-full rounded-md border border-border bg-background px-3 text-sm font-normal outline-none focus:border-primary" />
+          </label>
+          <label className="mb-2 block text-xs font-medium text-foreground">
+            Account ID
+            <input value={accountId} onChange={(event) => setAccountId(event.target.value.trim())} placeholder="32-character account ID, required for account-scoped tokens" className="mt-1 h-10 w-full rounded-md border border-border bg-background px-3 font-mono text-xs font-normal outline-none focus:border-primary" />
+          </label>
+          <label className="mb-2 block text-xs font-medium text-foreground">
+            Zone ID
+            <input value={defaultZoneId} onChange={(event) => setDefaultZoneId(event.target.value.trim())} placeholder="32-character zone ID, optional" className="mt-1 h-10 w-full rounded-md border border-border bg-background px-3 font-mono text-xs font-normal outline-none focus:border-primary" />
+          </label>
+          <label className="mb-3 block text-xs font-medium text-foreground">
+            Profile password
+            <input value={profilePassword} onChange={(event) => setProfilePassword(event.target.value)} type="password" placeholder="Required only to save sealed" className="mt-1 h-10 w-full rounded-md border border-border bg-background px-3 text-sm font-normal outline-none focus:border-primary" />
+          </label>
           {error && <div className="mb-4 flex items-center gap-2 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive"><AlertCircle className="h-3.5 w-3.5" />{error}</div>}
           <div className="grid grid-cols-2 gap-2">
             <button onClick={connect} disabled={!apiToken || loading} className="flex h-10 items-center justify-center gap-2 rounded-md border border-border bg-background text-sm font-medium text-foreground hover:bg-secondary disabled:opacity-50">
@@ -300,13 +442,17 @@ export function CloudflareApp({ className }: { className?: string }) {
         </button>
       </div>
       <div className="border-b border-border px-4 py-2 text-[11px] text-muted-foreground">
-        {savedSecret ? "API token saved in sealed profile" : "Connected for this browser session"} · DNS records
+        {savedSecret ? "API token value saved in sealed profile" : "Connected for this browser session"} · {accountId ? `account ${accountId}` : "no account ID"} · {tokenId ? `token ID ${tokenId}` : "token ID hidden until verified"} · DNS records
       </div>
       {savedSecret && (
         <div className="border-b border-border p-3">
           <div className="mb-2 text-xs font-medium text-foreground">Saved Cloudflare secret</div>
-          <div className="grid grid-cols-[1fr_auto] gap-2">
+          <div className="mb-2 text-[11px] text-muted-foreground">
+            {savedSecret.zoneId ? `Default zone: ${savedSecret.zoneName || savedSecret.zoneId}` : "No default zone saved yet"}
+          </div>
+          <div className="grid grid-cols-[1fr_auto_auto] gap-2">
             <input value={profilePassword} onChange={(event) => setProfilePassword(event.target.value)} type="password" placeholder="Profile password to remove saved token" className="h-8 rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary" />
+            <button onClick={saveSelectedZone} disabled={!profilePassword || !selectedZone || auth.isLoading} className="rounded-md border border-border bg-secondary/50 px-2 text-xs text-muted-foreground hover:text-foreground disabled:opacity-45">Save zone</button>
             <button onClick={removeSavedSecret} disabled={!profilePassword || auth.isLoading} className="rounded-md border border-border bg-secondary/50 px-2 text-xs text-muted-foreground hover:text-foreground disabled:opacity-45">Remove sealed token</button>
           </div>
         </div>
@@ -322,6 +468,7 @@ export function CloudflareApp({ className }: { className?: string }) {
               <button key={zone.id} onClick={() => setSelectedZoneId(zone.id)} className={cn("rounded-md border p-3 text-left text-xs", selectedZone?.id === zone.id ? "border-primary bg-primary/10" : "border-border bg-card hover:bg-secondary/45")}>
                 <div className="font-medium text-foreground">{zone.name}</div>
                 <div className="mt-1 text-muted-foreground">{zone.account?.name || zone.status || zone.id.slice(0, 8)}</div>
+                <div className="mt-1 truncate font-mono text-[10px] text-muted-foreground">{zone.id}</div>
               </button>
             ))}
           </div>

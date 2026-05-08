@@ -1,18 +1,17 @@
 "use client"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useMemo } from "react"
 import type React from "react"
 import { useStore } from "@nanostores/react"
 import { Contact, IdCard, Inbox, Settings, Store } from "lucide-react"
 import { AuthOverlay } from "./auth-overlay"
 import { AppOverlayHost } from "./app-overlay-host"
-import { IdentityApp } from "./identity-app"
 import { PeopleApp, type PeopleTab } from "./people-app"
 import { ProfileMenu } from "./profile-menu"
 import { CapabilityGatePrompt } from "@/components/capability-gate-prompt"
 import { useAuth } from "@/hooks/use-auth"
 import { FloatingDock, type FloatingDockContext, type FloatingDockItem } from "@/components/ui/floating-dock"
-import { addLog, appSurfaceOrderStore, appSurfacesStore, closeAppSurface, focusedAppSurfaceStore, focusAppSurface, pendingGateStore, terminalLogsStore } from "@/stores/desktop-store"
+import { addLog, appSurfaceOrderStore, appSurfacesStore, focusedAppSurfaceStore, focusAppSurface, pendingGateStore, terminalLogsStore } from "@/stores/desktop-store"
 import { getAppIcon, handleCloseAppSurface, launchApp, launchAppById } from "@/stores/app-launcher"
 import { getBuiltinApp } from "@/platform/registries/builtin-app-registry"
 import { listBuiltinApps } from "@/platform/registries/builtin-app-registry"
@@ -43,7 +42,7 @@ function sendAssistantInput(message: string) {
   }))
 }
 
-const PINNED_DOCK_APP_IDS = new Set(["app-store", "settings"])
+const PINNED_DOCK_APP_IDS = new Set(["identity", "app-store", "settings"])
 
 export function Desktop() {
   const auth = useAuth()
@@ -53,50 +52,29 @@ export function Desktop() {
   const pendingGate = useStore(pendingGateStore)
   const installedAppIds = useStore(installedAppIdsStore)
   const catalogAppList = useStore(catalogApps)
-  const [openApp, setOpenApp] = useState<"identity" | null>(null)
   const showDesktop = auth.authState === "authenticated"
 
-  useEffect(() => {
-    const closeLocalApp = () => setOpenApp(null)
-    window.addEventListener("edgerun:app-surface-opening", closeLocalApp)
-    return () => window.removeEventListener("edgerun:app-surface-opening", closeLocalApp)
-  }, [])
-
-  const closeLocalWindow = useCallback(() => {
-    setOpenApp(null)
-  }, [])
-
-  const closeOverlayWindows = useCallback(() => {
-    for (const surface of appSurfacesStore.get()) {
-      if (surface.kind === "overlay") closeAppSurface(surface.id)
-    }
-  }, [])
-
   const openIdentity = useCallback(() => {
-    closeOverlayWindows()
-    setOpenApp("identity")
-  }, [closeOverlayWindows])
+    return launchAppById("identity")
+  }, [])
 
   const openSurfaceById = useCallback((appId: string) => {
-    closeLocalWindow()
     return launchAppById(appId)
-  }, [closeLocalWindow])
+  }, [])
 
   const openPeople = useCallback((initialTab: PeopleTab, initialRecipientId?: string) => {
-    closeLocalWindow()
     const app = getBuiltinApp("people")
     if (!app) return null
     return launchApp(app, <PeopleApp initialTab={initialTab} initialRecipientId={initialRecipientId} />)
-  }, [closeLocalWindow])
+  }, [])
 
   const grantPendingGate = useCallback(() => {
     const pending = pendingGateStore.get()
     if (!pending) return
     grantLocalCapabilities(pending.app.appId, pending.blocked, "Approved from app launch prompt")
     pendingGateStore.set(null)
-    closeLocalWindow()
     launchApp(pending.app)
-  }, [closeLocalWindow])
+  }, [])
 
   const dockItems = useMemo<FloatingDockItem[]>(() => {
     const builtinApps = listBuiltinApps()
@@ -174,7 +152,6 @@ export function Desktop() {
         return
       }
       const appId = resolveCommandAppId(target)
-      closeLocalWindow()
       if (appId && launchAppById(appId)) {
         addLog("success", `Opened ${appId}`)
       } else {
@@ -193,7 +170,7 @@ export function Desktop() {
         message: `dock> ${command}`,
       },
     ])
-  }, [auth, closeLocalWindow, openPeople])
+  }, [auth, openPeople])
 
   if (!showDesktop) {
     return (
@@ -257,7 +234,6 @@ export function Desktop() {
           </div>
         </div>
       ) : null}
-      {openApp === "identity" ? <IdentityApp onClose={() => setOpenApp(null)} /> : null}
     </div>
   )
 }

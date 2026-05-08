@@ -2,7 +2,7 @@ import { NextRequest } from "next/server"
 import { cloudflareFetch } from "../cloudflare"
 
 function zonePath(req: NextRequest): string | null {
-  const zoneId = req.nextUrl.searchParams.get("zoneId")
+  const zoneId = req.nextUrl.searchParams.get("zoneId") || req.cookies.get("cloudflare_zone_id")?.value
   if (!zoneId || !/^[a-f0-9]{32}$/i.test(zoneId)) return null
   return `/zones/${zoneId}/dns_records`
 }

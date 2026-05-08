@@ -29,6 +29,7 @@ export const installedAppIdsStore = persistentAtom<string[]>(
   {
     encode: JSON.stringify,
     decode: (value) => {
+      if (!value) return [...DEFAULT_INSTALLED_APP_IDS]
       const parsed = JSON.parse(value)
       if (!Array.isArray(parsed)) return [...DEFAULT_INSTALLED_APP_IDS]
       const normalized = normalizeInstalledIds(parsed)

@@ -1,12 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { Copy, IdCard, KeyRound, Lock, Mail, ShieldCheck, X } from "lucide-react"
+import { Copy, IdCard, KeyRound, Lock, Mail, ShieldCheck } from "lucide-react"
 import { useAuth, type UnlockedProfileContainer } from "@/hooks/use-auth"
-
-type IdentityAppProps = {
-  onClose: () => void
-}
+import { AppHeader } from "@/components/os/app-chrome"
 
 function shortId(value: string) {
   if (!value) return "missing"
@@ -27,7 +24,7 @@ function emailContact(handle: string, publicKey: string) {
   window.location.href = `mailto:?subject=${subject}&body=${body}`
 }
 
-export function IdentityApp({ onClose }: IdentityAppProps) {
+export function IdentityApp() {
   const auth = useAuth()
   const profile = auth.unlockedProfile as UnlockedProfileContainer | null
   const [password, setPassword] = useState("")
@@ -51,20 +48,10 @@ export function IdentityApp({ onClose }: IdentityAppProps) {
   }
 
   return (
-    <div className="fixed left-1/2 top-1/2 z-40 flex h-[calc(100vh-6rem)] max-h-[640px] w-[calc(100vw-2rem)] max-w-[860px] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-border bg-background/96 shadow-2xl backdrop-blur-xl">
-      <div className="flex h-14 shrink-0 items-center justify-between border-b border-border px-4 sm:px-5">
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-md bg-primary/12 text-primary"><IdCard className="h-4 w-4" /></div>
-          <div>
-            <div className="text-sm font-semibold text-foreground">Identity</div>
-            <div className="text-xs text-muted-foreground">Your local profile and public contact card</div>
-          </div>
-        </div>
-        <button onClick={onClose} className="rounded-md p-2 text-muted-foreground hover:bg-secondary hover:text-foreground" aria-label="Close Identity">
-          <X className="h-4 w-4" />
-        </button>
-      </div>
-
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+      <AppHeader title="Identity" icon={<IdCard className="h-4 w-4" />}>
+        Your local profile and public contact card
+      </AppHeader>
       <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-5">
         <section className="rounded-lg border border-border bg-card p-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start">

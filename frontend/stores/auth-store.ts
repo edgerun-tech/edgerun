@@ -75,7 +75,20 @@ export type OAuthProfileSecret = {
 export type GmailProfileSecret = OAuthProfileSecret & { appId: "gmail" }
 export type GoogleDriveProfileSecret = OAuthProfileSecret & { appId: "google-drive" }
 export type GitHubProfileSecret = OAuthProfileSecret & { appId: "github" }
-export type CloudflareProfileSecret = OAuthProfileSecret & { appId: "cloudflare" }
+export type CloudflareProfileSecret = OAuthProfileSecret & {
+  appId: "cloudflare"
+  accountId?: string
+  tokenId?: string
+  zoneId?: string
+  zoneName?: string
+}
+
+export type OAuthProfileSecretInput = Omit<OAuthProfileSecret, "appId" | "kind" | "updatedAtIso"> & {
+  accountId?: string
+  tokenId?: string
+  zoneId?: string
+  zoneName?: string
+}
 
 type NodeGenesisEvent = {
   seq: number
@@ -296,6 +309,91 @@ function sanitizeProfilePreferences(value: unknown, handle = ""): ProfilePrefere
   }
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value))
+}
+
+function isIsoDate(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && Number.isFinite(Date.parse(value))
+}
+
+function isHex(value: unknown, length?: number): value is string {
+  return typeof value === "string" && /^[a-f0-9]+$/i.test(value) && (!length || value.length === length)
+}
+
+function validBase64(value: unknown): value is string {
+  if (typeof value !== "string" || !value) return false
+  try {
+    base64ToBytes(value)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function normalizeOAuthSecret(secret: unknown): OAuthProfileSecret | null {
+  if (!isRecord(secret)) return null
+  const appId = secret.appId
+  if (appId !== "gmail" && appId !== "google-drive" && appId !== "github" && appId !== "cloudflare") return null
+  if (secret.kind !== "oauth2") return null
+  if (typeof secret.email !== "string" || typeof secret.accessToken !== "string" || !secret.accessToken.trim()) return null
+  if (!isIsoDate(secret.expiresAtIso) || !isIsoDate(secret.updatedAtIso)) return null
+  if (!Array.isArray(secret.scopes) || !secret.scopes.every((scope) => typeof scope === "string")) return null
+
+  const normalized: OAuthProfileSecretInput & { appId: OAuthAppId; kind: "oauth2"; updatedAtIso: string } = {
+    appId,
+    kind: "oauth2",
+    email: secret.email,
+    accessToken: secret.accessToken,
+    refreshToken: typeof secret.refreshToken === "string" ? secret.refreshToken : undefined,
+    expiresAtIso: secret.expiresAtIso,
+    scopes: secret.scopes,
+    updatedAtIso: secret.updatedAtIso,
+  }
+  if (appId === "cloudflare") {
+    if (isHex(secret.accountId, 32)) normalized.accountId = secret.accountId
+    if (isHex(secret.tokenId, 32)) normalized.tokenId = secret.tokenId
+    if (isHex(secret.zoneId, 32)) normalized.zoneId = secret.zoneId
+    if (normalized.zoneId && typeof secret.zoneName === "string" && secret.zoneName.trim()) normalized.zoneName = secret.zoneName.trim()
+  }
+  return normalized
+}
+
+function validateOAuthSecretInput(appId: OAuthAppId, secret: OAuthProfileSecretInput) {
+  if (typeof secret.email !== "string") throw new Error("Profile secret is missing a connector label.")
+  if (typeof secret.accessToken !== "string" || !secret.accessToken.trim()) throw new Error("Profile secret is missing an access token.")
+  if (!isIsoDate(secret.expiresAtIso)) throw new Error("Profile secret has an invalid expiration timestamp.")
+  if (!Array.isArray(secret.scopes) || !secret.scopes.every((scope) => typeof scope === "string")) throw new Error("Profile secret scopes are invalid.")
+  if (appId === "cloudflare") {
+    if (secret.accountId && !isHex(secret.accountId, 32)) throw new Error("Cloudflare account ID must be a 32-character hex value.")
+    if (secret.tokenId && !isHex(secret.tokenId, 32)) throw new Error("Cloudflare token ID must be a 32-character hex value.")
+    if (secret.zoneId && !isHex(secret.zoneId, 32)) throw new Error("Cloudflare zone ID must be a 32-character hex value.")
+    if (secret.zoneName && !secret.zoneId) throw new Error("Cloudflare zone name cannot be saved without a zone ID.")
+  }
+}
+
+function normalizeUnlockedProfile(profile: UnlockedProfileContainer): UnlockedProfileContainer {
+  if (profile.version !== 1) throw new Error("Profile validation failed: unsupported profile version.")
+  if (typeof profile.handle !== "string" || !profile.handle.trim()) throw new Error("Profile validation failed: missing handle.")
+  if (!isIsoDate(profile.createdAtIso)) throw new Error("Profile validation failed: invalid creation timestamp.")
+  for (const [label, key] of [["owner", profile.owner], ["owner encryption", profile.ownerEncryption], ["browser node", profile.browserNode]] as const) {
+    if (!isHex(key.identityIdHex)) throw new Error(`Profile validation failed: invalid ${label} identity.`)
+    if (!validBase64(key.publicKeyRawBase64) || !validBase64(key.privateKeyPkcs8Base64)) throw new Error(`Profile validation failed: invalid ${label} key material.`)
+  }
+  return {
+    ...profile,
+    handle: profile.handle.trim(),
+    nodes: Array.isArray(profile.nodes) && profile.nodes.length ? profile.nodes : [profile.browserNode],
+    contacts: Array.isArray(profile.contacts) ? profile.contacts : [selfContact(profile)],
+    eventLog: Array.isArray(profile.eventLog) ? profile.eventLog : [],
+    profilePreferences: sanitizeProfilePreferences(profile.profilePreferences, profile.handle),
+    webAuthnBinding: deriveWebAuthnBinding(Array.isArray(profile.eventLog) ? profile.eventLog : [], profile.webAuthnBinding),
+    appSecrets: Array.isArray(profile.appSecrets) ? profile.appSecrets.map(normalizeOAuthSecret).filter((secret): secret is OAuthProfileSecret => Boolean(secret)) : [],
+    sealedContainers: Array.isArray(profile.sealedContainers) ? profile.sealedContainers : [],
+    outbox: Array.isArray(profile.outbox) ? profile.outbox : [],
+  }
+}
+
 function deriveProfilePreferences(events: ProfileEvent[], fallback: unknown, handle: string): ProfilePreferences {
   let preferences = sanitizeProfilePreferences(fallback, handle)
   for (const event of events) {
@@ -465,7 +563,7 @@ async function consumeSessionResumeTicket(): Promise<UnlockedProfileContainer | 
     if (!sealed || profileIdFor(sealed) !== ticket.profileId) return null
     await importP256PrivateKey(profile.owner)
     await importP256PrivateKey(profile.browserNode)
-    return {
+    return normalizeUnlockedProfile({
       ...profile,
       nodes: profile.nodes ?? [profile.browserNode],
       contacts: profile.contacts ?? [selfContact(profile)],
@@ -475,7 +573,7 @@ async function consumeSessionResumeTicket(): Promise<UnlockedProfileContainer | 
       appSecrets: profile.appSecrets ?? [],
       sealedContainers: profile.sealedContainers ?? [],
       outbox: profile.outbox ?? [],
-    }
+    })
   } catch {
     return null
   }
@@ -715,7 +813,7 @@ async function openProfile(sealed: SealedProfileContainer, password: string): Pr
   const eventLog = parsed.eventLog ?? []
   const profilePreferences = deriveProfilePreferences(eventLog, parsed.profilePreferences, parsed.handle)
   const webAuthnBinding = deriveWebAuthnBinding(eventLog, parsed.webAuthnBinding)
-  return {
+  return normalizeUnlockedProfile({
     ...parsed,
     ownerEncryption,
     nodes: parsed.nodes ?? [parsed.browserNode],
@@ -726,7 +824,7 @@ async function openProfile(sealed: SealedProfileContainer, password: string): Pr
     appSecrets: parsed.appSecrets ?? [],
     sealedContainers: parsed.sealedContainers ?? [],
     outbox: parsed.outbox ?? [],
-  }
+  })
 }
 
 function profileIdFor(sealed: SealedProfileContainer): string {
@@ -1234,20 +1332,21 @@ async function persistUnlockedProfile(profile: UnlockedProfileContainer, passwor
   const current = readSealedProfile()
   if (!current) throw new Error("No sealed profile container found.")
   await openProfile(current, password)
-  const sealed = await sealProfile(profile, password)
+  const normalizedProfile = normalizeUnlockedProfile(profile)
+  const sealed = await sealProfile(normalizedProfile, password)
   persistSealedProfile(sealed)
-  startSessionResumeHeartbeat(profile)
+  startSessionResumeHeartbeat(normalizedProfile)
   authStore.set({
     ...authStore.get(),
     authState: "authenticated",
-    username: profile.handle,
+    username: normalizedProfile.handle,
     error: null,
-    nodeRegistration: registrationFor(profile),
-    unlockedProfile: profile,
+    nodeRegistration: registrationFor(normalizedProfile),
+    unlockedProfile: normalizedProfile,
     sealedProfile: sealed,
     profileSummaries: readProfileIndex(),
     activeProfileId: profileIdFor(sealed),
-    localMessages: localMessagesFor(profile),
+    localMessages: localMessagesFor(normalizedProfile),
   })
   return sealed
 }
@@ -1573,13 +1672,13 @@ export async function bindWebAuthnToProfile(password: string): Promise<boolean> 
   }
 }
 
-export async function saveOAuthProfileSecret(input: { appId: OAuthAppId; password: string; secret: Omit<OAuthProfileSecret, "appId" | "kind" | "updatedAtIso"> }): Promise<boolean> {
+export async function saveOAuthProfileSecret(input: { appId: OAuthAppId; password: string; secret: OAuthProfileSecretInput }): Promise<boolean> {
   const state = authStore.get()
   const profile = state.unlockedProfile
   if (!profile) return false
   authStore.set({ ...state, isLoading: true, error: null })
   try {
-    await persistUnlockedProfile(profile, input.password)
+    validateOAuthSecretInput(input.appId, input.secret)
     const nextSecret: OAuthProfileSecret = {
       appId: input.appId,
       kind: "oauth2",

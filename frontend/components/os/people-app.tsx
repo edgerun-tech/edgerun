@@ -55,7 +55,7 @@ export function PeopleApp({
             }}
           />
         )}
-        {tab === "messages" && <MessagesApp surface="embedded" onClose={() => setTab("contacts")} initialRecipientId={recipientId} />}
+        {tab === "messages" && <MessagesApp initialRecipientId={recipientId} />}
         {tab === "calls" && <CallingApp />}
       </div>
     </div>

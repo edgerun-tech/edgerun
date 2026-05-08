@@ -25,7 +25,7 @@ export interface DashboardModeState {
 }
 
 const initialState: DashboardModeState = {
-  mode: "demo",
+  mode: "offline",
   reason: "No node connection",
   isBootstrapTopology: true, // assume bootstrap during development
 }

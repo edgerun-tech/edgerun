@@ -1,3 +1,5 @@
+/* global self, btoa, atob */
+
 const tickets = new Map()
 
 function bytesToBase64(bytes) {

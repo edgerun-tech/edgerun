@@ -16,7 +16,7 @@ export {
 
 export {
   getAppSurfaceSpec,
-  getDefaultSurfaceSize,
+  getDefaultSurfaceVariant,
   type AppSurfaceSpec,
 } from "./app-surface-registry"
 

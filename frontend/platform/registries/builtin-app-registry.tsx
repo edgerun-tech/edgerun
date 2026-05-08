@@ -20,6 +20,7 @@ import {
   Mail,
   Settings,
   Shield,
+  IdCard,
   HardDrive,
   Cloud,
   Images,
@@ -52,6 +53,7 @@ export const BUILTIN_ICON_MAP: Record<string, React.ReactNode> = {
   github: <GitBranch className="h-5 w-5" />,
   cloudflare: <Cloud className="h-5 w-5" />,
   settings: <Settings className="h-5 w-5" />,
+  identity: <IdCard className="h-5 w-5" />,
 }
 
 export function normalizeBuiltinAppId(appId: string): string {
@@ -63,6 +65,7 @@ export function getIconById(iconId: string): React.ReactNode {
 }
 
 export const BUILTIN_APPS: AppDefinition[] = [
+  { appId: "identity", name: "Identity", description: "Local profile, public contact card, and device identity", iconId: "identity", kind: "builtin", source: "builtin", componentKey: "identity", requiredCapabilityIds: [], optionalCapabilityIds: [], status: "available" },
   { appId: "app-store", name: "App Store", description: "Install, open, and uninstall apps", iconId: "app-store", kind: "builtin", source: "builtin", componentKey: "app-store", requiredCapabilityIds: [], optionalCapabilityIds: [], status: "available" },
   { appId: "terminal", name: "Terminal", description: "System shell & logs", iconId: "terminal", kind: "builtin", source: "builtin", componentKey: "terminal", requiredCapabilityIds: [], optionalCapabilityIds: [], status: "available" },
   { appId: "db-explorer", name: "DB Explorer", description: "Query distributed state", iconId: "db-explorer", kind: "builtin", source: "builtin", componentKey: "db-explorer", requiredCapabilityIds: [], optionalCapabilityIds: ["node_connection"], status: "available" },
