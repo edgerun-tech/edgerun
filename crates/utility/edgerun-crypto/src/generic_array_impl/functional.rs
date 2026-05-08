@@ -1,4 +1,3 @@
-
 use super::ArrayLength;
 use core::iter::FromIterator;
 
@@ -60,14 +59,12 @@ pub unsafe trait FunctionalSequence<T>: GenericSequence<T> {
     }
 }
 
-unsafe impl<'a, T, S: GenericSequence<T>> FunctionalSequence<T> for &'a S
-where
-    &'a S: GenericSequence<T>,
+unsafe impl<'a, T, S: GenericSequence<T>> FunctionalSequence<T> for &'a S where
+    &'a S: GenericSequence<T>
 {
 }
 
-unsafe impl<'a, T, S: GenericSequence<T>> FunctionalSequence<T> for &'a mut S
-where
-    &'a mut S: GenericSequence<T>,
+unsafe impl<'a, T, S: GenericSequence<T>> FunctionalSequence<T> for &'a mut S where
+    &'a mut S: GenericSequence<T>
 {
 }

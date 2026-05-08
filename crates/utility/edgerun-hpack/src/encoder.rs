@@ -47,6 +47,7 @@
 use alloc::vec::Vec;
 use core::num::Wrapping;
 
+#[allow(clippy::result_unit_err)]
 pub trait Writer {
     fn write_all(&mut self, buf: &[u8]) -> Result<(), ()>;
 }
@@ -100,6 +101,7 @@ use super::STATIC_TABLE;
 ///     assert_eq!(vec, vec![31, 154, 10]);
 /// }
 /// ```
+#[allow(clippy::result_unit_err)]
 pub fn encode_integer_into<W: Writer>(
     mut value: usize,
     prefix_size: u8,
@@ -222,6 +224,7 @@ impl<'a> Encoder<'a> {
     /// Error at any point, this error is propagated out. Any changes to the internal state of the
     /// encoder will not be rolled back, though, so care should be taken to ensure that the paired
     /// decoder also ends up seeing the same state updates or that their pairing is cancelled.
+    #[allow(clippy::result_unit_err)]
     pub fn encode_into<'b, I, W>(&mut self, headers: I, writer: &mut W) -> Result<(), ()>
     where
         I: IntoIterator<Item = (&'b [u8], &'b [u8])>,
@@ -237,6 +240,7 @@ impl<'a> Encoder<'a> {
     ///
     /// Any errors are propagated, similarly to the `encode_into` method, and it is the callers
     /// responsiblity to make sure that the paired encoder sees them too.
+    #[allow(clippy::result_unit_err)]
     pub fn encode_header_into<W: Writer>(
         &mut self,
         header: (&[u8], &[u8]),

@@ -1,20 +1,21 @@
 use super::{get_pss_signature_algo_id, sign_digest, Signature, VerifyingKey};
+use crate::const_oid::AssociatedOid;
+use crate::digest::{Digest, FixedOutputReset};
 use crate::pkcs1;
+use crate::pkcs8::{
+    spki::{
+        der::AnyRef, AlgorithmIdentifierOwned, AlgorithmIdentifierRef,
+        AssociatedAlgorithmIdentifier, DynSignatureAlgorithmIdentifier,
+    },
+    EncodePrivateKey, SecretDocument,
+};
 use crate::rand_core::CryptoRngCore;
 use crate::rsa::{Result, RsaPrivateKey};
 use crate::signature::{
     hazmat::RandomizedPrehashSigner, Keypair, RandomizedDigestSigner, RandomizedSigner,
 };
-use crate::const_oid::AssociatedOid;
-use core::marker::PhantomData;
-use crate::digest::{Digest, FixedOutputReset};
-use crate::pkcs8::{
-    spki::{der::AnyRef, AlgorithmIdentifierOwned, AlgorithmIdentifierRef,
-        AssociatedAlgorithmIdentifier, DynSignatureAlgorithmIdentifier,
-    },
-    EncodePrivateKey, SecretDocument,
-};
 use crate::zeroize::ZeroizeOnDrop;
+use core::marker::PhantomData;
 
 #[cfg(feature = "getrandom")]
 use {
@@ -173,7 +174,9 @@ impl<D> DynSignatureAlgorithmIdentifier for SigningKey<D>
 where
     D: Digest + AssociatedOid,
 {
-    fn signature_algorithm_identifier(&self) -> crate::pkcs8::spki::Result<AlgorithmIdentifierOwned> {
+    fn signature_algorithm_identifier(
+        &self,
+    ) -> crate::pkcs8::spki::Result<AlgorithmIdentifierOwned> {
         get_pss_signature_algo_id::<D>(self.salt_len as u8)
     }
 }

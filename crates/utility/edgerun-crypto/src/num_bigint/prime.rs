@@ -1,9 +1,9 @@
 // https://github.com/RustCrypto/RSA/blob/master/src/prime.rs
 // Implements probabilistic prime checkers.
 
+use crate::num_bigint::{FromPrimitive, One, ToPrimitive, Zero};
 use alloc::vec;
 use integer::Integer;
-use crate::num_bigint::{FromPrimitive, One, ToPrimitive, Zero};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 

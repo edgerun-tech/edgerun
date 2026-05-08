@@ -252,7 +252,7 @@ impl Action {
 
         if instruction.is_some() {
             let pos = buf.position();
-            read.advance(pos as usize);
+            read.advance(pos);
         }
 
         Ok(instruction)

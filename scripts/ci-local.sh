@@ -16,7 +16,7 @@ case $CMD in
     cargo fmt --check
     
     echo "[2/4] Clippy lint"
-    cargo clippy --workspace -- -A warnings || true
+    cargo clippy --workspace
     
     echo "[3/4] Workspace check"
     cargo check --workspace

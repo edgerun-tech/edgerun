@@ -81,6 +81,7 @@ mod tests {
         generic_array::GenericArray, rand_core::OsRng, sec1::FromEncodedPoint,
     };
     use crate::ff::PrimeField;
+    use crate::hex;
     use crate::p256::{
         ecdsa::{
             signature::hazmat::{PrehashSigner, PrehashVerifier},
@@ -90,7 +91,6 @@ mod tests {
         test_vectors::ecdsa::ECDSA_TEST_VECTORS,
         AffinePoint, BlindedScalar, EncodedPoint, Scalar,
     };
-    use crate::hex;
     use crate::sha2::Digest;
 
     // Test vector from RFC 6979 Appendix 2.5 (NIST P-256 + SHA-256)

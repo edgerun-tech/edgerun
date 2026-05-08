@@ -209,9 +209,9 @@ pub struct ReadmeDoctests;
 #[cfg(feature = "std")]
 extern crate std;
 
+pub use crate::num_bigint::BigUint;
 pub use crate::rand_core;
 pub use crate::signature;
-pub use crate::num_bigint::BigUint;
 
 mod algorithms;
 pub mod errors;

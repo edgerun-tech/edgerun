@@ -5,8 +5,8 @@ use crate::num_bigint::algorithms::{adc, add2, sub2, sub_sign};
 use crate::num_bigint::big_digit::{BigDigit, DoubleBigDigit, BITS};
 use crate::num_bigint::bigint::Sign::{Minus, NoSign, Plus};
 use crate::num_bigint::biguint::IntDigits;
-use crate::smallvec;
 use crate::num_bigint::{BigInt, BigUint};
+use crate::smallvec;
 
 #[inline]
 pub fn mac_with_carry(a: BigDigit, b: BigDigit, c: BigDigit, acc: &mut DoubleBigDigit) -> BigDigit {

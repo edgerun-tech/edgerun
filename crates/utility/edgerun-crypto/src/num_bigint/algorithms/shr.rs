@@ -1,7 +1,7 @@
 use alloc::borrow::Cow;
 
-use crate::num_bigint::Zero;
 use crate::num_bigint::SmallVec;
+use crate::num_bigint::Zero;
 
 use crate::num_bigint::big_digit::{BigDigit, BITS};
 use crate::num_bigint::BigUint;

@@ -3,8 +3,8 @@
 use crate::crypto_bigint::{
     Checked, CheckedMul, Concat, ConcatMixed, Limb, Uint, WideWord, Word, Wrapping, Zero,
 };
-use core::ops::{Mul, MulAssign};
 use crate::subtle::CtOption;
+use core::ops::{Mul, MulAssign};
 
 impl<const LIMBS: usize> Uint<LIMBS> {
     /// Multiply `self` by `rhs`, returning a concatenated "wide" result.

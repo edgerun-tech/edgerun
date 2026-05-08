@@ -14,9 +14,9 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::fmt;
 
-use crate::rand_core::CryptoRngCore;
 use crate::digest::{Digest, DynDigest, FixedOutputReset};
 use crate::num_bigint::BigUint;
+use crate::rand_core::CryptoRngCore;
 use crate::zeroize::Zeroizing;
 
 use crate::rsa::algorithms::oaep::*;
@@ -290,14 +290,14 @@ mod tests {
     use crate::rsa::traits::PublicKeyParts;
     use crate::rsa::traits::{Decryptor, RandomizedDecryptor, RandomizedEncryptor};
 
-    use crate::rand_core::RngCore;
-    use crate::test_rng::ChaCha8Rng;
-    use alloc::string::String;
     use crate::digest::{Digest, DynDigest, FixedOutputReset};
     use crate::num_bigint::BigUint;
     use crate::num_bigint::FromPrimitive;
-    use sha1::Sha1;
+    use crate::rand_core::RngCore;
     use crate::sha2::{Sha224, Sha256, Sha384, Sha512};
+    use crate::test_rng::ChaCha8Rng;
+    use alloc::string::String;
+    use sha1::Sha1;
     use sha3::{Sha3_256, Sha3_384, Sha3_512};
 
     fn get_private_key() -> RsaPrivateKey {

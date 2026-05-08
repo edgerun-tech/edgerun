@@ -1,12 +1,12 @@
 //! X.509 `AlgorithmIdentifier`
 
-use crate::spki::{Error, Result};
-use core::cmp::Ordering;
 use crate::der::{
     asn1::{AnyRef, Choice, ObjectIdentifier},
     Decode, DecodeValue, DerOrd, Encode, EncodeValue, Header, Length, Reader, Sequence, ValueOrd,
     Writer,
 };
+use crate::spki::{Error, Result};
+use core::cmp::Ordering;
 
 use crate::der::asn1::Any;
 

@@ -7,13 +7,14 @@ use crate::der::{Document, SecretDocument};
 
 #[cfg(feature = "rsa_pem")]
 use {
-    crate::pkcs1::LineEnding,
-    alloc::string::String, crate::der::pem::PemLabel, crate::zeroize::Zeroizing,
+    crate::der::pem::PemLabel, crate::pkcs1::LineEnding, crate::zeroize::Zeroizing,
+    alloc::string::String,
 };
 
 #[cfg(feature = "rsa")]
 use {
-    crate::pkcs1::{ALGORITHM_ID, ALGORITHM_OID}, crate::der::asn1::BitStringRef,
+    crate::der::asn1::BitStringRef,
+    crate::pkcs1::{ALGORITHM_ID, ALGORITHM_OID},
 };
 
 #[cfg(feature = "std")]
@@ -169,7 +170,10 @@ where
 #[cfg(feature = "rsa")]
 impl<T> DecodeRsaPublicKey for T
 where
-    T: for<'a> TryFrom<crate::pkcs8::SubjectPublicKeyInfoRef<'a>, Error = crate::pkcs8::spki::Error>,
+    T: for<'a> TryFrom<
+        crate::pkcs8::SubjectPublicKeyInfoRef<'a>,
+        Error = crate::pkcs8::spki::Error,
+    >,
 {
     fn from_pkcs1_der(public_key: &[u8]) -> Result<Self> {
         Ok(Self::try_from(crate::pkcs8::SubjectPublicKeyInfoRef {

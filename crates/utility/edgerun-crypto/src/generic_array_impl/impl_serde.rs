@@ -1,4 +1,3 @@
-
 use core::fmt;
 use core::marker::PhantomData;
 use serde::de::{self, SeqAccess, Visitor};
@@ -90,7 +89,8 @@ mod tests {
         array[0] = 1;
         array[1] = 2;
         let serialized = bincode::serialize(&array).unwrap();
-        let deserialized = bincode::deserialize::<GenericArray<u8, crate::typenum::U2>>(&serialized);
+        let deserialized =
+            bincode::deserialize::<GenericArray<u8, crate::typenum::U2>>(&serialized);
         assert!(deserialized.is_ok());
         let array = deserialized.unwrap();
         assert_eq!(array[0], 1);
@@ -103,5 +103,4 @@ mod tests {
         let size = bincode::serialized_size(&array).unwrap();
         assert_eq!(size, 1);
     }
-
 }

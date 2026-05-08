@@ -1,7 +1,7 @@
 use crate::ff::PrimeField;
+use crate::subtle::{Choice, CtOption};
 use core::fmt;
 use core::ops::{Mul, Neg};
-use crate::subtle::{Choice, CtOption};
 
 use crate::group::{prime::PrimeGroup, Curve, Group, GroupEncoding, GroupOps, GroupOpsOwned};
 

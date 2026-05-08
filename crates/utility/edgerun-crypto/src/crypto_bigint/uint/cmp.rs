@@ -4,8 +4,8 @@
 
 use super::Uint;
 use crate::crypto_bigint::{CtChoice, Limb};
-use core::cmp::Ordering;
 use crate::subtle::{Choice, ConstantTimeEq, ConstantTimeGreater, ConstantTimeLess};
+use core::cmp::Ordering;
 
 impl<const LIMBS: usize> Uint<LIMBS> {
     /// Return `b` if `c` is truthy, otherwise return `a`.
@@ -169,8 +169,8 @@ impl<const LIMBS: usize> PartialEq for Uint<LIMBS> {
 #[cfg(all(test, crypto_bigint_internal_tests))]
 mod tests {
     use crate::crypto_bigint::{Integer, Zero, U128};
-    use core::cmp::Ordering;
     use crate::subtle::{ConstantTimeEq, ConstantTimeGreater, ConstantTimeLess};
+    use core::cmp::Ordering;
 
     #[test]
     fn is_zero() {

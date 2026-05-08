@@ -8,6 +8,7 @@ use crate::elliptic_curve::{
     secret_key::SecretKey,
     Curve, Error, FieldBytes, FieldBytesSize, Result,
 };
+use crate::zeroize::{Zeroize, ZeroizeOnDrop};
 use alloc::{
     borrow::ToOwned,
     format,
@@ -20,7 +21,6 @@ use core::{
     str::{self, FromStr},
 };
 use serdect::serde::{de, ser, Deserialize, Serialize};
-use crate::zeroize::{Zeroize, ZeroizeOnDrop};
 
 #[cfg(feature = "elliptic_curve_arithmetic")]
 use crate::elliptic_curve::{

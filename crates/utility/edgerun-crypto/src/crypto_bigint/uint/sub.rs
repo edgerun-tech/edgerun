@@ -2,8 +2,8 @@
 
 use super::Uint;
 use crate::crypto_bigint::{Checked, CheckedSub, CtChoice, Limb, Wrapping, Zero};
-use core::ops::{Sub, SubAssign};
 use crate::subtle::CtOption;
+use core::ops::{Sub, SubAssign};
 
 impl<const LIMBS: usize> Uint<LIMBS> {
     /// Computes `a - (b + borrow)`, returning the result along with the new borrow.

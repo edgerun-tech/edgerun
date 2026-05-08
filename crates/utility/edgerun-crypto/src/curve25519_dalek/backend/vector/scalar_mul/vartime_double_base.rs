@@ -13,10 +13,10 @@
 
 pub mod spec_avx2 {
 
-    use core::cmp::Ordering;
-    use crate::curve25519_dalek::backend::vector::avx2::{CachedPoint, ExtendedPoint};
     #[cfg(feature = "precomputed-tables")]
     use crate::curve25519_dalek::backend::vector::avx2::constants::BASEPOINT_ODD_LOOKUP_TABLE;
+    use crate::curve25519_dalek::backend::vector::avx2::{CachedPoint, ExtendedPoint};
+    use core::cmp::Ordering;
 
     use crate::curve25519_dalek::edwards::EdwardsPoint;
     use crate::curve25519_dalek::scalar::Scalar;
@@ -47,8 +47,9 @@ pub mod spec_avx2 {
         let table_B = &BASEPOINT_ODD_LOOKUP_TABLE;
 
         #[cfg(not(feature = "precomputed-tables"))]
-        let table_B =
-            &NafLookupTable5::<CachedPoint>::from(&crate::curve25519_dalek::constants::ED25519_BASEPOINT_POINT);
+        let table_B = &NafLookupTable5::<CachedPoint>::from(
+            &crate::curve25519_dalek::constants::ED25519_BASEPOINT_POINT,
+        );
 
         let mut Q = ExtendedPoint::identity();
 

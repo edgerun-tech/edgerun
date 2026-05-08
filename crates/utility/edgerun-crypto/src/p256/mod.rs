@@ -110,7 +110,8 @@ impl crate::elliptic_curve::JwkParameters for NistP256 {
 
 #[cfg(feature = "p256_pkcs8")]
 impl crate::pkcs8::AssociatedOid for NistP256 {
-    const OID: crate::pkcs8::ObjectIdentifier = crate::pkcs8::ObjectIdentifier::new_unwrap("1.2.840.10045.3.1.7");
+    const OID: crate::pkcs8::ObjectIdentifier =
+        crate::pkcs8::ObjectIdentifier::new_unwrap("1.2.840.10045.3.1.7");
 }
 
 /// Blinded scalar.

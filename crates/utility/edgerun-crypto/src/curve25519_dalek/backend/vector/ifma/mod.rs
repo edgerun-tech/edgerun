@@ -7,7 +7,6 @@
 // Authors:
 // - Henry de Valence <hdevalence@hdevalence.ca>
 
-
 #[allow(missing_docs)]
 pub mod field;
 

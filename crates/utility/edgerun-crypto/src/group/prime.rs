@@ -1,7 +1,7 @@
 use crate::ff::PrimeField;
+use crate::subtle::Choice;
 use core::fmt;
 use core::ops::{Mul, Neg};
-use crate::subtle::Choice;
 
 use crate::group::{Curve, Group, GroupEncoding};
 

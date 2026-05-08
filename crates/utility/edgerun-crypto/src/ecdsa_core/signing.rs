@@ -1,5 +1,7 @@
 //! ECDSA signing: producing signatures using a [`SigningKey`].
 
+use crate::const_oid::AssociatedOid;
+use crate::digest::{const_oid::AssociatedOid as DigestAssociatedOid, Digest, FixedOutput};
 use crate::ecdsa_core::{
     ecdsa_oid_for_digest,
     hazmat::{bits2field, DigestPrimitive, SignPrimitive},
@@ -22,8 +24,6 @@ use core::{
     fmt::{self, Debug},
     num::NonZeroU32,
 };
-use crate::const_oid::AssociatedOid;
-use crate::digest::{const_oid::AssociatedOid as DigestAssociatedOid, Digest, FixedOutput};
 
 #[cfg(feature = "p256_ecdsa_der")]
 use {crate::ecdsa_core::der, core::ops::Add};
@@ -37,14 +37,14 @@ use {
 #[cfg(feature = "p256_ecdsa_pkcs8")]
 use crate::{
     der::AnyRef,
+    elliptic_curve::{
+        sec1::{self, FromEncodedPoint, ToEncodedPoint},
+        AffinePoint,
+    },
     pkcs8::{
         self,
         spki::{AlgorithmIdentifier, AssociatedAlgorithmIdentifier, SignatureAlgorithmIdentifier},
         ObjectIdentifier,
-    },
-    elliptic_curve::{
-    sec1::{self, FromEncodedPoint, ToEncodedPoint},
-    AffinePoint,
     },
 };
 

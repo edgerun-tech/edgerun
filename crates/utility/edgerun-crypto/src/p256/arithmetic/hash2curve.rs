@@ -1,11 +1,11 @@
 use super::FieldElement;
 use crate::elliptic_curve::{
+    crate::subtle::Choice,
     bigint::{ArrayEncoding, U256},
     consts::U48,
     generic_array::GenericArray,
     hash2curve::{FromOkm, GroupDigest, MapToCurve, OsswuMap, OsswuMapParams, Sgn0},
     point::DecompressPoint,
-    crate::subtle::Choice,
 };
 use crate::p256::{AffinePoint, FieldBytes, NistP256, ProjectivePoint, Scalar};
 
@@ -106,10 +106,10 @@ mod tests {
         sec1::{self, ToEncodedPoint},
         Curve, Field,
     };
-    use crate::p256::{FieldElement, NistP256, Scalar, U256};
     use crate::hex;
-    use proptest::{num::u64::ANY, prelude::ProptestConfig, proptest};
+    use crate::p256::{FieldElement, NistP256, Scalar, U256};
     use crate::sha2::Sha256;
+    use proptest::{num::u64::ANY, prelude::ProptestConfig, proptest};
 
     #[allow(dead_code)] // TODO(tarcieri): fix commented out code
     #[test]

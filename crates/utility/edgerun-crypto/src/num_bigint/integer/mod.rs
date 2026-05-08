@@ -772,8 +772,8 @@ macro_rules! impl_integer_for_isize {
             #[test]
             fn test_extended_gcd_lcm() {
                 use crate::num_bigint::ExtendedGcd;
-                use core::fmt::Debug;
                 use crate::num_bigint::NumAssign;
+                use core::fmt::Debug;
 
                 fn check<A: Copy + Debug + Integer + NumAssign>(a: A, b: A) {
                     let ExtendedGcd { gcd, x, y, .. } = a.extended_gcd(&b);

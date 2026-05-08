@@ -1,4 +1,5 @@
 use super::encrypt_digest;
+use crate::digest::{Digest, FixedOutputReset};
 use crate::rand_core::CryptoRngCore;
 use crate::rsa::{traits::RandomizedEncryptor, Result, RsaPublicKey};
 use alloc::{
@@ -6,7 +7,6 @@ use alloc::{
     vec::Vec,
 };
 use core::marker::PhantomData;
-use crate::digest::{Digest, FixedOutputReset};
 
 /// Encryption key for PKCS#1 v1.5 encryption as described in [RFC8017 § 7.1].
 ///

@@ -1,7 +1,7 @@
-use core::cmp::Ordering;
-use crate::num_bigint::{One, Zero};
 use crate::num_bigint::SmallVec;
+use crate::num_bigint::{One, Zero};
 use crate::smallvec;
+use core::cmp::Ordering;
 
 use crate::num_bigint::algorithms::{add2, cmp_slice, sub2};
 use crate::num_bigint::big_digit::{self, BigDigit, DoubleBigDigit};

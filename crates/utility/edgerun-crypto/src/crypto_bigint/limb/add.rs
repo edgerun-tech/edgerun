@@ -1,8 +1,8 @@
 //! Limb addition
 
 use crate::crypto_bigint::{Checked, CheckedAdd, Limb, WideWord, Word, Wrapping, Zero};
-use core::ops::{Add, AddAssign};
 use crate::subtle::CtOption;
+use core::ops::{Add, AddAssign};
 
 impl Limb {
     /// Computes `self + rhs + carry`, returning the result along with the new carry.

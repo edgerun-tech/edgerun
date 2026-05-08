@@ -1,10 +1,10 @@
 //! ASN.1 `OBJECT IDENTIFIER`
 
+use crate::const_oid::ObjectIdentifier;
 use crate::der::{
     asn1::AnyRef, ord::OrdIsValueOrd, DecodeValue, EncodeValue, Error, FixedTag, Header, Length,
     Reader, Result, Tag, Tagged, Writer,
 };
-use crate::const_oid::ObjectIdentifier;
 
 #[cfg(feature = "alloc")]
 use super::Any;

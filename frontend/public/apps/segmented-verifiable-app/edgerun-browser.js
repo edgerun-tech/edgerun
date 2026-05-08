@@ -32,14 +32,6 @@ function hex(bytes) {
   return [...new Uint8Array(bytes)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-function fromHex(value) {
-  const out = new Uint8Array(value.length / 2);
-  for (let index = 0; index < out.length; index++) {
-    out[index] = Number.parseInt(value.slice(index * 2, index * 2 + 2), 16);
-  }
-  return out;
-}
-
 function short(value, head = 10, tail = 8) {
   if (!value) return "none";
   if (value.length <= head + tail + 3) return value;

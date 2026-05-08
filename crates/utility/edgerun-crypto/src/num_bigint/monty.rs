@@ -1,8 +1,8 @@
 #![allow(clippy::many_single_char_names)]
 
+use crate::num_bigint::{One, Zero};
 use alloc::vec::Vec;
 use core::ops::Shl;
-use crate::num_bigint::{One, Zero};
 
 use crate::num_bigint::big_digit::{self, BigDigit, DoubleBigDigit, SignedDoubleBigDigit};
 use crate::num_bigint::biguint::BigUint;

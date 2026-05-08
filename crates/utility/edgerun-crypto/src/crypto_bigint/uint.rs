@@ -41,8 +41,8 @@ mod array;
 mod rand;
 
 use crate::crypto_bigint::{Bounded, Encoding, Integer, Limb, Word, Zero};
-use core::fmt;
 use crate::subtle::{Choice, ConditionallySelectable};
+use core::fmt;
 
 #[cfg(feature = "serde")]
 use serdect::serde::{Deserialize, Deserializer, Serialize, Serializer};

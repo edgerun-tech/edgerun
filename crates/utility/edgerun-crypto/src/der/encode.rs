@@ -9,8 +9,8 @@ use {alloc::boxed::Box, alloc::vec::Vec};
 #[cfg(feature = "pem")]
 use {
     crate::der::PemWriter,
-    alloc::string::String,
     crate::pem_rfc7468::{self as pem, LineEnding, PemLabel},
+    alloc::string::String,
 };
 
 #[cfg(any(feature = "alloc", feature = "pem"))]

@@ -18,13 +18,13 @@ pub mod spec_avx2 {
     use core::borrow::Borrow;
     use core::cmp::Ordering;
 
-    #[cfg(feature = "zeroize")]
-    use crate::zeroize::Zeroizing;
     use crate::curve25519_dalek::backend::vector::avx2::{CachedPoint, ExtendedPoint};
     use crate::curve25519_dalek::edwards::EdwardsPoint;
     use crate::curve25519_dalek::scalar::Scalar;
     use crate::curve25519_dalek::traits::{Identity, MultiscalarMul, VartimeMultiscalarMul};
     use crate::curve25519_dalek::window::{LookupTable, NafLookupTable5};
+    #[cfg(feature = "zeroize")]
+    use crate::zeroize::Zeroizing;
 
     /// Multiscalar multiplication using interleaved window / Straus'
     /// method.  See the `Straus` struct in the serial backend for more

@@ -1,15 +1,17 @@
 //! Traits for encoding/decoding SPKI public keys.
 
-use crate::spki::{AlgorithmIdentifier, Error, Result, SubjectPublicKeyInfoRef};
 use crate::der::{EncodeValue, Tagged};
+use crate::spki::{AlgorithmIdentifier, Error, Result, SubjectPublicKeyInfoRef};
 
 use {
-    crate::spki::AlgorithmIdentifierOwned, crate::der::{asn1::BitString, Any, Document},
+    crate::der::{asn1::BitString, Any, Document},
+    crate::spki::AlgorithmIdentifierOwned,
 };
 
 #[cfg(feature = "pem")]
 use {
-    alloc::string::String, crate::der::pem::{LineEnding, PemLabel},
+    crate::der::pem::{LineEnding, PemLabel},
+    alloc::string::String,
 };
 
 #[cfg(feature = "std")]

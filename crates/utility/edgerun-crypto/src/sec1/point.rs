@@ -5,8 +5,8 @@
 //!
 //! [SEC1: Elliptic Curve Cryptography]: https://www.secg.org/sec1-v2.pdf
 
-use crate::sec1::{Error, Result};
 use crate::base16ct::HexDisplay;
+use crate::sec1::{Error, Result};
 use core::{
     cmp::Ordering,
     fmt::{self, Debug},
@@ -546,4 +546,3 @@ impl From<Tag> for u8 {
         tag as u8
     }
 }
-

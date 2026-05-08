@@ -4,7 +4,7 @@ use super::Reader;
 use crate::der::{Decode, Error, ErrorKind, Header, Length, Result};
 use core::cell::RefCell;
 
-#[allow(clippy::integer_arithmetic)]
+#[allow(clippy::arithmetic_side_effects)]
 mod utils {
     use crate::der::{Error, Length, Result};
     use crate::pem_rfc7468::Decoder;

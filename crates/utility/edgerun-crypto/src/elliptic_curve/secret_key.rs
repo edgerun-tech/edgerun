@@ -9,10 +9,10 @@
 mod pkcs8;
 
 use crate::elliptic_curve::{Curve, Error, FieldBytes, Result, ScalarPrimitive};
-use core::fmt::{self, Debug};
-use generic_array::typenum::Unsigned;
 use crate::subtle::{Choice, ConstantTimeEq};
 use crate::zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
+use core::fmt::{self, Debug};
+use generic_array::typenum::Unsigned;
 
 #[cfg(feature = "elliptic_curve_arithmetic")]
 use crate::elliptic_curve::{CurveArithmetic, NonZeroScalar, PublicKey};
@@ -43,8 +43,8 @@ use {
         sec1::{FromEncodedPoint, ToEncodedPoint},
         AffinePoint,
     },
-    alloc::vec::Vec,
     crate::sec1::der::Encode,
+    alloc::vec::Vec,
 };
 
 #[cfg(all(

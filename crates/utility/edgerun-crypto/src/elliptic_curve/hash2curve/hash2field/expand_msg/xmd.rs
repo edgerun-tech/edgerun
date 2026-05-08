@@ -3,7 +3,6 @@
 use core::marker::PhantomData;
 
 use super::{Domain, ExpandMsg, Expander};
-use crate::elliptic_curve::{Error, Result};
 use crate::digest::{
     core_api::BlockSizeUser,
     generic_array::{
@@ -12,6 +11,7 @@ use crate::digest::{
     },
     FixedOutput, HashMarker,
 };
+use crate::elliptic_curve::{Error, Result};
 
 /// Placeholder type for implementing `expand_message_xmd` based on a hash function
 ///
@@ -151,13 +151,13 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::hex;
+    use crate::sha2::Sha256;
     use core::mem;
     use generic_array::{
         typenum::{U128, U32},
         ArrayLength,
     };
-    use crate::hex;
-    use crate::sha2::Sha256;
 
     fn assert_message<HashT>(
         msg: &[u8],

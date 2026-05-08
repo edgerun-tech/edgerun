@@ -1,5 +1,4 @@
-
-use core::{fmt, str, ops::Add, cmp::min};
+use core::{cmp::min, fmt, ops::Add, str};
 
 use crate::typenum::*;
 

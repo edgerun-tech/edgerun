@@ -24,8 +24,8 @@ use crate::subtle::{Choice, ConstantTimeEq};
 use crate::zeroize::{Zeroize, ZeroizeOnDrop};
 
 // These are used in the functions that are made public when the hazmat feature is set
-use crate::ed25519_dalek::{Signature, VerifyingKey};
 use crate::curve25519_dalek::digest::{generic_array::typenum::U64, Digest};
+use crate::ed25519_dalek::{Signature, VerifyingKey};
 
 /// Contains the secret scalar and domain separator used for generating signatures.
 ///

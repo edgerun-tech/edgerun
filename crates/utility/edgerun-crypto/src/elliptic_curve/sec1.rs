@@ -5,8 +5,8 @@
 pub use crate::sec1::point::{Coordinates, ModulusSize, Tag};
 
 use crate::elliptic_curve::{Curve, FieldBytesSize, Result, SecretKey};
-use generic_array::GenericArray;
 use crate::subtle::CtOption;
+use generic_array::GenericArray;
 
 #[cfg(feature = "elliptic_curve_arithmetic")]
 use crate::elliptic_curve::{AffinePoint, CurveArithmetic, Error};

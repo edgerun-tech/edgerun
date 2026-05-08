@@ -3,10 +3,10 @@ pub use crate::ff;
 
 use crate::elliptic_curve::rand_core::RngCore;
 use crate::ff::PrimeField;
+use crate::subtle::{Choice, CtOption};
 use core::fmt;
 use core::iter::Sum;
 use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
-use crate::subtle::{Choice, CtOption};
 
 pub mod cofactor;
 pub mod prime;

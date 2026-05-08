@@ -61,8 +61,8 @@ fn exp(a: f64) -> f64 {
     libm::exp(a)
 }
 
-use crate::num_bigint::integer::{Integer, Roots};
 use crate::num_bigint::float::FloatCore;
+use crate::num_bigint::integer::{Integer, Roots};
 use crate::num_bigint::{
     CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, FromPrimitive, Num, One, Pow, ToPrimitive,
     Unsigned, Zero,

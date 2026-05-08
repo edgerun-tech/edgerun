@@ -2,20 +2,20 @@ use super::{
     AlgorithmName, Buffer, BufferKindUser, ExtendableOutputCore, FixedOutputCore, OutputSizeUser,
     Reset, UpdateCore, XofReaderCoreWrapper,
 };
-use crate::digest::{
-    ExtendableOutput, ExtendableOutputReset, FixedOutput, FixedOutputReset, HashMarker, Update,
-};
 use crate::digest::block_buffer::BlockBuffer;
-use core::fmt;
 use crate::digest::crypto_common::{
     typenum::{IsLess, Le, NonZero, U256},
     BlockSizeUser, InvalidLength, Key, KeyInit, KeySizeUser, Output,
 };
+use crate::digest::{
+    ExtendableOutput, ExtendableOutputReset, FixedOutput, FixedOutputReset, HashMarker, Update,
+};
+use core::fmt;
 
-#[cfg(feature = "mac")]
-use crate::digest::MacMarker;
 #[cfg(feature = "oid")]
 use crate::const_oid::{AssociatedOid, ObjectIdentifier};
+#[cfg(feature = "mac")]
+use crate::digest::MacMarker;
 
 /// Wrapper around [`BufferKindUser`].
 ///

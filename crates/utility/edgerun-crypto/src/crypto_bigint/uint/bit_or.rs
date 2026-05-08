@@ -2,8 +2,8 @@
 
 use super::Uint;
 use crate::crypto_bigint::{Limb, Wrapping};
-use core::ops::{BitOr, BitOrAssign};
 use crate::subtle::{Choice, CtOption};
+use core::ops::{BitOr, BitOrAssign};
 
 impl<const LIMBS: usize> Uint<LIMBS> {
     /// Computes bitwise `a & b`.

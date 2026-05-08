@@ -51,13 +51,9 @@ async function preflightPackagedApp(slug) {
     throw new Error(`catalog app is missing app.eapp: ${slug}`)
   })
 
-  const manifestBytes = await readFile(join(appDir, "app.edapp")).catch(() => {
+  await readFile(join(appDir, "app.edapp")).catch(() => {
     throw new Error(`catalog app is missing app.edapp: ${slug}`)
   })
-  const firstMeaningfulByte = manifestBytes.find((byte) => ![9, 10, 13, 32].includes(byte))
-  if (firstMeaningfulByte === 0x7b || firstMeaningfulByte === 0x5b) {
-    throw new Error(`catalog app uses a JSON app.edapp; repackage it as rkyv before publishing: ${slug}`)
-  }
 }
 
 async function preflightNoUnlistedPackages(listedSlugs) {

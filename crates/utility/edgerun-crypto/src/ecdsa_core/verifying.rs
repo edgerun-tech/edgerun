@@ -1,5 +1,6 @@
 //! ECDSA verifying: checking signatures are authentic using a [`VerifyingKey`].
 
+use crate::digest::{Digest, FixedOutput};
 use crate::ecdsa_core::{
     hazmat::{bits2field, DigestPrimitive, VerifyPrimitive},
     Error, Result, Signature, SignatureSize,
@@ -10,11 +11,7 @@ use crate::elliptic_curve::{
     sec1::{self, CompressedPoint, EncodedPoint, FromEncodedPoint, ToEncodedPoint},
     AffinePoint, CurveArithmetic, FieldBytesSize, PrimeCurve, PublicKey,
 };
-use crate::digest::{Digest, FixedOutput};
-use crate::signature::{
-    hazmat::PrehashVerifier,
-    DigestVerifier, Verifier,
-};
+use crate::signature::{hazmat::PrehashVerifier, DigestVerifier, Verifier};
 use core::{cmp::Ordering, fmt::Debug};
 
 #[cfg(feature = "p256_ecdsa_alloc")]
@@ -31,7 +28,8 @@ use {
 
 #[cfg(feature = "p256_ecdsa_pkcs8")]
 use crate::elliptic_curve::pkcs8::{
-    self, der::AnyRef,
+    self,
+    der::AnyRef,
     spki::{AlgorithmIdentifier, AssociatedAlgorithmIdentifier, SignatureAlgorithmIdentifier},
     AssociatedOid, ObjectIdentifier,
 };
@@ -419,7 +417,9 @@ where
 {
     type Error = crate::pkcs8::spki::Error;
 
-    fn try_from(spki: crate::pkcs8::SubjectPublicKeyInfoRef<'_>) -> crate::pkcs8::spki::Result<Self> {
+    fn try_from(
+        spki: crate::pkcs8::SubjectPublicKeyInfoRef<'_>,
+    ) -> crate::pkcs8::spki::Result<Self> {
         PublicKey::try_from(spki).map(|inner| Self { inner })
     }
 }

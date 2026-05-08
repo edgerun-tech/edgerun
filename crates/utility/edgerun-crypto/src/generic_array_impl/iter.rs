@@ -1,4 +1,3 @@
-
 use super::{ArrayLength, GenericArray};
 use core::iter::FusedIterator;
 use core::mem::ManuallyDrop;

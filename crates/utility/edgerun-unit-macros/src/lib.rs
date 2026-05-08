@@ -113,8 +113,7 @@ fn validate_return(tokens: &[TokenTree]) -> Result<(), String> {
     else {
         return Ok(());
     };
-    if !matches!(tokens.get(arrow + 1), Some(TokenTree::Punct(punct)) if punct.as_char() == '>')
-    {
+    if !matches!(tokens.get(arrow + 1), Some(TokenTree::Punct(punct)) if punct.as_char() == '>') {
         return Ok(());
     }
     let ty = tokens[arrow + 2..]

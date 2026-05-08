@@ -17,13 +17,13 @@ pub use self::{
     signing_key::SigningKey, verifying_key::VerifyingKey,
 };
 
-use crate::rand_core::CryptoRngCore;
-use alloc::{boxed::Box, vec::Vec};
-use core::fmt::Debug;
 use crate::digest::Digest;
 use crate::num_bigint::BigUint;
 use crate::pkcs8::AssociatedOid;
+use crate::rand_core::CryptoRngCore;
 use crate::zeroize::Zeroizing;
+use alloc::{boxed::Box, vec::Vec};
+use core::fmt::Debug;
 
 use crate::rsa::algorithms::pad::{uint_to_be_pad, uint_to_zeroizing_be_pad};
 use crate::rsa::algorithms::pkcs1v15::*;
@@ -263,7 +263,12 @@ pub use oid::RsaSignatureAssociatedOid;
 #[cfg(all(test, feature = "rsa_internal_tests"))]
 mod tests {
     use super::*;
+    use crate::hex;
+    use crate::num_bigint::BigUint;
+    use crate::num_bigint::FromPrimitive;
+    use crate::num_bigint::Num;
     use crate::rand_core::RngCore;
+    use crate::sha2::Sha256;
     use crate::signature::{
         hazmat::{PrehashSigner, PrehashVerifier},
         DigestSigner, DigestVerifier, Keypair, RandomizedDigestSigner, RandomizedSigner,
@@ -271,12 +276,7 @@ mod tests {
     };
     use crate::test_rng::ChaCha8Rng;
     use base64ct::{Base64, Encoding};
-    use crate::hex;
-    use crate::num_bigint::BigUint;
-    use crate::num_bigint::FromPrimitive;
-    use crate::num_bigint::Num;
     use sha1::{Digest, Sha1};
-    use crate::sha2::Sha256;
     use sha3::Sha3_256;
 
     use crate::rsa::traits::{

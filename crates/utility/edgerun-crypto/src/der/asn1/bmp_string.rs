@@ -136,8 +136,8 @@ impl fmt::Display for BmpString {
 mod tests {
     use super::BmpString;
     use crate::der::{Decode, Encode};
-    use alloc::string::ToString;
     use crate::hex;
+    use alloc::string::ToString;
 
     const EXAMPLE_BYTES: &[u8] = &hex!(
         "1e 26 00 43 00 65 00 72 00 74"

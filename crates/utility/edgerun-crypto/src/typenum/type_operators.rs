@@ -1,4 +1,3 @@
-
 use crate::typenum::{
     private::{Internal, InternalMarker},
     Bit, NInt, NonZero, PInt, UInt, UTerm, Unsigned, Z0,

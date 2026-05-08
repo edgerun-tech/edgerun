@@ -8,13 +8,10 @@ use edgerun_node::command_dispatch::{
 use edgerun_node::runtime::RuntimeKernel;
 use edgerun_node::storage::MemoryRuntimeStorage;
 use edgerun_node::stream_append::append_signed_stream_event_blocking_with_protocol_signer;
-use edgerun_sdk::browser_authoring::{
-    build_publishable_app, BrowserAppArtifact, BrowserAppRoute, BrowserAppSpec,
-};
-use edgerun_protocols::core_protocol::command::{command_hash, CommandExecutionContext};
 use edgerun_protocols::core_protocol::collections::{HashMap, HashSet};
+use edgerun_protocols::core_protocol::command::{command_hash, CommandExecutionContext};
 use edgerun_protocols::core_protocol::protocol::{
-    CommandDecision, CommandEnvelope, CommandType, EventType, IdentityRef, ObjectKind, NodeRef,
+    CommandDecision, CommandEnvelope, CommandType, EventType, IdentityRef, NodeRef, ObjectKind,
     ProtocolRecord, Signature, Timestamp,
 };
 use edgerun_protocols::core_protocol::util::{
@@ -24,6 +21,9 @@ use edgerun_protocols::keygen::generate_ephemeral_node_identity;
 use edgerun_protocols::sign::{ProtocolSigner, SignableProtocolFamily};
 use edgerun_protocols::wire::{
     from_bytes, sdk_wire_bytes, SdkWireRecord, ROUTE_SCHEME_HTTPS, RUNTIME_EVENT_APP_INSTALLED,
+};
+use edgerun_sdk::browser_authoring::{
+    build_publishable_app, BrowserAppArtifact, BrowserAppRoute, BrowserAppSpec,
 };
 use edgerun_storage::{BlobKeySource, NodeStore, NodeStoreConfig};
 
@@ -115,8 +115,7 @@ fn signed_query_command(target_node_id: &[u8; 64]) -> CommandEnvelope {
 }
 
 fn append_genesis(store: &mut NodeStore, node: &edgerun_protocols::keygen::EphemeralNodeIdentity) {
-    let payload_ref =
-        create_node_genesis_payload(store, &node.node_id, &NodeID(node.node_id), &[]);
+    let payload_ref = create_node_genesis_payload(store, &node.node_id, &NodeID(node.node_id), &[]);
     let stored_payload = store
         .get_object(&payload_ref)
         .expect("read genesis payload object")
@@ -328,10 +327,9 @@ fn sdk_authored_app_installs_in_runtime_and_is_archived_to_node_stream() {
     })
     .expect("sdk builds publishable app package");
 
-    let graph = from_bytes::<SdkWireRecord, edgerun_protocols::wire::WireError>(
-        &package.app_graph_bytes,
-    )
-    .expect("decode sdk app graph");
+    let graph =
+        from_bytes::<SdkWireRecord, edgerun_protocols::wire::WireError>(&package.app_graph_bytes)
+            .expect("decode sdk app graph");
     assert!(matches!(graph, SdkWireRecord::AppGraph(_)));
 
     let mut runtime = RuntimeKernel::new(MemoryRuntimeStorage::default(), package.app_id);
@@ -346,16 +344,18 @@ fn sdk_authored_app_installs_in_runtime_and_is_archived_to_node_stream() {
 
     let runtime_event = runtime.events()[0].event.clone();
     let runtime_event_bytes = sdk_wire_bytes(&SdkWireRecord::RuntimeEvent(runtime_event.clone()));
-    let archived_event = from_bytes::<SdkWireRecord, edgerun_protocols::wire::WireError>(
-        &runtime_event_bytes,
-    )
-    .expect("decode runtime event");
+    let archived_event =
+        from_bytes::<SdkWireRecord, edgerun_protocols::wire::WireError>(&runtime_event_bytes)
+            .expect("decode runtime event");
     let archived_event = match archived_event {
         SdkWireRecord::RuntimeEvent(event) => event,
         _ => panic!("expected runtime event"),
     };
     assert_eq!(archived_event, runtime_event);
-    assert_eq!(archived_event.payload_sha256, edgerun_sdk::sha256(&archived_event.payload));
+    assert_eq!(
+        archived_event.payload_sha256,
+        edgerun_sdk::sha256(&archived_event.payload)
+    );
 
     let installed_payload =
         from_bytes::<SdkWireRecord, edgerun_protocols::wire::WireError>(&archived_event.payload)
@@ -404,7 +404,10 @@ fn sdk_authored_app_installs_in_runtime_and_is_archived_to_node_stream() {
         &stored_runtime_event.content,
     )
     .expect("decode stored runtime event object");
-    assert_eq!(decoded_stored_event, SdkWireRecord::RuntimeEvent(runtime_event));
+    assert_eq!(
+        decoded_stored_event,
+        SdkWireRecord::RuntimeEvent(runtime_event)
+    );
     assert_eq!(
         store
             .validate_stream_chain_with_writer(&node.node_id, &node.node_id)

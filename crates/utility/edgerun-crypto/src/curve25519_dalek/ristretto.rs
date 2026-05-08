@@ -182,9 +182,9 @@ use crate::curve25519_dalek::field::FieldElement;
 
 #[cfg(feature = "group")]
 use {
-    group::{cofactor::CofactorGroup, prime::PrimeGroup, GroupEncoding},
     crate::rand_core::RngCore,
     crate::subtle::CtOption,
+    group::{cofactor::CofactorGroup, prime::PrimeGroup, GroupEncoding},
 };
 
 use crate::subtle::Choice;
@@ -205,7 +205,9 @@ use crate::curve25519_dalek::scalar::Scalar;
 use crate::curve25519_dalek::traits::BasepointTable;
 use crate::curve25519_dalek::traits::Identity;
 #[cfg(feature = "alloc")]
-use crate::curve25519_dalek::traits::{MultiscalarMul, VartimeMultiscalarMul, VartimePrecomputedMultiscalarMul};
+use crate::curve25519_dalek::traits::{
+    MultiscalarMul, VartimeMultiscalarMul, VartimePrecomputedMultiscalarMul,
+};
 
 // ------------------------------------------------------------------------
 // Compressed points
@@ -1011,7 +1013,9 @@ impl VartimeMultiscalarMul for RistrettoPoint {
 // decouple stability of the inner type from the stability of the
 // outer type.
 #[cfg(feature = "alloc")]
-pub struct VartimeRistrettoPrecomputation(crate::curve25519_dalek::backend::VartimePrecomputedStraus);
+pub struct VartimeRistrettoPrecomputation(
+    crate::curve25519_dalek::backend::VartimePrecomputedStraus,
+);
 
 #[cfg(feature = "alloc")]
 impl VartimePrecomputedMultiscalarMul for VartimeRistrettoPrecomputation {
@@ -1022,9 +1026,11 @@ impl VartimePrecomputedMultiscalarMul for VartimeRistrettoPrecomputation {
         I: IntoIterator,
         I::Item: Borrow<Self::Point>,
     {
-        Self(crate::curve25519_dalek::backend::VartimePrecomputedStraus::new(
-            static_points.into_iter().map(|P| P.borrow().0),
-        ))
+        Self(
+            crate::curve25519_dalek::backend::VartimePrecomputedStraus::new(
+                static_points.into_iter().map(|P| P.borrow().0),
+            ),
+        )
     }
 
     fn optional_mixed_multiscalar_mul<I, J, K>(

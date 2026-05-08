@@ -3,8 +3,8 @@
 pub(super) mod xmd;
 pub(super) mod xof;
 
-use crate::elliptic_curve::{Error, Result};
 use crate::digest::{Digest, ExtendableOutput, Update, XofReader};
+use crate::elliptic_curve::{Error, Result};
 use generic_array::typenum::{IsLess, U256};
 use generic_array::{ArrayLength, GenericArray};
 

@@ -215,7 +215,7 @@ impl<T: FromJson + Default + Copy, const N: usize> FromJson for [T; N] {
             )));
         }
         let mut out = [T::default(); N];
-        for (slot, value) in out.iter_mut().zip(values.into_iter()) {
+        for (slot, value) in out.iter_mut().zip(values) {
             *slot = T::from_json(value)?;
         }
         Ok(out)

@@ -2,8 +2,8 @@
 
 use super::div_limb::{div_rem_limb_with_reciprocal, Reciprocal};
 use crate::crypto_bigint::{CtChoice, Limb, NonZero, Uint, Word, Wrapping};
-use core::ops::{Div, DivAssign, Rem, RemAssign};
 use crate::subtle::CtOption;
+use core::ops::{Div, DivAssign, Rem, RemAssign};
 
 impl<const LIMBS: usize> Uint<LIMBS> {
     /// Computes `self` / `rhs` using a pre-made reciprocal,

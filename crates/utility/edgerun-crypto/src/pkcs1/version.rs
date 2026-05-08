@@ -1,7 +1,7 @@
 //! PKCS#1 version identifier.
 
-use crate::pkcs1::Error;
 use crate::der::{Decode, Encode, FixedTag, Reader, Tag, Writer};
+use crate::pkcs1::Error;
 
 /// Version identifier for PKCS#1 documents as defined in
 /// [RFC 8017 Appendix 1.2].

@@ -87,9 +87,9 @@ pub use crate::elliptic_curve::{
     secret_key::SecretKey,
 };
 pub use crate::rand_core;
-pub use generic_array::{self, typenum::consts};
 pub use crate::subtle;
 pub use crate::zeroize;
+pub use generic_array::{self, typenum::consts};
 
 #[cfg(feature = "elliptic_curve_arithmetic")]
 pub use {

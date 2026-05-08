@@ -1,8 +1,8 @@
 //! Limb subtraction
 
 use crate::crypto_bigint::{Checked, CheckedSub, Limb, WideWord, Word, Wrapping, Zero};
-use core::ops::{Sub, SubAssign};
 use crate::subtle::CtOption;
+use core::ops::{Sub, SubAssign};
 
 impl Limb {
     /// Computes `self - (rhs + borrow)`, returning the result along with the new borrow.

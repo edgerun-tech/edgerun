@@ -1,12 +1,12 @@
 //! Traits provided by this crate
 
 use crate::crypto_bigint::{Limb, NonZero};
-use core::fmt::Debug;
-use core::ops::{BitAnd, BitOr, BitXor, Div, Not, Rem, Shl, Shr};
 use crate::subtle::{
     Choice, ConditionallySelectable, ConstantTimeEq, ConstantTimeGreater, ConstantTimeLess,
     CtOption,
 };
+use core::fmt::Debug;
+use core::ops::{BitAnd, BitOr, BitXor, Div, Not, Rem, Shl, Shr};
 
 #[cfg(feature = "p256_arithmetic")]
 use crate::rand_core::CryptoRngCore;

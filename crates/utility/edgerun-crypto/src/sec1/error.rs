@@ -13,7 +13,7 @@ pub type Result<T> = core::result::Result<T, Error>;
 #[non_exhaustive]
 pub enum Error {
     /// ASN.1 DER-related errors.
-        Asn1(crate::der::Error),
+    Asn1(crate::der::Error),
 
     /// Cryptographic errors.
     ///
@@ -38,7 +38,7 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-                        Error::Asn1(err) => write!(f, "SEC1 ASN.1 error: {}", err),
+            Error::Asn1(err) => write!(f, "SEC1 ASN.1 error: {}", err),
             Error::Crypto => f.write_str("SEC1 cryptographic error"),
             #[cfg(feature = "elliptic_curve_pkcs8")]
             Error::Pkcs8(err) => write!(f, "{}", err),

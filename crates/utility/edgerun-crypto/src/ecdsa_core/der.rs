@@ -3,6 +3,7 @@
 //!
 //! [RFC5912 Appendix A]: https://www.rfc-editor.org/rfc/rfc5912#appendix-A
 
+use crate::der::{asn1::UintRef, Decode, Encode, FixedTag, Length, Reader, Tag, Writer};
 use crate::ecdsa_core::{Error, Result};
 use crate::elliptic_curve::{
     consts::U9,
@@ -13,7 +14,6 @@ use core::{
     fmt::{self, Debug},
     ops::{Add, Range},
 };
-use crate::der::{asn1::UintRef, Decode, Encode, FixedTag, Length, Reader, Tag, Writer};
 
 #[cfg(feature = "p256_ecdsa_alloc")]
 use {
@@ -422,7 +422,8 @@ mod tests {
         assert!(Signature::from_der(&[crate::der::Tag::Sequence.into(), 0x00]).is_err());
         assert!(Signature::from_der(&[
             crate::der::Tag::Sequence.into(),
-            0x03, der::Tag::Integer.into(),
+            0x03,
+            der::Tag::Integer.into(),
             0x01,
             0x01
         ])

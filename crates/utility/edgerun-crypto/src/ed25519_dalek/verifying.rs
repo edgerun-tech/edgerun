@@ -12,12 +12,12 @@
 use core::fmt::Debug;
 use core::hash::{Hash, Hasher};
 
-use crate::digest::{generic_array::typenum::U64, Digest};
 use crate::curve25519_dalek::{
     edwards::{CompressedEdwardsY, EdwardsPoint},
     montgomery::MontgomeryPoint,
     scalar::Scalar,
 };
+use crate::digest::{generic_array::typenum::U64, Digest};
 
 use crate::ed25519::signature::Verifier;
 
@@ -656,7 +656,8 @@ impl TryFrom<&crate::pkcs8::PublicKeyBytes> for VerifyingKey {
     type Error = crate::pkcs8::spki::Error;
 
     fn try_from(pkcs8_key: &crate::pkcs8::PublicKeyBytes) -> crate::pkcs8::spki::Result<Self> {
-        VerifyingKey::from_bytes(pkcs8_key.as_ref()).map_err(|_| crate::pkcs8::spki::Error::KeyMalformed)
+        VerifyingKey::from_bytes(pkcs8_key.as_ref())
+            .map_err(|_| crate::pkcs8::spki::Error::KeyMalformed)
     }
 }
 
@@ -678,7 +679,9 @@ impl From<&VerifyingKey> for crate::pkcs8::PublicKeyBytes {
 impl TryFrom<crate::pkcs8::spki::SubjectPublicKeyInfoRef<'_>> for VerifyingKey {
     type Error = crate::pkcs8::spki::Error;
 
-    fn try_from(public_key: crate::pkcs8::spki::SubjectPublicKeyInfoRef<'_>) -> crate::pkcs8::spki::Result<Self> {
+    fn try_from(
+        public_key: crate::pkcs8::spki::SubjectPublicKeyInfoRef<'_>,
+    ) -> crate::pkcs8::spki::Result<Self> {
         crate::pkcs8::PublicKeyBytes::try_from(public_key)?.try_into()
     }
 }

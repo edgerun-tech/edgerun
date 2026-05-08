@@ -23,11 +23,11 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use crate::sha2::Sha512;
 use crate::subtle::{Choice, ConstantTimeEq};
 
-use crate::digest::{generic_array::typenum::U64, Digest};
 use crate::curve25519_dalek::{
     edwards::{CompressedEdwardsY, EdwardsPoint},
     scalar::Scalar,
 };
+use crate::digest::{generic_array::typenum::U64, Digest};
 
 use crate::ed25519::signature::{KeypairRef, Signer, Verifier};
 
@@ -728,7 +728,9 @@ impl From<&SigningKey> for crate::pkcs8::KeypairBytes {
     fn from(signing_key: &SigningKey) -> crate::pkcs8::KeypairBytes {
         crate::pkcs8::KeypairBytes {
             secret_key: signing_key.to_bytes(),
-            public_key: Some(crate::pkcs8::PublicKeyBytes(signing_key.verifying_key.to_bytes())),
+            public_key: Some(crate::pkcs8::PublicKeyBytes(
+                signing_key.verifying_key.to_bytes(),
+            )),
         }
     }
 }

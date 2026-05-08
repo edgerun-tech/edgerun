@@ -1,6 +1,6 @@
 use crate::num_bigint::Integer;
-use core::mem;
 use crate::num_bigint::{checked_pow, PrimInt};
+use core::mem;
 
 // Provides methods to compute an integer's square root, cube root,
 // and arbitrary `n`th root.

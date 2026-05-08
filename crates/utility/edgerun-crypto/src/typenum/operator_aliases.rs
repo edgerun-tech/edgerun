@@ -1,5 +1,3 @@
-
-
 // Aliases!!!
 use crate::typenum::type_operators::{
     Abs, Cmp, FoldAdd, FoldMul, Gcd, Len, Logarithm2, Max, Min, PartialDiv, Pow, SquareRoot,

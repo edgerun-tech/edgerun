@@ -268,7 +268,7 @@ pub fn to_toml_string(value: &TomlValue) -> Result<String, TomlError> {
     Ok(output)
 }
 
-fn to_toml_value(output: &mut String, value: &TomlValue, indent: usize) -> Result<(), TomlError> {
+fn to_toml_value(output: &mut String, value: &TomlValue, _indent: usize) -> Result<(), TomlError> {
     match value {
         TomlValue::String(s) => {
             if s.contains('"') || s.contains('\n') || s.contains('\\') || s.contains('#') {
@@ -308,7 +308,7 @@ fn to_toml_value(output: &mut String, value: &TomlValue, indent: usize) -> Resul
                 if i > 0 {
                     output.push_str(", ");
                 }
-                to_toml_value(output, v, indent)?;
+                to_toml_value(output, v, _indent)?;
             }
             output.push(']');
         }
@@ -320,12 +320,12 @@ fn to_toml_value(output: &mut String, value: &TomlValue, indent: usize) -> Resul
                 match v {
                     TomlValue::Table(_) | TomlValue::Array(_) => {
                         output.push_str(&format!("[{}]\n", k));
-                        to_toml_value(output, v, indent + 1)?;
+                        to_toml_value(output, v, _indent + 1)?;
                     }
                     _ => {
                         output.push_str(k);
                         output.push_str(" = ");
-                        to_toml_value(output, v, indent)?;
+                        to_toml_value(output, v, _indent)?;
                     }
                 }
             }

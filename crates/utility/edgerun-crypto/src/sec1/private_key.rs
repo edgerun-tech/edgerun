@@ -5,13 +5,13 @@
 //!
 //! <https://www.secg.org/sec1-v2.pdf>
 
-use crate::sec1::{EcParameters, Error, Result};
-use core::fmt;
 use crate::der::{
     asn1::{BitStringRef, ContextSpecific, ContextSpecificRef, OctetStringRef},
     Decode, DecodeValue, Encode, EncodeValue, Header, Length, Reader, Sequence, Tag, TagMode,
     TagNumber, Writer,
 };
+use crate::sec1::{EcParameters, Error, Result};
+use core::fmt;
 
 #[cfg(feature = "elliptic_curve_alloc")]
 use crate::der::SecretDocument;

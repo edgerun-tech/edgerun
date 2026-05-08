@@ -1,6 +1,8 @@
 //! ASN.1 DER-encoded documents stored on the heap.
 
-use crate::der::{Decode, Encode, Error, FixedTag, Length, Reader, Result, SliceReader, Tag, Writer};
+use crate::der::{
+    Decode, Encode, Error, FixedTag, Length, Reader, Result, SliceReader, Tag, Writer,
+};
 use alloc::vec::Vec;
 use core::fmt::{self, Debug};
 

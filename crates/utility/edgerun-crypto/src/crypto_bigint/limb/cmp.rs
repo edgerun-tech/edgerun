@@ -2,8 +2,8 @@
 
 use super::HI_BIT;
 use crate::crypto_bigint::{CtChoice, Limb};
-use core::cmp::Ordering;
 use crate::subtle::{Choice, ConstantTimeEq, ConstantTimeGreater, ConstantTimeLess};
+use core::cmp::Ordering;
 
 impl Limb {
     /// Is this limb an odd number?
@@ -125,8 +125,8 @@ impl PartialEq for Limb {
 #[cfg(all(test, crypto_bigint_internal_tests))]
 mod tests {
     use crate::crypto_bigint::{Limb, Zero};
-    use core::cmp::Ordering;
     use crate::subtle::{ConstantTimeEq, ConstantTimeGreater, ConstantTimeLess};
+    use core::cmp::Ordering;
 
     #[test]
     fn is_zero() {

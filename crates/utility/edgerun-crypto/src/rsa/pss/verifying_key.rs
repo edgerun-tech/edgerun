@@ -1,13 +1,13 @@
 use super::{verify_digest, Signature};
-use crate::pkcs1;
-use crate::rsa::RsaPublicKey;
-use crate::signature::{hazmat::PrehashVerifier, DigestVerifier, Verifier};
-use core::marker::PhantomData;
 use crate::digest::{Digest, FixedOutputReset};
+use crate::pkcs1;
 use crate::pkcs8::{
     spki::{der::AnyRef, AlgorithmIdentifierRef, AssociatedAlgorithmIdentifier},
     Document, EncodePublicKey,
 };
+use crate::rsa::RsaPublicKey;
+use crate::signature::{hazmat::PrehashVerifier, DigestVerifier, Verifier};
+use core::marker::PhantomData;
 
 /// Verifying key for checking the validity of RSASSA-PSS signatures as
 /// described in [RFC8017 § 8.1].

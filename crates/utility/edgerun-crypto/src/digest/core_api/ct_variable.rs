@@ -2,17 +2,17 @@ use super::{
     AlgorithmName, Buffer, BufferKindUser, FixedOutputCore, Reset, TruncSide, UpdateCore,
     VariableOutputCore,
 };
-use crate::digest::HashMarker;
-#[cfg(feature = "mac")]
-use crate::digest::MacMarker;
 #[cfg(feature = "oid")]
 use crate::const_oid::{AssociatedOid, ObjectIdentifier};
-use core::{fmt, marker::PhantomData};
 use crate::digest::crypto_common::{
     generic_array::{ArrayLength, GenericArray},
     typenum::{IsLess, IsLessOrEqual, Le, LeEq, NonZero, U256},
     Block, BlockSizeUser, OutputSizeUser,
 };
+use crate::digest::HashMarker;
+#[cfg(feature = "mac")]
+use crate::digest::MacMarker;
+use core::{fmt, marker::PhantomData};
 
 /// Dummy type used with [`CtVariableCoreWrapper`] in cases when
 /// resulting hash does not have a known OID.

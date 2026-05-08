@@ -6,11 +6,12 @@ use crate::sec1::Result;
 use crate::der::SecretDocument;
 
 #[cfg(feature = "elliptic_curve_pem")]
-use {crate::sec1::LineEnding, alloc::string::String, crate::der::pem::PemLabel};
+use {crate::der::pem::PemLabel, crate::sec1::LineEnding, alloc::string::String};
 
 #[cfg(feature = "elliptic_curve_pkcs8")]
 use {
-    crate::sec1::{EcPrivateKey, ALGORITHM_OID}, crate::der::Decode,
+    crate::der::Decode,
+    crate::sec1::{EcPrivateKey, ALGORITHM_OID},
 };
 
 #[cfg(feature = "elliptic_curve_std")]

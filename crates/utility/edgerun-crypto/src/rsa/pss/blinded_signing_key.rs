@@ -1,20 +1,21 @@
 use super::{get_pss_signature_algo_id, sign_digest, Signature, VerifyingKey};
+use crate::const_oid::AssociatedOid;
+use crate::digest::{Digest, FixedOutputReset};
 use crate::pkcs1;
+use crate::pkcs8::{
+    spki::{
+        der::AnyRef, AlgorithmIdentifierOwned, AlgorithmIdentifierRef,
+        AssociatedAlgorithmIdentifier, DynSignatureAlgorithmIdentifier,
+    },
+    EncodePrivateKey, SecretDocument,
+};
 use crate::rand_core::CryptoRngCore;
 use crate::rsa::{Result, RsaPrivateKey};
 use crate::signature::{
     hazmat::RandomizedPrehashSigner, Keypair, RandomizedDigestSigner, RandomizedSigner,
 };
-use crate::const_oid::AssociatedOid;
-use core::marker::PhantomData;
-use crate::digest::{Digest, FixedOutputReset};
-use crate::pkcs8::{
-    spki::{der::AnyRef, AlgorithmIdentifierOwned, AlgorithmIdentifierRef,
-        AssociatedAlgorithmIdentifier, DynSignatureAlgorithmIdentifier,
-    },
-    EncodePrivateKey, SecretDocument,
-};
 use crate::zeroize::ZeroizeOnDrop;
+use core::marker::PhantomData;
 
 /// Signing key for producing "blinded" RSASSA-PSS signatures as described in
 /// [draft-irtf-cfrg-rsa-blind-signatures](https://datatracker.ietf.org/doc/draft-irtf-cfrg-rsa-blind-signatures/).
@@ -151,7 +152,9 @@ impl<D> DynSignatureAlgorithmIdentifier for BlindedSigningKey<D>
 where
     D: Digest + AssociatedOid,
 {
-    fn signature_algorithm_identifier(&self) -> crate::pkcs8::spki::Result<AlgorithmIdentifierOwned> {
+    fn signature_algorithm_identifier(
+        &self,
+    ) -> crate::pkcs8::spki::Result<AlgorithmIdentifierOwned> {
         get_pss_signature_algo_id::<D>(self.salt_len as u8)
     }
 }

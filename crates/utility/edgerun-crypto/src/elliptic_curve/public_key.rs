@@ -22,8 +22,8 @@ use {
         sec1::{CompressedPoint, EncodedPoint, FromEncodedPoint, ModulusSize, ToEncodedPoint},
         FieldBytesSize,
     },
-    core::cmp::Ordering,
     crate::subtle::{Choice, CtOption},
+    core::cmp::Ordering,
 };
 
 #[cfg(all(feature = "elliptic_curve_alloc", feature = "elliptic_curve_pkcs8"))]
@@ -44,8 +44,8 @@ use crate::pkcs8::DecodePublicKey;
 #[cfg(all(feature = "elliptic_curve_sec1", feature = "elliptic_curve_pkcs8"))]
 use {
     crate::elliptic_curve::ALGORITHM_OID,
-    crate::pkcs8::{self, AssociatedOid},
     crate::pkcs8::der,
+    crate::pkcs8::{self, AssociatedOid},
 };
 
 /// Elliptic curve public keys.
@@ -443,7 +443,9 @@ where
 {
     type Error = crate::pkcs8::spki::Error;
 
-    fn try_from(spki: crate::pkcs8::SubjectPublicKeyInfoRef<'_>) -> crate::pkcs8::spki::Result<Self> {
+    fn try_from(
+        spki: crate::pkcs8::SubjectPublicKeyInfoRef<'_>,
+    ) -> crate::pkcs8::spki::Result<Self> {
         Self::try_from(&spki)
     }
 }
@@ -457,7 +459,9 @@ where
 {
     type Error = crate::pkcs8::spki::Error;
 
-    fn try_from(spki: &crate::pkcs8::SubjectPublicKeyInfoRef<'_>) -> crate::pkcs8::spki::Result<Self> {
+    fn try_from(
+        spki: &crate::pkcs8::SubjectPublicKeyInfoRef<'_>,
+    ) -> crate::pkcs8::spki::Result<Self> {
         spki.algorithm.assert_oids(ALGORITHM_OID, C::OID)?;
 
         let public_key_bytes = spki
@@ -479,7 +483,8 @@ where
 {
     fn to_public_key_der(&self) -> crate::pkcs8::spki::Result<crate::der::Document> {
         let public_key_bytes = self.to_encoded_point(false);
-        let subject_public_key = crate::der::asn1::BitStringRef::new(0, public_key_bytes.as_bytes())?;
+        let subject_public_key =
+            crate::der::asn1::BitStringRef::new(0, public_key_bytes.as_bytes())?;
 
         crate::pkcs8::SubjectPublicKeyInfo {
             algorithm: Self::ALGORITHM_IDENTIFIER,

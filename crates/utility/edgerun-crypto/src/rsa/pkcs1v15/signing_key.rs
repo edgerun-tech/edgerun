@@ -1,20 +1,21 @@
 use super::{oid, pkcs1v15_generate_prefix, sign, Signature, VerifyingKey};
+use crate::digest::Digest;
 use crate::pkcs1;
+use crate::pkcs8::{
+    spki::{
+        der::AnyRef, AlgorithmIdentifierRef, AssociatedAlgorithmIdentifier,
+        SignatureAlgorithmIdentifier,
+    },
+    AssociatedOid, EncodePrivateKey, SecretDocument,
+};
 use crate::rand_core::CryptoRngCore;
 use crate::rsa::{dummy_rng::DummyRng, Result, RsaPrivateKey};
 use crate::signature::{
     hazmat::PrehashSigner, DigestSigner, Keypair, RandomizedDigestSigner, RandomizedSigner, Signer,
 };
+use crate::zeroize::ZeroizeOnDrop;
 use alloc::vec::Vec;
 use core::marker::PhantomData;
-use crate::digest::Digest;
-use crate::pkcs8::{
-    spki::{der::AnyRef, AlgorithmIdentifierRef, AssociatedAlgorithmIdentifier,
-        SignatureAlgorithmIdentifier,
-    },
-    AssociatedOid, EncodePrivateKey, SecretDocument,
-};
-use crate::zeroize::ZeroizeOnDrop;
 
 /// Signing key for `RSASSA-PKCS1-v1_5` signatures as described in [RFC8017 § 8.2].
 ///

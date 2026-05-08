@@ -35,7 +35,10 @@ impl<'a, const LIMBS: usize> DecodeValue<'a> for Uint<LIMBS>
 where
     Uint<LIMBS>: ArrayEncoding,
 {
-    fn decode_value<R: crate::der::Reader<'a>>(reader: &mut R, header: crate::der::Header) -> crate::der::Result<Self> {
+    fn decode_value<R: crate::der::Reader<'a>>(
+        reader: &mut R,
+        header: crate::der::Header,
+    ) -> crate::der::Result<Self> {
         UintRef::decode_value(reader, header)?.try_into()
     }
 }

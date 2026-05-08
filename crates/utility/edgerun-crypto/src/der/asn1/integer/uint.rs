@@ -345,7 +345,9 @@ fn needs_leading_zero(bytes: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{decode_to_array, UintRef};
-    use crate::der::{asn1::integer::tests::*, AnyRef, Decode, Encode, ErrorKind, SliceWriter, Tag};
+    use crate::der::{
+        asn1::integer::tests::*, AnyRef, Decode, Encode, ErrorKind, SliceWriter, Tag,
+    };
 
     #[test]
     fn decode_to_array_no_leading_zero() {

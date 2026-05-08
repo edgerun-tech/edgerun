@@ -9,7 +9,6 @@
 // - isis agora lovecruft <isis@patternsinthevoid.net>
 // - Henry de Valence <hdevalence@hdevalence.ca>
 
-
 #[allow(missing_docs)]
 pub mod packed_simd;
 

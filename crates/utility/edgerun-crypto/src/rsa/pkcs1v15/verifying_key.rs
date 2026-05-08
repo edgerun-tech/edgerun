@@ -1,16 +1,17 @@
 use super::{oid, pkcs1v15_generate_prefix, verify, Signature};
-use crate::pkcs1;
-use crate::rsa::RsaPublicKey;
-use crate::signature::{hazmat::PrehashVerifier, DigestVerifier, Verifier};
-use alloc::vec::Vec;
-use core::marker::PhantomData;
 use crate::digest::Digest;
+use crate::pkcs1;
 use crate::pkcs8::{
-    spki::{der::AnyRef, AlgorithmIdentifierRef, AssociatedAlgorithmIdentifier,
+    spki::{
+        der::AnyRef, AlgorithmIdentifierRef, AssociatedAlgorithmIdentifier,
         SignatureAlgorithmIdentifier,
     },
     AssociatedOid, Document, EncodePublicKey,
 };
+use crate::rsa::RsaPublicKey;
+use crate::signature::{hazmat::PrehashVerifier, DigestVerifier, Verifier};
+use alloc::vec::Vec;
+use core::marker::PhantomData;
 
 /// Verifying key for `RSASSA-PKCS1-v1_5` signatures as described in [RFC8017 § 8.2].
 ///
@@ -201,7 +202,9 @@ where
 {
     type Error = crate::pkcs8::spki::Error;
 
-    fn try_from(spki: crate::pkcs8::SubjectPublicKeyInfoRef<'_>) -> crate::pkcs8::spki::Result<Self> {
+    fn try_from(
+        spki: crate::pkcs8::SubjectPublicKeyInfoRef<'_>,
+    ) -> crate::pkcs8::spki::Result<Self> {
         RsaPublicKey::try_from(spki).map(Self::new)
     }
 }

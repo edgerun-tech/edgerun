@@ -3,9 +3,9 @@ use crate::num_bigint::bigint::Sign::*;
 use crate::num_bigint::bigint::{BigInt, ToBigInt};
 use crate::num_bigint::biguint::{BigUint, IntDigits};
 use crate::num_bigint::integer::Integer;
+use crate::num_bigint::{One, Signed, Zero};
 use alloc::borrow::Cow;
 use core::ops::Neg;
-use crate::num_bigint::{One, Signed, Zero};
 
 // XGCD sets z to the greatest common divisor of a and b and returns z.
 // If extended is true, XGCD returns their value such that z = a*x + b*y.

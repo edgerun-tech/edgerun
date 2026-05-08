@@ -103,8 +103,7 @@ impl HuffmanDecoder {
 }
 
 fn lookup_symbol(code: u32, len: u8) -> Option<usize> {
-    for i in 0..257 {
-        let (table_code, table_len) = HUFFMAN_CODE_TABLE[i];
+    for (i, &(table_code, table_len)) in HUFFMAN_CODE_TABLE.iter().enumerate().take(257) {
         if table_len == len && table_code == code {
             return Some(i);
         }
@@ -127,10 +126,10 @@ pub fn encode(input: &[u8]) -> Vec<u8> {
     for &byte in input {
         let (code_val, code_len) = HUFFMAN_CODE_TABLE[byte as usize];
         bits = (bits << code_len) | code_val as u64;
-        bit_count = bit_count + code_len as u32;
+        bit_count += code_len as u32;
 
         while bit_count >= 8 {
-            bit_count = bit_count - 8;
+            bit_count -= 8;
             let shift = bit_count;
             result.push(((bits >> shift) & 0xFF) as u8);
         }
@@ -141,11 +140,11 @@ pub fn encode(input: &[u8]) -> Vec<u8> {
         let padding: u32 = 8 - bit_count;
         let pad_value: u64 = ((1u64 << padding) - 1) & 0xFF;
         bits = (bits << padding) | pad_value;
-        bit_count = bit_count + padding;
+        bit_count += padding;
 
         // Output remaining bits
         while bit_count >= 8 {
-            bit_count = bit_count - 8;
+            bit_count -= 8;
             let shift = bit_count;
             result.push(((bits >> shift) & 0xFF) as u8);
         }

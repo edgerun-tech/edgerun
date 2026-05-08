@@ -1,4 +1,3 @@
-
 use crate::typenum::{
     bit::{Bit, B0, B1},
     consts::{U0, U1},

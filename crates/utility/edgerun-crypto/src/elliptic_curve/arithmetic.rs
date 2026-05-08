@@ -6,9 +6,9 @@ use crate::elliptic_curve::{
     scalar::{FromUintUnchecked, IsHigh},
     Curve, FieldBytes, PrimeCurve, ScalarPrimitive,
 };
-use core::fmt::Debug;
 use crate::subtle::{ConditionallySelectable, ConstantTimeEq, CtOption};
 use crate::zeroize::DefaultIsZeroes;
+use core::fmt::Debug;
 
 /// Elliptic curve with an arithmetic implementation.
 pub trait CurveArithmetic: Curve {

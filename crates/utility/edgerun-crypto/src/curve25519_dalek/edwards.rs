@@ -108,8 +108,8 @@ use crate::digest::{generic_array::typenum::U64, Digest};
 
 #[cfg(feature = "group")]
 use {
-    group::{cofactor::CofactorGroup, prime::PrimeGroup, GroupEncoding},
     crate::subtle::CtOption,
+    group::{cofactor::CofactorGroup, prime::PrimeGroup, GroupEncoding},
 };
 
 #[cfg(feature = "group")]

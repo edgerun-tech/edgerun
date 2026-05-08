@@ -3,8 +3,8 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use crate::rand_core::CryptoRngCore;
 use crate::digest::{Digest, DynDigest, FixedOutputReset};
+use crate::rand_core::CryptoRngCore;
 use crate::subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 use crate::zeroize::Zeroizing;
 

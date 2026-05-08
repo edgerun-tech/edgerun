@@ -1,11 +1,11 @@
 //! Generate prime components for the RSA Private Key
 
-use crate::rand_core::CryptoRngCore;
-use alloc::vec::Vec;
 use crate::num_bigint::BigUint;
 #[allow(unused_imports)]
 use crate::num_bigint::Float;
 use crate::num_bigint::Zero;
+use crate::rand_core::CryptoRngCore;
+use alloc::vec::Vec;
 
 use crate::rsa::{
     algorithms::{
@@ -121,9 +121,9 @@ pub(crate) fn generate_multi_prime_key_with_exp<R: CryptoRngCore + ?Sized>(
 #[cfg(all(test, feature = "rsa_internal_tests"))]
 mod tests {
     use super::*;
-    use crate::test_rng::ChaCha8Rng;
     use crate::num_bigint::BigUint;
     use crate::num_bigint::FromPrimitive;
+    use crate::test_rng::ChaCha8Rng;
 
     const EXP: u64 = 65537;
 

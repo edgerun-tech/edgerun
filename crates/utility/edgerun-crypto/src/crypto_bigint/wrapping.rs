@@ -1,8 +1,8 @@
 //! Wrapping arithmetic.
 
 use crate::crypto_bigint::Zero;
-use core::fmt;
 use crate::subtle::{Choice, ConditionallySelectable, ConstantTimeEq};
+use core::fmt;
 
 #[cfg(feature = "p256_arithmetic")]
 use {crate::crypto_bigint::Random, crate::rand_core::CryptoRngCore};

@@ -13,12 +13,12 @@ pub mod spec_avx2 {
 
     use alloc::vec::Vec;
 
-    use core::borrow::Borrow;
-    use core::cmp::Ordering;
     use crate::curve25519_dalek::backend::vector::avx2::{CachedPoint, ExtendedPoint};
     use crate::curve25519_dalek::edwards::EdwardsPoint;
     use crate::curve25519_dalek::scalar::Scalar;
     use crate::curve25519_dalek::traits::{Identity, VartimeMultiscalarMul};
+    use core::borrow::Borrow;
+    use core::cmp::Ordering;
 
     /// Implements a version of Pippenger's algorithm.
     ///

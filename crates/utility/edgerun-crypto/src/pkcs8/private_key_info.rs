@@ -1,18 +1,19 @@
 //! PKCS#8 `PrivateKeyInfo`.
 
-use crate::pkcs8::{AlgorithmIdentifierRef, Error, Result, Version};
-use core::fmt;
 use crate::der::{
     asn1::{AnyRef, BitStringRef, ContextSpecific, OctetStringRef},
     Decode, DecodeValue, Encode, EncodeValue, Header, Length, Reader, Sequence, TagMode, TagNumber,
     Writer,
 };
+use crate::pkcs8::{AlgorithmIdentifierRef, Error, Result, Version};
+use core::fmt;
 
 use crate::der::SecretDocument;
 
 #[cfg(feature = "encryption")]
 use {
-    crate::pkcs8::EncryptedPrivateKeyInfo, crate::zeroize::Zeroizing,
+    crate::pkcs8::EncryptedPrivateKeyInfo,
+    crate::zeroize::Zeroizing,
     pkcs5::pbes2,
     rand_core::{CryptoRng, RngCore},
 };
@@ -155,7 +156,9 @@ impl<'a> PrivateKeyInfo<'a> {
     }
 
     /// Get a `BIT STRING` representation of the public key, if present.
-    fn public_key_bit_string(&self) -> crate::der::Result<Option<ContextSpecific<BitStringRef<'a>>>> {
+    fn public_key_bit_string(
+        &self,
+    ) -> crate::der::Result<Option<ContextSpecific<BitStringRef<'a>>>> {
         self.public_key
             .map(|pk| {
                 BitStringRef::from_bytes(pk).map(|value| ContextSpecific {

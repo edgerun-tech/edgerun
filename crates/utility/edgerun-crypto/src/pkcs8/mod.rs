@@ -61,13 +61,13 @@ mod version;
 #[cfg(feature = "pkcs5")]
 pub(crate) mod encrypted_private_key_info;
 
+pub use crate::der::{self, asn1::ObjectIdentifier, oid::AssociatedOid};
 pub use crate::pkcs8::{
     error::{Error, Result},
     private_key_info::PrivateKeyInfo,
     traits::DecodePrivateKey,
     version::Version,
 };
-pub use crate::der::{self, asn1::ObjectIdentifier, oid::AssociatedOid};
 pub use crate::spki::{
     AlgorithmIdentifierRef, DecodePublicKey, SubjectPublicKeyInfo, SubjectPublicKeyInfoRef,
 };
@@ -77,8 +77,9 @@ pub mod spki {
 }
 
 pub use {
-    crate::pkcs8::traits::EncodePrivateKey, der::{Document, SecretDocument},
+    crate::pkcs8::traits::EncodePrivateKey,
     crate::spki::EncodePublicKey,
+    der::{Document, SecretDocument},
 };
 
 #[cfg(feature = "rsa_pem")]

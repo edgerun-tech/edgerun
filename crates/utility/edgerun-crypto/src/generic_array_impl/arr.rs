@@ -1,7 +1,6 @@
-
 use super::ArrayLength;
-use core::ops::Add;
 use crate::typenum::U1;
+use core::ops::Add;
 
 pub trait AddLength<T, N: ArrayLength<T>>: ArrayLength<T> {
     type Output: ArrayLength<T>;

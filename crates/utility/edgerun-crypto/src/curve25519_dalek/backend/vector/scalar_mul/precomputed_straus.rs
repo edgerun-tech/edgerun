@@ -15,14 +15,14 @@ pub mod spec_avx2 {
 
     use alloc::vec::Vec;
 
-    use core::borrow::Borrow;
-    use core::cmp::Ordering;
     use crate::curve25519_dalek::backend::vector::avx2::{CachedPoint, ExtendedPoint};
     use crate::curve25519_dalek::edwards::EdwardsPoint;
     use crate::curve25519_dalek::scalar::Scalar;
     use crate::curve25519_dalek::traits::Identity;
     use crate::curve25519_dalek::traits::VartimePrecomputedMultiscalarMul;
     use crate::curve25519_dalek::window::{NafLookupTable5, NafLookupTable8};
+    use core::borrow::Borrow;
+    use core::cmp::Ordering;
 
     pub struct VartimePrecomputedStraus {
         static_lookup_tables: Vec<NafLookupTable8<CachedPoint>>,

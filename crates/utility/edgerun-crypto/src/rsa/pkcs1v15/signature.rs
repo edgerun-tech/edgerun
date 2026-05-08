@@ -1,12 +1,13 @@
 pub use crate::signature::SignatureEncoding;
-use crate::spki::{der::{asn1::BitString, Result as DerResult},
+use crate::spki::{
+    der::{asn1::BitString, Result as DerResult},
     SignatureBitStringEncoding,
 };
 
+use crate::num_bigint::BigUint;
 use crate::rsa::algorithms::pad::uint_to_be_pad;
 use alloc::{boxed::Box, string::ToString};
 use core::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
-use crate::num_bigint::BigUint;
 
 /// `RSASSA-PKCS1-v1_5` signatures as described in [RFC8017 § 8.2].
 ///

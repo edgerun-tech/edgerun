@@ -19,19 +19,14 @@ pub struct Command {
     action: Option<Action>,
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, Default, PartialEq)]
 pub enum Action {
+    #[default]
     Set,
     StoreTrue,
     StoreFalse,
     Append,
     Count,
-}
-
-impl Default for Action {
-    fn default() -> Self {
-        Self::Set
-    }
 }
 
 impl Command {
@@ -106,11 +101,7 @@ impl Command {
             }
 
             if arg.starts_with('-') && arg.len() > 1 {
-                let mut rest = if arg.starts_with("--") {
-                    arg.trim_start_matches('-')
-                } else {
-                    arg.trim_start_matches('-')
-                };
+                let mut rest = arg.trim_start_matches('-');
                 let inline_value = if arg.starts_with("--") {
                     rest.split_once('=').map(|(name, value)| {
                         rest = name;

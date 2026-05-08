@@ -96,15 +96,18 @@ pub mod rfc2256 {
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.30");
     pub const PROTOCOL_INFORMATION: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.48");
-    pub const DMD_NAME: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.54");
+    pub const DMD_NAME: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.54");
     pub const STATE_OR_PROVINCE_NAME: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.8");
     pub const STREET_ADDRESS: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.9");
     pub const APPLICATION_ENTITY: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.12");
-    pub const DSA: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.13");
-    pub const DMD: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.20");
+    pub const DSA: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.13");
+    pub const DMD: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.20");
 }
 pub mod rfc2293 {
     pub const SUBTREE: crate::const_oid::ObjectIdentifier =
@@ -179,7 +182,8 @@ pub mod rfc3280 {
         crate::const_oid::ObjectIdentifier::new_unwrap("1.2.840.113549.1.9.1");
     pub const EMAIL_ADDRESS: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("1.2.840.113549.1.9.1");
-    pub const PSEUDONYM: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.65");
+    pub const PSEUDONYM: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.65");
 }
 pub mod rfc3296 {
     pub const REF: crate::const_oid::ObjectIdentifier =
@@ -194,8 +198,10 @@ pub mod rfc3671 {
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.18.7");
     pub const COLLECTIVE_ATTRIBUTE_SUBENTRY: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.20.2");
-    pub const C_O: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.10.1");
-    pub const C_OU: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.11.1");
+    pub const C_O: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.10.1");
+    pub const C_OU: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.11.1");
     pub const C_POSTAL_ADDRESS: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.16.1");
     pub const C_POSTAL_CODE: crate::const_oid::ObjectIdentifier =
@@ -212,12 +218,16 @@ pub mod rfc3671 {
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.23.1");
     pub const C_INTERNATIONAL_ISDN_NUMBER: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.25.1");
-    pub const C_L: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.7.1");
-    pub const C_ST: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.8.1");
-    pub const C_STREET: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.9.1");
+    pub const C_L: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.7.1");
+    pub const C_ST: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.8.1");
+    pub const C_STREET: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.9.1");
 }
 pub mod rfc3672 {
-    pub const SUBENTRY: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.17.0");
+    pub const SUBENTRY: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.17.0");
     pub const ADMINISTRATIVE_ROLE: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.18.5");
     pub const SUBTREE_SPECIFICATION: crate::const_oid::ObjectIdentifier =
@@ -882,7 +892,8 @@ pub mod rfc4512 {
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.18.3");
     pub const MODIFIERS_NAME: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.18.4");
-    pub const SUBSCHEMA: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.20.1");
+    pub const SUBSCHEMA: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.20.1");
     pub const DIT_STRUCTURE_RULES: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.21.1");
     pub const GOVERNING_STRUCTURE_RULE: crate::const_oid::ObjectIdentifier =
@@ -895,7 +906,8 @@ pub mod rfc4512 {
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.21.5");
     pub const OBJECT_CLASSES: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.21.6");
-    pub const NAME_FORMS: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.21.7");
+    pub const NAME_FORMS: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.21.7");
     pub const MATCHING_RULE_USE: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.21.8");
     pub const STRUCTURAL_OBJECT_CLASS: crate::const_oid::ObjectIdentifier =
@@ -904,8 +916,10 @@ pub mod rfc4512 {
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.0");
     pub const ALIASED_OBJECT_NAME: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.1");
-    pub const TOP: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.0");
-    pub const ALIAS: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.1");
+    pub const TOP: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.0");
+    pub const ALIAS: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.1");
 }
 pub mod rfc4517 {
     pub const CASE_EXACT_IA_5_MATCH: crate::const_oid::ObjectIdentifier =
@@ -986,13 +1000,16 @@ pub mod rfc4519 {
         crate::const_oid::ObjectIdentifier::new_unwrap("1.3.6.1.1.3.1");
     pub const DC_OBJECT: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("1.3.6.1.4.1.1466.344");
-    pub const O: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.10");
+    pub const O: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.10");
     pub const ORGANIZATION_NAME: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.10");
-    pub const OU: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.11");
+    pub const OU: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.11");
     pub const ORGANIZATIONAL_UNIT_NAME: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.11");
-    pub const TITLE: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.12");
+    pub const TITLE: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.12");
     pub const DESCRIPTION: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.13");
     pub const SEARCH_GUIDE: crate::const_oid::ObjectIdentifier =
@@ -1025,20 +1042,30 @@ pub mod rfc4519 {
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.27");
     pub const PREFERRED_DELIVERY_METHOD: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.28");
-    pub const CN: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.3");
-    pub const COMMON_NAME: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.3");
-    pub const MEMBER: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.31");
-    pub const OWNER: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.32");
+    pub const CN: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.3");
+    pub const COMMON_NAME: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.3");
+    pub const MEMBER: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.31");
+    pub const OWNER: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.32");
     pub const ROLE_OCCUPANT: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.33");
-    pub const SEE_ALSO: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.34");
+    pub const SEE_ALSO: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.34");
     pub const USER_PASSWORD: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.35");
-    pub const SN: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.4");
-    pub const SURNAME: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.4");
-    pub const NAME: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.41");
-    pub const GIVEN_NAME: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.42");
-    pub const INITIALS: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.43");
+    pub const SN: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.4");
+    pub const SURNAME: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.4");
+    pub const NAME: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.41");
+    pub const GIVEN_NAME: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.42");
+    pub const INITIALS: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.43");
     pub const GENERATION_QUALIFIER: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.44");
     pub const X_500_UNIQUE_IDENTIFIER: crate::const_oid::ObjectIdentifier =
@@ -1055,28 +1082,36 @@ pub mod rfc4519 {
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.50");
     pub const HOUSE_IDENTIFIER: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.51");
-    pub const C: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.6");
+    pub const C: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.6");
     pub const COUNTRY_NAME: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.6");
-    pub const L: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.7");
+    pub const L: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.7");
     pub const LOCALITY_NAME: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.7");
-    pub const ST: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.8");
-    pub const STREET: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.9");
+    pub const ST: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.8");
+    pub const STREET: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.9");
     pub const RESIDENTIAL_PERSON: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.10");
     pub const APPLICATION_PROCESS: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.11");
-    pub const DEVICE: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.14");
+    pub const DEVICE: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.14");
     pub const GROUP_OF_UNIQUE_NAMES: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.17");
-    pub const COUNTRY: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.2");
-    pub const LOCALITY: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.3");
+    pub const COUNTRY: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.2");
+    pub const LOCALITY: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.3");
     pub const ORGANIZATION: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.4");
     pub const ORGANIZATIONAL_UNIT: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.5");
-    pub const PERSON: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.6");
+    pub const PERSON: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.6");
     pub const ORGANIZATIONAL_PERSON: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.7");
     pub const ORGANIZATIONAL_ROLE: crate::const_oid::ObjectIdentifier =
@@ -1123,9 +1158,12 @@ pub mod rfc4523 {
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.18");
     pub const CRL_DISTRIBUTION_POINT: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.19");
-    pub const PKI_USER: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.21");
-    pub const PKI_CA: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.22");
-    pub const DELTA_CRL: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.23");
+    pub const PKI_USER: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.21");
+    pub const PKI_CA: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.22");
+    pub const DELTA_CRL: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.6.23");
 }
 pub mod rfc4524 {
     pub const MANAGER: crate::const_oid::ObjectIdentifier =
@@ -1308,7 +1346,8 @@ pub mod rfc5280 {
         crate::const_oid::ObjectIdentifier::new_unwrap("2.2.840.10040.2.2");
     pub const ID_HOLDINSTRUCTION_REJECT: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.2.840.10040.2.3");
-    pub const ID_CE: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.29");
+    pub const ID_CE: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.29");
     pub const ID_CE_SUBJECT_KEY_IDENTIFIER: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.29.14");
     pub const ID_CE_KEY_USAGE: crate::const_oid::ObjectIdentifier =
@@ -1359,7 +1398,8 @@ pub mod rfc5280 {
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.29.54");
     pub const ID_CE_SUBJECT_DIRECTORY_ATTRIBUTES: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.29.9");
-    pub const ID_AT: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4");
+    pub const ID_AT: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4");
 }
 pub mod rfc5911 {
     pub const ID_PBKDF_2: crate::const_oid::ObjectIdentifier =
@@ -1684,7 +1724,8 @@ pub mod rfc5912 {
         crate::const_oid::ObjectIdentifier::new_unwrap("1.3.6.1.5.5.7.17.5");
     pub const ID_STC_BUILD_STATUS_CHECKED_AA_PATH: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("1.3.6.1.5.5.7.17.6");
-    pub const ID_STC_STATUS_CHECK_AC_AND_BUILD_STATUS_CHECKED_AA_PATH: crate::const_oid::ObjectIdentifier =
+    pub const ID_STC_STATUS_CHECK_AC_AND_BUILD_STATUS_CHECKED_AA_PATH:
+        crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("1.3.6.1.5.5.7.17.7");
     pub const ID_SWB: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("1.3.6.1.5.5.7.18");
@@ -1896,7 +1937,8 @@ pub mod rfc5912 {
         crate::const_oid::ObjectIdentifier::new_unwrap("2.2.840.10040.2.2");
     pub const ID_HOLDINSTRUCTION_REJECT: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.2.840.10040.2.3");
-    pub const ID_CE: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.29");
+    pub const ID_CE: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.29");
     pub const ID_CE_SUBJECT_KEY_IDENTIFIER: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.29.14");
     pub const ID_CE_KEY_USAGE: crate::const_oid::ObjectIdentifier =
@@ -1949,8 +1991,10 @@ pub mod rfc5912 {
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.29.56");
     pub const ID_CE_SUBJECT_DIRECTORY_ATTRIBUTES: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("2.5.29.9");
-    pub const ID_AT: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4");
-    pub const ID_AT_ROLE: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.72");
+    pub const ID_AT: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4");
+    pub const ID_AT_ROLE: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("2.5.4.72");
 }
 pub mod rfc6109 {
     pub const LDIF_LOCATION_URL_OBJECT: crate::const_oid::ObjectIdentifier =
@@ -2253,7 +2297,8 @@ pub mod rfc7612 {
 pub mod rfc8284 {
     pub const JID_OBJECT: crate::const_oid::ObjectIdentifier =
         crate::const_oid::ObjectIdentifier::new_unwrap("1.3.6.1.1.23.1");
-    pub const JID: crate::const_oid::ObjectIdentifier = crate::const_oid::ObjectIdentifier::new_unwrap("1.3.6.1.1.23.2");
+    pub const JID: crate::const_oid::ObjectIdentifier =
+        crate::const_oid::ObjectIdentifier::new_unwrap("1.3.6.1.1.23.2");
 }
 pub mod rfc8410 {
     pub const ID_EDWARDS_CURVE_ALGS: crate::const_oid::ObjectIdentifier =

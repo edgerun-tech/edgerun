@@ -3,17 +3,19 @@
 //! Note: PKCS#1 support is achieved through a blanket impl of the
 //! `pkcs1` crate's traits for types which impl the `pkcs8` crate's traits.
 
+use crate::pkcs1;
+use crate::pkcs8::{der::Encode, Document, EncodePrivateKey, EncodePublicKey, SecretDocument};
 use crate::rsa::{
     traits::{PrivateKeyParts, PublicKeyParts},
     BigUint, RsaPrivateKey, RsaPublicKey,
 };
-use crate::pkcs1;
-use core::convert::{TryFrom, TryInto};
-use crate::pkcs8::{der::Encode, Document, EncodePrivateKey, EncodePublicKey, SecretDocument};
 use crate::zeroize::Zeroizing;
+use core::convert::{TryFrom, TryInto};
 
 /// Verify that the `AlgorithmIdentifier` for a key is correct.
-fn verify_algorithm_id(algorithm: &crate::pkcs8::AlgorithmIdentifierRef) -> crate::pkcs8::spki::Result<()> {
+fn verify_algorithm_id(
+    algorithm: &crate::pkcs8::AlgorithmIdentifierRef,
+) -> crate::pkcs8::spki::Result<()> {
     algorithm.assert_algorithm_oid(pkcs1::ALGORITHM_OID)?;
 
     if algorithm.parameters_any()? != crate::pkcs8::der::asn1::Null.into() {
@@ -42,14 +44,17 @@ impl TryFrom<crate::pkcs8::PrivateKeyInfo<'_>> for RsaPrivateKey {
         let prime1 = BigUint::from_bytes_be(pkcs1_key.prime1.as_bytes());
         let prime2 = BigUint::from_bytes_be(pkcs1_key.prime2.as_bytes());
         let primes = alloc::vec![prime1, prime2];
-        RsaPrivateKey::from_components(n, e, d, primes).map_err(|_| crate::pkcs8::Error::KeyMalformed)
+        RsaPrivateKey::from_components(n, e, d, primes)
+            .map_err(|_| crate::pkcs8::Error::KeyMalformed)
     }
 }
 
 impl TryFrom<crate::pkcs8::SubjectPublicKeyInfoRef<'_>> for RsaPublicKey {
     type Error = crate::pkcs8::spki::Error;
 
-    fn try_from(spki: crate::pkcs8::SubjectPublicKeyInfoRef<'_>) -> crate::pkcs8::spki::Result<Self> {
+    fn try_from(
+        spki: crate::pkcs8::SubjectPublicKeyInfoRef<'_>,
+    ) -> crate::pkcs8::spki::Result<Self> {
         verify_algorithm_id(&spki.algorithm)?;
 
         let pkcs1_key = pkcs1::RsaPublicKey::try_from(

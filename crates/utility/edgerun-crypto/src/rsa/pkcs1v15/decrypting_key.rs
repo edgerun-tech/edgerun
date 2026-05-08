@@ -5,8 +5,8 @@ use crate::rsa::{
     traits::{Decryptor, EncryptingKeypair, RandomizedDecryptor},
     Result, RsaPrivateKey,
 };
-use alloc::vec::Vec;
 use crate::zeroize::ZeroizeOnDrop;
+use alloc::vec::Vec;
 
 /// Decryption key for PKCS#1 v1.5 decryption as described in [RFC8017 § 7.2].
 ///

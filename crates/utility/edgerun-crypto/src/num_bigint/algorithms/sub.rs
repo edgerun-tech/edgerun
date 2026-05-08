@@ -1,8 +1,8 @@
 use core::cmp;
 use core::cmp::Ordering::*;
 
-use crate::num_bigint::Zero;
 use crate::num_bigint::SmallVec;
+use crate::num_bigint::Zero;
 
 use crate::num_bigint::algorithms::cmp_slice;
 use crate::num_bigint::big_digit::{BigDigit, SignedDoubleBigDigit, BITS};

@@ -1,8 +1,8 @@
 //! Special handling for converting the BigUint to u8 vectors
 
-use alloc::vec::Vec;
 use crate::num_bigint::BigUint;
 use crate::zeroize::Zeroizing;
+use alloc::vec::Vec;
 
 use crate::rsa::errors::{Error, Result};
 

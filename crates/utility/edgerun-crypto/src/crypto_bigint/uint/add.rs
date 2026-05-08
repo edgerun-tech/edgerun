@@ -1,8 +1,8 @@
 //! [`Uint`] addition operations.
 
 use crate::crypto_bigint::{Checked, CheckedAdd, CtChoice, Limb, Uint, Wrapping, Zero};
-use core::ops::{Add, AddAssign};
 use crate::subtle::CtOption;
+use core::ops::{Add, AddAssign};
 
 impl<const LIMBS: usize> Uint<LIMBS> {
     /// Computes `a + b + carry`, returning the result along with the new carry.

@@ -11,7 +11,7 @@ use {
 };
 
 #[cfg(feature = "rsa_pem")]
-use {crate::pkcs8::LineEnding, alloc::string::String, crate::zeroize::Zeroizing};
+use {crate::pkcs8::LineEnding, crate::zeroize::Zeroizing, alloc::string::String};
 
 #[cfg(feature = "rsa_pem")]
 use crate::der::pem::PemLabel;

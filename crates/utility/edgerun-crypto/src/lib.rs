@@ -130,23 +130,23 @@ pub mod aead;
 pub mod aes;
 #[cfg(feature = "p256")]
 pub(crate) mod base16ct;
-#[cfg(feature = "p256")]
-pub mod crypto_bigint;
 #[cfg(any(feature = "digest", feature = "p256", feature = "rsa"))]
 pub mod const_oid;
 #[cfg(any(feature = "sha2_impl", feature = "curve25519"))]
 pub(crate) mod cpu_features;
+#[cfg(feature = "p256")]
+pub mod crypto_bigint;
 #[cfg(any(feature = "ed25519", feature = "x25519"))]
 pub mod curve25519_dalek;
+#[cfg(any(feature = "p256", feature = "rsa"))]
+pub mod der;
 #[cfg(feature = "des")]
 pub mod des;
 #[cfg(feature = "digest")]
 pub mod digest;
+pub mod error;
 #[cfg(any(feature = "digest", feature = "p256"))]
 mod generic_array_impl;
-#[cfg(any(feature = "p256", feature = "rsa"))]
-pub mod der;
-pub mod error;
 #[cfg(feature = "rsa")]
 pub mod num_bigint;
 #[cfg(any(feature = "p256", feature = "rsa"))]

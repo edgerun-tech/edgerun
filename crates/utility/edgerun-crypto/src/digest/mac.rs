@@ -1,10 +1,10 @@
-use crate::digest::{FixedOutput, FixedOutputReset, Update};
 use crate::digest::crypto_common::{InvalidLength, Key, KeyInit, Output, OutputSizeUser, Reset};
+use crate::digest::{FixedOutput, FixedOutputReset, Update};
 
+use crate::digest::crypto_common::typenum::Unsigned;
 #[cfg(feature = "rand_core")]
 use crate::rand_core::{CryptoRng, RngCore};
 use core::fmt;
-use crate::digest::crypto_common::typenum::Unsigned;
 use subtle::{Choice, ConstantTimeEq};
 
 /// Marker trait for Message Authentication algorithms.

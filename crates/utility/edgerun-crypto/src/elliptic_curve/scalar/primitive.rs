@@ -1,5 +1,6 @@
 //! Generic scalar type with primitive functionality.
 
+use crate::base16ct::{self, HexDisplay};
 use crate::elliptic_curve::rand_core::CryptoRngCore;
 use crate::elliptic_curve::{
     bigint::{prelude::*, Limb, NonZero},
@@ -7,7 +8,11 @@ use crate::elliptic_curve::{
     scalar::IsHigh,
     Curve, Error, FieldBytes, FieldBytesEncoding, Result,
 };
-use crate::base16ct::{self, HexDisplay};
+use crate::subtle::{
+    Choice, ConditionallySelectable, ConstantTimeEq, ConstantTimeGreater, ConstantTimeLess,
+    CtOption,
+};
+use crate::zeroize::DefaultIsZeroes;
 use core::{
     cmp::Ordering,
     fmt,
@@ -15,11 +20,6 @@ use core::{
     str,
 };
 use generic_array::{typenum::Unsigned, GenericArray};
-use crate::subtle::{
-    Choice, ConditionallySelectable, ConstantTimeEq, ConstantTimeGreater, ConstantTimeLess,
-    CtOption,
-};
-use crate::zeroize::DefaultIsZeroes;
 
 #[cfg(feature = "elliptic_curve_arithmetic")]
 use super::{CurveArithmetic, Scalar};

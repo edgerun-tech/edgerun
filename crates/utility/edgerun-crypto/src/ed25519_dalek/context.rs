@@ -78,11 +78,11 @@ impl<'k, 'v, K> Context<'k, 'v, K> {
 mod test {
     #![allow(clippy::unwrap_used)]
 
+    use crate::curve25519_dalek::digest::Digest;
     use crate::ed25519::signature::{DigestSigner, DigestVerifier};
     use crate::ed25519_dalek::{Signature, SigningKey, VerifyingKey};
-    use crate::curve25519_dalek::digest::Digest;
-    use rand::rngs::OsRng;
     use crate::sha2::Sha512;
+    use rand::rngs::OsRng;
 
     #[test]
     fn context_correctness() {

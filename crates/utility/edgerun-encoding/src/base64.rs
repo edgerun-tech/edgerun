@@ -100,7 +100,7 @@ pub const fn base64url_nopad_encoded_len(input_len: usize) -> usize {
 
 /// Upper bound for decoded Base64-URL bytes.
 pub const fn base64url_decoded_bound(input_len: usize) -> usize {
-    ((input_len + 3) / 4) * 3
+    input_len.div_ceil(4) * 3
 }
 
 /// Encode bytes to unpadded Base64-URL into a caller-provided buffer.

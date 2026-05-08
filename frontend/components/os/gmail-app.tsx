@@ -2,14 +2,11 @@
 
 import { useState, useEffect, useCallback } from "react"
 import {
-  Mail,
   RefreshCw,
   LogOut,
-  Send,
   Inbox,
   AlertCircle,
   Circle,
-  User,
   Clock,
   ShieldCheck,
   ExternalLink,
@@ -195,13 +192,15 @@ export function GmailApp({ className }: GmailAppProps) {
     if (connected !== false || !savedSecret) return
     let cancelled = false
     async function restore() {
+      if (!savedSecret) return
       setLoading(true)
       setError(null)
       try {
-        const ok = await restoreGmailSession(savedSecret)
+        const secret = savedSecret
+        const ok = await restoreGmailSession(secret)
         if (cancelled) return
         if (ok) {
-          setEmail(savedSecret.email)
+          setEmail(secret.email)
           setConnected(true)
           await fetchEmails()
         }

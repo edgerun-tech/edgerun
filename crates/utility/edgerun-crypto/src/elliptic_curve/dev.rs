@@ -5,6 +5,7 @@
 
 use crate::elliptic_curve::{
     crate::elliptic_curve::rand_core::RngCore,
+    crate::subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption},
     bigint::{Limb, U256},
     error::{Error, Result},
     generic_array::typenum::U32,
@@ -13,17 +14,16 @@ use crate::elliptic_curve::{
     point::AffineCoordinates,
     scalar::{FromUintUnchecked, IsHigh},
     sec1::{CompressedPoint, FromEncodedPoint, ToEncodedPoint},
-    crate::subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption},
     zeroize::DefaultIsZeroes,
     Curve, CurveArithmetic, FieldBytesEncoding, PrimeCurve,
 };
 use crate::ff::{Field, PrimeField};
+use crate::hex;
+use crate::pkcs8::AssociatedOid;
 use core::{
     iter::{Product, Sum},
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
-use crate::hex;
-use crate::pkcs8::AssociatedOid;
 
 #[cfg(feature = "elliptic_curve_bits")]
 use crate::ff::PrimeFieldBits;
@@ -84,7 +84,8 @@ impl CurveArithmetic for MockCurve {
 
 impl AssociatedOid for MockCurve {
     /// OID for NIST P-256
-    const OID: crate::pkcs8::ObjectIdentifier = crate::pkcs8::ObjectIdentifier::new_unwrap("1.2.840.10045.3.1.7");
+    const OID: crate::pkcs8::ObjectIdentifier =
+        crate::pkcs8::ObjectIdentifier::new_unwrap("1.2.840.10045.3.1.7");
 }
 
 #[cfg(feature = "elliptic_curve_jwk")]

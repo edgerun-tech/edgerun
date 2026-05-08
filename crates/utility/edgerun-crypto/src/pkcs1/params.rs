@@ -1,12 +1,12 @@
 //! PKCS#1 RSA parameters.
 
-use crate::pkcs1::{Error, Result};
 use crate::der::{
     asn1::{AnyRef, ContextSpecificRef, ObjectIdentifier},
     oid::AssociatedOid,
     Decode, DecodeValue, Encode, EncodeValue, FixedTag, Length, Reader, Sequence, Tag, TagMode,
     TagNumber, Writer,
 };
+use crate::pkcs1::{Error, Result};
 use crate::spki::{AlgorithmIdentifier, AlgorithmIdentifierRef};
 
 const OID_SHA_1: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.3.14.3.2.26");
@@ -37,7 +37,10 @@ impl Default for TrailerField {
 }
 
 impl<'a> DecodeValue<'a> for TrailerField {
-    fn decode_value<R: Reader<'a>>(decoder: &mut R, header: crate::der::Header) -> crate::der::Result<Self> {
+    fn decode_value<R: Reader<'a>>(
+        decoder: &mut R,
+        header: crate::der::Header,
+    ) -> crate::der::Result<Self> {
         match u8::decode_value(decoder, header)? {
             1 => Ok(TrailerField::BC),
             _ => Err(Self::TAG.value_error()),
@@ -178,7 +181,10 @@ impl<'a> Default for RsaPssParams<'a> {
 }
 
 impl<'a> DecodeValue<'a> for RsaPssParams<'a> {
-    fn decode_value<R: Reader<'a>>(reader: &mut R, header: crate::der::Header) -> crate::der::Result<Self> {
+    fn decode_value<R: Reader<'a>>(
+        reader: &mut R,
+        header: crate::der::Header,
+    ) -> crate::der::Result<Self> {
         reader.read_nested(header.length, |reader| {
             Ok(Self {
                 hash: reader
@@ -342,7 +348,10 @@ impl<'a> Default for RsaOaepParams<'a> {
 }
 
 impl<'a> DecodeValue<'a> for RsaOaepParams<'a> {
-    fn decode_value<R: Reader<'a>>(reader: &mut R, header: crate::der::Header) -> crate::der::Result<Self> {
+    fn decode_value<R: Reader<'a>>(
+        reader: &mut R,
+        header: crate::der::Header,
+    ) -> crate::der::Result<Self> {
         reader.read_nested(header.length, |reader| {
             Ok(Self {
                 hash: reader

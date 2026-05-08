@@ -1,7 +1,7 @@
 use crate::num_bigint::algorithms::mac3;
 use crate::num_bigint::big_digit::{BigDigit, DoubleBigDigit, BITS};
-use crate::smallvec;
 use crate::num_bigint::BigUint;
+use crate::smallvec;
 
 #[inline]
 pub fn mul_with_carry(a: BigDigit, b: BigDigit, acc: &mut DoubleBigDigit) -> BigDigit {

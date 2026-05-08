@@ -22,12 +22,12 @@ pub use self::{
 use alloc::{boxed::Box, vec::Vec};
 use core::fmt::{self, Debug};
 
-use crate::rand_core::CryptoRngCore;
 use crate::const_oid::{AssociatedOid, ObjectIdentifier};
 use crate::digest::{Digest, DynDigest, FixedOutputReset};
 use crate::num_bigint::BigUint;
 use crate::pkcs1::RsaPssParams;
 use crate::pkcs8::spki::{der::Any, AlgorithmIdentifierOwned};
+use crate::rand_core::CryptoRngCore;
 
 use crate::rsa::algorithms::pad::{uint_to_be_pad, uint_to_zeroizing_be_pad};
 use crate::rsa::algorithms::pss::*;
@@ -236,7 +236,9 @@ where
     get_pss_signature_algo_id::<D>(salt_len)
 }
 
-fn get_pss_signature_algo_id<D>(salt_len: u8) -> crate::pkcs8::spki::Result<AlgorithmIdentifierOwned>
+fn get_pss_signature_algo_id<D>(
+    salt_len: u8,
+) -> crate::pkcs8::spki::Result<AlgorithmIdentifierOwned>
 where
     D: Digest + AssociatedOid,
 {
@@ -255,14 +257,14 @@ mod test {
     use crate::rsa::pss::{BlindedSigningKey, Pss, Signature, SigningKey, VerifyingKey};
     use crate::rsa::{RsaPrivateKey, RsaPublicKey};
 
+    use crate::hex;
+    use crate::num_bigint::BigUint;
+    use crate::num_bigint::{FromPrimitive, Num};
     use crate::signature::hazmat::{PrehashVerifier, RandomizedPrehashSigner};
     use crate::signature::{
         DigestVerifier, Keypair, RandomizedDigestSigner, RandomizedSigner, Verifier,
     };
     use crate::test_rng::ChaCha8Rng;
-    use crate::hex;
-    use crate::num_bigint::BigUint;
-    use crate::num_bigint::{FromPrimitive, Num};
     use sha1::{Digest, Sha1};
 
     fn get_private_key() -> RsaPrivateKey {

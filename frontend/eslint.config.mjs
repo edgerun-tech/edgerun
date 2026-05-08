@@ -8,6 +8,8 @@ export default [
   {
     ignores: [
       ".next/**",
+      ".open-next/**",
+      ".wrangler/**",
       "out/**",
       "coverage/**",
       "node_modules/**",

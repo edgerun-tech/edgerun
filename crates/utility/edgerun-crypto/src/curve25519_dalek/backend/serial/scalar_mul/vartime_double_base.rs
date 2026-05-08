@@ -12,7 +12,9 @@
 
 use core::cmp::Ordering;
 
-use crate::curve25519_dalek::backend::serial::curve_models::{ProjectiveNielsPoint, ProjectivePoint};
+use crate::curve25519_dalek::backend::serial::curve_models::{
+    ProjectiveNielsPoint, ProjectivePoint,
+};
 use crate::curve25519_dalek::constants;
 use crate::curve25519_dalek::edwards::EdwardsPoint;
 use crate::curve25519_dalek::scalar::Scalar;

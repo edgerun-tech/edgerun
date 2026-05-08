@@ -21,13 +21,13 @@ mod error;
 mod spki;
 mod traits;
 
+pub use crate::der::{self, asn1::ObjectIdentifier};
 pub use crate::spki::{
     algorithm::{AlgorithmIdentifier, AlgorithmIdentifierRef, AlgorithmIdentifierWithOid},
     error::{Error, Result},
     spki::{SubjectPublicKeyInfo, SubjectPublicKeyInfoRef},
     traits::{AssociatedAlgorithmIdentifier, DecodePublicKey, SignatureAlgorithmIdentifier},
 };
-pub use crate::der::{self, asn1::ObjectIdentifier};
 
 pub use {
     crate::spki::{
@@ -37,5 +37,6 @@ pub use {
             DynAssociatedAlgorithmIdentifier, DynSignatureAlgorithmIdentifier, EncodePublicKey,
             SignatureBitStringEncoding,
         },
-    }, der::Document,
+    },
+    der::Document,
 };

@@ -1,7 +1,7 @@
 //! Error types
 
-use core::fmt;
 use crate::der::asn1::ObjectIdentifier;
+use core::fmt;
 
 /// Result type with `spki` crate's [`Error`] type.
 pub type Result<T> = core::result::Result<T, Error>;

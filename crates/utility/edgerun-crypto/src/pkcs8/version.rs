@@ -1,7 +1,7 @@
 //! PKCS#8 version identifier.
 
-use crate::pkcs8::Error;
 use crate::der::{Decode, Encode, FixedTag, Reader, Tag, Writer};
+use crate::pkcs8::Error;
 
 /// Version identifier for PKCS#8 documents.
 ///

@@ -34,7 +34,8 @@ pub const ALGORITHM_OID: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.84
 
 /// `AlgorithmIdentifier` for RSA.
 #[cfg(feature = "rsa")]
-pub const ALGORITHM_ID: crate::pkcs8::AlgorithmIdentifierRef<'static> = crate::pkcs8::AlgorithmIdentifierRef {
-    oid: ALGORITHM_OID,
-    parameters: Some(crate::der::asn1::AnyRef::NULL),
-};
+pub const ALGORITHM_ID: crate::pkcs8::AlgorithmIdentifierRef<'static> =
+    crate::pkcs8::AlgorithmIdentifierRef {
+        oid: ALGORITHM_OID,
+        parameters: Some(crate::der::asn1::AnyRef::NULL),
+    };

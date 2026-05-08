@@ -1,4 +1,3 @@
-
 pub use crate::typenum::marker_traits::Integer;
 use crate::typenum::{
     bit::{Bit, B0, B1},

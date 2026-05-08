@@ -32,8 +32,8 @@ use alloc::boxed::Box;
 pub mod dev;
 
 pub mod block_buffer;
-pub mod crypto_common;
 pub mod core_api;
+pub mod crypto_common;
 mod digest;
 #[cfg(feature = "mac")]
 mod mac;
@@ -41,7 +41,9 @@ mod mac;
 pub use crate::const_oid;
 
 pub use self::digest::{Digest, DynDigest, HashMarker};
-pub use crate::digest::crypto_common::{generic_array, typenum, typenum::consts, Output, OutputSizeUser, Reset};
+pub use crate::digest::crypto_common::{
+    generic_array, typenum, typenum::consts, Output, OutputSizeUser, Reset,
+};
 #[cfg(feature = "mac")]
 pub use crate::digest::crypto_common::{InnerInit, InvalidLength, Key, KeyInit};
 #[cfg(feature = "mac")]

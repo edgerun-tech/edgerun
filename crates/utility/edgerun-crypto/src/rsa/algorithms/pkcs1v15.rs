@@ -6,12 +6,12 @@
 //!
 //! [RFC8017 § 8.2]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.2
 
-use crate::rand_core::CryptoRngCore;
-use alloc::vec::Vec;
 use crate::digest::Digest;
 use crate::pkcs8::AssociatedOid;
+use crate::rand_core::CryptoRngCore;
 use crate::subtle::{Choice, ConditionallySelectable, ConstantTimeEq};
 use crate::zeroize::Zeroizing;
+use alloc::vec::Vec;
 
 use crate::rsa::errors::{Error, Result};
 

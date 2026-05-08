@@ -9,9 +9,9 @@
 //! [Probabilistic Signature Scheme]: https://en.wikipedia.org/wiki/Probabilistic_signature_scheme
 //! [RFC8017 § 8.1]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.1
 
-use alloc::vec::Vec;
 use crate::digest::{Digest, DynDigest, FixedOutputReset};
 use crate::subtle::{Choice, ConstantTimeEq};
+use alloc::vec::Vec;
 
 use super::mgf::{mgf1_xor, mgf1_xor_digest};
 use crate::rsa::errors::{Error, Result};

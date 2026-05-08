@@ -1,11 +1,11 @@
 //! PKCS#8 `EncryptedPrivateKeyInfo`
 
-use crate::pkcs8::{Error, Result};
-use core::fmt;
 use crate::der::{
     asn1::OctetStringRef, Decode, DecodeValue, Encode, EncodeValue, Header, Length, Reader,
     Sequence, Writer,
 };
+use crate::pkcs8::{Error, Result};
+use core::fmt;
 use pkcs5::EncryptionScheme;
 
 use crate::der::SecretDocument;

@@ -1,12 +1,12 @@
 //! X.509 `SubjectPublicKeyInfo`
 
-use crate::spki::{AlgorithmIdentifier, Error, Result};
-use core::cmp::Ordering;
 use crate::der::{
     asn1::{AnyRef, BitStringRef},
     Choice, Decode, DecodeValue, DerOrd, Encode, EncodeValue, FixedTag, Header, Length, Reader,
     Sequence, ValueOrd, Writer,
 };
+use crate::spki::{AlgorithmIdentifier, Error, Result};
+use core::cmp::Ordering;
 
 use crate::der::{
     asn1::{Any, BitString},
@@ -62,7 +62,6 @@ where
         use base64ct::{Base64, Encoding};
         Ok(Base64::encode_string(&self.fingerprint_bytes()?))
     }
-
 }
 
 impl<'a: 'k, 'k, Params, Key: 'k> DecodeValue<'a> for SubjectPublicKeyInfo<Params, Key>
@@ -161,8 +160,8 @@ impl<Params, Key> PemLabel for SubjectPublicKeyInfo<Params, Key> {
 
 mod allocating {
     use super::*;
-    use crate::spki::EncodePublicKey;
     use crate::der::referenced::*;
+    use crate::spki::EncodePublicKey;
 
     impl<'a> RefToOwned<'a> for SubjectPublicKeyInfoRef<'a> {
         type Owned = SubjectPublicKeyInfoOwned;

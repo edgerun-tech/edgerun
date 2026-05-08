@@ -5,7 +5,9 @@
 //! higher-level traits.
 use crate::digest::InvalidOutputSize;
 
-pub use crate::digest::crypto_common::{AlgorithmName, Block, BlockSizeUser, OutputSizeUser, Reset};
+pub use crate::digest::crypto_common::{
+    AlgorithmName, Block, BlockSizeUser, OutputSizeUser, Reset,
+};
 
 use crate::digest::block_buffer::{BlockBuffer, BufferKind};
 use crate::digest::crypto_common::{

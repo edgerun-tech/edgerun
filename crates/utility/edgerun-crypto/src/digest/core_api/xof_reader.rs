@@ -1,8 +1,8 @@
 use super::{AlgorithmName, XofReaderCore};
-use crate::digest::XofReader;
 use crate::digest::block_buffer::EagerBuffer;
-use core::fmt;
 use crate::digest::crypto_common::typenum::{IsLess, Le, NonZero, U256};
+use crate::digest::XofReader;
+use core::fmt;
 
 /// Wrapper around [`XofReaderCore`] implementations.
 ///

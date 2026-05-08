@@ -1,12 +1,12 @@
 //! Wrapper type for non-zero integers.
 
 use crate::crypto_bigint::{CtChoice, Encoding, Integer, Limb, Uint, Zero};
+use crate::subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 use core::{
     fmt,
     num::{NonZeroU128, NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU8},
     ops::Deref,
 };
-use crate::subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 
 #[cfg(feature = "p256_arithmetic")]
 use crate::crypto_bigint::{ArrayEncoding, ByteArray};

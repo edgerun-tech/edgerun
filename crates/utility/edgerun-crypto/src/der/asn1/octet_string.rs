@@ -217,7 +217,9 @@ mod allocating {
 #[cfg(feature = "bytes")]
 mod bytes {
     use super::OctetString;
-    use crate::der::{DecodeValue, EncodeValue, FixedTag, Header, Length, Reader, Result, Tag, Writer};
+    use crate::der::{
+        DecodeValue, EncodeValue, FixedTag, Header, Length, Reader, Result, Tag, Writer,
+    };
     use bytes::Bytes;
 
     impl<'a> DecodeValue<'a> for Bytes {

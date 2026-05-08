@@ -29,8 +29,12 @@ impl fmt::Display for Error {
             Error::Label => f.write_str("PEM type label invalid"),
             Error::Length => f.write_str("PEM length invalid"),
             Error::Preamble => f.write_str("PEM preamble contains invalid data"),
-            Error::PreEncapsulationBoundary => f.write_str("PEM pre-encapsulation boundary invalid"),
-            Error::PostEncapsulationBoundary => f.write_str("PEM post-encapsulation boundary invalid"),
+            Error::PreEncapsulationBoundary => {
+                f.write_str("PEM pre-encapsulation boundary invalid")
+            }
+            Error::PostEncapsulationBoundary => {
+                f.write_str("PEM post-encapsulation boundary invalid")
+            }
             Error::UnexpectedTypeLabel { expected } => {
                 write!(f, "unexpected PEM type label; expected {expected}")
             }
@@ -83,8 +87,8 @@ pub fn decode_label(pem: &[u8]) -> Result<&str> {
 pub fn decode<'i, 'o>(pem: &'i [u8], out: &'o mut [u8]) -> Result<(&'i str, &'o [u8])> {
     let (label, body) = parse_pem(pem)?;
     let compact = compact_base64(body)?;
-    let decoded = edgerun_encoding::base64::standard_decode(&compact)
-        .map_err(|_| Error::EncapsulatedText)?;
+    let decoded =
+        edgerun_encoding::base64::standard_decode(&compact).map_err(|_| Error::EncapsulatedText)?;
 
     if decoded.len() > out.len() {
         return Err(Error::Length);
@@ -97,8 +101,8 @@ pub fn decode<'i, 'o>(pem: &'i [u8], out: &'o mut [u8]) -> Result<(&'i str, &'o 
 pub fn decode_vec(pem: &[u8]) -> Result<(&str, Vec<u8>)> {
     let (label, body) = parse_pem(pem)?;
     let compact = compact_base64(body)?;
-    let decoded = edgerun_encoding::base64::standard_decode(&compact)
-        .map_err(|_| Error::EncapsulatedText)?;
+    let decoded =
+        edgerun_encoding::base64::standard_decode(&compact).map_err(|_| Error::EncapsulatedText)?;
     Ok((label, decoded))
 }
 
@@ -129,7 +133,8 @@ pub fn encapsulated_len_wrapped(
         (base64_len + line_width - 1) / line_width
     };
 
-    b"-----BEGIN ".len()
+    b"-----BEGIN "
+        .len()
         .checked_add(label.len())
         .and_then(|len| len.checked_add(b"-----".len()))
         .and_then(|len| len.checked_add(eol))
@@ -254,7 +259,9 @@ fn parse_pem(pem: &[u8]) -> Result<(&str, &[u8])> {
     }
 
     let pem = core::str::from_utf8(pem).map_err(|_| Error::CharacterEncoding)?;
-    let begin_pos = pem.find("-----BEGIN ").ok_or(Error::PreEncapsulationBoundary)?;
+    let begin_pos = pem
+        .find("-----BEGIN ")
+        .ok_or(Error::PreEncapsulationBoundary)?;
     let after_begin = begin_pos + "-----BEGIN ".len();
     let begin_end = pem[after_begin..]
         .find("-----")

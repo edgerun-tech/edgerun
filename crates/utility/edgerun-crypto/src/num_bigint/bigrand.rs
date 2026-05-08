@@ -1,8 +1,8 @@
 // Randomization of big integers
 
-use rand::Rng;
 use rand::distributions::uniform::{SampleBorrow, SampleUniform, UniformSampler};
 use rand::prelude::*;
+use rand::Rng;
 
 use crate::num_bigint::BigInt;
 use crate::num_bigint::BigUint;
@@ -11,11 +11,11 @@ use crate::num_bigint::Sign::*;
 use crate::num_bigint::big_digit::BigDigit;
 use crate::num_bigint::bigint::{into_magnitude, magnitude};
 use crate::num_bigint::integer::Integer;
-#[cfg(feature = "prime")]
-use num_iter::range_step;
 use crate::num_bigint::Zero;
 #[cfg(feature = "prime")]
 use crate::num_bigint::{FromPrimitive, ToPrimitive};
+#[cfg(feature = "prime")]
+use num_iter::range_step;
 
 #[cfg(feature = "prime")]
 use crate::num_bigint::prime::probably_prime;

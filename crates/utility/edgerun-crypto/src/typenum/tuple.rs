@@ -1,4 +1,3 @@
-
 use crate::typenum::{Len, U0};
 
 impl Len for () {

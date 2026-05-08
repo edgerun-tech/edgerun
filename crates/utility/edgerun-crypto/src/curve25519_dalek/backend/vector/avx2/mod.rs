@@ -9,7 +9,6 @@
 // - isis agora lovecruft <isis@patternsinthevoid.net>
 // - Henry de Valence <hdevalence@hdevalence.ca>
 
-
 pub(crate) mod field;
 
 pub(crate) mod edwards;

@@ -252,20 +252,19 @@ impl CrbTpmTransport {
         }
 
         let mut header = [0u8; HEADER_SIZE];
-        let response_size = 'wait_response: loop {
-            for _ in 0..self.timeout_polls {
-                unsafe { read_mmio_bytes(self.response_buffer, &mut header) };
+        let mut response_size = None;
+        for _ in 0..self.timeout_polls {
+            unsafe { read_mmio_bytes(self.response_buffer, &mut header) };
 
-                let size = read_u32_be(&header, 2) as usize;
-                if (HEADER_SIZE..=self.response_buffer_size).contains(&size) {
-                    break 'wait_response size;
-                }
-
-                core::hint::spin_loop();
+            let size = read_u32_be(&header, 2) as usize;
+            if (HEADER_SIZE..=self.response_buffer_size).contains(&size) {
+                response_size = Some(size);
+                break;
             }
 
-            return Err(TpmError::TpmResponseCode(TPM_CRB_TIMEOUT_CODE));
-        };
+            core::hint::spin_loop();
+        }
+        let response_size = response_size.ok_or(TpmError::TpmResponseCode(TPM_CRB_TIMEOUT_CODE))?;
 
         let mut response = vec![0u8; response_size];
         response[..HEADER_SIZE].copy_from_slice(&header);
@@ -284,20 +283,19 @@ impl CrbTpmTransport {
         }
 
         let mut header = [0u8; HEADER_SIZE];
-        let response_size = 'wait_response: loop {
-            for _ in 0..self.timeout_polls {
-                unsafe { read_mmio_bytes(self.response_buffer, &mut header) };
+        let mut response_size = None;
+        for _ in 0..self.timeout_polls {
+            unsafe { read_mmio_bytes(self.response_buffer, &mut header) };
 
-                let size = read_u32_be(&header, 2) as usize;
-                if (HEADER_SIZE..=self.response_buffer_size).contains(&size) {
-                    break 'wait_response size;
-                }
-
-                core::hint::spin_loop();
+            let size = read_u32_be(&header, 2) as usize;
+            if (HEADER_SIZE..=self.response_buffer_size).contains(&size) {
+                response_size = Some(size);
+                break;
             }
 
-            return Err(TpmError::TpmResponseCode(TPM_CRB_TIMEOUT_CODE));
-        };
+            core::hint::spin_loop();
+        }
+        let response_size = response_size.ok_or(TpmError::TpmResponseCode(TPM_CRB_TIMEOUT_CODE))?;
 
         if response_size > response.len() {
             return Err(TpmError::TpmResponseCode(TPM_CRB_TIMEOUT_CODE));

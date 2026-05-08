@@ -1,4 +1,3 @@
-
 use crate::typenum::sealed::Sealed;
 
 pub trait NonZero: Sealed {}

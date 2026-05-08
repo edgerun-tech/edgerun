@@ -1,8 +1,8 @@
 //! `expand_message_xof` for the `ExpandMsg` trait
 
 use super::{Domain, ExpandMsg, Expander};
-use crate::elliptic_curve::{Error, Result};
 use crate::digest::{ExtendableOutput, Update, XofReader};
+use crate::elliptic_curve::{Error, Result};
 use generic_array::typenum::U32;
 
 /// Placeholder type for implementing `expand_message_xof` based on an extendable output function
@@ -63,12 +63,12 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::hex;
     use core::mem;
     use generic_array::{
         typenum::{U128, U32},
         ArrayLength, GenericArray,
     };
-    use crate::hex;
     use sha3::Shake128;
 
     fn assert_message(msg: &[u8], domain: &Domain<'_, U32>, len_in_bytes: u16, bytes: &[u8]) {

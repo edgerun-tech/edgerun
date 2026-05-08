@@ -1,5 +1,3 @@
-use crate::sha2::{consts, sha256::compress256, sha512::compress512};
-use core::{fmt, slice::from_ref};
 use crate::digest::{
     block_buffer::Eager,
     core_api::{
@@ -9,6 +7,8 @@ use crate::digest::{
     typenum::{Unsigned, U128, U32, U64},
     HashMarker, InvalidOutputSize, Output,
 };
+use crate::sha2::{consts, sha256::compress256, sha512::compress512};
+use core::{fmt, slice::from_ref};
 
 /// Core block-level SHA-256 hasher with variable output size.
 ///

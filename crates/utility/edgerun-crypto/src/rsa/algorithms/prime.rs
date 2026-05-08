@@ -1,7 +1,7 @@
 //! Probabilistic primality checks used by RSA key generation.
 
-use crate::num_bigint::{BigInt, BigUint, Sign};
 use crate::num_bigint::Integer;
+use crate::num_bigint::{BigInt, BigUint, Sign};
 use crate::num_bigint::{FromPrimitive, One, Signed, ToPrimitive, Zero};
 
 const PRIMES_A: u64 = 3 * 5 * 7 * 11 * 13 * 17 * 19 * 23 * 37;

@@ -1,0 +1,28 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "main": ".open-next/worker.js",
+  "name": "edgerun-frontend",
+  "compatibility_date": "2026-05-08",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  },
+  "secrets_store_secrets": [
+    {
+      "binding": "GMAIL_CLIENT_ID",
+      "store_id": "c7add8f0635f44b7a9b154c4715bbd94",
+      "secret_name": "GMAIL_CLIENT_ID"
+    },
+    {
+      "binding": "GMAIL_CLIENT_SECRET",
+      "store_id": "c7add8f0635f44b7a9b154c4715bbd94",
+      "secret_name": "GMAIL_CLIENT_SECRET"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}

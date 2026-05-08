@@ -1,10 +1,10 @@
 //! PKCS#1 RSA Public Keys.
 
-use crate::pkcs1::{Error, Result};
 use crate::der::{
     asn1::UintRef, Decode, DecodeValue, Encode, EncodeValue, Header, Length, Reader, Sequence,
     Writer,
 };
+use crate::pkcs1::{Error, Result};
 
 #[cfg(feature = "rsa")]
 use crate::der::Document;

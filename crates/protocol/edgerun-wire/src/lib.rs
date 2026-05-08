@@ -95,6 +95,7 @@ pub struct CapabilityRequest {
 }
 
 impl CapabilityRequest {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         capability_kind: u16,
         operation: u16,
@@ -190,6 +191,7 @@ pub struct UserProfileIdSeedRecord {
 }
 
 impl CapabilityResponse {
+    #[allow(clippy::too_many_arguments)]
     pub fn ok(
         request_sha256: [u8; 32],
         capability_kind: u16,
@@ -215,6 +217,7 @@ impl CapabilityResponse {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn denied(
         request_sha256: [u8; 32],
         capability_kind: u16,
@@ -309,6 +312,7 @@ pub struct RuntimeEvent {
 }
 
 impl RuntimeEvent {
+    #[allow(clippy::too_many_arguments)]
     pub fn unsigned_payload(
         seq: u64,
         time: u64,
@@ -335,6 +339,7 @@ impl RuntimeEvent {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[rkyv(crate = rkyv)]
 pub struct RuntimeAppInstall {

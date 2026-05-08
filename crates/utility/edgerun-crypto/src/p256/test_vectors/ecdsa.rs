@@ -1,7 +1,7 @@
 //! ECDSA/secp256r1 test vectors
 
-use ecdsa_core::dev::TestVector;
 use crate::hex;
+use ecdsa_core::dev::TestVector;
 
 /// ECDSA/P-256 test vectors.
 ///

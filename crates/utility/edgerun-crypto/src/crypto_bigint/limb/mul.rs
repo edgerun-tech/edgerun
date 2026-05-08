@@ -1,8 +1,8 @@
 //! Limb multiplication
 
 use crate::crypto_bigint::{Checked, CheckedMul, Limb, WideWord, Word, Wrapping, Zero};
-use core::ops::{Mul, MulAssign};
 use crate::subtle::CtOption;
+use core::ops::{Mul, MulAssign};
 
 impl Limb {
     /// Computes `self + (b * c) + carry`, returning the result along with the new carry.

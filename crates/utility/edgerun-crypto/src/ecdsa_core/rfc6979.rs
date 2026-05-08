@@ -1,8 +1,8 @@
-use crate::elliptic_curve::generic_array::{ArrayLength, GenericArray};
 use crate::digest::{
     core_api::BlockSizeUser, generic_array::typenum::Unsigned, Digest, FixedOutput,
     FixedOutputReset, Output,
 };
+use crate::elliptic_curve::generic_array::{ArrayLength, GenericArray};
 use crate::subtle::{Choice, ConditionallySelectable, ConstantTimeEq};
 
 pub type ByteArray<Size> = GenericArray<u8, Size>;

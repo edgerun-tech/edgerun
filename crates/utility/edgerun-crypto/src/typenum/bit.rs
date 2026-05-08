@@ -1,5 +1,6 @@
-
-use crate::typenum::{private::InternalMarker, Cmp, Equal, Greater, Less, NonZero, PowerOfTwo, Zero};
+use crate::typenum::{
+    private::InternalMarker, Cmp, Equal, Greater, Less, NonZero, PowerOfTwo, Zero,
+};
 use core::ops::{BitAnd, BitOr, BitXor, Not};
 
 pub use crate::typenum::marker_traits::Bit;

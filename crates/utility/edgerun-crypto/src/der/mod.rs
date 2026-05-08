@@ -1,6 +1,5 @@
 #![allow(missing_docs)]
 
-
 pub mod asn1;
 pub mod referenced;
 
@@ -58,7 +57,9 @@ pub use crate::const_oid as oid;
 
 #[cfg(feature = "pem")]
 pub use {
-    crate::der::{decode::DecodePem, encode::EncodePem, reader::pem::PemReader, writer::pem::PemWriter},
+    crate::der::{
+        decode::DecodePem, encode::EncodePem, reader::pem::PemReader, writer::pem::PemWriter,
+    },
     crate::pem_rfc7468 as pem,
 };
 

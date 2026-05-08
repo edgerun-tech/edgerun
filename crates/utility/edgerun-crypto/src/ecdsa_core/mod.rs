@@ -100,7 +100,8 @@ use crate::digest::{
 use crate::const_oid::{AssociatedOid, ObjectIdentifier};
 
 #[cfg(feature = "p256_ecdsa_pkcs8")]
-use crate::elliptic_curve::pkcs8::spki::{der::AnyRef, AlgorithmIdentifierRef, AssociatedAlgorithmIdentifier,
+use crate::elliptic_curve::pkcs8::spki::{
+    der::AnyRef, AlgorithmIdentifierRef, AssociatedAlgorithmIdentifier,
 };
 
 #[cfg(feature = "p256_ecdsa_serde")]
@@ -696,9 +697,7 @@ where
 
 /// Get the ECDSA OID for a given digest OID.
 #[cfg(feature = "p256_ecdsa_digest")]
-const fn ecdsa_oid_for_digest(
-    digest_oid: DigestObjectIdentifier,
-) -> Option<ObjectIdentifier> {
+const fn ecdsa_oid_for_digest(digest_oid: DigestObjectIdentifier) -> Option<ObjectIdentifier> {
     match digest_oid {
         SHA224_OID => Some(ECDSA_SHA224_OID),
         SHA256_OID => Some(ECDSA_SHA256_OID),

@@ -3,7 +3,6 @@
 #![allow(missing_docs)]
 
 #[cfg(feature = "std")]
-
 #[cfg(feature = "rand_core")]
 pub use rand_core;
 

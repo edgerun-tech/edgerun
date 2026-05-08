@@ -4,7 +4,7 @@
 #![allow(
     clippy::cast_lossless,
     clippy::cast_sign_loss,
-    clippy::integer_arithmetic
+    clippy::arithmetic_side_effects
 )]
 
 use crate::der::{

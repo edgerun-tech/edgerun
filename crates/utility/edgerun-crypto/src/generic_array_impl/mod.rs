@@ -1,11 +1,9 @@
-
 #![allow(missing_docs)]
 
 #[cfg(feature = "serde")]
 extern crate serde;
 
 #[cfg(feature = "zeroize")]
-
 pub use crate::typenum;
 
 mod hex;
@@ -17,13 +15,13 @@ mod impl_serde;
 #[cfg(feature = "zeroize")]
 mod impl_zeroize;
 
-use core::iter::FromIterator;
-use core::marker::PhantomData;
-use core::mem::{MaybeUninit, ManuallyDrop};
-use core::ops::{Deref, DerefMut};
-use core::{mem, ptr, slice};
 use crate::typenum::bit::{B0, B1};
 use crate::typenum::uint::{UInt, UTerm, Unsigned};
+use core::iter::FromIterator;
+use core::marker::PhantomData;
+use core::mem::{ManuallyDrop, MaybeUninit};
+use core::ops::{Deref, DerefMut};
+use core::{mem, ptr, slice};
 
 #[cfg_attr(test, macro_use)]
 pub mod arr;
@@ -145,7 +143,10 @@ impl<T, N: ArrayLength<T>> ArrayBuilder<T, N> {
     #[doc(hidden)]
     #[inline]
     pub unsafe fn iter_position(&mut self) -> (slice::IterMut<'_, T>, &mut usize) {
-        ((&mut *self.array.as_mut_ptr()).iter_mut(), &mut self.position)
+        (
+            (&mut *self.array.as_mut_ptr()).iter_mut(),
+            &mut self.position,
+        )
     }
     #[doc(hidden)]
     #[inline]

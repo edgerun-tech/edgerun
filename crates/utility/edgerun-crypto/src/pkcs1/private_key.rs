@@ -3,15 +3,15 @@
 #[cfg(feature = "rsa")]
 pub(crate) mod other_prime_info;
 
-use crate::pkcs1::{Error, Result, RsaPublicKey, Version};
-use core::fmt;
 use crate::der::{
     asn1::UintRef, Decode, DecodeValue, Encode, EncodeValue, Header, Length, Reader, Sequence, Tag,
     Writer,
 };
+use crate::pkcs1::{Error, Result, RsaPublicKey, Version};
+use core::fmt;
 
 #[cfg(feature = "rsa")]
-use {self::other_prime_info::OtherPrimeInfo, alloc::vec::Vec, crate::der::SecretDocument};
+use {self::other_prime_info::OtherPrimeInfo, crate::der::SecretDocument, alloc::vec::Vec};
 
 #[cfg(feature = "rsa_pem")]
 use crate::der::pem::PemLabel;

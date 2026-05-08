@@ -5,8 +5,8 @@ use crate::elliptic_curve::{
     sec1::{ModulusSize, ValidatePublicKey},
     Curve, FieldBytesSize, ALGORITHM_OID,
 };
-use crate::pkcs8::{self, der::Decode, AssociatedOid};
 use crate::pkcs8::spki::{AlgorithmIdentifier, AssociatedAlgorithmIdentifier, ObjectIdentifier};
+use crate::pkcs8::{self, der::Decode, AssociatedOid};
 use crate::sec1::EcPrivateKey;
 
 // Imports for the `EncodePrivateKey` impl
@@ -26,8 +26,8 @@ use {
 #[cfg(feature = "elliptic_curve_pem")]
 use {
     crate::elliptic_curve::{error::Error, Result},
-    core::str::FromStr,
     crate::pkcs8::DecodePrivateKey,
+    core::str::FromStr,
 };
 
 impl<C> AssociatedAlgorithmIdentifier for SecretKey<C>
