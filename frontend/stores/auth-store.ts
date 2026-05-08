@@ -51,6 +51,17 @@ export type WebAuthnBinding = {
   unlockMethod: "prf-local-vault"
 }
 
+export type GmailProfileSecret = {
+  appId: "gmail"
+  kind: "oauth2"
+  email: string
+  accessToken: string
+  refreshToken?: string
+  expiresAtIso: string
+  scopes: string[]
+  updatedAtIso: string
+}
+
 type NodeGenesisEvent = {
   seq: number
   kind: "NODE_GENESIS"
@@ -132,6 +143,7 @@ export type UnlockedProfileContainer = {
   eventLog: ProfileEvent[]
   profilePreferences: ProfilePreferences
   webAuthnBinding?: WebAuthnBinding
+  appSecrets: GmailProfileSecret[]
   sealedContainers: SealedNestedContainer[]
   outbox: RoutedSealedEnvelope[]
 }
@@ -542,6 +554,7 @@ async function openProfile(sealed: SealedProfileContainer, password: string): Pr
     eventLog,
     profilePreferences,
     webAuthnBinding,
+    appSecrets: parsed.appSecrets ?? [],
     sealedContainers: parsed.sealedContainers ?? [],
     outbox: parsed.outbox ?? [],
   }
@@ -832,6 +845,7 @@ export async function registerAuth(name: string, nodeProvision?: NodeProvisionIn
       contacts: [],
       eventLog: [genesis],
       profilePreferences: sanitizeProfilePreferences(undefined, name.trim()),
+      appSecrets: [],
       sealedContainers: [],
       outbox: [],
     }
@@ -1223,6 +1237,53 @@ export async function bindWebAuthnToProfile(password: string): Promise<boolean> 
     return true
   } catch (err) {
     authStore.set({ ...authStore.get(), isLoading: false, error: err instanceof Error ? err.message : "Passkey binding failed." })
+    return false
+  }
+}
+
+export async function saveGmailProfileSecret(input: { password: string; secret: Omit<GmailProfileSecret, "appId" | "kind" | "updatedAtIso"> }): Promise<boolean> {
+  const state = authStore.get()
+  const profile = state.unlockedProfile
+  if (!profile) return false
+  authStore.set({ ...state, isLoading: true, error: null })
+  try {
+    await persistUnlockedProfile(profile, input.password)
+    const nextSecret: GmailProfileSecret = {
+      appId: "gmail",
+      kind: "oauth2",
+      ...input.secret,
+      updatedAtIso: new Date().toISOString(),
+    }
+    await persistUnlockedProfile({
+      ...profile,
+      appSecrets: [
+        ...profile.appSecrets.filter((secret) => secret.appId !== "gmail"),
+        nextSecret,
+      ],
+    }, input.password)
+    authStore.set({ ...authStore.get(), isLoading: false })
+    return true
+  } catch (err) {
+    authStore.set({ ...authStore.get(), isLoading: false, error: err instanceof Error ? err.message : "Gmail profile secret save failed." })
+    return false
+  }
+}
+
+export async function removeGmailProfileSecret(password: string): Promise<boolean> {
+  const state = authStore.get()
+  const profile = state.unlockedProfile
+  if (!profile) return false
+  authStore.set({ ...state, isLoading: true, error: null })
+  try {
+    await persistUnlockedProfile(profile, password)
+    await persistUnlockedProfile({
+      ...profile,
+      appSecrets: profile.appSecrets.filter((secret) => secret.appId !== "gmail"),
+    }, password)
+    authStore.set({ ...authStore.get(), isLoading: false })
+    return true
+  } catch (err) {
+    authStore.set({ ...authStore.get(), isLoading: false, error: err instanceof Error ? err.message : "Gmail profile secret removal failed." })
     return false
   }
 }

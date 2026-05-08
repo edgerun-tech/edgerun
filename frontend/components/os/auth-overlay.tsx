@@ -108,7 +108,7 @@ export function AuthOverlay({
         <div className="auth-vignette absolute inset-0" />
       </div>
 
-      <div className="relative z-10 m-auto flex w-[calc(100vw-2rem)] max-w-[440px] max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-2xl border border-border bg-[var(--window-bg)]/94 shadow-2xl shadow-black/60 backdrop-blur-xl">
+      <div className="edgerun-auth-panel relative z-10 m-auto flex flex-col overflow-hidden rounded-2xl border border-border bg-[var(--window-bg)]/94 shadow-2xl shadow-black/60 backdrop-blur-xl">
         <div className="flex items-center justify-center border-b border-border px-6 py-5 sm:py-6">
           <EdgerunLogo variant="full" size="md" className="text-primary" />
         </div>

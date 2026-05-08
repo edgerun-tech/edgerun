@@ -5,6 +5,7 @@ interface TokenResponse {
   refresh_token?: string
   expires_in: number
   token_type: string
+  scope?: string
 }
 
 export async function GET(req: NextRequest) {
@@ -97,6 +98,20 @@ export async function GET(req: NextRequest) {
         maxAge: 60 * 60 * 24 * 365,
       })
     }
+
+    res.cookies.set("gmail_profile_pending", Buffer.from(JSON.stringify({
+      email: userInfo?.email || "",
+      accessToken: tokens.access_token,
+      refreshToken: tokens.refresh_token,
+      expiresAtIso: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
+      scopes: (tokens.scope || "").split(/\s+/).filter(Boolean),
+    })).toString("base64url"), {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 600,
+      path: "/",
+    })
 
     res.cookies.delete("gmail_oauth_state")
 

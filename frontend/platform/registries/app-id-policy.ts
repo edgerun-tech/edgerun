@@ -26,7 +26,6 @@ export const REMOVED_APP_IDS = new Set([
   "workflow-builder",
   "calculator",
   "help",
-  "gmail",
 ])
 
 export const CORE_APP_IDS = ["app-store", "settings"] as const

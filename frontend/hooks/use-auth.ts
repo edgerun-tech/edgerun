@@ -22,6 +22,8 @@ import {
   openLocalQueuedMessage,
   updateProfilePreferences,
   bindWebAuthnToProfile,
+  saveGmailProfileSecret,
+  removeGmailProfileSecret,
   type AuthState,
   type NodeProvisionInput,
   type StoredNodeRegistration,
@@ -33,9 +35,10 @@ import {
   type LocalQueuedMessage,
   type ProfilePreferences,
   type ProfileEvent,
+  type GmailProfileSecret,
 } from "@/stores/auth-store"
 
-export type { AuthState, NodeProvisionInput, StoredNodeRegistration, UnlockedProfileContainer, SealedNestedContainer, ContactRecord, RoutedSealedEnvelope, ProfileSummary, LocalQueuedMessage, ProfilePreferences, ProfileEvent }
+export type { AuthState, NodeProvisionInput, StoredNodeRegistration, UnlockedProfileContainer, SealedNestedContainer, ContactRecord, RoutedSealedEnvelope, ProfileSummary, LocalQueuedMessage, ProfilePreferences, ProfileEvent, GmailProfileSecret }
 
 export function useAuth() {
   const store = useStore(authStore)
@@ -69,6 +72,8 @@ export function useAuth() {
     openLocalMessage: openLocalQueuedMessage,
     updateProfilePreferences,
     bindWebAuthn: bindWebAuthnToProfile,
+    saveGmailSecret: saveGmailProfileSecret,
+    removeGmailSecret: removeGmailProfileSecret,
   }
 }
 
