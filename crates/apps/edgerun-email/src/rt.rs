@@ -12,7 +12,9 @@ pub use edgerun_node::rt::{
 
 pub(crate) fn bare_io(error: edgerun_node::rt::IoError) -> io::Error {
     match error {
-        edgerun_node::rt::IoError::UnexpectedEof => io::Error::new(io::ErrorKind::UnexpectedEof, error),
+        edgerun_node::rt::IoError::UnexpectedEof => {
+            io::Error::new(io::ErrorKind::UnexpectedEof, error)
+        }
         edgerun_node::rt::IoError::WriteZero => io::Error::new(io::ErrorKind::WriteZero, error),
         edgerun_node::rt::IoError::Other(_) => io::Error::other(error),
     }

@@ -27,7 +27,7 @@
 //!     }
 //! }
 //!
-//! # crate::rt::Runtime::new_multi_thread().enable_all().build().unwrap().block_on(async {
+//! # edgerun_node::rt::Runtime::new_multi_thread().enable_all().build().unwrap().block_on(async {
 //! HttpServer::new(HelloHandler)
 //!     .bind("127.0.0.1:0")
 //!     .await
@@ -45,7 +45,7 @@
 //! # {
 //! use edgerun_node::http::HttpClient;
 //!
-//! # crate::rt::Runtime::new_multi_thread().enable_all().build().unwrap().block_on(async {
+//! # edgerun_node::rt::Runtime::new_multi_thread().enable_all().build().unwrap().block_on(async {
 //! let client = HttpClient::new();
 //! let response = client.get("http://example.com/").await.unwrap();
 //! println!("Status: {}", response.status().as_u16());

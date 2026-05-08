@@ -2,6 +2,8 @@ use alloc::vec::Vec;
 
 use edgerun_protocols::wire::RuntimeProtocolBinding;
 
+use super::{TransportAddress, TransportCarrier, TransportProtocol};
+
 /// Transport surface available to this node runtime.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum NodeTransportSurface {
@@ -35,6 +37,13 @@ pub enum ServiceBindingDecision {
     Denied(RuntimeProtocolBinding),
 }
 
+/// Concrete bind target for native host adapters.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NativeSocketBind {
+    pub binding: RuntimeProtocolBinding,
+    pub address: TransportAddress,
+}
+
 pub fn binding_intents(
     bindings: &[RuntimeProtocolBinding],
     surface: NodeTransportSurface,
@@ -58,4 +67,33 @@ pub fn decide_binding(intent: ServiceBindingIntent) -> ServiceBindingDecision {
 
 pub fn decide_bindings(intents: Vec<ServiceBindingIntent>) -> Vec<ServiceBindingDecision> {
     intents.into_iter().map(decide_binding).collect()
+}
+
+pub fn native_socket_bind(decision: &ServiceBindingDecision) -> Option<NativeSocketBind> {
+    let ServiceBindingDecision::NativeSocket(binding) = decision else {
+        return None;
+    };
+    let protocol = match binding.protocol {
+        edgerun_protocols::wire::RUNTIME_PROTOCOL_DNS_UDP
+        | edgerun_protocols::wire::RUNTIME_PROTOCOL_TFTP => TransportProtocol::Datagram,
+        _ => TransportProtocol::Stream,
+    };
+    let endpoint = socket_endpoint(binding);
+    Some(NativeSocketBind {
+        binding: binding.clone(),
+        address: TransportAddress {
+            carrier: TransportCarrier::HostSocket,
+            protocol,
+            endpoint,
+        },
+    })
+}
+
+pub fn native_socket_binds(decisions: &[ServiceBindingDecision]) -> Vec<NativeSocketBind> {
+    decisions.iter().filter_map(native_socket_bind).collect()
+}
+
+fn socket_endpoint(binding: &RuntimeProtocolBinding) -> Vec<u8> {
+    let [a, b, c, d] = binding.bind_ipv4;
+    alloc::format!("{a}.{b}.{c}.{d}:{}", binding.port).into_bytes()
 }

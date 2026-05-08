@@ -9,6 +9,7 @@ use edgerun_protocols::wire::{
 };
 
 use crate::network::{binding_intents, NodeTransportSurface, ServiceBindingIntent};
+use crate::storage::{storage_intents, RuntimeStorageIntent, RuntimeStorageSurface};
 
 use super::{
     default_protocol_bindings, runtime_app_install, runtime_deployment_config, runtime_http_route,
@@ -260,6 +261,20 @@ impl RuntimeServicePlan {
 
     pub fn requested_bindings(&self, surface: NodeTransportSurface) -> Vec<ServiceBindingIntent> {
         binding_intents(&self.listeners, surface)
+    }
+
+    pub fn storage_namespaces(&self) -> Vec<Vec<u8>> {
+        let mut namespaces = Vec::new();
+        for app in &self.apps {
+            namespaces.extend(app.storage_namespaces.iter().cloned());
+        }
+        namespaces.sort();
+        namespaces.dedup();
+        namespaces
+    }
+
+    pub fn requested_storage(&self, surface: RuntimeStorageSurface) -> Vec<RuntimeStorageIntent> {
+        storage_intents(&self.storage_namespaces(), surface)
     }
 
     pub fn provided_capabilities(&self) -> Vec<RuntimeCapabilityDeclaration> {

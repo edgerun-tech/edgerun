@@ -13,17 +13,25 @@ name = "edgerun-sdk"
 path = "src/main.rs"
 required-features = ["std"]
 
+[[example]]
+name = "package_segmented_verifiable_app"
+path = "examples/package_segmented_verifiable_app.rs"
+required-features = ["browser-authoring"]
+
 [features]
 default = ["std"]
+browser-authoring = ["dep:edgerun-crypto", "dep:edgerun-wire"]
 runtime-api = ["dep:edgerun-protocols"]
-std = ["dep:edgerun-crypto", "dep:edgerun-deploy", "dep:edgerun-machine-report", "runtime-api", "dep:edgerun-ssh"]
+std = ["dep:edgerun-crypto", "dep:edgerun-deploy", "dep:edgerun-json", "dep:edgerun-machine-report", "runtime-api", "dep:edgerun-ssh"]
 
 [dependencies]
 edgerun-crypto = { workspace = true, features = ["ed25519"], optional = true }
 edgerun-deploy = { workspace = true, features = ["std"], optional = true }
 edgerun-machine-report = { version = "0.1", path = "../node/edgerun-machine-report", optional = true }
 edgerun-protocols = { workspace = true, default-features = false, features = ["seal", "wire"], optional = true }
+edgerun-wire = { workspace = true, optional = true }
 edgerun-ssh = { workspace = true, features = ["std"], optional = true }
+edgerun-json = { workspace = true, features = ["std"], optional = true }
 
 [lints]
 workspace = true

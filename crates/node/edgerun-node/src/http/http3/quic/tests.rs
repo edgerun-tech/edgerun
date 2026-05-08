@@ -36,8 +36,10 @@ fn test_initial_packet_handshake_timeout() {
         client_socket.connect(server_addr).expect("client connect");
         server_socket.connect(client_addr).expect("server connect");
 
-        let client = Arc::new(crate::http::runtime::wrap_udp_socket(client_socket).expect("wrap client"));
-        let server = Arc::new(crate::http::runtime::wrap_udp_socket(server_socket).expect("wrap server"));
+        let client =
+            Arc::new(crate::http::runtime::wrap_udp_socket(client_socket).expect("wrap client"));
+        let server =
+            Arc::new(crate::http::runtime::wrap_udp_socket(server_socket).expect("wrap server"));
 
         let dcid = vec![0x83, 0x94, 0xc8, 0xf0, 0x3e, 0x51, 0x57, 0x08];
         let handshaker = handshake::QuicTlsHandshaker::new("example.com");
@@ -515,7 +517,8 @@ fn test_server_sends_1rtt_response() {
 
     // Create two connected UDP sockets for testing
     let sender = crate::http::runtime::net::UdpSocket::bind("127.0.0.1:0").expect("bind sender");
-    let receiver = crate::http::runtime::net::UdpSocket::bind("127.0.0.1:0").expect("bind receiver");
+    let receiver =
+        crate::http::runtime::net::UdpSocket::bind("127.0.0.1:0").expect("bind receiver");
     sender.set_nonblocking(true).ok();
     receiver.set_nonblocking(true).ok();
     let recv_addr = receiver.local_addr().expect("get receiver addr");
@@ -546,7 +549,8 @@ fn test_server_sends_1rtt_response() {
 #[test]
 fn test_protected_send_frame_preserves_parseable_header() {
     let sender = crate::http::runtime::net::UdpSocket::bind("127.0.0.1:0").expect("bind sender");
-    let receiver = crate::http::runtime::net::UdpSocket::bind("127.0.0.1:0").expect("bind receiver");
+    let receiver =
+        crate::http::runtime::net::UdpSocket::bind("127.0.0.1:0").expect("bind receiver");
     let recv_addr = receiver.local_addr().expect("get receiver addr");
     sender.connect(recv_addr).expect("connect sender");
 
@@ -591,7 +595,8 @@ fn test_protected_send_frame_preserves_parseable_header() {
 #[test]
 fn test_early_data_uses_parseable_zero_rtt_packet() {
     let sender = crate::http::runtime::net::UdpSocket::bind("127.0.0.1:0").expect("bind sender");
-    let receiver = crate::http::runtime::net::UdpSocket::bind("127.0.0.1:0").expect("bind receiver");
+    let receiver =
+        crate::http::runtime::net::UdpSocket::bind("127.0.0.1:0").expect("bind receiver");
     let recv_addr = receiver.local_addr().expect("get receiver addr");
     sender.connect(recv_addr).expect("connect sender");
 

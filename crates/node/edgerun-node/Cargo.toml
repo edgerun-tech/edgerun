@@ -19,7 +19,6 @@ default = [
     "std",
     "all-hardware",
     "oci",
-    "compositor",
     "protocols",
     "service-suite",
 ]
@@ -40,6 +39,18 @@ http3 = [
 runtime = []
 server = ["http1", "http2", "runtime"]
 static-files = ["std", "server"]
+xray = [
+    "std",
+    "server",
+    "dep:edgerun-codelyzer",
+    "edgerun-codelyzer/lang-rust",
+    "edgerun-codelyzer/lang-typescript",
+    "edgerun-codelyzer/lang-javascript",
+    "edgerun-codelyzer/lang-c",
+    "edgerun-codelyzer/lang-python",
+    "edgerun-codelyzer/lang-go",
+    "edgerun-codelyzer/lang-java",
+]
 tls = [
     "edgerun-protocols/tls",
     "edgerun-crypto/aead",
@@ -64,7 +75,6 @@ full = [
     "std",
     "all-hardware",
     "oci",
-    "compositor",
     "protocols",
     "service-suite",
 ]
@@ -81,7 +91,6 @@ virtual-disk = ["dep:edgerun-virtual-disk", "edgerun-protocols/block"]
 derived-db = ["http", "dep:edgerun-derived-db"]
 android-keystore = ["dep:edgerun-android-keystore"]
 oci = []
-compositor = ["dep:edgerun-compositor"]
 hardware = [
     "dep:edgerun-evdev-input",
     "dep:edgerun-alsa-speaker",
@@ -120,13 +129,15 @@ edgerun-mesh = { version = "0.1", path = "../../mesh/edgerun-mesh" }
 edgerun-mesh-link = { version = "0.1", path = "../../mesh/edgerun-mesh-link" }
 edgerun-mesh-capability = { version = "0.1", path = "../../capability/edgerun-mesh-capability" }
 edgerun-mesh-session = { version = "0.1", path = "../../mesh/edgerun-mesh-session" }
-edgerun-crypto = { workspace = true, default-features = false }
+edgerun-crypto = { workspace = true, default-features = false, features = ["ed25519"] }
 edgerun-log = { version = "0.1", path = "../../utility/edgerun-log" }
 edgerun-platform = { version = "0.1", path = "../../edgerun-platform" }
 edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-hardware-signing", default-features = false }
 edgerun-json = { version = "0.1", path = "../../utility/edgerun-json" }
 edgerun-url = { workspace = true }
 edgerun-protocols = { workspace = true, features = ["sign-p256", "keygen", "seal", "core", "wire", "ethernet-ipv4", "serial-mux"] }
+edgerun-codelyzer = { version = "0.1", path = "../../edgerun-codelyzer", default-features = false, optional = true }
+rkyv.workspace = true
 edgerun-hpack = { version = "0.1", path = "../../utility/edgerun-hpack", optional = true }
 edgerun-qpack = { version = "0.1", path = "../../utility/edgerun-qpack", optional = true }
 edgerun-derived-db = { workspace = true, features = ["std"], optional = true }
@@ -157,11 +168,11 @@ edgerun-linux-cec = { version = "0.1", path = "../../linux-adapters/edgerun-linu
 edgerun-amd-xdna = { version = "0.1", path = "../../linux-adapters/edgerun-amd-xdna", optional = true }
 edgerun-virtual-disk = { version = "0.1", path = "../../authority/edgerun-virtual-disk", optional = true }
 edgerun-android-keystore = { version = "0.1", path = "../../identity/edgerun-android-keystore", optional = true }
-edgerun-compositor = { version = "0.1", path = "../../edgerun-compositor", optional = true }
 
 [dev-dependencies]
 edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-hardware-signing" }
 edgerun-alsa-microphone = { version = "0.1", path = "../../linux-adapters/edgerun-alsa-microphone" }
+edgerun-sdk = { version = "0.1", path = "../../edgerun-sdk", default-features = false, features = ["browser-authoring"] }
 
 [lints]
 workspace = true

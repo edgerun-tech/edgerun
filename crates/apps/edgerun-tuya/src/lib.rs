@@ -200,8 +200,12 @@ fn rt_error(error: edgerun_node::rt::IoError) -> IoError {
         edgerun_node::rt::IoError::UnexpectedEof => {
             std::io::Error::new(std::io::ErrorKind::UnexpectedEof, error)
         }
-        edgerun_node::rt::IoError::WriteZero => std::io::Error::new(std::io::ErrorKind::WriteZero, error),
-        edgerun_node::rt::IoError::Other(_) => std::io::Error::new(std::io::ErrorKind::Other, error),
+        edgerun_node::rt::IoError::WriteZero => {
+            std::io::Error::new(std::io::ErrorKind::WriteZero, error)
+        }
+        edgerun_node::rt::IoError::Other(_) => {
+            std::io::Error::new(std::io::ErrorKind::Other, error)
+        }
     }
 }
 

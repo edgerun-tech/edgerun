@@ -116,8 +116,27 @@ pub fn validate_stream_append_case(
             mapping([("event_hash", ystr(candidate_hash))]),
         );
     }
-    let head = head.unwrap();
+    let Some(head) = head else {
+        return defer(
+            ReasonCode::MissingDependency,
+            mapping([("event_hash", ystr(candidate_hash))]),
+        );
+    };
     let head_seq = number_value(head, "seq", -1);
+    if head_seq < 0 {
+        return reject(
+            ReasonCode::StructuralInvalid,
+            mapping([("event_hash", ystr(candidate_hash))]),
+            empty_map(),
+        );
+    }
+    let Some(expected_next_seq) = head_seq.checked_add(1) else {
+        return reject(
+            ReasonCode::ForkConflict,
+            mapping([("event_hash", ystr(candidate_hash))]),
+            empty_map(),
+        );
+    };
     let head_hash = string_value(
         head,
         "event_hash_hex",
@@ -132,7 +151,7 @@ pub fn validate_stream_append_case(
             )
         })
         .unwrap_or_default();
-    if seq_no == head_seq + 1 {
+    if seq_no == expected_next_seq {
         if !head_hash.is_empty() && !prev_hash.is_empty() && head_hash != prev_hash {
             return reject(
                 ReasonCode::ForkConflict,
@@ -155,7 +174,7 @@ pub fn validate_stream_append_case(
             )]),
         );
     }
-    if seq_no > head_seq + 1 {
+    if seq_no > expected_next_seq {
         return defer(
             ReasonCode::MissingDependency,
             mapping([("event_hash", ystr(candidate_hash))]),

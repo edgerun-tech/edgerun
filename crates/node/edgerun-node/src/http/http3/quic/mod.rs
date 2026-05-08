@@ -117,7 +117,8 @@ pub struct QuicConnection {
         crate::http::runtime::net::SocketAddr,
     )>,
     /// Pending migration path challenges (data → deadline)
-    pending_path_challenges: alloc::collections::BTreeMap<[u8; 8], crate::http::runtime::time::Instant>,
+    pending_path_challenges:
+        alloc::collections::BTreeMap<[u8; 8], crate::http::runtime::time::Instant>,
     /// Runtime clock used by this UDP wrapper for idle timeout bookkeeping.
     runtime_last_activity: crate::http::runtime::time::Instant,
     /// Captured sent packets (for integration testing)
@@ -299,7 +300,10 @@ impl QuicConnection {
                     if !all_handshake_crypto.is_empty() {
                         break;
                     }
-                    crate::http::runtime::sleep(crate::http::runtime::time::Duration::from_millis(10)).await;
+                    crate::http::runtime::sleep(crate::http::runtime::time::Duration::from_millis(
+                        10,
+                    ))
+                    .await;
                 }
                 Err(e) => return Err(e),
             }
@@ -567,8 +571,9 @@ impl QuicConnection {
         socket: UdpSocket,
         target: crate::http::runtime::net::SocketAddr,
     ) -> Self {
-        let socket =
-            Arc::new(crate::http::runtime::wrap_udp_socket(socket).expect("Cannot wrap test socket"));
+        let socket = Arc::new(
+            crate::http::runtime::wrap_udp_socket(socket).expect("Cannot wrap test socket"),
+        );
         let local_cid = ConnectionId::random();
         let remote_cid = ConnectionId::random();
         let transport = QuicTransport::new(local_cid.clone(), remote_cid.clone());
@@ -1153,7 +1158,10 @@ impl QuicConnection {
     pub fn initialize_active_path(&mut self) {
         if self.active_path.is_none() {
             if let Ok(local) = self.socket.local_addr() {
-                if let Ok(remote) = self.server_addr.parse::<crate::http::runtime::net::SocketAddr>() {
+                if let Ok(remote) = self
+                    .server_addr
+                    .parse::<crate::http::runtime::net::SocketAddr>()
+                {
                     self.active_path = Some((local, remote));
                 }
             }
@@ -1167,7 +1175,8 @@ impl QuicConnection {
         let frame = QuicFrame::PathChallenge { data };
         self.pending_path_challenges.insert(
             data,
-            crate::http::runtime::time::Instant::now() + crate::http::runtime::time::Duration::from_secs(3),
+            crate::http::runtime::time::Instant::now()
+                + crate::http::runtime::time::Duration::from_secs(3),
         );
         self.send_frame(frame).await
     }

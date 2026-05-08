@@ -1,0 +1,467 @@
+
+use crate::typenum::{
+    private::{Internal, InternalMarker},
+    Bit, NInt, NonZero, PInt, UInt, UTerm, Unsigned, Z0,
+};
+
+pub trait Same<Rhs = Self> {
+    type Output;
+}
+
+impl<T> Same<T> for T {
+    type Output = T;
+}
+
+pub trait Abs {
+    type Output;
+}
+
+impl Abs for Z0 {
+    type Output = Z0;
+}
+
+impl<U: Unsigned + NonZero> Abs for PInt<U> {
+    type Output = Self;
+}
+
+impl<U: Unsigned + NonZero> Abs for NInt<U> {
+    type Output = PInt<U>;
+}
+
+pub trait Pow<Exp> {
+    type Output;
+    fn powi(self, exp: Exp) -> Self::Output;
+}
+
+macro_rules! impl_pow_f {
+    ($t:ty) => {
+        impl Pow<UTerm> for $t {
+            type Output = $t;
+            #[inline]
+            fn powi(self, _: UTerm) -> Self::Output {
+                1.0
+            }
+        }
+
+        impl<U: Unsigned, B: Bit> Pow<UInt<U, B>> for $t {
+            type Output = $t;
+            // powi is unstable in core, so we have to write this function ourselves.
+            // copied from num::pow::pow
+            #[inline]
+            fn powi(self, _: UInt<U, B>) -> Self::Output {
+                let mut exp = <UInt<U, B> as Unsigned>::to_u32();
+                let mut base = self;
+
+                if exp == 0 {
+                    return 1.0;
+                }
+
+                while exp & 1 == 0 {
+                    base *= base;
+                    exp >>= 1;
+                }
+                if exp == 1 {
+                    return base;
+                }
+
+                let mut acc = base.clone();
+                while exp > 1 {
+                    exp >>= 1;
+                    base *= base;
+                    if exp & 1 == 1 {
+                        acc *= base.clone();
+                    }
+                }
+                acc
+            }
+        }
+
+        impl Pow<Z0> for $t {
+            type Output = $t;
+            #[inline]
+            fn powi(self, _: Z0) -> Self::Output {
+                1.0
+            }
+        }
+
+        impl<U: Unsigned + NonZero> Pow<PInt<U>> for $t {
+            type Output = $t;
+            // powi is unstable in core, so we have to write this function ourselves.
+            // copied from num::pow::pow
+            #[inline]
+            fn powi(self, _: PInt<U>) -> Self::Output {
+                let mut exp = U::to_u32();
+                let mut base = self;
+
+                if exp == 0 {
+                    return 1.0;
+                }
+
+                while exp & 1 == 0 {
+                    base *= base;
+                    exp >>= 1;
+                }
+                if exp == 1 {
+                    return base;
+                }
+
+                let mut acc = base.clone();
+                while exp > 1 {
+                    exp >>= 1;
+                    base *= base;
+                    if exp & 1 == 1 {
+                        acc *= base.clone();
+                    }
+                }
+                acc
+            }
+        }
+
+        impl<U: Unsigned + NonZero> Pow<NInt<U>> for $t {
+            type Output = $t;
+
+            #[inline]
+            fn powi(self, _: NInt<U>) -> Self::Output {
+                <$t as Pow<PInt<U>>>::powi(self, PInt::new()).recip()
+            }
+        }
+    };
+}
+
+impl_pow_f!(f32);
+impl_pow_f!(f64);
+
+macro_rules! impl_pow_i {
+    () => ();
+    ($(#[$meta:meta])*  $t: ty $(, $tail:tt)*) => (
+        $(#[$meta])*
+        impl Pow<UTerm> for $t {
+            type Output = $t;
+            #[inline]
+            fn powi(self, _: UTerm) -> Self::Output {
+                1
+            }
+        }
+
+        $(#[$meta])*
+        impl<U: Unsigned, B: Bit> Pow<UInt<U, B>> for $t {
+            type Output = $t;
+            #[inline]
+            fn powi(self, _: UInt<U, B>) -> Self::Output {
+                self.pow(<UInt<U, B> as Unsigned>::to_u32())
+            }
+        }
+
+        $(#[$meta])*
+        impl Pow<Z0> for $t {
+            type Output = $t;
+            #[inline]
+            fn powi(self, _: Z0) -> Self::Output {
+                1
+            }
+        }
+
+        $(#[$meta])*
+        impl<U: Unsigned + NonZero> Pow<PInt<U>> for $t {
+            type Output = $t;
+            #[inline]
+            fn powi(self, _: PInt<U>) -> Self::Output {
+                self.pow(U::to_u32())
+            }
+        }
+
+        impl_pow_i!($($tail),*);
+    );
+}
+
+impl_pow_i!(u8, u16, u32, u64, usize, i8, i16, i32, i64, isize);
+#[cfg(feature = "i128")]
+impl_pow_i!(
+    #[cfg_attr(docsrs, doc(cfg(feature = "i128")))]
+    u128,
+    i128
+);
+
+#[test]
+fn pow_test() {
+    use crate::typenum::consts::*;
+    let z0 = Z0::new();
+    let p3 = P3::new();
+
+    let u0 = U0::new();
+    let u3 = U3::new();
+    let n3 = N3::new();
+
+    macro_rules! check {
+        ($x:ident) => {
+            assert_eq!($x.powi(z0), 1);
+            assert_eq!($x.powi(u0), 1);
+
+            assert_eq!($x.powi(p3), $x * $x * $x);
+            assert_eq!($x.powi(u3), $x * $x * $x);
+        };
+        ($x:ident, $f:ident) => {
+            assert!((<$f as Pow<Z0>>::powi(*$x, z0) - 1.0).abs() < ::core::$f::EPSILON);
+            assert!((<$f as Pow<U0>>::powi(*$x, u0) - 1.0).abs() < ::core::$f::EPSILON);
+
+            assert!((<$f as Pow<P3>>::powi(*$x, p3) - $x * $x * $x).abs() < ::core::$f::EPSILON);
+            assert!((<$f as Pow<U3>>::powi(*$x, u3) - $x * $x * $x).abs() < ::core::$f::EPSILON);
+
+            if *$x == 0.0 {
+                assert!(<$f as Pow<N3>>::powi(*$x, n3).is_infinite());
+            } else {
+                assert!(
+                    (<$f as Pow<N3>>::powi(*$x, n3) - 1. / $x / $x / $x).abs()
+                        < ::core::$f::EPSILON
+                );
+            }
+        };
+    }
+
+    for x in &[0i8, -3, 2] {
+        check!(x);
+    }
+    for x in &[0u8, 1, 5] {
+        check!(x);
+    }
+    for x in &[0usize, 1, 5, 40] {
+        check!(x);
+    }
+    for x in &[0isize, 1, 2, -30, -22, 48] {
+        check!(x);
+    }
+    for x in &[0.0f32, 2.2, -3.5, 378.223] {
+        check!(x, f32);
+    }
+    for x in &[0.0f64, 2.2, -3.5, -2387.2, 234.22] {
+        check!(x, f64);
+    }
+}
+
+pub trait Cmp<Rhs = Self> {
+    type Output;
+
+    #[doc(hidden)]
+    fn compare<IM: InternalMarker>(&self, _: &Rhs) -> Self::Output;
+}
+
+#[allow(clippy::len_without_is_empty)]
+pub trait Len {
+    type Output: crate::typenum::Unsigned;
+    fn len(&self) -> Self::Output;
+}
+
+pub trait FoldAdd {
+    type Output;
+}
+
+pub trait FoldMul {
+    type Output;
+}
+
+#[cfg(any())]
+#[test]
+fn fold_test() {
+    use crate::typenum::*;
+    assert_eq!(10, <FoldSum::<tarr![U2, U3, U5]>>::to_u32());
+    assert_eq!(30, <FoldProd::<tarr![U2, U3, U5]>>::to_u32());
+}
+
+pub trait PartialDiv<Rhs = Self> {
+    type Output;
+    fn partial_div(self, _: Rhs) -> Self::Output;
+}
+
+pub trait Min<Rhs = Self> {
+    type Output;
+    fn min(self, rhs: Rhs) -> Self::Output;
+}
+
+pub trait Max<Rhs = Self> {
+    type Output;
+    fn max(self, rhs: Rhs) -> Self::Output;
+}
+
+use crate::typenum::Compare;
+
+pub trait IsLess<Rhs = Self> {
+    type Output: Bit;
+    #[allow(clippy::wrong_self_convention)]
+    fn is_less(self, rhs: Rhs) -> Self::Output;
+}
+
+use crate::typenum::private::IsLessPrivate;
+impl<A, B> IsLess<B> for A
+where
+    A: Cmp<B> + IsLessPrivate<B, Compare<A, B>>,
+{
+    type Output = <A as IsLessPrivate<B, Compare<A, B>>>::Output;
+
+    #[inline]
+    fn is_less(self, rhs: B) -> Self::Output {
+        let lhs_cmp_rhs = self.compare::<Internal>(&rhs);
+        self.is_less_private(rhs, lhs_cmp_rhs)
+    }
+}
+
+pub trait IsEqual<Rhs = Self> {
+    type Output: Bit;
+    #[allow(clippy::wrong_self_convention)]
+    fn is_equal(self, rhs: Rhs) -> Self::Output;
+}
+
+use crate::typenum::private::IsEqualPrivate;
+impl<A, B> IsEqual<B> for A
+where
+    A: Cmp<B> + IsEqualPrivate<B, Compare<A, B>>,
+{
+    type Output = <A as IsEqualPrivate<B, Compare<A, B>>>::Output;
+
+    #[inline]
+    fn is_equal(self, rhs: B) -> Self::Output {
+        let lhs_cmp_rhs = self.compare::<Internal>(&rhs);
+        self.is_equal_private(rhs, lhs_cmp_rhs)
+    }
+}
+
+pub trait IsGreater<Rhs = Self> {
+    type Output: Bit;
+    #[allow(clippy::wrong_self_convention)]
+    fn is_greater(self, rhs: Rhs) -> Self::Output;
+}
+
+use crate::typenum::private::IsGreaterPrivate;
+impl<A, B> IsGreater<B> for A
+where
+    A: Cmp<B> + IsGreaterPrivate<B, Compare<A, B>>,
+{
+    type Output = <A as IsGreaterPrivate<B, Compare<A, B>>>::Output;
+
+    #[inline]
+    fn is_greater(self, rhs: B) -> Self::Output {
+        let lhs_cmp_rhs = self.compare::<Internal>(&rhs);
+        self.is_greater_private(rhs, lhs_cmp_rhs)
+    }
+}
+
+pub trait IsLessOrEqual<Rhs = Self> {
+    type Output: Bit;
+    #[allow(clippy::wrong_self_convention)]
+    fn is_less_or_equal(self, rhs: Rhs) -> Self::Output;
+}
+
+use crate::typenum::private::IsLessOrEqualPrivate;
+impl<A, B> IsLessOrEqual<B> for A
+where
+    A: Cmp<B> + IsLessOrEqualPrivate<B, Compare<A, B>>,
+{
+    type Output = <A as IsLessOrEqualPrivate<B, Compare<A, B>>>::Output;
+
+    #[inline]
+    fn is_less_or_equal(self, rhs: B) -> Self::Output {
+        let lhs_cmp_rhs = self.compare::<Internal>(&rhs);
+        self.is_less_or_equal_private(rhs, lhs_cmp_rhs)
+    }
+}
+
+pub trait IsNotEqual<Rhs = Self> {
+    type Output: Bit;
+    #[allow(clippy::wrong_self_convention)]
+    fn is_not_equal(self, rhs: Rhs) -> Self::Output;
+}
+
+use crate::typenum::private::IsNotEqualPrivate;
+impl<A, B> IsNotEqual<B> for A
+where
+    A: Cmp<B> + IsNotEqualPrivate<B, Compare<A, B>>,
+{
+    type Output = <A as IsNotEqualPrivate<B, Compare<A, B>>>::Output;
+
+    #[inline]
+    fn is_not_equal(self, rhs: B) -> Self::Output {
+        let lhs_cmp_rhs = self.compare::<Internal>(&rhs);
+        self.is_not_equal_private(rhs, lhs_cmp_rhs)
+    }
+}
+
+pub trait IsGreaterOrEqual<Rhs = Self> {
+    type Output: Bit;
+    #[allow(clippy::wrong_self_convention)]
+    fn is_greater_or_equal(self, rhs: Rhs) -> Self::Output;
+}
+
+use crate::typenum::private::IsGreaterOrEqualPrivate;
+impl<A, B> IsGreaterOrEqual<B> for A
+where
+    A: Cmp<B> + IsGreaterOrEqualPrivate<B, Compare<A, B>>,
+{
+    type Output = <A as IsGreaterOrEqualPrivate<B, Compare<A, B>>>::Output;
+
+    #[inline]
+    fn is_greater_or_equal(self, rhs: B) -> Self::Output {
+        let lhs_cmp_rhs = self.compare::<Internal>(&rhs);
+        self.is_greater_or_equal_private(rhs, lhs_cmp_rhs)
+    }
+}
+#[deprecated(since = "1.9.0", note = "use the `op!` macro instead")]
+#[macro_export]
+macro_rules! cmp {
+    ($a:ident < $b:ty) => {
+        <$a as $crate::IsLess<$b>>::Output
+    };
+    ($a:ty, < $b:ty) => {
+        <$a as $crate::IsLess<$b>>::Output
+    };
+
+    ($a:ident == $b:ty) => {
+        <$a as $crate::IsEqual<$b>>::Output
+    };
+    ($a:ty, == $b:ty) => {
+        <$a as $crate::IsEqual<$b>>::Output
+    };
+
+    ($a:ident > $b:ty) => {
+        <$a as $crate::IsGreater<$b>>::Output
+    };
+    ($a:ty, > $b:ty) => {
+        <$a as $crate::IsGreater<$b>>::Output
+    };
+
+    ($a:ident <= $b:ty) => {
+        <$a as $crate::IsLessOrEqual<$b>>::Output
+    };
+    ($a:ty, <= $b:ty) => {
+        <$a as $crate::IsLessOrEqual<$b>>::Output
+    };
+
+    ($a:ident != $b:ty) => {
+        <$a as $crate::IsNotEqual<$b>>::Output
+    };
+    ($a:ty, != $b:ty) => {
+        <$a as $crate::IsNotEqual<$b>>::Output
+    };
+
+    ($a:ident >= $b:ty) => {
+        <$a as $crate::IsGreaterOrEqual<$b>>::Output
+    };
+    ($a:ty, >= $b:ty) => {
+        <$a as $crate::IsGreaterOrEqual<$b>>::Output
+    };
+}
+
+pub trait SquareRoot {
+    type Output;
+}
+
+pub trait Logarithm2 {
+    type Output;
+}
+
+pub trait Gcd<Rhs> {
+    type Output;
+}
+
+pub trait ToInt<T> {
+    fn to_int() -> T;
+    const INT: T;
+}

@@ -2,6 +2,23 @@
 resolver = "2"
 exclude = [
   "crates/utility/edgerun-clap-derive",
+  "crates/edgerun-compositor",
+  "crates/edgerun-term/edgerun-term-core",
+  "crates/utility/edgerun-clipboard",
+  "crates/utility/edgerun-emoji",
+  "crates/utility/edgerun-pty",
+  "crates/utility/edgerun-sixel",
+  "crates/utility/edgerun-terminal-parser",
+  "crates/utility/edgerun-unicode",
+  "crates/apps/edgerun-email",
+  "crates/apps/edgerun-exchange-api",
+  "crates/apps/edgerun-oauth",
+  "crates/apps/edgerun-tuya",
+  "crates/apps/edgerun-wallet-app",
+  "crates/edgerun-exchange",
+  "crates/edgerun-marketplace",
+  "crates/edgerun-tcl-ac",
+  "crates/edgerun-wallet",
 ]
 
 members = [
@@ -21,28 +38,21 @@ members = [
   "crates/linux-adapters/edgerun-alsa-speaker",
   "crates/linux-adapters/edgerun-amd-xdna",
   "crates/identity/edgerun-android-keystore",
-  "crates/edgerun-analytics",
   "crates/linux-adapters/edgerun-audio-calibration",
   "crates/linux-adapters/edgerun-audio-liveliness",
   "crates/device-types/edgerun-devices",
   "crates/linux-adapters/edgerun-bluetooth-gatt",
-  "crates/edgerun-tcl-ac",
   "crates/capability/edgerun-capabilities",
   "crates/capability/edgerun-capability-policy",
   "crates/protocol/edgerun-core",
-  "crates/edgerun-compositor",
   "crates/utility/edgerun-crypto",
   "crates/protocol/edgerun-protocols",
-  "crates/protocol/edgerun-protocol-bundle",
-  "crates/protocol/edgerun-sign-verify-e2e",
   "crates/linux-adapters/edgerun-drm-display",
   "crates/authority/edgerun-edgefs",
   "crates/utility/edgerun-encoding",
-  "crates/utility/edgerun-emoji",
   "crates/utility/edgerun-error",
   "crates/utility/edgerun-unit-macros",
   "crates/linux-adapters/edgerun-evdev-input",
-  "crates/linux-adapters/edgerun-face-detection",
   "crates/linux-adapters/edgerun-goodix-fingerprint",
   "crates/identity/edgerun-hardware-signing",
   "crates/utility/edgerun-hpack",
@@ -58,45 +68,30 @@ members = [
   "crates/linux-adapters/edgerun-linux-usb",
   "crates/linux-adapters/edgerun-linux-wifi",
   "crates/utility/edgerun-log",
-  "crates/utility/edgerun-pty",
-  "crates/utility/edgerun-sixel",
-  "crates/utility/edgerun-terminal-parser",
-  "crates/utility/edgerun-unicode",
   "crates/node/edgerun-machine-report",
   "crates/mesh/edgerun-mesh",
   "crates/capability/edgerun-mesh-capability",
   "crates/mesh/edgerun-mesh-link",
   "crates/mesh/edgerun-mesh-session",
   "crates/linux-adapters/edgerun-mgmt-bluetooth",
-  "crates/linux-adapters/edgerun-passport-nfc",
   "crates/node/edgerun-node",
-  "crates/apps/edgerun-oauth",
   "crates/edgerun-oci",
   "crates/edgerun-quectel-ec200a",
   "crates/utility/edgerun-qpack",
   "crates/capability/edgerun-remote-capability",
   "crates/apps/edgerun-secret-service",
-  "crates/apps/edgerun-email",
   "crates/authority/edgerun-derived-db",
   "crates/authority/edgerun-storage",
   "crates/authority/edgerun-stream",
   "crates/edgerun-virtio",
-  "crates/apps/edgerun-tuya",
   "crates/identity/edgerun-tpm",
   "crates/linux-adapters/edgerun-v4l2-camera",
   "crates/authority/edgerun-virtual-disk",
   "crates/identity/edgerun-yubikey",
   "crates/authority/edgerun-vfs",
   "crates/utility/edgerun-clap",
-  "crates/utility/edgerun-bytes",
-  "crates/utility/edgerun-clipboard",
   "crates/protocol/edgerun-wire",
   "crates/edgerun-event",
-  "crates/edgerun-wallet",
-  "crates/edgerun-exchange",
-  "crates/apps/edgerun-exchange-api",
-  "crates/edgerun-marketplace",
-  "crates/edgerun-term/edgerun-term-core",
 ]
 
 [workspace.package]
@@ -164,12 +159,12 @@ edgerun-url = { version = "0.1", path = "crates/utility/edgerun-url" }
 edgerun-glob = { version = "0.1", path = "crates/utility/edgerun-glob" }
 edgerun-regex = { version = "0.1", path = "crates/utility/edgerun-regex" }
 edgerun-email = { version = "0.1", path = "crates/apps/edgerun-email" }
+edgerun-wallet-app = { version = "0.1", path = "crates/apps/edgerun-wallet-app" }
 edgerun-log = { version = "0.1", path = "crates/utility/edgerun-log" }
 edgerun-deploy = { version = "0.1", path = "crates/edgerun-deploy", default-features = false }
 edgerun-ssh = { version = "0.1", path = "crates/edgerun-ssh", default-features = false }
 edgerun-wire = { version = "0.1", path = "crates/protocol/edgerun-wire", default-features = false }
 edgerun-crypto = { version = "0.1", path = "crates/utility/edgerun-crypto", default-features = false }
-edgerun-sign-verify-e2e = { version = "0.1", path = "crates/protocol/edgerun-sign-verify-e2e", default-features = false }
 edgerun-json = { version = "0.1", path = "crates/utility/edgerun-json", default-features = false }
 edgerun-error = { version = "0.1", path = "crates/utility/edgerun-error" }
 edgerun-clap = { version = "0.1", path = "crates/utility/edgerun-clap" }
@@ -189,7 +184,5 @@ edgerun-unicode = { version = "0.1", path = "crates/utility/edgerun-unicode" }
 
 rkyv = { version = "0.8.16", default-features = true }
 libc = "0.2"
-sha2 = { version = "0.10", default-features = false }
 
 [patch.crates-io]
-const-oid = { path = "crates/utility/edgerun-crypto/vendor/const-oid-0.9" }

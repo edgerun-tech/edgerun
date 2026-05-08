@@ -1,11 +1,13 @@
 use super::*;
 use crate::storage::MemoryRuntimeStorage;
+use crate::storage::{RuntimeStorageDecision, RuntimeStorageSurface};
 use alloc::vec;
 use edgerun_protocols::wire::{
     from_bytes, CapabilityRequest, RuntimeDomainConfig, RuntimeMailbox, CAPABILITY_KIND_SIGNING,
     CAPABILITY_KIND_STORAGE, CAPABILITY_OPERATION_READ, CAPABILITY_OPERATION_SIGN,
     CAPABILITY_OPERATION_WRITE, HTTP_METHOD_GET, ROUTE_SCHEME_HTTPS,
-    RUNTIME_EVENT_CAPABILITY_EXECUTED, RUNTIME_PROTOCOL_HTTPS, RUNTIME_PROTOCOL_SMTP,
+    RUNTIME_EVENT_CAPABILITY_EXECUTED, RUNTIME_PROTOCOL_DNS_UDP, RUNTIME_PROTOCOL_HTTPS,
+    RUNTIME_PROTOCOL_SMTP,
 };
 
 #[derive(Default)]
@@ -162,6 +164,73 @@ fn runtime_installs_routes_dispatches_and_brokers_storage() {
             );
         }
     }
+}
+
+#[test]
+fn runtime_installs_app_graph_with_bound_install_record() {
+    let app_id = sha256(b"packaged-app");
+    let release_id = sha256(b"packaged-release");
+    let manifest_sha256 = sha256(b"app manifest");
+    let route = runtime_http_route(
+        app_id,
+        release_id,
+        ROUTE_SCHEME_HTTPS,
+        b"dash.edgerun.tech".to_vec(),
+        b"/v1/order".to_vec(),
+    );
+    let install = runtime_app_install(
+        app_id,
+        release_id,
+        sha256(b"code"),
+        sha256(b"developer"),
+        manifest_sha256,
+        vec![route.clone()],
+        vec![b"private".to_vec()],
+    );
+    let graph = AppGraphRecord {
+        abi_version: SDK_WIRE_ABI_VERSION,
+        flags: 1,
+        app_id,
+        developer_public_key: install.developer_id,
+        app_manifest_sha256: manifest_sha256,
+        app_slug: b"packaged-app".to_vec(),
+        runtime_install: install,
+        artifacts: vec![edgerun_protocols::wire::AppArtifactRecord {
+            kind: 1,
+            path: b"app.edapp".to_vec(),
+            sha256: manifest_sha256,
+        }],
+    };
+    let graph_bytes = sdk_wire_bytes(&SdkWireRecord::AppGraph(graph));
+    let mut runtime = RuntimeKernel::new(MemoryRuntimeStorage::default(), sha256(b"runtime"));
+    runtime
+        .install_app_graph_wire(&graph_bytes, 1)
+        .expect("install app graph");
+
+    assert_eq!(runtime.events().len(), 1);
+    assert_eq!(
+        runtime.events()[0].event.event_kind,
+        RUNTIME_EVENT_APP_INSTALLED
+    );
+
+    runtime
+        .grant_http_route(route, 2)
+        .expect("grant declared route");
+    let dispatch = runtime
+        .dispatch_http(
+            runtime_http_request(
+                HTTP_METHOD_GET,
+                ROUTE_SCHEME_HTTPS,
+                b"dash.edgerun.tech".to_vec(),
+                b"/v1/order/123".to_vec(),
+                [0; 32],
+                Vec::new(),
+            ),
+            3,
+        )
+        .expect("dispatch declared route");
+    assert_eq!(dispatch.app_id, app_id);
+    assert_eq!(dispatch.release_id, release_id);
 }
 
 #[test]
@@ -572,6 +641,102 @@ fn service_plan_derives_app_capability_declarations() {
     let plan = RuntimeServicePlan::from_deployment(&config);
     assert_eq!(plan.provided_capabilities(), vec![provided]);
     assert_eq!(plan.required_capabilities(), vec![required]);
+}
+
+#[test]
+fn same_service_plan_decides_native_and_wasm_boundaries() {
+    use crate::network::{
+        native_socket_binds, NodeTransportSurface, ServiceBindingDecision, TransportCarrier,
+        TransportProtocol,
+    };
+    use crate::runtime::{decide_runtime_boundary, RuntimeBoundarySurface, RuntimeServicePlan};
+
+    let app_id = sha256(b"portable-app");
+    let release_id = sha256(b"portable-release");
+    let config = runtime_deployment_config(
+        sha256(b"runtime"),
+        [203, 0, 113, 10],
+        b"runtime.example.com".to_vec(),
+        b"example.com".to_vec(),
+        b"admin@example.com".to_vec(),
+        Vec::new(),
+        Vec::new(),
+        vec![runtime_app_install(
+            app_id,
+            release_id,
+            sha256(b"code"),
+            sha256(b"developer"),
+            sha256(b"manifest"),
+            Vec::new(),
+            vec![b"portable-app/state".to_vec()],
+        )],
+    );
+    let plan = RuntimeServicePlan::from_deployment(&config);
+
+    let native = decide_runtime_boundary(&plan, RuntimeBoundarySurface::NATIVE);
+    let wasm = decide_runtime_boundary(&plan, RuntimeBoundarySurface::WASM);
+
+    assert_eq!(native.bindings.len(), wasm.bindings.len());
+    assert!(native
+        .bindings
+        .iter()
+        .all(|decision| matches!(decision, ServiceBindingDecision::NativeSocket(_))));
+    let native_binds = native_socket_binds(&native.bindings);
+    assert_eq!(native_binds.len(), native.bindings.len());
+    assert!(native_binds
+        .iter()
+        .all(|bind| bind.address.carrier == TransportCarrier::HostSocket));
+    assert!(native_binds.iter().any(|bind| {
+        bind.binding.protocol == RUNTIME_PROTOCOL_DNS_UDP
+            && bind.address.protocol == TransportProtocol::Datagram
+    }));
+    assert!(wasm
+        .bindings
+        .iter()
+        .all(|decision| matches!(decision, ServiceBindingDecision::Routed(_))));
+    assert!(native_socket_binds(&wasm.bindings).is_empty());
+
+    let native_namespaces: Vec<_> = native
+        .storage
+        .iter()
+        .map(storage_decision_namespace)
+        .collect();
+    let wasm_namespaces: Vec<_> = wasm
+        .storage
+        .iter()
+        .map(storage_decision_namespace)
+        .collect();
+    assert_eq!(native_namespaces, wasm_namespaces);
+    assert_eq!(native_namespaces, vec![b"portable-app/state".to_vec()]);
+
+    assert!(native.storage.iter().all(|decision| matches!(
+        decision,
+        RuntimeStorageDecision::Provider(intent)
+            if intent.surface == RuntimeStorageSurface::HostDurable
+    )));
+    assert!(wasm.storage.iter().all(|decision| matches!(
+        decision,
+        RuntimeStorageDecision::Provider(intent)
+            if intent.surface == RuntimeStorageSurface::BrowserDurable
+    )));
+
+    let replay = decide_runtime_boundary(&plan, RuntimeBoundarySurface::REPLAY);
+    assert!(replay
+        .bindings
+        .iter()
+        .all(|decision| matches!(decision, ServiceBindingDecision::Routed(_))));
+    assert!(plan
+        .requested_bindings(NodeTransportSurface::NativeSocket)
+        .iter()
+        .all(|intent| intent.surface == NodeTransportSurface::NativeSocket));
+}
+
+fn storage_decision_namespace(decision: &RuntimeStorageDecision) -> Vec<u8> {
+    match decision {
+        RuntimeStorageDecision::Provider(intent) | RuntimeStorageDecision::Denied(intent) => {
+            intent.namespace.clone()
+        }
+    }
 }
 
 #[test]

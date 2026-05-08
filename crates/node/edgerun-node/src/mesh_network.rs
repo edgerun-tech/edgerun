@@ -96,7 +96,6 @@ impl MeshNetwork {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_crypto::rand_core::RngCore;
     use edgerun_hardware_signing::MeshSigner;
     use edgerun_mesh::EventType;
     use edgerun_protocols::core_protocol::protocol::{CommandEnvelope, IdentityRef, NodeRef};

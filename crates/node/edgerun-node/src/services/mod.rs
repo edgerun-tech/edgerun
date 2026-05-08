@@ -17,7 +17,7 @@
 //!     .build()
 //!     .await?;
 //!
-//! let shutdown = crate::rt::CancellationToken::new();
+//! let shutdown = edgerun_node::rt::CancellationToken::new();
 //! runtime.run(shutdown).await
 //! # }
 //! ```

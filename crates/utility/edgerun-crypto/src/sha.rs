@@ -15,6 +15,11 @@ pub trait Digest {
 }
 
 #[derive(Clone, Debug, Default)]
+pub struct Sha1 {
+    data: Vec<u8>,
+}
+
+#[derive(Clone, Debug, Default)]
 pub struct Sha256 {
     data: Vec<u8>,
 }
@@ -83,6 +88,40 @@ impl Sha512 {
     }
 }
 
+impl Sha1 {
+    pub fn new() -> Self {
+        Self { data: Vec::new() }
+    }
+
+    pub fn update(&mut self, data: impl AsRef<[u8]>) {
+        self.data.extend_from_slice(data.as_ref());
+    }
+
+    pub fn finalize(self) -> [u8; 20] {
+        sha1(&self.data)
+    }
+
+    pub fn digest(data: impl AsRef<[u8]>) -> [u8; 20] {
+        sha1(data.as_ref())
+    }
+}
+
+impl Digest for Sha1 {
+    type Output = [u8; 20];
+
+    fn new() -> Self {
+        Self::new()
+    }
+
+    fn update(&mut self, data: impl AsRef<[u8]>) {
+        Self::update(self, data);
+    }
+
+    fn finalize(self) -> Self::Output {
+        Self::finalize(self)
+    }
+}
+
 impl Digest for Sha256 {
     type Output = [u8; 32];
 
@@ -131,6 +170,22 @@ impl Digest for Sha512 {
     }
 }
 
+pub fn sha1(data: &[u8]) -> [u8; 20] {
+    let mut h = [
+        0x67452301u32,
+        0xefcdab89,
+        0x98badcfe,
+        0x10325476,
+        0xc3d2e1f0,
+    ];
+    sha1_inner(data, &mut h);
+    let mut out = [0u8; 20];
+    for (index, word) in h.into_iter().enumerate() {
+        out[index * 4..index * 4 + 4].copy_from_slice(&word.to_be_bytes());
+    }
+    out
+}
+
 pub fn sha256(data: &[u8]) -> [u8; 32] {
     let mut h = [
         0x6a09e667u32,
@@ -177,6 +232,59 @@ pub fn sha512(data: &[u8]) -> [u8; 64] {
     ];
     sha512_inner(data, &mut h);
     words64_to_bytes(h)
+}
+
+fn sha1_inner(data: &[u8], h: &mut [u32; 5]) {
+    let bit_len = (data.len() as u64).wrapping_mul(8);
+    let mut padded = Vec::with_capacity(data.len() + 72);
+    padded.extend_from_slice(data);
+    padded.push(0x80);
+    while padded.len() % 64 != 56 {
+        padded.push(0);
+    }
+    padded.extend_from_slice(&bit_len.to_be_bytes());
+
+    let mut w = [0u32; 80];
+    for chunk in padded.chunks_exact(64) {
+        for i in 0..16 {
+            w[i] = u32::from_be_bytes(chunk[i * 4..i * 4 + 4].try_into().unwrap());
+        }
+        for i in 16..80 {
+            w[i] = (w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16]).rotate_left(1);
+        }
+
+        let mut a = h[0];
+        let mut b = h[1];
+        let mut c = h[2];
+        let mut d = h[3];
+        let mut e = h[4];
+
+        for (i, word) in w.iter().enumerate() {
+            let (f, k) = match i {
+                0..=19 => ((b & c) | ((!b) & d), 0x5a827999),
+                20..=39 => (b ^ c ^ d, 0x6ed9eba1),
+                40..=59 => ((b & c) | (b & d) | (c & d), 0x8f1bbcdc),
+                _ => (b ^ c ^ d, 0xca62c1d6),
+            };
+            let temp = a
+                .rotate_left(5)
+                .wrapping_add(f)
+                .wrapping_add(e)
+                .wrapping_add(k)
+                .wrapping_add(*word);
+            e = d;
+            d = c;
+            c = b.rotate_left(30);
+            b = a;
+            a = temp;
+        }
+
+        h[0] = h[0].wrapping_add(a);
+        h[1] = h[1].wrapping_add(b);
+        h[2] = h[2].wrapping_add(c);
+        h[3] = h[3].wrapping_add(d);
+        h[4] = h[4].wrapping_add(e);
+    }
 }
 
 fn sha256_inner(data: &[u8], h: &mut [u32; 8]) {
@@ -427,6 +535,10 @@ mod tests {
 
     #[test]
     fn sha_known_vectors() {
+        assert_eq!(
+            hex(&sha1(b"abc")),
+            "a9993e364706816aba3e25717850c26c9cd0d89d"
+        );
         assert_eq!(
             hex(&sha256(b"abc")),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"

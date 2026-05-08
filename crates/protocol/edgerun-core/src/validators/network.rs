@@ -833,7 +833,7 @@ mod proto_tests {
     use crate::protocol::{ReachabilityHint, RouteAdvertisement};
 
     fn make_test_keypair() -> (edgerun_crypto::p256::ecdsa::SigningKey, Vec<u8>) {
-        let sk = edgerun_crypto::p256::ecdsa::SigningKey::random(&mut edgerun_crypto::OsRng);
+        let sk = edgerun_crypto::random_p256_signing_key();
         let vk = *sk.verifying_key();
         let sec1 = vk.to_encoded_point(false);
         let pk = sec1.as_bytes()[1..].to_vec();

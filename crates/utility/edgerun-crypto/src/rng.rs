@@ -5,16 +5,13 @@
 //! 2. CPU hardware random instructions
 //! 3. no_std SHA-256 counter DRBG seeded from mixed entropy when available
 
-use core::num::NonZeroU32;
 use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use crate::error::{CryptoError, Result};
 use crate::sha::Digest;
-use rand_core::{CryptoRng, Error as RandError, RngCore};
 
 pub type RandomSource = fn(&mut [u8]) -> Result<()>;
 
-const RNG_ERROR_CODE: u32 = RandError::CUSTOM_START + 1;
 const EXTERNAL_SOURCE_NONE: usize = 0;
 
 static EXTERNAL_SOURCE: AtomicUsize = AtomicUsize::new(EXTERNAL_SOURCE_NONE);
@@ -34,25 +31,23 @@ static DRBG_STATE: [AtomicUsize; 8] = [
 #[derive(Clone, Copy, Debug, Default)]
 pub struct OsRng;
 
-impl RngCore for OsRng {
-    fn next_u32(&mut self) -> u32 {
+impl OsRng {
+    pub fn next_u32(&mut self) -> u32 {
         random_u32().unwrap_or(0)
     }
 
-    fn next_u64(&mut self) -> u64 {
+    pub fn next_u64(&mut self) -> u64 {
         random_u64().unwrap_or(0)
     }
 
-    fn fill_bytes(&mut self, dest: &mut [u8]) {
+    pub fn fill_bytes(&mut self, dest: &mut [u8]) {
         let _ = fill_random(dest);
     }
 
-    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> core::result::Result<(), RandError> {
-        fill_random(dest).map_err(|_| rand_error())
+    pub fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<()> {
+        fill_random(dest)
     }
 }
-
-impl CryptoRng for OsRng {}
 
 pub fn register_random_source(source: RandomSource) {
     EXTERNAL_SOURCE.store(source as usize, Ordering::Release);
@@ -195,10 +190,6 @@ fn store_state(bytes: &[u8]) {
     }
 }
 
-fn rand_error() -> RandError {
-    RandError::from(NonZeroU32::new(RNG_ERROR_CODE).unwrap())
-}
-
 #[cfg(target_arch = "x86_64")]
 mod cpu_random {
     use core::arch::x86_64::{__cpuid, __cpuid_count, _rdrand64_step, _rdseed64_step, _rdtsc};
@@ -303,7 +294,7 @@ mod tests {
     }
 
     #[test]
-    fn os_rng_implements_rand_core() {
+    fn os_rng_fills_bytes() {
         let mut rng = OsRng;
         let mut bytes = [0u8; 32];
         rng.fill_bytes(&mut bytes);

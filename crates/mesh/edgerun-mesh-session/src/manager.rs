@@ -1,16 +1,43 @@
+use crate::collections::HashMap;
 use crate::prelude::v1::*;
+use crate::session::NONCE_PREFIX_SIZE;
+use crate::time::Duration;
 pub use edgerun_crypto::p256::ecdh::EphemeralSecret;
 use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
 use edgerun_crypto::p256::PublicKey;
 use edgerun_hardware_signing::NodeID;
-use std::collections::HashMap;
-use std::time::{Duration, Instant};
 
 use super::*;
 
 // ---------------------------------------------------------------------------
 // Session manager
 // ---------------------------------------------------------------------------
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum SessionClock {
+    Host,
+    Logical(Duration),
+}
+
+impl SessionClock {
+    fn now(self) -> Duration {
+        match self {
+            Self::Host => crate::time::host_now(),
+            Self::Logical(now) => now,
+        }
+    }
+
+    fn set_logical(&mut self, now: Duration) {
+        *self = Self::Logical(now);
+    }
+
+    fn advance_logical(&mut self, delta: Duration) {
+        let Self::Logical(now) = self else {
+            return;
+        };
+        *now = now.saturating_add(delta);
+    }
+}
 
 /// Manages active sessions with mesh peers.
 ///
@@ -23,6 +50,7 @@ pub struct SessionManager {
     sessions: HashMap<NodeID, MeshSession>,
     /// Our NodeID (from hardware).
     our_node_id: NodeID,
+    clock: SessionClock,
 }
 
 impl SessionManager {
@@ -30,6 +58,16 @@ impl SessionManager {
         Self {
             sessions: HashMap::new(),
             our_node_id,
+            clock: SessionClock::Host,
+        }
+    }
+
+    /// Creates a manager backed by an explicit logical clock for deterministic replay.
+    pub fn new_replayable(our_node_id: NodeID) -> Self {
+        Self {
+            sessions: HashMap::new(),
+            our_node_id,
+            clock: SessionClock::Logical(Duration::ZERO),
         }
     }
 
@@ -38,9 +76,26 @@ impl SessionManager {
         self.our_node_id
     }
 
+    /// Sets the logical clock used by replayable managers.
+    pub fn set_logical_time(&mut self, now: Duration) {
+        self.clock.set_logical(now);
+    }
+
+    /// Advances the logical clock used by replayable managers.
+    pub fn advance_logical_time(&mut self, delta: Duration) {
+        self.clock.advance_logical(delta);
+    }
+
     /// Generate a random EphemeralSecret using OS randomness.
     pub fn random_ephemeral_secret() -> EphemeralSecret {
-        EphemeralSecret::random(&mut edgerun_crypto::OsRng)
+        edgerun_crypto::random_p256_ephemeral_secret()
+    }
+
+    /// Construct a P-256 ephemeral secret from explicit scalar bytes for replay.
+    pub fn ephemeral_secret_from_bytes(
+        bytes: [u8; 32],
+    ) -> Result<EphemeralSecret, edgerun_crypto::elliptic_curve::Error> {
+        EphemeralSecret::from_bytes(bytes.into())
     }
 
     // -----------------------------------------------------------------------
@@ -54,6 +109,15 @@ impl SessionManager {
     /// internally until the handshake completes.
     pub fn initiate_handshake(&self, _peer: NodeID) -> (HandshakeInit, EphemeralSecret) {
         let secret = Self::random_ephemeral_secret();
+        self.initiate_handshake_with_secret(_peer, secret)
+    }
+
+    /// Starts a handshake with an explicit ephemeral secret for replay.
+    pub fn initiate_handshake_with_secret(
+        &self,
+        _peer: NodeID,
+        secret: EphemeralSecret,
+    ) -> (HandshakeInit, EphemeralSecret) {
         let pub_point = secret.public_key().to_encoded_point(false);
         let pub_bytes = pub_point.as_bytes();
         let mut ephemeral_pub = [0u8; ECDH_PUBLIC_KEY_SIZE];
@@ -74,12 +138,29 @@ impl SessionManager {
         accept: &HandshakeAccept,
         our_secret: &EphemeralSecret,
     ) -> Result<(), SessionError> {
+        let mut nonce_prefix = [0u8; NONCE_PREFIX_SIZE];
+        edgerun_crypto::fill_random(&mut nonce_prefix).expect("random generation failed");
+        self.complete_handshake_initiator_with_nonce_prefix(accept, our_secret, nonce_prefix)
+    }
+
+    /// Completes an initiator handshake using an explicit nonce prefix for replay.
+    pub fn complete_handshake_initiator_with_nonce_prefix(
+        &mut self,
+        accept: &HandshakeAccept,
+        our_secret: &EphemeralSecret,
+        nonce_prefix: [u8; NONCE_PREFIX_SIZE],
+    ) -> Result<(), SessionError> {
         let their_pub = PublicKey::from_sec1_bytes(&accept.ephemeral_pub)
             .map_err(|_| SessionError::InvalidEcdhPublicKey)?;
         let shared = our_secret.diffie_hellman(&their_pub);
         let session_key = derive_session_key(shared.raw_secret_bytes());
 
-        let session = MeshSession::new(accept.responder, session_key);
+        let session = MeshSession::new_with_nonce_prefix(
+            accept.responder,
+            session_key,
+            self.clock.now(),
+            nonce_prefix,
+        );
         self.sessions.insert(accept.responder, session);
         Ok(())
     }
@@ -96,10 +177,22 @@ impl SessionManager {
         &mut self,
         init: &HandshakeInit,
     ) -> Result<(HandshakeAccept, EphemeralSecret), SessionError> {
+        let our_secret = Self::random_ephemeral_secret();
+        let mut nonce_prefix = [0u8; NONCE_PREFIX_SIZE];
+        edgerun_crypto::fill_random(&mut nonce_prefix).expect("random generation failed");
+        self.respond_to_handshake_with_secret_and_nonce_prefix(init, our_secret, nonce_prefix)
+    }
+
+    /// Responds to a handshake with explicit secret material for replay.
+    pub fn respond_to_handshake_with_secret_and_nonce_prefix(
+        &mut self,
+        init: &HandshakeInit,
+        our_secret: EphemeralSecret,
+        nonce_prefix: [u8; NONCE_PREFIX_SIZE],
+    ) -> Result<(HandshakeAccept, EphemeralSecret), SessionError> {
         let their_pub = PublicKey::from_sec1_bytes(&init.ephemeral_pub)
             .map_err(|_| SessionError::InvalidEcdhPublicKey)?;
 
-        let our_secret = Self::random_ephemeral_secret();
         let our_pub_point = our_secret.public_key().to_encoded_point(false);
         let our_pub_bytes = our_pub_point.as_bytes();
         let mut ephemeral_pub = [0u8; ECDH_PUBLIC_KEY_SIZE];
@@ -108,7 +201,12 @@ impl SessionManager {
         let shared = our_secret.diffie_hellman(&their_pub);
         let session_key = derive_session_key(shared.raw_secret_bytes());
 
-        let session = MeshSession::new(init.initiator, session_key);
+        let session = MeshSession::new_with_nonce_prefix(
+            init.initiator,
+            session_key,
+            self.clock.now(),
+            nonce_prefix,
+        );
         self.sessions.insert(init.initiator, session);
 
         let accept = HandshakeAccept {
@@ -130,7 +228,7 @@ impl SessionManager {
             .get_mut(&peer)
             .ok_or(SessionError::NoActiveSession)?;
 
-        if session.needs_rekey() {
+        if session.needs_rekey_at(self.clock.now()) {
             return Err(SessionError::SessionExpired);
         }
 

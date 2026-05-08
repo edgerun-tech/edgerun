@@ -68,10 +68,7 @@ pub fn discover_fingerprint_readers() -> Vec<String> {
                 ));
             }
         }
-        Err(e) => crate::node_warn!(
-            "edged: warning: Goodix fingerprint discovery failed: {}",
-            e
-        ),
+        Err(e) => crate::node_warn!("edged: warning: Goodix fingerprint discovery failed: {}", e),
     }
 
     readers
@@ -445,10 +442,7 @@ impl HardwareInventory {
         let fingerprint_devices = match edgerun_goodix_fingerprint::discover_supported_devices() {
             Ok(devices) => devices,
             Err(e) => {
-                crate::node_warn!(
-                    "edged: warning: Goodix fingerprint discovery failed: {}",
-                    e
-                );
+                crate::node_warn!("edged: warning: Goodix fingerprint discovery failed: {}", e);
                 Vec::new()
             }
         };

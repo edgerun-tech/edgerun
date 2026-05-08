@@ -39,6 +39,10 @@ pub const CAPABILITY_STATUS_POLICY_DENIED: u16 = 1;
 pub const CAPABILITY_STATUS_INVALID_REQUEST: u16 = 2;
 pub const CAPABILITY_STATUS_PROVIDER_FAILED: u16 = 3;
 
+pub const USER_PROFILE_KDF_NONE: u16 = 0;
+pub const USER_PROFILE_KDF_PBKDF2_HMAC_SHA256: u16 = 1;
+pub const USER_PROFILE_OWNER_KEY_ED25519: u16 = 1;
+
 pub const RUNTIME_EVENT_PROFILE_OPENED: u16 = 1;
 pub const RUNTIME_EVENT_PROFILE_ROLLBACK_REJECTED: u16 = 2;
 pub const RUNTIME_EVENT_CAPABILITY_ALLOWED: u16 = 3;
@@ -76,6 +80,16 @@ pub const RUNTIME_PROTOCOL_LMTP: u16 = 9;
 pub const RUNTIME_PROTOCOL_TFTP: u16 = 10;
 pub const RUNTIME_PROTOCOL_PROXY: u16 = 11;
 pub const RUNTIME_PROTOCOL_ACME: u16 = 12;
+
+pub const APP_STORE_SUBMISSION_STATUS_SUBMITTED: u16 = 1;
+pub const APP_STORE_SUBMISSION_STATUS_ACCEPTED: u16 = 2;
+pub const APP_STORE_SUBMISSION_STATUS_REJECTED: u16 = 3;
+pub const APP_STORE_SUBMISSION_STATUS_PUBLISHED: u16 = 4;
+pub const APP_STORE_SUBMISSION_STATUS_REVOKED: u16 = 5;
+
+pub const APP_STORE_REVIEW_DECISION_ACCEPT: u16 = 1;
+pub const APP_STORE_REVIEW_DECISION_REJECT: u16 = 2;
+pub const APP_STORE_REVIEW_DECISION_REVOKE: u16 = 3;
 
 #[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[rkyv(crate = rkyv)]
@@ -249,8 +263,18 @@ pub struct UserProfile {
     pub monotonic_version: u64,
     pub profile_id: [u8; 32],
     pub owner_id: [u8; 32],
+    pub password_kdf: UserProfilePasswordKdf,
     pub body_sha256: [u8; 32],
     pub sealed_body: Vec<u8>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct UserProfilePasswordKdf {
+    pub kdf: u16,
+    pub flags: u16,
+    pub rounds: u32,
+    pub salt: Vec<u8>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
@@ -262,6 +286,8 @@ pub struct UserProfileBody {
     pub monotonic_version: u64,
     pub profile_id: [u8; 32],
     pub owner_id: [u8; 32],
+    pub owner_key_algorithm: u16,
+    pub owner_private_key: Vec<u8>,
     pub grants: Vec<UserCapabilityGrant>,
     pub signature: Vec<u8>,
 }
@@ -678,6 +704,32 @@ pub struct SignerPolicyEntry {
 
 #[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[rkyv(crate = rkyv)]
+pub struct AppManifestRecord {
+    pub abi_version: u16,
+    pub flags: u32,
+    pub app_id: [u8; 32],
+    pub developer_id: [u8; 32],
+    pub app_slug: Vec<u8>,
+    pub name: Vec<u8>,
+    pub version: Vec<u8>,
+    pub summary: Vec<u8>,
+    pub code_sha256: [u8; 32],
+    pub routes: Vec<AppHttpRouteRecord>,
+    pub storage_namespaces: Vec<Vec<u8>>,
+    pub provided_capabilities: Vec<RuntimeCapabilityDeclaration>,
+    pub required_capabilities: Vec<RuntimeCapabilityDeclaration>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct AppHttpRouteRecord {
+    pub scheme: u16,
+    pub host: Vec<u8>,
+    pub path_prefix: Vec<u8>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
 pub struct AppGraphRecord {
     pub abi_version: u16,
     pub flags: u32,
@@ -685,6 +737,7 @@ pub struct AppGraphRecord {
     pub developer_public_key: [u8; 32],
     pub app_manifest_sha256: [u8; 32],
     pub app_slug: Vec<u8>,
+    pub runtime_install: RuntimeAppInstall,
     pub artifacts: Vec<AppArtifactRecord>,
 }
 
@@ -737,6 +790,86 @@ pub struct ProductRecord {
     pub currency: Vec<u8>,
     pub developer_signature: Vec<u8>,
     pub store_signature: Vec<u8>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct AppStoreCatalogRecord {
+    pub abi_version: u16,
+    pub flags: u32,
+    pub store_id: [u8; 32],
+    pub generated_at: u64,
+    pub sequence: u64,
+    pub previous_catalog_sha256: [u8; 32],
+    pub entries: Vec<AppStoreCatalogEntry>,
+    pub signature: Vec<u8>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct AppStoreCatalogEntry {
+    pub app_id: [u8; 32],
+    pub release_id: [u8; 32],
+    pub developer_id: [u8; 32],
+    pub app_graph_sha256: [u8; 32],
+    pub manifest_sha256: [u8; 32],
+    pub package_sha256: [u8; 32],
+    pub package_bytes: u64,
+    pub status: u16,
+    pub name: Vec<u8>,
+    pub version: Vec<u8>,
+    pub summary: Vec<u8>,
+    pub app_slug: Vec<u8>,
+    pub package_ref: Vec<u8>,
+    pub manifest_ref: Vec<u8>,
+    pub launch_ref: Vec<u8>,
+    pub required_capabilities: Vec<Vec<u8>>,
+    pub optional_capabilities: Vec<Vec<u8>>,
+    pub asset_refs: Vec<AppStoreAssetRef>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct AppStoreAssetRef {
+    pub path: Vec<u8>,
+    pub sha256: [u8; 32],
+    pub bytes: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct AppStoreSubmissionRecord {
+    pub abi_version: u16,
+    pub flags: u32,
+    pub submitted_at: u64,
+    pub app_id: [u8; 32],
+    pub release_id: [u8; 32],
+    pub developer_id: [u8; 32],
+    pub app_graph_sha256: [u8; 32],
+    pub manifest_sha256: [u8; 32],
+    pub package_sha256: [u8; 32],
+    pub package_bytes: u64,
+    pub app_slug: Vec<u8>,
+    pub package_ref: Vec<u8>,
+    pub manifest_ref: Vec<u8>,
+    pub notes: Vec<u8>,
+    pub app_graph: AppGraphRecord,
+    pub developer_signature: Vec<u8>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct AppStoreReviewRecord {
+    pub abi_version: u16,
+    pub flags: u32,
+    pub reviewed_at: u64,
+    pub decision: u16,
+    pub app_id: [u8; 32],
+    pub release_id: [u8; 32],
+    pub submission_sha256: [u8; 32],
+    pub reviewer_id: [u8; 32],
+    pub reason: Vec<u8>,
+    pub signature: Vec<u8>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
@@ -1196,12 +1329,18 @@ pub enum SdkWireRecord {
     ArtifactSignature(ArtifactSignature),
     SignerPolicy(SignerPolicy),
     SignerPolicyEntry(SignerPolicyEntry),
+    AppManifest(AppManifestRecord),
     AppGraph(AppGraphRecord),
     AppArtifact(AppArtifactRecord),
     Entitlement(EntitlementRecord),
     Product(ProductRecord),
+    AppStoreCatalog(AppStoreCatalogRecord),
+    AppStoreCatalogEntry(AppStoreCatalogEntry),
+    AppStoreSubmission(AppStoreSubmissionRecord),
+    AppStoreReview(AppStoreReviewRecord),
     Settlement(SettlementRecord),
     Payment(PaymentRecord),
+    UserProfilePasswordKdf(UserProfilePasswordKdf),
 }
 
 pub fn sdk_wire_bytes(record: &SdkWireRecord) -> Vec<u8> {
@@ -1242,6 +1381,8 @@ mod tests {
             monotonic_version: 2,
             profile_id: [1; 32],
             owner_id: [2; 32],
+            owner_key_algorithm: USER_PROFILE_OWNER_KEY_ED25519,
+            owner_private_key: vec![6; 32],
             grants: vec![UserCapabilityGrant {
                 capability_kind: CAPABILITY_KIND_SEALING,
                 operation: CAPABILITY_OPERATION_UNSEAL,
@@ -1338,7 +1479,22 @@ mod tests {
             route_path_prefix: route.path_prefix.clone(),
             request_sha256: [8; 32],
         };
+        let app_graph = AppGraphRecord {
+            abi_version: SDK_WIRE_ABI_VERSION,
+            flags: 1,
+            app_id: install.app_id,
+            developer_public_key: install.developer_id,
+            app_manifest_sha256: install.manifest_sha256,
+            app_slug: b"example-app".to_vec(),
+            runtime_install: install.clone(),
+            artifacts: vec![AppArtifactRecord {
+                kind: 1,
+                path: b"app.edapp".to_vec(),
+                sha256: install.manifest_sha256,
+            }],
+        };
         assert!(!sdk_wire_bytes(&SdkWireRecord::RuntimeAppInstall(install)).is_empty());
+        assert!(!sdk_wire_bytes(&SdkWireRecord::AppGraph(app_graph)).is_empty());
         assert!(
             !sdk_wire_bytes(&SdkWireRecord::RuntimeCapabilityDeclaration(
                 RuntimeCapabilityDeclaration {
@@ -1357,6 +1513,126 @@ mod tests {
         assert!(!sdk_wire_bytes(&SdkWireRecord::RuntimeHttpRoute(route)).is_empty());
         assert!(!sdk_wire_bytes(&SdkWireRecord::RuntimeHttpRequest(request)).is_empty());
         assert!(!sdk_wire_bytes(&SdkWireRecord::RuntimeHttpDispatch(dispatch)).is_empty());
+    }
+
+    #[test]
+    fn app_store_records_archive_through_rkyv() {
+        let install = RuntimeAppInstall {
+            abi_version: SDK_WIRE_ABI_VERSION,
+            flags: 1,
+            app_id: [1; 32],
+            release_id: [2; 32],
+            code_sha256: [3; 32],
+            developer_id: [4; 32],
+            manifest_sha256: [5; 32],
+            declared_routes: Vec::new(),
+            storage_namespaces: Vec::new(),
+            provided_capabilities: Vec::new(),
+            required_capabilities: Vec::new(),
+        };
+        let app_graph = AppGraphRecord {
+            abi_version: SDK_WIRE_ABI_VERSION,
+            flags: 1,
+            app_id: install.app_id,
+            developer_public_key: install.developer_id,
+            app_manifest_sha256: install.manifest_sha256,
+            app_slug: b"example-app".to_vec(),
+            runtime_install: install.clone(),
+            artifacts: vec![AppArtifactRecord {
+                kind: 1,
+                path: b"app.edapp".to_vec(),
+                sha256: install.manifest_sha256,
+            }],
+        };
+        let app_manifest = AppManifestRecord {
+            abi_version: SDK_WIRE_ABI_VERSION,
+            flags: 1,
+            app_id: install.app_id,
+            developer_id: install.developer_id,
+            app_slug: b"example-app".to_vec(),
+            name: b"Example App".to_vec(),
+            version: b"0.1.0".to_vec(),
+            summary: b"Example rkyv app manifest".to_vec(),
+            code_sha256: install.code_sha256,
+            routes: vec![AppHttpRouteRecord {
+                scheme: ROUTE_SCHEME_HTTPS,
+                host: b"example.com".to_vec(),
+                path_prefix: b"/app".to_vec(),
+            }],
+            storage_namespaces: vec![b"example-app/state".to_vec()],
+            provided_capabilities: Vec::new(),
+            required_capabilities: Vec::new(),
+        };
+        let asset = AppStoreAssetRef {
+            path: b"index.html".to_vec(),
+            sha256: [6; 32],
+            bytes: 128,
+        };
+        let entry = AppStoreCatalogEntry {
+            app_id: install.app_id,
+            release_id: install.release_id,
+            developer_id: install.developer_id,
+            app_graph_sha256: [7; 32],
+            manifest_sha256: install.manifest_sha256,
+            package_sha256: [8; 32],
+            package_bytes: 4096,
+            status: APP_STORE_SUBMISSION_STATUS_PUBLISHED,
+            name: b"Example".to_vec(),
+            version: b"0.1.0".to_vec(),
+            summary: b"Example app".to_vec(),
+            app_slug: b"example-app".to_vec(),
+            package_ref: b"edgerun://store/apps/example/app.eapp".to_vec(),
+            manifest_ref: b"edgerun://store/apps/example/app.edapp".to_vec(),
+            launch_ref: b"edgerun://store/apps/example/index.html".to_vec(),
+            required_capabilities: vec![b"browser.wasm.execute".to_vec()],
+            optional_capabilities: Vec::new(),
+            asset_refs: vec![asset],
+        };
+        let catalog = AppStoreCatalogRecord {
+            abi_version: SDK_WIRE_ABI_VERSION,
+            flags: 1,
+            store_id: [9; 32],
+            generated_at: 10,
+            sequence: 1,
+            previous_catalog_sha256: [0; 32],
+            entries: vec![entry.clone()],
+            signature: vec![11; 64],
+        };
+        let submission = AppStoreSubmissionRecord {
+            abi_version: SDK_WIRE_ABI_VERSION,
+            flags: 1,
+            submitted_at: 12,
+            app_id: install.app_id,
+            release_id: install.release_id,
+            developer_id: install.developer_id,
+            app_graph_sha256: [7; 32],
+            manifest_sha256: install.manifest_sha256,
+            package_sha256: [8; 32],
+            package_bytes: 4096,
+            app_slug: b"example-app".to_vec(),
+            package_ref: b"edgerun://store/submissions/example/app.eapp".to_vec(),
+            manifest_ref: b"edgerun://store/submissions/example/app.edapp".to_vec(),
+            notes: Vec::new(),
+            app_graph,
+            developer_signature: vec![13; 64],
+        };
+        let review = AppStoreReviewRecord {
+            abi_version: SDK_WIRE_ABI_VERSION,
+            flags: 1,
+            reviewed_at: 14,
+            decision: APP_STORE_REVIEW_DECISION_ACCEPT,
+            app_id: install.app_id,
+            release_id: install.release_id,
+            submission_sha256: [15; 32],
+            reviewer_id: [16; 32],
+            reason: b"accepted".to_vec(),
+            signature: vec![17; 64],
+        };
+        assert!(!sdk_wire_bytes(&SdkWireRecord::AppStoreCatalog(catalog)).is_empty());
+        assert!(!sdk_wire_bytes(&SdkWireRecord::AppManifest(app_manifest)).is_empty());
+        assert!(!sdk_wire_bytes(&SdkWireRecord::AppStoreCatalogEntry(entry)).is_empty());
+        assert!(!sdk_wire_bytes(&SdkWireRecord::AppStoreSubmission(submission)).is_empty());
+        assert!(!sdk_wire_bytes(&SdkWireRecord::AppStoreReview(review)).is_empty());
     }
 
     #[test]

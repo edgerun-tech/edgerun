@@ -77,6 +77,17 @@ pub type PFNGLTEXIMAGE2DPROC = unsafe extern "system" fn(
     ty: GLenum,
     pixels: *const GLvoid,
 );
+pub type PFNGLTEXSUBIMAGE2DPROC = unsafe extern "system" fn(
+    target: GLenum,
+    level: GLint,
+    xoffset: GLint,
+    yoffset: GLint,
+    width: GLsizei,
+    height: GLsizei,
+    format: GLenum,
+    ty: GLenum,
+    pixels: *const GLvoid,
+);
 pub type PFNGLDELETETEXTURESPROC = unsafe extern "system" fn(n: GLsizei, textures: *const GLuint);
 pub type PFNGLENABLEPROC = unsafe extern "system" fn(cap: GLenum);
 pub type PFNGLDISABLEPROC = unsafe extern "system" fn(cap: GLenum);
@@ -203,6 +214,7 @@ pub struct Gl {
     pub glBindTexture: PFNGLBINDTEXTUREPROC,
     pub glTexParameteri: PFNGLTEXPARAMETERIPROC,
     pub glTexImage2D: PFNGLTEXIMAGE2DPROC,
+    pub glTexSubImage2D: PFNGLTEXSUBIMAGE2DPROC,
     pub glDeleteTextures: PFNGLDELETETEXTURESPROC,
     pub glEnable: PFNGLENABLEPROC,
     pub glDisable: PFNGLDISABLEPROC,
@@ -291,6 +303,7 @@ impl Gl {
             glBindTexture: dlsym(lib, "glBindTexture")?,
             glTexParameteri: dlsym(lib, "glTexParameteri")?,
             glTexImage2D: dlsym(lib, "glTexImage2D")?,
+            glTexSubImage2D: dlsym(lib, "glTexSubImage2D")?,
             glDeleteTextures: dlsym(lib, "glDeleteTextures")?,
             glEnable: dlsym(lib, "glEnable")?,
             glDisable: dlsym(lib, "glDisable")?,

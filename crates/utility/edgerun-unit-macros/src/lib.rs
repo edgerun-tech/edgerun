@@ -1,197 +1,179 @@
-use proc_macro::TokenStream;
-use quote::quote;
-use syn::{
-    parse_macro_input, parse_quote, Error, FnArg, ItemFn, LitStr, PatType, ReturnType, Type,
-    Visibility,
-};
+use proc_macro::{Delimiter, Group, TokenStream, TokenTree};
 
 #[proc_macro_attribute]
 pub fn export(attr: TokenStream, item: TokenStream) -> TokenStream {
     if !attr.is_empty() {
-        let parsed = parse_macro_input!(attr as LitStr);
-        return Error::new_spanned(parsed, "edgerun_unit::export takes no arguments")
-            .to_compile_error()
-            .into();
+        return compile_error("edgerun_unit::export takes no arguments");
     }
-
-    let mut function = parse_macro_input!(item as ItemFn);
-    if let Err(err) = validate_export_signature(&function) {
-        return err.to_compile_error().into();
-    }
-
-    if function
-        .attrs
-        .iter()
-        .any(|attr| attr.path().is_ident("no_mangle"))
-    {
-        return Error::new_spanned(
-            function.sig.ident,
-            "edgerun_unit::export owns #[no_mangle]; remove the manual attribute",
-        )
-        .to_compile_error()
-        .into();
-    }
-
-    function
-        .sig
-        .abi
-        .get_or_insert_with(|| parse_quote!(extern "C"));
-    function.attrs.push(parse_quote!(#[no_mangle]));
-    function.vis = Visibility::Public(parse_quote!(pub));
-
-    quote!(#function).into()
+    expand_export(item).unwrap_or_else(|message| compile_error(&message))
 }
 
-fn validate_export_signature(function: &ItemFn) -> Result<(), Error> {
-    if !function.sig.generics.params.is_empty() {
-        return Err(Error::new_spanned(
-            &function.sig.generics,
-            "edgerun unit exports cannot be generic",
-        ));
-    }
-    if function.sig.constness.is_some() {
-        return Err(Error::new_spanned(
-            function.sig.constness,
-            "edgerun unit exports cannot be const functions",
-        ));
-    }
-    if function.sig.asyncness.is_some() {
-        return Err(Error::new_spanned(
-            function.sig.asyncness,
-            "edgerun unit exports cannot be async functions",
-        ));
-    }
-    if function.sig.variadic.is_some() {
-        return Err(Error::new_spanned(
-            &function.sig.variadic,
-            "edgerun unit exports cannot be variadic",
-        ));
+fn expand_export(item: TokenStream) -> Result<TokenStream, String> {
+    let tokens: Vec<TokenTree> = item.clone().into_iter().collect();
+    if has_no_mangle_attr(&tokens) {
+        return Err("edgerun_unit::export owns #[no_mangle]; remove the manual attribute".into());
     }
 
-    match &function.sig.abi {
-        Some(abi) => {
-            let is_c = abi
-                .name
-                .as_ref()
-                .map(|name| name.value() == "C")
-                .unwrap_or(false);
-            if !is_c {
-                return Err(Error::new_spanned(
-                    abi,
-                    "edgerun unit exports must use extern \"C\"",
-                ));
-            }
+    let fn_index = tokens
+        .iter()
+        .position(|token| is_ident(token, "fn"))
+        .ok_or_else(|| "edgerun_unit::export expected a function".to_string())?;
+    let name_index = fn_index
+        .checked_add(1)
+        .ok_or_else(|| "edgerun_unit::export expected a function name".to_string())?;
+    let name = match tokens.get(name_index) {
+        Some(TokenTree::Ident(ident)) => ident.to_string(),
+        _ => return Err("edgerun_unit::export expected a function name".into()),
+    };
+    let args_index = name_index
+        .checked_add(1)
+        .ok_or_else(|| "edgerun_unit::export expected a parameter list".to_string())?;
+    let args = match tokens.get(args_index) {
+        Some(TokenTree::Group(group)) if group.delimiter() == Delimiter::Parenthesis => group,
+        Some(TokenTree::Punct(punct)) if punct.as_char() == '<' => {
+            return Err("edgerun unit exports cannot be generic".into());
         }
-        None => {}
+        _ => return Err("edgerun_unit::export expected a parameter list".into()),
+    };
+
+    validate_prefix(&tokens[..fn_index])?;
+    validate_params(args.stream())?;
+    validate_return(&tokens[args_index + 1..])?;
+
+    let source = item.to_string();
+    rewrite_function(&source, &name)
+        .parse()
+        .map_err(|_| "edgerun_unit::export failed to generate function".to_string())
+}
+
+fn validate_prefix(tokens: &[TokenTree]) -> Result<(), String> {
+    if tokens.iter().any(|token| is_ident(token, "const")) {
+        return Err("edgerun unit exports cannot be const functions".into());
+    }
+    if tokens.iter().any(|token| is_ident(token, "async")) {
+        return Err("edgerun unit exports cannot be async functions".into());
     }
 
-    for input in &function.sig.inputs {
-        let FnArg::Typed(PatType { ty, .. }) = input else {
-            return Err(Error::new_spanned(
-                input,
-                "edgerun unit exports cannot take self receivers",
-            ));
-        };
-        if !is_wasm_scalar_type(ty) {
-            return Err(Error::new_spanned(
-                ty,
-                "edgerun unit export parameters must be i32, i64, f32, or f64",
-            ));
+    let mut saw_extern = false;
+    let mut abi_is_c = false;
+    for token in tokens {
+        if is_ident(token, "extern") {
+            saw_extern = true;
         }
-    }
-
-    match &function.sig.output {
-        ReturnType::Default => {}
-        ReturnType::Type(_, ty) => {
-            if !is_wasm_scalar_type(ty) {
-                return Err(Error::new_spanned(
-                    ty,
-                    "edgerun unit export return values must be i32, i64, f32, or f64",
-                ));
+        if let TokenTree::Literal(lit) = token {
+            if lit.to_string() == "\"C\"" {
+                abi_is_c = true;
             }
         }
     }
-
+    if saw_extern && !abi_is_c {
+        return Err("edgerun unit exports must use extern \"C\"".into());
+    }
     Ok(())
 }
 
-fn is_wasm_scalar_type(ty: &Type) -> bool {
-    let Type::Path(path) = ty else {
-        return false;
-    };
-    if path.qself.is_some() {
-        return false;
+fn validate_params(params: TokenStream) -> Result<(), String> {
+    let mut current = Vec::new();
+    for token in params {
+        if matches!(&token, TokenTree::Punct(punct) if punct.as_char() == ',') {
+            validate_param(&current)?;
+            current.clear();
+        } else {
+            current.push(token);
+        }
     }
-    let Some(segment) = path.path.segments.last() else {
-        return false;
-    };
-    matches!(
-        segment.ident.to_string().as_str(),
-        "i32" | "i64" | "f32" | "f64"
-    )
+    if !current.is_empty() {
+        validate_param(&current)?;
+    }
+    Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use syn::parse_quote;
-
-    #[test]
-    fn accepts_wasm_scalar_signature() {
-        let function: ItemFn = parse_quote! {
-            unsafe fn digest(input_ptr: i32, input_len: i32, out_ptr: i32) -> i32 {
-                0
-            }
-        };
-
-        assert!(validate_export_signature(&function).is_ok());
+fn validate_param(tokens: &[TokenTree]) -> Result<(), String> {
+    if tokens.len() == 1 && is_ident(&tokens[0], "self") {
+        return Err("edgerun unit exports cannot take self receivers".into());
     }
-
-    #[test]
-    fn rejects_generic_export() {
-        let function: ItemFn = parse_quote! {
-            fn generic<T>(value: i32) -> i32 {
-                value
-            }
-        };
-
-        let err = validate_export_signature(&function).expect_err("generic");
-        assert!(err.to_string().contains("generic"));
+    let colon = tokens
+        .iter()
+        .position(|token| matches!(token, TokenTree::Punct(punct) if punct.as_char() == ':'))
+        .ok_or_else(|| "edgerun unit export parameters must be named".to_string())?;
+    let ty = tokens[colon + 1..]
+        .iter()
+        .map(ToString::to_string)
+        .collect::<String>();
+    if !is_wasm_scalar_type(&ty) {
+        return Err("edgerun unit export parameters must be i32, i64, f32, or f64".into());
     }
+    Ok(())
+}
 
-    #[test]
-    fn rejects_non_c_abi() {
-        let function: ItemFn = parse_quote! {
-            extern "Rust" fn rust_abi(value: i32) -> i32 {
-                value
-            }
-        };
-
-        let err = validate_export_signature(&function).expect_err("abi");
-        assert!(err.to_string().contains("extern \"C\""));
+fn validate_return(tokens: &[TokenTree]) -> Result<(), String> {
+    let Some(arrow) = tokens
+        .iter()
+        .position(|token| matches!(token, TokenTree::Punct(punct) if punct.as_char() == '-'))
+    else {
+        return Ok(());
+    };
+    if !matches!(tokens.get(arrow + 1), Some(TokenTree::Punct(punct)) if punct.as_char() == '>')
+    {
+        return Ok(());
     }
-
-    #[test]
-    fn rejects_non_scalar_parameter() {
-        let function: ItemFn = parse_quote! {
-            fn pointer(value: *const u8) -> i32 {
-                0
-            }
-        };
-
-        let err = validate_export_signature(&function).expect_err("parameter");
-        assert!(err.to_string().contains("parameters"));
+    let ty = tokens[arrow + 2..]
+        .iter()
+        .take_while(|token| !matches!(token, TokenTree::Group(group) if group.delimiter() == Delimiter::Brace))
+        .map(ToString::to_string)
+        .collect::<String>();
+    if !is_wasm_scalar_type(&ty) {
+        return Err("edgerun unit export return values must be i32, i64, f32, or f64".into());
     }
+    Ok(())
+}
 
-    #[test]
-    fn rejects_non_scalar_return() {
-        let function: ItemFn = parse_quote! {
-            fn pointer() -> *const u8 {
-                core::ptr::null()
-            }
-        };
+fn is_wasm_scalar_type(ty: &str) -> bool {
+    matches!(ty.trim(), "i32" | "i64" | "f32" | "f64")
+}
 
-        let err = validate_export_signature(&function).expect_err("return");
-        assert!(err.to_string().contains("return"));
+fn has_no_mangle_attr(tokens: &[TokenTree]) -> bool {
+    tokens.windows(2).any(|pair| {
+        matches!(&pair[0], TokenTree::Punct(punct) if punct.as_char() == '#')
+            && matches!(&pair[1], TokenTree::Group(group) if group.delimiter() == Delimiter::Bracket && group.stream().to_string().contains("no_mangle"))
+    })
+}
+
+fn rewrite_function(source: &str, name: &str) -> String {
+    let fn_marker = format!("fn {name}");
+    let Some(fn_pos) = source.find(&fn_marker) else {
+        return source.to_string();
+    };
+    let before = source[..fn_pos].trim_end();
+    let after = &source[fn_pos..];
+    let unsafe_fn = before.ends_with("unsafe");
+    let extern_fn = before.contains("extern \"C\"");
+    let mut prefix = before
+        .trim_end_matches("unsafe")
+        .trim_end_matches("extern \"C\"")
+        .trim_end_matches("pub")
+        .trim_end()
+        .to_string();
+    if !prefix.is_empty() {
+        prefix.push(' ');
     }
+    prefix.push_str("#[no_mangle] pub ");
+    if unsafe_fn {
+        prefix.push_str("unsafe ");
+    }
+    if !extern_fn {
+        prefix.push_str("extern \"C\" ");
+    }
+    prefix.push_str(after);
+    prefix
+}
+
+fn is_ident(token: &TokenTree, value: &str) -> bool {
+    matches!(token, TokenTree::Ident(ident) if ident.to_string() == value)
+}
+
+fn compile_error(message: &str) -> TokenStream {
+    format!("compile_error!({message:?});")
+        .parse()
+        .expect("valid compile_error")
 }

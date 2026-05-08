@@ -2,9 +2,9 @@ use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
 use edgerun_protocols::wire::{
-    sdk_wire_bytes, RuntimeAppInstall, RuntimeAppMessage, RuntimeEvent, RuntimeHttpDispatch,
-    RuntimeHttpRequest, RuntimeHttpRoute, RuntimeIdentityRoute, RuntimeRoutedAppMessage,
-    SdkWireRecord, APP_MESSAGE_STATUS_ACCEPTED, APP_MESSAGE_STATUS_DENIED,
+    sdk_wire_bytes, AppGraphRecord, RuntimeAppInstall, RuntimeAppMessage, RuntimeEvent,
+    RuntimeHttpDispatch, RuntimeHttpRequest, RuntimeHttpRoute, RuntimeIdentityRoute,
+    RuntimeRoutedAppMessage, SdkWireRecord, APP_MESSAGE_STATUS_ACCEPTED, APP_MESSAGE_STATUS_DENIED,
     APP_MESSAGE_STATUS_FORWARDED, CAPABILITY_STATUS_OK, CAPABILITY_STATUS_POLICY_DENIED,
     RUNTIME_EVENT_APP_INSTALLED, RUNTIME_EVENT_APP_MESSAGE_DISPATCHED,
     RUNTIME_EVENT_APP_MESSAGE_FORWARDED, RUNTIME_EVENT_CAPABILITY_DENIED,
@@ -15,9 +15,13 @@ use edgerun_protocols::wire::{
 use crate::storage::RuntimeStorage;
 
 mod capabilities;
+mod deployment_boundary;
 mod service_plan;
 mod types;
 mod wire_builders;
+pub use deployment_boundary::{
+    decide_runtime_boundary, RuntimeBoundaryDecision, RuntimeBoundaryIntent, RuntimeBoundarySurface,
+};
 pub use service_plan::{
     RuntimeAliasSpec, RuntimeBootstrapPolicy, RuntimeDeploymentSpec, RuntimeDomainSpec,
     RuntimeMailboxSpec, RuntimeServicePlan, RuntimeWebsiteSpec,
@@ -102,6 +106,33 @@ where
             payload,
         );
         Ok(())
+    }
+
+    pub fn install_app_graph(
+        &mut self,
+        graph: AppGraphRecord,
+        time: u64,
+    ) -> Result<(), RuntimeError> {
+        if !app_graph_runtime_install_is_bound(&graph) {
+            return Err(RuntimeError::InvalidWireRecord);
+        }
+        self.install_app(graph.runtime_install, time)
+    }
+
+    pub fn install_app_graph_wire(
+        &mut self,
+        graph_bytes: &[u8],
+        time: u64,
+    ) -> Result<(), RuntimeError> {
+        let owned = graph_bytes.to_vec();
+        match edgerun_protocols::wire::from_bytes::<SdkWireRecord, edgerun_protocols::wire::WireError>(
+            &owned,
+        )
+        .map_err(|_| RuntimeError::InvalidWireRecord)?
+        {
+            SdkWireRecord::AppGraph(graph) => self.install_app_graph(graph, time),
+            _ => Err(RuntimeError::InvalidWireRecord),
+        }
     }
 
     pub fn install_service_plan_apps(
@@ -331,6 +362,19 @@ where
             event_sha256,
         });
     }
+}
+
+fn app_graph_runtime_install_is_bound(graph: &AppGraphRecord) -> bool {
+    graph.abi_version == SDK_WIRE_ABI_VERSION
+        && graph.flags & 1 == 1
+        && graph.runtime_install.abi_version == SDK_WIRE_ABI_VERSION
+        && graph.runtime_install.flags & 1 == 1
+        && graph.runtime_install.app_id == graph.app_id
+        && graph.runtime_install.developer_id == graph.developer_public_key
+        && graph.runtime_install.manifest_sha256 == graph.app_manifest_sha256
+        && graph.artifacts.iter().any(|artifact| {
+            artifact.path.as_slice() == b"app.edapp" && artifact.sha256 == graph.app_manifest_sha256
+        })
 }
 
 #[cfg(test)]

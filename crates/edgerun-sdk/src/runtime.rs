@@ -1215,12 +1215,12 @@ pub(crate) fn validate_wasm_unit_surface(
         return Err(format!("{unit_id} must export at least one unit function"));
     }
     for function in unit_functions {
-        if api_cost_profile(&function.name).is_none() {
-            return Err(format!(
-                "missing deterministic cost profile: {unit_id}.{}",
-                function.name
-            ));
-        }
+        let ty = function
+            .ty
+            .as_ref()
+            .ok_or_else(|| format!("missing type for {unit_id}.{}", function.name))?;
+        validate_api_cost_signature(&function.name, ty.params(), ty.results())
+            .map_err(|err| format!("{unit_id}.{} {err}", function.name))?;
     }
     Ok(())
 }
@@ -1289,12 +1289,9 @@ pub(crate) fn runtime_api_manifest_bytes(
             .ty
             .as_ref()
             .ok_or_else(|| format!("missing type for {unit_id}.{}", function.name))?;
-        let Some((cost_base, cost_per_byte)) = api_cost_profile(&function.name) else {
-            return Err(format!(
-                "missing api cost profile: {unit_id}.{}",
-                function.name
-            ));
-        };
+        let (cost_base, cost_per_byte) =
+            api_cost_profile_for_signature(&function.name, ty.params(), ty.results())
+                .map_err(|err| format!("{unit_id}.{} {err}", function.name))?;
         wire_functions.push(edgerun_wire::UnitApiFunction {
             name: function.name.as_bytes().to_vec(),
             params: valtypes_to_api_bytes(ty.params()),
@@ -2964,7 +2961,9 @@ pub(crate) fn verify_binary_api(expected: &UnitManifest, bytes: &[u8]) -> bool {
         let Some((params, results)) = parse_api_type(expected.ty) else {
             return false;
         };
-        let Some((cost_base, cost_per_byte)) = api_cost_profile(expected.name) else {
+        let Ok((cost_base, cost_per_byte)) =
+            api_cost_profile_for_signature(expected.name, &params, &results)
+        else {
             return false;
         };
         if actual.params != valtypes_to_api_bytes(&params)
@@ -2978,70 +2977,49 @@ pub(crate) fn verify_binary_api(expected: &UnitManifest, bytes: &[u8]) -> bool {
     true
 }
 
-pub(crate) fn api_cost_profile(name: &str) -> Option<(u32, u32)> {
-    match name {
-        "proto_abi_version" | "proto_standard_id" => Some((1, 0)),
-        "sha256_digest" | "sha384_digest" | "sha512_digest" => Some((12, 1)),
-        "rfc2104_key_pad" => Some((8, 1)),
-        "hmac_sha256" => Some((32, 1)),
-        "udp_minimum_length"
-        | "tftp_minimum_length"
-        | "ipv4_minimum_length"
-        | "dns_header_length"
-        | "base64url_encoded_len"
-        | "base64url_decoded_bound"
-        | "base32hex_encoded_len"
-        | "base32hex_decoded_bound"
-        | "base16_encoded_len"
-        | "base16_decoded_bound"
-        | "quic_varint_encoded_len"
-        | "edgerun_p256_private_key_len"
-        | "edgerun_p256_public_key_len"
-        | "edgerun_signature_algorithm_p256_sha256"
-        | "edgerun_signature_len_p256"
-        | "edgerun_signature_input_len"
-        | "edgerun_p256_signature_len" => Some((2, 0)),
-        "tftp_opcode_valid" | "dns_is_query" | "http_tchar_valid" | "utf8_scalar_width"
-        | "cbor_major_valid" => Some((4, 0)),
-        "byte_eq" | "byte_prefix" | "byte_find" | "byte_ascii_lower" | "byte_ascii_case_eq" => {
-            Some((4, 1))
-        }
-        "constant_time_eq" => Some((6, 1)),
-        "udp_parse"
-        | "tftp_parse"
-        | "ipv4_parse"
-        | "dns_header_parse"
-        | "http_token_validate"
-        | "utf8_validate"
-        | "base64url_encode"
-        | "base64url_decode"
-        | "base32hex_encode"
-        | "base32hex_decode"
-        | "base16_encode"
-        | "base16_decode"
-        | "cbor_head_parse"
-        | "http_field_line_parse"
-        | "crc32_ieee"
-        | "crc32_ieee_write"
-        | "quic_varint_encode"
-        | "quic_varint_decode"
-        | "edgerun_p256_private_key_valid"
-        | "edgerun_p256_public_key_from_private"
-        | "edgerun_signature_input"
-        | "edgerun_p256_raw64_public_key_valid" => Some((8, 1)),
-        "edgerun_p256_sign_prehash_input" | "edgerun_p256_verify_prehash_input" => Some((64, 1)),
-        "capability_operation_valid" | "capability_access_class_valid" => Some((2, 0)),
-        "capability_authorize_invocation"
-        | "capability_session_mode_valid"
-        | "capability_session_open_validate"
-        | "capability_session_accept_unchecked_status"
-        | "capability_session_reject_status"
-        | "capability_invocation_validate"
-        | "capability_result_validate"
-        | "capability_result_frame_validate"
-        | "decision_byte_eq" => Some((4, 0)),
-        _ => None,
+pub(crate) fn api_cost_profile_for_signature(
+    name: &str,
+    params: &[ValType],
+    results: &[ValType],
+) -> Result<(u32, u32), String> {
+    validate_api_cost_signature(name, params, results)?;
+
+    let profile = match name {
+        "proto_abi_version" | "proto_standard_id" => (1, 0),
+        "sha256_digest" | "sha384_digest" | "sha512_digest" => (12, 1),
+        "hmac_sha256" => (32, 1),
+        "edgerun_p256_sign_prehash_input" | "edgerun_p256_verify_prehash_input" => (64, 1),
+        "rfc2104_key_pad" | "constant_time_eq" => (8, 1),
+        _ if name.starts_with("capability_") || name.starts_with("decision_byte") => (4, 0),
+        _ if name.starts_with("byte_") => (4, 1),
+        _ if scalar_metadata_function(name) => (2, 0),
+        _ if params.len() <= 1 => (4, 0),
+        _ => (8, 1),
+    };
+    Ok(profile)
+}
+
+pub(crate) fn validate_api_cost_signature(
+    name: &str,
+    params: &[ValType],
+    results: &[ValType],
+) -> Result<(), String> {
+    if !params.iter().all(|ty| matches!(ty, ValType::I32))
+        || !results.iter().all(|ty| matches!(ty, ValType::I32))
+    {
+        return Err("cost inference only supports i32 unit ABI functions".to_owned());
     }
+    if results.len() > 1 {
+        return Err("cost inference expects at most one i32 result".to_owned());
+    }
+    Ok(())
+}
+
+pub(crate) fn scalar_metadata_function(name: &str) -> bool {
+    name.ends_with("_len")
+        || name.ends_with("_length")
+        || name.ends_with("_bound")
+        || name.contains("_algorithm_")
 }
 
 pub(crate) fn verify_binary_composition(expected: &CompositionManifest, bytes: &[u8]) -> bool {
@@ -5101,6 +5079,7 @@ unsafe fn tftp_parse(message_ptr: i32, message_len: i32, out_ptr: i32) -> i32 {
         ];
         let input_lengths: Vec<u32> = inputs.iter().map(|input| input.len() as u32).collect();
         let input_hashes: Vec<[u8; 32]> = inputs.iter().map(|input| sha256(input)).collect();
+        let replayed_cost = hmac_verify_segment_cost(&inputs);
         let forged_output_hash =
             *b"0000000000000000000000000000000000000000000000000000000000000000";
         let bytes = segment_report_bytes(
@@ -5108,7 +5087,7 @@ unsafe fn tftp_parse(message_ptr: i32, message_len: i32, out_ptr: i32) -> i32 {
             &input_lengths,
             &input_hashes,
             0,
-            199,
+            replayed_cost,
             1,
             u16::MAX,
             &forged_output_hash,
@@ -5131,13 +5110,14 @@ unsafe fn tftp_parse(message_ptr: i32, message_len: i32, out_ptr: i32) -> i32 {
         ];
         let input_lengths: Vec<u32> = inputs.iter().map(|input| input.len() as u32).collect();
         let input_hashes: Vec<[u8; 32]> = inputs.iter().map(|input| sha256(input)).collect();
+        let replayed_cost = hmac_verify_segment_cost(&inputs);
         let output_hash = *b"6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d";
         let report_bytes = segment_report_bytes(
             manifest,
             &input_lengths,
             &input_hashes,
             0,
-            199,
+            replayed_cost,
             1,
             u16::MAX,
             &output_hash,
@@ -5161,6 +5141,14 @@ unsafe fn tftp_parse(message_ptr: i32, message_len: i32, out_ptr: i32) -> i32 {
         let policy_bytes = signer_policy_bytes(manifest, &[allowed_key]).expect("policy");
         let policy = parse_signer_policy_record(&policy_bytes).expect("policy");
         let output_hash = *b"6e340b9cffb37a989ca544e6bb780a2c78901d3fb33738768511a30617afa01d";
+        let policy_inputs = vec![
+            b"Jefe".to_vec(),
+            b"what do ya want for nothing?".to_vec(),
+            hex_to_32("5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843")
+                .unwrap()
+                .to_vec(),
+        ];
+        let replayed_cost = hmac_verify_segment_cost(&policy_inputs);
 
         let report_bytes = segment_report_bytes(
             manifest,
@@ -5174,7 +5162,7 @@ unsafe fn tftp_parse(message_ptr: i32, message_len: i32, out_ptr: i32) -> i32 {
                 ),
             ],
             0,
-            199,
+            replayed_cost,
             1,
             u16::MAX,
             &output_hash,
@@ -5593,7 +5581,9 @@ unsafe fn tftp_parse(message_ptr: i32, message_len: i32, out_ptr: i32) -> i32 {
             valid_from: 10,
             valid_until: 20,
         };
-        let body = user_profile_body_bytes(&profile_id, &owner, 7, 2, &[grant]);
+        let owner_seed = [0x31; 32];
+        let body =
+            user_profile_body_with_owner_seed_bytes(&profile_id, &owner_seed, 7, 2, &[grant]);
         let profile_file = user_profile_file_bytes(&body, &seal_key).expect("profile");
         let wire_profile =
             match edgerun_wire::from_bytes::<SdkWireRecord, edgerun_wire::WireError>(&profile_file)
@@ -5610,9 +5600,42 @@ unsafe fn tftp_parse(message_ptr: i32, message_len: i32, out_ptr: i32) -> i32 {
 
         let wire_body = opened;
         assert_eq!(wire_body.grants.len(), 1);
+        assert_eq!(
+            wire_body.owner_key_algorithm,
+            edgerun_wire::USER_PROFILE_OWNER_KEY_ED25519
+        );
+        assert_eq!(wire_body.owner_private_key, owner_seed.to_vec());
         let first = sdk_wire_bytes(&SdkWireRecord::UserProfileBody(wire_body.clone()));
         let second = sdk_wire_bytes(&SdkWireRecord::UserProfileBody(wire_body));
         assert_eq!(first, second);
+    }
+
+    #[test]
+    fn password_user_profile_opens_with_sealed_owner_seed() {
+        let owner_seed = [0x33; 32];
+        let owner = SigningKey::from_bytes(&owner_seed);
+        let profile_id = user_profile_id(owner.verifying_key().as_bytes(), 9);
+        let body = user_profile_body_with_owner_seed_bytes(&profile_id, &owner_seed, 9, 1, &[]);
+        let profile_file =
+            user_profile_file_bytes_with_password(&body, "correct horse").expect("profile");
+        let wire_profile =
+            match edgerun_wire::from_bytes::<SdkWireRecord, edgerun_wire::WireError>(&profile_file)
+                .expect("profile")
+            {
+                SdkWireRecord::UserProfile(profile) => profile,
+                _ => panic!("not a user profile"),
+            };
+        assert_eq!(
+            wire_profile.password_kdf.kdf,
+            edgerun_wire::USER_PROFILE_KDF_PBKDF2_HMAC_SHA256
+        );
+
+        let opened =
+            open_user_profile_file_with_password(&profile_file, "correct horse").expect("opened");
+        assert_eq!(opened.profile_id, profile_id);
+        assert_eq!(opened.owner_private_key, owner_seed.to_vec());
+        assert!(verify_user_profile_body_signature(&opened));
+        assert!(open_user_profile_file_with_password(&profile_file, "wrong").is_err());
     }
 
     #[test]
@@ -6022,16 +6045,16 @@ pub(crate) fn http_tchar_valid(value: i32) -> i32 {
     }
 
     #[test]
-    fn wasm_unit_surface_policy_requires_cost_profile() {
+    fn wasm_unit_surface_policy_rejects_non_i32_abi() {
         let mut surface = valid_test_surface();
         surface.exports.push(ExportSurface {
-            name: "unpriced_export".to_owned(),
+            name: "bad_arg_type".to_owned(),
             kind: ExternalKind::Func,
-            ty: Some(FuncType::new([ValType::I32], [ValType::I32])),
+            ty: Some(FuncType::new([ValType::I64], [ValType::I32])),
         });
 
         let err = validate_wasm_unit_surface("test-unit", &surface).expect_err("surface");
-        assert!(err.contains("cost profile"));
+        assert!(err.contains("i32"));
     }
 
     #[test]
@@ -6082,6 +6105,19 @@ pub(crate) fn http_tchar_valid(value: i32) -> i32 {
             SdkWireRecord::UnitApi(api) => api,
             _ => panic!("not a unit api"),
         }
+    }
+
+    fn hmac_verify_segment_cost(inputs: &[Vec<u8>]) -> u64 {
+        let manifest = segment("hmac-sha256-verify-private-node-v1").expect("segment");
+        let composition_manifest = composition(manifest.composition_id).expect("composition");
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let composition_bytes =
+            fs::read(root.join(composition_manifest.path)).expect("composition bytes");
+        let composition = parse_composition(&composition_bytes).expect("composition record");
+        let input_refs: Vec<&[u8]> = inputs.iter().map(Vec::as_slice).collect();
+        execute_composition(composition_manifest, &composition, &input_refs)
+            .expect("segment replay")
+            .cost
     }
 
     #[test]
@@ -6196,6 +6232,207 @@ pub(crate) fn http_tchar_valid(value: i32) -> i32 {
 
         unit.write(0, b"Bad Name: value");
         assert_eq!(unit.call("http_field_line_parse", [0, 15, 128, 0, 0]), 2);
+    }
+
+    #[test]
+    fn json_field_unit_locates_and_decodes_fields() {
+        let mut unit = instantiate_test_unit("json-field-v1");
+
+        unit.write(0, br#"{"name":"edge\nrun","enabled":true}"#);
+        unit.write(128, b"name");
+        assert_eq!(
+            unit.call("json_string_field_locate", [0, 35, 128, 4, 256]),
+            0
+        );
+        let fields = unit.read::<8>(256);
+        let value_offset = u32::from_le_bytes(fields[0..4].try_into().unwrap());
+        let value_len = u32::from_le_bytes(fields[4..8].try_into().unwrap());
+        assert_eq!(
+            unit.call("json_string_decode", [value_offset, value_len, 300, 16, 0]),
+            8
+        );
+        let decoded = unit.read::<8>(300);
+        assert_eq!(&decoded, b"edge\nrun");
+
+        unit.write(140, b"enabled");
+        assert_eq!(unit.call("json_bool_field_get", [0, 35, 140, 7, 0]), 1);
+    }
+
+    #[test]
+    fn form_urlencoded_unit_locates_and_decodes_values() {
+        let mut unit = instantiate_test_unit("form-urlencoded-v1");
+
+        unit.write(0, b"name=edge+run&redirect=https%3A%2F%2Fx");
+        unit.write(128, b"redirect");
+        assert_eq!(unit.call("form_urlencoded_locate", [0, 38, 128, 8, 256]), 0);
+        let fields = unit.read::<8>(256);
+        let value_offset = u32::from_le_bytes(fields[0..4].try_into().unwrap());
+        let value_len = u32::from_le_bytes(fields[4..8].try_into().unwrap());
+        assert_eq!(
+            unit.call(
+                "form_urlencoded_decode",
+                [value_offset, value_len, 300, 32, 0]
+            ),
+            9
+        );
+        let decoded = unit.read::<9>(300);
+        assert_eq!(&decoded, b"https://x");
+    }
+
+    #[test]
+    fn http_response_unit_builds_rfc9110_head() {
+        let mut unit = instantiate_test_unit("http-response-rfc9110");
+
+        unit.write(0, b"text/plain");
+        assert_eq!(unit.call("http_status_known", [200, 0, 0, 0, 0]), 1);
+        assert_eq!(
+            unit.call("http_response_head_build", [200, 5, 0, 10, 128]),
+            83
+        );
+        let head = unit.read::<83>(128);
+        assert_eq!(
+            &head,
+            b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 5\r\nConnection: close\r\n\r\n"
+        );
+    }
+
+    #[test]
+    fn websocket_unit_imports_rfc6455_protocol_helpers() {
+        let mut unit = instantiate_test_unit("websocket-rfc6455");
+
+        unit.write(0, b"GET / HTTP/1.1\r\n\r\n");
+        assert_eq!(
+            unit.call("websocket_handshake_complete", [0, 18, 0, 0, 0]),
+            1
+        );
+
+        unit.write(64, &[0x82, 126]);
+        assert_eq!(
+            unit.call("websocket_frame_prefix_decode", [64, 2, 128, 0, 0]),
+            0
+        );
+        let fields = unit.read::<20>(128);
+        assert_eq!(u32::from_le_bytes(fields[0..4].try_into().unwrap()), 1);
+        assert_eq!(u32::from_le_bytes(fields[4..8].try_into().unwrap()), 2);
+        assert_eq!(u32::from_le_bytes(fields[8..12].try_into().unwrap()), 0);
+        assert_eq!(u32::from_le_bytes(fields[12..16].try_into().unwrap()), 126);
+        assert_eq!(u32::from_le_bytes(fields[16..20].try_into().unwrap()), 2);
+
+        unit.write(80, &[0x01, 0x00]);
+        assert_eq!(
+            unit.call("websocket_payload_len_decode", [126, 80, 2, 1024, 160]),
+            0
+        );
+        let payload_len = unit.read::<4>(160);
+        assert_eq!(u32::from_le_bytes(payload_len), 256);
+    }
+
+    #[test]
+    fn ethernet_ipv4_unit_imports_packet_helpers() {
+        let mut unit = instantiate_test_unit("ethernet-ipv4-v1");
+
+        unit.write(
+            0,
+            &[
+                0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 0x08, 0x00, 0x45, 0x00, 0x00, 0x14, 0, 0, 0,
+                0, 64, 17, 0xab, 0xcd, 192, 168, 1, 2, 10, 0, 0, 1,
+            ],
+        );
+        assert_eq!(
+            unit.call("ethernet_ipv4_parse_packet", [0, 34, 128, 0, 0]),
+            0
+        );
+        let fields = unit.read::<36>(128);
+        assert_eq!(u32::from_le_bytes(fields[0..4].try_into().unwrap()), 0x0800);
+        assert_eq!(u32::from_le_bytes(fields[4..8].try_into().unwrap()), 0x45);
+        assert_eq!(u32::from_le_bytes(fields[12..16].try_into().unwrap()), 20);
+        assert_eq!(u32::from_le_bytes(fields[16..20].try_into().unwrap()), 64);
+        assert_eq!(u32::from_le_bytes(fields[20..24].try_into().unwrap()), 17);
+        assert_eq!(
+            u32::from_le_bytes(fields[24..28].try_into().unwrap()),
+            0xabcd
+        );
+        assert_eq!(
+            u32::from_le_bytes(fields[28..32].try_into().unwrap()),
+            0xc0a80102
+        );
+        assert_eq!(
+            u32::from_le_bytes(fields[32..36].try_into().unwrap()),
+            0x0a000001
+        );
+        assert_eq!(
+            unit.call("ethernet_ipv4_checksum", [14, 20, 0, 0, 0]),
+            0x0361
+        );
+    }
+
+    #[test]
+    fn bluetooth_gatt_unit_imports_att_helpers() {
+        let mut unit = instantiate_test_unit("bluetooth-gatt-v1");
+
+        unit.write(0, &[0x01, 0x0a, 0x00, 0x0a]);
+        assert_eq!(
+            unit.call("bluetooth_gatt_att_error_parse", [0, 4, 128, 0, 0]),
+            0
+        );
+        let fields = unit.read::<8>(128);
+        assert_eq!(u32::from_le_bytes(fields[0..4].try_into().unwrap()), 10);
+        assert_eq!(u32::from_le_bytes(fields[4..8].try_into().unwrap()), 10);
+
+        unit.write(16, &[0x03, 0xf7, 0x00]);
+        assert_eq!(
+            unit.call("bluetooth_gatt_att_mtu_parse", [16, 3, 0, 0, 0]),
+            247
+        );
+
+        unit.write(32, &[0x19]);
+        assert_eq!(
+            unit.call("bluetooth_gatt_execute_write_response", [32, 1, 0, 0, 0]),
+            1
+        );
+
+        unit.write(
+            48,
+            &[
+                0x01, 0x00, 0x34, 0x12, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            ],
+        );
+        assert_eq!(
+            unit.call(
+                "bluetooth_gatt_connection_complete_parse",
+                [48, 18, 160, 0, 0]
+            ),
+            0
+        );
+        let connection = unit.read::<8>(160);
+        assert_eq!(u32::from_le_bytes(connection[0..4].try_into().unwrap()), 0);
+        assert_eq!(
+            u32::from_le_bytes(connection[4..8].try_into().unwrap()),
+            0x1234
+        );
+    }
+
+    #[test]
+    fn proxy_unit_imports_socks5_helpers() {
+        let mut unit = instantiate_test_unit("proxy-v1");
+
+        unit.write(0, &[0x05, 0x02, 0x00, 0x02]);
+        assert_eq!(
+            unit.call("socks5_select_no_auth_unit", [0, 4, 128, 0, 0]),
+            0
+        );
+        let selected = unit.read::<2>(128);
+        assert_eq!(selected, [0x05, 0x00]);
+
+        unit.write(16, &[0x05, 0x01, 0x02]);
+        assert_eq!(
+            unit.call("socks5_select_no_auth_unit", [16, 3, 128, 0, 0]),
+            8
+        );
+
+        assert_eq!(unit.call("socks5_reply_build", [5, 160, 0, 0, 0]), 10);
+        let reply = unit.read::<10>(160);
+        assert_eq!(reply, [0x05, 0x05, 0, 0x01, 0, 0, 0, 0, 0, 0]);
     }
 
     #[test]

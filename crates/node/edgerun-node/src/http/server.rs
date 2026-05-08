@@ -280,7 +280,9 @@ where
         use crate::tls::AsyncTlsServerStream;
         let tls_stream = AsyncTlsServerStream::accept(stream, cert.as_ref())
             .await
-            .map_err(|e| crate::http::runtime::io::Error::other(format!("TLS handshake failed: {e}")))?;
+            .map_err(|e| {
+                crate::http::runtime::io::Error::other(format!("TLS handshake failed: {e}"))
+            })?;
 
         // When TLS is established, use the negotiated ALPN protocol to
         // determine the HTTP version.
@@ -320,9 +322,12 @@ where
                 }
                 Err(e) => {
                     // RFC 9113 §3.5: If we can't read preface, send GOAWAY and close
-                    let goaway =
-                        crate::http::http2::frame::GoawayFrame::new(0, 0x1, b"Connection error".to_vec())
-                            .to_frame();
+                    let goaway = crate::http::http2::frame::GoawayFrame::new(
+                        0,
+                        0x1,
+                        b"Connection error".to_vec(),
+                    )
+                    .to_frame();
                     let goaway_bytes = goaway.to_bytes();
                     let _ = reader.get_mut().write_all(&goaway_bytes).await;
                     let _ = reader.get_mut().flush().await;
@@ -638,7 +643,8 @@ where
         };
 
         if frame.frame_type == FrameType::Settings {
-            let settings_frame = match crate::http::http2::frame::SettingsFrame::from_frame(&frame) {
+            let settings_frame = match crate::http::http2::frame::SettingsFrame::from_frame(&frame)
+            {
                 Ok(sf) => sf,
                 Err(_) => {
                     write_goaway(

@@ -1,0 +1,82 @@
+import js from "@eslint/js"
+import nextPlugin from "@next/eslint-plugin-next"
+import tsPlugin from "typescript-eslint"
+import reactHooks from "eslint-plugin-react-hooks"
+import reactRefresh from "eslint-plugin-react-refresh"
+
+export default [
+  {
+    ignores: [
+      ".next/**",
+      "out/**",
+      "coverage/**",
+      "node_modules/**",
+      "public/apps/**",
+      "public/workers/**",
+      "tsconfig.tsbuildinfo",
+      "next-env.d.ts",
+      "types/**/*.d.ts",
+      "gen/**/*.ts",
+    ],
+  },
+  js.configs.recommended,
+  ...tsPlugin.configs.recommended,
+  {
+    plugins: {
+      "@next/next": nextPlugin,
+      "react-hooks": reactHooks,
+      "react-refresh": reactRefresh,
+    },
+    languageOptions: {
+      globals: {
+        AbortController: "readonly",
+        Blob: "readonly",
+        clearTimeout: "readonly",
+        console: "readonly",
+        crypto: "readonly",
+        document: "readonly",
+        fetch: "readonly",
+        File: "readonly",
+        FileReader: "readonly",
+        FormData: "readonly",
+        Headers: "readonly",
+        HTMLCanvasElement: "readonly",
+        HTMLDivElement: "readonly",
+        HTMLInputElement: "readonly",
+        localStorage: "readonly",
+        navigator: "readonly",
+        OffscreenCanvas: "readonly",
+        process: "readonly",
+        Request: "readonly",
+        Response: "readonly",
+        setTimeout: "readonly",
+        TextDecoder: "readonly",
+        TextEncoder: "readonly",
+        URL: "readonly",
+        URLSearchParams: "readonly",
+        WebAssembly: "readonly",
+        WebGLProgram: "readonly",
+        WebGLRenderingContext: "readonly",
+        WebGLShader: "readonly",
+        WebGLUniformLocation: "readonly",
+        Window: "readonly",
+        window: "readonly",
+        Worker: "readonly",
+      },
+    },
+    rules: {
+      ...nextPlugin.configs.recommended.rules,
+      ...nextPlugin.configs["core-web-vitals"].rules,
+      "@next/next/no-assign-module-variable": "warn",
+      "@typescript-eslint/no-explicit-any": "warn",
+      "@typescript-eslint/no-unsafe-function-type": "warn",
+      "@typescript-eslint/no-unused-vars": "warn",
+      "no-constant-binary-expression": "warn",
+      "no-useless-assignment": "warn",
+      "prefer-const": "warn",
+      "react-hooks/rules-of-hooks": "error",
+      "react-hooks/exhaustive-deps": "warn",
+      "react-refresh/only-export-components": "warn",
+    },
+  },
+]

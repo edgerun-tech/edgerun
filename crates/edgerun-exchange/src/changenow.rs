@@ -9,13 +9,13 @@ use crate::provider::*;
 use crate::provider_mapping::map_provider_status;
 use alloc::string::String;
 use core::result::Result;
+use edgerun_json::{from_str, to_string, JsonValue, Map, ToJson};
 use edgerun_node::http::client_middleware::Chain;
 use edgerun_node::http::{HttpClient, Method};
-use edgerun_json::{from_str, to_string, JsonValue, Map, ToJson};
+use edgerun_node::rt::block_on;
 use edgerun_protocols::core_protocol::protocol::edgerun_wallet_v0::{
     AssetRef, Quote, QuoteRequest,
 };
-use edgerun_node::rt::block_on;
 use edgerun_wallet::{DecimalAmount, WalletError};
 
 const CHANGENOW_BASE_URL: &str = "https://api.changenow.io/api/v2";

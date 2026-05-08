@@ -217,7 +217,7 @@ mod tests {
         Vec<u8>,
     ) {
         use edgerun_crypto::p256::ecdsa::signature::SignerMut;
-        let sk = edgerun_crypto::p256::ecdsa::SigningKey::random(&mut edgerun_crypto::OsRng);
+        let sk = edgerun_crypto::random_p256_signing_key();
         let vk = *sk.verifying_key();
         // Public key without 0x04 prefix (64 bytes)
         let sec1 = vk.to_encoded_point(false);

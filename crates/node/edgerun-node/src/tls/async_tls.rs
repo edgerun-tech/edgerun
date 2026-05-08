@@ -115,7 +115,7 @@ impl Tls12RecordCipher {
         let mut out = Vec::with_capacity(encrypted_len);
         out.extend_from_slice(&explicit);
         out.extend_from_slice(&buffer);
-        out.extend_from_slice(&tag);
+        out.extend_from_slice(tag.as_slice());
         out
     }
 
@@ -138,7 +138,7 @@ impl Tls12RecordCipher {
                 edgerun_crypto::aes_gcm::Nonce::from_slice(&nonce),
                 &aad,
                 &mut buffer,
-                edgerun_crypto::aes_gcm::aead::generic_array::GenericArray::from_slice(tag),
+                &edgerun_crypto::aes_gcm::aead::generic_array::GenericArray::from_slice(tag),
             )
             .map_err(|_| TlsError::Cipher("TLS 1.2 AEAD decryption failed".into()))?;
         self.seq = self.seq.wrapping_add(1);

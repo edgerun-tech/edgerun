@@ -1,7 +1,7 @@
 #![no_std]
 
-use p256::ecdsa::signature::hazmat::PrehashSigner;
-use p256::ecdsa::{Signature, SigningKey};
+use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
+use edgerun_crypto::p256::ecdsa::{Signature, SigningKey};
 
 edgerun_unit::no_alloc!();
 edgerun_unit::metadata!(1);

@@ -198,9 +198,7 @@ pub fn handle_registry(ctx: &mut DispatchContext) {
                 "zxdg_decoration_manager_v1" => {
                     ctx.client_decoration_manager_ids.insert(ctx.client_id, id);
                 }
-                "wp_viewporter" => {
-                    ctx.client_viewporter_ids.insert(ctx.client_id, id);
-                }
+                "wp_viewporter" => {}
                 "wp_cursor_shape_manager_v1" => {
                     ctx.client_cursor_shape_manager_ids
                         .insert(ctx.client_id, id);

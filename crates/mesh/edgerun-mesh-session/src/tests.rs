@@ -924,6 +924,61 @@ fn needs_rekey_returns_false_one_below_max_frames() {
 }
 
 #[test]
+fn replayable_clock_drives_age_expiry_deterministically() {
+    let alice_id = node_id(0xAA);
+    let bob_id = node_id(0xBB);
+
+    let mut alice_mgr = SessionManager::new_replayable(alice_id);
+    let mut bob_mgr = SessionManager::new_replayable(bob_id);
+
+    let (init, secret) = alice_mgr.initiate_handshake(bob_id);
+    let (accept, _) = bob_mgr.respond_to_handshake(&init).unwrap();
+    alice_mgr
+        .complete_handshake_initiator(&accept, &secret)
+        .unwrap();
+
+    alice_mgr.set_logical_time(MAX_SESSION_AGE - Duration::from_millis(1));
+    let ct = alice_mgr.encrypt_for(bob_id, b"x").unwrap();
+    assert_eq!(bob_mgr.decrypt_from(alice_id, &ct).unwrap(), b"x");
+
+    alice_mgr.advance_logical_time(Duration::from_millis(1));
+    assert!(matches!(
+        alice_mgr.encrypt_for(bob_id, b"x"),
+        Err(SessionError::SessionExpired)
+    ));
+}
+
+#[test]
+fn explicit_replay_inputs_produce_repeatable_ciphertext() {
+    fn run_once() -> Vec<u8> {
+        let alice_id = node_id(0xAA);
+        let bob_id = node_id(0xBB);
+        let alice_secret = SessionManager::ephemeral_secret_from_bytes([1u8; 32]).unwrap();
+        let bob_secret = SessionManager::ephemeral_secret_from_bytes([2u8; 32]).unwrap();
+
+        let mut alice_mgr = SessionManager::new_replayable(alice_id);
+        let mut bob_mgr = SessionManager::new_replayable(bob_id);
+
+        let (init, alice_secret) = alice_mgr.initiate_handshake_with_secret(bob_id, alice_secret);
+        let (accept, _) = bob_mgr
+            .respond_to_handshake_with_secret_and_nonce_prefix(&init, bob_secret, [0xB0; 4])
+            .unwrap();
+        alice_mgr
+            .complete_handshake_initiator_with_nonce_prefix(&accept, &alice_secret, [0xA0; 4])
+            .unwrap();
+
+        let ciphertext = alice_mgr.encrypt_for(bob_id, b"replay me").unwrap();
+        assert_eq!(
+            bob_mgr.decrypt_from(alice_id, &ciphertext).unwrap(),
+            b"replay me"
+        );
+        ciphertext
+    }
+
+    assert_eq!(run_once(), run_once());
+}
+
+#[test]
 fn session_expiry_does_not_affect_other_peers() {
     let alice_id = node_id(0xAA);
     let bob_id = node_id(0xBB);

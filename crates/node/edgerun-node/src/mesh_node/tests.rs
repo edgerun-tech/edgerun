@@ -1,6 +1,5 @@
 use super::*;
 use alloc::vec;
-use edgerun_crypto::rand_core::RngCore;
 use edgerun_hardware_signing::MeshSigner;
 use edgerun_protocols::core_protocol::protocol::common as proto_common;
 

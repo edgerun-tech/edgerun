@@ -126,6 +126,35 @@ fn build_unsigned_event_rejects_previous_event_from_different_stream() {
 }
 
 #[test]
+fn build_unsigned_event_rejects_sequence_overflow() {
+    let id = stream_id(12);
+    let mut previous = genesis_event(&id, 1_000);
+    previous.seq = u64::MAX;
+
+    let err = build_unsigned_event(
+        &id,
+        Some(&previous),
+        EventDraft {
+            event_type: 100,
+            event_version: 1,
+            ..Default::default()
+        },
+    )
+    .unwrap_err();
+
+    assert_eq!(err, StreamError::SequenceOverflow { seq: u64::MAX });
+}
+
+#[test]
+fn next_sequence_rejects_overflow() {
+    assert_eq!(next_sequence(41).unwrap(), 42);
+    assert_eq!(
+        next_sequence(u64::MAX).unwrap_err(),
+        StreamError::SequenceOverflow { seq: u64::MAX }
+    );
+}
+
+#[test]
 fn validate_stream_rejects_empty_stream() {
     let id = stream_id(13);
     let err = validate_stream(&[], &id).unwrap_err();

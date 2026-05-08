@@ -1,4 +1,5 @@
 use super::*;
+use edgerun_json::{parse_json, JsonValue};
 
 pub(crate) fn cmd_sign_app(args: Vec<String>) -> i32 {
     let Some(app_dir) = args.first().map(PathBuf::from) else {
@@ -20,6 +21,11 @@ pub(crate) fn cmd_sign_app(args: Vec<String>) -> i32 {
     let developer_key = SigningKey::from_bytes(&developer_seed);
     let developer_public = *developer_key.verifying_key().as_bytes();
     let app_id = app_id_for(app_slug, &developer_public);
+    if let Err(err) = rebind_app_manifest_developer(&app_dir, app_slug, &developer_public, &app_id)
+    {
+        eprintln!("sign-app failed: {err}");
+        return 1;
+    }
     let eapp = match packaged_app_graph_bytes(&app_dir, app_slug, &developer_public, &app_id) {
         Ok(bytes) => bytes,
         Err(err) => {
@@ -63,6 +69,27 @@ pub(crate) fn cmd_sign_app(args: Vec<String>) -> i32 {
         app_dir.join("developer.esig").display()
     );
     0
+}
+
+pub(crate) fn rebind_app_manifest_developer(
+    app_dir: &Path,
+    app_slug: &str,
+    developer_public: &[u8; 32],
+    app_id: &[u8; 32],
+) -> Result<(), String> {
+    let Ok(mut manifest) = read_app_manifest_record(app_dir) else {
+        return Ok(());
+    };
+    if manifest.app_slug != app_slug.as_bytes() {
+        return Err("app manifest slug does not match package slug".to_owned());
+    }
+    manifest.developer_id = *developer_public;
+    manifest.app_id = *app_id;
+    fs::write(
+        app_dir.join("app.edapp"),
+        sdk_wire_record_bytes(SdkWireRecord::AppManifest(manifest)),
+    )
+    .map_err(|err| err.to_string())
 }
 
 pub(crate) fn cmd_verify_signed_app(args: Vec<String>) -> i32 {
@@ -109,6 +136,232 @@ pub(crate) fn cmd_verify_signed_app(args: Vec<String>) -> i32 {
     }
 }
 
+pub(crate) fn cmd_write_app_store_catalog(args: Vec<String>) -> i32 {
+    if args.len() != 5 {
+        eprintln!(
+            "write-app-store-catalog requires out.ecat, store seed, sequence, apps root, and catalog source json"
+        );
+        return 1;
+    }
+    let out = PathBuf::from(&args[0]);
+    let Some(store_seed) = parse_seed(&args[1]) else {
+        eprintln!("store seed must be 32 hex bytes");
+        return 1;
+    };
+    let sequence = match parse_u64_arg(&args[2], "sequence") {
+        Ok(value) => value,
+        Err(err) => {
+            eprintln!("{err}");
+            return 1;
+        }
+    };
+    let apps_root = PathBuf::from(&args[3]);
+    let specs = match read_app_catalog_source(&PathBuf::from(&args[4])) {
+        Ok(specs) => specs,
+        Err(err) => {
+            eprintln!("{err}");
+            return 1;
+        }
+    };
+    let store_key = SigningKey::from_bytes(&store_seed);
+    let mut entries = Vec::new();
+    for spec in &specs {
+        match app_store_catalog_entry(&apps_root, &spec) {
+            Ok(entry) => entries.push(entry),
+            Err(err) => {
+                eprintln!("{err}");
+                return 1;
+            }
+        }
+    }
+    entries.sort_by(|left, right| left.app_slug.cmp(&right.app_slug));
+    let entries_len = entries.len();
+    let mut catalog = edgerun_wire::AppStoreCatalogRecord {
+        abi_version: edgerun_wire::SDK_WIRE_ABI_VERSION,
+        flags: 1,
+        store_id: *store_key.verifying_key().as_bytes(),
+        generated_at: 0,
+        sequence,
+        previous_catalog_sha256: [0; 32],
+        entries,
+        signature: Vec::new(),
+    };
+    let unsigned = sdk_wire_record_bytes(SdkWireRecord::AppStoreCatalog(catalog.clone()));
+    let signature = store_key.sign(&signature_payload_for_domain(
+        APP_STORE_CATALOG_DOMAIN,
+        &sha256(&unsigned),
+    ));
+    catalog.signature = signature.to_bytes().to_vec();
+    let bytes = sdk_wire_record_bytes(SdkWireRecord::AppStoreCatalog(catalog));
+    if let Some(parent) = out.parent().filter(|parent| !parent.as_os_str().is_empty()) {
+        if let Err(err) = fs::create_dir_all(parent) {
+            eprintln!("cannot create app store catalog directory: {err}");
+            return 1;
+        }
+    }
+    if let Err(err) = fs::write(&out, &bytes) {
+        eprintln!("cannot write app store catalog: {err}");
+        return 1;
+    }
+    println!("catalog: {}", out.display());
+    println!(
+        "store_public_key: {}",
+        bytes_to_hex(store_key.verifying_key().as_bytes())
+    );
+    println!("entries: {entries_len}");
+    0
+}
+
+pub(crate) const APP_STORE_CATALOG_DOMAIN: &[u8] = b"edgerun-sdk.ecat.v1.store-catalog";
+
+pub(crate) struct AppCatalogSpec {
+    slug: String,
+    required_capabilities: Vec<Vec<u8>>,
+    optional_capabilities: Vec<Vec<u8>>,
+}
+
+fn read_app_catalog_source(path: &Path) -> Result<Vec<AppCatalogSpec>, String> {
+    let raw = fs::read_to_string(path)
+        .map_err(|err| format!("cannot read app catalog source {}: {err}", path.display()))?;
+    let root = parse_json(&raw)
+        .map_err(|err| format!("invalid app catalog source json {}: {err}", path.display()))?;
+    let object = root
+        .as_object()
+        .ok_or_else(|| "app catalog source must be a JSON object".to_owned())?;
+    let format = object
+        .required_str("format")
+        .map_err(|err| format!("invalid app catalog source format: {err}"))?;
+    if format != "edgerun-app-catalog-source-v1" {
+        return Err(format!("unsupported app catalog source format: {format}"));
+    }
+    let specs = object
+        .required_array("apps")
+        .map_err(|err| format!("invalid app catalog source apps: {err}"))?
+        .iter()
+        .enumerate()
+        .map(|(index, value)| app_catalog_spec_from_json(index, value))
+        .collect::<Result<Vec<_>, _>>()?;
+    for (index, spec) in specs.iter().enumerate() {
+        if specs[..index].iter().any(|seen| seen.slug == spec.slug) {
+            return Err(format!("duplicate app catalog source slug: {}", spec.slug));
+        }
+    }
+    Ok(specs)
+}
+
+fn app_catalog_spec_from_json(index: usize, value: &JsonValue) -> Result<AppCatalogSpec, String> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| format!("app catalog source app {index} must be an object"))?;
+    let slug = object
+        .required_str("slug")
+        .map_err(|err| format!("invalid app catalog source app {index} slug: {err}"))?;
+    if slug.is_empty() {
+        return Err(format!(
+            "app catalog source app {index} slug cannot be empty"
+        ));
+    }
+    if !app_catalog_slug_is_safe(slug) {
+        return Err(format!(
+            "app catalog source app {index} slug must contain only ASCII letters, digits, dot, dash, or underscore"
+        ));
+    }
+    Ok(AppCatalogSpec {
+        slug: slug.to_owned(),
+        required_capabilities: catalog_capabilities_from_json(
+            index,
+            "requiredCapabilityIds",
+            object.get_array("requiredCapabilityIds"),
+        )?,
+        optional_capabilities: catalog_capabilities_from_json(
+            index,
+            "optionalCapabilityIds",
+            object.get_array("optionalCapabilityIds"),
+        )?,
+    })
+}
+
+fn catalog_capabilities_from_json(
+    app_index: usize,
+    field: &str,
+    values: Option<&Vec<JsonValue>>,
+) -> Result<Vec<Vec<u8>>, String> {
+    values
+        .into_iter()
+        .flatten()
+        .enumerate()
+        .map(|(capability_index, value)| {
+            let capability = value.as_str().ok_or_else(|| {
+                format!("app catalog source app {app_index} {field}[{capability_index}] must be a string")
+            })?;
+            if capability.is_empty() {
+                Err(format!(
+                    "app catalog source app {app_index} {field}[{capability_index}] cannot be empty"
+                ))
+            } else {
+                Ok(capability.as_bytes().to_vec())
+            }
+        })
+        .collect()
+}
+
+fn app_catalog_slug_is_safe(slug: &str) -> bool {
+    slug.bytes()
+        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'_'))
+}
+
+pub(crate) fn app_store_catalog_entry(
+    apps_root: &Path,
+    spec: &AppCatalogSpec,
+) -> Result<edgerun_wire::AppStoreCatalogEntry, String> {
+    let slug = &spec.slug;
+    let app_dir = apps_root.join(slug);
+    let (eapp, graph) = read_app_graph(&app_dir)?;
+    let manifest_bytes = fs::read(app_dir.join("app.edapp"))
+        .map_err(|err| format!("cannot read {}/app.edapp: {err}", app_dir.display()))?;
+    let (name, version, summary) = app_catalog_text(&app_dir)?;
+    let mut asset_refs = Vec::new();
+    for artifact in collect_app_artifacts(&app_dir)? {
+        let bytes = fs::read(app_dir.join(&artifact.path))
+            .map_err(|err| format!("cannot read app asset {}: {err}", artifact.path))?;
+        asset_refs.push(edgerun_wire::AppStoreAssetRef {
+            path: artifact.path.into_bytes(),
+            sha256: artifact.sha256,
+            bytes: bytes.len() as u64,
+        });
+    }
+    asset_refs.sort_by(|left, right| left.path.cmp(&right.path));
+    Ok(edgerun_wire::AppStoreCatalogEntry {
+        app_id: graph.app_id,
+        release_id: graph.runtime_install.release_id,
+        developer_id: graph.developer_public_key,
+        app_graph_sha256: sha256(&eapp),
+        manifest_sha256: sha256(&manifest_bytes),
+        package_sha256: sha256(&eapp),
+        package_bytes: eapp.len() as u64,
+        status: edgerun_wire::APP_STORE_SUBMISSION_STATUS_PUBLISHED,
+        name: name.into_bytes(),
+        version: version.into_bytes(),
+        summary: summary.into_bytes(),
+        app_slug: slug.as_bytes().to_vec(),
+        package_ref: format!("/apps/{slug}/app.eapp").into_bytes(),
+        manifest_ref: format!("/apps/{slug}/app.edapp").into_bytes(),
+        launch_ref: format!("/apps/{slug}/index.html").into_bytes(),
+        required_capabilities: spec.required_capabilities.clone(),
+        optional_capabilities: spec.optional_capabilities.clone(),
+        asset_refs,
+    })
+}
+
+fn app_catalog_text(app_dir: &Path) -> Result<(String, String, String), String> {
+    let manifest = read_app_manifest_record(app_dir)?;
+    Ok((
+        String::from_utf8_lossy(&manifest.name).into_owned(),
+        String::from_utf8_lossy(&manifest.version).into_owned(),
+        String::from_utf8_lossy(&manifest.summary).into_owned(),
+    ))
+}
+
 pub(crate) fn write_packaged_app_graph(out_dir: &Path, app_slug: &str) -> Result<(), String> {
     let developer_public = [0u8; 32];
     let app_id = app_id_for(app_slug, &developer_public);
@@ -123,11 +376,23 @@ pub(crate) fn packaged_app_graph_bytes(
     app_id: &[u8; 32],
 ) -> Result<Vec<u8>, String> {
     let artifacts = collect_app_artifacts(app_dir)?;
+    let app_manifest = read_app_manifest_record(app_dir).ok();
     let app_manifest_sha256 = artifacts
         .iter()
         .find(|artifact| artifact.path == "app.edapp")
         .map(|artifact| artifact.sha256)
         .ok_or_else(|| "app.edapp missing from app package".to_owned())?;
+    if let Some(manifest) = app_manifest.as_ref() {
+        validate_app_manifest_binding(manifest, app_slug, developer_public, app_id)?;
+    }
+    let runtime_install = runtime_install_for_app_graph(
+        app_slug,
+        developer_public,
+        app_id,
+        app_manifest_sha256,
+        &artifacts,
+        app_manifest.as_ref(),
+    );
     Ok(sdk_wire_record_bytes(SdkWireRecord::AppGraph(
         edgerun_wire::AppGraphRecord {
             abi_version: edgerun_wire::SDK_WIRE_ABI_VERSION,
@@ -136,6 +401,7 @@ pub(crate) fn packaged_app_graph_bytes(
             developer_public_key: *developer_public,
             app_manifest_sha256,
             app_slug: app_slug.as_bytes().to_vec(),
+            runtime_install,
             artifacts: artifacts
                 .into_iter()
                 .map(|artifact| edgerun_wire::AppArtifactRecord {
@@ -146,6 +412,101 @@ pub(crate) fn packaged_app_graph_bytes(
                 .collect(),
         },
     )))
+}
+
+pub(crate) fn runtime_install_for_app_graph(
+    app_slug: &str,
+    developer_public: &[u8; 32],
+    app_id: &[u8; 32],
+    app_manifest_sha256: [u8; 32],
+    artifacts: &[AppArtifact],
+    app_manifest: Option<&edgerun_wire::AppManifestRecord>,
+) -> edgerun_wire::RuntimeAppInstall {
+    let release_id = app_release_id_for(app_id, app_manifest_sha256, artifacts);
+    if let Some(manifest) = app_manifest {
+        return runtime_install_for_app_manifest(manifest, app_manifest_sha256, release_id);
+    }
+    if app_slug == "edgerun-wallet-app" {
+        return edgerun_wire::RuntimeAppInstall {
+            abi_version: edgerun_wire::SDK_WIRE_ABI_VERSION,
+            flags: 1,
+            app_id: *app_id,
+            release_id,
+            code_sha256: sha256(b"edgerun-wallet-app:0.1.0"),
+            developer_id: *developer_public,
+            manifest_sha256: app_manifest_sha256,
+            declared_routes: Vec::new(),
+            storage_namespaces: vec![b"edgerun-wallet-app/state".to_vec()],
+            provided_capabilities: Vec::new(),
+            required_capabilities: Vec::new(),
+        };
+    }
+    edgerun_wire::RuntimeAppInstall {
+        abi_version: edgerun_wire::SDK_WIRE_ABI_VERSION,
+        flags: 1,
+        app_id: *app_id,
+        release_id,
+        code_sha256: app_code_sha256_for(app_slug, artifacts),
+        developer_id: *developer_public,
+        manifest_sha256: app_manifest_sha256,
+        declared_routes: Vec::new(),
+        storage_namespaces: Vec::new(),
+        provided_capabilities: Vec::new(),
+        required_capabilities: Vec::new(),
+    }
+}
+
+pub(crate) fn runtime_install_for_app_manifest(
+    manifest: &edgerun_wire::AppManifestRecord,
+    manifest_sha256: [u8; 32],
+    release_id: [u8; 32],
+) -> edgerun_wire::RuntimeAppInstall {
+    edgerun_wire::RuntimeAppInstall {
+        abi_version: edgerun_wire::SDK_WIRE_ABI_VERSION,
+        flags: 1,
+        app_id: manifest.app_id,
+        release_id,
+        code_sha256: manifest.code_sha256,
+        developer_id: manifest.developer_id,
+        manifest_sha256,
+        declared_routes: manifest
+            .routes
+            .iter()
+            .map(|route| edgerun_wire::RuntimeHttpRoute {
+                abi_version: edgerun_wire::SDK_WIRE_ABI_VERSION,
+                flags: 1,
+                app_id: manifest.app_id,
+                release_id,
+                scheme: route.scheme,
+                host: route.host.clone(),
+                path_prefix: route.path_prefix.clone(),
+            })
+            .collect(),
+        storage_namespaces: manifest.storage_namespaces.clone(),
+        provided_capabilities: manifest.provided_capabilities.clone(),
+        required_capabilities: manifest.required_capabilities.clone(),
+    }
+}
+
+pub(crate) fn validate_app_manifest_binding(
+    manifest: &edgerun_wire::AppManifestRecord,
+    app_slug: &str,
+    developer_public: &[u8; 32],
+    app_id: &[u8; 32],
+) -> Result<(), String> {
+    if manifest.abi_version != edgerun_wire::SDK_WIRE_ABI_VERSION || manifest.flags & 1 != 1 {
+        return Err("invalid app manifest ABI".to_owned());
+    }
+    if manifest.app_slug != app_slug.as_bytes() {
+        return Err("app manifest slug does not match package slug".to_owned());
+    }
+    if &manifest.developer_id != developer_public {
+        return Err("app manifest developer does not match package developer".to_owned());
+    }
+    if &manifest.app_id != app_id {
+        return Err("app manifest app_id does not match package app_id".to_owned());
+    }
+    Ok(())
 }
 
 pub(crate) struct AppArtifact {
@@ -242,6 +603,26 @@ pub(crate) fn verify_packaged_app_graph(
     {
         return false;
     }
+    let app_manifest = read_app_manifest_record(app_dir).ok();
+    if let Some(manifest) = app_manifest.as_ref() {
+        if validate_app_manifest_binding(manifest, slug, &graph.developer_public_key, &graph.app_id)
+            .is_err()
+        {
+            return false;
+        }
+    }
+    if graph.runtime_install
+        != runtime_install_for_app_graph(
+            slug,
+            &graph.developer_public_key,
+            &graph.app_id,
+            graph.app_manifest_sha256,
+            &actual,
+            app_manifest.as_ref(),
+        )
+    {
+        return false;
+    }
     actual.iter().all(|expected| {
         graph.artifacts.iter().any(|actual| {
             actual.kind == expected.kind
@@ -260,12 +641,123 @@ pub(crate) fn app_id_for(app_slug: &str, developer_public: &[u8; 32]) -> [u8; 32
     sha256(&bytes)
 }
 
+pub(crate) fn app_release_id_for(
+    app_id: &[u8; 32],
+    app_manifest_sha256: [u8; 32],
+    artifacts: &[AppArtifact],
+) -> [u8; 32] {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(b"edgerun-sdk.eapp.v1.release-id");
+    bytes.extend_from_slice(app_id);
+    bytes.extend_from_slice(&app_manifest_sha256);
+    for artifact in artifacts {
+        bytes.extend_from_slice(artifact.path.as_bytes());
+        bytes.push(0);
+        bytes.extend_from_slice(&artifact.kind.to_le_bytes());
+        bytes.extend_from_slice(&artifact.sha256);
+    }
+    sha256(&bytes)
+}
+
+pub(crate) fn app_code_sha256_for(app_slug: &str, artifacts: &[AppArtifact]) -> [u8; 32] {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(b"edgerun-sdk.eapp.v1.code");
+    bytes.extend_from_slice(app_slug.as_bytes());
+    for artifact in artifacts
+        .iter()
+        .filter(|artifact| matches!(artifact.kind, 2 | 3 | 4 | 5))
+    {
+        bytes.extend_from_slice(artifact.path.as_bytes());
+        bytes.push(0);
+        bytes.extend_from_slice(&artifact.sha256);
+    }
+    sha256(&bytes)
+}
+
 pub(crate) fn parse_seed(value: &str) -> Option<[u8; 32]> {
     parse_hex(value)?.try_into().ok()
 }
 
 pub(crate) fn parse_seal_key(value: &str) -> Option<SealKey> {
     Some(SealKey::from_bytes(parse_hex(value)?.try_into().ok()?))
+}
+
+pub(crate) const USER_PROFILE_PASSWORD_KDF_DOMAIN: &[u8] =
+    b"edgerun-sdk.eusr.v1.pbkdf2-hmac-sha256";
+pub(crate) const USER_PROFILE_PASSWORD_SALT_LEN: usize = 16;
+pub(crate) const USER_PROFILE_PASSWORD_DEFAULT_ROUNDS: u32 = 100_000;
+
+pub(crate) fn user_profile_password_kdf_none() -> edgerun_wire::UserProfilePasswordKdf {
+    edgerun_wire::UserProfilePasswordKdf {
+        kdf: edgerun_wire::USER_PROFILE_KDF_NONE,
+        flags: 0,
+        rounds: 0,
+        salt: Vec::new(),
+    }
+}
+
+pub(crate) fn random_user_profile_password_kdf(
+) -> Result<edgerun_wire::UserProfilePasswordKdf, String> {
+    let mut salt = [0u8; USER_PROFILE_PASSWORD_SALT_LEN];
+    fill_random(&mut salt).map_err(|err| format!("salt generation failed: {err:?}"))?;
+    Ok(edgerun_wire::UserProfilePasswordKdf {
+        kdf: edgerun_wire::USER_PROFILE_KDF_PBKDF2_HMAC_SHA256,
+        flags: 1,
+        rounds: USER_PROFILE_PASSWORD_DEFAULT_ROUNDS,
+        salt: salt.to_vec(),
+    })
+}
+
+pub(crate) fn seal_key_from_user_profile_password(
+    password: &str,
+    kdf: &edgerun_wire::UserProfilePasswordKdf,
+) -> Result<SealKey, String> {
+    if password.is_empty() {
+        return Err("password must not be empty".to_owned());
+    }
+    if kdf.kdf != edgerun_wire::USER_PROFILE_KDF_PBKDF2_HMAC_SHA256 || kdf.flags & 1 != 1 {
+        return Err("unsupported user profile password KDF".to_owned());
+    }
+    if kdf.salt.len() < USER_PROFILE_PASSWORD_SALT_LEN || kdf.rounds == 0 {
+        return Err("invalid user profile password KDF parameters".to_owned());
+    }
+    let mut salt_block = Vec::new();
+    salt_block.extend_from_slice(USER_PROFILE_PASSWORD_KDF_DOMAIN);
+    salt_block.extend_from_slice(&kdf.salt);
+    salt_block.extend_from_slice(&1u32.to_be_bytes());
+    let mut u = user_profile_hmac_sha256(password.as_bytes(), &salt_block);
+    let mut out = [0u8; 32];
+    out.copy_from_slice(&u);
+    for _ in 1..kdf.rounds {
+        u = user_profile_hmac_sha256(password.as_bytes(), &u);
+        for (dst, src) in out.iter_mut().zip(u.iter()) {
+            *dst ^= *src;
+        }
+    }
+    Ok(SealKey::from_bytes(out))
+}
+
+pub(crate) fn user_profile_hmac_sha256(key: &[u8], data: &[u8]) -> [u8; 32] {
+    let mut normalized = [0u8; 64];
+    if key.len() > 64 {
+        normalized[..32].copy_from_slice(&sha256(key));
+    } else {
+        normalized[..key.len()].copy_from_slice(key);
+    }
+    let mut ipad = [0x36u8; 64];
+    let mut opad = [0x5cu8; 64];
+    for index in 0..64 {
+        ipad[index] ^= normalized[index];
+        opad[index] ^= normalized[index];
+    }
+    let mut inner = Vec::with_capacity(64 + data.len());
+    inner.extend_from_slice(&ipad);
+    inner.extend_from_slice(data);
+    let inner_digest = sha256(&inner);
+    let mut outer = Vec::with_capacity(64 + inner_digest.len());
+    outer.extend_from_slice(&opad);
+    outer.extend_from_slice(&inner_digest);
+    sha256(&outer)
 }
 
 pub(crate) fn user_profile_id(owner_id: &[u8; 32], epoch: u64) -> [u8; 32] {
@@ -656,6 +1148,24 @@ pub(crate) fn parse_app_graph_record(bytes: &[u8]) -> Option<edgerun_wire::AppGr
             Some(graph)
         }
         _ => None,
+    }
+}
+
+pub(crate) fn read_app_manifest_record(
+    app_dir: &Path,
+) -> Result<edgerun_wire::AppManifestRecord, String> {
+    let bytes = fs::read(app_dir.join("app.edapp")).map_err(|err| err.to_string())?;
+    let owned = bytes.to_vec();
+    match edgerun_wire::from_bytes::<SdkWireRecord, edgerun_wire::WireError>(&owned)
+        .map_err(|_| "invalid app.edapp wire record".to_owned())?
+    {
+        SdkWireRecord::AppManifest(manifest)
+            if manifest.abi_version == edgerun_wire::SDK_WIRE_ABI_VERSION
+                && manifest.flags & 1 == 1 =>
+        {
+            Ok(manifest)
+        }
+        _ => Err("app.edapp is not an app manifest record".to_owned()),
     }
 }
 
@@ -2022,8 +2532,35 @@ pub(crate) fn user_profile_body_bytes(
     wire_user_profile_body_bytes(profile_id, owner_key, epoch, monotonic_version, grants)
 }
 
+pub(crate) fn user_profile_body_with_owner_seed_bytes(
+    profile_id: &[u8; 32],
+    owner_seed: &[u8; 32],
+    epoch: u64,
+    monotonic_version: u64,
+    grants: &[OwnedUserGrant],
+) -> Vec<u8> {
+    let owner_key = SigningKey::from_bytes(owner_seed);
+    wire_user_profile_body_with_owner_seed_bytes(
+        profile_id,
+        &owner_key,
+        Some(owner_seed),
+        epoch,
+        monotonic_version,
+        grants,
+    )
+}
+
 pub(crate) fn user_profile_file_bytes(body: &[u8], seal_key: &SealKey) -> Result<Vec<u8>, String> {
     wire_user_profile_file_bytes(body, seal_key)
+}
+
+pub(crate) fn user_profile_file_bytes_with_password(
+    body: &[u8],
+    password: &str,
+) -> Result<Vec<u8>, String> {
+    let kdf = random_user_profile_password_kdf()?;
+    let seal_key = seal_key_from_user_profile_password(password, &kdf)?;
+    wire_user_profile_file_bytes_with_kdf(body, &seal_key, kdf)
 }
 
 pub(crate) fn open_user_profile_file(
@@ -2031,6 +2568,15 @@ pub(crate) fn open_user_profile_file(
     seal_key: &SealKey,
 ) -> Result<edgerun_wire::UserProfileBody, String> {
     open_wire_user_profile_file(bytes, seal_key)
+}
+
+pub(crate) fn open_user_profile_file_with_password(
+    bytes: &[u8],
+    password: &str,
+) -> Result<edgerun_wire::UserProfileBody, String> {
+    let profile = parse_wire_user_profile(bytes)?;
+    let seal_key = seal_key_from_user_profile_password(password, &profile.password_kdf)?;
+    open_wire_user_profile_with_record(&profile, &seal_key)
 }
 
 pub(crate) fn verify_user_profile_body_signature(profile: &edgerun_wire::UserProfileBody) -> bool {
@@ -2120,6 +2666,24 @@ pub(crate) fn wire_user_profile_body_bytes(
     monotonic_version: u64,
     grants: &[OwnedUserGrant],
 ) -> Vec<u8> {
+    wire_user_profile_body_with_owner_seed_bytes(
+        profile_id,
+        owner_key,
+        None,
+        epoch,
+        monotonic_version,
+        grants,
+    )
+}
+
+pub(crate) fn wire_user_profile_body_with_owner_seed_bytes(
+    profile_id: &[u8; 32],
+    owner_key: &SigningKey,
+    owner_seed: Option<&[u8; 32]>,
+    epoch: u64,
+    monotonic_version: u64,
+    grants: &[OwnedUserGrant],
+) -> Vec<u8> {
     let mut body = edgerun_wire::UserProfileBody {
         abi_version: edgerun_wire::SDK_WIRE_ABI_VERSION,
         flags: 1,
@@ -2127,6 +2691,12 @@ pub(crate) fn wire_user_profile_body_bytes(
         monotonic_version,
         profile_id: *profile_id,
         owner_id: *owner_key.verifying_key().as_bytes(),
+        owner_key_algorithm: if owner_seed.is_some() {
+            edgerun_wire::USER_PROFILE_OWNER_KEY_ED25519
+        } else {
+            0
+        },
+        owner_private_key: owner_seed.map_or_else(Vec::new, |seed| seed.to_vec()),
         grants: grants.iter().map(wire_user_grant_from_owned).collect(),
         signature: Vec::new(),
     };
@@ -2142,6 +2712,14 @@ pub(crate) fn wire_user_profile_body_bytes(
 pub(crate) fn wire_user_profile_file_bytes(
     body_bytes: &[u8],
     seal_key: &SealKey,
+) -> Result<Vec<u8>, String> {
+    wire_user_profile_file_bytes_with_kdf(body_bytes, seal_key, user_profile_password_kdf_none())
+}
+
+pub(crate) fn wire_user_profile_file_bytes_with_kdf(
+    body_bytes: &[u8],
+    seal_key: &SealKey,
+    password_kdf: edgerun_wire::UserProfilePasswordKdf,
 ) -> Result<Vec<u8>, String> {
     let owned = body_bytes.to_vec();
     let body = match edgerun_wire::from_bytes::<SdkWireRecord, edgerun_wire::WireError>(&owned)
@@ -2161,6 +2739,7 @@ pub(crate) fn wire_user_profile_file_bytes(
         monotonic_version: body.monotonic_version,
         profile_id: body.profile_id,
         owner_id: body.owner_id,
+        password_kdf,
         body_sha256: sha256(body_bytes),
         sealed_body: sealed,
     };
@@ -2171,13 +2750,24 @@ pub(crate) fn open_wire_user_profile_file(
     bytes: &[u8],
     seal_key: &SealKey,
 ) -> Result<edgerun_wire::UserProfileBody, String> {
+    let profile = parse_wire_user_profile(bytes)?;
+    open_wire_user_profile_with_record(&profile, seal_key)
+}
+
+pub(crate) fn parse_wire_user_profile(bytes: &[u8]) -> Result<edgerun_wire::UserProfile, String> {
     let owned = bytes.to_vec();
-    let profile = match edgerun_wire::from_bytes::<SdkWireRecord, edgerun_wire::WireError>(&owned)
+    match edgerun_wire::from_bytes::<SdkWireRecord, edgerun_wire::WireError>(&owned)
         .map_err(|err| format!("invalid wire user profile: {err:?}"))?
     {
-        SdkWireRecord::UserProfile(profile) => profile,
-        _ => return Err("wire record is not a user profile".to_owned()),
-    };
+        SdkWireRecord::UserProfile(profile) => Ok(profile),
+        _ => Err("wire record is not a user profile".to_owned()),
+    }
+}
+
+pub(crate) fn open_wire_user_profile_with_record(
+    profile: &edgerun_wire::UserProfile,
+    seal_key: &SealKey,
+) -> Result<edgerun_wire::UserProfileBody, String> {
     let body_bytes = unseal_with_key(&profile.sealed_body, seal_key)
         .map_err(|err| format!("unseal failed: {err:?}"))?;
     let body_owned = body_bytes.to_vec();
@@ -2209,6 +2799,18 @@ pub(crate) fn verify_wire_user_profile_body_signature(
     let Ok(signature_bytes) = <[u8; 64]>::try_from(profile.signature.as_slice()) else {
         return false;
     };
+    if !profile.owner_private_key.is_empty() {
+        if profile.owner_key_algorithm != edgerun_wire::USER_PROFILE_OWNER_KEY_ED25519 {
+            return false;
+        }
+        let Ok(owner_seed) = <[u8; 32]>::try_from(profile.owner_private_key.as_slice()) else {
+            return false;
+        };
+        let owner_key = SigningKey::from_bytes(&owner_seed);
+        if owner_key.verifying_key().as_bytes() != &profile.owner_id {
+            return false;
+        }
+    }
     let signature = Signature::from_bytes(&signature_bytes);
     let unsigned = wire_user_profile_body_unsigned_bytes(profile);
     public_key
@@ -3592,7 +4194,13 @@ pub(crate) fn cmd_create_user_profile(args: Vec<String>) -> i32 {
     };
     let owner_key = SigningKey::from_bytes(&owner_seed);
     let profile_id = user_profile_id(owner_key.verifying_key().as_bytes(), epoch);
-    let body = user_profile_body_bytes(&profile_id, &owner_key, epoch, monotonic_version, &[]);
+    let body = user_profile_body_with_owner_seed_bytes(
+        &profile_id,
+        &owner_seed,
+        epoch,
+        monotonic_version,
+        &[],
+    );
     let bytes = match user_profile_file_bytes(&body, &seal_key) {
         Ok(bytes) => bytes,
         Err(err) => {
@@ -3610,6 +4218,66 @@ pub(crate) fn cmd_create_user_profile(args: Vec<String>) -> i32 {
         "owner_id: {}",
         bytes_to_hex(owner_key.verifying_key().as_bytes())
     );
+    println!("body_sha256: {}", bytes_to_hex(&sha256(&body)));
+    0
+}
+
+pub(crate) fn cmd_create_user_profile_password(args: Vec<String>) -> i32 {
+    if args.len() < 4 {
+        eprintln!(
+            "create-user-profile-password requires out.eusr, owner seed hex, password, and epoch [monotonic-version]"
+        );
+        return 1;
+    }
+    let out = PathBuf::from(&args[0]);
+    let Some(owner_seed) = parse_seed(&args[1]) else {
+        eprintln!("owner seed must be 32 hex bytes");
+        return 1;
+    };
+    let epoch = match parse_u64_arg(&args[3], "epoch") {
+        Ok(value) => value,
+        Err(err) => {
+            eprintln!("{err}");
+            return 1;
+        }
+    };
+    let monotonic_version = match args.get(4) {
+        Some(value) => match parse_u64_arg(value, "monotonic-version") {
+            Ok(value) => value,
+            Err(err) => {
+                eprintln!("{err}");
+                return 1;
+            }
+        },
+        None => 1,
+    };
+    let owner_key = SigningKey::from_bytes(&owner_seed);
+    let profile_id = user_profile_id(owner_key.verifying_key().as_bytes(), epoch);
+    let body = user_profile_body_with_owner_seed_bytes(
+        &profile_id,
+        &owner_seed,
+        epoch,
+        monotonic_version,
+        &[],
+    );
+    let bytes = match user_profile_file_bytes_with_password(&body, &args[2]) {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            eprintln!("{err}");
+            return 1;
+        }
+    };
+    if let Err(err) = fs::write(&out, &bytes) {
+        eprintln!("cannot write user profile: {err}");
+        return 1;
+    }
+    println!("user_profile: {}", out.display());
+    println!("profile_id: {}", bytes_to_hex(&profile_id));
+    println!(
+        "owner_id: {}",
+        bytes_to_hex(owner_key.verifying_key().as_bytes())
+    );
+    println!("owner_private_key: sealed");
     println!("body_sha256: {}", bytes_to_hex(&sha256(&body)));
     0
 }
@@ -3730,9 +4398,9 @@ pub(crate) fn cmd_grant_profile_capability(args: Vec<String>) -> i32 {
         valid_until,
     });
     let profile_id = existing.profile_id;
-    let new_body = user_profile_body_bytes(
+    let new_body = user_profile_body_with_owner_seed_bytes(
         &profile_id,
-        &owner_key,
+        &owner_seed,
         existing.epoch,
         monotonic_version,
         &grants,
@@ -3780,6 +4448,51 @@ pub(crate) fn cmd_open_user_profile(args: Vec<String>) -> i32 {
     println!("owner_id: {}", bytes_to_hex(&parsed.owner_id));
     println!("epoch: {}", parsed.epoch);
     println!("monotonic_version: {}", parsed.monotonic_version);
+    println!(
+        "owner_private_key: {}",
+        if parsed.owner_private_key.is_empty() {
+            "missing"
+        } else {
+            "sealed"
+        }
+    );
+    println!("grant_count: {}", parsed.grants.len());
+    print_check(
+        "owner-signature",
+        verify_user_profile_body_signature(&parsed),
+    );
+    0
+}
+
+pub(crate) fn cmd_open_user_profile_password(args: Vec<String>) -> i32 {
+    if args.len() < 2 {
+        eprintln!("open-user-profile-password requires profile.eusr and password");
+        return 1;
+    }
+    let Ok(profile_bytes) = fs::read(&args[0]) else {
+        eprintln!("cannot read user profile: {}", args[0]);
+        return 1;
+    };
+    let parsed = match open_user_profile_file_with_password(&profile_bytes, &args[1]) {
+        Ok(body) => body,
+        Err(err) => {
+            eprintln!("{err}");
+            return 1;
+        }
+    };
+    println!("user_profile: {}", args[0]);
+    println!("profile_id: {}", bytes_to_hex(&parsed.profile_id));
+    println!("owner_id: {}", bytes_to_hex(&parsed.owner_id));
+    println!("epoch: {}", parsed.epoch);
+    println!("monotonic_version: {}", parsed.monotonic_version);
+    println!(
+        "owner_private_key: {}",
+        if parsed.owner_private_key.is_empty() {
+            "missing"
+        } else {
+            "sealed"
+        }
+    );
     println!("grant_count: {}", parsed.grants.len());
     print_check(
         "owner-signature",

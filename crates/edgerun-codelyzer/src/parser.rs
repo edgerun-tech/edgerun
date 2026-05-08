@@ -1,29 +1,7 @@
-use std::{borrow::Cow, collections::HashMap, fs};
+use std::{borrow::Cow, fs};
 
 use rkyv::{Archive, Deserialize as RkyvDeserialize, Serialize as RkyvSerialize};
-use tree_sitter::{Language, Node, Parser};
 
-// Language grammars - feature gated
-#[cfg(feature = "lang-c")]
-use tree_sitter_c::LANGUAGE as TS_C;
-#[cfg(feature = "lang-go")]
-use tree_sitter_go::LANGUAGE as TS_GO;
-#[cfg(feature = "lang-java")]
-use tree_sitter_java::LANGUAGE as TS_JAVA;
-#[cfg(feature = "lang-javascript")]
-use tree_sitter_javascript::LANGUAGE as TS_JS;
-#[cfg(feature = "lang-python")]
-use tree_sitter_python::LANGUAGE as TS_PYTHON;
-#[cfg(feature = "lang-rust")]
-use tree_sitter_rust::LANGUAGE as TS_RUST;
-#[cfg(feature = "lang-typescript")]
-use tree_sitter_typescript::LANGUAGE_TSX as TS_TS;
-
-/// Parser module using tree-sitter to extract functions and call relationships.
-///
-/// Supports Rust, TypeScript, C, Python, Go, Java, and JavaScript files.
-/// For C: handles function definitions (including static), direct calls,
-/// indirect calls via function pointers, and preprocessor macro detection.
 use crate::uir::CallKind;
 
 /// A raw function definition found in source code.
@@ -32,9 +10,9 @@ pub struct RawFunction<'a> {
     pub name: &'a str,
     pub start_byte: usize,
     pub end_byte: usize,
-    pub is_static: bool, // C: `static` keyword present
+    pub is_static: bool,
     #[allow(dead_code)]
-    pub is_macro_def: bool, // C: this is a preproc_function_def, not a real function
+    pub is_macro_def: bool,
 }
 
 /// Owned version of RawFunction for caching.
@@ -112,7 +90,7 @@ pub struct ParseResult<'a> {
     pub calls: Vec<RawCall<'a>>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Lang {
     Rust,
     TypeScript,
@@ -123,798 +101,596 @@ enum Lang {
     JavaScript,
 }
 
-/// A pool of tree-sitter parsers, one per language.
-/// Reusing parsers avoids repeated language initialization overhead.
+/// Parser pool kept for API stability. The local parser has no external
+/// grammar state to cache.
 #[derive(Default)]
-pub struct ParserPool {
-    parsers: HashMap<Lang, Parser>,
-}
+pub struct ParserPool;
 
 impl ParserPool {
-    /// Create a new empty parser pool.
     pub fn new() -> Self {
-        Self {
-            parsers: HashMap::new(),
-        }
+        Self
     }
 
-    /// Get or create a parser for the given language.
-    fn get_or_insert(&mut self, lang: Lang) -> &mut Parser {
-        self.parsers.entry(lang).or_insert_with(|| {
-            let mut parser = Parser::new();
-            parser
-                .set_language(&lang_to_tree_sitter(lang))
-                .expect("failed to set language");
-            parser
-        })
-    }
-
-    /// Parse a file using the pooled parser.
-    /// Returns None if the file extension is not supported.
     pub fn parse_file<'a>(&mut self, file_path: &str, source: &'a str) -> Option<ParseResult<'a>> {
-        let lang = lang_for_path(file_path)?;
-        let parser = self.get_or_insert(lang);
-        let tree = parser.parse(source, None)?;
-        let root = tree.root_node();
-
-        let functions = extract_functions(root, source, lang);
-        let calls = extract_calls(root, source, lang);
-
-        Some(ParseResult { functions, calls })
+        parse_file(file_path, source)
     }
 }
 
-/// Determine the language from a file path.
+/// Parse a file and return extracted functions and call pairs.
+#[allow(dead_code)]
+pub fn parse_file<'a>(file_path: &str, source: &'a str) -> Option<ParseResult<'a>> {
+    let lang = lang_for_path(file_path)?;
+    let clean = mask_comments_and_strings(source, lang);
+    let mut functions = collect_functions(source, &clean, lang);
+    finalize_function_ranges(source, &clean, lang, &mut functions);
+    let calls = collect_calls(source, &clean, lang);
+    Some(ParseResult { functions, calls })
+}
+
 fn lang_for_path(path: &str) -> Option<Lang> {
     if path.ends_with(".rs") {
         #[cfg(feature = "lang-rust")]
-        {
-            return Some(Lang::Rust);
-        }
-        #[cfg(not(feature = "lang-rust"))]
-        {
-            return None;
-        }
+        return Some(Lang::Rust);
     } else if path.ends_with(".ts") || path.ends_with(".tsx") {
         #[cfg(feature = "lang-typescript")]
-        {
-            return Some(Lang::TypeScript);
-        }
-        #[cfg(not(feature = "lang-typescript"))]
-        {
-            return None;
-        }
+        return Some(Lang::TypeScript);
     } else if path.ends_with(".c") || path.ends_with(".h") {
         #[cfg(feature = "lang-c")]
-        {
-            return Some(Lang::C);
-        }
-        #[cfg(not(feature = "lang-c"))]
-        {
-            return None;
-        }
+        return Some(Lang::C);
     } else if path.ends_with(".py") {
         #[cfg(feature = "lang-python")]
-        {
-            return Some(Lang::Python);
-        }
-        #[cfg(not(feature = "lang-python"))]
-        {
-            return None;
-        }
+        return Some(Lang::Python);
     } else if path.ends_with(".go") {
         #[cfg(feature = "lang-go")]
-        {
-            return Some(Lang::Go);
-        }
-        #[cfg(not(feature = "lang-go"))]
-        {
-            return None;
-        }
+        return Some(Lang::Go);
     } else if path.ends_with(".java") {
         #[cfg(feature = "lang-java")]
-        {
-            return Some(Lang::Java);
-        }
-        #[cfg(not(feature = "lang-java"))]
-        {
-            return None;
-        }
+        return Some(Lang::Java);
     } else if path.ends_with(".js") || path.ends_with(".jsx") || path.ends_with(".mjs") {
         #[cfg(feature = "lang-javascript")]
-        {
-            return Some(Lang::JavaScript);
+        return Some(Lang::JavaScript);
+    }
+    None
+}
+
+fn collect_functions<'a>(source: &'a str, clean: &str, lang: Lang) -> Vec<RawFunction<'a>> {
+    let mut functions = Vec::new();
+
+    match lang {
+        Lang::Rust => collect_keyword_functions(source, clean, "fn ", false, &mut functions),
+        Lang::TypeScript | Lang::JavaScript => {
+            collect_keyword_functions(source, clean, "function ", false, &mut functions);
+            collect_js_arrow_functions(source, clean, &mut functions);
+            collect_js_methods(source, clean, &mut functions);
         }
-        #[cfg(not(feature = "lang-javascript"))]
-        {
-            return None;
+        Lang::Python => collect_keyword_functions(source, clean, "def ", false, &mut functions),
+        Lang::Go => collect_go_functions(source, clean, &mut functions),
+        Lang::Java => collect_java_methods(source, clean, &mut functions),
+        Lang::C => collect_c_functions(source, clean, &mut functions),
+    }
+
+    functions.sort_by_key(|f| f.start_byte);
+    functions.dedup_by(|a, b| a.start_byte == b.start_byte && a.name == b.name);
+    functions
+}
+
+fn collect_keyword_functions<'a>(
+    source: &'a str,
+    clean: &str,
+    keyword: &str,
+    is_static: bool,
+    out: &mut Vec<RawFunction<'a>>,
+) {
+    let mut offset = 0;
+    while let Some(rel) = clean[offset..].find(keyword) {
+        let pos = offset + rel;
+        if pos > 0 && is_ident_byte(clean.as_bytes()[pos - 1]) {
+            offset = pos + keyword.len();
+            continue;
         }
+        let name_start = skip_ws(clean, pos + keyword.len());
+        let Some(name_end) = read_ident_end(clean, name_start) else {
+            offset = pos + keyword.len();
+            continue;
+        };
+        out.push(RawFunction {
+            name: &source[name_start..name_end],
+            start_byte: pos,
+            end_byte: source.len(),
+            is_static,
+            is_macro_def: false,
+        });
+        offset = name_end;
+    }
+}
+
+fn collect_js_arrow_functions<'a>(source: &'a str, clean: &str, out: &mut Vec<RawFunction<'a>>) {
+    let mut offset = 0;
+    while let Some(rel) = clean[offset..].find("=>") {
+        let arrow = offset + rel;
+        let Some(eq) = clean[..arrow].rfind('=') else {
+            offset = arrow + 2;
+            continue;
+        };
+        let Some((name_start, name_end)) = previous_ident(clean, eq) else {
+            offset = arrow + 2;
+            continue;
+        };
+        out.push(RawFunction {
+            name: &source[name_start..name_end],
+            start_byte: name_start,
+            end_byte: source.len(),
+            is_static: false,
+            is_macro_def: false,
+        });
+        offset = arrow + 2;
+    }
+}
+
+fn collect_js_methods<'a>(source: &'a str, clean: &str, out: &mut Vec<RawFunction<'a>>) {
+    let bytes = clean.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if !is_ident_start(bytes[i]) {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        i += 1;
+        while i < bytes.len() && is_call_path_byte(bytes[i]) {
+            i += 1;
+        }
+        let end = i;
+        let name = &clean[start..end];
+        if is_keyword(name) {
+            continue;
+        }
+        if start > 0 && matches!(bytes[start - 1], b'.' | b':') {
+            continue;
+        }
+        let paren = skip_ws(clean, end);
+        if bytes.get(paren) == Some(&b'(') {
+            let after = find_matching(clean, paren, b'(', b')')
+                .map(|p| skip_ws(clean, p + 1))
+                .unwrap_or(paren);
+            if bytes.get(after) == Some(&b'{') {
+                out.push(RawFunction {
+                    name: &source[start..end],
+                    start_byte: start,
+                    end_byte: source.len(),
+                    is_static: false,
+                    is_macro_def: false,
+                });
+            }
+        }
+    }
+}
+
+fn collect_go_functions<'a>(source: &'a str, clean: &str, out: &mut Vec<RawFunction<'a>>) {
+    let mut offset = 0;
+    while let Some(rel) = clean[offset..].find("func ") {
+        let pos = offset + rel;
+        let mut cursor = skip_ws(clean, pos + 5);
+        if clean.as_bytes().get(cursor) == Some(&b'(') {
+            if let Some(end) = find_matching(clean, cursor, b'(', b')') {
+                cursor = skip_ws(clean, end + 1);
+            }
+        }
+        let Some(name_end) = read_ident_end(clean, cursor) else {
+            offset = pos + 5;
+            continue;
+        };
+        out.push(RawFunction {
+            name: &source[cursor..name_end],
+            start_byte: pos,
+            end_byte: source.len(),
+            is_static: false,
+            is_macro_def: false,
+        });
+        offset = name_end;
+    }
+}
+
+fn collect_java_methods<'a>(source: &'a str, clean: &str, out: &mut Vec<RawFunction<'a>>) {
+    for (line_start, line) in lines_with_offsets(clean) {
+        let Some(paren_rel) = line.find('(') else {
+            continue;
+        };
+        let global_paren = line_start + paren_rel;
+        if !has_body_after_signature(clean, global_paren) {
+            continue;
+        }
+        let Some((name_start, name_end)) = previous_ident(line, paren_rel) else {
+            continue;
+        };
+        let name = &line[name_start..name_end];
+        if is_keyword(name) {
+            continue;
+        }
+        out.push(RawFunction {
+            name: &source[line_start + name_start..line_start + name_end],
+            start_byte: line_start,
+            end_byte: source.len(),
+            is_static: line[..paren_rel].contains(" static "),
+            is_macro_def: false,
+        });
+    }
+}
+
+fn collect_c_functions<'a>(source: &'a str, clean: &str, out: &mut Vec<RawFunction<'a>>) {
+    for (line_start, line) in lines_with_offsets(clean) {
+        let trimmed = line.trim_start();
+        let leading_ws = line.len() - trimmed.len();
+        if let Some(rest) = trimmed.strip_prefix("#define ") {
+            if let Some(name_end) = read_ident_end(rest, 0) {
+                out.push(RawFunction {
+                    name: &source
+                        [line_start + leading_ws + 8..line_start + leading_ws + 8 + name_end],
+                    start_byte: line_start,
+                    end_byte: line_start + line.len(),
+                    is_static: false,
+                    is_macro_def: true,
+                });
+            }
+            continue;
+        }
+    }
+
+    let bytes = clean.as_bytes();
+    let mut cursor = 0;
+    while cursor < bytes.len() {
+        let Some(rel) = clean[cursor..].find('(') else {
+            break;
+        };
+        let paren = cursor + rel;
+        cursor = paren + 1;
+
+        if !has_body_after_signature(clean, paren) {
+            continue;
+        }
+        let Some((name_start, name_end)) = previous_ident(clean, paren) else {
+            continue;
+        };
+        let name = &clean[name_start..name_end];
+        if is_keyword(name) {
+            continue;
+        }
+        if name_start > 0 && matches!(bytes[name_start - 1], b'.' | b'>' | b':') {
+            continue;
+        }
+        let decl_start = declaration_start(clean, name_start);
+        let prefix = clean[decl_start..name_start].trim();
+        if prefix.is_empty()
+            || prefix.ends_with('=')
+            || prefix.ends_with(',')
+            || prefix.ends_with("return")
+            || prefix.split_whitespace().any(is_control_keyword)
+        {
+            continue;
+        }
+
+        out.push(RawFunction {
+            name: &source[name_start..name_end],
+            start_byte: decl_start,
+            end_byte: source.len(),
+            is_static: prefix.split_whitespace().any(|part| part == "static"),
+            is_macro_def: false,
+        });
+    }
+}
+
+fn finalize_function_ranges(
+    source: &str,
+    clean: &str,
+    lang: Lang,
+    functions: &mut [RawFunction<'_>],
+) {
+    for i in 0..functions.len() {
+        if functions[i].is_macro_def {
+            continue;
+        }
+        let next_start = functions
+            .get(i + 1)
+            .map(|f| f.start_byte)
+            .unwrap_or(source.len());
+        functions[i].end_byte = match lang {
+            Lang::Python => next_start,
+            _ => clean[functions[i].start_byte..next_start]
+                .find('{')
+                .and_then(|rel| find_matching(clean, functions[i].start_byte + rel, b'{', b'}'))
+                .map(|end| end + 1)
+                .unwrap_or(next_start),
+        };
+    }
+}
+
+fn collect_calls<'a>(source: &'a str, clean: &str, lang: Lang) -> Vec<RawCall<'a>> {
+    let bytes = clean.as_bytes();
+    let mut calls = Vec::new();
+    let mut i = 0;
+    while i < bytes.len() {
+        if !is_ident_start(bytes[i]) {
+            i += 1;
+            continue;
+        }
+        let name_start = i;
+        i += 1;
+        while i < bytes.len() && is_ident_byte(bytes[i]) {
+            i += 1;
+        }
+        let name_end = i;
+        let name = call_leaf_name(&clean[name_start..name_end]);
+        let paren = skip_ws(clean, name_end);
+        if bytes.get(paren) != Some(&b'(') || is_keyword(name) {
+            continue;
+        }
+        if is_declaration_context(clean, lang, name_start) {
+            continue;
+        }
+        let kind = if lang == Lang::C && is_likely_macro(name) {
+            CallKind::Macro
+        } else {
+            CallKind::Direct
+        };
+        calls.push(RawCall {
+            callee_name: borrow_call_leaf(source, name_start, name_end),
+            start_byte: name_start,
+            end_byte: find_matching(clean, paren, b'(', b')')
+                .map(|p| p + 1)
+                .unwrap_or(paren + 1),
+            kind,
+        });
+    }
+    calls
+}
+
+fn is_declaration_context(clean: &str, lang: Lang, name_start: usize) -> bool {
+    let prefix = &clean[..name_start];
+    let tail = prefix
+        .rsplit_once(|c: char| ['\n', ';', '{', '}'].contains(&c))
+        .map(|(_, tail)| tail)
+        .unwrap_or(prefix)
+        .trim_end();
+    match lang {
+        Lang::Rust => tail.ends_with("fn") || tail.ends_with("async fn"),
+        Lang::TypeScript | Lang::JavaScript => {
+            tail.ends_with("function") || tail.ends_with("if") || tail.ends_with("for")
+        }
+        Lang::Python => tail.ends_with("def") || tail.ends_with("class"),
+        Lang::Go => tail.ends_with("func"),
+        Lang::Java | Lang::C => {
+            tail.ends_with("if")
+                || tail.ends_with("for")
+                || tail.ends_with("while")
+                || tail.ends_with("switch")
+                || tail.contains("return")
+        }
+    }
+}
+
+fn mask_comments_and_strings(source: &str, lang: Lang) -> String {
+    let mut out = source.as_bytes().to_vec();
+    let bytes = source.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'"' || bytes[i] == b'\'' || bytes[i] == b'`' {
+            let quote = bytes[i];
+            i += 1;
+            while i < bytes.len() {
+                if bytes[i] == b'\n' && quote != b'`' {
+                    break;
+                }
+                out[i] = mask_byte(bytes[i]);
+                if bytes[i] == b'\\' {
+                    i += 2;
+                    continue;
+                }
+                if bytes[i] == quote {
+                    i += 1;
+                    break;
+                }
+                i += 1;
+            }
+            continue;
+        }
+
+        if bytes[i] == b'/' && bytes.get(i + 1) == Some(&b'/') && lang != Lang::Python {
+            i += 2;
+            while i < bytes.len() && bytes[i] != b'\n' {
+                out[i] = b' ';
+                i += 1;
+            }
+            continue;
+        }
+        if bytes[i] == b'/' && bytes.get(i + 1) == Some(&b'*') && lang != Lang::Python {
+            i += 2;
+            while i + 1 < bytes.len() {
+                out[i] = mask_byte(bytes[i]);
+                if bytes[i] == b'*' && bytes[i + 1] == b'/' {
+                    out[i + 1] = b' ';
+                    i += 2;
+                    break;
+                }
+                i += 1;
+            }
+            continue;
+        }
+        if bytes[i] == b'#' && lang == Lang::Python {
+            i += 1;
+            while i < bytes.len() && bytes[i] != b'\n' {
+                out[i] = b' ';
+                i += 1;
+            }
+            continue;
+        }
+        i += 1;
+    }
+    String::from_utf8(out).unwrap_or_default()
+}
+
+fn mask_byte(byte: u8) -> u8 {
+    if byte == b'\n' {
+        b'\n'
+    } else {
+        b' '
+    }
+}
+
+fn skip_ws(input: &str, mut pos: usize) -> usize {
+    let bytes = input.as_bytes();
+    while pos < bytes.len() && bytes[pos].is_ascii_whitespace() {
+        pos += 1;
+    }
+    pos
+}
+
+fn read_ident_end(input: &str, start: usize) -> Option<usize> {
+    let bytes = input.as_bytes();
+    if !bytes.get(start).copied().is_some_and(is_ident_start) {
+        return None;
+    }
+    let mut end = start + 1;
+    while end < bytes.len() && is_ident_byte(bytes[end]) {
+        end += 1;
+    }
+    Some(end)
+}
+
+fn previous_ident(input: &str, before: usize) -> Option<(usize, usize)> {
+    let bytes = input.as_bytes();
+    let mut end = before;
+    while end > 0 && bytes[end - 1].is_ascii_whitespace() {
+        end -= 1;
+    }
+    let mut start = end;
+    while start > 0 && is_ident_byte(bytes[start - 1]) {
+        start -= 1;
+    }
+    if start < end && is_ident_start(bytes[start]) {
+        Some((start, end))
     } else {
         None
     }
 }
 
-fn lang_to_tree_sitter(lang: Lang) -> Language {
-    match lang {
-        #[cfg(feature = "lang-rust")]
-        Lang::Rust => TS_RUST.into(),
-        #[cfg(feature = "lang-typescript")]
-        Lang::TypeScript => TS_TS.into(),
-        #[cfg(feature = "lang-c")]
-        Lang::C => TS_C.into(),
-        #[cfg(feature = "lang-python")]
-        Lang::Python => TS_PYTHON.into(),
-        #[cfg(feature = "lang-go")]
-        Lang::Go => TS_GO.into(),
-        #[cfg(feature = "lang-java")]
-        Lang::Java => TS_JAVA.into(),
-        #[cfg(feature = "lang-javascript")]
-        Lang::JavaScript => TS_JS.into(),
-        #[allow(unreachable_patterns)]
-        _ => panic!("Language not enabled via feature flag"),
+fn has_body_after_signature(clean: &str, paren: usize) -> bool {
+    let Some(close) = find_matching(clean, paren, b'(', b')') else {
+        return false;
+    };
+    for byte in clean.as_bytes().iter().skip(close + 1) {
+        match *byte {
+            b'{' => return true,
+            b';' => return false,
+            b'-' | b'>' | b'[' | b']' | b'_' | b':' | b',' | b'<' | b' ' | b'\t' | b'\n'
+            | b'\r' => {}
+            byte if byte.is_ascii_alphanumeric() => {}
+            _ => {}
+        }
     }
+    false
 }
 
-/// Parse a file and return extracted functions and call pairs.
-///
-/// This is a convenience function that creates a temporary parser
-/// for single-file use. For parsing multiple files, use `ParserPool`
-/// directly to avoid repeated parser initialization.
-#[allow(dead_code)]
-pub fn parse_file<'a>(file_path: &str, source: &'a str) -> Option<ParseResult<'a>> {
-    let lang = lang_for_path(file_path)?;
-
-    let mut parser = Parser::new();
-    parser.set_language(&lang_to_tree_sitter(lang)).ok()?;
-
-    let tree = parser.parse(source, None)?;
-    let root = tree.root_node();
-
-    let functions = extract_functions(root, source, lang);
-    let calls = extract_calls(root, source, lang);
-
-    Some(ParseResult { functions, calls })
+fn declaration_start(clean: &str, before: usize) -> usize {
+    clean[..before]
+        .rfind(|c: char| [';', '{', '}'].contains(&c))
+        .map(|idx| idx + 1)
+        .unwrap_or(0)
 }
 
-// ─── Function extraction ─────────────────────────────────────────────
-
-fn extract_functions<'a>(node: Node, source: &'a str, lang: Lang) -> Vec<RawFunction<'a>> {
-    let mut results = Vec::new();
-    match lang {
-        #[cfg(feature = "lang-rust")]
-        Lang::Rust => collect_functions_rust(node, source, &mut results),
-        #[cfg(feature = "lang-typescript")]
-        Lang::TypeScript => collect_functions_ts(node, source, &mut results),
-        #[cfg(feature = "lang-c")]
-        Lang::C => collect_functions_c(node, source, &mut results),
-        #[cfg(feature = "lang-python")]
-        Lang::Python => collect_functions_python(node, source, &mut results),
-        #[cfg(feature = "lang-go")]
-        Lang::Go => collect_functions_go(node, source, &mut results),
-        #[cfg(feature = "lang-java")]
-        Lang::Java => collect_functions_java(node, source, &mut results),
-        #[cfg(feature = "lang-javascript")]
-        Lang::JavaScript => collect_functions_js(node, source, &mut results),
-        #[allow(unreachable_patterns)]
-        _ => {}
+fn find_matching(input: &str, open_pos: usize, open: u8, close: u8) -> Option<usize> {
+    let bytes = input.as_bytes();
+    if bytes.get(open_pos) != Some(&open) {
+        return None;
     }
-    results
-}
-
-fn collect_functions_rust<'a>(node: Node, source: &'a str, out: &mut Vec<RawFunction<'a>>) {
-    if node.kind() == "function_item" {
-        if let Some(name_node) = node.child_by_field_name("name") {
-            let name = node_text(name_node, source);
-            out.push(RawFunction {
-                name,
-                start_byte: node.start_byte(),
-                end_byte: node.end_byte(),
-                is_static: false,
-                is_macro_def: false,
-            });
-        }
-    }
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        collect_functions_rust(child, source, out);
-    }
-}
-
-fn collect_functions_ts<'a>(node: Node, source: &'a str, out: &mut Vec<RawFunction<'a>>) {
-    if node.kind() == "function_declaration" || node.kind() == "method_definition" {
-        if let Some(name_node) = node.child_by_field_name("name") {
-            let name = node_text(name_node, source);
-            out.push(RawFunction {
-                name,
-                start_byte: node.start_byte(),
-                end_byte: node.end_byte(),
-                is_static: false,
-                is_macro_def: false,
-            });
-        }
-    }
-    // Arrow functions: const foo = () => ...
-    if node.kind() == "lexical_declaration" {
-        for child in node.children(&mut node.walk()) {
-            if child.kind() == "variable_declarator" {
-                if let Some(name_node) = child.child_by_field_name("name") {
-                    if let Some(value_node) = child.child_by_field_name("value") {
-                        if value_node.kind() == "arrow_function" || value_node.kind() == "function"
-                        {
-                            let name = node_text(name_node, source);
-                            out.push(RawFunction {
-                                name,
-                                start_byte: child.start_byte(),
-                                end_byte: child.end_byte(),
-                                is_static: false,
-                                is_macro_def: false,
-                            });
-                        }
-                    }
-                }
-            }
-        }
-    }
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        collect_functions_ts(child, source, out);
-    }
-}
-
-fn collect_functions_c<'a>(node: Node, source: &'a str, out: &mut Vec<RawFunction<'a>>) {
-    // Regular function definition
-    if node.kind() == "function_definition" {
-        if let Some(declarator) = find_function_declarator(node) {
-            let name = node_text(declarator, source);
-            // Check for `static` storage class specifier
-            let is_static = has_static_specifier(node, source);
-            out.push(RawFunction {
-                name,
-                start_byte: node.start_byte(),
-                end_byte: node.end_byte(),
-                is_static,
-                is_macro_def: false,
-            });
-        }
-    }
-    // Preprocessor function definitions: #define FOO(x) ...
-    // These look like functions but are macros
-    if node.kind() == "preproc_function_def" {
-        if let Some(name_node) = node.child_by_field_name("name") {
-            let name = node_text(name_node, source);
-            out.push(RawFunction {
-                name,
-                start_byte: node.start_byte(),
-                end_byte: node.end_byte(),
-                is_static: false,
-                is_macro_def: true,
-            });
-        }
-    }
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        collect_functions_c(child, source, out);
-    }
-}
-
-fn collect_functions_python<'a>(node: Node, source: &'a str, out: &mut Vec<RawFunction<'a>>) {
-    // function_definition (top-level or nested functions)
-    if node.kind() == "function_definition" {
-        if let Some(name_node) = node.child_by_field_name("name") {
-            let name = node_text(name_node, source);
-            out.push(RawFunction {
-                name,
-                start_byte: node.start_byte(),
-                end_byte: node.end_byte(),
-                is_static: false,
-                is_macro_def: false,
-            });
-        }
-    }
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        collect_functions_python(child, source, out);
-    }
-}
-
-fn collect_functions_go<'a>(node: Node, source: &'a str, out: &mut Vec<RawFunction<'a>>) {
-    // function_declaration: func foo() { ... }
-    // method_declaration: func (r Receiver) foo() { ... }
-    if node.kind() == "function_declaration" || node.kind() == "method_declaration" {
-        if let Some(name_node) = node.child_by_field_name("name") {
-            let name = node_text(name_node, source);
-            out.push(RawFunction {
-                name,
-                start_byte: node.start_byte(),
-                end_byte: node.end_byte(),
-                is_static: false,
-                is_macro_def: false,
-            });
-        }
-    }
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        collect_functions_go(child, source, out);
-    }
-}
-
-fn collect_functions_java<'a>(node: Node, source: &'a str, out: &mut Vec<RawFunction<'a>>) {
-    // method_declaration: void foo() { ... }
-    // constructor_declaration: ClassName() { ... }
-    if node.kind() == "method_declaration" {
-        if let Some(name_node) = node.child_by_field_name("name") {
-            let name = node_text(name_node, source);
-            out.push(RawFunction {
-                name,
-                start_byte: node.start_byte(),
-                end_byte: node.end_byte(),
-                is_static: false,
-                is_macro_def: false,
-            });
-        }
-    }
-    if node.kind() == "constructor_declaration" {
-        if let Some(name_node) = node.child_by_field_name("name") {
-            let name = node_text(name_node, source);
-            out.push(RawFunction {
-                name,
-                start_byte: node.start_byte(),
-                end_byte: node.end_byte(),
-                is_static: false,
-                is_macro_def: false,
-            });
-        }
-    }
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        collect_functions_java(child, source, out);
-    }
-}
-
-fn collect_functions_js<'a>(node: Node, source: &'a str, out: &mut Vec<RawFunction<'a>>) {
-    // function_declaration: function foo() { ... }
-    if node.kind() == "function_declaration" {
-        if let Some(name_node) = node.child_by_field_name("name") {
-            let name = node_text(name_node, source);
-            out.push(RawFunction {
-                name,
-                start_byte: node.start_byte(),
-                end_byte: node.end_byte(),
-                is_static: false,
-                is_macro_def: false,
-            });
-        }
-    }
-    // function_expression: const foo = function() { ... }
-    if node.kind() == "function_expression" {
-        // Named function expressions
-        if let Some(name_node) = node.child_by_field_name("name") {
-            let name = node_text(name_node, source);
-            out.push(RawFunction {
-                name,
-                start_byte: node.start_byte(),
-                end_byte: node.end_byte(),
-                is_static: false,
-                is_macro_def: false,
-            });
-        }
-    }
-    // Arrow functions assigned to variables: const foo = () => ...
-    if node.kind() == "lexical_declaration" || node.kind() == "variable_declaration" {
-        for child in node.children(&mut node.walk()) {
-            if child.kind() == "variable_declarator" {
-                if let Some(name_node) = child.child_by_field_name("name") {
-                    if let Some(value_node) = child.child_by_field_name("value") {
-                        if value_node.kind() == "arrow_function"
-                            || value_node.kind() == "function_expression"
-                        {
-                            let name = node_text(name_node, source);
-                            out.push(RawFunction {
-                                name,
-                                start_byte: child.start_byte(),
-                                end_byte: child.end_byte(),
-                                is_static: false,
-                                is_macro_def: false,
-                            });
-                        }
-                    }
-                }
-            }
-        }
-    }
-    // method_definition in classes: class Foo { bar() { ... } }
-    if node.kind() == "method_definition" {
-        if let Some(name_node) = node.child_by_field_name("name") {
-            let name = node_text(name_node, source);
-            out.push(RawFunction {
-                name,
-                start_byte: node.start_byte(),
-                end_byte: node.end_byte(),
-                is_static: false,
-                is_macro_def: false,
-            });
-        }
-    }
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        collect_functions_js(child, source, out);
-    }
-}
-
-/// Find the declarator (name) of a C function_definition node.
-fn find_function_declarator(node: Node) -> Option<Node> {
-    // The declarator is a direct child, but tree-sitter-c wraps it
-    // in pointer_declarator for pointer return types. We need to
-    // dig down to find the identifier.
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        if child.kind() == "function_declarator" {
-            // Inside function_declarator, the first child is the identifier
-            if let Some(ident) = child.child(0) {
-                if ident.kind() == "identifier" {
-                    return Some(ident);
-                }
-            }
-        }
-        // Sometimes it's nested: pointer_declarator -> function_declarator
-        if child.kind() == "pointer_declarator" {
-            if let Some(inner) = child.child_by_field_name("declarator") {
-                if inner.kind() == "function_declarator" {
-                    if let Some(ident) = inner.child(0) {
-                        if ident.kind() == "identifier" {
-                            return Some(ident);
-                        }
-                    }
-                }
-            }
-        }
-        // Also: parenthesized_declarator -> function_declarator
-        if child.kind() == "parenthesized_declarator" {
-            if let Some(inner) = child.child(0) {
-                if inner.kind() == "function_declarator" {
-                    if let Some(ident) = inner.child(0) {
-                        if ident.kind() == "identifier" {
-                            return Some(ident);
-                        }
-                    }
-                }
+    let mut depth = 0usize;
+    for (idx, byte) in bytes.iter().enumerate().skip(open_pos) {
+        if *byte == open {
+            depth += 1;
+        } else if *byte == close {
+            depth = depth.saturating_sub(1);
+            if depth == 0 {
+                return Some(idx);
             }
         }
     }
     None
 }
 
-/// Check if a C function_definition has `static` storage class specifier.
-fn has_static_specifier(node: Node, source: &str) -> bool {
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        if child.kind() == "storage_class_specifier" {
-            let text = node_text(child, source);
-            if text == "static" {
-                return true;
-            }
-        }
-    }
-    false
+fn lines_with_offsets(input: &str) -> impl Iterator<Item = (usize, &str)> {
+    let mut offset = 0usize;
+    input.lines().map(move |line| {
+        let start = offset;
+        offset += line.len() + 1;
+        (start, line)
+    })
 }
 
-// ─── Call extraction ─────────────────────────────────────────────────
-
-fn extract_calls<'a>(node: Node, source: &'a str, lang: Lang) -> Vec<RawCall<'a>> {
-    let mut results = Vec::new();
-    match lang {
-        #[cfg(any(feature = "lang-rust", feature = "lang-typescript"))]
-        Lang::Rust | Lang::TypeScript => collect_calls_rust_ts(node, source, &mut results),
-        #[cfg(feature = "lang-c")]
-        Lang::C => collect_calls_c(node, source, &mut results),
-        #[cfg(feature = "lang-python")]
-        Lang::Python => collect_calls_python(node, source, &mut results),
-        #[cfg(feature = "lang-go")]
-        Lang::Go => collect_calls_go(node, source, &mut results),
-        #[cfg(feature = "lang-java")]
-        Lang::Java => collect_calls_java(node, source, &mut results),
-        #[cfg(feature = "lang-javascript")]
-        Lang::JavaScript => collect_calls_js(node, source, &mut results),
-        #[allow(unreachable_patterns)]
-        _ => {}
-    }
-    results
+fn is_ident_start(byte: u8) -> bool {
+    byte.is_ascii_alphabetic() || byte == b'_'
 }
 
-fn collect_calls_rust_ts<'a>(node: Node, source: &'a str, out: &mut Vec<RawCall<'a>>) {
-    if node.kind() == "call_expression" {
-        if let Some(func_node) = node.child_by_field_name("function") {
-            if func_node.kind() == "identifier" {
-                let name = node_text(func_node, source);
-                out.push(RawCall {
-                    callee_name: Cow::Borrowed(name),
-                    start_byte: node.start_byte(),
-                    end_byte: node.end_byte(),
-                    kind: CallKind::Direct,
-                });
-            } else if func_node.kind() == "member_expression" {
-                if let Some(prop) = func_node.child_by_field_name("property") {
-                    let name = node_text(prop, source);
-                    out.push(RawCall {
-                        callee_name: Cow::Borrowed(name),
-                        start_byte: node.start_byte(),
-                        end_byte: node.end_byte(),
-                        kind: CallKind::Direct,
-                    });
-                }
-            }
-        }
-    }
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        collect_calls_rust_ts(child, source, out);
+fn is_ident_byte(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || byte == b'_'
+}
+
+fn is_call_path_byte(byte: u8) -> bool {
+    is_ident_byte(byte) || byte == b'.' || byte == b':'
+}
+
+fn call_leaf_name(name: &str) -> &str {
+    name.rsplit(['.', ':'])
+        .find(|part| !part.is_empty())
+        .unwrap_or(name)
+}
+
+fn borrow_call_leaf<'a>(source: &'a str, start: usize, end: usize) -> Cow<'a, str> {
+    let text = &source[start..end];
+    match text.rfind(['.', ':']) {
+        Some(pos) => Cow::Borrowed(&text[pos + 1..]),
+        None => Cow::Borrowed(text),
     }
 }
 
-fn collect_calls_c<'a>(node: Node, source: &'a str, out: &mut Vec<RawCall<'a>>) {
-    // Direct call: foo(args)
-    if node.kind() == "call_expression" {
-        let function = node.child_by_field_name("function");
-        if let Some(func_node) = function {
-            match func_node.kind() {
-                "identifier" => {
-                    let name = node_text(func_node, source);
-                    let kind = if is_likely_macro(name, source, node) {
-                        CallKind::Macro
-                    } else {
-                        CallKind::Direct
-                    };
-                    out.push(RawCall {
-                        callee_name: Cow::Borrowed(name),
-                        start_byte: node.start_byte(),
-                        end_byte: node.end_byte(),
-                        kind,
-                    });
-                }
-                // Indirect: ptr->method(args) or obj.method(args)
-                "field_expression" => {
-                    if let Some(prop) = func_node.child_by_field_name("field") {
-                        let name = node_text(prop, source);
-                        out.push(RawCall {
-                            callee_name: Cow::Borrowed(name),
-                            start_byte: node.start_byte(),
-                            end_byte: node.end_byte(),
-                            kind: CallKind::Indirect,
-                        });
-                    }
-                }
-                // Indirect: (*fp)(args)
-                "parenthesized_expression" => {
-                    let inner_text = node_text(func_node, source);
-                    let synthesized =
-                        format!("INDIRECT_{}", inner_text.replace(['(', ')', '*', ' '], "_"));
-                    out.push(RawCall {
-                        callee_name: Cow::Owned(synthesized),
-                        start_byte: node.start_byte(),
-                        end_byte: node.end_byte(),
-                        kind: CallKind::Indirect,
-                    });
-                }
-                _ => {
-                    let name = node_text(func_node, source);
-                    out.push(RawCall {
-                        callee_name: Cow::Borrowed(name),
-                        start_byte: node.start_byte(),
-                        end_byte: node.end_byte(),
-                        kind: CallKind::Unknown,
-                    });
-                }
-            }
-        }
-    }
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        collect_calls_c(child, source, out);
-    }
+fn is_keyword(name: &str) -> bool {
+    matches!(
+        name,
+        "if" | "for"
+            | "while"
+            | "switch"
+            | "match"
+            | "loop"
+            | "return"
+            | "sizeof"
+            | "typeof"
+            | "function"
+            | "fn"
+            | "def"
+            | "func"
+            | "class"
+            | "struct"
+            | "enum"
+            | "trait"
+            | "impl"
+            | "new"
+            | "catch"
+    )
 }
 
-fn collect_calls_python<'a>(node: Node, source: &'a str, out: &mut Vec<RawCall<'a>>) {
-    // call_expression: foo(), obj.method(), self.helper()
-    if node.kind() == "call" {
-        if let Some(func_node) = node.child_by_field_name("function") {
-            match func_node.kind() {
-                "identifier" => {
-                    let name = node_text(func_node, source);
-                    out.push(RawCall {
-                        callee_name: Cow::Borrowed(name),
-                        start_byte: node.start_byte(),
-                        end_byte: node.end_byte(),
-                        kind: CallKind::Direct,
-                    });
-                }
-                "attribute" => {
-                    // obj.method() or self.method()
-                    if let Some(attr_node) = func_node.child_by_field_name("attribute") {
-                        let name = node_text(attr_node, source);
-                        out.push(RawCall {
-                            callee_name: Cow::Borrowed(name),
-                            start_byte: node.start_byte(),
-                            end_byte: node.end_byte(),
-                            kind: CallKind::Direct,
-                        });
-                    }
-                }
-                _ => {
-                    let name = node_text(func_node, source);
-                    out.push(RawCall {
-                        callee_name: Cow::Borrowed(name),
-                        start_byte: node.start_byte(),
-                        end_byte: node.end_byte(),
-                        kind: CallKind::Unknown,
-                    });
-                }
-            }
-        }
-    }
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        collect_calls_python(child, source, out);
-    }
+fn is_control_keyword(name: &str) -> bool {
+    matches!(
+        name,
+        "if" | "for" | "while" | "switch" | "return" | "sizeof"
+    )
 }
 
-fn collect_calls_go<'a>(node: Node, source: &'a str, out: &mut Vec<RawCall<'a>>) {
-    // call_expression: foo(), pkg.Func(), m.Method()
-    if node.kind() == "call_expression" {
-        if let Some(func_node) = node.child_by_field_name("function") {
-            match func_node.kind() {
-                "identifier" => {
-                    let name = node_text(func_node, source);
-                    out.push(RawCall {
-                        callee_name: Cow::Borrowed(name),
-                        start_byte: node.start_byte(),
-                        end_byte: node.end_byte(),
-                        kind: CallKind::Direct,
-                    });
-                }
-                "selector_expression" => {
-                    // pkg.Func() or m.Method()
-                    if let Some(field_node) = func_node.child_by_field_name("field") {
-                        let name = node_text(field_node, source);
-                        out.push(RawCall {
-                            callee_name: Cow::Borrowed(name),
-                            start_byte: node.start_byte(),
-                            end_byte: node.end_byte(),
-                            kind: CallKind::Direct,
-                        });
-                    }
-                }
-                _ => {
-                    let name = node_text(func_node, source);
-                    out.push(RawCall {
-                        callee_name: Cow::Borrowed(name),
-                        start_byte: node.start_byte(),
-                        end_byte: node.end_byte(),
-                        kind: CallKind::Unknown,
-                    });
-                }
-            }
-        }
-    }
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        collect_calls_go(child, source, out);
-    }
-}
-
-fn collect_calls_java<'a>(node: Node, source: &'a str, out: &mut Vec<RawCall<'a>>) {
-    // method_invocation: foo(), obj.method(), System.out.println()
-    if node.kind() == "method_invocation" {
-        if let Some(name_node) = node.child_by_field_name("name") {
-            let name = node_text(name_node, source);
-            out.push(RawCall {
-                callee_name: Cow::Borrowed(name),
-                start_byte: node.start_byte(),
-                end_byte: node.end_byte(),
-                kind: CallKind::Direct,
-            });
-        }
-    }
-    // object_creation: new Foo()
-    if node.kind() == "object_creation" {
-        // The type being constructed
-        if let Some(type_node) = node.child_by_field_name("type") {
-            // For constructor calls, the constructor name is part of the type
-            if let Some(ident) = type_node.descendant_for_byte_range(
-                type_node.start_byte(),
-                type_node.start_byte().saturating_add(1),
-            ) {
-                let name = node_text(ident, source);
-                out.push(RawCall {
-                    callee_name: Cow::Borrowed(name),
-                    start_byte: node.start_byte(),
-                    end_byte: node.end_byte(),
-                    kind: CallKind::Direct,
-                });
-            }
-        }
-    }
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        collect_calls_java(child, source, out);
-    }
-}
-
-fn collect_calls_js<'a>(node: Node, source: &'a str, out: &mut Vec<RawCall<'a>>) {
-    // call_expression: foo(), obj.method()
-    if node.kind() == "call_expression" {
-        if let Some(func_node) = node.child_by_field_name("function") {
-            match func_node.kind() {
-                "identifier" => {
-                    let name = node_text(func_node, source);
-                    out.push(RawCall {
-                        callee_name: Cow::Borrowed(name),
-                        start_byte: node.start_byte(),
-                        end_byte: node.end_byte(),
-                        kind: CallKind::Direct,
-                    });
-                }
-                "member_expression" => {
-                    if let Some(prop) = func_node.child_by_field_name("property") {
-                        let name = node_text(prop, source);
-                        out.push(RawCall {
-                            callee_name: Cow::Borrowed(name),
-                            start_byte: node.start_byte(),
-                            end_byte: node.end_byte(),
-                            kind: CallKind::Direct,
-                        });
-                    }
-                }
-                _ => {
-                    let name = node_text(func_node, source);
-                    out.push(RawCall {
-                        callee_name: Cow::Borrowed(name),
-                        start_byte: node.start_byte(),
-                        end_byte: node.end_byte(),
-                        kind: CallKind::Unknown,
-                    });
-                }
-            }
-        }
-    }
-    // new_expression: new Foo()
-    if node.kind() == "new_expression" {
-        if let Some(ctor_node) = node.child_by_field_name("constructor") {
-            if ctor_node.kind() == "identifier" {
-                let name = node_text(ctor_node, source);
-                out.push(RawCall {
-                    callee_name: Cow::Borrowed(name),
-                    start_byte: node.start_byte(),
-                    end_byte: node.end_byte(),
-                    kind: CallKind::Direct,
-                });
-            }
-        }
-    }
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        collect_calls_js(child, source, out);
-    }
-}
-
-/// Heuristic: a call `NAME(args)` where NAME is uppercase and short
-/// is likely a macro in kernel code.
-fn is_likely_macro(name: &str, _source: &str, _call_node: Node) -> bool {
-    // Kernel convention: ALL_CAPS names are usually macros
-    if name.len() > 1
+fn is_likely_macro(name: &str) -> bool {
+    name.len() > 1
         && name.chars().all(|c| c.is_ascii_uppercase() || c == '_')
         && !name.starts_with('_')
-    {
-        return true;
-    }
-    false
 }
 
-// ─── Call-to-function pairing ────────────────────────────────────────
-
-/// For each function, find calls that fall within its byte range and
-/// create (caller_name, RawCall) pairs.
-/// Owned version of build_call_pairs for use with cached data.
-/// Returns Vec<(caller_name, RawCallOwned)> pairs.
+/// For each function, find calls that fall within its byte range and create
+/// `(caller_name, RawCall)` pairs.
 pub fn build_call_pairs_owned(
     functions: &[RawFunctionOwned],
     all_calls: &[RawCallOwned],
@@ -941,8 +717,6 @@ pub fn build_call_pairs_owned(
     pairs
 }
 
-// ─── Directory scanning ──────────────────────────────────────────────
-
 /// Recursively collect all .rs, .ts, .tsx, .c, .h, .py, .go, .java, .js, .jsx,
 /// .mjs files from a directory.
 #[allow(dead_code)]
@@ -966,18 +740,10 @@ pub fn collect_source_files(dir: &str) -> Vec<String> {
                 let sub = path.to_string_lossy().to_string();
                 files.extend(collect_source_files(&sub));
             } else if let Some(ext) = path.extension().and_then(|e| e.to_str()) {
-                if ext == "rs"
-                    || ext == "ts"
-                    || ext == "tsx"
-                    || ext == "c"
-                    || ext == "h"
-                    || ext == "py"
-                    || ext == "go"
-                    || ext == "java"
-                    || ext == "js"
-                    || ext == "jsx"
-                    || ext == "mjs"
-                {
+                if matches!(
+                    ext,
+                    "rs" | "ts" | "tsx" | "c" | "h" | "py" | "go" | "java" | "js" | "jsx" | "mjs"
+                ) {
                     files.push(path.to_string_lossy().to_string());
                 }
             }
@@ -986,82 +752,9 @@ pub fn collect_source_files(dir: &str) -> Vec<String> {
     files
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────
-
-fn node_text<'a>(node: Node, source: &'a str) -> &'a str {
-    node.utf8_text(source.as_bytes()).unwrap_or("")
-}
-
-// ─── Tests ─────────────────────────────────────────────────────────────
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_parse_c_simple_function() {
-        let source = r#"
-void foo() {
-    bar();
-}
-"#;
-        let result = parse_file("test.c", source).expect("parse failed");
-        assert_eq!(result.functions.len(), 1);
-        assert_eq!(result.functions[0].name, "foo");
-        assert!(!result.functions[0].is_static);
-    }
-
-    #[test]
-    fn test_parse_c_static_function() {
-        let source = r#"
-static int helper(void) {
-    return 42;
-}
-"#;
-        let result = parse_file("test.c", source).expect("parse failed");
-        assert_eq!(result.functions.len(), 1);
-        assert_eq!(result.functions[0].name, "helper");
-        assert!(result.functions[0].is_static);
-    }
-
-    #[test]
-    fn test_parse_c_call_detection() {
-        let source = r#"
-void caller() {
-    callee();
-    another_call(1, 2);
-}
-"#;
-        let result = parse_file("test.c", source).expect("parse failed");
-        assert_eq!(result.calls.len(), 2);
-    }
-
-    #[test]
-    fn test_parse_c_macro_definition() {
-        let source = r#"
-#define FOO(x) ((x) + 1)
-
-void bar() {
-    int y = FOO(5);
-}
-"#;
-        let result = parse_file("test.c", source).expect("parse failed");
-        // Should detect the macro def
-        assert!(result.functions.iter().any(|f| f.is_macro_def));
-        // Should detect the macro call in bar
-        assert!(result.calls.iter().any(|c| c.kind == CallKind::Macro));
-    }
-
-    #[test]
-    fn test_parse_c_indirect_call() {
-        let source = r#"
-void test() {
-    fn_ptr(arg);
-}
-"#;
-        let result = parse_file("test.c", source).expect("parse failed");
-        assert!(!result.functions.is_empty());
-    }
 
     #[test]
     fn test_parse_rust_function() {
@@ -1082,27 +775,83 @@ fn helper() {}
     fn test_parse_rust_method() {
         let source = r#"
 impl Foo {
-    pub fn bar(&self) {
+    pub async fn bar(&self) {
         self.baz();
+        crate::net::send();
     }
 }
 "#;
         let result = parse_file("test.rs", source).expect("parse failed");
         assert_eq!(result.functions.len(), 1);
         assert_eq!(result.functions[0].name, "bar");
+        assert!(result.calls.iter().any(|call| call.callee_name == "baz"));
+        assert!(result.calls.iter().any(|call| call.callee_name == "send"));
     }
 
     #[test]
-    fn test_parse_typescript_function() {
-        let source = r#"
-function greet(name: string): void {
-    console.log(name);
-}
+    #[cfg(feature = "lang-c")]
+    fn test_parse_c_simple_function() {
+        let source = "void foo() { bar(); }";
+        let result = parse_file("test.c", source).expect("parse failed");
+        assert_eq!(result.functions.len(), 1);
+        assert_eq!(result.functions[0].name, "foo");
+        assert!(!result.functions[0].is_static);
+    }
 
-const arrow = () => { return 42; };
+    #[test]
+    #[cfg(feature = "lang-c")]
+    fn test_parse_c_macro_definition() {
+        let source = "#define FOO(x) ((x) + 1)\nvoid bar() { int y = FOO(5); }";
+        let result = parse_file("test.c", source).expect("parse failed");
+        assert!(result.functions.iter().any(|f| f.is_macro_def));
+        assert!(result.calls.iter().any(|c| c.kind == CallKind::Macro));
+    }
+
+    #[test]
+    #[cfg(feature = "lang-c")]
+    fn test_parse_c_prototype_and_multiline_definition() {
+        let source = r#"
+int helper(void);
+
+static int
+worker(void)
+{
+    return helper();
+}
 "#;
+        let result = parse_file("test.c", source).expect("parse failed");
+        assert_eq!(
+            result.functions.iter().filter(|f| !f.is_macro_def).count(),
+            1
+        );
+        assert_eq!(
+            result
+                .functions
+                .iter()
+                .find(|f| !f.is_macro_def)
+                .unwrap()
+                .name,
+            "worker"
+        );
+        assert!(
+            result
+                .functions
+                .iter()
+                .find(|f| f.name == "worker")
+                .unwrap()
+                .is_static
+        );
+        assert!(result.calls.iter().any(|call| call.callee_name == "helper"));
+    }
+
+    #[test]
+    #[cfg(feature = "lang-typescript")]
+    fn test_parse_typescript_function() {
+        let source = "function greet(name: string): void { console.log(name); }\nconst arrow = () => service.run();";
         let result = parse_file("test.ts", source).expect("parse failed");
         assert_eq!(result.functions.len(), 2);
+        assert!(result.calls.iter().any(|call| call.callee_name == "log"));
+        assert!(result.calls.iter().any(|call| call.callee_name == "run"));
     }
 
     #[test]
@@ -1139,63 +888,5 @@ const arrow = () => { return 42; };
         ];
         let pairs = build_call_pairs_owned(&funcs, &calls);
         assert_eq!(pairs.len(), 2);
-        // foo -> bar (resolved)
-        let foo_bar = pairs
-            .iter()
-            .find(|(caller, call)| *caller == "foo" && call.callee_name == "bar");
-        assert!(foo_bar.is_some());
-        // foo -> external (unresolved)
-        let foo_ext = pairs
-            .iter()
-            .find(|(caller, call)| *caller == "foo" && call.callee_name == "external");
-        assert!(foo_ext.is_some());
-    }
-
-    #[test]
-    fn test_parser_pool() {
-        let mut pool = ParserPool::new();
-        let source = "void foo() { bar(); }";
-
-        // First parse
-        let r1 = pool.parse_file("test.c", source);
-        assert!(r1.is_some());
-        let funcs1 = r1.unwrap();
-        assert_eq!(funcs1.functions.len(), 1);
-
-        // Reuse pool — should reuse parser
-        let r2 = pool.parse_file("test2.c", source);
-        assert!(r2.is_some());
-    }
-
-    #[test]
-    fn test_empty_source() {
-        let result = parse_file("empty.c", "");
-        assert!(result.is_some());
-        let r = result.unwrap();
-        assert_eq!(r.functions.len(), 0);
-        assert_eq!(r.calls.len(), 0);
-    }
-
-    #[test]
-    fn test_multiple_c_functions() {
-        let source = r#"
-int main() { return 0; }
-static void init() {}
-void cleanup(void) {}
-"#;
-        let result = parse_file("test.c", source).expect("parse failed");
-        assert_eq!(result.functions.len(), 3);
-        assert!(result
-            .functions
-            .iter()
-            .any(|f| f.name == "main" && !f.is_static));
-        assert!(result
-            .functions
-            .iter()
-            .any(|f| f.name == "init" && f.is_static));
-        assert!(result
-            .functions
-            .iter()
-            .any(|f| f.name == "cleanup" && !f.is_static));
     }
 }

@@ -14,7 +14,6 @@ use edgerun_crypto::rsa::{
     signature::SignatureEncoding,
     RsaPrivateKey,
 };
-use edgerun_crypto::OsRng;
 use edgerun_encoding::base64;
 
 pub struct DkimSigner {
@@ -33,8 +32,7 @@ impl DkimSigner {
     }
 
     pub fn generate(domain: &str, selector: &str) -> io::Result<Self> {
-        let mut rng = OsRng;
-        let private_key = RsaPrivateKey::new(&mut rng, 2048).map_err(|e| {
+        let private_key = edgerun_crypto::random_rsa_private_key(2048).map_err(|e| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("RSA keygen failed: {}", e),

@@ -112,25 +112,38 @@ pub(crate) fn cmd_package_app(args: Vec<String>) -> i32 {
         .first()
         .map(String::as_str)
         .unwrap_or("hmac-sha256-rfc2104-composed");
-    if let Err(err) = build_artifacts() {
-        eprintln!("package-app build failed: {err}");
-        return 1;
-    }
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let out_dir = args
         .get(1)
         .map(PathBuf::from)
         .unwrap_or_else(|| root.join("dist").join(format!("{app_id}-app")));
     let result = match app_id {
-        "sha256-fips180" => package_sha256_browser_app(&root, &out_dir),
-        "hmac-sha256-rfc2104-composed" => package_hmac_browser_app(&root, &out_dir),
+        "edgerun-wallet-app" => package_wallet_browser_app(&out_dir),
+        "edgerun-wallet-runtime" => package_wallet_runtime_app(&out_dir),
+        "edgerun-exchange-api" => {
+            let host = args
+                .get(2)
+                .map(String::as_str)
+                .unwrap_or("dash.edgerun.tech");
+            package_exchange_api_runtime_app(&out_dir, host.as_bytes())
+        }
+        "sha256-fips180" => {
+            build_artifacts().and_then(|_| package_sha256_browser_app(&root, &out_dir))
+        }
+        "hmac-sha256-rfc2104-composed" => {
+            build_artifacts().and_then(|_| package_hmac_browser_app(&root, &out_dir))
+        }
+        "assemblyscript-compiler" => package_assemblyscript_compiler_browser_app(&out_dir),
         _ => Err(format!("unsupported app package: {app_id}")),
     };
     match result {
         Ok(()) => {
             println!("app: {app_id}");
             println!("path: {}", out_dir.display());
-            println!("entry: {}", out_dir.join("index.html").display());
+            let entry = out_dir.join("index.html");
+            if entry.exists() {
+                println!("entry: {}", entry.display());
+            }
             println!("artifact_graph: {}", out_dir.join("app.eapp").display());
             0
         }
@@ -139,6 +152,133 @@ pub(crate) fn cmd_package_app(args: Vec<String>) -> i32 {
             1
         }
     }
+}
+
+pub(crate) fn package_wallet_runtime_app(out_dir: &Path) -> Result<(), String> {
+    fs::create_dir_all(out_dir).map_err(|err| err.to_string())?;
+    write_rkyv_app_package(
+        out_dir,
+        RkyvAppSpec {
+            slug: "edgerun-wallet-app",
+            name: "EdgeRun Wallet",
+            version: "0.1.0",
+            summary: "Internal wallet and finances app",
+            developer_public: [0; 32],
+            code_sha256: sha256(b"edgerun-wallet-app:0.1.0"),
+            routes: &[],
+            storage_namespaces: &[b"edgerun-wallet-app/state"],
+        },
+    )
+}
+
+pub(crate) fn package_wallet_browser_app(out_dir: &Path) -> Result<(), String> {
+    fs::create_dir_all(out_dir).map_err(|err| err.to_string())?;
+    for path in ["index.html", "edgerun-browser.js", "app.edapp"] {
+        if !out_dir.join(path).exists() {
+            return Err(format!(
+                "missing wallet browser asset: {}",
+                out_dir.join(path).display()
+            ));
+        }
+    }
+    write_packaged_app_graph(out_dir, "edgerun-wallet-app")
+}
+
+pub(crate) fn package_exchange_api_runtime_app(out_dir: &Path, host: &[u8]) -> Result<(), String> {
+    fs::create_dir_all(out_dir).map_err(|err| err.to_string())?;
+    write_rkyv_app_package(
+        out_dir,
+        RkyvAppSpec {
+            slug: "edgerun-exchange-api",
+            name: "EdgeRun Exchange API",
+            version: "0.1.0",
+            summary: "Provider-backed exchange quote and order API",
+            developer_public: [0; 32],
+            code_sha256: sha256(b"edgerun-exchange-api:0.1.0"),
+            routes: &[
+                AppRouteSpec {
+                    scheme: edgerun_wire::ROUTE_SCHEME_HTTPS,
+                    host,
+                    path_prefix: b"/v1/quote",
+                },
+                AppRouteSpec {
+                    scheme: edgerun_wire::ROUTE_SCHEME_HTTPS,
+                    host,
+                    path_prefix: b"/v1/payment-request",
+                },
+                AppRouteSpec {
+                    scheme: edgerun_wire::ROUTE_SCHEME_HTTPS,
+                    host,
+                    path_prefix: b"/v1/order",
+                },
+                AppRouteSpec {
+                    scheme: edgerun_wire::ROUTE_SCHEME_HTTPS,
+                    host,
+                    path_prefix: b"/v1/assets",
+                },
+                AppRouteSpec {
+                    scheme: edgerun_wire::ROUTE_SCHEME_HTTPS,
+                    host,
+                    path_prefix: b"/health",
+                },
+            ],
+            storage_namespaces: &[b"edgerun-exchange-api/state"],
+        },
+    )
+}
+
+pub(crate) struct RkyvAppSpec<'a> {
+    pub(crate) slug: &'a str,
+    pub(crate) name: &'a str,
+    pub(crate) version: &'a str,
+    pub(crate) summary: &'a str,
+    pub(crate) developer_public: [u8; 32],
+    pub(crate) code_sha256: [u8; 32],
+    pub(crate) routes: &'a [AppRouteSpec<'a>],
+    pub(crate) storage_namespaces: &'a [&'a [u8]],
+}
+
+pub(crate) struct AppRouteSpec<'a> {
+    pub(crate) scheme: u16,
+    pub(crate) host: &'a [u8],
+    pub(crate) path_prefix: &'a [u8],
+}
+
+pub(crate) fn write_rkyv_app_package(out_dir: &Path, spec: RkyvAppSpec<'_>) -> Result<(), String> {
+    let app_id = app_id_for(spec.slug, &spec.developer_public);
+    let manifest = edgerun_wire::AppManifestRecord {
+        abi_version: edgerun_wire::SDK_WIRE_ABI_VERSION,
+        flags: 1,
+        app_id,
+        developer_id: spec.developer_public,
+        app_slug: spec.slug.as_bytes().to_vec(),
+        name: spec.name.as_bytes().to_vec(),
+        version: spec.version.as_bytes().to_vec(),
+        summary: spec.summary.as_bytes().to_vec(),
+        code_sha256: spec.code_sha256,
+        routes: spec
+            .routes
+            .iter()
+            .map(|route| edgerun_wire::AppHttpRouteRecord {
+                scheme: route.scheme,
+                host: route.host.to_vec(),
+                path_prefix: route.path_prefix.to_vec(),
+            })
+            .collect(),
+        storage_namespaces: spec
+            .storage_namespaces
+            .iter()
+            .map(|namespace| namespace.to_vec())
+            .collect(),
+        provided_capabilities: Vec::new(),
+        required_capabilities: Vec::new(),
+    };
+    fs::write(
+        out_dir.join("app.edapp"),
+        sdk_wire_record_bytes(SdkWireRecord::AppManifest(manifest)),
+    )
+    .map_err(|err| err.to_string())?;
+    write_packaged_app_graph(out_dir, spec.slug)
 }
 
 pub(crate) fn package_hmac_browser_app(root: &Path, out_dir: &Path) -> Result<(), String> {
@@ -160,18 +300,29 @@ pub(crate) fn package_hmac_browser_app(root: &Path, out_dir: &Path) -> Result<()
     let composition_graph = parse_composition(&composition_bytes)
         .ok_or_else(|| format!("bad composition: {}", composition.id))?;
     fs::write(
-        out_dir.join("app.edapp"),
+        out_dir.join("manifest.json"),
         hmac_browser_app_manifest(composition, &composition_graph, &unit_json),
     )
     .map_err(|err| err.to_string())?;
-    write_packaged_app_graph(out_dir, "hmac-sha256-rfc2104-composed")?;
     fs::write(out_dir.join("index.html"), HMAC_BROWSER_INDEX).map_err(|err| err.to_string())?;
     fs::write(
         out_dir.join("edgerun-browser.js"),
         COMPOSITION_BROWSER_RUNNER,
     )
     .map_err(|err| err.to_string())?;
-    Ok(())
+    write_rkyv_app_package(
+        out_dir,
+        RkyvAppSpec {
+            slug: "hmac-sha256-rfc2104-composed",
+            name: "HMAC-SHA256 RFC 2104",
+            version: "0.1.0",
+            summary: "Browser package for the composed HMAC-SHA256 RFC 2104 unit workflow.",
+            developer_public: [0; 32],
+            code_sha256: sha256(COMPOSITION_BROWSER_RUNNER.as_bytes()),
+            routes: &[],
+            storage_namespaces: &[],
+        },
+    )
 }
 
 pub(crate) fn package_sha256_browser_app(root: &Path, out_dir: &Path) -> Result<(), String> {
@@ -179,15 +330,61 @@ pub(crate) fn package_sha256_browser_app(root: &Path, out_dir: &Path) -> Result<
     fs::create_dir_all(out_dir).map_err(|err| err.to_string())?;
     let unit_json = package_unit_for_app(root, out_dir, unit)?;
     fs::write(
-        out_dir.join("app.edapp"),
+        out_dir.join("manifest.json"),
         sha256_browser_app_manifest(&unit_json),
     )
     .map_err(|err| err.to_string())?;
-    write_packaged_app_graph(out_dir, "sha256-fips180")?;
     fs::write(out_dir.join("index.html"), SHA256_BROWSER_INDEX).map_err(|err| err.to_string())?;
     fs::write(out_dir.join("edgerun-browser.js"), SHA256_BROWSER_RUNNER)
         .map_err(|err| err.to_string())?;
-    Ok(())
+    write_rkyv_app_package(
+        out_dir,
+        RkyvAppSpec {
+            slug: "sha256-fips180",
+            name: "SHA-256 FIPS 180",
+            version: "0.1.0",
+            summary: "Browser package for the SHA-256 FIPS 180 unit.",
+            developer_public: [0; 32],
+            code_sha256: sha256(SHA256_BROWSER_RUNNER.as_bytes()),
+            routes: &[],
+            storage_namespaces: &[],
+        },
+    )
+}
+
+pub(crate) fn package_assemblyscript_compiler_browser_app(out_dir: &Path) -> Result<(), String> {
+    fs::create_dir_all(out_dir).map_err(|err| err.to_string())?;
+    for path in [
+        "index.html",
+        "edgerun-browser.js",
+        "assemblyscript-compiler-worker.js",
+    ] {
+        if !out_dir.join(path).exists() {
+            return Err(format!(
+                "missing AS compiler browser asset: {}",
+                out_dir.join(path).display()
+            ));
+        }
+    }
+    fs::write(
+        out_dir.join("manifest.json"),
+        ASSEMBLYSCRIPT_COMPILER_APP_MANIFEST,
+    )
+    .map_err(|err| err.to_string())?;
+    let runner = fs::read(out_dir.join("edgerun-browser.js")).map_err(|err| err.to_string())?;
+    write_rkyv_app_package(
+        out_dir,
+        RkyvAppSpec {
+            slug: "assemblyscript-compiler",
+            name: "AssemblyScript Compiler",
+            version: "0.2.0",
+            summary: "Browser package for compiling AssemblyScript units.",
+            developer_public: [0; 32],
+            code_sha256: sha256(&runner),
+            routes: &[],
+            storage_namespaces: &[],
+        },
+    )
 }
 
 pub(crate) fn package_unit_for_app(
@@ -778,6 +975,37 @@ pub(crate) fn sha256_browser_app_manifest(unit_json: &str) -> String {
     )
 }
 
+pub(crate) const ASSEMBLYSCRIPT_COMPILER_APP_MANIFEST: &str = r#"{
+  "format": "edgerun-app-v1",
+  "id": "assemblyscript-compiler-browser",
+  "name": "AssemblyScript Compiler",
+  "version": "0.2.0",
+  "abi": "browser-iframe-v1",
+  "entry": {
+    "kind": "browser-iframe",
+    "path": "index.html"
+  },
+  "developer": {
+    "name": "EdgeRun SDK"
+  },
+  "runtime": {
+    "worker": "assemblyscript-compiler-worker.js",
+    "compile_mode": "client-worker",
+    "compiles": "AssemblyScript",
+    "emits": "wasm32-unknown-unknown"
+  },
+  "capabilities": {
+    "required": [
+      "browser.worker.execute",
+      "browser.wasm.execute"
+    ],
+    "optional": [
+      "browser.storage.local"
+    ]
+  }
+}
+"#;
+
 pub(crate) const SHA256_BROWSER_INDEX: &str = r#"<!doctype html>
 <html lang="en">
 <head>
@@ -881,7 +1109,7 @@ function ensureMemory(memory, needed) {
 }
 
 async function loadApp() {
-  const app = await (await fetch("./app.edapp")).json();
+  const app = await (await fetch("./manifest.json")).json();
   const unit = app.units.find((candidate) => candidate.id === "sha256-fips180");
   if (!unit) throw new Error("sha256-fips180 unit missing from app manifest");
   const implementation = unit.implementations.find((candidate) => candidate.kind === "wasm" && candidate.target === "wasm32-unknown-unknown");
@@ -980,7 +1208,7 @@ function compareRefs(leftRef, rightRef, inputs, scalars) {
 }
 
 async function loadApp() {
-  const app = await (await fetch("./app.edapp")).json();
+  const app = await (await fetch("./manifest.json")).json();
   const units = new Map();
   for (const unit of app.units) {
     const implementation = unit.implementations.find((candidate) => candidate.kind === "wasm" && candidate.target === "wasm32-unknown-unknown");
@@ -1264,4 +1492,113 @@ pub(crate) fn bench_sha256_native_dylib(
     }
     let ns = start.elapsed().as_secs_f64() * 1_000_000_000.0 / iterations as f64;
     Ok((ns, checksum))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_app_dir(name: &str) -> PathBuf {
+        let mut path = env::temp_dir();
+        path.push(format!(
+            "edgerun-sdk-{name}-{}-{}",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .expect("system time")
+                .as_nanos()
+        ));
+        path
+    }
+
+    #[test]
+    fn wallet_package_writes_internal_protocol_app_without_routes() {
+        let app_dir = temp_app_dir("wallet-package");
+        package_wallet_runtime_app(&app_dir).expect("package app");
+
+        let manifest = read_app_manifest_record(&app_dir).expect("read app manifest");
+        assert_eq!(manifest.app_slug, b"edgerun-wallet-app");
+        assert!(manifest.routes.is_empty());
+        assert_eq!(
+            manifest.storage_namespaces,
+            vec![b"edgerun-wallet-app/state".to_vec()]
+        );
+
+        let (_graph_bytes, graph) = read_app_graph(&app_dir).expect("read app graph");
+        assert!(verify_packaged_app_graph(&app_dir, &graph));
+        assert!(graph.runtime_install.declared_routes.is_empty());
+        assert_eq!(
+            graph.runtime_install.storage_namespaces,
+            vec![b"edgerun-wallet-app/state".to_vec()]
+        );
+
+        fs::remove_dir_all(&app_dir).expect("remove temp app dir");
+    }
+
+    #[test]
+    fn exchange_api_package_writes_rkyv_manifest_and_verifiable_graph() {
+        let app_dir = temp_app_dir("exchange-api-package");
+        package_exchange_api_runtime_app(&app_dir, b"dash.edgerun.tech").expect("package app");
+
+        assert!(!app_dir.join("index.html").exists());
+
+        let manifest = read_app_manifest_record(&app_dir).expect("read app manifest");
+        assert_eq!(manifest.app_slug, b"edgerun-exchange-api");
+        assert_eq!(manifest.routes.len(), 5);
+        assert!(manifest.routes.iter().any(|route| {
+            route.host == b"dash.edgerun.tech" && route.path_prefix == b"/v1/order"
+        }));
+        assert_eq!(
+            manifest.storage_namespaces,
+            vec![b"edgerun-exchange-api/state".to_vec()]
+        );
+
+        let (_graph_bytes, graph) = read_app_graph(&app_dir).expect("read app graph");
+        assert!(verify_packaged_app_graph(&app_dir, &graph));
+        assert_eq!(graph.runtime_install.app_id, graph.app_id);
+        assert_eq!(
+            graph.runtime_install.manifest_sha256,
+            graph.app_manifest_sha256
+        );
+        assert_eq!(graph.runtime_install.declared_routes.len(), 5);
+        assert!(graph.runtime_install.declared_routes.iter().any(|route| {
+            route.host == b"dash.edgerun.tech" && route.path_prefix == b"/health"
+        }));
+
+        fs::remove_dir_all(&app_dir).expect("remove temp app dir");
+    }
+
+    #[test]
+    fn assemblyscript_compiler_package_writes_browser_manifest_and_graph() {
+        let app_dir = temp_app_dir("assemblyscript-compiler-package");
+        fs::create_dir_all(&app_dir).expect("create temp app dir");
+        fs::write(app_dir.join("index.html"), b"<!doctype html>").expect("write index");
+        fs::write(app_dir.join("edgerun-browser.js"), b"export {};").expect("write runner");
+        fs::write(
+            app_dir.join("assemblyscript-compiler-worker.js"),
+            b"self.onmessage=null;",
+        )
+        .expect("write worker");
+
+        package_assemblyscript_compiler_browser_app(&app_dir).expect("package app");
+
+        let manifest_json =
+            fs::read_to_string(app_dir.join("manifest.json")).expect("read browser manifest");
+        assert!(manifest_json.contains("\"id\": \"assemblyscript-compiler-browser\""));
+        assert!(manifest_json.contains("\"runtime\""));
+        let manifest = read_app_manifest_record(&app_dir).expect("read rkyv app manifest");
+        assert_eq!(manifest.app_slug, b"assemblyscript-compiler");
+        assert_eq!(manifest.name, b"AssemblyScript Compiler");
+        assert_eq!(manifest.version, b"0.2.0");
+
+        let (_graph_bytes, graph) = read_app_graph(&app_dir).expect("read app graph");
+        assert!(verify_packaged_app_graph(&app_dir, &graph));
+        assert_eq!(graph.app_slug, b"assemblyscript-compiler");
+        assert!(graph
+            .artifacts
+            .iter()
+            .any(|artifact| artifact.path == b"assemblyscript-compiler-worker.js"));
+
+        fs::remove_dir_all(&app_dir).expect("remove temp app dir");
+    }
 }

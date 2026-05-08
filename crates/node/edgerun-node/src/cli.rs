@@ -49,6 +49,11 @@ pub enum Command {
     BindCheck {
         standard_ports: bool,
     },
+    #[cfg(feature = "xray")]
+    XrayServer {
+        root: PathBuf,
+        listen: Option<String>,
+    },
 }
 
 pub fn parse_args() -> Result<Command, String> {
@@ -227,6 +232,38 @@ pub fn parse_args() -> Result<Command, String> {
             }
             Ok(Command::BindCheck { standard_ports })
         }
+        #[cfg(feature = "xray")]
+        "xray-server" => {
+            let mut root = PathBuf::from(".");
+            let mut listen = None;
+            let mut saw_root = false;
+            let mut i = 1;
+            while i < args.len() {
+                match args[i].as_str() {
+                    "--listen" => {
+                        i += 1;
+                        listen = Some(
+                            args.get(i)
+                                .ok_or("error: --listen requires an address")?
+                                .clone(),
+                        );
+                    }
+                    "--help" | "-h" => {
+                        return Err(
+                            "Usage: edged xray-server [repo-path] [--listen 127.0.0.1:13337]"
+                                .into(),
+                        );
+                    }
+                    value if !saw_root => {
+                        root = PathBuf::from(value);
+                        saw_root = true;
+                    }
+                    other => return Err(format!("unknown option: {}", other)),
+                }
+                i += 1;
+            }
+            Ok(Command::XrayServer { root, listen })
+        }
         "help" | "--help" | "-h" => Err(help_text()),
         other => Err(format!("unknown command: {}", other)),
     }
@@ -275,9 +312,21 @@ pub fn main() {
         Command::BindCheck { standard_ports } => {
             cmd_bind_check(standard_ports);
         }
+        #[cfg(feature = "xray")]
+        Command::XrayServer { root, listen } => {
+            edgerun_node::xray::cmd_xray_server(root.to_string_lossy().into_owned(), listen);
+        }
     }
 }
 
 fn help_text() -> String {
-    "edgerun Node Daemon\n\nCommands:\n  init              Generate node identity and genesis event\n  init-encrypted    Generate encrypted software identity\n  init-provisioned  Generate provisioned node identity\n  provision         Provision a node with a controller\n  status            Show node event-log status\n  bind-check        Bind enabled service listeners and report them\n  help              Show this help".into()
+    let mut text = "edgerun Node Daemon\n\nCommands:\n  init              Generate node identity and genesis event\n  init-encrypted    Generate encrypted software identity\n  init-provisioned  Generate provisioned node identity\n  provision         Provision a node with a controller\n  status            Show node event-log status\n  bind-check        Bind enabled service listeners and report them".to_string();
+    #[cfg(feature = "xray")]
+    {
+        text.push_str(
+            "\n  xray-server       Serve local codelyzer graph bridge for dashboard Xray",
+        );
+    }
+    text.push_str("\n  help              Show this help");
+    text
 }

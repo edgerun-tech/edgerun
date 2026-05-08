@@ -7,9 +7,6 @@ extern crate alloc;
 #[cfg(not(target_os = "none"))]
 extern crate std;
 
-#[cfg(target_os = "none")]
-extern crate self as std;
-
 pub mod prelude {
     pub mod v1 {
         pub use alloc::vec;
@@ -19,24 +16,27 @@ pub mod prelude {
 }
 
 pub mod collections {
+    #[cfg(target_os = "none")]
     pub use alloc::collections::{BTreeMap as HashMap, BTreeSet as HashSet};
+    #[cfg(not(target_os = "none"))]
+    pub use std::collections::{HashMap, HashSet};
 }
 
 pub mod time {
     pub use core::time::Duration;
 
-    #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd)]
-    pub struct Instant(Duration);
-
-    impl Instant {
-        #[must_use]
-        pub const fn now() -> Self {
-            Self(Duration::from_secs(0))
+    #[must_use]
+    pub fn host_now() -> Duration {
+        #[cfg(not(target_os = "none"))]
+        {
+            return std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default();
         }
 
-        #[must_use]
-        pub fn elapsed(&self) -> Duration {
-            Self::now().0.saturating_sub(self.0)
+        #[cfg(target_os = "none")]
+        {
+            Duration::ZERO
         }
     }
 }
@@ -53,7 +53,7 @@ pub mod result {
     pub use core::result::*;
 }
 
-use std::time::Duration;
+use crate::time::Duration;
 
 mod error;
 mod handshake;
@@ -63,7 +63,7 @@ mod session;
 pub use error::SessionError;
 pub use handshake::{EphemeralSecret, HandshakeAccept, HandshakeInit};
 pub use manager::SessionManager;
-pub use session::MeshSession;
+pub use session::{MeshSession, NONCE_PREFIX_SIZE};
 
 // Constants
 // ---------------------------------------------------------------------------

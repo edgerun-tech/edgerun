@@ -15,8 +15,8 @@ use alloc::vec::Vec;
 
 use crate::http::runtime::Mutex;
 
-use crate::tls::SessionCache;
 use crate::tls::AsyncTlsStream;
+use crate::tls::SessionCache;
 
 use crate::http::http2::client::{AsyncClient, HttpResponse};
 use crate::http::{Error, Method, Result};

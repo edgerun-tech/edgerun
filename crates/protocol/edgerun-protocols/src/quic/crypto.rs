@@ -61,8 +61,8 @@ impl QuicAead {
     ) -> Result<aes_gcm::Tag, aes_gcm::aead::Error> {
         let nonce = aes_gcm::Nonce::from_slice(nonce);
         match self {
-            Self::Aes128(cipher) => cipher.encrypt_in_place_detached(nonce, aad, buffer),
-            Self::Aes256(cipher) => cipher.encrypt_in_place_detached(nonce, aad, buffer),
+            Self::Aes128(cipher) => cipher.encrypt_in_place_detached(&nonce, aad, buffer),
+            Self::Aes256(cipher) => cipher.encrypt_in_place_detached(&nonce, aad, buffer),
         }
     }
 
@@ -75,8 +75,8 @@ impl QuicAead {
     ) -> Result<(), aes_gcm::aead::Error> {
         let nonce = aes_gcm::Nonce::from_slice(nonce);
         match self {
-            Self::Aes128(cipher) => cipher.decrypt_in_place_detached(nonce, aad, buffer, tag),
-            Self::Aes256(cipher) => cipher.decrypt_in_place_detached(nonce, aad, buffer, tag),
+            Self::Aes128(cipher) => cipher.decrypt_in_place_detached(&nonce, aad, buffer, tag),
+            Self::Aes256(cipher) => cipher.decrypt_in_place_detached(&nonce, aad, buffer, tag),
         }
     }
 }
@@ -310,7 +310,7 @@ impl PacketProtection {
         let mut buffer = ciphertext_and_tag[..tag_start].to_vec();
 
         self.read_aead
-            .decrypt_in_place_detached(&nonce, header, &mut buffer, tag)
+            .decrypt_in_place_detached(&nonce, header, &mut buffer, &tag)
             .map_err(|e| format!("AEAD decrypt failed: {:?}", e))?;
 
         Ok(buffer)

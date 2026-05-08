@@ -2,7 +2,6 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use edgerun_crypto::rand_core::RngCore;
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_protocols::keygen::{generate_node_signing_key, node_id_from_signing_key};
 use edgerun_protocols::seal::{generate_seal_key, seal_node_signing_key};

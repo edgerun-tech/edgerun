@@ -23,7 +23,7 @@ pub mod command_dispatch_result;
 #[cfg(feature = "dns")]
 pub mod dns;
 pub mod error;
-#[cfg(feature = "std")]
+#[cfg(all(feature = "std", not(target_arch = "wasm32")))]
 pub mod hardware;
 #[cfg(feature = "http")]
 pub mod http;
@@ -35,23 +35,30 @@ pub mod network;
 pub mod router;
 pub mod rt;
 pub mod runtime;
-#[cfg(any(
-    feature = "http",
-    feature = "dns",
-    feature = "dhcp",
-    feature = "tftp",
-    feature = "proxy",
-    feature = "smtp",
-    feature = "imap",
-    feature = "lmtp",
-    feature = "acme",
-    feature = "virtual-disk",
+#[cfg(all(
+    not(target_arch = "wasm32"),
+    any(
+        feature = "http",
+        feature = "dns",
+        feature = "dhcp",
+        feature = "tftp",
+        feature = "proxy",
+        feature = "smtp",
+        feature = "imap",
+        feature = "lmtp",
+        feature = "acme",
+        feature = "virtual-disk",
+    )
 ))]
 pub mod services;
 pub mod storage;
 pub mod stream_append;
 #[cfg(feature = "tls")]
 pub mod tls;
+#[cfg(target_arch = "wasm32")]
+pub mod wasm;
+#[cfg(feature = "xray")]
+pub mod xray;
 
 mod protocol_signer;
 

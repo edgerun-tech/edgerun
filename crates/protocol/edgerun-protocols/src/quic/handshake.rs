@@ -1363,8 +1363,7 @@ mod tests {
 
     #[test]
     fn certificate_verify_accepts_ed25519_signature() {
-        let mut rng = edgerun_crypto::rand_core::OsRng;
-        let signing_key = edgerun_crypto::ed25519_dalek::SigningKey::generate(&mut rng);
+        let signing_key = edgerun_crypto::random_ed25519_signing_key();
         let verifying_key = signing_key.verifying_key();
         let cert_der = fake_certificate_with_spki(&[0x2b, 0x65, 0x70], verifying_key.as_bytes());
         let transcript = b"prior tls handshake messages";
@@ -1392,10 +1391,9 @@ mod tests {
     #[test]
     fn certificate_verify_accepts_rsa_pss_signature() {
         use edgerun_crypto::rsa::pkcs1::EncodeRsaPublicKey;
-        use edgerun_crypto::rsa::signature::{RandomizedSigner, SignatureEncoding};
+        use edgerun_crypto::rsa::signature::SignatureEncoding;
 
-        let mut rng = edgerun_crypto::rand_core::OsRng;
-        let private_key = edgerun_crypto::rsa::RsaPrivateKey::new(&mut rng, 2048).unwrap();
+        let private_key = edgerun_crypto::random_rsa_private_key(2048).unwrap();
         let public_key = edgerun_crypto::rsa::RsaPublicKey::from(&private_key);
         let public_key_der = public_key.to_pkcs1_der().unwrap();
         let cert_der = fake_certificate_with_spki(
@@ -1404,11 +1402,7 @@ mod tests {
         );
         let transcript = b"prior tls handshake messages";
         let signed_input = certificate_verify_signed_input(transcript, &Hasher::Sha256);
-        let signing_key =
-            edgerun_crypto::rsa::pss::SigningKey::<edgerun_crypto::rsa::sha2::Sha256>::new(
-                private_key,
-            );
-        let signature = signing_key.sign_with_rng(&mut rng, &signed_input);
+        let signature = edgerun_crypto::rsa_pss_sha256_sign(private_key, &signed_input);
         let validator = CertificateValidator::new(Some("example.com"));
 
         assert!(validator.verify_certificate_signature(

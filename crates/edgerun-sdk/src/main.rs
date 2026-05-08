@@ -1,7 +1,7 @@
 #![cfg(feature = "std")]
 
 use edgerun_crypto::ed25519_dalek::{Signature, Verifier, VerifyingKey};
-use edgerun_crypto::{Ed25519SigningKey as SigningKey, Signer};
+use edgerun_crypto::{fill_random, Ed25519SigningKey as SigningKey, Signer};
 use edgerun_protocols::seal::{seal_with_key, unseal_with_key, SealKey};
 use edgerun_protocols::wire as edgerun_wire;
 use edgerun_protocols::wire::{
@@ -61,6 +61,7 @@ fn main() {
         Some("package-app") => cmd_package_app(args.collect()),
         Some("sign-app") => cmd_sign_app(args.collect()),
         Some("verify-signed-app") => cmd_verify_signed_app(args.collect()),
+        Some("write-app-store-catalog") => cmd_write_app_store_catalog(args.collect()),
         Some("issue-product") => cmd_issue_product(args.collect()),
         Some("verify-product") => cmd_verify_product(args.collect()),
         Some("issue-entitlement") => cmd_issue_entitlement(args.collect()),
@@ -106,6 +107,8 @@ fn main() {
         Some("grant-profile-capability") => cmd_grant_profile_capability(args.collect()),
         Some("open-user-profile") => cmd_open_user_profile(args.collect()),
         Some("verify-profile-access") => cmd_verify_profile_access(args.collect()),
+        Some("create-user-profile-password") => cmd_create_user_profile_password(args.collect()),
+        Some("open-user-profile-password") => cmd_open_user_profile_password(args.collect()),
         Some("generate-unit-metadata") => cmd_generate_unit_metadata(args.next().as_deref()),
         Some("deploy-inventory") => cmd_deploy_inventory(args.collect()),
         Some("deploy-server") => cmd_deploy_server(args.collect()),

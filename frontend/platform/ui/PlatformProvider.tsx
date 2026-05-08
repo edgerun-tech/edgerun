@@ -1,0 +1,150 @@
+/**
+ * Top-level provider that wires platform services together.
+ * Wraps the app with context for protocol client, stores, registries, router, runtime, auth trackers.
+ */
+
+"use client"
+
+import React, { createContext, useContext, useEffect, type ReactNode } from "react"
+import { protocolClient } from "@/platform/protocol/client"
+import { syncProtocolApprovals } from "@/platform/protocol/approvals"
+import { nodeStore, refreshNodeStatus } from "@/platform/state/node-store"
+import { appStore, loadApps } from "@/platform/state/app-store"
+import { capabilityStore, loadCapabilities } from "@/platform/state/capability-store"
+import { connectionStore } from "@/platform/state/connection-store"
+import { permissionStore } from "@/platform/state/permission-store"
+import { wasmRegistry } from "@/platform/runtime/wasm-registry"
+import { appRegistry } from "@/platform/registries/app-registry"
+import { seedBuiltinCatalogApps, syncBrowserCatalogRegistry } from "@/platform/registries/app-catalog-registry"
+import { browserAppInstallStore } from "@/platform/runtime/browser-app-install-store"
+import { capabilityRegistry } from "@/platform/registries/capability-registry"
+import { connectionRegistry } from "@/platform/registries/connection-registry"
+import { toolRegistry } from "@/platform/registries/tool-registry"
+import { router } from "@/platform/router/edgerun-router"
+import { permissionTracker } from "@/platform/auth/permission-tracker"
+import { sessionTracker, setNodeRegistration } from "@/platform/auth/session-tracker"
+import { approvalTracker } from "@/platform/auth/approval-tracker"
+import { appRuntime } from "@/platform/runtime/app-runtime"
+import { bootstrapBrowserCapabilityRuntime } from "@/platform/runtime/browser-runtime"
+import { NodeWebSocketBridge } from "@/platform/runtime/edgerun-node"
+import { registerPlatformTools } from "@/platform/tools/register-tools"
+import { applyUiSettings, uiSettingsStore } from "@/stores/ui-settings-store"
+
+interface PlatformContextValue {
+  protocolClient: typeof protocolClient
+  stores: {
+    node: typeof nodeStore
+    app: typeof appStore
+    capability: typeof capabilityStore
+    connection: typeof connectionStore
+    permission: typeof permissionStore
+  }
+  registries: {
+    app: typeof appRegistry
+    capability: typeof capabilityRegistry
+    connection: typeof connectionRegistry
+    tool: typeof toolRegistry
+  }
+  router: typeof router
+  auth: {
+    permission: typeof permissionTracker
+    session: typeof sessionTracker
+    approval: typeof approvalTracker
+  }
+  runtime: {
+    wasm: typeof wasmRegistry
+    app: typeof appRuntime
+  }
+}
+
+const PlatformContext = createContext<PlatformContextValue | null>(null)
+
+export function PlatformProvider({ children }: { children: ReactNode }) {
+  useEffect(() => {
+    let nodeBridge: NodeWebSocketBridge | null = null
+
+    void seedBuiltinCatalogApps()
+    const unsubscribeBrowserApps = browserAppInstallStore.subscribe(syncBrowserCatalogRegistry)
+    refreshNodeStatus()
+    loadApps()
+    loadCapabilities()
+    registerPlatformTools()
+    bootstrapBrowserCapabilityRuntime()
+    applyUiSettings(uiSettingsStore.get())
+    const unsubscribeUiSettings = uiSettingsStore.subscribe(applyUiSettings)
+
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("edgerun_node_registration_v1")
+      if (stored) {
+        try {
+          const reg = JSON.parse(stored)
+          protocolClient.setNodeRegistration(reg)
+          setNodeRegistration(reg)
+        } catch {
+          // Ignore parse errors
+        }
+      }
+
+      const nodeWsUrl =
+        localStorage.getItem("edgerun_node_ws_url_v1")
+        || process.env.NEXT_PUBLIC_EDGERUN_NODE_WS_URL
+      if (nodeWsUrl) {
+        nodeBridge = new NodeWebSocketBridge(nodeWsUrl)
+        nodeBridge.start()
+      }
+    }
+
+    void syncProtocolApprovals().catch(() => undefined)
+    const interval = window.setInterval(() => {
+      void syncProtocolApprovals().catch(() => undefined)
+    }, 2500)
+
+    return () => {
+      nodeBridge?.stop()
+      unsubscribeBrowserApps()
+      unsubscribeUiSettings()
+      window.clearInterval(interval)
+    }
+  }, [])
+
+  const value: PlatformContextValue = {
+    protocolClient,
+    stores: {
+      node: nodeStore,
+      app: appStore,
+      capability: capabilityStore,
+      connection: connectionStore,
+      permission: permissionStore,
+    },
+    registries: {
+      app: appRegistry,
+      capability: capabilityRegistry,
+      connection: connectionRegistry,
+      tool: toolRegistry,
+    },
+    router,
+    auth: {
+      permission: permissionTracker,
+      session: sessionTracker,
+      approval: approvalTracker,
+    },
+    runtime: {
+      wasm: wasmRegistry,
+      app: appRuntime,
+    },
+  }
+
+  return (
+    <PlatformContext.Provider value={value}>
+      {children}
+    </PlatformContext.Provider>
+  )
+}
+
+export function usePlatform(): PlatformContextValue {
+  const context = useContext(PlatformContext)
+  if (!context) {
+    throw new Error("usePlatform must be used within a PlatformProvider")
+  }
+  return context
+}

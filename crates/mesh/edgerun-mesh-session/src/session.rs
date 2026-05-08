@@ -1,11 +1,10 @@
 use crate::prelude::v1::*;
+use crate::time::Duration;
 pub use edgerun_crypto::p256::ecdh::EphemeralSecret;
 use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
 use edgerun_crypto::p256::PublicKey;
 use edgerun_crypto::{Aead, KeyInit};
 use edgerun_hardware_signing::NodeID;
-use std::collections::HashMap;
-use std::time::{Duration, Instant};
 
 use super::*;
 
@@ -38,6 +37,9 @@ pub const HANDSHAKE_MSG_SIZE: usize = 129; // 64 + 65
 /// Nonce size for AES-GCM.
 const NONCE_SIZE: usize = 12;
 
+/// Size of the random per-session nonce prefix.
+pub const NONCE_PREFIX_SIZE: usize = 4;
+
 /// HKDF info string for session key derivation.
 const HKDF_INFO: &[u8] = b"edgerun-session-v1";
 
@@ -65,15 +67,24 @@ pub struct MeshSession {
     /// Highest nonce counter seen from the peer (replay detection).
     highest_seen_counter: Option<u64>,
     frame_count: u64,
-    created_at: Instant,
+    created_at: Duration,
 }
 
 impl MeshSession {
     /// Creates a session from a derived AES-256-GCM key.
-    pub(crate) fn new(peer: NodeID, key: [u8; 32]) -> Self {
+    pub(crate) fn new(peer: NodeID, key: [u8; 32], created_at: Duration) -> Self {
         let mut nonce_prefix = [0u8; 4];
         edgerun_crypto::fill_random(&mut nonce_prefix).expect("random generation failed");
+        Self::new_with_nonce_prefix(peer, key, created_at, nonce_prefix)
+    }
 
+    /// Creates a session using an explicit nonce prefix for deterministic replay.
+    pub(crate) fn new_with_nonce_prefix(
+        peer: NodeID,
+        key: [u8; 32],
+        created_at: Duration,
+        nonce_prefix: [u8; NONCE_PREFIX_SIZE],
+    ) -> Self {
         Self {
             peer,
             cipher: edgerun_crypto::AesGcmCipher::new_from_slice(&key).expect("valid AES-256 key"),
@@ -81,7 +92,7 @@ impl MeshSession {
             nonce_counter: 0,
             highest_seen_counter: None,
             frame_count: 0,
-            created_at: Instant::now(),
+            created_at,
         }
     }
 
@@ -145,7 +156,13 @@ impl MeshSession {
 
     /// Returns `true` if this session should be rekeyed.
     pub fn needs_rekey(&self) -> bool {
-        self.frame_count >= MAX_FRAMES_BEFORE_REKEY || self.created_at.elapsed() >= MAX_SESSION_AGE
+        self.needs_rekey_at(crate::time::host_now())
+    }
+
+    /// Returns `true` if this session should be rekeyed at the supplied logical time.
+    pub fn needs_rekey_at(&self, now: Duration) -> bool {
+        self.frame_count >= MAX_FRAMES_BEFORE_REKEY
+            || now.saturating_sub(self.created_at) >= MAX_SESSION_AGE
     }
 }
 

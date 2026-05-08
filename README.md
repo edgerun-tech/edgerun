@@ -1,15 +1,19 @@
 # Edgerun Core
 
 Edgerun Core is an identity-based, append-only information fabric for edge
-nodes. The internal wire protocol is consolidated on rkyv: hashing, signing,
-storage, transport payloads, caches, and local bridges must archive concrete
-protocol types through the rkyv boundary. Legacy schema/generated wire artifacts
-have been removed so old call sites fail instead of silently using a second
-protocol.
+nodes. A node is addressed by its signing identity, writes authoritative facts to
+its own signed stream, and derives local indexes, service views, routes, and
+capability decisions from durable event logs.
+
+The internal Edgerun wire protocol is `rkyv`. Hashing, signing, storage,
+transport payloads, caches, and local bridge payloads archive concrete protocol
+types through the rkyv boundary. Legacy schema and generated wire artifacts have
+been removed so stale callers fail loudly instead of silently using a second
+protocol path.
 
 ## Protocol Model
 
-The v0 protocol has five central rules:
+The v0 protocol has five central rules that define the system end to end:
 
 1. A stream has exactly one writer for its lifetime.
 2. Events are immutable, strictly ordered by `seq`, hash-linked by
@@ -24,10 +28,37 @@ The v0 protocol has five central rules:
    assurance claims, query proofs, and route hints are validated under local
    policy rather than global consensus.
 
-## Implementation Map
+The authority flow is:
+
+```text
+hardware or software signer
+  -> protocol signature input
+  -> command or event
+  -> validated stream append
+  -> durable event log
+  -> derived indexes, caches, snapshots, routes, and service views
+```
+
+Only the signed stream and immutable objects are authoritative. Indexes,
+snapshots, replay caches, query results, route hints, dashboards, health checks,
+and service projections are derived state; they must be rebuildable from logs or
+rejectable under local policy.
+
+## Wire Boundary
+
+There is one internal wire protocol: `rkyv`.
+
+Removed legacy paths must not be reintroduced as compatibility shims. If a
+caller breaks, migrate that caller to archive and access the concrete rkyv type
+at that boundary.
+
+External standards keep their standards-defined encodings. HTTP, DNS, TLS,
+QUIC, HPACK, QPACK, DHCP, NFC, OCI, TPM, and device protocols are external
+protocol domains, not alternate Edgerun internal wire formats.
+
+## Runtime Map
 
 For a fuller architecture and consolidation map, see `docs/architecture.md`.
-
 
 | Layer | Main crates | What the code actually does |
 |---|---|---|
@@ -42,15 +73,79 @@ For a fuller architecture and consolidation map, see `docs/architecture.md`.
 | Bare metal | `edgerun-rt`, `edgerun-platform`, `edgerun-unikernel`, `edgerun-virtio`, `edgerun-rtl8125` | Provides runtime, platform primitives, drivers, boot support, and a freestanding unikernel binary; TFTP and PXE/iPXE ABI code lives in `edgerun-protocols`. |
 | Local support crates | `edgerun-json`, `edgerun-encoding`, `edgerun-hpack`, `edgerun-qpack`, `edgerun-crypto`, `edgerun-clap`, `edgerun-log`, `edgerun-vfs`, `edgerun-virtual-disk` | Provides local utilities. These crates are not alternate protocol wire formats. |
 
-## Wire Protocol Rule
+## End-to-End Shape
 
-There is one internal wire protocol: `rkyv`.
+An Edgerun node starts with a P-256 identity. The signer may be software-backed
+for development or hardware-backed through TPM, YubiKey, Android Keystore, or
+another backend in production.
 
-Removed legacy paths must not be reintroduced as compatibility shims. If a
-caller breaks, migrate the caller to archive and access the concrete rkyv type at
-that boundary.
+A new node writes a signed genesis event. After that, every authoritative update
+is either a stream event produced by the fixed stream writer or the durable
+result of a command that the target node validated and committed or rejected in
+its own stream.
 
-## Build
+Storage persists those logs and immutable objects. It may maintain stream heads,
+object indexes, replay records, file indexes, snapshots, and service-specific
+views, but those are derived from the event log. Rebuilding an index must not
+change authority.
+
+Mesh, capability, and service crates sit above that authority boundary. They can
+carry commands, capability envelopes, route hints, external protocol traffic, or
+service results, but delivery is not authority. Trust enters only when local
+policy validates the record and the target node records the outcome.
+
+## 10-Minute Proof
+
+The fastest local proof is a software-key node plus a service bind check. The
+software key path is development-only; production nodes should use TPM, YubiKey,
+or another hardware signing backend.
+
+```bash
+cargo run -p edgerun-node --bin edged -- init \
+  --config /tmp/edgerun-node-a \
+  --name demo-a \
+  --software
+
+cargo run -p edgerun-node --bin edged -- status \
+  --config /tmp/edgerun-node-a
+```
+
+That creates a P-256 node identity, writes a signed genesis event, and then
+reads the durable event log back as node status. The status output is the first
+proof point: identity is the node address, and authoritative state begins at the
+signed stream boundary.
+
+To prove that the same runtime can realize service surfaces, run the bind check
+with the broad service feature set:
+
+```bash
+cargo run -p edgerun-node --bin edged \
+  --features "http https dns dhcp smtp imap proxy derived-db quic acme" \
+  -- bind-check
+```
+
+The command binds non-privileged loopback ports for HTTP, HTTPS, DNS, DHCP,
+SMTP, IMAP, proxy, derived DB, QUIC, and ACME support, then prints a JSON report.
+Use `--standard-ports` only when the process has permission to bind privileged
+ports.
+
+Two-node smoke path:
+
+```bash
+cargo run -p edgerun-node --bin edged -- init \
+  --config /tmp/edgerun-node-b \
+  --name demo-b \
+  --software
+
+cargo run -p edgerun-node --bin edged -- status \
+  --config /tmp/edgerun-node-b
+```
+
+For a polished demo, show both status outputs side by side: two different node
+identities, two signed genesis streams, and the same runtime verifying each
+node's local event-log state.
+
+## Checks
 
 Hosted checks for a specific crate:
 

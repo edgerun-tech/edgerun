@@ -6,8 +6,7 @@
 use crate::prelude::*;
 use alloc::format;
 use core::str;
-use edgerun_crypto::aes_gcm::aead::generic_array::GenericArray;
-use edgerun_crypto::Aes256GcmCipher;
+use edgerun_crypto::{AeadInPlace, Aes256GcmCipher, Nonce, Tag};
 use edgerun_encoding::byteorder::{push_u16_be, push_u32_be, read_u32_be};
 use edgerun_encoding::crc32;
 use edgerun_json::{FromJson, JsonValue, JsonValueError, Map, ToJson};
@@ -284,8 +283,9 @@ pub fn pack_6699_with_iv(
     push_u32_be(&mut frame, len);
 
     let cipher = Aes256GcmCipher::new(key).map_err(|_| TuyaProtocolError::InvalidKey)?;
+    let nonce = Nonce::from(*iv);
     let tag = cipher
-        .encrypt_in_place_detached(GenericArray::from_slice(iv), &frame[4..], &mut encrypted)
+        .encrypt_in_place_detached(&nonce, &frame[4..], &mut encrypted)
         .map_err(|_| TuyaProtocolError::AuthenticationFailed)?;
 
     frame.extend_from_slice(iv);
@@ -307,13 +307,10 @@ pub fn decrypt_6699_payload(
     let tag = &payload[payload.len() - 16..];
     let mut ciphertext = payload[12..payload.len() - 16].to_vec();
     let cipher = Aes256GcmCipher::new(session_key).map_err(|_| TuyaProtocolError::InvalidKey)?;
+    let nonce = Nonce::from_slice(iv);
+    let tag = Tag::from_slice(tag);
     cipher
-        .decrypt_in_place_detached(
-            GenericArray::from_slice(iv),
-            &header[4..],
-            &mut ciphertext,
-            GenericArray::from_slice(tag),
-        )
+        .decrypt_in_place_detached(&nonce, &header[4..], &mut ciphertext, &tag)
         .map_err(|_| TuyaProtocolError::AuthenticationFailed)?;
     Ok(ciphertext)
 }
@@ -410,9 +407,9 @@ pub fn derive_v35_session_key(
     }
 
     let cipher = Aes256GcmCipher::new(local_key).map_err(|_| TuyaProtocolError::InvalidKey)?;
-    let nonce = GenericArray::from_slice(&local_nonce[..12]);
+    let nonce = Nonce::from_slice(&local_nonce[..12]);
     let _tag = cipher
-        .encrypt_in_place_detached(nonce, &[], &mut xored)
+        .encrypt_in_place_detached(&nonce, &[], &mut xored)
         .map_err(|_| TuyaProtocolError::AuthenticationFailed)?;
     Ok(xored)
 }

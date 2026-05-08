@@ -5,8 +5,7 @@
 use alloc::{format, string::String, vec::Vec};
 use edgerun_crypto::p256::ecdh::EphemeralSecret as P256Secret;
 use edgerun_crypto::p256::EncodedPoint;
-use edgerun_crypto::x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret as X25519Secret};
-use edgerun_crypto::OsRng;
+use edgerun_crypto::x25519::{PublicKey as X25519PublicKey, StaticSecret as X25519Secret};
 
 /// Named group for key exchange
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -68,7 +67,7 @@ impl EcdhKeyPair {
     pub fn generate(group: KeyExchangeGroup) -> Result<Self, String> {
         match group {
             KeyExchangeGroup::SECP256R1 => {
-                let secret = P256Secret::random(&mut OsRng);
+                let secret = edgerun_crypto::random_p256_ephemeral_secret();
                 let public = EncodedPoint::from(secret.public_key());
                 Ok(EcdhKeyPair::P256 { secret, public })
             }

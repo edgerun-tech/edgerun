@@ -133,6 +133,44 @@ fn stream_action_completed_requires_result_object() {
 }
 
 #[test]
+fn stream_append_rejects_overflowed_head_sequence() {
+    let semantic = match mapping([(
+        "candidate_event",
+        mapping([
+            ("envelope_version", yi64(1)),
+            ("event_version", yi64(1)),
+            ("recorded_at", ystr("2030-01-01T00:00:00Z")),
+            ("signature", mapping([])),
+            ("event_type", ystr("EVENT_TYPE_CUSTOM")),
+            ("stream_id", ystr("node-stream")),
+            ("seq", yi64(i64::MAX)),
+            ("event_hash_hex", ystr("candidate-hash")),
+            ("prev_ref", mapping([("hash_hex", ystr("head-hash"))])),
+        ]),
+    )]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+    let state = match mapping([(
+        "stream_heads",
+        mapping([(
+            "node-stream",
+            mapping([
+                ("seq", yi64(i64::MAX)),
+                ("event_hash_hex", ystr("head-hash")),
+            ]),
+        )]),
+    )]) {
+        Value::Map(m) => m,
+        _ => unreachable!(),
+    };
+
+    let result = validate_stream_append_case(&semantic, &state, &TestVerifier, &no_hash);
+    assert_eq!(result.verdict, Verdict::Reject);
+    assert_eq!(result.reason_code, Some(ReasonCode::ForkConflict));
+}
+
+#[test]
 fn object_descriptor_and_header_must_match_object_id() {
     let semantic = match mapping([
         (

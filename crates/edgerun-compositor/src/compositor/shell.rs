@@ -2,8 +2,22 @@
 
 use std::collections::{HashMap, HashSet};
 
+use crate::compositor::surface::{Surface, SurfaceTree};
 use crate::protocol::dispatch::linux_ext::SyncobjState;
 use edgerun_protocols::wayland::{layer_shell, xdg_shell};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct SurfaceHit {
+    pub surface_id: u32,
+    pub x: i32,
+    pub y: i32,
+}
+
+impl SurfaceHit {
+    pub fn local_position(&self, x: f64, y: f64) -> (f64, f64) {
+        (x - self.x as f64, y - self.y as f64)
+    }
+}
 
 /// A toplevel window.
 #[derive(Debug)]
@@ -87,10 +101,19 @@ pub struct Subsurface {
     pub parent_surface_id: u32,
     pub x: i32,
     pub y: i32,
+    pub pending_x: Option<i32>,
+    pub pending_y: Option<i32>,
     /// Sync mode: commit is deferred until parent commits.
     pub sync: bool,
     /// Z-order relative to parent: siblings ordered before/after this one.
     pub stack_index: usize,
+    pub pending_stack_index: Option<usize>,
+}
+
+impl Subsurface {
+    pub fn output_position(&self, parent_x: i32, parent_y: i32) -> (i32, i32) {
+        (parent_x + self.x, parent_y + self.y)
+    }
 }
 
 /// Subsurface manager.
@@ -108,8 +131,11 @@ impl SubsurfaceManager {
                 parent_surface_id,
                 x: 0,
                 y: 0,
+                pending_x: None,
+                pending_y: None,
                 sync: true, // default to sync mode
                 stack_index: 0,
+                pending_stack_index: None,
             },
         );
     }
@@ -126,12 +152,86 @@ impl SubsurfaceManager {
         self.subsurfaces.get_mut(&surface_id)
     }
 
+    pub fn set_position(&mut self, surface_id: u32, x: i32, y: i32) {
+        if let Some(subsurface) = self.subsurfaces.get_mut(&surface_id) {
+            subsurface.pending_x = Some(x);
+            subsurface.pending_y = Some(y);
+        }
+    }
+
+    pub fn commit_parent(&mut self, parent_surface_id: u32) {
+        for subsurface in self.subsurfaces.values_mut() {
+            if subsurface.parent_surface_id != parent_surface_id {
+                continue;
+            }
+            if let Some(x) = subsurface.pending_x.take() {
+                subsurface.x = x;
+            }
+            if let Some(y) = subsurface.pending_y.take() {
+                subsurface.y = y;
+            }
+            if let Some(stack_index) = subsurface.pending_stack_index.take() {
+                subsurface.stack_index = stack_index;
+            }
+        }
+    }
+
     /// Get all subsurfaces for a given parent surface.
     pub fn for_parent(&self, parent_surface_id: u32) -> Vec<&Subsurface> {
         self.subsurfaces
             .values()
             .filter(|s| s.parent_surface_id == parent_surface_id)
             .collect()
+    }
+
+    /// Get subsurfaces for a parent in compositor draw order, back to front.
+    pub fn for_parent_render_order(&self, parent_surface_id: u32) -> Vec<&Subsurface> {
+        let mut subsurfaces = self.for_parent(parent_surface_id);
+        subsurfaces.sort_by_key(|s| (s.stack_index, s.surface_id));
+        subsurfaces
+    }
+
+    pub fn place_above(&mut self, surface_id: u32, sibling_id: u32) {
+        self.place_relative(surface_id, sibling_id, true);
+    }
+
+    pub fn place_below(&mut self, surface_id: u32, sibling_id: u32) {
+        self.place_relative(surface_id, sibling_id, false);
+    }
+
+    fn place_relative(&mut self, surface_id: u32, sibling_id: u32, above: bool) {
+        let Some(parent_surface_id) = self
+            .subsurfaces
+            .get(&surface_id)
+            .map(|s| s.parent_surface_id)
+        else {
+            return;
+        };
+
+        let mut ordered: Vec<(usize, u32)> = self
+            .subsurfaces
+            .values()
+            .filter(|s| s.parent_surface_id == parent_surface_id && s.surface_id != surface_id)
+            .map(|s| (s.pending_stack_index.unwrap_or(s.stack_index), s.surface_id))
+            .collect::<Vec<_>>();
+        ordered.sort_by_key(|&(stack_index, surface_id)| (stack_index, surface_id));
+        let mut ordered: Vec<u32> = ordered
+            .into_iter()
+            .map(|(_, surface_id)| surface_id)
+            .collect();
+
+        let insert_at = ordered
+            .iter()
+            .position(|&id| id == sibling_id)
+            .map(|pos| if above { pos + 1 } else { pos })
+            .unwrap_or_else(|| if above { ordered.len() } else { 0 });
+        ordered.insert(insert_at.min(ordered.len()), surface_id);
+
+        for (index, id) in ordered.into_iter().enumerate() {
+            if let Some(subsurface) = self.subsurfaces.get_mut(&id) {
+                subsurface.pending_stack_index = Some(index);
+            }
+        }
     }
 }
 
@@ -504,6 +604,11 @@ impl Shell {
             .filter_map(|&id| self.toplevels.get(&id))
     }
 
+    /// Get all toplevels in compositor draw order, back to front.
+    pub fn toplevels_render_order(&self) -> impl Iterator<Item = &Toplevel> {
+        self.stack.iter().filter_map(|&id| self.toplevels.get(&id))
+    }
+
     /// Activate a toplevel (bring to front).
     pub fn activate(&mut self, id: u32) {
         self.stack.retain(|&x| x != id);
@@ -872,11 +977,141 @@ impl Shell {
             .max_by_key(|ls| ls.layer)
             .map(|ls| ls.surface_id)
     }
+
+    pub fn surface_at(&self, surfaces: &SurfaceTree, x: i32, y: i32) -> Option<SurfaceHit> {
+        let layer_surfaces = self.layer_surfaces_render_order();
+        for layer_surface in layer_surfaces
+            .iter()
+            .rev()
+            .filter(|layer_surface| layer_surface.layer >= 2)
+        {
+            if let Some(hit) = surface_hit(
+                surfaces,
+                layer_surface.surface_id,
+                layer_surface.x,
+                layer_surface.y,
+                x,
+                y,
+            ) {
+                return Some(hit);
+            }
+        }
+
+        for toplevel in self.toplevels_z_order() {
+            let Some(parent) = surfaces.get(toplevel.surface_id) else {
+                continue;
+            };
+            let parent_x = parent.x;
+            let parent_y = parent.y;
+
+            for subsurface in self
+                .subsurfaces
+                .for_parent_render_order(toplevel.surface_id)
+                .iter()
+                .rev()
+            {
+                let (sub_x, sub_y) = subsurface.output_position(parent_x, parent_y);
+                if let Some(hit) = surface_hit(surfaces, subsurface.surface_id, sub_x, sub_y, x, y)
+                {
+                    return Some(hit);
+                }
+            }
+
+            if let Some(hit) = surface_hit(surfaces, toplevel.surface_id, parent_x, parent_y, x, y)
+            {
+                return Some(hit);
+            }
+        }
+
+        for layer_surface in layer_surfaces
+            .iter()
+            .rev()
+            .filter(|layer_surface| layer_surface.layer < 2)
+        {
+            if let Some(hit) = surface_hit(
+                surfaces,
+                layer_surface.surface_id,
+                layer_surface.x,
+                layer_surface.y,
+                x,
+                y,
+            ) {
+                return Some(hit);
+            }
+        }
+
+        None
+    }
+}
+
+fn surface_hit(
+    surfaces: &SurfaceTree,
+    surface_id: u32,
+    origin_x: i32,
+    origin_y: i32,
+    x: i32,
+    y: i32,
+) -> Option<SurfaceHit> {
+    let surface = surfaces.get(surface_id)?;
+    if surface_accepts_point(surface, origin_x, origin_y, x, y) {
+        Some(SurfaceHit {
+            surface_id,
+            x: origin_x,
+            y: origin_y,
+        })
+    } else {
+        None
+    }
+}
+
+fn surface_accepts_point(surface: &Surface, origin_x: i32, origin_y: i32, x: i32, y: i32) -> bool {
+    if surface.buffer.is_none() {
+        return false;
+    }
+
+    let local_x = x - origin_x;
+    let local_y = y - origin_y;
+    if local_x < 0
+        || local_y < 0
+        || local_x >= surface.logical_width() as i32
+        || local_y >= surface.logical_height() as i32
+    {
+        return false;
+    }
+
+    match &surface.input_region {
+        None => true,
+        Some(rects) => rects.iter().any(|rect| {
+            local_x >= rect.x
+                && local_x < rect.x + rect.width
+                && local_y >= rect.y
+                && local_y < rect.y + rect.height
+        }),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::compositor::surface::SurfaceBuffer;
+
+    fn commit_test_surface(surfaces: &mut SurfaceTree, id: u32, x: i32, y: i32, w: i32, h: i32) {
+        surfaces.create(id);
+        surfaces.attach(
+            id,
+            SurfaceBuffer::Shm {
+                pool_fd: 0,
+                offset: 0,
+                width: w,
+                height: h,
+                stride: w * 4,
+                format: 0x34325258,
+            },
+            x,
+            y,
+        );
+        surfaces.commit(id);
+    }
 
     #[test]
     fn test_create_toplevel() {
@@ -907,6 +1142,9 @@ mod tests {
         // Front to back: last created is frontmost
         let z_order: Vec<u32> = shell.toplevels_z_order().map(|tl| tl.id).collect();
         assert_eq!(z_order, vec![3, 2, 1]);
+
+        let render_order: Vec<u32> = shell.toplevels_render_order().map(|tl| tl.id).collect();
+        assert_eq!(render_order, vec![1, 2, 3]);
     }
 
     #[test]
@@ -919,6 +1157,9 @@ mod tests {
         shell.activate(1); // move 1 to front
         let z_order: Vec<u32> = shell.toplevels_z_order().map(|tl| tl.id).collect();
         assert_eq!(z_order, vec![1, 3, 2]);
+
+        let render_order: Vec<u32> = shell.toplevels_render_order().map(|tl| tl.id).collect();
+        assert_eq!(render_order, vec![2, 3, 1]);
     }
 
     #[test]
@@ -975,6 +1216,231 @@ mod tests {
             .collect();
         parent_6.sort();
         assert_eq!(parent_6, vec![12]);
+    }
+
+    #[test]
+    fn test_subsurface_render_order_uses_stack_index() {
+        let mut shell = Shell::new(100);
+        shell.subsurfaces.create(10, 5);
+        shell.subsurfaces.create(11, 5);
+        shell.subsurfaces.create(12, 5);
+        shell.subsurfaces.get_mut(10).unwrap().stack_index = 2;
+        shell.subsurfaces.get_mut(11).unwrap().stack_index = 0;
+        shell.subsurfaces.get_mut(12).unwrap().stack_index = 1;
+
+        let render_order: Vec<_> = shell
+            .subsurfaces
+            .for_parent_render_order(5)
+            .iter()
+            .map(|s| s.surface_id)
+            .collect();
+        assert_eq!(render_order, vec![11, 12, 10]);
+    }
+
+    #[test]
+    fn test_subsurface_place_above_reindexes_siblings() {
+        let mut shell = Shell::new(100);
+        shell.subsurfaces.create(10, 5);
+        shell.subsurfaces.create(11, 5);
+        shell.subsurfaces.create(12, 5);
+        shell.subsurfaces.get_mut(10).unwrap().stack_index = 0;
+        shell.subsurfaces.get_mut(11).unwrap().stack_index = 1;
+        shell.subsurfaces.get_mut(12).unwrap().stack_index = 2;
+
+        shell.subsurfaces.place_above(10, 11);
+
+        let render_order: Vec<_> = shell
+            .subsurfaces
+            .for_parent_render_order(5)
+            .iter()
+            .map(|s| s.surface_id)
+            .collect();
+        assert_eq!(render_order, vec![10, 11, 12]);
+
+        shell.subsurfaces.commit_parent(5);
+        let render_order: Vec<_> = shell
+            .subsurfaces
+            .for_parent_render_order(5)
+            .iter()
+            .map(|s| s.surface_id)
+            .collect();
+        assert_eq!(render_order, vec![11, 10, 12]);
+    }
+
+    #[test]
+    fn test_subsurface_place_below_reindexes_siblings() {
+        let mut shell = Shell::new(100);
+        shell.subsurfaces.create(10, 5);
+        shell.subsurfaces.create(11, 5);
+        shell.subsurfaces.create(12, 5);
+        shell.subsurfaces.get_mut(10).unwrap().stack_index = 0;
+        shell.subsurfaces.get_mut(11).unwrap().stack_index = 1;
+        shell.subsurfaces.get_mut(12).unwrap().stack_index = 2;
+
+        shell.subsurfaces.place_below(12, 11);
+
+        let render_order: Vec<_> = shell
+            .subsurfaces
+            .for_parent_render_order(5)
+            .iter()
+            .map(|s| s.surface_id)
+            .collect();
+        assert_eq!(render_order, vec![10, 11, 12]);
+
+        shell.subsurfaces.commit_parent(5);
+        let render_order: Vec<_> = shell
+            .subsurfaces
+            .for_parent_render_order(5)
+            .iter()
+            .map(|s| s.surface_id)
+            .collect();
+        assert_eq!(render_order, vec![10, 12, 11]);
+    }
+
+    #[test]
+    fn test_subsurface_output_position_is_parent_relative() {
+        let sub = Subsurface {
+            surface_id: 10,
+            parent_surface_id: 5,
+            x: 7,
+            y: -3,
+            pending_x: None,
+            pending_y: None,
+            sync: true,
+            stack_index: 0,
+            pending_stack_index: None,
+        };
+
+        assert_eq!(sub.output_position(100, 50), (107, 47));
+    }
+
+    #[test]
+    fn test_subsurface_position_applies_on_parent_commit() {
+        let mut shell = Shell::new(100);
+        shell.subsurfaces.create(10, 5);
+
+        shell.subsurfaces.set_position(10, 20, 30);
+        assert_eq!(
+            shell.subsurfaces.get(10).unwrap().output_position(100, 50),
+            (100, 50)
+        );
+
+        shell.subsurfaces.commit_parent(5);
+        assert_eq!(
+            shell.subsurfaces.get(10).unwrap().output_position(100, 50),
+            (120, 80)
+        );
+    }
+
+    #[test]
+    fn test_surface_at_hits_frontmost_toplevel() {
+        let mut shell = Shell::new(100);
+        shell.create_toplevel(1, 10);
+        shell.create_toplevel(2, 20);
+
+        let mut surfaces = SurfaceTree::new();
+        commit_test_surface(&mut surfaces, 10, 0, 0, 100, 100);
+        commit_test_surface(&mut surfaces, 20, 25, 25, 100, 100);
+
+        assert_eq!(shell.surface_at(&surfaces, 30, 30).unwrap().surface_id, 20);
+        assert_eq!(shell.surface_at(&surfaces, 10, 10).unwrap().surface_id, 10);
+        assert!(shell.surface_at(&surfaces, 200, 200).is_none());
+    }
+
+    #[test]
+    fn test_surface_at_hits_parent_relative_subsurface() {
+        let mut shell = Shell::new(100);
+        shell.create_toplevel(1, 10);
+        shell.subsurfaces.create(11, 10);
+        shell.subsurfaces.get_mut(11).unwrap().x = 20;
+        shell.subsurfaces.get_mut(11).unwrap().y = 10;
+
+        let mut surfaces = SurfaceTree::new();
+        commit_test_surface(&mut surfaces, 10, 100, 50, 100, 100);
+        commit_test_surface(&mut surfaces, 11, 0, 0, 30, 30);
+
+        let hit = shell.surface_at(&surfaces, 125, 65).unwrap();
+        assert_eq!(hit.surface_id, 11);
+        assert_eq!((hit.x, hit.y), (120, 60));
+        assert_eq!(hit.local_position(125.0, 65.0), (5.0, 5.0));
+    }
+
+    #[test]
+    fn test_surface_at_respects_input_region() {
+        let mut shell = Shell::new(100);
+        shell.create_toplevel(1, 10);
+
+        let mut surfaces = SurfaceTree::new();
+        commit_test_surface(&mut surfaces, 10, 0, 0, 100, 100);
+        surfaces.set_input_region(
+            10,
+            Some(vec![crate::compositor::surface::DamageRect {
+                x: 10,
+                y: 10,
+                width: 20,
+                height: 20,
+            }]),
+        );
+
+        assert_eq!(shell.surface_at(&surfaces, 5, 5).unwrap().surface_id, 10);
+        surfaces.commit(10);
+        assert_eq!(shell.surface_at(&surfaces, 15, 15).unwrap().surface_id, 10);
+        assert!(shell.surface_at(&surfaces, 5, 5).is_none());
+    }
+
+    #[test]
+    fn test_surface_at_respects_subtracted_input_region_hole() {
+        let mut shell = Shell::new(100);
+        shell.create_toplevel(1, 10);
+
+        let mut surfaces = SurfaceTree::new();
+        commit_test_surface(&mut surfaces, 10, 0, 0, 100, 100);
+        surfaces.set_input_region(
+            10,
+            Some(vec![crate::compositor::surface::DamageRect {
+                x: 0,
+                y: 0,
+                width: 100,
+                height: 100,
+            }]),
+        );
+        surfaces.subtract_input_region_rect(
+            10,
+            crate::compositor::surface::DamageRect {
+                x: 20,
+                y: 20,
+                width: 30,
+                height: 30,
+            },
+        );
+
+        assert_eq!(shell.surface_at(&surfaces, 25, 25).unwrap().surface_id, 10);
+        surfaces.commit(10);
+        assert_eq!(shell.surface_at(&surfaces, 10, 10).unwrap().surface_id, 10);
+        assert_eq!(shell.surface_at(&surfaces, 70, 30).unwrap().surface_id, 10);
+        assert!(shell.surface_at(&surfaces, 25, 25).is_none());
+    }
+
+    #[test]
+    fn test_surface_at_uses_logical_surface_size() {
+        let mut shell = Shell::new(100);
+        shell.create_toplevel(1, 10);
+
+        let mut surfaces = SurfaceTree::new();
+        commit_test_surface(&mut surfaces, 10, 0, 0, 200, 100);
+        surfaces.set_buffer_scale(10, 2);
+
+        assert_eq!(shell.surface_at(&surfaces, 150, 75).unwrap().surface_id, 10);
+        surfaces.commit(10);
+        assert_eq!(shell.surface_at(&surfaces, 99, 49).unwrap().surface_id, 10);
+        assert!(shell.surface_at(&surfaces, 100, 49).is_none());
+        assert!(shell.surface_at(&surfaces, 99, 50).is_none());
+
+        surfaces.set_viewport_destination(10, 120, 80);
+        assert!(shell.surface_at(&surfaces, 119, 79).is_none());
+        surfaces.commit(10);
+        assert_eq!(shell.surface_at(&surfaces, 119, 79).unwrap().surface_id, 10);
+        assert!(shell.surface_at(&surfaces, 120, 79).is_none());
     }
 
     #[test]

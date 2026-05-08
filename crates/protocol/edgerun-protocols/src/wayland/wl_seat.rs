@@ -319,7 +319,7 @@ pub fn pointer_leave_event(ptr_id: u32, serial: u32, surface_id: u32) -> Message
     push_u32_le(&mut args, surface_id);
     Message {
         sender_id: ptr_id,
-        opcode: keyboard_event::LEAVE,
+        opcode: pointer_event::LEAVE,
         size: (8 + args.len()) as u16,
         args,
         fds: Vec::new(),
@@ -488,4 +488,16 @@ pub fn touch_frame_event(touch_id: u32) -> Message {
 /// Build touch cancel event.
 pub fn touch_cancel_event(touch_id: u32) -> Message {
     message_empty(touch_id, touch_event::CANCEL)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pointer_leave_uses_pointer_opcode() {
+        let msg = pointer_leave_event(7, 11, 13);
+        assert_eq!(msg.sender_id, 7);
+        assert_eq!(msg.opcode, pointer_event::LEAVE);
+    }
 }

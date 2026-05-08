@@ -160,7 +160,10 @@ impl AsyncClient {
             .write_all(&settings_frame.to_frame().to_bytes())
             .await
             .map_err(crate::http::runtime::bare_io)?;
-        stream.flush().await.map_err(crate::http::runtime::bare_io)?;
+        stream
+            .flush()
+            .await
+            .map_err(crate::http::runtime::bare_io)?;
 
         // Read server SETTINGS frame per RFC 9113 §3.4
         let (server_settings_frame, _) =
@@ -180,13 +183,15 @@ impl AsyncClient {
             .write_all(&ack_frame.to_frame().to_bytes())
             .await
             .map_err(crate::http::runtime::bare_io)?;
-        stream.flush().await.map_err(crate::http::runtime::bare_io)?;
+        stream
+            .flush()
+            .await
+            .map_err(crate::http::runtime::bare_io)?;
 
         let (frame_tx, frame_rx) = mpsc::channel::<OutgoingFrame>(64);
-        let streams = Arc::new(crate::http::runtime::sync::Mutex::new(StreamStateInner::new(
-            client_settings,
-            server_settings,
-        )));
+        let streams = Arc::new(crate::http::runtime::sync::Mutex::new(
+            StreamStateInner::new(client_settings, server_settings),
+        ));
 
         let task = spawn(connection_task(stream, frame_rx, Arc::clone(&streams)));
 
@@ -698,7 +703,8 @@ async fn connection_task<S>(
                     let ping_frame = PingFrame::new(data);
                     let frame_bytes = ping_frame.to_frame().to_bytes();
                     if let Err(e) = stream.write_all(&frame_bytes).await {
-                        let _ = reply_tx.send(Err(Http2Error::Io(crate::http::runtime::bare_io(e))));
+                        let _ =
+                            reply_tx.send(Err(Http2Error::Io(crate::http::runtime::bare_io(e))));
                         break;
                     }
                     let _ = stream.flush().await;

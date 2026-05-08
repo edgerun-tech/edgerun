@@ -9,11 +9,11 @@ extern crate alloc;
 use crate::provider::*;
 use alloc::string::String;
 use core::result::Result;
+use edgerun_json::{from_str, to_string, JsonValue, Map, ToJson};
 use edgerun_node::http::client_middleware::Chain;
 use edgerun_node::http::{HttpClient, Method};
-use edgerun_json::{from_str, to_string, JsonValue, Map, ToJson};
-use edgerun_proto::edgerun::v0::wallet::v0::{AssetRef, Quote, QuoteRequest};
 use edgerun_node::rt::block_on;
+use edgerun_proto::edgerun::v0::wallet::v0::{AssetRef, Quote, QuoteRequest};
 use edgerun_wallet::{DecimalAmount, WalletError};
 
 const FFIO_BASE_URL: &str = "https://api.ff.io/api/v1";

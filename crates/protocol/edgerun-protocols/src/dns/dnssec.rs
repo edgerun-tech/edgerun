@@ -657,7 +657,7 @@ pub fn generate_dnskey_ecdsap256(
     flags: u16,
     ttl: u32,
 ) -> (DnsRecord, edgerun_crypto::p256::ecdsa::SigningKey) {
-    let signing_key = edgerun_crypto::p256::ecdsa::SigningKey::random(&mut edgerun_crypto::OsRng);
+    let signing_key = edgerun_crypto::random_p256_signing_key();
     let vk = signing_key.verifying_key();
     let encoded = vk.to_encoded_point(false);
     let public_key_bytes = encoded.as_bytes()[1..].to_vec();
@@ -753,10 +753,9 @@ pub fn sign_rrset_ecdsap256(
     let mut hasher = Sha256::new();
     hasher.update(&signed_data);
     let digest = hasher.finalize();
-    use edgerun_crypto::p256::NistP256;
-    let signature: edgerun_crypto::ecdsa::Signature<NistP256> =
+    let signature: edgerun_crypto::p256::ecdsa::Signature =
         signing_key.sign_prehash(&digest).expect("ECDSA sign ok");
-    use edgerun_crypto::ecdsa::SignatureEncoding;
+    use edgerun_crypto::p256::ecdsa::signature::SignatureEncoding;
     let signature = signature.to_bytes().to_vec();
 
     DnsRecord::rrsig(

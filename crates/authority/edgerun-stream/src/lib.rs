@@ -147,7 +147,8 @@ pub fn build_unsigned_event(
             if prev.stream_id != stream_id.as_slice() {
                 return Err(StreamError::StreamMismatch);
             }
-            (prev.seq + 1, Some(compute_event_hash(prev)))
+            let seq = next_sequence(prev.seq)?;
+            (seq, Some(compute_event_hash(prev)))
         }
         None => (0, None),
     };
@@ -170,6 +171,12 @@ pub fn build_unsigned_event(
         event_metadata: draft.event_metadata,
         signature: None,
     })
+}
+
+fn next_sequence(prev_seq: u64) -> Result<u64, StreamError> {
+    prev_seq
+        .checked_add(1)
+        .ok_or(StreamError::SequenceOverflow { seq: prev_seq })
 }
 
 pub fn genesis_event(stream_id: &StreamId, recorded_at_ms: i64) -> EventEnvelope {
@@ -274,9 +281,10 @@ pub fn validate_stream(events: &[EventEnvelope], writer: &StreamId) -> Result<()
         if curr.stream_id != writer.as_slice() {
             return Err(StreamError::StreamMismatch);
         }
-        if curr.seq != prev.seq + 1 {
+        let expected_seq = next_sequence(prev.seq)?;
+        if curr.seq != expected_seq {
             return Err(StreamError::SequenceGap {
-                expected: prev.seq + 1,
+                expected: expected_seq,
                 actual: curr.seq,
             });
         }
@@ -309,6 +317,9 @@ pub enum StreamError {
     SequenceGap {
         expected: u64,
         actual: u64,
+    },
+    SequenceOverflow {
+        seq: u64,
     },
     InvalidPrevHash {
         seq: u64,
@@ -382,6 +393,7 @@ impl core::fmt::Display for StreamError {
             Self::SequenceGap { expected, actual } => {
                 write!(f, "sequence gap at seq {actual}: expected {expected}")
             }
+            Self::SequenceOverflow { seq } => write!(f, "stream sequence overflow after seq {seq}"),
             Self::InvalidPrevHash { seq, .. } => write!(f, "invalid prev_hash at seq {seq}"),
             Self::MissingSignature => write!(f, "event signature is missing"),
             Self::InvalidSignature { expected, actual } => write!(

@@ -39,13 +39,13 @@ use crate::http::runtime::net::SocketAddr;
 use crate::http::runtime::AsyncUdpSocket;
 use crate::http::runtime::CancellationToken;
 use crate::http::uri::Uri;
+use crate::tls::certificate_gen::CertificateAndKey;
 use alloc::collections::BTreeMap as HashMap;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
-use crate::tls::certificate_gen::CertificateAndKey;
 
 use super::connection::Http3Connection;
 use super::quic::crypto::PacketProtection;
@@ -636,7 +636,10 @@ impl Http3Server {
                 }
                 Ok(Err(e)) => {
                     edgerun_log::warn!("HTTP/3 accept error: {}", e);
-                    crate::http::runtime::sleep(crate::http::runtime::time::Duration::from_millis(100)).await;
+                    crate::http::runtime::sleep(crate::http::runtime::time::Duration::from_millis(
+                        100,
+                    ))
+                    .await;
                 }
                 Err(_) => {}
             }
@@ -688,9 +691,12 @@ mod tests {
     use crate::tls::certificate_gen::generate_self_signed;
 
     fn test_server(cert_and_key: CertificateAndKey) -> Http3Server {
-        let socket = crate::http::runtime::net::UdpSocket::bind("127.0.0.1:0").expect("bind test socket");
+        let socket =
+            crate::http::runtime::net::UdpSocket::bind("127.0.0.1:0").expect("bind test socket");
         Http3Server {
-            socket: Arc::new(crate::http::runtime::wrap_udp_socket(socket).expect("wrap test socket")),
+            socket: Arc::new(
+                crate::http::runtime::wrap_udp_socket(socket).expect("wrap test socket"),
+            ),
             cert_and_key,
             pending: Mutex::new(Vec::new()),
             validation_state: Mutex::new(HashMap::new()),

@@ -84,7 +84,7 @@ async fn run_bind_check_async(standard_ports: bool) -> Result<String, String> {
     let tls_cert = edgerun_protocols::tls::generate_self_signed(&["localhost", "127.0.0.1"])
         .map_err(|e| format!("tls certificate: {e}"))?;
 
-    let dns_config = crate::services::DnsConfig {
+    let dns_config = edgerun_node::services::DnsConfig {
         bind_addr: ports.dns.to_string(),
         bind_addr_ipv6: None,
         default_ttl: 60,
@@ -100,7 +100,7 @@ async fn run_bind_check_async(standard_ports: bool) -> Result<String, String> {
         default_bootfile: None,
         bootfile_by_arch: std::collections::BTreeMap::new(),
     };
-    let dhcp_server = crate::services::dhcp_runtime::DhcpServer::new_bound(
+    let dhcp_server = edgerun_node::services::dhcp_runtime::DhcpServer::new_bound(
         dhcp_config,
         Ipv4Addr::new(10, 77, 0, 10),
         Ipv4Addr::new(10, 77, 0, 20),
@@ -108,27 +108,27 @@ async fn run_bind_check_async(standard_ports: bool) -> Result<String, String> {
     )
     .map_err(|e| format!("dhcp bind: {e:?}"))?;
 
-    let _server_dhcp_config = crate::services::DhcpConfig::new(
+    let _server_dhcp_config = edgerun_node::services::DhcpConfig::new(
         Ipv4Addr::new(10, 77, 0, 1),
         Ipv4Addr::new(255, 255, 255, 0),
         Ipv4Addr::new(10, 77, 0, 1),
         Ipv4Addr::new(10, 77, 0, 10),
         Ipv4Addr::new(10, 77, 0, 20),
     );
-    let mut smtp_config = crate::services::SmtpConfig::default();
+    let mut smtp_config = edgerun_node::services::SmtpConfig::default();
     smtp_config.bind_addr = ports.smtp.to_string();
     smtp_config.domain_name = "bind-check.edgerun.local".to_string();
     smtp_config.starttls = true;
     smtp_config.tls_cert = Some(tls_cert.clone());
     smtp_config.local_domains = vec!["bind-check.edgerun.local".to_string()];
-    let mut imap_config = crate::services::ImapConfig::default();
+    let mut imap_config = edgerun_node::services::ImapConfig::default();
     imap_config.bind_addr = ports.imap.to_string();
     imap_config.domain_name = "bind-check.edgerun.local".to_string();
     imap_config.tls_cert = Some(tls_cert.clone());
-    let mut proxy_config = crate::services::ProxyConfig::default();
+    let mut proxy_config = edgerun_node::services::ProxyConfig::default();
     proxy_config.bind_addr = ports.proxy.to_string();
 
-    let mut bound = crate::services::NodeRuntime::new()
+    let mut bound = edgerun_node::services::NodeRuntime::new()
         .with_http_app(
             ports.http,
             edgerun_node::runtime::sha256(b"bind-check-http"),
@@ -279,10 +279,7 @@ fn derived_db_probe_path() -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis())
         .unwrap_or(0);
-    path.push(format!(
-        "edged-bind-check-{}-{now}.edb",
-        std::process::id()
-    ));
+    path.push(format!("edged-bind-check-{}-{now}.edb", std::process::id()));
     path
 }
 

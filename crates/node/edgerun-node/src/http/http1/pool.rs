@@ -102,7 +102,10 @@ impl PooledConn {
                     .write_all(data)
                     .await
                     .map_err(crate::http::runtime::bare_io)?;
-                r.get_mut().flush().await.map_err(crate::http::runtime::bare_io)
+                r.get_mut()
+                    .flush()
+                    .await
+                    .map_err(crate::http::runtime::bare_io)
             }
             #[cfg(feature = "tls")]
             PooledConn::Tls(r) => {
@@ -110,7 +113,10 @@ impl PooledConn {
                     .write_all(data)
                     .await
                     .map_err(crate::http::runtime::bare_io)?;
-                r.get_mut().flush().await.map_err(crate::http::runtime::bare_io)
+                r.get_mut()
+                    .flush()
+                    .await
+                    .map_err(crate::http::runtime::bare_io)
             }
         }
     }

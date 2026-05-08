@@ -39,3 +39,9 @@ target = "x86_64-unknown-linux-gnu"
 # Android cross-compilation — override with --target
 # Set ANDROID_NDK_ROOT to your NDK installation path
 # Example: export ANDROID_NDK_ROOT=$HOME/Android/Sdk/ndk/27.0.12077973
+
+[source.crates-io]
+replace-with = "vendored-sources"
+
+[source.vendored-sources]
+directory = "vendor/cargo"

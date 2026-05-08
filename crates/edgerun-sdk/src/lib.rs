@@ -2,6 +2,9 @@
 
 extern crate alloc;
 
+#[cfg(feature = "browser-authoring")]
+pub mod browser_authoring;
+
 #[cfg(feature = "runtime-api")]
 pub mod runtime_api;
 

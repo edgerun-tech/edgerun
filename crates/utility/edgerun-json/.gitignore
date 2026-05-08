@@ -2,7 +2,6 @@
 /target/
 **/*.rs.bk
 *.pdb
-/fuzz/target/
 
 # Test artifacts
 /tests/json_test_suite/
@@ -27,8 +26,6 @@ criterion/
 *.pb
 
 # Release artifacts
-fuzz/corpus/
-fuzz/artifacts/
 
 # Local configuration
 .env

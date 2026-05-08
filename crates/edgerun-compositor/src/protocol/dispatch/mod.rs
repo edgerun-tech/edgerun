@@ -82,9 +82,14 @@ pub struct TouchSlot {
     pub touch_id: u32,
     pub surface_id: Option<u32>,
     pub client_id: Option<u32>,
+    pub origin_x: i32,
+    pub origin_y: i32,
     pub x: f64,
     pub y: f64,
     pub active: bool,
+    pub has_x: bool,
+    pub has_y: bool,
+    pub down_sent: bool,
 }
 
 impl TouchState {

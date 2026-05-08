@@ -114,7 +114,6 @@ crates/
     edgerun-sign-p256
     edgerun-keygen
     edgerun-node-bootstrap
-    edgerun-sign-verify-e2e
   authority/
     edgerun-stream
     edgerun-storage
@@ -156,7 +155,6 @@ crates/
     edgerun-oauth
     edgerun-protocols::proxy
     edgerun-oci
-    edgerun-analytics
     edgerun-edit
     edgerun-exchange
     edgerun-exchange-api
@@ -186,7 +184,6 @@ crates/
     edgerun-bluetooth-gatt
     edgerun-drm-display
     edgerun-evdev-input
-    edgerun-face-detection
     edgerun-goodix-fingerprint
     edgerun-linux-cec
     edgerun-linux-gpu
@@ -199,7 +196,6 @@ crates/
     edgerun-linux-usb
     edgerun-linux-wifi
     edgerun-mgmt-bluetooth
-    edgerun-passport-nfc
     edgerun-v4l2-camera
   bare-target/
     edgerun-rt

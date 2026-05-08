@@ -162,7 +162,9 @@ impl Future for ReadChunkFut<'_> {
                             None => Ok(None),
                         })
                     }
-                    Err(crate::http::runtime::mpsc::TryRecvError::Disconnected) => Poll::Ready(Ok(None)),
+                    Err(crate::http::runtime::mpsc::TryRecvError::Disconnected) => {
+                        Poll::Ready(Ok(None))
+                    }
                 }
             }
         }
@@ -332,7 +334,9 @@ impl<R: AsyncRead + Unpin> Future for ReadBodyFut<'_, '_, R> {
                 let pinned = Pin::new(&mut this.reader.reader);
                 match pinned.poll_read(cx, &mut this.buf[..max_read]) {
                     Poll::Ready(Ok(n)) => Poll::Ready(n),
-                    Poll::Ready(Err(e)) => return Poll::Ready(Err(crate::http::runtime::bare_io(e))),
+                    Poll::Ready(Err(e)) => {
+                        return Poll::Ready(Err(crate::http::runtime::bare_io(e)));
+                    }
                     Poll::Pending => Poll::Pending,
                 }
             };
@@ -529,7 +533,9 @@ impl<R: AsyncRead + Unpin> Future for CollectBodyFut<R> {
                 let pinned = Pin::new(&mut this.reader.reader);
                 match pinned.poll_read(cx, &mut this.read_buf) {
                     Poll::Ready(Ok(n)) => n,
-                    Poll::Ready(Err(e)) => return Poll::Ready(Err(crate::http::runtime::bare_io(e))),
+                    Poll::Ready(Err(e)) => {
+                        return Poll::Ready(Err(crate::http::runtime::bare_io(e)));
+                    }
                     Poll::Pending => return Poll::Pending,
                 }
             };

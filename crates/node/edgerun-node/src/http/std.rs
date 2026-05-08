@@ -297,10 +297,10 @@ pub mod sync {
 pub mod time {
     use core::ops::{Add, Sub};
 
-    #[cfg(not(feature = "runtime"))]
-    pub use core::time::Duration;
     #[cfg(feature = "runtime")]
     pub use crate::rt::Duration;
+    #[cfg(not(feature = "runtime"))]
+    pub use core::time::Duration;
 
     #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Ord, PartialOrd)]
     #[cfg(feature = "runtime")]

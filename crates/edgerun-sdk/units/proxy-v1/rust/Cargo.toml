@@ -1,0 +1,25 @@
+[package]
+name = "edgerun-sdk-unit-proxy-v1"
+version = "0.1.1"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[package.metadata.edgerun.unit]
+id = "proxy-v1"
+standard = "PROXY"
+
+[dependencies]
+edgerun-protocols = { path = "../../../../protocol/edgerun-protocols", default-features = false, features = ["proxy"] }
+edgerun-unit = { path = "../../../../edgerun-unit" }
+
+[profile.release]
+panic = "abort"
+opt-level = "z"
+codegen-units = 1
+lto = true
+strip = true
