@@ -6,11 +6,41 @@ on:
   pull_request:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 env:
   RUST_BACKTRACE: 1
 
 jobs:
+  repository-hygiene:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Vendored crate checksums
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          missing = []
+          for checksum_path in Path("vendor/cargo").glob("*/.cargo-checksum.json"):
+              files = json.loads(checksum_path.read_text(encoding="utf-8")).get("files", {})
+              for relative_path in files:
+                  path = checksum_path.parent / relative_path
+                  if not path.exists():
+                      missing.append(str(path))
+
+          if missing:
+              print("Vendored crates are incomplete. Missing files:")
+              print("\n".join(missing))
+              raise SystemExit(1)
+          PY
+
   check:
+    needs: repository-hygiene
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -77,6 +107,7 @@ jobs:
         run: docker build --target builder --file Dockerfile .
 
   quality:
+    needs: repository-hygiene
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
