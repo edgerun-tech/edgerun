@@ -16,6 +16,7 @@ import {
   CheckCircle2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useAuth, type GmailProfileSecret } from "@/hooks/use-auth"
 
 interface Email {
   id: string
@@ -30,6 +31,38 @@ interface Email {
 
 interface GmailAppProps {
   className?: string
+}
+
+type PendingGmailSecret = Omit<GmailProfileSecret, "appId" | "kind" | "updatedAtIso">
+
+function readCookie(name: string): string | null {
+  const prefix = `${name}=`
+  return document.cookie.split("; ").find((cookie) => cookie.startsWith(prefix))?.slice(prefix.length) ?? null
+}
+
+function deleteCookie(name: string) {
+  document.cookie = `${name}=; Max-Age=0; path=/`
+}
+
+function readPendingGmailSecret(): PendingGmailSecret | null {
+  const raw = readCookie("gmail_profile_pending")
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(atob(raw.replace(/-/g, "+").replace(/_/g, "/"))) as PendingGmailSecret
+    return parsed.accessToken && parsed.expiresAtIso ? { ...parsed, scopes: parsed.scopes ?? [] } : null
+  } catch {
+    deleteCookie("gmail_profile_pending")
+    return null
+  }
+}
+
+async function restoreGmailSession(secret: PendingGmailSecret): Promise<boolean> {
+  const res = await fetch("/api/gmail/session", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(secret),
+  })
+  return res.ok
 }
 
 function GoogleMark({ className }: { className?: string }) {
@@ -75,6 +108,8 @@ function Avatar({ name, size = "sm" }: { name: string; size?: "sm" | "md" }) {
 }
 
 export function GmailApp({ className }: GmailAppProps) {
+  const auth = useAuth()
+  const savedSecret = auth.unlockedProfile?.appSecrets.find((secret) => secret.appId === "gmail")
   const [connected, setConnected] = useState<boolean | null>(null)
   const [email, setEmail] = useState<string>("")
   const [emails, setEmails] = useState<Email[]>([])
@@ -82,6 +117,8 @@ export function GmailApp({ className }: GmailAppProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [nextPage, setNextPage] = useState<string | null>(null)
+  const [pendingSecret, setPendingSecret] = useState<PendingGmailSecret | null>(null)
+  const [profilePassword, setProfilePassword] = useState("")
 
   useEffect(() => {
     const checkConnection = async () => {
@@ -146,20 +183,81 @@ export function GmailApp({ className }: GmailAppProps) {
     }
   }, [])
 
+  useEffect(() => {
+    const pending = readPendingGmailSecret()
+    if (pending) {
+      setPendingSecret(pending)
+      setEmail(pending.email)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (connected !== false || !savedSecret) return
+    let cancelled = false
+    async function restore() {
+      setLoading(true)
+      setError(null)
+      try {
+        const ok = await restoreGmailSession(savedSecret)
+        if (cancelled) return
+        if (ok) {
+          setEmail(savedSecret.email)
+          setConnected(true)
+          await fetchEmails()
+        }
+      } catch (err) {
+        if (!cancelled) setError(`Saved Gmail session restore failed: ${err}`)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    void restore()
+    return () => {
+      cancelled = true
+    }
+  }, [connected, fetchEmails, savedSecret])
+
+  const savePendingSecret = useCallback(async () => {
+    if (!pendingSecret || !profilePassword) return
+    const ok = await auth.saveGmailSecret({ password: profilePassword, secret: pendingSecret })
+    if (ok) {
+      await restoreGmailSession(pendingSecret)
+      deleteCookie("gmail_profile_pending")
+      setPendingSecret(null)
+      setProfilePassword("")
+      setConnected(true)
+      setEmail(pendingSecret.email)
+    }
+  }, [auth, pendingSecret, profilePassword])
+
+  const removeSavedSecret = useCallback(async () => {
+    if (!profilePassword) return
+    const ok = await auth.removeGmailSecret(profilePassword)
+    if (ok) setProfilePassword("")
+  }, [auth, profilePassword])
+
   const disconnect = useCallback(() => {
     document.cookie = "gmail_access_token=; Max-Age=0; path=/"
     document.cookie = "gmail_refresh_token=; Max-Age=0; path=/"
     document.cookie = "gmail_email=; Max-Age=0; path=/"
+    deleteCookie("gmail_profile_pending")
+    void fetch("/api/gmail/session", { method: "DELETE" })
     setConnected(false)
     setEmail("")
     setEmails([])
     setSelected(null)
+    setPendingSecret(null)
   }, [])
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     if (params.get("gmail_connected") === "true") {
       setConnected(true)
+      const pending = readPendingGmailSecret()
+      if (pending) {
+        setPendingSecret(pending)
+        setEmail(pending.email)
+      }
       const emailCookie = document.cookie.split("; ").find((c) => c.startsWith("gmail_email="))
       if (emailCookie) setEmail(decodeURIComponent(emailCookie.split("=")[1]))
       window.history.replaceState({}, "", "/")
@@ -233,8 +331,38 @@ export function GmailApp({ className }: GmailAppProps) {
           <button onClick={disconnect} className="rounded p-1 text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground" title="Disconnect Google Mail"><LogOut className="h-3.5 w-3.5" /></button>
         </div>
         <div className="border-b border-[var(--window-border)] px-3 py-2 text-[10px] text-muted-foreground">
-          Connected through <span className="font-mono text-foreground">edgerun.tech</span> · Gmail scope
+          {savedSecret ? "Saved in sealed profile" : "Connected for this browser session"} · Gmail scope
         </div>
+        {pendingSecret && (
+          <div className="border-b border-[var(--window-border)] bg-primary/5 p-3">
+            <div className="mb-2 text-xs font-medium text-foreground">Save Gmail secret to this profile</div>
+            <p className="mb-2 text-[10px] leading-4 text-muted-foreground">Seal the OAuth refresh token into your unlocked Edgerun profile so Gmail can restore after reload.</p>
+            <input
+              value={profilePassword}
+              onChange={(event) => setProfilePassword(event.target.value)}
+              type="password"
+              placeholder="Profile password"
+              className="mb-2 h-8 w-full rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary"
+            />
+            <button onClick={savePendingSecret} disabled={!profilePassword || auth.isLoading} className="w-full rounded-md bg-primary px-2 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-45">
+              Save to profile
+            </button>
+          </div>
+        )}
+        {savedSecret && !pendingSecret && (
+          <div className="border-b border-[var(--window-border)] p-3">
+            <input
+              value={profilePassword}
+              onChange={(event) => setProfilePassword(event.target.value)}
+              type="password"
+              placeholder="Profile password to remove saved Gmail"
+              className="mb-2 h-8 w-full rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary"
+            />
+            <button onClick={removeSavedSecret} disabled={!profilePassword || auth.isLoading} className="w-full rounded-md border border-border bg-secondary/50 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground disabled:opacity-45">
+              Remove saved Gmail secret
+            </button>
+          </div>
+        )}
         <div className="flex items-center gap-2 border-b border-[var(--window-border)] px-3 py-2">
           <button onClick={() => fetchEmails()} disabled={loading} className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50">
             <RefreshCw className={cn("h-3 w-3", loading && "animate-spin")} />{loading ? "Loading..." : "Refresh"}

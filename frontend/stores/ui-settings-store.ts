@@ -23,7 +23,7 @@ export interface UiSettings {
 
 export const DEFAULT_UI_SETTINGS: UiSettings = {
   colorScheme: "dark",
-  accent: "green",
+  accent: "blue",
   windowBlur: true,
   animations: true,
   fontSize: 13,
@@ -39,7 +39,7 @@ export const DEFAULT_UI_SETTINGS: UiSettings = {
 
 const ACCENTS: Record<UiAccent, { primary: string; warning: string; terminal: string }> = {
   green: { primary: "oklch(0.65 0.2 145)", warning: "oklch(0.75 0.18 80)", terminal: "oklch(0.65 0.2 145)" },
-  blue: { primary: "oklch(0.62 0.18 250)", warning: "oklch(0.78 0.16 85)", terminal: "oklch(0.7 0.16 230)" },
+  blue: { primary: "oklch(0.66 0.19 245)", warning: "oklch(0.78 0.16 85)", terminal: "oklch(0.72 0.16 245)" },
   orange: { primary: "oklch(0.72 0.18 60)", warning: "oklch(0.78 0.16 85)", terminal: "oklch(0.76 0.15 70)" },
   pink: { primary: "oklch(0.66 0.21 340)", warning: "oklch(0.76 0.16 75)", terminal: "oklch(0.7 0.18 335)" },
   cyan: { primary: "oklch(0.68 0.16 200)", warning: "oklch(0.76 0.16 80)", terminal: "oklch(0.74 0.14 205)" },
