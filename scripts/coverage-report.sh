@@ -10,6 +10,7 @@ run_rust=1
 run_frontend=1
 require_rust=0
 rust_package_args=""
+rust_scope_args="--workspace"
 
 usage() {
   cat <<'USAGE'
@@ -57,6 +58,7 @@ if [ -n "${RUST_COVERAGE_PACKAGES:-}" ]; then
   for package in $RUST_COVERAGE_PACKAGES; do
     rust_package_args="$rust_package_args -p $package"
   done
+  rust_scope_args="$rust_package_args"
 fi
 
 if [ "$run_rust" -eq 1 ] && command -v cargo-llvm-cov >/dev/null 2>&1; then
@@ -64,14 +66,12 @@ if [ "$run_rust" -eq 1 ] && command -v cargo-llvm-cov >/dev/null 2>&1; then
   cargo llvm-cov clean --workspace
   # shellcheck disable=SC2086
   cargo llvm-cov \
-    --workspace \
-    $rust_package_args \
+    $rust_scope_args \
     --html \
     --output-dir "$rust_dir/html"
   # shellcheck disable=SC2086
   cargo llvm-cov report \
-    --workspace \
-    $rust_package_args \
+    $rust_scope_args \
     --lcov \
     --output-path "$rust_dir/lcov.info"
   echo "Rust coverage HTML: $rust_dir/html/index.html"

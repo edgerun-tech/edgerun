@@ -10,4 +10,4 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-edgerun-crypto = { path = "../../../../../utility/edgerun-crypto", default-features = false }
+edgerun-crypto = { version = "0.1.1", path = "../../../../../utility/edgerun-crypto", default-features = false }

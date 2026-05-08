@@ -14,7 +14,7 @@ id = "http-response-rfc9110"
 standard = "RFC9110"
 
 [dependencies]
-edgerun-unit = { path = "../../../../edgerun-unit" }
+edgerun-unit = { version = "0.1.1", path = "../../../../edgerun-unit" }
 
 [profile.release]
 panic = "abort"

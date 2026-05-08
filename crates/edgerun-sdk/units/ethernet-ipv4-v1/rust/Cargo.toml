@@ -14,8 +14,8 @@ id = "ethernet-ipv4-v1"
 standard = "ETHERNET-IPV4"
 
 [dependencies]
-edgerun-protocols = { path = "../../../../protocol/edgerun-protocols", default-features = false, features = ["ethernet-ipv4"] }
-edgerun-unit = { path = "../../../../edgerun-unit" }
+edgerun-protocols = { version = "0.1.1", path = "../../../../protocol/edgerun-protocols", default-features = false, features = ["ethernet-ipv4"] }
+edgerun-unit = { version = "0.1.1", path = "../../../../edgerun-unit" }
 
 [profile.release]
 panic = "abort"

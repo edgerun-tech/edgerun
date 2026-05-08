@@ -14,8 +14,8 @@ standard = "edgerun.v0.verify"
 crate-type = ["cdylib"]
 
 [dependencies]
-edgerun-crypto = { path = "../../../../utility/edgerun-crypto", default-features = false, features = ["p256"] }
-edgerun-unit = { path = "../../../../edgerun-unit" }
+edgerun-crypto = { version = "0.1.1", path = "../../../../utility/edgerun-crypto", default-features = false, features = ["p256"] }
+edgerun-unit = { version = "0.1.1", path = "../../../../edgerun-unit" }
 
 [profile.release]
 panic = "abort"

@@ -14,7 +14,7 @@ id = "utf8-rfc3629"
 standard = "RFC3629"
 
 [dependencies]
-edgerun-unit = { path = "../../../../edgerun-unit" }
+edgerun-unit = { version = "0.1.1", path = "../../../../edgerun-unit" }
 
 [profile.release]
 panic = "abort"

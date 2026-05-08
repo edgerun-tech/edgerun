@@ -14,7 +14,7 @@ id = "form-urlencoded-v1"
 standard = "HTML-FORM-URLENCODED"
 
 [dependencies]
-edgerun-unit = { path = "../../../../edgerun-unit" }
+edgerun-unit = { version = "0.1.1", path = "../../../../edgerun-unit" }
 
 [profile.release]
 panic = "abort"

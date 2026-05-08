@@ -14,8 +14,8 @@ id = "http-token-rfc9110"
 standard = "RFC9110"
 
 [dependencies]
-edgerun-protocols = { path = "../../../../protocol/edgerun-protocols", default-features = false, features = ["http"] }
-edgerun-unit = { path = "../../../../edgerun-unit" }
+edgerun-protocols = { version = "0.1.1", path = "../../../../protocol/edgerun-protocols", default-features = false, features = ["http"] }
+edgerun-unit = { version = "0.1.1", path = "../../../../edgerun-unit" }
 
 [profile.release]
 panic = "abort"

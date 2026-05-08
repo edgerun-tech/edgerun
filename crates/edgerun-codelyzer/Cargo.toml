@@ -27,5 +27,5 @@ edgerun-crypto = { workspace = true, default-features = false, features = ["sha1
 edgerun-glob.workspace = true
 edgerun-json = { workspace = true, features = ["std", "toml"] }
 edgerun-regex.workspace = true
-edgerun-vfs = { path = "../authority/edgerun-vfs", optional = true }
+edgerun-vfs = { version = "0.1.1", path = "../authority/edgerun-vfs", optional = true }
 rkyv.workspace = true

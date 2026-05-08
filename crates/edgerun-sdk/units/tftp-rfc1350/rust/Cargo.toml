@@ -14,8 +14,8 @@ standard = "RFC1350"
 crate-type = ["cdylib"]
 
 [dependencies]
-edgerun-protocols = { path = "../../../../protocol/edgerun-protocols", default-features = false, features = ["tftp"] }
-edgerun-unit = { path = "../../../../edgerun-unit" }
+edgerun-protocols = { version = "0.1.1", path = "../../../../protocol/edgerun-protocols", default-features = false, features = ["tftp"] }
+edgerun-unit = { version = "0.1.1", path = "../../../../edgerun-unit" }
 
 [profile.release]
 panic = "abort"

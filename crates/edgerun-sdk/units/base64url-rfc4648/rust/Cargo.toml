@@ -14,8 +14,8 @@ standard = "RFC4648"
 crate-type = ["cdylib"]
 
 [dependencies]
-edgerun-encoding = { path = "../../../../utility/edgerun-encoding", default-features = false }
-edgerun-unit = { path = "../../../../edgerun-unit" }
+edgerun-encoding = { version = "0.1.1", path = "../../../../utility/edgerun-encoding", default-features = false }
+edgerun-unit = { version = "0.1.1", path = "../../../../edgerun-unit" }
 
 [profile.release]
 panic = "abort"
