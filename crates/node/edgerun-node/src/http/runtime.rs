@@ -12,8 +12,8 @@ pub use crate::http::std_compat::{collections, fs, io, net, path, sync, time};
 
 pub use crate::rt::sync::Mutex;
 pub use crate::rt::{
-    mpsc, AsyncRead, AsyncReadExt, AsyncTcpListener, AsyncTcpStream, AsyncUdpSocket, AsyncWrite,
-    AsyncWriteExt, BufReader, CancellationToken, ConnectFuture, JoinHandle,
+    AsyncRead, AsyncReadExt, AsyncTcpListener, AsyncTcpStream, AsyncUdpSocket, AsyncWrite,
+    AsyncWriteExt, BufReader, CancellationToken, ConnectFuture, JoinHandle, mpsc,
 };
 pub use crate::select;
 

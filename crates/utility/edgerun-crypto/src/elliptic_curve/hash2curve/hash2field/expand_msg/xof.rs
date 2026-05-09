@@ -66,8 +66,8 @@ mod test {
     use crate::hex;
     use core::mem;
     use generic_array::{
-        typenum::{U128, U32},
         ArrayLength, GenericArray,
+        typenum::{U32, U128},
     };
     use sha3::Shake128;
 

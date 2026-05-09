@@ -26,11 +26,11 @@
 //! [AKE]: https://en.wikipedia.org/wiki/Authenticated_Key_Exchange
 //! [SIGMA]: https://webee.technion.ac.il/~hugo/sigma-pdf.pdf
 
-use crate::digest::{crypto_common::BlockSizeUser, Digest, Output, OutputSizeUser};
+use crate::digest::{Digest, Output, OutputSizeUser, crypto_common::BlockSizeUser};
 use crate::elliptic_curve::rand_core::CryptoRngCore;
 use crate::elliptic_curve::{
-    point::AffineCoordinates, AffinePoint, Curve, CurveArithmetic, Error, FieldBytes,
-    NonZeroScalar, ProjectivePoint, PublicKey,
+    AffinePoint, Curve, CurveArithmetic, Error, FieldBytes, NonZeroScalar, ProjectivePoint,
+    PublicKey, point::AffineCoordinates,
 };
 use crate::group::Curve as _;
 use crate::zeroize::{Zeroize, ZeroizeOnDrop};

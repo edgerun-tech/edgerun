@@ -248,7 +248,7 @@ pub fn build_seccomp_prog(spec: &OciLinuxSeccomp) -> (Vec<u8>, Vec<u8>) {
                         let mask_hi = (arg.value >> 32) as u32;
                         let expected_hi = (arg.value_two >> 32) as u32;
                         insns.push(bpf_insn(0x50, 0, 0, mask_hi)); // A = A & mask_hi
-                                                                   // Skip past RET on mismatch
+                        // Skip past RET on mismatch
                         insns.push(bpf_insn(0x15, 0, 1, expected_hi));
                     }
                     _ => {

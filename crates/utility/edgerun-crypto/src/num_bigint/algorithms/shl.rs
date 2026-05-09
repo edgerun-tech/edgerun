@@ -3,8 +3,8 @@ use core::iter::repeat;
 
 use crate::num_bigint::SmallVec;
 
-use crate::num_bigint::big_digit::BITS;
 use crate::num_bigint::BigUint;
+use crate::num_bigint::big_digit::BITS;
 
 #[inline]
 pub fn biguint_shl(n: Cow<BigUint>, bits: usize) -> BigUint {

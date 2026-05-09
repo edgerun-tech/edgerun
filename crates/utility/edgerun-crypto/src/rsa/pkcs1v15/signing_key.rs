@@ -1,17 +1,17 @@
-use super::{oid, pkcs1v15_generate_prefix, sign, Signature, VerifyingKey};
+use super::{Signature, VerifyingKey, oid, pkcs1v15_generate_prefix, sign};
 use crate::digest::Digest;
 use crate::pkcs1;
 use crate::pkcs8::{
-    spki::{
-        der::AnyRef, AlgorithmIdentifierRef, AssociatedAlgorithmIdentifier,
-        SignatureAlgorithmIdentifier,
-    },
     AssociatedOid, EncodePrivateKey, SecretDocument,
+    spki::{
+        AlgorithmIdentifierRef, AssociatedAlgorithmIdentifier, SignatureAlgorithmIdentifier,
+        der::AnyRef,
+    },
 };
 use crate::rand_core::CryptoRngCore;
-use crate::rsa::{dummy_rng::DummyRng, Result, RsaPrivateKey};
+use crate::rsa::{Result, RsaPrivateKey, dummy_rng::DummyRng};
 use crate::signature::{
-    hazmat::PrehashSigner, DigestSigner, Keypair, RandomizedDigestSigner, RandomizedSigner, Signer,
+    DigestSigner, Keypair, RandomizedDigestSigner, RandomizedSigner, Signer, hazmat::PrehashSigner,
 };
 use crate::zeroize::ZeroizeOnDrop;
 use alloc::vec::Vec;

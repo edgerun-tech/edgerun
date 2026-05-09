@@ -7,8 +7,8 @@ use std::sync::{Arc, Mutex};
 use edgerun_protocols::core_protocol::protocol::EventEnvelope;
 
 use crate::core::{
-    canonical_event_hash, encode_event_frame, validate_event_location, AppendReceipt,
-    EventLocation, EventLog, ScannedEvent,
+    AppendReceipt, EventLocation, EventLog, ScannedEvent, canonical_event_hash, encode_event_frame,
+    validate_event_location,
 };
 use crate::error::StorageError;
 

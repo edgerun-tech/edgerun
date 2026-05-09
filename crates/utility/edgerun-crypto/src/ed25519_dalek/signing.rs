@@ -27,7 +27,7 @@ use crate::curve25519_dalek::{
     edwards::{CompressedEdwardsY, EdwardsPoint},
     scalar::Scalar,
 };
-use crate::digest::{generic_array::typenum::U64, Digest};
+use crate::digest::{Digest, generic_array::typenum::U64};
 
 use crate::ed25519::signature::{KeypairRef, Signer, Verifier};
 
@@ -42,12 +42,12 @@ use crate::zeroize::{Zeroize, ZeroizeOnDrop};
 #[cfg(feature = "hazmat")]
 use crate::ed25519_dalek::verifying::StreamVerifier;
 use crate::ed25519_dalek::{
+    Signature,
     constants::{KEYPAIR_LENGTH, SECRET_KEY_LENGTH},
     errors::{InternalError, SignatureError},
     hazmat::ExpandedSecretKey,
     signature::InternalSignature,
     verifying::VerifyingKey,
-    Signature,
 };
 
 /// ed25519 secret key as defined in [RFC8032 § 5.1.5]:

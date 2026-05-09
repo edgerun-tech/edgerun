@@ -57,7 +57,7 @@ use core::{
 use crate::curve25519_dalek::constants::{APLUS2_OVER_FOUR, MONTGOMERY_A, MONTGOMERY_A_NEG};
 use crate::curve25519_dalek::edwards::{CompressedEdwardsY, EdwardsPoint};
 use crate::curve25519_dalek::field::FieldElement;
-use crate::curve25519_dalek::scalar::{clamp_integer, Scalar};
+use crate::curve25519_dalek::scalar::{Scalar, clamp_integer};
 
 use crate::curve25519_dalek::traits::Identity;
 

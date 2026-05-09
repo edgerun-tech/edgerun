@@ -324,7 +324,7 @@ where
 
 #[cfg(all(test, crypto_bigint_internal_tests))]
 mod tests {
-    use crate::crypto_bigint::{CheckedMul, Zero, U128, U192, U256, U64};
+    use crate::crypto_bigint::{CheckedMul, U64, U128, U192, U256, Zero};
 
     #[test]
     fn mul_wide_zero_and_one() {

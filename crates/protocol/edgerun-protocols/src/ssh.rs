@@ -7,7 +7,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use edgerun_encoding::byteorder::{push_u32_be, read_u32_be};
 use edgerun_encoding::string_field::{
-    decode_bytes_u32_be_borrowed, encode_bytes_u32_be, StringFieldError,
+    StringFieldError, decode_bytes_u32_be_borrowed, encode_bytes_u32_be,
 };
 
 pub const CLIENT_IDENTIFICATION: &str = "SSH-2.0-edgerun-ssh_0.1";

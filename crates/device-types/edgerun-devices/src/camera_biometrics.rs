@@ -13,8 +13,8 @@ mod prelude {
 
 use crate::biometrics::{BiometricModality, BiometricState};
 use edgerun_capabilities::{
-    capability_descriptor, CapabilityDescriptor, CapabilityEventKind, CapabilityModality,
-    CapabilityOperation, CapabilityProvider, CapabilityRole,
+    CapabilityDescriptor, CapabilityEventKind, CapabilityModality, CapabilityOperation,
+    CapabilityProvider, CapabilityRole, capability_descriptor,
 };
 use prelude::v1::*;
 

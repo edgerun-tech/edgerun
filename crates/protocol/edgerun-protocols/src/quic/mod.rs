@@ -12,9 +12,9 @@ pub mod types;
 pub use crypto::{PacketProtection, ProtectionKeys, QuicCrypto};
 pub use frame::QuicFrame;
 pub use handshake::{HandshakeResult, QuicTlsHandshaker};
-pub use packet::{get_long_header_payload_offset, PacketType, QuicPacket};
+pub use packet::{PacketType, QuicPacket, get_long_header_payload_offset};
 pub use server_handshake::{QuicTlsServerHandshaker, ServerHandshakeResult};
 pub use transport::{QuicDuration, QuicInstant, QuicTransport};
-pub use types::{ConnectionId, PacketNumberSpace, TransportParameters, QUIC_VERSION_V1};
+pub use types::{ConnectionId, PacketNumberSpace, QUIC_VERSION_V1, TransportParameters};
 
 pub type QuicConnection = QuicTransport;

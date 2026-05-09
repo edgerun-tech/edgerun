@@ -40,7 +40,7 @@ pub mod vec {
 
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 use edgerun_devices::display::{
-    default_display_descriptor, DisplayDevice, DisplayInfo, DisplayMode, DisplayUpdateRequest,
+    DisplayDevice, DisplayInfo, DisplayMode, DisplayUpdateRequest, default_display_descriptor,
 };
 use edgerun_linux_sysfs::prelude::v1::*;
 use edgerun_linux_sysfs::{parse_display_mode_line, read_trimmed};

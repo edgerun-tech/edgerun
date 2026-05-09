@@ -1,6 +1,6 @@
 //! ASN.1 `TeletexString` support.
 //!
-use crate::der::{asn1::AnyRef, FixedTag, Result, StrRef, Tag};
+use crate::der::{FixedTag, Result, StrRef, Tag, asn1::AnyRef};
 use core::{fmt, ops::Deref};
 
 macro_rules! impl_teletex_string {
@@ -93,9 +93,9 @@ mod allocation {
     use super::TeletexStringRef;
 
     use crate::der::{
+        BytesRef, Error, FixedTag, Result, StrOwned, Tag,
         asn1::AnyRef,
         referenced::{OwnedToRef, RefToOwned},
-        BytesRef, Error, FixedTag, Result, StrOwned, Tag,
     };
     use alloc::string::String;
     use core::{fmt, ops::Deref};

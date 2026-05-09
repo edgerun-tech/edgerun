@@ -1,8 +1,8 @@
 use edgerun_core::protocol::{
-    relay_envelope, CipherSuite, Directness, EncryptedEnvelope, IdentityKind, IdentityRef, NodeRef,
-    ObjectKind, ObjectRef, PayloadKind, ProtocolRecord, ReachabilityHint, RecipientKey,
-    RelayEnvelope, RouteAdvertisement, SessionAccept, SessionHello, Signature, Timestamp,
-    TransportClass,
+    CipherSuite, Directness, EncryptedEnvelope, IdentityKind, IdentityRef, NodeRef, ObjectKind,
+    ObjectRef, PayloadKind, ProtocolRecord, ReachabilityHint, RecipientKey, RelayEnvelope,
+    RouteAdvertisement, SessionAccept, SessionHello, Signature, Timestamp, TransportClass,
+    relay_envelope,
 };
 
 fn bytes(len: usize, value: u8) -> Vec<u8> {

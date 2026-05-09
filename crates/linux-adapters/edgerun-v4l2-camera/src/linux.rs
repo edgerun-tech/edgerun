@@ -283,13 +283,13 @@ pub use core::{ptr, slice};
 
 use crate::prelude::v1::*;
 use edgerun_devices::camera_biometrics::{
-    default_camera_descriptor, default_face_biometric_state, validate_liveness_challenge,
     CameraBiometricError, CameraBiometricPurpose, CameraBiometricReader, CameraCapture,
     CameraCaptureQuality, CameraEnrollProgress, CameraEnrollmentSession, CameraFrame,
     CameraLivenessChallenge, CameraLivenessEvidence, CameraLivenessFrameObservation,
     CameraLivenessResult, CameraPixelFormat, CameraReaderInfo, CameraStreamRole,
     CameraTemplateRecord, CameraVerification, CameraVerifyRequest, PairedCameraBiometricReader,
-    PairedCameraFrame,
+    PairedCameraFrame, default_camera_descriptor, default_face_biometric_state,
+    validate_liveness_challenge,
 };
 use std::collections::HashMap;
 #[cfg(unix)]

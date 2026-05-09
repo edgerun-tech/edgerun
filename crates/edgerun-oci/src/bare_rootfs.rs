@@ -3,8 +3,8 @@
 use crate::oci_path::normalize_layer_path;
 use crate::prelude::*;
 use crate::rootfs_access::{
-    normalize_rootfs_path, OciDeviceId, OciRootfs, OciRootfsEntry, OciRootfsEntryKind,
-    OciRootfsError,
+    OciDeviceId, OciRootfs, OciRootfsEntry, OciRootfsEntryKind, OciRootfsError,
+    normalize_rootfs_path,
 };
 use crate::tar_layer::{OciWhiteout, TarEntry, TarEntryKind, TarLayerSink};
 use alloc::collections::BTreeMap;

@@ -8,12 +8,12 @@ use alloc::string::String;
 #[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::vec::Vec;
 
+use crate::JsonValue;
 use crate::borrowed_value::BorrowedJsonValue;
 use crate::error::JsonParseError;
 use crate::map::Map;
 use crate::number::JsonNumber;
 use crate::tape::{TapeToken, TapeTokenKind};
-use crate::JsonValue;
 #[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::borrow::Cow;
 #[cfg(all(feature = "std", not(target_os = "none")))]
@@ -559,7 +559,7 @@ impl<'a> Parser<'a> {
                     return Err(JsonParseError::UnexpectedCharacter {
                         index: self.index - 1,
                         found: byte as char,
-                    })
+                    });
                 }
                 _ => {}
             }
@@ -588,7 +588,7 @@ impl<'a> Parser<'a> {
                     return Err(JsonParseError::UnexpectedCharacter {
                         index: self.index - 1,
                         found: byte as char,
-                    })
+                    });
                 }
                 _ => {}
             }
@@ -650,7 +650,7 @@ impl<'a> Parser<'a> {
                         _ => {
                             return Err(JsonParseError::InvalidEscape {
                                 index: escape_index,
-                            })
+                            });
                         }
                     }
                 }
@@ -658,7 +658,7 @@ impl<'a> Parser<'a> {
                     return Err(JsonParseError::UnexpectedCharacter {
                         index: self.index - 1,
                         found: byte as char,
-                    })
+                    });
                 }
                 _ => {}
             }
@@ -689,7 +689,7 @@ impl<'a> Parser<'a> {
                     return Err(JsonParseError::UnexpectedCharacter {
                         index: self.index - 1,
                         found: byte as char,
-                    })
+                    });
                 }
                 _ => {}
             }
@@ -723,7 +723,7 @@ impl<'a> Parser<'a> {
                     return Err(JsonParseError::UnexpectedCharacter {
                         index: self.index - 1,
                         found: byte as char,
-                    })
+                    });
                 }
                 _ => {}
             }
@@ -749,7 +749,7 @@ impl<'a> Parser<'a> {
             _ => {
                 return Err(JsonParseError::InvalidEscape {
                     index: escape_index,
-                })
+                });
             }
         }
         Ok(())

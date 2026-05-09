@@ -1,10 +1,10 @@
 //! PKCS#1 RSA parameters.
 
 use crate::der::{
-    asn1::{AnyRef, ContextSpecificRef, ObjectIdentifier},
-    oid::AssociatedOid,
     Decode, DecodeValue, Encode, EncodeValue, FixedTag, Length, Reader, Sequence, Tag, TagMode,
     TagNumber, Writer,
+    asn1::{AnyRef, ContextSpecificRef, ObjectIdentifier},
+    oid::AssociatedOid,
 };
 use crate::pkcs1::{Error, Result};
 use crate::spki::{AlgorithmIdentifier, AlgorithmIdentifierRef};

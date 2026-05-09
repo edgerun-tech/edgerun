@@ -12,8 +12,8 @@ mod prelude {
 }
 
 use edgerun_capabilities::{
-    capability_descriptor, CapabilityDescriptor, CapabilityEventKind, CapabilityModality,
-    CapabilityOperation, CapabilityProvider, CapabilityRole,
+    CapabilityDescriptor, CapabilityEventKind, CapabilityModality, CapabilityOperation,
+    CapabilityProvider, CapabilityRole, capability_descriptor,
 };
 use prelude::v1::*;
 
@@ -421,12 +421,16 @@ mod tests {
     #[test]
     fn bluetooth_descriptor_has_observe_and_query_operations() {
         let descriptor = default_bluetooth_descriptor("bt", "hci0");
-        assert!(descriptor
-            .operations
-            .contains(&(CapabilityOperation::Observe as i32)));
-        assert!(descriptor
-            .operations
-            .contains(&(CapabilityOperation::Query as i32)));
+        assert!(
+            descriptor
+                .operations
+                .contains(&(CapabilityOperation::Observe as i32))
+        );
+        assert!(
+            descriptor
+                .operations
+                .contains(&(CapabilityOperation::Query as i32))
+        );
     }
 
     #[test]

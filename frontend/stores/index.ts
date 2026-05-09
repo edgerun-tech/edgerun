@@ -33,6 +33,39 @@ export {
 } from "./app-launcher"
 
 export {
+  executeUiAction,
+  executeUiActions,
+  executeUiCommand,
+  focusAssistantInput,
+  focusDockInput,
+  getUiCommandHelp,
+  registerUiCommandHandler,
+  type UiAction,
+  type UiCommandSource,
+} from "./ui-command-center"
+
+export {
+  assistantElapsedMsStore,
+  assistantAbortControllerStore,
+  assistantLastDurationStore,
+  assistantLoadingStore,
+  assistantMessagesStore,
+  assistantStartedAtStore,
+  assistantStatusStore,
+  abortAssistantRequest,
+  appendAssistantMessage,
+  finishAssistantRequest,
+  getAssistantUserMessageContents,
+  isAssistantAbortError,
+  setAssistantStatus,
+  setAssistantAbortController,
+  startAssistantRequest,
+  updateAssistantMessages,
+  type AssistantMessage,
+  type AssistantStatus,
+} from "./assistant-store"
+
+export {
   installedAppIdsStore,
   installApp,
   uninstallApp,

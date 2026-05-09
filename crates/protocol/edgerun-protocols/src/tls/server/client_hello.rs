@@ -347,9 +347,10 @@ mod tests {
         assert_eq!(ch.server_name, Some("example.com".to_string()));
         assert!(ch.client_key_share.is_some());
         assert_eq!(ch.client_key_share_group, Some(NamedGroup::SECP256R1));
-        assert!(ch
-            .cipher_suites
-            .contains(&CipherSuite::TLS_AES_128_GCM_SHA256));
+        assert!(
+            ch.cipher_suites
+                .contains(&CipherSuite::TLS_AES_128_GCM_SHA256)
+        );
         assert!(ch.supported_versions.contains(&0x0304));
     }
 
@@ -438,11 +439,13 @@ mod tests {
             .unwrap();
 
         let ch = ClientHello::parse(&ch_bytes).unwrap();
-        assert!(ch
-            .cipher_suites
-            .contains(&CipherSuite::TLS_AES_128_GCM_SHA256));
-        assert!(ch
-            .cipher_suites
-            .contains(&CipherSuite::TLS_AES_256_GCM_SHA384));
+        assert!(
+            ch.cipher_suites
+                .contains(&CipherSuite::TLS_AES_128_GCM_SHA256)
+        );
+        assert!(
+            ch.cipher_suites
+                .contains(&CipherSuite::TLS_AES_256_GCM_SHA384)
+        );
     }
 }

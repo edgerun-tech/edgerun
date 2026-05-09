@@ -2,11 +2,11 @@
 
 use super::SecretKey;
 use crate::elliptic_curve::{
+    ALGORITHM_OID, Curve, FieldBytesSize,
     sec1::{ModulusSize, ValidatePublicKey},
-    Curve, FieldBytesSize, ALGORITHM_OID,
 };
 use crate::pkcs8::spki::{AlgorithmIdentifier, AssociatedAlgorithmIdentifier, ObjectIdentifier};
-use crate::pkcs8::{self, der::Decode, AssociatedOid};
+use crate::pkcs8::{self, AssociatedOid, der::Decode};
 use crate::sec1::EcPrivateKey;
 
 // Imports for the `EncodePrivateKey` impl
@@ -16,16 +16,16 @@ use crate::sec1::EcPrivateKey;
 ))]
 use {
     crate::elliptic_curve::{
-        sec1::{FromEncodedPoint, ToEncodedPoint},
         AffinePoint, CurveArithmetic,
+        sec1::{FromEncodedPoint, ToEncodedPoint},
     },
-    crate::pkcs8::{der, EncodePrivateKey},
+    crate::pkcs8::{EncodePrivateKey, der},
 };
 
 // Imports for actual PEM support
 #[cfg(feature = "elliptic_curve_pem")]
 use {
-    crate::elliptic_curve::{error::Error, Result},
+    crate::elliptic_curve::{Result, error::Error},
     crate::pkcs8::DecodePrivateKey,
     core::str::FromStr,
 };

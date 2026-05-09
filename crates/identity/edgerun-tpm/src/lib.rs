@@ -67,7 +67,7 @@ mod types;
 mod wire;
 
 // Explicit public API — no glob re-exports
-pub use acpi::{discover_tpm2_info, parse_tpm2_table, AcpiTpm2Info};
+pub use acpi::{AcpiTpm2Info, discover_tpm2_info, parse_tpm2_table};
 pub use constants::{
     TPM_ALG_ECC, TPM_ALG_NULL, TPM_ALG_SHA256, TPM_CC_GET_RANDOM, TPM_CC_SIGN, TPM_ECC_NIST_P256,
     TPM_RC_SUCCESS, TPM_RH_NULL, TPM_RS_PW, TPM_ST_HASHCHECK, TPM_ST_NO_SESSIONS, TPM_SU_CLEAR,
@@ -77,9 +77,9 @@ pub use device::TpmDevice;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use linux::{LinuxTpmDevice, LinuxTpmSigningKey};
 pub use signing::{
-    default_sign_scheme_for_algorithm, hash_message_for_algorithm, sign_params_for_message,
-    sign_prehashed_with_device, sign_record_with_tpm, sign_record_with_tpm_checked,
-    signature_input_for_record, TpmTransportSigningKey,
+    TpmTransportSigningKey, default_sign_scheme_for_algorithm, hash_message_for_algorithm,
+    sign_params_for_message, sign_prehashed_with_device, sign_record_with_tpm,
+    sign_record_with_tpm_checked, signature_input_for_record,
 };
 pub use tis::TisTpmTransport;
 pub use traits::{FixedTpmTransport, TpmSigningKey, TpmTransport};

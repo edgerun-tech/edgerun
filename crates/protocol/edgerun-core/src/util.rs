@@ -8,7 +8,7 @@ use crate::protocol::Timestamp;
 // ---------------------------------------------------------------------------
 
 pub use edgerun_encoding::rfc3339::{
-    canonical_time_string, format_rfc3339_utc, parse_rfc3339, DateTimeUtc, ParseRfc3339Error,
+    DateTimeUtc, ParseRfc3339Error, canonical_time_string, format_rfc3339_utc, parse_rfc3339,
 };
 
 /// Parse an RFC3339 timestamp into `(seconds, nanos)` for `crate::protocol::Timestamp`.

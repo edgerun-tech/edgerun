@@ -2,7 +2,7 @@
 // TODO(tarcieri): completely phase out `generic-array` when const generics are powerful enough
 
 use crate::crypto_bigint::{ArrayDecoding, ArrayEncoding, ByteArray};
-use generic_array::{typenum, GenericArray};
+use generic_array::{GenericArray, typenum};
 
 macro_rules! impl_uint_array_encoding {
     ($(($uint:ident, $bytes:path)),+) => {

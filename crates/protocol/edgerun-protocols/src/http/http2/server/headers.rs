@@ -1,14 +1,14 @@
 //! HEADERS and CONTINUATION frame handlers for the HTTP/2 server.
 
-use super::continuation::ContinuationState;
-use super::response;
 use super::FrameAction;
 use super::Http2Server;
+use super::continuation::ContinuationState;
+use super::response;
+use crate::http::http2::ErrorCode;
 use crate::http::http2::frame::{Frame, HeadersFrame};
 use crate::http::http2::headers::{validate_header_name_case, validate_request_headers};
 use crate::http::http2::hpack::{Decoder, Encoder};
 use crate::http::http2::stream::StreamState;
-use crate::http::http2::ErrorCode;
 
 impl Http2Server {
     /// Process an incoming HEADERS frame.

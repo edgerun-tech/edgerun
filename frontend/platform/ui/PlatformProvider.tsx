@@ -15,7 +15,7 @@ import { connectionStore } from "@/platform/state/connection-store"
 import { permissionStore } from "@/platform/state/permission-store"
 import { wasmRegistry } from "@/platform/runtime/wasm-registry"
 import { appRegistry } from "@/platform/registries/app-registry"
-import { seedBuiltinCatalogApps, syncBrowserCatalogRegistry } from "@/platform/registries/app-catalog-registry"
+import { syncBrowserCatalogRegistry } from "@/platform/registries/app-catalog-registry"
 import { browserAppInstallStore } from "@/platform/runtime/browser-app-install-store"
 import { capabilityRegistry } from "@/platform/registries/capability-registry"
 import { connectionRegistry } from "@/platform/registries/connection-registry"
@@ -63,7 +63,6 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let nodeBridge: NodeWebSocketBridge | null = null
 
-    void seedBuiltinCatalogApps()
     const unsubscribeBrowserApps = browserAppInstallStore.subscribe(syncBrowserCatalogRegistry)
     refreshNodeStatus()
     loadApps()

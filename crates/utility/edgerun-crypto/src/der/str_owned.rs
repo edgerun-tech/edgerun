@@ -2,8 +2,8 @@
 //! library-level length limitation i.e. `Length::max()`.
 
 use crate::der::{
-    referenced::OwnedToRef, BytesRef, DecodeValue, EncodeValue, Header, Length, Reader, Result,
-    StrRef, Writer,
+    BytesRef, DecodeValue, EncodeValue, Header, Length, Reader, Result, StrRef, Writer,
+    referenced::OwnedToRef,
 };
 use alloc::string::String;
 use core::str;

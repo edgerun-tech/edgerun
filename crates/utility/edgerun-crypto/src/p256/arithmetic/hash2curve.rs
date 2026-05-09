@@ -99,12 +99,12 @@ impl FromOkm for Scalar {
 mod tests {
     use crate::elliptic_curve::{
         crate::group::cofactor::CofactorGroup,
+        Curve, Field,
         bigint::{ArrayEncoding, NonZero, U384},
         consts::U48,
         generic_array::GenericArray,
         hash2curve::{self, ExpandMsgXmd, FromOkm, GroupDigest, MapToCurve},
         sec1::{self, ToEncodedPoint},
-        Curve, Field,
     };
     use crate::hex;
     use crate::p256::{FieldElement, NistP256, Scalar, U256};

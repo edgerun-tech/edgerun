@@ -6,9 +6,9 @@ use crate::multicast::SockaddrIn;
 use alloc::vec;
 use alloc::vec::Vec;
 use edgerun_crypto::p256::ecdsa::SigningKey;
-use edgerun_hardware_signing::{NodeID, MESH_PUBLIC_KEY_LENGTH, MESH_SIGNATURE_LENGTH};
+use edgerun_hardware_signing::{MESH_PUBLIC_KEY_LENGTH, MESH_SIGNATURE_LENGTH, NodeID};
+use edgerun_mesh::{FrameType, LocalNode, MeshFrame, MeshFrameHeader, MeshRoute, sign_frame};
 use edgerun_mesh::{discovery::DiscoveryPacket, router::MeshRouter};
-use edgerun_mesh::{sign_frame, FrameType, LocalNode, MeshFrame, MeshFrameHeader, MeshRoute};
 
 // -----------------------------------------------------------------------
 // Test helpers
@@ -196,7 +196,7 @@ fn discovery_packet_decode_rejects_partial_last_route() {
 fn discovery_packet_decode_ignores_extra_bytes() {
     let mut buf = vec![0u8; 5 + 65 + 100];
     buf[4] = 1; // claim 1 route
-                // extra trailing bytes should be ignored
+    // extra trailing bytes should be ignored
     let decoded = DiscoveryPacket::decode(&buf).unwrap();
     assert_eq!(decoded.routes.len(), 1);
 }
@@ -965,8 +965,8 @@ fn mesh_link_inject_frame_not_for_us_is_forwarded() {
     // Learn a route to third_id via other_id (simulate multi-hop)
     // We manually inject a route into the routing table
     router.routing_table().clone(); // get a copy
-                                    // Actually we need to use process_discovery from other_id advertising third_id
-                                    // Build a synthetic discovery from other_id claiming a route to third_id
+    // Actually we need to use process_discovery from other_id advertising third_id
+    // Build a synthetic discovery from other_id claiming a route to third_id
     let adv_packet = DiscoveryPacket {
         sequence: 1,
         routes: vec![MeshRoute {
@@ -1328,7 +1328,7 @@ fn from_wire_exactly_at_minimum_boundary() {
     // Fill header
     buf[128] = 5; // ttl
     buf[129] = 0; // Data
-                  // Fill signature area
+    // Fill signature area
     buf[193] = 0xFF;
 
     let parsed = MeshFrame::from_wire(&buf);

@@ -5,8 +5,8 @@
 use alloc::{vec, vec::Vec};
 
 use edgerun_android_keystore::{
-    sign_record_with_keystore_checked, AndroidKeystoreAssuranceLevel,
-    AndroidKeystoreSignatureAlgorithm, AndroidKeystoreSigningKey,
+    AndroidKeystoreAssuranceLevel, AndroidKeystoreSignatureAlgorithm, AndroidKeystoreSigningKey,
+    sign_record_with_keystore_checked,
 };
 
 use crate::{

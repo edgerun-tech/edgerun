@@ -9,10 +9,9 @@ use crate::crypto::sha256;
 use crate::result::{ReasonCode, ValidationResult, Verdict};
 use crate::util::bytes_to_hex_prefixed;
 use crate::validators::{
-    validate_canonical_case, validate_command_case, validate_control_change_case,
+    FixtureVerifier, validate_canonical_case, validate_command_case, validate_control_change_case,
     validate_crypto_case, validate_delegation_case, validate_network_case, validate_object_case,
     validate_query_case, validate_snapshot_case, validate_stream_append_case, validate_trust_case,
-    FixtureVerifier,
 };
 use crate::value::Value;
 
@@ -55,8 +54,8 @@ fn parse_yaml_full(text: &str) -> BTreeMap<String, Value> {
         Err(_) => BTreeMap::new(),
     }
 } // ===========================================================================
-  // Test verifier — checks signature structure (real verification in tests)
-  // ===========================================================================
+// Test verifier — checks signature structure (real verification in tests)
+// ===========================================================================
 
 struct TestVerifier;
 

@@ -173,9 +173,9 @@ use core::ops::{Mul, MulAssign};
 use crate::rand_core::CryptoRngCore;
 
 #[cfg(feature = "digest")]
-use crate::digest::generic_array::typenum::U64;
-#[cfg(feature = "digest")]
 use crate::digest::Digest;
+#[cfg(feature = "digest")]
+use crate::digest::generic_array::typenum::U64;
 
 use crate::curve25519_dalek::constants;
 use crate::curve25519_dalek::field::FieldElement;
@@ -184,7 +184,7 @@ use crate::curve25519_dalek::field::FieldElement;
 use {
     crate::rand_core::RngCore,
     crate::subtle::CtOption,
-    group::{cofactor::CofactorGroup, prime::PrimeGroup, GroupEncoding},
+    group::{GroupEncoding, cofactor::CofactorGroup, prime::PrimeGroup},
 };
 
 use crate::subtle::Choice;

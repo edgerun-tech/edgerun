@@ -5,7 +5,7 @@
 use alloc::vec::Vec;
 
 use edgerun_tpm::{
-    sign_record_with_tpm_checked, TpmAssuranceLevel, TpmSignatureAlgorithm, TpmSigningKey,
+    TpmAssuranceLevel, TpmSignatureAlgorithm, TpmSigningKey, sign_record_with_tpm_checked,
 };
 
 use crate::{

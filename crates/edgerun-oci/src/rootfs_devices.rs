@@ -5,7 +5,7 @@ use std::io;
 use std::path::Path;
 
 use crate::spec::OciLinuxDevice;
-use crate::syscalls::{chown, makedev, mknod, S_IFCHR};
+use crate::syscalls::{S_IFCHR, chown, makedev, mknod};
 
 fn c_string(value: &str) -> io::Result<CString> {
     CString::new(value).map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))

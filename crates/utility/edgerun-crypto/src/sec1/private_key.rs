@@ -6,9 +6,9 @@
 //! <https://www.secg.org/sec1-v2.pdf>
 
 use crate::der::{
-    asn1::{BitStringRef, ContextSpecific, ContextSpecificRef, OctetStringRef},
     Decode, DecodeValue, Encode, EncodeValue, Header, Length, Reader, Sequence, Tag, TagMode,
     TagNumber, Writer,
+    asn1::{BitStringRef, ContextSpecific, ContextSpecificRef, OctetStringRef},
 };
 use crate::sec1::{EcParameters, Error, Result};
 use core::fmt;

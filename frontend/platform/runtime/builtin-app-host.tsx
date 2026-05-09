@@ -6,36 +6,12 @@ import { getComponent } from "@/platform/registries/component-registry"
 
 const LoadingApp = () => <div className="p-4 text-sm text-muted-foreground">Loading app...</div>
 
-const TerminalApp = dynamic(
-  () => import("@/components/os/terminal").then((mod) => mod.Terminal),
-  { ssr: false, loading: LoadingApp },
-)
 const AppStoreApp = dynamic(
   () => import("@/components/os/app-store").then((mod) => mod.AppStore),
   { ssr: false, loading: LoadingApp },
 )
-const PeopleApp = dynamic(
-  () => import("@/components/os/people-app").then((mod) => mod.PeopleApp),
-  { ssr: false, loading: LoadingApp },
-)
 const TrustManagerSurface = dynamic(
   () => import("@/components/os/trust-manager-surface").then((mod) => mod.TrustManagerSurface),
-  { ssr: false, loading: LoadingApp },
-)
-const FinancesApp = dynamic(
-  () => import("@/components/os/finances-app").then((mod) => mod.FinancesApp),
-  { ssr: false, loading: LoadingApp },
-)
-const CalculatorApp = dynamic(
-  () => import("@/components/os/calculator-app").then((mod) => mod.CalculatorApp),
-  { ssr: false, loading: LoadingApp },
-)
-const HelpApp = dynamic(
-  () => import("@/components/os/help-app").then((mod) => mod.HelpApp),
-  { ssr: false, loading: LoadingApp },
-)
-const WorkflowBuilderApp = dynamic(
-  () => import("@/components/os/workflow-builder").then((mod) => mod.WorkflowBuilder),
   { ssr: false, loading: LoadingApp },
 )
 const FileManagerApp = dynamic(
@@ -92,26 +68,20 @@ export function BuiltinAppHost({ app, onLaunchApp }: BuiltinAppHostProps) {
   switch (app.appId) {
     case "identity":
       return <IdentityApp />
-    case "terminal":
-      return <TerminalApp logs={[]} onCommand={() => {}} />
     case "app-store":
       return <AppStoreApp onLaunchApp={(a: AppDefinition) => onLaunchApp?.(a)} />
     case "people":
     case "contacts":
     case "calling":
     case "chat":
-      return <PeopleApp />
-    case "trust-manager":
-      return <TrustManagerSurface />
     case "finances":
     case "wallet":
-      return <FinancesApp />
     case "calculator":
-      return <CalculatorApp />
     case "help":
-      return <HelpApp />
     case "workflow-builder":
-      return <WorkflowBuilderApp onClose={() => {}} />
+      return <div className="p-4 text-muted-foreground">Desktop demo app disabled: {app.name}</div>
+    case "trust-manager":
+      return <TrustManagerSurface />
     case "file-browser":
       return <FileManagerApp />
     case "storage":

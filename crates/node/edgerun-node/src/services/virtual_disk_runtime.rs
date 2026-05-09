@@ -16,9 +16,9 @@ use std::net::{TcpListener, TcpStream};
 use std::thread;
 
 use crate::rt::{self, CancellationToken};
-use edgerun_protocols::block::{handle_request, BlockBackend, BlockError};
+use edgerun_protocols::block::{BlockBackend, BlockError, handle_request};
 use edgerun_virtual_disk::{
-    receive_request, send_response, serve_nbd_connection_multi, NbdExportEntry,
+    NbdExportEntry, receive_request, send_response, serve_nbd_connection_multi,
 };
 
 type SharedBlockBackend = Arc<dyn BlockBackend + Send + Sync>;

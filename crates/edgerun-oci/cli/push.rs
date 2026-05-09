@@ -3,12 +3,12 @@
 use crate::prelude::*;
 use std::path::PathBuf;
 
-use crate::cli::{
-    default_images_dir, invalid_input, parse_cli_args, required_positional, resolve_registry_auth,
-    GlobalOpts,
-};
 use crate::ImageRef;
 use crate::RegistryClient;
+use crate::cli::{
+    GlobalOpts, default_images_dir, invalid_input, parse_cli_args, required_positional,
+    resolve_registry_auth,
+};
 use edgerun_clap::{Arg, Command};
 
 pub fn cmd_push(_opts: &GlobalOpts, args: &[String]) -> std::io::Result<()> {

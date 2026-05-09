@@ -6,6 +6,7 @@
 use crate::elliptic_curve::{
     crate::elliptic_curve::rand_core::RngCore,
     crate::subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption},
+    Curve, CurveArithmetic, FieldBytesEncoding, PrimeCurve,
     bigint::{Limb, U256},
     error::{Error, Result},
     generic_array::typenum::U32,
@@ -15,7 +16,6 @@ use crate::elliptic_curve::{
     scalar::{FromUintUnchecked, IsHigh},
     sec1::{CompressedPoint, FromEncodedPoint, ToEncodedPoint},
     zeroize::DefaultIsZeroes,
-    Curve, CurveArithmetic, FieldBytesEncoding, PrimeCurve,
 };
 use crate::ff::{Field, PrimeField};
 use crate::hex;
@@ -452,11 +452,7 @@ impl ConstantTimeEq for AffinePoint {
 impl ConditionallySelectable for AffinePoint {
     fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
         // Not really constant time, but this is dev code
-        if choice.into() {
-            *b
-        } else {
-            *a
-        }
+        if choice.into() { *b } else { *a }
     }
 }
 
@@ -539,11 +535,7 @@ impl ConstantTimeEq for ProjectivePoint {
 
 impl ConditionallySelectable for ProjectivePoint {
     fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
-        if choice.into() {
-            *b
-        } else {
-            *a
-        }
+        if choice.into() { *b } else { *a }
     }
 }
 

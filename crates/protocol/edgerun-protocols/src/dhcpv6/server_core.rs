@@ -9,10 +9,10 @@ use core::net::Ipv6Addr;
 
 use super::duid::default_server_duid;
 use super::lease::{LeasePool, LeaseState};
-use super::message::{Dhcpv6Message, Dhcpv6MsgType, DHCPV6_CLIENT_PORT};
+use super::message::{DHCPV6_CLIENT_PORT, Dhcpv6Message, Dhcpv6MsgType};
 use super::options::{
-    Dhcpv6Option, StatusCode, OPT_DNS_SERVERS, OPT_DOMAIN_LIST, OPT_IAADDR, OPT_IA_NA,
-    OPT_RAPID_COMMIT, OPT_SERVERID,
+    Dhcpv6Option, OPT_DNS_SERVERS, OPT_DOMAIN_LIST, OPT_IA_NA, OPT_IAADDR, OPT_RAPID_COMMIT,
+    OPT_SERVERID, StatusCode,
 };
 
 /// DHCPv6 server configuration.

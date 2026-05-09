@@ -1,6 +1,6 @@
 use super::encrypt;
 use crate::rand_core::CryptoRngCore;
-use crate::rsa::{traits::RandomizedEncryptor, Result, RsaPublicKey};
+use crate::rsa::{Result, RsaPublicKey, traits::RandomizedEncryptor};
 use alloc::vec::Vec;
 
 /// Encryption key for PKCS#1 v1.5 encryption as described in [RFC8017 § 7.2].

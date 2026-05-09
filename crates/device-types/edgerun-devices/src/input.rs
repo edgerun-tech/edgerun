@@ -3,9 +3,9 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use edgerun_capabilities::{
-    capability_descriptor, constraint, CapabilityConstraintKind, CapabilityDescriptor,
-    CapabilityError, CapabilityEventKind, CapabilityModality, CapabilityOperation,
-    CapabilityProvider, CapabilityRole,
+    CapabilityConstraintKind, CapabilityDescriptor, CapabilityError, CapabilityEventKind,
+    CapabilityModality, CapabilityOperation, CapabilityProvider, CapabilityRole,
+    capability_descriptor, constraint,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -255,54 +255,72 @@ mod tests {
     fn descriptor_is_input_capability() {
         let descriptor = default_input_descriptor("evdev", "event0");
         assert_eq!(descriptor.role, CapabilityRole::Input as i32);
-        assert!(descriptor
-            .operations
-            .contains(&(CapabilityOperation::Observe as i32)));
+        assert!(
+            descriptor
+                .operations
+                .contains(&(CapabilityOperation::Observe as i32))
+        );
     }
 
     #[test]
     fn descriptor_contains_query_and_capture() {
         let descriptor = default_input_descriptor("test", "id");
-        assert!(descriptor
-            .operations
-            .contains(&(CapabilityOperation::Query as i32)));
-        assert!(descriptor
-            .operations
-            .contains(&(CapabilityOperation::Capture as i32)));
+        assert!(
+            descriptor
+                .operations
+                .contains(&(CapabilityOperation::Query as i32))
+        );
+        assert!(
+            descriptor
+                .operations
+                .contains(&(CapabilityOperation::Capture as i32))
+        );
     }
 
     #[test]
     fn descriptor_has_expected_modalities() {
         let descriptor = default_input_descriptor("test", "id");
-        assert!(descriptor
-            .modalities
-            .contains(&(CapabilityModality::Touch as i32)));
-        assert!(descriptor
-            .modalities
-            .contains(&(CapabilityModality::Text as i32)));
+        assert!(
+            descriptor
+                .modalities
+                .contains(&(CapabilityModality::Touch as i32))
+        );
+        assert!(
+            descriptor
+                .modalities
+                .contains(&(CapabilityModality::Text as i32))
+        );
     }
 
     #[test]
     fn descriptor_has_expected_event_kinds() {
         let descriptor = default_input_descriptor("test", "id");
-        assert!(descriptor
-            .event_kinds
-            .contains(&(CapabilityEventKind::Touch as i32)));
-        assert!(descriptor
-            .event_kinds
-            .contains(&(CapabilityEventKind::Text as i32)));
-        assert!(descriptor
-            .event_kinds
-            .contains(&(CapabilityEventKind::State as i32)));
+        assert!(
+            descriptor
+                .event_kinds
+                .contains(&(CapabilityEventKind::Touch as i32))
+        );
+        assert!(
+            descriptor
+                .event_kinds
+                .contains(&(CapabilityEventKind::Text as i32))
+        );
+        assert!(
+            descriptor
+                .event_kinds
+                .contains(&(CapabilityEventKind::State as i32))
+        );
     }
 
     #[test]
     fn descriptor_has_require_local_only_constraint() {
         let descriptor = default_input_descriptor("test", "id");
-        assert!(descriptor
-            .default_constraints
-            .iter()
-            .any(|c| c.kind == CapabilityConstraintKind::RequireLocalOnly as i32));
+        assert!(
+            descriptor
+                .default_constraints
+                .iter()
+                .any(|c| c.kind == CapabilityConstraintKind::RequireLocalOnly as i32)
+        );
     }
 
     #[test]

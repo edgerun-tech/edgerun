@@ -2,8 +2,8 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use edgerun_capabilities::{
-    capability_descriptor, CapabilityDescriptor, CapabilityEventKind, CapabilityModality,
-    CapabilityOperation, CapabilityProvider, CapabilityRole,
+    CapabilityDescriptor, CapabilityEventKind, CapabilityModality, CapabilityOperation,
+    CapabilityProvider, CapabilityRole, capability_descriptor,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -520,12 +520,16 @@ mod tests {
     #[test]
     fn descriptor_has_query_and_render() {
         let descriptor = default_speaker_descriptor("test", "id");
-        assert!(descriptor
-            .operations
-            .contains(&(CapabilityOperation::Query as i32)));
-        assert!(descriptor
-            .operations
-            .contains(&(CapabilityOperation::Render as i32)));
+        assert!(
+            descriptor
+                .operations
+                .contains(&(CapabilityOperation::Query as i32))
+        );
+        assert!(
+            descriptor
+                .operations
+                .contains(&(CapabilityOperation::Render as i32))
+        );
     }
 
     #[test]

@@ -2,7 +2,7 @@ use crate::prelude::v1::*;
 use alloc::vec;
 use alloc::vec::Vec;
 use core::ptr::{read_volatile, write_volatile};
-use core::sync::atomic::{compiler_fence, Ordering};
+use core::sync::atomic::{Ordering, compiler_fence};
 use edgerun_encoding::byteorder::read_u32_be;
 
 use crate::acpi::AcpiTpm2Info;

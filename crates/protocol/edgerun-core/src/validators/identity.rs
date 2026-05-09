@@ -9,11 +9,11 @@ use crate::prelude::v1::*;
 
 use super::helpers::*;
 use crate::crypto::{
-    verify_canonical_record, ECDSA_P256_PUBLIC_KEY_LEN, ECDSA_P256_SIGNATURE_LEN,
-    SIG_DOMAIN_IDENTITY_RECORD,
+    ECDSA_P256_PUBLIC_KEY_LEN, ECDSA_P256_SIGNATURE_LEN, SIG_DOMAIN_IDENTITY_RECORD,
+    verify_canonical_record,
 };
-use crate::protocol::{protocol_wire_bytes, ProtocolRecord};
-use crate::result::{reject, ReasonCode, ValidationResult};
+use crate::protocol::{ProtocolRecord, protocol_wire_bytes};
+use crate::result::{ReasonCode, ValidationResult, reject};
 use crate::value::Value;
 
 /// Validates the structural integrity of an IdentityRecord.

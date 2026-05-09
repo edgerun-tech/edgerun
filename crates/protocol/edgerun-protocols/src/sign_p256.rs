@@ -81,7 +81,7 @@ pub fn signature_for_record_p256(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::verify::{verify_event_envelope, ProtocolSignerRef};
+    use crate::verify::{ProtocolSignerRef, verify_event_envelope};
     use edgerun_core::protocol::{EventEnvelope, ProtocolRecord};
 
     fn test_signing_key() -> SigningKey {

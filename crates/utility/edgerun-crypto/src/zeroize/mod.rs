@@ -241,10 +241,10 @@ mod x86;
 
 use core::{
     marker::{PhantomData, PhantomPinned},
-    mem::{size_of, MaybeUninit},
+    mem::{MaybeUninit, size_of},
     num::{
-        self, NonZeroI128, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI8, NonZeroIsize,
-        NonZeroU128, NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU8, NonZeroUsize,
+        self, NonZeroI8, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI128, NonZeroIsize, NonZeroU8,
+        NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU128, NonZeroUsize,
     },
     ops, ptr,
     slice::IterMut,

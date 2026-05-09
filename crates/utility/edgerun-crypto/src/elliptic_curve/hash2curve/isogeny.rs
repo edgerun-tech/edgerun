@@ -4,7 +4,7 @@
 
 use crate::ff::Field;
 use core::ops::{AddAssign, Mul};
-use generic_array::{typenum::Unsigned, ArrayLength, GenericArray};
+use generic_array::{ArrayLength, GenericArray, typenum::Unsigned};
 
 /// The coefficients for mapping from one isogenous curve to another
 pub struct IsogenyCoefficients<F: Field + AddAssign + Mul<Output = F>> {

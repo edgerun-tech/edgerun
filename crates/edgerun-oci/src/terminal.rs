@@ -4,7 +4,7 @@ use crate::libc;
 use std::io;
 use std::os::raw::{c_char, c_int};
 
-extern "C" {
+unsafe extern "C" {
     fn posix_openpt(flags: c_int) -> c_int;
     fn grantpt(fd: c_int) -> c_int;
     fn unlockpt(fd: c_int) -> c_int;

@@ -2,7 +2,7 @@ use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use edgerun_sdk::browser_authoring::{build_publishable_app, BrowserAppArtifact, BrowserAppSpec};
+use edgerun_sdk::browser_authoring::{BrowserAppArtifact, BrowserAppSpec, build_publishable_app};
 
 fn main() {
     let out_dir = env::args()

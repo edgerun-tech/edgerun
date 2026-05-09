@@ -109,11 +109,7 @@ impl UdpSocket {
     }
 
     pub fn local_addr(&self) -> Option<SocketAddr> {
-        if self.bound {
-            Some(self.local)
-        } else {
-            None
-        }
+        if self.bound { Some(self.local) } else { None }
     }
 
     pub fn remote_addr(&self) -> Option<SocketAddr> {

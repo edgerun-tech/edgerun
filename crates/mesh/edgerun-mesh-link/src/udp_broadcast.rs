@@ -16,7 +16,7 @@ use super::*;
 use crate::multicast::SockaddrIn;
 use crate::prelude::v1::*;
 use edgerun_hardware_signing::NodeID;
-use edgerun_mesh::{discovery::DiscoveryPacket, router::MeshRouter, FrameType, MeshFrame};
+use edgerun_mesh::{FrameType, MeshFrame, discovery::DiscoveryPacket, router::MeshRouter};
 use std::collections::{HashMap, VecDeque};
 use std::io;
 use std::os::raw::{c_int, c_void};

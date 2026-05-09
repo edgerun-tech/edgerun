@@ -1,10 +1,10 @@
 use crate::{
-    discovery::DiscoveryPacket, router::MeshRouter, FrameType, LocalNode, MeshFrame,
-    MeshFrameHeader, MeshPeer, MeshRoute, MeshRoutingTable,
+    FrameType, LocalNode, MeshFrame, MeshFrameHeader, MeshPeer, MeshRoute, MeshRoutingTable,
+    discovery::DiscoveryPacket, router::MeshRouter,
 };
 use alloc::vec;
 use alloc::vec::Vec;
-use edgerun_hardware_signing::{NodeID, MESH_SIGNATURE_LENGTH};
+use edgerun_hardware_signing::{MESH_SIGNATURE_LENGTH, NodeID};
 
 // ---------------------------------------------------------------------------
 // Discovery packet (serialized payload)

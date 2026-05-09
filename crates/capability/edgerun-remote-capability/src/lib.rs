@@ -68,12 +68,12 @@ pub use adapters::{
 };
 pub use policy::{IntoPolicyWrappedProvider, PolicyWrappedProvider, SessionGrantBinding};
 pub use protocol::{
-    accept_session_open_unchecked, capability_error_result, capability_remote_envelope,
-    default_remote_requester, pump_one_event, serve_one, session_accept_from_grant,
-    session_open_as_request, session_reject, CapabilityInvocationFrame, CapabilityRemoteEnvelope,
-    CapabilityResultFrame, CapabilitySessionAccept, CapabilitySessionClose, CapabilitySessionEvent,
-    CapabilitySessionMode, CapabilitySessionOpen, RemoteCapabilityProvider,
-    RemoteCapabilityTransport, RemoteInvocationResult,
+    CapabilityInvocationFrame, CapabilityRemoteEnvelope, CapabilityResultFrame,
+    CapabilitySessionAccept, CapabilitySessionClose, CapabilitySessionEvent, CapabilitySessionMode,
+    CapabilitySessionOpen, RemoteCapabilityProvider, RemoteCapabilityTransport,
+    RemoteInvocationResult, accept_session_open_unchecked, capability_error_result,
+    capability_remote_envelope, default_remote_requester, pump_one_event, serve_one,
+    session_accept_from_grant, session_open_as_request, session_reject,
 };
 #[cfg(unix)]
 pub use transport::FramedRemoteTransport;

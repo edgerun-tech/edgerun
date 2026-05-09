@@ -2,7 +2,7 @@
 
 use crate::crypto_bigint::{Encoding, Integer};
 use core::ops::Add;
-use generic_array::{typenum::Unsigned, ArrayLength, GenericArray};
+use generic_array::{ArrayLength, GenericArray, typenum::Unsigned};
 
 /// Alias for a byte array whose size is defined by [`ArrayEncoding::ByteSize`].
 pub type ByteArray<T> = GenericArray<u8, <T as ArrayEncoding>::ByteSize>;

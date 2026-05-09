@@ -442,7 +442,7 @@ impl Edit for Rename {
                 return Err(format!(
                     "cannot undo: renamed function not found: {}",
                     new_id
-                ))
+                ));
             }
         };
 

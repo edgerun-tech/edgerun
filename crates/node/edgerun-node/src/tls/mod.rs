@@ -77,12 +77,12 @@ pub mod tls_alpn {
 pub use crate::rt::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 pub use async_tls::{AsyncTlsServerStream, AsyncTlsStream};
 pub use name_match::{normalize_tls_dns_name, tls_dns_name_matches};
-pub use session_cache::{parse_new_session_ticket, SessionCache, SessionTicket};
+pub use session_cache::{SessionCache, SessionTicket, parse_new_session_ticket};
 
 pub use alert::{Alert, AlertLevel};
 pub use certificate_gen::{
-    cert_from_pem, generate_csr, generate_self_signed, generate_self_signed_pem,
-    signing_key_from_pem, signing_key_to_pem, CertificateAndKey,
+    CertificateAndKey, cert_from_pem, generate_csr, generate_self_signed, generate_self_signed_pem,
+    signing_key_from_pem, signing_key_to_pem,
 };
 pub use tls_alpn::ACME_TLS_ALPN_PROTOCOL;
 

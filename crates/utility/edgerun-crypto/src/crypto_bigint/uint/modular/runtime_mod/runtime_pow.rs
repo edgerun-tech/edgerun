@@ -3,7 +3,7 @@ use crate::crypto_bigint::modular::pow::multi_exponentiate_montgomery_form_array
 #[cfg(feature = "crypto_bigint_alloc")]
 use crate::crypto_bigint::modular::pow::multi_exponentiate_montgomery_form_slice;
 use crate::crypto_bigint::{
-    modular::pow::pow_montgomery_form, MultiExponentiateBoundedExp, PowBoundedExp, Uint,
+    MultiExponentiateBoundedExp, PowBoundedExp, Uint, modular::pow::pow_montgomery_form,
 };
 #[cfg(feature = "crypto_bigint_alloc")]
 use alloc::vec::Vec;

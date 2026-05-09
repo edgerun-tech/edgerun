@@ -1,16 +1,16 @@
 #![cfg(feature = "std")]
 
 use edgerun_crypto::ed25519_dalek::{Signature, Verifier, VerifyingKey};
-use edgerun_crypto::{fill_random, Ed25519SigningKey as SigningKey, Signer};
-use edgerun_protocols::seal::{seal_with_key, unseal_with_key, SealKey};
+use edgerun_crypto::{Ed25519SigningKey as SigningKey, Signer, fill_random};
+use edgerun_protocols::seal::{SealKey, seal_with_key, unseal_with_key};
 use edgerun_protocols::wire as edgerun_wire;
 use edgerun_protocols::wire::{
-    sdk_wire_bytes, CapabilityResponseProofRecord, SdkWireRecord, SigningAlgorithmRecord,
-    StorageWriteReceiptRecord, UserProfileIdSeedRecord,
+    CapabilityResponseProofRecord, SdkWireRecord, SigningAlgorithmRecord,
+    StorageWriteReceiptRecord, UserProfileIdSeedRecord, sdk_wire_bytes,
 };
 use edgerun_sdk::{
-    sha256, sha256_hex, str_eq, ApiFunction, ChainManifest, CompositionComponent,
-    CompositionManifest, Determinism, SegmentManifest, UnitManifest, SDK_ABI_NAME,
+    ApiFunction, ChainManifest, CompositionComponent, CompositionManifest, Determinism,
+    SDK_ABI_NAME, SegmentManifest, UnitManifest, sha256, sha256_hex, str_eq,
 };
 use edgerun_ssh::SshTarget;
 use formats::{

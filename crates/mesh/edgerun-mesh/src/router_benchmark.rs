@@ -3,7 +3,7 @@
 /// Measures next-hop routing table lookups with a realistic peer table.
 use std::time::{Duration, Instant};
 
-use crate::{discovery::DiscoveryPacket, router::MeshRouter, LocalNode, MeshRoute};
+use crate::{LocalNode, MeshRoute, discovery::DiscoveryPacket, router::MeshRouter};
 use edgerun_hardware_signing::NodeID;
 
 // ===========================================================================

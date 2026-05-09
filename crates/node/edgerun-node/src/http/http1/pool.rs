@@ -20,8 +20,8 @@
 use crate::http::runtime::net::{IpAddr, SocketAddr};
 use crate::http::runtime::time::{Duration, Instant};
 use crate::http::runtime::{
-    timeout as rt_timeout, AsyncRead, AsyncReadExt, AsyncTcpStream, AsyncWrite, AsyncWriteExt,
-    BufReader, ConnectFuture,
+    AsyncRead, AsyncReadExt, AsyncTcpStream, AsyncWrite, AsyncWriteExt, BufReader, ConnectFuture,
+    timeout as rt_timeout,
 };
 use alloc::collections::{BTreeMap as HashMap, BTreeSet};
 use alloc::format;

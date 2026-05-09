@@ -3,7 +3,7 @@
 //! Uses the library lifecycle to run hooks with full OCI spec compliance.
 
 use crate::cli::process_tree::{signal_tree, wait_tree_dead};
-use crate::cli::{parse_cli_args, required_positional, split_cli_prefix, GlobalOpts};
+use crate::cli::{GlobalOpts, parse_cli_args, required_positional, split_cli_prefix};
 use crate::libc;
 use crate::prelude::*;
 use std::fs;
@@ -15,7 +15,7 @@ use crate::lifecycle::{
     fork_container_child, run_create_runtime_hooks, run_prestart_hooks, save_created_state,
 };
 use crate::process::validate_spec;
-use crate::spec::{parse_oci_spec, OciSpec};
+use crate::spec::{OciSpec, parse_oci_spec};
 use crate::state::delete_state_with_result;
 
 pub fn cmd_create(opts: &GlobalOpts, args: &[String]) -> io::Result<()> {

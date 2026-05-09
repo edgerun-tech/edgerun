@@ -11,7 +11,7 @@ use crate::cli::exec::container_namespace_pid;
 use crate::cli::exec::{enter_container_root, join_container_namespaces, open_exec_root};
 use crate::cli::process_tree;
 use crate::cli::{invalid_input, parse_cli_args};
-use crate::state::{load_state, save_state, state_root_dir, ContainerState};
+use crate::state::{ContainerState, load_state, save_state, state_root_dir};
 use edgerun_clap::cli::Action;
 use edgerun_clap::{Arg, Command};
 

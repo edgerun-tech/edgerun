@@ -64,11 +64,11 @@ mod router_tests;
 pub use discovery::DiscoveryPacket;
 pub use edgerun_hardware_signing::NodeID;
 pub use frame::{
-    inspect_mesh_frame_wire, inspect_mesh_frame_wire_for, MeshFrame, MeshFrameAdmission,
-    MeshFrameAdmissionPolicy, MeshFrameHeader, MeshFrameReject, MESH_MAX_PAYLOAD_LEN,
+    MESH_MAX_PAYLOAD_LEN, MeshFrame, MeshFrameAdmission, MeshFrameAdmissionPolicy, MeshFrameHeader,
+    MeshFrameReject, inspect_mesh_frame_wire, inspect_mesh_frame_wire_for,
 };
 pub use frame_types::FrameType;
-pub use node::{sign_frame, DiscoveryPayload, LocalNode, MeshPeer};
+pub use node::{DiscoveryPayload, LocalNode, MeshPeer, sign_frame};
 pub use router::MeshRouter;
 pub use routing::{MeshRoute, MeshRoutingTable};
 

@@ -228,7 +228,7 @@ fn apply_scheduler(sched: &crate::spec::OciScheduler) -> io::Result<()> {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 format!("unknown scheduler policy: {}", sched.policy),
-            ))
+            ));
         }
     };
 

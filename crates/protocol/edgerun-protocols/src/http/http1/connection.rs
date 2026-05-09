@@ -5,9 +5,9 @@
 //! - HTTP/1.1: defaults to keep-alive, `Connection: close` disables persistence
 //! - `Connection: upgrade` signals protocol upgrade (e.g., WebSocket)
 
+use crate::http::HeaderMap;
 use crate::http::header::header_value_has_token;
 use crate::http::http1::version::{ConnectionDefault, Http1Version};
-use crate::http::HeaderMap;
 
 /// Connection header state
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

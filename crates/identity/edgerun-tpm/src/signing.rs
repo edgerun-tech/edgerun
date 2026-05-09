@@ -246,7 +246,7 @@ pub fn hash_message_for_algorithm(
         TpmSignatureAlgorithm::Opaque(v) => {
             return Err(TpmError::UnsupportedAlgorithm(
                 TpmSignatureAlgorithm::Opaque(v.clone()),
-            ))
+            ));
         }
     })
 }

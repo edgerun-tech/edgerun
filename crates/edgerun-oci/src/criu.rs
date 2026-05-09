@@ -48,7 +48,7 @@ pub enum RestoreFlags {
     RbResetSiginfo = (1 << 13),
 }
 
-extern "C" {
+unsafe extern "C" {
     fn syscall(number: c_long, ...) -> c_long;
 }
 

@@ -104,7 +104,7 @@ use core::cmp;
 use core::fmt;
 use core::hash::{Hash, Hasher};
 use core::hint::unreachable_unchecked;
-use core::iter::{repeat, FromIterator, FusedIterator, IntoIterator};
+use core::iter::{FromIterator, FusedIterator, IntoIterator, repeat};
 use core::mem;
 use core::mem::MaybeUninit;
 use core::ops::{self, Range, RangeBounds};
@@ -2490,10 +2490,10 @@ impl<T> Copy for ConstNonNull<T> {}
 
 #[cfg(feature = "impl_bincode")]
 use bincode::{
-    de::{read::Reader, BorrowDecoder, Decode, Decoder},
-    enc::{write::Writer, Encode, Encoder},
-    error::{DecodeError, EncodeError},
     BorrowDecode,
+    de::{BorrowDecoder, Decode, Decoder, read::Reader},
+    enc::{Encode, Encoder, write::Writer},
+    error::{DecodeError, EncodeError},
 };
 
 #[cfg(feature = "impl_bincode")]

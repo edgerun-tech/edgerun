@@ -5,7 +5,7 @@
 
 use crate::prelude::*;
 use alloc::format;
-use edgerun_crypto::aes::{Aes128, AES_BLOCK_SIZE};
+use edgerun_crypto::aes::{AES_BLOCK_SIZE, Aes128};
 use edgerun_crypto::hmac_sha256;
 use edgerun_crypto::sha256;
 

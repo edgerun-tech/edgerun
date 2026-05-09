@@ -1013,20 +1013,22 @@ mod tests {
     fn backend_get_nonexistent_collection() {
         let root = tmp_root();
         let be = Backend::new_noop(root).unwrap();
-        assert!(be
-            .get("/org/freedesktop/secrets/collections/nonexistent", "any")
-            .unwrap()
-            .is_none());
+        assert!(
+            be.get("/org/freedesktop/secrets/collections/nonexistent", "any")
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]
     fn backend_list_nonexistent_collection() {
         let root = tmp_root();
         let be = Backend::new_noop(root).unwrap();
-        assert!(be
-            .list("/org/freedesktop/secrets/collections/nonexistent")
-            .unwrap()
-            .is_empty());
+        assert!(
+            be.list("/org/freedesktop/secrets/collections/nonexistent")
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]

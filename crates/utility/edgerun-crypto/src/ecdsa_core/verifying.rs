@@ -2,16 +2,16 @@
 
 use crate::digest::{Digest, FixedOutput};
 use crate::ecdsa_core::{
-    hazmat::{bits2field, DigestPrimitive, VerifyPrimitive},
     Error, Result, Signature, SignatureSize,
+    hazmat::{DigestPrimitive, VerifyPrimitive, bits2field},
 };
 use crate::elliptic_curve::{
+    AffinePoint, CurveArithmetic, FieldBytesSize, PrimeCurve, PublicKey,
     generic_array::ArrayLength,
     point::PointCompression,
     sec1::{self, CompressedPoint, EncodedPoint, FromEncodedPoint, ToEncodedPoint},
-    AffinePoint, CurveArithmetic, FieldBytesSize, PrimeCurve, PublicKey,
 };
-use crate::signature::{hazmat::PrehashVerifier, DigestVerifier, Verifier};
+use crate::signature::{DigestVerifier, Verifier, hazmat::PrehashVerifier};
 use core::{cmp::Ordering, fmt::Debug};
 
 #[cfg(feature = "p256_ecdsa_alloc")]
@@ -28,22 +28,21 @@ use {
 
 #[cfg(feature = "p256_ecdsa_pkcs8")]
 use crate::elliptic_curve::pkcs8::{
-    self,
+    self, AssociatedOid, ObjectIdentifier,
     der::AnyRef,
     spki::{AlgorithmIdentifier, AssociatedAlgorithmIdentifier, SignatureAlgorithmIdentifier},
-    AssociatedOid, ObjectIdentifier,
 };
 
 #[cfg(feature = "sha2")]
 use {
     crate::ecdsa_core::{
-        SignatureWithOid, ECDSA_SHA224_OID, ECDSA_SHA256_OID, ECDSA_SHA384_OID, ECDSA_SHA512_OID,
+        ECDSA_SHA224_OID, ECDSA_SHA256_OID, ECDSA_SHA384_OID, ECDSA_SHA512_OID, SignatureWithOid,
     },
     crate::sha2::{Sha224, Sha256, Sha384, Sha512},
 };
 
 #[cfg(all(feature = "p256_ecdsa_pem", feature = "p256_ecdsa_serde"))]
-use serdect::serde::{de, ser, Deserialize, Serialize};
+use serdect::serde::{Deserialize, Serialize, de, ser};
 
 /// ECDSA public key used for verifying signatures. Generic over prime order
 /// elliptic curves (e.g. NIST P-curves)

@@ -4,7 +4,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use edgerun_encoding::byteorder::{push_i32_le, push_u16_le, push_u32_le, read_u32_le};
 
-use super::{align4, Message};
+use super::{Message, align4};
 
 /// Encode a message for sending to a client.
 ///
@@ -137,7 +137,7 @@ pub fn encode_string(buf: &mut Vec<u8>, s: &str) {
     push_u32_le(buf, len as u32);
     buf.extend_from_slice(s.as_bytes());
     buf.push(0); // null terminator
-                 // Pad to 4-byte boundary
+    // Pad to 4-byte boundary
     for _ in 0..(aligned - len) {
         buf.push(0);
     }

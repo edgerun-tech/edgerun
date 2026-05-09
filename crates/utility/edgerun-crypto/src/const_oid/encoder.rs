@@ -1,8 +1,8 @@
 //! OID encoder with `const` support.
 
 use crate::const_oid::{
-    arcs::{ARC_MAX_FIRST, ARC_MAX_SECOND},
     Arc, Error, ObjectIdentifier, Result,
+    arcs::{ARC_MAX_FIRST, ARC_MAX_SECOND},
 };
 
 /// BER/DER encoder

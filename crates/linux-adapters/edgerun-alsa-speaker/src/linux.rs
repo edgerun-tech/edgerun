@@ -155,7 +155,7 @@ pub mod path {
 
     impl fmt::Display for Display<'_> {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            f.write_str(&self.0 .0)
+            f.write_str(&self.0.0)
         }
     }
 }
@@ -188,8 +188,8 @@ pub mod vec {
 use crate::prelude::v1::*;
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 use edgerun_devices::speaker::{
-    default_speaker_descriptor, validate_audio_playback_request, AudioPlaybackRequest,
-    AudioPlaybackResult, SpeakerDevice, SpeakerInfo, SpeakerOutputLevel, SpeakerSampleFormat,
+    AudioPlaybackRequest, AudioPlaybackResult, SpeakerDevice, SpeakerInfo, SpeakerOutputLevel,
+    SpeakerSampleFormat, default_speaker_descriptor, validate_audio_playback_request,
 };
 use std::ffi::c_long;
 #[cfg(unix)]

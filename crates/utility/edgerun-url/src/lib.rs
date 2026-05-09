@@ -7,6 +7,7 @@
 
 extern crate alloc;
 
+use alloc::format;
 use alloc::string::String;
 use alloc::string::ToString;
 use edgerun_json::{FromJson, JsonValue, JsonValueError, ToJson};
@@ -70,6 +71,56 @@ impl Url {
         &self.path
     }
 
+    /// Set the URL scheme. Returns `Err(())` if the scheme is invalid.
+    pub fn set_scheme(&mut self, scheme: &str) -> Result<(), ()> {
+        if scheme.is_empty()
+            || !scheme
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '-' || c == '.')
+        {
+            return Err(());
+        }
+        self.scheme = scheme.to_ascii_lowercase();
+        Ok(())
+    }
+
+    /// Set the URL path.
+    pub fn set_path(&mut self, path: &str) {
+        self.path = path.to_string();
+    }
+
+    /// Append a query pair using RFC 3986 percent encoding.
+    pub fn append_query_pair(&mut self, key: &str, value: &str) {
+        fn is_unreserved(b: u8) -> bool {
+            matches!(b, b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~')
+        }
+
+        fn encode(value: &str) -> String {
+            const HEX: &[u8; 16] = b"0123456789ABCDEF";
+            let mut out = String::with_capacity(value.len());
+            for &b in value.as_bytes() {
+                if is_unreserved(b) {
+                    out.push(b as char);
+                } else {
+                    out.push('%');
+                    out.push(HEX[(b >> 4) as usize] as char);
+                    out.push(HEX[(b & 0x0f) as usize] as char);
+                }
+            }
+            out
+        }
+
+        let pair = format!("{}={}", encode(key), encode(value));
+        match &mut self.query {
+            Some(query) if !query.is_empty() => {
+                query.push('&');
+                query.push_str(&pair);
+            }
+            Some(query) => query.push_str(&pair),
+            None => self.query = Some(pair),
+        }
+    }
+
     /// Get the query string, if present.
     pub fn query(&self) -> Option<&str> {
         self.query.as_deref()
@@ -95,7 +146,7 @@ impl Url {
             if !self.path.starts_with('/') {
                 s.push('/');
             }
-            s.push_str(&self.path);
+            s.push_str(self.path.trim_start_matches('/'));
         }
         if let Some(ref q) = self.query {
             s.push('?');
@@ -106,6 +157,12 @@ impl Url {
             s.push_str(f);
         }
         s
+    }
+}
+
+impl core::fmt::Display for Url {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(&self.to_string())
     }
 }
 
@@ -144,7 +201,7 @@ fn parse_url(input: &str) -> Result<Url, ParseError> {
         String::new()
     } else if rest.starts_with('/') {
         let end = rest.find(['?', '#']).unwrap_or(rest.len());
-        rest[1..end].to_string()
+        rest[..end].to_string()
     } else {
         let end = rest.find(['?', '#']).unwrap_or(rest.len());
         rest[..end].to_string()

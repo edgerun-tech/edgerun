@@ -20,7 +20,7 @@ use crate::rootfs_devices::create_rootfs_devices;
 use crate::rootfs_idmap::setup_idmapped_mount;
 use crate::spec::{OciLinuxDevice, OciMount, OciRoot};
 use crate::syscalls::{
-    do_mount, do_mount_setattr, do_pivot_root, do_umount2, mount_attr, ms, MountAttr, MNT_DETACH,
+    MNT_DETACH, MountAttr, do_mount, do_mount_setattr, do_pivot_root, do_umount2, mount_attr, ms,
 };
 
 fn c_string(value: &str) -> io::Result<CString> {
@@ -117,13 +117,13 @@ fn rootfs_relative_destination(destination: &str) -> io::Result<PathBuf> {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
                     format!("mount destination escapes rootfs: {destination}"),
-                ))
+                ));
             }
             Component::Prefix(_) => {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
                     format!("unsupported mount destination: {destination}"),
-                ))
+                ));
             }
         }
     }
@@ -284,9 +284,13 @@ fn setup_mount(mount: &OciMount, mount_label: Option<&str>) -> io::Result<()> {
             &attr,
             mount_attr::REC as u32,
         ) {
-            let _ = std::fs::write("/dev/kmsg",
-                format!("edgerun: mount.recursive failed for {}: {} (kernel may not support mount_setattr)",
-                    mount.destination, e));
+            let _ = std::fs::write(
+                "/dev/kmsg",
+                format!(
+                    "edgerun: mount.recursive failed for {}: {} (kernel may not support mount_setattr)",
+                    mount.destination, e
+                ),
+            );
         }
     }
 
@@ -299,9 +303,13 @@ fn setup_mount(mount: &OciMount, mount_label: Option<&str>) -> io::Result<()> {
                 uid_mappings,
                 mount.gid_mappings.as_deref(),
             ) {
-                let _ = std::fs::write("/dev/kmsg",
-                    format!("edgerun: idmapped mount failed for {}: {} (kernel may not support idmapped mounts)",
-                        mount.destination, e));
+                let _ = std::fs::write(
+                    "/dev/kmsg",
+                    format!(
+                        "edgerun: idmapped mount failed for {}: {} (kernel may not support idmapped mounts)",
+                        mount.destination, e
+                    ),
+                );
             }
         }
     }

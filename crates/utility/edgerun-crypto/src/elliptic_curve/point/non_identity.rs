@@ -3,11 +3,11 @@
 use core::ops::{Deref, Mul};
 
 use crate::elliptic_curve::rand_core::{CryptoRng, RngCore};
-use crate::group::{prime::PrimeCurveAffine, Curve, GroupEncoding};
+use crate::group::{Curve, GroupEncoding, prime::PrimeCurveAffine};
 use crate::subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 
 #[cfg(feature = "elliptic_curve_serde")]
-use serdect::serde::{de, ser, Deserialize, Serialize};
+use serdect::serde::{Deserialize, Serialize, de, ser};
 
 use crate::elliptic_curve::{CurveArithmetic, NonZeroScalar, Scalar};
 

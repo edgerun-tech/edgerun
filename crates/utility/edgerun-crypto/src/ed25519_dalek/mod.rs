@@ -25,10 +25,10 @@ pub use errors::*;
 pub use signing::*;
 pub use verifying::*;
 
+pub use crate::ed25519::Signature;
 #[cfg(feature = "digest")]
 pub use crate::ed25519::signature::{DigestSigner, DigestVerifier};
 pub use crate::ed25519::signature::{Signer, Verifier};
-pub use crate::ed25519::Signature;
 
 #[cfg(feature = "pkcs8")]
 pub use crate::ed25519::pkcs8;

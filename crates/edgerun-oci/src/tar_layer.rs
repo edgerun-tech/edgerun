@@ -1,16 +1,16 @@
 //! no_std parser for uncompressed OCI tar layers.
 
 use crate::layer_pipeline::{
-    apply_layer_chunks, sha256_layer_digest, LayerApplyReport, LayerDigest, LayerPipelineError,
-    LayerSink,
+    LayerApplyReport, LayerDigest, LayerPipelineError, LayerSink, apply_layer_chunks,
+    sha256_layer_digest,
 };
 use crate::oci_path::{layer_path_safe, normalize_layer_path};
 use crate::prelude::*;
 use crate::registry::manifest::LayerDescriptor;
 pub use crate::tar_compression::{
-    decompress_gzip_layer, decompress_zstd_layer, layer_compression, OciLayerCompression,
+    OciLayerCompression, decompress_gzip_layer, decompress_zstd_layer, layer_compression,
 };
-pub use crate::tar_whiteout::{parse_oci_whiteout, OciWhiteout};
+pub use crate::tar_whiteout::{OciWhiteout, parse_oci_whiteout};
 use core::fmt;
 
 const BLOCK_SIZE: usize = 512;

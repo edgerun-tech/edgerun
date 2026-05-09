@@ -254,7 +254,7 @@ pub mod path {
 
     impl fmt::Display for Display<'_> {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            f.write_str(&self.0 .0)
+            f.write_str(&self.0.0)
         }
     }
 }
@@ -287,12 +287,14 @@ pub mod vec {
 use crate::prelude::v1::*;
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityProvider};
 use edgerun_devices::fingerprint::{
-    default_fingerprint_descriptor, validate_enroll_request, FingerprintCapture,
-    FingerprintCapturePurpose, FingerprintEnrollProgress, FingerprintEnrollRequest,
-    FingerprintEnrollmentSession, FingerprintError, FingerprintReader, FingerprintReaderInfo,
-    FingerprintTemplateRecord, FingerprintVerification, FingerprintVerifyRequest,
+    FingerprintCapture, FingerprintCapturePurpose, FingerprintEnrollProgress,
+    FingerprintEnrollRequest, FingerprintEnrollmentSession, FingerprintError, FingerprintReader,
+    FingerprintReaderInfo, FingerprintTemplateRecord, FingerprintVerification,
+    FingerprintVerifyRequest, default_fingerprint_descriptor, validate_enroll_request,
 };
 use edgerun_protocols::goodix_fingerprint::{
+    GOODIX_PACKAGE_CRC_SIZE, GOODIX_PACKAGE_HEADER_SIZE, GOODIX_RESPONSE_ACK_CMD,
+    GoodixPacketError, GoodixPayloadError,
     build_goodix_finger_id as build_protocol_goodix_finger_id,
     build_goodix_package as build_protocol_goodix_package, goodix_crc32,
     parse_goodix_ack as parse_protocol_goodix_ack,
@@ -307,9 +309,7 @@ use edgerun_protocols::goodix_fingerprint::{
     parse_goodix_packet as parse_protocol_goodix_packet,
     parse_goodix_simple_result as parse_protocol_goodix_simple_result,
     parse_goodix_template as parse_protocol_goodix_template,
-    parse_goodix_version_info as parse_protocol_goodix_version_info, GoodixPacketError,
-    GoodixPayloadError, GOODIX_PACKAGE_CRC_SIZE, GOODIX_PACKAGE_HEADER_SIZE,
-    GOODIX_RESPONSE_ACK_CMD,
+    parse_goodix_version_info as parse_protocol_goodix_version_info,
 };
 pub use edgerun_protocols::goodix_fingerprint::{
     GoodixAck, GoodixCaptureResponse, GoodixDuplicateCheckResult, GoodixEnrollInitResult,
@@ -317,11 +317,11 @@ pub use edgerun_protocols::goodix_fingerprint::{
     GoodixPacket, GoodixPacketHeader, GoodixSimpleResult, GoodixTemplate, GoodixVersionInfo,
 };
 use edgerun_protocols::usb::{
+    USB_DT_CONFIG, USB_DT_DEVICE, USB_DT_STRING, UsbDescriptorError,
     parse_usb_configuration_descriptor as parse_protocol_usb_configuration_descriptor,
     parse_usb_device_descriptor as parse_protocol_usb_device_descriptor,
     parse_usb_language_ids as parse_protocol_usb_language_ids,
     parse_usb_utf16le_string_descriptor as parse_protocol_usb_utf16le_string_descriptor,
-    UsbDescriptorError, USB_DT_CONFIG, USB_DT_DEVICE, USB_DT_STRING,
 };
 pub use edgerun_protocols::usb::{UsbConfigurationDescriptor, UsbDeviceDescriptor};
 #[cfg(unix)]
@@ -1243,7 +1243,7 @@ pub fn discover_interfaces(
         let number = match read_interface_number(&path) {
             Ok(v) => v,
             Err(GoodixFingerprintError::Io(err)) if err.kind() == io::ErrorKind::NotFound => {
-                continue
+                continue;
             }
             Err(err) => return Err(err),
         };
@@ -2238,9 +2238,11 @@ mod tests {
         let descriptor = reader.descriptor();
         assert_eq!(descriptor.provider_name, "goodix-usb");
         assert_eq!(descriptor.provider_instance_id, "usb-001-002-27c6-609c");
-        assert!(descriptor
-            .operations
-            .contains(&(edgerun_capabilities::CapabilityOperation::Verify as i32)));
+        assert!(
+            descriptor
+                .operations
+                .contains(&(edgerun_capabilities::CapabilityOperation::Verify as i32))
+        );
     }
 
     #[test]

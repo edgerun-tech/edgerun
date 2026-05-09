@@ -7,7 +7,7 @@ use core::net::Ipv4Addr;
 use edgerun_encoding::ip::broadcast_address;
 
 use super::lease::LeasePool;
-use super::message::{DhcpMessage, DhcpMessageType, NetworkConfig, DHCP_CLIENT_PORT};
+use super::message::{DHCP_CLIENT_PORT, DhcpMessage, DhcpMessageType, NetworkConfig};
 
 pub struct DhcpServerConfig {
     pub server_ip: Ipv4Addr,

@@ -35,9 +35,9 @@ use crate::http::method::Method;
 use crate::http::request::Request;
 use crate::http::response::Response;
 use crate::http::runtime;
-use crate::http::runtime::net::SocketAddr;
 use crate::http::runtime::AsyncUdpSocket;
 use crate::http::runtime::CancellationToken;
+use crate::http::runtime::net::SocketAddr;
 use crate::http::uri::Uri;
 use crate::tls::certificate_gen::CertificateAndKey;
 use alloc::collections::BTreeMap as HashMap;
@@ -47,16 +47,16 @@ use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 
+use super::Http3Error;
 use super::connection::Http3Connection;
+use super::quic::ConnectionId;
+use super::quic::QUIC_VERSION_V1;
+use super::quic::QuicConnection;
+use super::quic::QuicTlsServerHandshaker;
 use super::quic::crypto::PacketProtection;
 use super::quic::frame::QuicFrame;
 use super::quic::packet::{self, PacketType, QuicPacket, QuicPacketHeader};
 use super::quic::server_handshake::CertificateAndKey as QuicCertificateAndKey;
-use super::quic::ConnectionId;
-use super::quic::QuicConnection;
-use super::quic::QuicTlsServerHandshaker;
-use super::quic::QUIC_VERSION_V1;
-use super::Http3Error;
 use crate::http::http3::settings::Http3Settings;
 use crate::http::runtime::sync::Mutex;
 use edgerun_qpack::{QpackDecoder, QpackEncoder};
@@ -782,9 +782,11 @@ mod tests {
 
         let server_keys = server_hs.initial_keys(&client_dcid);
         let mut wrong_server_protection = PacketProtection::new(&server_keys);
-        assert!(wrong_server_protection
-            .unprotect(&parsed.header_to_bytes_aad(), 0, &parsed.payload)
-            .is_err());
+        assert!(
+            wrong_server_protection
+                .unprotect(&parsed.header_to_bytes_aad(), 0, &parsed.payload)
+                .is_err()
+        );
 
         let mut server_protection = PacketProtection::new(&server_keys);
         let plaintext = server_protection

@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
-import { CommandPalette } from '../components/os/command-input'
 import { PlatformProvider } from '@/platform/ui/PlatformProvider'
 import { TooltipProvider } from '@radix-ui/react-tooltip'
 
@@ -46,7 +45,6 @@ export default function RootLayout({
         <TooltipProvider>
           <PlatformProvider>
             {children}
-            <CommandPalette />
           </PlatformProvider>
         </TooltipProvider>
       </body>

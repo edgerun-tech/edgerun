@@ -1,11 +1,11 @@
 //! TLS 1.3 server handshake message builders.
 
 use alloc::{vec, vec::Vec};
-use edgerun_crypto::p256::ecdsa::{signature::SignerMut, Signature, SigningKey};
+use edgerun_crypto::p256::ecdsa::{Signature, SigningKey, signature::SignerMut};
 
-use super::super::cipher::NamedGroup;
-use super::super::prf::{hmac_sha256, hmac_sha384, Hasher};
 use super::super::Result;
+use super::super::cipher::NamedGroup;
+use super::super::prf::{Hasher, hmac_sha256, hmac_sha384};
 use edgerun_crypto::CipherSuite;
 use edgerun_encoding::byteorder::{push_u16_be, push_u24_be, write_u16_be, write_u24_be};
 
@@ -225,7 +225,7 @@ mod tests {
     use crate::tls::certificate_gen::generate_self_signed;
     use crate::tls::handshake::ClientHelloBuilder;
     use crate::tls::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
-    use crate::tls::prf::{server_write_keys, Tls13KeySchedule};
+    use crate::tls::prf::{Tls13KeySchedule, server_write_keys};
     use crate::tls::record::RecordCipher;
 
     #[test]

@@ -744,11 +744,7 @@ fn str_eq(left: &str, right: &str) -> bool {
 }
 
 const fn min_usize(left: usize, right: usize) -> usize {
-    if left < right {
-        left
-    } else {
-        right
-    }
+    if left < right { left } else { right }
 }
 
 fn sha256_compress(h: &mut [u32; 8], chunk: &[u8; 64], k: &[u32; 64]) {

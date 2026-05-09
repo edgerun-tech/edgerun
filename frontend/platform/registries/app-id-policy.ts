@@ -8,7 +8,6 @@ export const APP_ID_ALIASES: Record<string, string> = {
 export const REMOVED_APP_IDS = new Set([
   "resource-monitor",
   "network-monitor",
-  "terminal",
   "people",
   "trust-manager",
   "finances",
@@ -25,6 +24,7 @@ export const REMOVED_APP_IDS = new Set([
   "workflow-builder",
   "calculator",
   "help",
+  "terminal",
 ])
 
 export const CORE_APP_IDS = ["identity", "app-store", "settings"] as const

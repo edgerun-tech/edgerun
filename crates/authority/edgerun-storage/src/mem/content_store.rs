@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 
 use edgerun_protocols::core_protocol::protocol::ObjectRef;
 
-use crate::core::{cas::raw_object_ids, ContentStore, ObjectBytes};
+use crate::core::{ContentStore, ObjectBytes, cas::raw_object_ids};
 use crate::error::StorageError;
 
 #[derive(Clone, Debug)]

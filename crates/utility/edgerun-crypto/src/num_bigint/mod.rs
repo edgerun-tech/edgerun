@@ -128,7 +128,7 @@ mod biguint;
 pub mod integer;
 mod smallvec_impl;
 
-pub use integer::{sqrt, Integer};
+pub use integer::{Integer, sqrt};
 pub use smallvec_impl::*;
 
 #[cfg(feature = "prime")]
@@ -202,11 +202,11 @@ pub use crate::num_bigint::biguint::BigUint;
 pub use crate::num_bigint::biguint::IntoBigUint;
 pub use crate::num_bigint::biguint::ToBigUint;
 
-pub use crate::num_bigint::bigint::negate_sign;
 pub use crate::num_bigint::bigint::BigInt;
 pub use crate::num_bigint::bigint::IntoBigInt;
 pub use crate::num_bigint::bigint::Sign;
 pub use crate::num_bigint::bigint::ToBigInt;
+pub use crate::num_bigint::bigint::negate_sign;
 
 #[cfg(feature = "rand")]
 pub use crate::num_bigint::bigrand::{RandBigInt, RandomBits, UniformBigInt, UniformBigUint};

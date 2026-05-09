@@ -11,10 +11,10 @@ use alloc::string::String;
 #[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::vec::Vec;
 
-use crate::error::JsonError;
-use crate::util;
 use crate::JsonValue;
 use crate::JsonValueError;
+use crate::error::JsonError;
+use crate::util;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CompiledObjectSchema {
@@ -780,7 +780,7 @@ impl CompiledRowSchema {
 
 #[cfg(test)]
 mod tests {
-    use crate::{parse_json_tape, TapeTokenKind};
+    use crate::{TapeTokenKind, parse_json_tape};
     use alloc::{string::String, vec, vec::Vec};
 
     #[test]

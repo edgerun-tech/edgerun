@@ -71,7 +71,7 @@ impl FromJson for TuyaDevice {
             _ => {
                 return Err(JsonValueError::WrongType(format!(
                     "expected tuya device object"
-                )))
+                )));
             }
         };
         Ok(Self {
@@ -177,7 +177,7 @@ impl FromJson for TuyaResponse {
             _ => {
                 return Err(JsonValueError::WrongType(format!(
                     "expected tuya response object"
-                )))
+                )));
             }
         };
         let action = String::from_json(

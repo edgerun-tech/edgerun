@@ -11,19 +11,19 @@
 
 use crate::http::handler::Handler;
 use crate::http::header::HeaderMap;
-use crate::http::http2::frame::{flags, Frame, FrameType};
+use crate::http::http2::ErrorCode;
+use crate::http::http2::frame::{Frame, FrameType, flags};
 use crate::http::http2::headers::{validate_header_name_case, validate_request_headers};
 use crate::http::http2::hpack::{Decoder, Encoder};
-use crate::http::http2::ErrorCode;
 use crate::http::http2::{FrameAction, Http2Server};
 use crate::http::method::Method;
+use crate::http::runtime::CancellationToken;
 use crate::http::runtime::net::SocketAddr;
 use crate::http::runtime::sync::Arc;
 use crate::http::runtime::time::Duration;
-use crate::http::runtime::CancellationToken;
 use crate::http::runtime::{
-    bind_tcp_listener, sleep, spawn, timeout, AsyncRead, AsyncReadExt, AsyncTcpListener,
-    AsyncTcpStream, AsyncWrite, AsyncWriteExt, BufReader,
+    AsyncRead, AsyncReadExt, AsyncTcpListener, AsyncTcpStream, AsyncWrite, AsyncWriteExt,
+    BufReader, bind_tcp_listener, sleep, spawn, timeout,
 };
 use crate::http::uri::Uri;
 use crate::http::{Request, Response, StatusCode};
@@ -1049,16 +1049,14 @@ async fn process_request_with_body(
     handler: &dyn Handler,
 ) -> FrameAction {
     if let Err((ec, _)) = validate_request_headers(headers) {
-        return FrameAction::WriteFrames(vec![crate::http::http2::frame::RstStreamFrame::new(
-            stream_id, ec,
-        )
-        .to_frame()]);
+        return FrameAction::WriteFrames(vec![
+            crate::http::http2::frame::RstStreamFrame::new(stream_id, ec).to_frame(),
+        ]);
     }
     if let Err((ec, _)) = validate_header_name_case(headers) {
-        return FrameAction::WriteFrames(vec![crate::http::http2::frame::RstStreamFrame::new(
-            stream_id, ec,
-        )
-        .to_frame()]);
+        return FrameAction::WriteFrames(vec![
+            crate::http::http2::frame::RstStreamFrame::new(stream_id, ec).to_frame(),
+        ]);
     }
 
     let method = headers

@@ -3,8 +3,8 @@
 use crate::prelude::*;
 use crate::validate::{default_process_args, default_process_env};
 use crate::{
-    default_masked_paths, default_namespaces, default_readonly_paths, OciLinux, OciMount,
-    OciProcess, OciRoot, OciSpec, OciUser,
+    OciLinux, OciMount, OciProcess, OciRoot, OciSpec, OciUser, default_masked_paths,
+    default_namespaces, default_readonly_paths,
 };
 
 use super::config::ImageConfig;

@@ -578,9 +578,11 @@ mod tests {
         let len = ap.build_beacon(&mut out).unwrap();
 
         assert_eq!((read_u16_le(&out, 0) >> 4) & 0xf, SUBTYPE_BEACON);
-        assert!(out[..len]
-            .windows(b"edgerun-ac".len())
-            .any(|w| w == b"edgerun-ac"));
+        assert!(
+            out[..len]
+                .windows(b"edgerun-ac".len())
+                .any(|w| w == b"edgerun-ac")
+        );
         assert!(out[..len].windows(3).any(|w| w == [3, 1, 6]));
     }
 

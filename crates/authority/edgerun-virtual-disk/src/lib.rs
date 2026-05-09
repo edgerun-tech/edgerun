@@ -68,7 +68,9 @@ pub mod image {
                 Self::Unsupported => f.write_str("virtual disk image operations require host I/O"),
                 Self::InvalidArgument(msg) => write!(f, "invalid argument: {msg}"),
                 Self::AlreadyExists(path) => write!(f, "virtual disk already exists: {path}"),
-                Self::CommandMissing { command } => write!(f, "required command missing: {command}"),
+                Self::CommandMissing { command } => {
+                    write!(f, "required command missing: {command}")
+                }
                 Self::CommandFailed {
                     command,
                     status,
@@ -132,16 +134,16 @@ pub mod nbd;
 pub mod remote;
 
 pub use image::{
-    clone, create, detect_format, info, remove, resize, Result as VirtualDiskResult,
-    VirtualDiskError, VirtualDiskFormat, VirtualDiskInfo, VirtualDiskSpec,
+    Result as VirtualDiskResult, VirtualDiskError, VirtualDiskFormat, VirtualDiskInfo,
+    VirtualDiskSpec, clone, create, detect_format, info, remove, resize,
 };
 pub use nbd::{
-    attach_nbd, detach_nbd, negotiate_nbd_export, serve_nbd_connection, serve_nbd_connection_multi,
-    LinuxNbdAttachSpec, NbdExport, NbdExportEntry, NbdNegotiatedExport,
+    LinuxNbdAttachSpec, NbdExport, NbdExportEntry, NbdNegotiatedExport, attach_nbd, detach_nbd,
+    negotiate_nbd_export, serve_nbd_connection, serve_nbd_connection_multi,
 };
 pub use remote::{
-    receive_request, receive_response, send_request, send_response, BlockClient, BlockServer,
-    FileBlockBackend, MemoryBlockBackend,
+    BlockClient, BlockServer, FileBlockBackend, MemoryBlockBackend, receive_request,
+    receive_response, send_request, send_response,
 };
 
 #[cfg(test)]
@@ -153,8 +155,8 @@ mod tests {
     use alloc::sync::Arc;
     use alloc::vec;
     use edgerun_protocols::block::{
-        handle_request, validate_range, BlockBackend, BlockDeviceInfo, BlockError, BlockRequest,
-        BlockResponse, RequestId, BLOCK_PROTOCOL_VERSION,
+        BLOCK_PROTOCOL_VERSION, BlockBackend, BlockDeviceInfo, BlockError, BlockRequest,
+        BlockResponse, RequestId, handle_request, validate_range,
     };
 
     // Tests for re-exported types from the image module

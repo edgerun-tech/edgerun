@@ -26,15 +26,15 @@ use std::time::Duration;
 use crate::cgroups::{setup_cgroups, setup_device_cgroup};
 pub use crate::handle::RunningContainer;
 use crate::hooks::{
-    execute_create_runtime_hooks, execute_poststart_hooks, execute_poststop_hooks,
-    execute_prestart_hooks, ContainerState,
+    ContainerState, execute_create_runtime_hooks, execute_poststart_hooks, execute_poststop_hooks,
+    execute_prestart_hooks,
 };
-use crate::lifecycle_child::{fork_with_setup_mode, ChildExecContext, ChildSetupMode};
+use crate::lifecycle_child::{ChildExecContext, ChildSetupMode, fork_with_setup_mode};
 use crate::process::ContainerConfig;
 use crate::spec::{OciHook, OciLinuxResources, OciSpec};
 use crate::state::{
-    container_state_dir, fifo_path, is_root, is_rootless_mode, save_runtime_spec, save_state,
-    ContainerState as StateContainerState,
+    ContainerState as StateContainerState, container_state_dir, fifo_path, is_root,
+    is_rootless_mode, save_runtime_spec, save_state,
 };
 
 /// Extract hooks from an OCI spec, returning a default-empty set if absent.
@@ -663,7 +663,7 @@ fn remove_cgroup_dir(cgroup_dir: &Path) -> io::Result<()> {
                         cgroup_dir.display(),
                         error
                     ),
-                ))
+                ));
             }
         }
     }

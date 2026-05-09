@@ -2,7 +2,7 @@
 //!
 //! Run with: cargo test --test unicode -- --nocapture
 
-use edgerun_json::{parse_json, JsonValue};
+use edgerun_json::{JsonValue, parse_json};
 
 /// Test that all valid Unicode scalar values are handled correctly
 #[test]

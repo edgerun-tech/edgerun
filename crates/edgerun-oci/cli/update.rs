@@ -211,7 +211,7 @@ fn apply_update(cgroup_root: &std::path::Path, opts: &UpdateOpts) -> io::Result<
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidInput,
                     "pids limit must be -1 or greater than zero",
-                ))
+                ));
             }
             _ => limit.to_string(),
         };

@@ -3,7 +3,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use edgerun_json::{json, Value};
+use edgerun_json::{Value, json};
 
 use crate::{filesystem, rust_edit};
 

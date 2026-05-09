@@ -2753,15 +2753,15 @@ fn append_encoded_record(out: &mut Vec<u8>, kind: u8, payload: &[u8]) -> Result<
 fn rkyv_encode<T>(value: &T) -> Result<Vec<u8>, DbError>
 where
     T: for<'a> edgerun_wire::Serialize<
-        edgerun_wire::rancor::Strategy<
-            edgerun_wire::ser::Serializer<
-                edgerun_wire::util::AlignedVec,
-                edgerun_wire::ser::allocator::ArenaHandle<'a>,
-                edgerun_wire::ser::sharing::Share,
+            edgerun_wire::rancor::Strategy<
+                edgerun_wire::ser::Serializer<
+                    edgerun_wire::util::AlignedVec,
+                    edgerun_wire::ser::allocator::ArenaHandle<'a>,
+                    edgerun_wire::ser::sharing::Share,
+                >,
+                edgerun_wire::WireError,
             >,
-            edgerun_wire::WireError,
         >,
-    >,
 {
     edgerun_wire::to_bytes::<edgerun_wire::WireError>(value)
         .map(|bytes| bytes.into_vec())

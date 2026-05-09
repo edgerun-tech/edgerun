@@ -11,8 +11,8 @@ use crate::rt::{
     CancellationToken, RwLock,
 };
 use edgerun_protocols::dns::{
-    dns_tcp_frame_len, encode_dns_tcp_frame, handle_query_without_forwarding, resolve,
-    udp_response_wire, DnsMessage, DnsRecordData, DnsRecordType, DnsResponseCode, DnsZone,
+    DnsMessage, DnsRecordData, DnsRecordType, DnsResponseCode, DnsZone, dns_tcp_frame_len,
+    encode_dns_tcp_frame, handle_query_without_forwarding, resolve, udp_response_wire,
 };
 
 const ACCEPT_POLL_INTERVAL: Duration = Duration::from_millis(100);

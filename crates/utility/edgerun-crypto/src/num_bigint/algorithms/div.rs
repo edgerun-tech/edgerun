@@ -3,9 +3,9 @@ use crate::num_bigint::{One, Zero};
 use crate::smallvec;
 use core::cmp::Ordering;
 
+use crate::num_bigint::BigUint;
 use crate::num_bigint::algorithms::{add2, cmp_slice, sub2};
 use crate::num_bigint::big_digit::{self, BigDigit, DoubleBigDigit};
-use crate::num_bigint::BigUint;
 
 pub fn div_rem_digit(mut a: BigUint, b: BigDigit) -> (BigUint, BigDigit) {
     let mut rem = 0;

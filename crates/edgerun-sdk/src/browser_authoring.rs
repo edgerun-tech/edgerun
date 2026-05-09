@@ -2,9 +2,9 @@ use alloc::{string::String, vec, vec::Vec};
 
 use edgerun_crypto::{Ed25519SigningKey as SigningKey, Signer};
 use edgerun_wire::{
-    sdk_wire_bytes, AppArtifactRecord, AppGraphRecord, AppHttpRouteRecord, AppManifestRecord,
+    AppArtifactRecord, AppGraphRecord, AppHttpRouteRecord, AppManifestRecord,
     AppStoreSubmissionRecord, ArtifactSignature, RuntimeAppInstall, RuntimeCapabilityDeclaration,
-    RuntimeHttpRoute, SdkWireRecord,
+    RuntimeHttpRoute, SdkWireRecord, sdk_wire_bytes,
 };
 
 use crate::sha256;

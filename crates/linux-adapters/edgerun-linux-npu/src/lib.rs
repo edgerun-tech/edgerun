@@ -47,8 +47,8 @@ use edgerun_linux_sysfs::parse_hex_u32_from_str;
 use edgerun_linux_sysfs::prelude::v1::*;
 // Re-export sysfs helpers that downstream NPU backends need.
 use edgerun_devices::npu::{
-    default_npu_descriptor, validate_npu_workload_request, CapabilityDescriptor, CapabilityError,
-    CapabilityProvider, NpuDevice, NpuInfo, NpuWorkloadRequest, NpuWorkloadResult,
+    CapabilityDescriptor, CapabilityError, CapabilityProvider, NpuDevice, NpuInfo,
+    NpuWorkloadRequest, NpuWorkloadResult, default_npu_descriptor, validate_npu_workload_request,
 };
 pub use edgerun_linux_sysfs::{read_trimmed, temp_root};
 use std::collections::BTreeSet;

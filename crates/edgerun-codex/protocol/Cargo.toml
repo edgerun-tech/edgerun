@@ -1,0 +1,46 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "codex-protocol"
+version.workspace = true
+
+[lib]
+name = "codex_protocol"
+path = "src/lib.rs"
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+chardetng = { workspace = true }
+edgerun-encoding = { workspace = true }
+edgerun-error = { workspace = true }
+edgerun-glob = { workspace = true }
+edgerun-json = { workspace = true }
+edgerun-locale = { workspace = true }
+edgerun-time = { workspace = true }
+encoding_rs = { workspace = true }
+icu_decimal = { workspace = true }
+icu_locale_core = { workspace = true }
+icu_provider = { workspace = true, features = ["sync"] }
+quick-xml = { workspace = true, features = ["serialize"] }
+reqwest = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+serde_with = { workspace = true, features = ["macros", "base64"] }
+strum = { workspace = true }
+strum_macros = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+ts-rs = { workspace = true, features = [
+    "uuid-impl",
+    "serde-json-impl",
+    "no-serde-warnings",
+] }
+uuid = { workspace = true, features = ["serde", "v7", "v4"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+landlock = { workspace = true }
+seccompiler = { workspace = true }

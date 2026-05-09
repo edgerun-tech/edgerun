@@ -2,8 +2,8 @@
 
 use super::value_cmp;
 use crate::der::{
-    ord::OrdIsValueOrd, AnyRef, BytesRef, DecodeValue, EncodeValue, Error, ErrorKind, FixedTag,
-    Header, Length, Reader, Result, Tag, ValueOrd, Writer,
+    AnyRef, BytesRef, DecodeValue, EncodeValue, Error, ErrorKind, FixedTag, Header, Length, Reader,
+    Result, Tag, ValueOrd, Writer, ord::OrdIsValueOrd,
 };
 use core::cmp::Ordering;
 
@@ -156,12 +156,12 @@ impl<'a> OrdIsValueOrd for UintRef<'a> {}
 
 #[cfg(feature = "alloc")]
 mod allocating {
-    use super::{decode_to_slice, encoded_len, strip_leading_zeroes, UintRef};
+    use super::{UintRef, decode_to_slice, encoded_len, strip_leading_zeroes};
     use crate::der::{
-        ord::OrdIsValueOrd,
-        referenced::{OwnedToRef, RefToOwned},
         BytesOwned, DecodeValue, EncodeValue, ErrorKind, FixedTag, Header, Length, Reader, Result,
         Tag, Writer,
+        ord::OrdIsValueOrd,
+        referenced::{OwnedToRef, RefToOwned},
     };
 
     /// Unsigned arbitrary precision ASN.1 `INTEGER` type.
@@ -344,9 +344,9 @@ fn needs_leading_zero(bytes: &[u8]) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{decode_to_array, UintRef};
+    use super::{UintRef, decode_to_array};
     use crate::der::{
-        asn1::integer::tests::*, AnyRef, Decode, Encode, ErrorKind, SliceWriter, Tag,
+        AnyRef, Decode, Encode, ErrorKind, SliceWriter, Tag, asn1::integer::tests::*,
     };
 
     #[test]

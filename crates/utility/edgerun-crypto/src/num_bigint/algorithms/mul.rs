@@ -1,6 +1,6 @@
-use crate::num_bigint::algorithms::mac3;
-use crate::num_bigint::big_digit::{BigDigit, DoubleBigDigit, BITS};
 use crate::num_bigint::BigUint;
+use crate::num_bigint::algorithms::mac3;
+use crate::num_bigint::big_digit::{BITS, BigDigit, DoubleBigDigit};
 use crate::smallvec;
 
 #[inline]

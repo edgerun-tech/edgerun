@@ -2,8 +2,8 @@
 
 #[cfg(feature = "toml")]
 pub use crate::toml_api::{
-    from_toml_str, json_to_toml, parse_toml_value, to_toml_string, toml_to_json, TomlError,
-    TomlValue,
+    TomlError, TomlValue, from_toml_str, json_to_toml, parse_toml_value, to_toml_string,
+    toml_to_json,
 };
 
 #[cfg(feature = "toml")]

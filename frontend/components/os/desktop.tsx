@@ -1,23 +1,25 @@
 "use client"
 
-import { useCallback, useMemo } from "react"
+import { useCallback, useEffect, useMemo } from "react"
 import type React from "react"
 import { useStore } from "@nanostores/react"
-import { Contact, IdCard, Inbox, Settings, Store } from "lucide-react"
+import { Bot, IdCard, Settings, Store } from "lucide-react"
 import { AuthOverlay } from "./auth-overlay"
 import { AppOverlayHost } from "./app-overlay-host"
-import { PeopleApp, type PeopleTab } from "./people-app"
+import { AgentUiBridge } from "./agent-ui-bridge"
 import { ProfileMenu } from "./profile-menu"
+import { ProjectChecklist } from "./project-checklist"
 import { CapabilityGatePrompt } from "@/components/capability-gate-prompt"
 import { useAuth } from "@/hooks/use-auth"
 import { FloatingDock, type FloatingDockContext, type FloatingDockItem } from "@/components/ui/floating-dock"
-import { addLog, appSurfaceOrderStore, appSurfacesStore, focusedAppSurfaceStore, focusAppSurface, pendingGateStore, terminalLogsStore } from "@/stores/desktop-store"
+import { appSurfaceOrderStore, appSurfacesStore, focusedAppSurfaceStore, focusAppSurface, pendingGateStore } from "@/stores/desktop-store"
 import { getAppIcon, handleCloseAppSurface, launchApp, launchAppById } from "@/stores/app-launcher"
-import { getBuiltinApp } from "@/platform/registries/builtin-app-registry"
 import { listBuiltinApps } from "@/platform/registries/builtin-app-registry"
-import { catalogApps, getCatalogApp } from "@/platform/registries/app-catalog-registry"
+import { isRemovedAppId } from "@/platform/registries/app-id-policy"
+import { catalogApps } from "@/platform/registries/app-catalog-registry"
 import { grantLocalCapabilities } from "@/stores/local-capability-grants-store"
 import { installedAppIdsStore, normalizeAppId } from "@/stores/installed-apps-store"
+import { executeUiCommand, focusDockInput, registerUiCommandHandler } from "@/stores/ui-command-center"
 
 function DockIcon({ children }: { children: React.ReactNode }) {
   return (
@@ -27,19 +29,8 @@ function DockIcon({ children }: { children: React.ReactNode }) {
   )
 }
 
-function resolveCommandAppId(value: string): string | null {
-  const normalized = normalizeAppId(value)
-  if (listBuiltinApps().some((app) => app.appId === normalized) || getCatalogApp(normalized)) return normalized
-
-  const term = value.trim().toLowerCase()
-  const builtin = listBuiltinApps().find((app) => app.name.toLowerCase() === term || app.name.toLowerCase().startsWith(term))
-  return builtin?.appId ?? null
-}
-
-function sendAssistantInput(message: string) {
-  window.dispatchEvent(new CustomEvent("edgerun:assistant-input", {
-    detail: { message, submit: true },
-  }))
+function focusCodexDockInput() {
+  focusDockInput("~")
 }
 
 const PINNED_DOCK_APP_IDS = new Set(["identity", "app-store", "settings"])
@@ -54,18 +45,19 @@ export function Desktop() {
   const catalogAppList = useStore(catalogApps)
   const showDesktop = auth.authState === "authenticated"
 
+  useEffect(() => {
+    return registerUiCommandHandler("/lock", () => {
+      auth.lock()
+      return "Locked browser session"
+    })
+  }, [auth])
+
   const openIdentity = useCallback(() => {
     return launchAppById("identity")
   }, [])
 
   const openSurfaceById = useCallback((appId: string) => {
     return launchAppById(appId)
-  }, [])
-
-  const openPeople = useCallback((initialTab: PeopleTab, initialRecipientId?: string) => {
-    const app = getBuiltinApp("people")
-    if (!app) return null
-    return launchApp(app, <PeopleApp initialTab={initialTab} initialRecipientId={initialRecipientId} />)
   }, [])
 
   const grantPendingGate = useCallback(() => {
@@ -81,6 +73,7 @@ export function Desktop() {
     const appsById = new Map([...builtinApps, ...catalogAppList].map((app) => [normalizeAppId(app.appId), app]))
     const installedItems = Array.from(new Set(installedAppIds.map(normalizeAppId)))
       .filter((appId) => !PINNED_DOCK_APP_IDS.has(appId))
+      .filter((appId) => !isRemovedAppId(appId))
       .map((appId) => appsById.get(appId))
       .filter((app): app is NonNullable<typeof app> => Boolean(app))
       .sort((a, b) => a.name.localeCompare(b.name))
@@ -94,22 +87,16 @@ export function Desktop() {
 
     return [
       {
+        title: "Codex",
+        icon: <DockIcon><Bot className="h-5 w-5" /></DockIcon>,
+        kind: "trigger",
+        onClick: focusCodexDockInput,
+      },
+      {
         title: "Identity",
         icon: <DockIcon><IdCard className="h-5 w-5" /></DockIcon>,
         kind: "trigger",
         onClick: openIdentity,
-      },
-      {
-        title: "Contacts",
-        icon: <DockIcon><Contact className="h-5 w-5" /></DockIcon>,
-        kind: "trigger",
-        onClick: () => openPeople("contacts"),
-      },
-      {
-        title: "Messages",
-        icon: <DockIcon><Inbox className="h-5 w-5" /></DockIcon>,
-        kind: "trigger",
-        onClick: () => openPeople("messages"),
       },
       ...installedItems,
       {
@@ -125,56 +112,17 @@ export function Desktop() {
         onClick: () => openSurfaceById("settings"),
       },
     ]
-  }, [catalogAppList, installedAppIds, openIdentity, openPeople, openSurfaceById])
+  }, [catalogAppList, installedAppIds, openIdentity, openSurfaceById])
 
   const dockContext = useMemo<FloatingDockContext>(() => ({ mode: "apps" }), [])
 
-  const handleDockCommand = useCallback((command: string) => {
-    if (command === "/lock") {
-      auth.lock()
-      return
-    }
-
-    if (command.startsWith("~")) {
-      const message = command.slice(1).trim()
-      if (message) sendAssistantInput(message)
-      return
-    }
-
-    if (command.startsWith("/open ")) {
-      const target = command.slice("/open ".length).trim().toLowerCase()
-      if (target.includes("contact")) {
-        openPeople("contacts")
-        return
-      }
-      if (target.includes("message") || target.includes("chat")) {
-        openPeople("messages")
-        return
-      }
-      const appId = resolveCommandAppId(target)
-      if (appId && launchAppById(appId)) {
-        addLog("success", `Opened ${appId}`)
-      } else {
-        addLog("warning", `Could not open app: ${command.slice("/open ".length).trim()}`)
-      }
-      return
-    }
-
-    addLog("info", `Dock command: ${command}`)
-    terminalLogsStore.set([
-      ...terminalLogsStore.get(),
-      {
-        id: `dock-command-${Date.now()}`,
-        timestamp: new Date(),
-        type: "system",
-        message: `dock> ${command}`,
-      },
-    ])
-  }, [auth, openPeople])
+  const handleDockCommand = useCallback(async (command: string) => {
+    return executeUiCommand(command, "dock")
+  }, [])
 
   if (!showDesktop) {
     return (
-      <div className="relative h-screen w-screen overflow-hidden bg-background">
+      <div className="relative h-screen w-screen overflow-hidden bg-black">
         <AuthOverlay
           authState={auth.authState}
           username={auth.username}
@@ -197,16 +145,7 @@ export function Desktop() {
   }
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-[oklch(0.075_0.018_255)]">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_36%,rgba(62,128,255,0.20),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.035),transparent_28%,rgba(0,0,0,0.24))]" />
-      <div className="absolute inset-x-4 top-4 flex items-center justify-center sm:top-6">
-          <div className="w-[calc(100vw-2rem)] max-w-[560px] rounded-full border border-white/10 bg-white/[0.055] px-4 py-2 text-center shadow-2xl backdrop-blur-xl">
-          <p className="text-xs font-medium text-foreground">Identity unlocked</p>
-          <p className="mt-0.5 text-[11px] leading-4 text-muted-foreground">
-            Your keys are available until you lock this browser session.
-          </p>
-        </div>
-      </div>
+    <div className="relative h-screen w-screen overflow-hidden bg-black">
       <FloatingDock
         items={dockItems}
         context={dockContext}
@@ -214,6 +153,8 @@ export function Desktop() {
         desktopClassName="fixed bottom-5 left-1/2 z-50 -translate-x-1/2"
         mobileClassName="fixed bottom-5 left-1/2 z-50 -translate-x-1/2"
       />
+      <AgentUiBridge />
+      <ProjectChecklist />
       <ProfileMenu />
       <AppOverlayHost
         surfaces={appSurfaces}

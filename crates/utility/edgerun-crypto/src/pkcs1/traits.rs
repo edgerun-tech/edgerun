@@ -171,9 +171,9 @@ where
 impl<T> DecodeRsaPublicKey for T
 where
     T: for<'a> TryFrom<
-        crate::pkcs8::SubjectPublicKeyInfoRef<'a>,
-        Error = crate::pkcs8::spki::Error,
-    >,
+            crate::pkcs8::SubjectPublicKeyInfoRef<'a>,
+            Error = crate::pkcs8::spki::Error,
+        >,
 {
     fn from_pkcs1_der(public_key: &[u8]) -> Result<Self> {
         Ok(Self::try_from(crate::pkcs8::SubjectPublicKeyInfoRef {

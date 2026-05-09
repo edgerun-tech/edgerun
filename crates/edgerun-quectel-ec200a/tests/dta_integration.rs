@@ -109,10 +109,12 @@ fn test_dta_registration() {
 #[test]
 fn test_dta_network_operator() {
     let modem = ModemSimulator::new();
-    assert!(modem
-        .execute_at_command("AT+COPS?")
-        .unwrap()
-        .contains("DTA_NET"));
+    assert!(
+        modem
+            .execute_at_command("AT+COPS?")
+            .unwrap()
+            .contains("DTA_NET")
+    );
 }
 
 #[test]
@@ -156,10 +158,12 @@ fn test_dta_complete_flow() {
     let modem = ModemSimulator::new();
 
     // Power on modem
-    assert!(modem
-        .execute_at_command("AT+CFUN=1")
-        .unwrap()
-        .contains("OK"));
+    assert!(
+        modem
+            .execute_at_command("AT+CFUN=1")
+            .unwrap()
+            .contains("OK")
+    );
 
     // Verify registered state
     let state = modem.get_state();
@@ -184,10 +188,12 @@ fn test_dta_lifecycle() {
     let modem = ModemSimulator::new();
 
     // Power on
-    assert!(modem
-        .execute_at_command("AT+CFUN=1")
-        .unwrap()
-        .contains("OK"));
+    assert!(
+        modem
+            .execute_at_command("AT+CFUN=1")
+            .unwrap()
+            .contains("OK")
+    );
 
     // Verify registration state changed
     let state = modem.get_state();

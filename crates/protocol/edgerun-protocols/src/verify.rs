@@ -92,7 +92,11 @@ pub enum ProtocolVerifyError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MessageVerifyAlgorithm {
     Ed25519,
+    EcdsaP256Sha256,
 }
+
+pub const MESSAGE_SIGNATURE_ALGORITHM_ED25519: u16 = 1;
+pub const MESSAGE_SIGNATURE_ALGORITHM_ECDSA_P256_SHA256: u16 = 2;
 
 #[cfg(feature = "ed25519")]
 pub fn verify_ed25519_message(
@@ -117,6 +121,54 @@ pub fn verify_ed25519_message(
     verifying_key
         .verify(message, &signature)
         .map_err(|_| ProtocolVerifyError::InvalidSignature)
+}
+
+#[cfg(feature = "sign-p256")]
+pub fn verify_p256_message(
+    public_key: &[u8],
+    message: &[u8],
+    signature: &[u8],
+) -> Result<(), ProtocolVerifyError> {
+    if signature.len() != crypto::ECDSA_P256_SIGNATURE_LEN {
+        return Err(ProtocolVerifyError::InvalidSignatureLength);
+    }
+
+    let verifying_key = match public_key.len() {
+        crypto::ECDSA_P256_PUBLIC_KEY_LEN => {
+            let raw: &[u8; crypto::ECDSA_P256_PUBLIC_KEY_LEN] = public_key
+                .try_into()
+                .map_err(|_| ProtocolVerifyError::InvalidPublicKey)?;
+            crypto::node_id_to_verifying_key(raw).ok_or(ProtocolVerifyError::InvalidPublicKey)?
+        }
+        _ => crypto::VerifyingKey::from_sec1_bytes(public_key)
+            .map_err(|_| ProtocolVerifyError::InvalidPublicKey)?,
+    };
+    let signature = crypto::Signature::from_slice(signature)
+        .map_err(|_| ProtocolVerifyError::InvalidSignatureLength)?;
+    let digest = crypto::sha256(message);
+    use edgerun_core::crypto::PrehashVerifier as _;
+    verifying_key
+        .verify_prehash(&digest, &signature)
+        .map_err(|_| ProtocolVerifyError::InvalidSignature)
+}
+
+pub fn verify_message_signature(
+    algorithm: u16,
+    public_key: &[u8],
+    message: &[u8],
+    signature: &[u8],
+) -> Result<(), ProtocolVerifyError> {
+    match algorithm {
+        #[cfg(feature = "ed25519")]
+        MESSAGE_SIGNATURE_ALGORITHM_ED25519 => {
+            verify_ed25519_message(public_key, message, signature)
+        }
+        #[cfg(feature = "sign-p256")]
+        MESSAGE_SIGNATURE_ALGORITHM_ECDSA_P256_SHA256 => {
+            verify_p256_message(public_key, message, signature)
+        }
+        _ => Err(ProtocolVerifyError::UnsupportedSignatureAlgorithm),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -461,7 +513,7 @@ pub fn verify_identity_record(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_core::crypto::{sign_canonical_record, SigningKey};
+    use edgerun_core::crypto::{SigningKey, sign_canonical_record};
     use edgerun_core::protocol::{EventEnvelope, ProtocolRecord, Signature};
 
     fn test_signing_key() -> SigningKey {

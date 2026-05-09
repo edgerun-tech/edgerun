@@ -13,6 +13,7 @@ import { getCatalogApp } from "@/platform/registries/app-catalog-registry"
 import { getAppSurfaceSpec, getDefaultSurfaceVariant } from "@/platform/registries/app-surface-registry"
 import { createAppLaunchPlan } from "@/platform/runtime/app-manager"
 import { isAppInstalled } from "@/stores/installed-apps-store"
+import { isRemovedAppId } from "@/platform/registries/app-id-policy"
 import { getMissingCapabilities } from "@/stores/local-capability-grants-store"
 import type { AppDefinition } from "@/platform/types/app-definition"
 
@@ -34,6 +35,11 @@ export function getAppIcon(appId: string): React.ReactNode {
 }
 
 export function launchApp(app: AppDefinition, component?: React.ReactNode): AppSurfaceDef | null {
+  if (isRemovedAppId(app.appId)) {
+    addLog("warning", `${app.name} is no longer available`)
+    return null
+  }
+
   if (!component && !isAppInstalled(app.appId)) {
     addLog("warning", `${app.name} is not installed`)
     return null
@@ -95,6 +101,7 @@ export function launchApp(app: AppDefinition, component?: React.ReactNode): AppS
 }
 
 export function launchAppById(appId: string, component?: React.ReactNode): AppSurfaceDef | null {
+  if (isRemovedAppId(appId)) return null
   const app = getBuiltinApp(appId) ?? getCatalogApp(appId)
   if (!app) return null
   return launchApp(app, component)

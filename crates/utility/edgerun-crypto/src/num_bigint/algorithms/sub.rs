@@ -5,7 +5,7 @@ use crate::num_bigint::SmallVec;
 use crate::num_bigint::Zero;
 
 use crate::num_bigint::algorithms::cmp_slice;
-use crate::num_bigint::big_digit::{BigDigit, SignedDoubleBigDigit, BITS};
+use crate::num_bigint::big_digit::{BITS, BigDigit, SignedDoubleBigDigit};
 use crate::num_bigint::bigint::Sign::{self, *};
 use crate::num_bigint::{BigUint, VEC_SIZE};
 

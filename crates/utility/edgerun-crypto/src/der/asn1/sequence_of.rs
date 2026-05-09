@@ -1,8 +1,8 @@
 //! ASN.1 `SEQUENCE OF` support.
 
 use crate::der::{
-    arrayvec, ord::iter_cmp, ArrayVec, Decode, DecodeValue, DerOrd, Encode, EncodeValue, FixedTag,
-    Header, Length, Reader, Result, Tag, ValueOrd, Writer,
+    ArrayVec, Decode, DecodeValue, DerOrd, Encode, EncodeValue, FixedTag, Header, Length, Reader,
+    Result, Tag, ValueOrd, Writer, arrayvec, ord::iter_cmp,
 };
 use core::cmp::Ordering;
 

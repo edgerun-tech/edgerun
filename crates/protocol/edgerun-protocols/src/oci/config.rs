@@ -3,7 +3,7 @@
 use alloc::collections::BTreeMap;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use edgerun_json::{from_json_slice, FromJson, JsonValue, JsonValueError, Map};
+use edgerun_json::{FromJson, JsonValue, JsonValueError, Map, from_json_slice};
 
 use super::manifest::{ImageIndex, ImageManifest, SingleManifest};
 

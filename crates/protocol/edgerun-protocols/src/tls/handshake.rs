@@ -7,9 +7,9 @@
 //!
 //! All messages after ServerHello are encrypted.
 
-use super::cipher::NamedGroup;
 use super::Result;
 use super::TlsError;
+use super::cipher::NamedGroup;
 use alloc::{
     format,
     string::{String, ToString},
@@ -237,7 +237,7 @@ impl ClientHelloBuilder {
             // PSK identities list
             let identities_start = psk_ext.len();
             psk_ext.extend_from_slice(&[0u8; 2]); // identities length placeholder
-                                                  // Identity entry
+            // Identity entry
             push_u16_be(&mut psk_ext, ticket.len() as u16);
             psk_ext.extend_from_slice(ticket);
             push_u32_be(&mut psk_ext, obfuscated_age);
@@ -248,7 +248,7 @@ impl ClientHelloBuilder {
             // PSK binders list
             let binders_start = psk_ext.len();
             psk_ext.extend_from_slice(&[0u8; 2]); // binders length placeholder
-                                                  // Placeholder binder (1 byte len + zeros) — real binder requires HMAC of truncated CH
+            // Placeholder binder (1 byte len + zeros) — real binder requires HMAC of truncated CH
             let binder_len = 32; // SHA-256 output
             psk_ext.push(binder_len as u8);
             psk_ext.extend_from_slice(&vec![0u8; binder_len]);

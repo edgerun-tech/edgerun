@@ -1,7 +1,7 @@
 //! HTTP/3 connection over QUIC
 
 use crate::http::http3::{Http3Error, Result};
-use alloc::collections::{btree_map::Entry, BTreeMap};
+use alloc::collections::{BTreeMap, btree_map::Entry};
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec;

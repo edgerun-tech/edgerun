@@ -7,7 +7,7 @@ mod expand_msg;
 pub use expand_msg::{xmd::*, xof::*, *};
 
 use crate::elliptic_curve::{Error, Result};
-use generic_array::{typenum::Unsigned, ArrayLength, GenericArray};
+use generic_array::{ArrayLength, GenericArray, typenum::Unsigned};
 
 /// The trait for helping to convert to a field element.
 pub trait FromOkm {

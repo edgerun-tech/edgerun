@@ -69,7 +69,7 @@ pub(crate) mod test_support {
 
     use edgerun_hardware_signing::{HardwareSigningError, MeshSigner, NodeID};
     use edgerun_protocols::keygen::{
-        generate_node_signing_key, node_id_from_signing_key, NodeSigningKey,
+        NodeSigningKey, generate_node_signing_key, node_id_from_signing_key,
     };
     use edgerun_protocols::sign::{ProtocolSigner, SignableProtocolFamily};
     use edgerun_protocols::sign_p256::P256ProtocolSigner;
@@ -131,7 +131,7 @@ use alloc::vec::Vec;
 use edgerun_capabilities::CapabilityGrant;
 use edgerun_capability_policy::SimplePolicyEngine;
 use edgerun_hardware_signing::NodeID;
-use edgerun_protocols::core_protocol::command::{validate_command, CommandValidationContext};
+use edgerun_protocols::core_protocol::command::{CommandValidationContext, validate_command};
 use edgerun_protocols::core_protocol::protocol::{CommandEnvelope, EventEnvelope, EventType};
 use edgerun_protocols::core_protocol::result::Verdict;
 use edgerun_protocols::core_protocol::util::now_unix_millis_i64 as now_ms;

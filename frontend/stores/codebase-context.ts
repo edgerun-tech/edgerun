@@ -18,6 +18,28 @@ export interface FileInfo {
 
 const STORAGE_KEY = "edgerun_codebase_context"
 
+const IGNORED_CONTEXT_DIRS = new Set([
+  ".git",
+  "node_modules",
+  "target",
+  "dist",
+  "build",
+  ".next",
+  ".turbo",
+  ".cache",
+  "coverage",
+  "vendor",
+  "tmp",
+  "temp",
+  ".venv",
+  "venv",
+  "__pycache__",
+])
+
+function hasIgnoredDir(path: string) {
+  return path.split("/").some((part) => IGNORED_CONTEXT_DIRS.has(part))
+}
+
 function loadFromStorage(): CodebaseContext | null {
   if (typeof window === "undefined") return null
   const raw = localStorage.getItem(STORAGE_KEY)
@@ -43,15 +65,48 @@ export const codebaseStore = atom<CodebaseContext>({
 
 export async function scanCodebase() {
   const fs = fileSystemStore.get()
-  if (!fs.rootHandle) return
-
   const files = new Map<string, FileInfo>()
+
+  if (!fs.rootHandle) {
+    for (const entry of fs.entries) {
+      if (entry.ignored || hasIgnoredDir(entry.path)) continue
+      const ext = entry.kind === "file" ? entry.name.split(".").pop()?.toLowerCase() || "" : undefined
+      files.set(entry.path, {
+        name: entry.name,
+        path: entry.path,
+        type: entry.kind === "directory" ? "directory" : "file",
+        size: entry.size,
+        extension: ext,
+      })
+    }
+
+    if (files.size === 0) return
+
+    const jsFiles = Array.from(files.values()).filter(f => f.extension === "ts" || f.extension === "tsx")
+    const rustFiles = Array.from(files.values()).filter(f => f.extension === "rs")
+    const configFiles = Array.from(files.values()).filter(f => ["json", "toml", "yaml", "yml"].includes(f.extension || ""))
+    const summary = `Project at ${fs.rootPath}: ${files.size} files/dirs. ` +
+      `TypeScript: ${jsFiles.length}, Rust: ${rustFiles.length}, Config: ${configFiles.length}.`
+
+    const ctx: CodebaseContext = {
+      rootPath: fs.rootPath,
+      files,
+      lastScanned: Date.now(),
+      summary,
+    }
+
+    codebaseStore.set(ctx)
+    saveToStorage(ctx)
+    return
+  }
   
   const scanDir = async (handle: FileSystemDirectoryHandle, path: string, depth = 0) => {
     if (depth > 3) return // Limit depth
     
     for await (const entry of handle.values()) {
       const fullPath = path ? `${path}/${entry.name}` : entry.name
+      if (entry.kind === "directory" && IGNORED_CONTEXT_DIRS.has(entry.name)) continue
+      if (hasIgnoredDir(fullPath)) continue
       
       if (entry.kind === "file") {
         const ext = entry.name.split(".").pop()?.toLowerCase() || ""

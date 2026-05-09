@@ -263,18 +263,20 @@ fn test_recv_path_records_received_packets_and_processes_ack() {
 
     assert_eq!(conn.recv_from_buffer().unwrap(), None);
     assert_eq!(conn.transport.bytes_in_flight(), 0);
-    assert!(conn
-        .transport
-        .should_send_ack(PacketNumberSpace::ApplicationData));
+    assert!(
+        conn.transport
+            .should_send_ack(PacketNumberSpace::ApplicationData)
+    );
 }
 
 #[test]
 fn test_recv_path_expands_truncated_packet_number_before_ack_tracking() {
     let mut conn = QuicConnection::dummy();
     conn.established = true;
-    assert!(conn
-        .transport
-        .record_received_packet(PacketNumberSpace::ApplicationData, 0xff));
+    assert!(
+        conn.transport
+            .record_received_packet(PacketNumberSpace::ApplicationData, 0xff)
+    );
 
     let frame = QuicFrame::Stream {
         stream_id: 0,
@@ -497,8 +499,8 @@ fn test_full_quic_tls_handshake() {
 /// without errors.
 #[test]
 fn test_server_sends_1rtt_response() {
-    use crate::http::http3::frame::Http3Frame;
     use crate::http::http3::QpackEncoder;
+    use crate::http::http3::frame::Http3Frame;
 
     let mut encoder = QpackEncoder::new();
     let (header_block, _) = encoder.encode(&[(":status", "200")]).unwrap();

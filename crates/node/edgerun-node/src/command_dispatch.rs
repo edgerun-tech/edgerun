@@ -5,16 +5,16 @@ use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
 
-use crate::bootstrap::{archive_node_genesis_payload, node_genesis_payload};
 use crate::NodeConfig;
+use crate::bootstrap::{archive_node_genesis_payload, node_genesis_payload};
 use edgerun_hardware_signing::MeshSigner;
 use edgerun_protocols::core_protocol::collections::{HashMap, HashSet};
 use edgerun_protocols::core_protocol::command::{
-    command_hash, validate_command, CommandExecutionContext, CommandValidationContext,
+    CommandExecutionContext, CommandValidationContext, command_hash, validate_command,
 };
 use edgerun_protocols::core_protocol::protocol::{
-    command_envelope, enum_from_i32, CommandDecision, CommandEnvelope, CommandType, EventType,
-    ObjectKind, ObjectRef,
+    CommandDecision, CommandEnvelope, CommandType, EventType, ObjectKind, ObjectRef,
+    command_envelope, enum_from_i32,
 };
 use edgerun_protocols::core_protocol::result::Verdict;
 use edgerun_protocols::core_protocol::util::now_unix_millis_i64;

@@ -1,6 +1,6 @@
 use crate::subtle::CtOption;
 
-use crate::crypto_bigint::{modular::inv::inv_montgomery_form, traits::Invert, CtChoice};
+use crate::crypto_bigint::{CtChoice, modular::inv::inv_montgomery_form, traits::Invert};
 
 use super::DynResidue;
 

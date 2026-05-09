@@ -24,7 +24,7 @@ pub mod test_vectors;
 pub use crate::elliptic_curve::{self, bigint::U256, consts::U32};
 
 #[cfg(feature = "p256_arithmetic")]
-pub use arithmetic::{scalar::Scalar, AffinePoint, ProjectivePoint};
+pub use arithmetic::{AffinePoint, ProjectivePoint, scalar::Scalar};
 
 #[cfg(feature = "p256_expose_field")]
 pub use arithmetic::field::FieldElement;
@@ -33,7 +33,7 @@ pub use arithmetic::field::FieldElement;
 pub use crate::elliptic_curve::pkcs8;
 
 use crate::elliptic_curve::{
-    bigint::ArrayEncoding, consts::U33, generic_array::GenericArray, FieldBytesEncoding,
+    FieldBytesEncoding, bigint::ArrayEncoding, consts::U33, generic_array::GenericArray,
 };
 
 /// Order of NIST P-256's elliptic curve group (i.e. scalar modulus) serialized

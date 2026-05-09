@@ -8,8 +8,8 @@ pub(crate) mod slice;
 pub(crate) use nested::NestedReader;
 
 use crate::der::{
-    asn1::ContextSpecific, Decode, DecodeValue, Encode, Error, ErrorKind, FixedTag, Header, Length,
-    Result, Tag, TagMode, TagNumber,
+    Decode, DecodeValue, Encode, Error, ErrorKind, FixedTag, Header, Length, Result, Tag, TagMode,
+    TagNumber, asn1::ContextSpecific,
 };
 
 #[cfg(feature = "alloc")]

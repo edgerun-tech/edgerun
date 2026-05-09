@@ -6,8 +6,8 @@
 use core::sync::atomic::{AtomicU16, Ordering};
 
 pub use edgerun_protocols::serial_mux::{
-    DecodeError, Frame, ReceivedFrame, Receiver, CHANNEL_CONTROL, CHANNEL_LOG, CHANNEL_NET,
-    CHANNEL_WIFI, MAX_FRAME_PAYLOAD,
+    CHANNEL_CONTROL, CHANNEL_LOG, CHANNEL_NET, CHANNEL_WIFI, DecodeError, Frame, MAX_FRAME_PAYLOAD,
+    ReceivedFrame, Receiver,
 };
 
 static TX_SEQ: AtomicU16 = AtomicU16::new(0);

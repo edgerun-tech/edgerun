@@ -1,6 +1,7 @@
 //! Affine curve points.
 
 use crate::elliptic_curve::{
+    Error, FieldBytes, FieldBytesEncoding, FieldBytesSize, PublicKey, Result, Scalar,
     generic_array::ArrayLength,
     point::{AffineCoordinates, DecompactPoint, DecompressPoint, Double},
     sec1::{
@@ -9,10 +10,9 @@ use crate::elliptic_curve::{
     },
     subtle::{Choice, ConditionallySelectable, ConstantTimeEq, ConstantTimeGreater, CtOption},
     zeroize::DefaultIsZeroes,
-    Error, FieldBytes, FieldBytesEncoding, FieldBytesSize, PublicKey, Result, Scalar,
 };
 use crate::ff::{Field, PrimeField};
-use crate::group::{prime::PrimeCurveAffine, GroupEncoding};
+use crate::group::{GroupEncoding, prime::PrimeCurveAffine};
 use crate::primeorder::{PrimeCurveParams, ProjectivePoint};
 use core::{
     borrow::Borrow,
@@ -20,7 +20,7 @@ use core::{
 };
 
 #[cfg(feature = "primeorder_serde")]
-use serdect::serde::{de, ser, Deserialize, Serialize};
+use serdect::serde::{Deserialize, Serialize, de, ser};
 
 /// Point on a Weierstrass curve in affine coordinates.
 #[derive(Clone, Copy, Debug)]

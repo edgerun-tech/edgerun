@@ -8,9 +8,9 @@ use alloc::string::String;
 #[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::vec::Vec;
 
-use crate::value::JsonValueError;
 use crate::FromJson;
 use crate::JsonValue;
+use crate::value::JsonValueError;
 use core::ops::{Deref, DerefMut};
 
 #[derive(Clone, Debug, PartialEq)]

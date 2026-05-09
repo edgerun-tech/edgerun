@@ -100,7 +100,7 @@ generate_tuple_impls! {
 
 #[cfg(test)]
 mod test {
-    use crate::typenum::{Len, U0, U1, U11, U12, U2};
+    use crate::typenum::{Len, U0, U1, U2, U11, U12};
 
     #[test]
     fn tuple_index() {

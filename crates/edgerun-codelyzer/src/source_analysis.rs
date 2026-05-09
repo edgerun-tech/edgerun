@@ -260,17 +260,21 @@ mod tests {
         assert_eq!(result.program.functions.len(), 3);
         #[cfg(not(feature = "lang-typescript"))]
         assert_eq!(result.program.functions.len(), 2);
-        assert!(result
-            .program
-            .edges
-            .iter()
-            .any(|edge| edge.caller == "src/lib.rs::a" && edge.callee == "src/lib.rs::b"));
+        assert!(
+            result
+                .program
+                .edges
+                .iter()
+                .any(|edge| edge.caller == "src/lib.rs::a" && edge.callee == "src/lib.rs::b")
+        );
         #[cfg(feature = "lang-typescript")]
-        assert!(result
-            .changes
-            .edges_added
-            .iter()
-            .any(|(_, callee, _)| callee == "write"));
+        assert!(
+            result
+                .changes
+                .edges_added
+                .iter()
+                .any(|(_, callee, _)| callee == "write")
+        );
     }
 
     #[test]
@@ -286,9 +290,11 @@ mod tests {
         let decoded = SourceSnapshot::decode_rkyv(&encoded).expect("decode snapshot");
         let graph = graph_data_from_snapshot(&decoded);
         assert_eq!(graph.node_count, 2);
-        assert!(graph
-            .edges
-            .iter()
-            .any(|edge| edge.source == "src/lib.rs::a" && edge.target == "src/lib.rs::b"));
+        assert!(
+            graph
+                .edges
+                .iter()
+                .any(|edge| edge.source == "src/lib.rs::a" && edge.target == "src/lib.rs::b")
+        );
     }
 }

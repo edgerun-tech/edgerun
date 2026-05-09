@@ -12,7 +12,7 @@ pub use crate::elf_stack::{
 };
 use crate::prelude::*;
 use crate::rootfs_access::{
-    build_launch_plan, normalize_rootfs_path, OciLaunchPlan, OciRootfs, OciRootfsError,
+    OciLaunchPlan, OciRootfs, OciRootfsError, build_launch_plan, normalize_rootfs_path,
 };
 use core::fmt;
 use edgerun_encoding::byteorder::{

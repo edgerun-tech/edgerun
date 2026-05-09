@@ -4,7 +4,7 @@ use crate::prelude::*;
 use std::io;
 
 use crate::spec::OciSpec;
-use crate::state::{container_state_dir, load_state, save_state, ContainerState};
+use crate::state::{ContainerState, container_state_dir, load_state, save_state};
 
 pub fn cmd_inspect(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     crate::cli::apply_global_opts(opts)?;

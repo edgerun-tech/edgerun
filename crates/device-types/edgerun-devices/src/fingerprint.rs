@@ -4,9 +4,8 @@ use alloc::vec::Vec;
 
 use crate::biometrics::{BiometricModality, BiometricState};
 use edgerun_capabilities::{
-    capability_descriptor, constraint, CapabilityConstraintKind, CapabilityDescriptor,
-    CapabilityEventKind, CapabilityModality, CapabilityOperation, CapabilityProvider,
-    CapabilityRole,
+    CapabilityConstraintKind, CapabilityDescriptor, CapabilityEventKind, CapabilityModality,
+    CapabilityOperation, CapabilityProvider, CapabilityRole, capability_descriptor, constraint,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -315,12 +314,16 @@ mod tests {
             descriptor.event_kinds,
             vec![CapabilityEventKind::Biometric as i32]
         );
-        assert!(descriptor
-            .operations
-            .contains(&(CapabilityOperation::Capture as i32)));
-        assert!(descriptor
-            .operations
-            .contains(&(CapabilityOperation::Verify as i32)));
+        assert!(
+            descriptor
+                .operations
+                .contains(&(CapabilityOperation::Capture as i32))
+        );
+        assert!(
+            descriptor
+                .operations
+                .contains(&(CapabilityOperation::Verify as i32))
+        );
         assert!(descriptor.default_constraints.iter().any(|constraint| {
             constraint.kind == CapabilityConstraintKind::RequireUserPresence as i32
         }));

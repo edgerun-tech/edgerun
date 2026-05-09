@@ -2,6 +2,7 @@
 resolver = "2"
 exclude = [
   "crates/utility/edgerun-clap-derive",
+  "crates/utility/edgerun-json-derive",
   "crates/edgerun-compositor",
   "crates/edgerun-term/edgerun-term-core",
   "crates/utility/edgerun-clipboard",
@@ -23,6 +24,10 @@ exclude = [
 
 members = [
   "crates/utility/edgerun-glob",
+  "crates/utility/edgerun-shlex",
+  "crates/utility/edgerun-time",
+  "crates/utility/edgerun-tokio-tungstenite",
+  "crates/utility/edgerun-tungstenite",
   "crates/utility/edgerun-regex",
   "crates/edgerun-standards",
   "crates/edgerun-unit",
@@ -57,6 +62,8 @@ members = [
   "crates/identity/edgerun-hardware-signing",
   "crates/utility/edgerun-hpack",
   "crates/utility/edgerun-json",
+  "crates/utility/edgerun-locale",
+  "crates/utility/edgerun-random",
   "crates/linux-adapters/edgerun-linux-cec",
   "crates/linux-adapters/edgerun-linux-gpu",
   "crates/linux-adapters/edgerun-linux-netif",
@@ -75,6 +82,7 @@ members = [
   "crates/mesh/edgerun-mesh-session",
   "crates/linux-adapters/edgerun-mgmt-bluetooth",
   "crates/node/edgerun-node",
+  "crates/relay/edgerun-relay",
   "crates/edgerun-oci",
   "crates/edgerun-quectel-ec200a",
   "crates/utility/edgerun-qpack",
@@ -95,12 +103,12 @@ members = [
 ]
 
 [workspace.package]
-edition = "2021"
+edition = "2024"
 license = "MIT OR Apache-2.0"
 publish = false
 repository = "https://github.com/Sylchi/edgerun_reference_core"
 homepage = "https://github.com/Sylchi/edgerun_reference_core"
-rust-version = "1.81"
+rust-version = "1.95"
 version = "0.1.1"
 
 [profile.release]
@@ -137,6 +145,7 @@ edgerun-derived-db = { version = "0.1", path = "crates/authority/edgerun-derived
 edgerun-storage = { version = "0.1", path = "crates/authority/edgerun-storage" }
 edgerun-stream = { version = "0.1", path = "crates/authority/edgerun-stream" }
 edgerun-node = { version = "0.1", path = "crates/node/edgerun-node" }
+edgerun-relay = { version = "0.1", path = "crates/relay/edgerun-relay" }
 edgerun-hardware-signing = { version = "0.1", path = "crates/identity/edgerun-hardware-signing" }
 edgerun-capabilities = { version = "0.1", path = "crates/capability/edgerun-capabilities" }
 edgerun-mesh = { version = "0.1", path = "crates/mesh/edgerun-mesh" }
@@ -157,6 +166,10 @@ edgerun-edgefs = { version = "0.1", path = "crates/authority/edgerun-edgefs" }
 edgerun-encoding = { version = "0.1", path = "crates/utility/edgerun-encoding", default-features = false }
 edgerun-url = { version = "0.1", path = "crates/utility/edgerun-url" }
 edgerun-glob = { version = "0.1", path = "crates/utility/edgerun-glob" }
+edgerun-shlex = { version = "0.1", path = "crates/utility/edgerun-shlex" }
+edgerun-time = { version = "0.1", path = "crates/utility/edgerun-time" }
+edgerun-tokio-tungstenite = { version = "0.1", path = "crates/utility/edgerun-tokio-tungstenite" }
+edgerun-tungstenite = { version = "0.1", path = "crates/utility/edgerun-tungstenite" }
 edgerun-regex = { version = "0.1", path = "crates/utility/edgerun-regex" }
 edgerun-email = { version = "0.1", path = "crates/apps/edgerun-email" }
 edgerun-wallet-app = { version = "0.1", path = "crates/apps/edgerun-wallet-app" }
@@ -166,6 +179,8 @@ edgerun-ssh = { version = "0.1", path = "crates/edgerun-ssh", default-features =
 edgerun-wire = { version = "0.1", path = "crates/protocol/edgerun-wire", default-features = false }
 edgerun-crypto = { version = "0.1", path = "crates/utility/edgerun-crypto", default-features = false }
 edgerun-json = { version = "0.1", path = "crates/utility/edgerun-json", default-features = false }
+edgerun-locale = { version = "0.1", path = "crates/utility/edgerun-locale", default-features = false }
+edgerun-random = { version = "0.1", path = "crates/utility/edgerun-random" }
 edgerun-error = { version = "0.1", path = "crates/utility/edgerun-error" }
 edgerun-clap = { version = "0.1", path = "crates/utility/edgerun-clap" }
 edgerun-compositor = { version = "0.1", path = "crates/edgerun-compositor" }

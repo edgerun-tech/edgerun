@@ -1,7 +1,7 @@
 use super::encrypt_digest;
 use crate::digest::{Digest, FixedOutputReset};
 use crate::rand_core::CryptoRngCore;
-use crate::rsa::{traits::RandomizedEncryptor, Result, RsaPublicKey};
+use crate::rsa::{Result, RsaPublicKey, traits::RandomizedEncryptor};
 use alloc::{
     string::{String, ToString},
     vec::Vec,

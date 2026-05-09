@@ -83,7 +83,7 @@ pub mod service_core;
 pub mod session;
 
 pub use backend::{
-    init_node_id, no_op_event_recorder, Backend, CredentialMeta, SecretEventRecorder,
+    Backend, CredentialMeta, SecretEventRecorder, init_node_id, no_op_event_recorder,
 };
 #[cfg(unix)]
 pub use dbus_bus::BusConnection;
@@ -91,5 +91,5 @@ pub use service_core::{
     MemorySecretStore, SecretEntry, SecretRequest, SecretResponse, SecretServiceCore, SecretStore,
 };
 pub use session::{
-    BiometricVerifier, NoBiometricVerifier, Session, SessionManager, DEFAULT_IDLE_TIMEOUT_US,
+    BiometricVerifier, DEFAULT_IDLE_TIMEOUT_US, NoBiometricVerifier, Session, SessionManager,
 };

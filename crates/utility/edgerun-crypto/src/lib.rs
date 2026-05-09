@@ -301,7 +301,7 @@ pub use rng::{fill_random, mix_entropy, random_bytes, random_u32, random_u64};
 
 pub use crate::rng::OsRng;
 
-pub use sha::{sha256, sha384, sha512, Sha256, Sha384, Sha512};
+pub use sha::{Sha256, Sha384, Sha512, sha256, sha384, sha512};
 
 #[cfg(feature = "hmac")]
 pub fn hmac_sha256(key: &[u8], data: &[u8]) -> alloc::vec::Vec<u8> {

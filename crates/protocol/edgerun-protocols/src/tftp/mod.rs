@@ -4,8 +4,8 @@ pub mod message;
 pub mod protocol;
 
 pub use message::{
-    TftpError, TftpMessage, TftpOpcode, TftpOptions, DEFAULT_BLKSIZE, DEFAULT_TIMEOUT, MAX_BLKSIZE,
-    TFTP_PORT,
+    DEFAULT_BLKSIZE, DEFAULT_TIMEOUT, MAX_BLKSIZE, TFTP_PORT, TftpError, TftpMessage, TftpOpcode,
+    TftpOptions,
 };
 pub use protocol::{TftpDatagram, TftpPeerId, TftpReadCore, TftpReadProvider};
 

@@ -12,19 +12,19 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use crate::http::runtime::{
-    mpsc, select, sleep, spawn, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, JoinHandle,
+    AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, JoinHandle, mpsc, select, sleep, spawn,
 };
 use crate::rt::channel as response_channel;
 
 use crate::http::http2::flow_control::FlowControlManager;
 use crate::http::http2::frame::{
-    flags, DataFrame, Frame, FrameType, GoawayFrame, HeadersFrame, PingFrame, RstStreamFrame,
-    SettingsFrame, WindowUpdateFrame,
+    DataFrame, Frame, FrameType, GoawayFrame, HeadersFrame, PingFrame, RstStreamFrame,
+    SettingsFrame, WindowUpdateFrame, flags,
 };
 use crate::http::http2::hpack::{Decoder, Encoder};
 use crate::http::http2::settings::Settings;
 use crate::http::http2::stream::{StreamManager, StreamState};
-use crate::http::http2::{ErrorCode, Http2Error, Result, CONNECTION_PREFACE};
+use crate::http::http2::{CONNECTION_PREFACE, ErrorCode, Http2Error, Result};
 use crate::http::{HeaderMap, StatusCode};
 
 /// Maximum body size per stream before we error (100 MB).

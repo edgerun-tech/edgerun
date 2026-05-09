@@ -1,6 +1,6 @@
 use crate::digest::{
-    core_api::BlockSizeUser, generic_array::typenum::Unsigned, Digest, FixedOutput,
-    FixedOutputReset, Output,
+    Digest, FixedOutput, FixedOutputReset, Output, core_api::BlockSizeUser,
+    generic_array::typenum::Unsigned,
 };
 use crate::elliptic_curve::generic_array::{ArrayLength, GenericArray};
 use crate::subtle::{Choice, ConditionallySelectable, ConstantTimeEq};

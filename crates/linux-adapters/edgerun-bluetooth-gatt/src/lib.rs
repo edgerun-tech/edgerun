@@ -213,13 +213,13 @@ pub use hci::{HciConnection, HciConnectionPool, LeConnParams};
 pub use linux::{AttProtocol, L2capSocket};
 
 use edgerun_capabilities::{
-    capability_descriptor, CapabilityDescriptor, CapabilityEventKind, CapabilityModality,
-    CapabilityOperation, CapabilityProvider, CapabilityRole,
+    CapabilityDescriptor, CapabilityEventKind, CapabilityModality, CapabilityOperation,
+    CapabilityProvider, CapabilityRole, capability_descriptor,
 };
 pub use edgerun_protocols::bluetooth_gatt::{
-    format_gatt_uuid, parse_gatt_uuid, GattAttributeType, GattProperty, GattUuid,
-    UUID_CHARACTERISTIC_USER_DESCRIPTION, UUID_CLIENT_CHARACTERISTIC_CONFIGURATION,
-    UUID_GATT_CHARACTERISTIC_EXTENDED_PROPERTIES, UUID_SERVER_CHARACTERISTIC_CONFIGURATION,
+    GattAttributeType, GattProperty, GattUuid, UUID_CHARACTERISTIC_USER_DESCRIPTION,
+    UUID_CLIENT_CHARACTERISTIC_CONFIGURATION, UUID_GATT_CHARACTERISTIC_EXTENDED_PROPERTIES,
+    UUID_SERVER_CHARACTERISTIC_CONFIGURATION, format_gatt_uuid, parse_gatt_uuid,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

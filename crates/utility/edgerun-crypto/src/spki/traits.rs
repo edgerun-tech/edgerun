@@ -4,7 +4,7 @@ use crate::der::{EncodeValue, Tagged};
 use crate::spki::{AlgorithmIdentifier, Error, Result, SubjectPublicKeyInfoRef};
 
 use {
-    crate::der::{asn1::BitString, Any, Document},
+    crate::der::{Any, Document, asn1::BitString},
     crate::spki::AlgorithmIdentifierOwned,
 };
 

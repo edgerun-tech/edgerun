@@ -2,9 +2,9 @@ use super::decrypt_digest;
 use crate::digest::{Digest, FixedOutputReset};
 use crate::rand_core::CryptoRngCore;
 use crate::rsa::{
+    Result, RsaPrivateKey,
     dummy_rng::DummyRng,
     traits::{Decryptor, RandomizedDecryptor},
-    Result, RsaPrivateKey,
 };
 use crate::zeroize::ZeroizeOnDrop;
 use alloc::{

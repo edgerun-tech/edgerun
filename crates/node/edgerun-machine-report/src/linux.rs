@@ -9,7 +9,7 @@ use core::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use core::option::Option::{self, None, Some};
 use core::result::Result::{Err, Ok};
 use core::writeln;
-use edgerun_encoding::kv::{format_hex_u16, format_hex_u32, format_hex_u8};
+use edgerun_encoding::kv::{format_hex_u8, format_hex_u16, format_hex_u32};
 #[cfg(target_os = "none")]
 use edgerun_linux_pci::path::PathBuf;
 #[cfg(not(target_os = "none"))]
@@ -24,10 +24,10 @@ use edgerun_devices::wifi::{
     WifiAccessPointController, WifiAccessPointState, WifiController, WifiInterfaceInfo,
     WifiNetworkObservation, WifiScanner,
 };
-use edgerun_linux_netif::{discover_network_interfaces, LinuxNetifBackend};
+use edgerun_linux_netif::{LinuxNetifBackend, discover_network_interfaces};
 use edgerun_linux_pci::LinuxPciBackend;
 use edgerun_linux_usb::LinuxUsbBackend;
-use edgerun_linux_wifi::{discover_wifi_interfaces, LinuxWifiBackend};
+use edgerun_linux_wifi::{LinuxWifiBackend, discover_wifi_interfaces};
 
 use crate::{ContainerRuntime, DeploymentMachineInventory, ServiceManager};
 
@@ -953,11 +953,7 @@ fn command_trim(program: &str, args: &[&str]) -> Option<String> {
         return None;
     }
     let value = String::from_utf8(output.stdout).ok()?.trim().to_string();
-    if value.is_empty() {
-        None
-    } else {
-        Some(value)
-    }
+    if value.is_empty() { None } else { Some(value) }
 }
 
 #[cfg(not(target_os = "none"))]
@@ -2802,11 +2798,7 @@ fn command_output_text(program: &str, args: &[&str]) -> Option<String> {
         text.push_str(&String::from_utf8_lossy(&output.stderr));
     }
     let text = text.trim().to_string();
-    if text.is_empty() {
-        None
-    } else {
-        Some(text)
-    }
+    if text.is_empty() { None } else { Some(text) }
 }
 
 fn gather_service_inventory() -> ReportSection<ServiceInventoryReport> {

@@ -1,8 +1,8 @@
 use crate::prelude::v1::*;
 use crate::time::Duration;
+use edgerun_crypto::p256::PublicKey;
 pub use edgerun_crypto::p256::ecdh::EphemeralSecret;
 use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
-use edgerun_crypto::p256::PublicKey;
 use edgerun_crypto::{Aead, KeyInit};
 use edgerun_hardware_signing::NodeID;
 

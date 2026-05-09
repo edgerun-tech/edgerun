@@ -1483,7 +1483,7 @@ fn validate_peers(r: &mut std::io::Cursor<&[u8]>, data_len: u64) -> bool {
         if read_str(r).is_err() {
             return false;
         } // status
-          // last_seen (option u64)
+        // last_seen (option u64)
         let mut tag = [0u8; 1];
         if r.read_exact(&mut tag).is_err() {
             return false;
@@ -1528,7 +1528,7 @@ fn validate_delegations(r: &mut std::io::Cursor<&[u8]>, data_len: u64) -> bool {
         if read_str(r).is_err() {
             return false;
         } // capability_hex
-          // expires_at: Option<i64>
+        // expires_at: Option<i64>
         let mut tag = [0u8; 1];
         if r.read_exact(&mut tag).is_err() {
             return false;
@@ -1563,7 +1563,7 @@ fn validate_revocations(r: &mut std::io::Cursor<&[u8]>, data_len: u64) -> bool {
         if read_str(r).is_err() {
             return false;
         } // target_hex
-          // effective_at: Option<i64>
+        // effective_at: Option<i64>
         let mut tag = [0u8; 1];
         if r.read_exact(&mut tag).is_err() {
             return false;

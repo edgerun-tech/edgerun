@@ -1,6 +1,6 @@
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_protocols::keygen::{
-    node_id_from_signing_key, node_signing_key_from_bytes, NodeSigningKey,
+    NodeSigningKey, node_id_from_signing_key, node_signing_key_from_bytes,
 };
 use edgerun_protocols::sign::{ProtocolSigner, SignableProtocolFamily};
 use edgerun_protocols::sign_p256::P256ProtocolSigner;

@@ -1502,7 +1502,7 @@ mod tests {
         };
         let wire = data.to_wire(DnsRecordType::HTTPS);
         assert_eq!(wire[0..2], [0, 1]); // priority
-                                        // target is domain-name encoded after priority
+        // target is domain-name encoded after priority
     }
 
     #[test]

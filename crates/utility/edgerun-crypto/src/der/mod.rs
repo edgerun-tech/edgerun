@@ -35,9 +35,9 @@ pub use crate::der::{
     header::Header,
     length::{IndefiniteLength, Length},
     ord::{DerOrd, ValueOrd},
-    reader::{nested::NestedReader, slice::SliceReader, Reader},
+    reader::{Reader, nested::NestedReader, slice::SliceReader},
     tag::{Class, FixedTag, Tag, TagMode, TagNumber, Tagged},
-    writer::{slice::SliceWriter, Writer},
+    writer::{Writer, slice::SliceWriter},
 };
 
 #[cfg(feature = "alloc")]

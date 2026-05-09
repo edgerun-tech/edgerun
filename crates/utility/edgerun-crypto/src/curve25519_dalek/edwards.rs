@@ -104,12 +104,12 @@ use core::ops::{Mul, MulAssign};
 use crate::cfg_if;
 
 #[cfg(feature = "digest")]
-use crate::digest::{generic_array::typenum::U64, Digest};
+use crate::digest::{Digest, generic_array::typenum::U64};
 
 #[cfg(feature = "group")]
 use {
     crate::subtle::CtOption,
-    group::{cofactor::CofactorGroup, prime::PrimeGroup, GroupEncoding},
+    group::{GroupEncoding, cofactor::CofactorGroup, prime::PrimeGroup},
 };
 
 #[cfg(feature = "group")]
@@ -126,7 +126,7 @@ use crate::zeroize::Zeroize;
 use crate::curve25519_dalek::constants;
 
 use crate::curve25519_dalek::field::FieldElement;
-use crate::curve25519_dalek::scalar::{clamp_integer, Scalar};
+use crate::curve25519_dalek::scalar::{Scalar, clamp_integer};
 
 use crate::curve25519_dalek::montgomery::MontgomeryPoint;
 
@@ -137,8 +137,8 @@ use crate::curve25519_dalek::backend::serial::curve_models::ProjectivePoint;
 
 #[cfg(feature = "precomputed-tables")]
 use crate::curve25519_dalek::window::{
-    LookupTableRadix128, LookupTableRadix16, LookupTableRadix256, LookupTableRadix32,
-    LookupTableRadix64,
+    LookupTableRadix16, LookupTableRadix32, LookupTableRadix64, LookupTableRadix128,
+    LookupTableRadix256,
 };
 
 #[cfg(feature = "precomputed-tables")]

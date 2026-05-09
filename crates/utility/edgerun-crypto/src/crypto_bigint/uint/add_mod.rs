@@ -49,7 +49,7 @@ impl<const LIMBS: usize> AddMod for Uint<LIMBS> {
 
 #[cfg(all(test, feature = "rand"))]
 mod tests {
-    use crate::crypto_bigint::{Limb, NonZero, Random, RandomMod, Uint, U256};
+    use crate::crypto_bigint::{Limb, NonZero, Random, RandomMod, U256, Uint};
 
     // TODO(tarcieri): additional tests + proptests
 

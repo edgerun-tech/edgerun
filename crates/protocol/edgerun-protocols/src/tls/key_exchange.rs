@@ -3,8 +3,8 @@
 //! All crypto flows through edgerun-crypto.
 
 use alloc::{format, string::String, vec::Vec};
-use edgerun_crypto::p256::ecdh::EphemeralSecret as P256Secret;
 use edgerun_crypto::p256::EncodedPoint;
+use edgerun_crypto::p256::ecdh::EphemeralSecret as P256Secret;
 use edgerun_crypto::x25519::{PublicKey as X25519PublicKey, StaticSecret as X25519Secret};
 
 /// Named group for key exchange

@@ -17,6 +17,10 @@ default = []
 std = []
 yaml = []
 toml = []
+derive = ["dep:edgerun-json-derive"]
+
+[dependencies]
+edgerun-json-derive = { version = "0.1", path = "../edgerun-json-derive", optional = true }
 
 [lints]
 workspace = true

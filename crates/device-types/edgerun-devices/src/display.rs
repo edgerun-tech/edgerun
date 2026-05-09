@@ -3,9 +3,9 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use edgerun_capabilities::{
-    capability_descriptor, constraint, CapabilityConstraintKind, CapabilityDescriptor,
-    CapabilityError, CapabilityEventKind, CapabilityModality, CapabilityOperation,
-    CapabilityProvider, CapabilityRole,
+    CapabilityConstraintKind, CapabilityDescriptor, CapabilityError, CapabilityEventKind,
+    CapabilityModality, CapabilityOperation, CapabilityProvider, CapabilityRole,
+    capability_descriptor, constraint,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -96,13 +96,17 @@ mod tests {
     fn descriptor_is_display_output_capability() {
         let descriptor = default_display_descriptor("wayland", "eDP-1");
         assert_eq!(descriptor.role, CapabilityRole::Output as i32);
-        assert!(descriptor
-            .modalities
-            .contains(&(CapabilityModality::Display as i32)));
-        assert!(descriptor
-            .default_constraints
-            .iter()
-            .any(|c| c.kind == CapabilityConstraintKind::RequireLocalOnly as i32));
+        assert!(
+            descriptor
+                .modalities
+                .contains(&(CapabilityModality::Display as i32))
+        );
+        assert!(
+            descriptor
+                .default_constraints
+                .iter()
+                .any(|c| c.kind == CapabilityConstraintKind::RequireLocalOnly as i32)
+        );
     }
 
     #[test]
@@ -388,31 +392,41 @@ mod tests {
     #[test]
     fn descriptor_has_query_control_render() {
         let descriptor = default_display_descriptor("test", "id");
-        assert!(descriptor
-            .operations
-            .contains(&(CapabilityOperation::Query as i32)));
-        assert!(descriptor
-            .operations
-            .contains(&(CapabilityOperation::Control as i32)));
-        assert!(descriptor
-            .operations
-            .contains(&(CapabilityOperation::Render as i32)));
+        assert!(
+            descriptor
+                .operations
+                .contains(&(CapabilityOperation::Query as i32))
+        );
+        assert!(
+            descriptor
+                .operations
+                .contains(&(CapabilityOperation::Control as i32))
+        );
+        assert!(
+            descriptor
+                .operations
+                .contains(&(CapabilityOperation::Render as i32))
+        );
     }
 
     #[test]
     fn descriptor_has_visual_modality() {
         let descriptor = default_display_descriptor("test", "id");
-        assert!(descriptor
-            .modalities
-            .contains(&(CapabilityModality::Visual as i32)));
+        assert!(
+            descriptor
+                .modalities
+                .contains(&(CapabilityModality::Visual as i32))
+        );
     }
 
     #[test]
     fn descriptor_has_display_event_kind() {
         let descriptor = default_display_descriptor("test", "id");
-        assert!(descriptor
-            .event_kinds
-            .contains(&(CapabilityEventKind::Display as i32)));
+        assert!(
+            descriptor
+                .event_kinds
+                .contains(&(CapabilityEventKind::Display as i32))
+        );
     }
 
     #[test]

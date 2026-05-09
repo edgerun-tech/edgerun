@@ -5,7 +5,7 @@
 
 #![allow(unsafe_op_in_unsafe_fn)]
 
-use alloc::alloc::{alloc, Layout};
+use alloc::alloc::{Layout, alloc};
 use core::ffi::{c_char, c_int, c_void};
 use core::ptr;
 

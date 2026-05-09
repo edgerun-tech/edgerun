@@ -22,11 +22,10 @@ fn main() {
     } else {
         "32"
     };
-    let backend = if target_arch == "x86_64" && bits == "64" {
-        "simd"
-    } else {
-        "serial"
-    };
+    // Benchmarked in May 2026: the x86_64 SIMD Curve25519 backend made Ed25519
+    // signing roughly 25x slower than the serial backend in this crate, while
+    // P-256 performance was unchanged. Keep Curve25519 on serial by default.
+    let backend = "serial";
 
     println!("cargo:rustc-cfg=curve25519_dalek_bits=\"{bits}\"");
     println!("cargo:rustc-cfg=curve25519_dalek_backend=\"{backend}\"");

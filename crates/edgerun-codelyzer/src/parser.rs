@@ -529,11 +529,7 @@ fn mask_comments_and_strings(source: &str, lang: Lang) -> String {
 }
 
 fn mask_byte(byte: u8) -> u8 {
-    if byte == b'\n' {
-        b'\n'
-    } else {
-        b' '
-    }
+    if byte == b'\n' { b'\n' } else { b' ' }
 }
 
 fn skip_ws(input: &str, mut pos: usize) -> usize {

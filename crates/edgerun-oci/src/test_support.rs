@@ -1,5 +1,5 @@
 use crate::image_plan::BareImagePlan;
-use crate::layer_pipeline::{format_digest, LayerDigest};
+use crate::layer_pipeline::{LayerDigest, format_digest};
 use crate::prelude::*;
 use crate::registry::manifest::LayerDescriptor;
 use crate::runtime_config::BareRuntimeConfig;

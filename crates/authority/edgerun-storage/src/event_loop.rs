@@ -13,14 +13,14 @@ use crate::prelude::v1::*;
 use edgerun_protocols::core_protocol::protocol::EventEnvelope;
 use std::fs::File;
 use std::path::PathBuf;
-use std::sync::mpsc::{self, Receiver, SyncSender};
 use std::sync::Arc;
+use std::sync::mpsc::{self, Receiver, SyncSender};
 use std::thread::JoinHandle;
 
 use crate::error::StorageError;
 use crate::file_index::FileIndex;
 use crate::fs::{append_event_to_file, open_stream_file};
-use crate::materializer::{materialize_event_to_index, OpEventType};
+use crate::materializer::{OpEventType, materialize_event_to_index};
 
 // ---------------------------------------------------------------------------
 // Event submission

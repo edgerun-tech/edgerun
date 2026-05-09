@@ -15,7 +15,7 @@ use crate::dbus_types::*;
 use crate::dbus_wire::{decode_msg, encode_msg};
 use crate::service_core::{SecretRequest, SecretResponse, SecretServiceCore};
 use crate::session::{
-    BiometricVerifier, NoBiometricVerifier, SessionManager, DEFAULT_IDLE_TIMEOUT_US,
+    BiometricVerifier, DEFAULT_IDLE_TIMEOUT_US, NoBiometricVerifier, SessionManager,
 };
 
 // ===========================================================================
@@ -791,7 +791,9 @@ fn complete_encoded_msg_len(data: &[u8]) -> Option<usize> {
 
 /// Build D-Bus introspection XML.
 fn build_introspect_xml(path: &str) -> String {
-    let mut xml = String::from("<!DOCTYPE node PUBLIC \"-//freedesktop//DTD D-BUS Object Introspection 1.0//EN\"\n\"http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd\">\n<node>\n");
+    let mut xml = String::from(
+        "<!DOCTYPE node PUBLIC \"-//freedesktop//DTD D-BUS Object Introspection 1.0//EN\"\n\"http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd\">\n<node>\n",
+    );
 
     if path == "/org/freedesktop/secrets" {
         xml.push_str(
@@ -1448,11 +1450,13 @@ mod tests {
         let msg = Msg::call(&item_path, "org.freedesktop.Secret.Item", "Delete", ":1.1");
         let reply = server.handle_message(":1.1", &msg);
         assert_eq!(reply.mt, MType::Return);
-        assert!(server
-            .backend
-            .get("/org/freedesktop/secrets/collections/default", &key)
-            .unwrap()
-            .is_none());
+        assert!(
+            server
+                .backend
+                .get("/org/freedesktop/secrets/collections/default", &key)
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]
@@ -1505,11 +1509,13 @@ mod tests {
         );
         let reply = server.handle_message(":1.1", &msg);
         assert_eq!(reply.mt, MType::Return);
-        assert!(server
-            .backend
-            .list("/org/freedesktop/secrets/collections/default")
-            .unwrap()
-            .is_empty());
+        assert!(
+            server
+                .backend
+                .list("/org/freedesktop/secrets/collections/default")
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]

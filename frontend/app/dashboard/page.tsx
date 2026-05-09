@@ -1,9 +1,5 @@
-import { SettingsDialog } from "@/components/settings-dialog"
+import { redirect } from "next/navigation"
 
 export default function Page() {
-  return (
-    <div className="flex h-svh items-center justify-center">
-      <SettingsDialog />
-    </div>
-  )
+  redirect("/")
 }

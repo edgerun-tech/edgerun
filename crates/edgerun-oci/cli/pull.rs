@@ -3,12 +3,12 @@
 use crate::prelude::*;
 use std::path::PathBuf;
 
+use crate::ImageRef;
 use crate::cli::display::format_bytes;
 use crate::cli::{
-    default_images_dir, default_store_dir, invalid_input, parse_cli_args, required_positional,
-    resolve_registry_auth, GlobalOpts,
+    GlobalOpts, default_images_dir, default_store_dir, invalid_input, parse_cli_args,
+    required_positional, resolve_registry_auth,
 };
-use crate::ImageRef;
 use crate::{ImageTrustPolicy, PullProgress, RegistryClient};
 use edgerun_clap::cli::Action;
 use edgerun_clap::{Arg, Command};

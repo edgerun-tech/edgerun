@@ -469,9 +469,9 @@ mod tests {
 
     use super::super::encoder::encode_integer;
     use super::super::huffman::HuffmanDecoderError;
-    use super::decode_string;
     use super::Decoder;
     use super::FieldRepresentation;
+    use super::decode_string;
     use super::{DecoderError, DecoderResult};
     use super::{IntegerDecodingError, StringDecodingError};
 
@@ -1428,9 +1428,9 @@ mod interop_tests {
     use std::io::Read;
     use std::path::{Path, PathBuf};
 
-    use rustc_serialize::hex::FromHex;
     use rustc_serialize::Decoder as JsonDecoder;
-    use rustc_serialize::{json, Decodable};
+    use rustc_serialize::hex::FromHex;
+    use rustc_serialize::{Decodable, json};
 
     use super::Decoder;
 
@@ -1559,7 +1559,9 @@ mod interop_tests {
         assert_eq!(decoded.cases.len(), 2);
         assert_eq!(
             decoded.cases[0].wire_bytes,
-            vec![0x82, 0x86, 0x41, 0x88, 0xf4, 0x39, 0xce, 0x75, 0xc8, 0x75, 0xfa, 0x57, 0x84]
+            vec![
+                0x82, 0x86, 0x41, 0x88, 0xf4, 0x39, 0xce, 0x75, 0xc8, 0x75, 0xfa, 0x57, 0x84
+            ]
         );
         assert_eq!(
             decoded.cases[0].headers,

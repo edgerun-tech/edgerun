@@ -94,7 +94,7 @@ export function applyUiSettings(settings: UiSettings): void {
   root.style.setProperty("--ring", accent.primary)
   root.style.setProperty("--chart-1", accent.primary)
   root.style.setProperty("--sidebar-primary", accent.primary)
-  root.style.setProperty("--window-glow", accent.primary.replace(")", " / 0.3)"))
+  root.style.setProperty("--window-glow", "transparent")
   root.style.setProperty("--terminal-text", accent.terminal)
   root.style.setProperty("--status-online", accent.primary)
   root.style.setProperty("--status-warning", accent.warning)

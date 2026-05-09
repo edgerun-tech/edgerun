@@ -1,10 +1,10 @@
 //! Protocol-agnostic HTTP request.
 
+use crate::http::Result;
 use crate::http::header::HeaderMap;
 use crate::http::method::Method;
 use crate::http::middleware::Extensions;
 use crate::http::uri::{Scheme, Uri};
-use crate::http::Result;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;

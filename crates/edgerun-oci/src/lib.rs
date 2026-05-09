@@ -141,9 +141,9 @@ pub mod cli;
 
 pub use bare_rootfs::{BareRootfs, BareRootfsEntry, BareRootfsEntryKind};
 pub use bare_syscall::{
-    dispatch_linux_syscall, dispatch_x86_64_linux_syscall_frame, OciBufferSyscallSink,
+    OCI_LINUX_SYS_EXIT, OCI_LINUX_SYS_EXIT_GROUP, OCI_LINUX_SYS_WRITE, OciBufferSyscallSink,
     OciSliceSyscallMemory, OciSyscallAction, OciSyscallError, OciSyscallMemory, OciSyscallSink,
-    OciX86_64SyscallFrame, OCI_LINUX_SYS_EXIT, OCI_LINUX_SYS_EXIT_GROUP, OCI_LINUX_SYS_WRITE,
+    OciX86_64SyscallFrame, dispatch_linux_syscall, dispatch_x86_64_linux_syscall_frame,
 };
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use bundle::{create_bundle, write_bundle};
@@ -152,14 +152,20 @@ pub use config_builder::ContainerProcessConfig;
 #[cfg(feature = "edgefs")]
 pub use edgefs::EdgeFsLayerSink;
 pub use elf::{
-    build_elf64_auxv, build_elf_load_plan, build_elf_memory_map,
+    OCI_ELF_AT_BASE, OCI_ELF_AT_ENTRY, OCI_ELF_AT_FLAGS, OCI_ELF_AT_NULL, OCI_ELF_AT_PAGESZ,
+    OCI_ELF_AT_PHDR, OCI_ELF_AT_PHENT, OCI_ELF_AT_PHNUM, OciElfAuxvEntry, OciElfError, OciElfImage,
+    OciElfInfo, OciElfInitialStack, OciElfLoadBias, OciElfLoadPlan, OciElfLoadSegment,
+    OciElfMachine, OciElfMapper, OciElfMapping, OciElfMemoryMap, OciElfPermissions,
+    OciElfProgramHeader, OciElfRuntimeLayout, OciElfRuntimeMapping, OciElfRuntimeMemoryMap,
+    OciElfRuntimePlan, OciElfSegmentRead, OciElfType, OciElfUnsafeIdentityMapper,
+    OciPreparedLaunchState, OciPreparedProgram, build_elf_load_plan, build_elf_memory_map,
     build_elf_memory_map_with_load_bias, build_elf_memory_map_with_page_size,
     build_elf_memory_map_with_page_size_and_load_bias, build_elf_runtime_layout,
     build_elf_runtime_mapping_list, build_elf_runtime_memory_map,
     build_elf_runtime_memory_map_with_load_bias, build_elf_runtime_memory_map_with_page_size,
     build_elf_runtime_memory_map_with_page_size_and_load_bias, build_elf_runtime_plan,
-    build_launch_elf_load_plan, build_launch_elf_runtime_plan, inspect_elf, inspect_launch_elf,
-    load_prepared_elf64_program, load_prepared_elf64_program_aligned,
+    build_elf64_auxv, build_launch_elf_load_plan, build_launch_elf_runtime_plan, inspect_elf,
+    inspect_launch_elf, load_prepared_elf64_program, load_prepared_elf64_program_aligned,
     prepare_and_load_oci_elf_program, prepare_and_load_oci_elf_program_with_load_bias,
     prepare_and_load_oci_elf_program_with_page_size_and_load_bias, prepare_oci_elf_program,
     prepare_oci_elf_program_with_load_bias, prepare_oci_elf_program_with_page_size,
@@ -168,14 +174,7 @@ pub use elf::{
     read_elf_runtime_segment_chunk, read_elf_segment_chunk, write_elf64_initial_stack,
     write_elf64_initial_stack_aligned, write_prepared_elf64_initial_stack,
     write_prepared_elf64_initial_stack_aligned, write_prepared_elf64_launch_state,
-    write_prepared_elf64_launch_state_aligned, OciElfAuxvEntry, OciElfError, OciElfImage,
-    OciElfInfo, OciElfInitialStack, OciElfLoadBias, OciElfLoadPlan, OciElfLoadSegment,
-    OciElfMachine, OciElfMapper, OciElfMapping, OciElfMemoryMap, OciElfPermissions,
-    OciElfProgramHeader, OciElfRuntimeLayout, OciElfRuntimeMapping, OciElfRuntimeMemoryMap,
-    OciElfRuntimePlan, OciElfSegmentRead, OciElfType, OciElfUnsafeIdentityMapper,
-    OciPreparedLaunchState, OciPreparedProgram, OCI_ELF_AT_BASE, OCI_ELF_AT_ENTRY,
-    OCI_ELF_AT_FLAGS, OCI_ELF_AT_NULL, OCI_ELF_AT_PAGESZ, OCI_ELF_AT_PHDR, OCI_ELF_AT_PHENT,
-    OCI_ELF_AT_PHNUM,
+    write_prepared_elf64_launch_state_aligned,
 };
 #[cfg(target_arch = "x86_64")]
 pub use elf::{enter_elf64, enter_elf64_launch_state};
@@ -189,21 +188,21 @@ pub use handle::RunningContainer;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use hooks::execute_poststop_hooks;
 pub use image_apply::{
-    apply_bare_image_layer_blobs, apply_bare_image_layer_blobs_sha256, BareImageApplyError,
-    BareImageApplyReport,
+    BareImageApplyError, BareImageApplyReport, apply_bare_image_layer_blobs,
+    apply_bare_image_layer_blobs_sha256,
 };
 pub use image_plan::{
-    parse_single_manifest_bytes, platform_matches, select_manifest_for_current_target,
-    select_manifest_for_target, selected_manifest_digest_for_current_target,
-    selected_manifest_digest_from_index_bytes, single_manifest, validate_digest_reference,
-    BareImagePlan, ImagePlanError,
+    BareImagePlan, ImagePlanError, parse_single_manifest_bytes, platform_matches,
+    select_manifest_for_current_target, select_manifest_for_target,
+    selected_manifest_digest_for_current_target, selected_manifest_digest_from_index_bytes,
+    single_manifest, validate_digest_reference,
 };
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use init::fork_and_init;
 pub use layer_pipeline::{
+    LayerApplyReport, LayerDigest, LayerPipelineError, LayerSink, Sha256LayerDigest,
     apply_layer_chunks, bytes_to_hex, format_digest, sha256_digest_reference, sha256_layer_digest,
-    validate_layer_descriptor, LayerApplyReport, LayerDigest, LayerPipelineError, LayerSink,
-    Sha256LayerDigest,
+    validate_layer_descriptor,
 };
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use lifecycle::{
@@ -214,12 +213,12 @@ pub use lifecycle::{
 };
 pub use oci_path::{layer_path_safe, normalize_layer_path};
 #[cfg(all(feature = "std", not(target_os = "none")))]
-pub use process::{setup_container_child, ContainerConfig};
+pub use process::{ContainerConfig, setup_container_child};
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use rootfs::setup_rootfs;
 pub use rootfs_access::{
-    build_launch_plan, resolve_executable, resolve_executable_path, OciDeviceId, OciExecutable,
-    OciLaunchPlan, OciRootfs, OciRootfsEntry, OciRootfsEntryKind, OciRootfsError,
+    OciDeviceId, OciExecutable, OciLaunchPlan, OciRootfs, OciRootfsEntry, OciRootfsEntryKind,
+    OciRootfsError, build_launch_plan, resolve_executable, resolve_executable_path,
 };
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use rootless::{generate_gid_map, generate_uid_map};
@@ -227,23 +226,23 @@ pub use runtime_config::{BareNamespace, BareNamespaceKind, BareRuntimeConfig};
 pub use spec::*;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use state::{
-    container_state_dir, delete_state, fifo_path, load_state, save_state, state_exists,
-    state_file_path, ContainerState,
+    ContainerState, container_state_dir, delete_state, fifo_path, load_state, save_state,
+    state_exists, state_file_path,
 };
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use syscalls::*;
 pub use tar_layer::{
+    DecodedTarLayer, OciLayerCompression, OciWhiteout, TarEntry, TarEntryKind, TarLayerApplyError,
+    TarLayerApplyReport, TarLayerError, TarLayerSink, UncompressedTarStream,
     apply_uncompressed_tar_layer, apply_uncompressed_tar_layer_streaming,
     apply_validated_tar_layer, apply_validated_tar_layer_sha256,
     apply_validated_uncompressed_tar_layer, decompress_gzip_layer, decompress_zstd_layer,
     layer_compression, parse_oci_whiteout, validate_and_decode_tar_layer,
-    validate_and_decode_tar_layer_sha256, DecodedTarLayer, OciLayerCompression, OciWhiteout,
-    TarEntry, TarEntryKind, TarLayerApplyError, TarLayerApplyReport, TarLayerError, TarLayerSink,
-    UncompressedTarStream,
+    validate_and_decode_tar_layer_sha256,
 };
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use userns::drop_capabilities;
-pub use validate::{host_arch, host_os, validate_spec, OciValidationError};
+pub use validate::{OciValidationError, host_arch, host_os, validate_spec};
 
 #[cfg(any(
     feature = "registry-client",
@@ -257,8 +256,8 @@ pub use registry::auth::RegistryAuth;
 ))]
 pub use registry::client::RegistryClient;
 pub use registry::config::{
-    parse_image_config, parse_json_bytes, parse_manifest, parse_single_manifest, HistoryEntry,
-    ImageConfig, ImageConfigInner, RootFs,
+    HistoryEntry, ImageConfig, ImageConfigInner, RootFs, parse_image_config, parse_json_bytes,
+    parse_manifest, parse_single_manifest,
 };
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use registry::dbus_client::SecretClient;

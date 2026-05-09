@@ -238,9 +238,9 @@ pub use core::{mem, str};
 use crate::prelude::v1::*;
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 use edgerun_devices::bluetooth::{
-    default_bluetooth_descriptor, BluetoothAddressKind, BluetoothBeaconObservation,
-    BluetoothConnectionInfo, BluetoothConnectionProvider, BluetoothLinkKind, BluetoothProfile,
-    BluetoothScanResult, BluetoothScanner, BluetoothTransportKind,
+    BluetoothAddressKind, BluetoothBeaconObservation, BluetoothConnectionInfo,
+    BluetoothConnectionProvider, BluetoothLinkKind, BluetoothProfile, BluetoothScanResult,
+    BluetoothScanner, BluetoothTransportKind, default_bluetooth_descriptor,
 };
 use edgerun_encoding::byteorder::{read_u16_le, read_u32_le};
 use edgerun_protocols::bluetooth_mgmt::{self, BluetoothMgmtError, MgmtEvent};
@@ -1586,9 +1586,11 @@ mod tests {
     fn parses_eir_name_and_uuid() {
         let parsed = parse_eir_or_ad_data(&[3, 0x03, 0x0f, 0x18, 5, 0x09, b'T', b'e', b's', b't']);
         assert_eq!(parsed.local_name.as_deref(), Some("Test"));
-        assert!(parsed
-            .service_uuids
-            .contains(&"0000180f-0000-1000-8000-00805f9b34fb".to_string()));
+        assert!(
+            parsed
+                .service_uuids
+                .contains(&"0000180f-0000-1000-8000-00805f9b34fb".to_string())
+        );
         assert!(parsed.profiles.contains(&BluetoothProfile::BatteryService));
     }
 
@@ -1605,9 +1607,11 @@ mod tests {
         let parsed = parse_eir_or_ad_data(&[
             5, 0x05, 0x6f, 0x00, 0x00, 0x00, 3, 0x09, b'T', b'e', b's', b't',
         ]);
-        assert!(parsed
-            .service_uuids
-            .contains(&"0000006f-0000-1000-8000-00805f9b34fb".to_string()));
+        assert!(
+            parsed
+                .service_uuids
+                .contains(&"0000006f-0000-1000-8000-00805f9b34fb".to_string())
+        );
     }
 
     #[test]
@@ -1634,18 +1638,22 @@ mod tests {
     #[test]
     fn parses_service_data_16bit_profile() {
         let parsed = parse_eir_or_ad_data(&[4, 0x16, 0x0f, 0x18, 0x01, 0x02]);
-        assert!(parsed
-            .service_uuids
-            .contains(&"0000180f-0000-1000-8000-00805f9b34fb".to_string()));
+        assert!(
+            parsed
+                .service_uuids
+                .contains(&"0000180f-0000-1000-8000-00805f9b34fb".to_string())
+        );
         assert!(parsed.profiles.contains(&BluetoothProfile::BatteryService));
     }
 
     #[test]
     fn parses_16bit_service_uuid_solicitation() {
         let parsed = parse_eir_or_ad_data(&[3, 0x14, 0x0f, 0x18]);
-        assert!(parsed
-            .service_uuids
-            .contains(&"0000180f-0000-1000-8000-00805f9b34fb".to_string()));
+        assert!(
+            parsed
+                .service_uuids
+                .contains(&"0000180f-0000-1000-8000-00805f9b34fb".to_string())
+        );
         assert!(parsed.profiles.contains(&BluetoothProfile::BatteryService));
     }
 
@@ -1655,18 +1663,22 @@ mod tests {
             17, 0x21, 0xff, 0xee, 0xdd, 0xcc, 0xbb, 0xaa, 0x99, 0x88, 0x77, 0x66, 0x55, 0x44, 0x33,
             0x22, 0x11, 0x00,
         ]);
-        assert!(parsed
-            .service_uuids
-            .contains(&"00112233-4455-6677-8899-aabbccddeeff".to_string()));
+        assert!(
+            parsed
+                .service_uuids
+                .contains(&"00112233-4455-6677-8899-aabbccddeeff".to_string())
+        );
     }
 
     #[test]
     fn parses_service_uuids_from_info_record_variants() {
         let text = "[General]\nServices=180f;{180D};0000180f\n";
         let record = parse_bluez_device_record("AA:BB:CC:DD:EE:FF", "11:22:33:44:55:66", text);
-        assert!(record
-            .service_uuids
-            .contains(&"0000180f-0000-1000-8000-00805f9b34fb".to_string()));
+        assert!(
+            record
+                .service_uuids
+                .contains(&"0000180f-0000-1000-8000-00805f9b34fb".to_string())
+        );
         assert!(record.profiles.contains(&BluetoothProfile::HeartRate));
         assert!(record.profiles.contains(&BluetoothProfile::BatteryService));
     }
@@ -1690,12 +1702,16 @@ mod tests {
     fn normalizes_0x_prefixed_service_uuids() {
         let text = "[General]\nServices=0x180f;0X180A\n";
         let record = parse_bluez_device_record("AA:BB:CC:DD:EE:FF", "11:22:33:44:55:66", text);
-        assert!(record
-            .service_uuids
-            .contains(&"0000180f-0000-1000-8000-00805f9b34fb".to_string()));
-        assert!(record
-            .service_uuids
-            .contains(&"0000180a-0000-1000-8000-00805f9b34fb".to_string()));
+        assert!(
+            record
+                .service_uuids
+                .contains(&"0000180f-0000-1000-8000-00805f9b34fb".to_string())
+        );
+        assert!(
+            record
+                .service_uuids
+                .contains(&"0000180a-0000-1000-8000-00805f9b34fb".to_string())
+        );
         assert!(record.profiles.contains(&BluetoothProfile::BatteryService));
     }
 
@@ -2239,7 +2255,7 @@ mod tests {
         payload[7] = 0x3f;
         payload[8] = 0x00; // manufacturer
         payload[9..13].copy_from_slice(&0x3ffu32.to_le_bytes()); // supported_settings
-                                                                 // current_settings: bits 0,1,9 = powered, connectable, low_energy (0x203)
+        // current_settings: bits 0,1,9 = powered, connectable, low_energy (0x203)
         payload[13..17].copy_from_slice(&0x203u32.to_le_bytes());
         // class_of_device is 3 bytes at offset 17-19
         payload[17] = 0x04;

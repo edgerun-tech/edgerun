@@ -1,0 +1,20 @@
+[package]
+name = "edgerun-relay"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Edgerun relay node protocol and TCP relay runtime"
+
+[[bin]]
+name = "edgerun-relay"
+path = "src/main.rs"
+
+[dependencies]
+edgerun-crypto = { workspace = true, default-features = false, features = ["ed25519"] }
+rkyv.workspace = true
+
+[lints]
+workspace = true

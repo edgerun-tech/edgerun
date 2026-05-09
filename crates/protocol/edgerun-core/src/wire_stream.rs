@@ -3,7 +3,7 @@
 use alloc::vec::Vec;
 
 use crate::protocol::{
-    protocol_wire_bytes, CommandEnvelope, CommandResultPayload, EventEnvelope, ProtocolRecord,
+    CommandEnvelope, CommandResultPayload, EventEnvelope, ProtocolRecord, protocol_wire_bytes,
 };
 
 pub fn event_signable_wire_bytes(event: &EventEnvelope) -> Vec<u8> {

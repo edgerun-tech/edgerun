@@ -2,16 +2,16 @@
 //!
 //! Each handler is a method on `Http2Server` in this module.
 
-use super::response;
 use super::FrameAction;
 use super::Http2Server;
+use super::response;
+use crate::http::http2::ErrorCode;
+use crate::http::http2::Http2Error as ProtocolHttp2Error;
 use crate::http::http2::flow_control::FlowController;
 use crate::http::http2::frame::{
     Frame, PingFrame, PriorityFrame, RstStreamFrame, SettingsFrame, WindowUpdateFrame,
 };
 use crate::http::http2::settings::Settings;
-use crate::http::http2::ErrorCode;
-use crate::http::http2::Http2Error as ProtocolHttp2Error;
 
 impl Http2Server {
     /// Process an incoming SETTINGS frame (after preface).

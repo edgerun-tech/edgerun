@@ -4,7 +4,7 @@
 //! ESP-IDF Wi-Fi blob with enough OS callbacks to move initialization forward
 //! while Edgerun's own scheduler-backed adapter is still being built.
 
-use alloc::alloc::{alloc, alloc_zeroed, Layout};
+use alloc::alloc::{Layout, alloc, alloc_zeroed};
 use core::ffi::{c_char, c_int, c_uint, c_ulong, c_void};
 use core::ptr;
 use core::sync::atomic::{AtomicU32, Ordering};

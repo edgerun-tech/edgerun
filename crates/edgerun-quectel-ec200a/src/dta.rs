@@ -4,12 +4,12 @@
 //! provides an AT transport; this module only sequences EC200A commands and
 //! parses EC200A responses.
 
-use crate::prelude::v1::*;
 use crate::DtaNetwork;
+use crate::prelude::v1::*;
 use edgerun_protocols::quectel_ec200a::{
+    CMD_IMSI, CMD_MODEM_INFO, CMD_NETWORK_REGISTRATION, CMD_OPERATOR, CMD_SIGNAL_QUALITY,
     configure_dta_commands, parse_imsi, parse_modem_info, parse_network_operator,
-    parse_network_registered, parse_signal_quality, set_radio_function_command, CMD_IMSI,
-    CMD_MODEM_INFO, CMD_NETWORK_REGISTRATION, CMD_OPERATOR, CMD_SIGNAL_QUALITY,
+    parse_network_registered, parse_signal_quality, set_radio_function_command,
 };
 
 /// DTA network configuration.

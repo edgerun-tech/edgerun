@@ -23,7 +23,6 @@ const registry = new Map<string, AppSurfaceSpec>()
 
 const BUILTIN_SPECS: Record<string, AppSurfaceSpec> = {
   identity: { kind: "overlay", variant: "standard", dismissOnOutsideClick: true },
-  terminal: { kind: "overlay", variant: "standard", dismissOnOutsideClick: true },
   "db-explorer": { kind: "overlay", variant: "standard", dismissOnOutsideClick: true },
   "network-monitor": { kind: "pinned-widget", variant: "widget", dismissOnOutsideClick: false, preferredSlot: "left-top" },
   "file-browser": { kind: "overlay", variant: "standard", dismissOnOutsideClick: true },

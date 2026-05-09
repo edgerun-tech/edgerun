@@ -79,6 +79,7 @@
     "react-is": "^19.2.5",
     "react-jsx-parser": "^2.4.1",
     "react-resizable-panels": "^4",
+    "react-syntax-highlighter": "^16.1.1",
     "shiki": "^4.0.2",
     "sonner": "^2.0.7",
     "streamdown": "^2.5.0",

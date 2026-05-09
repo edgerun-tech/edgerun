@@ -8,15 +8,15 @@
 use crate::prelude::*;
 use std::fs::{self, File};
 use std::io::{self, Read};
-use std::os::unix::fs::{symlink, FileTypeExt, PermissionsExt};
+use std::os::unix::fs::{FileTypeExt, PermissionsExt, symlink};
 use std::path::{Path, PathBuf};
 
 use super::errors::RegistryError;
 use crate::layer_pipeline::format_digest;
 use crate::oci_path::{layer_path_safe, normalize_layer_path};
 use crate::tar_layer::{
-    apply_uncompressed_tar_layer, decompress_gzip_layer, decompress_zstd_layer, layer_compression,
-    OciLayerCompression, TarEntry, TarEntryKind, TarLayerSink,
+    OciLayerCompression, TarEntry, TarEntryKind, TarLayerSink, apply_uncompressed_tar_layer,
+    decompress_gzip_layer, decompress_zstd_layer, layer_compression,
 };
 use edgerun_crypto::sha::Digest;
 

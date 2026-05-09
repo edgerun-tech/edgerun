@@ -55,7 +55,7 @@ pub trait Read {
                     return Err(Error::new(
                         ErrorKind::UnexpectedEof,
                         "failed to fill whole buffer",
-                    ))
+                    ));
                 }
                 n => {
                     let tmp = buf;
@@ -103,7 +103,7 @@ pub trait Write {
                     return Err(Error::new(
                         ErrorKind::WriteZero,
                         "failed to write whole buffer",
-                    ))
+                    ));
                 }
                 n => buf = &buf[n..],
             }

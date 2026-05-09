@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react"
 import { Download, KeyRound, LockKeyhole, Upload } from "lucide-react"
 import { EdgerunLogo } from "./edgerun-logo"
-import { Globe } from "./globe"
 import type { AuthState, NodeProvisionInput, ProfileSummary } from "@/hooks/use-auth"
 
 interface AuthOverlayProps {
@@ -103,10 +102,7 @@ export function AuthOverlay({
 
   return (
     <div className="fixed inset-0 z-[100] flex overflow-hidden">
-      <div className="absolute inset-0">
-        <Globe nodeCount={20} className="h-full w-full opacity-70" />
-        <div className="auth-vignette absolute inset-0" />
-      </div>
+      <div className="absolute inset-0 bg-background" />
 
       <div className="edgerun-auth-panel relative z-10 m-auto flex flex-col overflow-hidden rounded-2xl border border-border bg-[var(--window-bg)]/94 shadow-2xl shadow-black/60 backdrop-blur-xl">
         <div className="flex items-center justify-center border-b border-border px-6 py-5 sm:py-6">
@@ -122,7 +118,7 @@ export function AuthOverlay({
                   Create a local identity for this browser. You can lock it, switch profiles, and bring it back later with your password.
                 </p>
               </div>
-              <button onClick={() => setScreen("create")} className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 hover:bg-primary/90">
+              <button onClick={() => setScreen("create")} className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
                 <KeyRound className="h-4 w-4" />
                 New profile
               </button>
@@ -156,7 +152,7 @@ export function AuthOverlay({
                   <span className="block">Use fingerprint, Face ID, Windows Hello, or a security key for future unlocks.</span>
                 </span>
               </label>
-              <button disabled={!canCreate || isLoading} onClick={createProfile} className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 disabled:cursor-not-allowed disabled:opacity-45">
+              <button disabled={!canCreate || isLoading} onClick={createProfile} className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-45">
                 <LockKeyhole className="h-4 w-4" />
                 {isLoading ? "Sealing..." : "Create and unlock"}
               </button>
@@ -190,7 +186,7 @@ export function AuthOverlay({
                 </select>
               )}
               <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" placeholder="Profile password" className="h-10 w-full rounded-lg border border-border bg-secondary/50 px-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" onKeyDown={(event) => event.key === "Enter" && unlockProfile()} />
-              <button disabled={!canUnlock || isLoading} onClick={unlockProfile} className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/20 disabled:cursor-not-allowed disabled:opacity-45">
+              <button disabled={!canUnlock || isLoading} onClick={unlockProfile} className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary px-4 text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-45">
                 <LockKeyhole className="h-4 w-4" />
                 {isLoading ? "Opening..." : "Unlock"}
               </button>

@@ -15,10 +15,10 @@ pub use edgerun_linux_sysfs::{collections, fs, io, mem, option, os, path, result
 
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 use edgerun_devices::usb::{
-    default_usb_descriptor, UsbDeviceInfo, UsbInterfaceInfo, UsbInventory, UsbSpeed,
+    UsbDeviceInfo, UsbInterfaceInfo, UsbInventory, UsbSpeed, default_usb_descriptor,
 };
 use edgerun_linux_sysfs::prelude::v1::*;
-use edgerun_linux_sysfs::{parse_hex_u16, parse_hex_u8, parse_u32, parse_u8, read_trimmed};
+use edgerun_linux_sysfs::{parse_hex_u8, parse_hex_u16, parse_u8, parse_u32, read_trimmed};
 use std::collections::{BTreeMap as HashMap, BTreeSet as HashSet};
 #[cfg(not(target_os = "none"))]
 use std::fs;
@@ -117,7 +117,7 @@ pub fn discover_usb_devices_in(root: &Path) -> Result<Vec<LinuxUsbDevice>, Capab
         Err(e) => {
             return Err(CapabilityError::Provider(format!(
                 "failed to read usb sysfs: {e}"
-            )))
+            )));
         }
     };
     for entry in entries.flatten() {

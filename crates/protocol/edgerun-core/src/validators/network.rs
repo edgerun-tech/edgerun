@@ -503,11 +503,11 @@ fn has_empty_string_item(items: Option<&[Value]>) -> bool {
 // ===================================================================
 
 use crate::crypto::{
-    verify_canonical_record, verify_canonical_record_hw, ECDSA_P256_PUBLIC_KEY_LEN,
-    ECDSA_P256_SIGNATURE_LEN, SIGNATURE_ALGORITHM_ECDSA_P256, SIG_DOMAIN_ROUTE_ADVERTISEMENT,
+    ECDSA_P256_PUBLIC_KEY_LEN, ECDSA_P256_SIGNATURE_LEN, SIG_DOMAIN_ROUTE_ADVERTISEMENT,
+    SIGNATURE_ALGORITHM_ECDSA_P256, verify_canonical_record, verify_canonical_record_hw,
 };
-use crate::protocol::{protocol_wire_bytes, IdentityRef, ObjectRef, ProtocolRecord};
 use crate::protocol::{Directness, IdentityKind, ObjectKind, TransportClass};
+use crate::protocol::{IdentityRef, ObjectRef, ProtocolRecord, protocol_wire_bytes};
 
 fn validate_identity_ref(
     identity: &IdentityRef,

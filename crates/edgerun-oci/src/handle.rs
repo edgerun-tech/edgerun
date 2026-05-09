@@ -9,7 +9,7 @@ use std::os::unix::process::ExitStatusExt;
 use std::path::Path;
 
 use crate::spec::OciHook;
-use crate::syscalls::{kill, SIGKILL, SIGTERM};
+use crate::syscalls::{SIGKILL, SIGTERM, kill};
 
 /// A handle to a running container that can be awaited or killed.
 pub struct RunningContainer {

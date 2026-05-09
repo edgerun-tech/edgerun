@@ -12,8 +12,8 @@ mod prelude {
 }
 
 use edgerun_capabilities::{
-    capability_descriptor, CapabilityDescriptor, CapabilityEventKind, CapabilityModality,
-    CapabilityOperation, CapabilityProvider, CapabilityRole,
+    CapabilityDescriptor, CapabilityEventKind, CapabilityModality, CapabilityOperation,
+    CapabilityProvider, CapabilityRole, capability_descriptor,
 };
 use prelude::v1::*;
 
@@ -455,29 +455,41 @@ mod tests {
     #[test]
     fn wifi_descriptor_has_radio_and_state_events() {
         let descriptor = default_wifi_descriptor("wifi", "wlan0");
-        assert!(descriptor
-            .event_kinds
-            .contains(&(CapabilityEventKind::Radio as i32)));
-        assert!(descriptor
-            .event_kinds
-            .contains(&(CapabilityEventKind::State as i32)));
+        assert!(
+            descriptor
+                .event_kinds
+                .contains(&(CapabilityEventKind::Radio as i32))
+        );
+        assert!(
+            descriptor
+                .event_kinds
+                .contains(&(CapabilityEventKind::State as i32))
+        );
     }
 
     #[test]
     fn wifi_descriptor_has_all_operations() {
         let descriptor = default_wifi_descriptor("wifi", "wlan0");
-        assert!(descriptor
-            .operations
-            .contains(&(CapabilityOperation::Query as i32)));
-        assert!(descriptor
-            .operations
-            .contains(&(CapabilityOperation::Observe as i32)));
-        assert!(descriptor
-            .operations
-            .contains(&(CapabilityOperation::Control as i32)));
-        assert!(descriptor
-            .operations
-            .contains(&(CapabilityOperation::Invoke as i32)));
+        assert!(
+            descriptor
+                .operations
+                .contains(&(CapabilityOperation::Query as i32))
+        );
+        assert!(
+            descriptor
+                .operations
+                .contains(&(CapabilityOperation::Observe as i32))
+        );
+        assert!(
+            descriptor
+                .operations
+                .contains(&(CapabilityOperation::Control as i32))
+        );
+        assert!(
+            descriptor
+                .operations
+                .contains(&(CapabilityOperation::Invoke as i32))
+        );
     }
 
     // --- validate_access_point_config ---

@@ -93,7 +93,7 @@ impl<T: Serialize> Serialize for Wrapping<T> {
 #[cfg(all(test, feature = "serde"))]
 #[allow(clippy::unwrap_used)]
 mod tests {
-    use crate::crypto_bigint::{Wrapping, U64};
+    use crate::crypto_bigint::{U64, Wrapping};
 
     #[test]
     fn serde() {

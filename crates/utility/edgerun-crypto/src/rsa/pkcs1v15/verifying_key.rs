@@ -1,15 +1,15 @@
-use super::{oid, pkcs1v15_generate_prefix, verify, Signature};
+use super::{Signature, oid, pkcs1v15_generate_prefix, verify};
 use crate::digest::Digest;
 use crate::pkcs1;
 use crate::pkcs8::{
-    spki::{
-        der::AnyRef, AlgorithmIdentifierRef, AssociatedAlgorithmIdentifier,
-        SignatureAlgorithmIdentifier,
-    },
     AssociatedOid, Document, EncodePublicKey,
+    spki::{
+        AlgorithmIdentifierRef, AssociatedAlgorithmIdentifier, SignatureAlgorithmIdentifier,
+        der::AnyRef,
+    },
 };
 use crate::rsa::RsaPublicKey;
-use crate::signature::{hazmat::PrehashVerifier, DigestVerifier, Verifier};
+use crate::signature::{DigestVerifier, Verifier, hazmat::PrehashVerifier};
 use alloc::vec::Vec;
 use core::marker::PhantomData;
 

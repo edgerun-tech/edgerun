@@ -38,7 +38,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use core::module_path;
 
-use crate::command_dispatch::{dispatch_command, ControllerSet};
+use crate::command_dispatch::{ControllerSet, dispatch_command};
 use crate::{Node, NodeConfig};
 use edgerun_capabilities::CapabilityGrant;
 use edgerun_hardware_signing::{MeshSigner, NodeID};

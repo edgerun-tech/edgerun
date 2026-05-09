@@ -23,8 +23,8 @@ use crate::tls::cipher::NamedGroup;
 use crate::tls::handshake::{ClientHelloBuilder, ServerHello};
 use crate::tls::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
 use crate::tls::prf::{
-    quic_hp_key, quic_initial_client_keys, quic_traffic_keys, Hasher, Tls13KeySchedule,
-    TrafficKeys, INITIAL_SALT_V1,
+    Hasher, INITIAL_SALT_V1, Tls13KeySchedule, TrafficKeys, quic_hp_key, quic_initial_client_keys,
+    quic_traffic_keys,
 };
 use alloc::{
     format,
@@ -32,14 +32,14 @@ use alloc::{
     vec,
     vec::Vec,
 };
-use edgerun_crypto::fill_random;
 use edgerun_crypto::CipherSuite;
+use edgerun_crypto::fill_random;
 use edgerun_encoding::byteorder::{push_u16_be, push_u24_be, read_u16_be, read_u24_be};
 
 use super::crypto::{CryptoPhase, PacketProtection, ProtectionKeys};
 use super::frame::QuicFrame;
 use super::packet::QuicPacket;
-use super::{ConnectionId, TransportParameters, QUIC_VERSION_V1};
+use super::{ConnectionId, QUIC_VERSION_V1, TransportParameters};
 
 /// Certificate validation result.
 #[derive(Debug)]

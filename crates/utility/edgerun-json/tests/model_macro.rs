@@ -1,4 +1,4 @@
-use edgerun_json::{from_json_value, impl_json_struct, json, to_json_value, FromJson, ToJson};
+use edgerun_json::{FromJson, ToJson, from_json_value, impl_json_struct, json, to_json_value};
 
 #[derive(Debug, PartialEq, Eq)]
 struct Job {

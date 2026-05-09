@@ -4,8 +4,8 @@ use alloc::vec::Vec;
 
 use crate::decoder::Decoder;
 use crate::encoder::Encoder;
-use crate::helpers::{build_table, build_table_with_size, TABLE_SIZE};
-use crate::{dynamic::DynamicTable, Decoded, DecoderError, HeaderField};
+use crate::helpers::{TABLE_SIZE, build_table, build_table_with_size};
+use crate::{Decoded, DecoderError, HeaderField, dynamic::DynamicTable};
 use edgerun_encoding::buf::Cursor;
 
 #[test]

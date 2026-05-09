@@ -4,14 +4,14 @@ use super::{
 };
 #[cfg(feature = "oid")]
 use crate::const_oid::{AssociatedOid, ObjectIdentifier};
-use crate::digest::crypto_common::{
-    generic_array::{ArrayLength, GenericArray},
-    typenum::{IsLess, IsLessOrEqual, Le, LeEq, NonZero, U256},
-    Block, BlockSizeUser, OutputSizeUser,
-};
 use crate::digest::HashMarker;
 #[cfg(feature = "mac")]
 use crate::digest::MacMarker;
+use crate::digest::crypto_common::{
+    Block, BlockSizeUser, OutputSizeUser,
+    generic_array::{ArrayLength, GenericArray},
+    typenum::{IsLess, IsLessOrEqual, Le, LeEq, NonZero, U256},
+};
 use core::{fmt, marker::PhantomData};
 
 /// Dummy type used with [`CtVariableCoreWrapper`] in cases when

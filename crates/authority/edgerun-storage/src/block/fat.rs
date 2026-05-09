@@ -1,6 +1,6 @@
 //! Minimal no_std read-only FAT root directory support.
 
-use crate::block::{probe_filesystem, BlockStorage, FatInfo, FileSystemDetails, FileSystemKind};
+use crate::block::{BlockStorage, FatInfo, FileSystemDetails, FileSystemKind, probe_filesystem};
 use crate::error::StorageError;
 use crate::prelude::v1::*;
 use edgerun_encoding::byteorder::{read_u16_le as read_u16, read_u32_le as read_u32};

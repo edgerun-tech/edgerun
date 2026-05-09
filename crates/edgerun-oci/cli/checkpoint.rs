@@ -15,8 +15,7 @@ use edgerun_clap::{Arg, Command};
 pub fn cmd_checkpoint(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     crate::cli::apply_global_opts(opts)?;
 
-    const USAGE: &str =
-        "Usage: ert checkpoint [--image-path DIR] [--work-path DIR] [--leave-running] [--pre-dump] <container-id>";
+    const USAGE: &str = "Usage: ert checkpoint [--image-path DIR] [--work-path DIR] [--leave-running] [--pre-dump] <container-id>";
     let matches = parse_cli_args(
         Command::new("checkpoint")
             .arg(Arg::new("image-path").long("image-path"))

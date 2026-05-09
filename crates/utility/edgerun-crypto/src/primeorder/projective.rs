@@ -1,6 +1,7 @@
 //! Projective curve points.
 
 use crate::elliptic_curve::{
+    BatchNormalize, Error, FieldBytes, FieldBytesSize, PublicKey, Result, Scalar,
     bigint::{ArrayEncoding, Integer},
     generic_array::ArrayLength,
     ops::{BatchInvert, Invert, LinearCombination, MulByGenerator},
@@ -12,15 +13,13 @@ use crate::elliptic_curve::{
     },
     subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption},
     zeroize::DefaultIsZeroes,
-    BatchNormalize, Error, FieldBytes, FieldBytesSize, PublicKey, Result, Scalar,
 };
 use crate::group::{
-    self,
+    self, Group, GroupEncoding,
     cofactor::CofactorGroup,
     prime::{PrimeCurve, PrimeGroup},
-    Group, GroupEncoding,
 };
-use crate::primeorder::{point_arithmetic::PointArithmetic, AffinePoint, Field, PrimeCurveParams};
+use crate::primeorder::{AffinePoint, Field, PrimeCurveParams, point_arithmetic::PointArithmetic};
 use core::{
     borrow::Borrow,
     iter::Sum,

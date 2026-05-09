@@ -52,8 +52,8 @@ pub mod vec {
 
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 use edgerun_devices::network_interface::{
-    default_network_interface_descriptor, NetworkAdminState, NetworkInterfaceController,
-    NetworkInterfaceInfo, NetworkInterfaceKind, NetworkLinkState,
+    NetworkAdminState, NetworkInterfaceController, NetworkInterfaceInfo, NetworkInterfaceKind,
+    NetworkLinkState, default_network_interface_descriptor,
 };
 use edgerun_linux_sysfs::prelude::v1::*;
 use edgerun_linux_sysfs::{

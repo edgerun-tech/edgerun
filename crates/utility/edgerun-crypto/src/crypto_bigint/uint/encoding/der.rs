@@ -1,9 +1,9 @@
 //! Support for decoding/encoding [`Uint`] as an ASN.1 DER `INTEGER`.
 
-use crate::crypto_bigint::{generic_array::GenericArray, ArrayEncoding, Uint};
+use crate::crypto_bigint::{ArrayEncoding, Uint, generic_array::GenericArray};
 use crate::der::{
-    asn1::{AnyRef, UintRef},
     DecodeValue, EncodeValue, FixedTag, Length, Tag,
+    asn1::{AnyRef, UintRef},
 };
 
 impl<'a, const LIMBS: usize> TryFrom<AnyRef<'a>> for Uint<LIMBS>

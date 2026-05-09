@@ -117,7 +117,7 @@ function AccentButton({ active, color, label, onClick }: { active: boolean; colo
       title={label}
     >
       <span className="absolute inset-0" style={{ background: color }} />
-      <span className="absolute inset-0 bg-gradient-to-br from-white/30 to-black/25" />
+      <span className="absolute inset-0 bg-transparent" />
       {active && <Check className="absolute inset-0 m-auto h-4 w-4 text-black" />}
     </button>
   )
@@ -379,7 +379,7 @@ function AboutPanel() {
     <div className="space-y-4">
       <Card className="overflow-hidden border-[var(--window-border)] bg-card/55 py-0 shadow-none">
         <CardContent className="relative flex items-center gap-4 px-5 py-5">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,var(--primary)_0,transparent_28%)] opacity-10" />
+          <div className="absolute inset-0 bg-transparent" />
           <div className="relative rounded-2xl border border-primary/10 bg-primary/5 p-3">
             <EdgerunLogo size="lg" variant="mark" />
           </div>

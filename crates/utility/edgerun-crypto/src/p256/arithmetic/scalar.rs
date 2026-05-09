@@ -6,7 +6,8 @@ mod scalar_impl;
 
 use self::scalar_impl::barrett_reduce;
 use crate::elliptic_curve::{
-    bigint::{prelude::*, Limb, U256},
+    Curve, ScalarPrimitive,
+    bigint::{Limb, U256, prelude::*},
     ops::{Invert, Reduce, ReduceNonZero},
     rand_core::RngCore,
     scalar::{FromUintUnchecked, IsHigh},
@@ -15,10 +16,9 @@ use crate::elliptic_curve::{
         CtOption,
     },
     zeroize::DefaultIsZeroes,
-    Curve, ScalarPrimitive,
 };
 use crate::ff::{self, Field, PrimeField};
-use crate::p256::{FieldBytes, NistP256, SecretKey, ORDER_HEX};
+use crate::p256::{FieldBytes, NistP256, ORDER_HEX, SecretKey};
 use core::{
     fmt::{self, Debug},
     iter::{Product, Sum},
@@ -29,7 +29,7 @@ use core::{
 use {crate::elliptic_curve::group::ff::PrimeFieldBits, crate::p256::ScalarBits};
 
 #[cfg(feature = "p256_serde")]
-use serdect::serde::{de, ser, Deserialize, Serialize};
+use serdect::serde::{Deserialize, Serialize, de, ser};
 
 /// Constant representing the modulus
 /// n = FFFFFFFF 00000000 FFFFFFFF FFFFFFFF BCE6FAAD A7179E84 F3B9CAC2 FC632551

@@ -63,7 +63,9 @@ impl fmt::Display for VirtualDiskError {
         match self {
             Self::Io(err) => write!(f, "I/O error: {err}"),
             Self::InvalidArgument(msg) => write!(f, "invalid argument: {msg}"),
-            Self::AlreadyExists(path) => write!(f, "virtual disk already exists: {}", path.display()),
+            Self::AlreadyExists(path) => {
+                write!(f, "virtual disk already exists: {}", path.display())
+            }
             Self::CommandMissing { command } => write!(f, "required command missing: {command}"),
             Self::CommandFailed {
                 command,

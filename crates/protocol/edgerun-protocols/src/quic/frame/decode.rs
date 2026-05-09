@@ -1,6 +1,6 @@
-use super::varint::decode_varint_string as decode_varint;
 use super::QuicFrame;
 use super::QuicFrameType;
+use super::varint::decode_varint_string as decode_varint;
 use alloc::{
     format,
     string::{String, ToString},

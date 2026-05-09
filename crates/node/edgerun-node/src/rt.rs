@@ -13,24 +13,24 @@ pub use time::{Duration, Instant};
 pub use runtime::{pending, run_queue, runs};
 
 pub mod timer;
-pub use timer::{elapsed_since, now, set_now, sleep_ms, sleep_us, TimerWheel};
+pub use timer::{TimerWheel, elapsed_since, now, set_now, sleep_ms, sleep_us};
 
 pub mod runtime;
 pub use runtime::{
-    block_on, noop_waker, shutdown, spawn, spawn_blocking, spawn_local, Builder, JoinError,
-    JoinHandle, JoinSet, Runtime, RuntimeHandle,
+    Builder, JoinError, JoinHandle, JoinSet, Runtime, RuntimeHandle, block_on, noop_waker,
+    shutdown, spawn, spawn_blocking, spawn_local,
 };
 
 pub mod timers;
 pub use timers::{
-    sleep, sleep_until, timeout, timeout_at, Elapsed, Sleep, SleepUntil, Timeout, TimeoutAt,
+    Elapsed, Sleep, SleepUntil, Timeout, TimeoutAt, sleep, sleep_until, timeout, timeout_at,
 };
 
 pub mod interval;
-pub use interval::{interval, interval_at, Interval, MissedTickBehavior};
+pub use interval::{Interval, MissedTickBehavior, interval, interval_at};
 
 pub mod yield_now;
-pub use yield_now::{yieldnow, YieldNow};
+pub use yield_now::{YieldNow, yieldnow};
 
 pub mod sync;
 pub use sync::{
@@ -50,12 +50,12 @@ pub use cancellation::{CancellationToken, Cancelled};
 
 pub mod io;
 pub use io::{
-    copy, copy_bidirectional, AsyncBufRead, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt,
-    BufReader, Cursor, IoError,
+    AsyncBufRead, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, Cursor, IoError,
+    copy, copy_bidirectional,
 };
 
 pub mod poll_fn;
-pub use poll_fn::{poll_fn, PollFn};
+pub use poll_fn::{PollFn, poll_fn};
 
 pub mod join;
 pub use join::{join2, join3, join4, join5};
@@ -66,11 +66,11 @@ pub mod join_internal {
 
 pub mod select;
 pub use select::{
-    select2, select_2, select_3, select_4, Either, Select, Select2Enum, Select3, Select4,
+    Either, Select, Select2Enum, Select3, Select4, select_2, select_3, select_4, select2,
 };
 
 pub mod channel;
-pub use channel::{channel, Receiver, RecvError, SendError, Sender};
+pub use channel::{Receiver, RecvError, SendError, Sender, channel};
 
 pub mod mpsc;
 pub use mpsc::{Receiver as MpscReceiver, Sender as MpscSender};
@@ -84,7 +84,7 @@ pub fn unbounded_channel<T>() -> (MpscSender<T>, MpscReceiver<T>) {
 }
 
 pub mod broadcast;
-pub use broadcast::{broadcast, Publisher, Subscriber};
+pub use broadcast::{Publisher, Subscriber, broadcast};
 
 pub fn broadcast_channel<T: Clone + 'static>(initial: T) -> (Publisher<T>, Subscriber<T>) {
     let (publisher, subscriber) = broadcast::broadcast(1);
@@ -94,7 +94,7 @@ pub fn broadcast_channel<T: Clone + 'static>(initial: T) -> (Publisher<T>, Subsc
 
 pub mod watch;
 pub use watch::watch as watch_channel;
-pub use watch::{watch, Receiver as WatchReceiver, Sender as WatchSender};
+pub use watch::{Receiver as WatchReceiver, Sender as WatchSender, watch};
 
 pub mod task_local;
 pub use task_local::TaskLocal;
@@ -109,7 +109,7 @@ pub mod error;
 pub use error::Error;
 
 pub mod signal;
-pub use signal::{alarm, ctrl_c, usr1, usr2, CtrlC, Signal, SignalHandler, SignalKind};
+pub use signal::{CtrlC, Signal, SignalHandler, SignalKind, alarm, ctrl_c, usr1, usr2};
 
 pub mod serial_mux;
 
@@ -121,9 +121,9 @@ pub mod tcp;
 pub use tcp::{TcpError, TcpListener, TcpSocket, TcpState};
 
 pub mod bare_async_net;
-pub use bare_async_net::{install_bare_net_driver, BareNetDriver};
 #[cfg(target_os = "none")]
 pub use bare_async_net::{AsyncTcpListener, AsyncTcpStream, AsyncUdpSocket, ConnectFuture};
+pub use bare_async_net::{BareNetDriver, install_bare_net_driver};
 #[cfg(not(target_os = "none"))]
 pub mod host_async_net;
 #[cfg(not(target_os = "none"))]

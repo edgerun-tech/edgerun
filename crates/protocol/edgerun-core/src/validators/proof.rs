@@ -18,8 +18,8 @@ use crate::protocol::{
     ProofBundle, ProofPayloadType, ResultFragmentProof, SnapshotSetProof, StreamHeadsProof,
     TrustPolicyProof,
 };
-use crate::result::{accept, defer, empty_map, reject, ReasonCode, ValidationResult};
-use crate::value::{mapping, ystr, Value};
+use crate::result::{ReasonCode, ValidationResult, accept, defer, empty_map, reject};
+use crate::value::{Value, mapping, ystr};
 
 /// Structural validation result for a proof object.
 #[derive(Debug, Clone, PartialEq, Eq)]

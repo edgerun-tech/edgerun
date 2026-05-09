@@ -23,11 +23,7 @@ pub(crate) fn cmd_verify_segment(id: Option<&str>) -> i32 {
     for segment in segments {
         ok &= verify_segment(segment);
     }
-    if ok {
-        0
-    } else {
-        1
-    }
+    if ok { 0 } else { 1 }
 }
 
 pub(crate) fn cmd_verify_chain(id: Option<&str>) -> i32 {
@@ -45,11 +41,7 @@ pub(crate) fn cmd_verify_chain(id: Option<&str>) -> i32 {
     for chain in chains {
         ok &= verify_chain(chain);
     }
-    if ok {
-        0
-    } else {
-        1
-    }
+    if ok { 0 } else { 1 }
 }
 
 pub(crate) fn cmd_verify_chain_reports(args: Vec<String>) -> i32 {
@@ -88,11 +80,7 @@ pub(crate) fn cmd_verify_chain_reports(args: Vec<String>) -> i32 {
     let ok = verify_chain_reports(manifest, &reports);
     println!("chain: {}", manifest.id);
     print_check("chain-report-preflight-bindings", ok);
-    if ok {
-        0
-    } else {
-        1
-    }
+    if ok { 0 } else { 1 }
 }
 
 pub(crate) fn cmd_verify_report(path: Option<&str>) -> i32 {
@@ -2180,11 +2168,7 @@ pub(crate) fn cmd_verify(id: Option<&str>) -> i32 {
             ok &= verify_composition(composition);
         }
     }
-    if ok {
-        0
-    } else {
-        1
-    }
+    if ok { 0 } else { 1 }
 }
 
 pub(crate) fn verify_composition(manifest: &CompositionManifest) -> bool {

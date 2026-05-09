@@ -15,15 +15,15 @@ use core::{
     str,
 };
 use generic_array::{
-    typenum::{U1, U24, U28, U32, U48, U66},
     ArrayLength, GenericArray,
+    typenum::{U1, U24, U28, U32, U48, U66},
 };
 
 #[cfg(feature = "elliptic_curve_alloc")]
 use alloc::boxed::Box;
 
 #[cfg(feature = "elliptic_curve_serde")]
-use serdect::serde::{de, ser, Deserialize, Serialize};
+use serdect::serde::{Deserialize, Serialize, de, ser};
 
 use crate::subtle::{Choice, ConditionallySelectable};
 

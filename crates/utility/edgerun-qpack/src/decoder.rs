@@ -343,7 +343,7 @@ mod tests {
     use alloc::{format, vec, vec::Vec};
 
     use super::*;
-    use crate::helpers::{build_table_with_size, TABLE_SIZE};
+    use crate::helpers::{TABLE_SIZE, build_table_with_size};
 
     // #[test]
     // fn test_header_too_long() {

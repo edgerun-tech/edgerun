@@ -203,9 +203,9 @@ fn gzip_bytes(_data: &[u8]) -> io::Result<Vec<u8>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::tar_layer::{TarEntry, TarLayerSink};
     #[cfg(feature = "gzip")]
     use crate::tar_layer::{apply_uncompressed_tar_layer, decompress_gzip_layer};
-    use crate::tar_layer::{TarEntry, TarLayerSink};
     use std::path::PathBuf;
 
     #[derive(Default)]

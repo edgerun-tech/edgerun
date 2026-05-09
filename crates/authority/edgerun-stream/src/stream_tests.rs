@@ -3,7 +3,7 @@ use super::*;
 use edgerun_protocols::core_protocol::crypto::{
     ECDSA_P256_SIGNATURE_LEN, SIGNATURE_ALGORITHM_ECDSA_P256,
 };
-use edgerun_protocols::keygen::{node_signing_key_from_bytes, NodeSigningKey};
+use edgerun_protocols::keygen::{NodeSigningKey, node_signing_key_from_bytes};
 use edgerun_protocols::sign_p256::P256ProtocolSigner;
 
 fn signer(seed: u8) -> P256ProtocolSigner {
@@ -72,10 +72,12 @@ fn stream_writer_appends_contiguous_signed_hash_linked_events() {
     assert_eq!(second.seq, 2);
     assert_eq!(first.prev_event_hash, Some(genesis_hash));
     assert_eq!(second.prev_event_hash, Some(compute_event_hash(&first)));
-    assert!(writer
-        .events()
-        .iter()
-        .all(|event| event.signature.is_some()));
+    assert!(
+        writer
+            .events()
+            .iter()
+            .all(|event| event.signature.is_some())
+    );
     validate_stream(writer.events(), writer.stream_id()).unwrap();
 }
 

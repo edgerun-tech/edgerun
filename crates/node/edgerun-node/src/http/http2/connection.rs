@@ -1,14 +1,14 @@
 //! HTTP/2 connection management
 
+use super::Http2Error;
 use super::flow_control::FlowControlManager;
 use super::frame::{
     ContinuationFrame, DataFrame, Frame, FrameType, GoawayFrame, HeadersFrame, PingFrame,
     PriorityFrame, PushPromiseFrame, RstStreamFrame, SettingsFrame, WindowUpdateFrame,
 };
 use super::stream::{Stream, StreamManager};
-use super::Http2Error;
+use super::{CONNECTION_PREFACE, Settings};
 use super::{ErrorCode, Result};
-use super::{Settings, CONNECTION_PREFACE};
 use crate::http::runtime::io::{self, Read, Write};
 use alloc::collections::BTreeMap as HashMap;
 use alloc::format;

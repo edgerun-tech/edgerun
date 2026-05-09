@@ -132,7 +132,7 @@ impl<const LIMBS: usize> ShlAssign<usize> for Uint<LIMBS> {
 
 #[cfg(all(test, crypto_bigint_internal_tests))]
 mod tests {
-    use crate::crypto_bigint::{Limb, Uint, U128, U256};
+    use crate::crypto_bigint::{Limb, U128, U256, Uint};
 
     const N: U256 =
         U256::from_be_hex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141");

@@ -18,6 +18,15 @@ pub use rkyv::*;
 
 pub const SDK_WIRE_ABI_VERSION: u16 = 2;
 
+pub const SIGNATURE_ALGORITHM_ED25519: u16 = 1;
+pub const SIGNATURE_ALGORITHM_ECDSA_P256_SHA256: u16 = 2;
+
+pub const RELAY_WIRE_ABI_VERSION: u16 = 1;
+pub const RELAY_DELIVERY_STATUS_ACCEPTED: u16 = 1;
+pub const RELAY_DELIVERY_STATUS_REJECTED: u16 = 2;
+pub const RELAY_REPORT_STATUS_ACCEPTED: u16 = 1;
+pub const RELAY_REPORT_STATUS_REJECTED: u16 = 2;
+
 pub const CAPABILITY_KIND_SIGNING: u16 = 1;
 pub const CAPABILITY_KIND_SEALING: u16 = 2;
 pub const CAPABILITY_KIND_STORAGE: u16 = 4;
@@ -188,6 +197,124 @@ pub struct UserProfileIdSeedRecord {
     pub domain: Vec<u8>,
     pub owner_id: [u8; 32],
     pub epoch: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RelayIdentity {
+    pub algorithm: u16,
+    pub public_key: Vec<u8>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RelaySignature {
+    pub algorithm: u16,
+    pub public_key: Vec<u8>,
+    pub signature: Vec<u8>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RelayRegister {
+    pub abi_version: u16,
+    pub flags: u32,
+    pub node: RelayIdentity,
+    pub sequence: u64,
+    pub log_head: [u8; 32],
+    pub signature: RelaySignature,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RelaySubmit {
+    pub abi_version: u16,
+    pub flags: u32,
+    pub message_id: [u8; 32],
+    pub from: RelayIdentity,
+    pub to: RelayIdentity,
+    pub sequence: u64,
+    pub payload_sha256: [u8; 32],
+    pub payload: Vec<u8>,
+    pub signature: RelaySignature,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RelayDeliveryRequest {
+    pub abi_version: u16,
+    pub flags: u32,
+    pub relay_id: Vec<u8>,
+    pub submit: RelaySubmit,
+    pub received_unix_ms: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RelayDeliveryReceipt {
+    pub abi_version: u16,
+    pub flags: u32,
+    pub message_id: [u8; 32],
+    pub recipient: RelayIdentity,
+    pub status: u16,
+    pub recipient_sequence: u64,
+    pub recipient_log_head: [u8; 32],
+    pub request_sha256: [u8; 32],
+    pub signature: RelaySignature,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RelayDeliveryReport {
+    pub abi_version: u16,
+    pub flags: u32,
+    pub relay_id: Vec<u8>,
+    pub submit: RelaySubmit,
+    pub recipient_receipt: RelayDeliveryReceipt,
+    pub reported_unix_ms: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RelayDeliveryReportReceipt {
+    pub abi_version: u16,
+    pub flags: u32,
+    pub message_id: [u8; 32],
+    pub sender: RelayIdentity,
+    pub status: u16,
+    pub sender_sequence: u64,
+    pub sender_log_head: [u8; 32],
+    pub report_sha256: [u8; 32],
+    pub signature: RelaySignature,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RelayAck {
+    pub ok: bool,
+    pub code: u16,
+    pub text: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub enum RelayMessage {
+    Register(RelayRegister),
+    Submit(RelaySubmit),
+    DeliveryRequest(RelayDeliveryRequest),
+    DeliveryReceipt(RelayDeliveryReceipt),
+    DeliveryReport(RelayDeliveryReport),
+    DeliveryReportReceipt(RelayDeliveryReportReceipt),
+    Ack(RelayAck),
+}
+
+pub fn relay_message_bytes(message: &RelayMessage) -> Result<Vec<u8>, WireError> {
+    to_bytes::<WireError>(message).map(|bytes| bytes.to_vec())
+}
+
+pub fn relay_message_from_bytes(bytes: &[u8]) -> Result<RelayMessage, WireError> {
+    let archived = access::<ArchivedRelayMessage, WireError>(bytes)?;
+    deserialize::<RelayMessage, WireError>(archived)
 }
 
 impl CapabilityResponse {

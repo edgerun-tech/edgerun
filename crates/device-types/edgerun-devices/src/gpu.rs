@@ -6,9 +6,9 @@ use alloc::vec::Vec;
 use core::option::Option::{self, Some};
 use core::result::Result;
 use edgerun_capabilities::{
-    capability_descriptor, constraint, CapabilityConstraintKind, CapabilityDescriptor,
-    CapabilityError, CapabilityEventKind, CapabilityModality, CapabilityOperation,
-    CapabilityProvider, CapabilityRole,
+    CapabilityConstraintKind, CapabilityDescriptor, CapabilityError, CapabilityEventKind,
+    CapabilityModality, CapabilityOperation, CapabilityProvider, CapabilityRole,
+    capability_descriptor, constraint,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -332,49 +332,67 @@ mod tests {
     fn descriptor_is_local_execution_capability() {
         let descriptor = default_gpu_descriptor("linux-gpu", "0000:01:00.0");
         assert_eq!(descriptor.role, CapabilityRole::Execution as i32);
-        assert!(descriptor
-            .modalities
-            .contains(&(CapabilityModality::Display as i32)));
-        assert!(descriptor
-            .modalities
-            .contains(&(CapabilityModality::Computational as i32)));
-        assert!(descriptor
-            .default_constraints
-            .iter()
-            .any(|c| c.kind == CapabilityConstraintKind::RequireLocalOnly as i32));
+        assert!(
+            descriptor
+                .modalities
+                .contains(&(CapabilityModality::Display as i32))
+        );
+        assert!(
+            descriptor
+                .modalities
+                .contains(&(CapabilityModality::Computational as i32))
+        );
+        assert!(
+            descriptor
+                .default_constraints
+                .iter()
+                .any(|c| c.kind == CapabilityConstraintKind::RequireLocalOnly as i32)
+        );
     }
 
     #[test]
     fn descriptor_contains_visual_modality() {
         let descriptor = default_gpu_descriptor("linux-gpu", "gpu0");
-        assert!(descriptor
-            .modalities
-            .contains(&(CapabilityModality::Visual as i32)));
+        assert!(
+            descriptor
+                .modalities
+                .contains(&(CapabilityModality::Visual as i32))
+        );
     }
 
     #[test]
     fn descriptor_contains_display_and_inference_events() {
         let descriptor = default_gpu_descriptor("linux-gpu", "gpu0");
-        assert!(descriptor
-            .event_kinds
-            .contains(&(CapabilityEventKind::Display as i32)));
-        assert!(descriptor
-            .event_kinds
-            .contains(&(CapabilityEventKind::Inference as i32)));
-        assert!(descriptor
-            .event_kinds
-            .contains(&(CapabilityEventKind::State as i32)));
+        assert!(
+            descriptor
+                .event_kinds
+                .contains(&(CapabilityEventKind::Display as i32))
+        );
+        assert!(
+            descriptor
+                .event_kinds
+                .contains(&(CapabilityEventKind::Inference as i32))
+        );
+        assert!(
+            descriptor
+                .event_kinds
+                .contains(&(CapabilityEventKind::State as i32))
+        );
     }
 
     #[test]
     fn descriptor_contains_query_and_observe_operations() {
         let descriptor = default_gpu_descriptor("linux-gpu", "gpu0");
-        assert!(descriptor
-            .operations
-            .contains(&(CapabilityOperation::Query as i32)));
-        assert!(descriptor
-            .operations
-            .contains(&(CapabilityOperation::Observe as i32)));
+        assert!(
+            descriptor
+                .operations
+                .contains(&(CapabilityOperation::Query as i32))
+        );
+        assert!(
+            descriptor
+                .operations
+                .contains(&(CapabilityOperation::Observe as i32))
+        );
     }
 
     #[test]

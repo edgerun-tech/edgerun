@@ -3,7 +3,7 @@
 #![no_std]
 #![allow(dead_code)]
 
-use core::sync::atomic::{fence, AtomicBool, Ordering};
+use core::sync::atomic::{AtomicBool, Ordering, fence};
 
 #[cfg(test)]
 extern crate std;
@@ -2893,11 +2893,7 @@ fn pci_bar_addr(bus: u8, slot: u8, func: u8, bar: u8) -> Option<u64> {
         (raw & !0xf) as u64
     };
 
-    if base == 0 {
-        None
-    } else {
-        Some(base)
-    }
+    if base == 0 { None } else { Some(base) }
 }
 
 fn is_multifunction(bus: u8, slot: u8) -> bool {
@@ -3253,39 +3249,45 @@ mod tests {
         let common_cfg = common.0.as_mut_ptr();
         let notify_cfg = notify.as_mut_ptr();
 
-        assert!(VirtioTransport::modern_pci(
-            0,
-            1,
-            0,
-            common_cfg,
-            notify_cfg,
-            core::ptr::null_mut(),
-            core::ptr::null_mut(),
-            4,
-        )
-        .is_some());
-        assert!(VirtioTransport::modern_pci(
-            0,
-            1,
-            0,
-            core::ptr::null_mut(),
-            notify_cfg,
-            core::ptr::null_mut(),
-            core::ptr::null_mut(),
-            4,
-        )
-        .is_none());
-        assert!(VirtioTransport::modern_pci(
-            0,
-            1,
-            0,
-            common_cfg,
-            core::ptr::null_mut(),
-            core::ptr::null_mut(),
-            core::ptr::null_mut(),
-            4,
-        )
-        .is_none());
+        assert!(
+            VirtioTransport::modern_pci(
+                0,
+                1,
+                0,
+                common_cfg,
+                notify_cfg,
+                core::ptr::null_mut(),
+                core::ptr::null_mut(),
+                4,
+            )
+            .is_some()
+        );
+        assert!(
+            VirtioTransport::modern_pci(
+                0,
+                1,
+                0,
+                core::ptr::null_mut(),
+                notify_cfg,
+                core::ptr::null_mut(),
+                core::ptr::null_mut(),
+                4,
+            )
+            .is_none()
+        );
+        assert!(
+            VirtioTransport::modern_pci(
+                0,
+                1,
+                0,
+                common_cfg,
+                core::ptr::null_mut(),
+                core::ptr::null_mut(),
+                core::ptr::null_mut(),
+                4,
+            )
+            .is_none()
+        );
     }
 
     #[test]

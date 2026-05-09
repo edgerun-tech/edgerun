@@ -7,7 +7,7 @@
 use core::cmp::Ordering;
 
 pub mod bit;
-mod gen;
+mod r#gen;
 pub mod int;
 pub mod marker_traits;
 pub mod operator_aliases;
@@ -20,7 +20,7 @@ pub mod tuple;
 
 pub use crate::typenum::{
     array::{ATerm, TArr},
-    gen::consts,
+    r#gen::consts,
     int::{NInt, PInt},
     marker_traits::*,
     operator_aliases::*,
@@ -33,7 +33,7 @@ pub use crate::typenum::{
 pub use consts::*;
 
 #[cfg(feature = "const-generics")]
-pub use crate::typenum::gen::generic_const_mappings;
+pub use crate::typenum::r#gen::generic_const_mappings;
 
 #[cfg(feature = "const-generics")]
 #[doc(no_inline)]
@@ -90,7 +90,7 @@ macro_rules! assert_type {
 
 mod sealed {
     use crate::typenum::{
-        ATerm, Bit, Equal, Greater, Less, NInt, NonZero, PInt, TArr, UInt, UTerm, Unsigned, B0, B1,
+        ATerm, B0, B1, Bit, Equal, Greater, Less, NInt, NonZero, PInt, TArr, UInt, UTerm, Unsigned,
         Z0,
     };
 

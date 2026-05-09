@@ -3,12 +3,12 @@
 //!
 //! [RFC5912 Appendix A]: https://www.rfc-editor.org/rfc/rfc5912#appendix-A
 
-use crate::der::{asn1::UintRef, Decode, Encode, FixedTag, Length, Reader, Tag, Writer};
+use crate::der::{Decode, Encode, FixedTag, Length, Reader, Tag, Writer, asn1::UintRef};
 use crate::ecdsa_core::{Error, Result};
 use crate::elliptic_curve::{
-    consts::U9,
-    generic_array::{typenum::Unsigned, ArrayLength, GenericArray},
     FieldBytesSize, PrimeCurve,
+    consts::U9,
+    generic_array::{ArrayLength, GenericArray, typenum::Unsigned},
 };
 use core::{
     fmt::{self, Debug},
@@ -19,11 +19,11 @@ use core::{
 use {
     crate::signature::SignatureEncoding,
     alloc::{boxed::Box, vec::Vec},
-    spki::{der::asn1::BitString, SignatureBitStringEncoding},
+    spki::{SignatureBitStringEncoding, der::asn1::BitString},
 };
 
 #[cfg(feature = "p256_ecdsa_serde")]
-use serdect::serde::{de, ser, Deserialize, Serialize};
+use serdect::serde::{Deserialize, Serialize, de, ser};
 
 /// Maximum overhead of an ASN.1 DER-encoded ECDSA signature for a given curve:
 /// 9-bytes.
@@ -420,45 +420,51 @@ mod tests {
         assert!(Signature::from_der(&[]).is_err());
         assert!(Signature::from_der(&[crate::der::Tag::Sequence.into()]).is_err());
         assert!(Signature::from_der(&[crate::der::Tag::Sequence.into(), 0x00]).is_err());
-        assert!(Signature::from_der(&[
-            crate::der::Tag::Sequence.into(),
-            0x03,
-            der::Tag::Integer.into(),
-            0x01,
-            0x01
-        ])
-        .is_err());
+        assert!(
+            Signature::from_der(&[
+                crate::der::Tag::Sequence.into(),
+                0x03,
+                der::Tag::Integer.into(),
+                0x01,
+                0x01
+            ])
+            .is_err()
+        );
     }
 
     #[test]
     fn test_asn1_non_der_signature() {
         // A minimal 8-byte ASN.1 signature parses OK.
-        assert!(Signature::from_der(&[
-            crate::der::Tag::Sequence.into(),
-            0x06, // length of below
-            crate::der::Tag::Integer.into(),
-            0x01, // length of value
-            0x01, // value=1
-            crate::der::Tag::Integer.into(),
-            0x01, // length of value
-            0x01, // value=1
-        ])
-        .is_ok());
+        assert!(
+            Signature::from_der(&[
+                crate::der::Tag::Sequence.into(),
+                0x06, // length of below
+                crate::der::Tag::Integer.into(),
+                0x01, // length of value
+                0x01, // value=1
+                crate::der::Tag::Integer.into(),
+                0x01, // length of value
+                0x01, // value=1
+            ])
+            .is_ok()
+        );
 
         // But length fields that are not minimally encoded should be rejected, as they are not
         // valid DER, cf.
         // https://github.com/google/wycheproof/blob/2196000605e4/testvectors/ecdsa_secp256k1_sha256_test.json#L57-L66
-        assert!(Signature::from_der(&[
-            crate::der::Tag::Sequence.into(),
-            0x81, // extended length: 1 length byte to come
-            0x06, // length of below
-            crate::der::Tag::Integer.into(),
-            0x01, // length of value
-            0x01, // value=1
-            crate::der::Tag::Integer.into(),
-            0x01, // length of value
-            0x01, // value=1
-        ])
-        .is_err());
+        assert!(
+            Signature::from_der(&[
+                crate::der::Tag::Sequence.into(),
+                0x81, // extended length: 1 length byte to come
+                0x06, // length of below
+                crate::der::Tag::Integer.into(),
+                0x01, // length of value
+                0x01, // value=1
+                crate::der::Tag::Integer.into(),
+                0x01, // length of value
+                0x01, // value=1
+            ])
+            .is_err()
+        );
     }
 }

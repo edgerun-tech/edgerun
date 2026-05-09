@@ -1,5 +1,5 @@
 use crate::num_bigint::Integer;
-use crate::num_bigint::{checked_pow, PrimInt};
+use crate::num_bigint::{PrimInt, checked_pow};
 use core::mem;
 
 // Provides methods to compute an integer's square root, cube root,
@@ -231,11 +231,7 @@ macro_rules! unsigned_roots {
                                     _ => lo,
                                 }
                             } else {
-                                if hi.pow(n) <= a {
-                                    hi
-                                } else {
-                                    lo
-                                }
+                                if hi.pow(n) <= a { hi } else { lo }
                             }
                         };
                     }
@@ -281,11 +277,7 @@ macro_rules! unsigned_roots {
                         } else {
                             let lo = (a >> 2u32).sqrt() << 1;
                             let hi = lo + 1;
-                            if hi * hi <= a {
-                                hi
-                            } else {
-                                lo
-                            }
+                            if hi * hi <= a { hi } else { lo }
                         };
                     }
 
@@ -322,11 +314,7 @@ macro_rules! unsigned_roots {
                         } else {
                             let lo = (a >> 3u32).cbrt() << 1;
                             let hi = lo + 1;
-                            if hi * hi * hi <= a {
-                                hi
-                            } else {
-                                lo
-                            }
+                            if hi * hi * hi <= a { hi } else { lo }
                         };
                     }
 

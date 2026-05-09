@@ -11,18 +11,18 @@
 //! FULL PRIVATE KEY RECOVERY!
 
 use crate::ecdsa_core::{Error, Result};
-use crate::elliptic_curve::{generic_array::typenum::Unsigned, FieldBytes, PrimeCurve};
+use crate::elliptic_curve::{FieldBytes, PrimeCurve, generic_array::typenum::Unsigned};
 use core::cmp;
 
 #[cfg(feature = "p256_ecdsa_arithmetic")]
 use {
     crate::ecdsa_core::{RecoveryId, SignatureSize},
     crate::elliptic_curve::{
+        CurveArithmetic, ProjectivePoint, Scalar,
         ops::{Invert, LinearCombination, MulByGenerator, Reduce},
         point::AffineCoordinates,
         scalar::IsHigh,
         subtle::CtOption,
-        CurveArithmetic, ProjectivePoint, Scalar,
     },
     crate::ff::{Field, PrimeField},
     crate::group::{Curve as _, Group},
@@ -30,7 +30,7 @@ use {
 
 #[cfg(feature = "p256_ecdsa_digest")]
 use {
-    crate::digest::{core_api::BlockSizeUser, Digest, FixedOutput, FixedOutputReset},
+    crate::digest::{Digest, FixedOutput, FixedOutputReset, core_api::BlockSizeUser},
     crate::elliptic_curve::FieldBytesSize,
     crate::signature::PrehashSignature,
 };
@@ -320,7 +320,9 @@ mod tests {
 
     #[test]
     fn bits2field_size_greater() {
-        let prehash = hex!("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB");
+        let prehash = hex!(
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+        );
         let field_bytes = bits2field::<MockCurve>(&prehash).unwrap();
         assert_eq!(
             field_bytes.as_slice(),

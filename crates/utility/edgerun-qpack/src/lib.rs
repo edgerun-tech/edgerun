@@ -6,8 +6,8 @@
 extern crate alloc;
 
 pub use self::{
-    decoder::{decode_stateless, Decoded, DecoderError},
-    encoder::{encode_stateless, EncoderError},
+    decoder::{Decoded, DecoderError, decode_stateless},
+    encoder::{EncoderError, encode_stateless},
     field::HeaderField,
 };
 

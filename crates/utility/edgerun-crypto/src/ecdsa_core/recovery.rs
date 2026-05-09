@@ -4,20 +4,20 @@ use crate::ecdsa_core::{Error, Result};
 
 #[cfg(feature = "p256_ecdsa_signing")]
 use {
-    crate::ecdsa_core::{hazmat::SignPrimitive, SigningKey},
+    crate::ecdsa_core::{SigningKey, hazmat::SignPrimitive},
     crate::elliptic_curve::subtle::CtOption,
-    crate::signature::{hazmat::PrehashSigner, DigestSigner, Signer},
+    crate::signature::{DigestSigner, Signer, hazmat::PrehashSigner},
 };
 
 #[cfg(feature = "p256_ecdsa_verifying")]
 use {
-    crate::ecdsa_core::{hazmat::VerifyPrimitive, VerifyingKey},
+    crate::ecdsa_core::{VerifyingKey, hazmat::VerifyPrimitive},
     crate::elliptic_curve::{
+        AffinePoint, FieldBytesEncoding, FieldBytesSize, Group, PrimeField, ProjectivePoint,
         bigint::CheckedAdd,
         ops::{LinearCombination, Reduce},
         point::DecompressPoint,
         sec1::{self, FromEncodedPoint, ToEncodedPoint},
-        AffinePoint, FieldBytesEncoding, FieldBytesSize, Group, PrimeField, ProjectivePoint,
     },
     crate::signature::hazmat::PrehashVerifier,
 };
@@ -25,11 +25,11 @@ use {
 #[cfg(any(feature = "p256_ecdsa_signing", feature = "p256_ecdsa_verifying"))]
 use {
     crate::ecdsa_core::{
-        hazmat::{bits2field, DigestPrimitive},
         Signature, SignatureSize,
+        hazmat::{DigestPrimitive, bits2field},
     },
     crate::elliptic_curve::{
-        generic_array::ArrayLength, ops::Invert, CurveArithmetic, PrimeCurve, Scalar,
+        CurveArithmetic, PrimeCurve, Scalar, generic_array::ArrayLength, ops::Invert,
     },
     crate::signature::digest::Digest,
 };

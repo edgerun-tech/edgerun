@@ -728,13 +728,17 @@ mod tests {
 
     #[test]
     fn custom_directory_url_requires_https() {
-        assert!(DirectoryUrl::from_json(JsonValue::String(
-            "http://example.test/directory".to_string()
-        ))
-        .is_err());
-        assert!(DirectoryUrl::from_json(JsonValue::String(
-            "https://example.test/directory".to_string()
-        ))
-        .is_ok());
+        assert!(
+            DirectoryUrl::from_json(JsonValue::String(
+                "http://example.test/directory".to_string()
+            ))
+            .is_err()
+        );
+        assert!(
+            DirectoryUrl::from_json(JsonValue::String(
+                "https://example.test/directory".to_string()
+            ))
+            .is_ok()
+        );
     }
 }

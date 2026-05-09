@@ -4,8 +4,8 @@ use crate::http::{Error, Result};
 use alloc::string::ToString;
 use alloc::vec::Vec;
 
-pub use edgerun_protocols::http::http1::chunked::ChunkedBodyError;
 use edgerun_protocols::http::HeaderMap;
+pub use edgerun_protocols::http::http1::chunked::ChunkedBodyError;
 
 /// Parse a chunked transfer-encoded body without trailers (for requests).
 pub fn parse_chunked_body(data: &[u8]) -> Result<Vec<u8>> {

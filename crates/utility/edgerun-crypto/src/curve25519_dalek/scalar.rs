@@ -134,9 +134,9 @@ use crate::rand_core::RngCore;
 use crate::rand_core::CryptoRngCore;
 
 #[cfg(feature = "digest")]
-use crate::digest::generic_array::typenum::U64;
-#[cfg(feature = "digest")]
 use crate::digest::Digest;
+#[cfg(feature = "digest")]
+use crate::digest::generic_array::typenum::U64;
 
 use crate::subtle::Choice;
 use crate::subtle::ConditionallySelectable;

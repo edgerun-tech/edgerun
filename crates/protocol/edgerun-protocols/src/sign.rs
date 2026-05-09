@@ -4,7 +4,7 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 
 use crate::verify::{
-    protocol_record_hash, protocol_signable_wire_bytes, ProtocolFamily, ProtocolVerifyError,
+    ProtocolFamily, ProtocolVerifyError, protocol_record_hash, protocol_signable_wire_bytes,
 };
 use edgerun_core::protocol::{
     AssuranceClaim, CommandEnvelope, DelegationRecord, EventEnvelope, IdentityRecord,
@@ -74,6 +74,7 @@ pub trait ProtocolSigner {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MessageSignAlgorithm {
     Ed25519,
+    EcdsaP256Sha256,
 }
 
 pub trait MessageSigner {
@@ -120,6 +121,48 @@ impl MessageSigner for Ed25519MessageSigner {
     fn sign_message(&self, message: &[u8]) -> Result<Vec<u8>, ProtocolSignError> {
         use edgerun_crypto::Ed25519Signer as _;
         Ok(self.signing_key.sign(message).to_bytes().to_vec())
+    }
+}
+
+#[cfg(feature = "sign-p256")]
+#[derive(Clone)]
+pub struct P256MessageSigner {
+    signing_key: edgerun_core::crypto::SigningKey,
+}
+
+#[cfg(feature = "sign-p256")]
+impl P256MessageSigner {
+    pub const fn new(signing_key: edgerun_core::crypto::SigningKey) -> Self {
+        Self { signing_key }
+    }
+
+    pub fn signing_key(&self) -> &edgerun_core::crypto::SigningKey {
+        &self.signing_key
+    }
+
+    pub fn verifying_key(&self) -> edgerun_core::crypto::VerifyingKey {
+        *self.signing_key.verifying_key()
+    }
+}
+
+#[cfg(feature = "sign-p256")]
+impl MessageSigner for P256MessageSigner {
+    fn message_sign_algorithm(&self) -> MessageSignAlgorithm {
+        MessageSignAlgorithm::EcdsaP256Sha256
+    }
+
+    fn public_key_bytes(&self) -> Vec<u8> {
+        edgerun_core::crypto::verifying_key_to_node_id(self.signing_key.verifying_key()).to_vec()
+    }
+
+    fn sign_message(&self, message: &[u8]) -> Result<Vec<u8>, ProtocolSignError> {
+        use edgerun_core::crypto::PrehashSigner as _;
+        let digest = edgerun_core::crypto::sha256(message);
+        let signature: edgerun_core::crypto::Signature = self
+            .signing_key
+            .sign_prehash(&digest)
+            .map_err(|_| ProtocolSignError::SignerFailed)?;
+        Ok(signature.to_bytes().to_vec())
     }
 }
 

@@ -4,8 +4,8 @@ use super::{
 };
 use crate::digest::block_buffer::BlockBuffer;
 use crate::digest::crypto_common::{
-    typenum::{IsLess, Le, NonZero, U256},
     BlockSizeUser, InvalidLength, Key, KeyInit, KeySizeUser, Output,
+    typenum::{IsLess, Le, NonZero, U256},
 };
 use crate::digest::{
     ExtendableOutput, ExtendableOutputReset, FixedOutput, FixedOutputReset, HashMarker, Update,

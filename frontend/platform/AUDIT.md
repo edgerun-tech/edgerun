@@ -30,7 +30,6 @@ Scope: `crates/edgerun-dash-webapp`
 | `WalletApp` | components/os/wallet-app.tsx | Fake balances (`balance: 134.57`), fake transactions, fake exchange rates |
 | `WorkflowBuilder` | components/os/workflow-builder.tsx | Uses old workflow-store, directly executes workflows via `executeWorkflow`, not platform-connected |
 | `ResourceMonitor` | components/os/resource-monitor.tsx | Uses web worker with fake/simulated data, not connected to real node stats |
-| `Terminal` | components/os/terminal.tsx | Uses mock log data (`generateMockLogs`), not connected to real node logs |
 
 ### Mixed Components (partially platform, partially old)
 | Component | Location | Issues |
@@ -45,7 +44,6 @@ Scope: `crates/edgerun-dash-webapp`
 ### Dead/Unused or Candidate for Deletion
 | Item | Location | Notes |
 |------|----------|-------|
-| `stores/system-store.ts` | stores/system-store.ts | Referenced by desktop.tsx for `startSystemStatsSimulation`/`generateInitialLogs` — produces fake data |
 | `stores/wasm-store.ts` | stores/wasm-store.ts | Referenced by desktop.tsx for `removeWasm` — may be replaced by platform wasm-registry |
 
 ### Platform Services (need work)

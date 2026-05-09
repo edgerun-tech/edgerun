@@ -1,0 +1,18 @@
+[package]
+name = "edgerun-shlex"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Small shell word splitting and quoting helpers"
+
+[features]
+default = []
+std = []
+
+[dependencies]
+
+[lints]
+workspace = true

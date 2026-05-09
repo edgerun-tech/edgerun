@@ -405,14 +405,16 @@ mod tests {
         })
         .unwrap();
 
-        assert!(vfs
-            .read_str(Path::new("file1.txt"))
-            .unwrap()
-            .contains("edited1"));
-        assert!(vfs
-            .read_str(Path::new("file2.txt"))
-            .unwrap()
-            .contains("edited2"));
+        assert!(
+            vfs.read_str(Path::new("file1.txt"))
+                .unwrap()
+                .contains("edited1")
+        );
+        assert!(
+            vfs.read_str(Path::new("file2.txt"))
+                .unwrap()
+                .contains("edited2")
+        );
     }
 
     #[test]

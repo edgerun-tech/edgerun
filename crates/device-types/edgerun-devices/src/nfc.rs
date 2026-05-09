@@ -6,8 +6,8 @@ use alloc::vec::Vec;
 use core::option::Option::{self, None, Some};
 use core::result::Result;
 use edgerun_capabilities::{
-    capability_descriptor, CapabilityDescriptor, CapabilityEventKind, CapabilityModality,
-    CapabilityOperation, CapabilityProvider, CapabilityRole,
+    CapabilityDescriptor, CapabilityEventKind, CapabilityModality, CapabilityOperation,
+    CapabilityProvider, CapabilityRole, capability_descriptor,
 };
 pub use edgerun_protocols::ndef::{NdefMessage, NdefRecord, NdefTnf};
 
@@ -325,8 +325,10 @@ mod tests {
     #[test]
     fn nfc_descriptor_has_invoke_operation() {
         let descriptor = default_nfc_descriptor("nfc", "nfc0");
-        assert!(descriptor
-            .operations
-            .contains(&(CapabilityOperation::Invoke as i32)));
+        assert!(
+            descriptor
+                .operations
+                .contains(&(CapabilityOperation::Invoke as i32))
+        );
     }
 }

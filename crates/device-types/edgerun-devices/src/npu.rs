@@ -16,8 +16,8 @@ use prelude::v1::*;
 pub use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 
 use edgerun_capabilities::{
-    capability_descriptor, constraint, CapabilityConstraintKind, CapabilityEventKind,
-    CapabilityModality, CapabilityOperation, CapabilityRole,
+    CapabilityConstraintKind, CapabilityEventKind, CapabilityModality, CapabilityOperation,
+    CapabilityRole, capability_descriptor, constraint,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -229,30 +229,38 @@ mod tests {
     #[test]
     fn descriptor_contains_query_and_invoke_operations() {
         let descriptor = default_npu_descriptor("linux-npu", "accel0");
-        assert!(descriptor
-            .operations
-            .contains(&(CapabilityOperation::Query as i32)));
-        assert!(descriptor
-            .operations
-            .contains(&(CapabilityOperation::Invoke as i32)));
+        assert!(
+            descriptor
+                .operations
+                .contains(&(CapabilityOperation::Query as i32))
+        );
+        assert!(
+            descriptor
+                .operations
+                .contains(&(CapabilityOperation::Invoke as i32))
+        );
     }
 
     #[test]
     fn descriptor_contains_hardware_protection_constraint() {
         let descriptor = default_npu_descriptor("linux-npu", "accel0");
-        assert!(descriptor
-            .default_constraints
-            .iter()
-            .any(|c| c.kind == CapabilityConstraintKind::RequireHardwareProtected as i32));
+        assert!(
+            descriptor
+                .default_constraints
+                .iter()
+                .any(|c| c.kind == CapabilityConstraintKind::RequireHardwareProtected as i32)
+        );
     }
 
     #[test]
     fn descriptor_contains_require_local_constraint() {
         let descriptor = default_npu_descriptor("linux-npu", "accel0");
-        assert!(descriptor
-            .default_constraints
-            .iter()
-            .any(|c| c.kind == CapabilityConstraintKind::RequireLocalOnly as i32));
+        assert!(
+            descriptor
+                .default_constraints
+                .iter()
+                .any(|c| c.kind == CapabilityConstraintKind::RequireLocalOnly as i32)
+        );
     }
 
     #[test]

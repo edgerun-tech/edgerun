@@ -1,18 +1,18 @@
-use super::{get_pss_signature_algo_id, sign_digest, Signature, VerifyingKey};
+use super::{Signature, VerifyingKey, get_pss_signature_algo_id, sign_digest};
 use crate::const_oid::AssociatedOid;
 use crate::digest::{Digest, FixedOutputReset};
 use crate::pkcs1;
 use crate::pkcs8::{
-    spki::{
-        der::AnyRef, AlgorithmIdentifierOwned, AlgorithmIdentifierRef,
-        AssociatedAlgorithmIdentifier, DynSignatureAlgorithmIdentifier,
-    },
     EncodePrivateKey, SecretDocument,
+    spki::{
+        AlgorithmIdentifierOwned, AlgorithmIdentifierRef, AssociatedAlgorithmIdentifier,
+        DynSignatureAlgorithmIdentifier, der::AnyRef,
+    },
 };
 use crate::rand_core::CryptoRngCore;
 use crate::rsa::{Result, RsaPrivateKey};
 use crate::signature::{
-    hazmat::RandomizedPrehashSigner, Keypair, RandomizedDigestSigner, RandomizedSigner,
+    Keypair, RandomizedDigestSigner, RandomizedSigner, hazmat::RandomizedPrehashSigner,
 };
 use crate::zeroize::ZeroizeOnDrop;
 use core::marker::PhantomData;
@@ -20,7 +20,7 @@ use core::marker::PhantomData;
 #[cfg(feature = "getrandom")]
 use {
     crate::rand_core::OsRng,
-    crate::signature::{hazmat::PrehashSigner, Signer},
+    crate::signature::{Signer, hazmat::PrehashSigner},
 };
 
 /// Signing key for producing RSASSA-PSS signatures as described in

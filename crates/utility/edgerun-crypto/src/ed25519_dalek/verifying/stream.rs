@@ -3,7 +3,7 @@ use crate::sha2::Sha512;
 
 use crate::ed25519_dalek::verifying::RCompute;
 use crate::ed25519_dalek::{
-    signature::InternalSignature, InternalError, SignatureError, VerifyingKey,
+    InternalError, SignatureError, VerifyingKey, signature::InternalSignature,
 };
 
 /// An IUF verifier for ed25519.

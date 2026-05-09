@@ -5,8 +5,8 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::result::Result;
 use edgerun_capabilities::{
-    capability_descriptor, CapabilityDescriptor, CapabilityEventKind, CapabilityModality,
-    CapabilityOperation, CapabilityProvider, CapabilityRole,
+    CapabilityDescriptor, CapabilityEventKind, CapabilityModality, CapabilityOperation,
+    CapabilityProvider, CapabilityRole, capability_descriptor,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -86,9 +86,11 @@ mod tests {
     fn power_descriptor_is_stateful() {
         let descriptor = default_power_descriptor("linux-power", "system");
         assert_eq!(descriptor.role, CapabilityRole::Communication as i32);
-        assert!(descriptor
-            .event_kinds
-            .contains(&(CapabilityEventKind::State as i32)));
+        assert!(
+            descriptor
+                .event_kinds
+                .contains(&(CapabilityEventKind::State as i32))
+        );
     }
 
     // ----- PowerSupplyKind -----
@@ -388,20 +390,26 @@ mod tests {
     #[test]
     fn descriptor_has_query_and_observe() {
         let descriptor = default_power_descriptor("test", "id");
-        assert!(descriptor
-            .operations
-            .contains(&(CapabilityOperation::Query as i32)));
-        assert!(descriptor
-            .operations
-            .contains(&(CapabilityOperation::Observe as i32)));
+        assert!(
+            descriptor
+                .operations
+                .contains(&(CapabilityOperation::Query as i32))
+        );
+        assert!(
+            descriptor
+                .operations
+                .contains(&(CapabilityOperation::Observe as i32))
+        );
     }
 
     #[test]
     fn descriptor_has_text_modality() {
         let descriptor = default_power_descriptor("test", "id");
-        assert!(descriptor
-            .modalities
-            .contains(&(CapabilityModality::Text as i32)));
+        assert!(
+            descriptor
+                .modalities
+                .contains(&(CapabilityModality::Text as i32))
+        );
     }
 
     #[test]

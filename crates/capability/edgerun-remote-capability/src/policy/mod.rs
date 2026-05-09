@@ -15,8 +15,9 @@ use edgerun_protocols::core_protocol::protocol::capability_runtime::{
 };
 
 use crate::protocol::{
-    accept_session_open_unchecked, default_remote_requester_opt, session_accept_from_grant,
-    session_open_as_request, session_reject, RemoteCapabilityProvider, RemoteInvocationResult,
+    RemoteCapabilityProvider, RemoteInvocationResult, accept_session_open_unchecked,
+    default_remote_requester_opt, session_accept_from_grant, session_open_as_request,
+    session_reject,
 };
 
 /// Session-to-grant association record.

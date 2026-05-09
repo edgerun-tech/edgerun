@@ -1,24 +1,23 @@
 //! ECDSA signing: producing signatures using a [`SigningKey`].
 
 use crate::const_oid::AssociatedOid;
-use crate::digest::{const_oid::AssociatedOid as DigestAssociatedOid, Digest, FixedOutput};
+use crate::digest::{Digest, FixedOutput, const_oid::AssociatedOid as DigestAssociatedOid};
 use crate::ecdsa_core::{
-    ecdsa_oid_for_digest,
-    hazmat::{bits2field, DigestPrimitive, SignPrimitive},
-    Error, Result, Signature, SignatureSize, SignatureWithOid,
+    Error, Result, Signature, SignatureSize, SignatureWithOid, ecdsa_oid_for_digest,
+    hazmat::{DigestPrimitive, SignPrimitive, bits2field},
 };
 use crate::elliptic_curve::{
+    CurveArithmetic, FieldBytes, FieldBytesSize, NonZeroScalar, PrimeCurve, Scalar, SecretKey,
     generic_array::ArrayLength,
     ops::Invert,
     subtle::{Choice, ConstantTimeEq, CtOption},
     zeroize::{Zeroize, ZeroizeOnDrop},
-    CurveArithmetic, FieldBytes, FieldBytesSize, NonZeroScalar, PrimeCurve, Scalar, SecretKey,
 };
 use crate::ff::PrimeField;
 use crate::signature::{
+    DigestSigner, RandomizedDigestSigner, RandomizedSigner, Signer,
     hazmat::{PrehashSigner, RandomizedPrehashSigner},
     rand_core::CryptoRngCore,
-    DigestSigner, RandomizedDigestSigner, RandomizedSigner, Signer,
 };
 use core::{
     fmt::{self, Debug},
@@ -38,13 +37,12 @@ use {
 use crate::{
     der::AnyRef,
     elliptic_curve::{
-        sec1::{self, FromEncodedPoint, ToEncodedPoint},
         AffinePoint,
+        sec1::{self, FromEncodedPoint, ToEncodedPoint},
     },
     pkcs8::{
-        self,
+        self, ObjectIdentifier,
         spki::{AlgorithmIdentifier, AssociatedAlgorithmIdentifier, SignatureAlgorithmIdentifier},
-        ObjectIdentifier,
     },
 };
 

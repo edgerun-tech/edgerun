@@ -1,8 +1,8 @@
 //! PKCS#8 `EncryptedPrivateKeyInfo`
 
 use crate::der::{
-    asn1::OctetStringRef, Decode, DecodeValue, Encode, EncodeValue, Header, Length, Reader,
-    Sequence, Writer,
+    Decode, DecodeValue, Encode, EncodeValue, Header, Length, Reader, Sequence, Writer,
+    asn1::OctetStringRef,
 };
 use crate::pkcs8::{Error, Result};
 use core::fmt;

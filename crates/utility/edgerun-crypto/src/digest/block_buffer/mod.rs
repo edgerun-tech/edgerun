@@ -5,8 +5,8 @@ pub use generic_array;
 
 use core::{fmt, marker::PhantomData, slice};
 use generic_array::{
-    typenum::{IsLess, Le, NonZero, U256},
     ArrayLength, GenericArray,
+    typenum::{IsLess, Le, NonZero, U256},
 };
 
 mod sealed;

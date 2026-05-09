@@ -1,8 +1,8 @@
 use super::{AlgorithmName, TruncSide, UpdateCore, VariableOutputCore};
-use crate::digest::block_buffer::BlockBuffer;
-use crate::digest::crypto_common::typenum::{IsLess, Le, NonZero, Unsigned, U256};
 #[cfg(feature = "mac")]
 use crate::digest::MacMarker;
+use crate::digest::block_buffer::BlockBuffer;
+use crate::digest::crypto_common::typenum::{IsLess, Le, NonZero, U256, Unsigned};
 use crate::digest::{HashMarker, InvalidBufferSize};
 use crate::digest::{InvalidOutputSize, Reset, Update, VariableOutput, VariableOutputReset};
 use core::fmt;

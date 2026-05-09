@@ -81,7 +81,7 @@ pub trait Write {
                     return Err(Error::new(
                         ErrorKind::WriteZero,
                         "failed to write whole buffer",
-                    ))
+                    ));
                 }
                 n => buf = &buf[n..],
             }

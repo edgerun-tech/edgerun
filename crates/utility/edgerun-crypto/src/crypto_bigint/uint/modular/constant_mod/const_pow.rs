@@ -1,5 +1,5 @@
 use crate::crypto_bigint::{
-    modular::pow::pow_montgomery_form, MultiExponentiateBoundedExp, PowBoundedExp, Uint,
+    MultiExponentiateBoundedExp, PowBoundedExp, Uint, modular::pow::pow_montgomery_form,
 };
 
 use super::{Residue, ResidueParams};
@@ -111,7 +111,7 @@ impl<MOD: ResidueParams<LIMBS>, const LIMBS: usize, const RHS_LIMBS: usize>
 mod tests {
     use crate::crypto_bigint::traits::MultiExponentiate;
     use crate::crypto_bigint::{
-        const_residue, impl_modulus, modular::constant_mod::ResidueParams, U256,
+        U256, const_residue, impl_modulus, modular::constant_mod::ResidueParams,
     };
 
     impl_modulus!(

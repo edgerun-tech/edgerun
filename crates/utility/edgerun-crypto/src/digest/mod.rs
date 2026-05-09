@@ -41,11 +41,11 @@ mod mac;
 pub use crate::const_oid;
 
 pub use self::digest::{Digest, DynDigest, HashMarker};
-pub use crate::digest::crypto_common::{
-    generic_array, typenum, typenum::consts, Output, OutputSizeUser, Reset,
-};
 #[cfg(feature = "mac")]
 pub use crate::digest::crypto_common::{InnerInit, InvalidLength, Key, KeyInit};
+pub use crate::digest::crypto_common::{
+    Output, OutputSizeUser, Reset, generic_array, typenum, typenum::consts,
+};
 #[cfg(feature = "mac")]
 pub use mac::{CtOutput, Mac, MacError, MacMarker};
 

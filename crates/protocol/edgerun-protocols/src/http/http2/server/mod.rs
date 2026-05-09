@@ -62,9 +62,9 @@ use alloc::collections::{BTreeMap as HashMap, BTreeSet as HashSet};
 use alloc::vec;
 use alloc::vec::Vec;
 
+use super::ErrorCode;
 use super::flow_control::FlowController;
 use super::settings::Settings;
-use super::ErrorCode;
 use crate::http::http2::frame::{Frame, SettingsFrame};
 use crate::http::http2::stream::StreamManager;
 

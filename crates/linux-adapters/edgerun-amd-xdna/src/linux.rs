@@ -159,11 +159,11 @@ use core::option::Option::{self, None, Some};
 use core::result::Result::{self, Err, Ok};
 
 use edgerun_devices::npu::{
-    default_npu_descriptor, validate_npu_workload_request, CapabilityDescriptor, CapabilityError,
-    CapabilityProvider, NpuDevice, NpuExecutionMode, NpuInfo, NpuWorkloadRequest,
-    NpuWorkloadResult,
+    CapabilityDescriptor, CapabilityError, CapabilityProvider, NpuDevice, NpuExecutionMode,
+    NpuInfo, NpuWorkloadRequest, NpuWorkloadResult, default_npu_descriptor,
+    validate_npu_workload_request,
 };
-use edgerun_linux_npu::{discover_linux_npus_in, read_trimmed, LinuxNpuInfo};
+use edgerun_linux_npu::{LinuxNpuInfo, discover_linux_npus_in, read_trimmed};
 use std::collections::HashSet;
 use std::fs::OpenOptions;
 use std::os::fd::{AsRawFd, RawFd};
@@ -1523,9 +1523,11 @@ mod tests {
         let infos = discover_amd_xdna_devices_in(&accel_root, &pci_root, &dev_root).unwrap();
         assert_eq!(infos.len(), 1);
         assert_eq!(infos[0].generation, AmdXdnaGeneration::PhoenixOrHawkPoint);
-        assert!(infos[0]
-            .supported_execution_modes
-            .contains(&NpuExecutionMode::Inference));
+        assert!(
+            infos[0]
+                .supported_execution_modes
+                .contains(&NpuExecutionMode::Inference)
+        );
 
         let _ = fs::remove_dir_all(accel_root);
         let _ = fs::remove_dir_all(pci_root);
@@ -1882,17 +1884,17 @@ mod tests {
 
     #[test]
     fn amd_xdna_generation_clone_copy() {
-        let gen = AmdXdnaGeneration::PhoenixOrHawkPoint;
-        let cloned = gen.clone();
-        assert_eq!(gen, cloned);
-        let _copied = gen;
-        let _also = gen;
+        let generation = AmdXdnaGeneration::PhoenixOrHawkPoint;
+        let cloned = generation.clone();
+        assert_eq!(generation, cloned);
+        let _copied = generation;
+        let _also = generation;
     }
 
     #[test]
     fn amd_xdna_generation_debug() {
-        let gen = AmdXdnaGeneration::Unknown;
-        let debug_str = format!("{gen:?}");
+        let generation = AmdXdnaGeneration::Unknown;
+        let debug_str = format!("{generation:?}");
         assert!(debug_str.contains("Unknown"));
     }
 }

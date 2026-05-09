@@ -10,7 +10,7 @@ pub use generic_array;
 pub use generic_array::typenum;
 
 use core::fmt;
-use generic_array::{typenum::Unsigned, ArrayLength, GenericArray};
+use generic_array::{ArrayLength, GenericArray, typenum::Unsigned};
 #[cfg(feature = "rand_core")]
 use rand_core::{CryptoRng, RngCore};
 

@@ -26,7 +26,7 @@ pub(crate) const fn split_mixed<const L: usize, const H: usize, const O: usize>(
 
 #[cfg(all(test, crypto_bigint_internal_tests))]
 mod tests {
-    use crate::crypto_bigint::{U128, U64};
+    use crate::crypto_bigint::{U64, U128};
 
     #[test]
     fn split() {

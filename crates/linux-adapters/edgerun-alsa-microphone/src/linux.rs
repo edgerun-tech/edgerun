@@ -258,8 +258,8 @@ pub mod vec {
 use crate::prelude::v1::*;
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 use edgerun_devices::microphone::{
-    default_microphone_descriptor, validate_audio_capture_request, AudioCapture,
-    AudioCaptureRequest, MicrophoneDevice, MicrophoneInfo, MicrophoneSampleFormat,
+    AudioCapture, AudioCaptureRequest, MicrophoneDevice, MicrophoneInfo, MicrophoneSampleFormat,
+    default_microphone_descriptor, validate_audio_capture_request,
 };
 use std::ffi::c_long;
 #[cfg(not(unix))]
@@ -402,7 +402,7 @@ struct SndXferi {
     frames: u64,
 }
 
-extern "C" {
+unsafe extern "C" {
     fn ioctl(fd: c_int, request: c_int, ...) -> c_int;
 }
 
@@ -580,7 +580,7 @@ impl AlsaMicrophoneBackend {
             MicrophoneSampleFormat::Other(_) => {
                 return Err(CapabilityError::Unsupported(
                     "ALSA microphone only supports PCM capture formats",
-                ))
+                ));
             }
         };
         let frames = (u64::from(request.duration_ms) * u64::from(request.sample_rate_hz)) / 1000;

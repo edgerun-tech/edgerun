@@ -1,4 +1,4 @@
-use crate::num_bigint::big_digit::{BigDigit, DoubleBigDigit, BITS};
+use crate::num_bigint::big_digit::{BITS, BigDigit, DoubleBigDigit};
 
 // Add with carry:
 #[inline]

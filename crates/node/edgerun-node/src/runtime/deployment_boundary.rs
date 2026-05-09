@@ -1,10 +1,10 @@
 use alloc::vec::Vec;
 
 use crate::network::{
-    decide_bindings, NodeTransportSurface, ServiceBindingDecision, ServiceBindingIntent,
+    NodeTransportSurface, ServiceBindingDecision, ServiceBindingIntent, decide_bindings,
 };
 use crate::storage::{
-    decide_storage_intents, RuntimeStorageDecision, RuntimeStorageIntent, RuntimeStorageSurface,
+    RuntimeStorageDecision, RuntimeStorageIntent, RuntimeStorageSurface, decide_storage_intents,
 };
 
 use super::RuntimeServicePlan;

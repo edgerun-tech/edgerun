@@ -26,7 +26,7 @@ use crate::const_oid::{AssociatedOid, ObjectIdentifier};
 use crate::digest::{Digest, DynDigest, FixedOutputReset};
 use crate::num_bigint::BigUint;
 use crate::pkcs1::RsaPssParams;
-use crate::pkcs8::spki::{der::Any, AlgorithmIdentifierOwned};
+use crate::pkcs8::spki::{AlgorithmIdentifierOwned, der::Any};
 use crate::rand_core::CryptoRngCore;
 
 use crate::rsa::algorithms::pad::{uint_to_be_pad, uint_to_zeroizing_be_pad};

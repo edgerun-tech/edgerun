@@ -1,8 +1,8 @@
 //! `ert registry logout` — remove registry credentials.
 
+use crate::SecretClient;
 use crate::cli::GlobalOpts;
 use crate::prelude::*;
-use crate::SecretClient;
 
 pub fn cmd_logout(_opts: &GlobalOpts, args: &[String]) -> std::io::Result<()> {
     if args.is_empty() {

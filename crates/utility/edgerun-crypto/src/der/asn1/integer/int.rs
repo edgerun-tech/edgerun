@@ -2,8 +2,8 @@
 
 use super::{is_highest_bit_set, uint, value_cmp};
 use crate::der::{
-    ord::OrdIsValueOrd, AnyRef, BytesRef, DecodeValue, EncodeValue, Error, ErrorKind, FixedTag,
-    Header, Length, Reader, Result, Tag, ValueOrd, Writer,
+    AnyRef, BytesRef, DecodeValue, EncodeValue, Error, ErrorKind, FixedTag, Header, Length, Reader,
+    Result, Tag, ValueOrd, Writer, ord::OrdIsValueOrd,
 };
 use core::cmp::Ordering;
 
@@ -162,13 +162,13 @@ impl<'a> OrdIsValueOrd for IntRef<'a> {}
 
 #[cfg(feature = "alloc")]
 mod allocating {
-    use super::{strip_leading_ones, validate_canonical, IntRef};
+    use super::{IntRef, strip_leading_ones, validate_canonical};
     use crate::der::{
+        BytesOwned, DecodeValue, EncodeValue, ErrorKind, FixedTag, Header, Length, Reader, Result,
+        Tag, Writer,
         asn1::Uint,
         ord::OrdIsValueOrd,
         referenced::{OwnedToRef, RefToOwned},
-        BytesOwned, DecodeValue, EncodeValue, ErrorKind, FixedTag, Header, Length, Reader, Result,
-        Tag, Writer,
     };
     use alloc::vec::Vec;
 
@@ -354,8 +354,8 @@ pub(crate) fn strip_leading_ones(mut bytes: &[u8]) -> &[u8] {
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_canonical, IntRef};
-    use crate::der::{asn1::integer::tests::*, Decode, Encode, SliceWriter};
+    use super::{IntRef, validate_canonical};
+    use crate::der::{Decode, Encode, SliceWriter, asn1::integer::tests::*};
 
     #[test]
     fn validate_canonical_ok() {

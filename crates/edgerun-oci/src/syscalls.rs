@@ -14,7 +14,7 @@ use crate::linux_catalog::capability_number;
 // Raw syscall FFI
 // ===========================================================================
 
-extern "C" {
+unsafe extern "C" {
     pub fn syscall(number: c_long, ...) -> c_long;
     pub fn kill(pid: c_int, sig: c_int) -> c_int;
     pub fn mount(

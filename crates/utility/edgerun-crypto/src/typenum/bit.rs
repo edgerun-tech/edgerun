@@ -1,5 +1,5 @@
 use crate::typenum::{
-    private::InternalMarker, Cmp, Equal, Greater, Less, NonZero, PowerOfTwo, Zero,
+    Cmp, Equal, Greater, Less, NonZero, PowerOfTwo, Zero, private::InternalMarker,
 };
 use core::ops::{BitAnd, BitOr, BitXor, Not};
 
@@ -313,7 +313,7 @@ mod bit_creation_tests {
         }
 
         {
-            use crate::typenum::{Bit, B0, B1};
+            use crate::typenum::{B0, B1, Bit};
 
             let _: B0 = <B0 as Bit>::new();
             let _: B1 = <B1 as Bit>::new();

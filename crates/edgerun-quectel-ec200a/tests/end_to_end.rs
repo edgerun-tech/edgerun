@@ -7,8 +7,8 @@
 #![cfg(test)]
 
 use edgerun_quectel_ec200a::{
-    check_dta_status, configure_dta, get_imsi, get_modem_info, get_network_operator,
-    get_signal_quality, set_radio_function, Config, DtaNetwork, Ec200a, Model,
+    Config, DtaNetwork, Ec200a, Model, check_dta_status, configure_dta, get_imsi, get_modem_info,
+    get_network_operator, get_signal_quality, set_radio_function,
 };
 
 fn require_ec200a_hardware() -> bool {

@@ -6,6 +6,7 @@ const root = process.cwd()
 const componentsDir = join(root, "components")
 const featuresDir = join(root, "features")
 const outputPath = join(root, "COMPONENT_INVENTORY.md")
+const jsonOutputPath = join(root, "COMPONENT_INVENTORY.json")
 
 const IGNORED_DIRS = new Set(["node_modules", ".next", "out", "coverage", ".git"])
 const COMPONENT_EXT = new Set([".tsx", ".ts", ".jsx", ".js"])
@@ -105,4 +106,17 @@ for (const [group, groupEntries] of Array.from(groups.entries()).sort(([a], [b])
 }
 
 writeFileSync(outputPath, `${lines.join("\n")}\n`)
+writeFileSync(
+  jsonOutputPath,
+  `${JSON.stringify(
+    {
+      generatedBy: "scripts/generate-component-inventory.mjs",
+      totalIndexedFiles: entries.length,
+      entries,
+    },
+    null,
+    2,
+  )}\n`,
+)
 console.log(`Wrote ${relative(root, outputPath)}`)
+console.log(`Wrote ${relative(root, jsonOutputPath)}`)

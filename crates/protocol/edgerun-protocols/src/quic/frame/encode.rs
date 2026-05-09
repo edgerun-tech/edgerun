@@ -1,5 +1,5 @@
-use super::varint::encode_varint;
 use super::QuicFrame;
+use super::varint::encode_varint;
 use alloc::{vec, vec::Vec};
 
 pub fn to_bytes(frame: &QuicFrame) -> Vec<u8> {

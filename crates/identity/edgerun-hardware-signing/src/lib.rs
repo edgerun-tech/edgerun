@@ -31,15 +31,15 @@ pub mod android_keystore;
 pub mod yubikey;
 
 #[cfg(feature = "tpm")]
-pub use tpm::{sign_record_with_tpm_provider, TpmHardwareKeyAdapter};
+pub use tpm::{TpmHardwareKeyAdapter, sign_record_with_tpm_provider};
 
 #[cfg(feature = "android-keystore")]
 pub use android_keystore::{
-    sign_record_with_android_keystore_provider, AndroidKeystoreHardwareKeyAdapter,
+    AndroidKeystoreHardwareKeyAdapter, sign_record_with_android_keystore_provider,
 };
 
 #[cfg(all(feature = "yubikey", target_os = "linux"))]
-pub use yubikey::{sign_record_with_yubikey_provider, YubiKeyHardwareKeyAdapter};
+pub use yubikey::{YubiKeyHardwareKeyAdapter, sign_record_with_yubikey_provider};
 
 // ---------------------------------------------------------------------------
 // Mesh identity constants — ECDSA P256 is the universal algorithm

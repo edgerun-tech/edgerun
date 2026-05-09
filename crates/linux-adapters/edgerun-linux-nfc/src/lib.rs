@@ -15,8 +15,8 @@ pub use edgerun_linux_sysfs::{collections, fs, io, mem, option, os, path, result
 
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 use edgerun_devices::nfc::{
-    default_nfc_descriptor, NdefMessage, NfcDevice, NfcDeviceInfo, NfcPowerState, NfcReader,
-    NfcScanner, NfcTarget, NfcTechnology,
+    NdefMessage, NfcDevice, NfcDeviceInfo, NfcPowerState, NfcReader, NfcScanner, NfcTarget,
+    NfcTechnology, default_nfc_descriptor,
 };
 use edgerun_linux_sysfs::prelude::v1::*;
 use edgerun_linux_sysfs::read_trimmed;
@@ -53,7 +53,7 @@ pub fn discover_nfc_adapters_in(root: &Path) -> Result<Vec<LinuxNfcAdapter>, Cap
         Err(e) => {
             return Err(CapabilityError::Provider(format!(
                 "failed to read nfc sysfs: {e}"
-            )))
+            )));
         }
     };
     for entry in entries.flatten() {

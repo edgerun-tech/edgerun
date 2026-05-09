@@ -228,8 +228,9 @@ fn build_field_load(field: &Field) -> proc_macro2::TokenStream {
         };
     }
 
+    let ty = &field.ty;
     quote! {
-        #ident: matches.get_one::<String>(#field_name).unwrap_or_default()
+        #ident: matches.get_one::<#ty>(#field_name).unwrap_or_default()
     }
 }
 
@@ -405,8 +406,9 @@ pub fn derive_parser(input: TokenStream) -> TokenStream {
                                 #ident: matches.get_positional(#idx).map(|s| s.parse::<#inner_ty>().unwrap())
                             }
                         } else {
+                            let ty = &f.ty;
                             quote! {
-                                #ident: matches.get_positional(#idx).map(String::from).unwrap_or_default()
+                                #ident: matches.get_positional(#idx).map(|s| s.parse::<#ty>().unwrap()).unwrap_or_default()
                             }
                         }
                     } else {

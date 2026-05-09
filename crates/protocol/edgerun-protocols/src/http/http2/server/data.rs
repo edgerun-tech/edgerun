@@ -1,11 +1,11 @@
 //! DATA frame handler for the HTTP/2 server.
 
-use super::response;
 use super::FrameAction;
 use super::Http2Server;
+use super::response;
+use crate::http::http2::ErrorCode;
 use crate::http::http2::frame::{DataFrame, Frame};
 use crate::http::http2::hpack::Encoder;
-use crate::http::http2::ErrorCode;
 use alloc::vec;
 
 impl Http2Server {

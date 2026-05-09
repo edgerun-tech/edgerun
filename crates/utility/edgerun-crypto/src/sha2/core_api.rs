@@ -1,11 +1,11 @@
 use crate::digest::{
+    HashMarker, InvalidOutputSize, Output,
     block_buffer::Eager,
     core_api::{
         AlgorithmName, Block, BlockSizeUser, Buffer, BufferKindUser, OutputSizeUser, TruncSide,
         UpdateCore, VariableOutputCore,
     },
-    typenum::{Unsigned, U128, U32, U64},
-    HashMarker, InvalidOutputSize, Output,
+    typenum::{U32, U64, U128, Unsigned},
 };
 use crate::sha2::{consts, sha256::compress256, sha512::compress512};
 use core::{fmt, slice::from_ref};

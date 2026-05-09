@@ -3,13 +3,13 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use edgerun_protocols::wire::{
+    ROUTE_SCHEME_HTTPS, RUNTIME_PROTOCOL_ACME, RUNTIME_PROTOCOL_DNS_TCP, RUNTIME_PROTOCOL_DNS_UDP,
     RuntimeAppInstall, RuntimeCapabilityDeclaration, RuntimeDeploymentConfig, RuntimeDomainConfig,
-    RuntimeProtocolBinding, ROUTE_SCHEME_HTTPS, RUNTIME_PROTOCOL_ACME, RUNTIME_PROTOCOL_DNS_TCP,
-    RUNTIME_PROTOCOL_DNS_UDP, SDK_WIRE_ABI_VERSION,
+    RuntimeProtocolBinding, SDK_WIRE_ABI_VERSION,
 };
 
-use crate::network::{binding_intents, NodeTransportSurface, ServiceBindingIntent};
-use crate::storage::{storage_intents, RuntimeStorageIntent, RuntimeStorageSurface};
+use crate::network::{NodeTransportSurface, ServiceBindingIntent, binding_intents};
+use crate::storage::{RuntimeStorageIntent, RuntimeStorageSurface, storage_intents};
 
 use super::{
     default_protocol_bindings, runtime_app_install, runtime_deployment_config, runtime_http_route,

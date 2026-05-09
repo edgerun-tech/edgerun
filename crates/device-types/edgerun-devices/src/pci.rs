@@ -3,8 +3,8 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::result::Result;
 use edgerun_capabilities::{
-    capability_descriptor, CapabilityDescriptor, CapabilityEventKind, CapabilityModality,
-    CapabilityOperation, CapabilityProvider, CapabilityRole,
+    CapabilityDescriptor, CapabilityEventKind, CapabilityModality, CapabilityOperation,
+    CapabilityProvider, CapabilityRole, capability_descriptor,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -181,20 +181,26 @@ mod tests {
     fn pci_descriptor_is_stateful() {
         let descriptor = default_pci_descriptor("linux-pci", "root");
         assert_eq!(descriptor.role, CapabilityRole::Communication as i32);
-        assert!(descriptor
-            .event_kinds
-            .contains(&(CapabilityEventKind::State as i32)));
+        assert!(
+            descriptor
+                .event_kinds
+                .contains(&(CapabilityEventKind::State as i32))
+        );
     }
 
     #[test]
     fn pci_descriptor_has_query_and_observe() {
         let descriptor = default_pci_descriptor("linux-pci", "0000:01:00.0");
-        assert!(descriptor
-            .operations
-            .contains(&(CapabilityOperation::Query as i32)));
-        assert!(descriptor
-            .operations
-            .contains(&(CapabilityOperation::Observe as i32)));
+        assert!(
+            descriptor
+                .operations
+                .contains(&(CapabilityOperation::Query as i32))
+        );
+        assert!(
+            descriptor
+                .operations
+                .contains(&(CapabilityOperation::Observe as i32))
+        );
     }
 
     #[test]

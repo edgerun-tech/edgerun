@@ -1,5 +1,5 @@
 use alloc::borrow::Cow;
-use alloc::collections::{btree_map::BTreeMap, btree_map::Entry, VecDeque};
+use alloc::collections::{VecDeque, btree_map::BTreeMap, btree_map::Entry};
 
 use super::{field::HeaderField, static_::StaticTable};
 use crate::vas::{self, VirtualAddressSpace};

@@ -1,6 +1,6 @@
-use super::flags;
 use super::Frame;
 use super::FrameType;
+use super::flags;
 use super::{Http2Error, Result};
 use alloc::string::ToString;
 

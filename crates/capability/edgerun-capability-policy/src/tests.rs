@@ -7,10 +7,10 @@ use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
 use edgerun_capabilities::{
-    capability_descriptor, constraint, constraint_with_scope, CapabilityAccessClass,
-    CapabilityConstraint, CapabilityConstraintKind, CapabilityDescriptor, CapabilityError,
-    CapabilityEventKind, CapabilityGrant, CapabilityModality, CapabilityOperation,
+    CapabilityAccessClass, CapabilityConstraint, CapabilityConstraintKind, CapabilityDescriptor,
+    CapabilityError, CapabilityEventKind, CapabilityGrant, CapabilityModality, CapabilityOperation,
     CapabilityRequest, CapabilityRevocation, CapabilityRole, CapabilitySelector,
+    capability_descriptor, constraint, constraint_with_scope,
 };
 use edgerun_protocols::core_protocol::protocol::capability::CapabilityInvocation;
 use edgerun_protocols::core_protocol::protocol::{Duration as ProtocolDuration, Timestamp};
@@ -1204,9 +1204,11 @@ fn request_operations_filtered_to_descriptor() {
         PolicyDecision::Allow { grant } => *grant,
         other => panic!("unexpected: {other:?}"),
     };
-    assert!(grant
-        .granted_operations
-        .contains(&(CapabilityOperation::Query as i32)));
+    assert!(
+        grant
+            .granted_operations
+            .contains(&(CapabilityOperation::Query as i32))
+    );
     assert!(!grant.granted_operations.contains(&999));
 }
 

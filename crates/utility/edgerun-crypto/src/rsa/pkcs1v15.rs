@@ -270,9 +270,9 @@ mod tests {
     use crate::rand_core::RngCore;
     use crate::sha2::Sha256;
     use crate::signature::{
-        hazmat::{PrehashSigner, PrehashVerifier},
         DigestSigner, DigestVerifier, Keypair, RandomizedDigestSigner, RandomizedSigner,
         SignatureEncoding, Signer, Verifier,
+        hazmat::{PrehashSigner, PrehashVerifier},
     };
     use crate::test_rng::ChaCha8Rng;
     use base64ct::{Base64, Encoding};
@@ -311,19 +311,24 @@ mod tests {
     fn test_decrypt_pkcs1v15() {
         let priv_key = get_private_key();
 
-        let tests = [[
-	    "gIcUIoVkD6ATMBk/u/nlCZCCWRKdkfjCgFdo35VpRXLduiKXhNz1XupLLzTXAybEq15juc+EgY5o0DHv/nt3yg==",
-	    "x",
-	], [
-	    "Y7TOCSqofGhkRb+jaVRLzK8xw2cSo1IVES19utzv6hwvx+M8kFsoWQm5DzBeJCZTCVDPkTpavUuEbgp8hnUGDw==",
-	    "testing.",
-	], [
-	    "arReP9DJtEVyV2Dg3dDp4c/PSk1O6lxkoJ8HcFupoRorBZG+7+1fDAwT1olNddFnQMjmkb8vxwmNMoTAT/BFjQ==",
-	    "testing.\n",
-	], [
-	"WtaBXIoGC54+vH0NH0CHHE+dRDOsMc/6BrfFu2lEqcKL9+uDuWaf+Xj9mrbQCjjZcpQuX733zyok/jsnqe/Ftw==",
-		"01234567890123456789012345678901234567890123456789012",
-	]];
+        let tests = [
+            [
+                "gIcUIoVkD6ATMBk/u/nlCZCCWRKdkfjCgFdo35VpRXLduiKXhNz1XupLLzTXAybEq15juc+EgY5o0DHv/nt3yg==",
+                "x",
+            ],
+            [
+                "Y7TOCSqofGhkRb+jaVRLzK8xw2cSo1IVES19utzv6hwvx+M8kFsoWQm5DzBeJCZTCVDPkTpavUuEbgp8hnUGDw==",
+                "testing.",
+            ],
+            [
+                "arReP9DJtEVyV2Dg3dDp4c/PSk1O6lxkoJ8HcFupoRorBZG+7+1fDAwT1olNddFnQMjmkb8vxwmNMoTAT/BFjQ==",
+                "testing.\n",
+            ],
+            [
+                "WtaBXIoGC54+vH0NH0CHHE+dRDOsMc/6BrfFu2lEqcKL9+uDuWaf+Xj9mrbQCjjZcpQuX733zyok/jsnqe/Ftw==",
+                "01234567890123456789012345678901234567890123456789012",
+            ],
+        ];
 
         for test in &tests {
             let out = priv_key
@@ -362,19 +367,24 @@ mod tests {
         let priv_key = get_private_key();
         let decrypting_key = DecryptingKey::new(priv_key);
 
-        let tests = [[
-	    "gIcUIoVkD6ATMBk/u/nlCZCCWRKdkfjCgFdo35VpRXLduiKXhNz1XupLLzTXAybEq15juc+EgY5o0DHv/nt3yg==",
-	    "x",
-	], [
-	    "Y7TOCSqofGhkRb+jaVRLzK8xw2cSo1IVES19utzv6hwvx+M8kFsoWQm5DzBeJCZTCVDPkTpavUuEbgp8hnUGDw==",
-	    "testing.",
-	], [
-	    "arReP9DJtEVyV2Dg3dDp4c/PSk1O6lxkoJ8HcFupoRorBZG+7+1fDAwT1olNddFnQMjmkb8vxwmNMoTAT/BFjQ==",
-	    "testing.\n",
-	], [
-	"WtaBXIoGC54+vH0NH0CHHE+dRDOsMc/6BrfFu2lEqcKL9+uDuWaf+Xj9mrbQCjjZcpQuX733zyok/jsnqe/Ftw==",
-		"01234567890123456789012345678901234567890123456789012",
-	]];
+        let tests = [
+            [
+                "gIcUIoVkD6ATMBk/u/nlCZCCWRKdkfjCgFdo35VpRXLduiKXhNz1XupLLzTXAybEq15juc+EgY5o0DHv/nt3yg==",
+                "x",
+            ],
+            [
+                "Y7TOCSqofGhkRb+jaVRLzK8xw2cSo1IVES19utzv6hwvx+M8kFsoWQm5DzBeJCZTCVDPkTpavUuEbgp8hnUGDw==",
+                "testing.",
+            ],
+            [
+                "arReP9DJtEVyV2Dg3dDp4c/PSk1O6lxkoJ8HcFupoRorBZG+7+1fDAwT1olNddFnQMjmkb8vxwmNMoTAT/BFjQ==",
+                "testing.\n",
+            ],
+            [
+                "WtaBXIoGC54+vH0NH0CHHE+dRDOsMc/6BrfFu2lEqcKL9+uDuWaf+Xj9mrbQCjjZcpQuX733zyok/jsnqe/Ftw==",
+                "01234567890123456789012345678901234567890123456789012",
+            ],
+        ];
 
         for test in &tests {
             let out = decrypting_key

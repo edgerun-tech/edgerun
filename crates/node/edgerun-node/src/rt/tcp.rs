@@ -6,7 +6,7 @@
 
 use super::udp::SocketAddr;
 use edgerun_protocols::ethernet_ipv4::{
-    IpAddr, IpStack, TcpHeader, ETH_TYPE_IPV4, IP_PROTO_TCP, TCP_FLAG_ACK, TCP_FLAG_PSH,
+    ETH_TYPE_IPV4, IP_PROTO_TCP, IpAddr, IpStack, TCP_FLAG_ACK, TCP_FLAG_PSH, TcpHeader,
 };
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]

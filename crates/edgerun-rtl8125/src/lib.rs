@@ -6,7 +6,7 @@
 
 #![no_std]
 
-use core::sync::atomic::{fence, Ordering};
+use core::sync::atomic::{Ordering, fence};
 
 pub const VENDOR_ID: u16 = 0x10ec;
 pub const DEVICE_ID: u16 = 0x8125;

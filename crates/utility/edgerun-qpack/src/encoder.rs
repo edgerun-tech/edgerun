@@ -3,6 +3,7 @@ use core::cmp;
 use edgerun_encoding::buf::{Buf, BufMut, Cursor};
 
 use super::{
+    HeaderField,
     block::{
         HeaderPrefix, Indexed, IndexedWithPostBase, Literal, LiteralWithNameRef,
         LiteralWithPostBaseNameRef,
@@ -19,7 +20,6 @@ use super::{
         DecoderInstruction, Duplicate, DynamicTableSizeUpdate, HeaderAck, InsertCountIncrement,
         InsertWithNameRef, InsertWithoutNameRef, StreamCancel,
     },
-    HeaderField,
 };
 
 #[derive(Debug, PartialEq, Clone)]
@@ -300,7 +300,7 @@ mod tests {
 
     use super::*;
 
-    use crate::helpers::{build_table, TABLE_SIZE};
+    use crate::helpers::{TABLE_SIZE, build_table};
 
     #[allow(clippy::type_complexity)]
     fn check_encode_field(

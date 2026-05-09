@@ -15,13 +15,13 @@ pub use edgerun_linux_sysfs::{collections, fs, io, mem, option, os, path, result
 
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 use edgerun_devices::gpu::{
-    default_gpu_descriptor, infer_gpu_vendor, GpuConnectorInfo, GpuDisplayMode, GpuInfo,
-    GpuInventory, GpuVendor,
+    GpuConnectorInfo, GpuDisplayMode, GpuInfo, GpuInventory, GpuVendor, default_gpu_descriptor,
+    infer_gpu_vendor,
 };
 use edgerun_linux_sysfs::prelude::v1::*;
 use edgerun_linux_sysfs::{
-    is_pci_address, link_name, parse_bool_flag, parse_display_mode_line, parse_hex_u16,
-    parse_hex_u32, parse_hex_u8, parse_i32, parse_u32, parse_uevent_map, read_trimmed,
+    is_pci_address, link_name, parse_bool_flag, parse_display_mode_line, parse_hex_u8,
+    parse_hex_u16, parse_hex_u32, parse_i32, parse_u32, parse_uevent_map, read_trimmed,
 };
 use std::collections::BTreeMap as HashMap;
 #[cfg(not(target_os = "none"))]
@@ -103,7 +103,7 @@ pub fn discover_gpus_in(
         Err(err) => {
             return Err(CapabilityError::Provider(format!(
                 "failed to read PCI root: {err}"
-            )))
+            )));
         }
     };
 
@@ -254,7 +254,7 @@ fn build_drm_map(root: &Path) -> Result<DrmNodeMap, CapabilityError> {
         Err(err) => {
             return Err(CapabilityError::Provider(format!(
                 "failed to read DRM root: {err}"
-            )))
+            )));
         }
     };
 

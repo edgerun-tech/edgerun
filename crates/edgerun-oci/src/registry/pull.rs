@@ -16,7 +16,7 @@ use super::layer::{apply_whiteouts, build_rootfs, extract_layer, verify_blob_dig
 use super::manifest::{ImageManifest, LayerDescriptor, SingleManifest};
 use super::oci_spec::generate_oci_spec;
 use super::provenance::ImageProvenance;
-use crate::tar_layer::{layer_compression, OciLayerCompression};
+use crate::tar_layer::{OciLayerCompression, layer_compression};
 use crate::{sha256_digest_reference, validate_digest_reference};
 
 #[derive(Debug, Clone)]

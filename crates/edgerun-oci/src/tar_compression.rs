@@ -4,7 +4,7 @@ use crate::prelude::*;
 use crate::tar_layer::TarLayerApplyError;
 use edgerun_encoding::crc32::crc32;
 
-pub use edgerun_protocols::oci::layer::{layer_compression, OciLayerCompression};
+pub use edgerun_protocols::oci::layer::{OciLayerCompression, layer_compression};
 
 #[cfg(feature = "gzip")]
 pub fn decompress_gzip_layer(data: &[u8]) -> Result<Vec<u8>, TarLayerApplyError> {

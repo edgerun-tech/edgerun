@@ -7,12 +7,12 @@ use edgerun_protocols::keygen::{generate_node_signing_key, node_id_from_signing_
 use edgerun_protocols::seal::{generate_seal_key, seal_node_signing_key};
 use edgerun_protocols::sign::ProtocolSigner;
 use edgerun_protocols::sign_p256::P256ProtocolSigner;
-use edgerun_storage::fs::FsEventLog;
 use edgerun_storage::DurableStreamWriter;
+use edgerun_storage::fs::FsEventLog;
 use edgerun_yubikey::YubiKeySigningKey;
 
 use crate::protocol_signer::MeshProtocolSigner;
-use crate::signer::{parse_signing_key_hex, SyncSoftwareSigner};
+use crate::signer::{SyncSoftwareSigner, parse_signing_key_hex};
 
 fn create_stream_or_exit<S>(root: &PathBuf, node_id: NodeID, signer: S)
 where
@@ -323,7 +323,9 @@ pub fn cmd_init_provisioned(path: &PathBuf, name: Option<String>, controller: Op
     let pairing_pin = generate_pairing_pin();
     let _node_name = name.unwrap_or_else(|| format!("edgerun-{}", node_id.short()));
     if let Some(controller) = controller {
-        eprintln!("Controller bootstrap input must be recorded by a signed bootstrap contract: {controller}");
+        eprintln!(
+            "Controller bootstrap input must be recorded by a signed bootstrap contract: {controller}"
+        );
     }
     fs::create_dir_all(path).unwrap_or_else(|e| {
         eprintln!(
@@ -360,7 +362,9 @@ pub fn cmd_init_provisioned(path: &PathBuf, name: Option<String>, controller: Op
     );
     eprintln!();
     eprintln!("The node identity and genesis stream are initialized.");
-    eprintln!("Provisioning listeners bind to loopback by default; use an explicit tunnel for remote setup.");
+    eprintln!(
+        "Provisioning listeners bind to loopback by default; use an explicit tunnel for remote setup."
+    );
     eprintln!("Control is bound to the generated node private key.");
     eprintln!("Protect and back up local key material; there is no account recovery path.");
 }

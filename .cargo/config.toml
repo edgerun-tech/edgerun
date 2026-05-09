@@ -43,5 +43,15 @@ target = "x86_64-unknown-linux-gnu"
 [source.crates-io]
 replace-with = "vendored-sources"
 
+[source."git+https://github.com/openai-oss-forks/tokio-tungstenite?rev=132f5b39c862e3a970f731d709608b3e6276d5f6"]
+git = "https://github.com/openai-oss-forks/tokio-tungstenite"
+rev = "132f5b39c862e3a970f731d709608b3e6276d5f6"
+replace-with = "vendored-sources"
+
+[source."git+https://github.com/openai-oss-forks/tungstenite-rs?rev=9200079d3b54a1ff51072e24d81fd354f085156f"]
+git = "https://github.com/openai-oss-forks/tungstenite-rs"
+rev = "9200079d3b54a1ff51072e24d81fd354f085156f"
+replace-with = "vendored-sources"
+
 [source.vendored-sources]
 directory = "vendor/cargo"

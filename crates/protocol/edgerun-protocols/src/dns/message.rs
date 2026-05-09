@@ -11,8 +11,8 @@ use alloc::{
 use core::net::Ipv4Addr;
 
 use super::record::{
-    decode_domain_name, encode_domain_name, encode_domain_name_compressed, DnsRecordData,
-    DnsRecordType,
+    DnsRecordData, DnsRecordType, decode_domain_name, encode_domain_name,
+    encode_domain_name_compressed,
 };
 use edgerun_encoding::byteorder::{
     push_u16_be, push_u32_be, read_u16_be, read_u32_be, write_u16_be,

@@ -4,8 +4,8 @@
 pub(crate) mod other_prime_info;
 
 use crate::der::{
-    asn1::UintRef, Decode, DecodeValue, Encode, EncodeValue, Header, Length, Reader, Sequence, Tag,
-    Writer,
+    Decode, DecodeValue, Encode, EncodeValue, Header, Length, Reader, Sequence, Tag, Writer,
+    asn1::UintRef,
 };
 use crate::pkcs1::{Error, Result, RsaPublicKey, Version};
 use core::fmt;

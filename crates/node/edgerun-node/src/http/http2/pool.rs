@@ -6,7 +6,7 @@
 
 use crate::http::runtime::net::{IpAddr, SocketAddr};
 use crate::http::runtime::time::{Duration, Instant};
-use crate::http::runtime::{timeout as rt_timeout, AsyncTcpStream, ConnectFuture};
+use crate::http::runtime::{AsyncTcpStream, ConnectFuture, timeout as rt_timeout};
 use alloc::collections::BTreeMap as HashMap;
 use alloc::format;
 use alloc::string::{String, ToString};

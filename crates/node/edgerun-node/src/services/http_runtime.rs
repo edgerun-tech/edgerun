@@ -7,7 +7,7 @@ use crate::network::{HostSocketTransport, TransportAddress};
 use crate::rt::{
     self, AsyncReadExt, AsyncTcpListener, AsyncTcpStream, AsyncWriteExt, CancellationToken,
 };
-use edgerun_crypto::p256::ecdsa::{signature::Verifier, Signature, VerifyingKey};
+use edgerun_crypto::p256::ecdsa::{Signature, VerifyingKey, signature::Verifier};
 
 #[cfg(target_os = "none")]
 use crate::rt::io;
@@ -259,7 +259,9 @@ fn relay_record_from_payload(
     payload: &edgerun_json::Value,
     signature_base64: &str,
 ) -> Result<NodeRelayRecord, &'static str> {
-    let version = payload.required_u64("version").map_err(|_| "missing version")?;
+    let version = payload
+        .required_u64("version")
+        .map_err(|_| "missing version")?;
     if version != 1 {
         return Err("unsupported relay update version");
     }
@@ -324,7 +326,8 @@ fn verify_relay_record_signature(
     let signature = base64_decode(&record.signature_base64).ok_or("invalid signature")?;
     let verifying_key =
         VerifyingKey::from_sec1_bytes(&public_key).map_err(|_| "invalid P-256 public key")?;
-    let signature = Signature::try_from(signature.as_slice()).map_err(|_| "invalid ECDSA signature")?;
+    let signature =
+        Signature::try_from(signature.as_slice()).map_err(|_| "invalid ECDSA signature")?;
     verifying_key
         .verify(signed_payload, &signature)
         .map_err(|_| "relay update signature verification failed")
@@ -361,15 +364,27 @@ fn persisted_relay_record(value: &edgerun_json::Value) -> Result<NodeRelayRecord
             .required_str("publicKeyRawBase64")
             .map_err(|_| ())?
             .to_string(),
-        reachable_target: value.required_str("reachableTarget").map_err(|_| ())?.to_string(),
-        updated_at_iso: value.required_str("updatedAtIso").map_err(|_| ())?.to_string(),
-        expires_at_iso: value.required_str("expiresAtIso").map_err(|_| ())?.to_string(),
+        reachable_target: value
+            .required_str("reachableTarget")
+            .map_err(|_| ())?
+            .to_string(),
+        updated_at_iso: value
+            .required_str("updatedAtIso")
+            .map_err(|_| ())?
+            .to_string(),
+        expires_at_iso: value
+            .required_str("expiresAtIso")
+            .map_err(|_| ())?
+            .to_string(),
         protocols_json: value
             .get("protocols")
             .and_then(|value| value.to_json_string().ok())
             .unwrap_or_else(|| "[]".to_string()),
         nonce: value.required_str("nonce").map_err(|_| ())?.to_string(),
-        signature_base64: value.required_str("signatureBase64").map_err(|_| ())?.to_string(),
+        signature_base64: value
+            .required_str("signatureBase64")
+            .map_err(|_| ())?
+            .to_string(),
     })
 }
 

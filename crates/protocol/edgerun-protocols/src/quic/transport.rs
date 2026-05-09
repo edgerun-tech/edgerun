@@ -1023,14 +1023,18 @@ mod tests {
 
         assert_eq!(transport.bytes_in_flight(), 200);
         assert_eq!(transport.sent_packets.len(), 2);
-        assert!(transport
-            .sent_packets
-            .iter()
-            .any(|pkt| pkt.packet_number == 2));
-        assert!(transport
-            .sent_packets
-            .iter()
-            .any(|pkt| pkt.packet_number == 3));
+        assert!(
+            transport
+                .sent_packets
+                .iter()
+                .any(|pkt| pkt.packet_number == 2)
+        );
+        assert!(
+            transport
+                .sent_packets
+                .iter()
+                .any(|pkt| pkt.packet_number == 3)
+        );
     }
 
     #[test]
@@ -1054,10 +1058,12 @@ mod tests {
         transport.on_ack_received(PacketNumberSpace::Initial, 4, 0, &[], 0);
 
         assert_eq!(transport.get_retransmit_queue(), &[packet_1]);
-        assert!(transport
-            .get_retransmit_queue()
-            .iter()
-            .all(|packet| !packet.is_empty()));
+        assert!(
+            transport
+                .get_retransmit_queue()
+                .iter()
+                .all(|packet| !packet.is_empty())
+        );
     }
 
     #[test]

@@ -2,7 +2,7 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 
-use crate::keygen::{node_signing_key_from_bytes, NodeSigningKey};
+use crate::keygen::{NodeSigningKey, node_signing_key_from_bytes};
 use edgerun_crypto::{AeadInPlace, Aes256GcmCipher, Nonce, Tag};
 
 const MAGIC: &[u8] = b"EDGERUN-SEAL-KEY1";

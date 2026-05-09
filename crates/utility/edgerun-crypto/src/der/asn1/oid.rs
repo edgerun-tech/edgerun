@@ -2,8 +2,8 @@
 
 use crate::const_oid::ObjectIdentifier;
 use crate::der::{
-    asn1::AnyRef, ord::OrdIsValueOrd, DecodeValue, EncodeValue, Error, FixedTag, Header, Length,
-    Reader, Result, Tag, Tagged, Writer,
+    DecodeValue, EncodeValue, Error, FixedTag, Header, Length, Reader, Result, Tag, Tagged, Writer,
+    asn1::AnyRef, ord::OrdIsValueOrd,
 };
 
 #[cfg(feature = "alloc")]

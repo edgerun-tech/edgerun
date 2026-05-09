@@ -8,7 +8,7 @@ use core::option::Option::{self, Some};
 use core::result::Result::{self, Err, Ok};
 
 #[cfg(unix)]
-use edgerun_alsa_microphone::{discover_alsa_pcms, AlsaMicrophoneBackend};
+use edgerun_alsa_microphone::{AlsaMicrophoneBackend, discover_alsa_pcms};
 #[cfg(unix)]
 use edgerun_alsa_speaker::discover_speakers;
 use edgerun_capabilities::CapabilityError;

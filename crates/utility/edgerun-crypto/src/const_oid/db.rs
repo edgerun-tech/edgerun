@@ -11,9 +11,9 @@
 
 #![allow(clippy::arithmetic_side_effects, missing_docs)]
 
-mod gen;
+mod r#gen;
 
-pub use gen::*;
+pub use r#gen::*;
 
 use crate::const_oid::{Error, ObjectIdentifier};
 

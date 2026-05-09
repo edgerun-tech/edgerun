@@ -1,5 +1,5 @@
 use super::{FixedOutput, FixedOutputReset, InvalidBufferSize, Reset, Update};
-use crate::digest::crypto_common::{typenum::Unsigned, Output, OutputSizeUser};
+use crate::digest::crypto_common::{Output, OutputSizeUser, typenum::Unsigned};
 
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;

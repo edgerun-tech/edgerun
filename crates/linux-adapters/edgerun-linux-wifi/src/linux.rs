@@ -176,12 +176,12 @@ use edgerun_devices::network_interface::{
     NetworkAdminState, NetworkInterfaceController, NetworkInterfaceKind,
 };
 use edgerun_devices::wifi::{
-    default_wifi_descriptor, validate_access_point_config, WifiAccessPointConfig,
-    WifiAccessPointController, WifiAccessPointState, WifiController, WifiInterfaceInfo,
-    WifiInterfaceMode, WifiNetworkObservation, WifiPowerState, WifiScanResult, WifiScanner,
+    WifiAccessPointConfig, WifiAccessPointController, WifiAccessPointState, WifiController,
+    WifiInterfaceInfo, WifiInterfaceMode, WifiNetworkObservation, WifiPowerState, WifiScanResult,
+    WifiScanner, default_wifi_descriptor, validate_access_point_config,
 };
 use edgerun_linux_netif::{
-    discover_network_interfaces, discover_network_interfaces_in, LinuxNetifBackend,
+    LinuxNetifBackend, discover_network_interfaces, discover_network_interfaces_in,
 };
 use edgerun_linux_sysfs::{
     close_ioctl_fd, fill_ifr_name, ioctl_call, open_ioctl_socket, read_trimmed,

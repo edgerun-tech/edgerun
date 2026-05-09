@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useStore } from "@nanostores/react"
 import {
   ArrowLeft,
@@ -19,7 +19,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { getIconById, listBuiltinApps } from "@/platform/registries/builtin-app-registry"
-import { catalogApps, installCatalogApp, uninstallCatalogApp } from "@/platform/registries/app-catalog-registry"
+import { catalogApps, installCatalogApp, seedBuiltinCatalogApps, uninstallCatalogApp } from "@/platform/registries/app-catalog-registry"
 import type { AppDefinition } from "@/platform/types/app-definition"
 import {
   installedAppIdsStore,
@@ -174,6 +174,10 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
     const installed = installedIdSet.has(normalizedAppId) || isCoreApp(normalizedAppId)
     return installed && app.requiredCapabilityIds.some((id) => !hasLocalCapabilityGrant(normalizedAppId, id))
   }).length
+
+  useEffect(() => {
+    void seedBuiltinCatalogApps()
+  }, [])
 
   async function installSelected(app: AppDefinition) {
     const normalizedAppId = normalizeAppId(app.appId)

@@ -4,12 +4,12 @@ use core::marker::PhantomData;
 
 use super::{Domain, ExpandMsg, Expander};
 use crate::digest::{
+    FixedOutput, HashMarker,
     core_api::BlockSizeUser,
     generic_array::{
-        typenum::{IsLess, IsLessOrEqual, Unsigned, U256},
         GenericArray,
+        typenum::{IsLess, IsLessOrEqual, U256, Unsigned},
     },
-    FixedOutput, HashMarker,
 };
 use crate::elliptic_curve::{Error, Result};
 
@@ -155,8 +155,8 @@ mod test {
     use crate::sha2::Sha256;
     use core::mem;
     use generic_array::{
-        typenum::{U128, U32},
         ArrayLength,
+        typenum::{U32, U128},
     };
 
     fn assert_message<HashT>(

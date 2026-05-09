@@ -17,14 +17,14 @@ use core::fmt::Debug;
 
 use crate::ed25519_dalek::{InternalError, SignatureError};
 
-use crate::curve25519_dalek::scalar::{clamp_integer, Scalar};
+use crate::curve25519_dalek::scalar::{Scalar, clamp_integer};
 
 use crate::subtle::{Choice, ConstantTimeEq};
 #[cfg(feature = "zeroize")]
 use crate::zeroize::{Zeroize, ZeroizeOnDrop};
 
 // These are used in the functions that are made public when the hazmat feature is set
-use crate::curve25519_dalek::digest::{generic_array::typenum::U64, Digest};
+use crate::curve25519_dalek::digest::{Digest, generic_array::typenum::U64};
 use crate::ed25519_dalek::{Signature, VerifyingKey};
 
 /// Contains the secret scalar and domain separator used for generating signatures.
@@ -259,7 +259,7 @@ mod test {
 
     use super::*;
 
-    use rand::{rngs::OsRng, CryptoRng, RngCore};
+    use rand::{CryptoRng, RngCore, rngs::OsRng};
 
     // Pick distinct, non-spec 512-bit hash functions for message and sig-context hashing
     type CtxDigest = blake2::Blake2b512;

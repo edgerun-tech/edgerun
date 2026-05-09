@@ -4,9 +4,9 @@ use crate::base16ct::{self, HexDisplay};
 use crate::crypto_bigint::{ArrayEncoding, Integer};
 use crate::elliptic_curve::rand_core::CryptoRngCore;
 use crate::elliptic_curve::{
+    CurveArithmetic, Error, FieldBytes, PrimeCurve, Scalar, ScalarPrimitive, SecretKey,
     ops::{Invert, Reduce, ReduceNonZero},
     scalar::IsHigh,
-    CurveArithmetic, Error, FieldBytes, PrimeCurve, Scalar, ScalarPrimitive, SecretKey,
 };
 use crate::ff::{Field, PrimeField};
 use crate::subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
@@ -16,10 +16,10 @@ use core::{
     ops::{Deref, Mul, Neg},
     str,
 };
-use generic_array::{typenum::Unsigned, GenericArray};
+use generic_array::{GenericArray, typenum::Unsigned};
 
 #[cfg(feature = "elliptic_curve_serde")]
-use serdect::serde::{de, ser, Deserialize, Serialize};
+use serdect::serde::{Deserialize, Serialize, de, ser};
 
 /// Non-zero scalar type.
 ///

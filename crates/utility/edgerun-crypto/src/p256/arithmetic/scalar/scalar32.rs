@@ -4,8 +4,8 @@
 
 use super::{MODULUS, MU};
 use crate::p256::{
-    arithmetic::util::{adc, mac, sbb},
     U256,
+    arithmetic::util::{adc, mac, sbb},
 };
 
 /// Barrett Reduction

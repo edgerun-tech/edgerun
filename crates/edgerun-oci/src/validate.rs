@@ -1,8 +1,8 @@
 //! no_std OCI spec validation helpers.
 
 pub use edgerun_protocols::oci::{
-    default_process_args, default_process_env, validate_spec, OciValidationError, DEFAULT_ARGS,
-    DEFAULT_ENV,
+    DEFAULT_ARGS, DEFAULT_ENV, OciValidationError, default_process_args, default_process_env,
+    validate_spec,
 };
 
 /// Get the target OS string (e.g. "linux").

@@ -3,14 +3,14 @@
 use crate::prelude::*;
 use core::fmt;
 
-use crate::registry::config::{parse_image_config, parse_manifest, ImageConfig};
+use crate::registry::config::{ImageConfig, parse_image_config, parse_manifest};
 use crate::registry::manifest::{
     ImageIndex, ImageManifest, LayerDescriptor, ManifestDescriptor, PlatformDescriptor,
     SingleManifest,
 };
 use crate::registry::oci_spec::generate_oci_spec_model;
 use crate::runtime_config::BareRuntimeConfig;
-use crate::validate::{host_arch, host_os, OciValidationError};
+use crate::validate::{OciValidationError, host_arch, host_os};
 
 /// A host-independent plan for booting an OCI image.
 ///

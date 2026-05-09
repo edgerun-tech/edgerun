@@ -6,13 +6,13 @@ use alloc::vec::Vec;
 use core::option::Option::{self, Some};
 use core::result::Result;
 use edgerun_capabilities::{
-    capability_descriptor, constraint, CapabilityConstraintKind, CapabilityDescriptor,
-    CapabilityError, CapabilityEventKind, CapabilityModality, CapabilityOperation,
-    CapabilityProvider, CapabilityRole,
+    CapabilityConstraintKind, CapabilityDescriptor, CapabilityError, CapabilityEventKind,
+    CapabilityModality, CapabilityOperation, CapabilityProvider, CapabilityRole,
+    capability_descriptor, constraint,
 };
 pub use edgerun_protocols::cec::{
-    active_source, cec_header, image_view_on, set_stream_path, standby, text_view_on,
-    wake_sequence, CecLogicalAddress, CecMessage,
+    CecLogicalAddress, CecMessage, active_source, cec_header, image_view_on, set_stream_path,
+    standby, text_view_on, wake_sequence,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -273,46 +273,62 @@ mod tests {
     fn descriptor_is_local_communication_capability() {
         let descriptor = default_cec_descriptor("linux-cec", "cec0");
         assert_eq!(descriptor.role, CapabilityRole::Communication as i32);
-        assert!(descriptor
-            .default_constraints
-            .iter()
-            .any(|c| c.kind == CapabilityConstraintKind::RequireLocalOnly as i32));
+        assert!(
+            descriptor
+                .default_constraints
+                .iter()
+                .any(|c| c.kind == CapabilityConstraintKind::RequireLocalOnly as i32)
+        );
     }
 
     #[test]
     fn descriptor_contains_display_and_text_modalities() {
         let descriptor = default_cec_descriptor("linux-cec", "cec0");
-        assert!(descriptor
-            .modalities
-            .contains(&(CapabilityModality::Display as i32)));
-        assert!(descriptor
-            .modalities
-            .contains(&(CapabilityModality::Text as i32)));
+        assert!(
+            descriptor
+                .modalities
+                .contains(&(CapabilityModality::Display as i32))
+        );
+        assert!(
+            descriptor
+                .modalities
+                .contains(&(CapabilityModality::Text as i32))
+        );
     }
 
     #[test]
     fn descriptor_contains_state_and_display_events() {
         let descriptor = default_cec_descriptor("linux-cec", "cec0");
-        assert!(descriptor
-            .event_kinds
-            .contains(&(CapabilityEventKind::State as i32)));
-        assert!(descriptor
-            .event_kinds
-            .contains(&(CapabilityEventKind::Display as i32)));
+        assert!(
+            descriptor
+                .event_kinds
+                .contains(&(CapabilityEventKind::State as i32))
+        );
+        assert!(
+            descriptor
+                .event_kinds
+                .contains(&(CapabilityEventKind::Display as i32))
+        );
     }
 
     #[test]
     fn descriptor_contains_query_control_invoke_operations() {
         let descriptor = default_cec_descriptor("linux-cec", "cec0");
-        assert!(descriptor
-            .operations
-            .contains(&(CapabilityOperation::Query as i32)));
-        assert!(descriptor
-            .operations
-            .contains(&(CapabilityOperation::Control as i32)));
-        assert!(descriptor
-            .operations
-            .contains(&(CapabilityOperation::Invoke as i32)));
+        assert!(
+            descriptor
+                .operations
+                .contains(&(CapabilityOperation::Query as i32))
+        );
+        assert!(
+            descriptor
+                .operations
+                .contains(&(CapabilityOperation::Control as i32))
+        );
+        assert!(
+            descriptor
+                .operations
+                .contains(&(CapabilityOperation::Invoke as i32))
+        );
     }
 
     #[test]

@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 use edgerun_encoding::frame::{decode_frame_len_u16_be, encode_frame_u16_be};
 
 use super::io;
-use super::limits::{validate_dns_wire_bounds, MAX_DNS_MESSAGE_LEN};
+use super::limits::{MAX_DNS_MESSAGE_LEN, validate_dns_wire_bounds};
 
 const DNS_TCP_LENGTH_LEN: usize = 2;
 

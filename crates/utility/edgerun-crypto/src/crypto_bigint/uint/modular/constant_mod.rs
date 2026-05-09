@@ -4,7 +4,7 @@ use crate::subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 
 use crate::crypto_bigint::{Limb, Uint, Zero};
 
-use super::{div_by_2::div_by_2, reduction::montgomery_reduction, Retrieve};
+use super::{Retrieve, div_by_2::div_by_2, reduction::montgomery_reduction};
 
 #[cfg(feature = "p256_arithmetic")]
 use crate::crypto_bigint::{NonZero, Random, RandomMod};

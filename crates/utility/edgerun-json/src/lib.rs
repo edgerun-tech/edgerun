@@ -89,8 +89,8 @@ pub use error::{JsonError, JsonParseError};
 pub use index::ValueIndex;
 pub use map::Map;
 pub use model::{
-    from_json_slice, from_json_str, from_json_value, to_json_string, to_json_value, to_json_vec,
-    FromJson, ToJson,
+    FromJson, ToJson, from_json_slice, from_json_str, from_json_value, to_json_string,
+    to_json_value, to_json_vec,
 };
 pub use number::JsonNumber;
 pub use tape::{
@@ -99,14 +99,17 @@ pub use tape::{
 };
 pub use value::{JsonValue, JsonValueError, Number, Value};
 
+#[cfg(feature = "derive")]
+pub use edgerun_json_derive::{FromJson, ToJson};
+
 #[cfg(feature = "toml")]
 pub use toml::{
-    from_toml_str, json_to_toml, parse_toml_value, to_toml_string, toml_to_json, TomlError,
-    TomlValue,
+    TomlError, TomlValue, from_toml_str, json_to_toml, parse_toml_value, to_toml_string,
+    toml_to_json,
 };
 #[cfg(feature = "yaml")]
 pub use yaml::{
-    from_yaml_str, parse_yaml_value, to_yaml_string, YamlDeserializer, YamlError, YamlValue,
+    YamlDeserializer, YamlError, YamlValue, from_yaml_str, parse_yaml_value, to_yaml_string,
 };
 
 #[doc(hidden)]

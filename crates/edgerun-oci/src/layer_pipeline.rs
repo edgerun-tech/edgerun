@@ -1,6 +1,6 @@
 //! no_std OCI layer streaming pipeline contracts.
 
-use crate::image_plan::{validate_digest_reference, ImagePlanError};
+use crate::image_plan::{ImagePlanError, validate_digest_reference};
 use crate::prelude::*;
 use crate::registry::manifest::LayerDescriptor;
 use core::fmt;

@@ -1,6 +1,6 @@
 use crate::typenum::{
-    private::{Internal, InternalMarker},
     Bit, NInt, NonZero, PInt, UInt, UTerm, Unsigned, Z0,
+    private::{Internal, InternalMarker},
 };
 
 pub trait Same<Rhs = Self> {

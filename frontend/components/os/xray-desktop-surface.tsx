@@ -83,7 +83,7 @@ export function XrayDesktopSurface({
 }: XrayDesktopSurfaceProps) {
   return (
     <div className="absolute inset-0 z-0 overflow-hidden bg-zinc-950">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(120,119,198,0.16),transparent_36%),radial-gradient(circle_at_80%_10%,rgba(16,185,129,0.08),transparent_32%)]" />
+      <div className="absolute inset-0 bg-black" />
 
       <div className="absolute inset-y-4 left-4 z-10 hidden w-56 grid-rows-2 gap-4 pb-20 pt-4 xl:grid">
         <SurfaceSlot

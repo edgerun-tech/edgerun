@@ -4,9 +4,9 @@ use crate::prelude::*;
 use std::io;
 use std::path::PathBuf;
 
+use crate::ImageRef;
 use crate::cli::{default_images_dir, invalid_input, parse_cli_args, required_positional};
 use crate::state::state_root_dir;
-use crate::ImageRef;
 use edgerun_clap::cli::Action;
 use edgerun_clap::{Arg, Command};
 

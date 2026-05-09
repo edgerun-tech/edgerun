@@ -1,6 +1,6 @@
 //! `From`-like conversions for [`Uint`].
 
-use crate::crypto_bigint::{ConcatMixed, Limb, Uint, WideWord, Word, U128, U64};
+use crate::crypto_bigint::{ConcatMixed, Limb, U64, U128, Uint, WideWord, Word};
 
 impl<const LIMBS: usize> Uint<LIMBS> {
     /// Create a [`Uint`] from a `u8` (const-friendly)
@@ -228,7 +228,7 @@ impl<const LIMBS: usize, const LIMBS2: usize> From<&Uint<LIMBS>> for Uint<LIMBS2
 
 #[cfg(all(test, crypto_bigint_internal_tests))]
 mod tests {
-    use crate::crypto_bigint::{Limb, Word, U128};
+    use crate::crypto_bigint::{Limb, U128, Word};
 
     #[cfg(target_pointer_width = "32")]
     use crate::crypto_bigint::U64 as UintEx;

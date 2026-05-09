@@ -242,8 +242,8 @@ pub mod libc {
 use crate::prelude::v1::*;
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 use edgerun_devices::input::{
-    default_input_descriptor, validate_event_read_request, InputDevice, InputDeviceInfo,
-    InputDeviceKind, InputEventKind, InputEventRecord,
+    InputDevice, InputDeviceInfo, InputDeviceKind, InputEventKind, InputEventRecord,
+    default_input_descriptor, validate_event_read_request,
 };
 use edgerun_linux_sysfs::read_trimmed;
 #[cfg(unix)]

@@ -71,7 +71,7 @@ impl<MOD: ResidueParams<LIMBS>, const LIMBS: usize> AddAssign<Self> for Residue<
 #[cfg(all(test, crypto_bigint_internal_tests))]
 mod tests {
     use crate::crypto_bigint::{
-        const_residue, impl_modulus, modular::constant_mod::ResidueParams, U256,
+        U256, const_residue, impl_modulus, modular::constant_mod::ResidueParams,
     };
 
     impl_modulus!(

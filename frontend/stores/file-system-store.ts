@@ -18,6 +18,13 @@ export interface FileEntry {
   error?: string
 }
 
+export interface GitInfo {
+  branch: string | null
+  head: string | null
+  remote: string | null
+  isWorktree: boolean
+}
+
 export interface OpenFile {
   path: string
   name: string
@@ -42,6 +49,7 @@ export interface FileSystemStore {
   activeFileIndex: number
   gitRoot: string | null
   isGitRepo: boolean
+  gitInfo: GitInfo | null
   indexedFileCount: number
   indexedDirCount: number
   totalBytesIndexed: number
@@ -92,7 +100,6 @@ const DEFAULT_CONTEXT_OPTIONS: Required<RepoContextOptions> = {
 }
 
 const IGNORED_DIRS = new Set([
-  ".git",
   "node_modules",
   "target",
   "dist",
@@ -110,6 +117,8 @@ const IGNORED_DIRS = new Set([
   ".idea",
   ".vscode",
 ])
+
+const GIT_METADATA_FILES = new Set([".git/HEAD", ".git/config", ".git/packed-refs"])
 
 const BINARY_EXTENSIONS = new Set([
   "png", "jpg", "jpeg", "gif", "webp", "ico", "pdf", "zip", "gz", "tgz", "xz", "7z", "rar",
@@ -269,6 +278,16 @@ function isIgnoredDirectory(name: string): boolean {
   return IGNORED_DIRS.has(name)
 }
 
+function shouldSkipIndexedPath(path: string, kind: FileEntryKind): boolean {
+  const parts = path.split("/").filter(Boolean)
+  if (parts.some(isIgnoredDirectory)) return true
+  const gitIndex = parts.indexOf(".git")
+  if (gitIndex === -1) return false
+  if (gitIndex === 0 && parts.length === 1) return false
+  if (kind === "file" && GIT_METADATA_FILES.has(path)) return false
+  return true
+}
+
 function joinPath(parent: string, name: string): string {
   return parent ? `${parent}/${name}` : name
 }
@@ -306,6 +325,7 @@ export const fileSystemStore = atom<FileSystemStore>({
   activeFileIndex: -1,
   gitRoot: null,
   isGitRepo: false,
+  gitInfo: null,
   indexedFileCount: 0,
   indexedDirCount: 0,
   totalBytesIndexed: 0,
@@ -338,7 +358,8 @@ export async function openDirectory(): Promise<boolean> {
     fileSystemStore.set({ ...fileSystemStore.get(), isLoading: true, repoIndexStatus: "indexing", repoIndexError: null, error: null })
 
     const handle = await (window as any).showDirectoryPicker({ mode: "readwrite" }) as FileSystemDirectoryHandle
-    const hasGit = await checkForGit(handle)
+    const gitInfo = await readGitInfo(handle)
+    const hasGit = gitInfo != null
 
     fileSystemStore.set({
       ...fileSystemStore.get(),
@@ -350,6 +371,7 @@ export async function openDirectory(): Promise<boolean> {
       hasPermission: true,
       gitRoot: hasGit ? handle.name : null,
       isGitRepo: hasGit,
+      gitInfo,
       expandedDirs: [],
       selectedPath: null,
       searchQuery: "",
@@ -399,7 +421,8 @@ export async function restoreDirectory(): Promise<boolean> {
       const handle = await loadHandle(name)
       if (!handle) continue
 
-      const hasGit = await checkForGit(handle)
+      const gitInfo = await readGitInfo(handle)
+      const hasGit = gitInfo != null
       fileSystemStore.set({
         ...fileSystemStore.get(),
         rootHandle: handle,
@@ -412,6 +435,7 @@ export async function restoreDirectory(): Promise<boolean> {
         hasPermission: true,
         gitRoot: hasGit ? name : null,
         isGitRepo: hasGit,
+        gitInfo,
         error: null,
       })
 
@@ -465,7 +489,7 @@ export async function indexDirectory(options: IndexOptions = {}): Promise<void> 
         if (stoppedByLimit) break
 
         const path = joinPath(parentPathValue, child.name)
-        const ignored = child.kind === "directory" && isIgnoredDirectory(child.name)
+        const ignored = child.kind === "directory" && shouldSkipIndexedPath(path, child.kind)
         const entry: FileEntry = {
           name: child.name,
           path,
@@ -479,6 +503,7 @@ export async function indexDirectory(options: IndexOptions = {}): Promise<void> 
         }
 
         if (child.kind === "file") {
+          if (shouldSkipIndexedPath(path, child.kind)) continue
           indexedFileCount++
           try {
             const file = await (child as FileSystemFileHandle).getFile()
@@ -567,13 +592,78 @@ export async function indexDirectory(options: IndexOptions = {}): Promise<void> 
   }
 }
 
-async function checkForGit(dirHandle: FileSystemDirectoryHandle): Promise<boolean> {
+async function readOptionalFile(dirHandle: FileSystemDirectoryHandle, path: string): Promise<string | null> {
   try {
-    await dirHandle.getDirectoryHandle(".git")
-    return true
+    const parts = path.split("/").filter(Boolean)
+    const filename = parts.pop()
+    if (!filename) return null
+    let current = dirHandle
+    for (const part of parts) current = await current.getDirectoryHandle(part)
+    const fileHandle = await current.getFileHandle(filename)
+    return await (await fileHandle.getFile()).text()
   } catch {
-    return false
+    return null
   }
+}
+
+function parseGitRemote(config: string | null): string | null {
+  if (!config) return null
+  const lines = config.split(/\r\n|\r|\n/)
+  let inOrigin = false
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (trimmed.startsWith("[remote ")) {
+      inOrigin = trimmed.includes('"origin"')
+      continue
+    }
+    if (inOrigin && trimmed.startsWith("url")) {
+      return trimmed.split("=").slice(1).join("=").trim() || null
+    }
+  }
+  return null
+}
+
+async function readGitInfo(dirHandle: FileSystemDirectoryHandle): Promise<GitInfo | null> {
+  const head = await readOptionalFile(dirHandle, ".git/HEAD")
+  if (!head) return null
+
+  const trimmedHead = head.trim()
+  const refMatch = trimmedHead.match(/^ref:\s+refs\/heads\/(.+)$/)
+  const config = await readOptionalFile(dirHandle, ".git/config")
+
+  return {
+    branch: refMatch?.[1] ?? null,
+    head: refMatch ? null : trimmedHead.slice(0, 12),
+    remote: parseGitRemote(config),
+    isWorktree: false,
+  }
+}
+
+function deriveGitInfoFromEntries(entries: FileEntry[], openFiles: OpenFile[]): GitInfo | null {
+  const hasGit = entries.some((entry) => entry.path === ".git" && entry.kind === "directory")
+  if (!hasGit) return null
+
+  const head = openFiles.find((file) => file.path === ".git/HEAD")?.content.trim() ?? null
+  const config = openFiles.find((file) => file.path === ".git/config")?.content ?? null
+  const refMatch = head?.match(/^ref:\s+refs\/heads\/(.+)$/)
+
+  return {
+    branch: refMatch?.[1] ?? null,
+    head: head && !refMatch ? head.slice(0, 12) : null,
+    remote: parseGitRemote(config),
+    isWorktree: false,
+  }
+}
+
+async function requestRootWritePermission(): Promise<void> {
+  const handle = fileSystemStore.get().rootHandle
+  if (!handle) return
+
+  const permission = await (handle as any).queryPermission?.({ mode: "readwrite" })
+  if (permission === "granted" || permission === undefined) return
+
+  const requested = await (handle as any).requestPermission?.({ mode: "readwrite" })
+  if (requested !== "granted") throw new Error("Write permission denied")
 }
 
 function getLanguageFromFilename(filename: string): string {
@@ -610,6 +700,90 @@ function getLanguageFromFilename(filename: string): string {
     wasm: "wasm",
   }
   return langMap[ext] || "text"
+}
+
+function childEntries(path: string) {
+  const prefix = `${path}/`
+  return fileSystemStore.get().entries.filter((entry) => entry.path === path || entry.path.startsWith(prefix))
+}
+
+async function copyFileHandle(source: FileSystemFileHandle, targetDir: FileSystemDirectoryHandle, targetName: string) {
+  const file = await source.getFile()
+  const target = await targetDir.getFileHandle(targetName, { create: true })
+  const writable = await target.createWritable()
+  await writable.write(file)
+  await writable.close()
+}
+
+async function copyDirectoryHandle(source: FileSystemDirectoryHandle, target: FileSystemDirectoryHandle) {
+  for await (const [, child] of source.entries()) {
+    if (child.kind === "file") {
+      await copyFileHandle(child as FileSystemFileHandle, target, child.name)
+    } else {
+      const targetChild = await target.getDirectoryHandle(child.name, { create: true })
+      await copyDirectoryHandle(child as FileSystemDirectoryHandle, targetChild)
+    }
+  }
+}
+
+function renameIndexedEntry(path: string, newName: string) {
+  const store = fileSystemStore.get()
+  const entry = store.entriesByPath[path]
+  if (!entry) return
+
+  const parent = parentOf(path)
+  const nextPath = parent ? `${parent}/${newName}` : newName
+  const prefix = `${path}/`
+  const nextPrefix = `${nextPath}/`
+
+  const entries = store.entries.map((item) => {
+    if (item.path !== path && !item.path.startsWith(prefix)) return item
+    const renamedPath = item.path === path ? nextPath : item.path.replace(prefix, nextPrefix)
+    return {
+      ...item,
+      name: item.path === path ? newName : item.name,
+      path: renamedPath,
+      parentPath: item.path === path ? parent : item.parentPath?.replace(prefix.slice(0, -1), nextPath) ?? null,
+    }
+  })
+
+  const openFiles = store.openFiles.map((file) => {
+    if (file.path !== path && !file.path.startsWith(prefix)) return file
+    const renamedPath = file.path === path ? nextPath : file.path.replace(prefix, nextPrefix)
+    return { ...file, path: renamedPath, name: renamedPath.split("/").pop() ?? file.name }
+  })
+
+  fileSystemStore.set({
+    ...store,
+    entries: sortEntries(entries),
+    entriesByPath: makeEntriesByPath(entries),
+    openFiles,
+    selectedPath: store.selectedPath === path ? nextPath : store.selectedPath?.startsWith(prefix) ? store.selectedPath.replace(prefix, nextPrefix) : store.selectedPath,
+    error: null,
+  })
+}
+
+function deleteIndexedEntry(path: string) {
+  const store = fileSystemStore.get()
+  const prefix = `${path}/`
+  const entries = store.entries.filter((entry) => entry.path !== path && !entry.path.startsWith(prefix))
+  const openFiles = store.openFiles.filter((file) => file.path !== path && !file.path.startsWith(prefix))
+  const indexedFileCount = entries.filter((entry) => entry.kind === "file").length
+  const indexedDirCount = entries.filter((entry) => entry.kind === "directory").length
+  const totalBytesIndexed = entries.reduce((total, entry) => total + (entry.kind === "file" ? entry.size ?? 0 : 0), 0)
+
+  fileSystemStore.set({
+    ...store,
+    entries,
+    entriesByPath: makeEntriesByPath(entries),
+    openFiles,
+    activeFileIndex: openFiles.length ? Math.min(store.activeFileIndex, openFiles.length - 1) : -1,
+    indexedFileCount,
+    indexedDirCount,
+    totalBytesIndexed,
+    selectedPath: store.selectedPath === path || store.selectedPath?.startsWith(prefix) ? null : store.selectedPath,
+    error: null,
+  })
 }
 
 export async function getDirectoryHandleByPath(path: string): Promise<FileSystemDirectoryHandle> {
@@ -776,6 +950,102 @@ export async function readFileContent(path: string): Promise<string | null> {
   return file.text()
 }
 
+export async function deleteEntry(path: string): Promise<boolean> {
+  const store = fileSystemStore.get()
+  const entry = store.entriesByPath[path]
+  if (!entry) return false
+
+  try {
+    if (store.rootHandle) {
+      await requestRootWritePermission()
+      const parent = parentOf(path)
+      const dir = parent ? await getDirectoryHandleByPath(parent) : store.rootHandle
+      await dir.removeEntry(entry.name, { recursive: entry.kind === "directory" })
+      await refreshEntries()
+    } else {
+      deleteIndexedEntry(path)
+    }
+    return true
+  } catch (err) {
+    const error = err instanceof Error ? err.message : "Failed to delete entry"
+    fileSystemStore.set({ ...fileSystemStore.get(), error })
+    return false
+  }
+}
+
+export async function renameEntry(path: string, newName: string): Promise<boolean> {
+  const name = newName.trim()
+  const store = fileSystemStore.get()
+  const entry = store.entriesByPath[path]
+  if (!entry || !name || name.includes("/")) return false
+
+  try {
+    if (store.rootHandle) {
+      await requestRootWritePermission()
+      const parent = parentOf(path)
+      const parentDir = parent ? await getDirectoryHandleByPath(parent) : store.rootHandle
+
+      if (entry.kind === "file") {
+        const source = await getFileHandleByPath(path)
+        await copyFileHandle(source, parentDir, name)
+      } else {
+        const source = await getDirectoryHandleByPath(path)
+        const target = await parentDir.getDirectoryHandle(name, { create: true })
+        await copyDirectoryHandle(source, target)
+      }
+
+      await parentDir.removeEntry(entry.name, { recursive: entry.kind === "directory" })
+      await refreshEntries()
+    } else {
+      renameIndexedEntry(path, name)
+    }
+    return true
+  } catch (err) {
+    const error = err instanceof Error ? err.message : "Failed to rename entry"
+    fileSystemStore.set({ ...fileSystemStore.get(), error })
+    return false
+  }
+}
+
+export async function compressEntry(path: string): Promise<boolean> {
+  const store = fileSystemStore.get()
+  const entry = store.entriesByPath[path]
+  if (!entry) return false
+
+  try {
+    const encoder = new TextEncoder()
+    const sourceText = entry.kind === "file" && store.rootHandle
+      ? await readFileContent(path) ?? ""
+      : JSON.stringify(childEntries(path), null, 2)
+    const stream = new Blob([encoder.encode(sourceText)]).stream().pipeThrough(new CompressionStream("gzip"))
+    const blob = await new Response(stream).blob()
+    const archiveName = `${entry.name}.gz`
+
+    if (store.rootHandle) {
+      await requestRootWritePermission()
+      const parent = parentOf(path)
+      const dir = parent ? await getDirectoryHandleByPath(parent) : store.rootHandle
+      const archive = await dir.getFileHandle(archiveName, { create: true })
+      const writable = await archive.createWritable()
+      await writable.write(blob)
+      await writable.close()
+      await refreshEntries()
+    } else {
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = url
+      link.download = archiveName
+      link.click()
+      URL.revokeObjectURL(url)
+    }
+    return true
+  } catch (err) {
+    const error = err instanceof Error ? err.message : "Failed to compress entry"
+    fileSystemStore.set({ ...fileSystemStore.get(), error })
+    return false
+  }
+}
+
 export function searchRepo(query: string): FileEntry[] {
   const q = query.trim().toLowerCase()
   const entries = fileSystemStore.get().entries
@@ -805,6 +1075,7 @@ export function clearRepo() {
     activeFileIndex: -1,
     gitRoot: null,
     isGitRepo: false,
+    gitInfo: null,
     indexedFileCount: 0,
     indexedDirCount: 0,
     totalBytesIndexed: 0,
@@ -983,10 +1254,124 @@ export async function openDroppedFiles(files: FileList): Promise<void> {
     repoName: "Dropped Files",
     rootHandle: null,
     repoRootHandle: null,
+    gitRoot: null,
+    isGitRepo: false,
+    gitInfo: null,
     entries,
     entriesByPath: makeEntriesByPath(entries),
     selectedPath: openFiles[0]?.path || null,
     repoIndexStatus: "ready",
     error: null,
   })
+}
+
+export async function openDirectoryFromFileList(files: FileList): Promise<boolean> {
+  if (files.length === 0) return false
+
+  const entriesByPath = new Map<string, FileEntry>()
+  const openFiles: OpenFile[] = []
+  const gitMetadataFiles: OpenFile[] = []
+  let totalBytesIndexed = 0
+  let rootName = "Selected Folder"
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i]
+    const relativePath = file.webkitRelativePath || file.name
+    const parts = relativePath.split("/").filter(Boolean)
+    if (parts.length === 0) continue
+
+    if (i === 0 && parts.length > 1) rootName = parts[0]
+    const filePath = parts.length > 1 ? parts.slice(1).join("/") : parts.join("/")
+    if (shouldSkipIndexedPath(filePath, "file")) continue
+
+    for (let depth = 0; depth < parts.length - 1; depth++) {
+      const dirParts = parts.slice(parts.length > 1 ? 1 : 0, depth + 1)
+      if (dirParts.length === 0) continue
+      const path = dirParts.join("/")
+      if (shouldSkipIndexedPath(path, "directory")) continue
+      if (!entriesByPath.has(path)) {
+        entriesByPath.set(path, {
+          name: dirParts[dirParts.length - 1],
+          path,
+          kind: "directory",
+          depth: dirParts.length - 1,
+          parentPath: parentOf(path),
+          ignored: isIgnoredDirectory(dirParts[dirParts.length - 1]),
+          loaded: true,
+        })
+      }
+    }
+
+    const binary = isBinaryPath(file.name)
+    entriesByPath.set(filePath, {
+      name: file.name,
+      path: filePath,
+      kind: "file",
+      depth: Math.max(0, filePath.split("/").length - 1),
+      parentPath: parentOf(filePath),
+      size: file.size,
+      modified: file.lastModified,
+      binary,
+      loaded: true,
+    })
+    totalBytesIndexed += file.size
+
+    if (!binary && GIT_METADATA_FILES.has(filePath)) {
+      gitMetadataFiles.push({
+        path: filePath,
+        name: file.name,
+        content: await file.text(),
+        handle: null,
+        modified: false,
+        language: getLanguageFromFilename(file.name),
+        binary,
+      })
+    } else if (openFiles.length < 8 && !binary) {
+      openFiles.push({
+        path: filePath,
+        name: file.name,
+        content: await file.text(),
+        handle: null,
+        modified: false,
+        language: getLanguageFromFilename(file.name),
+        binary,
+      })
+    }
+  }
+
+  const entries = sortEntries(Array.from(entriesByPath.values()))
+  const indexedFileCount = entries.filter((entry) => entry.kind === "file").length
+  const indexedDirCount = entries.filter((entry) => entry.kind === "directory").length
+  const hasGit = entries.some((entry) => entry.kind === "directory" && entry.path === ".git")
+  const gitInfo = deriveGitInfoFromEntries(entries, [...gitMetadataFiles, ...openFiles])
+  const s = fileSystemStore.get()
+
+  fileSystemStore.set({
+    ...s,
+    rootHandle: null,
+    repoRootHandle: null,
+    rootPath: rootName,
+    repoName: rootName,
+    repoIndexStatus: "ready",
+    repoIndexError: null,
+    isLoading: false,
+    entries,
+    entriesByPath: makeEntriesByPath(entries),
+    openFiles,
+    activeFileIndex: openFiles.length ? 0 : -1,
+    gitRoot: hasGit ? rootName : null,
+    isGitRepo: hasGit,
+    gitInfo,
+    indexedFileCount,
+    indexedDirCount,
+    totalBytesIndexed,
+    selectedPath: openFiles[0]?.path ?? null,
+    expandedDirs: [],
+    searchQuery: "",
+    lastIndexedAt: Date.now(),
+    error: null,
+    hasPermission: true,
+  })
+
+  return true
 }

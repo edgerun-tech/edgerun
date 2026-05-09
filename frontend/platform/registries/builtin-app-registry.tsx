@@ -3,7 +3,6 @@ import type { AppDefinition, AppSource } from "@/platform/types/app-definition"
 import { normalizeAppId } from "./app-id-policy"
 import {
   Store,
-  Terminal,
   Database,
   Globe,
   FileText,
@@ -28,7 +27,6 @@ import {
 
 export const BUILTIN_ICON_MAP: Record<string, React.ReactNode> = {
   "app-store": <Store className="h-5 w-5" />,
-  terminal: <Terminal className="h-5 w-5" />,
   "db-explorer": <Database className="h-5 w-5" />,
   "file-browser": <FileText className="h-5 w-5" />,
   storage: <HardDrive className="h-5 w-5" />,
@@ -67,7 +65,6 @@ export function getIconById(iconId: string): React.ReactNode {
 export const BUILTIN_APPS: AppDefinition[] = [
   { appId: "identity", name: "Identity", description: "Local profile, public contact card, and device identity", iconId: "identity", kind: "builtin", source: "builtin", componentKey: "identity", requiredCapabilityIds: [], optionalCapabilityIds: [], status: "available" },
   { appId: "app-store", name: "App Store", description: "Install, open, and uninstall apps", iconId: "app-store", kind: "builtin", source: "builtin", componentKey: "app-store", requiredCapabilityIds: [], optionalCapabilityIds: [], status: "available" },
-  { appId: "terminal", name: "Terminal", description: "System shell & logs", iconId: "terminal", kind: "builtin", source: "builtin", componentKey: "terminal", requiredCapabilityIds: [], optionalCapabilityIds: [], status: "available" },
   { appId: "db-explorer", name: "DB Explorer", description: "Query distributed state", iconId: "db-explorer", kind: "builtin", source: "builtin", componentKey: "db-explorer", requiredCapabilityIds: [], optionalCapabilityIds: ["node_connection"], status: "available" },
   { appId: "file-browser", name: "File Manager", description: "Open selected local folders through the browser filesystem boundary", iconId: "file-browser", kind: "builtin", source: "builtin", componentKey: "file-browser", requiredCapabilityIds: ["filesystem"], optionalCapabilityIds: [], status: "available" },
   { appId: "storage", name: "Storage", description: "Connect storage sources and build permission-scoped data pipelines", iconId: "storage", kind: "builtin", source: "builtin", componentKey: "storage", requiredCapabilityIds: [], optionalCapabilityIds: ["filesystem", "node_connection"], status: "available" },

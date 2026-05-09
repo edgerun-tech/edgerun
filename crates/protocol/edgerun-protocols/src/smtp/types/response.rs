@@ -470,16 +470,22 @@ mod tests {
 
     #[test]
     fn test_specialized_responses() {
-        assert!(SmtpResponse::too_many_recipients(101)
-            .format()
-            .contains("101"));
-        assert!(SmtpResponse::line_too_long(1200, 998)
-            .format()
-            .contains("1200"));
+        assert!(
+            SmtpResponse::too_many_recipients(101)
+                .format()
+                .contains("101")
+        );
+        assert!(
+            SmtpResponse::line_too_long(1200, 998)
+                .format()
+                .contains("1200")
+        );
         assert!(SmtpResponse::vrfy_disabled().format().contains("VRFY"));
         assert!(SmtpResponse::expn_disabled().format().contains("EXPN"));
-        assert!(SmtpResponse::help_text("test.host")
-            .format()
-            .contains("EHLO"));
+        assert!(
+            SmtpResponse::help_text("test.host")
+                .format()
+                .contains("EHLO")
+        );
     }
 }

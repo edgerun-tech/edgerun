@@ -3,9 +3,9 @@ use alloc::vec::Vec;
 use core::ops::{Mul, Neg};
 
 use crate::group::{
+    GroupEncoding, UncompressedEncoding,
     prime::{PrimeCurve, PrimeCurveAffine},
     wnaf::WnafGroup,
-    GroupEncoding, UncompressedEncoding,
 };
 use crate::rand_core::RngCore;
 use crate::test_rng::ChaCha8Rng;

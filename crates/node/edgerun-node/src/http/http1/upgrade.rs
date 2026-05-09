@@ -9,7 +9,7 @@
 //! 3. Server sends `101 Switching Protocols` response
 //! 4. Connection transitions to the new protocol
 
-use crate::http::{header::header_value_has_token, HeaderMap};
+use crate::http::{HeaderMap, header::header_value_has_token};
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;

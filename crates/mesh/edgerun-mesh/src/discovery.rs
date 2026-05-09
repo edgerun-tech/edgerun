@@ -1,7 +1,7 @@
 use crate::{
     FrameType, LocalNode, MeshFrame, MeshFrameHeader, MeshPeer, MeshRoute, MeshRoutingTable,
 };
-use edgerun_hardware_signing::{NodeID, MESH_SIGNATURE_LENGTH};
+use edgerun_hardware_signing::{MESH_SIGNATURE_LENGTH, NodeID};
 
 // ---------------------------------------------------------------------------
 // Discovery packet (serialized payload)

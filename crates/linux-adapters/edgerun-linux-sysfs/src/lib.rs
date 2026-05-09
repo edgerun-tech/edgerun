@@ -388,7 +388,7 @@ pub mod path {
 
     impl core::fmt::Display for Display<'_> {
         fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-            f.write_str(&self.0 .0)
+            f.write_str(&self.0.0)
         }
     }
 

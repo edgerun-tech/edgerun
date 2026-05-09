@@ -1,14 +1,14 @@
 use crate::typenum::{
-    bit::{Bit, B0, B1},
+    Add1, Cmp, Double, Equal, Gcd, Gcf, GrEq, Greater, IsGreaterOrEqual, Len, Length, Less, Log2,
+    Logarithm2, Maximum, Minimum, NonZero, Or, Ord, Pow, Prod, Shleft, Shright, Sqrt, Square,
+    SquareRoot, Sub1, Sum, ToInt, Zero,
+    bit::{B0, B1, Bit},
     consts::{U0, U1},
     private::{
         BitDiff, BitDiffOut, Internal, InternalMarker, PrivateAnd, PrivateAndOut, PrivateCmp,
         PrivateCmpOut, PrivateLogarithm2, PrivatePow, PrivatePowOut, PrivateSquareRoot, PrivateSub,
         PrivateSubOut, PrivateXor, PrivateXorOut, Trim, TrimOut,
     },
-    Add1, Cmp, Double, Equal, Gcd, Gcf, GrEq, Greater, IsGreaterOrEqual, Len, Length, Less, Log2,
-    Logarithm2, Maximum, Minimum, NonZero, Or, Ord, Pow, Prod, Shleft, Shright, Sqrt, Square,
-    SquareRoot, Sub1, Sum, ToInt, Zero,
 };
 use core::ops::{Add, BitAnd, BitOr, BitXor, Mul, Shl, Shr, Sub};
 
@@ -1456,8 +1456,8 @@ impl<I> GetBit<I> for UTerm {
 
 #[test]
 fn test_get_bit() {
-    use crate::typenum::consts::*;
     use crate::typenum::Same;
+    use crate::typenum::consts::*;
     type T1 = <GetBitOut<U2, U0> as Same<B0>>::Output;
     type T2 = <GetBitOut<U2, U1> as Same<B1>>::Output;
     type T3 = <GetBitOut<U2, U2> as Same<B0>>::Output;
@@ -1550,8 +1550,8 @@ where
 
 #[test]
 fn test_set_bit() {
-    use crate::typenum::consts::*;
     use crate::typenum::Same;
+    use crate::typenum::consts::*;
     type T1 = <SetBitOut<U2, U0, B0> as Same<U2>>::Output;
     type T2 = <SetBitOut<U2, U0, B1> as Same<U3>>::Output;
     type T3 = <SetBitOut<U2, U1, B0> as Same<U0>>::Output;
@@ -1695,13 +1695,13 @@ where
     UInt<UTerm, GetBitOut<N, I>>: Trim,
     TrimOut<UInt<UTerm, GetBitOut<N, I>>>: Cmp<D>,
     (): PrivateDivIf<
-        N,
-        D,
-        Q,
-        TrimOut<UInt<UTerm, GetBitOut<N, I>>>,
-        I,
-        Compare<TrimOut<UInt<UTerm, GetBitOut<N, I>>>, D>,
-    >,
+            N,
+            D,
+            Q,
+            TrimOut<UInt<UTerm, GetBitOut<N, I>>>,
+            I,
+            Compare<TrimOut<UInt<UTerm, GetBitOut<N, I>>>, D>,
+        >,
 {
     type Quotient = PrivateDivIfQuot<
         N,
@@ -1750,13 +1750,13 @@ where
     N: GetBit<I>,
     UInt<UInt<Ur, Br>, GetBitOut<N, I>>: Cmp<D>,
     (): PrivateDivIf<
-        N,
-        D,
-        Q,
-        UInt<UInt<Ur, Br>, GetBitOut<N, I>>,
-        I,
-        Compare<UInt<UInt<Ur, Br>, GetBitOut<N, I>>, D>,
-    >,
+            N,
+            D,
+            Q,
+            UInt<UInt<Ur, Br>, GetBitOut<N, I>>,
+            I,
+            Compare<UInt<UInt<Ur, Br>, GetBitOut<N, I>>, D>,
+        >,
 {
     type Quotient = PrivateDivIfQuot<
         N,

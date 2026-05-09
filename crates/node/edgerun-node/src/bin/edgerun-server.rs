@@ -189,7 +189,9 @@ fn print_plan() {
     println!("derived_db_path={DERIVED_DB_PATH}");
     println!("public_ipv4={PUBLIC_IPV4}");
     println!("local_mail_domains=[\"{ORIGIN}\"]");
-    println!("certificate_domains=[\"{ORIGIN}\", \"{HOSTNAME}\", \"mta-sts.{ORIGIN}\", \"mta-sts.nodes.{ORIGIN}\"]");
+    println!(
+        "certificate_domains=[\"{ORIGIN}\", \"{HOSTNAME}\", \"mta-sts.{ORIGIN}\", \"mta-sts.nodes.{ORIGIN}\"]"
+    );
     println!("runtime_listeners=4");
     println!("runtime_requires_dns=true");
     println!("runtime_requires_acme=false");

@@ -1,6 +1,6 @@
 //! [`Uint`] division operations.
 
-use super::div_limb::{div_rem_limb_with_reciprocal, Reciprocal};
+use super::div_limb::{Reciprocal, div_rem_limb_with_reciprocal};
 use crate::crypto_bigint::{CtChoice, Limb, NonZero, Uint, Word, Wrapping};
 use crate::subtle::CtOption;
 use core::ops::{Div, DivAssign, Rem, RemAssign};
@@ -583,7 +583,7 @@ impl<const LIMBS: usize> RemAssign<&NonZero<Uint<LIMBS>>> for Wrapping<Uint<LIMB
 #[cfg(all(test, crypto_bigint_internal_tests))]
 mod tests {
     use super::*;
-    use crate::crypto_bigint::{limb::HI_BIT, Limb, U256};
+    use crate::crypto_bigint::{Limb, U256, limb::HI_BIT};
 
     #[cfg(feature = "rand")]
     use {

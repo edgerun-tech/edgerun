@@ -9,13 +9,13 @@ use core::time::Duration;
 
 use crate::network::{HostSocketTransport, RuntimeTransport, TransportAddress};
 use crate::rt::{
-    copy_bidirectional, spawn, timeout, AsyncReadExt, AsyncTcpListener, AsyncTcpStream,
-    AsyncWriteExt, CancellationToken,
+    AsyncReadExt, AsyncTcpListener, AsyncTcpStream, AsyncWriteExt, CancellationToken,
+    copy_bidirectional, spawn, timeout,
 };
 use edgerun_protocols::proxy::{
-    parse_http_proxy_request, parse_socks5_request, socks5_reply, socks5_select_no_auth,
-    split_host_port, HttpProxyRequest, Socks5Request, SOCKS5_REP_ADDR_NOT_SUPPORTED,
-    SOCKS5_REP_GENERAL_FAILURE, SOCKS5_REP_SUCCESS,
+    HttpProxyRequest, SOCKS5_REP_ADDR_NOT_SUPPORTED, SOCKS5_REP_GENERAL_FAILURE,
+    SOCKS5_REP_SUCCESS, Socks5Request, parse_http_proxy_request, parse_socks5_request,
+    socks5_reply, socks5_select_no_auth, split_host_port,
 };
 
 #[derive(Clone)]

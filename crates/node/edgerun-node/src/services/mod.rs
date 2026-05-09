@@ -66,8 +66,8 @@ pub mod tftp_runtime;
 #[cfg(all(feature = "virtual-disk", not(target_os = "none")))]
 pub mod virtual_disk_runtime;
 pub use crate::network::{
-    binding_intents, decide_binding, decide_bindings, NodeTransportSurface, ServiceBindingDecision,
-    ServiceBindingIntent,
+    NodeTransportSurface, ServiceBindingDecision, ServiceBindingIntent, binding_intents,
+    decide_binding, decide_bindings,
 };
 pub use config::*;
 #[cfg(any(

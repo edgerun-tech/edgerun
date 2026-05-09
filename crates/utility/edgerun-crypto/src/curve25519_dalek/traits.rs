@@ -15,7 +15,7 @@
 
 use core::borrow::Borrow;
 
-use crate::curve25519_dalek::scalar::{clamp_integer, Scalar};
+use crate::curve25519_dalek::scalar::{Scalar, clamp_integer};
 use crate::subtle::ConstantTimeEq;
 
 // ------------------------------------------------------------------------

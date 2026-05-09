@@ -8,7 +8,7 @@ mod projective;
 
 pub use crate::elliptic_curve;
 pub use crate::elliptic_curve::{
-    generic_array, point::Double, Field, FieldBytes, PrimeCurve, PrimeField,
+    Field, FieldBytes, PrimeCurve, PrimeField, generic_array, point::Double,
 };
 pub use crate::primeorder::{affine::AffinePoint, projective::ProjectivePoint};
 

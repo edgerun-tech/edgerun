@@ -11,7 +11,7 @@ use {crate::der::pem::PemLabel, crate::sec1::LineEnding, alloc::string::String};
 #[cfg(feature = "elliptic_curve_pkcs8")]
 use {
     crate::der::Decode,
-    crate::sec1::{EcPrivateKey, ALGORITHM_OID},
+    crate::sec1::{ALGORITHM_OID, EcPrivateKey},
 };
 
 #[cfg(feature = "elliptic_curve_std")]

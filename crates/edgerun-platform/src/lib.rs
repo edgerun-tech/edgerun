@@ -65,7 +65,7 @@ pub mod waker;
 mod allocator;
 pub use allocator::Allocator;
 
-pub use cpu::{all_cpus, smp_init, this_cpu, CpuId, PerCpu};
+pub use cpu::{CpuId, PerCpu, all_cpus, smp_init, this_cpu};
 pub use irq::{Ipi, Irq, IrqController, IrqHandler};
 pub use timer::{MonoTime, Timer};
 pub use tls::TlsArea;

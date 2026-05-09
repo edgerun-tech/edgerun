@@ -21,7 +21,7 @@ pub use crate::pkcs1::{
 
 #[cfg(feature = "rsa")]
 pub use crate::pkcs1::{
-    private_key::{other_prime_info::OtherPrimeInfo, OtherPrimeInfos},
+    private_key::{OtherPrimeInfos, other_prime_info::OtherPrimeInfo},
     traits::{EncodeRsaPrivateKey, EncodeRsaPublicKey},
 };
 

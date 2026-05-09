@@ -4,7 +4,7 @@ use crate::crypto_bigint::{CtChoice, Encoding, Integer, Limb, Uint, Zero};
 use crate::subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 use core::{
     fmt,
-    num::{NonZeroU128, NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU8},
+    num::{NonZeroU8, NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU128},
     ops::Deref,
 };
 
@@ -16,8 +16,8 @@ use {crate::crypto_bigint::Random, crate::rand_core::CryptoRngCore};
 
 #[cfg(feature = "serde")]
 use serdect::serde::{
-    de::{Error, Unexpected},
     Deserialize, Deserializer, Serialize, Serializer,
+    de::{Error, Unexpected},
 };
 
 /// Wrapper type for non-zero integers.

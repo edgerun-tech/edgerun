@@ -3,8 +3,8 @@
 use crate::prelude::*;
 use std::io;
 
-use crate::cli::{invalid_input, parse_cli_args, required_positional, GlobalOpts};
 use crate::SecretClient;
+use crate::cli::{GlobalOpts, invalid_input, parse_cli_args, required_positional};
 use edgerun_clap::{Arg, Command};
 
 pub fn cmd_login(_opts: &GlobalOpts, args: &[String]) -> io::Result<()> {

@@ -1,10 +1,10 @@
 //! Elliptic curve arithmetic traits.
 
 use crate::elliptic_curve::{
+    Curve, FieldBytes, PrimeCurve, ScalarPrimitive,
     ops::{Invert, LinearCombination, MulByGenerator, Reduce, ShrAssign},
     point::AffineCoordinates,
     scalar::{FromUintUnchecked, IsHigh},
-    Curve, FieldBytes, PrimeCurve, ScalarPrimitive,
 };
 use crate::subtle::{ConditionallySelectable, ConstantTimeEq, CtOption};
 use crate::zeroize::DefaultIsZeroes;
@@ -82,7 +82,5 @@ pub trait PrimeCurveArithmetic:
     PrimeCurve + CurveArithmetic<ProjectivePoint = Self::CurveGroup>
 {
     /// Prime order elliptic curve group.
-    type CurveGroup: crate::group::prime::PrimeCurve<
-        Affine = <Self as CurveArithmetic>::AffinePoint,
-    >;
+    type CurveGroup: crate::group::prime::PrimeCurve<Affine = <Self as CurveArithmetic>::AffinePoint>;
 }

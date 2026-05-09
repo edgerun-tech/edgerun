@@ -32,8 +32,8 @@ use crate::tls::cipher::NamedGroup;
 use crate::tls::handshake::{ClientHelloBuilder, ServerHello};
 use crate::tls::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
 use crate::tls::prf::{
-    client_app_write_keys, client_write_keys, hmac_sha256, hmac_sha384, server_app_write_keys,
-    server_write_keys, Hasher, Tls13KeySchedule,
+    Hasher, Tls13KeySchedule, client_app_write_keys, client_write_keys, hmac_sha256, hmac_sha384,
+    server_app_write_keys, server_write_keys,
 };
 use crate::tls::record::RecordCipher;
 use crate::tls::server::client_hello::ClientHello;

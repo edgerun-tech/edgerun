@@ -2,9 +2,9 @@ use crate::collections::HashMap;
 use crate::prelude::v1::*;
 use crate::session::NONCE_PREFIX_SIZE;
 use crate::time::Duration;
+use edgerun_crypto::p256::PublicKey;
 pub use edgerun_crypto::p256::ecdh::EphemeralSecret;
 use edgerun_crypto::p256::elliptic_curve::sec1::ToEncodedPoint;
-use edgerun_crypto::p256::PublicKey;
 use edgerun_hardware_signing::NodeID;
 
 use super::*;

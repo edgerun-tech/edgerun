@@ -5,7 +5,7 @@ use alloc::vec;
 use alloc::vec::Vec;
 use edgerun_encoding::byteorder::{push_u32_le, read_i32_le, read_u16_le, read_u32_le};
 
-use super::{align4, Message};
+use super::{Message, align4};
 
 /// Decode errors.
 #[derive(Debug)]
@@ -115,11 +115,7 @@ impl<'a> ArgCursor<'a> {
 
     /// Get the message size from the header.
     pub fn size(&self) -> Option<u16> {
-        if self.size > 0 {
-            Some(self.size)
-        } else {
-            None
-        }
+        if self.size > 0 { Some(self.size) } else { None }
     }
 
     /// Read an int (i32).

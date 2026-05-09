@@ -4,10 +4,10 @@
 //! `pkcs1` crate's traits for types which impl the `pkcs8` crate's traits.
 
 use crate::pkcs1;
-use crate::pkcs8::{der::Encode, Document, EncodePrivateKey, EncodePublicKey, SecretDocument};
+use crate::pkcs8::{Document, EncodePrivateKey, EncodePublicKey, SecretDocument, der::Encode};
 use crate::rsa::{
-    traits::{PrivateKeyParts, PublicKeyParts},
     BigUint, RsaPrivateKey, RsaPublicKey,
+    traits::{PrivateKeyParts, PublicKeyParts},
 };
 use crate::zeroize::Zeroizing;
 use core::convert::{TryFrom, TryInto};

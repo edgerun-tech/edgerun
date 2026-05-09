@@ -1,5 +1,5 @@
 use super::*;
-use edgerun_json::{parse_json, JsonValue};
+use edgerun_json::{JsonValue, parse_json};
 
 pub(crate) fn cmd_sign_app(args: Vec<String>) -> i32 {
     let Some(app_dir) = args.first().map(PathBuf::from) else {
@@ -696,8 +696,8 @@ pub(crate) fn user_profile_password_kdf_none() -> edgerun_wire::UserProfilePassw
     }
 }
 
-pub(crate) fn random_user_profile_password_kdf(
-) -> Result<edgerun_wire::UserProfilePasswordKdf, String> {
+pub(crate) fn random_user_profile_password_kdf()
+-> Result<edgerun_wire::UserProfilePasswordKdf, String> {
     let mut salt = [0u8; USER_PROFILE_PASSWORD_SALT_LEN];
     fill_random(&mut salt).map_err(|err| format!("salt generation failed: {err:?}"))?;
     Ok(edgerun_wire::UserProfilePasswordKdf {
@@ -2980,11 +2980,7 @@ pub(crate) fn cmd_verify_revocation(args: Vec<String>) -> i32 {
     println!("target: {}", bytes_to_hex(&revocation.target));
     println!("issuer: {}", bytes_to_hex(&revocation.issuer));
     print_check("issuer-signature", signature_ok);
-    if signature_ok {
-        0
-    } else {
-        1
-    }
+    if signature_ok { 0 } else { 1 }
 }
 
 pub(crate) fn cmd_write_sign_request(args: Vec<String>) -> i32 {
@@ -3214,11 +3210,7 @@ pub(crate) fn cmd_verify_sign_response(args: Vec<String>) -> i32 {
     println!("provider: {}", String::from_utf8_lossy(&response.provider));
     print_check("request-binding", binding_ok);
     print_check("runtime-signature", signature_ok);
-    if binding_ok && signature_ok {
-        0
-    } else {
-        1
-    }
+    if binding_ok && signature_ok { 0 } else { 1 }
 }
 
 pub(crate) fn parse_revocation_kind(value: &str) -> Option<u16> {
@@ -3435,11 +3427,7 @@ pub(crate) fn cmd_verify_capability_response(args: Vec<String>) -> i32 {
     if response.status != CAPABILITY_STATUS_OK {
         print_check("denial-proof", denial_proof_ok);
     }
-    if binding_ok && denial_proof_ok {
-        0
-    } else {
-        1
-    }
+    if binding_ok && denial_proof_ok { 0 } else { 1 }
 }
 
 pub(crate) fn cmd_write_seal_request(args: Vec<String>) -> i32 {
@@ -4544,11 +4532,7 @@ pub(crate) fn cmd_verify_profile_access(args: Vec<String>) -> i32 {
     println!("capability_request: {}", args[2]);
     print_check("profile-signature", signature_ok);
     print_check("capability-access", allowed);
-    if allowed {
-        0
-    } else {
-        1
-    }
+    if allowed { 0 } else { 1 }
 }
 
 pub(crate) struct CapabilityRequestInput<'a> {

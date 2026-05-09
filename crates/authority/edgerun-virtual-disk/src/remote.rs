@@ -78,15 +78,14 @@ mod sync {
 }
 
 use edgerun_protocols::block::{
-    byte_offset, byte_range, checked_len_bytes, decode_frame_len, decode_request_frame,
-    decode_request_payload, decode_response_frame, decode_response_payload, encode_request_frame,
-    encode_request_payload, encode_response_frame, encode_response_payload,
-    expect_discard_response, expect_flush_response, expect_handshake_response,
-    expect_info_response, expect_pong_response, expect_read_response, expect_write_response,
-    expect_write_zeroes_response, frame_payload, handle_request, total_size_len,
-    validate_device_info, validate_range, validate_transfer, BlockBackend, BlockDeviceInfo,
-    BlockError, BlockRequest, BlockResponse, RequestId, BLOCK_FRAME_HEADER_LEN,
-    BLOCK_PROTOCOL_VERSION,
+    BLOCK_FRAME_HEADER_LEN, BLOCK_PROTOCOL_VERSION, BlockBackend, BlockDeviceInfo, BlockError,
+    BlockRequest, BlockResponse, RequestId, byte_offset, byte_range, checked_len_bytes,
+    decode_frame_len, decode_request_frame, decode_request_payload, decode_response_frame,
+    decode_response_payload, encode_request_frame, encode_request_payload, encode_response_frame,
+    encode_response_payload, expect_discard_response, expect_flush_response,
+    expect_handshake_response, expect_info_response, expect_pong_response, expect_read_response,
+    expect_write_response, expect_write_zeroes_response, frame_payload, handle_request,
+    total_size_len, validate_device_info, validate_range, validate_transfer,
 };
 
 pub struct MemoryBlockBackend {
@@ -494,7 +493,7 @@ fn block_io_error(error: io::Error) -> BlockError {
 mod tests {
     use super::*;
     #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
-    use crate::image::{create, VirtualDiskFormat, VirtualDiskSpec};
+    use crate::image::{VirtualDiskFormat, VirtualDiskSpec, create};
     #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
     use std::env;
     #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]

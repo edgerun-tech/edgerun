@@ -8,9 +8,9 @@ use crate::http::http1::pool::ConnectionPool;
 #[cfg(feature = "tls")]
 use crate::http::http2::pool::Http2Pool;
 use crate::http::method::Method;
+use crate::http::runtime::Mutex;
 use crate::http::runtime::time::Duration;
 use crate::http::runtime::timeout as rt_timeout;
-use crate::http::runtime::Mutex;
 use crate::http::uri::Uri;
 use crate::http::{Error, Request, Response, Result, StatusCode};
 #[cfg(feature = "http3")]

@@ -7,8 +7,8 @@
 use alloc::vec::Vec;
 
 pub use edgerun_protocols::wire::{
-    RuntimeAppInstall, RuntimeCapabilityDeclaration, RuntimeHttpRoute, RuntimeProtocolBinding,
-    ROUTE_SCHEME_HTTP, ROUTE_SCHEME_HTTPS, SDK_WIRE_ABI_VERSION,
+    ROUTE_SCHEME_HTTP, ROUTE_SCHEME_HTTPS, RuntimeAppInstall, RuntimeCapabilityDeclaration,
+    RuntimeHttpRoute, RuntimeProtocolBinding, SDK_WIRE_ABI_VERSION,
 };
 
 use crate::sha256;

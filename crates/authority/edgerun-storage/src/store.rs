@@ -56,8 +56,8 @@ use crate::event_loop::{
     DurableEventAppender, EventLoopBuilder, FetchHandler, PeerDiscoveryHandler,
 };
 use crate::file_index::FileIndex;
-use crate::fs::{read_event_at, scan_event_logs, FsContentStore};
-use crate::materializer::{materialize_event_to_index, OpEventType};
+use crate::fs::{FsContentStore, read_event_at, scan_event_logs};
+use crate::materializer::{OpEventType, materialize_event_to_index};
 use std::collections::HashSet;
 
 enum EventBackend {
@@ -104,7 +104,7 @@ impl ControllerSet {
     }
 }
 use edgerun_protocols::sign::ProtocolSigner;
-use edgerun_protocols::verify::{verify_protocol_record, ProtocolFamily, ProtocolSignerRef};
+use edgerun_protocols::verify::{ProtocolFamily, ProtocolSignerRef, verify_protocol_record};
 
 /// Configuration for the unified node storage.
 #[derive(Clone, Debug)]
@@ -681,7 +681,7 @@ impl NodeStore {
         &self,
         payload_object_ref: &Option<edgerun_protocols::core_protocol::protocol::ObjectRef>,
     ) -> Result<Option<Vec<u8>>, StorageError> {
-        let Some(ref obj_ref) = payload_object_ref else {
+        let Some(obj_ref) = payload_object_ref else {
             return Ok(None);
         };
         match self.get_object(obj_ref)? {

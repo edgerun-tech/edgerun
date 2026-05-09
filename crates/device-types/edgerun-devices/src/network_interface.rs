@@ -12,8 +12,8 @@ mod prelude {
 }
 
 use edgerun_capabilities::{
-    capability_descriptor, CapabilityDescriptor, CapabilityError, CapabilityEventKind,
-    CapabilityModality, CapabilityOperation, CapabilityProvider, CapabilityRole,
+    CapabilityDescriptor, CapabilityError, CapabilityEventKind, CapabilityModality,
+    CapabilityOperation, CapabilityProvider, CapabilityRole, capability_descriptor,
 };
 use edgerun_quectel_ec200a::DtaNetwork;
 use prelude::v1::*;

@@ -2,14 +2,14 @@ use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
 use edgerun_protocols::wire::{
-    sdk_wire_bytes, AppGraphRecord, RuntimeAppInstall, RuntimeAppMessage, RuntimeEvent,
-    RuntimeHttpDispatch, RuntimeHttpRequest, RuntimeHttpRoute, RuntimeIdentityRoute,
-    RuntimeRoutedAppMessage, SdkWireRecord, APP_MESSAGE_STATUS_ACCEPTED, APP_MESSAGE_STATUS_DENIED,
-    APP_MESSAGE_STATUS_FORWARDED, CAPABILITY_STATUS_OK, CAPABILITY_STATUS_POLICY_DENIED,
+    APP_MESSAGE_STATUS_ACCEPTED, APP_MESSAGE_STATUS_DENIED, APP_MESSAGE_STATUS_FORWARDED,
+    AppGraphRecord, CAPABILITY_STATUS_OK, CAPABILITY_STATUS_POLICY_DENIED,
     RUNTIME_EVENT_APP_INSTALLED, RUNTIME_EVENT_APP_MESSAGE_DISPATCHED,
     RUNTIME_EVENT_APP_MESSAGE_FORWARDED, RUNTIME_EVENT_CAPABILITY_DENIED,
     RUNTIME_EVENT_HTTP_DISPATCHED, RUNTIME_EVENT_IDENTITY_ROUTE_GRANTED,
-    RUNTIME_EVENT_ROUTE_GRANTED, SDK_WIRE_ABI_VERSION,
+    RUNTIME_EVENT_ROUTE_GRANTED, RuntimeAppInstall, RuntimeAppMessage, RuntimeEvent,
+    RuntimeHttpDispatch, RuntimeHttpRequest, RuntimeHttpRoute, RuntimeIdentityRoute,
+    RuntimeRoutedAppMessage, SDK_WIRE_ABI_VERSION, SdkWireRecord, sdk_wire_bytes,
 };
 
 use crate::storage::RuntimeStorage;
@@ -20,7 +20,7 @@ mod service_plan;
 mod types;
 mod wire_builders;
 pub use deployment_boundary::{
-    decide_runtime_boundary, RuntimeBoundaryDecision, RuntimeBoundaryIntent, RuntimeBoundarySurface,
+    RuntimeBoundaryDecision, RuntimeBoundaryIntent, RuntimeBoundarySurface, decide_runtime_boundary,
 };
 pub use service_plan::{
     RuntimeAliasSpec, RuntimeBootstrapPolicy, RuntimeDeploymentSpec, RuntimeDomainSpec,

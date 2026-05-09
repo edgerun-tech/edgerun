@@ -41,17 +41,17 @@ pub mod store;
 #[cfg(test)]
 mod test_support;
 
-pub use blobs::{blob_file_path, BlobEntry, BlobKeySource, BlobStore, BlobStoreConfig};
+pub use blobs::{BlobEntry, BlobKeySource, BlobStore, BlobStoreConfig, blob_file_path};
 pub use block::BlockStreamStore;
 pub use block::{
-    detect_partitions, probe_filesystem, BlockEventLog, BlockStorage, ExFatInfo, ExtInfo,
-    FatDirectoryEntry, FatError, FatInfo, FatReadOnly, FileSystemDetails, FileSystemKind,
-    FileSystemProbe, FileSystemProbeError, InMemoryBlockDevice, Iso9660Info, PartitionBlockDevice,
-    PartitionEntry, PartitionError, PartitionKind, PartitionTable, PartitionTableKind,
+    BlockEventLog, BlockStorage, ExFatInfo, ExtInfo, FatDirectoryEntry, FatError, FatInfo,
+    FatReadOnly, FileSystemDetails, FileSystemKind, FileSystemProbe, FileSystemProbeError,
+    InMemoryBlockDevice, Iso9660Info, PartitionBlockDevice, PartitionEntry, PartitionError,
+    PartitionKind, PartitionTable, PartitionTableKind, detect_partitions, probe_filesystem,
 };
 pub use core::{
-    canonical_event_hash, derive_logical_object_id, derive_representation_id, AppendReceipt,
-    DurableStreamWriter, EventLog,
+    AppendReceipt, DurableStreamWriter, EventLog, canonical_event_hash, derive_logical_object_id,
+    derive_representation_id,
 };
 pub use credentials::CredentialStore;
 pub use error::StorageError;

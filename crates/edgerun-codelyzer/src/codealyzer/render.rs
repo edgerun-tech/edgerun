@@ -120,7 +120,9 @@ fn render_summary(report: &CrateReport) -> String {
 }
 
 fn render_dependencies(report: &CrateReport) -> String {
-    let mut s = String::from("<h2>Dependencies</h2>\n<table border=\"1\"><tr><th>Dependency</th><th>Kind</th><th>Source</th><th>Optional</th><th>Weight</th><th>Features</th><th>Reason</th><th>Visible</th></tr>\n");
+    let mut s = String::from(
+        "<h2>Dependencies</h2>\n<table border=\"1\"><tr><th>Dependency</th><th>Kind</th><th>Source</th><th>Optional</th><th>Weight</th><th>Features</th><th>Reason</th><th>Visible</th></tr>\n",
+    );
     for dep in &report.dependencies {
         s.push_str(&format!(
             "<tr><td>{}</td><td>{:?}</td><td>{}</td><td>{}</td><td>{}</td><td>{:?}</td><td>{}</td><td>{}</td></tr>\n",
@@ -154,7 +156,9 @@ fn render_public_api(report: &CrateReport) -> String {
 }
 
 fn render_call_graph(report: &CrateReport) -> String {
-    let mut s = String::from("<h2>Call Graph</h2>\n<table border=\"1\"><tr><th>Caller</th><th>Callee</th><th>File</th><th>Line</th><th>Confidence</th><th>Runtime Count</th></tr>\n");
+    let mut s = String::from(
+        "<h2>Call Graph</h2>\n<table border=\"1\"><tr><th>Caller</th><th>Callee</th><th>File</th><th>Line</th><th>Confidence</th><th>Runtime Count</th></tr>\n",
+    );
     for edge in &report.call_graph {
         s.push_str(&format!(
             "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{:?}</td><td>{}</td></tr>\n",

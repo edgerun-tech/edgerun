@@ -33,9 +33,9 @@ macro_rules! new_signing_test {
     ($curve:path, $vectors:expr) => {
         use $crate::ecdsa_core::hazmat::SignPrimitive;
         use $crate::elliptic_curve::{
-            bigint::Encoding,
-            generic_array::{typenum::Unsigned, GenericArray},
             Curve, CurveArithmetic, Scalar,
+            bigint::Encoding,
+            generic_array::{GenericArray, typenum::Unsigned},
         };
         use $crate::ff::PrimeField;
 
@@ -72,11 +72,11 @@ macro_rules! new_signing_test {
 #[macro_export]
 macro_rules! new_verification_test {
     ($curve:path, $vectors:expr) => {
-        use $crate::ecdsa_core::{hazmat::VerifyPrimitive, Signature};
+        use $crate::ecdsa_core::{Signature, hazmat::VerifyPrimitive};
         use $crate::elliptic_curve::{
+            AffinePoint, CurveArithmetic, Scalar,
             generic_array::GenericArray,
             sec1::{EncodedPoint, FromEncodedPoint},
-            AffinePoint, CurveArithmetic, Scalar,
         };
         use $crate::ff::PrimeField;
 

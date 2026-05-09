@@ -18,9 +18,9 @@ pub mod uri;
 
 pub use auth::parse_bearer_auth;
 pub use chunked::{
-    has_chunked_transfer_coding, parse_body, parse_body_with_trailers, ChunkedError,
+    ChunkedError, has_chunked_transfer_coding, parse_body, parse_body_with_trailers,
 };
-pub use header::{is_tchar, HeaderMap, HeaderName, HeaderValue};
+pub use header::{HeaderMap, HeaderName, HeaderValue, is_tchar};
 pub use message::{HttpMessageError, HttpRequest, HttpResponse};
 pub use method::Method;
 pub use status::StatusCode;

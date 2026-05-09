@@ -141,10 +141,10 @@ export function CallingApp({ initialPeer }: CallingAppProps) {
             {/* Status */}
             <div className="flex items-center gap-2">
               {callState === "dialing" && (
-                <p className="text-sm text-muted-foreground animate-pulse">Establishing P2P channel...</p>
+                <p className="text-sm text-muted-foreground">Establishing P2P channel...</p>
               )}
               {callState === "ringing" && (
-                <p className="text-sm text-[var(--status-warning)] animate-pulse">Ringing...</p>
+                <p className="text-sm text-[var(--status-warning)]">Ringing...</p>
               )}
               {callState === "connected" && (
                 <div className="flex items-center gap-2">

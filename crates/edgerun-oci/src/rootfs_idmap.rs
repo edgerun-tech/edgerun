@@ -8,7 +8,7 @@ use std::os::raw::c_int;
 
 use crate::spec::OciIdMapping;
 use crate::syscalls::{
-    do_mount_setattr, do_move_mount, do_open_tree, mount_attr, move_mount, open_tree, MountAttr,
+    MountAttr, do_mount_setattr, do_move_mount, do_open_tree, mount_attr, move_mount, open_tree,
 };
 
 fn c_string(value: &str) -> io::Result<CString> {

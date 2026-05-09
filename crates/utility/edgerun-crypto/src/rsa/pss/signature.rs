@@ -1,7 +1,7 @@
 pub use crate::signature::SignatureEncoding;
 use crate::spki::{
-    der::{asn1::BitString, Result as DerResult},
     SignatureBitStringEncoding,
+    der::{Result as DerResult, asn1::BitString},
 };
 
 use crate::num_bigint::BigUint;

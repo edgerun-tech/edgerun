@@ -890,7 +890,7 @@ pub(crate) const RTLD_NOW: core::ffi::c_int = 2;
 
 #[cfg(unix)]
 #[cfg_attr(target_os = "linux", link(name = "dl"))]
-extern "C" {
+unsafe extern "C" {
     fn dlopen(
         filename: *const core::ffi::c_char,
         flags: core::ffi::c_int,
@@ -1594,10 +1594,12 @@ mod tests {
         let (_graph_bytes, graph) = read_app_graph(&app_dir).expect("read app graph");
         assert!(verify_packaged_app_graph(&app_dir, &graph));
         assert_eq!(graph.app_slug, b"assemblyscript-compiler");
-        assert!(graph
-            .artifacts
-            .iter()
-            .any(|artifact| artifact.path == b"assemblyscript-compiler-worker.js"));
+        assert!(
+            graph
+                .artifacts
+                .iter()
+                .any(|artifact| artifact.path == b"assemblyscript-compiler-worker.js")
+        );
 
         fs::remove_dir_all(&app_dir).expect("remove temp app dir");
     }

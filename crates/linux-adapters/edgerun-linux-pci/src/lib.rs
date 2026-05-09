@@ -49,10 +49,10 @@ pub mod vec {
 }
 
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
-use edgerun_devices::pci::{default_pci_descriptor, PciDeviceInfo, PciInventory};
+use edgerun_devices::pci::{PciDeviceInfo, PciInventory, default_pci_descriptor};
 use edgerun_linux_sysfs::prelude::v1::*;
 use edgerun_linux_sysfs::{
-    is_pci_address, parse_hex_u16, parse_hex_u32, parse_hex_u8, parse_i32, parse_u32, read_trimmed,
+    is_pci_address, parse_hex_u8, parse_hex_u16, parse_hex_u32, parse_i32, parse_u32, read_trimmed,
 };
 use std::collections::{BTreeMap as HashMap, BTreeSet as HashSet};
 #[cfg(not(target_os = "none"))]
@@ -109,7 +109,7 @@ pub fn discover_pci_devices_in(root: &Path) -> Result<Vec<LinuxPciDevice>, Capab
         Err(e) => {
             return Err(CapabilityError::Provider(format!(
                 "failed to read pci sysfs: {e}"
-            )))
+            )));
         }
     };
     for entry in entries.flatten() {

@@ -83,13 +83,13 @@ mod tests {
     use crate::ff::PrimeField;
     use crate::hex;
     use crate::p256::{
+        AffinePoint, BlindedScalar, EncodedPoint, Scalar,
         ecdsa::{
-            signature::hazmat::{PrehashSigner, PrehashVerifier},
-            signature::Signer,
             Signature, SigningKey, VerifyingKey,
+            signature::Signer,
+            signature::hazmat::{PrehashSigner, PrehashVerifier},
         },
         test_vectors::ecdsa::ECDSA_TEST_VECTORS,
-        AffinePoint, BlindedScalar, EncodedPoint, Scalar,
     };
     use crate::sha2::Digest;
 
@@ -182,12 +182,12 @@ mod tests {
     }
 
     mod sign {
-        use crate::p256::{test_vectors::ecdsa::ECDSA_TEST_VECTORS, NistP256};
+        use crate::p256::{NistP256, test_vectors::ecdsa::ECDSA_TEST_VECTORS};
         crate::ecdsa_core::new_signing_test!(NistP256, ECDSA_TEST_VECTORS);
     }
 
     mod verify {
-        use crate::p256::{test_vectors::ecdsa::ECDSA_TEST_VECTORS, NistP256};
+        use crate::p256::{NistP256, test_vectors::ecdsa::ECDSA_TEST_VECTORS};
         crate::ecdsa_core::new_verification_test!(NistP256, ECDSA_TEST_VECTORS);
     }
 

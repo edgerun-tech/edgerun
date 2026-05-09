@@ -165,7 +165,7 @@ mod tests {
     use super::FieldElement;
     use crate::elliptic_curve::bigint::U256;
     use crate::ff::PrimeField;
-    use crate::p256::{test_vectors::field::DBL_TEST_VECTORS, FieldBytes};
+    use crate::p256::{FieldBytes, test_vectors::field::DBL_TEST_VECTORS};
     use crate::primeorder::{
         impl_field_identity_tests, impl_field_invert_tests, impl_field_sqrt_tests,
         impl_primefield_tests,

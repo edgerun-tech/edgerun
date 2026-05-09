@@ -2,10 +2,10 @@ use crate::prelude::v1::*;
 
 pub use crate::crypto::sha256;
 pub use crate::result::{
-    accept, defer, duplicate, empty_map, reject, ReasonCode, ValidationResult, Verdict,
+    ReasonCode, ValidationResult, Verdict, accept, defer, duplicate, empty_map, reject,
 };
 pub use crate::util::{bytes_to_hex, must_hex_to_bytes, parse_rfc3339};
-pub use crate::value::{mapping, seq, ystr, Value};
+pub use crate::value::{Value, mapping, seq, ystr};
 
 pub trait FixtureVerifier {
     fn verify_signed_fixture(

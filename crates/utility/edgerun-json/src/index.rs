@@ -7,8 +7,8 @@ use alloc::string::String;
 #[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::vec::Vec;
 
-use crate::map::Map;
 use crate::JsonValue;
+use crate::map::Map;
 use core::ops::{Index, IndexMut};
 
 pub trait ValueIndex {

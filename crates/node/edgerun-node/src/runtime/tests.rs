@@ -3,11 +3,10 @@ use crate::storage::MemoryRuntimeStorage;
 use crate::storage::{RuntimeStorageDecision, RuntimeStorageSurface};
 use alloc::vec;
 use edgerun_protocols::wire::{
-    from_bytes, CapabilityRequest, RuntimeDomainConfig, RuntimeMailbox, CAPABILITY_KIND_SIGNING,
-    CAPABILITY_KIND_STORAGE, CAPABILITY_OPERATION_READ, CAPABILITY_OPERATION_SIGN,
-    CAPABILITY_OPERATION_WRITE, HTTP_METHOD_GET, ROUTE_SCHEME_HTTPS,
-    RUNTIME_EVENT_CAPABILITY_EXECUTED, RUNTIME_PROTOCOL_DNS_UDP, RUNTIME_PROTOCOL_HTTPS,
-    RUNTIME_PROTOCOL_SMTP,
+    CAPABILITY_KIND_SIGNING, CAPABILITY_KIND_STORAGE, CAPABILITY_OPERATION_READ,
+    CAPABILITY_OPERATION_SIGN, CAPABILITY_OPERATION_WRITE, CapabilityRequest, HTTP_METHOD_GET,
+    ROUTE_SCHEME_HTTPS, RUNTIME_EVENT_CAPABILITY_EXECUTED, RUNTIME_PROTOCOL_DNS_UDP,
+    RUNTIME_PROTOCOL_HTTPS, RUNTIME_PROTOCOL_SMTP, RuntimeDomainConfig, RuntimeMailbox, from_bytes,
 };
 
 #[derive(Default)]
@@ -586,14 +585,16 @@ fn service_plan_derives_protocols_domains_and_mail() {
     let plan = RuntimeServicePlan::from_deployment(&config);
     assert!(plan.requires_dns());
     assert!(plan.requires_acme());
-    assert!(plan
-        .listeners
-        .iter()
-        .any(|binding| binding.protocol == RUNTIME_PROTOCOL_HTTPS && binding.port == 443));
-    assert!(plan
-        .listeners
-        .iter()
-        .any(|binding| binding.protocol == RUNTIME_PROTOCOL_SMTP && binding.port == 25));
+    assert!(
+        plan.listeners
+            .iter()
+            .any(|binding| binding.protocol == RUNTIME_PROTOCOL_HTTPS && binding.port == 443)
+    );
+    assert!(
+        plan.listeners
+            .iter()
+            .any(|binding| binding.protocol == RUNTIME_PROTOCOL_SMTP && binding.port == 25)
+    );
     assert_eq!(plan.mail_domains(), vec![b"example.com".to_vec()]);
 }
 
@@ -646,10 +647,10 @@ fn service_plan_derives_app_capability_declarations() {
 #[test]
 fn same_service_plan_decides_native_and_wasm_boundaries() {
     use crate::network::{
-        native_socket_binds, NodeTransportSurface, ServiceBindingDecision, TransportCarrier,
-        TransportProtocol,
+        NodeTransportSurface, ServiceBindingDecision, TransportCarrier, TransportProtocol,
+        native_socket_binds,
     };
-    use crate::runtime::{decide_runtime_boundary, RuntimeBoundarySurface, RuntimeServicePlan};
+    use crate::runtime::{RuntimeBoundarySurface, RuntimeServicePlan, decide_runtime_boundary};
 
     let app_id = sha256(b"portable-app");
     let release_id = sha256(b"portable-release");
@@ -697,17 +698,20 @@ fn same_service_plan_decides_native_and_wasm_boundaries() {
             .filter(|decision| matches!(decision, ServiceBindingDecision::NativeSocket(_)))
             .count()
     );
-    assert!(native_binds
-        .iter()
-        .all(|bind| bind.address.carrier == TransportCarrier::HostSocket));
+    assert!(
+        native_binds
+            .iter()
+            .all(|bind| bind.address.carrier == TransportCarrier::HostSocket)
+    );
     assert!(native_binds.iter().any(|bind| {
         bind.binding.protocol == RUNTIME_PROTOCOL_DNS_UDP
             && bind.address.protocol == TransportProtocol::Datagram
     }));
-    assert!(wasm
-        .bindings
-        .iter()
-        .all(|decision| matches!(decision, ServiceBindingDecision::Routed(_))));
+    assert!(
+        wasm.bindings
+            .iter()
+            .all(|decision| matches!(decision, ServiceBindingDecision::Routed(_)))
+    );
     assert!(native_socket_binds(&wasm.bindings).is_empty());
 
     let native_namespaces: Vec<_> = native
@@ -735,14 +739,17 @@ fn same_service_plan_decides_native_and_wasm_boundaries() {
     )));
 
     let replay = decide_runtime_boundary(&plan, RuntimeBoundarySurface::REPLAY);
-    assert!(replay
-        .bindings
-        .iter()
-        .all(|decision| matches!(decision, ServiceBindingDecision::Routed(_))));
-    assert!(plan
-        .requested_bindings(NodeTransportSurface::NativeSocket)
-        .iter()
-        .all(|intent| intent.surface == NodeTransportSurface::NativeSocket));
+    assert!(
+        replay
+            .bindings
+            .iter()
+            .all(|decision| matches!(decision, ServiceBindingDecision::Routed(_)))
+    );
+    assert!(
+        plan.requested_bindings(NodeTransportSurface::NativeSocket)
+            .iter()
+            .all(|intent| intent.surface == NodeTransportSurface::NativeSocket)
+    );
 }
 
 fn storage_decision_namespace(decision: &RuntimeStorageDecision) -> Vec<u8> {

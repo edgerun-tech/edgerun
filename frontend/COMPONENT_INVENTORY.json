@@ -1,0 +1,1090 @@
+{
+  "generatedBy": "scripts/generate-component-inventory.mjs",
+  "totalIndexedFiles": 159,
+  "entries": [
+    {
+      "path": "components/agents-ui/agent-audio-visualizer-aura.tsx",
+      "group": "components/other",
+      "exports": [
+        "AgentAudioVisualizerAura",
+        "AgentAudioVisualizerAuraVariants",
+        "interface AgentAudioVisualizerAuraProps"
+      ]
+    },
+    {
+      "path": "components/agents-ui/agent-audio-visualizer-bar.tsx",
+      "group": "components/other",
+      "exports": [
+        "AgentAudioVisualizerBar",
+        "AgentAudioVisualizerBarElementVariants",
+        "AgentAudioVisualizerBarVariants",
+        "interface AgentAudioVisualizerBarProps"
+      ]
+    },
+    {
+      "path": "components/agents-ui/agent-audio-visualizer-wave.tsx",
+      "group": "components/other",
+      "exports": [
+        "AgentAudioVisualizerWave",
+        "AgentAudioVisualizerWaveVariants",
+        "interface AgentAudioVisualizerWaveProps"
+      ]
+    },
+    {
+      "path": "components/agents-ui/react-shader-toy.tsx",
+      "group": "components/other",
+      "exports": [
+        "ReactShaderToy",
+        "interface ReactShaderToyProps"
+      ]
+    },
+    {
+      "path": "components/alerts/AlertCenter.tsx",
+      "group": "components/other",
+      "exports": [
+        "AlertCenter",
+        "activeAlerts",
+        "alertStore",
+        "interface Alert",
+        "raiseAlert",
+        "resolveAlert",
+        "type AlertSeverity"
+      ]
+    },
+    {
+      "path": "components/apps/AppList.tsx",
+      "group": "apps",
+      "exports": [
+        "AppList"
+      ]
+    },
+    {
+      "path": "components/apps/index.ts",
+      "group": "apps",
+      "exports": [
+        "SettingsApp",
+        "IdentityApp",
+        "FileManager",
+        "GmailApp",
+        "GoogleDriveApp",
+        "GooglePhotosApp",
+        "GoogleContactsApp",
+        "GitHubApp",
+        "CloudflareApp",
+        "AppStore"
+      ]
+    },
+    {
+      "path": "components/capabilities/CapabilityList.tsx",
+      "group": "components/other",
+      "exports": [
+        "CapabilityList"
+      ]
+    },
+    {
+      "path": "components/capability-gate-prompt.tsx",
+      "group": "components/other",
+      "exports": [
+        "CapabilityGatePrompt"
+      ]
+    },
+    {
+      "path": "components/dependencies/DependencyGraph.tsx",
+      "group": "components/other",
+      "exports": [
+        "DependencyGraph",
+        "allDepNodes",
+        "dependencyStore",
+        "illegalDeps",
+        "interface DepNode",
+        "interface DependencyGraph",
+        "updateDependencyGraph"
+      ]
+    },
+    {
+      "path": "components/layout-grid-demo.tsx",
+      "group": "review/cleanup",
+      "exports": [
+        "default export"
+      ]
+    },
+    {
+      "path": "components/layouts/glowing-containers.tsx",
+      "group": "layouts",
+      "exports": [
+        "GlowingContainer",
+        "GlowingGridItem"
+      ]
+    },
+    {
+      "path": "components/multi-step-loader-demo.tsx",
+      "group": "review/cleanup",
+      "exports": [
+        "default export"
+      ]
+    },
+    {
+      "path": "components/node-dashboard.tsx",
+      "group": "components/other",
+      "exports": [
+        "NodeDashboard"
+      ]
+    },
+    {
+      "path": "components/os/app-chrome.tsx",
+      "group": "os-shell",
+      "exports": [
+        "AppEmptyState",
+        "AppHeader",
+        "AppToolbar"
+      ]
+    },
+    {
+      "path": "components/os/app-overlay-host.tsx",
+      "group": "os-shell",
+      "exports": [
+        "AppOverlayHost"
+      ]
+    },
+    {
+      "path": "components/os/app-store.tsx",
+      "group": "os-shell",
+      "exports": [
+        "AppStore"
+      ]
+    },
+    {
+      "path": "components/os/auth-overlay.tsx",
+      "group": "os-shell",
+      "exports": [
+        "AuthOverlay"
+      ]
+    },
+    {
+      "path": "components/os/calculator-app.tsx",
+      "group": "os-shell",
+      "exports": [
+        "CalculatorApp"
+      ]
+    },
+    {
+      "path": "components/os/calling-app.tsx",
+      "group": "os-shell",
+      "exports": [
+        "CallingApp"
+      ]
+    },
+    {
+      "path": "components/os/chat-app.tsx",
+      "group": "os-shell",
+      "exports": [
+        "DemoChatApp"
+      ]
+    },
+    {
+      "path": "components/os/cloudflare-app.tsx",
+      "group": "os-shell",
+      "exports": [
+        "CloudflareApp"
+      ]
+    },
+    {
+      "path": "components/os/code-editor.tsx",
+      "group": "os-shell",
+      "exports": [
+        "CodeEditor",
+        "FileTreeView"
+      ]
+    },
+    {
+      "path": "components/os/compute-node.tsx",
+      "group": "os-shell",
+      "exports": [
+        "ComputeNode"
+      ]
+    },
+    {
+      "path": "components/os/contacts-app.tsx",
+      "group": "os-shell",
+      "exports": [
+        "ContactsApp"
+      ]
+    },
+    {
+      "path": "components/os/desktop-telemetry.tsx",
+      "group": "os-shell",
+      "exports": [
+        "DesktopTelemetry"
+      ]
+    },
+    {
+      "path": "components/os/desktop.tsx",
+      "group": "os-shell",
+      "exports": [
+        "Desktop"
+      ]
+    },
+    {
+      "path": "components/os/edgerun-logo.tsx",
+      "group": "os-shell",
+      "exports": [
+        "EdgerunLogo"
+      ]
+    },
+    {
+      "path": "components/os/file-manager.tsx",
+      "group": "os-shell",
+      "exports": [
+        "FileManager"
+      ]
+    },
+    {
+      "path": "components/os/finances-app.tsx",
+      "group": "os-shell",
+      "exports": [
+        "FinancesApp",
+        "WalletApp"
+      ]
+    },
+    {
+      "path": "components/os/github-app.tsx",
+      "group": "os-shell",
+      "exports": [
+        "GitHubApp"
+      ]
+    },
+    {
+      "path": "components/os/globe.tsx",
+      "group": "os-shell",
+      "exports": [
+        "Globe",
+        "interface GlobeNode"
+      ]
+    },
+    {
+      "path": "components/os/gmail-app.tsx",
+      "group": "os-shell",
+      "exports": [
+        "GmailApp"
+      ]
+    },
+    {
+      "path": "components/os/google-contacts-app.tsx",
+      "group": "os-shell",
+      "exports": [
+        "GoogleContactsApp"
+      ]
+    },
+    {
+      "path": "components/os/google-drive-app.tsx",
+      "group": "os-shell",
+      "exports": [
+        "GoogleDriveApp"
+      ]
+    },
+    {
+      "path": "components/os/google-photos-app.tsx",
+      "group": "os-shell",
+      "exports": [
+        "GooglePhotosApp"
+      ]
+    },
+    {
+      "path": "components/os/help-app.tsx",
+      "group": "os-shell",
+      "exports": [
+        "HelpApp"
+      ]
+    },
+    {
+      "path": "components/os/identity-app.tsx",
+      "group": "os-shell",
+      "exports": [
+        "IdentityApp"
+      ]
+    },
+    {
+      "path": "components/os/index.ts",
+      "group": "os-shell",
+      "exports": []
+    },
+    {
+      "path": "components/os/messages-app.tsx",
+      "group": "os-shell",
+      "exports": [
+        "MessagesApp"
+      ]
+    },
+    {
+      "path": "components/os/people-app.tsx",
+      "group": "os-shell",
+      "exports": [
+        "PeopleApp",
+        "type PeopleTab"
+      ]
+    },
+    {
+      "path": "components/os/profile-menu.tsx",
+      "group": "os-shell",
+      "exports": [
+        "ProfileMenu"
+      ]
+    },
+    {
+      "path": "components/os/settings-app.tsx",
+      "group": "os-shell",
+      "exports": [
+        "SettingsApp"
+      ]
+    },
+    {
+      "path": "components/os/storage-app.tsx",
+      "group": "os-shell",
+      "exports": [
+        "StorageApp"
+      ]
+    },
+    {
+      "path": "components/os/storage-dashboard.tsx",
+      "group": "os-shell",
+      "exports": [
+        "StorageDashboard"
+      ]
+    },
+    {
+      "path": "components/os/top-bar.tsx",
+      "group": "os-shell",
+      "exports": [
+        "TopBar"
+      ]
+    },
+    {
+      "path": "components/os/trust-container-app.tsx",
+      "group": "os-shell",
+      "exports": [
+        "TrustContainerApp"
+      ]
+    },
+    {
+      "path": "components/os/trust-manager-app.tsx",
+      "group": "os-shell",
+      "exports": [
+        "TrustManagerApp"
+      ]
+    },
+    {
+      "path": "components/os/trust-manager-surface.tsx",
+      "group": "os-shell",
+      "exports": [
+        "TrustManagerSurface"
+      ]
+    },
+    {
+      "path": "components/os/trust-manager-workspace.tsx",
+      "group": "os-shell",
+      "exports": [
+        "TrustManagerWorkspace"
+      ]
+    },
+    {
+      "path": "components/os/wallet-app.tsx",
+      "group": "os-shell",
+      "exports": [
+        "WalletApp"
+      ]
+    },
+    {
+      "path": "components/os/widget-panel.tsx",
+      "group": "os-shell",
+      "exports": [
+        "WidgetPanel"
+      ]
+    },
+    {
+      "path": "components/os/workflow-builder.tsx",
+      "group": "os-shell",
+      "exports": [
+        "WorkflowBuilder",
+        "WorkflowStatus"
+      ]
+    },
+    {
+      "path": "components/os/xray-desktop-surface.tsx",
+      "group": "os-shell",
+      "exports": [
+        "XrayDesktopSurface"
+      ]
+    },
+    {
+      "path": "components/pipelines/PipelineProgress.tsx",
+      "group": "components/other",
+      "exports": [
+        "PipelineProgress"
+      ]
+    },
+    {
+      "path": "components/sections/codelyzer-network.tsx",
+      "group": "sections",
+      "exports": [
+        "CodelyzerCodeWidget",
+        "CodelyzerNetworkPanel",
+        "NetworkConnectionsWidget"
+      ]
+    },
+    {
+      "path": "components/sections/finance-overviews.tsx",
+      "group": "sections",
+      "exports": [
+        "FinancesOverviewWidget"
+      ]
+    },
+    {
+      "path": "components/sections/index.ts",
+      "group": "sections",
+      "exports": []
+    },
+    {
+      "path": "components/settings-dialog.tsx",
+      "group": "components/other",
+      "exports": [
+        "SettingsDialog"
+      ]
+    },
+    {
+      "path": "components/tests/TestStatusPanel.tsx",
+      "group": "components/other",
+      "exports": [
+        "TestStatusPanel",
+        "allSuites",
+        "interface TestResult",
+        "interface TestState",
+        "interface TestSuite",
+        "testStore",
+        "updateTestSuite"
+      ]
+    },
+    {
+      "path": "components/theme-provider.tsx",
+      "group": "components/other",
+      "exports": [
+        "ThemeProvider"
+      ]
+    },
+    {
+      "path": "components/tokens/TokenUsagePanel.tsx",
+      "group": "components/other",
+      "exports": [
+        "TokenUsagePanel",
+        "interface TokenUsage",
+        "interface TokenUsageState",
+        "recentTokens",
+        "recordTokenUsage",
+        "tokenStore"
+      ]
+    },
+    {
+      "path": "components/ui/accordion.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/alert-dialog.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/alert.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/animated-modal.tsx",
+      "group": "components/ui",
+      "exports": [
+        "Modal",
+        "ModalBody",
+        "ModalContent",
+        "ModalFooter",
+        "ModalProvider",
+        "ModalTrigger",
+        "useModal",
+        "useOutsideClick"
+      ]
+    },
+    {
+      "path": "components/ui/aspect-ratio.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/avatar.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/badge.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/breadcrumb.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/button-group.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/button.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/calendar.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/card.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/carousel.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/checkbox.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/code-block.tsx",
+      "group": "components/ui",
+      "exports": [
+        "CodeBlock"
+      ]
+    },
+    {
+      "path": "components/ui/collapsible.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/combobox.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/command.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/context-menu.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/dialog.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/direction.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/drawer.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/dropdown-menu.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/empty.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/field.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/floating-dock.tsx",
+      "group": "components/ui",
+      "exports": [
+        "FloatingDock"
+      ]
+    },
+    {
+      "path": "components/ui/form.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/glowing-effect.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/glowing-stars.tsx",
+      "group": "components/ui",
+      "exports": [
+        "GlowingStarsBackgroundCard",
+        "GlowingStarsDescription",
+        "GlowingStarsTitle",
+        "Illustration"
+      ]
+    },
+    {
+      "path": "components/ui/grid-view.tsx",
+      "group": "components/ui",
+      "exports": [
+        "GridView",
+        "type GridViewProps"
+      ]
+    },
+    {
+      "path": "components/ui/hover-card.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/input-group.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/input-otp.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/input.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/item.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/kbd.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/label.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/layout-grid.tsx",
+      "group": "components/ui",
+      "exports": [
+        "LayoutGrid"
+      ]
+    },
+    {
+      "path": "components/ui/menubar.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/moving-border.tsx",
+      "group": "components/ui",
+      "exports": [
+        "Button",
+        "MovingBorder"
+      ]
+    },
+    {
+      "path": "components/ui/multi-step-loader.tsx",
+      "group": "components/ui",
+      "exports": [
+        "MultiStepLoader"
+      ]
+    },
+    {
+      "path": "components/ui/native-select.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/navigation-menu.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/pagination.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/popover.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/progress.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/radio-group.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/resizable.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/scroll-area.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/select.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/separator.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/sheet.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/sidebar.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/skeleton.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/slider.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/sonner.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/spinner.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/switch.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/table.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/tabs.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/textarea.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/toast.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/toaster.tsx",
+      "group": "components/ui",
+      "exports": [
+        "Toaster"
+      ]
+    },
+    {
+      "path": "components/ui/toggle-group.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/toggle.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/tooltip.tsx",
+      "group": "components/ui",
+      "exports": []
+    },
+    {
+      "path": "components/ui/use-mobile.tsx",
+      "group": "components/ui",
+      "exports": [
+        "useIsMobile"
+      ]
+    },
+    {
+      "path": "components/ui/use-toast.ts",
+      "group": "components/ui",
+      "exports": [
+        "reducer"
+      ]
+    },
+    {
+      "path": "components/ui/world-map.tsx",
+      "group": "components/ui",
+      "exports": [
+        "default export"
+      ]
+    },
+    {
+      "path": "components/wasm-installer.tsx",
+      "group": "components/other",
+      "exports": [
+        "WasmInstaller",
+        "interface WasmInstallResult"
+      ]
+    },
+    {
+      "path": "components/workspace/index.ts",
+      "group": "components/other",
+      "exports": []
+    },
+    {
+      "path": "components/workspace/workspace-prompt-input.tsx",
+      "group": "components/other",
+      "exports": [
+        "WorkspacePromptInput",
+        "interface Suggestion"
+      ]
+    },
+    {
+      "path": "components/workspace/workspace-status-panel.tsx",
+      "group": "components/other",
+      "exports": [
+        "WorkspaceStatusPanel",
+        "useWorkspaceAwareness"
+      ]
+    },
+    {
+      "path": "components/world-map-demo.tsx",
+      "group": "review/cleanup",
+      "exports": [
+        "default export"
+      ]
+    },
+    {
+      "path": "components/xray/XrayDashboard.tsx",
+      "group": "components/other",
+      "exports": [
+        "default export"
+      ]
+    },
+    {
+      "path": "features/xray/XrayCommandSurface.tsx",
+      "group": "features/xray",
+      "exports": [
+        "XrayCommandSurface"
+      ]
+    },
+    {
+      "path": "features/xray/XrayInspector.tsx",
+      "group": "features/xray",
+      "exports": [
+        "XrayInspector"
+      ]
+    },
+    {
+      "path": "features/xray/XrayOverlayWidgets.tsx",
+      "group": "features/xray",
+      "exports": [
+        "XrayLegendOverlay",
+        "XrayMouseHelpOverlay"
+      ]
+    },
+    {
+      "path": "features/xray/XrayViewport.tsx",
+      "group": "features/xray",
+      "exports": [
+        "XrayViewport"
+      ]
+    },
+    {
+      "path": "features/xray/XrayWorkspace.tsx",
+      "group": "features/xray",
+      "exports": [
+        "XrayWorkspace"
+      ]
+    },
+    {
+      "path": "features/xray/graph/graph-commands.ts",
+      "group": "features/xray",
+      "exports": [
+        "executeCommand",
+        "registerGlobalApi",
+        "type XrayCommand"
+      ]
+    },
+    {
+      "path": "features/xray/graph/graph-store.ts",
+      "group": "features/xray",
+      "exports": [
+        "clearHighlight",
+        "ensureCodeAnalyzerConnection",
+        "focusNode",
+        "getVisibleGraph",
+        "getXrayState",
+        "highlightNodes",
+        "initCodeAnalyzerConnection",
+        "nodeFilterKeys",
+        "requestAnalysis",
+        "resetView",
+        "selectNode",
+        "setHoveredNode",
+        "setLayout",
+        "setRuntimeMode",
+        "setViewTransform",
+        "toggleXrayFilter",
+        "updateNodePositions",
+        "xrayState"
+      ]
+    },
+    {
+      "path": "features/xray/graph/mock-graph.ts",
+      "group": "features/xray",
+      "exports": [
+        "createMockGraph",
+        "createMockRuntimeStats"
+      ]
+    },
+    {
+      "path": "features/xray/graph/types.ts",
+      "group": "features/xray",
+      "exports": [
+        "type LayoutType",
+        "type RuntimeNodeStats",
+        "type XrayEdge",
+        "type XrayFilterKey",
+        "type XrayNode",
+        "type XrayState"
+      ]
+    },
+    {
+      "path": "features/xray/index.ts",
+      "group": "features/xray",
+      "exports": []
+    },
+    {
+      "path": "features/xray/layout/force-layout.ts",
+      "group": "features/xray",
+      "exports": [
+        "runForceLayout"
+      ]
+    },
+    {
+      "path": "features/xray/layout/globe-layout.ts",
+      "group": "features/xray",
+      "exports": [
+        "runGlobeLayout"
+      ]
+    },
+    {
+      "path": "features/xray/layout/layer-layout.ts",
+      "group": "features/xray",
+      "exports": [
+        "runLayerLayout"
+      ]
+    },
+    {
+      "path": "features/xray/layout/morph-layout.ts",
+      "group": "features/xray",
+      "exports": [
+        "lerpNodePositions",
+        "morphPositions"
+      ]
+    },
+    {
+      "path": "features/xray/render/color-policy.ts",
+      "group": "features/xray",
+      "exports": [
+        "getEdgeColor",
+        "getNodeColor",
+        "getNodeSize"
+      ]
+    },
+    {
+      "path": "features/xray/render/shaders.ts",
+      "group": "features/xray",
+      "exports": [
+        "EDGE_FS",
+        "EDGE_VS",
+        "NODE_FS",
+        "NODE_VS",
+        "buildEdgeProgram",
+        "buildNodeProgram",
+        "buildProgram",
+        "compileShader",
+        "screenToGraph"
+      ]
+    },
+    {
+      "path": "features/xray/render/webgl-renderer.ts",
+      "group": "features/xray",
+      "exports": [
+        "WebGLRenderer",
+        "type RendererInfo",
+        "type ShaderUpdateResult"
+      ]
+    },
+    {
+      "path": "features/xray/runtime/runtime-store.ts",
+      "group": "features/xray",
+      "exports": [
+        "runtimeOverlay",
+        "setRuntimeOverlayEnabled",
+        "tickRuntime",
+        "updateRuntimeStats"
+      ]
+    },
+    {
+      "path": "features/xray/services/codeanalyzer-ws.ts",
+      "group": "features/xray",
+      "exports": [
+        "CodeAnalyzerWsService",
+        "interface CodeAnalyzerConfig",
+        "interface GraphData"
+      ]
+    },
+    {
+      "path": "features/xray/services/xray-wire-wasm.ts",
+      "group": "features/xray",
+      "exports": []
+    }
+  ]
+}

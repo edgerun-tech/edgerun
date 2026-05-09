@@ -194,7 +194,7 @@ impl Next {
 /// Applied via [`Chain`].
 pub trait Middleware: Send + Sync + 'static {
     fn call(&self, req: Request, next: Next)
-        -> Pin<Box<dyn Future<Output = Response> + Send + '_>>;
+    -> Pin<Box<dyn Future<Output = Response> + Send + '_>>;
 }
 
 /// Function-based middleware. Created via [`middleware_fn`].

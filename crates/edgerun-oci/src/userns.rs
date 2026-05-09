@@ -3,7 +3,7 @@
 use crate::prelude::*;
 use std::io;
 
-use crate::linux_catalog::{capability_number, LINUX_CAPABILITIES};
+use crate::linux_catalog::{LINUX_CAPABILITIES, capability_number};
 use crate::syscalls::{
     do_capset, do_prctl_cap_ambient, do_prctl_cap_bset_drop, do_prctl_set_dumpable,
     do_prctl_set_no_new_privs, prctl_const, setgid, setgroups, setuid,

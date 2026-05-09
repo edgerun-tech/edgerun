@@ -33,7 +33,7 @@ pub(crate) const fn concat_mixed<const L: usize, const H: usize, const O: usize>
 
 #[cfg(all(test, crypto_bigint_internal_tests))]
 mod tests {
-    use crate::crypto_bigint::{ConcatMixed, U128, U192, U64};
+    use crate::crypto_bigint::{ConcatMixed, U64, U128, U192};
 
     #[test]
     fn concat() {

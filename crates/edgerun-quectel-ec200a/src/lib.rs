@@ -50,8 +50,8 @@ pub mod pins;
 pub mod power;
 
 pub use dta::{
-    check_dta_status, configure_dta, get_imsi, get_modem_info, get_network_operator,
-    get_signal_quality, set_radio_function, Config,
+    Config, check_dta_status, configure_dta, get_imsi, get_modem_info, get_network_operator,
+    get_signal_quality, set_radio_function,
 };
 pub use interfaces::*;
 pub use pins::*;

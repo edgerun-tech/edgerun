@@ -1,7 +1,7 @@
 #![doc(hidden)]
 
 use crate::typenum::{
-    bit::{Bit, B0, B1},
+    bit::{B0, B1, Bit},
     uint::{UInt, UTerm, Unsigned},
 };
 

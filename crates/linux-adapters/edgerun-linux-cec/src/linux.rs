@@ -5,9 +5,9 @@ pub use edgerun_linux_sysfs::{collections, fs, io, mem, option, os, path, result
 
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 use edgerun_devices::cec::{
-    active_source, default_cec_descriptor, image_view_on, set_stream_path, standby, wake_sequence,
     CecAdapterDevice, CecAdapterInfo, CecCapabilities, CecDrmConnectorInfo, CecLogicalAddress,
-    CecMessage,
+    CecMessage, active_source, default_cec_descriptor, image_view_on, set_stream_path, standby,
+    wake_sequence,
 };
 use edgerun_linux_gpu::discover_gpus;
 use edgerun_linux_sysfs::prelude::v1::*;
@@ -263,7 +263,7 @@ pub fn discover_cec_adapters_in(root: &Path) -> Result<Vec<LinuxCecAdapterInfo>,
         Err(err) => {
             return Err(CapabilityError::Provider(format!(
                 "failed to read cec sysfs: {err}"
-            )))
+            )));
         }
     };
 

@@ -9,8 +9,8 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use edgerun_capabilities::{
-    capability_descriptor, CapabilityDescriptor, CapabilityEventKind, CapabilityModality,
-    CapabilityOperation, CapabilityRole,
+    CapabilityDescriptor, CapabilityEventKind, CapabilityModality, CapabilityOperation,
+    CapabilityRole, capability_descriptor,
 };
 use edgerun_protocols::wire::{
     RuntimeAppInstall, RuntimeCapabilityDeclaration, SDK_WIRE_ABI_VERSION,

@@ -209,9 +209,9 @@ mod tests {
 #[cfg(all(feature = "android-real", target_os = "android"))]
 mod real {
     use super::*;
+    use jni::InitJavaVM;
     use jni::objects::{GlobalRef, JValue};
     use jni::strings::JNIString;
-    use jni::InitJavaVM;
     use ndk_context::android_context;
     use std::sync::OnceLock;
 
@@ -697,4 +697,4 @@ mod real {
 }
 
 #[cfg(all(feature = "android-real", target_os = "android"))]
-pub use real::{init_keystore_jvm, JniKeystoreKey};
+pub use real::{JniKeystoreKey, init_keystore_jvm};

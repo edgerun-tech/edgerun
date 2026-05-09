@@ -271,7 +271,7 @@ pub(crate) const fn div_rem_limb_with_reciprocal<const L: usize>(
 
 #[cfg(all(test, crypto_bigint_internal_tests))]
 mod tests {
-    use super::{div2by1, Reciprocal};
+    use super::{Reciprocal, div2by1};
     use crate::crypto_bigint::{Limb, Word};
     #[test]
     fn div2by1_overflow() {

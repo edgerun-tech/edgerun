@@ -4,8 +4,8 @@ use std::os::raw::c_void;
 
 use crate::spec::{OciLinuxSeccomp, OciSeccompAction};
 use crate::syscalls::{
-    do_seccomp, SECCOMP_FILTER_FLAG_NEW_LISTENER, SECCOMP_FILTER_FLAG_TSYNC,
-    SECCOMP_SET_MODE_FILTER,
+    SECCOMP_FILTER_FLAG_NEW_LISTENER, SECCOMP_FILTER_FLAG_TSYNC, SECCOMP_SET_MODE_FILTER,
+    do_seccomp,
 };
 
 use super::*;

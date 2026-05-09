@@ -13,8 +13,8 @@ use std::sync::{Mutex, OnceLock};
 use edgerun_crypto::ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use edgerun_crypto::sha::sha256;
 use edgerun_protocols::wire::{
-    from_bytes, sdk_wire_bytes, AppGraphRecord, AppStoreCatalogRecord, SdkWireRecord, WireError,
-    SDK_WIRE_ABI_VERSION,
+    AppGraphRecord, AppStoreCatalogRecord, SDK_WIRE_ABI_VERSION, SdkWireRecord, WireError,
+    from_bytes, sdk_wire_bytes,
 };
 
 use crate::runtime::{RuntimeKernel, RuntimeMessageDelivery};

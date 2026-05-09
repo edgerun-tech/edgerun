@@ -32,20 +32,20 @@ pub use crate::http::{Request, Response};
 pub use crate::http::runtime::BufReader;
 pub use body::{AsyncBodyReader, Body, BodyReader, BodySender};
 pub use compression::{
-    accept_encoding_value, compress_body, decompress_body, preferred_response_encoding,
-    ContentEncoding,
+    ContentEncoding, accept_encoding_value, compress_body, decompress_body,
+    preferred_response_encoding,
 };
-pub use connection::{determine_connection, ConnectionState};
-pub use handler::{into_handler, into_handler_async, Handler};
-pub use multipart::{extract_boundary, is_multipart, parse_multipart, MultipartField};
+pub use connection::{ConnectionState, determine_connection};
+pub use handler::{Handler, into_handler, into_handler_async};
+pub use multipart::{MultipartField, extract_boundary, is_multipart, parse_multipart};
 #[cfg(feature = "client")]
 pub use pool::ConnectionPool;
 pub use range::{
-    build_partial_response, get_range, has_range_header, is_range_satisfiable, parse_range_header,
-    range_not_satisfiable_response, resolve_byte_range, ByteRange, ContentRange, RangeSpecifier,
+    ByteRange, ContentRange, RangeSpecifier, build_partial_response, get_range, has_range_header,
+    is_range_satisfiable, parse_range_header, range_not_satisfiable_response, resolve_byte_range,
 };
 pub use upgrade::{
-    build_upgrade_response, build_websocket_accept_headers, is_websocket_upgrade, UpgradeHandler,
-    UpgradeProtocol,
+    UpgradeHandler, UpgradeProtocol, build_upgrade_response, build_websocket_accept_headers,
+    is_websocket_upgrade,
 };
 pub use version::HttpVersion;

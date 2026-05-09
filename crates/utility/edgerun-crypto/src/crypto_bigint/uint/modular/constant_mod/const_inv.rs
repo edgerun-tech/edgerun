@@ -2,7 +2,7 @@ use core::marker::PhantomData;
 
 use crate::subtle::CtOption;
 
-use crate::crypto_bigint::{modular::inv::inv_montgomery_form, traits::Invert, CtChoice, NonZero};
+use crate::crypto_bigint::{CtChoice, NonZero, modular::inv::inv_montgomery_form, traits::Invert};
 
 use super::{Residue, ResidueParams};
 
@@ -48,7 +48,7 @@ impl<MOD: ResidueParams<LIMBS>, const LIMBS: usize> Invert for NonZero<Residue<M
 #[cfg(all(test, crypto_bigint_internal_tests))]
 mod tests {
     use crate::crypto_bigint::{
-        const_residue, impl_modulus, modular::constant_mod::ResidueParams, U256,
+        U256, const_residue, impl_modulus, modular::constant_mod::ResidueParams,
     };
 
     impl_modulus!(

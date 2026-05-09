@@ -1,6 +1,9 @@
 "use client";
 import { cn } from "@/lib/utils";
-import { PanelTopClose } from "lucide-react";
+import { sendCodexMessage } from "@/lib/codex-stream";
+import { AssistantMessageContent } from "@/components/os/assistant-message-content";
+import { useStore } from "@nanostores/react";
+import { Bot, Check, Copy, Loader2, PanelTopClose, Square, User } from "lucide-react";
 import {
   AnimatePresence,
   motion,
@@ -11,6 +14,29 @@ import {
 import type { MotionValue } from "motion/react";
 
 import { useEffect, useMemo, useRef, useState, useCallback, type ReactNode } from "react";
+import {
+  appendAssistantMessage,
+  assistantElapsedMsStore,
+  assistantLastDurationStore,
+  assistantLoadingStore,
+  assistantMessagesStore,
+  assistantStartedAtStore,
+  assistantStatusStore,
+  abortAssistantRequest,
+  clearAssistantMessages,
+  finishAssistantRequest,
+  formatAssistantMessageTime,
+  getAssistantUserMessageContents,
+  getLastAssistantUserMessage,
+  hasRetryableAssistantError,
+  isAssistantAbortError,
+  setAssistantStatus,
+  setAssistantAbortController,
+  startAssistantRequest,
+  updateAssistantMessages,
+  type AssistantMessage,
+  type AssistantStatus,
+} from "@/stores/assistant-store";
 
 type FloatingDockItem = {
   title: string;
@@ -27,7 +53,7 @@ type FloatingDockContext = {
 };
 
 type DockPage = "people" | "launcher" | "command";
-type CommandPrefix = "/" | "#" | "?" | "~";
+type CommandPrefix = "/" | "?" | "~";
 
 type CommandSuggestion = {
   value: string;
@@ -35,39 +61,72 @@ type CommandSuggestion = {
   prefix: CommandPrefix;
 };
 
+type DockCommandInputEvent = CustomEvent<{
+  prefix?: CommandPrefix;
+  value?: string;
+}>;
+
+type AssistantStatusEvent = CustomEvent<{ status?: AssistantStatus }>;
+
 const COMMAND_PREFIXES: Record<CommandPrefix, { label: string; title: string; className: string }> = {
-  "/": { label: "General", title: "General command", className: "bg-sky-500 text-white shadow-[0_0_18px_rgba(14,165,233,0.35)]" },
-  "#": { label: "Terminal", title: "Send to terminal", className: "bg-cyan-500 text-white shadow-[0_0_18px_rgba(6,182,212,0.35)]" },
-  "?": { label: "Help", title: "Help topics", className: "bg-amber-400 text-black shadow-[0_0_18px_rgba(251,191,36,0.35)]" },
-  "~": { label: "AI", title: "AI input", className: "bg-fuchsia-500 text-white shadow-[0_0_18px_rgba(217,70,239,0.35)]" },
+  "/": { label: "General", title: "General command", className: "text-muted-foreground hover:text-foreground" },
+  "?": { label: "Help", title: "Help topics", className: "text-amber-300 hover:text-amber-200" },
+  "~": { label: "AI", title: "AI input", className: "text-primary hover:text-primary/85" },
 };
 
 const SUGGESTIONS: CommandSuggestion[] = [
   { prefix: "/", value: "/open settings", label: "Open Settings" },
-  { prefix: "#", value: "#bun run build", label: "Build frontend" },
-  { prefix: "#", value: "#bun run lint", label: "Lint frontend" },
-  { prefix: "#", value: "#git status", label: "Git status" },
   { prefix: "/", value: "/lock", label: "Lock profile" },
-  { prefix: "?", value: "?profile container", label: "Profile container" },
-  { prefix: "?", value: "?dock shortcuts", label: "Dock shortcuts" },
-  { prefix: "~", value: "~show node identity", label: "Show node identity" },
+  { prefix: "/", value: "/node identity", label: "Node identity" },
+  { prefix: "/", value: "/checklist", label: "Checklist" },
+  { prefix: "?", value: "?commands", label: "Prompt commands" },
+  { prefix: "?", value: "?node", label: "Node commands" },
+  { prefix: "?", value: "?checklist", label: "Checklist commands" },
+  { prefix: "?", value: "?open", label: "Open apps" },
 ];
 
 function commandPrefixFor(value: string): CommandPrefix {
   const first = value.trimStart().slice(0, 1) as CommandPrefix;
-  return first === "#" || first === "?" || first === "~" || first === "/" ? first : "/";
+  return first === "?" || first === "~" || first === "/" ? first : "/";
 }
 
 function commandBody(value: string) {
   const trimmed = value.trimStart();
-  return ["/", "#", "?", "~"].includes(trimmed[0] || "") ? trimmed.slice(1) : trimmed;
+  return ["/", "?", "~"].includes(trimmed[0] || "") ? trimmed.slice(1) : trimmed;
 }
 
 function nextPrefix(prefix: CommandPrefix): CommandPrefix {
-  if (prefix === "/") return "#";
-  if (prefix === "#") return "?";
+  if (prefix === "/") return "?";
   if (prefix === "?") return "~";
   return "/";
+}
+
+function isCommandPrefix(value: string): value is CommandPrefix {
+  return value === "/" || value === "?" || value === "~";
+}
+
+function assistantStatusClass(status: AssistantStatus) {
+  if (status === "ready") return "text-emerald-300 hover:text-emerald-200";
+  if (status === "offline") return "text-red-300 hover:text-red-200";
+  return "text-amber-300 hover:text-amber-200";
+}
+
+function assistantPlaceholder(status: AssistantStatus) {
+  if (status === "ready") return "ask assistant...";
+  if (status === "offline") return "assistant offline...";
+  return "assistant checking...";
+}
+
+function stripActions(text: string) {
+  return text.replace(/\[action:[^\]]+\]/g, "").trim();
+}
+
+function formatRequestDuration(ms: number) {
+  const seconds = Math.max(0, Math.floor(ms / 1000));
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  if (minutes > 0) return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
+  return `${remainingSeconds}s`;
 }
 
 export const FloatingDock = ({
@@ -81,7 +140,7 @@ export const FloatingDock = ({
   context?: FloatingDockContext;
   desktopClassName?: string;
   mobileClassName?: string;
-  onCommandSubmit?: (command: string) => void;
+  onCommandSubmit?: (command: string) => void | string | Promise<void | string>;
 }) => {
   const mobileItems = context?.items?.length ? context.items : items;
 
@@ -128,7 +187,7 @@ const FloatingDockMobile = ({
                     item.onClick?.();
                     setOpen(false);
                   }}
-                  className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/10 text-white shadow-lg backdrop-blur-xl hover:bg-primary/15"
+                  className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-transparent text-white shadow-lg backdrop-blur-xl hover:bg-primary/15"
                   aria-label={item.title}
                   title={item.title}
                 >
@@ -142,7 +201,7 @@ const FloatingDockMobile = ({
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-white/10 text-white shadow-lg backdrop-blur-xl hover:bg-primary/15"
+        className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-transparent text-white shadow-lg backdrop-blur-xl hover:bg-primary/15"
         aria-label="Open app dock"
       >
         <PanelTopClose className="h-5 w-5" />
@@ -160,26 +219,70 @@ const FloatingDockDesktop = ({
   launcherItems: FloatingDockItem[];
   context?: FloatingDockContext;
   className?: string;
-  onCommandSubmit?: (command: string) => void;
+  onCommandSubmit?: (command: string) => void | string | Promise<void | string>;
 }) => {
   const mouseX = useMotionValue(Infinity);
-  const [page, setPage] = useState<DockPage>("launcher");
+  const [page, setPage] = useState<DockPage>("command");
   const [command, setCommand] = useState("");
-  const [currentPrefix, setCurrentPrefix] = useState<CommandPrefix>("/");
+  const [currentPrefix, setCurrentPrefix] = useState<CommandPrefix>("~");
+  const [messageTimeNow, setMessageTimeNow] = useState(() => Date.now());
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [historyIndex, setHistoryIndex] = useState<number | null>(null);
+  const assistantStatus = useStore(assistantStatusStore);
+  const assistantLoading = useStore(assistantLoadingStore);
+  const assistantMessages = useStore(assistantMessagesStore);
+  const assistantStartedAt = useStore(assistantStartedAtStore);
+  const assistantElapsedMs = useStore(assistantElapsedMsStore);
+  const assistantLastDurationMs = useStore(assistantLastDurationStore);
   const inputRef = useRef<HTMLInputElement>(null);
+  const assistantOutputRef = useRef<HTMLDivElement>(null);
 
   const peopleItems = useMemo(() => context?.items ?? [], [context?.items]);
   const launcherItemsStable = useMemo(() => launcherItems, [launcherItems]);
   const hasPeoplePage = Boolean(peopleItems.length);
   const commandPrefix = commandPrefixFor(command || currentPrefix);
   const commandMode = COMMAND_PREFIXES[commandPrefix];
+  const prefixClassName = commandPrefix === "~" ? assistantStatusClass(assistantStatus) : commandMode.className;
+  const placeholder = commandPrefix === "~" ? assistantPlaceholder(assistantStatus) : `${commandMode.label.toLowerCase()}...`;
   const commandQuery = commandBody(command).toLowerCase();
+  const assistantDurationMs = assistantLoading ? assistantElapsedMs : assistantLastDurationMs;
+  const lastAssistantUserMessage = useMemo(() => getLastAssistantUserMessage(assistantMessages), [assistantMessages]);
+  const assistantUserMessages = useMemo(() => getAssistantUserMessageContents(assistantMessages), [assistantMessages]);
+  const canRetryAssistant = Boolean(lastAssistantUserMessage) && hasRetryableAssistantError(assistantMessages);
+  const promptLaunchItems = useMemo(() => [...launcherItemsStable, ...peopleItems], [launcherItemsStable, peopleItems]);
   const suggestions = useMemo(() => {
-    return SUGGESTIONS
+    const launchSuggestions: CommandSuggestion[] = commandPrefix === "/"
+      ? promptLaunchItems.map((item) => ({
+        prefix: "/" as const,
+        value: `/${item.title}`,
+        label: item.title,
+      }))
+      : [];
+
+    return [...SUGGESTIONS, ...launchSuggestions]
       .filter((item) => item.prefix === commandPrefix)
       .filter((item) => !commandQuery || item.label.toLowerCase().includes(commandQuery) || item.value.toLowerCase().includes(commandQuery))
       .slice(0, 4);
-  }, [commandPrefix, commandQuery]);
+  }, [commandPrefix, commandQuery, promptLaunchItems]);
+  const reversedAssistantMessages = useMemo(() => [...assistantMessages].reverse(), [assistantMessages]);
+
+  useEffect(() => {
+    assistantOutputRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, [assistantMessages, assistantLoading]);
+
+  useEffect(() => {
+    if (!assistantStartedAt) return;
+    assistantElapsedMsStore.set(Date.now() - assistantStartedAt);
+    const interval = window.setInterval(() => {
+      assistantElapsedMsStore.set(Date.now() - assistantStartedAt);
+    }, 500);
+    return () => window.clearInterval(interval);
+  }, [assistantStartedAt]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setMessageTimeNow(Date.now()), 60_000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (!hasPeoplePage && page === "people") setPage("launcher");
@@ -192,7 +295,66 @@ const FloatingDockDesktop = ({
   }, [page]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function checkAssistant() {
+      setAssistantStatus("checking");
+      try {
+        const res = await fetch("/api/codex", { method: "GET", cache: "no-store" });
+        const data = await res.json().catch(() => null) as { ok?: boolean } | null;
+        if (!cancelled) setAssistantStatus(res.ok && data?.ok === true ? "ready" : "offline");
+      } catch {
+        if (!cancelled) setAssistantStatus("offline");
+      }
+    }
+
+    void checkAssistant();
+    const interval = window.setInterval(() => void checkAssistant(), 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    const onAssistantStatus = (event: Event) => {
+      const status = (event as AssistantStatusEvent).detail?.status;
+      if (status === "checking" || status === "ready" || status === "offline") {
+        setAssistantStatus(status);
+      }
+    };
+
+    window.addEventListener("edgerun:assistant-status", onAssistantStatus);
+    return () => window.removeEventListener("edgerun:assistant-status", onAssistantStatus);
+  }, []);
+
+  useEffect(() => {
+    const openCommandInput = (event: Event) => {
+      const detail = (event as DockCommandInputEvent).detail;
+      const prefix = detail?.prefix && detail.prefix in COMMAND_PREFIXES ? detail.prefix : "~";
+      const body = detail?.value ? commandBody(detail.value) : "";
+      setCurrentPrefix(prefix);
+      setCommand(`${prefix}${body}`);
+      setPage("command");
+      requestAnimationFrame(() => inputRef.current?.focus());
+    };
+
+    window.addEventListener("edgerun:dock-command-input", openCommandInput);
+    return () => window.removeEventListener("edgerun:dock-command-input", openCommandInput);
+  }, []);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        event.stopPropagation();
+        setCurrentPrefix("~");
+        setCommand("~");
+        setPage("command");
+        requestAnimationFrame(() => inputRef.current?.focus());
+        return;
+      }
+
       if (!event.ctrlKey || event.metaKey || event.altKey) return;
       if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
       event.preventDefault();
@@ -200,16 +362,16 @@ const FloatingDockDesktop = ({
 
       if (event.key === "ArrowLeft") {
         setPage((current) => {
-          if (current === "command") return "launcher";
-          if (current === "launcher" && hasPeoplePage) return "people";
+          if (current === "people") return "launcher";
+          if (current === "launcher") return "command";
           return current;
         });
         return;
       }
 
       setPage((current) => {
-        if (current === "people") return "launcher";
-        if (current === "launcher") return "command";
+        if (current === "command") return "launcher";
+        if (current === "launcher" && hasPeoplePage) return "people";
         return current;
       });
     };
@@ -228,20 +390,157 @@ const FloatingDockDesktop = ({
     setPrefix(nextPrefix(commandPrefix));
   }, [commandPrefix, setPrefix]);
 
+  const sendAssistantMessage = useCallback(async (message: string, options: { appendUser?: boolean; force?: boolean } = {}) => {
+    if (assistantStatus === "offline" && !options.force) {
+      appendAssistantMessage({
+        role: "assistant",
+        content: "Codex bridge is offline.",
+      }, 4);
+      return;
+    }
+
+    const startedAt = Date.now();
+    const controller = new AbortController();
+    startAssistantRequest(startedAt);
+    setAssistantAbortController(controller);
+    if (options.appendUser !== false) {
+      updateAssistantMessages((current) => [
+        ...current.slice(-3),
+        { id: `user-${Date.now()}`, role: "user", content: message },
+      ]);
+    }
+    const assistantId = `assistant-${Date.now()}`;
+    updateAssistantMessages((current) => [
+      ...current.slice(-3),
+      { id: assistantId, role: "assistant", content: "Starting Codex..." },
+    ]);
+
+    try {
+      await sendCodexMessage(message, {
+        onStatus: (text) => {
+          updateAssistantMessages((current) => current.map((item) => (
+            item.id === assistantId && (item.content === "Starting Codex..." || item.content.startsWith("Network error."))
+              ? { ...item, content: text }
+              : item
+          )));
+        },
+        onMessage: (text) => {
+          updateAssistantMessages((current) => current.map((item) => (
+            item.id === assistantId
+              ? { ...item, content: stripActions(text || "Codex completed without a final message.") }
+              : item
+          )));
+        },
+      }, { signal: controller.signal });
+      setAssistantStatus("ready");
+    } catch (error) {
+      if (isAssistantAbortError(error)) {
+        updateAssistantMessages((current) => current.map((item) => (
+          item.id === assistantId
+            ? { ...item, content: "Stopped." }
+            : item
+        )));
+        setAssistantStatus("ready");
+        return;
+      }
+      updateAssistantMessages((current) => current.map((item) => (
+        item.id === assistantId
+          ? { ...item, content: `Error: ${error instanceof Error ? error.message : String(error)}` }
+          : item
+      )));
+      setAssistantStatus("offline");
+    } finally {
+      finishAssistantRequest(startedAt, assistantStatusStore.get());
+    }
+  }, [assistantStatus]);
+
+  const appendDockMessage = useCallback((message: Omit<AssistantMessage, "id">) => {
+    appendAssistantMessage(message, 6);
+  }, []);
+
   const submitCommand = useCallback((event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const body = commandBody(command).trim();
     if (!body) return;
-    onCommandSubmit?.(`${commandPrefix}${body}`);
+
+    if (commandPrefix === "~") {
+      void sendAssistantMessage(body);
+      setCommand("");
+      setCurrentPrefix("~");
+      setHistoryIndex(null);
+      setPage("command");
+      return;
+    }
+
+    const submittedCommand = `${commandPrefix}${body}`;
+    appendDockMessage({ role: "user", content: submittedCommand });
     setCommand("");
-    setCurrentPrefix("/");
-    setPage("launcher");
-  }, [command, commandPrefix, onCommandSubmit]);
+    setCurrentPrefix("~");
+    setHistoryIndex(null);
+    setPage("command");
+
+    if (commandPrefix === "/") {
+      const launchItem = promptLaunchItems.find((item) => {
+        const title = item.title.toLowerCase();
+        const normalizedBody = body.toLowerCase();
+        return title === normalizedBody || title.startsWith(normalizedBody);
+      });
+      if (launchItem?.onClick) {
+        launchItem.onClick();
+        appendDockMessage({ role: "assistant", content: `Opened ${launchItem.title}` });
+        return;
+      }
+    }
+
+    if (!onCommandSubmit) {
+      appendDockMessage({
+        role: "assistant",
+        content: `No handler is wired for ${commandPrefix} commands in this view.`,
+      });
+      return;
+    }
+
+    assistantLoadingStore.set(true);
+    void Promise.resolve(onCommandSubmit(submittedCommand))
+      .then((result) => {
+        appendDockMessage({
+          role: "assistant",
+          content: typeof result === "string" && result.trim() ? result.trim() : `Handled ${submittedCommand}`,
+        });
+      })
+      .catch((error) => {
+        appendDockMessage({
+          role: "assistant",
+          content: `Error: ${error instanceof Error ? error.message : String(error)}`,
+        });
+      })
+      .finally(() => {
+        assistantLoadingStore.set(false);
+      });
+  }, [appendDockMessage, command, commandPrefix, onCommandSubmit, promptLaunchItems, sendAssistantMessage]);
 
   const applySuggestion = useCallback((value: string) => {
     setCommand(value);
     setCurrentPrefix(commandPrefixFor(value));
+    setHistoryIndex(null);
     inputRef.current?.focus();
+  }, []);
+
+  const recallAssistantHistory = useCallback((direction: -1 | 1) => {
+    if (!assistantUserMessages.length) return false;
+    const nextIndex = historyIndex === null
+      ? (direction === -1 ? assistantUserMessages.length - 1 : 0)
+      : (historyIndex + direction + assistantUserMessages.length) % assistantUserMessages.length;
+    setHistoryIndex(nextIndex);
+    setCurrentPrefix("~");
+    setCommand(`~${assistantUserMessages[nextIndex]}`);
+    return true;
+  }, [assistantUserMessages, historyIndex]);
+
+  const copyAssistantMessage = useCallback(async (message: AssistantMessage) => {
+    await navigator.clipboard.writeText(message.content);
+    setCopiedMessageId(message.id);
+    window.setTimeout(() => setCopiedMessageId((current) => current === message.id ? null : current), 1200);
   }, []);
 
   return (
@@ -250,7 +549,7 @@ const FloatingDockDesktop = ({
       onMouseMove={(e) => mouseX.set(e.pageX)}
       onMouseLeave={() => mouseX.set(Infinity)}
       className={cn(
-        "mx-auto hidden h-16 items-end rounded-2xl border border-white/10 bg-black/50 px-4 pb-2.5 shadow-2xl shadow-black/40 backdrop-blur-xl md:flex",
+        "mx-auto hidden h-16 max-w-[calc(100vw-2rem)] items-end rounded-2xl border border-transparent bg-transparent px-4 pb-2.5 md:flex",
         className,
       )}
       data-dock-page={page}
@@ -258,6 +557,62 @@ const FloatingDockDesktop = ({
       aria-label="Application dock"
     >
       <div className="relative flex h-full min-w-0 items-end">
+        <AnimatePresence>
+          {assistantMessages.length > 0 && page === "command" ? (
+            <motion.div
+              key="assistant-output"
+              initial={{ opacity: 0, y: 10, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.98 }}
+              ref={assistantOutputRef}
+              className="assistant-chat-fade-top scrollbar-none absolute bottom-[calc(100%+10px)] left-1/2 flex max-h-[min(42vh,360px)] w-[min(560px,calc(100vw-2rem))] -translate-x-1/2 flex-col-reverse gap-1.5 overflow-y-auto p-0 text-xs text-white"
+              role="log"
+              aria-live="polite"
+            >
+              {reversedAssistantMessages.map((message) => (
+                <div
+                  key={message.id}
+                  className={cn(
+                    "flex min-w-0 items-start gap-2",
+                    message.role === "user"
+                      ? "ml-auto max-w-[88%] justify-end"
+                      : "mr-auto w-full max-w-full justify-start",
+                  )}
+                >
+                  {message.role === "assistant" ? (
+                    <span className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-white/10 text-white/55">
+                      <Bot className="h-3 w-3" />
+                    </span>
+                  ) : null}
+                  <div className={cn("min-w-0", message.role === "user" ? "text-right" : "text-left")}>
+                    <div className={cn("mb-0.5 flex items-center gap-1.5 text-[10px] leading-none text-white/45", message.role === "user" ? "justify-end" : "justify-start")}>
+                      <span>{message.role === "user" ? "You" : "Codex"}</span>
+                      <span>{formatAssistantMessageTime(message.createdAt, messageTimeNow)}</span>
+                      <button
+                        type="button"
+                        onClick={() => void copyAssistantMessage(message)}
+                        className="inline-flex h-4 w-4 items-center justify-center rounded text-white/35 transition-colors hover:bg-white/10 hover:text-white/80"
+                        aria-label="Copy message"
+                        title="Copy message"
+                      >
+                        {copiedMessageId === message.id ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                      </button>
+                    </div>
+                    <div className="min-w-0 px-0 py-0.5 leading-relaxed text-white">
+                      <AssistantMessageContent content={message.content} />
+                    </div>
+                  </div>
+                  {message.role === "user" ? (
+                    <span className="mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-white/10 text-white/55">
+                      <User className="h-3 w-3" />
+                    </span>
+                  ) : null}
+                </div>
+              ))}
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
+
         <AnimatePresence mode="wait" initial={false}>
           {page === "command" ? (
             <motion.form
@@ -273,51 +628,121 @@ const FloatingDockDesktop = ({
             >
               <button
                 type="button"
-                onClick={cyclePrefix}
+                onClick={() => {
+                  if (assistantLoading && commandPrefix === "~") {
+                    abortAssistantRequest();
+                    return;
+                  }
+                  cyclePrefix();
+                }}
                 className={cn(
-                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-mono text-sm font-bold transition-colors",
-                  commandMode.className,
+                  "flex h-7 w-7 shrink-0 items-center justify-center font-mono text-base font-semibold transition-colors",
+                  prefixClassName,
                 )}
-                aria-label={commandMode.title}
-                title={`${commandMode.title}. Click to cycle mode.`}
+                aria-label={assistantLoading && commandPrefix === "~" ? "Stop assistant request" : commandMode.title}
+                title={assistantLoading && commandPrefix === "~" ? "Stop assistant request" : `${commandMode.title}. Click to cycle mode.`}
               >
-                {commandPrefix}
+                {assistantLoading && commandPrefix === "~" ? <Loader2 className="h-4 w-4 animate-spin" /> : commandPrefix}
               </button>
               <input
                 ref={inputRef}
                 value={commandBody(command)}
-                onChange={(event) => setCommand(`${commandPrefix}${event.target.value}`)}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  if (nextValue.length === 1 && isCommandPrefix(nextValue)) {
+                    setCurrentPrefix(nextValue);
+                    setCommand(nextValue);
+                    setHistoryIndex(null);
+                    return;
+                  }
+                  setCommand(`${commandPrefix}${nextValue}`);
+                  setHistoryIndex(null);
+                }}
                 onKeyDown={(event) => {
+                  if ((event.key === "ArrowUp" || event.key === "ArrowDown") && (historyIndex !== null || !commandBody(command).trim())) {
+                    if (recallAssistantHistory(event.key === "ArrowUp" ? -1 : 1)) {
+                      event.preventDefault();
+                      return;
+                    }
+                  }
                   if (event.key === "Escape") {
                     event.preventDefault();
+                    if (assistantLoading) {
+                      abortAssistantRequest();
+                      return;
+                    }
                     setPage("launcher");
                     setCommand("");
-                    setCurrentPrefix("/");
+                    setCurrentPrefix("~");
+                    setHistoryIndex(null);
                   }
                   if ((event.metaKey || event.ctrlKey) && event.key === " ") {
                     event.preventDefault();
                     cyclePrefix();
                   }
                 }}
-                placeholder={`${commandMode.label.toLowerCase()}...`}
+                placeholder={placeholder}
                 className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground/55"
               />
               {suggestions.length > 0 && (
-                <div className="absolute bottom-[calc(100%+10px)] left-0 right-0 overflow-hidden rounded-xl border border-border bg-card/95 p-1 shadow-2xl backdrop-blur-md">
+                <div className="hidden min-w-0 max-w-[45%] items-center gap-1 overflow-hidden bg-transparent sm:flex">
                   {suggestions.map((item) => (
                     <button
                       key={item.value}
                       type="button"
                       onClick={() => applySuggestion(item.value)}
-                      className="flex h-9 w-full items-center gap-2 rounded-lg px-3 text-left text-xs hover:bg-accent/20"
+                      className="flex h-7 min-w-0 items-center gap-1.5 rounded-full bg-transparent px-2 text-left text-[11px] text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground"
                     >
-                      <span className={cn("flex h-5 w-5 items-center justify-center rounded-full font-mono text-[10px]", COMMAND_PREFIXES[item.prefix].className)}>{item.prefix}</span>
-                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
-                      <span className="truncate font-mono text-[10px] text-muted-foreground">{item.value}</span>
+                      <span className={cn("font-mono text-xs font-semibold", item.prefix === "~" ? assistantStatusClass(assistantStatus) : COMMAND_PREFIXES[item.prefix].className)}>{item.prefix}</span>
+                      <span className="min-w-0 truncate">{item.label}</span>
                     </button>
                   ))}
                 </div>
               )}
+              {commandPrefix === "~" && !commandBody(command).trim() && canRetryAssistant && lastAssistantUserMessage ? (
+                <button
+                  type="button"
+                  onClick={() => void sendAssistantMessage(lastAssistantUserMessage.content, { appendUser: false, force: true })}
+                  disabled={assistantLoading}
+                  className="hidden h-7 shrink-0 rounded-full border border-border px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground disabled:opacity-40 sm:inline-flex sm:items-center"
+                >
+                  Retry
+                </button>
+              ) : null}
+              {commandPrefix === "~" && assistantLoading ? (
+                <button
+                  type="button"
+                  onClick={abortAssistantRequest}
+                  className="hidden h-7 shrink-0 items-center gap-1 rounded-full border border-border px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:border-red-300/40 hover:text-red-200 sm:inline-flex"
+                  title="Stop assistant request"
+                >
+                  <Square className="h-3 w-3" />
+                  Stop
+                </button>
+              ) : null}
+              {commandPrefix === "~" && assistantMessages.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={clearAssistantMessages}
+                  disabled={assistantLoading}
+                  className="hidden h-7 shrink-0 rounded-full border border-border px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground disabled:opacity-40 sm:inline-flex sm:items-center"
+                >
+                  Clear
+                </button>
+              ) : null}
+              {commandPrefix === "~" && assistantDurationMs !== null ? (
+                <span className="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground" title="Assistant request time">
+                  {formatRequestDuration(assistantDurationMs)}
+                </span>
+              ) : null}
+              <span
+                className={cn(
+                  "h-2 w-2 shrink-0 rounded-full",
+                  assistantStatus === "ready" ? "bg-emerald-400" : assistantStatus === "offline" ? "bg-red-400" : "bg-amber-300",
+                )}
+                title={`Assistant ${assistantStatus}`}
+                aria-label={`Assistant ${assistantStatus}`}
+              />
             </motion.form>
           ) : (
             <motion.div
@@ -340,9 +765,9 @@ const FloatingDockDesktop = ({
         </AnimatePresence>
 
         <div className="pointer-events-none absolute left-1/2 top-[calc(100%+12px)] flex -translate-x-1/2 items-center gap-1.5" role="tablist" aria-label="Dock pages">
-          {hasPeoplePage && <span className={cn("h-1.5 w-1.5 rounded-full transition-colors", page === "people" ? "bg-primary" : "bg-muted-foreground/35")} role="tab" aria-selected={page === "people"} aria-label="People" />}
-          <span className={cn("h-1.5 w-1.5 rounded-full transition-colors", page === "launcher" ? "bg-primary" : "bg-muted-foreground/35")} role="tab" aria-selected={page === "launcher"} aria-label="Launcher" />
-          <span className={cn("h-1.5 w-1.5 rounded-full transition-colors", page === "command" ? "bg-primary" : "bg-muted-foreground/35")} role="tab" aria-selected={page === "command"} aria-label="Command" />
+          <span className={cn("h-1.5 w-1.5 rounded-full transition-colors", page === "command" ? "bg-muted-foreground/70" : "bg-muted-foreground/25")} role="tab" aria-selected={page === "command"} aria-label="Command" />
+          <span className={cn("h-1.5 w-1.5 rounded-full transition-colors", page === "launcher" ? "bg-muted-foreground/70" : "bg-muted-foreground/25")} role="tab" aria-selected={page === "launcher"} aria-label="Launcher" />
+          {hasPeoplePage && <span className={cn("h-1.5 w-1.5 rounded-full transition-colors", page === "people" ? "bg-muted-foreground/70" : "bg-muted-foreground/25")} role="tab" aria-selected={page === "people"} aria-label="People" />}
         </div>
       </div>
     </motion.div>

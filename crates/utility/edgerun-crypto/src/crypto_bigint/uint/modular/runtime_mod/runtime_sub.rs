@@ -64,8 +64,8 @@ impl<const LIMBS: usize> SubAssign<DynResidue<LIMBS>> for DynResidue<LIMBS> {
 #[cfg(all(test, crypto_bigint_internal_tests))]
 mod tests {
     use crate::crypto_bigint::{
-        modular::runtime_mod::{DynResidue, DynResidueParams},
         U256,
+        modular::runtime_mod::{DynResidue, DynResidueParams},
     };
 
     #[test]

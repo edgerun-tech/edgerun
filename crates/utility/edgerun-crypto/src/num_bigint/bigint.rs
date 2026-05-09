@@ -13,9 +13,9 @@ use core::ops::{
 };
 use core::str::{self, FromStr};
 use core::{fmt, mem};
+use core::{i64, u64};
 #[cfg(has_i128)]
 use core::{i128, u128};
-use core::{i64, u64};
 
 #[cfg(feature = "serde")]
 use serde;
@@ -29,11 +29,11 @@ use crate::num_bigint::{
 use self::Sign::{Minus, NoSign, Plus};
 use super::ParseBigIntError;
 use super::VEC_SIZE;
+use crate::num_bigint::SmallVec;
 use crate::num_bigint::big_digit::{self, BigDigit, DoubleBigDigit};
 use crate::num_bigint::biguint;
 use crate::num_bigint::biguint::to_str_radix_reversed;
 use crate::num_bigint::biguint::{BigUint, IntDigits};
-use crate::num_bigint::SmallVec;
 
 use crate::num_bigint::IsizePromotion;
 use crate::num_bigint::UsizePromotion;
@@ -1051,7 +1051,9 @@ impl Add<BigInt> for BigInt {
 
     #[inline]
     fn add(self, other: BigInt) -> BigInt {
-        bigint_add!(self, self, self.data, self.sign, other, other, other.data, other.sign)
+        bigint_add!(
+            self, self, self.data, self.sign, other, other, other.data, other.sign
+        )
     }
 }
 
@@ -2192,11 +2194,7 @@ impl CheckedMul for BigInt {
 impl CheckedDiv for BigInt {
     #[inline]
     fn checked_div(&self, v: &BigInt) -> Option<BigInt> {
-        if v.is_zero() {
-            None
-        } else {
-            Some(self.div(v))
-        }
+        if v.is_zero() { None } else { Some(self.div(v)) }
     }
 }
 
@@ -2207,11 +2205,7 @@ impl Integer for BigInt {
         let (d_ui, r_ui) = self.data.div_mod_floor(&other.data);
         let d = BigInt::from_biguint(self.sign, d_ui);
         let r = BigInt::from_biguint(self.sign, r_ui);
-        if other.is_negative() {
-            (-d, r)
-        } else {
-            (d, r)
-        }
+        if other.is_negative() { (-d, r) } else { (d, r) }
     }
 
     #[inline]
@@ -3097,11 +3091,7 @@ impl BigInt {
 
     #[inline]
     pub fn checked_div(&self, v: &BigInt) -> Option<BigInt> {
-        if v.is_zero() {
-            None
-        } else {
-            Some(self.div(v))
-        }
+        if v.is_zero() { None } else { Some(self.div(v)) }
     }
 
     // Returns `(self ^ exponent) mod modulus`

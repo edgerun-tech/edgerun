@@ -11,9 +11,8 @@ use core::task::{Context, Poll};
 use crate::rt::io::{AsyncRead, AsyncWrite, IoError, Result as IoResult};
 use crate::rt::sync::Mutex;
 use edgerun_protocols::ethernet_ipv4::{
-    checksum, ip_checksum, EthHeader, IpHeader, TcpHeader, ETH_TYPE_ARP, ETH_TYPE_IPV4,
-    IP_PROTO_TCP, IP_PROTO_UDP, TCP_FLAG_ACK, TCP_FLAG_FIN, TCP_FLAG_PSH, TCP_FLAG_RST,
-    TCP_FLAG_SYN,
+    ETH_TYPE_ARP, ETH_TYPE_IPV4, EthHeader, IP_PROTO_TCP, IP_PROTO_UDP, IpHeader, TCP_FLAG_ACK,
+    TCP_FLAG_FIN, TCP_FLAG_PSH, TCP_FLAG_RST, TCP_FLAG_SYN, TcpHeader, checksum, ip_checksum,
 };
 
 const MAX_STREAMS: usize = 8;

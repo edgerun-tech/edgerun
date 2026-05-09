@@ -17,17 +17,17 @@ use crate::cli::pull::print_pull_progress;
 #[cfg(test)]
 use crate::cli::run_config::parse_pull_policy;
 use crate::cli::run_config::{
-    apply_run_overrides, apply_user_override, generate_container_id, parse_run_args,
-    write_container_network_files, PullPolicy,
+    PullPolicy, apply_run_overrides, apply_user_override, generate_container_id, parse_run_args,
+    write_container_network_files,
 };
-use crate::cli::{resolve_registry_auth, GlobalOpts};
+use crate::cli::{GlobalOpts, resolve_registry_auth};
 use crate::lifecycle::{
     fork_container_child_with_terminal_socket, run_create_runtime_hooks, run_prestart_hooks,
     save_and_start_forked_child,
 };
 use crate::process::validate_spec;
 use crate::rootfs_copy::copy_rootfs_tree;
-use crate::spec::{parse_oci_spec, OciSpec};
+use crate::spec::{OciSpec, parse_oci_spec};
 use crate::state::{delete_state_with_result, load_state};
 use crate::terminal::{recv_fd, relay_pty_until_exit, send_fd, wait_for_exit_code};
 

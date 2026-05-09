@@ -1,6 +1,6 @@
 //! [`Zeroize`] impls for ARM64 SIMD registers.
 
-use super::{atomic_fence, volatile_write, Zeroize};
+use super::{Zeroize, atomic_fence, volatile_write};
 
 use core::arch::aarch64::*;
 

@@ -3,7 +3,7 @@
 use crate::decoder::Decoder as InnerDecoder;
 use crate::dynamic::DynamicTable;
 use crate::encoder::Encoder as InnerEncoder;
-use crate::{decode_stateless, encode_stateless, Decoded, DecoderError, EncoderError, HeaderField};
+use crate::{Decoded, DecoderError, EncoderError, HeaderField, decode_stateless, encode_stateless};
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use edgerun_encoding::buf::Cursor;

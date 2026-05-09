@@ -4,13 +4,13 @@
 use crate::num_bigint::{FromPrimitive, One, ToPrimitive, Zero};
 use alloc::vec;
 use integer::Integer;
-use rand::rngs::StdRng;
 use rand::SeedableRng;
+use rand::rngs::StdRng;
 
+use crate::num_bigint::Sign::Plus;
 use crate::num_bigint::algorithms::jacobi;
 use crate::num_bigint::big_digit;
 use crate::num_bigint::bigrand::RandBigInt;
-use crate::num_bigint::Sign::Plus;
 use crate::num_bigint::{BigInt, BigUint, IntoBigUint};
 
 lazy_static! {
@@ -627,7 +627,9 @@ mod tests {
     test_pseudo_primes!(
         test_probably_prime_lucas,
         |n| probably_prime_lucas(n) && !probably_prime_miller_rabin(n, 1, true),
-        vec![989, 3239, 5777, 10877, 27971, 29681, 30739, 31631, 39059, 72389, 73919, 75077,]
+        vec![
+            989, 3239, 5777, 10877, 27971, 29681, 30739, 31631, 39059, 72389, 73919, 75077,
+        ]
     );
 
     #[test]

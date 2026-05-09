@@ -17,7 +17,7 @@ use crate::curve25519_dalek::{
     montgomery::MontgomeryPoint,
     scalar::Scalar,
 };
-use crate::digest::{generic_array::typenum::U64, Digest};
+use crate::digest::{Digest, generic_array::typenum::U64};
 
 use crate::ed25519::signature::Verifier;
 

@@ -1,7 +1,7 @@
 //! Elliptic curve public keys.
 
 use crate::elliptic_curve::{
-    point::NonIdentity, AffinePoint, CurveArithmetic, Error, NonZeroScalar, ProjectivePoint, Result,
+    AffinePoint, CurveArithmetic, Error, NonZeroScalar, ProjectivePoint, Result, point::NonIdentity,
 };
 use crate::group::{Curve, Group};
 use core::fmt::Debug;
@@ -18,9 +18,9 @@ use core::str::FromStr;
 #[cfg(feature = "elliptic_curve_sec1")]
 use {
     crate::elliptic_curve::{
+        FieldBytesSize,
         point::PointCompression,
         sec1::{CompressedPoint, EncodedPoint, FromEncodedPoint, ModulusSize, ToEncodedPoint},
-        FieldBytesSize,
     },
     crate::subtle::{Choice, CtOption},
     core::cmp::Ordering,
@@ -36,7 +36,7 @@ use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 
 #[cfg(feature = "elliptic_curve_serde")]
-use serdect::serde::{de, ser, Deserialize, Serialize};
+use serdect::serde::{Deserialize, Serialize, de, ser};
 
 #[cfg(any(feature = "elliptic_curve_pem", feature = "elliptic_curve_serde"))]
 use crate::pkcs8::DecodePublicKey;

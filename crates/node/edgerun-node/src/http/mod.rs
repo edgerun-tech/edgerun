@@ -116,7 +116,7 @@ pub mod uri {
 }
 
 pub use edgerun_protocols::http::{
-    is_tchar, HeaderMap, HeaderName, HeaderValue, Method, Scheme, StatusCode, Uri,
+    HeaderMap, HeaderName, HeaderValue, Method, Scheme, StatusCode, Uri, is_tchar,
 };
 pub use error::{Error, HttpError, Result};
 
@@ -135,7 +135,7 @@ pub mod static_handler;
 
 #[cfg(feature = "client")]
 pub use client::{HttpClient, HttpVersion};
-pub use handler::{into_handler, into_handler_async, AsyncHandler, Handler, SyncHandler};
+pub use handler::{AsyncHandler, Handler, SyncHandler, into_handler, into_handler_async};
 pub use request::{Request, RequestBuilder};
 pub use response::Response;
 #[cfg(all(feature = "server", feature = "tls"))]
@@ -143,13 +143,13 @@ pub use server::TlsCertificate;
 #[cfg(feature = "server")]
 pub use server::{BoundHttpServer, HttpServer};
 #[cfg(feature = "static-files")]
-pub use static_handler::{serve_static, StaticHandler};
+pub use static_handler::{StaticHandler, serve_static};
 
 // ---------------------------------------------------------------------------
 // Middleware system
 // ---------------------------------------------------------------------------
 pub mod middleware;
-pub use middleware::{middleware_fn, Chain, Extensions, FnMiddleware, Middleware, Next};
+pub use middleware::{Chain, Extensions, FnMiddleware, Middleware, Next, middleware_fn};
 
 // ---------------------------------------------------------------------------
 // Connection middleware system (gated by feature)
@@ -168,8 +168,8 @@ pub use connection_middleware::{
 pub mod client_middleware;
 #[cfg(feature = "client")]
 pub use client_middleware::{
-    client_middleware_fn, Chain as ClientChain, Client, ClientExtensions, ClientMiddleware,
-    ClientNext, ClientRequest, ClientTransport, FnClientMiddleware,
+    Chain as ClientChain, Client, ClientExtensions, ClientMiddleware, ClientNext, ClientRequest,
+    ClientTransport, FnClientMiddleware, client_middleware_fn,
 };
 
 // ---------------------------------------------------------------------------

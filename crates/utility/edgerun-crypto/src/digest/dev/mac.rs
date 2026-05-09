@@ -15,8 +15,8 @@ macro_rules! new_mac_test {
     ($name:ident, $test_name:expr, $mac:ty, $trunc:expr $(,)?) => {
         #[test]
         fn $name() {
-            use crate::digest::dev::blobby::Blob3Iterator;
             use crate::digest::Mac;
+            use crate::digest::dev::blobby::Blob3Iterator;
             use core::cmp::min;
 
             fn run_test(key: &[u8], input: &[u8], tag: &[u8]) -> Option<&'static str> {
@@ -90,8 +90,8 @@ macro_rules! new_resettable_mac_test {
     ($name:ident, $test_name:expr, $mac:ty, $trunc:expr $(,)?) => {
         #[test]
         fn $name() {
-            use crate::digest::dev::blobby::Blob3Iterator;
             use crate::digest::Mac;
+            use crate::digest::dev::blobby::Blob3Iterator;
             use core::cmp::min;
 
             fn run_test(key: &[u8], input: &[u8], tag: &[u8]) -> Option<&'static str> {

@@ -1,4 +1,4 @@
-use crate::num_bigint::big_digit::{BigDigit, DoubleBigDigit, BITS};
+use crate::num_bigint::big_digit::{BITS, BigDigit, DoubleBigDigit};
 use crate::num_bigint::bigint::Sign::*;
 use crate::num_bigint::bigint::{BigInt, ToBigInt};
 use crate::num_bigint::biguint::{BigUint, IntDigits};

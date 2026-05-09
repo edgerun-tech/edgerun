@@ -146,8 +146,12 @@ export function DependencyGraph() {
       {externalNodes.length > 0 && (
         <>
           <h4 className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-            <Ban className="h-3 w-3 text-red-500" />
-            External/Illegal Dependencies
+            {illegalEdges.length > 0 ? (
+              <Ban className="h-3 w-3 text-red-500" />
+            ) : (
+              <GitBranch className="h-3 w-3 text-muted-foreground" />
+            )}
+            {illegalEdges.length > 0 ? "External/Illegal Dependencies" : "External Dependencies"}
           </h4>
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
             {externalNodes.map(node => (

@@ -7,7 +7,7 @@ fn h(byte: u8) -> [u8; 32] {
 #[test]
 fn token_bucket_allows_burst() {
     let mut bucket = TokenBucket::new(5, 1); // burst of 5, 1/sec refill
-                                             // Should allow 5 in a row
+    // Should allow 5 in a row
     for _ in 0..5 {
         assert!(bucket.try_consume());
     }
@@ -112,7 +112,7 @@ fn token_bucket_does_not_exceed_max() {
 fn token_bucket_high_refill_rate() {
     // With max_tokens=5, high refill rate refills multiple tokens between consumes
     let mut bucket = TokenBucket::new(5, 1000); // burst 5, 1000/sec
-                                                // Consume all 5 initial tokens
+    // Consume all 5 initial tokens
     for _ in 0..5 {
         assert!(bucket.try_consume());
     }

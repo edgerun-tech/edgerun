@@ -274,11 +274,7 @@ impl FieldElement {
                 borrow = 0;
             }
         }
-        if borrow == 0 {
-            Self(out)
-        } else {
-            reduced
-        }
+        if borrow == 0 { Self(out) } else { reduced }
     }
 
     fn conditional_swap(lhs: &mut Self, rhs: &mut Self, choice: u64) {

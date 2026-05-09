@@ -1,8 +1,8 @@
 //! Context-specific field.
 
 use crate::der::{
-    asn1::AnyRef, Choice, Decode, DecodeValue, DerOrd, Encode, EncodeValue, EncodeValueRef, Error,
-    Header, Length, Reader, Result, Tag, TagMode, TagNumber, Tagged, ValueOrd, Writer,
+    Choice, Decode, DecodeValue, DerOrd, Encode, EncodeValue, EncodeValueRef, Error, Header,
+    Length, Reader, Result, Tag, TagMode, TagNumber, Tagged, ValueOrd, Writer, asn1::AnyRef,
 };
 use core::cmp::Ordering;
 
@@ -256,7 +256,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::ContextSpecific;
-    use crate::der::{asn1::BitStringRef, Decode, Encode, SliceReader, TagMode, TagNumber};
+    use crate::der::{Decode, Encode, SliceReader, TagMode, TagNumber, asn1::BitStringRef};
     use crate::hex;
 
     // Public key data from `pkcs8` crate's `ed25519-pkcs8-v2.der`

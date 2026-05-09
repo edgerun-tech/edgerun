@@ -168,7 +168,7 @@ impl<const LIMBS: usize> PartialEq for Uint<LIMBS> {
 
 #[cfg(all(test, crypto_bigint_internal_tests))]
 mod tests {
-    use crate::crypto_bigint::{Integer, Zero, U128};
+    use crate::crypto_bigint::{Integer, U128, Zero};
     use crate::subtle::{ConstantTimeEq, ConstantTimeGreater, ConstantTimeLess};
     use core::cmp::Ordering;
 

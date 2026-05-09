@@ -6,9 +6,9 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use std::io;
 
+use super::DnsQuery;
 use super::dkim::{DkimResult, DkimStatus};
 use super::spf::SpfResult;
-use super::DnsQuery;
 
 /// Result of a DMARC evaluation.
 #[derive(Debug, Clone)]

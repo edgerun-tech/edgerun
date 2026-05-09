@@ -2,7 +2,7 @@
 
 use super::Scalar;
 use crate::elliptic_curve::rand_core::CryptoRngCore;
-use crate::elliptic_curve::{ops::Invert, CurveArithmetic};
+use crate::elliptic_curve::{CurveArithmetic, ops::Invert};
 use crate::group::ff::Field;
 use crate::subtle::CtOption;
 use crate::zeroize::Zeroize;

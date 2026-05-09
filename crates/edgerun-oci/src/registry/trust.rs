@@ -51,9 +51,11 @@ mod tests {
                 .parse()
                 .unwrap();
 
-        assert!(ImageTrustPolicy::RequireDigestReference
-            .enforce(&image)
-            .is_ok());
+        assert!(
+            ImageTrustPolicy::RequireDigestReference
+                .enforce(&image)
+                .is_ok()
+        );
     }
 
     #[test]

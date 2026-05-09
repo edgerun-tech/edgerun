@@ -12,8 +12,8 @@ macro_rules! impl_modulus {
             for $name
         where
             $uint_type: $crate::crypto_bigint::ConcatMixed<
-                MixedOutput = $crate::crypto_bigint::Uint<DLIMBS>,
-            >,
+                    MixedOutput = $crate::crypto_bigint::Uint<DLIMBS>,
+                >,
         {
             const LIMBS: usize = <$uint_type>::LIMBS;
             const MODULUS: $uint_type = {

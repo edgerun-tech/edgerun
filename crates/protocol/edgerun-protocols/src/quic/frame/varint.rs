@@ -3,7 +3,7 @@
 use alloc::string::{String, ToString};
 
 pub use edgerun_encoding::quic_varint::{
-    decode_varint, encode_varint, encode_varint_vec, VarintError,
+    VarintError, decode_varint, encode_varint, encode_varint_vec,
 };
 
 pub fn decode_varint_string(data: &[u8]) -> Result<(u64, usize), String> {

@@ -11,8 +11,8 @@ pub use crate::digest::crypto_common::{
 
 use crate::digest::block_buffer::{BlockBuffer, BufferKind};
 use crate::digest::crypto_common::{
-    typenum::{IsLess, Le, NonZero, U256},
     Output,
+    typenum::{IsLess, Le, NonZero, U256},
 };
 
 mod ct_variable;

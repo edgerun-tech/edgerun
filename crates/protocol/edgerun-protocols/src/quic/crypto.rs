@@ -17,10 +17,10 @@ use alloc::{
     vec,
     vec::Vec,
 };
+use edgerun_crypto::CipherSuite;
 use edgerun_crypto::aes::{Aes128, Aes256};
 use edgerun_crypto::aes_gcm::aead::{AeadInPlace, KeyInit};
 use edgerun_crypto::aes_gcm::{self, Aes128Gcm, Aes256Gcm};
-use edgerun_crypto::CipherSuite;
 
 /// Crypto phase / encryption level
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

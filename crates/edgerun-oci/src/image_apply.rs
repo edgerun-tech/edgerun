@@ -2,15 +2,15 @@
 
 use crate::image_plan::BareImagePlan;
 use crate::layer_pipeline::{
-    apply_layer_chunks, format_digest, sha256_layer_digest, LayerDigest, LayerSink,
-    Sha256LayerDigest,
+    LayerDigest, LayerSink, Sha256LayerDigest, apply_layer_chunks, format_digest,
+    sha256_layer_digest,
 };
 use crate::prelude::*;
 use crate::registry::manifest::LayerDescriptor;
 use crate::tar_layer::{
+    OciLayerCompression, TarLayerApplyError, TarLayerApplyReport, TarLayerSink,
     apply_uncompressed_tar_layer, apply_uncompressed_tar_layer_streaming, layer_compression,
-    validate_and_decode_tar_layer, OciLayerCompression, TarLayerApplyError, TarLayerApplyReport,
-    TarLayerSink,
+    validate_and_decode_tar_layer,
 };
 use core::fmt;
 

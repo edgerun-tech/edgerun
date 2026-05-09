@@ -1,10 +1,10 @@
 pub use crate::typenum::marker_traits::Integer;
 use crate::typenum::{
-    bit::{Bit, B0, B1},
+    Cmp, Equal, Greater, Less, NonZero, Pow, PowerOfTwo, ToInt, Zero,
+    bit::{B0, B1, Bit},
     consts::{N1, P1, U0, U1},
     private::{Internal, InternalMarker, PrivateDivInt, PrivateIntegerAdd, PrivateRem},
     uint::{UInt, Unsigned},
-    Cmp, Equal, Greater, Less, NonZero, Pow, PowerOfTwo, ToInt, Zero,
 };
 use core::ops::{Add, Div, Mul, Neg, Rem, Sub};
 
@@ -1305,7 +1305,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::typenum::{consts::*, Integer, ToInt};
+    use crate::typenum::{Integer, ToInt, consts::*};
 
     #[test]
     fn to_ix_min() {

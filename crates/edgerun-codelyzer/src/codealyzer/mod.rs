@@ -27,5 +27,5 @@ pub use crate_model::*;
 pub use dependency_footprint::{collect_dependency_footprints, write_dependency_footprints};
 pub use errors::*;
 pub use report::{generate_report, save_report};
-pub use runtime_bridge::{load_runtime_events, merge_runtime_calls_into_edges, RuntimeCallEvent};
-pub use workspace_membership::{check_workspace_membership, WorkspaceMembershipReport};
+pub use runtime_bridge::{RuntimeCallEvent, load_runtime_events, merge_runtime_calls_into_edges};
+pub use workspace_membership::{WorkspaceMembershipReport, check_workspace_membership};

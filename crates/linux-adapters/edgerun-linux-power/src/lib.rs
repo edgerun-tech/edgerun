@@ -15,11 +15,11 @@ pub use edgerun_linux_sysfs::{collections, fs, io, mem, option, os, path, result
 
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityError, CapabilityProvider};
 use edgerun_devices::power::{
-    default_power_descriptor, BatteryStatus, LidState, PowerInventory, PowerSourceInfo,
-    PowerSupplyKind, PowerSystemInfo,
+    BatteryStatus, LidState, PowerInventory, PowerSourceInfo, PowerSupplyKind, PowerSystemInfo,
+    default_power_descriptor,
 };
 use edgerun_linux_sysfs::prelude::v1::*;
-use edgerun_linux_sysfs::{parse_bool_flag, parse_u64, parse_u8, read_trimmed};
+use edgerun_linux_sysfs::{parse_bool_flag, parse_u8, parse_u64, read_trimmed};
 #[cfg(not(target_os = "none"))]
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -104,7 +104,7 @@ pub fn discover_power_supplies_in(root: &Path) -> Result<Vec<LinuxPowerSupply>, 
         Err(err) => {
             return Err(CapabilityError::Provider(format!(
                 "failed to read power supply sysfs: {err}"
-            )))
+            )));
         }
     };
     for entry in entries.flatten() {

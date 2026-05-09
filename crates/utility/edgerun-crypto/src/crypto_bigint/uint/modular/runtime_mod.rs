@@ -1,10 +1,10 @@
 use crate::crypto_bigint::{Limb, Uint, Word};
 
 use super::{
+    Retrieve,
     constant_mod::{Residue, ResidueParams},
     div_by_2::div_by_2,
     reduction::montgomery_reduction,
-    Retrieve,
 };
 
 use crate::subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};

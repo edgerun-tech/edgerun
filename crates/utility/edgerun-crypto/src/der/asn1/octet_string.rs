@@ -1,8 +1,8 @@
 //! ASN.1 `OCTET STRING` support.
 
 use crate::der::{
-    asn1::AnyRef, ord::OrdIsValueOrd, BytesRef, Decode, DecodeValue, EncodeValue, ErrorKind,
-    FixedTag, Header, Length, Reader, Result, Tag, Writer,
+    BytesRef, Decode, DecodeValue, EncodeValue, ErrorKind, FixedTag, Header, Length, Reader,
+    Result, Tag, Writer, asn1::AnyRef, ord::OrdIsValueOrd,
 };
 
 /// ASN.1 `OCTET STRING` type: borrowed form.

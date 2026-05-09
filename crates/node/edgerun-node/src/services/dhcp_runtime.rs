@@ -6,8 +6,8 @@ use core::net::Ipv4Addr;
 use core::time::Duration;
 
 use crate::network::{BareFrameTransport, HostSocketTransport, TransportAddress};
-use crate::rt::{sleep, AsyncUdpSocket, CancellationToken, Mutex, SocketAddr, UdpSocket};
-use edgerun_protocols::dhcp::{message::io, DhcpServerConfig, DhcpServerCore, DHCP_SERVER_PORT};
+use crate::rt::{AsyncUdpSocket, CancellationToken, Mutex, SocketAddr, UdpSocket, sleep};
+use edgerun_protocols::dhcp::{DHCP_SERVER_PORT, DhcpServerConfig, DhcpServerCore, message::io};
 
 pub struct DhcpServer {
     socket: Arc<UdpSocket>,

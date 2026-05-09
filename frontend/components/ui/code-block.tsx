@@ -8,6 +8,7 @@ type CodeBlockProps = {
   language: string;
   filename: string;
   highlightLines?: number[];
+  startingLineNumber?: number;
 } & (
   | {
       code: string;
@@ -29,6 +30,7 @@ export const CodeBlock = ({
   filename,
   code,
   highlightLines = [],
+  startingLineNumber = 1,
   tabs = [],
 }: CodeBlockProps) => {
   const [copied, setCopied] = React.useState(false);
@@ -96,6 +98,7 @@ export const CodeBlock = ({
         }}
         wrapLines={true}
         showLineNumbers={true}
+        startingLineNumber={startingLineNumber}
         lineProps={(lineNumber) => ({
           style: {
             backgroundColor: activeHighlightLines.includes(lineNumber)

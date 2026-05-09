@@ -60,10 +60,10 @@ pub mod data_source_event {
     // sig: none
 
     pub const DND_DROP_PERFORMED: u16 = 3; // version 3+
-                                           // sig: none
+    // sig: none
 
     pub const DND_FINISHED: u16 = 4; // version 3+
-                                     // sig: none
+    // sig: none
 }
 
 /// Build target event.
@@ -126,7 +126,7 @@ pub mod data_offer_event {
     // sig: string(mime_type)
 
     pub const SOURCE_ACTIONS: u16 = 1; // version 3+
-                                       // sig: uint(actions)
+    // sig: uint(actions)
 }
 
 /// Build offer event (mime type available from source).

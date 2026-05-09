@@ -1,19 +1,11 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { BookOpen, Check, Copy, KeyRound, LogOut, Mail, Settings, Share2, X } from "lucide-react"
+import { BookOpen, Check, Copy, KeyRound, LogOut, Mail, Settings, Share2, User, X } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { useAuth, type ProfilePreferences, type UnlockedProfileContainer } from "@/hooks/use-auth"
 
 type Panel = "menu" | "share" | "events" | "settings" | "confirm-logout"
-
-const AVATAR_COLORS = [
-  "oklch(0.34 0.14 245)",
-  "oklch(0.36 0.13 215)",
-  "oklch(0.34 0.12 285)",
-  "oklch(0.36 0.13 25)",
-  "oklch(0.34 0.12 190)",
-]
 
 function contactCard(handle: string, publicKey: string) {
   return [
@@ -86,18 +78,17 @@ export function ProfileMenu() {
   }
 
   return (
-    <div className="fixed left-4 top-4 z-50 sm:left-5 sm:top-5">
+    <div className="fixed right-4 top-4 z-50 sm:right-5 sm:top-5">
       <button
         onClick={() => setOpen((value) => !value)}
-        className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 text-sm font-semibold text-white shadow-2xl ring-1 ring-black/30 transition hover:ring-primary/40 sm:h-12 sm:w-12"
-        style={{ background: preferences.avatarColor }}
+        className="flex h-11 w-11 items-center justify-center rounded-full bg-transparent text-white transition hover:text-foreground sm:h-12 sm:w-12"
         aria-label="Open profile menu"
       >
-        {preferences.avatarInitials}
+        <User className="h-5 w-5 text-muted-foreground" />
       </button>
 
       {open && (
-        <div className="mt-3 max-h-[calc(100vh-5.5rem)] w-[calc(100vw-2rem)] max-w-[360px] overflow-hidden rounded-xl border border-border bg-background/96 shadow-2xl backdrop-blur-xl">
+        <div className="absolute right-0 mt-3 max-h-[calc(100vh-5.5rem)] w-[calc(100vw-2rem)] max-w-[360px] overflow-hidden rounded-xl border border-border bg-background/96 shadow-xl backdrop-blur-xl">
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <div className="min-w-0">
               <div className="truncate text-sm font-semibold text-foreground">{profile.handle}</div>
@@ -169,28 +160,6 @@ export function ProfileMenu() {
           {panel === "settings" && (
             <div className="max-h-[min(560px,calc(100vh-10rem))] overflow-auto p-4">
               <div className="grid gap-4">
-              <label className="grid gap-1 text-xs text-muted-foreground">
-                Avatar initials
-                <input
-                  value={effectiveDraft.avatarInitials}
-                  onChange={(event) => setDraft({ ...effectiveDraft, avatarInitials: event.target.value.slice(0, 2).toUpperCase() })}
-                  className="rounded-md border border-border bg-secondary px-3 py-2 text-sm text-foreground outline-none focus:border-primary"
-                />
-              </label>
-              <div>
-                <div className="mb-2 text-xs text-muted-foreground">Avatar color</div>
-                <div className="flex gap-2">
-                  {AVATAR_COLORS.map((color) => (
-                    <button
-                      key={color}
-                      onClick={() => setDraft({ ...effectiveDraft, avatarColor: color })}
-                      className="h-8 w-8 rounded-full border border-white/15 ring-offset-2 ring-offset-background"
-                      style={{ background: color, outline: effectiveDraft.avatarColor === color ? "2px solid var(--primary)" : "none" }}
-                      aria-label="Set avatar color"
-                    />
-                  ))}
-                </div>
-              </div>
               <div className="grid gap-3">
                 <div className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card px-3 py-2">
                   <div>

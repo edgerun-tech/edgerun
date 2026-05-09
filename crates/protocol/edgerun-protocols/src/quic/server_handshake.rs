@@ -20,8 +20,8 @@
 use crate::tls::cipher::NamedGroup;
 use crate::tls::key_exchange::{EcdhKeyPair, KeyExchangeGroup};
 use crate::tls::prf::{
-    quic_hp_key, quic_initial_server_keys, quic_traffic_keys, Hasher, Tls13KeySchedule,
-    TrafficKeys, INITIAL_SALT_V1,
+    Hasher, INITIAL_SALT_V1, Tls13KeySchedule, TrafficKeys, quic_hp_key, quic_initial_server_keys,
+    quic_traffic_keys,
 };
 use crate::tls::server::client_hello::ClientHello;
 use crate::tls::server::message_builder::{
@@ -35,11 +35,11 @@ use alloc::{
     vec,
     vec::Vec,
 };
-use edgerun_crypto::fill_random;
 use edgerun_crypto::CipherSuite;
+use edgerun_crypto::fill_random;
 
-use super::crypto::ProtectionKeys;
 use super::ConnectionId;
+use super::crypto::ProtectionKeys;
 
 #[derive(Clone)]
 pub struct CertificateAndKey {

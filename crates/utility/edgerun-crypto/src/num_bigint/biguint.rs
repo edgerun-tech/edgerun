@@ -13,7 +13,7 @@ use core::ops::{
 use core::str::{self, FromStr};
 use core::{cmp, fmt, mem};
 use core::{f32, f64};
-use core::{u32, u64, u8};
+use core::{u8, u32, u64};
 
 #[cfg(feature = "serde")]
 use serde;
@@ -1386,11 +1386,7 @@ impl CheckedMul for BigUint {
 impl CheckedDiv for BigUint {
     #[inline]
     fn checked_div(&self, v: &BigUint) -> Option<BigUint> {
-        if v.is_zero() {
-            None
-        } else {
-            Some(self.div(v))
-        }
+        if v.is_zero() { None } else { Some(self.div(v)) }
     }
 }
 
@@ -1702,11 +1698,7 @@ impl ToPrimitive for BigUint {
             None
         } else {
             let ret = (mantissa as f32) * 2.0f32.powi(exponent as i32);
-            if ret.is_infinite() {
-                None
-            } else {
-                Some(ret)
-            }
+            if ret.is_infinite() { None } else { Some(ret) }
         }
     }
 
@@ -1719,11 +1711,7 @@ impl ToPrimitive for BigUint {
             None
         } else {
             let ret = (mantissa as f64) * 2.0f64.powi(exponent as i32);
-            if ret.is_infinite() {
-                None
-            } else {
-                Some(ret)
-            }
+            if ret.is_infinite() { None } else { Some(ret) }
         }
     }
 }

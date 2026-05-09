@@ -37,10 +37,10 @@ use alloc::string::String;
 #[cfg(any(not(feature = "std"), target_os = "none"))]
 use alloc::vec::Vec;
 
+use crate::ValueIndex;
 use crate::map::Map;
 use crate::number::JsonNumber;
 use crate::util;
-use crate::ValueIndex;
 use core::fmt;
 
 /// Error type for fallible JSON value operations.

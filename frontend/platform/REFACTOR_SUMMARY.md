@@ -166,5 +166,5 @@
 1. Old `platform/assistant/*.ts` files (pre-existing) have type errors — need updating to use new types
 2. `workflow-store.ts` still has `eval()` — mark clearly as demo-only
 3. `WalletApp` still shows fake balance — should add more prominent demo label
-4. Old `system-store.ts` (`startSystemStatsSimulation`) still produces fake data — should be removed once real node stats connected
+4. Real node stats should replace the zeroed `systemStatsStore` placeholder in `desktop-store.ts`
 5. Some old `stores/*` files still referenced — gradual migration needed

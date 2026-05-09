@@ -1,4 +1,4 @@
-use crate::crypto_bigint::{modular::reduction::montgomery_reduction, CtChoice, Limb, Uint};
+use crate::crypto_bigint::{CtChoice, Limb, Uint, modular::reduction::montgomery_reduction};
 
 pub const fn inv_montgomery_form<const LIMBS: usize>(
     x: &Uint<LIMBS>,

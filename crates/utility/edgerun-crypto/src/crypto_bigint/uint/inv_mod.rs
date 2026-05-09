@@ -180,7 +180,7 @@ impl<const LIMBS: usize> Uint<LIMBS> {
 
 #[cfg(all(test, crypto_bigint_internal_tests))]
 mod tests {
-    use crate::crypto_bigint::{U1024, U256, U64};
+    use crate::crypto_bigint::{U64, U256, U1024};
 
     #[test]
     fn inv_mod2k() {

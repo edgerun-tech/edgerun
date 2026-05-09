@@ -26,8 +26,8 @@ use pem_rfc7468::{self as pem, PemLabel};
 #[cfg(feature = "elliptic_curve_sec1")]
 use {
     crate::elliptic_curve::{
-        sec1::{EncodedPoint, ModulusSize, ValidatePublicKey},
         FieldBytesSize,
+        sec1::{EncodedPoint, ModulusSize, ValidatePublicKey},
     },
     crate::sec1,
     crate::sec1::der,
@@ -40,8 +40,8 @@ use {
 ))]
 use {
     crate::elliptic_curve::{
-        sec1::{FromEncodedPoint, ToEncodedPoint},
         AffinePoint,
+        sec1::{FromEncodedPoint, ToEncodedPoint},
     },
     crate::sec1::der::Encode,
     alloc::vec::Vec,

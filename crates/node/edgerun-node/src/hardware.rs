@@ -367,7 +367,7 @@ pub fn run_audio_calibration(
     mic_card: u32,
     mic_device: u32,
 ) -> Result<Vec<edgerun_audio_calibration::AudioSweepStepResult>, String> {
-    use edgerun_audio_calibration::{run_speaker_mic_sweep, AudioSweepConfig};
+    use edgerun_audio_calibration::{AudioSweepConfig, run_speaker_mic_sweep};
 
     let config = AudioSweepConfig {
         speaker_card,
@@ -795,12 +795,16 @@ mod tests {
         assert!(!inventory.summary().is_empty());
         let provider_apps = inventory.capability_provider_apps([1; 32]);
         assert_eq!(provider_apps.len(), inventory.capability_descriptors.len());
-        assert!(provider_apps
-            .iter()
-            .all(|app| !app.app_id.iter().all(|b| *b == 0)));
-        assert!(provider_apps
-            .iter()
-            .all(|app| !app.provided_capabilities.is_empty()));
+        assert!(
+            provider_apps
+                .iter()
+                .all(|app| !app.app_id.iter().all(|b| *b == 0))
+        );
+        assert!(
+            provider_apps
+                .iter()
+                .all(|app| !app.provided_capabilities.is_empty())
+        );
         #[cfg(not(target_os = "android"))]
         assert_eq!(inventory.platform, "linux");
         #[cfg(target_os = "android")]

@@ -17,7 +17,7 @@ use edgerun_protocols::core_protocol::protocol::{
     ProtocolRecord, RevocationRef,
 };
 use edgerun_protocols::sign::{ProtocolSignError, ProtocolSigner};
-use edgerun_protocols::verify::{verify_event_envelope, ProtocolFamily, ProtocolSignerRef};
+use edgerun_protocols::verify::{ProtocolFamily, ProtocolSignerRef, verify_event_envelope};
 
 pub type StreamId = [u8; 64];
 

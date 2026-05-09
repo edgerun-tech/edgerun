@@ -2,8 +2,8 @@
 
 #[cfg(feature = "yaml")]
 pub use crate::yaml_api::{
-    from_yaml_str, json_to_yaml, parse_yaml_value, to_yaml_string, yaml_to_json, YamlDeserializer,
-    YamlError, YamlValue,
+    YamlDeserializer, YamlError, YamlValue, from_yaml_str, json_to_yaml, parse_yaml_value,
+    to_yaml_string, yaml_to_json,
 };
 
 #[cfg(feature = "yaml")]

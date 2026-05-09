@@ -45,7 +45,7 @@ use core::ops::{Add, Mul, Neg};
 
 use crate::curve25519_dalek::backend::serial::u64::field::FieldElement51;
 use crate::curve25519_dalek::backend::vector::avx2::constants::{
-    P_TIMES_16_HI, P_TIMES_16_LO, P_TIMES_2_HI, P_TIMES_2_LO,
+    P_TIMES_2_HI, P_TIMES_2_LO, P_TIMES_16_HI, P_TIMES_16_LO,
 };
 
 /// Unpack 32-bit lanes into 64-bit lanes:

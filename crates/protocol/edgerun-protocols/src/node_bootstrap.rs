@@ -2,7 +2,7 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 
-use crate::keygen::{generate_node_signing_key, GeneratedKeyStore, KeygenError, NodeId};
+use crate::keygen::{GeneratedKeyStore, KeygenError, NodeId, generate_node_signing_key};
 use crate::sign_p256::P256ProtocolSigner;
 use crate::verify::ProtocolFamily;
 use edgerun_core::protocol::{EventEnvelope, EventType, ProtocolRecord};
@@ -100,7 +100,7 @@ pub fn bootstrap_new_node<S: GeneratedKeyStore>(
 mod tests {
     use super::*;
     use crate::keygen::MemoryKeyStore;
-    use crate::verify::{verify_event_envelope, ProtocolSignerRef};
+    use crate::verify::{ProtocolSignerRef, verify_event_envelope};
 
     #[test]
     fn bootstrap_generates_stores_and_signs_genesis() {

@@ -74,7 +74,7 @@ fn decode_inner<'a>(
 }
 
 pub mod lower {
-    use super::{decode_inner, encoded_len, Error};
+    use super::{Error, decode_inner, encoded_len};
 
     pub fn decode<'a>(src: impl AsRef<[u8]>, dst: &'a mut [u8]) -> Result<&'a [u8], Error> {
         decode_inner(src.as_ref(), dst, decode_nibble)
@@ -113,7 +113,7 @@ pub mod lower {
 }
 
 pub mod upper {
-    use super::{decode_inner, encoded_len, Error};
+    use super::{Error, decode_inner, encoded_len};
 
     pub fn decode<'a>(src: impl AsRef<[u8]>, dst: &'a mut [u8]) -> Result<&'a [u8], Error> {
         decode_inner(src.as_ref(), dst, decode_nibble)
@@ -152,7 +152,7 @@ pub mod upper {
 }
 
 pub mod mixed {
-    use super::{decode_inner, Error};
+    use super::{Error, decode_inner};
 
     pub fn decode<'a>(src: impl AsRef<[u8]>, dst: &'a mut [u8]) -> Result<&'a [u8], Error> {
         decode_inner(src.as_ref(), dst, decode_nibble)

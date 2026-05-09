@@ -1,9 +1,9 @@
 //! PKCS#8 `PrivateKeyInfo`.
 
 use crate::der::{
-    asn1::{AnyRef, BitStringRef, ContextSpecific, OctetStringRef},
     Decode, DecodeValue, Encode, EncodeValue, Header, Length, Reader, Sequence, TagMode, TagNumber,
     Writer,
+    asn1::{AnyRef, BitStringRef, ContextSpecific, OctetStringRef},
 };
 use crate::pkcs8::{AlgorithmIdentifierRef, Error, Result, Version};
 use core::fmt;

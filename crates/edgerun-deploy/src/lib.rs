@@ -7,8 +7,8 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 pub use edgerun_machine_report::{
-    plan_deployment_modes, ContainerRuntime, DeploymentMachineInventory,
-    DeploymentMode as DeployMode, MachineCapabilityReport, ServiceManager,
+    ContainerRuntime, DeploymentMachineInventory, DeploymentMode as DeployMode,
+    MachineCapabilityReport, ServiceManager, plan_deployment_modes,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -258,11 +258,7 @@ fn join_strings(values: &[String]) -> String {
 }
 
 fn bool_str(value: bool) -> &'static str {
-    if value {
-        "yes"
-    } else {
-        "no"
-    }
+    if value { "yes" } else { "no" }
 }
 
 #[cfg(feature = "std")]

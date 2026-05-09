@@ -65,7 +65,7 @@ mod verifying;
 pub use crate::ecdsa_core::{normalized::NormalizedSignature, recovery::RecoveryId};
 
 // Re-export the `elliptic-curve` crate (and select types)
-pub use crate::elliptic_curve::{self, sec1::EncodedPoint, PrimeCurve};
+pub use crate::elliptic_curve::{self, PrimeCurve, sec1::EncodedPoint};
 
 // Re-export the `signature` crate (and select types)
 pub use crate::signature::{self, Error, Result, SignatureEncoding};
@@ -76,8 +76,8 @@ pub use crate::ecdsa_core::signing::SigningKey;
 pub use crate::ecdsa_core::verifying::VerifyingKey;
 
 use crate::elliptic_curve::{
-    generic_array::{typenum::Unsigned, ArrayLength, GenericArray},
     FieldBytes, FieldBytesSize, ScalarPrimitive,
+    generic_array::{ArrayLength, GenericArray, typenum::Unsigned},
 };
 use core::{fmt, ops::Add};
 
@@ -86,14 +86,14 @@ use alloc::vec::Vec;
 
 #[cfg(feature = "p256_ecdsa_arithmetic")]
 use {
-    crate::elliptic_curve::{scalar::IsHigh, CurveArithmetic, NonZeroScalar},
+    crate::elliptic_curve::{CurveArithmetic, NonZeroScalar, scalar::IsHigh},
     core::str,
 };
 
 #[cfg(feature = "p256_ecdsa_digest")]
 use crate::digest::{
-    const_oid::{AssociatedOid as DigestAssociatedOid, ObjectIdentifier as DigestObjectIdentifier},
     Digest,
+    const_oid::{AssociatedOid as DigestAssociatedOid, ObjectIdentifier as DigestObjectIdentifier},
 };
 
 #[cfg(any(feature = "p256_ecdsa_digest", feature = "p256_ecdsa_pkcs8"))]
@@ -101,11 +101,11 @@ use crate::const_oid::{AssociatedOid, ObjectIdentifier};
 
 #[cfg(feature = "p256_ecdsa_pkcs8")]
 use crate::elliptic_curve::pkcs8::spki::{
-    der::AnyRef, AlgorithmIdentifierRef, AssociatedAlgorithmIdentifier,
+    AlgorithmIdentifierRef, AssociatedAlgorithmIdentifier, der::AnyRef,
 };
 
 #[cfg(feature = "p256_ecdsa_serde")]
-use serdect::serde::{de, ser, Deserialize, Serialize};
+use serdect::serde::{Deserialize, Serialize, de, ser};
 
 #[cfg(all(feature = "p256_ecdsa_alloc", feature = "p256_ecdsa_pkcs8"))]
 use crate::elliptic_curve::pkcs8::spki::{

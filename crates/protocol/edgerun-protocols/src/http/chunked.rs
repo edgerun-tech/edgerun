@@ -1,7 +1,7 @@
-use super::header::{header_value_has_token, HeaderMap};
+use super::header::{HeaderMap, header_value_has_token};
 use alloc::vec::Vec;
 use core::fmt;
-use edgerun_encoding::chunked::{decode_chunked, ChunkedError as EncodingChunkedError};
+use edgerun_encoding::chunked::{ChunkedError as EncodingChunkedError, decode_chunked};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChunkedError {

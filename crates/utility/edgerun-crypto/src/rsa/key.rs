@@ -1,6 +1,6 @@
-use crate::num_bigint::traits::ModInverse;
 use crate::num_bigint::Integer;
 use crate::num_bigint::Sign::Plus;
+use crate::num_bigint::traits::ModInverse;
 use crate::num_bigint::{BigInt, BigUint};
 use crate::num_bigint::{FromPrimitive, One, ToPrimitive};
 use crate::rand_core::CryptoRngCore;
@@ -16,10 +16,10 @@ use crate::rsa::algorithms::rsa::{
     recover_primes,
 };
 
+use crate::rsa::CrtValue;
 use crate::rsa::dummy_rng::DummyRng;
 use crate::rsa::errors::{Error, Result};
 use crate::rsa::traits::{PaddingScheme, PrivateKeyParts, PublicKeyParts, SignatureScheme};
-use crate::rsa::CrtValue;
 
 /// Represents the public part of an RSA key.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
@@ -641,7 +641,7 @@ mod tests {
     #[cfg(feature = "rsa_serde")]
     fn test_serde() {
         use crate::test_rng::ChaCha8Rng;
-        use serde_test::{assert_tokens, Token};
+        use serde_test::{Token, assert_tokens};
 
         let mut rng = ChaCha8Rng::from_seed([42; 32]);
         let priv_key = RsaPrivateKey::new(&mut rng, 64).expect("failed to generate key");

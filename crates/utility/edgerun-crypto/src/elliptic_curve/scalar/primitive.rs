@@ -3,10 +3,10 @@
 use crate::base16ct::{self, HexDisplay};
 use crate::elliptic_curve::rand_core::CryptoRngCore;
 use crate::elliptic_curve::{
-    bigint::{prelude::*, Limb, NonZero},
+    Curve, Error, FieldBytes, FieldBytesEncoding, Result,
+    bigint::{Limb, NonZero, prelude::*},
     scalar::FromUintUnchecked,
     scalar::IsHigh,
-    Curve, Error, FieldBytes, FieldBytesEncoding, Result,
 };
 use crate::subtle::{
     Choice, ConditionallySelectable, ConstantTimeEq, ConstantTimeGreater, ConstantTimeLess,
@@ -19,13 +19,13 @@ use core::{
     ops::{Add, AddAssign, Neg, ShrAssign, Sub, SubAssign},
     str,
 };
-use generic_array::{typenum::Unsigned, GenericArray};
+use generic_array::{GenericArray, typenum::Unsigned};
 
 #[cfg(feature = "elliptic_curve_arithmetic")]
 use super::{CurveArithmetic, Scalar};
 
 #[cfg(feature = "elliptic_curve_serde")]
-use serdect::serde::{de, ser, Deserialize, Serialize};
+use serdect::serde::{Deserialize, Serialize, de, ser};
 
 /// Generic scalar type with primitive functionality.
 ///

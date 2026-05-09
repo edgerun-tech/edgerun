@@ -343,8 +343,8 @@ mod tests {
     use alloc::vec;
     use alloc::vec::Vec;
 
-    use super::encode_integer;
     use super::Encoder;
+    use super::encode_integer;
 
     use super::super::Decoder;
 
@@ -461,7 +461,9 @@ mod tests {
             // The rest of it correctly represents PUT?
             assert_eq!(
                 &result[1..],
-                &[11, b'e', b'x', b'a', b'm', b'p', b'l', b'e', b'.', b'c', b'o', b'm']
+                &[
+                    11, b'e', b'x', b'a', b'm', b'p', b'l', b'e', b'.', b'c', b'o', b'm'
+                ]
             )
         }
     }

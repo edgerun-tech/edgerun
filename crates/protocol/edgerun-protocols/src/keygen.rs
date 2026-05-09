@@ -122,7 +122,7 @@ impl GeneratedKeyStore for MemoryKeyStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::verify::{verify_event_envelope, ProtocolFamily, ProtocolSignerRef};
+    use crate::verify::{ProtocolFamily, ProtocolSignerRef, verify_event_envelope};
     use edgerun_core::protocol::{EventEnvelope, ProtocolRecord};
 
     #[test]

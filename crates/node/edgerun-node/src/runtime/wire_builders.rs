@@ -1,14 +1,14 @@
 use alloc::vec::Vec;
 
 use edgerun_protocols::wire::{
-    CapabilityRequest, CapabilityResponseProofRecord, RuntimeAppInstall, RuntimeAppMessage,
-    RuntimeCapabilityDeclaration, RuntimeDeploymentConfig, RuntimeDomainConfig, RuntimeHttpRequest,
-    RuntimeHttpRoute, RuntimeIdentityRoute, RuntimeProtocolBinding, SigningCapabilityInputRecord,
-    SigningResponsePayloadRecord, StorageWriteReceiptRecord, CAPABILITY_OPERATION_SIGN,
+    CAPABILITY_OPERATION_SIGN, CapabilityRequest, CapabilityResponseProofRecord,
     RUNTIME_PROTOCOL_ACME, RUNTIME_PROTOCOL_DNS_TCP, RUNTIME_PROTOCOL_DNS_UDP,
     RUNTIME_PROTOCOL_HTTP, RUNTIME_PROTOCOL_HTTPS, RUNTIME_PROTOCOL_IMAP, RUNTIME_PROTOCOL_IMAPS,
     RUNTIME_PROTOCOL_LMTP, RUNTIME_PROTOCOL_PROXY, RUNTIME_PROTOCOL_SMTP,
-    RUNTIME_PROTOCOL_SUBMISSION, RUNTIME_PROTOCOL_TFTP, SDK_WIRE_ABI_VERSION,
+    RUNTIME_PROTOCOL_SUBMISSION, RUNTIME_PROTOCOL_TFTP, RuntimeAppInstall, RuntimeAppMessage,
+    RuntimeCapabilityDeclaration, RuntimeDeploymentConfig, RuntimeDomainConfig, RuntimeHttpRequest,
+    RuntimeHttpRoute, RuntimeIdentityRoute, RuntimeProtocolBinding, SDK_WIRE_ABI_VERSION,
+    SigningCapabilityInputRecord, SigningResponsePayloadRecord, StorageWriteReceiptRecord,
 };
 
 pub fn runtime_app_install(

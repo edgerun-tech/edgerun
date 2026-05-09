@@ -293,11 +293,7 @@ pub fn parse_mac(s: &str) -> Option<[u8; 6]> {
         result[i] = (hi << 4) | lo;
         i += 1;
     }
-    if i == 6 {
-        Some(result)
-    } else {
-        None
-    }
+    if i == 6 { Some(result) } else { None }
 }
 
 /// Format `[u8; 6]` as a colon-separated MAC address string.

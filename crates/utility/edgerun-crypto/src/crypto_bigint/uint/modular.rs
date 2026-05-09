@@ -27,11 +27,10 @@ pub trait Retrieve {
 #[cfg(all(test, crypto_bigint_internal_tests))]
 mod tests {
     use crate::crypto_bigint::{
-        const_residue, impl_modulus,
+        NonZero, U64, U256, Uint, const_residue, impl_modulus,
         modular::{
             constant_mod::Residue, constant_mod::ResidueParams, reduction::montgomery_reduction,
         },
-        NonZero, Uint, U256, U64,
     };
 
     impl_modulus!(

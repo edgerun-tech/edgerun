@@ -37,10 +37,10 @@ fn validate_assurance_claim_satisfies_requirement(
 use crate::prelude::v1::*;
 
 use crate::protocol::{
-    protocol_wire_bytes, AssuranceClaim, AssuranceRequirement, CapabilityDescriptor,
-    CommandEnvelope, CommandType, DelegationRecord, Digest, IdentityRef, ObjectRef, ProtocolRecord,
+    AssuranceClaim, AssuranceRequirement, CapabilityDescriptor, CommandEnvelope, CommandType,
+    DelegationRecord, Digest, IdentityRef, ObjectRef, ProtocolRecord, protocol_wire_bytes,
 };
-use crate::result::{accept, defer, duplicate, empty_map, reject, ReasonCode, ValidationResult};
+use crate::result::{ReasonCode, ValidationResult, accept, defer, duplicate, empty_map, reject};
 use crate::value::Value;
 
 // ---------------------------------------------------------------------------

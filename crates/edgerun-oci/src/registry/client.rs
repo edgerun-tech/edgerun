@@ -1,7 +1,7 @@
 //! OCI Registry V2 client — async, using the node-owned HTTP client.
 
-use crate::prelude::*;
 use crate::BareImagePlan;
+use crate::prelude::*;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 use std::io;
 #[cfg(all(feature = "std", not(target_os = "none")))]

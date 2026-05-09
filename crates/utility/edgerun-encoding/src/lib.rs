@@ -41,4 +41,4 @@ pub use base64::{
     base64url_decode, base64url_encode, base64url_nopad_encode, standard_decode, standard_encode,
     standard_encode_wrapped,
 };
-pub use crc32::{crc32, Crc32};
+pub use crc32::{Crc32, crc32};
