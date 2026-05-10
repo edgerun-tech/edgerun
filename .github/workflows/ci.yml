@@ -39,6 +39,9 @@ jobs:
               raise SystemExit(1)
           PY
 
+      - name: Vendor flattening inventory
+        run: python3 scripts/vendor-flattening-inventory.py
+
       - name: Dependency sovereignty inventory
         run: python3 scripts/dependency-sovereignty.py
 
