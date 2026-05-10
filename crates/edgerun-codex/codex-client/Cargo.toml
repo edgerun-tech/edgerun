@@ -7,6 +7,7 @@ version.workspace = true
 [features]
 default = ["native-transport"]
 native-transport = [
+    "edgerun-reqwest/cookies",
     "edgerun-reqwest/http1",
     "edgerun-reqwest/http2",
     "edgerun-reqwest/http3",
