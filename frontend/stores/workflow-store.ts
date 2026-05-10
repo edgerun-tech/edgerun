@@ -14,6 +14,7 @@
  */
 
 import { atom, computed } from "nanostores"
+import { computedMapToList } from "@/platform/utils/computed"
 
 export type TriggerType = "manual" | "schedule" | "event" | "webhook"
 export type ActionType = "http" | "deploy" | "notify" | "transform" | "condition" | "delay" | "log"

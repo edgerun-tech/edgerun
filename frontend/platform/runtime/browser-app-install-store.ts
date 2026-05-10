@@ -1,6 +1,7 @@
 "use client"
 
 import { atom, computed } from "nanostores"
+import { computedMapToList } from "@/platform/utils/computed"
 import { runtimeEventLog } from "./runtime-event-log"
 import { sha256Hex } from "./browser-capability-types"
 import { decodeAppStoreCatalogWithEdgerunNode, installEappWithEdgerunNode } from "./edgerun-node"
