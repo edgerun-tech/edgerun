@@ -1,0 +1,19 @@
+[package]
+name = "edgerun-icu-provider"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Edgerun shim for icu_provider"
+
+[dependencies]
+icu_provider = { path = "../../vendor/cargo/icu_provider", default-features = false }
+
+[features]
+default = []
+sync = ["icu_provider/sync"]
+
+[lints]
+workspace = true

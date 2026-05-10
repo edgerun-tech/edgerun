@@ -1,0 +1,19 @@
+[package]
+name = "edgerun-v8"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Edgerun shim for v8"
+
+[dependencies]
+v8 = { path = "../../vendor/cargo/v8" }
+
+[features]
+default = []
+v8_enable_sandbox = ["v8/v8_enable_sandbox"]
+
+[lints]
+workspace = true

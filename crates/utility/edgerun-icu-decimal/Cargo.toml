@@ -1,0 +1,15 @@
+[package]
+name = "edgerun-icu-decimal"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Edgerun shim for icu_decimal"
+
+[dependencies]
+icu_decimal = { path = "../../vendor/cargo/icu_decimal" }
+
+[lints]
+workspace = true

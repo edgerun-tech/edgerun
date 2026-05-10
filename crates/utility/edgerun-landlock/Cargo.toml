@@ -1,0 +1,15 @@
+[package]
+name = "edgerun-landlock"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Edgerun shim for landlock"
+
+[dependencies]
+landlock = { path = "../../vendor/cargo/landlock" }
+
+[lints]
+workspace = true

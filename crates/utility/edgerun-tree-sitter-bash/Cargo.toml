@@ -1,0 +1,15 @@
+[package]
+name = "edgerun-tree-sitter-bash"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Edgerun shim for tree-sitter-bash"
+
+[dependencies]
+tree-sitter-bash = { path = "../../vendor/cargo/tree-sitter-bash" }
+
+[lints]
+workspace = true
