@@ -87,6 +87,8 @@ members = [
   "crates/utility/edgerun-strum-macros",
   "crates/linux-adapters/edgerun-linux-cec",
   "crates/utility/edgerun-rusttls",
+  "crates/utility/edgerun-rustls-pki-types",
+  "crates/utility/edgerun-rustls-native-certs",
   "crates/linux-adapters/edgerun-linux-gpu",
   "crates/linux-adapters/edgerun-linux-netif",
   "crates/linux-adapters/edgerun-linux-nfc",
@@ -203,6 +205,9 @@ edgerun-tokio = { version = "0.1", path = "crates/utility/edgerun-tokio" }
 edgerun-tokio-tungstenite = { version = "0.1", path = "crates/utility/edgerun-tokio-tungstenite" }
 edgerun-tokio-util = { version = "0.1", path = "crates/utility/edgerun-tokio-util" }
 edgerun-tungstenite = { version = "0.1", path = "crates/utility/edgerun-tungstenite" }
+edgerun-rusttls = { version = "0.1", path = "crates/utility/edgerun-rusttls", default-features = false }
+edgerun-rustls-pki-types = { version = "0.1", path = "crates/utility/edgerun-rustls-pki-types", default-features = false }
+edgerun-rustls-native-certs = { version = "0.1", path = "crates/utility/edgerun-rustls-native-certs" }
 edgerun-regex = { version = "0.1", path = "crates/utility/edgerun-regex" }
 edgerun-reqwest = { version = "0.1", path = "crates/utility/edgerun-reqwest" }
 edgerun-rmcp = { version = "0.1", path = "crates/utility/edgerun-rmcp" }
