@@ -14,4 +14,6 @@ pub use provider::ProviderAccountResult;
 pub use provider::ProviderAccountState;
 pub use provider::ProviderCapabilities;
 pub use provider::SharedModelProvider;
+#[cfg(feature = "native-transport")]
 pub use provider::create_model_provider;
+pub use provider::create_model_provider_with_transport;
