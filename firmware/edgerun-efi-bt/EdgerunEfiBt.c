@@ -57,7 +57,6 @@ UefiMain(
   EDGERUN_HCI_LOCAL_VERSION Version;
   UINT8 BdAddr[6];
 
-  (VOID)ImageHandle;
   (VOID)SystemTable;
 
   Print(L"\r\nEdgeRun UEFI Bluetooth bring-up (C/EDK II)\r\n");
@@ -84,7 +83,7 @@ UefiMain(
     Device.AclInEndpoint
     );
 
-  Status = EdgerunRealtekInitRtl8922A(&Device);
+  Status = EdgerunRealtekInitRtl8922A(&Device, ImageHandle);
   if (EFI_ERROR(Status)) {
     Print(L"Realtek init failed: ");
     EdgerunPrintStatus(Status);
