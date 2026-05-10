@@ -8,13 +8,12 @@ repository = "https://github.com/Sylchi/edgerun_reference_core"
 homepage = "https://github.com/Sylchi/edgerun_reference_core"
 description = "No-crate UEFI Bluetooth bring-up for Realtek RTL8922AE"
 
-[lib]
+[[bin]]
+name = "edgerun-efi-bluetooth"
 path = "src/main.rs"
-crate-type = ["cdylib"]
 
 [features]
 default = []
-# Put firmware/rtl8922au_fw.bin in this crate and enable this feature to embed it.
 embedded-rtl8922au-fw = []
 
 [dependencies]
