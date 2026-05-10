@@ -1,16 +1,19 @@
 [package]
 name = "edgerun-zeroize"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-publish.workspace = true
-repository.workspace = true
-homepage.workspace = true
+version = "0.1.1"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+repository = "https://github.com/Sylchi/edgerun_reference_core"
+homepage = "https://github.com/Sylchi/edgerun_reference_core"
 description = "Edgerun-owned no_std memory zeroization primitives"
+
+[workspace]
 
 [features]
 default = ["alloc"]
 alloc = []
 
-[lints]
-workspace = true
+[lints.rust]
+dead_code = "allow"
+missing_docs = "allow"
