@@ -9,30 +9,23 @@ version.workspace = true
 name = "codex_core"
 path = "src/stub_lib.rs"
 
+[features]
+default = ["native-transport"]
+native-transport = [
+    "codex-api/native-transport",
+    "codex-model-provider/native-transport",
+]
+
 [lints]
 workspace = true
 
 [dependencies]
-codex-api = { workspace = true }
+codex-api = { workspace = true, default-features = false }
 codex-apply-patch = { workspace = true }
-codex-model-provider = { workspace = true }
+codex-model-provider = { workspace = true, default-features = false }
 codex-model-provider-info = { workspace = true }
 codex-models-manager = { workspace = true }
 codex-protocol = { workspace = true }
 codex-shell-command = { workspace = true }
 codex-tools = { workspace = true }
-edgerun-async-channel = { workspace = true }
-edgerun-async-trait = { workspace = true }
-edgerun-error = { workspace = true }
-edgerun-encoding = { workspace = true }
-edgerun-eventsource-stream = { workspace = true }
-edgerun-futures = { workspace = true }
-edgerun-http = { workspace = true }
 edgerun-json = { workspace = true, features = ["serde-compat"] }
-tracing = { workspace = true }
-edgerun-random = { workspace = true }
-edgerun-shlex = { workspace = true }
-edgerun-similar = { workspace = true }
-edgerun-time = { workspace = true }
-edgerun-tokio-tungstenite = { workspace = true }
-edgerun-uuid = { workspace = true }
