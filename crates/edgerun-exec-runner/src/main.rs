@@ -1,17 +1,16 @@
 use std::env;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, OpenOptions};
 use std::io::{self, Read, Write};
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::mpsc;
 use std::thread;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 const MAGIC: &[u8; 4] = b"ERXR";
 const VERSION: u16 = 1;
 const MAX_PROGRAM_SIZE: u64 = 512 * 1024 * 1024;
-const DEFAULT_TIMEOUT_MS: u64 = 0;
 
 const MSG_HELLO: u16 = 1;
 const MSG_EXEC_BEGIN: u16 = 2;
@@ -75,6 +74,7 @@ fn real_main() -> io::Result<()> {
                     }
                 } else {
                     send_error(&mut output, frame.seq, "expected EXEC_BEGIN")?;
+                    output.flush()?;
                 }
             }
             Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => return Ok(()),
@@ -84,10 +84,19 @@ fn real_main() -> io::Result<()> {
 }
 
 fn bootstrap_linux_mounts() {
-    let _ = Command::new("/bin/mount").args(["-t", "proc", "proc", "/proc"]).status();
-    let _ = Command::new("/bin/mount").args(["-t", "sysfs", "sysfs", "/sys"]).status();
-    let _ = Command::new("/bin/mount").args(["-t", "devtmpfs", "devtmpfs", "/dev"]).status();
-    let _ = Command::new("/bin/mount").args(["-t", "tmpfs", "tmpfs", "/run"]).status();
+    run_quiet_mount(["-t", "proc", "proc", "/proc"]);
+    run_quiet_mount(["-t", "sysfs", "sysfs", "/sys"]);
+    run_quiet_mount(["-t", "devtmpfs", "devtmpfs", "/dev"]);
+    run_quiet_mount(["-t", "tmpfs", "tmpfs", "/run"]);
+}
+
+fn run_quiet_mount<const N: usize>(args: [&str; N]) {
+    let _ = Command::new("/bin/mount")
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
 }
 
 fn handle_job<R: Read, W: Write>(
@@ -137,6 +146,7 @@ fn handle_job<R: Read, W: Write>(
     if got_hash != begin.sha256 {
         let _ = fs::remove_dir_all(&job_dir);
         send_error(output, first.seq, "sha256 mismatch")?;
+        output.flush()?;
         return Ok(());
     }
 
@@ -173,8 +183,8 @@ fn execute_and_stream<W: Write>(
     command.stderr(Stdio::piped());
 
     let mut child = command.spawn()?;
-    let mut stdout = child.stdout.take().ok_or_else(|| io::Error::new(io::ErrorKind::Other, "missing stdout pipe"))?;
-    let mut stderr = child.stderr.take().ok_or_else(|| io::Error::new(io::ErrorKind::Other, "missing stderr pipe"))?;
+    let mut stdout = child.stdout.take().ok_or_else(|| io::Error::other("missing stdout pipe"))?;
+    let mut stderr = child.stderr.take().ok_or_else(|| io::Error::other("missing stderr pipe"))?;
 
     let (tx, rx) = mpsc::channel::<(u16, Vec<u8>)>();
     let tx_out = tx.clone();
@@ -183,37 +193,38 @@ fn execute_and_stream<W: Write>(
     thread::spawn(move || pipe_reader(MSG_STDERR, &mut stderr, tx_err));
     drop(tx);
 
-    let deadline = if begin.timeout_ms == 0 { None } else { Some(Instant::now() + Duration::from_millis(begin.timeout_ms)) };
-    let mut exit_code = None;
+    let deadline = if begin.timeout_ms == 0 {
+        None
+    } else {
+        Some(Instant::now() + Duration::from_millis(begin.timeout_ms))
+    };
 
-    loop {
+    let exit_code = loop {
         while let Ok((msg_type, data)) = rx.try_recv() {
             send_frame(output, msg_type, 0, &data)?;
             output.flush()?;
         }
 
         if let Some(status) = child.try_wait()? {
-            exit_code = Some(status.code().unwrap_or(128 + status_signal_code(&status)));
-            break;
+            break status.code().unwrap_or(128 + status_signal_code(&status));
         }
 
         if let Some(deadline) = deadline {
             if Instant::now() >= deadline {
                 let _ = child.kill();
                 let _ = child.wait();
-                exit_code = Some(124);
-                break;
+                break 124;
             }
         }
 
         thread::sleep(Duration::from_millis(5));
-    }
+    };
 
     for (msg_type, data) in rx.try_iter() {
         send_frame(output, msg_type, 0, &data)?;
     }
 
-    Ok(exit_code.unwrap_or(127))
+    Ok(exit_code)
 }
 
 #[cfg(unix)]
@@ -223,7 +234,9 @@ fn status_signal_code(status: &std::process::ExitStatus) -> i32 {
 }
 
 #[cfg(not(unix))]
-fn status_signal_code(_status: &std::process::ExitStatus) -> i32 { 0 }
+fn status_signal_code(_status: &std::process::ExitStatus) -> i32 {
+    0
+}
 
 fn pipe_reader(msg_type: u16, reader: &mut dyn Read, tx: mpsc::Sender<(u16, Vec<u8>)>) {
     let mut buf = [0u8; 4096];
@@ -251,9 +264,8 @@ fn read_frame<R: Read>(reader: &mut R) -> io::Result<Frame> {
         return Err(io::Error::new(io::ErrorKind::InvalidData, "bad version"));
     }
     let msg_type = u16::from_le_bytes([header[6], header[7]]);
-    let seq = u64::from_le_bytes(header[8..16].try_into().unwrap());
-    let len = u32::from_le_bytes(header[16..20].try_into().unwrap()) as usize;
-    let _reserved = u32::from_le_bytes(header[20..24].try_into().unwrap());
+    let seq = u64::from_le_bytes(header[8..16].try_into().expect("header slice"));
+    let len = u32::from_le_bytes(header[16..20].try_into().expect("header slice")) as usize;
     let mut payload = vec![0u8; len];
     reader.read_exact(&mut payload)?;
     Ok(Frame { msg_type, seq, payload })
@@ -314,7 +326,10 @@ struct Cursor<'a> {
 }
 
 impl<'a> Cursor<'a> {
-    fn new(data: &'a [u8]) -> Self { Self { data, pos: 0 } }
+    fn new(data: &'a [u8]) -> Self {
+        Self { data, pos: 0 }
+    }
+
     fn read_exact(&mut self, out: &mut [u8]) -> io::Result<()> {
         if out.len() > self.data.len().saturating_sub(self.pos) {
             return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "payload truncated"));
@@ -323,16 +338,19 @@ impl<'a> Cursor<'a> {
         self.pos += out.len();
         Ok(())
     }
+
     fn read_u16(&mut self) -> io::Result<u16> {
         let mut b = [0u8; 2];
         self.read_exact(&mut b)?;
         Ok(u16::from_le_bytes(b))
     }
+
     fn read_u64(&mut self) -> io::Result<u64> {
         let mut b = [0u8; 8];
         self.read_exact(&mut b)?;
         Ok(u64::from_le_bytes(b))
     }
+
     fn read_string(&mut self) -> io::Result<String> {
         let len = self.read_u16()? as usize;
         if len > self.data.len().saturating_sub(self.pos) {
@@ -441,7 +459,7 @@ impl Sha256 {
         ];
         let mut w = [0u32; 64];
         for i in 0..16 {
-            w[i] = u32::from_be_bytes(block[i*4..i*4+4].try_into().unwrap());
+            w[i] = u32::from_be_bytes(block[i*4..i*4+4].try_into().expect("sha256 block"));
         }
         for i in 16..64 {
             let s0 = w[i-15].rotate_right(7) ^ w[i-15].rotate_right(18) ^ (w[i-15] >> 3);
