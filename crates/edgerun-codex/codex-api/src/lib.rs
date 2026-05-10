@@ -5,6 +5,7 @@ pub(crate) mod auth;
 pub(crate) mod common;
 pub(crate) mod endpoint;
 pub(crate) mod error;
+#[cfg(feature = "native-transport")]
 pub(crate) mod files;
 pub(crate) mod provider;
 pub(crate) mod rate_limits;
@@ -13,7 +14,9 @@ pub(crate) mod sse;
 pub(crate) mod telemetry;
 
 pub use crate::requests::headers::build_session_headers;
+pub use codex_client::HttpTransport;
 pub use codex_client::RequestTelemetry;
+#[cfg(feature = "native-transport")]
 pub use codex_client::ReqwestTransport;
 pub use codex_client::TransportError;
 
@@ -44,22 +47,36 @@ pub use crate::common::response_create_client_metadata;
 pub use crate::endpoint::CompactClient;
 pub use crate::endpoint::MemoriesClient;
 pub use crate::endpoint::ModelsClient;
+#[cfg(feature = "native-transport")]
 pub use crate::endpoint::RealtimeCallClient;
+#[cfg(feature = "native-transport")]
 pub use crate::endpoint::RealtimeCallResponse;
+#[cfg(feature = "native-transport")]
 pub use crate::endpoint::RealtimeEventParser;
+#[cfg(feature = "native-transport")]
 pub use crate::endpoint::RealtimeOutputModality;
+#[cfg(feature = "native-transport")]
 pub use crate::endpoint::RealtimeSessionConfig;
+#[cfg(feature = "native-transport")]
 pub use crate::endpoint::RealtimeSessionMode;
+#[cfg(feature = "native-transport")]
 pub use crate::endpoint::RealtimeWebsocketClient;
+#[cfg(feature = "native-transport")]
 pub use crate::endpoint::RealtimeWebsocketConnection;
+#[cfg(feature = "native-transport")]
 pub use crate::endpoint::RealtimeWebsocketEvents;
+#[cfg(feature = "native-transport")]
 pub use crate::endpoint::RealtimeWebsocketWriter;
 pub use crate::endpoint::ResponsesClient;
 pub use crate::endpoint::ResponsesOptions;
+#[cfg(feature = "native-transport")]
 pub use crate::endpoint::ResponsesWebsocketClient;
+#[cfg(feature = "native-transport")]
 pub use crate::endpoint::ResponsesWebsocketConnection;
+#[cfg(feature = "native-transport")]
 pub use crate::endpoint::session_update_session_json;
 pub use crate::error::ApiError;
+#[cfg(feature = "native-transport")]
 pub use crate::files::upload_local_file;
 pub use crate::provider::Provider;
 pub use crate::provider::RetryConfig;
