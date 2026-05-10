@@ -17,7 +17,7 @@ use wiremock::matchers::body_string_contains;
 use wiremock::matchers::method;
 use wiremock::matchers::path;
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn continue_after_stream_error() {
     skip_if_no_network!();
 

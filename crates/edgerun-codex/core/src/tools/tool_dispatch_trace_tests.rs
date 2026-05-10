@@ -9,7 +9,7 @@ use codex_rollout_trace::ThreadStartedTraceMetadata;
 use codex_rollout_trace::ToolCallRequester;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
-use tokio_util::sync::CancellationToken;
+use edgerun_tokio_util::sync::CancellationToken;
 
 use crate::function_tool::FunctionCallError;
 use crate::session::session::Session;
@@ -46,7 +46,7 @@ impl ToolHandler for TestHandler {
     }
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn dispatch_lifecycle_trace_records_direct_and_code_mode_requesters() -> anyhow::Result<()> {
     let temp = TempDir::new()?;
     let (mut session, turn) = make_session_and_context().await;
@@ -133,7 +133,7 @@ async fn dispatch_lifecycle_trace_records_direct_and_code_mode_requesters() -> a
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn dispatch_lifecycle_trace_records_unsupported_tool_failures() -> anyhow::Result<()> {
     let temp = TempDir::new()?;
     let (mut session, turn) = make_session_and_context().await;
@@ -163,7 +163,7 @@ async fn dispatch_lifecycle_trace_records_unsupported_tool_failures() -> anyhow:
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn dispatch_lifecycle_trace_records_incompatible_payload_failures() -> anyhow::Result<()> {
     let temp = TempDir::new()?;
     let (mut session, turn) = make_session_and_context().await;
@@ -197,7 +197,7 @@ async fn dispatch_lifecycle_trace_records_incompatible_payload_failures() -> any
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn missing_code_mode_wait_traces_only_the_wait_tool_call() -> anyhow::Result<()> {
     let temp = TempDir::new()?;
     let (mut session, turn) = make_session_and_context().await;
@@ -261,7 +261,7 @@ fn test_invocation_with_payload(
         session,
         turn,
         cancellation_token: CancellationToken::new(),
-        tracker: Arc::new(tokio::sync::Mutex::new(TurnDiffTracker::new())),
+        tracker: Arc::new(edgerun_tokio::sync::Mutex::new(TurnDiffTracker::new())),
         call_id: call_id.to_string(),
         tool_name,
         source,

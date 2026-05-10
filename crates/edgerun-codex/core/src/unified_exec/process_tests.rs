@@ -13,9 +13,9 @@ use edgerun_async_trait::async_trait;
 use pretty_assertions::assert_eq;
 use std::collections::VecDeque;
 use std::sync::Arc;
-use tokio::sync::Mutex;
-use tokio::sync::watch;
-use tokio::time::Duration;
+use edgerun_tokio::sync::Mutex;
+use edgerun_tokio::sync::watch;
+use edgerun_tokio::time::Duration;
 
 struct MockExecProcess {
     process_id: ProcessId,
@@ -86,7 +86,7 @@ async fn remote_process(write_status: WriteStatus) -> UnifiedExecProcess {
         .expect("remote process should start")
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn remote_write_unknown_process_marks_process_exited() {
     let process = remote_process(WriteStatus::UnknownProcess).await;
 
@@ -99,7 +99,7 @@ async fn remote_write_unknown_process_marks_process_exited() {
     assert!(process.has_exited());
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn remote_write_closed_stdin_marks_process_exited() {
     let process = remote_process(WriteStatus::StdinClosed).await;
 
@@ -112,7 +112,7 @@ async fn remote_write_closed_stdin_marks_process_exited() {
     assert!(process.has_exited());
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn fail_and_terminate_preserves_failure_message() {
     let process = remote_process(WriteStatus::Accepted).await;
 
@@ -126,7 +126,7 @@ async fn fail_and_terminate_preserves_failure_message() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn remote_process_waits_for_early_exit_event() {
     let (wake_tx, _wake_rx) = watch::channel(0);
     let started = StartedExecProcess {
@@ -147,8 +147,8 @@ async fn remote_process_waits_for_early_exit_event() {
         }),
     };
 
-    tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(10)).await;
+    edgerun_tokio::spawn(async move {
+        edgerun_tokio::time::sleep(Duration::from_millis(10)).await;
         let _ = wake_tx.send(1);
     });
 

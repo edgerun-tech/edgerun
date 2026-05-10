@@ -325,7 +325,7 @@ pub async fn run_user_shell_command(sess: &Arc<Session>, sub_id: String, command
         sess.active_turn_context_and_cancellation_token().await
     {
         let session = Arc::clone(sess);
-        tokio::spawn(async move {
+        edgerun_tokio::spawn(async move {
             execute_user_shell_command(
                 session,
                 turn_context,

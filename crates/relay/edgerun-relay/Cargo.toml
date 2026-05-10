@@ -19,8 +19,8 @@ path = "src/bin/edgerun-relay-bench.rs"
 required-features = ["std"]
 
 [dependencies]
-edgerun-crypto = { workspace = true, default-features = false, features = ["ed25519", "p256"] }
-edgerun-protocols = { workspace = true, default-features = false, features = ["ed25519", "sign-p256"] }
+edgerun-crypto = { workspace = true, default-features = false }
+edgerun-protocols = { workspace = true, default-features = false }
 edgerun-rusttls = { version = "0.1", path = "../../utility/edgerun-rusttls", default-features = false, optional = true }
 edgerun-tungstenite = { version = "0.1", path = "../../utility/edgerun-tungstenite", default-features = false, features = ["deflate", "handshake"], optional = true }
 edgerun-virtio = { workspace = true, optional = true }
@@ -28,9 +28,11 @@ edgerun-wire = { workspace = true, default-features = false }
 
 [features]
 default = []
-std = ["edgerun-wire/std", "edgerun-protocols/keygen", "wss", "edgerun-rusttls/std", "dep:edgerun-tungstenite"]
+ed25519 = ["edgerun-crypto/ed25519", "edgerun-protocols/ed25519"]
+p256-message = ["edgerun-crypto/p256", "edgerun-protocols/sign-p256"]
+std = ["ed25519", "p256-message", "edgerun-wire/std", "edgerun-protocols/keygen", "wss", "edgerun-rusttls/std", "dep:edgerun-tungstenite"]
 virtio = ["dep:edgerun-virtio", "edgerun-protocols/ethernet-ipv4"]
-wss = ["dep:edgerun-rusttls", "edgerun-protocols/tls"]
+wss = ["dep:edgerun-rusttls"]
 
 [dev-dependencies]
 edgerun-protocols = { workspace = true, default-features = false, features = ["keygen"] }

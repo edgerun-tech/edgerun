@@ -18,8 +18,8 @@ use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::time::Duration;
-use tokio::time::Instant;
+use edgerun_tokio::time::Duration;
+use edgerun_tokio::time::Instant;
 
 async fn test_session_and_turn() -> (Arc<Session>, Arc<TurnContext>) {
     let (session, turn) = make_session_and_context().await;
@@ -231,7 +231,7 @@ fn head_tail_buffer_default_preserves_prefix_and_suffix() {
     assert!(rendered.ends_with(b"bc"));
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn unified_exec_persists_across_requests() -> anyhow::Result<()> {
     skip_if_sandbox!(Ok(()));
 
@@ -266,7 +266,7 @@ async fn unified_exec_persists_across_requests() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn multi_unified_exec_sessions() -> anyhow::Result<()> {
     skip_if_sandbox!(Ok(()));
 
@@ -294,7 +294,7 @@ async fn multi_unified_exec_sessions() -> anyhow::Result<()> {
         /*workdir*/ None,
     )
     .await?;
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    edgerun_tokio::time::sleep(Duration::from_secs(2)).await;
     assert!(
         out_2.process_id.is_none(),
         "short command should not report a process id if it exits quickly"
@@ -319,7 +319,7 @@ async fn multi_unified_exec_sessions() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn unified_exec_timeouts() -> anyhow::Result<()> {
     skip_if_sandbox!(Ok(()));
 
@@ -353,7 +353,7 @@ async fn unified_exec_timeouts() -> anyhow::Result<()> {
         "timeout too short should yield incomplete output"
     );
 
-    tokio::time::sleep(Duration::from_secs(7)).await;
+    edgerun_tokio::time::sleep(Duration::from_secs(7)).await;
 
     let out_3 = write_stdin(&session, process_id, "", /*yield_time_ms*/ 100).await?;
 
@@ -365,7 +365,7 @@ async fn unified_exec_timeouts() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn unified_exec_pause_blocks_yield_timeout() -> anyhow::Result<()> {
     skip_if_sandbox!(Ok(()));
 
@@ -373,12 +373,12 @@ async fn unified_exec_pause_blocks_yield_timeout() -> anyhow::Result<()> {
     session.set_out_of_band_elicitation_pause_state(/*paused*/ true);
 
     let paused_session = Arc::clone(&session);
-    tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_secs(2)).await;
+    edgerun_tokio::spawn(async move {
+        edgerun_tokio::time::sleep(Duration::from_secs(2)).await;
         paused_session.set_out_of_band_elicitation_pause_state(/*paused*/ false);
     });
 
-    let started = tokio::time::Instant::now();
+    let started = edgerun_tokio::time::Instant::now();
     let response = exec_command(
         &session,
         &turn,
@@ -404,7 +404,7 @@ async fn unified_exec_pause_blocks_yield_timeout() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 #[ignore] // Ignored while we have a better way to test this.
 async fn requests_with_large_timeout_are_capped() -> anyhow::Result<()> {
     let (session, turn) = test_session_and_turn().await;
@@ -424,7 +424,7 @@ async fn requests_with_large_timeout_are_capped() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 #[ignore] // Ignored while we have a better way to test this.
 async fn completed_commands_do_not_persist_sessions() -> anyhow::Result<()> {
     let (session, turn) = test_session_and_turn().await;
@@ -457,7 +457,7 @@ async fn completed_commands_do_not_persist_sessions() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn reusing_completed_process_returns_unknown_process() -> anyhow::Result<()> {
     skip_if_sandbox!(Ok(()));
 
@@ -471,7 +471,7 @@ async fn reusing_completed_process_returns_unknown_process() -> anyhow::Result<(
 
     write_stdin(&session, process_id, "exit\n", /*yield_time_ms*/ 2_500).await?;
 
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    edgerun_tokio::time::sleep(Duration::from_millis(200)).await;
 
     let err = write_stdin(&session, process_id, "", /*yield_time_ms*/ 100)
         .await
@@ -498,7 +498,7 @@ async fn reusing_completed_process_returns_unknown_process() -> anyhow::Result<(
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn completed_pipe_commands_preserve_exit_code() -> anyhow::Result<()> {
     let (_, turn) = make_session_and_context().await;
     let request = test_exec_request(
@@ -522,7 +522,7 @@ async fn completed_pipe_commands_preserve_exit_code() -> anyhow::Result<()> {
     if !process.has_exited() {
         let exit_signal = process.cancellation_token();
         assert!(
-            tokio::time::timeout(Duration::from_secs(2), exit_signal.cancelled())
+            edgerun_tokio::time::timeout(Duration::from_secs(2), exit_signal.cancelled())
                 .await
                 .is_ok(),
             "process did not report exit within timeout"
@@ -534,7 +534,7 @@ async fn completed_pipe_commands_preserve_exit_code() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn unified_exec_uses_remote_exec_server_when_configured() -> anyhow::Result<()> {
     skip_if_sandbox!(Ok(()));
     let Some(_remote_env) = get_remote_test_env() else {
@@ -562,7 +562,7 @@ async fn unified_exec_uses_remote_exec_server_when_configured() -> anyhow::Resul
         .await?;
 
     process.write(b"printf 'remote-unified-exec\\n'\n").await?;
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    edgerun_tokio::time::sleep(Duration::from_millis(100)).await;
 
     let crate::unified_exec::process::OutputHandles {
         output_buffer,
@@ -586,7 +586,7 @@ async fn unified_exec_uses_remote_exec_server_when_configured() -> anyhow::Resul
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_exec_server_rejects_inherited_fd_launches() -> anyhow::Result<()> {
     skip_if_sandbox!(Ok(()));
     let Some(_remote_env) = get_remote_test_env() else {

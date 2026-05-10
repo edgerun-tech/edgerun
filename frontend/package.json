@@ -13,6 +13,8 @@
     "test:run": "vitest run",
     "test:ui": "vitest --ui",
     "test:coverage": "vitest run --coverage",
+    "cdp": "node tools/cdp/cli.mjs",
+    "cdp:list": "node tools/cdp/cli.mjs list",
     "refresh:app-catalog": "node scripts/refresh-app-catalog.mjs",
     "inventory": "node scripts/generate-component-inventory.mjs",
     "precommit": "node scripts/generate-component-inventory.mjs"

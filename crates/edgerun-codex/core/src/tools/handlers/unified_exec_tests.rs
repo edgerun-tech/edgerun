@@ -14,7 +14,7 @@ use crate::tools::context::ToolPayload;
 use crate::tools::hook_names::HookToolName;
 use crate::tools::registry::ToolHandler;
 use crate::turn_diff_tracker::TurnDiffTracker;
-use tokio::sync::Mutex;
+use edgerun_tokio::sync::Mutex;
 
 async fn invocation_for_payload(
     tool_name: &str,
@@ -25,7 +25,7 @@ async fn invocation_for_payload(
     ToolInvocation {
         session: session.into(),
         turn: turn.into(),
-        cancellation_token: tokio_util::sync::CancellationToken::new(),
+        cancellation_token: edgerun_tokio_util::sync::CancellationToken::new(),
         tracker: Arc::new(Mutex::new(TurnDiffTracker::new())),
         call_id: call_id.to_string(),
         tool_name: codex_tools::ToolName::plain(tool_name),
@@ -178,7 +178,7 @@ fn test_get_command_ignores_explicit_shell_in_zsh_fork_mode() -> anyhow::Result<
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn exec_command_pre_tool_use_payload_uses_raw_command() {
     let payload = ToolPayload::Function {
         arguments: edgerun_json::serde_json::json!({ "cmd": "printf exec command" }).to_string(),
@@ -190,7 +190,7 @@ async fn exec_command_pre_tool_use_payload_uses_raw_command() {
         handler.pre_tool_use_payload(&ToolInvocation {
             session: session.into(),
             turn: turn.into(),
-            cancellation_token: tokio_util::sync::CancellationToken::new(),
+            cancellation_token: edgerun_tokio_util::sync::CancellationToken::new(),
             tracker: Arc::new(Mutex::new(TurnDiffTracker::new())),
             call_id: "call-43".to_string(),
             tool_name: codex_tools::ToolName::plain("exec_command"),
@@ -204,7 +204,7 @@ async fn exec_command_pre_tool_use_payload_uses_raw_command() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn exec_command_pre_tool_use_payload_skips_write_stdin() {
     let payload = ToolPayload::Function {
         arguments: edgerun_json::serde_json::json!({ "chars": "echo hi" }).to_string(),
@@ -216,7 +216,7 @@ async fn exec_command_pre_tool_use_payload_skips_write_stdin() {
         handler.pre_tool_use_payload(&ToolInvocation {
             session: session.into(),
             turn: turn.into(),
-            cancellation_token: tokio_util::sync::CancellationToken::new(),
+            cancellation_token: edgerun_tokio_util::sync::CancellationToken::new(),
             tracker: Arc::new(Mutex::new(TurnDiffTracker::new())),
             call_id: "call-44".to_string(),
             tool_name: codex_tools::ToolName::plain("write_stdin"),
@@ -227,7 +227,7 @@ async fn exec_command_pre_tool_use_payload_skips_write_stdin() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn exec_command_post_tool_use_payload_uses_output_for_noninteractive_one_shot_commands() {
     let payload = ToolPayload::Function {
         arguments: edgerun_json::serde_json::json!({ "cmd": "echo three", "tty": false }).to_string(),
@@ -256,7 +256,7 @@ async fn exec_command_post_tool_use_payload_uses_output_for_noninteractive_one_s
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn exec_command_post_tool_use_payload_uses_output_for_interactive_completion() {
     let payload = ToolPayload::Function {
         arguments: edgerun_json::serde_json::json!({ "cmd": "echo three", "tty": true }).to_string(),
@@ -286,7 +286,7 @@ async fn exec_command_post_tool_use_payload_uses_output_for_interactive_completi
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn exec_command_post_tool_use_payload_skips_running_sessions() {
     let payload = ToolPayload::Function {
         arguments: edgerun_json::serde_json::json!({ "cmd": "echo three", "tty": false }).to_string(),
@@ -307,7 +307,7 @@ async fn exec_command_post_tool_use_payload_skips_running_sessions() {
     assert_eq!(handler.post_tool_use_payload(&invocation, &output), None);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn write_stdin_post_tool_use_payload_uses_original_exec_call_id_and_command_on_completion() {
     let payload = ToolPayload::Function {
         arguments: edgerun_json::serde_json::json!({
@@ -341,7 +341,7 @@ async fn write_stdin_post_tool_use_payload_uses_original_exec_call_id_and_comman
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn write_stdin_post_tool_use_payload_keeps_parallel_session_metadata_separate() {
     let payload = ToolPayload::Function {
         arguments: edgerun_json::serde_json::json!({ "session_id": 45, "chars": "" }).to_string(),

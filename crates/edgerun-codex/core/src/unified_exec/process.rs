@@ -3,14 +3,14 @@
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
-use tokio::sync::Mutex;
-use tokio::sync::Notify;
-use tokio::sync::broadcast;
-use tokio::sync::oneshot::error::TryRecvError;
-use tokio::sync::watch;
-use tokio::task::JoinHandle;
-use tokio::time::Duration;
-use tokio_util::sync::CancellationToken;
+use edgerun_tokio::sync::Mutex;
+use edgerun_tokio::sync::Notify;
+use edgerun_tokio::sync::broadcast;
+use edgerun_tokio::sync::oneshot::error::TryRecvError;
+use edgerun_tokio::sync::watch;
+use edgerun_tokio::task::JoinHandle;
+use edgerun_tokio::time::Duration;
+use edgerun_tokio_util::sync::CancellationToken;
 
 use crate::exec::is_likely_sandbox_denied;
 use codex_exec_server::ExecProcess;
@@ -164,7 +164,7 @@ impl UnifiedExecProcess {
         }
     }
 
-    pub(super) fn output_receiver(&self) -> tokio::sync::broadcast::Receiver<Vec<u8>> {
+    pub(super) fn output_receiver(&self) -> edgerun_tokio::sync::broadcast::Receiver<Vec<u8>> {
         self.output_tx.subscribe()
     }
 
@@ -201,7 +201,7 @@ impl UnifiedExecProcess {
             ProcessHandle::Local(process_handle) => process_handle.terminate(),
             ProcessHandle::ExecServer(process_handle) => {
                 let process_handle = Arc::clone(process_handle);
-                tokio::spawn(async move {
+                edgerun_tokio::spawn(async move {
                     let _ = process_handle.terminate().await;
                 });
             }
@@ -235,7 +235,7 @@ impl UnifiedExecProcess {
 
     pub(super) async fn check_for_sandbox_denial(&self) -> Result<(), UnifiedExecError> {
         let _ =
-            tokio::time::timeout(Duration::from_millis(20), self.output_notify.notified()).await;
+            edgerun_tokio::time::timeout(Duration::from_millis(20), self.output_notify.notified()).await;
 
         let collected_chunks = self.snapshot_output().await;
         let mut aggregated: Vec<u8> = Vec::new();
@@ -320,13 +320,13 @@ impl UnifiedExecProcess {
             Err(TryRecvError::Empty) => {}
         }
 
-        if let Ok(exit_result) = tokio::time::timeout(EARLY_EXIT_GRACE_PERIOD, &mut exit_rx).await {
+        if let Ok(exit_result) = edgerun_tokio::time::timeout(EARLY_EXIT_GRACE_PERIOD, &mut exit_rx).await {
             managed.signal_exit(exit_result.ok());
             managed.check_for_sandbox_denial().await?;
             return Ok(managed);
         }
 
-        tokio::spawn({
+        edgerun_tokio::spawn({
             let state_tx = managed.state_tx.clone();
             let cancellation_token = managed.cancellation_token.clone();
             async move {
@@ -355,7 +355,7 @@ impl UnifiedExecProcess {
         ));
 
         let mut state_rx = managed.state_rx.clone();
-        if tokio::time::timeout(EARLY_EXIT_GRACE_PERIOD, async {
+        if edgerun_tokio::time::timeout(EARLY_EXIT_GRACE_PERIOD, async {
             loop {
                 let state = state_rx.borrow().clone();
                 if state.has_exited || state.failure_message.is_some() {
@@ -390,7 +390,7 @@ impl UnifiedExecProcess {
         } = output_handles;
         let process = started.process;
         let mut wake_rx = process.subscribe_wake();
-        tokio::spawn(async move {
+        edgerun_tokio::spawn(async move {
             let mut after_seq = None;
             loop {
                 match process
@@ -465,14 +465,14 @@ impl UnifiedExecProcess {
     }
 
     fn spawn_local_output_task(
-        mut receiver: tokio::sync::broadcast::Receiver<Vec<u8>>,
+        mut receiver: edgerun_tokio::sync::broadcast::Receiver<Vec<u8>>,
         buffer: OutputBuffer,
         output_notify: Arc<Notify>,
         output_closed: Arc<AtomicBool>,
         output_closed_notify: Arc<Notify>,
         output_tx: broadcast::Sender<Vec<u8>>,
     ) -> JoinHandle<()> {
-        tokio::spawn(async move {
+        edgerun_tokio::spawn(async move {
             loop {
                 match receiver.recv().await {
                     Ok(chunk) => {
@@ -482,8 +482,8 @@ impl UnifiedExecProcess {
                         let _ = output_tx.send(chunk);
                         output_notify.notify_waiters();
                     }
-                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
-                    Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                    Err(edgerun_tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(edgerun_tokio::sync::broadcast::error::RecvError::Closed) => {
                         output_closed.store(true, Ordering::Release);
                         output_closed_notify.notify_waiters();
                         break;

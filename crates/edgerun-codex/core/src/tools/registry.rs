@@ -33,7 +33,7 @@ use codex_tools::ToolName;
 use codex_tools::ToolSpec;
 use codex_utils_readiness::Readiness;
 use edgerun_time::chrono::ChronoUtc as Utc;
-use futures::future::BoxFuture;
+use edgerun_futures::future::BoxFuture;
 use edgerun_json::serde_json::Value;
 use tracing::warn;
 
@@ -376,7 +376,7 @@ impl ToolRegistry {
         }
 
         let is_mutating = handler.is_mutating(&invocation).await;
-        let response_cell = tokio::sync::Mutex::new(None);
+        let response_cell = edgerun_tokio::sync::Mutex::new(None);
         let invocation_for_tool = invocation.clone();
 
         let started = Instant::now();

@@ -6,10 +6,10 @@ use std::time::Duration;
 
 use edgerun_async_trait::async_trait;
 use edgerun_json::serde_json::Value as JsonValue;
-use tokio::sync::Mutex;
-use tokio::sync::mpsc;
-use tokio::sync::oneshot;
-use tokio_util::sync::CancellationToken;
+use edgerun_tokio::sync::Mutex;
+use edgerun_tokio::sync::mpsc;
+use edgerun_tokio::sync::oneshot;
+use edgerun_tokio_util::sync::CancellationToken;
 use tracing::warn;
 
 use crate::FunctionCallOutputContentItem;
@@ -116,7 +116,7 @@ impl CodeModeService {
             (runtime_tx, runtime_terminate_handle)
         };
 
-        tokio::spawn(run_session_control(
+        edgerun_tokio::spawn(run_session_control(
             Arc::clone(&self.inner),
             SessionControlContext {
                 cell_id: cell_id.clone(),
@@ -171,9 +171,9 @@ impl CodeModeService {
         let inner = Arc::clone(&self.inner);
         let turn_message_rx = self.inner.turn_message_rx.clone();
 
-        tokio::spawn(async move {
+        edgerun_tokio::spawn(async move {
             loop {
-                let next_message = tokio::select! {
+                let next_message = edgerun_tokio::select! {
                     _ = &mut shutdown_rx => break,
                     message = turn_message_rx.recv() => message.ok(),
                 };
@@ -195,7 +195,7 @@ impl CodeModeService {
                     TurnMessage::ToolCall(invocation) => {
                         let host = Arc::clone(&host);
                         let inner = Arc::clone(&inner);
-                        tokio::spawn(async move {
+                        edgerun_tokio::spawn(async move {
                             let cell_id = invocation.cell_id.clone();
                             let runtime_tool_call_id = invocation.runtime_tool_call_id.clone();
                             let response =
@@ -323,10 +323,10 @@ async fn run_session_control(
     let mut response_tx = Some(initial_response_tx);
     let mut termination_requested = false;
     let mut runtime_closed = false;
-    let mut yield_timer: Option<std::pin::Pin<Box<tokio::time::Sleep>>> = None;
+    let mut yield_timer: Option<std::pin::Pin<Box<edgerun_tokio::time::Sleep>>> = None;
 
     loop {
-        tokio::select! {
+        edgerun_tokio::select! {
             maybe_event = async {
                 if runtime_closed {
                     std::future::pending::<Option<RuntimeEvent>>().await
@@ -364,7 +364,7 @@ async fn run_session_control(
                 };
                 match event {
                     RuntimeEvent::Started => {
-                        yield_timer = Some(Box::pin(tokio::time::sleep(Duration::from_millis(initial_yield_time_ms))));
+                        yield_timer = Some(Box::pin(edgerun_tokio::time::sleep(Duration::from_millis(initial_yield_time_ms))));
                     }
                     RuntimeEvent::ContentItem(item) => {
                         content_items.push(item);
@@ -441,7 +441,7 @@ async fn run_session_control(
                             break;
                         }
                         response_tx = Some(next_response_tx);
-                        yield_timer = Some(Box::pin(tokio::time::sleep(Duration::from_millis(yield_time_ms))));
+                        yield_timer = Some(Box::pin(edgerun_tokio::time::sleep(Duration::from_millis(yield_time_ms))));
                     }
                     SessionControlCommand::Terminate { response_tx: next_response_tx } => {
                         if let Some(result) = pending_result.take() {
@@ -498,9 +498,9 @@ mod tests {
     use std::time::Duration;
 
     use pretty_assertions::assert_eq;
-    use tokio::sync::Mutex;
-    use tokio::sync::mpsc;
-    use tokio::sync::oneshot;
+    use edgerun_tokio::sync::Mutex;
+    use edgerun_tokio::sync::mpsc;
+    use edgerun_tokio::sync::oneshot;
 
     use super::CodeModeService;
     use super::Inner;
@@ -539,7 +539,7 @@ mod tests {
         })
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn synchronous_exit_returns_successfully() {
         let service = CodeModeService::new();
 
@@ -565,7 +565,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn v8_console_is_not_exposed_on_global_this() {
         let service = CodeModeService::new();
 
@@ -591,7 +591,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn date_locale_string_formats_with_icu_data() {
         let service = CodeModeService::new();
 
@@ -631,7 +631,7 @@ text(value);
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn intl_date_time_format_formats_with_icu_data() {
         let service = CodeModeService::new();
 
@@ -670,7 +670,7 @@ text(formatter.format(new Date("2025-01-02T03:04:05Z")));
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn output_helpers_return_undefined() {
         let service = CodeModeService::new();
 
@@ -713,7 +713,7 @@ text(JSON.stringify(returnsUndefined));
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn image_helper_accepts_raw_mcp_image_block_with_original_detail() {
         let service = CodeModeService::new();
 
@@ -748,7 +748,7 @@ image({
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn image_helper_second_arg_overrides_explicit_object_detail() {
         let service = CodeModeService::new();
 
@@ -784,7 +784,7 @@ image(
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn image_helper_second_arg_overrides_raw_mcp_image_detail() {
         let service = CodeModeService::new();
 
@@ -822,7 +822,7 @@ image(
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn image_helper_rejects_raw_mcp_result_container() {
         let service = CodeModeService::new();
 
@@ -861,7 +861,7 @@ image({
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn wait_reports_missing_cell_separately_from_runtime_results() {
         let service = CodeModeService::new();
 
@@ -885,7 +885,7 @@ image({
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn terminate_waits_for_runtime_shutdown_before_responding() {
         let inner = test_inner();
         let (event_tx, event_rx) = mpsc::unbounded_channel();
@@ -902,7 +902,7 @@ image({
         )
         .unwrap();
 
-        tokio::spawn(run_session_control(
+        edgerun_tokio::spawn(run_session_control(
             inner,
             SessionControlContext {
                 cell_id: "cell-1".to_string(),
@@ -932,9 +932,9 @@ image({
             })
             .unwrap();
         let terminate_response = async { terminate_response_rx.await.unwrap() };
-        tokio::pin!(terminate_response);
+        edgerun_tokio::pin!(terminate_response);
         assert!(
-            tokio::time::timeout(Duration::from_millis(100), terminate_response.as_mut())
+            edgerun_tokio::time::timeout(Duration::from_millis(100), terminate_response.as_mut())
                 .await
                 .is_err()
         );

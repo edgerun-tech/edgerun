@@ -19,7 +19,7 @@ use pretty_assertions::assert_eq;
 
 const TURN_STATE_HEADER: &str = "x-codex-turn-state";
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn responses_turn_state_persists_within_turn_and_resets_after() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -87,7 +87,7 @@ async fn responses_turn_state_persists_within_turn_and_resets_after() -> Result<
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn websocket_turn_state_persists_within_turn_and_resets_after() -> Result<()> {
     skip_if_no_network!(Ok(()));
 

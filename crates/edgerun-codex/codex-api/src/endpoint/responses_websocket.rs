@@ -30,16 +30,16 @@ use edgerun_tungstenite::extensions::ExtensionsConfig;
 use edgerun_tungstenite::extensions::compression::deflate::DeflateConfig;
 use edgerun_tungstenite::protocol::WebSocketConfig;
 use edgerun_url::Url;
-use futures::SinkExt;
-use futures::StreamExt;
+use edgerun_futures::SinkExt;
+use edgerun_futures::StreamExt;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::time::Duration;
-use tokio::net::TcpStream;
-use tokio::sync::Mutex;
-use tokio::sync::mpsc;
-use tokio::sync::oneshot;
-use tokio::time::Instant;
+use edgerun_tokio::net::TcpStream;
+use edgerun_tokio::sync::Mutex;
+use edgerun_tokio::sync::mpsc;
+use edgerun_tokio::sync::oneshot;
+use edgerun_tokio::time::Instant;
 use tracing::Instrument;
 use tracing::Span;
 use tracing::debug;
@@ -51,7 +51,7 @@ use tracing::trace;
 struct WsStream {
     tx_command: mpsc::Sender<WsCommand>,
     rx_message: mpsc::UnboundedReceiver<Result<Message, WsError>>,
-    pump_task: tokio::task::JoinHandle<()>,
+    pump_task: edgerun_tokio::task::JoinHandle<()>,
 }
 
 enum WsCommand {
@@ -66,10 +66,10 @@ impl WsStream {
         let (tx_command, mut rx_command) = mpsc::channel::<WsCommand>(32);
         let (tx_message, rx_message) = mpsc::unbounded_channel::<Result<Message, WsError>>();
 
-        let pump_task = tokio::spawn(async move {
+        let pump_task = edgerun_tokio::spawn(async move {
             let mut inner = inner;
             loop {
-                tokio::select! {
+                edgerun_tokio::select! {
                     command = rx_command.recv() => {
                         let Some(command) = command else {
                             break;
@@ -264,7 +264,7 @@ impl ResponsesWebsocketConnection {
         })?;
 
         let current_span = Span::current();
-        tokio::spawn(
+        edgerun_tokio::spawn(
             #[expect(
                 clippy::await_holding_invalid_type,
                 reason = "the guard serializes exclusive use of the websocket stream for the lifetime of the response stream"
@@ -592,7 +592,7 @@ async fn run_websocket_response_stream(
 
     loop {
         let poll_start = Instant::now();
-        let response = tokio::time::timeout(idle_timeout, ws_stream.next())
+        let response = edgerun_tokio::time::timeout(idle_timeout, ws_stream.next())
             .await
             .map_err(|_| ApiError::Stream("idle timeout waiting for websocket".into()));
         if let Some(t) = telemetry.as_ref() {
@@ -704,7 +704,7 @@ async fn send_websocket_request(
     trace!("websocket request: {request_text}");
 
     let request_start = Instant::now();
-    let result = tokio::time::timeout(
+    let result = edgerun_tokio::time::timeout(
         idle_timeout,
         ws_stream.send(Message::Text(request_text.into())),
     )

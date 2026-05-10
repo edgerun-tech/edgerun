@@ -28,11 +28,11 @@ use edgerun_async_channel::bounded;
 use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::Mutex;
-use tokio::sync::watch;
-use tokio::time::timeout;
+use edgerun_tokio::sync::Mutex;
+use edgerun_tokio::sync::watch;
+use edgerun_tokio::time::timeout;
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn forward_events_cancelled_while_send_blocked_shuts_down_delegate() {
     let (tx_events, rx_events) = bounded(1);
     let (tx_sub, rx_sub) = bounded(SUBMISSION_CHANNEL_CAPACITY);
@@ -61,7 +61,7 @@ async fn forward_events_cancelled_while_send_blocked_shuts_down_delegate() {
         .unwrap();
 
     let cancel = CancellationToken::new();
-    let forward = tokio::spawn(forward_events(
+    let forward = edgerun_tokio::spawn(forward_events(
         Arc::clone(&codex),
         tx_out.clone(),
         session,
@@ -109,7 +109,7 @@ async fn forward_events_cancelled_while_send_blocked_shuts_down_delegate() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn forward_ops_preserves_submission_trace_context() {
     let (tx_sub, rx_sub) = bounded(SUBMISSION_CHANNEL_CAPACITY);
     let (_tx_events, rx_events) = bounded(SUBMISSION_CHANNEL_CAPACITY);
@@ -124,7 +124,7 @@ async fn forward_ops_preserves_submission_trace_context() {
     });
     let (tx_ops, rx_ops) = bounded(1);
     let cancel = CancellationToken::new();
-    let forward = tokio::spawn(forward_ops(Arc::clone(&codex), rx_ops, cancel));
+    let forward = edgerun_tokio::spawn(forward_ops(Arc::clone(&codex), rx_ops, cancel));
 
     let submission = Submission {
         id: "sub-1".to_string(),
@@ -153,7 +153,7 @@ async fn forward_ops_preserves_submission_trace_context() {
         .expect("forward_ops join error");
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn run_codex_thread_interactive_respects_pre_cancelled_spawn() {
     let (parent_session, parent_ctx, _rx_events) =
         crate::session::tests::make_session_and_context_with_rx().await;
@@ -179,7 +179,7 @@ async fn run_codex_thread_interactive_respects_pre_cancelled_spawn() {
     assert!(matches!(result, Err(CodexErr::TurnAborted)));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn handle_request_permissions_uses_tool_call_id_for_round_trip() {
     let (parent_session, parent_ctx, rx_events) =
         crate::session::tests::make_session_and_context_with_rx().await;
@@ -212,7 +212,7 @@ async fn handle_request_permissions_uses_tool_call_id_for_round_trip() {
     let request_call_id = call_id.clone();
     let request_cwd = delegated_cwd.clone();
 
-    let handle = tokio::spawn({
+    let handle = edgerun_tokio::spawn({
         let codex = Arc::clone(&codex);
         let parent_session = Arc::clone(&parent_session);
         let parent_ctx = Arc::clone(&parent_ctx);
@@ -273,7 +273,7 @@ async fn handle_request_permissions_uses_tool_call_id_for_round_trip() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn handle_exec_approval_uses_call_id_for_guardian_review_and_approval_id_for_reply() {
     let (parent_session, parent_ctx, rx_events) =
         crate::session::tests::make_session_and_context_with_rx().await;
@@ -299,7 +299,7 @@ async fn handle_exec_approval_uses_call_id_for_guardian_review_and_approval_id_f
     });
 
     let cancel_token = CancellationToken::new();
-    let handle = tokio::spawn({
+    let handle = edgerun_tokio::spawn({
         let codex = Arc::clone(&codex);
         let parent_session = Arc::clone(&parent_session);
         let parent_ctx = Arc::clone(&parent_ctx);
@@ -386,7 +386,7 @@ async fn handle_exec_approval_uses_call_id_for_guardian_review_and_approval_id_f
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn delegated_mcp_guardian_abort_returns_synthetic_decline_answer() {
     let (parent_session, parent_ctx, _rx_events) =
         crate::session::tests::make_session_and_context_with_rx().await;

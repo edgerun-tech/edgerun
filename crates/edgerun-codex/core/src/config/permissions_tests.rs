@@ -42,7 +42,7 @@ fn windows_verbatim_path_prefix_does_not_count_as_glob_syntax() {
     ));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn restricted_read_implicitly_allows_helper_executables() -> std::io::Result<()> {
     let temp_dir = TempDir::new()?;
     let cwd = temp_dir.path().join("workspace");

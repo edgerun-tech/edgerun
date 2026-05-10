@@ -78,7 +78,7 @@ fn resume_history(
     })
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn emits_warning_when_resumed_model_differs() {
     // Arrange a config with a current model and a prior rollout recorded under a different model.
     let home = TempDir::new().expect("tempdir");
@@ -131,5 +131,5 @@ async fn emits_warning_when_resumed_model_differs() {
 
     // Drain the TurnComplete/Shutdown window to avoid leaking tasks between tests.
     // The warning is emitted during initialization, so a short sleep is sufficient.
-    tokio::time::sleep(Duration::from_millis(50)).await;
+    edgerun_tokio::time::sleep(Duration::from_millis(50)).await;
 }

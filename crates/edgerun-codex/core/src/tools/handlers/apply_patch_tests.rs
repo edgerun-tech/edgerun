@@ -12,7 +12,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;
-use tokio::sync::Mutex;
+use edgerun_tokio::sync::Mutex;
 
 use crate::session::tests::make_session_and_context;
 use crate::tools::context::ToolInvocation;
@@ -33,7 +33,7 @@ async fn invocation_for_payload(payload: ToolPayload) -> ToolInvocation {
     ToolInvocation {
         session: session.into(),
         turn: turn.into(),
-        cancellation_token: tokio_util::sync::CancellationToken::new(),
+        cancellation_token: edgerun_tokio_util::sync::CancellationToken::new(),
         tracker: Arc::new(Mutex::new(TurnDiffTracker::new())),
         call_id: "call-apply-patch".to_string(),
         tool_name: codex_tools::ToolName::plain("apply_patch"),
@@ -42,7 +42,7 @@ async fn invocation_for_payload(payload: ToolPayload) -> ToolInvocation {
     }
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn pre_tool_use_payload_uses_json_patch_input() {
     let patch = sample_patch();
     let payload = ToolPayload::Function {
@@ -60,7 +60,7 @@ async fn pre_tool_use_payload_uses_json_patch_input() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn pre_tool_use_payload_uses_freeform_patch_input() {
     let patch = sample_patch();
     let payload = ToolPayload::Custom {
@@ -78,7 +78,7 @@ async fn pre_tool_use_payload_uses_freeform_patch_input() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn post_tool_use_payload_uses_patch_input_and_tool_output() {
     let patch = sample_patch();
     let payload = ToolPayload::Custom {
@@ -204,7 +204,7 @@ fn diff_consumer_sends_next_update_after_buffer_interval() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn approval_keys_include_move_destination() {
     let tmp = TempDir::new().expect("tmp");
     let cwd_path = tmp.path();

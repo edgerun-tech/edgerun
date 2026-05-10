@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tokio_util::sync::CancellationToken;
+use edgerun_tokio_util::sync::CancellationToken;
 
 use crate::session::turn::run_turn;
 use crate::session::turn_context::TurnContext;

@@ -5,6 +5,7 @@
 use alloc::{format, string::String, vec::Vec};
 use edgerun_crypto::p256::EncodedPoint;
 use edgerun_crypto::p256::ecdh::EphemeralSecret as P256Secret;
+#[cfg(feature = "tls-x25519")]
 use edgerun_crypto::x25519::{PublicKey as X25519PublicKey, StaticSecret as X25519Secret};
 
 /// Named group for key exchange
@@ -54,6 +55,7 @@ pub enum EcdhKeyPair {
         public: EncodedPoint,
     },
     /// X25519 (Curve25519) key pair.
+    #[cfg(feature = "tls-x25519")]
     X25519 {
         /// The secret scalar (private key).
         secret: X25519Secret,
@@ -71,6 +73,7 @@ impl EcdhKeyPair {
                 let public = EncodedPoint::from(secret.public_key());
                 Ok(EcdhKeyPair::P256 { secret, public })
             }
+            #[cfg(feature = "tls-x25519")]
             KeyExchangeGroup::X25519 => {
                 let mut secret_bytes = [0u8; 32];
                 edgerun_crypto::fill_random(&mut secret_bytes)
@@ -82,6 +85,8 @@ impl EcdhKeyPair {
                     public: public.to_bytes(),
                 })
             }
+            #[cfg(not(feature = "tls-x25519"))]
+            KeyExchangeGroup::X25519 => Err(String::from("X25519 support is not enabled")),
         }
     }
 
@@ -89,6 +94,7 @@ impl EcdhKeyPair {
     pub fn public_key_bytes(&self) -> Vec<u8> {
         match self {
             EcdhKeyPair::P256 { public, .. } => public.as_bytes().to_vec(),
+            #[cfg(feature = "tls-x25519")]
             EcdhKeyPair::X25519 { public, .. } => public.to_vec(),
         }
     }
@@ -97,6 +103,7 @@ impl EcdhKeyPair {
     pub fn group(&self) -> KeyExchangeGroup {
         match self {
             EcdhKeyPair::P256 { .. } => KeyExchangeGroup::SECP256R1,
+            #[cfg(feature = "tls-x25519")]
             EcdhKeyPair::X25519 { .. } => KeyExchangeGroup::X25519,
         }
     }
@@ -111,6 +118,7 @@ impl EcdhKeyPair {
                 let shared = secret.diffie_hellman(&peer_pk);
                 Ok(shared.raw_secret_bytes().to_vec())
             }
+            #[cfg(feature = "tls-x25519")]
             EcdhKeyPair::X25519 { secret, .. } => {
                 if peer_pk.len() != 32 {
                     return Err(format!(

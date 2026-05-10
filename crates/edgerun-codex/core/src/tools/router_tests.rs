@@ -15,7 +15,7 @@ use super::ToolCall;
 use super::ToolRouter;
 use super::ToolRouterParams;
 
-#[tokio::test]
+#[edgerun_tokio::test]
 #[expect(
     clippy::await_holding_invalid_type,
     reason = "test builds a router from session-owned MCP manager state"
@@ -65,7 +65,7 @@ async fn parallel_support_does_not_match_namespaced_local_tool_names() -> anyhow
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn build_tool_call_uses_namespace_for_registry_name() -> anyhow::Result<()> {
     let (session, _) = make_session_and_context().await;
     let session = Arc::new(session);
@@ -99,7 +99,7 @@ async fn build_tool_call_uses_namespace_for_registry_name() -> anyhow::Result<()
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn mcp_parallel_support_uses_exact_payload_server() -> anyhow::Result<()> {
     let (_, turn) = make_session_and_context().await;
     let router = ToolRouter::from_config(
@@ -139,7 +139,7 @@ async fn mcp_parallel_support_uses_exact_payload_server() -> anyhow::Result<()> 
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn model_visible_specs_filter_deferred_dynamic_tools() -> anyhow::Result<()> {
     let (_, turn) = make_session_and_context().await;
     let hidden_tool = "hidden_dynamic_tool";

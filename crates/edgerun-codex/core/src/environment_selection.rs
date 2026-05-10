@@ -100,7 +100,7 @@ mod tests {
         .expect("runtime paths")
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn default_thread_environment_selections_use_manager_default_id() {
         let cwd = AbsolutePathBuf::current_dir().expect("cwd");
         let manager = EnvironmentManager::create_for_tests(
@@ -118,7 +118,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn default_thread_environment_selections_empty_when_default_disabled() {
         let cwd = AbsolutePathBuf::current_dir().expect("cwd");
         let manager = EnvironmentManager::disabled_for_tests(test_runtime_paths());
@@ -129,7 +129,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn resolve_environment_selections_rejects_duplicate_ids() {
         let cwd = AbsolutePathBuf::current_dir().expect("cwd");
         let manager = EnvironmentManager::default_for_tests();
@@ -152,7 +152,7 @@ mod tests {
         assert!(err.to_string().contains("duplicate"));
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn resolved_environment_selections_use_first_selection_as_primary() {
         let cwd = AbsolutePathBuf::current_dir().expect("cwd");
         let selected_cwd = cwd.join("selected");

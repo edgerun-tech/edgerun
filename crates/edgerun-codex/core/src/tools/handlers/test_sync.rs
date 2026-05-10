@@ -5,8 +5,8 @@ use std::sync::OnceLock;
 use std::time::Duration;
 
 use serde::Deserialize;
-use tokio::sync::Barrier;
-use tokio::time::sleep;
+use edgerun_tokio::sync::Barrier;
+use edgerun_tokio::time::sleep;
 
 use crate::function_tool::FunctionCallError;
 use crate::tools::context::FunctionToolOutput;
@@ -23,7 +23,7 @@ pub struct TestSyncHandler;
 
 const DEFAULT_TIMEOUT_MS: u64 = 1_000;
 
-static BARRIERS: OnceLock<tokio::sync::Mutex<HashMap<String, BarrierState>>> = OnceLock::new();
+static BARRIERS: OnceLock<edgerun_tokio::sync::Mutex<HashMap<String, BarrierState>>> = OnceLock::new();
 
 struct BarrierState {
     barrier: Arc<Barrier>,
@@ -52,8 +52,8 @@ fn default_timeout_ms() -> u64 {
     DEFAULT_TIMEOUT_MS
 }
 
-fn barrier_map() -> &'static tokio::sync::Mutex<HashMap<String, BarrierState>> {
-    BARRIERS.get_or_init(|| tokio::sync::Mutex::new(HashMap::new()))
+fn barrier_map() -> &'static edgerun_tokio::sync::Mutex<HashMap<String, BarrierState>> {
+    BARRIERS.get_or_init(|| edgerun_tokio::sync::Mutex::new(HashMap::new()))
 }
 
 impl ToolHandler for TestSyncHandler {
@@ -148,7 +148,7 @@ async fn wait_on_barrier(args: BarrierArgs) -> Result<(), FunctionCallError> {
     };
 
     let timeout = Duration::from_millis(args.timeout_ms);
-    let wait_result = tokio::time::timeout(timeout, barrier.wait())
+    let wait_result = edgerun_tokio::time::timeout(timeout, barrier.wait())
         .await
         .map_err(|_| {
             FunctionCallError::RespondToModel("test_sync_tool barrier wait timed out".to_string())

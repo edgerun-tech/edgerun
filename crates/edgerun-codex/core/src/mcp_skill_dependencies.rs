@@ -12,7 +12,7 @@ use codex_protocol::request_user_input::RequestUserInputQuestion;
 use codex_protocol::request_user_input::RequestUserInputQuestionOption;
 use codex_protocol::request_user_input::RequestUserInputResponse;
 use codex_rmcp_client::perform_oauth_login;
-use tokio_util::sync::CancellationToken;
+use edgerun_tokio_util::sync::CancellationToken;
 use tracing::warn;
 
 use crate::SkillMetadata;
@@ -249,7 +249,7 @@ async fn should_install_mcp_dependencies(
     let sub_id = &turn_context.sub_id;
     let call_id = format!("mcp-deps-{sub_id}");
     let response_fut = sess.request_user_input(turn_context, call_id, args);
-    let response = tokio::select! {
+    let response = edgerun_tokio::select! {
         biased;
         _ = cancellation_token.cancelled() => {
             let empty = RequestUserInputResponse {

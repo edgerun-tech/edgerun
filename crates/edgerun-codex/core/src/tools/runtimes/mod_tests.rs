@@ -30,7 +30,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
 use tempfile::tempdir;
-use tokio::sync::watch;
+use edgerun_tokio::sync::watch;
 
 struct StaticReloader;
 
@@ -83,7 +83,7 @@ async fn test_network_proxy() -> anyhow::Result<NetworkProxy> {
         .await
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn explicit_escalation_prepares_exec_without_managed_network() -> anyhow::Result<()> {
     let proxy = test_network_proxy().await?;
     let dir = tempdir().expect("create temp dir");

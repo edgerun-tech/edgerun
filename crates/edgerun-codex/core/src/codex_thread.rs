@@ -43,8 +43,8 @@ use rmcp::model::ReadResourceRequestParams;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::Mutex;
-use tokio::sync::watch;
+use edgerun_tokio::sync::Mutex;
+use edgerun_tokio::sync::watch;
 
 use codex_rollout::state_db::StateDbHandle;
 

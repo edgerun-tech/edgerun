@@ -1,10 +1,10 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use tokio::sync::RwLock;
-use tokio_util::either::Either;
-use tokio_util::sync::CancellationToken;
-use tokio_util::task::AbortOnDropHandle;
+use edgerun_tokio::sync::RwLock;
+use edgerun_tokio_util::either::Either;
+use edgerun_tokio_util::sync::CancellationToken;
+use edgerun_tokio_util::task::AbortOnDropHandle;
 use tracing::Instrument;
 use tracing::instrument;
 use tracing::trace_span;
@@ -105,8 +105,8 @@ impl ToolCallRuntime {
         );
 
         let handle: AbortOnDropHandle<Result<AnyToolResult, FunctionCallError>> =
-            AbortOnDropHandle::new(tokio::spawn(async move {
-                tokio::select! {
+            AbortOnDropHandle::new(edgerun_tokio::spawn(async move {
+                edgerun_tokio::select! {
                     _ = cancellation_token.cancelled() => {
                         let secs = started.elapsed().as_secs_f32().max(0.1);
                         dispatch_span.record("aborted", true);

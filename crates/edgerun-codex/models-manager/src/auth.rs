@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use codex_app_server_protocol::AuthMode;
 use codex_protocol::account::PlanType;
-use tokio::sync::RwLock;
+use edgerun_tokio::sync::RwLock;
 
 #[derive(Clone, Debug)]
 pub enum CodexAuth {

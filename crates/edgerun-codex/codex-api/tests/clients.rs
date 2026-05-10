@@ -80,7 +80,7 @@ impl HttpTransport for RecordingTransport {
     async fn stream(&self, req: Request) -> Result<StreamResponse, TransportError> {
         self.state.record(req);
 
-        let stream = futures::stream::iter(Vec::<Result<Bytes, TransportError>>::new());
+        let stream = edgerun_futures::stream::iter(Vec::<Result<Bytes, TransportError>>::new());
         Ok(StreamResponse {
             status: StatusCode::OK,
             headers: HeaderMap::new(),
@@ -236,7 +236,7 @@ impl HttpTransport for FlakyTransport {
             return Err(TransportError::Network("first attempt fails".to_string()));
         }
 
-        let stream = futures::stream::iter(vec![Ok(Bytes::from(
+        let stream = edgerun_futures::stream::iter(vec![Ok(Bytes::from(
             r#"event: message
 data: {"id":"resp-1","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hi"}]}]}
 
@@ -251,7 +251,7 @@ data: {"id":"resp-1","output":[{"type":"message","role":"assistant","content":[{
     }
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn responses_client_uses_responses_path() -> Result<()> {
     let state = RecordingState::default();
     let transport = RecordingTransport::new(state.clone());
@@ -272,7 +272,7 @@ async fn responses_client_uses_responses_path() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn streaming_client_adds_auth_headers() -> Result<()> {
     let state = RecordingState::default();
     let transport = RecordingTransport::new(state.clone());
@@ -313,7 +313,7 @@ async fn streaming_client_adds_auth_headers() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn streaming_client_retries_on_transport_error() -> Result<()> {
     let transport = FlakyTransport::new();
 
@@ -351,7 +351,7 @@ async fn streaming_client_retries_on_transport_error() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn streaming_client_retries_on_transient_auth_error() -> Result<()> {
     let state = RecordingState::default();
     let transport = RecordingTransport::new(state.clone());
@@ -376,7 +376,7 @@ async fn streaming_client_retries_on_transient_auth_error() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn streaming_client_does_not_retry_auth_build_error() -> Result<()> {
     let state = RecordingState::default();
     let transport = RecordingTransport::new(state.clone());
@@ -410,7 +410,7 @@ async fn streaming_client_does_not_retry_auth_build_error() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn azure_default_store_attaches_ids_and_headers() -> Result<()> {
     let state = RecordingState::default();
     let transport = RecordingTransport::new(state.clone());

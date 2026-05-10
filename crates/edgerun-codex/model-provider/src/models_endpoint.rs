@@ -18,7 +18,7 @@ use codex_response_debug_context::extract_response_debug_context;
 use codex_response_debug_context::telemetry_transport_error_message;
 use edgerun_async_trait::async_trait;
 use edgerun_http::HeaderMap;
-use tokio::time::timeout;
+use edgerun_tokio::time::timeout;
 
 use crate::auth::resolve_provider_auth;
 
@@ -72,7 +72,7 @@ impl ModelsEndpointClient for OpenAiModelsEndpoint {
         let auth_mode = auth.as_ref().map(CodexAuth::auth_mode);
         let api_provider = self.provider_info.to_api_provider(auth_mode)?;
         let api_auth = resolve_provider_auth(auth.as_ref(), &self.provider_info)?;
-        let transport = ReqwestTransport::new(reqwest::Client::new());
+        let transport = ReqwestTransport::new(edgerun_reqwest::Client::new());
         let auth_telemetry = auth_header_telemetry(api_auth.as_ref());
         let request_telemetry: Arc<dyn RequestTelemetry> = Arc::new(ModelsRequestTelemetry {
             auth_header_attached: auth_telemetry.attached,

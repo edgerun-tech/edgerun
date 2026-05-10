@@ -18,5 +18,5 @@ codex-app-server-protocol = { workspace = true }
 codex-protocol = { workspace = true }
 edgerun-json = { workspace = true, features = ["serde-compat"] }
 edgerun-time = { workspace = true }
-tokio = { workspace = true, features = ["fs", "sync", "time"] }
+edgerun-tokio = { workspace = true, features = ["fs", "sync", "time"] }
 tracing = { workspace = true }

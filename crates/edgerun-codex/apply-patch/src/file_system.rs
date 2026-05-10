@@ -4,7 +4,7 @@ use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
 use edgerun_async_trait::async_trait;
-use tokio::io;
+use edgerun_tokio::io;
 
 use crate::absolute_path::AbsolutePathBuf;
 
@@ -96,14 +96,14 @@ impl ExecutorFileSystem for LocalFileSystem {
         path: &AbsolutePathBuf,
         _sandbox: Option<&FileSystemSandboxContext>,
     ) -> FileSystemResult<Vec<u8>> {
-        let metadata = tokio::fs::metadata(path.as_path()).await?;
+        let metadata = edgerun_tokio::fs::metadata(path.as_path()).await?;
         if metadata.len() > MAX_READ_FILE_BYTES {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 format!("file is too large to read: limit is {MAX_READ_FILE_BYTES} bytes"),
             ));
         }
-        tokio::fs::read(path.as_path()).await
+        edgerun_tokio::fs::read(path.as_path()).await
     }
 
     async fn write_file(
@@ -112,7 +112,7 @@ impl ExecutorFileSystem for LocalFileSystem {
         contents: Vec<u8>,
         _sandbox: Option<&FileSystemSandboxContext>,
     ) -> FileSystemResult<()> {
-        tokio::fs::write(path.as_path(), contents).await
+        edgerun_tokio::fs::write(path.as_path(), contents).await
     }
 
     async fn create_directory(
@@ -122,9 +122,9 @@ impl ExecutorFileSystem for LocalFileSystem {
         _sandbox: Option<&FileSystemSandboxContext>,
     ) -> FileSystemResult<()> {
         if options.recursive {
-            tokio::fs::create_dir_all(path.as_path()).await
+            edgerun_tokio::fs::create_dir_all(path.as_path()).await
         } else {
-            tokio::fs::create_dir(path.as_path()).await
+            edgerun_tokio::fs::create_dir(path.as_path()).await
         }
     }
 
@@ -133,8 +133,8 @@ impl ExecutorFileSystem for LocalFileSystem {
         path: &AbsolutePathBuf,
         _sandbox: Option<&FileSystemSandboxContext>,
     ) -> FileSystemResult<FileMetadata> {
-        let metadata = tokio::fs::metadata(path.as_path()).await?;
-        let symlink_metadata = tokio::fs::symlink_metadata(path.as_path()).await?;
+        let metadata = edgerun_tokio::fs::metadata(path.as_path()).await?;
+        let symlink_metadata = edgerun_tokio::fs::symlink_metadata(path.as_path()).await?;
         Ok(FileMetadata {
             is_directory: metadata.is_dir(),
             is_file: metadata.is_file(),
@@ -150,16 +150,16 @@ impl ExecutorFileSystem for LocalFileSystem {
         options: RemoveOptions,
         _sandbox: Option<&FileSystemSandboxContext>,
     ) -> FileSystemResult<()> {
-        match tokio::fs::symlink_metadata(path.as_path()).await {
+        match edgerun_tokio::fs::symlink_metadata(path.as_path()).await {
             Ok(metadata) => {
                 if metadata.file_type().is_dir() {
                     if options.recursive {
-                        tokio::fs::remove_dir_all(path.as_path()).await
+                        edgerun_tokio::fs::remove_dir_all(path.as_path()).await
                     } else {
-                        tokio::fs::remove_dir(path.as_path()).await
+                        edgerun_tokio::fs::remove_dir(path.as_path()).await
                     }
                 } else {
-                    tokio::fs::remove_file(path.as_path()).await
+                    edgerun_tokio::fs::remove_file(path.as_path()).await
                 }
             }
             Err(err) if err.kind() == io::ErrorKind::NotFound && options.force => Ok(()),

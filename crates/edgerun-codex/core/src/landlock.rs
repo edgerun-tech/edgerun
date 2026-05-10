@@ -9,7 +9,7 @@ use codex_sandboxing::landlock::create_linux_sandbox_command_args_for_permission
 use codex_utils_absolute_path::AbsolutePathBuf;
 use std::collections::HashMap;
 use std::path::Path;
-use tokio::process::Child;
+use edgerun_tokio::process::Child;
 
 /// Spawn a shell tool command under the Linux sandbox helper
 /// (codex-linux-sandbox), which defaults to bubblewrap for filesystem

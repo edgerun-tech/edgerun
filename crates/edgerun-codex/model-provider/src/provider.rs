@@ -331,7 +331,7 @@ mod tests {
         assert_eq!(provider.capabilities(), ProviderCapabilities::default());
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn configured_provider_runtime_base_url_uses_configured_base_url() {
         let provider = create_model_provider(
             provider_for("https://example.test/v1".to_string()),
@@ -448,7 +448,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn amazon_bedrock_provider_creates_static_models_manager() {
         let provider = create_model_provider(
             ModelProviderInfo::create_amazon_bedrock_provider(/*aws*/ None),
@@ -483,7 +483,7 @@ mod tests {
         assert_eq!(default_model.model, "openai.gpt-5.4");
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn amazon_bedrock_provider_uses_configured_static_catalog_when_present() {
         let custom_model =
             codex_models_manager::model_info::model_info_from_slug("custom-bedrock-model");
@@ -505,7 +505,7 @@ mod tests {
         assert_eq!(catalog.models[0].slug, "custom-bedrock-model");
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn configured_provider_models_manager_uses_provider_bearer_token() {
         let server = MockServer::start().await;
         let remote_models = vec![remote_model("provider-model")];

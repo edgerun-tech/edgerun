@@ -1,8 +1,8 @@
 use edgerun_bytes::Bytes;
 use edgerun_http::Method;
 use edgerun_json::serde_json::Value;
-use reqwest::header::HeaderMap;
-use reqwest::header::HeaderValue;
+use edgerun_reqwest::header::HeaderMap;
+use edgerun_reqwest::header::HeaderValue;
 use serde::Serialize;
 use std::time::Duration;
 

@@ -76,7 +76,7 @@ fn ev_namespaced_function_call(
     })
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn empty_turn_environments_omits_environment_backed_tools() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -118,7 +118,7 @@ async fn empty_turn_environments_omits_environment_backed_tools() -> Result<()> 
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn turn_environment_selection_keeps_environment_backed_tools() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -159,7 +159,7 @@ async fn turn_environment_selection_keeps_environment_backed_tools() -> Result<(
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn custom_tool_unknown_returns_custom_output_error() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -206,7 +206,7 @@ async fn custom_tool_unknown_returns_custom_output_error() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[serial(mcp_test_value)]
 async fn historical_unavailable_mcp_call_is_exposed_as_placeholder_tool() -> Result<()> {
     skip_if_no_network!(Ok(()));
@@ -349,7 +349,7 @@ async fn historical_unavailable_mcp_call_is_exposed_as_placeholder_tool() -> Res
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn shell_escalated_permissions_rejected_then_ok() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -446,7 +446,7 @@ async fn shell_escalated_permissions_rejected_then_ok() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn sandbox_denied_shell_returns_original_output() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -543,7 +543,7 @@ async fn sandbox_denied_shell_returns_original_output() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn shell_enforces_glob_deny_read_policy() -> Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
@@ -690,7 +690,7 @@ async fn collect_tools(use_unified_exec: bool) -> Result<Vec<String>> {
     Ok(tool_names(&first_body))
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn unified_exec_spec_toggle_end_to_end() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -717,7 +717,7 @@ async fn unified_exec_spec_toggle_end_to_end() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn shell_timeout_includes_timeout_prefix_and_metadata() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -792,7 +792,7 @@ async fn shell_timeout_includes_timeout_prefix_and_metadata() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn shell_timeout_handles_background_grandchild_stdout() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -849,7 +849,7 @@ time.sleep(60)
     .await;
 
     let start = Instant::now();
-    let output_str = tokio::time::timeout(Duration::from_secs(10), async {
+    let output_str = edgerun_tokio::time::timeout(Duration::from_secs(10), async {
         test.submit_turn_with_approval_and_permission_profile(
             "run a command with a detached grandchild",
             AskForApproval::Never,
@@ -892,7 +892,7 @@ time.sleep(60)
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn shell_spawn_failure_truncates_exec_error() -> Result<()> {
     skip_if_no_network!(Ok(()));
 

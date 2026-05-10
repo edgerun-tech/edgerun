@@ -41,7 +41,7 @@ async fn apply_verified_patch(root: &Path, patch: &str) -> AppliedPatchDelta {
     .expect("patch should apply")
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn accumulates_add_then_update_as_single_add() {
     let dir = tempdir().expect("tempdir");
     let mut tracker = TurnDiffTracker::with_display_root(dir.path().to_path_buf());
@@ -75,7 +75,7 @@ index {ZERO_OID}..{right_oid}
     assert_eq!(tracker.get_unified_diff(), Some(expected));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn invalidated_tracker_suppresses_existing_diff() {
     let dir = tempdir().expect("tempdir");
     let mut tracker = TurnDiffTracker::with_display_root(dir.path().to_path_buf());
@@ -92,7 +92,7 @@ async fn invalidated_tracker_suppresses_existing_diff() {
     assert_eq!(tracker.get_unified_diff(), None);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn accumulates_delete() {
     let dir = tempdir().expect("tempdir");
     fs::write(dir.path().join("b.txt"), "x\n").expect("seed file");
@@ -119,7 +119,7 @@ index {left_oid}..{ZERO_OID}
     assert_eq!(tracker.get_unified_diff(), Some(expected));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn accumulates_move_and_update() {
     let dir = tempdir().expect("tempdir");
     fs::write(dir.path().join("src.txt"), "line\n").expect("seed file");
@@ -147,7 +147,7 @@ index {left_oid}..{right_oid}
     assert_eq!(tracker.get_unified_diff(), Some(expected));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn pure_rename_yields_no_diff() {
     let dir = tempdir().expect("tempdir");
     fs::write(dir.path().join("old.txt"), "same\n").expect("seed file");
@@ -163,7 +163,7 @@ async fn pure_rename_yields_no_diff() {
     assert_eq!(tracker.get_unified_diff(), None);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn add_over_existing_file_becomes_update() {
     let dir = tempdir().expect("tempdir");
     fs::write(dir.path().join("dup.txt"), "before\n").expect("seed file");
@@ -191,7 +191,7 @@ index {left_oid}..{right_oid}
     assert_eq!(tracker.get_unified_diff(), Some(expected));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn delete_then_readd_same_path_becomes_update() {
     let dir = tempdir().expect("tempdir");
     fs::write(dir.path().join("cycle.txt"), "before\n").expect("seed file");
@@ -226,7 +226,7 @@ index {left_oid}..{right_oid}
     assert_eq!(tracker.get_unified_diff(), Some(expected));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn move_over_existing_destination_without_content_change_deletes_source_only() {
     let dir = tempdir().expect("tempdir");
     fs::write(dir.path().join("a.txt"), "same\n").expect("seed source");
@@ -254,7 +254,7 @@ index {left_oid}..{ZERO_OID}
     assert_eq!(tracker.get_unified_diff(), Some(expected));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn move_over_existing_destination_with_content_change_deletes_source_and_updates_destination()
 {
     let dir = tempdir().expect("tempdir");
@@ -292,7 +292,7 @@ index {left_oid_b}..{right_oid_b}
     assert_eq!(tracker.get_unified_diff(), Some(expected));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn preserves_committed_change_order_with_delete_then_move_overwrite() {
     let dir = tempdir().expect("tempdir");
     fs::write(dir.path().join("a.txt"), "from\n").expect("seed source");

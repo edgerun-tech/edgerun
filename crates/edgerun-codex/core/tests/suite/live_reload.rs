@@ -21,7 +21,7 @@ use core_test_support::test_codex::TestCodex;
 use core_test_support::test_codex::test_codex;
 use core_test_support::test_codex::turn_permission_fields;
 use core_test_support::wait_for_event;
-use tokio::time::timeout;
+use edgerun_tokio::time::timeout;
 
 fn enable_trusted_project(config: &mut codex_core::config::Config) {
     config.active_project = ProjectConfig {
@@ -84,7 +84,7 @@ async fn submit_skill_turn(test: &TestCodex, skill_path: PathBuf, prompt: &str) 
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn live_skills_reload_refreshes_skill_cache_after_skill_change() -> Result<()> {
     let server = start_mock_server().await;
     let responses = mount_sse_sequence(

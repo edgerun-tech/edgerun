@@ -25,7 +25,7 @@ use pretty_assertions::assert_eq;
 /// Delegate should surface ExecApprovalRequest from sub-agent and proceed
 /// after parent submits an approval decision.
 #[ignore = "TODO once we have a delegate that can ask for approvals"]
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn codex_delegate_forwards_exec_approval_and_proceeds_on_approval() {
     skip_if_no_network!();
 
@@ -119,7 +119,7 @@ async fn codex_delegate_forwards_exec_approval_and_proceeds_on_approval() {
 /// Delegate should surface ApplyPatchApprovalRequest and honor parent decision
 /// so the sub-agent can proceed to completion.
 #[ignore = "TODO once we have a delegate that can ask for approvals"]
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn codex_delegate_forwards_patch_approval_and_proceeds_on_decision() {
     skip_if_no_network!();
 
@@ -197,7 +197,7 @@ async fn codex_delegate_forwards_patch_approval_and_proceeds_on_decision() {
     wait_for_event(&test.codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn codex_delegate_ignores_legacy_deltas() {
     skip_if_no_network!();
 

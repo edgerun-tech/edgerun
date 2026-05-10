@@ -51,7 +51,7 @@ async fn make_config_for_test(
     trust_level: TrustLevel,
     project_root_markers: Option<Vec<String>>,
 ) -> std::io::Result<()> {
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         codex_home.join(CONFIG_TOML_FILE),
         toml::to_string(&ConfigToml {
             projects: Some(HashMap::from([(
@@ -68,7 +68,7 @@ async fn make_config_for_test(
     .await
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn cli_overrides_resolve_relative_paths_against_cwd() -> std::io::Result<()> {
     let codex_home = tempdir().expect("tempdir");
     let cwd_dir = tempdir().expect("tempdir");
@@ -92,7 +92,7 @@ async fn cli_overrides_resolve_relative_paths_against_cwd() -> std::io::Result<(
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn returns_config_error_for_invalid_user_config_toml() {
     let tmp = tempdir().expect("tempdir");
     let contents = "model = \"gpt-4\"\ninvalid = [";
@@ -118,7 +118,7 @@ async fn returns_config_error_for_invalid_user_config_toml() {
     assert_eq!(config_error, &expected_config_error);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn ignore_user_config_keeps_empty_user_layer() -> std::io::Result<()> {
     let tmp = tempdir().expect("tempdir");
     std::fs::write(
@@ -154,7 +154,7 @@ async fn ignore_user_config_keeps_empty_user_layer() -> std::io::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn ignore_rules_marks_config_stack_for_exec_policy_rule_skip() -> std::io::Result<()> {
     let tmp = tempdir().expect("tempdir");
     let cwd = AbsolutePathBuf::try_from(tmp.path()).expect("cwd");
@@ -177,7 +177,7 @@ async fn ignore_rules_marks_config_stack_for_exec_policy_rule_skip() -> std::io:
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn returns_config_error_for_invalid_managed_config_toml() {
     let tmp = tempdir().expect("tempdir");
     let managed_path = tmp.path().join("managed_config.toml");
@@ -206,7 +206,7 @@ async fn returns_config_error_for_invalid_managed_config_toml() {
     assert_eq!(config_error, &expected_config_error);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn returns_config_error_for_schema_error_in_user_config() {
     let tmp = tempdir().expect("tempdir");
     let contents = "model_context_window = \"not_a_number\"";
@@ -245,7 +245,7 @@ fn schema_error_points_to_feature_value() {
     assert_eq!(error.range.start.column, value_column);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn merges_managed_config_layer_on_top() {
     let tmp = tempdir().expect("tempdir");
     let managed_path = tmp.path().join("managed_config.toml");
@@ -299,7 +299,7 @@ extra = true
     assert_eq!(nested.get("extra"), Some(&TomlValue::Boolean(true)));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn returns_empty_when_all_layers_missing() {
     let tmp = tempdir().expect("tempdir");
     let managed_path = tmp.path().join("managed_config.toml");
@@ -366,11 +366,11 @@ async fn returns_empty_when_all_layers_missing() {
     }
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn includes_thread_config_layers_in_stack() -> anyhow::Result<()> {
     let tmp = tempdir()?;
     let cwd_dir = tmp.path().join("project");
-    tokio::fs::create_dir_all(&cwd_dir).await?;
+    edgerun_tokio::fs::create_dir_all(&cwd_dir).await?;
     let cwd = AbsolutePathBuf::from_absolute_path(&cwd_dir)?;
     let overrides = LoaderOverrides::without_managed_config_for_tests();
     let expected_system_config = AbsolutePathBuf::from_absolute_path(
@@ -424,7 +424,7 @@ async fn includes_thread_config_layers_in_stack() -> anyhow::Result<()> {
 }
 
 #[cfg(target_os = "macos")]
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn managed_preferences_take_highest_precedence() {
     
     let tmp = tempdir().expect("tempdir");
@@ -494,7 +494,7 @@ flag = false
 }
 
 #[cfg(target_os = "macos")]
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn managed_preferences_expand_home_directory_in_workspace_write_roots() -> anyhow::Result<()>
 {
     
@@ -541,7 +541,7 @@ writable_roots = ["~/code"]
 }
 
 #[cfg(target_os = "macos")]
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn managed_preferences_requirements_are_applied() -> anyhow::Result<()> {
     
     let tmp = tempdir()?;
@@ -603,13 +603,13 @@ allowed_sandbox_modes = ["read-only"]
 }
 
 #[cfg(target_os = "macos")]
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn managed_preferences_requirements_take_precedence() -> anyhow::Result<()> {
     
     let tmp = tempdir()?;
     let managed_path = tmp.path().join("managed_config.toml");
 
-    tokio::fs::write(&managed_path, "approval_policy = \"on-request\"\n").await?;
+    edgerun_tokio::fs::write(&managed_path, "approval_policy = \"on-request\"\n").await?;
 
     let mut loader_overrides = LoaderOverrides::with_managed_config_path_for_tests(managed_path);
     loader_overrides.macos_managed_config_requirements_base64 = Some(
@@ -647,11 +647,11 @@ allowed_approval_policies = ["never"]
     Ok(())
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[edgerun_tokio::test(flavor = "current_thread")]
 async fn load_requirements_toml_produces_expected_constraints() -> anyhow::Result<()> {
     let tmp = tempdir()?;
     let requirements_file = tmp.path().join("requirements.toml");
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         &requirements_file,
         r#"
 allowed_approval_policies = ["never", "on-request"]
@@ -746,7 +746,7 @@ personality = true
 }
 
 #[cfg(target_os = "macos")]
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn cloud_requirements_take_precedence_over_mdm_requirements() -> anyhow::Result<()> {
     
     let tmp = tempdir()?;
@@ -808,11 +808,11 @@ allowed_approval_policies = ["on-request"]
     Ok(())
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[edgerun_tokio::test(flavor = "current_thread")]
 async fn cloud_requirements_are_not_overwritten_by_system_requirements() -> anyhow::Result<()> {
     let tmp = tempdir()?;
     let requirements_file = tmp.path().join("requirements.toml");
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         &requirements_file,
         r#"
 allowed_approval_policies = ["on-request"]
@@ -866,11 +866,11 @@ allowed_approval_policies = ["on-request"]
     Ok(())
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[edgerun_tokio::test(flavor = "current_thread")]
 async fn system_remote_sandbox_config_keeps_cloud_sandbox_modes() -> anyhow::Result<()> {
     let tmp = tempdir()?;
     let requirements_file = tmp.path().join("requirements.toml");
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         &requirements_file,
         r#"
 [[remote_sandbox_config]]
@@ -915,13 +915,13 @@ allowed_sandbox_modes = ["read-only"]
     Ok(())
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[edgerun_tokio::test(flavor = "current_thread")]
 async fn load_requirements_toml_resolves_deny_read_against_parent() -> anyhow::Result<()> {
     let tmp = tempdir()?;
     let requirements_dir = tmp.path().join("managed");
-    tokio::fs::create_dir_all(&requirements_dir).await?;
+    edgerun_tokio::fs::create_dir_all(&requirements_dir).await?;
     let requirements_file = requirements_dir.join("requirements.toml");
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         &requirements_file,
         r#"
 [permissions.filesystem]
@@ -969,13 +969,13 @@ deny_read = ["./sensitive", "../shared/secret.txt"]
     Ok(())
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[edgerun_tokio::test(flavor = "current_thread")]
 async fn load_requirements_toml_resolves_deny_read_glob_against_parent() -> anyhow::Result<()> {
     let tmp = tempdir()?;
     let requirements_dir = tmp.path().join("managed");
-    tokio::fs::create_dir_all(&requirements_dir).await?;
+    edgerun_tokio::fs::create_dir_all(&requirements_dir).await?;
     let requirements_file = requirements_dir.join("requirements.toml");
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         &requirements_file,
         r#"
 [permissions.filesystem]
@@ -1024,11 +1024,11 @@ deny_read = ["./sensitive/**/*.txt"]
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn load_config_layers_includes_cloud_requirements() -> anyhow::Result<()> {
     let tmp = tempdir()?;
     let codex_home = tmp.path().join("home");
-    tokio::fs::create_dir_all(&codex_home).await?;
+    edgerun_tokio::fs::create_dir_all(&codex_home).await?;
     let cwd = AbsolutePathBuf::from_absolute_path(tmp.path())?;
 
     let requirements = ConfigRequirementsToml {
@@ -1082,17 +1082,17 @@ async fn load_config_layers_includes_cloud_requirements() -> anyhow::Result<()> 
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn load_config_layers_can_ignore_managed_requirements() -> anyhow::Result<()> {
     let tmp = tempdir()?;
     let codex_home = tmp.path().join("home");
-    tokio::fs::create_dir_all(&codex_home).await?;
+    edgerun_tokio::fs::create_dir_all(&codex_home).await?;
     let cwd = AbsolutePathBuf::from_absolute_path(tmp.path())?;
 
     let managed_config_path = tmp.path().join("managed_config.toml");
-    tokio::fs::write(&managed_config_path, "approval_policy = \"never\"\n").await?;
+    edgerun_tokio::fs::write(&managed_config_path, "approval_policy = \"never\"\n").await?;
     let system_requirements_path = tmp.path().join("requirements.toml");
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         &system_requirements_path,
         "allowed_sandbox_modes = [\"read-only\"]\n",
     )
@@ -1134,13 +1134,13 @@ async fn load_config_layers_can_ignore_managed_requirements() -> anyhow::Result<
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn load_config_layers_includes_cloud_hook_requirements() -> anyhow::Result<()> {
     let tmp = tempdir()?;
     let codex_home = tmp.path().join("home");
-    tokio::fs::create_dir_all(&codex_home).await?;
+    edgerun_tokio::fs::create_dir_all(&codex_home).await?;
     let managed_dir = tmp.path().join("managed-hooks");
-    tokio::fs::create_dir_all(&managed_dir).await?;
+    edgerun_tokio::fs::create_dir_all(&managed_dir).await?;
     let cwd = AbsolutePathBuf::from_absolute_path(tmp.path())?;
 
     let requirements = ConfigRequirementsToml {
@@ -1189,11 +1189,11 @@ async fn load_config_layers_includes_cloud_hook_requirements() -> anyhow::Result
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn load_config_layers_applies_matching_remote_sandbox_config() -> anyhow::Result<()> {
     let tmp = tempdir()?;
     let codex_home = tmp.path().join("home");
-    tokio::fs::create_dir_all(&codex_home).await?;
+    edgerun_tokio::fs::create_dir_all(&codex_home).await?;
     let cwd = AbsolutePathBuf::from_absolute_path(tmp.path())?;
 
     let requirements: ConfigRequirementsToml = toml::from_str(
@@ -1237,11 +1237,11 @@ async fn load_config_layers_applies_matching_remote_sandbox_config() -> anyhow::
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn load_config_layers_fails_when_cloud_requirements_loader_fails() -> anyhow::Result<()> {
     let tmp = tempdir()?;
     let codex_home = tmp.path().join("home");
-    tokio::fs::create_dir_all(&codex_home).await?;
+    edgerun_tokio::fs::create_dir_all(&codex_home).await?;
     let cwd = AbsolutePathBuf::from_absolute_path(tmp.path())?;
 
     let err = load_config_layers_state(
@@ -1268,28 +1268,28 @@ async fn load_config_layers_fails_when_cloud_requirements_loader_fails() -> anyh
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn project_layers_prefer_closest_cwd() -> std::io::Result<()> {
     let tmp = tempdir()?;
     let project_root = tmp.path().join("project");
     let nested = project_root.join("child");
-    tokio::fs::create_dir_all(nested.join(".codex")).await?;
-    tokio::fs::create_dir_all(project_root.join(".codex")).await?;
-    tokio::fs::write(project_root.join(".git"), "gitdir: here").await?;
+    edgerun_tokio::fs::create_dir_all(nested.join(".codex")).await?;
+    edgerun_tokio::fs::create_dir_all(project_root.join(".codex")).await?;
+    edgerun_tokio::fs::write(project_root.join(".git"), "gitdir: here").await?;
 
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         project_root.join(".codex").join(CONFIG_TOML_FILE),
         "foo = \"root\"\n",
     )
     .await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         nested.join(".codex").join(CONFIG_TOML_FILE),
         "foo = \"child\"\n",
     )
     .await?;
 
     let codex_home = tmp.path().join("home");
-    tokio::fs::create_dir_all(&codex_home).await?;
+    edgerun_tokio::fs::create_dir_all(&codex_home).await?;
     make_config_for_test(
         &codex_home,
         &project_root,
@@ -1333,15 +1333,15 @@ async fn project_layers_prefer_closest_cwd() -> std::io::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn project_paths_resolve_relative_to_dot_codex_and_override_in_order() -> std::io::Result<()>
 {
     let tmp = tempdir()?;
     let project_root = tmp.path().join("project");
     let nested = project_root.join("child");
-    tokio::fs::create_dir_all(project_root.join(".codex")).await?;
-    tokio::fs::create_dir_all(nested.join(".codex")).await?;
-    tokio::fs::write(project_root.join(".git"), "gitdir: here").await?;
+    edgerun_tokio::fs::create_dir_all(project_root.join(".codex")).await?;
+    edgerun_tokio::fs::create_dir_all(nested.join(".codex")).await?;
+    edgerun_tokio::fs::write(project_root.join(".git"), "gitdir: here").await?;
 
     let root_cfg = r#"
 model_instructions_file = "root.txt"
@@ -1349,21 +1349,21 @@ model_instructions_file = "root.txt"
     let nested_cfg = r#"
 model_instructions_file = "child.txt"
 "#;
-    tokio::fs::write(project_root.join(".codex").join(CONFIG_TOML_FILE), root_cfg).await?;
-    tokio::fs::write(nested.join(".codex").join(CONFIG_TOML_FILE), nested_cfg).await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::write(project_root.join(".codex").join(CONFIG_TOML_FILE), root_cfg).await?;
+    edgerun_tokio::fs::write(nested.join(".codex").join(CONFIG_TOML_FILE), nested_cfg).await?;
+    edgerun_tokio::fs::write(
         project_root.join(".codex").join("root.txt"),
         "root instructions",
     )
     .await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         nested.join(".codex").join("child.txt"),
         "child instructions",
     )
     .await?;
 
     let codex_home = tmp.path().join("home");
-    tokio::fs::create_dir_all(&codex_home).await?;
+    edgerun_tokio::fs::create_dir_all(&codex_home).await?;
     make_config_for_test(
         &codex_home,
         &project_root,
@@ -1389,18 +1389,18 @@ model_instructions_file = "child.txt"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn cli_override_model_instructions_file_sets_base_instructions() -> std::io::Result<()> {
     let tmp = tempdir()?;
     let codex_home = tmp.path().join("home");
-    tokio::fs::create_dir_all(&codex_home).await?;
-    tokio::fs::write(codex_home.join(CONFIG_TOML_FILE), "").await?;
+    edgerun_tokio::fs::create_dir_all(&codex_home).await?;
+    edgerun_tokio::fs::write(codex_home.join(CONFIG_TOML_FILE), "").await?;
 
     let cwd = tmp.path().join("work");
-    tokio::fs::create_dir_all(&cwd).await?;
+    edgerun_tokio::fs::create_dir_all(&cwd).await?;
 
     let instructions_path = tmp.path().join("instr.md");
-    tokio::fs::write(&instructions_path, "cli override instructions").await?;
+    edgerun_tokio::fs::write(&instructions_path, "cli override instructions").await?;
 
     let cli_overrides = vec![(
         "model_instructions_file".to_string(),
@@ -1425,12 +1425,12 @@ async fn cli_override_model_instructions_file_sets_base_instructions() -> std::i
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn inline_instructions_set_base_instructions() -> std::io::Result<()> {
     let tmp = tempdir()?;
     let codex_home = tmp.path().join("home");
-    tokio::fs::create_dir_all(&codex_home).await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::create_dir_all(&codex_home).await?;
+    edgerun_tokio::fs::write(
         codex_home.join(CONFIG_TOML_FILE),
         r#"instructions = "snapshot instructions""#,
     )
@@ -1449,17 +1449,17 @@ async fn inline_instructions_set_base_instructions() -> std::io::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn project_layer_is_added_when_dot_codex_exists_without_config_toml() -> std::io::Result<()> {
     let tmp = tempdir()?;
     let project_root = tmp.path().join("project");
     let nested = project_root.join("child");
-    tokio::fs::create_dir_all(&nested).await?;
-    tokio::fs::create_dir_all(project_root.join(".codex")).await?;
-    tokio::fs::write(project_root.join(".git"), "gitdir: here").await?;
+    edgerun_tokio::fs::create_dir_all(&nested).await?;
+    edgerun_tokio::fs::create_dir_all(project_root.join(".codex")).await?;
+    edgerun_tokio::fs::write(project_root.join(".git"), "gitdir: here").await?;
 
     let codex_home = tmp.path().join("home");
-    tokio::fs::create_dir_all(&codex_home).await?;
+    edgerun_tokio::fs::create_dir_all(&codex_home).await?;
     make_config_for_test(
         &codex_home,
         &project_root,
@@ -1500,13 +1500,13 @@ async fn project_layer_is_added_when_dot_codex_exists_without_config_toml() -> s
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn codex_home_is_not_loaded_as_project_layer_from_home_dir() -> std::io::Result<()> {
     let tmp = tempdir()?;
     let home_dir = tmp.path().join("home");
     let codex_home = home_dir.join(".codex");
-    tokio::fs::create_dir_all(&codex_home).await?;
-    tokio::fs::write(codex_home.join(CONFIG_TOML_FILE), "foo = \"user\"\n").await?;
+    edgerun_tokio::fs::create_dir_all(&codex_home).await?;
+    edgerun_tokio::fs::write(codex_home.join(CONFIG_TOML_FILE), "foo = \"user\"\n").await?;
 
     let cwd = AbsolutePathBuf::from_absolute_path(&home_dir)?;
     let layers = load_config_layers_state(
@@ -1538,7 +1538,7 @@ async fn codex_home_is_not_loaded_as_project_layer_from_home_dir() -> std::io::R
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn codex_home_within_project_tree_is_not_double_loaded() -> std::io::Result<()> {
     let tmp = tempdir()?;
     let project_root = tmp.path().join("project");
@@ -1546,11 +1546,11 @@ async fn codex_home_within_project_tree_is_not_double_loaded() -> std::io::Resul
     let project_dot_codex = project_root.join(".codex");
     let nested_dot_codex = nested.join(".codex");
 
-    tokio::fs::create_dir_all(&nested_dot_codex).await?;
-    tokio::fs::create_dir_all(project_root.join(".git")).await?;
-    tokio::fs::write(nested_dot_codex.join(CONFIG_TOML_FILE), "foo = \"child\"\n").await?;
+    edgerun_tokio::fs::create_dir_all(&nested_dot_codex).await?;
+    edgerun_tokio::fs::create_dir_all(project_root.join(".git")).await?;
+    edgerun_tokio::fs::write(nested_dot_codex.join(CONFIG_TOML_FILE), "foo = \"child\"\n").await?;
 
-    tokio::fs::create_dir_all(&project_dot_codex).await?;
+    edgerun_tokio::fs::create_dir_all(&project_dot_codex).await?;
     make_config_for_test(
         &project_dot_codex,
         &project_root,
@@ -1559,8 +1559,8 @@ async fn codex_home_within_project_tree_is_not_double_loaded() -> std::io::Resul
     )
     .await?;
     let user_config_path = project_dot_codex.join(CONFIG_TOML_FILE);
-    let user_config_contents = tokio::fs::read_to_string(&user_config_path).await?;
-    tokio::fs::write(
+    let user_config_contents = edgerun_tokio::fs::read_to_string(&user_config_path).await?;
+    edgerun_tokio::fs::write(
         &user_config_path,
         format!("foo = \"user\"\n{user_config_contents}"),
     )
@@ -1608,13 +1608,13 @@ async fn codex_home_within_project_tree_is_not_double_loaded() -> std::io::Resul
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn project_layers_disabled_when_untrusted_or_unknown() -> std::io::Result<()> {
     let tmp = tempdir()?;
     let project_root = tmp.path().join("project");
     let nested = project_root.join("child");
-    tokio::fs::create_dir_all(nested.join(".codex")).await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::create_dir_all(nested.join(".codex")).await?;
+    edgerun_tokio::fs::write(
         nested.join(".codex").join(CONFIG_TOML_FILE),
         "foo = \"child\"\nprofile = \"ignored\"\n",
     )
@@ -1623,7 +1623,7 @@ async fn project_layers_disabled_when_untrusted_or_unknown() -> std::io::Result<
     let cwd = AbsolutePathBuf::from_absolute_path(&nested)?;
 
     let codex_home_untrusted = tmp.path().join("home_untrusted");
-    tokio::fs::create_dir_all(&codex_home_untrusted).await?;
+    edgerun_tokio::fs::create_dir_all(&codex_home_untrusted).await?;
     make_config_for_test(
         &codex_home_untrusted,
         &project_root,
@@ -1632,8 +1632,8 @@ async fn project_layers_disabled_when_untrusted_or_unknown() -> std::io::Result<
     )
     .await?;
     let untrusted_config_path = codex_home_untrusted.join(CONFIG_TOML_FILE);
-    let untrusted_config_contents = tokio::fs::read_to_string(&untrusted_config_path).await?;
-    tokio::fs::write(
+    let untrusted_config_contents = edgerun_tokio::fs::read_to_string(&untrusted_config_path).await?;
+    edgerun_tokio::fs::write(
         &untrusted_config_path,
         format!("foo = \"user\"\n{untrusted_config_contents}"),
     )
@@ -1678,8 +1678,8 @@ async fn project_layers_disabled_when_untrusted_or_unknown() -> std::io::Result<
     assert_eq!(layers_untrusted.startup_warnings(), Some(empty_warnings));
 
     let codex_home_unknown = tmp.path().join("home_unknown");
-    tokio::fs::create_dir_all(&codex_home_unknown).await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::create_dir_all(&codex_home_unknown).await?;
+    edgerun_tokio::fs::write(
         codex_home_unknown.join(CONFIG_TOML_FILE),
         "foo = \"user\"\n",
     )
@@ -1725,17 +1725,17 @@ async fn project_layers_disabled_when_untrusted_or_unknown() -> std::io::Result<
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn project_layer_ignores_unsupported_config_keys() -> std::io::Result<()> {
     let tmp = tempdir()?;
     let project_root = tmp.path().join("project");
     let dot_codex = project_root.join(".codex");
-    tokio::fs::create_dir_all(&dot_codex).await?;
+    edgerun_tokio::fs::create_dir_all(&dot_codex).await?;
     // `model_instructions_file` is intentionally allowed from project config:
     // it is the control case that should still be resolved relative to this
     // `.codex` folder. The malformed profile value below would fail typed path
     // resolution if `profiles` were not stripped before that pass runs.
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         dot_codex.join(CONFIG_TOML_FILE),
         r#"
 model = "project-model"
@@ -1763,7 +1763,7 @@ wire_api = "responses"
     .await?;
 
     let codex_home = tmp.path().join("home");
-    tokio::fs::create_dir_all(&codex_home).await?;
+    edgerun_tokio::fs::create_dir_all(&codex_home).await?;
     make_config_for_test(
         &codex_home,
         &project_root,
@@ -1842,14 +1842,14 @@ wire_api = "responses"
 }
 
 #[cfg(unix)]
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn project_trust_does_not_match_configured_alias_for_canonical_cwd() -> std::io::Result<()> {
     let tmp = tempdir()?;
     let project_root = tmp.path().join("project");
     let alias_root = tmp.path().join("project_alias");
-    tokio::fs::create_dir_all(project_root.join(".codex")).await?;
-    tokio::fs::write(project_root.join(".git"), "gitdir: here").await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::create_dir_all(project_root.join(".codex")).await?;
+    edgerun_tokio::fs::write(project_root.join(".git"), "gitdir: here").await?;
+    edgerun_tokio::fs::write(
         project_root.join(".codex").join(CONFIG_TOML_FILE),
         "foo = \"project\"\n",
     )
@@ -1857,8 +1857,8 @@ async fn project_trust_does_not_match_configured_alias_for_canonical_cwd() -> st
     std::os::unix::fs::symlink(&project_root, &alias_root)?;
 
     let codex_home = tmp.path().join("home");
-    tokio::fs::create_dir_all(&codex_home).await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::create_dir_all(&codex_home).await?;
+    edgerun_tokio::fs::write(
         codex_home.join(CONFIG_TOML_FILE),
         toml::to_string(&ConfigToml {
             projects: Some(HashMap::from([(
@@ -1902,7 +1902,7 @@ async fn project_trust_does_not_match_configured_alias_for_canonical_cwd() -> st
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn cli_override_can_update_project_local_mcp_server_when_project_is_trusted()
 -> std::io::Result<()> {
     let tmp = tempdir()?;
@@ -1910,11 +1910,11 @@ async fn cli_override_can_update_project_local_mcp_server_when_project_is_truste
     let nested = project_root.join("child");
     let dot_codex = project_root.join(".codex");
     let codex_home = tmp.path().join("home");
-    tokio::fs::create_dir_all(&nested).await?;
-    tokio::fs::create_dir_all(&dot_codex).await?;
-    tokio::fs::create_dir_all(&codex_home).await?;
-    tokio::fs::write(project_root.join(".git"), "gitdir: here").await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::create_dir_all(&nested).await?;
+    edgerun_tokio::fs::create_dir_all(&dot_codex).await?;
+    edgerun_tokio::fs::create_dir_all(&codex_home).await?;
+    edgerun_tokio::fs::write(project_root.join(".git"), "gitdir: here").await?;
+    edgerun_tokio::fs::write(
         dot_codex.join(CONFIG_TOML_FILE),
         r#"
 [mcp_servers.sentry]
@@ -1951,7 +1951,7 @@ enabled = false
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn cli_override_for_disabled_project_local_mcp_server_returns_invalid_transport()
 -> std::io::Result<()> {
     let tmp = tempdir()?;
@@ -1959,11 +1959,11 @@ async fn cli_override_for_disabled_project_local_mcp_server_returns_invalid_tran
     let nested = project_root.join("child");
     let dot_codex = project_root.join(".codex");
     let codex_home = tmp.path().join("home");
-    tokio::fs::create_dir_all(&nested).await?;
-    tokio::fs::create_dir_all(&dot_codex).await?;
-    tokio::fs::create_dir_all(&codex_home).await?;
-    tokio::fs::write(project_root.join(".git"), "gitdir: here").await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::create_dir_all(&nested).await?;
+    edgerun_tokio::fs::create_dir_all(&dot_codex).await?;
+    edgerun_tokio::fs::create_dir_all(&codex_home).await?;
+    edgerun_tokio::fs::write(project_root.join(".git"), "gitdir: here").await?;
+    edgerun_tokio::fs::write(
         dot_codex.join(CONFIG_TOML_FILE),
         r#"
 [mcp_servers.sentry]
@@ -1993,14 +1993,14 @@ enabled = false
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn invalid_project_config_ignored_when_untrusted_or_unknown() -> std::io::Result<()> {
     let tmp = tempdir()?;
     let project_root = tmp.path().join("project");
     let nested = project_root.join("child");
-    tokio::fs::create_dir_all(nested.join(".codex")).await?;
-    tokio::fs::write(project_root.join(".git"), "gitdir: here").await?;
-    tokio::fs::write(nested.join(".codex").join(CONFIG_TOML_FILE), "foo =").await?;
+    edgerun_tokio::fs::create_dir_all(nested.join(".codex")).await?;
+    edgerun_tokio::fs::write(project_root.join(".git"), "gitdir: here").await?;
+    edgerun_tokio::fs::write(nested.join(".codex").join(CONFIG_TOML_FILE), "foo =").await?;
 
     let cwd = AbsolutePathBuf::from_absolute_path(&nested)?;
     let cases = [
@@ -2010,7 +2010,7 @@ async fn invalid_project_config_ignored_when_untrusted_or_unknown() -> std::io::
 
     for (name, trust_level) in cases {
         let codex_home = tmp.path().join(format!("home_{name}"));
-        tokio::fs::create_dir_all(&codex_home).await?;
+        edgerun_tokio::fs::create_dir_all(&codex_home).await?;
         let config_path = codex_home.join(CONFIG_TOML_FILE);
 
         if let Some(trust_level) = trust_level {
@@ -2021,10 +2021,10 @@ async fn invalid_project_config_ignored_when_untrusted_or_unknown() -> std::io::
                 /*project_root_markers*/ None,
             )
             .await?;
-            let config_contents = tokio::fs::read_to_string(&config_path).await?;
-            tokio::fs::write(&config_path, format!("foo = \"user\"\n{config_contents}")).await?;
+            let config_contents = edgerun_tokio::fs::read_to_string(&config_path).await?;
+            edgerun_tokio::fs::write(&config_path, format!("foo = \"user\"\n{config_contents}")).await?;
         } else {
-            tokio::fs::write(&config_path, "foo = \"user\"\n").await?;
+            edgerun_tokio::fs::write(&config_path, "foo = \"user\"\n").await?;
         }
 
         let layers = load_config_layers_state(
@@ -2067,14 +2067,14 @@ async fn invalid_project_config_ignored_when_untrusted_or_unknown() -> std::io::
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn project_layer_without_config_toml_is_disabled_when_untrusted_or_unknown()
 -> std::io::Result<()> {
     let tmp = tempdir()?;
     let project_root = tmp.path().join("project");
     let nested = project_root.join("child");
-    tokio::fs::create_dir_all(nested.join(".codex")).await?;
-    tokio::fs::write(project_root.join(".git"), "gitdir: here").await?;
+    edgerun_tokio::fs::create_dir_all(nested.join(".codex")).await?;
+    edgerun_tokio::fs::write(project_root.join(".git"), "gitdir: here").await?;
 
     let cwd = AbsolutePathBuf::from_absolute_path(&nested)?;
     let cases = [
@@ -2085,7 +2085,7 @@ async fn project_layer_without_config_toml_is_disabled_when_untrusted_or_unknown
 
     for (name, trust_level, expect_disabled) in cases {
         let codex_home = tmp.path().join(format!("home_no_config_{name}"));
-        tokio::fs::create_dir_all(&codex_home).await?;
+        edgerun_tokio::fs::create_dir_all(&codex_home).await?;
         if let Some(trust_level) = trust_level {
             make_config_for_test(
                 &codex_home,
@@ -2133,16 +2133,16 @@ async fn project_layer_without_config_toml_is_disabled_when_untrusted_or_unknown
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn cli_overrides_with_relative_paths_do_not_break_trust_check() -> std::io::Result<()> {
     let tmp = tempdir()?;
     let project_root = tmp.path().join("project");
     let nested = project_root.join("child");
-    tokio::fs::create_dir_all(&nested).await?;
-    tokio::fs::write(project_root.join(".git"), "gitdir: here").await?;
+    edgerun_tokio::fs::create_dir_all(&nested).await?;
+    edgerun_tokio::fs::write(project_root.join(".git"), "gitdir: here").await?;
 
     let codex_home = tmp.path().join("home");
-    tokio::fs::create_dir_all(&codex_home).await?;
+    edgerun_tokio::fs::create_dir_all(&codex_home).await?;
     make_config_for_test(
         &codex_home,
         &project_root,
@@ -2171,27 +2171,27 @@ async fn cli_overrides_with_relative_paths_do_not_break_trust_check() -> std::io
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn project_root_markers_supports_alternate_markers() -> std::io::Result<()> {
     let tmp = tempdir()?;
     let project_root = tmp.path().join("project");
     let nested = project_root.join("child");
-    tokio::fs::create_dir_all(project_root.join(".codex")).await?;
-    tokio::fs::create_dir_all(nested.join(".codex")).await?;
-    tokio::fs::write(project_root.join(".hg"), "hg").await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::create_dir_all(project_root.join(".codex")).await?;
+    edgerun_tokio::fs::create_dir_all(nested.join(".codex")).await?;
+    edgerun_tokio::fs::write(project_root.join(".hg"), "hg").await?;
+    edgerun_tokio::fs::write(
         project_root.join(".codex").join(CONFIG_TOML_FILE),
         "foo = \"root\"\n",
     )
     .await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         nested.join(".codex").join(CONFIG_TOML_FILE),
         "foo = \"child\"\n",
     )
     .await?;
 
     let codex_home = tmp.path().join("home");
-    tokio::fs::create_dir_all(&codex_home).await?;
+    edgerun_tokio::fs::create_dir_all(&codex_home).await?;
     make_config_for_test(
         &codex_home,
         &project_root,
@@ -2478,7 +2478,7 @@ prefix_rules = []
         Ok(())
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn loads_requirements_exec_policy_without_rules_files() -> anyhow::Result<()> {
         let temp_dir = tempdir()?;
         let requirements = requirements_from_toml(
@@ -2510,7 +2510,7 @@ prefix_rules = []
         Ok(())
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn merges_requirements_exec_policy_with_file_rules() -> anyhow::Result<()> {
         let temp_dir = tempdir()?;
         let policy_dir = temp_dir.path().join("rules");

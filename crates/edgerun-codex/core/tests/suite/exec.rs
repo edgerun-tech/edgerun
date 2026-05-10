@@ -61,7 +61,7 @@ where
 }
 
 /// Command succeeds with exit code 0 normally
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn exit_code_0_succeeds() {
     if skip_test() {
         return;
@@ -77,7 +77,7 @@ async fn exit_code_0_succeeds() {
 }
 
 /// Command succeeds with exit code 0 normally
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn truncates_output_lines() {
     if skip_test() {
         return;
@@ -97,7 +97,7 @@ async fn truncates_output_lines() {
 }
 
 /// Command succeeds with exit code 0 normally
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn truncates_output_bytes() {
     if skip_test() {
         return;
@@ -114,7 +114,7 @@ async fn truncates_output_bytes() {
 }
 
 /// Command not found returns exit code 127, this is not considered a sandbox error
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn exit_command_not_found_is_ok() {
     if skip_test() {
         return;
@@ -125,7 +125,7 @@ async fn exit_command_not_found_is_ok() {
     run_test_cmd(tmp, cmd).await.unwrap();
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn openpty_works_under_real_exec_seatbelt_path() {
     if skip_test() {
         return;
@@ -157,7 +157,7 @@ assert os.read(master, 4) == b"ping""#
 }
 
 /// Writing a file fails and should be considered a sandbox error
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn write_file_fails_as_sandbox_error() {
     if skip_test() {
         return;

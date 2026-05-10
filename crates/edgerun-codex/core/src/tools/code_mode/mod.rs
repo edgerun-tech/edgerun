@@ -14,7 +14,7 @@ use codex_protocol::models::FunctionCallOutputContentItem;
 use codex_protocol::models::FunctionCallOutputPayload;
 use codex_protocol::models::ResponseInputItem;
 use edgerun_json::serde_json::Value as JsonValue;
-use tokio_util::sync::CancellationToken;
+use edgerun_tokio_util::sync::CancellationToken;
 
 use crate::function_tool::FunctionCallError;
 use crate::original_image_detail::can_request_original_image_detail;

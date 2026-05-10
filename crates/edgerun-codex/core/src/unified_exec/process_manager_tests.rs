@@ -1,7 +1,7 @@
 use super::*;
 use pretty_assertions::assert_eq;
-use tokio::time::Duration;
-use tokio::time::Instant;
+use edgerun_tokio::time::Duration;
+use edgerun_tokio::time::Instant;
 
 #[test]
 fn unified_exec_env_injects_defaults() {
@@ -135,7 +135,7 @@ fn exec_server_process_id_matches_unified_exec_process_id() {
     assert_eq!(exec_server_process_id(/*process_id*/ 4321), "4321");
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn network_denial_fallback_message_names_sandbox_network_proxy() {
     let message = network_denial_message_for_session(/*session*/ None, /*deferred*/ None).await;
 
@@ -145,19 +145,19 @@ async fn network_denial_fallback_message_names_sandbox_network_proxy() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn late_network_denial_grace_observes_cancellation_after_exit() {
     let cancellation = CancellationToken::new();
     let cancellation_for_task = cancellation.clone();
-    tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(10)).await;
+    edgerun_tokio::spawn(async move {
+        edgerun_tokio::time::sleep(Duration::from_millis(10)).await;
         cancellation_for_task.cancel();
     });
 
     assert!(wait_for_late_network_denial(Some(cancellation)).await);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn failed_initial_end_for_unstored_process_uses_fallback_output() {
     let (session, turn, rx_event) = crate::session::tests::make_session_and_context_with_rx().await;
     let context = UnifiedExecContext::new(
@@ -189,7 +189,7 @@ async fn failed_initial_end_for_unstored_process_uses_fallback_output() {
         prefix_rule: None,
     };
 
-    let transcript = Arc::new(tokio::sync::Mutex::new(HeadTailBuffer::default()));
+    let transcript = Arc::new(edgerun_tokio::sync::Mutex::new(HeadTailBuffer::default()));
     transcript
         .lock()
         .await
@@ -207,7 +207,7 @@ async fn failed_initial_end_for_unstored_process_uses_fallback_output() {
     )
     .await;
 
-    let event = tokio::time::timeout(Duration::from_secs(1), rx_event.recv())
+    let event = edgerun_tokio::time::timeout(Duration::from_secs(1), rx_event.recv())
         .await
         .expect("timed out waiting for failed exec end event")
         .expect("event channel closed");

@@ -18,7 +18,7 @@ use codex_protocol::protocol::SubAgentSource;
 use core_test_support::load_default_config_for_test;
 use core_test_support::responses;
 use core_test_support::test_codex::test_codex;
-use futures::StreamExt;
+use edgerun_futures::StreamExt;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 use wiremock::matchers::header;
@@ -33,7 +33,7 @@ fn normalize_git_remote_url(url: &str) -> String {
 
 const TEST_INSTALLATION_ID: &str = "11111111-1111-4111-8111-111111111111";
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn responses_stream_includes_subagent_header_on_review() {
     core_test_support::skip_if_no_network!();
 
@@ -159,7 +159,7 @@ async fn responses_stream_includes_subagent_header_on_review() {
     assert_eq!(request.header("x-codex-sandbox"), None);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn responses_stream_includes_subagent_header_on_other() {
     core_test_support::skip_if_no_network!();
 
@@ -275,7 +275,7 @@ async fn responses_stream_includes_subagent_header_on_other() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn responses_respects_model_info_overrides_from_config() {
     core_test_support::skip_if_no_network!();
 
@@ -405,7 +405,7 @@ async fn responses_respects_model_info_overrides_from_config() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn responses_stream_includes_turn_metadata_header_for_git_workspace_e2e() {
     core_test_support::skip_if_no_network!();
 

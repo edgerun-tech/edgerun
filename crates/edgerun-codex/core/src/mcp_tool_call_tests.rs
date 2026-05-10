@@ -313,7 +313,7 @@ fn approval_question_text_prepends_safety_reason() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn mcp_tool_call_span_records_expected_fields() {
     let buffer: &'static std::sync::Mutex<Vec<u8>> =
         Box::leak(Box::new(std::sync::Mutex::new(Vec::new())));
@@ -408,7 +408,7 @@ async fn mcp_result_telemetry_span_logs(meta: Option<edgerun_json::serde_json::V
     String::from_utf8(buffer.lock().expect("buffer lock").clone()).expect("utf8 logs")
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn mcp_result_telemetry_records_allowlisted_span_fields() {
     let logs = mcp_result_telemetry_span_logs(Some(edgerun_json::serde_json::json!({
         "codex/telemetry": {
@@ -433,7 +433,7 @@ async fn mcp_result_telemetry_records_allowlisted_span_fields() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn mcp_result_telemetry_ignores_invalid_and_missing_values() {
     let invalid_logs = mcp_result_telemetry_span_logs(Some(edgerun_json::serde_json::json!({
         "codex/telemetry": {
@@ -468,7 +468,7 @@ async fn mcp_result_telemetry_ignores_invalid_and_missing_values() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn mcp_result_telemetry_truncates_long_target_id() {
     let truncated = "x".repeat(MCP_RESULT_TELEMETRY_TARGET_ID_MAX_CHARS);
     let target_id = format!("{truncated}tail");
@@ -500,7 +500,7 @@ fn truncates_strings_on_char_boundaries() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn approval_elicitation_request_uses_message_override_and_preserves_tool_params_keys() {
     let (session, turn_context) = make_session_and_context().await;
     let question = build_mcp_tool_approval_question(
@@ -928,7 +928,7 @@ fn truncate_mcp_tool_result_for_event_bounds_large_error() {
     assert!(got.contains("truncated"));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn mcp_tool_call_request_meta_includes_turn_metadata_for_custom_server() {
     let (_, turn_context) = make_session_and_context().await;
     let expected_turn_metadata = turn_context
@@ -971,7 +971,7 @@ async fn mcp_tool_call_request_meta_includes_turn_metadata_for_custom_server() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn mcp_tool_call_request_meta_includes_turn_started_at_unix_ms() {
     let (_, turn_context) = make_session_and_context().await;
     turn_context
@@ -997,7 +997,7 @@ async fn mcp_tool_call_request_meta_includes_turn_started_at_unix_ms() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn codex_apps_tool_call_request_meta_includes_turn_metadata_and_codex_apps_meta() {
     let (_, turn_context) = make_session_and_context().await;
     let expected_turn_metadata = turn_context
@@ -1044,7 +1044,7 @@ async fn codex_apps_tool_call_request_meta_includes_turn_metadata_and_codex_apps
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn codex_apps_tool_call_request_meta_includes_call_id_without_existing_codex_apps_meta() {
     let (_, turn_context) = make_session_and_context().await;
     let expected_turn_metadata = turn_context
@@ -1130,7 +1130,7 @@ async fn install_host_owned_codex_apps_manager(session: &Session, turn_context: 
     *session.services.mcp_connection_manager.write().await = manager;
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn codex_apps_auth_elicitation_feature_disabled_returns_original_result() {
     let (session, turn_context, rx_event) = make_session_and_context_with_rx().await;
     install_host_owned_codex_apps_manager(&session, &turn_context).await;
@@ -1151,7 +1151,7 @@ async fn codex_apps_auth_elicitation_feature_disabled_returns_original_result() 
     assert!(rx_event.try_recv().is_err());
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn codex_apps_auth_elicitation_non_host_owned_server_returns_original_result() {
     let (session, mut turn_context, rx_event) = make_session_and_context_with_rx().await;
     let mut features = Features::with_defaults();
@@ -1176,7 +1176,7 @@ async fn codex_apps_auth_elicitation_non_host_owned_server_returns_original_resu
     assert!(rx_event.try_recv().is_err());
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn codex_apps_auth_elicitation_disallowed_by_policy_returns_original_result() {
     let (session, mut turn_context, rx_event) = make_session_and_context_with_rx().await;
     install_host_owned_codex_apps_manager(&session, &turn_context).await;
@@ -1205,7 +1205,7 @@ async fn codex_apps_auth_elicitation_disallowed_by_policy_returns_original_resul
     assert!(rx_event.try_recv().is_err());
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn codex_apps_auth_elicitation_granular_mcp_disabled_returns_original_result() {
     let (session, mut turn_context, rx_event) = make_session_and_context_with_rx().await;
     install_host_owned_codex_apps_manager(&session, &turn_context).await;
@@ -1240,7 +1240,7 @@ async fn codex_apps_auth_elicitation_granular_mcp_disabled_returns_original_resu
     assert!(rx_event.try_recv().is_err());
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn codex_apps_auth_elicitation_feature_enabled_requests_elicitation() {
     let (session, mut turn_context, rx_event) = make_session_and_context_with_rx().await;
     install_host_owned_codex_apps_manager(&session, &turn_context).await;
@@ -1253,7 +1253,7 @@ async fn codex_apps_auth_elicitation_feature_enabled_requests_elicitation() {
     let result = codex_apps_auth_failure_result();
     let metadata = codex_apps_auth_failure_metadata();
 
-    let request_task = tokio::spawn({
+    let request_task = edgerun_tokio::spawn({
         let session = Arc::clone(&session);
         let turn_context = Arc::clone(&turn_context);
         async move {
@@ -1270,7 +1270,7 @@ async fn codex_apps_auth_elicitation_feature_enabled_requests_elicitation() {
     });
 
     let request = loop {
-        let event = tokio::time::timeout(std::time::Duration::from_secs(1), rx_event.recv())
+        let event = edgerun_tokio::time::timeout(std::time::Duration::from_secs(1), rx_event.recv())
             .await
             .expect("elicitation event timed out")
             .expect("expected elicitation event");
@@ -1300,7 +1300,7 @@ async fn codex_apps_auth_elicitation_feature_enabled_requests_elicitation() {
         )
         .await
         .expect("elicitation should resolve");
-    let returned = tokio::time::timeout(std::time::Duration::from_secs(1), request_task)
+    let returned = edgerun_tokio::time::timeout(std::time::Duration::from_secs(1), request_task)
         .await
         .expect("auth elicitation task timed out")
         .expect("auth elicitation task failed");
@@ -1533,7 +1533,7 @@ fn prepare_arc_request_action_serializes_mcp_tool_call_shape() {
     );
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[edgerun_tokio::test(flavor = "current_thread")]
 async fn guardian_review_decision_maps_to_mcp_tool_decision() {
     let (session, _) = make_session_and_context().await;
     let session = Arc::new(session);
@@ -1667,7 +1667,7 @@ fn approval_elicitation_meta_merges_session_and_always_persist_with_connector_so
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn approval_callsite_mode_distinguishes_default_and_always_allow() {
     let (_session, turn_context) = make_session_and_context().await;
 
@@ -1764,7 +1764,7 @@ fn accepted_elicitation_without_content_defaults_to_accept() {
     assert_eq!(response, McpToolApprovalDecision::Accept);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn persist_codex_app_tool_approval_writes_tool_override() {
     let tmp = tempdir().expect("tempdir");
 
@@ -1803,7 +1803,7 @@ async fn persist_codex_app_tool_approval_writes_tool_override() {
     assert!(contents.contains("[apps.calendar.tools.\"calendar/list_events\"]"));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn persist_custom_mcp_tool_approval_writes_tool_override() {
     let tmp = tempdir().expect("tempdir");
     std::fs::write(
@@ -1838,7 +1838,7 @@ async fn persist_custom_mcp_tool_approval_writes_tool_override() {
     assert!(contents.contains("[mcp_servers.docs.tools.search]"));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn custom_mcp_tool_approval_mode_uses_server_default_with_tool_override() {
     let tmp = tempdir().expect("tempdir");
     std::fs::write(
@@ -1875,7 +1875,7 @@ approval_mode = "prompt"
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn custom_mcp_tool_approval_mode_uses_plugin_mcp_policy() {
     let (session, mut turn_context) = make_session_and_context().await;
     let codex_home = session.codex_home().await;
@@ -1915,7 +1915,7 @@ approval_mode = "approve"
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn custom_mcp_tool_approval_mode_uses_updated_plugin_mcp_policy_after_cache_warm() {
     let (session, mut turn_context) = make_session_and_context().await;
     let codex_home = session.codex_home().await;
@@ -1968,7 +1968,7 @@ approval_mode = "approve"
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn maybe_persist_mcp_tool_approval_reloads_session_config() {
     let (session, turn_context) = make_session_and_context().await;
     let codex_home = session.codex_home().await;
@@ -2007,7 +2007,7 @@ async fn maybe_persist_mcp_tool_approval_reloads_session_config() {
     assert_eq!(mcp_tool_approval_is_remembered(&session, &key).await, true);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn maybe_persist_mcp_tool_approval_reloads_session_config_for_custom_server() {
     let (session, turn_context) = make_session_and_context().await;
     let codex_home = session.codex_home().await;
@@ -2049,7 +2049,7 @@ async fn maybe_persist_mcp_tool_approval_reloads_session_config_for_custom_serve
     assert_eq!(mcp_tool_approval_is_remembered(&session, &key).await, true);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn maybe_persist_mcp_tool_approval_writes_plugin_mcp_policy() {
     let (session, mut turn_context) = make_session_and_context().await;
     let codex_home = session.codex_home().await;
@@ -2099,7 +2099,7 @@ enabled = true
     assert_eq!(mcp_tool_approval_is_remembered(&session, &key).await, true);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn maybe_persist_mcp_tool_approval_writes_project_config_for_project_server() {
     let (session, mut turn_context) = make_session_and_context().await;
     let codex_home = session.codex_home().await;
@@ -2155,7 +2155,7 @@ async fn maybe_persist_mcp_tool_approval_writes_project_config_for_project_serve
     assert_eq!(mcp_tool_approval_is_remembered(&session, &key).await, true);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn approve_mode_skips_when_annotations_do_not_require_approval() {
     let (session, turn_context) = make_session_and_context().await;
     let session = Arc::new(session);
@@ -2195,7 +2195,7 @@ async fn approve_mode_skips_when_annotations_do_not_require_approval() {
     assert_eq!(decision, None);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn guardian_mode_skips_auto_when_annotations_do_not_require_approval() {
     use wiremock::Mock;
     use wiremock::ResponseTemplate;
@@ -2268,7 +2268,7 @@ async fn guardian_mode_skips_auto_when_annotations_do_not_require_approval() {
     assert_eq!(decision, None);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn permission_request_hook_allows_mcp_tool_call() {
     let (mut session, turn_context) = make_session_and_context().await;
     let log_path = install_mcp_permission_request_hook(
@@ -2348,7 +2348,7 @@ async fn permission_request_hook_allows_mcp_tool_call() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn permission_request_hook_uses_hook_tool_name_without_metadata() {
     let (mut session, turn_context) = make_session_and_context().await;
     let log_path = install_mcp_permission_request_hook(
@@ -2403,7 +2403,7 @@ async fn permission_request_hook_uses_hook_tool_name_without_metadata() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn permission_request_hook_runs_after_remembered_mcp_approval() {
     let (mut session, turn_context) = make_session_and_context().await;
     let log_path = install_mcp_permission_request_hook(
@@ -2465,7 +2465,7 @@ async fn permission_request_hook_runs_after_remembered_mcp_approval() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn guardian_mode_mcp_denial_returns_rationale_message() {
     let server = start_mock_server().await;
     let guardian_request_log = mount_sse_once(
@@ -2552,7 +2552,7 @@ async fn guardian_mode_mcp_denial_returns_rationale_message() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn prompt_mode_waits_for_approval_when_annotations_do_not_require_approval() {
     let (session, turn_context, _rx_event) = make_session_and_context_with_rx().await;
     {
@@ -2583,7 +2583,7 @@ async fn prompt_mode_waits_for_approval_when_annotations_do_not_require_approval
     let mut approval_task = {
         let session = Arc::clone(&session);
         let turn_context = Arc::clone(&turn_context);
-        tokio::spawn(async move {
+        edgerun_tokio::spawn(async move {
             maybe_request_mcp_tool_approval(
                 &session,
                 &turn_context,
@@ -2598,7 +2598,7 @@ async fn prompt_mode_waits_for_approval_when_annotations_do_not_require_approval
     };
 
     assert!(
-        tokio::time::timeout(std::time::Duration::from_millis(200), &mut approval_task)
+        edgerun_tokio::time::timeout(std::time::Duration::from_millis(200), &mut approval_task)
             .await
             .is_err(),
         "prompt mode should wait for approval instead of auto-allowing"
@@ -2606,7 +2606,7 @@ async fn prompt_mode_waits_for_approval_when_annotations_do_not_require_approval
     approval_task.abort();
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn approve_mode_skips_arc_interrupt_for_model() {
     use wiremock::Mock;
     use wiremock::MockServer;
@@ -2673,7 +2673,7 @@ async fn approve_mode_skips_arc_interrupt_for_model() {
     assert_eq!(decision, None);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn custom_approve_mode_skips_arc_interrupt_for_model() {
     use wiremock::Mock;
     use wiremock::MockServer;
@@ -2740,7 +2740,7 @@ async fn custom_approve_mode_skips_arc_interrupt_for_model() {
     assert_eq!(decision, None);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn approve_mode_skips_arc_interrupt_without_annotations() {
     use wiremock::Mock;
     use wiremock::MockServer;
@@ -2807,7 +2807,7 @@ async fn approve_mode_skips_arc_interrupt_without_annotations() {
     assert_eq!(decision, None);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn full_access_mode_skips_arc_monitor_for_all_approval_modes() {
     use wiremock::Mock;
     use wiremock::MockServer;
@@ -2885,7 +2885,7 @@ async fn full_access_mode_skips_arc_monitor_for_all_approval_modes() {
     }
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn approve_mode_skips_arc_and_guardian_in_every_permission_mode() {
     use wiremock::Mock;
     use wiremock::ResponseTemplate;

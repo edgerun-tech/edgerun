@@ -58,14 +58,14 @@ use core_test_support::wait_for_event;
 use core_test_support::wait_for_event_with_timeout;
 use edgerun_json::serde_json::Value;
 use edgerun_json::serde_json::json;
-use reqwest::Client;
-use reqwest::StatusCode;
+use edgerun_reqwest::Client;
+use edgerun_reqwest::StatusCode;
 use serial_test::serial;
 use tempfile::tempdir;
-use tokio::process::Child;
-use tokio::process::Command;
-use tokio::time::Instant;
-use tokio::time::sleep;
+use edgerun_tokio::process::Child;
+use edgerun_tokio::process::Command;
+use edgerun_tokio::time::Instant;
+use edgerun_tokio::time::sleep;
 use wiremock::MockServer;
 
 static OPENAI_PNG: &str = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAD0AAAA9CAYAAAAeYmHpAAAE6klEQVR4Aeyau44UVxCGx1fZsmRLlm3Zoe0XcGQ5cUiCCIgJeS9CHgAhMkISQnIuGQgJEkBcxLW+nqnZ6uqqc+nuWRC7q/P3qetf9e+MtOwyX25O4Nep6JPyop++0qev9HrfgZ+F6r2DuB/vHOrt/UIkqdDHYvujOW6fO7h/CNEI+a5jc+pBR8uy0jVFsziYu5HtfSUk+Io34q921hLNctFSX0gwww+S8wce8K1LfCU+cYW4888aov8NxqvQILUPPReLOrm6zyLxa4i+6VZuFbJo8d1MOHZm+7VUtB/aIvhPWc/3SWg49JcwFLlHxuXKjtyloo+YNhuW3VS+WPBuUEMvCFKjEDVgFBQHXrnazpqiSxNZCkQ1kYiozsbm9Oz7l4i2Il7vGccGNWAc3XosDrZe/9P3ZnMmzHNEQw4smf8RQ87XEAMsC7Az0Au+dgXerfH4+sHvEc0SYGic8WBBUGqFH2gN7yDrazy7m2pbRTeRmU3+MjZmr1h6LJgPbGy23SI6GlYT0brQ71IY8Us4PNQCm+zepSbaD2BY9xCaAsD9IIj/IzFmKMSdHHonwdZATbTnYREf6/VZGER98N9yCWIvXQwXDoDdhZJoT8jwLnJXDB9w4Sb3e6nK5ndzlkTLnP3JBu4LKkbrYrU69gCVceV0JvpyuW1xlsUVngzhwMetn/XamtTORF9IO5YnWNiyeF9zCAfqR3fUW+vZZKLtgP+ts8BmQRBREAdRDhH3o8QuRh/YucNFz2BEjxbRN6LGzphfKmvP6v6QhqIQyZ8XNJ0W0X83MR1PEcJBNO2KC2Z1TW/v244scp9FwRViZxIOBF0Lctk7ZVSavdLvRlV1hz/ysUi9sr8CIcB3nvWBwA93ykTz18eAYxQ6N/K2DkPA1lv3iXCwmDUT7YkjIby9siXueIJj9H+pzSqJ9oIuJWTUgSSt4WO7o/9GGg0viR4VinNRUDoIj34xoCd6pxD3aK3zfdbnx5v1J3ZNNEJsE0sBG7N27ReDrJc4sFxz7dI/ZAbOmmiKvHBitQXpAdR6+F7v+/ol/tOouUV01EeMZQF2BoQDn6dP4XNr+j9GZEtEK1/L8pFw7bd3a53tsTa7WD+054jOFmPg1XBKPQgnqFfmFcy32ZRvjmiIIQTYFvyDxQ8nH8WIwwGwlyDjDznnilYyFr6njrlZwsKkBpO59A7OwgdzPEWRm+G+oeb7IfyNuzjEEVLrOVxJsxvxwF8kmCM6I2QYmJunz4u4TrADpfl7mlbRTWQ7VmrBzh3+C9f6Grc3YoGN9dg/SXFthpRsT6vobfXRs2VBlgBHXVMLHjDNbIZv1sZ9+X3hB09cXdH1JKViyG0+W9bWZDa/r2f9zAFR71sTzGpMSWz2iI4YssWjWo3REy1MDGjdwe5e0dFSiAC1JakBvu4/CUS8Eh6dqHdU0Or0ioY3W5ClSqDXAy7/6SRfgw8vt4I+tbvvNtFT2kVDhY5+IGb1rCqYaXNF08vSALsXCPmt0kQNqJT1p5eI1mkIV/BxCY1z85lOzeFbPBQHURkkPTlwTYK9gTVE25l84IbFFN+YJDHjdpn0gq6mrHht0dkcjbM4UL9283O5p77GN+SPW/QwVB4IUYg7Or+Kp7naR6qktP98LNF2UxWo9yObPIT9KYg+hK4i56no4rfnM0qeyFf6AwAAAP//trwR3wAAAAZJREFUAwBZ0sR75itw5gAAAABJRU5ErkJggg==";
@@ -423,7 +423,7 @@ fn assert_cwd_tool_output(structured: &Value, expected_cwd: &Path) {
     );
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 1)]
 #[serial(mcp_test_value)]
 async fn stdio_server_round_trip() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
@@ -558,7 +558,7 @@ async fn stdio_server_round_trip() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 1)]
 #[serial(mcp_cwd)]
 async fn stdio_server_uses_configured_cwd_before_runtime_fallback() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
@@ -617,7 +617,7 @@ async fn stdio_server_uses_configured_cwd_before_runtime_fallback() -> anyhow::R
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 1)]
 #[serial(mcp_cwd)]
 async fn remote_stdio_server_uses_runtime_fallback_cwd_when_config_omits_cwd() -> anyhow::Result<()>
 {
@@ -671,7 +671,7 @@ async fn remote_stdio_server_uses_runtime_fallback_cwd_when_config_omits_cwd() -
 }
 
 #[cfg(unix)]
-#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 1)]
 #[serial(mcp_cwd)]
 async fn local_stdio_server_uses_runtime_fallback_cwd_when_config_omits_cwd() -> anyhow::Result<()>
 {
@@ -733,7 +733,7 @@ async fn local_stdio_server_uses_runtime_fallback_cwd_when_config_omits_cwd() ->
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn stdio_mcp_tool_call_includes_sandbox_state_meta() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -826,7 +826,7 @@ async fn stdio_mcp_tool_call_includes_sandbox_state_meta() -> anyhow::Result<()>
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn stdio_mcp_parallel_tool_calls_default_false_runs_serially() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -935,7 +935,7 @@ async fn stdio_mcp_parallel_tool_calls_default_false_runs_serially() -> anyhow::
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn stdio_mcp_parallel_tool_calls_opt_in_runs_concurrently() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -1017,7 +1017,7 @@ async fn stdio_mcp_parallel_tool_calls_opt_in_runs_concurrently() -> anyhow::Res
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 1)]
 #[serial(mcp_test_value)]
 async fn stdio_image_responses_round_trip() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
@@ -1153,7 +1153,7 @@ async fn stdio_image_responses_round_trip() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 1)]
 #[serial(mcp_test_value)]
 async fn stdio_image_responses_preserve_original_detail_metadata() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
@@ -1239,7 +1239,7 @@ async fn stdio_image_responses_preserve_original_detail_metadata() -> anyhow::Re
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 1)]
 #[serial(mcp_test_value)]
 async fn stdio_image_responses_are_sanitized_for_text_only_model() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
@@ -1385,7 +1385,7 @@ async fn stdio_image_responses_are_sanitized_for_text_only_model() -> anyhow::Re
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 1)]
 #[serial(mcp_test_value)]
 async fn stdio_server_propagates_whitelisted_env_vars() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
@@ -1500,7 +1500,7 @@ async fn stdio_server_propagates_whitelisted_env_vars() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 1)]
 #[serial(mcp_env_source)]
 async fn stdio_server_propagates_explicit_local_env_var_source() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
@@ -1590,7 +1590,7 @@ async fn stdio_server_propagates_explicit_local_env_var_source() -> anyhow::Resu
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 1)]
 #[serial(mcp_env_source)]
 async fn remote_stdio_env_var_source_does_not_copy_local_env() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
@@ -1763,7 +1763,7 @@ impl StreamableHttpTestServer {
 /// What this tests: Codex can discover and call a Streamable HTTP MCP tool in
 /// both local and remote-aware placements, and the tool observes the expected
 /// environment value from the server process that actually handled the request.
-#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn streamable_http_tool_call_round_trip() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -1915,7 +1915,7 @@ fn streamable_http_with_oauth_round_trip() -> anyhow::Result<()> {
         .name("streamable_http_with_oauth_round_trip".to_string())
         .stack_size(TEST_STACK_SIZE_BYTES)
         .spawn(|| -> anyhow::Result<()> {
-            let runtime = tokio::runtime::Builder::new_multi_thread()
+            let runtime = edgerun_tokio::runtime::Builder::new_multi_thread()
                 .worker_threads(1)
                 .enable_all()
                 .build()?;
@@ -2314,7 +2314,7 @@ async fn wait_for_local_streamable_http_server(
             ));
         }
 
-        match tokio::time::timeout(remaining, client.get(&metadata_url).send()).await {
+        match edgerun_tokio::time::timeout(remaining, client.get(&metadata_url).send()).await {
             Ok(Ok(response)) if response.status() == StatusCode::OK => return Ok(()),
             Ok(Ok(response)) => {
                 if Instant::now() >= deadline {
@@ -2410,7 +2410,7 @@ async fn wait_for_streamable_http_metadata(
             ));
         }
 
-        match tokio::time::timeout(remaining, client.get(&metadata_url).send()).await {
+        match edgerun_tokio::time::timeout(remaining, client.get(&metadata_url).send()).await {
             Ok(Ok(response)) if response.status() == StatusCode::OK => return Ok(()),
             Ok(Ok(response)) => {
                 if Instant::now() >= deadline {

@@ -21,7 +21,7 @@ use rmcp::model::ElicitationAction;
 use edgerun_json::serde_json::json;
 use tempfile::tempdir;
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn verified_plugin_install_completed_requires_installed_plugin() {
     let codex_home = tempdir().expect("tempdir should succeed");
     let curated_root = curated_plugins_repo_path(codex_home.path());
@@ -93,7 +93,7 @@ fn request_plugin_install_response_persists_only_decline_always_mode() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn persist_disabled_install_request_writes_connector_config() {
     let codex_home = tempdir().expect("tempdir should succeed");
     let tool = connector_tool("connector_calendar", "Google Calendar");
@@ -114,7 +114,7 @@ async fn persist_disabled_install_request_writes_connector_config() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn persist_disabled_install_request_writes_plugin_config() {
     let codex_home = tempdir().expect("tempdir should succeed");
     let tool = DiscoverableTool::Plugin(Box::new(DiscoverablePluginInfo {
@@ -142,7 +142,7 @@ async fn persist_disabled_install_request_writes_plugin_config() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn persist_disabled_install_request_dedupes_existing_disabled_tools() {
     let codex_home = tempdir().expect("tempdir should succeed");
     let tool = connector_tool("connector_calendar", "Google Calendar");

@@ -215,7 +215,7 @@ fn out_of_range_truncation_drops_pre_user_active_turn_prefix() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn ignores_session_prefix_messages_when_truncating() {
     let (session, turn_context) = make_session_and_context().await;
     let mut items = session.build_initial_context(&turn_context).await;
@@ -254,7 +254,7 @@ async fn ignores_session_prefix_messages_when_truncating() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn shutdown_all_threads_bounded_submits_shutdown_to_every_thread() {
     let temp_dir = tempdir().expect("tempdir");
     let mut config = test_config().await;
@@ -291,7 +291,7 @@ async fn shutdown_all_threads_bounded_submits_shutdown_to_every_thread() {
     assert!(manager.list_thread_ids().await.is_empty());
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn start_thread_accepts_explicit_environment_when_default_environment_is_disabled() {
     let temp_dir = tempdir().expect("tempdir");
     let mut config = test_config().await;
@@ -339,7 +339,7 @@ async fn start_thread_accepts_explicit_environment_when_default_environment_is_d
     assert_eq!(manager.list_thread_ids().await, vec![thread.thread_id]);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn start_thread_keeps_internal_threads_hidden_from_normal_lookups() {
     let temp_dir = tempdir().expect("tempdir");
     let mut config = test_config().await;
@@ -382,7 +382,7 @@ async fn start_thread_keeps_internal_threads_hidden_from_normal_lookups() {
     assert!(manager.list_thread_ids().await.is_empty());
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn resume_and_fork_do_not_restore_thread_environments_from_rollout() {
     let temp_dir = tempdir().expect("tempdir");
     let mut config = test_config().await;
@@ -495,7 +495,7 @@ async fn resume_and_fork_do_not_restore_thread_environments_from_rollout() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn explicit_installation_id_skips_codex_home_file() {
     let temp_dir = tempdir().expect("tempdir");
     let mut config = test_config().await;
@@ -535,7 +535,7 @@ async fn explicit_installation_id_skips_codex_home_file() {
     let _ = manager.remove_thread(&thread.thread_id).await;
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn resume_active_thread_from_rollout_returns_running_thread() {
     let temp_dir = tempdir().expect("tempdir");
     let mut config = test_config().await;
@@ -590,7 +590,7 @@ async fn resume_active_thread_from_rollout_returns_running_thread() {
         .expect("shutdown source thread");
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn resume_stopped_thread_from_rollout_spawns_new_thread() {
     let temp_dir = tempdir().expect("tempdir");
     let mut config = test_config().await;
@@ -650,7 +650,7 @@ async fn resume_stopped_thread_from_rollout_spawns_new_thread() {
         .expect("shutdown resumed thread");
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn resume_stopped_thread_from_rollout_preserves_thread_source() {
     let temp_dir = tempdir().expect("tempdir");
     let mut config = test_config().await;
@@ -731,7 +731,7 @@ async fn resume_stopped_thread_from_rollout_preserves_thread_source() {
         .expect("shutdown resumed thread");
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn rollout_path_resume_and_fork_read_history_through_thread_store() {
     let temp_dir = tempdir().expect("tempdir");
     let mut config = test_config().await;
@@ -836,7 +836,7 @@ async fn rollout_path_resume_and_fork_read_history_through_thread_store() {
         .expect("shutdown forked thread");
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn new_uses_active_provider_for_model_refresh() {
     let server = MockServer::start().await;
     let models_mock = mount_models_once(&server, ModelsResponse { models: vec![] }).await;
@@ -1054,7 +1054,7 @@ fn mixed_response_and_legacy_user_event_history_is_mid_turn() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn interrupted_fork_snapshot_does_not_synthesize_turn_id_for_legacy_history() {
     let temp_dir = tempdir().expect("tempdir");
     let mut config = test_config().await;
@@ -1160,7 +1160,7 @@ async fn interrupted_fork_snapshot_does_not_synthesize_turn_id_for_legacy_histor
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn interrupted_fork_snapshot_preserves_explicit_turn_id() {
     let temp_dir = tempdir().expect("tempdir");
     let mut config = test_config().await;
@@ -1255,7 +1255,7 @@ async fn interrupted_fork_snapshot_preserves_explicit_turn_id() {
     }));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn interrupted_fork_snapshot_uses_persisted_mid_turn_history_without_live_source() {
     let temp_dir = tempdir().expect("tempdir");
     let mut config = test_config().await;
@@ -1392,7 +1392,7 @@ async fn interrupted_fork_snapshot_uses_persisted_mid_turn_history_without_live_
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn resumed_thread_keeps_paused_goal_paused() -> anyhow::Result<()> {
     let temp_dir = tempdir().expect("tempdir");
     let mut config = test_config().await;

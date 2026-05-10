@@ -16,6 +16,7 @@ fn main() {
     println!("cargo:rustc-check-cfg=cfg(num_bigint_upstream_tests)");
 
     let target_arch = std::env::var("CARGO_CFG_TARGET_ARCH").unwrap_or_default();
+    let target_os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     let target_pointer_width = std::env::var("CARGO_CFG_TARGET_POINTER_WIDTH").unwrap_or_default();
     let bits = if target_pointer_width == "64" {
         "64"
@@ -29,7 +30,9 @@ fn main() {
 
     println!("cargo:rustc-cfg=curve25519_dalek_bits=\"{bits}\"");
     println!("cargo:rustc-cfg=curve25519_dalek_backend=\"{backend}\"");
-    println!("cargo:rustc-cfg=has_i128");
+    if target_os != "none" {
+        println!("cargo:rustc-cfg=has_i128");
+    }
     println!("cargo:rustc-cfg=arch_enabled");
 
     let target_features = std::env::var("CARGO_CFG_TARGET_FEATURE").unwrap_or_default();

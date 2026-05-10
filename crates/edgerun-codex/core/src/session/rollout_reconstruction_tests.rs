@@ -52,7 +52,7 @@ fn inter_agent_assistant_message(text: &str) -> ResponseItem {
     }
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn record_initial_history_resumed_bare_turn_context_does_not_hydrate_previous_turn_settings()
 {
     let (session, turn_context) = make_session_and_context().await;
@@ -93,7 +93,7 @@ async fn record_initial_history_resumed_bare_turn_context_does_not_hydrate_previ
     assert!(session.reference_context_item().await.is_none());
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn record_initial_history_resumed_hydrates_previous_turn_settings_from_lifecycle_turn_with_missing_turn_context_id()
  {
     let (session, turn_context) = make_session_and_context().await;
@@ -172,7 +172,7 @@ async fn record_initial_history_resumed_hydrates_previous_turn_settings_from_lif
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn reconstruct_history_rollback_keeps_history_and_metadata_in_sync_for_completed_turns() {
     let (session, turn_context) = make_session_and_context().await;
     let first_context_item = turn_context.to_turn_context_item();
@@ -277,7 +277,7 @@ async fn reconstruct_history_rollback_keeps_history_and_metadata_in_sync_for_com
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn reconstruct_history_rollback_keeps_history_and_metadata_in_sync_for_incomplete_turn() {
     let (session, turn_context) = make_session_and_context().await;
     let first_context_item = turn_context.to_turn_context_item();
@@ -364,7 +364,7 @@ async fn reconstruct_history_rollback_keeps_history_and_metadata_in_sync_for_inc
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn reconstruct_history_rollback_skips_non_user_turns_for_history_and_metadata() {
     let (session, turn_context) = make_session_and_context().await;
     let first_context_item = turn_context.to_turn_context_item();
@@ -482,7 +482,7 @@ async fn reconstruct_history_rollback_skips_non_user_turns_for_history_and_metad
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn reconstruct_history_rollback_counts_inter_agent_assistant_turns() {
     let (session, turn_context) = make_session_and_context().await;
     let first_context_item = turn_context.to_turn_context_item();
@@ -578,7 +578,7 @@ async fn reconstruct_history_rollback_counts_inter_agent_assistant_turns() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn reconstruct_history_rollback_clears_history_and_metadata_when_exceeding_user_turns() {
     let (session, turn_context) = make_session_and_context().await;
     let only_context_item = turn_context.to_turn_context_item();
@@ -629,7 +629,7 @@ async fn reconstruct_history_rollback_clears_history_and_metadata_when_exceeding
     assert!(reconstructed.reference_context_item.is_none());
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn record_initial_history_resumed_rollback_skips_only_user_turns() {
     let (session, turn_context) = make_session_and_context().await;
     let previous_context_item = turn_context.to_turn_context_item();
@@ -700,7 +700,7 @@ async fn record_initial_history_resumed_rollback_skips_only_user_turns() {
     assert!(session.reference_context_item().await.is_none());
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn record_initial_history_resumed_rollback_drops_incomplete_user_turn_compaction_metadata() {
     let (session, turn_context) = make_session_and_context().await;
     let previous_context_item = turn_context.to_turn_context_item();
@@ -785,7 +785,7 @@ async fn record_initial_history_resumed_rollback_drops_incomplete_user_turn_comp
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn record_initial_history_resumed_bare_turn_context_does_not_seed_reference_context_item() {
     let (session, turn_context) = make_session_and_context().await;
     let previous_context_item = turn_context.to_turn_context_item();
@@ -802,7 +802,7 @@ async fn record_initial_history_resumed_bare_turn_context_does_not_seed_referenc
     assert!(session.reference_context_item().await.is_none());
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn record_initial_history_resumed_does_not_seed_reference_context_item_after_compaction() {
     let (session, turn_context) = make_session_and_context().await;
     let previous_context_item = turn_context.to_turn_context_item();
@@ -826,7 +826,7 @@ async fn record_initial_history_resumed_does_not_seed_reference_context_item_aft
     assert!(session.reference_context_item().await.is_none());
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn reconstruct_history_legacy_compaction_without_replacement_history_does_not_inject_current_initial_context()
  {
     let (session, turn_context) = make_session_and_context().await;
@@ -853,7 +853,7 @@ async fn reconstruct_history_legacy_compaction_without_replacement_history_does_
     assert!(reconstructed.reference_context_item.is_none());
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn reconstruct_history_legacy_compaction_without_replacement_history_clears_later_reference_context_item()
  {
     let (session, turn_context) = make_session_and_context().await;
@@ -903,7 +903,7 @@ async fn reconstruct_history_legacy_compaction_without_replacement_history_clear
     assert!(reconstructed.reference_context_item.is_none());
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn record_initial_history_resumed_turn_context_after_compaction_reestablishes_reference_context_item()
  {
     let (session, turn_context) = make_session_and_context().await;
@@ -1012,7 +1012,7 @@ async fn record_initial_history_resumed_turn_context_after_compaction_reestablis
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn record_initial_history_resumed_aborted_turn_without_id_clears_active_turn_for_compaction_accounting()
  {
     let (session, turn_context) = make_session_and_context().await;
@@ -1120,7 +1120,7 @@ async fn record_initial_history_resumed_aborted_turn_without_id_clears_active_tu
     assert!(session.reference_context_item().await.is_none());
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn record_initial_history_resumed_unmatched_abort_preserves_active_turn_for_later_turn_context()
  {
     let (session, turn_context) = make_session_and_context().await;
@@ -1241,7 +1241,7 @@ async fn record_initial_history_resumed_unmatched_abort_preserves_active_turn_fo
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn record_initial_history_resumed_trailing_incomplete_turn_compaction_clears_reference_context_item()
  {
     let (session, turn_context) = make_session_and_context().await;
@@ -1341,7 +1341,7 @@ async fn record_initial_history_resumed_trailing_incomplete_turn_compaction_clea
     assert!(session.reference_context_item().await.is_none());
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn record_initial_history_resumed_trailing_incomplete_turn_preserves_turn_context_item() {
     let (session, turn_context) = make_session_and_context().await;
     let current_context_item = turn_context.to_turn_context_item();
@@ -1393,7 +1393,7 @@ async fn record_initial_history_resumed_trailing_incomplete_turn_preserves_turn_
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn record_initial_history_resumed_replaced_incomplete_compacted_turn_clears_reference_context_item()
  {
     let (session, turn_context) = make_session_and_context().await;

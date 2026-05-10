@@ -27,9 +27,9 @@ use codex_protocol::protocol::AskForApproval;
 use codex_shell_command::is_dangerous_command::command_might_be_dangerous;
 use codex_shell_command::is_safe_command::is_known_safe_command;
 use edgerun_error::Error;
-use tokio::fs;
-use tokio::sync::Semaphore;
-use tokio::task::spawn_blocking;
+use edgerun_tokio::fs;
+use edgerun_tokio::sync::Semaphore;
+use edgerun_tokio::task::spawn_blocking;
 use tracing::instrument;
 
 use crate::config::Config;
@@ -224,7 +224,7 @@ pub enum ExecPolicyUpdateError {
     AppendRule { path: PathBuf, source: AmendError },
 
     #[error("failed to join blocking rules update task: {source}")]
-    JoinBlockingTask { source: tokio::task::JoinError },
+    JoinBlockingTask { source: edgerun_tokio::task::JoinError },
 
     #[error("failed to update in-memory rules: {source}")]
     AddRule {

@@ -196,7 +196,7 @@ fn tool_names(body: &edgerun_json::serde_json::Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn capability_sections_render_in_developer_message_in_order() -> Result<()> {
     skip_if_no_network!(Ok(()));
     let server = start_mock_server().await;
@@ -268,7 +268,7 @@ async fn capability_sections_render_in_developer_message_in_order() -> Result<()
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn explicit_plugin_mentions_inject_plugin_guidance() -> Result<()> {
     skip_if_no_network!(Ok(()));
     let server = start_mock_server().await;
@@ -363,7 +363,7 @@ async fn explicit_plugin_mentions_inject_plugin_guidance() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn explicit_plugin_mentions_track_plugin_used_analytics() -> Result<()> {
     skip_if_no_network!(Ok(()));
     let server = start_mock_server().await;
@@ -412,7 +412,7 @@ async fn explicit_plugin_mentions_track_plugin_used_analytics() -> Result<()> {
         if Instant::now() >= deadline {
             panic!("timed out waiting for plugin analytics request");
         }
-        tokio::time::sleep(Duration::from_millis(50)).await;
+        edgerun_tokio::time::sleep(Duration::from_millis(50)).await;
     };
 
     let event = plugin_event;

@@ -5,7 +5,7 @@ use super::SessionTaskContext;
 use crate::session::turn_context::TurnContext;
 use crate::state::TaskKind;
 use codex_protocol::user_input::UserInput;
-use tokio_util::sync::CancellationToken;
+use edgerun_tokio_util::sync::CancellationToken;
 
 #[derive(Clone, Copy, Default)]
 pub(crate) struct CompactTask;

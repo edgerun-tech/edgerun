@@ -138,7 +138,7 @@ fn configured_builder(apps_base_url: String) -> TestCodexBuilder {
         .with_config(move |config| configure_apps(config, apps_base_url.as_str()))
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn search_tool_enabled_by_default_adds_tool_search() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -196,7 +196,7 @@ async fn search_tool_enabled_by_default_adds_tool_search() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn always_defer_feature_hides_small_app_tool_sets() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -242,7 +242,7 @@ async fn always_defer_feature_hides_small_app_tool_sets() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn tool_search_disabled_exposes_apps_tools_directly() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -290,7 +290,7 @@ async fn tool_search_disabled_exposes_apps_tools_directly() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn search_tool_is_hidden_for_api_key_auth() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -328,7 +328,7 @@ async fn search_tool_is_hidden_for_api_key_auth() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn search_tool_adds_discovery_instructions_to_tool_description() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -370,7 +370,7 @@ async fn search_tool_adds_discovery_instructions_to_tool_description() -> Result
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn search_tool_hides_apps_tools_without_search() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -406,7 +406,7 @@ async fn search_tool_hides_apps_tools_without_search() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn explicit_app_mentions_expose_apps_tools_without_search() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -451,7 +451,7 @@ async fn explicit_app_mentions_expose_apps_tools_without_search() -> Result<()> 
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn tool_search_returns_deferred_tools_without_follow_up_tool_injection() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -743,7 +743,7 @@ async fn tool_search_returns_deferred_tools_without_follow_up_tool_injection() -
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn tool_search_returns_deferred_dynamic_tool_and_routes_follow_up_call() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -924,7 +924,7 @@ async fn tool_search_returns_deferred_dynamic_tool_and_routes_follow_up_call() -
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn tool_search_indexes_only_enabled_non_app_mcp_tools() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -1050,7 +1050,7 @@ async fn tool_search_indexes_only_enabled_non_app_mcp_tools() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn tool_search_uses_non_app_mcp_server_instructions_as_namespace_description() -> Result<()> {
     skip_if_no_network!(Ok(()));
 

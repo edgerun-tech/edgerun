@@ -322,7 +322,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn sends_sdp_offer_as_raw_body() {
         let transport = CapturingTransport::new();
         let client = RealtimeCallClient::new(
@@ -364,7 +364,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn extracts_call_id_from_forwarded_backend_location() {
         let transport =
             CapturingTransport::with_location("/v1/realtime/calls/calls/rtc_backend_test");
@@ -399,7 +399,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn sends_api_session_call_as_multipart_body() {
         let transport = CapturingTransport::new();
         let client = RealtimeCallClient::new(
@@ -461,7 +461,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn sends_backend_session_call_as_json_body() {
         let transport = CapturingTransport::new();
         let client = RealtimeCallClient::new(
@@ -510,7 +510,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn errors_when_location_is_missing() {
         let transport = CapturingTransport::without_location();
         let client = RealtimeCallClient::new(

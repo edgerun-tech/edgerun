@@ -4,7 +4,7 @@ use super::*;
 use pretty_assertions::assert_eq;
 use tempfile::NamedTempFile;
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn reads_requested_range() -> anyhow::Result<()> {
     let mut temp = NamedTempFile::new()?;
     use std::io::Write as _;
@@ -21,7 +21,7 @@ gamma
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn errors_when_offset_exceeds_length() -> anyhow::Result<()> {
     let mut temp = NamedTempFile::new()?;
     use std::io::Write as _;
@@ -37,7 +37,7 @@ async fn errors_when_offset_exceeds_length() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn reads_non_utf8_lines() -> anyhow::Result<()> {
     let mut temp = NamedTempFile::new()?;
     use std::io::Write as _;
@@ -49,7 +49,7 @@ async fn reads_non_utf8_lines() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn trims_crlf_endings() -> anyhow::Result<()> {
     let mut temp = NamedTempFile::new()?;
     use std::io::Write as _;
@@ -60,7 +60,7 @@ async fn trims_crlf_endings() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn respects_limit_even_with_more_lines() -> anyhow::Result<()> {
     let mut temp = NamedTempFile::new()?;
     use std::io::Write as _;
@@ -80,7 +80,7 @@ third
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn truncates_lines_longer_than_max_length() -> anyhow::Result<()> {
     let mut temp = NamedTempFile::new()?;
     use std::io::Write as _;
@@ -93,7 +93,7 @@ async fn truncates_lines_longer_than_max_length() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn indentation_mode_captures_block() -> anyhow::Result<()> {
     let mut temp = NamedTempFile::new()?;
     use std::io::Write as _;
@@ -128,7 +128,7 @@ async fn indentation_mode_captures_block() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn indentation_mode_expands_parents() -> anyhow::Result<()> {
     let mut temp = NamedTempFile::new()?;
     use std::io::Write as _;
@@ -179,7 +179,7 @@ async fn indentation_mode_expands_parents() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn indentation_mode_respects_sibling_flag() -> anyhow::Result<()> {
     let mut temp = NamedTempFile::new()?;
     use std::io::Write as _;
@@ -229,7 +229,7 @@ async fn indentation_mode_respects_sibling_flag() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn indentation_mode_handles_python_sample() -> anyhow::Result<()> {
     let mut temp = NamedTempFile::new()?;
     use std::io::Write as _;
@@ -273,7 +273,7 @@ class Bar:
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 #[ignore]
 async fn indentation_mode_handles_javascript_sample() -> anyhow::Result<()> {
     let mut temp = NamedTempFile::new()?;
@@ -374,7 +374,7 @@ private:
     Ok(temp)
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn indentation_mode_handles_cpp_sample_shallow() -> anyhow::Result<()> {
     let temp = write_cpp_sample()?;
 
@@ -402,7 +402,7 @@ async fn indentation_mode_handles_cpp_sample_shallow() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn indentation_mode_handles_cpp_sample() -> anyhow::Result<()> {
     let temp = write_cpp_sample()?;
 
@@ -433,7 +433,7 @@ async fn indentation_mode_handles_cpp_sample() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn indentation_mode_handles_cpp_sample_no_headers() -> anyhow::Result<()> {
     let temp = write_cpp_sample()?;
 
@@ -464,7 +464,7 @@ async fn indentation_mode_handles_cpp_sample_no_headers() -> anyhow::Result<()> 
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn indentation_mode_handles_cpp_sample_siblings() -> anyhow::Result<()> {
     let temp = write_cpp_sample()?;
 

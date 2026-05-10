@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::Duration;
 
-use strum_macros::EnumIter;
+use edgerun_strum_macros::EnumIter;
 
 use crate::AgentPath;
 use crate::SessionId;
@@ -50,11 +50,11 @@ use crate::request_permissions::RequestPermissionsResponse;
 use crate::request_user_input::RequestUserInputResponse;
 use crate::user_input::UserInput;
 use edgerun_json::serde_json::Value;
+use edgerun_serde_with::serde_as;
+use edgerun_strum_macros::Display;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
-use serde_with::serde_as;
-use strum_macros::Display;
 use tracing::error;
 use ts_rs::TS;
 
@@ -191,7 +191,7 @@ mod conversation_start_prompt_serde {
     where
         D: Deserializer<'de>,
     {
-        serde_with::rust::double_option::deserialize(deserializer)
+        edgerun_serde_with::rust::double_option::deserialize(deserializer)
     }
 
     pub(crate) fn serialize<S>(
@@ -201,7 +201,7 @@ mod conversation_start_prompt_serde {
     where
         S: Serializer,
     {
-        serde_with::rust::double_option::serialize(value, serializer)
+        edgerun_serde_with::rust::double_option::serialize(value, serializer)
     }
 }
 
@@ -3133,7 +3133,7 @@ pub struct ExecCommandOutputDeltaEvent {
     /// Which stream produced this chunk.
     pub stream: ExecOutputStream,
     /// Raw bytes from the stream (may not be valid UTF-8).
-    #[serde_as(as = "serde_with::base64::Base64")]
+    #[serde_as(as = "edgerun_serde_with::base64::Base64")]
     #[schemars(with = "String")]
     #[ts(type = "string")]
     pub chunk: Vec<u8>,

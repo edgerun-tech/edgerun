@@ -31,9 +31,9 @@ use core_test_support::test_codex::turn_permission_fields;
 use core_test_support::wait_for_event;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
-use tokio::time::Duration;
-use tokio::time::Instant;
-use tokio::time::sleep;
+use edgerun_tokio::time::Duration;
+use edgerun_tokio::time::Instant;
+use edgerun_tokio::time::sleep;
 use wiremock::BodyPrintLimit;
 use wiremock::MockServer;
 
@@ -81,7 +81,7 @@ fn read_only_text_turn_with_personality(
     }
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn personality_does_not_mutate_base_instructions_without_template() {
     let codex_home = TempDir::new().expect("create temp dir");
     let mut config = load_default_config_for_test(&codex_home).await;
@@ -98,7 +98,7 @@ async fn personality_does_not_mutate_base_instructions_without_template() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn base_instructions_override_disables_personality_template() {
     let codex_home = TempDir::new().expect("create temp dir");
     let mut config = load_default_config_for_test(&codex_home).await;
@@ -119,7 +119,7 @@ async fn base_instructions_override_disables_personality_template() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn user_turn_personality_none_does_not_add_update_message() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -158,7 +158,7 @@ async fn user_turn_personality_none_does_not_add_update_message() -> anyhow::Res
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn config_personality_some_sets_instructions_template() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -205,7 +205,7 @@ async fn config_personality_some_sets_instructions_template() -> anyhow::Result<
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn config_personality_none_sends_no_personality() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -259,7 +259,7 @@ async fn config_personality_none_sends_no_personality() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn default_personality_is_pragmatic_without_config_toml() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -296,7 +296,7 @@ async fn default_personality_is_pragmatic_without_config_toml() -> anyhow::Resul
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn user_turn_personality_some_adds_update_message() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -379,7 +379,7 @@ async fn user_turn_personality_some_adds_update_message() -> anyhow::Result<()> 
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn user_turn_personality_same_value_does_not_add_update_message() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -457,7 +457,7 @@ async fn user_turn_personality_same_value_does_not_add_update_message() -> anyho
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn instructions_uses_base_if_feature_disabled() -> anyhow::Result<()> {
     let codex_home = TempDir::new().expect("create temp dir");
     let mut config = load_default_config_for_test(&codex_home).await;
@@ -477,7 +477,7 @@ async fn instructions_uses_base_if_feature_disabled() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn user_turn_personality_skips_if_feature_disabled() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -553,7 +553,7 @@ async fn user_turn_personality_skips_if_feature_disabled() -> anyhow::Result<()>
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_model_friendly_personality_instructions_with_feature() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -661,7 +661,7 @@ async fn remote_model_friendly_personality_instructions_with_feature() -> anyhow
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn user_turn_personality_remote_model_template_includes_update_message() -> anyhow::Result<()>
 {
     skip_if_no_network!(Ok(()));

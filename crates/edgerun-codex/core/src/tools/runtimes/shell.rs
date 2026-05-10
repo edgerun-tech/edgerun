@@ -42,7 +42,7 @@ use codex_protocol::protocol::ReviewDecision;
 use codex_sandboxing::SandboxablePreference;
 use codex_shell_command::powershell::prefix_powershell_script_with_utf8;
 use codex_utils_absolute_path::AbsolutePathBuf;
-use futures::future::BoxFuture;
+use edgerun_futures::future::BoxFuture;
 use std::collections::HashMap;
 
 #[derive(Clone, Debug)]

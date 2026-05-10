@@ -61,8 +61,8 @@ use codex_thread_store::StoredThread;
 use codex_thread_store::ThreadStore;
 use codex_thread_store::ThreadStoreError;
 use codex_utils_absolute_path::AbsolutePathBuf;
-use futures::StreamExt;
-use futures::stream::FuturesUnordered;
+use edgerun_futures::StreamExt;
+use edgerun_futures::stream::FuturesUnordered;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -70,10 +70,10 @@ use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
-use tokio::runtime::Handle;
-use tokio::runtime::RuntimeFlavor;
-use tokio::sync::RwLock;
-use tokio::sync::broadcast;
+use edgerun_tokio::runtime::Handle;
+use edgerun_tokio::runtime::RuntimeFlavor;
+use edgerun_tokio::sync::RwLock;
+use edgerun_tokio::sync::broadcast;
 use tracing::warn;
 
 const THREAD_CREATED_CHANNEL_CAPACITY: usize = 1024;
@@ -730,7 +730,7 @@ impl ThreadManager {
         let mut shutdowns = threads
             .into_iter()
             .map(|(thread_id, thread)| async move {
-                let outcome = match tokio::time::timeout(timeout, thread.shutdown_and_wait()).await
+                let outcome = match edgerun_tokio::time::timeout(timeout, thread.shutdown_and_wait()).await
                 {
                     Ok(Ok(())) => ShutdownOutcome::Complete,
                     Ok(Err(_)) => ShutdownOutcome::SubmitFailed,

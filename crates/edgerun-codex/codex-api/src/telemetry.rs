@@ -12,7 +12,7 @@ use edgerun_tokio_tungstenite::Message;
 use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::time::Instant;
+use edgerun_tokio::time::Instant;
 
 /// Generic telemetry.
 pub trait SseTelemetry: Send + Sync {
@@ -25,7 +25,7 @@ pub trait SseTelemetry: Send + Sync {
                     edgerun_eventsource_stream::EventStreamError<TransportError>,
                 >,
             >,
-            tokio::time::error::Elapsed,
+            edgerun_tokio::time::error::Elapsed,
         >,
         duration: Duration,
     );

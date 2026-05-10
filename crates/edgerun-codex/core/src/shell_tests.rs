@@ -146,7 +146,7 @@ fn derive_exec_args() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn test_current_shell_detects_zsh() {
     let shell = Command::new("sh")
         .arg("-c")
@@ -167,7 +167,7 @@ async fn test_current_shell_detects_zsh() {
     }
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn detects_powershell_as_default() {
     if !cfg!(windows) {
         return;

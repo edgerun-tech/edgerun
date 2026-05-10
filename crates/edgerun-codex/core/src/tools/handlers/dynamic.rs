@@ -16,7 +16,7 @@ use codex_protocol::protocol::EventMsg;
 use codex_tools::ToolName;
 use edgerun_json::serde_json::Value;
 use std::time::Instant;
-use tokio::sync::oneshot;
+use edgerun_tokio::sync::oneshot;
 use tracing::warn;
 
 pub struct DynamicToolHandler {

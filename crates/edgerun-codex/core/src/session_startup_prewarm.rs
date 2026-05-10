@@ -3,8 +3,8 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
 
-use tokio::task::JoinHandle;
-use tokio_util::sync::CancellationToken;
+use edgerun_tokio::task::JoinHandle;
+use edgerun_tokio_util::sync::CancellationToken;
 use tracing::info;
 use tracing::warn;
 
@@ -63,9 +63,9 @@ impl SessionStartupPrewarmHandle {
         let resolution = if task.is_finished() {
             Self::resolution_from_join_result(task.await, started_at)
         } else {
-            match tokio::select! {
+            match edgerun_tokio::select! {
                 _ = cancellation_token.cancelled() => None,
-                result = tokio::time::timeout(remaining, &mut task) => Some(result),
+                result = edgerun_tokio::time::timeout(remaining, &mut task) => Some(result),
             } {
                 Some(Ok(result)) => Self::resolution_from_join_result(result, started_at),
                 Some(Err(_elapsed)) => {
@@ -130,7 +130,7 @@ impl SessionStartupPrewarmHandle {
     }
 
     fn resolution_from_join_result(
-        result: std::result::Result<CodexResult<ModelClientSession>, tokio::task::JoinError>,
+        result: std::result::Result<CodexResult<ModelClientSession>, edgerun_tokio::task::JoinError>,
         started_at: Instant,
     ) -> SessionStartupPrewarmResolution {
         match result {
@@ -161,7 +161,7 @@ impl Session {
         let websocket_connect_timeout = self.provider().await.websocket_connect_timeout();
         let started_at = Instant::now();
         let startup_prewarm_session = Arc::clone(self);
-        let startup_prewarm = tokio::spawn(async move {
+        let startup_prewarm = edgerun_tokio::spawn(async move {
             let result =
                 schedule_startup_prewarm_inner(startup_prewarm_session, base_instructions).await;
             let status = if result.is_ok() { "ready" } else { "failed" };

@@ -30,13 +30,13 @@ use pretty_assertions::assert_eq;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;
-use tokio::io::AsyncWriteExt as _;
+use edgerun_tokio::io::AsyncWriteExt as _;
 use wiremock::MockServer;
 
 /// Verify that submitting `Op::Review` spawns a child task and emits
 /// EnteredReviewMode -> ExitedReviewMode(None) -> TurnComplete
 /// in that order when the model returns a structured review JSON payload.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn review_op_emits_lifecycle_and_review_output() {
     // Skip under Codex sandbox network restrictions.
     skip_if_no_network!();
@@ -182,8 +182,8 @@ async fn review_op_emits_lifecycle_and_review_output() {
 /// lifecycle still occurs and the plain text is surfaced via
 /// ExitedReviewMode(Some(..)) as the overall_explanation.
 // Windows CI only: bump to 4 workers to prevent SSE/event starvation and test timeouts.
-#[cfg_attr(windows, tokio::test(flavor = "multi_thread", worker_threads = 4))]
-#[cfg_attr(not(windows), tokio::test(flavor = "multi_thread", worker_threads = 2))]
+#[cfg_attr(windows, edgerun_tokio::test(flavor = "multi_thread", worker_threads = 4))]
+#[cfg_attr(not(windows), edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2))]
 async fn review_op_with_plain_text_emits_review_fallback() {
     skip_if_no_network!();
 
@@ -236,8 +236,8 @@ async fn review_op_with_plain_text_emits_review_fallback() {
 /// - AgentMessageContentDelta
 /// - ItemCompleted for TurnItem::AgentMessage
 // Windows CI only: bump to 4 workers to prevent SSE/event starvation and test timeouts.
-#[cfg_attr(windows, tokio::test(flavor = "multi_thread", worker_threads = 4))]
-#[cfg_attr(not(windows), tokio::test(flavor = "multi_thread", worker_threads = 2))]
+#[cfg_attr(windows, edgerun_tokio::test(flavor = "multi_thread", worker_threads = 4))]
+#[cfg_attr(not(windows), edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2))]
 async fn review_filters_agent_message_related_events() {
     skip_if_no_network!();
 
@@ -303,8 +303,8 @@ async fn review_filters_agent_message_related_events() {
 /// non-streaming AgentMessage is emitted; the UI consumes the structured
 /// result via ExitedReviewMode plus a final assistant message.
 // Windows CI only: bump to 4 workers to prevent SSE/event starvation and test timeouts.
-#[cfg_attr(windows, tokio::test(flavor = "multi_thread", worker_threads = 4))]
-#[cfg_attr(not(windows), tokio::test(flavor = "multi_thread", worker_threads = 2))]
+#[cfg_attr(windows, edgerun_tokio::test(flavor = "multi_thread", worker_threads = 4))]
+#[cfg_attr(not(windows), edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2))]
 async fn review_does_not_emit_agent_message_on_structured_output() {
     skip_if_no_network!();
 
@@ -383,7 +383,7 @@ async fn review_does_not_emit_agent_message_on_structured_output() {
 
 /// Ensure that when a custom `review_model` is set in the config, the review
 /// request uses that model (and not the main chat model).
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn review_uses_custom_review_model_from_config() {
     skip_if_no_network!();
 
@@ -438,7 +438,7 @@ async fn review_uses_custom_review_model_from_config() {
 
 /// Ensure that when `review_model` is not set in the config, the review request
 /// uses the session model.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn review_uses_session_model_when_review_model_unset() {
     skip_if_no_network!();
 
@@ -492,8 +492,8 @@ async fn review_uses_session_model_when_review_model_unset() {
 /// the parent session. The request `input` should contain only the review
 /// prompt from the user.
 // Windows CI only: bump to 4 workers to prevent SSE/event starvation and test timeouts.
-#[cfg_attr(windows, tokio::test(flavor = "multi_thread", worker_threads = 4))]
-#[cfg_attr(not(windows), tokio::test(flavor = "multi_thread", worker_threads = 2))]
+#[cfg_attr(windows, edgerun_tokio::test(flavor = "multi_thread", worker_threads = 4))]
+#[cfg_attr(not(windows), edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2))]
 async fn review_input_isolated_from_parent_history() {
     skip_if_no_network!();
 
@@ -509,7 +509,7 @@ async fn review_input_isolated_from_parent_history() {
 
     let session_file = codex_home.path().join("resume.jsonl");
     {
-        let mut f = tokio::fs::File::create(&session_file).await.unwrap();
+        let mut f = edgerun_tokio::fs::File::create(&session_file).await.unwrap();
         let convo_id = Uuid::new_v4();
         // Proper session_meta line (enveloped) with a conversation id
         let meta_line = edgerun_json::serde_json::json!({
@@ -672,7 +672,7 @@ async fn review_input_isolated_from_parent_history() {
 
 /// After a review thread finishes, its conversation should be visible in the
 /// parent session so later turns can reference the results.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn review_history_surfaces_in_parent_session() {
     skip_if_no_network!();
 
@@ -774,7 +774,7 @@ async fn review_history_surfaces_in_parent_session() {
 
 /// `/review` should use the session's current cwd (including runtime overrides)
 /// when resolving base-branch review prompts (merge-base computation).
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn review_uses_overridden_cwd_for_base_branch_merge_base() {
     skip_if_no_network!();
 

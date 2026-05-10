@@ -1,9 +1,9 @@
 use std::sync::Arc;
 use std::sync::LazyLock;
 
-use reqwest::cookie::CookieStore;
-use reqwest::cookie::Jar;
-use reqwest::header::HeaderValue;
+use edgerun_reqwest::cookie::CookieStore;
+use edgerun_reqwest::cookie::Jar;
+use edgerun_reqwest::header::HeaderValue;
 
 use crate::chatgpt_hosts::is_allowed_chatgpt_host;
 
@@ -23,7 +23,7 @@ impl CookieStore for ChatGptCloudflareCookieStore {
     fn set_cookies(
         &self,
         cookie_headers: &mut dyn Iterator<Item = &HeaderValue>,
-        url: &reqwest::Url,
+        url: &edgerun_reqwest::Url,
     ) {
         if !is_chatgpt_cookie_url(url) {
             return;
@@ -34,7 +34,7 @@ impl CookieStore for ChatGptCloudflareCookieStore {
         self.jar.set_cookies(&mut cloudflare_cookie_headers, url);
     }
 
-    fn cookies(&self, url: &reqwest::Url) -> Option<HeaderValue> {
+    fn cookies(&self, url: &edgerun_reqwest::Url) -> Option<HeaderValue> {
         if is_chatgpt_cookie_url(url) {
             self.jar.cookies(url).and_then(only_cloudflare_cookies)
         } else {
@@ -50,12 +50,12 @@ impl CookieStore for ChatGptCloudflareCookieStore {
 /// ChatGPT account, session, auth, or other user-specific cookies here. If a future caller needs
 /// those cookies, the store must be scoped to the auth/session owner instead of shared globally.
 pub fn with_chatgpt_cloudflare_cookie_store(
-    builder: reqwest::ClientBuilder,
-) -> reqwest::ClientBuilder {
+    builder: edgerun_reqwest::ClientBuilder,
+) -> edgerun_reqwest::ClientBuilder {
     builder.cookie_provider(Arc::clone(&SHARED_CHATGPT_CLOUDFLARE_COOKIE_STORE))
 }
 
-fn is_chatgpt_cookie_url(url: &reqwest::Url) -> bool {
+fn is_chatgpt_cookie_url(url: &edgerun_reqwest::Url) -> bool {
     match url.scheme() {
         "https" => {}
         _ => return false,
@@ -122,12 +122,12 @@ fn is_allowed_cloudflare_cookie_name(name: &str) -> bool {
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
-    use reqwest::cookie::CookieStore;
+    use edgerun_reqwest::cookie::CookieStore;
 
     #[test]
     fn stores_and_returns_cloudflare_cookies_for_chatgpt_hosts() {
         let store = ChatGptCloudflareCookieStore::default();
-        let url = reqwest::Url::parse("https://chatgpt.com/backend-api/codex/responses").unwrap();
+        let url = edgerun_reqwest::Url::parse("https://chatgpt.com/backend-api/codex/responses").unwrap();
         let cfuvid = HeaderValue::from_static("_cfuvid=visitor; Path=/; Secure; HttpOnly");
         let clearance =
             HeaderValue::from_static("cf_clearance=clearance; Path=/; Secure; HttpOnly");
@@ -157,7 +157,7 @@ mod tests {
     #[test]
     fn ignores_non_chatgpt_cookies() {
         let store = ChatGptCloudflareCookieStore::default();
-        let url = reqwest::Url::parse("https://api.openai.com/v1/responses").unwrap();
+        let url = edgerun_reqwest::Url::parse("https://api.openai.com/v1/responses").unwrap();
         let set_cookie = HeaderValue::from_static("_cfuvid=visitor; Path=/; Secure; HttpOnly");
 
         store.set_cookies(&mut std::iter::once(&set_cookie), &url);
@@ -168,7 +168,7 @@ mod tests {
     #[test]
     fn ignores_non_cloudflare_cookies_for_chatgpt_hosts() {
         let store = ChatGptCloudflareCookieStore::default();
-        let url = reqwest::Url::parse("https://chatgpt.com/backend-api/codex/responses").unwrap();
+        let url = edgerun_reqwest::Url::parse("https://chatgpt.com/backend-api/codex/responses").unwrap();
         let set_cookie = HeaderValue::from_static(
             "__Secure-next-auth.session-token=secret; Path=/; Secure; HttpOnly",
         );
@@ -181,7 +181,7 @@ mod tests {
     #[test]
     fn ignores_mixed_non_cloudflare_cookies_for_chatgpt_hosts() {
         let store = ChatGptCloudflareCookieStore::default();
-        let url = reqwest::Url::parse("https://chatgpt.com/backend-api/codex/responses").unwrap();
+        let url = edgerun_reqwest::Url::parse("https://chatgpt.com/backend-api/codex/responses").unwrap();
         let cfuvid = HeaderValue::from_static("_cfuvid=visitor; Path=/; Secure; HttpOnly");
         let account_cookie =
             HeaderValue::from_static("chatgpt_session=secret; Path=/; Secure; HttpOnly");
@@ -200,8 +200,8 @@ mod tests {
     fn does_not_return_chatgpt_cloudflare_cookies_for_other_hosts() {
         let store = ChatGptCloudflareCookieStore::default();
         let chatgpt_url =
-            reqwest::Url::parse("https://chatgpt.com/backend-api/codex/responses").unwrap();
-        let api_url = reqwest::Url::parse("https://api.openai.com/v1/responses").unwrap();
+            edgerun_reqwest::Url::parse("https://chatgpt.com/backend-api/codex/responses").unwrap();
+        let api_url = edgerun_reqwest::Url::parse("https://api.openai.com/v1/responses").unwrap();
         let set_cookie = HeaderValue::from_static("_cfuvid=visitor; Path=/; Secure; HttpOnly");
 
         store.set_cookies(&mut std::iter::once(&set_cookie), &chatgpt_url);
@@ -212,9 +212,9 @@ mod tests {
     #[test]
     fn rejects_plain_http_chatgpt_cookie_urls() {
         let store = ChatGptCloudflareCookieStore::default();
-        let http_url = reqwest::Url::parse("http://chatgpt.com/backend-api/codex/responses")
+        let http_url = edgerun_reqwest::Url::parse("http://chatgpt.com/backend-api/codex/responses")
             .expect("URL should parse");
-        let https_url = reqwest::Url::parse("https://chatgpt.com/backend-api/codex/responses")
+        let https_url = edgerun_reqwest::Url::parse("https://chatgpt.com/backend-api/codex/responses")
             .expect("URL should parse");
         let set_cookie = HeaderValue::from_static("_cfuvid=visitor; Path=/; Secure; HttpOnly");
 
@@ -226,11 +226,11 @@ mod tests {
 
     #[test]
     fn only_allows_https_urls() {
-        let url = reqwest::Url::parse("http://chatgpt.com/backend-api/codex/responses").unwrap();
+        let url = edgerun_reqwest::Url::parse("http://chatgpt.com/backend-api/codex/responses").unwrap();
 
         assert!(!is_chatgpt_cookie_url(&url));
 
-        let url = reqwest::Url::parse("wss://chatgpt.com/backend-api/codex/responses").unwrap();
+        let url = edgerun_reqwest::Url::parse("wss://chatgpt.com/backend-api/codex/responses").unwrap();
 
         assert!(!is_chatgpt_cookie_url(&url));
     }

@@ -5,12 +5,12 @@ use std::time::Duration;
 use crate::AuthProvider;
 use codex_client::build_reqwest_client_with_custom_ca;
 use edgerun_error::Error;
-use reqwest::StatusCode;
-use reqwest::header::CONTENT_LENGTH;
+use edgerun_reqwest::StatusCode;
+use edgerun_reqwest::header::CONTENT_LENGTH;
 use serde::Deserialize;
-use tokio::fs::File;
-use tokio::time::Instant;
-use tokio_util::io::ReaderStream;
+use edgerun_tokio::fs::File;
+use edgerun_tokio::time::Instant;
+use edgerun_tokio_util::io::ReaderStream;
 
 pub const OPENAI_FILE_URI_PREFIX: &str = "sediment://";
 pub const OPENAI_FILE_UPLOAD_LIMIT_BYTES: u64 = 512 * 1024 * 1024;
@@ -55,7 +55,7 @@ pub enum OpenAiFileError {
     Request {
         url: String,
         #[source]
-        source: reqwest::Error,
+        source: edgerun_reqwest::Error,
     },
     #[error("OpenAI file request to {url} failed with status {status}: {body}")]
     UnexpectedStatus {
@@ -100,7 +100,7 @@ pub async fn upload_local_file(
     auth: &dyn AuthProvider,
     path: &Path,
 ) -> Result<UploadedOpenAiFile, OpenAiFileError> {
-    let metadata = tokio::fs::metadata(path)
+    let metadata = edgerun_tokio::fs::metadata(path)
         .await
         .map_err(|source| match source.kind() {
             std::io::ErrorKind::NotFound => OpenAiFileError::MissingPath {
@@ -130,7 +130,7 @@ pub async fn upload_local_file(
         .unwrap_or("file")
         .to_string();
     let create_url = format!("{}/files", base_url.trim_end_matches('/'));
-    let create_response = authorized_request(auth, reqwest::Method::POST, &create_url)
+    let create_response = authorized_request(auth, edgerun_reqwest::Method::POST, &create_url)
         .json(&edgerun_json::serde_json::json!({
             "file_name": file_name,
             "file_size": metadata.len(),
@@ -168,7 +168,7 @@ pub async fn upload_local_file(
         .timeout(OPENAI_FILE_REQUEST_TIMEOUT)
         .header("x-ms-blob-type", "BlockBlob")
         .header(CONTENT_LENGTH, metadata.len())
-        .body(reqwest::Body::wrap_stream(ReaderStream::new(upload_file)))
+        .body(edgerun_reqwest::Body::wrap_stream(ReaderStream::new(upload_file)))
         .send()
         .await
         .map_err(|source| OpenAiFileError::Request {
@@ -192,7 +192,7 @@ pub async fn upload_local_file(
     );
     let finalize_started_at = Instant::now();
     loop {
-        let finalize_response = authorized_request(auth, reqwest::Method::POST, &finalize_url)
+        let finalize_response = authorized_request(auth, edgerun_reqwest::Method::POST, &finalize_url)
             .json(&edgerun_json::serde_json::json!({}))
             .send()
             .await
@@ -240,7 +240,7 @@ pub async fn upload_local_file(
                         file_id: create_payload.file_id,
                     });
                 }
-                tokio::time::sleep(OPENAI_FILE_FINALIZE_RETRY_DELAY).await;
+                edgerun_tokio::time::sleep(OPENAI_FILE_FINALIZE_RETRY_DELAY).await;
             }
             _ => {
                 return Err(OpenAiFileError::UploadFailed {
@@ -256,9 +256,9 @@ pub async fn upload_local_file(
 
 fn authorized_request(
     auth: &dyn AuthProvider,
-    method: reqwest::Method,
+    method: edgerun_reqwest::Method,
     url: &str,
-) -> reqwest::RequestBuilder {
+) -> edgerun_reqwest::RequestBuilder {
     let mut headers = edgerun_http::HeaderMap::new();
     auth.add_auth_headers(&mut headers);
 
@@ -269,10 +269,10 @@ fn authorized_request(
         .headers(headers)
 }
 
-fn build_reqwest_client() -> reqwest::Client {
-    build_reqwest_client_with_custom_ca(reqwest::Client::builder()).unwrap_or_else(|error| {
+fn build_reqwest_client() -> edgerun_reqwest::Client {
+    build_reqwest_client_with_custom_ca(edgerun_reqwest::Client::builder()).unwrap_or_else(|error| {
         tracing::warn!(error = %error, "failed to build OpenAI file upload client");
-        reqwest::Client::new()
+        edgerun_reqwest::Client::new()
     })
 }
 
@@ -280,7 +280,7 @@ fn build_reqwest_client() -> reqwest::Client {
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
-    use reqwest::header::HeaderValue;
+    use edgerun_reqwest::header::HeaderValue;
     use std::sync::Arc;
     use std::sync::atomic::AtomicUsize;
     use std::sync::atomic::Ordering;
@@ -298,9 +298,9 @@ mod tests {
     struct ChatGptTestAuth;
 
     impl AuthProvider for ChatGptTestAuth {
-        fn add_auth_headers(&self, headers: &mut reqwest::header::HeaderMap) {
+        fn add_auth_headers(&self, headers: &mut edgerun_reqwest::header::HeaderMap) {
             headers.insert(
-                reqwest::header::AUTHORIZATION,
+                edgerun_reqwest::header::AUTHORIZATION,
                 HeaderValue::from_static("Bearer token"),
             );
             headers.insert("ChatGPT-Account-ID", HeaderValue::from_static("account_id"));
@@ -315,7 +315,7 @@ mod tests {
         format!("{}/backend-api", server.uri())
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn upload_local_file_returns_canonical_uri() {
         let server = MockServer::start().await;
         Mock::given(method("POST"))
@@ -366,7 +366,7 @@ mod tests {
         let base_url = base_url_for(&server);
         let dir = TempDir::new().expect("temp dir");
         let path = dir.path().join("hello.txt");
-        tokio::fs::write(&path, b"hello").await.expect("write file");
+        edgerun_tokio::fs::write(&path, b"hello").await.expect("write file");
 
         let uploaded = upload_local_file(&base_url, &chatgpt_auth(), &path)
             .await

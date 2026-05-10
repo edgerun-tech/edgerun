@@ -22,7 +22,7 @@ fn parse_truncates_after_limit() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn run_search_returns_results() -> anyhow::Result<()> {
     if !rg_available() {
         return Ok(());
@@ -40,7 +40,7 @@ async fn run_search_returns_results() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn run_search_with_glob_filter() -> anyhow::Result<()> {
     if !rg_available() {
         return Ok(());
@@ -56,7 +56,7 @@ async fn run_search_with_glob_filter() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn run_search_respects_limit() -> anyhow::Result<()> {
     if !rg_available() {
         return Ok(());
@@ -72,7 +72,7 @@ async fn run_search_respects_limit() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn run_search_handles_no_matches() -> anyhow::Result<()> {
     if !rg_available() {
         return Ok(());

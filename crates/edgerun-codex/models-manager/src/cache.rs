@@ -13,7 +13,7 @@ use std::io;
 use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::time::Duration;
-use tokio::fs;
+use edgerun_tokio::fs;
 use tracing::error;
 use tracing::info;
 

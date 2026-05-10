@@ -51,8 +51,8 @@ use edgerun_json::serde_json::json;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
-use tokio::sync::Mutex;
-use tokio::task::JoinHandle;
+use edgerun_tokio::sync::Mutex;
+use edgerun_tokio::task::JoinHandle;
 use tracing::debug;
 use tracing::error;
 use tracing::info;
@@ -819,7 +819,7 @@ async fn handle_start_inner(
     let sess_clone = Arc::clone(sess);
     let sub_id = sub_id.to_string();
     let fanout_realtime_active = Arc::clone(&realtime_active);
-    let fanout_task = tokio::spawn(async move {
+    let fanout_task = edgerun_tokio::spawn(async move {
         let ev = |msg| Event {
             id: sub_id.clone(),
             msg,
@@ -1013,7 +1013,7 @@ pub(crate) async fn handle_close(sess: &Arc<Session>, sub_id: String) {
 }
 
 fn spawn_realtime_input_task(input: RealtimeInputTask) -> JoinHandle<()> {
-    tokio::spawn(run_realtime_input_task(input))
+    edgerun_tokio::spawn(run_realtime_input_task(input))
 }
 
 struct RealtimeWebrtcSidebandInputTask {
@@ -1043,7 +1043,7 @@ fn spawn_webrtc_sideband_input_task(input: RealtimeWebrtcSidebandInputTask) -> J
         realtime_active,
     } = input;
 
-    tokio::spawn(async move {
+    edgerun_tokio::spawn(async move {
         if !realtime_active.load(Ordering::Relaxed) {
             return;
         }
@@ -1106,7 +1106,7 @@ async fn run_realtime_input_task(input: RealtimeInputTask) {
     let mut response_create_queue = RealtimeResponseCreateQueue::default();
 
     loop {
-        let result = tokio::select! {
+        let result = edgerun_tokio::select! {
             // Text typed by the user that should be sent into realtime.
             user_text = user_text_rx.recv() => {
                 handle_user_text_input(

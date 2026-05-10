@@ -115,6 +115,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5dd9dc738b7a8311c7ade152424974d8115f2cdad61e8dab8dac9f2362298510"
 
 [[package]]
+name = "bytecheck"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0caa33a2c0edca0419d15ac723dff03f1956f7978329b1e3b5fdaaaed9d3ca8b"
+dependencies = [
+ "bytecheck_derive",
+ "ptr_meta",
+ "rancor",
+ "simdutf8",
+]
+
+[[package]]
+name = "bytecheck_derive"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "89385e82b5d1821d2219e0b095efa2cc1f246cbf99080f3be46a1a85c0d392d9"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "bytes"
 version = "1.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -211,18 +234,18 @@ dependencies = [
  "edgerun-encoding",
  "edgerun-error",
  "edgerun-eventsource-stream",
+ "edgerun-futures",
  "edgerun-http",
  "edgerun-json",
  "edgerun-log",
+ "edgerun-reqwest",
  "edgerun-time",
+ "edgerun-tokio",
  "edgerun-tokio-tungstenite",
+ "edgerun-tokio-util",
  "edgerun-tungstenite",
  "edgerun-url",
- "futures",
- "reqwest",
  "serde",
- "tokio",
- "tokio-util",
 ]
 
 [[package]]
@@ -236,13 +259,13 @@ dependencies = [
  "edgerun-inventory",
  "edgerun-json",
  "edgerun-log",
+ "edgerun-serde-with",
  "edgerun-similar",
+ "edgerun-strum-macros",
  "edgerun-uuid",
  "rmcp",
  "schemars 0.8.22",
  "serde",
- "serde_with",
- "strum_macros",
  "ts-rs",
 ]
 
@@ -253,7 +276,7 @@ dependencies = [
  "edgerun-async-trait",
  "edgerun-error",
  "edgerun-similar",
- "tokio",
+ "edgerun-tokio",
  "tree-sitter",
  "tree-sitter-bash",
 ]
@@ -266,19 +289,19 @@ dependencies = [
  "edgerun-bytes",
  "edgerun-error",
  "edgerun-eventsource-stream",
+ "edgerun-futures",
  "edgerun-http",
  "edgerun-json",
  "edgerun-log",
  "edgerun-random",
+ "edgerun-reqwest",
+ "edgerun-tokio",
  "edgerun-zstd",
- "futures",
  "opentelemetry",
- "reqwest",
  "rustls",
  "rustls-native-certs",
  "rustls-pki-types",
  "serde",
- "tokio",
  "tracing-opentelemetry",
 ]
 
@@ -287,14 +310,14 @@ name = "codex-code-mode"
 version = "0.0.0"
 dependencies = [
  "codex-protocol",
- "deno_core_icudata",
  "edgerun-async-channel",
  "edgerun-async-trait",
+ "edgerun-deno-core-icudata",
  "edgerun-json",
  "edgerun-log",
+ "edgerun-tokio",
+ "edgerun-tokio-util",
  "serde",
- "tokio",
- "tokio-util",
  "v8",
 ]
 
@@ -315,6 +338,7 @@ dependencies = [
  "edgerun-encoding",
  "edgerun-error",
  "edgerun-eventsource-stream",
+ "edgerun-futures",
  "edgerun-http",
  "edgerun-json",
  "edgerun-log",
@@ -340,8 +364,8 @@ dependencies = [
  "edgerun-http",
  "edgerun-json",
  "edgerun-log",
- "reqwest",
- "tokio",
+ "edgerun-reqwest",
+ "edgerun-tokio",
 ]
 
 [[package]]
@@ -366,7 +390,7 @@ dependencies = [
  "edgerun-json",
  "edgerun-log",
  "edgerun-time",
- "tokio",
+ "edgerun-tokio",
 ]
 
 [[package]]
@@ -381,20 +405,20 @@ dependencies = [
  "edgerun-locale",
  "edgerun-log",
  "edgerun-quick-xml",
+ "edgerun-reqwest",
+ "edgerun-serde-with",
+ "edgerun-strum",
+ "edgerun-strum-macros",
  "edgerun-time",
+ "edgerun-tokio",
  "edgerun-uuid",
  "icu_decimal",
  "icu_locale_core",
  "icu_provider",
  "landlock",
- "reqwest",
  "schemars 0.8.22",
  "seccompiler",
  "serde",
- "serde_with",
- "strum",
- "strum_macros",
- "tokio",
  "ts-rs",
 ]
 
@@ -629,7 +653,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ececcb659e7ba858fb4f10388c250a7252eb0a27373f1a72b8748afdd248e587"
 dependencies = [
  "powerfmt",
- "serde_core",
 ]
 
 [[package]]
@@ -701,6 +724,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 
 [[package]]
+name = "edgerun-android-keystore"
+version = "0.1.1"
+dependencies = [
+ "edgerun-protocols",
+]
+
+[[package]]
 name = "edgerun-async-channel"
 version = "0.1.1"
 dependencies = [
@@ -722,6 +752,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-capabilities"
+version = "0.1.1"
+dependencies = [
+ "edgerun-protocols",
+]
+
+[[package]]
+name = "edgerun-capability-policy"
+version = "0.1.1"
+dependencies = [
+ "edgerun-capabilities",
+ "edgerun-crypto",
+ "edgerun-protocols",
+]
+
+[[package]]
 name = "edgerun-clap"
 version = "0.1.1"
 dependencies = [
@@ -736,6 +782,39 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "edgerun-core"
+version = "0.1.1"
+dependencies = [
+ "edgerun-crypto",
+ "edgerun-encoding",
+ "edgerun-json",
+ "edgerun-wire",
+]
+
+[[package]]
+name = "edgerun-crypto"
+version = "0.1.1"
+dependencies = [
+ "edgerun-encoding",
+]
+
+[[package]]
+name = "edgerun-deno-core-icudata"
+version = "0.1.1"
+dependencies = [
+ "deno_core_icudata",
+]
+
+[[package]]
+name = "edgerun-devices"
+version = "0.1.1"
+dependencies = [
+ "edgerun-capabilities",
+ "edgerun-protocols",
+ "edgerun-quectel-ec200a",
 ]
 
 [[package]]
@@ -766,8 +845,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-futures"
+version = "0.1.1"
+dependencies = [
+ "futures",
+]
+
+[[package]]
 name = "edgerun-glob"
 version = "0.1.1"
+
+[[package]]
+name = "edgerun-hardware-signing"
+version = "0.1.1"
+dependencies = [
+ "edgerun-android-keystore",
+ "edgerun-devices",
+ "edgerun-protocols",
+ "edgerun-tpm",
+ "edgerun-yubikey",
+]
+
+[[package]]
+name = "edgerun-hpack"
+version = "0.1.1"
+dependencies = [
+ "edgerun-log",
+]
 
 [[package]]
 name = "edgerun-http"
@@ -801,6 +905,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-linux-netif"
+version = "0.1.1"
+dependencies = [
+ "edgerun-capabilities",
+ "edgerun-devices",
+ "edgerun-linux-sysfs",
+]
+
+[[package]]
+name = "edgerun-linux-sysfs"
+version = "0.1.1"
+dependencies = [
+ "edgerun-encoding",
+]
+
+[[package]]
 name = "edgerun-locale"
 version = "0.1.1"
 
@@ -809,6 +929,101 @@ name = "edgerun-log"
 version = "0.1.1"
 dependencies = [
  "tracing",
+]
+
+[[package]]
+name = "edgerun-mesh"
+version = "0.1.1"
+dependencies = [
+ "edgerun-crypto",
+ "edgerun-hardware-signing",
+ "edgerun-json",
+ "edgerun-protocols",
+]
+
+[[package]]
+name = "edgerun-mesh-capability"
+version = "0.1.1"
+dependencies = [
+ "edgerun-hardware-signing",
+ "edgerun-protocols",
+]
+
+[[package]]
+name = "edgerun-mesh-link"
+version = "0.1.1"
+dependencies = [
+ "edgerun-hardware-signing",
+ "edgerun-mesh",
+]
+
+[[package]]
+name = "edgerun-mesh-session"
+version = "0.1.1"
+dependencies = [
+ "edgerun-crypto",
+ "edgerun-hardware-signing",
+ "edgerun-mesh",
+ "edgerun-protocols",
+]
+
+[[package]]
+name = "edgerun-node"
+version = "0.1.1"
+dependencies = [
+ "edgerun-capabilities",
+ "edgerun-capability-policy",
+ "edgerun-crypto",
+ "edgerun-devices",
+ "edgerun-encoding",
+ "edgerun-hardware-signing",
+ "edgerun-hpack",
+ "edgerun-json",
+ "edgerun-linux-netif",
+ "edgerun-log",
+ "edgerun-mesh",
+ "edgerun-mesh-capability",
+ "edgerun-mesh-link",
+ "edgerun-mesh-session",
+ "edgerun-platform",
+ "edgerun-protocols",
+ "edgerun-qpack",
+ "edgerun-remote-capability",
+ "edgerun-storage",
+ "edgerun-stream",
+ "edgerun-tpm",
+ "edgerun-url",
+ "edgerun-yubikey",
+ "rkyv",
+]
+
+[[package]]
+name = "edgerun-platform"
+version = "0.1.0"
+
+[[package]]
+name = "edgerun-protocols"
+version = "0.1.1"
+dependencies = [
+ "edgerun-core",
+ "edgerun-crypto",
+ "edgerun-encoding",
+ "edgerun-hpack",
+ "edgerun-wire",
+]
+
+[[package]]
+name = "edgerun-qpack"
+version = "0.1.1"
+dependencies = [
+ "edgerun-encoding",
+]
+
+[[package]]
+name = "edgerun-quectel-ec200a"
+version = "0.1.1"
+dependencies = [
+ "edgerun-protocols",
 ]
 
 [[package]]
@@ -823,6 +1038,41 @@ name = "edgerun-random"
 version = "0.1.1"
 
 [[package]]
+name = "edgerun-remote-capability"
+version = "0.1.1"
+dependencies = [
+ "edgerun-capabilities",
+ "edgerun-capability-policy",
+ "edgerun-crypto",
+ "edgerun-devices",
+ "edgerun-encoding",
+ "edgerun-hardware-signing",
+ "edgerun-protocols",
+]
+
+[[package]]
+name = "edgerun-reqwest"
+version = "0.1.1"
+dependencies = [
+ "edgerun-bytes",
+ "edgerun-encoding",
+ "edgerun-futures",
+ "edgerun-http",
+ "edgerun-json",
+ "edgerun-node",
+ "edgerun-url",
+ "reqwest",
+ "serde",
+]
+
+[[package]]
+name = "edgerun-serde-with"
+version = "0.1.1"
+dependencies = [
+ "serde_with",
+]
+
+[[package]]
 name = "edgerun-shlex"
 version = "0.1.1"
 
@@ -834,11 +1084,52 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-storage"
+version = "0.1.1"
+dependencies = [
+ "edgerun-crypto",
+ "edgerun-encoding",
+ "edgerun-log",
+ "edgerun-protocols",
+ "edgerun-stream",
+ "edgerun-virtual-disk",
+]
+
+[[package]]
+name = "edgerun-stream"
+version = "0.1.1"
+dependencies = [
+ "edgerun-protocols",
+]
+
+[[package]]
+name = "edgerun-strum"
+version = "0.1.1"
+dependencies = [
+ "strum",
+]
+
+[[package]]
+name = "edgerun-strum-macros"
+version = "0.1.1"
+dependencies = [
+ "strum_macros",
+]
+
+[[package]]
 name = "edgerun-time"
 version = "0.1.1"
 dependencies = [
  "chrono",
  "edgerun-encoding",
+]
+
+[[package]]
+name = "edgerun-tokio"
+version = "0.1.1"
+dependencies = [
+ "edgerun-node",
+ "tokio",
 ]
 
 [[package]]
@@ -851,6 +1142,22 @@ dependencies = [
  "rustls",
  "tokio",
  "tokio-tungstenite",
+]
+
+[[package]]
+name = "edgerun-tokio-util"
+version = "0.1.1"
+dependencies = [
+ "edgerun-tokio",
+ "tokio-util",
+]
+
+[[package]]
+name = "edgerun-tpm"
+version = "0.1.1"
+dependencies = [
+ "edgerun-crypto",
+ "edgerun-encoding",
 ]
 
 [[package]]
@@ -876,6 +1183,31 @@ name = "edgerun-uuid"
 version = "0.1.1"
 dependencies = [
  "uuid",
+]
+
+[[package]]
+name = "edgerun-virtual-disk"
+version = "0.1.1"
+dependencies = [
+ "edgerun-crypto",
+ "edgerun-encoding",
+ "edgerun-protocols",
+]
+
+[[package]]
+name = "edgerun-wire"
+version = "0.1.1"
+dependencies = [
+ "rkyv",
+]
+
+[[package]]
+name = "edgerun-yubikey"
+version = "0.1.1"
+dependencies = [
+ "edgerun-encoding",
+ "edgerun-linux-sysfs",
+ "edgerun-protocols",
 ]
 
 [[package]]
@@ -1195,7 +1527,7 @@ dependencies = [
  "futures-core",
  "futures-sink",
  "http",
- "indexmap 2.13.0",
+ "indexmap",
  "slab",
  "tokio",
  "tokio-util",
@@ -1204,15 +1536,15 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.12.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
-
-[[package]]
-name = "hashbrown"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "841d1cc9bed7f9236f321df977030373f4a4163ae1a7dbfe1a51a2c1a51d9100"
+
+[[package]]
+name = "hashbrown"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f467dd6dccf739c208452f8014c75c18bb8301b050ad1cfb27153803edb0f51"
 
 [[package]]
 name = "headers"
@@ -1585,25 +1917,12 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "1.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd070e393353796e801d209ad339e89596eb4c8d430d18ede6a1cced8fafbd99"
-dependencies = [
- "autocfg",
- "hashbrown 0.12.3",
- "serde",
-]
-
-[[package]]
-name = "indexmap"
 version = "2.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7714e70437a7dc3ac8eb7e6f8df75fd8eb422675fc7678aff7364301092b1017"
 dependencies = [
  "equivalent",
  "hashbrown 0.16.1",
- "serde",
- "serde_core",
 ]
 
 [[package]]
@@ -1795,6 +2114,26 @@ dependencies = [
  "libc",
  "wasi",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "munge"
+version = "0.4.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5e17401f259eba956ca16491461b6e8f72913a0a114e39736ce404410f915a0c"
+dependencies = [
+ "munge_macro",
+]
+
+[[package]]
+name = "munge_macro"
+version = "0.4.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4568f25ccbd45ab5d5603dc34318c1ec56b117531781260002151b8530a9f931"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -2003,6 +2342,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "33cb294fe86a74cbcf50d4445b37da762029549ebeea341421c7c70370f86cac"
 
 [[package]]
+name = "ptr_meta"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b9a0cf95a1196af61d4f1cbdab967179516d9a4a4312af1f31948f8f6224a79"
+dependencies = [
+ "ptr_meta_derive",
+]
+
+[[package]]
+name = "ptr_meta_derive"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7347867d0a7e1208d93b46767be83e2b8f978c3dad35f775ac8d8847551d6fe1"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "publicsuffix"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2093,6 +2452,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "69cdb34c158ceb288df11e18b4bd39de994f6657d83847bdffdbd7f346754b0f"
 
 [[package]]
+name = "rancor"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a063ea72381527c2a0561da9c80000ef822bdd7c3241b1cc1b12100e3df081ee"
+dependencies = [
+ "ptr_meta",
+]
+
+[[package]]
 name = "rand"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2171,6 +2539,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7a2d987857b319362043e95f5353c0535c1f58eec5336fdfcf626430af7def58"
 
 [[package]]
+name = "rend"
+version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cadadef317c2f20755a64d7fdc48f9e7178ee6b0e1f7fce33fa60f1d68a276e6"
+dependencies = [
+ "bytecheck",
+]
+
+[[package]]
 name = "reqwest"
 version = "0.12.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2241,6 +2618,36 @@ dependencies = [
  "libc",
  "untrusted",
  "windows-sys 0.52.0",
+]
+
+[[package]]
+name = "rkyv"
+version = "0.8.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "73389e0c99e664f919275ab5b5b0471391fe9a8de61e1dff9b1eaf56a90f16e3"
+dependencies = [
+ "bytecheck",
+ "bytes",
+ "hashbrown 0.17.0",
+ "indexmap",
+ "munge",
+ "ptr_meta",
+ "rancor",
+ "rend",
+ "rkyv_derive",
+ "tinyvec",
+ "uuid",
+]
+
+[[package]]
+name = "rkyv_derive"
+version = "0.8.16"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5d2ed0b54125315fb36bd021e82d314d1c126548f871634b483f46b31d13cac6"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -2392,18 +2799,6 @@ dependencies = [
 
 [[package]]
 name = "schemars"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4cd191f9397d57d581cddd31014772520aa448f65ef991055d7f61582c65165f"
-dependencies = [
- "dyn-clone",
- "ref-cast",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "schemars"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2b42f36aa1cd011945615b92222f6bf73c599a102a300334cd7f8dbeec726cc"
@@ -2532,7 +2927,7 @@ version = "1.0.149"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "83fc039473c5595ace860d8c4fafa220ff474b3fc6bfdb4293327f1a37e94d86"
 dependencies = [
- "indexmap 2.13.0",
+ "indexmap",
  "itoa",
  "memchr",
  "serde",
@@ -2561,10 +2956,6 @@ dependencies = [
  "base64",
  "chrono",
  "hex",
- "indexmap 1.9.3",
- "indexmap 2.13.0",
- "schemars 0.9.0",
- "schemars 1.2.1",
  "serde_core",
  "serde_json",
  "serde_with_macros",
@@ -2614,6 +3005,12 @@ name = "simd-adler32"
 version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e320a6c5ad31d271ad523dcf3ad13e2767ad8b1cb8f047f75a8aeaf8da139da2"
+
+[[package]]
+name = "simdutf8"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
 
 [[package]]
 name = "similar"

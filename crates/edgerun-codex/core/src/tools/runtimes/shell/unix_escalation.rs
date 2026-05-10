@@ -67,8 +67,8 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::RwLock;
-use tokio_util::sync::CancellationToken;
+use edgerun_tokio::sync::RwLock;
+use edgerun_tokio_util::sync::CancellationToken;
 
 pub(crate) struct PreparedUnifiedExecZshFork {
     pub(crate) exec_request: ExecRequest,

@@ -32,8 +32,8 @@ use codex_protocol::protocol::CompactedItem;
 use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::TurnStartedEvent;
 use codex_rollout_trace::CompactionCheckpointTracePayload;
-use futures::TryFutureExt;
-use tokio_util::sync::CancellationToken;
+use edgerun_futures::TryFutureExt;
+use edgerun_tokio_util::sync::CancellationToken;
 use tracing::error;
 use tracing::info;
 

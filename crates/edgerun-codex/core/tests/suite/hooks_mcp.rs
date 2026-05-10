@@ -171,7 +171,7 @@ fn enable_hooks_and_rmcp_server(
     insert_rmcp_test_server(config, rmcp_test_server_bin, approval_mode);
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn pre_tool_use_blocks_mcp_tool_before_execution() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -253,7 +253,7 @@ async fn pre_tool_use_blocks_mcp_tool_before_execution() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn post_tool_use_records_mcp_tool_payload_and_context() -> Result<()> {
     skip_if_no_network!(Ok(()));
 

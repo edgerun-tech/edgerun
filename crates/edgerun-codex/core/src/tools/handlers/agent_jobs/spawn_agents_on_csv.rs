@@ -72,7 +72,7 @@ pub async fn handle(
     let db = required_state_db(&session)?;
     let input_path = turn.resolve_path(Some(args.csv_path));
     let input_path_display = input_path.display().to_string();
-    let csv_content = tokio::fs::read_to_string(&input_path)
+    let csv_content = edgerun_tokio::fs::read_to_string(&input_path)
         .await
         .map_err(|err| {
             FunctionCallError::RespondToModel(format!(
@@ -217,7 +217,7 @@ pub async fn handle(
             FunctionCallError::RespondToModel(format!("agent job {job_id} not found"))
         })?;
     let output_path = PathBuf::from(job.output_csv_path.clone());
-    if !tokio::fs::try_exists(&output_path).await.unwrap_or(false) {
+    if !edgerun_tokio::fs::try_exists(&output_path).await.unwrap_or(false) {
         export_job_csv_snapshot(db.clone(), &job)
             .await
             .map_err(|err| {

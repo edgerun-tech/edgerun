@@ -30,9 +30,9 @@ use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::TurnStartedEvent;
 use codex_rollout_trace::CompactionCheckpointTracePayload;
 use codex_rollout_trace::InferenceTraceContext;
-use futures::StreamExt;
-use futures::TryFutureExt;
-use tokio_util::sync::CancellationToken;
+use edgerun_futures::StreamExt;
+use edgerun_futures::TryFutureExt;
+use edgerun_tokio_util::sync::CancellationToken;
 use tracing::info;
 
 pub(crate) async fn run_inline_remote_auto_compact_task(
@@ -363,8 +363,8 @@ mod tests {
     use codex_protocol::models::ContentItem;
     use codex_protocol::models::MessagePhase;
     use pretty_assertions::assert_eq;
-    use tokio::sync::mpsc;
-    use tokio_util::sync::CancellationToken;
+    use edgerun_tokio::sync::mpsc;
+    use edgerun_tokio_util::sync::CancellationToken;
 
     fn message(role: &str, text: &str, phase: Option<MessagePhase>) -> ResponseItem {
         ResponseItem::Message {
@@ -427,7 +427,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn collect_context_compaction_output_accepts_additional_output_items() {
         let context_compaction = ResponseItem::ContextCompaction {
             encrypted_content: Some("encrypted".to_string()),

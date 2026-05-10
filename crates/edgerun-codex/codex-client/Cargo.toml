@@ -12,14 +12,14 @@ edgerun-eventsource-stream = { workspace = true }
 edgerun-http = { workspace = true }
 edgerun-json = { workspace = true, features = ["serde-compat"] }
 edgerun-random = { workspace = true }
-futures = { workspace = true }
+edgerun-futures = { workspace = true }
 opentelemetry = { workspace = true }
-reqwest = { workspace = true, features = ["json", "rustls-tls-native-roots", "stream"] }
+edgerun-reqwest = { workspace = true, features = ["json", "rustls-tls-native-roots", "stream"] }
 rustls = { workspace = true }
 rustls-native-certs = { workspace = true }
 rustls-pki-types = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-tokio = { workspace = true, features = ["macros", "rt", "time", "sync"] }
+edgerun-tokio = { workspace = true, features = ["macros", "rt", "time", "sync"] }
 tracing = { workspace = true }
 tracing-opentelemetry = { workspace = true }
 edgerun-zstd = { workspace = true }

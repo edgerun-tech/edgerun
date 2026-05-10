@@ -22,8 +22,8 @@ edgerun-similar = { workspace = true }
 edgerun-uuid = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-serde_with = { workspace = true }
-strum_macros = { workspace = true }
+edgerun-serde-with = { workspace = true }
+edgerun-strum-macros = { workspace = true }
 rmcp = { workspace = true, default-features = false, features = [
     "base64",
     "macros",

@@ -12,7 +12,7 @@ use core_test_support::wait_for_event;
 use edgerun_json::serde_json::json;
 use pretty_assertions::assert_eq;
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn quota_exceeded_emits_single_error_event() -> Result<()> {
     skip_if_no_network!(Ok(()));
 

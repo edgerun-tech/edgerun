@@ -4,7 +4,7 @@ use std::path::Path;
 use std::time::Duration;
 
 pub async fn wait_for_pid_file(path: &Path) -> edgerun_error::Result<String> {
-    let pid = tokio::time::timeout(Duration::from_secs(2), async {
+    let pid = edgerun_tokio::time::timeout(Duration::from_secs(2), async {
         loop {
             if let Ok(contents) = fs::read_to_string(path) {
                 let trimmed = contents.trim();
@@ -12,7 +12,7 @@ pub async fn wait_for_pid_file(path: &Path) -> edgerun_error::Result<String> {
                     return trimmed.to_string();
                 }
             }
-            tokio::time::sleep(Duration::from_millis(25)).await;
+            edgerun_tokio::time::sleep(Duration::from_millis(25)).await;
         }
     })
     .await
@@ -34,13 +34,13 @@ async fn wait_for_process_exit_inner(pid: String) -> edgerun_error::Result<()> {
         if !process_is_alive(&pid)? {
             return Ok(());
         }
-        tokio::time::sleep(Duration::from_millis(25)).await;
+        edgerun_tokio::time::sleep(Duration::from_millis(25)).await;
     }
 }
 
 pub async fn wait_for_process_exit(pid: &str) -> edgerun_error::Result<()> {
     let pid = pid.to_string();
-    tokio::time::timeout(Duration::from_secs(2), wait_for_process_exit_inner(pid))
+    edgerun_tokio::time::timeout(Duration::from_secs(2), wait_for_process_exit_inner(pid))
         .await
         .context("timed out waiting for process to exit")??;
 

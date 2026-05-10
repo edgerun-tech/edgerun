@@ -7,7 +7,7 @@ use std::sync::RwLock;
 use codex_utils_string::to_ascii_json_string;
 use serde::Serialize;
 use edgerun_json::serde_json::Value;
-use tokio::task::JoinHandle;
+use edgerun_tokio::task::JoinHandle;
 
 use crate::sandbox_tags::permission_profile_sandbox_tag;
 use codex_git_utils::get_git_remote_urls_assume_git_repo;
@@ -147,7 +147,7 @@ pub async fn build_turn_metadata_header(
 ) -> Option<String> {
     let repo_root = get_git_repo_root(cwd).map(|root| root.to_string_lossy().into_owned());
 
-    let (head_commit_hash, associated_remote_urls, has_changes) = tokio::join!(
+    let (head_commit_hash, associated_remote_urls, has_changes) = edgerun_tokio::join!(
         get_head_commit_hash(cwd),
         get_git_remote_urls_assume_git_repo(cwd),
         get_has_changes(cwd),
@@ -320,7 +320,7 @@ impl TurnMetadataState {
         }
 
         let state = self.clone();
-        *task_guard = Some(tokio::spawn(async move {
+        *task_guard = Some(edgerun_tokio::spawn(async move {
             let workspace_git_metadata = state.fetch_workspace_git_metadata().await;
             let Some(repo_root) = state.repo_root.clone() else {
                 return;
@@ -359,7 +359,7 @@ impl TurnMetadataState {
     }
 
     async fn fetch_workspace_git_metadata(&self) -> WorkspaceGitMetadata {
-        let (head_commit_hash, associated_remote_urls, has_changes) = tokio::join!(
+        let (head_commit_hash, associated_remote_urls, has_changes) = edgerun_tokio::join!(
             get_head_commit_hash(&self.cwd),
             get_git_remote_urls_assume_git_repo(&self.cwd),
             get_has_changes(&self.cwd),

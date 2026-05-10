@@ -43,16 +43,16 @@ use core_test_support::wait_for_event_match;
 use edgerun_json::serde_json::json;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
-use tokio::time::Duration;
-use tokio::time::Instant;
-use tokio::time::sleep;
-use tokio::time::timeout;
+use edgerun_tokio::time::Duration;
+use edgerun_tokio::time::Instant;
+use edgerun_tokio::time::sleep;
+use edgerun_tokio::time::timeout;
 use wiremock::BodyPrintLimit;
 use wiremock::MockServer;
 
 const REMOTE_MODEL_SLUG: &str = "codex-test";
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_models_get_model_info_uses_longest_matching_prefix() -> Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
@@ -117,7 +117,7 @@ async fn remote_models_get_model_info_uses_longest_matching_prefix() -> Result<(
 /// Scenario: the model advertises a default 273k context window and a 400k max
 /// context window, and the user explicitly configures 1M. This verifies the
 /// runtime turn clamps the override to the advertised max window.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_models_config_context_window_override_clamps_to_max_context_window() -> Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
@@ -195,7 +195,7 @@ async fn remote_models_config_context_window_override_clamps_to_max_context_wind
 /// Scenario: the user explicitly configures a context window above the model's
 /// max_context_window. This verifies the runtime window is clamped to the max
 /// instead of using the oversized config value.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_models_config_override_above_max_uses_max_context_window() -> Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
@@ -273,7 +273,7 @@ async fn remote_models_config_override_above_max_uses_max_context_window() -> Re
 /// Scenario: model metadata includes both context_window and max_context_window,
 /// but the user did not configure an override. This verifies the runtime keeps
 /// using the model's default context_window in the no-override path.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_models_use_context_window_when_config_override_is_absent() -> Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
@@ -347,7 +347,7 @@ async fn remote_models_use_context_window_when_config_override_is_absent() -> Re
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_models_long_model_slug_is_sent_with_high_reasoning() -> Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
@@ -439,7 +439,7 @@ async fn remote_models_long_model_slug_is_sent_with_high_reasoning() -> Result<(
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn namespaced_model_slug_uses_catalog_metadata_without_fallback_warning() -> Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
@@ -506,7 +506,7 @@ async fn namespaced_model_slug_uses_catalog_metadata_without_fallback_warning() 
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_models_remote_model_uses_unified_exec() -> Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
@@ -671,7 +671,7 @@ async fn remote_models_remote_model_uses_unified_exec() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_models_truncation_policy_without_override_preserves_remote() -> Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
@@ -717,7 +717,7 @@ async fn remote_models_truncation_policy_without_override_preserves_remote() -> 
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_models_truncation_policy_with_tool_output_override() -> Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
@@ -764,7 +764,7 @@ async fn remote_models_truncation_policy_with_tool_output_override() -> Result<(
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_models_apply_remote_base_instructions() -> Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
@@ -902,7 +902,7 @@ async fn remote_models_apply_remote_base_instructions() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_models_do_not_append_removed_builtin_presets() -> Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
@@ -960,7 +960,7 @@ async fn remote_models_do_not_append_removed_builtin_presets() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_models_merge_adds_new_high_priority_first() -> Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
@@ -1008,7 +1008,7 @@ async fn remote_models_merge_adds_new_high_priority_first() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_models_merge_replaces_overlapping_model() -> Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
@@ -1062,7 +1062,7 @@ async fn remote_models_merge_replaces_overlapping_model() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_models_merge_preserves_bundled_models_on_empty_response() -> Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
@@ -1095,7 +1095,7 @@ async fn remote_models_merge_preserves_bundled_models_on_empty_response() -> Res
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_models_request_times_out_after_5s() -> Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));
@@ -1163,7 +1163,7 @@ async fn remote_models_request_times_out_after_5s() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_models_hide_picker_only_models() -> Result<()> {
     skip_if_no_network!(Ok(()));
     skip_if_sandbox!(Ok(()));

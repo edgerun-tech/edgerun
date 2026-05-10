@@ -12,7 +12,7 @@ use std::thread;
 use codex_protocol::ToolName;
 use edgerun_json::serde_json::Value as JsonValue;
 use serde::Serialize;
-use tokio::sync::mpsc;
+use edgerun_tokio::sync::mpsc;
 
 use crate::description::EnabledToolMetadata;
 use crate::description::ToolDefinition;
@@ -360,7 +360,7 @@ mod tests {
     use std::time::Duration;
 
     use pretty_assertions::assert_eq;
-    use tokio::sync::mpsc;
+    use edgerun_tokio::sync::mpsc;
 
     use super::ExecuteRequest;
     use super::RuntimeEvent;
@@ -378,13 +378,13 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn terminate_execution_stops_cpu_bound_module() {
         let (event_tx, mut event_rx) = mpsc::unbounded_channel();
         let (_runtime_tx, runtime_terminate_handle) =
             spawn_runtime(execute_request("while (true) {}"), event_tx).unwrap();
 
-        let started_event = tokio::time::timeout(Duration::from_secs(1), event_rx.recv())
+        let started_event = edgerun_tokio::time::timeout(Duration::from_secs(1), event_rx.recv())
             .await
             .unwrap()
             .unwrap();
@@ -392,7 +392,7 @@ mod tests {
 
         assert!(runtime_terminate_handle.terminate_execution());
 
-        let result_event = tokio::time::timeout(Duration::from_secs(1), event_rx.recv())
+        let result_event = edgerun_tokio::time::timeout(Duration::from_secs(1), event_rx.recv())
             .await
             .unwrap()
             .unwrap();
@@ -407,7 +407,7 @@ mod tests {
         assert!(error_text.is_some());
 
         assert!(
-            tokio::time::timeout(Duration::from_secs(1), event_rx.recv())
+            edgerun_tokio::time::timeout(Duration::from_secs(1), event_rx.recv())
                 .await
                 .unwrap()
                 .is_none()

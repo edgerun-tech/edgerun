@@ -1,10 +1,10 @@
 use std::pin::Pin;
 use std::sync::Arc;
 
-use tokio::sync::Mutex;
-use tokio::time::Duration;
-use tokio::time::Instant;
-use tokio::time::Sleep;
+use edgerun_tokio::sync::Mutex;
+use edgerun_tokio::time::Duration;
+use edgerun_tokio::time::Instant;
+use edgerun_tokio::time::Sleep;
 
 use super::UnifiedExecContext;
 use super::process::UnifiedExecProcess;
@@ -50,8 +50,8 @@ pub(crate) fn start_streaming_output(
     let turn_ref = Arc::clone(&context.turn);
     let call_id = context.call_id.clone();
 
-    tokio::spawn(async move {
-        use tokio::sync::broadcast::error::RecvError;
+    edgerun_tokio::spawn(async move {
+        use edgerun_tokio::sync::broadcast::error::RecvError;
 
         let mut pending = Vec::<u8>::new();
         let mut emitted_deltas: usize = 0;
@@ -59,10 +59,10 @@ pub(crate) fn start_streaming_output(
         let mut grace_sleep: Option<Pin<Box<Sleep>>> = None;
 
         loop {
-            tokio::select! {
+            edgerun_tokio::select! {
                 _ = exit_token.cancelled(), if grace_sleep.is_none() => {
                     let deadline = Instant::now() + TRAILING_OUTPUT_GRACE;
-                    grace_sleep.replace(Box::pin(tokio::time::sleep_until(deadline)));
+                    grace_sleep.replace(Box::pin(edgerun_tokio::time::sleep_until(deadline)));
                 }
 
                 _ = async {
@@ -118,7 +118,7 @@ pub(crate) fn spawn_exit_watcher(
     let exit_token = process.cancellation_token();
     let output_drained = process.output_drained_notify();
 
-    tokio::spawn(async move {
+    edgerun_tokio::spawn(async move {
         exit_token.cancelled().await;
         output_drained.notified().await;
 

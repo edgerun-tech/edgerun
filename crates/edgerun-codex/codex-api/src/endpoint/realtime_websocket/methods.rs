@@ -28,17 +28,17 @@ use edgerun_tokio_tungstenite::WebSocketStream;
 use edgerun_tungstenite::client::IntoClientRequest;
 use edgerun_tungstenite::protocol::WebSocketConfig;
 use edgerun_url::Url;
-use futures::SinkExt;
-use futures::StreamExt;
+use edgerun_futures::SinkExt;
+use edgerun_futures::StreamExt;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
-use tokio::net::TcpStream;
-use tokio::sync::Mutex;
-use tokio::sync::mpsc;
-use tokio::sync::oneshot;
-use tokio::time::sleep;
+use edgerun_tokio::net::TcpStream;
+use edgerun_tokio::sync::Mutex;
+use edgerun_tokio::sync::mpsc;
+use edgerun_tokio::sync::oneshot;
+use edgerun_tokio::time::sleep;
 use tracing::debug;
 use tracing::error;
 use tracing::info;
@@ -49,7 +49,7 @@ const REALTIME_WIRE_LOG_TARGET: &str = "codex_api::realtime_websocket::wire";
 
 struct WsStream {
     tx_command: mpsc::Sender<WsCommand>,
-    pump_task: tokio::task::JoinHandle<()>,
+    pump_task: edgerun_tokio::task::JoinHandle<()>,
 }
 
 enum WsCommand {
@@ -73,10 +73,10 @@ impl WsStream {
         let (tx_message, rx_message) =
             edgerun_async_channel::unbounded::<Result<Message, WsError>>();
 
-        let pump_task = tokio::spawn(async move {
+        let pump_task = edgerun_tokio::spawn(async move {
             let mut inner = inner;
             loop {
-                tokio::select! {
+                edgerun_tokio::select! {
                     command = rx_command.recv() => {
                         let Some(command) = command else {
                             break;
@@ -848,7 +848,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use std::collections::HashMap;
     use std::time::Duration;
-    use tokio::net::TcpListener;
+    use edgerun_tokio::net::TcpListener;
 
     #[test]
     fn parse_session_updated_event() {
@@ -1515,12 +1515,12 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn e2e_connect_and_exchange_events_against_mock_ws_server() {
         let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
         let addr = listener.local_addr().expect("local addr");
 
-        let server = tokio::spawn(async move {
+        let server = edgerun_tokio::spawn(async move {
             let (stream, _) = listener.accept().await.expect("accept");
             let mut ws = accept_async(stream).await.expect("accept ws");
 
@@ -1808,12 +1808,12 @@ mod tests {
         server.await.expect("server task");
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn realtime_v2_session_update_includes_background_agent_tool_and_handoff_output_item() {
         let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
         let addr = listener.local_addr().expect("local addr");
 
-        let server = tokio::spawn(async move {
+        let server = edgerun_tokio::spawn(async move {
             let (stream, _) = listener.accept().await.expect("accept");
             let mut ws = accept_async(stream).await.expect("accept ws");
 
@@ -2016,12 +2016,12 @@ mod tests {
         server.await.expect("server task");
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn transcription_mode_session_update_omits_output_audio_and_instructions() {
         let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
         let addr = listener.local_addr().expect("local addr");
 
-        let server = tokio::spawn(async move {
+        let server = edgerun_tokio::spawn(async move {
             let (stream, _) = listener.accept().await.expect("accept");
             let mut ws = accept_async(stream).await.expect("accept ws");
 
@@ -2130,12 +2130,12 @@ mod tests {
         server.await.expect("server task");
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn v1_transcription_mode_is_treated_as_conversational() {
         let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
         let addr = listener.local_addr().expect("local addr");
 
-        let server = tokio::spawn(async move {
+        let server = edgerun_tokio::spawn(async move {
             let (stream, _) = listener.accept().await.expect("accept");
             let mut ws = accept_async(stream).await.expect("accept ws");
 
@@ -2223,12 +2223,12 @@ mod tests {
         server.await.expect("server task");
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn send_does_not_block_while_next_event_waits_for_inbound_data() {
         let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
         let addr = listener.local_addr().expect("local addr");
 
-        let server = tokio::spawn(async move {
+        let server = edgerun_tokio::spawn(async move {
             let (stream, _) = listener.accept().await.expect("accept");
             let mut ws = accept_async(stream).await.expect("accept ws");
 
@@ -2296,9 +2296,9 @@ mod tests {
             .await
             .expect("connect");
 
-        let (send_result, next_result) = tokio::join!(
+        let (send_result, next_result) = edgerun_tokio::join!(
             async {
-                tokio::time::timeout(
+                edgerun_tokio::time::timeout(
                     Duration::from_millis(200),
                     connection.send_audio_frame(RealtimeAudioFrame {
                         data: "AQID".to_string(),

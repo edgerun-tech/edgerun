@@ -31,7 +31,7 @@ async fn resume_until_initial_messages(
     rollout_path: PathBuf,
     predicate: impl Fn(&[EventMsg]) -> bool,
 ) -> Result<TestCodex> {
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+    let deadline = edgerun_tokio::time::Instant::now() + Duration::from_secs(2);
     let poll_interval = Duration::from_millis(10);
     let mut last_initial_messages = "<missing initial messages>".to_string();
 
@@ -46,18 +46,18 @@ async fn resume_until_initial_messages(
             last_initial_messages = format!("{initial_messages:#?}");
         }
 
-        if tokio::time::Instant::now() >= deadline {
+        if edgerun_tokio::time::Instant::now() >= deadline {
             panic!(
                 "timed out waiting for rollout resume messages to stabilize: {last_initial_messages}"
             );
         }
 
         drop(resumed);
-        tokio::time::sleep(poll_interval).await;
+        edgerun_tokio::time::sleep(poll_interval).await;
     }
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn resume_includes_initial_messages_from_rollout_events() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -146,7 +146,7 @@ async fn resume_includes_initial_messages_from_rollout_events() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn resume_includes_initial_messages_from_reasoning_events() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -238,7 +238,7 @@ async fn resume_includes_initial_messages_from_reasoning_events() -> Result<()> 
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn resume_switches_models_preserves_base_instructions() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -367,7 +367,7 @@ async fn resume_switches_models_preserves_base_instructions() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn resume_model_switch_is_not_duplicated_after_pre_turn_override() -> Result<()> {
     skip_if_no_network!(Ok(()));
 

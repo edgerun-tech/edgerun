@@ -16,8 +16,8 @@ use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::user_input::UserInput;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use edgerun_time::chrono::ChronoUtc as Utc;
-use futures::StreamExt;
-use futures::stream::FuturesUnordered;
+use edgerun_futures::StreamExt;
+use edgerun_futures::stream::FuturesUnordered;
 use serde::Deserialize;
 use serde::Serialize;
 use edgerun_json::serde_json::Value;
@@ -25,10 +25,10 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
-use tokio::sync::watch::Receiver;
-use tokio::time::Duration;
-use tokio::time::Instant;
-use tokio::time::timeout;
+use edgerun_tokio::sync::watch::Receiver;
+use edgerun_tokio::time::Duration;
+use edgerun_tokio::time::Instant;
+use edgerun_tokio::time::timeout;
 use edgerun_uuid::Uuid;
 
 mod report_agent_job_result;
@@ -341,9 +341,9 @@ async fn export_job_csv_snapshot(
         .map_err(|err| anyhow::anyhow!("failed to render job csv for auto-export: {err}"))?;
     let output_path = PathBuf::from(job.output_csv_path.clone());
     if let Some(parent) = output_path.parent() {
-        tokio::fs::create_dir_all(parent).await?;
+        edgerun_tokio::fs::create_dir_all(parent).await?;
     }
-    tokio::fs::write(&output_path, csv_content).await?;
+    edgerun_tokio::fs::write(&output_path, csv_content).await?;
     Ok(())
 }
 
@@ -465,7 +465,7 @@ async fn wait_for_status_change(active_items: &HashMap<ThreadId, ActiveJobItem>)
         }
     }
     if waiters.is_empty() {
-        tokio::time::sleep(STATUS_POLL_INTERVAL).await;
+        edgerun_tokio::time::sleep(STATUS_POLL_INTERVAL).await;
         return;
     }
     let _ = timeout(STATUS_POLL_INTERVAL, waiters.next()).await;

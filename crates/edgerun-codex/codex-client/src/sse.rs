@@ -1,10 +1,10 @@
 use crate::error::StreamError;
 use crate::transport::ByteStream;
 use edgerun_eventsource_stream::Eventsource;
-use futures::StreamExt;
-use tokio::sync::mpsc;
-use tokio::time::Duration;
-use tokio::time::timeout;
+use edgerun_futures::StreamExt;
+use edgerun_tokio::sync::mpsc;
+use edgerun_tokio::time::Duration;
+use edgerun_tokio::time::timeout;
 
 /// Minimal SSE helper that forwards raw `data:` frames as UTF-8 strings.
 ///
@@ -14,7 +14,7 @@ pub fn sse_stream(
     idle_timeout: Duration,
     tx: mpsc::Sender<Result<String, StreamError>>,
 ) {
-    tokio::spawn(async move {
+    edgerun_tokio::spawn(async move {
         let mut stream = stream
             .map(|res| res.map_err(|e| StreamError::Stream(e.to_string())))
             .eventsource();

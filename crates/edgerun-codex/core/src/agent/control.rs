@@ -38,7 +38,7 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::Weak;
-use tokio::sync::watch;
+use edgerun_tokio::sync::watch;
 use tracing::warn;
 
 const AGENT_NAMES: &str = include_str!("agent_names.txt");
@@ -954,7 +954,7 @@ impl AgentControl {
             return;
         };
         let control = self.clone();
-        tokio::spawn(async move {
+        edgerun_tokio::spawn(async move {
             let status = match control.subscribe_status(child_thread_id).await {
                 Ok(mut status_rx) => {
                     let mut status = status_rx.borrow().clone();

@@ -13,14 +13,14 @@ use crate::protocol::ErrorEvent;
 use crate::protocol::RateLimitSnapshot;
 use crate::protocol::TruncationPolicy;
 use edgerun_error::Error;
+use edgerun_reqwest::StatusCode;
 use edgerun_time::chrono::ChronoDatelike;
 use edgerun_time::chrono::ChronoLocal as Local;
 use edgerun_time::chrono::ChronoUtc as Utc;
 use edgerun_time::chrono::ChronoUtcDateTime as DateTime;
-use reqwest::StatusCode;
+use edgerun_tokio::task::JoinError;
 use std::io;
 use std::time::Duration;
-use tokio::task::JoinError;
 
 pub type Result<T> = std::result::Result<T, CodexErr>;
 
@@ -267,7 +267,7 @@ impl CodexErr {
 
 #[derive(Debug)]
 pub struct ConnectionFailedError {
-    pub source: reqwest::Error,
+    pub source: edgerun_reqwest::Error,
 }
 
 impl std::fmt::Display for ConnectionFailedError {
@@ -278,7 +278,7 @@ impl std::fmt::Display for ConnectionFailedError {
 
 #[derive(Debug)]
 pub struct ResponseStreamFailed {
-    pub source: reqwest::Error,
+    pub source: edgerun_reqwest::Error,
     pub request_id: Option<String>,
 }
 

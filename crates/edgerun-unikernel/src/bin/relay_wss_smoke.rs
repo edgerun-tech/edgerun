@@ -83,12 +83,13 @@ fn debug_write(bytes: &[u8]) {
 
 fn qemu_exit(code: u32) -> ! {
     unsafe {
-        outl(0xf4, code);
-    }
-    loop {
-        unsafe {
-            core::arch::asm!("hlt");
-        }
+        core::arch::asm!(
+            "mov dx, 0xf4",
+            "mov eax, {code:e}",
+            "out dx, eax",
+            code = in(reg) code,
+            options(noreturn)
+        );
     }
 }
 
@@ -96,12 +97,5 @@ fn qemu_exit(code: u32) -> ! {
 unsafe fn outb(port: u16, value: u8) {
     unsafe {
         core::arch::asm!("out dx, al", in("dx") port, in("al") value);
-    }
-}
-
-#[cfg(target_arch = "x86_64")]
-unsafe fn outl(port: u16, value: u32) {
-    unsafe {
-        core::arch::asm!("out dx, eax", in("dx") port, in("eax") value);
     }
 }

@@ -4,7 +4,7 @@ use notify::event::AccessMode;
 use notify::event::CreateKind;
 use notify::event::ModifyKind;
 use pretty_assertions::assert_eq;
-use tokio::time::timeout;
+use edgerun_tokio::time::timeout;
 
 const TEST_THROTTLE_INTERVAL: Duration = Duration::from_millis(50);
 
@@ -20,7 +20,7 @@ fn notify_event(kind: EventKind, paths: Vec<PathBuf>) -> Event {
     event
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn throttled_receiver_coalesces_within_interval() {
     let (tx, rx) = watch_channel();
     let mut throttled = ThrottledWatchReceiver::new(rx, TEST_THROTTLE_INTERVAL);
@@ -51,7 +51,7 @@ async fn throttled_receiver_coalesces_within_interval() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn throttled_receiver_flushes_pending_on_shutdown() {
     let (tx, rx) = watch_channel();
     let mut throttled = ThrottledWatchReceiver::new(rx, TEST_THROTTLE_INTERVAL);
@@ -193,7 +193,7 @@ fn deeply_missing_path_registers_nearest_existing_directory_ancestor() {
     assert_eq!(watcher.watch_counts_for_test(temp_dir.path()), Some((1, 0)));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn receiver_closes_when_subscriber_drops() {
     let watcher = Arc::new(FileWatcher::noop());
     let (subscriber, mut rx) = watcher.add_subscriber();
@@ -293,7 +293,7 @@ fn unregister_holds_state_lock_until_unwatch_finishes() {
     drop(register_subscriber);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn matching_subscribers_are_notified() {
     let watcher = Arc::new(FileWatcher::noop());
     let (skills_subscriber, skills_rx) = watcher.add_subscriber();
@@ -322,7 +322,7 @@ async fn matching_subscribers_are_notified() {
     assert_eq!(plugins_event.is_err(), true);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn non_recursive_watch_ignores_grandchildren() {
     let watcher = Arc::new(FileWatcher::noop());
     let (subscriber, rx) = watcher.add_subscriber();
@@ -337,7 +337,7 @@ async fn non_recursive_watch_ignores_grandchildren() {
     assert_eq!(event.is_err(), true);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn ancestor_events_notify_child_watches() {
     let temp_dir = tempfile::tempdir().expect("temp dir");
     let skills_dir = temp_dir.path().join("skills");
@@ -366,7 +366,7 @@ async fn ancestor_events_notify_child_watches() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn missing_file_watch_reports_requested_path_when_parent_changes() {
     // Parent events for a newly-created target should report the requested file.
     let temp_dir = tempfile::tempdir().expect("temp dir");
@@ -400,7 +400,7 @@ async fn missing_file_watch_reports_requested_path_when_parent_changes() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn missing_file_watch_reports_requested_path_when_parent_delete_event_arrives() {
     // Parent events should report both creation and deletion of a fallback target.
     let temp_dir = tempfile::tempdir().expect("temp dir");
@@ -442,7 +442,7 @@ async fn missing_file_watch_reports_requested_path_when_parent_delete_event_arri
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn missing_directory_watch_moves_to_created_directory_for_child_events() {
     // Missing directory watches move closer as components appear, without recursive fallback.
     let temp_dir = tempfile::tempdir().expect("temp dir");
@@ -490,7 +490,7 @@ async fn missing_directory_watch_moves_to_created_directory_for_child_events() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn spawn_event_loop_filters_non_mutating_events() {
     let watcher = Arc::new(FileWatcher::noop());
     let (subscriber, rx) = watcher.add_subscriber();
@@ -526,7 +526,7 @@ async fn spawn_event_loop_filters_non_mutating_events() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn dropping_live_watcher_releases_inner_watcher() {
     let watcher = FileWatcher::new().expect("watcher");
     let weak_inner = Arc::downgrade(watcher.inner.as_ref().expect("watcher inner"));

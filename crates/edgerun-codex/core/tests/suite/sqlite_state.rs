@@ -35,10 +35,10 @@ use edgerun_uuid::Uuid;
 use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::fs;
-use tokio::time::Duration;
+use edgerun_tokio::time::Duration;
 use tracing_subscriber::prelude::*;
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn new_thread_is_recorded_in_state_db() -> Result<()> {
     let server = start_mock_server().await;
     let mut builder = test_codex().with_config(|config| {
@@ -54,10 +54,10 @@ async fn new_thread_is_recorded_in_state_db() -> Result<()> {
     let db_path = codex_state::state_db_path(test.config.sqlite_home.as_path());
 
     for _ in 0..100 {
-        if tokio::fs::try_exists(&db_path).await.unwrap_or(false) {
+        if edgerun_tokio::fs::try_exists(&db_path).await.unwrap_or(false) {
             break;
         }
-        tokio::time::sleep(Duration::from_millis(25)).await;
+        edgerun_tokio::time::sleep(Duration::from_millis(25)).await;
     }
 
     let db = test.codex.state_db().expect("state db enabled");
@@ -80,7 +80,7 @@ async fn new_thread_is_recorded_in_state_db() -> Result<()> {
         if metadata.is_some() {
             break;
         }
-        tokio::time::sleep(Duration::from_millis(25)).await;
+        edgerun_tokio::time::sleep(Duration::from_millis(25)).await;
     }
 
     let metadata = metadata.expect("thread should exist in state db");
@@ -94,7 +94,7 @@ async fn new_thread_is_recorded_in_state_db() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn backfill_scans_existing_rollouts() -> Result<()> {
     let server = start_mock_server().await;
 
@@ -197,10 +197,10 @@ async fn backfill_scans_existing_rollouts() -> Result<()> {
     let default_provider = test.config.model_provider_id.clone();
 
     for _ in 0..20 {
-        if tokio::fs::try_exists(&db_path).await.unwrap_or(false) {
+        if edgerun_tokio::fs::try_exists(&db_path).await.unwrap_or(false) {
             break;
         }
-        tokio::time::sleep(Duration::from_millis(25)).await;
+        edgerun_tokio::time::sleep(Duration::from_millis(25)).await;
     }
 
     let db = test.codex.state_db().expect("state db enabled");
@@ -211,7 +211,7 @@ async fn backfill_scans_existing_rollouts() -> Result<()> {
         if metadata.is_some() {
             break;
         }
-        tokio::time::sleep(Duration::from_millis(25)).await;
+        edgerun_tokio::time::sleep(Duration::from_millis(25)).await;
     }
 
     let metadata = metadata.expect("backfilled thread should exist in state db");
@@ -226,7 +226,7 @@ async fn backfill_scans_existing_rollouts() -> Result<()> {
         if stored_tools.is_some() {
             break;
         }
-        tokio::time::sleep(Duration::from_millis(25)).await;
+        edgerun_tokio::time::sleep(Duration::from_millis(25)).await;
     }
     let stored_tools = stored_tools.expect("dynamic tools should be stored");
     assert_eq!(stored_tools, dynamic_tools);
@@ -234,7 +234,7 @@ async fn backfill_scans_existing_rollouts() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn user_messages_persist_in_state_db() -> Result<()> {
     let server = start_mock_server().await;
     mount_sse_sequence(
@@ -256,10 +256,10 @@ async fn user_messages_persist_in_state_db() -> Result<()> {
 
     let db_path = codex_state::state_db_path(test.config.sqlite_home.as_path());
     for _ in 0..100 {
-        if tokio::fs::try_exists(&db_path).await.unwrap_or(false) {
+        if edgerun_tokio::fs::try_exists(&db_path).await.unwrap_or(false) {
             break;
         }
-        tokio::time::sleep(Duration::from_millis(25)).await;
+        edgerun_tokio::time::sleep(Duration::from_millis(25)).await;
     }
 
     test.submit_turn("hello from sqlite").await?;
@@ -278,7 +278,7 @@ async fn user_messages_persist_in_state_db() -> Result<()> {
         {
             break;
         }
-        tokio::time::sleep(Duration::from_millis(25)).await;
+        edgerun_tokio::time::sleep(Duration::from_millis(25)).await;
     }
 
     let metadata = metadata.expect("thread should exist in state db");
@@ -287,7 +287,7 @@ async fn user_messages_persist_in_state_db() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn web_search_marks_thread_memory_mode_polluted_when_configured() -> Result<()> {
     let server = start_mock_server().await;
     mount_sse_sequence(
@@ -319,14 +319,14 @@ async fn web_search_marks_thread_memory_mode_polluted_when_configured() -> Resul
         if memory_mode.as_deref() == Some("polluted") {
             break;
         }
-        tokio::time::sleep(Duration::from_millis(25)).await;
+        edgerun_tokio::time::sleep(Duration::from_millis(25)).await;
     }
 
     assert_eq!(memory_mode.as_deref(), Some("polluted"));
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn mcp_call_marks_thread_memory_mode_polluted_when_configured() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -444,14 +444,14 @@ async fn mcp_call_marks_thread_memory_mode_polluted_when_configured() -> Result<
         if memory_mode.as_deref() == Some("polluted") {
             break;
         }
-        tokio::time::sleep(Duration::from_millis(25)).await;
+        edgerun_tokio::time::sleep(Duration::from_millis(25)).await;
     }
 
     assert_eq!(memory_mode.as_deref(), Some("polluted"));
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn builtin_memories_mcp_call_does_not_mark_thread_memory_mode_polluted_when_configured()
 -> Result<()> {
     let server = start_mock_server().await;
@@ -537,7 +537,7 @@ async fn builtin_memories_mcp_call_does_not_mark_thread_memory_mode_polluted_whe
     Ok(())
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[edgerun_tokio::test(flavor = "current_thread")]
 async fn tool_call_logs_include_thread_id() -> Result<()> {
     let server = start_mock_server().await;
     let call_id = "call-1";
@@ -600,7 +600,7 @@ async fn tool_call_logs_include_thread_id() -> Result<()> {
             found = Some((thread_id, message));
             break;
         }
-        tokio::time::sleep(Duration::from_millis(25)).await;
+        edgerun_tokio::time::sleep(Duration::from_millis(25)).await;
     }
 
     let (thread_id, message) = found.expect("expected ToolCall log row");

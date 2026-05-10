@@ -21,15 +21,15 @@ use edgerun_json::serde_json::Value;
 use edgerun_json::serde_json::json;
 use edgerun_tokio_tungstenite::Message;
 use edgerun_tokio_tungstenite::accept_async;
-use futures::SinkExt;
-use futures::StreamExt;
-use tokio::net::TcpListener;
+use edgerun_futures::SinkExt;
+use edgerun_futures::StreamExt;
+use edgerun_tokio::net::TcpListener;
 
-type RealtimeWsStream = edgerun_tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>;
+type RealtimeWsStream = edgerun_tokio_tungstenite::WebSocketStream<edgerun_tokio::net::TcpStream>;
 
 async fn spawn_realtime_ws_server<Handler, Fut>(
     handler: Handler,
-) -> (String, tokio::task::JoinHandle<()>)
+) -> (String, edgerun_tokio::task::JoinHandle<()>)
 where
     Handler: FnOnce(RealtimeWsStream) -> Fut + Send + 'static,
     Fut: Future<Output = ()> + Send + 'static,
@@ -43,7 +43,7 @@ where
         Err(err) => panic!("failed to read local websocket listener address: {err}"),
     };
 
-    let server = tokio::spawn(async move {
+    let server = edgerun_tokio::spawn(async move {
         let (stream, _) = match listener.accept().await {
             Ok(stream) => stream,
             Err(err) => panic!("failed to accept test websocket connection: {err}"),
@@ -75,7 +75,7 @@ fn test_provider(base_url: String) -> Provider {
     }
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn realtime_ws_e2e_session_create_and_event_flow() {
     let (addr, server) = spawn_realtime_ws_server(|mut ws: RealtimeWsStream| async move {
         let first = ws
@@ -202,14 +202,14 @@ async fn realtime_ws_e2e_session_create_and_event_flow() {
     server.await.expect("server task");
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn realtime_ws_connect_webrtc_sideband_retries_join_until_server_is_available() {
     let reserving_listener = TcpListener::bind("127.0.0.1:0").await.expect("bind");
     let addr = reserving_listener.local_addr().expect("local addr");
     drop(reserving_listener);
 
-    let server = tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(20)).await;
+    let server = edgerun_tokio::spawn(async move {
+        edgerun_tokio::time::sleep(Duration::from_millis(20)).await;
         let listener = TcpListener::bind(addr).await.expect("bind delayed server");
         let (stream, _) = listener.accept().await.expect("accept");
         let mut ws = accept_async(stream).await.expect("accept ws");
@@ -280,7 +280,7 @@ async fn realtime_ws_connect_webrtc_sideband_retries_join_until_server_is_availa
     server.await.expect("server task");
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn realtime_ws_e2e_send_while_next_event_waits() {
     let (addr, server) = spawn_realtime_ws_server(|mut ws: RealtimeWsStream| async move {
         let first = ws
@@ -334,9 +334,9 @@ async fn realtime_ws_e2e_send_while_next_event_waits() {
         .await
         .expect("connect");
 
-    let (send_result, next_result) = tokio::join!(
+    let (send_result, next_result) = edgerun_tokio::join!(
         async {
-            tokio::time::timeout(
+            edgerun_tokio::time::timeout(
                 Duration::from_millis(200),
                 connection.send_audio_frame(RealtimeAudioFrame {
                     data: "AQID".to_string(),
@@ -367,7 +367,7 @@ async fn realtime_ws_e2e_send_while_next_event_waits() {
     server.await.expect("server task");
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn realtime_ws_e2e_disconnected_emitted_once() {
     let (addr, server) = spawn_realtime_ws_server(|mut ws: RealtimeWsStream| async move {
         let first = ws
@@ -411,7 +411,7 @@ async fn realtime_ws_e2e_disconnected_emitted_once() {
     server.await.expect("server task");
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn realtime_ws_e2e_ignores_unknown_text_events() {
     let (addr, server) = spawn_realtime_ws_server(|mut ws: RealtimeWsStream| async move {
         let first = ws
@@ -483,7 +483,7 @@ async fn realtime_ws_e2e_ignores_unknown_text_events() {
     server.await.expect("server task");
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn realtime_ws_e2e_realtime_v2_parser_emits_handoff_requested() {
     let (addr, server) = spawn_realtime_ws_server(|mut ws: RealtimeWsStream| async move {
         let first = ws

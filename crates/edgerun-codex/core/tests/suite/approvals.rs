@@ -802,7 +802,7 @@ fn body_contains(req: &Request, text: &str) -> bool {
 }
 
 async fn wait_for_spawned_thread(test: &TestCodex) -> Result<Arc<CodexThread>> {
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
+    let deadline = edgerun_tokio::time::Instant::now() + Duration::from_secs(2);
     loop {
         let ids = test.thread_manager.list_thread_ids().await;
         if let Some(thread_id) = ids
@@ -815,10 +815,10 @@ async fn wait_for_spawned_thread(test: &TestCodex) -> Result<Arc<CodexThread>> {
                 .await
                 .map_err(anyhow::Error::from);
         }
-        if tokio::time::Instant::now() >= deadline {
+        if edgerun_tokio::time::Instant::now() >= deadline {
             anyhow::bail!("timed out waiting for spawned thread");
         }
-        tokio::time::sleep(Duration::from_millis(10)).await;
+        edgerun_tokio::time::sleep(Duration::from_millis(10)).await;
     }
 }
 
@@ -1787,7 +1787,7 @@ fn scenarios() -> Vec<ScenarioSpec> {
 #[test_case(ScenarioGroup::WorkspaceWrite ; "workspace_write")]
 #[test_case(ScenarioGroup::ApplyPatch ; "apply_patch")]
 #[test_case(ScenarioGroup::UnifiedExec ; "unified_exec")]
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn approval_matrix_covers_group(group: ScenarioGroup) -> Result<()> {
     run_scenario_group(group).await
 }
@@ -1993,7 +1993,7 @@ async fn run_scenario(scenario: &ScenarioSpec) -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[edgerun_tokio::test(flavor = "current_thread")]
 #[cfg(unix)]
 async fn approving_apply_patch_for_session_skips_future_prompts_for_same_file() -> Result<()> {
     skip_if_no_network!(Ok(()));
@@ -2113,7 +2113,7 @@ async fn approving_apply_patch_for_session_skips_future_prompts_for_same_file() 
     Ok(())
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[edgerun_tokio::test(flavor = "current_thread")]
 #[cfg(unix)]
 async fn approving_execpolicy_amendment_persists_policy_and_skips_future_prompts() -> Result<()> {
     let server = start_mock_server().await;
@@ -2285,7 +2285,7 @@ async fn approving_execpolicy_amendment_persists_policy_and_skips_future_prompts
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn spawned_subagent_execpolicy_amendment_propagates_to_parent_session() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -2469,7 +2469,7 @@ async fn spawned_subagent_execpolicy_amendment_propagates_to_parent_session() ->
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg(unix)]
 async fn matched_prefix_rule_runs_unsandboxed_under_zsh_fork() -> Result<()> {
     skip_if_no_network!(Ok(()));
@@ -2566,7 +2566,7 @@ async fn matched_prefix_rule_runs_unsandboxed_under_zsh_fork() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[edgerun_tokio::test(flavor = "current_thread")]
 #[cfg(unix)]
 async fn invalid_requested_prefix_rule_falls_back_for_compound_command() -> Result<()> {
     let server = start_mock_server().await;
@@ -2619,7 +2619,7 @@ async fn invalid_requested_prefix_rule_falls_back_for_compound_command() -> Resu
     Ok(())
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[edgerun_tokio::test(flavor = "current_thread")]
 #[cfg(unix)]
 async fn approving_fallback_rule_for_compound_command_works() -> Result<()> {
     let server = start_mock_server().await;
@@ -2735,7 +2735,7 @@ async fn approving_fallback_rule_for_compound_command_works() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[edgerun_tokio::test(flavor = "current_thread")]
 async fn denying_network_policy_amendment_persists_policy_and_skips_future_network_prompt()
 -> Result<()> {
     skip_if_no_network!(Ok(()));
@@ -3016,7 +3016,7 @@ allow_local_binding = true
     Ok(())
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[edgerun_tokio::test(flavor = "current_thread")]
 async fn network_approval_flow_survives_danger_full_access_session_start() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -3160,7 +3160,7 @@ allow_local_binding = true
 }
 
 // todo(dylan) add ScenarioSpec support for rules
-#[tokio::test(flavor = "current_thread")]
+#[edgerun_tokio::test(flavor = "current_thread")]
 #[cfg(unix)]
 async fn compound_command_with_one_safe_command_still_requires_approval() -> Result<()> {
     skip_if_no_network!(Ok(()));

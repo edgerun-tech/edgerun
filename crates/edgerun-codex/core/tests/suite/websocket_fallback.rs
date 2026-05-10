@@ -16,15 +16,15 @@ use core_test_support::test_codex::TestCodex;
 use core_test_support::test_codex::test_codex;
 use core_test_support::test_codex::turn_permission_fields;
 use pretty_assertions::assert_eq;
-use tokio::time::Duration;
-use tokio::time::timeout;
+use edgerun_tokio::time::Duration;
+use edgerun_tokio::time::timeout;
 use wiremock::Mock;
 use wiremock::ResponseTemplate;
 use wiremock::http::Method;
 use wiremock::matchers::method;
 use wiremock::matchers::path_regex;
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn websocket_fallback_switches_to_http_on_upgrade_required_connect() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -76,7 +76,7 @@ async fn websocket_fallback_switches_to_http_on_upgrade_required_connect() -> Re
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn websocket_fallback_switches_to_http_after_retries_exhausted() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -121,7 +121,7 @@ async fn websocket_fallback_switches_to_http_after_retries_exhausted() -> Result
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn websocket_fallback_hides_first_websocket_retry_stream_error() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -198,7 +198,7 @@ async fn websocket_fallback_hides_first_websocket_retry_stream_error() -> Result
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn websocket_fallback_is_sticky_across_turns() -> Result<()> {
     skip_if_no_network!(Ok(()));
 

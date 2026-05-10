@@ -11,7 +11,7 @@ use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::fs::PermissionsExt;
 
 use codex_utils_absolute_path::AbsolutePathBuf;
-use tokio::fs;
+use edgerun_tokio::fs;
 use edgerun_uuid::Uuid;
 
 pub(crate) const INSTALLATION_ID_FILENAME: &str = "installation_id";
@@ -19,7 +19,7 @@ pub(crate) const INSTALLATION_ID_FILENAME: &str = "installation_id";
 pub async fn resolve_installation_id(codex_home: &AbsolutePathBuf) -> Result<String> {
     let path = codex_home.join(INSTALLATION_ID_FILENAME);
     fs::create_dir_all(codex_home).await?;
-    tokio::task::spawn_blocking(move || {
+    edgerun_tokio::task::spawn_blocking(move || {
         let mut options = OpenOptions::new();
         options.read(true).write(true).create(true);
 
@@ -75,7 +75,7 @@ mod tests {
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn resolve_installation_id_generates_and_persists_uuid() {
         let codex_home = TempDir::new().expect("create temp dir");
         let codex_home_abs = codex_home.path().abs();
@@ -102,7 +102,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn resolve_installation_id_reuses_existing_uuid() {
         let codex_home = TempDir::new().expect("create temp dir");
         let codex_home_abs = codex_home.path().abs();
@@ -125,7 +125,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn resolve_installation_id_rewrites_invalid_file_contents() {
         let codex_home = TempDir::new().expect("create temp dir");
         let codex_home_abs = codex_home.path().abs();

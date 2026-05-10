@@ -92,7 +92,7 @@ fn extract_log_field_does_not_confuse_similar_keys() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 #[traced_test]
 async fn responses_api_emits_api_request_event() {
     let server = start_mock_server().await;
@@ -133,7 +133,7 @@ async fn responses_api_emits_api_request_event() {
     });
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 #[traced_test]
 async fn process_sse_emits_tracing_for_output_item() {
     let server = start_mock_server().await;
@@ -173,7 +173,7 @@ async fn process_sse_emits_tracing_for_output_item() {
     });
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 #[traced_test]
 async fn process_sse_emits_failed_event_on_parse_error() {
     let server = start_mock_server().await;
@@ -219,7 +219,7 @@ async fn process_sse_emits_failed_event_on_parse_error() {
     });
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 #[traced_test]
 async fn process_sse_records_failed_event_when_stream_closes_without_completed() {
     let server = start_mock_server().await;
@@ -265,7 +265,7 @@ async fn process_sse_records_failed_event_when_stream_closes_without_completed()
     });
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 #[traced_test]
 async fn process_sse_failed_event_records_response_error_message() {
     let server = start_mock_server().await;
@@ -332,7 +332,7 @@ async fn process_sse_failed_event_records_response_error_message() {
     });
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 #[traced_test]
 async fn process_sse_failed_event_logs_parse_error() {
     let server = start_mock_server().await;
@@ -393,7 +393,7 @@ async fn process_sse_failed_event_logs_parse_error() {
     });
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 #[traced_test]
 async fn process_sse_failed_event_logs_missing_error() {
     let server = start_mock_server().await;
@@ -444,7 +444,7 @@ async fn process_sse_failed_event_logs_missing_error() {
     });
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 #[traced_test]
 async fn process_sse_failed_event_logs_response_completed_parse_error() {
     let server = start_mock_server().await;
@@ -507,7 +507,7 @@ async fn process_sse_failed_event_logs_response_completed_parse_error() {
     });
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 #[traced_test]
 async fn process_sse_emits_completed_telemetry() {
     let server = start_mock_server().await;
@@ -564,7 +564,7 @@ async fn process_sse_emits_completed_telemetry() {
     });
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[edgerun_tokio::test(flavor = "current_thread")]
 async fn turn_and_completed_response_spans_record_token_usage() {
     let buffer: &'static Mutex<Vec<u8>> = Box::leak(Box::new(Mutex::new(Vec::new())));
     let subscriber = tracing_subscriber::fmt()
@@ -655,7 +655,7 @@ async fn turn_and_completed_response_spans_record_token_usage() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn handle_responses_span_records_response_kind_and_tool_name() {
     let buffer: &'static Mutex<Vec<u8>> = Box::leak(Box::new(Mutex::new(Vec::new())));
     let subscriber = tracing_subscriber::fmt()
@@ -731,7 +731,7 @@ async fn handle_responses_span_records_response_kind_and_tool_name() {
     );
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[edgerun_tokio::test(flavor = "current_thread")]
 async fn record_responses_sets_span_fields_for_response_events() {
     let buffer: &'static Mutex<Vec<u8>> = Box::leak(Box::new(Mutex::new(Vec::new())));
     let subscriber = tracing_subscriber::fmt()
@@ -841,7 +841,7 @@ async fn record_responses_sets_span_fields_for_response_events() {
     }
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 #[traced_test]
 async fn handle_response_item_records_tool_result_for_custom_tool_call() {
     let server = start_mock_server().await;
@@ -919,7 +919,7 @@ async fn handle_response_item_records_tool_result_for_custom_tool_call() {
     });
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 #[traced_test]
 async fn handle_response_item_records_tool_result_for_function_call() {
     let server = start_mock_server().await;
@@ -994,7 +994,7 @@ async fn handle_response_item_records_tool_result_for_function_call() {
     });
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 #[traced_test]
 async fn handle_response_item_records_tool_result_for_local_shell_missing_ids() {
     let server = start_mock_server().await;
@@ -1073,7 +1073,7 @@ async fn handle_response_item_records_tool_result_for_local_shell_missing_ids() 
 }
 
 #[cfg(target_os = "macos")]
-#[tokio::test]
+#[edgerun_tokio::test]
 #[traced_test]
 async fn handle_response_item_records_tool_result_for_local_shell_call() {
     let server = start_mock_server().await;
@@ -1182,7 +1182,7 @@ fn tool_decision_assertion<'a>(
     }
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 #[traced_test]
 async fn handle_container_exec_autoapprove_from_config_records_tool_decision() {
     let server = start_mock_server().await;
@@ -1242,7 +1242,7 @@ async fn handle_container_exec_autoapprove_from_config_records_tool_decision() {
     ));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 #[traced_test]
 async fn handle_container_exec_user_approved_records_tool_decision() {
     let server = start_mock_server().await;
@@ -1314,7 +1314,7 @@ async fn handle_container_exec_user_approved_records_tool_decision() {
     ));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 #[traced_test]
 async fn handle_container_exec_user_approved_for_session_records_tool_decision() {
     let server = start_mock_server().await;
@@ -1386,7 +1386,7 @@ async fn handle_container_exec_user_approved_for_session_records_tool_decision()
     ));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 #[traced_test]
 async fn handle_sandbox_error_user_approves_retry_records_tool_decision() {
     let server = start_mock_server().await;
@@ -1458,7 +1458,7 @@ async fn handle_sandbox_error_user_approves_retry_records_tool_decision() {
     ));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 #[traced_test]
 async fn handle_container_exec_user_denies_records_tool_decision() {
     let server = start_mock_server().await;
@@ -1530,7 +1530,7 @@ async fn handle_container_exec_user_denies_records_tool_decision() {
     ));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 #[traced_test]
 async fn handle_sandbox_error_user_approves_for_session_records_tool_decision() {
     let server = start_mock_server().await;
@@ -1602,7 +1602,7 @@ async fn handle_sandbox_error_user_approves_for_session_records_tool_decision() 
     ));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 #[traced_test]
 async fn handle_sandbox_error_user_denies_records_tool_decision() {
     let server = start_mock_server().await;

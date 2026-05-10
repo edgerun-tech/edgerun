@@ -2,7 +2,7 @@ use crate::error::TransportError;
 use crate::request::Request;
 use std::future::Future;
 use std::time::Duration;
-use tokio::time::sleep;
+use edgerun_tokio::time::sleep;
 
 #[derive(Debug, Clone)]
 pub struct RetryPolicy {

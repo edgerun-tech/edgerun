@@ -23,10 +23,10 @@ use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::path::Path;
 use std::path::PathBuf;
-use tokio::fs;
-use tokio::time::Duration;
-use tokio::time::Instant;
-use tokio::time::sleep;
+use edgerun_tokio::fs;
+use edgerun_tokio::time::Duration;
+use edgerun_tokio::time::Instant;
+use edgerun_tokio::time::sleep;
 
 #[derive(Debug)]
 struct SnapshotRun {
@@ -392,7 +392,7 @@ fn assert_posix_snapshot_sections(snapshot: &str) {
 }
 
 #[cfg_attr(not(target_os = "linux"), ignore)]
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn linux_unified_exec_uses_shell_snapshot() -> Result<()> {
     let command = "echo snapshot-linux";
     let run = run_snapshot_command(command).await?;
@@ -413,7 +413,7 @@ async fn linux_unified_exec_uses_shell_snapshot() -> Result<()> {
 }
 
 #[cfg_attr(target_os = "windows", ignore)]
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn linux_shell_command_uses_shell_snapshot() -> Result<()> {
     let command = "echo shell-command-snapshot-linux";
     let run = run_shell_command_snapshot(command).await?;
@@ -433,7 +433,7 @@ async fn linux_shell_command_uses_shell_snapshot() -> Result<()> {
 }
 
 #[cfg_attr(target_os = "windows", ignore)]
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn shell_command_snapshot_preserves_shell_environment_policy_set() -> Result<()> {
     let builder = test_codex().with_config(|config| {
         config
@@ -482,7 +482,7 @@ async fn shell_command_snapshot_preserves_shell_environment_policy_set() -> Resu
 }
 
 #[cfg_attr(not(target_os = "linux"), ignore)]
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn linux_unified_exec_snapshot_preserves_shell_environment_policy_set() -> Result<()> {
     let builder = test_codex().with_config(|config| {
         config.use_experimental_unified_exec_tool = true;
@@ -536,7 +536,7 @@ async fn linux_unified_exec_snapshot_preserves_shell_environment_policy_set() ->
 }
 
 #[cfg_attr(target_os = "windows", ignore)]
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn shell_command_snapshot_still_intercepts_apply_patch() -> Result<()> {
     let builder = test_codex().with_config(|config| {
         config
@@ -645,7 +645,7 @@ async fn shell_command_snapshot_still_intercepts_apply_patch() -> Result<()> {
 }
 
 #[cfg_attr(target_os = "windows", ignore)]
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn shell_snapshot_deleted_after_shutdown_with_skills() -> Result<()> {
     let builder = test_codex().with_config(|config| {
         config
@@ -682,7 +682,7 @@ async fn shell_snapshot_deleted_after_shutdown_with_skills() -> Result<()> {
     target_os = "macos",
     ignore = "requires unrestricted networking on macOS"
 )]
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn macos_unified_exec_uses_shell_snapshot() -> Result<()> {
     let command = "echo snapshot-macos";
     let run = run_snapshot_command(command).await?;
@@ -712,7 +712,7 @@ async fn macos_unified_exec_uses_shell_snapshot() -> Result<()> {
 
 // #[cfg_attr(not(target_os = "windows"), ignore)]
 #[ignore]
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn windows_unified_exec_uses_shell_snapshot() -> Result<()> {
     let command = "Write-Output snapshot-windows";
     let run = run_snapshot_command(command).await?;

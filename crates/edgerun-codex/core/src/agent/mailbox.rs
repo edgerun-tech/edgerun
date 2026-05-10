@@ -2,8 +2,8 @@ use codex_protocol::protocol::InterAgentCommunication;
 use std::collections::VecDeque;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
-use tokio::sync::mpsc;
-use tokio::sync::watch;
+use edgerun_tokio::sync::mpsc;
+use edgerun_tokio::sync::watch;
 
 #[cfg(test)]
 use codex_protocol::AgentPath;
@@ -91,7 +91,7 @@ mod tests {
         )
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn mailbox_assigns_monotonic_sequence_numbers() {
         let (mailbox, _receiver) = Mailbox::new();
         let mut seq_rx = mailbox.subscribe();
@@ -115,7 +115,7 @@ mod tests {
         assert_eq!(seq_b, 2);
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn mailbox_drains_in_delivery_order() {
         let (mailbox, mut receiver) = Mailbox::new();
         let mail_one = make_mail(
@@ -138,7 +138,7 @@ mod tests {
         assert!(!receiver.has_pending());
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn mailbox_tracks_pending_trigger_turn_mail() {
         let (mailbox, mut receiver) = Mailbox::new();
 

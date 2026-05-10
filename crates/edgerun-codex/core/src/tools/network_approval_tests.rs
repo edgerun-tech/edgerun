@@ -8,9 +8,9 @@ use codex_protocol::protocol::SandboxPolicy;
 use core_test_support::PathBufExt;
 use core_test_support::test_path_buf;
 use pretty_assertions::assert_eq;
-use tokio_util::sync::CancellationToken;
+use edgerun_tokio_util::sync::CancellationToken;
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn pending_approvals_are_deduped_per_host_protocol_and_port() {
     let service = NetworkApprovalService::default();
     let key = HostApprovalKey {
@@ -27,7 +27,7 @@ async fn pending_approvals_are_deduped_per_host_protocol_and_port() {
     assert!(Arc::ptr_eq(&first, &second));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn pending_approvals_do_not_dedupe_across_ports() {
     let service = NetworkApprovalService::default();
     let first_key = HostApprovalKey {
@@ -49,7 +49,7 @@ async fn pending_approvals_do_not_dedupe_across_ports() {
     assert!(!Arc::ptr_eq(&first, &second));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn session_approved_hosts_preserve_protocol_and_port_scope() {
     let source = NetworkApprovalService::default();
     {
@@ -107,7 +107,7 @@ async fn session_approved_hosts_preserve_protocol_and_port_scope() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn sync_session_approved_hosts_to_replaces_existing_target_hosts() {
     let source = NetworkApprovalService::default();
     {
@@ -149,13 +149,13 @@ async fn sync_session_approved_hosts_to_replaces_existing_target_hosts() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn pending_waiters_receive_owner_decision() {
     let pending = Arc::new(PendingHostApproval::new());
 
     let waiter = {
         let pending = Arc::clone(&pending);
-        tokio::spawn(async move { pending.wait_for_decision().await })
+        edgerun_tokio::spawn(async move { pending.wait_for_decision().await })
     };
 
     pending
@@ -244,7 +244,7 @@ async fn register_call_with_default_shell_trigger(
     cancellation_token
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn active_call_preserves_triggering_command_context() {
     let service = NetworkApprovalService::default();
     let expected = GuardianNetworkAccessTrigger {
@@ -277,7 +277,7 @@ async fn active_call_preserves_triggering_command_context() {
     assert_eq!(call.command, "curl https://example.com");
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn record_blocked_request_sets_policy_outcome_for_owner_call() {
     let service = NetworkApprovalService::default();
     let cancellation_token =
@@ -296,7 +296,7 @@ async fn record_blocked_request_sets_policy_outcome_for_owner_call() {
         );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn blocked_request_policy_does_not_override_user_denial_outcome() {
     let service = NetworkApprovalService::default();
     register_call_with_default_shell_trigger(&service, "registration-1").await;
@@ -314,7 +314,7 @@ async fn blocked_request_policy_does_not_override_user_denial_outcome() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn finish_call_returns_denial_and_unregisters_active_call() {
     let service = NetworkApprovalService::default();
     register_call_with_default_shell_trigger(&service, "registration-1").await;
@@ -336,7 +336,7 @@ async fn finish_call_returns_denial_and_unregisters_active_call() {
     assert_eq!(service.take_call_outcome("registration-1").await, None);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn deferred_finish_reuses_denial_result_after_first_consumer() {
     let service = NetworkApprovalService::default();
     let cancellation_token =
@@ -366,7 +366,7 @@ async fn deferred_finish_reuses_denial_result_after_first_consumer() {
     assert!(matches!(second, ToolError::Rejected(message) if message == "network denied"));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn record_call_outcome_ignores_inactive_call() {
     let service = NetworkApprovalService::default();
     let cancellation_token =
@@ -384,7 +384,7 @@ async fn record_call_outcome_ignores_inactive_call() {
     assert_eq!(service.take_call_outcome("registration-1").await, None);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn record_blocked_request_ignores_ambiguous_unattributed_blocked_requests() {
     let service = NetworkApprovalService::default();
     register_call_with_default_shell_trigger(&service, "registration-1").await;

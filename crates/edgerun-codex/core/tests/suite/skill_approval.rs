@@ -136,7 +136,7 @@ fn output_shows_sandbox_denial(output: &str) -> bool {
 }
 
 #[cfg(unix)]
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn shell_zsh_fork_skill_scripts_ignore_declared_permissions() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -231,7 +231,7 @@ async fn shell_zsh_fork_skill_scripts_ignore_declared_permissions() -> Result<()
 }
 
 #[cfg(unix)]
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn shell_zsh_fork_still_enforces_workspace_write_sandbox() -> Result<()> {
     skip_if_no_network!(Ok(()));
 

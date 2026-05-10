@@ -93,7 +93,7 @@ fn read_post_tool_use_hook_inputs(home: &Path) -> Result<Vec<Value>> {
         .collect()
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn codex_apps_file_params_upload_local_paths_before_mcp_tool_call() -> Result<()> {
     let server = start_mock_server().await;
     let apps_server = AppsTestServer::mount(&server).await?;
@@ -168,7 +168,7 @@ async fn codex_apps_file_params_upload_local_paths_before_mcp_tool_call() -> Res
             trust_discovered_hooks(config);
         });
     let test = builder.build(&server).await?;
-    tokio::fs::write(test.cwd.path().join("report.txt"), b"hello world").await?;
+    edgerun_tokio::fs::write(test.cwd.path().join("report.txt"), b"hello world").await?;
 
     test.submit_turn_with_approval_and_permission_profile(
         "Extract the report text with the app tool.",

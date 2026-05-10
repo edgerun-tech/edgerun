@@ -26,6 +26,7 @@ edgerun-async-trait = { workspace = true }
 edgerun-error = { workspace = true }
 edgerun-encoding = { workspace = true }
 edgerun-eventsource-stream = { workspace = true }
+edgerun-futures = { workspace = true }
 edgerun-http = { workspace = true }
 edgerun-json = { workspace = true, features = ["serde-compat"] }
 tracing = { workspace = true }

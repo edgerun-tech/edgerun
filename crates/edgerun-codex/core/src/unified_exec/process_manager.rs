@@ -4,11 +4,11 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
-use tokio::sync::Notify;
-use tokio::sync::watch;
-use tokio::time::Duration;
-use tokio::time::Instant;
-use tokio_util::sync::CancellationToken;
+use edgerun_tokio::sync::Notify;
+use edgerun_tokio::sync::watch;
+use edgerun_tokio::time::Duration;
+use edgerun_tokio::time::Instant;
+use edgerun_tokio_util::sync::CancellationToken;
 
 use crate::exec_env::CODEX_THREAD_ID_ENV_VAR;
 use crate::exec_env::create_env;
@@ -245,9 +245,9 @@ async fn wait_for_late_network_denial(network_cancelled: Option<CancellationToke
         return true;
     }
 
-    tokio::select! {
+    edgerun_tokio::select! {
         _ = network_cancelled.cancelled() => true,
-        _ = tokio::time::sleep(LATE_NETWORK_DENIAL_GRACE_PERIOD) => false,
+        _ = edgerun_tokio::time::sleep(LATE_NETWORK_DENIAL_GRACE_PERIOD) => false,
     }
 }
 
@@ -280,7 +280,7 @@ async fn emit_failed_initial_exec_end_if_unstored(
     context: &UnifiedExecContext,
     request: &ExecCommandRequest,
     cwd: AbsolutePathBuf,
-    transcript: Arc<tokio::sync::Mutex<HeadTailBuffer>>,
+    transcript: Arc<edgerun_tokio::sync::Mutex<HeadTailBuffer>>,
     fallback_output: String,
     message: String,
     wall_time: Duration,
@@ -311,8 +311,8 @@ fn terminate_process_on_network_denial(
 ) {
     let network_cancelled = deferred.cancellation_token();
     let process_exited = process.cancellation_token();
-    tokio::spawn(async move {
-        let denied = tokio::select! {
+    edgerun_tokio::spawn(async move {
+        let denied = edgerun_tokio::select! {
             _ = network_cancelled.cancelled() => true,
             _ = process_exited.cancelled() => {
                 wait_for_late_network_denial(Some(network_cancelled.clone())).await
@@ -392,7 +392,7 @@ impl UnifiedExecProcessManager {
             );
         }
 
-        let transcript = Arc::new(tokio::sync::Mutex::new(HeadTailBuffer::default()));
+        let transcript = Arc::new(edgerun_tokio::sync::Mutex::new(HeadTailBuffer::default()));
         let event_ctx = ToolEventCtx::new(
             context.session.as_ref(),
             context.turn.as_ref(),
@@ -621,7 +621,7 @@ impl UnifiedExecProcessManager {
                 Ok(()) => {
                     // Give the remote process a brief window to react so that we are
                     // more likely to capture its output in the poll below.
-                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    edgerun_tokio::time::sleep(Duration::from_millis(100)).await;
                 }
                 Err(err) => {
                     let status = self.refresh_process_state(process_id).await;
@@ -813,7 +813,7 @@ impl UnifiedExecProcessManager {
         process_id: i32,
         tty: bool,
         network_approval: Option<DeferredNetworkApproval>,
-        transcript: Arc<tokio::sync::Mutex<HeadTailBuffer>>,
+        transcript: Arc<edgerun_tokio::sync::Mutex<HeadTailBuffer>>,
     ) {
         let entry = ProcessEntry {
             process: Arc::clone(&process),
@@ -1118,25 +1118,25 @@ impl UnifiedExecProcessManager {
                     }
                     let notified = wait_for_output.unwrap_or_else(|| output_notify.notified());
                     let closed = output_closed_notify.notified();
-                    tokio::pin!(notified);
-                    tokio::pin!(closed);
-                    tokio::select! {
+                    edgerun_tokio::pin!(notified);
+                    edgerun_tokio::pin!(closed);
+                    edgerun_tokio::select! {
                         _ = &mut notified => {}
                         _ = &mut closed => {}
-                        _ = tokio::time::sleep(close_wait_remaining) => break,
+                        _ = edgerun_tokio::time::sleep(close_wait_remaining) => break,
                         _ = Self::wait_for_pause_change(pause_state.as_ref()) => {}
                     }
                     continue;
                 }
 
                 let notified = wait_for_output.unwrap_or_else(|| output_notify.notified());
-                tokio::pin!(notified);
+                edgerun_tokio::pin!(notified);
                 let exit_notified = cancellation_token.cancelled();
-                tokio::pin!(exit_notified);
-                tokio::select! {
+                edgerun_tokio::pin!(exit_notified);
+                edgerun_tokio::select! {
                     _ = &mut notified => {}
                     _ = &mut exit_notified => exit_signal_received = true,
-                    _ = tokio::time::sleep(remaining) => break,
+                    _ = edgerun_tokio::time::sleep(remaining) => break,
                     _ = Self::wait_for_pause_change(pause_state.as_ref()) => {}
                 }
                 continue;

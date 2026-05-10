@@ -55,7 +55,7 @@ pub fn run_main() -> i32 {
             return 1;
         }
     };
-    let runtime = match tokio::runtime::Builder::new_current_thread()
+    let runtime = match edgerun_tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
     {

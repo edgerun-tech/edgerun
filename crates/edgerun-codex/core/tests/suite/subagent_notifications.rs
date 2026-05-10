@@ -22,8 +22,8 @@ use pretty_assertions::assert_eq;
 use std::fs;
 use std::path::Path;
 use std::time::Duration;
-use tokio::time::Instant;
-use tokio::time::sleep;
+use edgerun_tokio::time::Instant;
+use edgerun_tokio::time::sleep;
 use wiremock::MockServer;
 
 const SPAWN_CALL_ID: &str = "spawn-call-1";
@@ -240,7 +240,7 @@ async fn setup_turn_one_with_custom_spawned_child(
             .ok_or_else(|| anyhow::anyhow!("expected parent rollout path"))?;
         let deadline = Instant::now() + Duration::from_secs(6);
         loop {
-            let has_notification = tokio::fs::read_to_string(&rollout_path)
+            let has_notification = edgerun_tokio::fs::read_to_string(&rollout_path)
                 .await
                 .is_ok_and(|rollout| rollout.contains("<subagent_notification>"));
             if has_notification {
@@ -283,7 +283,7 @@ async fn spawn_child_and_capture_snapshot(
         .await)
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn subagent_notification_is_included_without_wait() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -309,7 +309,7 @@ async fn subagent_notification_is_included_without_wait() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn spawned_child_receives_forked_parent_context() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -401,7 +401,7 @@ async fn spawned_child_receives_forked_parent_context() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn spawn_agent_requested_model_and_reasoning_override_inherited_settings_without_role()
 -> Result<()> {
     skip_if_no_network!(Ok(()));
@@ -427,7 +427,7 @@ async fn spawn_agent_requested_model_and_reasoning_override_inherited_settings_w
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn spawned_multi_agent_v2_child_inherits_parent_developer_context() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -512,7 +512,7 @@ async fn spawned_multi_agent_v2_child_inherits_parent_developer_context() -> Res
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn skills_toggle_skips_instructions_for_parent_and_spawned_child() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -603,7 +603,7 @@ async fn skills_toggle_skips_instructions_for_parent_and_spawned_child() -> Resu
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn spawn_agent_role_overrides_requested_model_and_reasoning_settings() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -645,7 +645,7 @@ async fn spawn_agent_role_overrides_requested_model_and_reasoning_settings() -> 
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn spawn_agent_tool_description_mentions_role_locked_settings() -> Result<()> {
     skip_if_no_network!(Ok(()));
 

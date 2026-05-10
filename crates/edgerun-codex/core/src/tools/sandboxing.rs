@@ -28,14 +28,14 @@ use codex_sandboxing::SandboxTransformRequest;
 use codex_sandboxing::SandboxType;
 use codex_sandboxing::SandboxablePreference;
 use codex_utils_absolute_path::AbsolutePathBuf;
-use futures::Future;
-use futures::future::BoxFuture;
+use edgerun_futures::Future;
+use edgerun_futures::future::BoxFuture;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::sync::Arc;
-use tokio_util::sync::CancellationToken;
+use edgerun_tokio_util::sync::CancellationToken;
 
 #[derive(Clone, Default, Debug)]
 pub(crate) struct ApprovalStore {

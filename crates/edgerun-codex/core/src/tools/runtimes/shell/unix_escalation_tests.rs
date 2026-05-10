@@ -40,7 +40,7 @@ use pretty_assertions::assert_eq;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::RwLock;
+use edgerun_tokio::sync::RwLock;
 
 fn host_absolute_path(segments: &[&str]) -> String {
     let mut path = if cfg!(windows) {
@@ -323,7 +323,7 @@ fn shell_request_escalation_execution_is_explicit() {
     );
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[edgerun_tokio::test(flavor = "current_thread")]
 async fn execve_permission_request_hook_short_circuits_prompt() -> anyhow::Result<()> {
     let (session, mut turn_context) = make_session_and_context().await;
     std::fs::create_dir_all(&turn_context.config.codex_home)
@@ -440,7 +440,7 @@ async fn execve_permission_request_hook_short_circuits_prompt() -> anyhow::Resul
         stopwatch: codex_shell_escalation::Stopwatch::new(Duration::from_secs(1)),
     };
 
-    let action = tokio::time::timeout(
+    let action = edgerun_tokio::time::timeout(
         Duration::from_secs(5),
         codex_shell_escalation::EscalationPolicy::determine_action(
             &provider,

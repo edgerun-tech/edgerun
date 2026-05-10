@@ -31,7 +31,7 @@ use codex_exec_server::Environment;
 use codex_network_proxy::NetworkProxy;
 use codex_protocol::models::AdditionalPermissionProfile;
 use codex_utils_absolute_path::AbsolutePathBuf;
-use tokio::sync::Mutex;
+use edgerun_tokio::sync::Mutex;
 
 use crate::sandboxing::SandboxPermissions;
 use crate::session::session::Session;
@@ -153,7 +153,7 @@ struct ProcessEntry {
     tty: bool,
     network_approval: Option<DeferredNetworkApproval>,
     session: Weak<Session>,
-    last_used: tokio::time::Instant,
+    last_used: edgerun_tokio::time::Instant,
 }
 
 pub(crate) fn clamp_yield_time(yield_time_ms: u64) -> u64 {

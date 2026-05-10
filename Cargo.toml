@@ -31,11 +31,14 @@ members = [
   "crates/utility/edgerun-shlex",
   "crates/utility/edgerun-similar",
   "crates/utility/edgerun-time",
+  "crates/utility/edgerun-tokio",
   "crates/utility/edgerun-tokio-tungstenite",
+  "crates/utility/edgerun-tokio-util",
   "crates/utility/edgerun-tungstenite",
   "crates/utility/edgerun-uuid",
   "crates/utility/edgerun-zstd",
   "crates/utility/edgerun-regex",
+  "crates/utility/edgerun-reqwest",
   "crates/edgerun-standards",
   "crates/edgerun-unit",
   "crates/edgerun-sdk",
@@ -45,7 +48,6 @@ members = [
   "crates/utility/edgerun-url",
   "crates/edgerun-rtl8125",
   "crates/edgerun-platform",
-  "crates/edgerun-unikernel",
   "crates/linux-adapters/edgerun-inotify",
   "crates/linux-adapters/edgerun-alsa-microphone",
   "crates/linux-adapters/edgerun-alsa-speaker",
@@ -78,6 +80,8 @@ members = [
   "crates/utility/edgerun-quick-xml",
   "crates/utility/edgerun-random",
   "crates/utility/edgerun-serde-with",
+  "crates/utility/edgerun-strum",
+  "crates/utility/edgerun-strum-macros",
   "crates/linux-adapters/edgerun-linux-cec",
   "crates/utility/edgerun-rusttls",
   "crates/linux-adapters/edgerun-linux-gpu",
@@ -188,10 +192,15 @@ edgerun-glob = { version = "0.1", path = "crates/utility/edgerun-glob" }
 edgerun-shlex = { version = "0.1", path = "crates/utility/edgerun-shlex" }
 edgerun-inventory = { version = "0.1", path = "crates/utility/edgerun-inventory" }
 edgerun-serde-with = { version = "0.1", path = "crates/utility/edgerun-serde-with" }
+edgerun-strum = { version = "0.1", path = "crates/utility/edgerun-strum" }
+edgerun-strum-macros = { version = "0.1", path = "crates/utility/edgerun-strum-macros" }
 edgerun-time = { version = "0.1", path = "crates/utility/edgerun-time" }
+edgerun-tokio = { version = "0.1", path = "crates/utility/edgerun-tokio" }
 edgerun-tokio-tungstenite = { version = "0.1", path = "crates/utility/edgerun-tokio-tungstenite" }
+edgerun-tokio-util = { version = "0.1", path = "crates/utility/edgerun-tokio-util" }
 edgerun-tungstenite = { version = "0.1", path = "crates/utility/edgerun-tungstenite" }
 edgerun-regex = { version = "0.1", path = "crates/utility/edgerun-regex" }
+edgerun-reqwest = { version = "0.1", path = "crates/utility/edgerun-reqwest" }
 edgerun-email = { version = "0.1", path = "crates/apps/edgerun-email" }
 edgerun-wallet-app = { version = "0.1", path = "crates/apps/edgerun-wallet-app" }
 edgerun-log = { version = "0.1", path = "crates/utility/edgerun-log" }

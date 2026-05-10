@@ -22,9 +22,9 @@ use codex_protocol::protocol::SandboxPolicy;
 use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::protocol::TokenUsage;
 use edgerun_json::serde_json::Value;
-use tokio::sync::Mutex;
-use tokio::sync::Semaphore;
-use tokio_util::sync::CancellationToken;
+use edgerun_tokio::sync::Mutex;
+use edgerun_tokio::sync::Semaphore;
+use edgerun_tokio_util::sync::CancellationToken;
 use tracing::warn;
 
 use crate::codex_delegate::run_codex_thread_interactive;
@@ -190,7 +190,7 @@ impl GuardianReviewSession {
 
     fn shutdown_in_background(self: &Arc<Self>) {
         let review_session = Arc::clone(self);
-        drop(tokio::spawn(async move {
+        drop(edgerun_tokio::spawn(async move {
             review_session.shutdown().await;
         }));
     }
@@ -242,7 +242,7 @@ impl Drop for EphemeralReviewCleanup {
             return;
         };
         let state = Arc::clone(&self.state);
-        drop(tokio::spawn(async move {
+        drop(edgerun_tokio::spawn(async move {
             let review_session = {
                 let mut state = state.lock().await;
                 state
@@ -295,7 +295,7 @@ impl GuardianReviewSessionManager {
         &self,
         params: GuardianReviewSessionParams,
     ) -> (GuardianReviewSessionOutcome, GuardianReviewAnalyticsResult) {
-        let deadline = tokio::time::Instant::now() + GUARDIAN_REVIEW_TIMEOUT;
+        let deadline = edgerun_tokio::time::Instant::now() + GUARDIAN_REVIEW_TIMEOUT;
         let next_reuse_key = GuardianReviewSessionReuseKey::from_spawn_config(&params.spawn_config);
         let mut stale_trunk_to_shutdown = None;
         let mut spawned_trunk = false;
@@ -516,7 +516,7 @@ impl GuardianReviewSessionManager {
         &self,
         params: GuardianReviewSessionParams,
         reuse_key: GuardianReviewSessionReuseKey,
-        deadline: tokio::time::Instant,
+        deadline: edgerun_tokio::time::Instant,
         fork_snapshot: Option<GuardianReviewForkSnapshot>,
     ) -> (GuardianReviewSessionOutcome, GuardianReviewAnalyticsResult) {
         let spawn_cancel_token = CancellationToken::new();
@@ -609,7 +609,7 @@ async fn run_review_on_session(
     review_session: &GuardianReviewSession,
     params: &GuardianReviewSessionParams,
     guardian_session_kind: GuardianReviewSessionKind,
-    deadline: tokio::time::Instant,
+    deadline: edgerun_tokio::time::Instant,
 ) -> (
     GuardianReviewSessionOutcome,
     bool,
@@ -783,16 +783,16 @@ async fn load_rollout_items_for_fork(
 async fn wait_for_guardian_review(
     review_session: &GuardianReviewSession,
     expected_turn_id: &str,
-    deadline: tokio::time::Instant,
+    deadline: edgerun_tokio::time::Instant,
     external_cancel: Option<&CancellationToken>,
     analytics_result: &mut GuardianReviewAnalyticsResult,
 ) -> (GuardianReviewSessionOutcome, bool, bool) {
-    let timeout = tokio::time::sleep_until(deadline);
-    tokio::pin!(timeout);
+    let timeout = edgerun_tokio::time::sleep_until(deadline);
+    edgerun_tokio::pin!(timeout);
     let mut last_error_message: Option<String> = None;
 
     loop {
-        tokio::select! {
+        edgerun_tokio::select! {
             _ = &mut timeout => {
                 let keep_review_session = interrupt_and_drain_turn(
                     &review_session.codex,
@@ -953,12 +953,12 @@ pub(crate) fn build_guardian_review_session_config(
 }
 
 async fn run_before_review_deadline<T>(
-    deadline: tokio::time::Instant,
+    deadline: edgerun_tokio::time::Instant,
     external_cancel: Option<&CancellationToken>,
     future: impl Future<Output = T>,
 ) -> Result<T, GuardianReviewSessionOutcome> {
-    tokio::select! {
-        _ = tokio::time::sleep_until(deadline) => Err(GuardianReviewSessionOutcome::TimedOut),
+    edgerun_tokio::select! {
+        _ = edgerun_tokio::time::sleep_until(deadline) => Err(GuardianReviewSessionOutcome::TimedOut),
         result = future => Ok(result),
         _ = async {
             if let Some(cancel_token) = external_cancel {
@@ -971,7 +971,7 @@ async fn run_before_review_deadline<T>(
 }
 
 async fn run_before_review_deadline_with_cancel<T>(
-    deadline: tokio::time::Instant,
+    deadline: edgerun_tokio::time::Instant,
     external_cancel: Option<&CancellationToken>,
     cancel_token: &CancellationToken,
     future: impl Future<Output = T>,
@@ -986,7 +986,7 @@ async fn run_before_review_deadline_with_cancel<T>(
 async fn interrupt_and_drain_turn(codex: &Codex, expected_turn_id: &str) -> anyhow::Result<()> {
     let _ = codex.submit(Op::Interrupt).await;
 
-    tokio::time::timeout(GUARDIAN_INTERRUPT_DRAIN_TIMEOUT, async {
+    edgerun_tokio::time::timeout(GUARDIAN_INTERRUPT_DRAIN_TIMEOUT, async {
         loop {
             let event = codex.next_event().await?;
             if event_matches_turn(&event, expected_turn_id)
@@ -1024,7 +1024,7 @@ mod tests {
         let (tx_sub, rx_sub) = edgerun_async_channel::bounded(4);
         let (tx_event, rx_event) = edgerun_async_channel::unbounded();
         let (_agent_status_tx, agent_status) =
-            tokio::sync::watch::channel(AgentStatus::PendingInit);
+            edgerun_tokio::sync::watch::channel(AgentStatus::PendingInit);
         let reuse_key =
             GuardianReviewSessionReuseKey::from_spawn_config(session.get_config().await.as_ref());
 
@@ -1117,7 +1117,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn guardian_review_session_config_change_invalidates_cached_session() {
         let parent_config = crate::config::test_config().await;
         let cached_spawn_config = build_guardian_review_session_config(
@@ -1149,7 +1149,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn guardian_review_session_config_disables_hooks() {
         let mut parent_config = crate::config::test_config().await;
         parent_config
@@ -1168,7 +1168,7 @@ mod tests {
         assert!(!guardian_config.features.enabled(Feature::CodexHooks));
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn guardian_review_session_config_disables_skill_instructions() {
         let mut parent_config = crate::config::test_config().await;
         parent_config.include_skill_instructions = true;
@@ -1184,13 +1184,13 @@ mod tests {
         assert!(!guardian_config.include_skill_instructions);
     }
 
-    #[tokio::test(flavor = "current_thread")]
+    #[edgerun_tokio::test(flavor = "current_thread")]
     async fn run_before_review_deadline_times_out_before_future_completes() {
         let outcome = run_before_review_deadline(
-            tokio::time::Instant::now() + Duration::from_millis(10),
+            edgerun_tokio::time::Instant::now() + Duration::from_millis(10),
             /*external_cancel*/ None,
             async {
-                tokio::time::sleep(Duration::from_millis(50)).await;
+                edgerun_tokio::time::sleep(Duration::from_millis(50)).await;
             },
         )
         .await;
@@ -1201,17 +1201,17 @@ mod tests {
         ));
     }
 
-    #[tokio::test(flavor = "current_thread")]
+    #[edgerun_tokio::test(flavor = "current_thread")]
     async fn run_before_review_deadline_aborts_when_cancelled() {
         let cancel_token = CancellationToken::new();
         let canceller = cancel_token.clone();
-        drop(tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(10)).await;
+        drop(edgerun_tokio::spawn(async move {
+            edgerun_tokio::time::sleep(Duration::from_millis(10)).await;
             canceller.cancel();
         }));
 
         let outcome = run_before_review_deadline(
-            tokio::time::Instant::now() + Duration::from_secs(1),
+            edgerun_tokio::time::Instant::now() + Duration::from_secs(1),
             Some(&cancel_token),
             std::future::pending::<()>(),
         )
@@ -1223,16 +1223,16 @@ mod tests {
         ));
     }
 
-    #[tokio::test(flavor = "current_thread")]
+    #[edgerun_tokio::test(flavor = "current_thread")]
     async fn run_before_review_deadline_with_cancel_cancels_token_on_timeout() {
         let cancel_token = CancellationToken::new();
 
         let outcome = run_before_review_deadline_with_cancel(
-            tokio::time::Instant::now() + Duration::from_millis(10),
+            edgerun_tokio::time::Instant::now() + Duration::from_millis(10),
             /*external_cancel*/ None,
             &cancel_token,
             async {
-                tokio::time::sleep(Duration::from_millis(50)).await;
+                edgerun_tokio::time::sleep(Duration::from_millis(50)).await;
             },
         )
         .await;
@@ -1244,18 +1244,18 @@ mod tests {
         assert!(cancel_token.is_cancelled());
     }
 
-    #[tokio::test(flavor = "current_thread")]
+    #[edgerun_tokio::test(flavor = "current_thread")]
     async fn run_before_review_deadline_with_cancel_cancels_token_on_abort() {
         let external_cancel = CancellationToken::new();
         let external_canceller = external_cancel.clone();
         let cancel_token = CancellationToken::new();
-        drop(tokio::spawn(async move {
-            tokio::time::sleep(Duration::from_millis(10)).await;
+        drop(edgerun_tokio::spawn(async move {
+            edgerun_tokio::time::sleep(Duration::from_millis(10)).await;
             external_canceller.cancel();
         }));
 
         let outcome = run_before_review_deadline_with_cancel(
-            tokio::time::Instant::now() + Duration::from_secs(1),
+            edgerun_tokio::time::Instant::now() + Duration::from_secs(1),
             Some(&external_cancel),
             &cancel_token,
             std::future::pending::<()>(),
@@ -1269,12 +1269,12 @@ mod tests {
         assert!(cancel_token.is_cancelled());
     }
 
-    #[tokio::test(flavor = "current_thread")]
+    #[edgerun_tokio::test(flavor = "current_thread")]
     async fn run_before_review_deadline_with_cancel_preserves_token_on_success() {
         let cancel_token = CancellationToken::new();
 
         let outcome = run_before_review_deadline_with_cancel(
-            tokio::time::Instant::now() + Duration::from_secs(1),
+            edgerun_tokio::time::Instant::now() + Duration::from_secs(1),
             /*external_cancel*/ None,
             &cancel_token,
             async { 42usize },
@@ -1325,7 +1325,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn run_review_on_reused_session_waits_for_submitted_turn() {
         let (review_session, tx_event, rx_sub) = test_review_session().await;
         {
@@ -1338,12 +1338,12 @@ mod tests {
         }
         let params = test_review_params().await;
 
-        let review = tokio::spawn(async move {
+        let review = edgerun_tokio::spawn(async move {
             run_review_on_session(
                 &review_session,
                 &params,
                 GuardianReviewSessionKind::TrunkReused,
-                tokio::time::Instant::now() + Duration::from_secs(1),
+                edgerun_tokio::time::Instant::now() + Duration::from_secs(1),
             )
             .await
         });
@@ -1371,7 +1371,7 @@ mod tests {
         assert!(keep_review_session);
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn wait_for_guardian_review_ignores_prior_turn_completion() {
         let (review_session, tx_event, _rx_sub) = test_review_session().await;
         tx_event
@@ -1387,7 +1387,7 @@ mod tests {
         let (outcome, keep_review_session, capture_token_usage) = wait_for_guardian_review(
             &review_session,
             "current-turn",
-            tokio::time::Instant::now() + Duration::from_secs(1),
+            edgerun_tokio::time::Instant::now() + Duration::from_secs(1),
             /*external_cancel*/ None,
             &mut analytics_result,
         )
@@ -1402,7 +1402,7 @@ mod tests {
         assert!(capture_token_usage);
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn wait_for_guardian_review_ignores_prior_turn_errors() {
         let (review_session, tx_event, _rx_sub) = test_review_session().await;
         tx_event
@@ -1428,7 +1428,7 @@ mod tests {
         let (outcome, keep_review_session, capture_token_usage) = wait_for_guardian_review(
             &review_session,
             "current-turn",
-            tokio::time::Instant::now() + Duration::from_secs(1),
+            edgerun_tokio::time::Instant::now() + Duration::from_secs(1),
             /*external_cancel*/ None,
             &mut analytics_result,
         )
@@ -1443,7 +1443,7 @@ mod tests {
         assert!(capture_token_usage);
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn wait_for_guardian_review_ignores_prior_turn_aborts() {
         let (review_session, tx_event, _rx_sub) = test_review_session().await;
         tx_event
@@ -1459,7 +1459,7 @@ mod tests {
         let (outcome, keep_review_session, capture_token_usage) = wait_for_guardian_review(
             &review_session,
             "current-turn",
-            tokio::time::Instant::now() + Duration::from_secs(1),
+            edgerun_tokio::time::Instant::now() + Duration::from_secs(1),
             /*external_cancel*/ None,
             &mut analytics_result,
         )
@@ -1474,7 +1474,7 @@ mod tests {
         assert!(capture_token_usage);
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn wait_for_guardian_review_timeout_drains_expected_turn_after_stale_terminal_event() {
         let (review_session, tx_event, rx_sub) = test_review_session().await;
         tx_event
@@ -1482,7 +1482,7 @@ mod tests {
             .await
             .expect("queue prior turn completion");
         let tx_interrupt_event = tx_event.clone();
-        let interrupt_response = tokio::spawn(async move {
+        let interrupt_response = edgerun_tokio::spawn(async move {
             let submission = rx_sub.recv().await.expect("interrupt submission");
             assert!(matches!(submission.op, Op::Interrupt));
             tx_interrupt_event
@@ -1495,7 +1495,7 @@ mod tests {
         let (outcome, keep_review_session, capture_token_usage) = wait_for_guardian_review(
             &review_session,
             "current-turn",
-            tokio::time::Instant::now() + Duration::from_millis(10),
+            edgerun_tokio::time::Instant::now() + Duration::from_millis(10),
             /*external_cancel*/ None,
             &mut analytics_result,
         )
@@ -1509,7 +1509,7 @@ mod tests {
         assert!(!capture_token_usage);
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn wait_for_guardian_review_cancel_drains_expected_turn_after_stale_terminal_event() {
         let (review_session, tx_event, rx_sub) = test_review_session().await;
         tx_event
@@ -1517,7 +1517,7 @@ mod tests {
             .await
             .expect("queue prior turn completion");
         let tx_interrupt_event = tx_event.clone();
-        let interrupt_response = tokio::spawn(async move {
+        let interrupt_response = edgerun_tokio::spawn(async move {
             let submission = rx_sub.recv().await.expect("interrupt submission");
             assert!(matches!(submission.op, Op::Interrupt));
             tx_interrupt_event
@@ -1532,7 +1532,7 @@ mod tests {
         let (outcome, keep_review_session, capture_token_usage) = wait_for_guardian_review(
             &review_session,
             "current-turn",
-            tokio::time::Instant::now() + Duration::from_secs(1),
+            edgerun_tokio::time::Instant::now() + Duration::from_secs(1),
             Some(&external_cancel),
             &mut analytics_result,
         )
@@ -1546,7 +1546,7 @@ mod tests {
         assert!(!capture_token_usage);
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn interrupt_and_drain_turn_ignores_prior_turn_completion() {
         let (review_session, tx_event, _rx_sub) = test_review_session().await;
         tx_event

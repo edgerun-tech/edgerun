@@ -7,10 +7,10 @@ use std::path::PathBuf;
 use crate::compat::absolute_path::AbsolutePathBuf;
 use crate::compat::absolute_path::canonicalize_preserving_symlinks;
 use edgerun_glob::glob_match_with_separator;
+use edgerun_strum_macros::Display;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
-use strum_macros::Display;
 use tracing::error;
 use ts_rs::TS;
 

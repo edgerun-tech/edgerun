@@ -1297,7 +1297,7 @@ fn blocking_set_path_updates_notifications() {
     assert_eq!(notifications, Some(false));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn async_builder_set_model_persists() {
     let tmp = tempdir().expect("tmpdir");
     let codex_home = tmp.path().to_path_buf();
@@ -1349,7 +1349,7 @@ model_reasoning_effort = "high"
     assert_eq!(contents, initial_expected);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn blocking_set_asynchronous_helpers_available() {
     let tmp = tempdir().expect("tmpdir");
     let codex_home = tmp.path().to_path_buf();

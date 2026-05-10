@@ -615,7 +615,7 @@ mod tests {
     use codex_utils_absolute_path::AbsolutePathBuf;
     use std::sync::Arc;
     use tempfile::tempdir;
-    use tokio::sync::Mutex;
+    use edgerun_tokio::sync::Mutex;
 
     async fn assert_failed_apply_patch_tracks_committed_delta(
         out: Result<ExecToolCallOutput, ToolError>,
@@ -662,7 +662,7 @@ mod tests {
         ));
 
         let unified_diff = loop {
-            let event = tokio::time::timeout(Duration::from_secs(1), rx_event.recv())
+            let event = edgerun_tokio::time::timeout(Duration::from_secs(1), rx_event.recv())
                 .await
                 .expect("turn diff event")
                 .expect("channel open");
@@ -674,7 +674,7 @@ mod tests {
         assert!(unified_diff.contains("+after"));
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn denied_apply_patch_tracks_committed_delta() {
         let output = ExecToolCallOutput {
             exit_code: 1,
@@ -690,7 +690,7 @@ mod tests {
         .await;
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn rejected_apply_patch_tracks_committed_delta() {
         assert_failed_apply_patch_tracks_committed_delta(
             Err(ToolError::Rejected("rejected by user".to_string())),

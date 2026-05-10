@@ -7,7 +7,7 @@ use codex_otel::TURN_TTFM_DURATION_METRIC;
 use codex_otel::TURN_TTFT_DURATION_METRIC;
 use codex_protocol::items::TurnItem;
 use codex_protocol::models::ResponseItem;
-use tokio::sync::Mutex;
+use edgerun_tokio::sync::Mutex;
 
 use crate::ResponseEvent;
 use crate::session::turn_context::TurnContext;

@@ -20,6 +20,6 @@ workspace = true
 edgerun-async-trait = { workspace = true }
 edgerun-error = { workspace = true }
 edgerun-similar = { workspace = true }
-tokio = { workspace = true, features = ["fs", "macros", "rt"] }
+edgerun-tokio = { workspace = true, features = ["fs", "macros", "rt"] }
 tree-sitter = { workspace = true }
 tree-sitter-bash = { workspace = true }

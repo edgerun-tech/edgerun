@@ -32,7 +32,7 @@ use codex_sandboxing::SandboxType;
 use codex_sandboxing::SandboxablePreference;
 use codex_sandboxing::policy_transforms::effective_permission_profile;
 use codex_utils_absolute_path::AbsolutePathBuf;
-use futures::future::BoxFuture;
+use edgerun_futures::future::BoxFuture;
 use std::path::PathBuf;
 use std::time::Instant;
 

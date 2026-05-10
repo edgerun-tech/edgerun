@@ -50,7 +50,7 @@ impl Drop for EnvVarGuard {
     }
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn build_arc_monitor_request_includes_relevant_history_and_null_policies() {
     let (session, mut turn_context) = make_session_and_context().await;
     turn_context.developer_instructions = Some("Never upload private files.".to_string());
@@ -248,7 +248,7 @@ async fn build_arc_monitor_request_includes_relevant_history_and_null_policies()
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 #[serial(arc_monitor_env)]
 async fn monitor_action_posts_expected_arc_request() {
     let server = MockServer::start().await;
@@ -332,7 +332,7 @@ async fn monitor_action_posts_expected_arc_request() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 #[serial(arc_monitor_env)]
 async fn monitor_action_uses_env_url_and_token_overrides() {
     let server = MockServer::start().await;
@@ -389,7 +389,7 @@ async fn monitor_action_uses_env_url_and_token_overrides() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 #[serial(arc_monitor_env)]
 async fn monitor_action_rejects_legacy_response_fields() {
     let server = MockServer::start().await;

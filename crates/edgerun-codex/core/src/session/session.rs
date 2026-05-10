@@ -6,7 +6,7 @@ use codex_protocol::permissions::FileSystemPath;
 use codex_protocol::permissions::FileSystemSpecialPath;
 use codex_protocol::protocol::ThreadSource;
 use codex_protocol::protocol::TurnEnvironmentSelection;
-use tokio::sync::Semaphore;
+use edgerun_tokio::sync::Semaphore;
 
 /// Context for an initialized model agent
 ///
@@ -507,7 +507,7 @@ impl Session {
 
         // Join all independent futures.
         let (thread_persistence_result, state_db_ctx, (auth, mcp_servers, auth_statuses)) =
-            tokio::join!(thread_persistence_fut, state_db_fut, auth_and_mcp_fut);
+            edgerun_tokio::join!(thread_persistence_fut, state_db_fut, auth_and_mcp_fut);
 
         let mut live_thread_init =
             LiveThreadInitGuard::new(thread_persistence_result.map_err(|e| {
@@ -841,7 +841,7 @@ impl Session {
                 tool_approvals: Mutex::new(ApprovalStore::default()),
                 guardian_rejections: Mutex::new(HashMap::new()),
                 guardian_rejection_circuit_breaker: Mutex::new(Default::default()),
-                runtime_handle: tokio::runtime::Handle::current(),
+                runtime_handle: edgerun_tokio::runtime::Handle::current(),
                 skills_manager,
                 plugins_manager: Arc::clone(&plugins_manager),
                 mcp_manager: Arc::clone(&mcp_manager),

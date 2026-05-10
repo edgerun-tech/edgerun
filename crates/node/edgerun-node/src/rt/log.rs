@@ -4,7 +4,7 @@ use core::fmt::{self, Write};
 use core::sync::atomic::{AtomicBool, AtomicPtr, Ordering};
 
 pub use edgerun_log::{
-    Level, clear_format_logger, clear_logger, debug, enabled, error, info, level,
+    LogLevel as Level, clear_format_logger, clear_logger, debug, enabled, error, info, level,
     set_format_logger, set_level, trace, warn,
 };
 

@@ -1,0 +1,29 @@
+[package]
+name = "edgerun-tokio-util"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Edgerun-owned Tokio-util-compatible async utility facade"
+
+[features]
+default = ["compat", "edgerun-runtime"]
+compat = ["dep:tokio-util"]
+edgerun-runtime = ["dep:edgerun-tokio"]
+codec = ["tokio-util?/codec"]
+compat-util = ["tokio-util?/compat"]
+io = ["tokio-util?/io"]
+io-util = ["tokio-util?/io-util"]
+net = ["tokio-util?/net"]
+rt = ["tokio-util?/rt"]
+sync = ["tokio-util?/rt"]
+time = ["tokio-util?/time"]
+
+[dependencies]
+edgerun-tokio = { version = "0.1", path = "../edgerun-tokio", default-features = false, features = ["edgerun-runtime"], optional = true }
+tokio-util = { version = "0.7.18", default-features = false, optional = true }
+
+[lints]
+workspace = true

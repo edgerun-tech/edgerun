@@ -11,18 +11,18 @@ use codex_protocol::protocol::ModelVerification;
 use codex_protocol::protocol::TokenUsage;
 use edgerun_eventsource_stream::Eventsource;
 use edgerun_json::serde_json::Value;
-use futures::StreamExt;
-use futures::TryStreamExt;
+use edgerun_futures::StreamExt;
+use edgerun_futures::TryStreamExt;
 use serde::Deserialize;
 use std::io::BufRead;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::time::Duration;
-use tokio::sync::mpsc;
-use tokio::time::Instant;
-use tokio::time::timeout;
-use tokio_util::io::ReaderStream;
+use edgerun_tokio::sync::mpsc;
+use edgerun_tokio::time::Instant;
+use edgerun_tokio::time::timeout;
+use edgerun_tokio_util::io::ReaderStream;
 use tracing::debug;
 use tracing::trace;
 
@@ -48,7 +48,7 @@ pub fn stream_from_fixture(
     let reader = std::io::Cursor::new(content);
     let stream = ReaderStream::new(reader).map_err(|err| TransportError::Network(err.to_string()));
     let (tx_event, rx_event) = mpsc::channel::<Result<ResponseEvent, ApiError>>(1600);
-    tokio::spawn(process_sse(
+    edgerun_tokio::spawn(process_sse(
         Box::pin(stream),
         tx_event,
         idle_timeout,
@@ -95,7 +95,7 @@ pub fn spawn_response_stream(
         let _ = turn_state.set(header_value.to_string());
     }
     let (tx_event, rx_event) = mpsc::channel::<Result<ResponseEvent, ApiError>>(1600);
-    tokio::spawn(async move {
+    edgerun_tokio::spawn(async move {
         if let Some(model) = server_model {
             let _ = tx_event.send(Ok(ResponseEvent::ServerModel(model))).await;
         }
@@ -610,9 +610,9 @@ mod tests {
     use edgerun_http::HeaderValue;
     use edgerun_http::StatusCode;
     use edgerun_json::serde_json::json;
-    use futures::stream;
+    use edgerun_futures::stream;
     use pretty_assertions::assert_eq;
-    use tokio::sync::mpsc;
+    use edgerun_tokio::sync::mpsc;
     use tokio_test::io::Builder as IoBuilder;
 
     async fn collect_events(chunks: &[&[u8]]) -> Vec<Result<ResponseEvent, ApiError>> {
@@ -625,7 +625,7 @@ mod tests {
         let stream =
             ReaderStream::new(reader).map_err(|err| TransportError::Network(err.to_string()));
         let (tx, mut rx) = mpsc::channel::<Result<ResponseEvent, ApiError>>(16);
-        tokio::spawn(process_sse(
+        edgerun_tokio::spawn(process_sse(
             Box::pin(stream),
             tx,
             idle_timeout(),
@@ -656,7 +656,7 @@ mod tests {
         let (tx, mut rx) = mpsc::channel::<Result<ResponseEvent, ApiError>>(8);
         let stream = ReaderStream::new(std::io::Cursor::new(body))
             .map_err(|err| TransportError::Network(err.to_string()));
-        tokio::spawn(process_sse(
+        edgerun_tokio::spawn(process_sse(
             Box::pin(stream),
             tx,
             idle_timeout(),
@@ -674,7 +674,7 @@ mod tests {
         Duration::from_millis(1000)
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn parses_items_and_completed() {
         let item1 = json!({
             "type": "response.output_item.done",
@@ -740,7 +740,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn error_when_missing_completed() {
         let item1 = json!({
             "type": "response.output_item.done",
@@ -768,7 +768,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn parses_tool_search_call_items() {
         let events = run_sse(vec![
             json!({
@@ -804,7 +804,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn parses_tool_call_input_deltas() {
         let events = run_sse(vec![
             json!({
@@ -836,7 +836,7 @@ mod tests {
         assert_matches!(&events[1], ResponseEvent::Completed { .. });
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn emits_completed_without_stream_end() {
         let completed = json!({
             "type": "response.completed",
@@ -849,14 +849,14 @@ mod tests {
         let stream: ByteStream = Box::pin(stream);
 
         let (tx, mut rx) = mpsc::channel::<Result<ResponseEvent, ApiError>>(8);
-        tokio::spawn(process_sse(
+        edgerun_tokio::spawn(process_sse(
             stream,
             tx,
             idle_timeout(),
             /*telemetry*/ None,
         ));
 
-        let events = tokio::time::timeout(Duration::from_millis(1000), async {
+        let events = edgerun_tokio::time::timeout(Duration::from_millis(1000), async {
             let mut events = Vec::new();
             while let Some(ev) = rx.recv().await {
                 events.push(ev);
@@ -881,7 +881,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn error_when_error_event() {
         let raw_error = r#"{"type":"response.failed","sequence_number":3,"response":{"id":"resp_689bcf18d7f08194bf3440ba62fe05d803fee0cdac429894","object":"response","created_at":1755041560,"status":"failed","background":false,"error":{"code":"rate_limit_exceeded","message":"Rate limit reached for gpt-5.1 in organization org-AAA on tokens per min (TPM): Limit 30000, Used 22999, Requested 12528. Please try again in 11.054s. Visit https://platform.openai.com/account/rate-limits to learn more."}, "usage":null,"user":null,"metadata":{}}}"#;
 
@@ -903,7 +903,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn context_window_error_is_fatal() {
         let raw_error = r#"{"type":"response.failed","sequence_number":3,"response":{"id":"resp_5c66275b97b9baef1ed95550adb3b7ec13b17aafd1d2f11b","object":"response","created_at":1759510079,"status":"failed","background":false,"error":{"code":"context_length_exceeded","message":"Your input exceeds the context window of this model. Please adjust your input and try again."},"usage":null,"user":null,"metadata":{}}}"#;
 
@@ -916,7 +916,7 @@ mod tests {
         assert_matches!(events[0], Err(ApiError::ContextWindowExceeded));
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn context_window_error_with_newline_is_fatal() {
         let raw_error = r#"{"type":"response.failed","sequence_number":4,"response":{"id":"resp_fatal_newline","object":"response","created_at":1759510080,"status":"failed","background":false,"error":{"code":"context_length_exceeded","message":"Your input exceeds the context window of this model. Please adjust your input and try\nagain."},"usage":null,"user":null,"metadata":{}}}"#;
 
@@ -929,7 +929,7 @@ mod tests {
         assert_matches!(events[0], Err(ApiError::ContextWindowExceeded));
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn quota_exceeded_error_is_fatal() {
         let raw_error = r#"{"type":"response.failed","sequence_number":3,"response":{"id":"resp_fatal_quota","object":"response","created_at":1759771626,"status":"failed","background":false,"error":{"code":"insufficient_quota","message":"You exceeded your current quota, please check your plan and billing details. For more information on this error, read the docs: https://platform.openai.com/docs/guides/error-codes/api-errors."},"incomplete_details":null}}"#;
 
@@ -942,7 +942,7 @@ mod tests {
         assert_matches!(events[0], Err(ApiError::QuotaExceeded));
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn cyber_policy_error_is_fatal() {
         let raw_error = r#"{"type":"response.failed","sequence_number":3,"response":{"id":"resp_fatal_cyber","object":"response","created_at":1759771626,"status":"failed","background":false,"error":{"code":"cyber_policy","message":"This request was flagged for cyber policy."},"incomplete_details":null}}"#;
 
@@ -960,7 +960,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn cyber_policy_error_uses_fallback_for_empty_message() {
         let raw_error = r#"{"type":"response.failed","sequence_number":3,"response":{"id":"resp_fatal_cyber","object":"response","created_at":1759771626,"status":"failed","background":false,"error":{"code":"cyber_policy","message":"   "},"incomplete_details":null}}"#;
 
@@ -981,7 +981,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn invalid_prompt_without_type_is_invalid_request() {
         let raw_error = r#"{"type":"response.failed","sequence_number":3,"response":{"id":"resp_invalid_prompt_no_type","object":"response","created_at":1759771628,"status":"failed","background":false,"error":{"code":"invalid_prompt","message":"Invalid prompt: we've limited access to this content for safety reasons."},"incomplete_details":null}}"#;
 
@@ -1002,7 +1002,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn table_driven_event_kinds() {
         struct TestCase {
             name: &'static str,
@@ -1080,7 +1080,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn spawn_response_stream_emits_header_events() {
         let mut headers = HeaderMap::new();
         headers.insert(REQUEST_ID_HEADER, HeaderValue::from_static("req-1"));
@@ -1116,7 +1116,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn spawn_response_stream_ignores_model_verification_header() {
         let mut headers = HeaderMap::new();
         headers.insert(
@@ -1153,7 +1153,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn process_sse_ignores_response_model_field_in_payload() {
         let events = run_sse(vec![
             json!({
@@ -1185,7 +1185,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn process_sse_emits_server_model_from_response_headers_payload() {
         let events = run_sse(vec![
             json!({
@@ -1222,7 +1222,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn process_sse_emits_model_verification_field() {
         let events = run_sse(vec![
             json!({

@@ -8,7 +8,7 @@ use pretty_assertions::assert_eq;
 
 const CONFIG_TOML: &str = "config.toml";
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn override_turn_context_does_not_persist_when_config_exists() {
     let server = start_mock_server().await;
     let initial_contents = "model = \"gpt-4o\"\n";
@@ -45,13 +45,13 @@ async fn override_turn_context_does_not_persist_when_config_exists() {
     codex.submit(Op::Shutdown).await.expect("request shutdown");
     wait_for_event(&codex, |ev| matches!(ev, EventMsg::ShutdownComplete)).await;
 
-    let contents = tokio::fs::read_to_string(&config_path)
+    let contents = edgerun_tokio::fs::read_to_string(&config_path)
         .await
         .expect("read config.toml after override");
     assert_eq!(contents, initial_contents);
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn override_turn_context_does_not_create_config_file() {
     let server = start_mock_server().await;
     let mut builder = test_codex();

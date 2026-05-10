@@ -69,7 +69,7 @@ fn call_output_content_and_success(
     (content, success)
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn request_user_input_round_trip_resolves_pending() -> anyhow::Result<()> {
     request_user_input_round_trip_for_mode(ModeKind::Plan).await
 }
@@ -289,7 +289,7 @@ where
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn request_user_input_rejected_in_execute_mode_alias() -> anyhow::Result<()> {
     assert_request_user_input_rejected("Execute", |model| CollaborationMode {
         mode: ModeKind::Execute,
@@ -302,7 +302,7 @@ async fn request_user_input_rejected_in_execute_mode_alias() -> anyhow::Result<(
     .await
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn request_user_input_rejected_in_default_mode_by_default() -> anyhow::Result<()> {
     assert_request_user_input_rejected("Default", |model| CollaborationMode {
         mode: ModeKind::Default,
@@ -315,12 +315,12 @@ async fn request_user_input_rejected_in_default_mode_by_default() -> anyhow::Res
     .await
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn request_user_input_round_trip_in_default_mode_with_feature() -> anyhow::Result<()> {
     request_user_input_round_trip_for_mode(ModeKind::Default).await
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn request_user_input_rejected_in_pair_mode_alias() -> anyhow::Result<()> {
     assert_request_user_input_rejected("Pair Programming", |model| CollaborationMode {
         mode: ModeKind::PairProgramming,

@@ -47,7 +47,18 @@ pub fn detect_all(features: &[&str]) -> bool {
     features.iter().all(|feature| detect(feature))
 }
 
-#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+#[cfg(all(
+    any(target_arch = "x86", target_arch = "x86_64"),
+    any(target_env = "sgx", target_os = "none", target_os = "uefi")
+))]
+fn detect(_feature: &str) -> bool {
+    false
+}
+
+#[cfg(all(
+    any(target_arch = "x86", target_arch = "x86_64"),
+    not(any(target_env = "sgx", target_os = "none", target_os = "uefi"))
+))]
 fn detect(feature: &str) -> bool {
     #[cfg(target_arch = "x86")]
     use core::arch::x86::{__cpuid, __cpuid_count};
@@ -58,11 +69,6 @@ fn detect(feature: &str) -> bool {
     use core::arch::x86 as arch;
     #[cfg(target_arch = "x86_64")]
     use core::arch::x86_64 as arch;
-
-    #[cfg(any(target_env = "sgx", target_os = "none", target_os = "uefi"))]
-    {
-        return false;
-    }
 
     let leaf1 = __cpuid(1);
     let leaf7 = __cpuid_count(7, 0);

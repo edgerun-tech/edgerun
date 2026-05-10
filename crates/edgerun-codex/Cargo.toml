@@ -84,6 +84,7 @@ edgerun-deno-core-icudata = { path = "../utility/edgerun-deno-core-icudata" }
 edgerun-encoding = { path = "../utility/edgerun-encoding", default-features = false }
 edgerun-error = { path = "../utility/edgerun-error", features = ["anyhow-compat"] }
 edgerun-eventsource-stream = { path = "../utility/edgerun-eventsource-stream" }
+edgerun-futures = { path = "../utility/edgerun-futures" }
 edgerun-glob = { path = "../utility/edgerun-glob", default-features = false }
 edgerun-http = { path = "../utility/edgerun-http" }
 edgerun-inventory = { path = "../utility/edgerun-inventory" }
@@ -91,21 +92,25 @@ edgerun-json = { path = "../utility/edgerun-json", default-features = false, fea
 edgerun-locale = { path = "../utility/edgerun-locale" }
 edgerun-quick-xml = { path = "../utility/edgerun-quick-xml" }
 edgerun-random = { path = "../utility/edgerun-random" }
+edgerun-reqwest = { path = "../utility/edgerun-reqwest", features = ["native-root"] }
+edgerun-serde-with = { path = "../utility/edgerun-serde-with" }
 edgerun-shlex = { path = "../utility/edgerun-shlex", default-features = false }
 edgerun-similar = { path = "../utility/edgerun-similar" }
+edgerun-strum = { path = "../utility/edgerun-strum" }
+edgerun-strum-macros = { path = "../utility/edgerun-strum-macros" }
 edgerun-time = { path = "../utility/edgerun-time", default-features = false, features = ["chrono"] }
+edgerun-tokio = { path = "../utility/edgerun-tokio" }
 edgerun-tokio-tungstenite = { path = "../utility/edgerun-tokio-tungstenite", features = ["proxy", "rustls-tls-native-roots"] }
+edgerun-tokio-util = { path = "../utility/edgerun-tokio-util" }
 edgerun-tungstenite = { path = "../utility/edgerun-tungstenite", features = ["deflate", "proxy"] }
 edgerun-url = { path = "../utility/edgerun-url", default-features = false }
 edgerun-uuid = { path = "../utility/edgerun-uuid", features = ["serde", "v4", "v7"] }
 edgerun-zstd = { path = "../utility/edgerun-zstd" }
-futures = { version = "0.3", default-features = false }
 icu_decimal = "2.1"
 icu_locale_core = "2.1"
 icu_provider = { version = "2.1", features = ["sync"] }
 landlock = "0.4.4"
 opentelemetry = "0.31.0"
-reqwest = { version = "0.12", features = ["cookies"] }
 rmcp = { version = "0.15.0", default-features = false }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 rustls-native-certs = "0.8.3"
@@ -113,11 +118,6 @@ rustls-pki-types = "1.14.0"
 schemars = "0.8.22"
 seccompiler = "0.5.0"
 serde = "1"
-serde_with = "3.17"
-strum = "0.27.2"
-strum_macros = "0.28.0"
-tokio = "1"
-tokio-util = "0.7.18"
 tracing = { package = "edgerun-log", path = "../utility/edgerun-log", features = ["tracing-compat"] }
 tracing-opentelemetry = "0.32.0"
 tree-sitter = "0.25.10"

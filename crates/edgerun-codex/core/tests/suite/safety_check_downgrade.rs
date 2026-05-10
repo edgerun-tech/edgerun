@@ -58,7 +58,7 @@ fn disabled_text_turn(test: &TestCodex, text: &str) -> Op {
     }
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn openai_model_header_mismatch_emits_warning_event_and_warning_item() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -130,7 +130,7 @@ async fn openai_model_header_mismatch_emits_warning_event_and_warning_item() -> 
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn cyber_policy_response_emits_typed_error_without_retry() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -164,7 +164,7 @@ async fn cyber_policy_response_emits_typed_error_without_retry() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn response_model_field_mismatch_emits_warning_when_header_matches_requested() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -226,7 +226,7 @@ async fn response_model_field_mismatch_emits_warning_when_header_matches_request
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn openai_model_header_mismatch_only_emits_one_warning_per_turn() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -278,7 +278,7 @@ async fn openai_model_header_mismatch_only_emits_one_warning_per_turn() -> Resul
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn openai_model_header_casing_only_mismatch_does_not_warn() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -319,7 +319,7 @@ async fn openai_model_header_casing_only_mismatch_does_not_warn() -> Result<()> 
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn model_verification_emits_structured_event_without_reroute_or_warning() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -379,7 +379,7 @@ async fn model_verification_emits_structured_event_without_reroute_or_warning() 
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn model_verification_only_emits_once_per_turn() -> Result<()> {
     skip_if_no_network!(Ok(()));
 

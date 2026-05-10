@@ -8,7 +8,7 @@ where
     T: Deserialize<'de>,
     D: Deserializer<'de>,
 {
-    serde_with::rust::double_option::deserialize(deserializer)
+    edgerun_serde_with::rust::double_option::deserialize(deserializer)
 }
 
 pub fn serialize_double_option<T, S>(
@@ -19,5 +19,5 @@ where
     T: Serialize,
     S: Serializer,
 {
-    serde_with::rust::double_option::serialize(value, serializer)
+    edgerun_serde_with::rust::double_option::serialize(value, serializer)
 }

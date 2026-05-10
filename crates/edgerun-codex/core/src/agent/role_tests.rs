@@ -32,7 +32,7 @@ async fn test_config_with_cli_overrides(
 
 async fn write_role_config(home: &TempDir, name: &str, contents: &str) -> PathBuf {
     let role_path = home.path().join(name);
-    tokio::fs::write(&role_path, contents)
+    edgerun_tokio::fs::write(&role_path, contents)
         .await
         .expect("write role config");
     role_path
@@ -50,7 +50,7 @@ fn session_flags_layer_count(config: &Config) -> usize {
         .count()
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn apply_role_defaults_to_default_and_leaves_config_unchanged() {
     let (_home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
     let before = config.clone();
@@ -62,7 +62,7 @@ async fn apply_role_defaults_to_default_and_leaves_config_unchanged() {
     assert_eq!(before, config);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn apply_role_returns_error_for_unknown_role() {
     let (_home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
 
@@ -73,7 +73,7 @@ async fn apply_role_returns_error_for_unknown_role() {
     assert_eq!(err, "unknown agent_type 'missing-role'");
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 #[ignore = "No role requiring it for now"]
 async fn apply_explorer_role_sets_model_and_adds_session_flags_layer() {
     let (_home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
@@ -88,7 +88,7 @@ async fn apply_explorer_role_sets_model_and_adds_session_flags_layer() {
     assert_eq!(session_flags_layer_count(&config), before_layers + 1);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn apply_empty_explorer_role_preserves_current_model_and_reasoning_effort() {
     let (_home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
     let before_layers = session_flags_layer_count(&config);
@@ -104,7 +104,7 @@ async fn apply_empty_explorer_role_preserves_current_model_and_reasoning_effort(
     assert_eq!(session_flags_layer_count(&config), before_layers);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn apply_role_returns_unavailable_for_missing_user_role_file() {
     let (_home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
     config.agent_roles.insert(
@@ -123,7 +123,7 @@ async fn apply_role_returns_unavailable_for_missing_user_role_file() {
     assert_eq!(err, AGENT_TYPE_UNAVAILABLE_ERROR);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn apply_role_returns_unavailable_for_invalid_user_role_toml() {
     let (home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
     let role_path = write_role_config(&home, "invalid-role.toml", "model = [").await;
@@ -143,7 +143,7 @@ async fn apply_role_returns_unavailable_for_invalid_user_role_toml() {
     assert_eq!(err, AGENT_TYPE_UNAVAILABLE_ERROR);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn apply_role_ignores_agent_metadata_fields_in_user_role_file() {
     let (home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
     let role_path = write_role_config(
@@ -174,7 +174,7 @@ model = "role-model"
     assert_eq!(config.model.as_deref(), Some("role-model"));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn apply_role_preserves_unspecified_keys() {
     let (home, mut config) = test_config_with_cli_overrides(vec![(
         "model".to_string(),
@@ -214,10 +214,10 @@ async fn apply_role_preserves_unspecified_keys() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn apply_role_preserves_active_profile_and_model_provider() {
     let home = TempDir::new().expect("create temp dir");
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         home.path().join(CONFIG_TOML_FILE),
         r#"
 [model_providers.test-provider]
@@ -266,10 +266,10 @@ model_provider = "test-provider"
     assert_eq!(config.model_provider.name, "Test Provider");
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn apply_role_top_level_profile_settings_override_preserved_profile() {
     let home = TempDir::new().expect("create temp dir");
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         home.path().join(CONFIG_TOML_FILE),
         r#"
 [profiles.base-profile]
@@ -325,10 +325,10 @@ model_verbosity = "high"
     assert_eq!(config.model_verbosity, Some(Verbosity::High));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn apply_role_uses_role_profile_instead_of_current_profile() {
     let home = TempDir::new().expect("create temp dir");
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         home.path().join(CONFIG_TOML_FILE),
         r#"
 [model_providers.base-provider]
@@ -386,10 +386,10 @@ model_provider = "role-provider"
     assert_eq!(config.model_provider.name, "Role Provider");
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn apply_role_uses_role_model_provider_instead_of_current_profile_provider() {
     let home = TempDir::new().expect("create temp dir");
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         home.path().join(CONFIG_TOML_FILE),
         r#"
 [model_providers.base-provider]
@@ -444,10 +444,10 @@ model_provider = "base-provider"
     assert_eq!(config.model_provider.name, "Role Provider");
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn apply_role_uses_active_profile_model_provider_update() {
     let home = TempDir::new().expect("create temp dir");
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         home.path().join(CONFIG_TOML_FILE),
         r#"
 [model_providers.base-provider]
@@ -509,7 +509,7 @@ model_reasoning_effort = "high"
     assert_eq!(config.model_reasoning_effort, Some(ReasoningEffort::High));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 #[cfg(not(windows))]
 async fn apply_role_does_not_materialize_default_sandbox_workspace_write_fields() {
     use codex_protocol::protocol::SandboxPolicy;
@@ -582,7 +582,7 @@ writable_roots = ["./sandbox-root"]
     }
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn apply_role_takes_precedence_over_existing_session_flags_for_same_key() {
     let (home, mut config) = test_config_with_cli_overrides(vec![(
         "model".to_string(),
@@ -614,7 +614,7 @@ async fn apply_role_takes_precedence_over_existing_session_flags_for_same_key() 
 }
 
 #[cfg_attr(windows, ignore)]
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn apply_role_skills_config_disables_skill_for_spawned_agent() {
     let (home, mut config) = test_config_with_cli_overrides(Vec::new()).await;
     let skill_dir = home.path().join("skills").join("demo");

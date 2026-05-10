@@ -87,19 +87,19 @@ use codex_rollout_trace::InferenceTraceContext;
 use codex_tools::create_tools_json_for_responses_api;
 use edgerun_eventsource_stream::Event;
 use edgerun_eventsource_stream::EventStreamError;
-use futures::StreamExt;
+use edgerun_futures::StreamExt;
 use edgerun_http::HeaderMap as ApiHeaderMap;
 use edgerun_http::HeaderValue;
 use edgerun_http::StatusCode as HttpStatusCode;
-use reqwest::StatusCode;
+use edgerun_reqwest::StatusCode;
 use std::time::Duration;
 use std::time::Instant;
-use tokio::sync::mpsc;
-use tokio::sync::oneshot;
-use tokio::sync::oneshot::error::TryRecvError;
+use edgerun_tokio::sync::mpsc;
+use edgerun_tokio::sync::oneshot;
+use edgerun_tokio::sync::oneshot::error::TryRecvError;
 use edgerun_tokio_tungstenite::Error;
 use edgerun_tokio_tungstenite::Message;
-use tokio_util::sync::CancellationToken;
+use edgerun_tokio_util::sync::CancellationToken;
 use tracing::debug;
 use tracing::instrument;
 use tracing::trace;
@@ -786,7 +786,7 @@ impl ModelClient {
         );
         let websocket_connect_timeout = self.state.provider.info().websocket_connect_timeout();
         let start = Instant::now();
-        let result = match tokio::time::timeout(
+        let result = match edgerun_tokio::time::timeout(
             websocket_connect_timeout,
             ApiWebSocketResponsesClient::new(api_provider, api_auth).connect(
                 headers,
@@ -1694,7 +1694,7 @@ fn map_response_events<S>(
     inference_trace_attempt: InferenceTraceAttempt,
 ) -> (ResponseStream, oneshot::Receiver<LastResponse>)
 where
-    S: futures::Stream<Item = std::result::Result<ResponseEvent, ApiError>>
+    S: edgerun_futures::Stream<Item = std::result::Result<ResponseEvent, ApiError>>
         + Unpin
         + Send
         + 'static,
@@ -1705,7 +1705,7 @@ where
     let consumer_dropped = CancellationToken::new();
     let consumer_dropped_for_stream = consumer_dropped.clone();
 
-    tokio::spawn(async move {
+    edgerun_tokio::spawn(async move {
         let mut logged_error = false;
         let mut tx_last_response = Some(tx_last_response);
         let mut items_added: Vec<ResponseItem> = Vec::new();
@@ -1715,7 +1715,7 @@ where
             feedback_tags!(last_model_request_id = upstream_request_id);
         }
         loop {
-            let event = tokio::select! {
+            let event = edgerun_tokio::select! {
                 _ = consumer_dropped.cancelled() => {
                     inference_trace_attempt.record_cancelled(
                         STREAM_DROPPED_REASON,
@@ -2113,7 +2113,7 @@ impl SseTelemetry for ApiTelemetry {
         &self,
         result: &std::result::Result<
             Option<std::result::Result<Event, EventStreamError<TransportError>>>,
-            tokio::time::error::Elapsed,
+            edgerun_tokio::time::error::Elapsed,
         >,
         duration: Duration,
     ) {

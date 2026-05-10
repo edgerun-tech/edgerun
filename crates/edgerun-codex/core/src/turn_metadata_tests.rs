@@ -11,7 +11,7 @@ use pretty_assertions::assert_eq;
 use edgerun_json::serde_json::Value;
 use std::collections::HashMap;
 use tempfile::TempDir;
-use tokio::process::Command;
+use edgerun_tokio::process::Command;
 
 fn test_mcp_turn_metadata_context() -> McpTurnMetadataContext<'static> {
     McpTurnMetadataContext {
@@ -20,7 +20,7 @@ fn test_mcp_turn_metadata_context() -> McpTurnMetadataContext<'static> {
     }
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn build_turn_metadata_header_includes_has_changes_for_clean_repo() {
     let temp_dir = TempDir::new().expect("temp dir");
     let repo_path = temp_dir.path().join("repo-東京").abs();

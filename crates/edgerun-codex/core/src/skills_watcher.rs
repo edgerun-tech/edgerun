@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::runtime::Handle;
-use tokio::sync::broadcast;
+use edgerun_tokio::runtime::Handle;
+use edgerun_tokio::sync::broadcast;
 use tracing::warn;
 
 use crate::SkillsManager;
@@ -95,10 +95,10 @@ impl SkillsWatcher {
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
-    use tokio::time::Duration;
-    use tokio::time::timeout;
+    use edgerun_tokio::time::Duration;
+    use edgerun_tokio::time::timeout;
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn forwards_file_watcher_events() {
         let file_watcher = Arc::new(FileWatcher::noop());
         let skills_watcher = SkillsWatcher::new(&file_watcher);

@@ -31,11 +31,11 @@ use indexmap::IndexMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
-use tokio::sync::Mutex;
-use tokio::sync::Notify;
-use tokio::sync::OnceCell;
-use tokio::sync::RwLock;
-use tokio_util::sync::CancellationToken;
+use edgerun_tokio::sync::Mutex;
+use edgerun_tokio::sync::Notify;
+use edgerun_tokio::sync::OnceCell;
+use edgerun_tokio::sync::RwLock;
+use edgerun_tokio_util::sync::CancellationToken;
 use tracing::warn;
 use edgerun_uuid::Uuid;
 

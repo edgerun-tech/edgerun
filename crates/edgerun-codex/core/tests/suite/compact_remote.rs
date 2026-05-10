@@ -41,7 +41,7 @@ use core_test_support::wait_for_event_with_timeout;
 use edgerun_json::serde_json::Value;
 use edgerun_json::serde_json::json;
 use pretty_assertions::assert_eq;
-use tokio::time::Duration;
+use edgerun_tokio::time::Duration;
 use wiremock::ResponseTemplate;
 
 fn approx_token_count(text: &str) -> i64 {
@@ -281,7 +281,7 @@ async fn wait_for_turn_complete(codex: &codex_core::CodexThread) {
     .await;
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_compact_replaces_history_for_followups() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -663,7 +663,7 @@ async fn assert_remote_manual_compact_request_parity(
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_manual_compact_api_auth_reuses_prompt_cache_key() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -679,7 +679,7 @@ async fn remote_manual_compact_api_auth_reuses_prompt_cache_key() -> Result<()> 
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_manual_compact_chatgpt_auth_reuses_service_tier_and_prompt_cache_key() -> Result<()>
 {
     skip_if_no_network!(Ok(()));
@@ -696,7 +696,7 @@ async fn remote_manual_compact_chatgpt_auth_reuses_service_tier_and_prompt_cache
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_compact_v2_reuses_context_compaction_for_followups() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -804,7 +804,7 @@ async fn remote_compact_v2_reuses_context_compaction_for_followups() -> Result<(
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_compact_v2_accepts_additional_output_items_before_context_compaction() -> Result<()>
 {
     skip_if_no_network!(Ok(()));
@@ -893,7 +893,7 @@ async fn remote_compact_v2_accepts_additional_output_items_before_context_compac
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_compact_filters_deferred_dynamic_tools() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -987,7 +987,7 @@ async fn remote_compact_filters_deferred_dynamic_tools() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_compact_runs_automatically() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -1061,7 +1061,7 @@ async fn remote_compact_runs_automatically() -> Result<()> {
 }
 
 #[cfg_attr(target_os = "windows", ignore)]
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_compact_trims_function_call_history_to_fit_context_window() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -1182,7 +1182,7 @@ async fn remote_compact_trims_function_call_history_to_fit_context_window() -> R
 }
 
 #[cfg_attr(target_os = "windows", ignore)]
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn auto_remote_compact_trims_function_call_history_to_fit_context_window() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -1326,7 +1326,7 @@ async fn auto_remote_compact_trims_function_call_history_to_fit_context_window()
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn auto_remote_compact_failure_stops_agent_loop() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -1424,7 +1424,7 @@ async fn auto_remote_compact_failure_stops_agent_loop() -> Result<()> {
 }
 
 #[cfg_attr(target_os = "windows", ignore)]
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_compact_trim_estimate_uses_session_base_instructions() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -1636,7 +1636,7 @@ async fn remote_compact_trim_estimate_uses_session_base_instructions() -> Result
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_manual_compact_emits_context_compaction_items() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -1716,7 +1716,7 @@ async fn remote_manual_compact_emits_context_compaction_items() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_manual_compact_failure_emits_task_error_event() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -1777,7 +1777,7 @@ async fn remote_manual_compact_failure_emits_task_error_event() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 // TODO(ccunningham): Re-enable after the follow-up compaction behavior PR lands.
 // Current main behavior for rollout replacement-history persistence is known-incorrect.
 #[ignore = "behavior change covered in follow-up compaction PR"]
@@ -1910,7 +1910,7 @@ async fn remote_compact_persists_replacement_history_in_rollout() -> Result<()> 
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_compact_and_resume_refresh_stale_developer_instructions() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -2058,7 +2058,7 @@ async fn remote_compact_and_resume_refresh_stale_developer_instructions() -> Res
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_compact_refreshes_stale_developer_instructions_without_resume() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -2152,7 +2152,7 @@ async fn remote_compact_refreshes_stale_developer_instructions_without_resume() 
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn snapshot_request_shape_remote_pre_turn_compaction_restates_realtime_start() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -2242,7 +2242,7 @@ async fn snapshot_request_shape_remote_pre_turn_compaction_restates_realtime_sta
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn remote_request_uses_custom_experimental_realtime_start_instructions() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -2291,7 +2291,7 @@ async fn remote_request_uses_custom_experimental_realtime_start_instructions() -
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn snapshot_request_shape_remote_pre_turn_compaction_restates_realtime_end() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -2382,7 +2382,7 @@ async fn snapshot_request_shape_remote_pre_turn_compaction_restates_realtime_end
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn snapshot_request_shape_remote_manual_compact_restates_realtime_start() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -2473,7 +2473,7 @@ async fn snapshot_request_shape_remote_manual_compact_restates_realtime_start() 
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn snapshot_request_shape_remote_mid_turn_compaction_does_not_restate_realtime_end()
 -> Result<()> {
     skip_if_no_network!(Ok(()));
@@ -2578,7 +2578,7 @@ async fn snapshot_request_shape_remote_mid_turn_compaction_does_not_restate_real
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn snapshot_request_shape_remote_compact_resume_restates_realtime_end() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -2685,7 +2685,7 @@ async fn snapshot_request_shape_remote_compact_resume_restates_realtime_end() ->
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 // TODO(ccunningham): Update once remote pre-turn compaction includes incoming user input.
 async fn snapshot_request_shape_remote_pre_turn_compaction_including_incoming_user_message()
 -> Result<()> {
@@ -2791,7 +2791,7 @@ async fn snapshot_request_shape_remote_pre_turn_compaction_including_incoming_us
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn snapshot_request_shape_remote_pre_turn_compaction_strips_incoming_model_switch()
 -> Result<()> {
     skip_if_no_network!(Ok(()));
@@ -2934,7 +2934,7 @@ async fn snapshot_request_shape_remote_pre_turn_compaction_strips_incoming_model
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 // TODO(ccunningham): Update once remote pre-turn compaction context-overflow handling includes
 // incoming user input and emits richer oversized-input messaging.
 async fn snapshot_request_shape_remote_pre_turn_compaction_context_window_exceeded() -> Result<()> {
@@ -3040,7 +3040,7 @@ async fn snapshot_request_shape_remote_pre_turn_compaction_context_window_exceed
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn snapshot_request_shape_remote_mid_turn_continuation_compaction() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -3111,7 +3111,7 @@ async fn snapshot_request_shape_remote_mid_turn_continuation_compaction() -> Res
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn snapshot_request_shape_remote_mid_turn_compaction_summary_only_reinjects_context()
 -> Result<()> {
     skip_if_no_network!(Ok(()));
@@ -3196,7 +3196,7 @@ async fn snapshot_request_shape_remote_mid_turn_compaction_summary_only_reinject
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn snapshot_request_shape_remote_mid_turn_compaction_multi_summary_reinjects_above_last_summary()
 -> Result<()> {
     skip_if_no_network!(Ok(()));
@@ -3307,7 +3307,7 @@ async fn snapshot_request_shape_remote_mid_turn_compaction_multi_summary_reinjec
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn snapshot_request_shape_remote_manual_compact_without_previous_user_messages() -> Result<()>
 {
     skip_if_no_network!(Ok(()));

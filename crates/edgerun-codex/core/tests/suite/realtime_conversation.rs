@@ -48,8 +48,8 @@ use std::process::Command;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
-use tokio::sync::oneshot;
-use tokio::time::timeout;
+use edgerun_tokio::sync::oneshot;
+use edgerun_tokio::time::timeout;
 use wiremock::Match;
 use wiremock::Mock;
 use wiremock::Request as WiremockRequest;
@@ -158,7 +158,7 @@ async fn wait_for_matching_websocket_request<F>(
 where
     F: Fn(&core_test_support::responses::WebSocketRequest) -> bool,
 {
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(10);
+    let deadline = edgerun_tokio::time::Instant::now() + Duration::from_secs(10);
     loop {
         if let Some(request) = server
             .connections()
@@ -171,10 +171,10 @@ where
         }
 
         assert!(
-            tokio::time::Instant::now() < deadline,
+            edgerun_tokio::time::Instant::now() < deadline,
             "timed out waiting for {description}"
         );
-        tokio::time::sleep(Duration::from_millis(10)).await;
+        edgerun_tokio::time::sleep(Duration::from_millis(10)).await;
     }
 }
 
@@ -242,7 +242,7 @@ async fn seed_recent_thread(
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn conversation_start_audio_text_close_round_trip() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -407,7 +407,7 @@ async fn conversation_start_audio_text_close_round_trip() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn conversation_start_defaults_to_v2_and_gpt_realtime_1_5() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -467,7 +467,7 @@ async fn conversation_start_defaults_to_v2_and_gpt_realtime_1_5() -> Result<()> 
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn conversation_webrtc_start_posts_generated_session() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -646,7 +646,7 @@ async fn conversation_webrtc_start_posts_generated_session() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn conversation_webrtc_close_while_sideband_connecting_drops_pending_join() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -736,7 +736,7 @@ async fn conversation_webrtc_close_while_sideband_connecting_drops_pending_join(
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn conversation_webrtc_sideband_connect_failure_closes_with_error() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -816,7 +816,7 @@ async fn conversation_webrtc_sideband_connect_failure_closes_with_error() -> Res
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn conversation_start_uses_openai_env_key_fallback_with_chatgpt_auth() -> Result<()> {
     if std::env::var_os(REALTIME_CONVERSATION_TEST_SUBPROCESS_ENV_VAR).is_none() {
         return run_realtime_conversation_test_in_subprocess(
@@ -892,7 +892,7 @@ async fn conversation_start_uses_openai_env_key_fallback_with_chatgpt_auth() -> 
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn conversation_transport_close_emits_closed_event() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -953,7 +953,7 @@ async fn conversation_transport_close_emits_closed_event() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn conversation_audio_before_start_emits_error() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -985,7 +985,7 @@ async fn conversation_audio_before_start_emits_error() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn conversation_start_preflight_failure_emits_realtime_error_only() -> Result<()> {
     if std::env::var_os(REALTIME_CONVERSATION_TEST_SUBPROCESS_ENV_VAR).is_none() {
         return run_realtime_conversation_test_in_subprocess(
@@ -1033,7 +1033,7 @@ async fn conversation_start_preflight_failure_emits_realtime_error_only() -> Res
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn conversation_start_connect_failure_emits_realtime_error_only() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -1077,7 +1077,7 @@ async fn conversation_start_connect_failure_emits_realtime_error_only() -> Resul
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn conversation_text_before_start_emits_error() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -1103,7 +1103,7 @@ async fn conversation_text_before_start_emits_error() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn conversation_second_start_replaces_runtime() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -1227,7 +1227,7 @@ async fn conversation_second_start_replaces_runtime() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn conversation_uses_experimental_realtime_ws_base_url_override() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -1290,7 +1290,7 @@ async fn conversation_uses_experimental_realtime_ws_base_url_override() -> Resul
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn conversation_uses_default_realtime_backend_prompt() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -1353,7 +1353,7 @@ async fn conversation_uses_default_realtime_backend_prompt() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn conversation_uses_empty_instructions_for_null_or_empty_prompt() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -1428,7 +1428,7 @@ async fn conversation_uses_empty_instructions_for_null_or_empty_prompt() -> Resu
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn conversation_uses_explicit_start_voice() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -1480,7 +1480,7 @@ async fn conversation_uses_explicit_start_voice() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn conversation_uses_configured_realtime_voice() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -1535,7 +1535,7 @@ async fn conversation_uses_configured_realtime_voice() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn conversation_rejects_voice_for_wrong_realtime_version() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -1566,7 +1566,7 @@ async fn conversation_rejects_voice_for_wrong_realtime_version() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn conversation_uses_experimental_realtime_ws_backend_prompt_override() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -1622,7 +1622,7 @@ async fn conversation_uses_experimental_realtime_ws_backend_prompt_override() ->
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn conversation_uses_experimental_realtime_ws_startup_context_override() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -1687,7 +1687,7 @@ async fn conversation_uses_experimental_realtime_ws_startup_context_override() -
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn conversation_disables_realtime_startup_context_with_empty_override() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -1751,7 +1751,7 @@ async fn conversation_disables_realtime_startup_context_with_empty_override() ->
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn conversation_start_injects_startup_context_from_thread_history() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -1817,7 +1817,7 @@ async fn conversation_start_injects_startup_context_from_thread_history() -> Res
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn conversation_startup_context_current_thread_selects_many_turns_by_budget() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -1975,7 +1975,7 @@ async fn conversation_startup_context_current_thread_selects_many_turns_by_budge
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn conversation_startup_context_falls_back_to_workspace_map() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -2028,7 +2028,7 @@ async fn conversation_startup_context_falls_back_to_workspace_map() -> Result<()
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn conversation_startup_context_is_truncated_and_sent_once_per_start() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -2099,7 +2099,7 @@ async fn conversation_startup_context_is_truncated_and_sent_once_per_start() -> 
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn conversation_user_text_turn_is_sent_to_realtime_when_active() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -2226,7 +2226,7 @@ async fn conversation_user_text_turn_is_sent_to_realtime_when_active() -> Result
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn conversation_user_text_turn_is_capped_when_mirrored_to_realtime() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -2349,7 +2349,7 @@ async fn conversation_user_text_turn_is_capped_when_mirrored_to_realtime() -> Re
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn realtime_v2_noop_tool_call_returns_empty_function_output_without_response() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -2435,7 +2435,7 @@ async fn realtime_v2_noop_tool_call_returns_empty_function_output_without_respon
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn conversation_mirrors_assistant_message_text_to_realtime_handoff() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -2516,13 +2516,13 @@ async fn conversation_mirrors_assistant_message_text_to_realtime_handoff() -> Re
     })
     .await;
 
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(2);
-    while tokio::time::Instant::now() < deadline {
+    let deadline = edgerun_tokio::time::Instant::now() + Duration::from_secs(2);
+    while edgerun_tokio::time::Instant::now() < deadline {
         let connections = realtime_server.connections();
         if connections.len() == 1 && connections[0].len() >= 2 {
             break;
         }
-        tokio::time::sleep(Duration::from_millis(10)).await;
+        edgerun_tokio::time::sleep(Duration::from_millis(10)).await;
     }
 
     let realtime_connections = realtime_server.connections();
@@ -2549,7 +2549,7 @@ async fn conversation_mirrors_assistant_message_text_to_realtime_handoff() -> Re
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn conversation_handoff_persists_across_item_done_until_turn_complete() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -2721,7 +2721,7 @@ fn message_input_texts(body: &Value, role: &str) -> Vec<String> {
         .collect()
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn inbound_handoff_request_starts_turn() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -2812,7 +2812,7 @@ async fn inbound_handoff_request_starts_turn() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn inbound_handoff_request_uses_active_transcript() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -2898,7 +2898,7 @@ async fn inbound_handoff_request_uses_active_transcript() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn inbound_handoff_request_sends_transcript_delta_after_each_handoff() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -3023,7 +3023,7 @@ async fn inbound_handoff_request_sends_transcript_delta_after_each_handoff() -> 
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn inbound_conversation_item_does_not_start_turn_and_still_forwards_audio() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -3082,7 +3082,7 @@ async fn inbound_conversation_item_does_not_start_turn_and_still_forwards_audio(
     })
     .await;
 
-    let audio_out = tokio::time::timeout(
+    let audio_out = edgerun_tokio::time::timeout(
         Duration::from_millis(500),
         wait_for_event_match(&test.codex, |msg| match msg {
             EventMsg::RealtimeConversationRealtime(RealtimeConversationRealtimeEvent {
@@ -3095,7 +3095,7 @@ async fn inbound_conversation_item_does_not_start_turn_and_still_forwards_audio(
     .expect("timed out waiting for realtime audio after conversation item");
     assert_eq!(audio_out.data, "AQID");
 
-    let unexpected_turn_started = tokio::time::timeout(
+    let unexpected_turn_started = edgerun_tokio::time::timeout(
         Duration::from_millis(200),
         wait_for_event_match(&test.codex, |msg| match msg {
             EventMsg::TurnStarted(_) => Some(()),
@@ -3109,7 +3109,7 @@ async fn inbound_conversation_item_does_not_start_turn_and_still_forwards_audio(
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn delegated_turn_user_role_echo_does_not_redelegate_and_still_forwards_audio() -> Result<()>
 {
     skip_if_no_network!(Ok(()));
@@ -3280,7 +3280,7 @@ async fn delegated_turn_user_role_echo_does_not_redelegate_and_still_forwards_au
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn inbound_handoff_request_does_not_block_realtime_event_forwarding() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -3360,7 +3360,7 @@ async fn inbound_handoff_request_does_not_block_realtime_event_forwarding() -> R
     })
     .await;
 
-    let audio_out = tokio::time::timeout(
+    let audio_out = edgerun_tokio::time::timeout(
         Duration::from_millis(500),
         wait_for_event_match(&test.codex, |msg| match msg {
             EventMsg::RealtimeConversationRealtime(RealtimeConversationRealtimeEvent {
@@ -3391,7 +3391,7 @@ async fn inbound_handoff_request_does_not_block_realtime_event_forwarding() -> R
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn inbound_handoff_request_steers_active_turn() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -3571,7 +3571,7 @@ async fn inbound_handoff_request_steers_active_turn() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn inbound_handoff_request_starts_turn_and_does_not_block_realtime_audio() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -3653,7 +3653,7 @@ async fn inbound_handoff_request_starts_turn_and_does_not_block_realtime_audio()
     })
     .await;
 
-    let audio_out = tokio::time::timeout(
+    let audio_out = edgerun_tokio::time::timeout(
         Duration::from_millis(500),
         wait_for_event_match(&test.codex, |msg| match msg {
             EventMsg::RealtimeConversationRealtime(RealtimeConversationRealtimeEvent {

@@ -45,7 +45,7 @@ fn provider(base_url: &str) -> Provider {
     }
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn models_client_hits_models_endpoint() {
     let server = MockServer::start().await;
     let base_url = format!("{}/api/codex", server.uri());
@@ -110,7 +110,7 @@ async fn models_client_hits_models_endpoint() {
         .mount(&server)
         .await;
 
-    let transport = ReqwestTransport::new(reqwest::Client::new());
+    let transport = ReqwestTransport::new(edgerun_reqwest::Client::new());
     let client = ModelsClient::new(transport, provider(&base_url), Arc::new(DummyAuth));
 
     let (models, _) = client

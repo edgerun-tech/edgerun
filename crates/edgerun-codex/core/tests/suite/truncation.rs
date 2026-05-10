@@ -38,7 +38,7 @@ fn assert_wall_time_header(output: &str) {
 
 // Verifies that a standard tool call (shell_command) exceeding the model formatting
 // limits is truncated before being sent back to the model.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn tool_call_output_configured_limit_chars_type() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -121,7 +121,7 @@ async fn tool_call_output_configured_limit_chars_type() -> Result<()> {
 
 // Verifies that a standard tool call (shell_command) exceeding the model formatting
 // limits is truncated before being sent back to the model.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn tool_call_output_exceeds_limit_truncated_chars_limit() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -202,7 +202,7 @@ async fn tool_call_output_exceeds_limit_truncated_chars_limit() -> Result<()> {
 
 // Verifies that a standard tool call (shell_command) exceeding the model formatting
 // limits is truncated before being sent back to the model.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn tool_call_output_exceeds_limit_truncated_for_model() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -286,7 +286,7 @@ $"#;
 }
 
 // Ensures shell_command outputs that exceed the line limit are truncated only once.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn tool_call_output_truncated_only_once() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -351,7 +351,7 @@ async fn tool_call_output_truncated_only_once() -> Result<()> {
 
 // Verifies that an MCP tool call result exceeding the model formatting limits
 // is truncated before being sent back to the model.
-#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn mcp_tool_call_output_exceeds_limit_truncated_for_model() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -453,7 +453,7 @@ async fn mcp_tool_call_output_exceeds_limit_truncated_for_model() -> Result<()> 
 
 // Verifies that an MCP image tool output is serialized as content_items array with
 // the image preserved and no truncation summary appended (since there are no text items).
-#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn mcp_image_output_preserves_image_and_no_text_summary() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -572,7 +572,7 @@ async fn mcp_image_output_preserves_image_and_no_text_summary() -> Result<()> {
 }
 
 // Token-based policy should report token counts even when truncation is byte-estimated.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn token_policy_marker_reports_tokens() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -627,7 +627,7 @@ async fn token_policy_marker_reports_tokens() -> Result<()> {
 }
 
 // Byte-based policy should report bytes removed.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn byte_policy_marker_reports_bytes() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -682,7 +682,7 @@ async fn byte_policy_marker_reports_bytes() -> Result<()> {
 }
 
 // shell_command output should remain intact when the config opts into a large token budget.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn shell_command_output_not_truncated_with_custom_limit() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -746,7 +746,7 @@ async fn shell_command_output_not_truncated_with_custom_limit() -> Result<()> {
 }
 
 // MCP server output should also remain intact when the config increases the token limit.
-#[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 1)]
 async fn mcp_tool_call_output_not_truncated_with_custom_limit() -> Result<()> {
     skip_if_no_network!(Ok(()));
 

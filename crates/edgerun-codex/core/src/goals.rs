@@ -32,14 +32,14 @@ use codex_protocol::protocol::validate_thread_goal_objective;
 use codex_rollout::state_db::reconcile_rollout;
 use codex_thread_store::LocalThreadStore;
 use codex_utils_template::Template;
-use futures::future::BoxFuture;
+use edgerun_futures::future::BoxFuture;
 use std::sync::Arc;
 use std::sync::LazyLock;
 use std::time::Duration;
 use std::time::Instant;
-use tokio::sync::Mutex;
-use tokio::sync::Semaphore;
-use tokio::sync::SemaphorePermit;
+use edgerun_tokio::sync::Mutex;
+use edgerun_tokio::sync::Semaphore;
+use edgerun_tokio::sync::SemaphorePermit;
 
 pub(crate) struct SetGoalRequest {
     pub(crate) objective: Option<String>,

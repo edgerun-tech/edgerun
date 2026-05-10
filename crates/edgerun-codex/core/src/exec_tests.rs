@@ -7,8 +7,8 @@ use core_test_support::PathExt;
 use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::time::Duration;
-use tokio::io::AsyncWriteExt;
-use tokio::time::timeout;
+use edgerun_tokio::io::AsyncWriteExt;
+use edgerun_tokio::time::timeout;
 
 fn make_exec_output(
     exit_code: i32,
@@ -96,11 +96,11 @@ fn sandbox_detection_ignores_network_policy_text_with_zero_exit_code() {
     ));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn read_output_limits_retained_bytes_for_shell_capture() {
-    let (mut writer, reader) = tokio::io::duplex(1024);
+    let (mut writer, reader) = edgerun_tokio::io::duplex(1024);
     let bytes = vec![b'a'; EXEC_OUTPUT_MAX_BYTES.saturating_add(128 * 1024)];
-    tokio::spawn(async move {
+    edgerun_tokio::spawn(async move {
         writer.write_all(&bytes).await.expect("write");
     });
 
@@ -194,14 +194,14 @@ fn aggregate_output_keeps_stdout_then_stderr_when_under_cap() {
     assert_eq!(aggregated.truncated_after_lines, None);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn read_output_retains_all_bytes_for_full_buffer_capture() {
-    let (mut writer, reader) = tokio::io::duplex(1024);
+    let (mut writer, reader) = edgerun_tokio::io::duplex(1024);
     let bytes = vec![b'a'; EXEC_OUTPUT_MAX_BYTES.saturating_add(128 * 1024)];
     let expected_len = bytes.len();
     // The duplex pipe is smaller than `bytes`, so the writer must run concurrently
     // with `read_output()` or `write_all()` will block once the buffer fills up.
-    tokio::spawn(async move {
+    edgerun_tokio::spawn(async move {
         writer.write_all(&bytes).await.expect("write");
     });
 
@@ -247,7 +247,7 @@ fn full_buffer_capture_policy_disables_caps_and_exec_expiration() {
     assert!(!ExecCapturePolicy::FullBuffer.uses_expiration());
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn exec_full_buffer_capture_ignores_expiration() -> Result<()> {
     #[cfg(windows)]
     let command = vec![
@@ -292,10 +292,10 @@ async fn exec_full_buffer_capture_ignores_expiration() -> Result<()> {
 }
 
 #[cfg(unix)]
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn exec_full_buffer_capture_keeps_io_drain_timeout_when_descendant_holds_pipe_open()
 -> Result<()> {
-    let output = tokio::time::timeout(
+    let output = edgerun_tokio::time::timeout(
         Duration::from_millis(IO_DRAIN_TIMEOUT_MS * 3),
         exec(
             ExecParams {
@@ -328,7 +328,7 @@ async fn exec_full_buffer_capture_keeps_io_drain_timeout_when_descendant_holds_p
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn process_exec_tool_call_preserves_full_buffer_capture_policy() -> Result<()> {
     let byte_count = EXEC_OUTPUT_MAX_BYTES.saturating_add(128 * 1024);
     #[cfg(windows)]
@@ -944,7 +944,7 @@ fn sandbox_detection_flags_sigsys_exit_code() {
 }
 
 #[cfg(unix)]
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn kill_child_process_group_kills_grandchildren_on_timeout() -> Result<()> {
     // On Linux/macOS, /bin/bash is typically present; on FreeBSD/OpenBSD,
     // prefer /bin/sh to avoid NotFound errors.
@@ -1003,14 +1003,14 @@ async fn kill_child_process_group_kills_grandchildren_on_timeout() -> Result<()>
             killed = true;
             break;
         }
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        edgerun_tokio::time::sleep(Duration::from_millis(100)).await;
     }
 
     assert!(killed, "grandchild process with pid {pid} is still alive");
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn process_exec_tool_call_respects_cancellation_token() -> Result<()> {
     let command = long_running_command();
     let cwd = codex_utils_absolute_path::AbsolutePathBuf::current_dir()?;
@@ -1030,8 +1030,8 @@ async fn process_exec_tool_call_respects_cancellation_token() -> Result<()> {
         justification: None,
         arg0: None,
     };
-    tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_millis(1_000)).await;
+    edgerun_tokio::spawn(async move {
+        edgerun_tokio::time::sleep(Duration::from_millis(1_000)).await;
         cancel_tx.cancel();
     });
     let result = timeout(

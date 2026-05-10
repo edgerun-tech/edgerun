@@ -20,7 +20,7 @@ use core_test_support::wait_for_event;
 use pretty_assertions::assert_eq;
 use std::sync::Arc;
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn window_id_advances_after_compact_persists_on_resume_and_resets_on_fork() -> Result<()> {
     skip_if_no_network!(Ok(()));
 

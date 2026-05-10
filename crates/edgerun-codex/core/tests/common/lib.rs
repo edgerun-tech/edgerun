@@ -292,7 +292,7 @@ pub async fn wait_for_event<F>(
 where
     F: FnMut(&codex_protocol::protocol::EventMsg) -> bool,
 {
-    use tokio::time::Duration;
+    use edgerun_tokio::time::Duration;
     wait_for_event_with_timeout(codex, predicate, Duration::from_secs(1)).await
 }
 
@@ -307,13 +307,13 @@ where
 pub async fn wait_for_event_with_timeout<F>(
     codex: &CodexThread,
     mut predicate: F,
-    wait_time: tokio::time::Duration,
+    wait_time: edgerun_tokio::time::Duration,
 ) -> codex_protocol::protocol::EventMsg
 where
     F: FnMut(&codex_protocol::protocol::EventMsg) -> bool,
 {
-    use tokio::time::Duration;
-    use tokio::time::timeout;
+    use edgerun_tokio::time::Duration;
+    use edgerun_tokio::time::timeout;
     loop {
         // Allow a bit more time to accommodate async startup work (e.g. config IO, tool discovery)
         let ev = timeout(wait_time.max(Duration::from_secs(10)), codex.next_event())
@@ -397,7 +397,7 @@ pub mod fs_wait {
     use std::sync::mpsc::RecvTimeoutError;
     use std::time::Duration;
     use std::time::Instant;
-    use tokio::task;
+    use edgerun_tokio::task;
     use walkdir::WalkDir;
 
     pub async fn wait_for_path_exists(

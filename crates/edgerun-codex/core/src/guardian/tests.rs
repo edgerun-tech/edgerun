@@ -64,7 +64,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
-use tokio_util::sync::CancellationToken;
+use edgerun_tokio_util::sync::CancellationToken;
 
 fn fixed_guardian_parent_session_id() -> ThreadId {
     ThreadId::from_string("11111111-1111-4111-8111-111111111111")
@@ -304,7 +304,7 @@ fn build_guardian_transcript_keeps_original_numbering() {
     assert!(omission.is_none());
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[edgerun_tokio::test(flavor = "current_thread")]
 async fn build_guardian_prompt_full_mode_preserves_initial_review_format() -> anyhow::Result<()> {
     let (session, turn) = guardian_test_session_and_turn_with_base_url("http://localhost").await;
     seed_guardian_parent_history(&session, &turn).await;
@@ -335,7 +335,7 @@ async fn build_guardian_prompt_full_mode_preserves_initial_review_format() -> an
     Ok(())
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[edgerun_tokio::test(flavor = "current_thread")]
 async fn build_guardian_prompt_delta_mode_preserves_original_numbering() -> anyhow::Result<()> {
     let (session, turn) = guardian_test_session_and_turn_with_base_url("http://localhost").await;
     seed_guardian_parent_history(&session, &turn).await;
@@ -396,7 +396,7 @@ async fn build_guardian_prompt_delta_mode_preserves_original_numbering() -> anyh
     Ok(())
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[edgerun_tokio::test(flavor = "current_thread")]
 async fn build_guardian_prompt_delta_mode_handles_empty_delta() -> anyhow::Result<()> {
     let (session, turn) = guardian_test_session_and_turn_with_base_url("http://localhost").await;
     seed_guardian_parent_history(&session, &turn).await;
@@ -430,7 +430,7 @@ async fn build_guardian_prompt_delta_mode_handles_empty_delta() -> anyhow::Resul
     Ok(())
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[edgerun_tokio::test(flavor = "current_thread")]
 async fn build_guardian_prompt_stale_delta_cursor_falls_back_to_full_prompt() -> anyhow::Result<()>
 {
     let (session, turn) = guardian_test_session_and_turn_with_base_url("http://localhost").await;
@@ -465,7 +465,7 @@ async fn build_guardian_prompt_stale_delta_cursor_falls_back_to_full_prompt() ->
     Ok(())
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[edgerun_tokio::test(flavor = "current_thread")]
 async fn build_guardian_prompt_stale_delta_version_falls_back_to_full_prompt() -> anyhow::Result<()>
 {
     let (session, turn) = guardian_test_session_and_turn_with_base_url("http://localhost").await;
@@ -802,7 +802,7 @@ fn guardian_approval_request_to_json_renders_network_access_trigger() -> edgerun
     Ok(())
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[edgerun_tokio::test(flavor = "current_thread")]
 async fn build_guardian_prompt_items_explains_network_access_review_scope() -> anyhow::Result<()> {
     let (session, turn) = guardian_test_session_and_turn_with_base_url("http://localhost").await;
     seed_guardian_parent_history(&session, &turn).await;
@@ -946,7 +946,7 @@ fn guardian_request_target_item_id_omits_network_access_trigger_call_id() {
     assert_eq!(guardian_request_target_item_id(&network_access), None);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn cancelled_guardian_review_emits_terminal_abort_without_warning() {
     let (session, turn, rx) = crate::session::tests::make_session_and_context_with_rx().await;
     let cancel_token = CancellationToken::new();
@@ -999,7 +999,7 @@ fn guardian_timeout_message_distinguishes_timeout_from_policy_denial() {
     assert!(!message.contains("unacceptable risk"));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn routes_approval_to_guardian_requires_guardian_reviewer() {
     let (_session, mut turn) = crate::session::tests::make_session_and_context().await;
     let mut config = (*turn.config).clone();
@@ -1014,7 +1014,7 @@ async fn routes_approval_to_guardian_requires_guardian_reviewer() {
     assert!(routes_approval_to_guardian(&turn));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn routes_approval_to_guardian_allows_granular_review_policy() {
     let (_session, mut turn) = crate::session::tests::make_session_and_context().await;
     let mut config = (*turn.config).clone();
@@ -1203,7 +1203,7 @@ fn guardian_output_schema_requires_only_outcome_and_allows_optional_details() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn guardian_review_request_layout_matches_model_visible_request_snapshot()
 -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
@@ -1349,7 +1349,7 @@ async fn guardian_review_request_layout_matches_model_visible_request_snapshot()
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn build_guardian_prompt_items_includes_parent_session_id() -> anyhow::Result<()> {
     let (session, _) = crate::session::tests::make_session_and_context().await;
     let prompt = build_guardian_prompt_items(
@@ -1387,7 +1387,7 @@ async fn build_guardian_prompt_items_includes_parent_session_id() -> anyhow::Res
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn guardian_reuses_prompt_cache_key_and_appends_prior_reviews() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -1676,7 +1676,7 @@ async fn guardian_reuses_prompt_cache_key_and_appends_prior_reviews() -> anyhow:
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn guardian_reused_trunk_ignores_stale_prior_turn_completion() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -1783,7 +1783,7 @@ async fn guardian_reused_trunk_ignores_stale_prior_turn_completion() -> anyhow::
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn guardian_review_surfaces_responses_api_errors_in_rejection_reason() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -1892,7 +1892,7 @@ async fn guardian_review_surfaces_responses_api_errors_in_rejection_reason() -> 
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn guardian_parallel_reviews_fork_from_last_committed_trunk_history() -> anyhow::Result<()> {
     const TEST_STACK_SIZE_BYTES: usize = 4 * 1024 * 1024;
 
@@ -1901,7 +1901,7 @@ async fn guardian_parallel_reviews_fork_from_last_committed_trunk_history() -> a
             .name("guardian_parallel_reviews_fork_from_last_committed_trunk_history".to_string())
             .stack_size(TEST_STACK_SIZE_BYTES)
             .spawn(|| -> anyhow::Result<()> {
-                let runtime = tokio::runtime::Builder::new_current_thread()
+                let runtime = edgerun_tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()?;
                 runtime.block_on(Box::pin(async {
@@ -1926,7 +1926,7 @@ async fn guardian_parallel_reviews_fork_from_last_committed_trunk_history() -> a
             "rationale": "third guardian rationale",
         })
         .to_string();
-        let (gate_tx, gate_rx) = tokio::sync::oneshot::channel();
+        let (gate_tx, gate_rx) = edgerun_tokio::sync::oneshot::channel();
         let (server, _) = start_streaming_sse_server(vec![
             vec![StreamingSseChunk {
                 gate: None,
@@ -2025,7 +2025,7 @@ async fn guardian_parallel_reviews_fork_from_last_committed_trunk_history() -> a
 
         let session_for_second = Arc::clone(&session);
         let turn_for_second = Arc::clone(&turn);
-        let mut second_review = tokio::spawn(async move {
+        let mut second_review = edgerun_tokio::spawn(async move {
             review_approval_request(
                 &session_for_second,
                 &turn_for_second,
@@ -2036,12 +2036,12 @@ async fn guardian_parallel_reviews_fork_from_last_committed_trunk_history() -> a
             .await
         });
 
-        let second_request_observed = tokio::time::timeout(Duration::from_secs(5), async {
+        let second_request_observed = edgerun_tokio::time::timeout(Duration::from_secs(5), async {
             loop {
                 if server.requests().await.len() >= 2 {
                     break;
                 }
-                tokio::task::yield_now().await;
+                edgerun_tokio::task::yield_now().await;
             }
         })
         .await;
@@ -2102,7 +2102,7 @@ async fn guardian_parallel_reviews_fork_from_last_committed_trunk_history() -> a
             "forked guardian review should not include the still in-flight trunk assessment"
         );
         assert!(
-            tokio::time::timeout(Duration::from_millis(100), &mut second_review)
+            edgerun_tokio::time::timeout(Duration::from_millis(100), &mut second_review)
                 .await
                 .is_err(),
             "the trunk guardian review should still be blocked on its gated response"
@@ -2125,7 +2125,7 @@ async fn guardian_parallel_reviews_fork_from_last_committed_trunk_history() -> a
         )),
     }
 }
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn guardian_review_session_config_preserves_parent_network_proxy() {
     let mut parent_config = test_config().await;
     let network = NetworkProxySpec::from_config_and_constraints(
@@ -2174,7 +2174,7 @@ async fn guardian_review_session_config_preserves_parent_network_proxy() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn guardian_review_session_config_clears_parent_developer_instructions() {
     let mut parent_config = test_config().await;
     parent_config.developer_instructions =
@@ -2195,7 +2195,7 @@ async fn guardian_review_session_config_clears_parent_developer_instructions() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn guardian_review_session_config_uses_live_network_proxy_state() {
     let mut parent_config = test_config().await;
     let mut parent_network = NetworkProxyConfig::default();
@@ -2241,7 +2241,7 @@ async fn guardian_review_session_config_uses_live_network_proxy_state() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn guardian_review_session_config_disables_mcp_apps_and_plugins() {
     let mut parent_config = test_config().await;
     let server: McpServerConfig =
@@ -2274,7 +2274,7 @@ async fn guardian_review_session_config_disables_mcp_apps_and_plugins() {
     assert!(!guardian_config.include_apps_instructions);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn guardian_review_session_config_allows_pinned_disabled_feature() {
     let mut parent_config = test_config().await;
     parent_config.features = ManagedFeatures::from_configured(
@@ -2301,7 +2301,7 @@ async fn guardian_review_session_config_allows_pinned_disabled_feature() {
     assert!(!guardian_config.include_apps_instructions);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn guardian_review_session_config_uses_parent_active_model_instead_of_hardcoded_slug() {
     let mut parent_config = test_config().await;
     parent_config.model = Some("configured-model".to_string());
@@ -2317,7 +2317,7 @@ async fn guardian_review_session_config_uses_parent_active_model_instead_of_hard
     assert_eq!(guardian_config.model, Some("active-model".to_string()));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn guardian_review_session_config_uses_requirements_guardian_policy_config() {
     let codex_home = tempfile::tempdir().expect("create temp dir");
     let workspace = tempfile::tempdir().expect("create temp dir");
@@ -2362,7 +2362,7 @@ async fn guardian_review_session_config_uses_requirements_guardian_policy_config
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn guardian_review_session_config_uses_default_guardian_policy_without_requirements_override()
 {
     let codex_home = tempfile::tempdir().expect("create temp dir");

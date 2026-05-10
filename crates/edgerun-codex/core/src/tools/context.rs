@@ -26,8 +26,8 @@ use edgerun_json::serde_json::Value as JsonValue;
 use std::borrow::Cow;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::Mutex;
-use tokio_util::sync::CancellationToken;
+use edgerun_tokio::sync::Mutex;
+use edgerun_tokio_util::sync::CancellationToken;
 
 pub type SharedTurnDiffTracker = Arc<Mutex<TurnDiffTracker>>;
 

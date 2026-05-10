@@ -4,7 +4,7 @@ use codex_protocol::protocol::CreditsSnapshot;
 use codex_protocol::protocol::RateLimitWindow;
 use pretty_assertions::assert_eq;
 
-#[tokio::test]
+#[edgerun_tokio::test]
 // Verifies connector merging deduplicates repeated IDs.
 async fn merge_connector_selection_deduplicates_entries() {
     let session_configuration = make_session_configuration_for_tests().await;
@@ -21,7 +21,7 @@ async fn merge_connector_selection_deduplicates_entries() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 // Verifies clearing connector selection removes all saved IDs.
 async fn clear_connector_selection_removes_entries() {
     let session_configuration = make_session_configuration_for_tests().await;
@@ -33,7 +33,7 @@ async fn clear_connector_selection_removes_entries() {
     assert_eq!(state.get_connector_selection(), HashSet::new());
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn set_rate_limits_defaults_limit_id_to_codex_when_missing() {
     let session_configuration = make_session_configuration_for_tests().await;
     let mut state = SessionState::new(session_configuration);
@@ -61,7 +61,7 @@ async fn set_rate_limits_defaults_limit_id_to_codex_when_missing() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn set_rate_limits_defaults_to_codex_when_limit_id_missing_after_other_bucket() {
     let session_configuration = make_session_configuration_for_tests().await;
     let mut state = SessionState::new(session_configuration);
@@ -102,7 +102,7 @@ async fn set_rate_limits_defaults_to_codex_when_limit_id_missing_after_other_buc
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn set_rate_limits_carries_credits_and_plan_type_from_codex_to_codex_other() {
     let session_configuration = make_session_configuration_for_tests().await;
     let mut state = SessionState::new(session_configuration);

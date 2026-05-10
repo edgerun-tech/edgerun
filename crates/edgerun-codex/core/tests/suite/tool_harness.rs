@@ -47,7 +47,7 @@ fn call_output(req: &ResponsesRequest, call_id: &str) -> (String, Option<bool>) 
     (content, success)
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn shell_tool_executes_command_and_streams_output() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -115,7 +115,7 @@ async fn shell_tool_executes_command_and_streams_output() -> anyhow::Result<()> 
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn update_plan_tool_emits_plan_update_event() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -205,7 +205,7 @@ async fn update_plan_tool_emits_plan_update_event() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn update_plan_tool_rejects_malformed_payload() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -297,7 +297,7 @@ async fn update_plan_tool_rejects_malformed_payload() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn apply_patch_tool_executes_and_emits_patch_events() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -440,7 +440,7 @@ A {file_name}
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn apply_patch_reports_parse_diagnostics() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 

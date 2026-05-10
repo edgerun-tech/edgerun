@@ -8,14 +8,14 @@ use codex_protocol::protocol::RateLimitSnapshot;
 use codex_protocol::protocol::TokenUsage;
 use codex_protocol::protocol::W3cTraceContext;
 use edgerun_json::serde_json::Value;
-use futures::Stream;
+use edgerun_futures::Stream;
 use serde::Deserialize;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
-use tokio::sync::mpsc;
+use edgerun_tokio::sync::mpsc;
 
 pub const WS_REQUEST_HEADER_TRACEPARENT_CLIENT_METADATA_KEY: &str = "ws_request_header_traceparent";
 pub const WS_REQUEST_HEADER_TRACESTATE_CLIENT_METADATA_KEY: &str = "ws_request_header_tracestate";

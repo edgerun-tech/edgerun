@@ -31,7 +31,7 @@ const CHILD_PROMPT: &str = "child: say done";
 const SPAWN_CALL_ID: &str = "spawn-call-1";
 const REQUEST_POLL_INTERVAL: Duration = Duration::from_millis(/*millis*/ 20);
 const TURN_TIMEOUT: Duration = Duration::from_secs(/*secs*/ 60);
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn responses_api_parent_and_subagent_requests_include_identity_headers() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -175,7 +175,7 @@ async fn wait_for_matching_request<F>(
 where
     F: FnMut(&ResponsesRequest) -> bool,
 {
-    tokio::time::timeout(TURN_TIMEOUT, async {
+    edgerun_tokio::time::timeout(TURN_TIMEOUT, async {
         loop {
             if let Some(request) = mock
                 .requests()
@@ -184,7 +184,7 @@ where
             {
                 return request;
             }
-            tokio::time::sleep(REQUEST_POLL_INTERVAL).await;
+            edgerun_tokio::time::sleep(REQUEST_POLL_INTERVAL).await;
         }
     })
     .await
@@ -200,7 +200,7 @@ where
     F: FnMut(&EventMsg) -> bool,
 {
     let mut seen_events = Vec::new();
-    tokio::time::timeout(TURN_TIMEOUT, async {
+    edgerun_tokio::time::timeout(TURN_TIMEOUT, async {
         loop {
             let event = test.codex.next_event().await?;
             seen_events.push(event_summary(&event.msg));

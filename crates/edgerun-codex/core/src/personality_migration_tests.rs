@@ -11,12 +11,12 @@ use codex_rollout::ARCHIVED_SESSIONS_SUBDIR;
 use codex_rollout::SESSIONS_SUBDIR;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
-use tokio::io::AsyncWriteExt;
+use edgerun_tokio::io::AsyncWriteExt;
 
 const TEST_TIMESTAMP: &str = "2025-01-01T00-00-00";
 
 async fn read_config_toml(codex_home: &Path) -> io::Result<ConfigToml> {
-    let contents = tokio::fs::read_to_string(codex_home.join("config.toml")).await?;
+    let contents = edgerun_tokio::fs::read_to_string(codex_home.join("config.toml")).await?;
     toml::from_str(&contents).map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
 }
 
@@ -37,9 +37,9 @@ async fn write_archived_session_with_user_event(codex_home: &Path) -> io::Result
 }
 
 async fn write_rollout_with_user_event(dir: &Path, thread_id: ThreadId) -> io::Result<()> {
-    tokio::fs::create_dir_all(&dir).await?;
+    edgerun_tokio::fs::create_dir_all(&dir).await?;
     let file_path = dir.join(format!("rollout-{TEST_TIMESTAMP}-{thread_id}.jsonl"));
-    let mut file = tokio::fs::File::create(&file_path).await?;
+    let mut file = edgerun_tokio::fs::File::create(&file_path).await?;
 
     let session_meta = SessionMetaLine {
         meta: SessionMeta {
@@ -82,7 +82,7 @@ async fn write_rollout_with_user_event(dir: &Path, thread_id: ThreadId) -> io::R
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn applies_when_sessions_exist_and_no_personality() -> io::Result<()> {
     let temp = TempDir::new()?;
     write_session_with_user_event(temp.path()).await?;
@@ -98,7 +98,7 @@ async fn applies_when_sessions_exist_and_no_personality() -> io::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn applies_when_only_archived_sessions_exist_and_no_personality() -> io::Result<()> {
     let temp = TempDir::new()?;
     write_archived_session_with_user_event(temp.path()).await?;
@@ -114,7 +114,7 @@ async fn applies_when_only_archived_sessions_exist_and_no_personality() -> io::R
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn skips_when_marker_exists() -> io::Result<()> {
     let temp = TempDir::new()?;
     create_marker(&temp.path().join(PERSONALITY_MIGRATION_FILENAME)).await?;
@@ -127,7 +127,7 @@ async fn skips_when_marker_exists() -> io::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn skips_when_personality_explicit() -> io::Result<()> {
     let temp = TempDir::new()?;
     ConfigEditsBuilder::new(temp.path())
@@ -150,7 +150,7 @@ async fn skips_when_personality_explicit() -> io::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn skips_when_no_sessions() -> io::Result<()> {
     let temp = TempDir::new()?;
     let config_toml = ConfigToml::default();

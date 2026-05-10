@@ -24,7 +24,7 @@ const PROBE_PROXY_ENV: &str = "CODEX_CUSTOM_CA_PROBE_PROXY";
 const PROBE_URL_ENV: &str = "CODEX_CUSTOM_CA_PROBE_URL";
 
 fn main() {
-    let runtime = match tokio::runtime::Builder::new_current_thread()
+    let runtime = match edgerun_tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
     {
@@ -47,12 +47,12 @@ fn main() {
 async fn run_probe() -> Result<(), String> {
     let proxy_url = env::var(PROBE_PROXY_ENV).ok();
     let target_url = env::var(PROBE_URL_ENV).ok();
-    let mut builder = reqwest::Client::builder();
+    let mut builder = edgerun_reqwest::Client::builder();
     if target_url.is_some() {
         builder = builder.timeout(Duration::from_secs(5));
     }
     if env::var_os(PROBE_TLS13_ENV).is_some() {
-        builder = builder.min_tls_version(reqwest::tls::Version::TLS_1_3);
+        builder = builder.min_tls_version(edgerun_reqwest::tls::Version::TLS_1_3);
     }
 
     let client = build_probe_client(builder, proxy_url.as_deref())?;
@@ -63,11 +63,11 @@ async fn run_probe() -> Result<(), String> {
 }
 
 fn build_probe_client(
-    builder: reqwest::ClientBuilder,
+    builder: edgerun_reqwest::ClientBuilder,
     proxy_url: Option<&str>,
-) -> Result<reqwest::Client, String> {
+) -> Result<edgerun_reqwest::Client, String> {
     if let Some(proxy_url) = proxy_url {
-        let proxy = reqwest::Proxy::https(proxy_url)
+        let proxy = edgerun_reqwest::Proxy::https(proxy_url)
             .map_err(|error| format!("failed to configure probe proxy {proxy_url}: {error}"))?;
         return codex_client::build_reqwest_client_with_custom_ca(builder.proxy(proxy))
             .map_err(|error| error.to_string());
@@ -77,7 +77,7 @@ fn build_probe_client(
         .map_err(|error| error.to_string())
 }
 
-async fn post_probe_request(client: &reqwest::Client, url: &str) -> Result<(), String> {
+async fn post_probe_request(client: &edgerun_reqwest::Client, url: &str) -> Result<(), String> {
     let response = client
         .post(url)
         .header("Content-Type", "application/x-www-form-urlencoded")

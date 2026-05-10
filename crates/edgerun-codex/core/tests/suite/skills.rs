@@ -41,7 +41,7 @@ async fn write_repo_skill(
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn user_turn_includes_skill_instructions() -> Result<()> {
     skip_if_no_network!(Ok(()));
 

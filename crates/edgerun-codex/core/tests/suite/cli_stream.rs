@@ -22,7 +22,7 @@ fn cli_responses_fixture() -> std::path::PathBuf {
 }
 
 /// Tests streaming the Responses API through the CLI using a mock server.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn responses_mode_stream_cli() {
     skip_if_no_network!();
 
@@ -90,7 +90,7 @@ async fn responses_mode_stream_cli() {
 }
 
 /// Ensures `openai_base_url` config override routes built-in openai provider requests.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn responses_mode_stream_cli_supports_openai_base_url_config_override() {
     skip_if_no_network!();
 
@@ -127,7 +127,7 @@ async fn responses_mode_stream_cli_supports_openai_base_url_config_override() {
 /// Verify that passing `-c model_instructions_file=...` to the CLI
 /// overrides the built-in base instructions by inspecting the request body
 /// received by a mock OpenAI Responses endpoint.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn exec_cli_applies_model_instructions_file() {
     skip_if_no_network!();
 
@@ -197,7 +197,7 @@ async fn exec_cli_applies_model_instructions_file() {
 /// Verify that `codex exec --profile ...` preserves the active profile when it
 /// starts the in-process app-server thread, so profile-scoped
 /// `model_instructions_file` is applied to the outbound request.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn exec_cli_profile_applies_model_instructions_file() {
     skip_if_no_network!();
 
@@ -268,7 +268,7 @@ async fn exec_cli_profile_applies_model_instructions_file() {
 /// 2. Configures codex to read from this fixture via CODEX_RS_SSE_FIXTURE env var
 /// 3. Sends a "hello?" prompt and verifies the response
 /// 4. Ensures the fixture content is correctly streamed through the CLI
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn responses_api_stream_cli() {
     skip_if_no_network!();
 
@@ -296,7 +296,7 @@ async fn responses_api_stream_cli() {
 }
 
 /// End-to-end: create a session (writes rollout), verify the file, then resume and confirm append.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn integration_creates_and_checks_session_file() -> anyhow::Result<()> {
     // Honor sandbox network restrictions for CI parity with the other tests.
     skip_if_no_network!(Ok(()));
@@ -485,7 +485,7 @@ async fn integration_creates_and_checks_session_file() -> anyhow::Result<()> {
 }
 
 /// Integration test to verify git info is collected and recorded in session files.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn integration_git_info_unit_test() {
     // This test verifies git info collection works independently
     // without depending on the full CLI integration

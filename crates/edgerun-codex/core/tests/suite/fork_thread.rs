@@ -21,7 +21,7 @@ use wiremock::ResponseTemplate;
 use wiremock::matchers::method;
 use wiremock::matchers::path;
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn fork_thread_twice_drops_to_first_message() {
     skip_if_no_network!();
 
@@ -149,7 +149,7 @@ async fn fork_thread_twice_drops_to_first_message() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn fork_thread_from_history_does_not_require_source_rollout_path() {
     skip_if_no_network!();
 

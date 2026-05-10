@@ -9,7 +9,7 @@ use core_test_support::test_codex::test_codex;
 const HIERARCHICAL_AGENTS_SNIPPET: &str =
     "Files called AGENTS.md commonly appear in many places inside a container";
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn hierarchical_agents_appends_to_project_doc_in_user_instructions() {
     let server = start_mock_server().await;
     let resp_mock = mount_sse_once(
@@ -60,7 +60,7 @@ async fn hierarchical_agents_appends_to_project_doc_in_user_instructions() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn hierarchical_agents_emits_when_no_project_doc() {
     let server = start_mock_server().await;
     let resp_mock = mount_sse_once(

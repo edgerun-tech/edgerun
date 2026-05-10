@@ -54,7 +54,7 @@ pub(crate) async fn export_config_lock_if_configured(
     let lock = toml::to_string_pretty(&lock).context("failed to serialize config lock")?;
     let path = export_dir.join(format!("{conversation_id}.config.lock.toml"));
 
-    tokio::fs::create_dir_all(export_dir)
+    edgerun_tokio::fs::create_dir_all(export_dir)
         .await
         .with_context(|| {
             format!(
@@ -62,7 +62,7 @@ pub(crate) async fn export_config_lock_if_configured(
                 export_dir.display()
             )
         })?;
-    tokio::fs::write(&path, lock)
+    edgerun_tokio::fs::write(&path, lock)
         .await
         .with_context(|| format!("failed to write config lock to {}", path.display()))?;
 
@@ -214,7 +214,7 @@ mod tests {
     use pretty_assertions::assert_eq;
     use std::sync::Arc;
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn lock_contains_prompts_and_materializes_features() {
         let mut sc = crate::session::tests::make_session_configuration_for_tests().await;
         sc.base_instructions = "resolved instructions".to_string();
@@ -274,7 +274,7 @@ mod tests {
         assert_eq!(lockfile.version, crate::config_lock::CONFIG_LOCK_VERSION);
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn lock_skips_session_values_when_model_catalog_fields_are_not_saved() {
         let mut sc = crate::session::tests::make_session_configuration_for_tests().await;
         let mut config = (*sc.original_config_do_not_use).clone();
@@ -300,7 +300,7 @@ mod tests {
         assert_eq!(lock.approvals_reviewer, None);
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn lock_validation_reports_config_diff() {
         let sc = crate::session::tests::make_session_configuration_for_tests().await;
         let expected = sc.to_config_lockfile_toml().expect("lock should serialize");
@@ -318,7 +318,7 @@ mod tests {
         assert!(message.contains("model = "), "{message}");
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn lock_validation_rejects_codex_version_mismatch_by_default() {
         let sc = crate::session::tests::make_session_configuration_for_tests().await;
         let mut expected = sc.to_config_lockfile_toml().expect("lock should serialize");
@@ -339,7 +339,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn lock_validation_can_ignore_codex_version_mismatch() {
         let sc = crate::session::tests::make_session_configuration_for_tests().await;
         let mut expected = sc.to_config_lockfile_toml().expect("lock should serialize");

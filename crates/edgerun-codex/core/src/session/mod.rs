@@ -140,21 +140,21 @@ use edgerun_json::serde_json::Value;
 use edgerun_time::chrono::ChronoLocal as Local;
 use edgerun_time::chrono::ChronoUtc as Utc;
 use edgerun_uuid::Uuid;
-use futures::future::BoxFuture;
-use futures::future::Shared;
-use futures::prelude::*;
+use edgerun_futures::future::BoxFuture;
+use edgerun_futures::future::Shared;
+use edgerun_futures::prelude::*;
 use rmcp::model::ListResourceTemplatesResult;
 use rmcp::model::ListResourcesResult;
 use rmcp::model::PaginatedRequestParams;
 use rmcp::model::ReadResourceRequestParams;
 use rmcp::model::ReadResourceResult;
 use rmcp::model::RequestId;
-use tokio::sync::Mutex;
-use tokio::sync::RwLock;
-use tokio::sync::oneshot;
-use tokio::sync::watch;
-use tokio::task::JoinHandle;
-use tokio_util::sync::CancellationToken;
+use edgerun_tokio::sync::Mutex;
+use edgerun_tokio::sync::RwLock;
+use edgerun_tokio::sync::oneshot;
+use edgerun_tokio::sync::watch;
+use edgerun_tokio::task::JoinHandle;
+use edgerun_tokio_util::sync::CancellationToken;
 use toml::Value as TomlValue;
 use tracing::Instrument;
 use tracing::debug;
@@ -666,7 +666,7 @@ impl Codex {
 
         // This task will run until Op::Shutdown is received.
         let session_for_loop = Arc::clone(&session);
-        let session_loop_handle = tokio::spawn(async move {
+        let session_loop_handle = edgerun_tokio::spawn(async move {
             submission_loop(session_for_loop, config, rx_sub)
                 .instrument(info_span!("session_loop", thread_id = %thread_id))
                 .await;
@@ -816,7 +816,7 @@ fn is_enterprise_default_service_tier_plan(plan_type: AccountPlanType) -> bool {
 
 #[cfg(test)]
 pub(crate) fn completed_session_loop_termination() -> SessionLoopTermination {
-    futures::future::ready(()).boxed().shared()
+    edgerun_futures::future::ready(()).boxed().shared()
 }
 
 pub(crate) fn session_loop_termination_from_handle(
@@ -1020,7 +1020,7 @@ impl Session {
     fn start_skills_watcher_listener(self: &Arc<Self>) {
         let mut rx = self.services.skills_watcher.subscribe();
         let weak_sess = Arc::downgrade(self);
-        tokio::spawn(async move {
+        edgerun_tokio::spawn(async move {
             loop {
                 match rx.recv().await {
                     Ok(SkillsWatcherEvent::SkillsChanged { .. }) => {
@@ -1033,8 +1033,8 @@ impl Session {
                         };
                         sess.send_event_raw(event).await;
                     }
-                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(edgerun_tokio::sync::broadcast::error::RecvError::Closed) => break,
+                    Err(edgerun_tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
                 }
             }
         });
@@ -2089,7 +2089,7 @@ impl Session {
                 codex_analytics::GuardianApprovalRequestSource::MainTurn,
                 cancellation_token.clone(),
             );
-            let decision = tokio::select! {
+            let decision = edgerun_tokio::select! {
                 biased;
                 _ = cancellation_token.cancelled() => return None,
                 decision = review_rx => decision.unwrap_or(ReviewDecision::Denied),
@@ -2173,7 +2173,7 @@ impl Session {
             cwd: Some(cwd),
         });
         self.send_event(turn_context.as_ref(), event).await;
-        tokio::select! {
+        edgerun_tokio::select! {
             biased;
             _ = cancellation_token.cancelled() => {
                 let mut active = self.active_turn.lock().await;
@@ -3129,7 +3129,7 @@ impl Session {
     async fn turn_state_for_sub_id(
         &self,
         sub_id: &str,
-    ) -> Option<Arc<tokio::sync::Mutex<crate::state::TurnState>>> {
+    ) -> Option<Arc<edgerun_tokio::sync::Mutex<crate::state::TurnState>>> {
         let active = self.active_turn.lock().await;
         active.as_ref().and_then(|active_turn| {
             active_turn

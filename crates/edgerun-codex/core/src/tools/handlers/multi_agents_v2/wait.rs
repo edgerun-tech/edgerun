@@ -5,8 +5,8 @@ use crate::turn_timing::now_unix_timestamp_ms;
 use codex_tools::ToolSpec;
 use std::collections::HashMap;
 use std::time::Duration;
-use tokio::time::Instant;
-use tokio::time::timeout_at;
+use edgerun_tokio::time::Instant;
+use edgerun_tokio::time::timeout_at;
 
 #[derive(Default)]
 pub(crate) struct Handler {
@@ -150,7 +150,7 @@ impl ToolOutput for WaitAgentResult {
 }
 
 async fn wait_for_mailbox_change(
-    mailbox_seq_rx: &mut tokio::sync::watch::Receiver<u64>,
+    mailbox_seq_rx: &mut edgerun_tokio::sync::watch::Receiver<u64>,
     deadline: Instant,
 ) -> bool {
     match timeout_at(deadline, mailbox_seq_rx.changed()).await {

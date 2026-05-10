@@ -23,7 +23,7 @@ use codex_tools::ToolSpec;
 use codex_tools::ToolsConfig;
 use std::collections::HashSet;
 use std::sync::Arc;
-use tokio_util::sync::CancellationToken;
+use edgerun_tokio_util::sync::CancellationToken;
 use tracing::instrument;
 
 pub use crate::tools::context::ToolCallSource;

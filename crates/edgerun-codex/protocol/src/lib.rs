@@ -1,3 +1,6 @@
+extern crate edgerun_serde_with as serde_with;
+extern crate edgerun_strum as strum;
+
 pub mod account;
 mod agent_path;
 pub mod auth;

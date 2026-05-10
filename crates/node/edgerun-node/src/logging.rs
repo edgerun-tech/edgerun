@@ -6,7 +6,7 @@
 
 use core::fmt;
 
-pub use edgerun_log::Level;
+pub use edgerun_log::LogLevel as Level;
 
 pub fn set_level(level: Level) {
     edgerun_log::set_level(level);

@@ -22,7 +22,7 @@ fn sse_incomplete() -> String {
     load_sse_fixture(fixture)
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn retries_on_early_close() {
     skip_if_no_network!();
 

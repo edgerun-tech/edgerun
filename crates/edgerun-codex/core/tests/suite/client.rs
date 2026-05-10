@@ -68,7 +68,7 @@ use core_test_support::wait_for_event;
 use dunce::canonicalize as normalize_path;
 use edgerun_json::serde_json::json;
 use edgerun_uuid::Uuid;
-use futures::StreamExt;
+use edgerun_futures::StreamExt;
 use pretty_assertions::assert_eq;
 use std::io::Write;
 use std::num::NonZeroU64;
@@ -254,7 +254,7 @@ fn non_zero_u64(value: u64) -> NonZeroU64 {
     }
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn resume_includes_initial_messages_and_sends_prior_items() {
     skip_if_no_network!();
 
@@ -460,7 +460,7 @@ async fn resume_includes_initial_messages_and_sends_prior_items() {
     assert!(pos_environment < pos_new_user);
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn resume_replays_legacy_js_repl_image_rollout_shapes() {
     skip_if_no_network!();
 
@@ -599,7 +599,7 @@ async fn resume_replays_legacy_js_repl_image_rollout_shapes() {
     assert!(legacy_image_index < new_user_index);
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn resume_replays_image_tool_outputs_with_detail() {
     skip_if_no_network!();
 
@@ -727,7 +727,7 @@ async fn resume_replays_image_tool_outputs_with_detail() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn includes_session_id_thread_id_and_model_headers_in_request() {
     skip_if_no_network!();
 
@@ -792,7 +792,7 @@ async fn includes_session_id_thread_id_and_model_headers_in_request() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn provider_auth_command_supplies_bearer_token() {
     skip_if_no_network!();
 
@@ -808,7 +808,7 @@ async fn provider_auth_command_supplies_bearer_token() {
     send_provider_auth_request(&server, auth_fixture.auth()).await;
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn provider_auth_command_refreshes_after_401() {
     skip_if_no_network!();
 
@@ -936,7 +936,7 @@ async fn send_provider_auth_request(server: &MockServer, auth: ModelProviderAuth
     }
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn includes_base_instructions_override_in_request() {
     skip_if_no_network!();
     // Mock server
@@ -984,7 +984,7 @@ async fn includes_base_instructions_override_in_request() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn chatgpt_auth_sends_correct_request() {
     skip_if_no_network!();
 
@@ -1062,7 +1062,7 @@ async fn chatgpt_auth_sends_correct_request() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn prefers_apikey_when_config_prefers_apikey_even_with_chatgpt_tokens() {
     skip_if_no_network!();
 
@@ -1151,7 +1151,7 @@ async fn prefers_apikey_when_config_prefers_apikey_even_with_chatgpt_tokens() {
     wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn includes_user_instructions_message_in_request() {
     skip_if_no_network!();
     let server = MockServer::start().await;
@@ -1230,7 +1230,7 @@ async fn includes_user_instructions_message_in_request() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn includes_apps_guidance_as_developer_message_for_chatgpt_auth() {
     skip_if_no_network!();
     let server = MockServer::start().await;
@@ -1292,7 +1292,7 @@ async fn includes_apps_guidance_as_developer_message_for_chatgpt_auth() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn omits_apps_guidance_for_api_key_auth_even_when_feature_enabled() {
     skip_if_no_network!();
     let server = MockServer::start().await;
@@ -1349,7 +1349,7 @@ async fn omits_apps_guidance_for_api_key_auth_even_when_feature_enabled() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn omits_apps_guidance_when_configured_off() {
     skip_if_no_network!();
     let server = MockServer::start().await;
@@ -1403,7 +1403,7 @@ async fn omits_apps_guidance_when_configured_off() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn omits_environment_context_when_configured_off() {
     let server = MockServer::start().await;
     let resp_mock = mount_sse_once(
@@ -1444,7 +1444,7 @@ async fn omits_environment_context_when_configured_off() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn skills_append_to_developer_message() {
     skip_if_no_network!();
     let server = MockServer::start().await;
@@ -1512,7 +1512,7 @@ async fn skills_append_to_developer_message() {
     let _codex_home_guard = codex_home;
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn skills_use_aliases_in_developer_message_under_budget_pressure() {
     skip_if_no_network!();
     let server = MockServer::start().await;
@@ -1601,7 +1601,7 @@ async fn skills_use_aliases_in_developer_message_under_budget_pressure() {
     let _codex_home_parent_guard = codex_home_parent;
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn includes_configured_effort_in_request() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
     let server = MockServer::start().await;
@@ -1648,7 +1648,7 @@ async fn includes_configured_effort_in_request() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn includes_no_effort_in_request() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
     let server = MockServer::start().await;
@@ -1689,7 +1689,7 @@ async fn includes_no_effort_in_request() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn includes_default_reasoning_effort_in_request_when_defined_by_model_info()
 -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
@@ -1731,7 +1731,7 @@ async fn includes_default_reasoning_effort_in_request_when_defined_by_model_info
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn user_turn_collaboration_mode_overrides_model_and_effort() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
     let server = MockServer::start().await;
@@ -1798,7 +1798,7 @@ async fn user_turn_collaboration_mode_overrides_model_and_effort() -> anyhow::Re
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn configured_reasoning_summary_is_sent() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
     let server = MockServer::start().await;
@@ -1844,7 +1844,7 @@ async fn configured_reasoning_summary_is_sent() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn user_turn_explicit_reasoning_summary_overrides_model_catalog_default() -> anyhow::Result<()>
 {
     skip_if_no_network!(Ok(()));
@@ -1917,7 +1917,7 @@ async fn user_turn_explicit_reasoning_summary_overrides_model_catalog_default() 
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn reasoning_summary_is_omitted_when_disabled() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
     let server = MockServer::start().await;
@@ -1962,7 +1962,7 @@ async fn reasoning_summary_is_omitted_when_disabled() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn reasoning_summary_none_overrides_model_catalog_default() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
     let server = MockServer::start().await;
@@ -2018,7 +2018,7 @@ async fn reasoning_summary_none_overrides_model_catalog_default() -> anyhow::Res
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn includes_default_verbosity_in_request() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
     let server = MockServer::start().await;
@@ -2059,7 +2059,7 @@ async fn includes_default_verbosity_in_request() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn configured_verbosity_not_sent_for_models_without_support() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
     let server = MockServer::start().await;
@@ -2105,7 +2105,7 @@ async fn configured_verbosity_not_sent_for_models_without_support() -> anyhow::R
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn configured_verbosity_is_sent() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
     let server = MockServer::start().await;
@@ -2152,7 +2152,7 @@ async fn configured_verbosity_is_sent() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn includes_developer_instructions_message_in_request() {
     skip_if_no_network!();
     let server = MockServer::start().await;
@@ -2246,7 +2246,7 @@ async fn includes_developer_instructions_message_in_request() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn azure_responses_request_includes_store_and_reasoning_ids() {
     skip_if_no_network!();
 
@@ -2425,7 +2425,7 @@ async fn azure_responses_request_includes_store_and_reasoning_ids() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn token_count_includes_rate_limits_snapshot() {
     skip_if_no_network!();
     let server = MockServer::start().await;
@@ -2589,7 +2589,7 @@ async fn token_count_includes_rate_limits_snapshot() {
     wait_for_event(&codex, |msg| matches!(msg, EventMsg::TurnComplete(_))).await;
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn usage_limit_error_emits_rate_limit_event() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
     let server = MockServer::start().await;
@@ -2679,7 +2679,7 @@ async fn usage_limit_error_emits_rate_limit_event() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn context_window_error_sets_total_tokens_to_model_window() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
     let server = MockServer::start().await;
@@ -2782,7 +2782,7 @@ async fn context_window_error_sets_total_tokens_to_model_window() -> anyhow::Res
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn incomplete_response_emits_content_filter_error_message() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
     let server = MockServer::start().await;
@@ -2851,7 +2851,7 @@ async fn incomplete_response_emits_content_filter_error_message() -> anyhow::Res
 /// the safest choice.
 const EXISTING_ENV_VAR_WITH_NON_EMPTY_VALUE: &str = "PATH";
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn azure_overrides_assign_properties_used_for_responses_url() {
     skip_if_no_network!();
 
@@ -2939,7 +2939,7 @@ async fn azure_overrides_assign_properties_used_for_responses_url() {
     wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn env_var_overrides_loaded_auth() {
     skip_if_no_network!();
 
@@ -3037,7 +3037,7 @@ fn create_dummy_codex_auth() -> CodexAuth {
 /// - Turn 3: user sends U3; model responds (same SSE again, not important).
 ///
 /// We assert that the `input` sent on each turn contains the expected conversation history
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn history_dedupes_streamed_and_final_messages_across_turns() {
     // Skip under Codex sandbox network restrictions (mirrors other tests).
     skip_if_no_network!();

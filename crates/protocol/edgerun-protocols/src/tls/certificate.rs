@@ -175,7 +175,9 @@ fn verify_certificate_signature_with_issuer(
 ) -> Result<(), String> {
     match issuer.subject_public_key_algorithm.as_slice() {
         OID_EC_PUBLIC_KEY => verify_ecdsa_certificate_signature(cert, issuer),
+        #[cfg(feature = "tls-rsa")]
         OID_RSA_ENCRYPTION => verify_rsa_certificate_signature(cert, issuer),
+        #[cfg(feature = "tls-ed25519")]
         OID_ED25519 => verify_ed25519_certificate_signature(cert, issuer),
         alg => Err(format!("Unsupported issuer public key algorithm: {alg:?}")),
     }
@@ -220,6 +222,7 @@ fn verify_ecdsa_certificate_signature(
         .map_err(|e| format!("ECDSA signature verification failed ({hasher_name} over P-256): {e}"))
 }
 
+#[cfg(feature = "tls-rsa")]
 fn verify_rsa_certificate_signature(
     cert: &Certificate,
     issuer: &Certificate,
@@ -256,6 +259,7 @@ fn verify_rsa_certificate_signature(
     }
 }
 
+#[cfg(feature = "tls-rsa")]
 fn verify_rsa_pkcs1_sha256(
     public_key: &edgerun_crypto::rsa::RsaPublicKey,
     message: &[u8],
@@ -272,6 +276,7 @@ fn verify_rsa_pkcs1_sha256(
         .map_err(|e| format!("RSA PKCS#1 SHA-256 certificate signature verification failed: {e}"))
 }
 
+#[cfg(feature = "tls-rsa")]
 fn verify_rsa_pkcs1_sha384(
     public_key: &edgerun_crypto::rsa::RsaPublicKey,
     message: &[u8],
@@ -288,6 +293,7 @@ fn verify_rsa_pkcs1_sha384(
         .map_err(|e| format!("RSA PKCS#1 SHA-384 certificate signature verification failed: {e}"))
 }
 
+#[cfg(feature = "tls-rsa")]
 fn verify_rsa_pkcs1_sha512(
     public_key: &edgerun_crypto::rsa::RsaPublicKey,
     message: &[u8],
@@ -304,6 +310,7 @@ fn verify_rsa_pkcs1_sha512(
         .map_err(|e| format!("RSA PKCS#1 SHA-512 certificate signature verification failed: {e}"))
 }
 
+#[cfg(feature = "tls-rsa")]
 fn verify_rsa_pss_sha256(
     public_key: &edgerun_crypto::rsa::RsaPublicKey,
     message: &[u8],
@@ -321,6 +328,7 @@ fn verify_rsa_pss_sha256(
         .map_err(|e| format!("RSA-PSS SHA-256 certificate signature verification failed: {e}"))
 }
 
+#[cfg(feature = "tls-ed25519")]
 fn verify_ed25519_certificate_signature(
     cert: &Certificate,
     issuer: &Certificate,

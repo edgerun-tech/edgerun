@@ -79,7 +79,7 @@ fn assert_no_matched_rules_invariant(output_item: &Value) {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn execpolicy_blocks_shell_invocation() -> Result<()> {
     let mut builder = test_codex().with_config(|config| {
         let policy_path = config.codex_home.join("rules").join("policy.rules");
@@ -173,7 +173,7 @@ async fn execpolicy_blocks_shell_invocation() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn shell_command_empty_script_with_collaboration_mode_does_not_panic() -> Result<()> {
     let server = start_mock_server().await;
     let mut builder = test_codex().with_model("gpt-5.2").with_config(|config| {
@@ -232,7 +232,7 @@ async fn shell_command_empty_script_with_collaboration_mode_does_not_panic() -> 
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn unified_exec_empty_script_with_collaboration_mode_does_not_panic() -> Result<()> {
     let server = start_mock_server().await;
     let mut builder = test_codex().with_model("gpt-5.2").with_config(|config| {
@@ -295,7 +295,7 @@ async fn unified_exec_empty_script_with_collaboration_mode_does_not_panic() -> R
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn shell_command_whitespace_script_with_collaboration_mode_does_not_panic() -> Result<()> {
     let server = start_mock_server().await;
     let mut builder = test_codex().with_model("gpt-5.2").with_config(|config| {
@@ -354,7 +354,7 @@ async fn shell_command_whitespace_script_with_collaboration_mode_does_not_panic(
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn unified_exec_whitespace_script_with_collaboration_mode_does_not_panic() -> Result<()> {
     let server = start_mock_server().await;
     let mut builder = test_codex().with_model("gpt-5.2").with_config(|config| {

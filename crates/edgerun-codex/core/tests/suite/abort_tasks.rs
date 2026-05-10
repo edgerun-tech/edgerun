@@ -19,7 +19,7 @@ use regex_lite::Regex;
 
 /// Integration test: spawn a long‑running shell_command tool via a mocked Responses SSE
 /// function call, then interrupt the session and expect TurnAborted.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn interrupt_long_running_tool_emits_turn_aborted() {
     let command = "sleep 60";
 
@@ -70,7 +70,7 @@ async fn interrupt_long_running_tool_emits_turn_aborted() {
 /// the original tool call and an `"aborted"` `function_call_output`. This test
 /// exercises the follow-up flow: it sends another user turn, inspects the mock
 /// responses server, and ensures the model receives the synthesized abort.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn interrupt_tool_records_history_entries() {
     let command = "sleep 60";
     let call_id = "call-history";
@@ -115,7 +115,7 @@ async fn interrupt_tool_records_history_entries() {
 
     wait_for_event(&codex, |ev| matches!(ev, EventMsg::ExecCommandBegin(_))).await;
 
-    tokio::time::sleep(Duration::from_secs_f32(0.1)).await;
+    edgerun_tokio::time::sleep(Duration::from_secs_f32(0.1)).await;
     codex.submit(Op::Interrupt).await.unwrap();
 
     wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnAborted(_))).await;
@@ -172,7 +172,7 @@ async fn interrupt_tool_records_history_entries() {
 
 /// After an interrupt we persist a model-visible `<turn_aborted>` marker in the conversation
 /// history. This test asserts that the marker is included in the next `/responses` request.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn interrupt_persists_turn_aborted_marker_in_next_request() {
     let command = "sleep 60";
     let call_id = "call-turn-aborted-marker";
@@ -217,7 +217,7 @@ async fn interrupt_persists_turn_aborted_marker_in_next_request() {
 
     wait_for_event(&codex, |ev| matches!(ev, EventMsg::ExecCommandBegin(_))).await;
 
-    tokio::time::sleep(Duration::from_secs_f32(0.1)).await;
+    edgerun_tokio::time::sleep(Duration::from_secs_f32(0.1)).await;
     codex.submit(Op::Interrupt).await.unwrap();
 
     wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnAborted(_))).await;

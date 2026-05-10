@@ -9,8 +9,8 @@ use edgerun_bytes::Bytes;
 use edgerun_http::HeaderMap;
 use edgerun_http::Method;
 use edgerun_http::StatusCode;
-use futures::StreamExt;
-use futures::stream::BoxStream;
+use edgerun_futures::StreamExt;
+use edgerun_futures::stream::BoxStream;
 use tracing::Level;
 use tracing::enabled;
 use tracing::trace;
@@ -35,7 +35,7 @@ pub struct ReqwestTransport {
 }
 
 impl ReqwestTransport {
-    pub fn new(client: reqwest::Client) -> Self {
+    pub fn new(client: edgerun_reqwest::Client) -> Self {
         Self {
             client: CodexHttpClient::new(client),
         }
@@ -69,7 +69,7 @@ impl ReqwestTransport {
         Ok(builder)
     }
 
-    fn map_error(err: reqwest::Error) -> TransportError {
+    fn map_error(err: edgerun_reqwest::Error) -> TransportError {
         if err.is_timeout() {
             TransportError::Timeout
         } else {

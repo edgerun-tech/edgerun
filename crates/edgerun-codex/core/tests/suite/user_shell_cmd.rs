@@ -30,17 +30,17 @@ use pretty_assertions::assert_eq;
 use regex_lite::escape;
 use std::path::PathBuf;
 use tempfile::TempDir;
-use tokio::time::Duration;
-use tokio::time::timeout;
+use edgerun_tokio::time::Duration;
+use edgerun_tokio::time::timeout;
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn user_shell_cmd_ls_and_cat_in_temp_dir() {
     // Create a temporary working directory with a known file.
     let cwd = TempDir::new().unwrap();
     let file_name = "hello.txt";
     let file_path: PathBuf = cwd.path().join(file_name);
     let contents = "hello from bang test\n";
-    tokio::fs::write(&file_path, contents)
+    edgerun_tokio::fs::write(&file_path, contents)
         .await
         .expect("write temp file");
 
@@ -98,7 +98,7 @@ async fn user_shell_cmd_ls_and_cat_in_temp_dir() {
     assert_eq!(stdout, contents);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn user_shell_cmd_can_be_interrupted() {
     // Set up isolated config and conversation.
     let server = start_mock_server().await;
@@ -139,7 +139,7 @@ async fn user_shell_cmd_can_be_interrupted() {
     assert_eq!(ev.reason, TurnAbortReason::Interrupted);
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn user_shell_command_does_not_replace_active_turn() -> anyhow::Result<()> {
     let server = start_mock_server().await;
     let mut builder = test_codex().with_model("gpt-5.4");
@@ -260,7 +260,7 @@ async fn user_shell_command_does_not_replace_active_turn() -> anyhow::Result<()>
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn user_shell_command_history_is_persisted_and_shared_with_model() -> anyhow::Result<()> {
     let server = responses::start_mock_server().await;
     // Disable it to ease command matching.
@@ -344,7 +344,7 @@ async fn user_shell_command_history_is_persisted_and_shared_with_model() -> anyh
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn user_shell_command_does_not_set_network_sandbox_env_var() -> anyhow::Result<()> {
     let server = responses::start_mock_server().await;
     let mut builder = core_test_support::test_codex::test_codex().with_config(|config| {
@@ -387,7 +387,7 @@ async fn user_shell_command_does_not_set_network_sandbox_env_var() -> anyhow::Re
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[cfg(not(target_os = "windows"))] // TODO: unignore on windows
 async fn user_shell_command_output_is_truncated_in_history() -> anyhow::Result<()> {
     let server = responses::start_mock_server().await;
@@ -450,7 +450,7 @@ async fn user_shell_command_output_is_truncated_in_history() -> anyhow::Result<(
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn user_shell_command_is_truncated_only_once() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 

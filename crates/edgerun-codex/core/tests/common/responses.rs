@@ -17,11 +17,11 @@ use edgerun_tungstenite::extensions::compression::deflate::DeflateConfig;
 use edgerun_tungstenite::handshake::server::Request;
 use edgerun_tungstenite::handshake::server::Response;
 use edgerun_tungstenite::protocol::WebSocketConfig;
-use futures::SinkExt;
-use futures::StreamExt;
-use tokio::net::TcpListener;
-use tokio::sync::Notify;
-use tokio::sync::oneshot;
+use edgerun_futures::SinkExt;
+use edgerun_futures::StreamExt;
+use edgerun_tokio::net::TcpListener;
+use edgerun_tokio::sync::Notify;
+use edgerun_tokio::sync::oneshot;
 use wiremock::BodyPrintLimit;
 use wiremock::Match;
 use wiremock::Mock;
@@ -465,7 +465,7 @@ pub struct WebSocketTestServer {
     handshakes: Arc<Mutex<Vec<WebSocketHandshake>>>,
     request_log_updated: Arc<Notify>,
     shutdown: oneshot::Sender<()>,
-    task: tokio::task::JoinHandle<()>,
+    task: edgerun_tokio::task::JoinHandle<()>,
 }
 
 impl WebSocketTestServer {
@@ -518,18 +518,18 @@ impl WebSocketTestServer {
             return true;
         }
 
-        let deadline = tokio::time::Instant::now() + timeout;
+        let deadline = edgerun_tokio::time::Instant::now() + timeout;
         let poll_interval = Duration::from_millis(10);
         loop {
             if self.handshakes.lock().unwrap().len() >= expected {
                 return true;
             }
-            let now = tokio::time::Instant::now();
+            let now = edgerun_tokio::time::Instant::now();
             if now >= deadline {
                 return false;
             }
             let sleep_for = std::cmp::min(poll_interval, deadline.saturating_duration_since(now));
-            tokio::time::sleep(sleep_for).await;
+            edgerun_tokio::time::sleep(sleep_for).await;
         }
     }
     pub fn single_handshake(&self) -> WebSocketHandshake {
@@ -543,7 +543,7 @@ impl WebSocketTestServer {
     pub async fn shutdown(self) {
         let _ = self.shutdown.send(());
         let mut task = self.task;
-        if tokio::time::timeout(Duration::from_secs(10), &mut task)
+        if edgerun_tokio::time::timeout(Duration::from_secs(10), &mut task)
             .await
             .is_err()
         {
@@ -1291,9 +1291,9 @@ pub async fn start_websocket_server_with_headers(
     let connections = Arc::new(Mutex::new(VecDeque::from(connections)));
     let (shutdown_tx, mut shutdown_rx) = oneshot::channel();
 
-    let task = tokio::spawn(async move {
+    let task = edgerun_tokio::spawn(async move {
         loop {
-            let accept_res = tokio::select! {
+            let accept_res = edgerun_tokio::select! {
                 _ = &mut shutdown_rx => return,
                 accept_res = listener.accept() => accept_res,
             };
@@ -1311,7 +1311,7 @@ pub async fn start_websocket_server_with_headers(
             };
 
             if let Some(delay) = connection.accept_delay {
-                tokio::time::sleep(delay).await;
+                edgerun_tokio::time::sleep(delay).await;
             }
 
             let response_headers = connection.response_headers.clone();

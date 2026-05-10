@@ -5,15 +5,15 @@ use codex_protocol::models::BaseInstructions;
 use codex_protocol::models::FunctionCallOutputBody;
 use codex_protocol::models::ResponseItem;
 use codex_tools::ToolSpec;
-use futures::Stream;
+use edgerun_futures::Stream;
 use serde::Deserialize;
 use edgerun_json::serde_json::Value;
 use std::collections::HashSet;
 use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
-use tokio::sync::mpsc;
-use tokio_util::sync::CancellationToken;
+use edgerun_tokio::sync::mpsc;
+use edgerun_tokio_util::sync::CancellationToken;
 
 /// Review thread system prompt. Edit `core/src/review_prompt.md` to customize.
 pub const REVIEW_PROMPT: &str = include_str!("../review_prompt.md");

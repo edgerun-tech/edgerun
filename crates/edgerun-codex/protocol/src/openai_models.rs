@@ -8,12 +8,12 @@ use std::str::FromStr;
 
 use edgerun_json::FromJson;
 use edgerun_json::ToJson;
+use edgerun_strum::IntoEnumIterator;
+use edgerun_strum_macros::Display;
+use edgerun_strum_macros::EnumIter;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
-use strum::IntoEnumIterator;
-use strum_macros::Display;
-use strum_macros::EnumIter;
 use tracing::warn;
 use ts_rs::TS;
 

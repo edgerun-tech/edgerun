@@ -2,15 +2,15 @@ use super::*;
 use crate::exec_output::StreamOutput;
 use crate::protocol::RateLimitWindow;
 use edgerun_http::Response as HttpResponse;
+use edgerun_reqwest::Response;
+use edgerun_reqwest::ResponseBuilderExt;
+use edgerun_reqwest::StatusCode;
+use edgerun_reqwest::Url;
 use edgerun_time::chrono::ChronoDuration;
 use edgerun_time::chrono::ChronoTimeZone;
 use edgerun_time::chrono::ChronoUtc as Utc;
 use edgerun_time::chrono::ChronoUtcDateTime as DateTime;
 use pretty_assertions::assert_eq;
-use reqwest::Response;
-use reqwest::ResponseBuilderExt;
-use reqwest::StatusCode;
-use reqwest::Url;
 
 fn rate_limit_snapshot() -> RateLimitSnapshot {
     let primary_reset_at = Utc

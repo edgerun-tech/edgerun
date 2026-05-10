@@ -9,9 +9,9 @@ use codex_protocol::protocol::SubAgentSource;
 use pretty_assertions::assert_eq;
 use edgerun_json::serde_json::json;
 use std::sync::Arc;
-use tokio::sync::Mutex;
+use edgerun_tokio::sync::Mutex;
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn multi_agent_v2_request_user_input_rejects_subagent_threads() {
     let (session, mut turn) = make_session_and_context().await;
     turn.session_source = SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
@@ -28,7 +28,7 @@ async fn multi_agent_v2_request_user_input_rejects_subagent_threads() {
     .handle(ToolInvocation {
         session: Arc::new(session),
         turn: Arc::new(turn),
-        cancellation_token: tokio_util::sync::CancellationToken::new(),
+        cancellation_token: edgerun_tokio_util::sync::CancellationToken::new(),
         tracker: Arc::new(Mutex::new(TurnDiffTracker::default())),
         call_id: "call-1".to_string(),
         tool_name: codex_tools::ToolName::plain(REQUEST_USER_INPUT_TOOL_NAME),

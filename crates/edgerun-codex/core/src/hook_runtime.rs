@@ -637,7 +637,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn hook_run_analytics_payload_uses_completed_turn_id() {
         let (_session, turn_context) = make_session_and_context().await;
         let completed = HookCompletedEvent {
@@ -656,7 +656,7 @@ mod tests {
         assert_eq!(hook.status, HookRunStatus::Blocked);
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn hook_run_analytics_payload_falls_back_to_turn_context_id() {
         let (_session, turn_context) = make_session_and_context().await;
         let completed = HookCompletedEvent {

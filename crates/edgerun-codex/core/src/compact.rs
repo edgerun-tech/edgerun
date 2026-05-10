@@ -38,7 +38,7 @@ use codex_rollout_trace::InferenceTraceContext;
 use codex_utils_output_truncation::TruncationPolicy;
 use codex_utils_output_truncation::approx_token_count;
 use codex_utils_output_truncation::truncate_text;
-use futures::prelude::*;
+use edgerun_futures::prelude::*;
 use tracing::error;
 
 use codex_model_provider_info::ModelProviderInfo;
@@ -245,7 +245,7 @@ async fn run_compact_task_inner_impl(
                         e,
                     )
                     .await;
-                    tokio::time::sleep(delay).await;
+                    edgerun_tokio::time::sleep(delay).await;
                     continue;
                 } else {
                     let event = EventMsg::Error(e.to_error_event(/*message_prefix*/ None));

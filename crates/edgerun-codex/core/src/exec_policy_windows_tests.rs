@@ -2,7 +2,7 @@ use super::*;
 use pretty_assertions::assert_eq;
 use std::path::Path;
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn evaluates_powershell_inner_commands_against_prompt_rules() {
     assert_exec_approval_requirement_for_command(
         ExecApprovalRequirementScenario {
@@ -26,7 +26,7 @@ async fn evaluates_powershell_inner_commands_against_prompt_rules() {
     .await;
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn evaluates_powershell_inner_commands_against_allow_rules() {
     assert_exec_approval_requirement_for_command(
         ExecApprovalRequirementScenario {
@@ -93,7 +93,7 @@ fn unmatched_safe_powershell_words_are_allowed() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn unmatched_dangerous_powershell_inner_commands_require_approval() {
     let inner_command = vec![
         "Remove-Item".to_string(),

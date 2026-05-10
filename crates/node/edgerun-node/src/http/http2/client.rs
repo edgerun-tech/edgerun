@@ -826,7 +826,7 @@ where
         }
 
         FrameType::Continuation => {
-            if let Some((stream_id, ref mut block, headers_end_stream)) = continuation_state {
+            if let Some((stream_id, block, headers_end_stream)) = continuation_state {
                 let block_clone = {
                     let mut b = block.clone();
                     b.extend_from_slice(&frame.payload);

@@ -4,9 +4,9 @@ use edgerun_http::HeaderName;
 use edgerun_http::HeaderValue;
 use opentelemetry::global;
 use opentelemetry::propagation::Injector;
-use reqwest::IntoUrl;
-use reqwest::Method;
-use reqwest::Response;
+use edgerun_reqwest::IntoUrl;
+use edgerun_reqwest::Method;
+use edgerun_reqwest::Response;
 use serde::Serialize;
 use std::fmt::Display;
 use std::time::Duration;
@@ -15,11 +15,11 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 #[derive(Clone, Debug)]
 pub struct CodexHttpClient {
-    inner: reqwest::Client,
+    inner: edgerun_reqwest::Client,
 }
 
 impl CodexHttpClient {
-    pub fn new(inner: reqwest::Client) -> Self {
+    pub fn new(inner: edgerun_reqwest::Client) -> Self {
         Self { inner }
     }
 
@@ -49,13 +49,13 @@ impl CodexHttpClient {
 #[must_use = "requests are not sent unless `send` is awaited"]
 #[derive(Debug)]
 pub struct CodexRequestBuilder {
-    builder: reqwest::RequestBuilder,
+    builder: edgerun_reqwest::RequestBuilder,
     method: Method,
     url: String,
 }
 
 impl CodexRequestBuilder {
-    fn new(builder: reqwest::RequestBuilder, method: Method, url: String) -> Self {
+    fn new(builder: edgerun_reqwest::RequestBuilder, method: Method, url: String) -> Self {
         Self {
             builder,
             method,
@@ -63,7 +63,7 @@ impl CodexRequestBuilder {
         }
     }
 
-    fn map(self, f: impl FnOnce(reqwest::RequestBuilder) -> reqwest::RequestBuilder) -> Self {
+    fn map(self, f: impl FnOnce(edgerun_reqwest::RequestBuilder) -> edgerun_reqwest::RequestBuilder) -> Self {
         Self {
             builder: f(self.builder),
             method: self.method,
@@ -105,12 +105,12 @@ impl CodexRequestBuilder {
 
     pub fn body<B>(self, body: B) -> Self
     where
-        B: Into<reqwest::Body>,
+        B: Into<edgerun_reqwest::Body>,
     {
         self.map(|builder| builder.body(body))
     }
 
-    pub async fn send(self) -> Result<Response, reqwest::Error> {
+    pub async fn send(self) -> Result<Response, edgerun_reqwest::Error> {
         let headers = trace_headers();
 
         match self.builder.headers(headers).send().await {

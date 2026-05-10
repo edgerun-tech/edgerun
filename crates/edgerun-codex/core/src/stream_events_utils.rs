@@ -5,7 +5,7 @@ use edgerun_encoding::base64::standard_decode;
 use codex_protocol::config_types::ModeKind;
 use codex_protocol::items::TurnItem;
 use codex_utils_stream_parser::strip_citations;
-use tokio_util::sync::CancellationToken;
+use edgerun_tokio_util::sync::CancellationToken;
 
 use crate::context::ContextualUserFragment;
 use crate::context::ImageGenerationInstructions;
@@ -27,7 +27,7 @@ use codex_protocol::models::ResponseItem;
 use codex_rollout::state_db;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_stream_parser::strip_proposed_plan_blocks;
-use futures::Future;
+use edgerun_futures::Future;
 use tracing::debug;
 use tracing::instrument;
 
@@ -114,9 +114,9 @@ async fn save_image_generation_result(
         })?;
     let path = image_generation_artifact_path(codex_home, session_id, call_id);
     if let Some(parent) = path.parent() {
-        tokio::fs::create_dir_all(parent).await?;
+        edgerun_tokio::fs::create_dir_all(parent).await?;
     }
-    tokio::fs::write(&path, bytes).await?;
+    edgerun_tokio::fs::write(&path, bytes).await?;
     Ok(path)
 }
 

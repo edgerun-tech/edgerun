@@ -27,7 +27,7 @@ async fn agents_instructions(mut builder: TestCodexBuilder) -> Result<String> {
         .ok_or_else(|| anyhow::anyhow!("instructions message not found"))
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn agents_override_is_preferred_over_agents_md() -> Result<()> {
     let instructions =
         agents_instructions(test_codex().with_workspace_setup(|cwd, fs| async move {
@@ -57,7 +57,7 @@ async fn agents_override_is_preferred_over_agents_md() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn configured_fallback_is_used_when_agents_candidate_is_directory() -> Result<()> {
     let instructions = agents_instructions(
         test_codex()
@@ -88,7 +88,7 @@ async fn configured_fallback_is_used_when_agents_candidate_is_directory() -> Res
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn agents_docs_are_concatenated_from_project_root_to_cwd() -> Result<()> {
     let instructions = agents_instructions(
         test_codex()

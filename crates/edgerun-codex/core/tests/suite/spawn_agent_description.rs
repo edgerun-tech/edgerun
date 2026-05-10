@@ -25,7 +25,7 @@ use core_test_support::test_codex::test_codex;
 use edgerun_json::serde_json::Value;
 use std::time::Duration;
 use std::time::Instant;
-use tokio::time::sleep;
+use edgerun_tokio::time::sleep;
 
 const SPAWN_AGENT_TOOL_NAME: &str = "spawn_agent";
 
@@ -103,7 +103,7 @@ async fn wait_for_model_available(manager: &SharedModelsManager, slug: &str) {
     }
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn spawn_agent_description_lists_visible_models_and_reasoning_efforts() -> Result<()> {
     let server = start_mock_server().await;
     mount_models_once(

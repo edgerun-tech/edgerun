@@ -19,9 +19,9 @@ edgerun-tokio-tungstenite = { workspace = true }
 edgerun-tungstenite = { workspace = true }
 edgerun-time = { workspace = true }
 edgerun-url = { workspace = true }
-futures = { workspace = true }
-reqwest = { workspace = true, features = ["json", "stream"] }
+edgerun-futures = { workspace = true }
+edgerun-reqwest = { workspace = true, features = ["json", "stream"] }
 serde = { workspace = true, features = ["derive"] }
-tokio = { workspace = true, features = ["fs", "macros", "net", "rt", "sync", "time"] }
+edgerun-tokio = { workspace = true, features = ["fs", "macros", "net", "rt", "sync", "time"] }
 tracing = { workspace = true }
-tokio-util = { workspace = true, features = ["codec", "io"] }
+edgerun-tokio-util = { workspace = true, features = ["codec", "io"] }

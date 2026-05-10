@@ -3,7 +3,7 @@
 //! Codex constructs outbound reqwest clients and secure websocket connections in a few crates, but
 //! they all need the same trust-store policy when enterprise proxies or gateways intercept TLS.
 //! This module centralizes that policy so callers can start from an ordinary
-//! `reqwest::ClientBuilder` or rustls client config, layer in custom CA support, and either get
+//! `edgerun_reqwest::ClientBuilder` or rustls client config, layer in custom CA support, and either get
 //! back a configured transport or a user-facing error that explains how to fix a misconfigured CA
 //! bundle.
 //!
@@ -22,7 +22,7 @@
 //! and environment variables that the test chose for itself. That matters here because the normal
 //! reqwest client-construction path is not hermetic enough for environment-sensitive tests:
 //!
-//! - on macOS seatbelt runs, `reqwest::Client::builder().build()` can panic inside
+//! - on macOS seatbelt runs, `edgerun_reqwest::Client::builder().build()` can panic inside
 //!   `system-configuration` while probing platform proxy settings, which means the process can die
 //!   before the custom-CA code reports success or a structured error. That matters in practice
 //!   because Codex itself commonly runs spawned test processes under seatbelt, so this is not just
@@ -109,7 +109,7 @@ pub enum BuildCustomCaTransportError {
         source_env: &'static str,
         path: PathBuf,
         certificate_index: usize,
-        source: reqwest::Error,
+        source: edgerun_reqwest::Error,
     },
 
     /// Reqwest rejected the final client configuration after a custom CA bundle was loaded.
@@ -122,12 +122,12 @@ pub enum BuildCustomCaTransportError {
         source_env: &'static str,
         path: PathBuf,
         #[source]
-        source: reqwest::Error,
+        source: edgerun_reqwest::Error,
     },
 
     /// Reqwest rejected the final client configuration while using only system roots.
     #[error("Failed to build HTTP client while using system root certificates: {0}")]
-    BuildClientWithSystemRoots(#[source] reqwest::Error),
+    BuildClientWithSystemRoots(#[source] edgerun_reqwest::Error),
 
     /// One parsed certificate block could not be registered with the websocket TLS root store.
     #[error(
@@ -168,7 +168,7 @@ impl From<BuildCustomCaTransportError> for io::Error {
 /// over `SSL_CERT_FILE`, and empty values for either are treated as unset so callers do not
 /// accidentally turn `VAR=""` into a bogus path lookup.
 ///
-/// Callers that build a raw `reqwest::Client` directly bypass this policy entirely. That is an
+/// Callers that build a raw `edgerun_reqwest::Client` directly bypass this policy entirely. That is an
 /// easy mistake to make when adding a new outbound Codex HTTP path, and the resulting bug only
 /// shows up in environments where a proxy or gateway requires a custom root CA.
 ///
@@ -177,8 +177,8 @@ impl From<BuildCustomCaTransportError> for io::Error {
 /// Returns a [`BuildCustomCaTransportError`] when the configured CA file is unreadable,
 /// malformed, or contains a certificate block that `reqwest` cannot register as a root.
 pub fn build_reqwest_client_with_custom_ca(
-    builder: reqwest::ClientBuilder,
-) -> Result<reqwest::Client, BuildCustomCaTransportError> {
+    builder: edgerun_reqwest::ClientBuilder,
+) -> Result<edgerun_reqwest::Client, BuildCustomCaTransportError> {
     build_reqwest_client_with_env(&ProcessEnv, builder)
 }
 
@@ -207,8 +207,8 @@ pub fn maybe_build_rustls_client_config_with_custom_ca()
 /// [`build_reqwest_client_with_custom_ca`] so test-only proxy behavior does not leak into
 /// ordinary client construction.
 pub fn build_reqwest_client_for_subprocess_tests(
-    builder: reqwest::ClientBuilder,
-) -> Result<reqwest::Client, BuildCustomCaTransportError> {
+    builder: edgerun_reqwest::ClientBuilder,
+) -> Result<edgerun_reqwest::Client, BuildCustomCaTransportError> {
     build_reqwest_client_with_env(&ProcessEnv, builder.no_proxy())
 }
 
@@ -270,8 +270,8 @@ fn maybe_build_rustls_client_config_with_env(
 /// certificate with that builder.
 fn build_reqwest_client_with_env(
     env_source: &dyn EnvSource,
-    mut builder: reqwest::ClientBuilder,
-) -> Result<reqwest::Client, BuildCustomCaTransportError> {
+    mut builder: edgerun_reqwest::ClientBuilder,
+) -> Result<edgerun_reqwest::Client, BuildCustomCaTransportError> {
     if let Some(bundle) = env_source.configured_ca_bundle() {
         ensure_rustls_crypto_provider();
         info!(
@@ -284,7 +284,7 @@ fn build_reqwest_client_with_env(
         let certificates = bundle.load_certificates()?;
 
         for (idx, cert) in certificates.iter().enumerate() {
-            let certificate = match reqwest::Certificate::from_der(cert.as_ref()) {
+            let certificate = match edgerun_reqwest::Certificate::from_der(cert.as_ref()) {
                 Ok(certificate) => certificate,
                 Err(source) => {
                     warn!(
@@ -627,7 +627,7 @@ impl NormalizedPem {
 /// A PEM `CERTIFICATE` block usually decodes to exactly one DER blob: the certificate itself.
 /// OpenSSL's `TRUSTED CERTIFICATE` variant is different. It starts with that same certificate
 /// blob, but may append extra `X509_AUX` bytes after it to describe OpenSSL-specific trust
-/// settings. `reqwest::Certificate::from_der` only understands the certificate object, not those
+/// settings. `edgerun_reqwest::Certificate::from_der` only understands the certificate object, not those
 /// trailing OpenSSL extensions.
 ///
 /// This helper therefore asks a narrower question than "is this a valid certificate?": where does

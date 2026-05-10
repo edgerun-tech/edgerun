@@ -95,7 +95,7 @@ pub mod ssh;
 pub mod tcl_ac;
 #[cfg(feature = "tftp")]
 pub mod tftp;
-#[cfg(feature = "tls")]
+#[cfg(any(feature = "tls", feature = "tls-cert"))]
 pub mod tls;
 #[cfg(feature = "tuya")]
 pub mod tuya;

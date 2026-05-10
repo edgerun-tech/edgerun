@@ -17,10 +17,10 @@ use anyhow::bail;
 use codex_otel::SessionTelemetry;
 use codex_protocol::ThreadId;
 use codex_utils_absolute_path::AbsolutePathBuf;
-use tokio::fs;
-use tokio::process::Command;
-use tokio::sync::watch;
-use tokio::time::timeout;
+use edgerun_tokio::fs;
+use edgerun_tokio::process::Command;
+use edgerun_tokio::sync::watch;
+use edgerun_tokio::time::timeout;
 use tracing::Instrument;
 use tracing::info_span;
 
@@ -90,7 +90,7 @@ impl ShellSnapshot {
         state_db: Option<StateDbHandle>,
     ) {
         let snapshot_span = info_span!("shell_snapshot", thread_id = %session_id);
-        tokio::spawn(
+        edgerun_tokio::spawn(
             async move {
                 let timer = session_telemetry.start_timer("codex.shell_snapshot.duration_ms", &[]);
                 let snapshot = ShellSnapshot::try_new(
@@ -142,7 +142,7 @@ impl ShellSnapshot {
         // Clean the (unlikely) leaked snapshot files.
         let codex_home = codex_home.clone();
         let cleanup_session_id = session_id;
-        tokio::spawn(async move {
+        edgerun_tokio::spawn(async move {
             if let Err(err) =
                 cleanup_stale_snapshots(&codex_home, cleanup_session_id, state_db).await
             {

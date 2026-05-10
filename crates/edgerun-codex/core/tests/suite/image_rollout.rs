@@ -68,7 +68,7 @@ async fn read_rollout_text(path: &Path) -> anyhow::Result<String> {
         {
             return Ok(text);
         }
-        tokio::time::sleep(Duration::from_millis(20)).await;
+        edgerun_tokio::time::sleep(Duration::from_millis(20)).await;
     }
     std::fs::read_to_string(path)
         .with_context(|| format!("read rollout file at {}", path.display()))
@@ -83,7 +83,7 @@ fn write_test_png(path: &Path, color: [u8; 4]) -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn copy_paste_local_image_persists_rollout_request_shape() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -175,7 +175,7 @@ async fn copy_paste_local_image_persists_rollout_request_shape() -> anyhow::Resu
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn drag_drop_image_persists_rollout_request_shape() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 

@@ -462,7 +462,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn test_implicit_patch_single_arg_is_error() {
         let patch = "*** Begin Patch\n*** Add File: foo\n+hi\n*** End Patch".to_string();
         let args = vec![patch];
@@ -479,7 +479,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn test_implicit_patch_bash_script_is_error() {
         let script = "*** Begin Patch\n*** Add File: foo\n+hi\n*** End Patch";
         let args = args_bash(script);
@@ -496,7 +496,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn test_literal() {
         let args = strs_to_strings(&[
             "apply_patch",
@@ -521,7 +521,7 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn test_literal_applypatch() {
         let args = strs_to_strings(&[
             "applypatch",
@@ -546,19 +546,19 @@ mod tests {
         }
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn test_heredoc() {
         assert_match(&heredoc_script(""), /*expected_workdir*/ None);
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn test_heredoc_non_login_shell() {
         let script = heredoc_script("");
         let args = strs_to_strings(&["bash", "-c", &script]);
         assert_match_args(args, /*expected_workdir*/ None);
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn test_heredoc_applypatch() {
         let args = strs_to_strings(&[
             "bash",
@@ -586,12 +586,12 @@ PATCH"#,
         }
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn test_powershell_heredoc() {
         let script = heredoc_script("");
         assert_match_args(args_powershell(&script), /*expected_workdir*/ None);
     }
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn test_powershell_heredoc_no_profile() {
         let script = heredoc_script("");
         assert_match_args(
@@ -599,82 +599,82 @@ PATCH"#,
             /*expected_workdir*/ None,
         );
     }
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn test_pwsh_heredoc() {
         let script = heredoc_script("");
         assert_match_args(args_pwsh(&script), /*expected_workdir*/ None);
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn test_cmd_heredoc_with_cd() {
         let script = heredoc_script("cd foo && ");
         assert_match_args(args_cmd(&script), Some("foo"));
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn test_heredoc_with_leading_cd() {
         assert_match(&heredoc_script("cd foo && "), Some("foo"));
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn test_cd_with_semicolon_is_ignored() {
         assert_not_match(&heredoc_script("cd foo; "));
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn test_cd_or_apply_patch_is_ignored() {
         assert_not_match(&heredoc_script("cd bar || "));
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn test_cd_pipe_apply_patch_is_ignored() {
         assert_not_match(&heredoc_script("cd bar | "));
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn test_cd_single_quoted_path_with_spaces() {
         assert_match(&heredoc_script("cd 'foo bar' && "), Some("foo bar"));
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn test_cd_double_quoted_path_with_spaces() {
         assert_match(&heredoc_script("cd \"foo bar\" && "), Some("foo bar"));
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn test_echo_and_apply_patch_is_ignored() {
         assert_not_match(&heredoc_script("echo foo && "));
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn test_apply_patch_with_arg_is_ignored() {
         let script = "apply_patch foo <<'PATCH'\n*** Begin Patch\n*** Add File: foo\n+hi\n*** End Patch\nPATCH";
         assert_not_match(script);
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn test_double_cd_then_apply_patch_is_ignored() {
         assert_not_match(&heredoc_script("cd foo && cd bar && "));
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn test_cd_two_args_is_ignored() {
         assert_not_match(&heredoc_script("cd foo bar && "));
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn test_cd_then_apply_patch_then_extra_is_ignored() {
         let script = heredoc_script_ps("cd bar && ", " && echo done");
         assert_not_match(&script);
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn test_echo_then_cd_and_apply_patch_is_ignored() {
         // Ensure preceding commands before the `cd && apply_patch <<...` sequence do not match.
         assert_not_match(&heredoc_script("echo foo; cd bar && "));
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn test_unified_diff_last_line_replacement() {
         // Replace the very last line of the file.
         let dir = tempdir().unwrap();
@@ -716,7 +716,7 @@ PATCH"#,
         assert_eq!(expected, diff);
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn test_unified_diff_insert_at_eof() {
         // Insert a new line at end‑of‑file.
         let dir = tempdir().unwrap();
@@ -755,7 +755,7 @@ PATCH"#,
         assert_eq!(expected, diff);
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn test_apply_patch_should_resolve_absolute_paths_in_cwd() {
         let session_dir = tempdir().unwrap();
         let relative_path = "source.txt";
@@ -807,7 +807,7 @@ PATCH"#,
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn test_apply_patch_resolves_move_path_with_effective_cwd() {
         let session_dir = tempdir().unwrap();
         let worktree_rel = "alt";
@@ -861,7 +861,7 @@ PATCH"#,
         }
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn test_unreadable_destinations_still_verify() {
         let session_dir = tempdir().unwrap();
         fs::write(session_dir.path().join("binary.dat"), [0xff, 0xfe, 0xfd]).unwrap();
@@ -890,7 +890,7 @@ PATCH"#,
     }
 
     #[cfg(unix)]
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn test_delete_symlink_still_verifies() {
         use std::os::unix::fs::symlink;
 

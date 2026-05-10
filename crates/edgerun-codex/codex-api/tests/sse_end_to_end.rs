@@ -18,7 +18,7 @@ use edgerun_bytes::Bytes;
 use edgerun_http::HeaderMap;
 use edgerun_http::StatusCode;
 use edgerun_json::serde_json::Value;
-use futures::StreamExt;
+use edgerun_futures::StreamExt;
 use pretty_assertions::assert_eq;
 
 #[derive(Clone)]
@@ -39,7 +39,7 @@ impl HttpTransport for FixtureSseTransport {
     }
 
     async fn stream(&self, _req: Request) -> Result<StreamResponse, TransportError> {
-        let stream = futures::stream::iter(vec![Ok::<Bytes, TransportError>(Bytes::from(
+        let stream = edgerun_futures::stream::iter(vec![Ok::<Bytes, TransportError>(Bytes::from(
             self.body.clone(),
         ))]);
         Ok(StreamResponse {
@@ -90,7 +90,7 @@ fn build_responses_body(events: Vec<Value>) -> String {
     body
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn responses_stream_parses_items_and_completed_end_to_end() -> Result<()> {
     let item1 = edgerun_json::serde_json::json!({
         "type": "response.output_item.done",

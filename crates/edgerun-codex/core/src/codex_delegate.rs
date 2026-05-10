@@ -26,9 +26,9 @@ use edgerun_async_channel::Receiver;
 use edgerun_async_channel::Sender;
 use edgerun_json::serde_json::Value;
 use std::time::Duration;
-use tokio::sync::Mutex;
-use tokio::time::timeout;
-use tokio_util::sync::CancellationToken;
+use edgerun_tokio::sync::Mutex;
+use edgerun_tokio::time::timeout;
+use edgerun_tokio_util::sync::CancellationToken;
 
 use crate::config::Config;
 use crate::guardian::GuardianApprovalRequest;
@@ -127,7 +127,7 @@ pub(crate) async fn run_codex_thread_interactive(
     // context when the later legacy RequestUserInput approval event only carries
     // a call_id plus approval question metadata.
     let pending_mcp_invocations = Arc::new(Mutex::new(HashMap::<String, McpInvocation>::new()));
-    tokio::spawn(async move {
+    edgerun_tokio::spawn(async move {
         forward_events(
             codex_for_events,
             tx_sub,
@@ -141,7 +141,7 @@ pub(crate) async fn run_codex_thread_interactive(
 
     // Forward ops from the caller to the sub-agent.
     let codex_for_ops = Arc::clone(&codex);
-    tokio::spawn(async move {
+    edgerun_tokio::spawn(async move {
         forward_ops(codex_for_ops, rx_ops, cancel_token_ops).await;
     });
 
@@ -201,7 +201,7 @@ pub(crate) async fn run_codex_thread_one_shot(
     let session = Arc::clone(&io.session);
     let session_loop_termination = io.session_loop_termination.clone();
     let io_for_bridge = io;
-    tokio::spawn(async move {
+    edgerun_tokio::spawn(async move {
         while let Ok(event) = io_for_bridge.next_event().await {
             let should_shutdown = matches!(
                 event.msg,
@@ -246,10 +246,10 @@ async fn forward_events(
     cancel_token: CancellationToken,
 ) {
     let cancelled = cancel_token.cancelled();
-    tokio::pin!(cancelled);
+    edgerun_tokio::pin!(cancelled);
 
     loop {
-        tokio::select! {
+        edgerun_tokio::select! {
             _ = &mut cancelled => {
                 shutdown_delegate(&codex).await;
                 break;
@@ -766,7 +766,7 @@ async fn await_user_input_with_cancel<F>(
 where
     F: core::future::Future<Output = Option<RequestUserInputResponse>>,
 {
-    tokio::select! {
+    edgerun_tokio::select! {
         biased;
         _ = cancel_token.cancelled() => {
             let empty = RequestUserInputResponse {
@@ -792,7 +792,7 @@ async fn await_request_permissions_with_cancel<F>(
 where
     F: core::future::Future<Output = Option<RequestPermissionsResponse>>,
 {
-    tokio::select! {
+    edgerun_tokio::select! {
         biased;
         _ = cancel_token.cancelled() => {
             let empty = RequestPermissionsResponse {
@@ -824,7 +824,7 @@ async fn await_approval_with_cancel<F>(
 where
     F: core::future::Future<Output = codex_protocol::protocol::ReviewDecision>,
 {
-    tokio::select! {
+    edgerun_tokio::select! {
         biased;
         _ = cancel_token.cancelled() => {
             if let Some(review_cancel_token) = review_cancel_token {

@@ -29,7 +29,7 @@ use codex_utils_absolute_path::AbsolutePathBuf;
 use edgerun_async_trait::async_trait;
 use serde::Deserialize;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use edgerun_tokio::sync::RwLock;
 
 pub async fn build_network_proxy_state() -> Result<NetworkProxyState> {
     let (state, reloader) = build_network_proxy_state_and_reloader().await?;

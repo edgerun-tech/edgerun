@@ -106,10 +106,10 @@ use codex_utils_stream_parser::ProposedPlanSegment;
 use codex_utils_stream_parser::extract_proposed_plan_text;
 use codex_utils_stream_parser::strip_citations;
 use edgerun_time::chrono::ChronoUtc as Utc;
-use futures::future::BoxFuture;
-use futures::prelude::*;
-use futures::stream::FuturesOrdered;
-use tokio_util::sync::CancellationToken;
+use edgerun_futures::future::BoxFuture;
+use edgerun_futures::prelude::*;
+use edgerun_futures::stream::FuturesOrdered;
+use edgerun_tokio_util::sync::CancellationToken;
 use tracing::Instrument;
 use tracing::error;
 use tracing::field;
@@ -369,7 +369,7 @@ pub(crate) async fn run_turn(
     // many turns, from the perspective of the user, it is a single turn.
     let display_root = get_git_repo_root(turn_context.cwd.as_path())
         .unwrap_or_else(|| turn_context.cwd.clone().into_path_buf());
-    let turn_diff_tracker = Arc::new(tokio::sync::Mutex::new(TurnDiffTracker::with_display_root(
+    let turn_diff_tracker = Arc::new(edgerun_tokio::sync::Mutex::new(TurnDiffTracker::with_display_root(
         display_root,
     )));
 
@@ -1136,7 +1136,7 @@ async fn run_sampling_request(
                 )
                 .await;
             }
-            tokio::time::sleep(delay).await;
+            edgerun_tokio::time::sleep(delay).await;
         } else {
             return Err(err);
         }

@@ -112,7 +112,7 @@ async fn tools_config_for_mcp_tool_exposure(search_tool: bool) -> ToolsConfig {
     tools_config
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn directly_exposes_small_effective_tool_sets() {
     let config = test_config().await;
     let tools_config = tools_config_for_mcp_tool_exposure(/*search_tool*/ true).await;
@@ -130,7 +130,7 @@ async fn directly_exposes_small_effective_tool_sets() {
     assert!(exposure.deferred_tools.is_none());
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn searches_large_effective_tool_sets() {
     let config = test_config().await;
     let tools_config = tools_config_for_mcp_tool_exposure(/*search_tool*/ true).await;
@@ -152,7 +152,7 @@ async fn searches_large_effective_tool_sets() {
     assert_eq!(tool_names(deferred_tools), tool_names(&mcp_tools));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn directly_exposes_explicit_apps_without_deferred_overlap() {
     let config = test_config().await;
     let tools_config = tools_config_for_mcp_tool_exposure(/*search_tool*/ true).await;
@@ -203,7 +203,7 @@ async fn directly_exposes_explicit_apps_without_deferred_overlap() {
     assert!(deferred_tool_names.contains(&ToolName::namespaced("mcp__rmcp__", "tool_0")));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn always_defer_feature_preserves_explicit_apps() {
     let mut config = test_config().await;
     config

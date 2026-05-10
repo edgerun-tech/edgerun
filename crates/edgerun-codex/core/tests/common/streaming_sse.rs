@@ -3,12 +3,12 @@ use std::sync::Arc;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
-use tokio::io::AsyncReadExt;
-use tokio::io::AsyncWriteExt;
-use tokio::net::TcpListener;
-use tokio::sync::Mutex as TokioMutex;
-use tokio::sync::Notify;
-use tokio::sync::oneshot;
+use edgerun_tokio::io::AsyncReadExt;
+use edgerun_tokio::io::AsyncWriteExt;
+use edgerun_tokio::net::TcpListener;
+use edgerun_tokio::sync::Mutex as TokioMutex;
+use edgerun_tokio::sync::Notify;
+use edgerun_tokio::sync::oneshot;
 
 /// Streaming SSE chunk payload gated by a per-chunk signal.
 #[derive(Debug)]
@@ -23,7 +23,7 @@ pub struct StreamingSseServer {
     requests: Arc<TokioMutex<Vec<Vec<u8>>>>,
     request_notify: Arc<Notify>,
     shutdown: oneshot::Sender<()>,
-    task: tokio::task::JoinHandle<()>,
+    task: edgerun_tokio::task::JoinHandle<()>,
 }
 
 impl StreamingSseServer {
@@ -83,16 +83,16 @@ pub async fn start_streaming_sse_server(
     let request_notify_for_task = Arc::clone(&request_notify);
     let (shutdown_tx, mut shutdown_rx) = oneshot::channel();
 
-    let task = tokio::spawn(async move {
+    let task = edgerun_tokio::spawn(async move {
         loop {
-            tokio::select! {
+            edgerun_tokio::select! {
                 _ = &mut shutdown_rx => break,
                 accept_res = listener.accept() => {
                     let (mut stream, _) = accept_res.expect("accept streaming SSE connection");
                     let state = Arc::clone(&state);
                     let requests = Arc::clone(&requests_for_task);
                     let request_notify = Arc::clone(&request_notify_for_task);
-                    tokio::spawn(async move {
+                    edgerun_tokio::spawn(async move {
                         let (request, body_prefix) = read_http_request(&mut stream).await;
                         let Some((method, path)) = parse_request_line(&request) else {
                             let _ = write_http_response(&mut stream, /*status*/ 400, "bad request", "text/plain").await;
@@ -186,7 +186,7 @@ async fn take_next_stream(
     Some((chunks, completion))
 }
 
-async fn read_http_request(stream: &mut tokio::net::TcpStream) -> (String, Vec<u8>) {
+async fn read_http_request(stream: &mut edgerun_tokio::net::TcpStream) -> (String, Vec<u8>) {
     let mut buf = Vec::new();
     let mut scratch = [0u8; 1024];
     loop {
@@ -231,7 +231,7 @@ fn content_length(headers: &str) -> Option<usize> {
 }
 
 async fn read_request_body(
-    stream: &mut tokio::net::TcpStream,
+    stream: &mut edgerun_tokio::net::TcpStream,
     headers: &str,
     mut body_prefix: Vec<u8>,
 ) -> std::io::Result<Vec<u8>> {
@@ -254,13 +254,13 @@ async fn read_request_body(
     Ok(body_prefix)
 }
 
-async fn write_sse_headers(stream: &mut tokio::net::TcpStream) -> std::io::Result<()> {
+async fn write_sse_headers(stream: &mut edgerun_tokio::net::TcpStream) -> std::io::Result<()> {
     let headers = "HTTP/1.1 200 OK\r\ncontent-type: text/event-stream\r\ncache-control: no-cache\r\nconnection: close\r\n\r\n";
     stream.write_all(headers.as_bytes()).await
 }
 
 async fn write_http_response(
-    stream: &mut tokio::net::TcpStream,
+    stream: &mut edgerun_tokio::net::TcpStream,
     status: i64,
     body: &str,
     content_type: &str,
@@ -285,10 +285,10 @@ fn unix_ms_now() -> i64 {
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
-    use reqwest::StatusCode;
-    use tokio::net::TcpStream;
-    use tokio::time::Duration;
-    use tokio::time::timeout;
+    use edgerun_reqwest::StatusCode;
+    use edgerun_tokio::net::TcpStream;
+    use edgerun_tokio::time::Duration;
+    use edgerun_tokio::time::timeout;
 
     fn split_response(response: &str) -> (&str, &str) {
         response
@@ -360,7 +360,7 @@ mod tests {
             .expect("write request");
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn get_models_returns_empty_list() {
         let (server, _) = start_streaming_sse_server(Vec::new()).await;
         let mut stream = connect(server.uri()).await;
@@ -388,7 +388,7 @@ mod tests {
         server.shutdown().await;
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn post_responses_streams_in_order_and_closes() {
         let chunks = vec![
             StreamingSseChunk {
@@ -424,7 +424,7 @@ mod tests {
         server.shutdown().await;
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn none_gate_streams_immediately() {
         let chunks = vec![StreamingSseChunk {
             gate: None,
@@ -445,7 +445,7 @@ mod tests {
         server.shutdown().await;
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn post_responses_with_no_queue_returns_500() {
         let (server, _) = start_streaming_sse_server(Vec::new()).await;
         let mut stream = connect(server.uri()).await;
@@ -462,7 +462,7 @@ mod tests {
         server.shutdown().await;
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn gated_chunks_wait_for_signal_and_preserve_order() {
         let (gate_one_tx, gate_one_rx) = oneshot::channel();
         let (gate_two_tx, gate_two_rx) = oneshot::channel();
@@ -514,7 +514,7 @@ mod tests {
         server.shutdown().await;
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn multiple_responses_are_fifo_and_completion_timestamps_monotonic() {
         let first_chunks = vec![StreamingSseChunk {
             gate: None,
@@ -558,7 +558,7 @@ mod tests {
         server.shutdown().await;
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn unknown_route_returns_404() {
         let (server, _) = start_streaming_sse_server(Vec::new()).await;
         let mut stream = connect(server.uri()).await;
@@ -575,7 +575,7 @@ mod tests {
         server.shutdown().await;
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn malformed_request_returns_400() {
         let (server, _) = start_streaming_sse_server(Vec::new()).await;
         let mut stream = connect(server.uri()).await;
@@ -588,7 +588,7 @@ mod tests {
         server.shutdown().await;
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn responses_post_drains_request_body() {
         let response_body = r#"event: response.completed
 data: {"type":"response.completed","response":{"id":"resp-1"}}
@@ -608,7 +608,7 @@ data: {"type":"response.completed","response":{"id":"resp-1"}}
             "stream": true
         });
 
-        let resp = reqwest::Client::new()
+        let resp = edgerun_reqwest::Client::new()
             .post(url)
             .json(&payload)
             .send()
@@ -626,14 +626,14 @@ data: {"type":"response.completed","response":{"id":"resp-1"}}
         server.shutdown().await;
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn read_http_request_returns_after_header_terminator() {
         let listener = TcpListener::bind("127.0.0.1:0")
             .await
             .expect("bind test listener");
         let addr = listener.local_addr().expect("listener address");
         let (tx, rx) = oneshot::channel();
-        let server_task = tokio::spawn(async move {
+        let server_task = edgerun_tokio::spawn(async move {
             let (mut stream, _) = listener.accept().await.expect("accept client");
             let (request, body) = read_http_request(&mut stream).await;
             let _ = tx.send((request, body));
@@ -667,7 +667,7 @@ data: {"type":"response.completed","response":{"id":"resp-1"}}
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn take_next_stream_consumes_in_lockstep() {
         let (first_tx, first_rx) = oneshot::channel();
         let (second_tx, second_rx) = oneshot::channel();
@@ -701,7 +701,7 @@ data: {"type":"response.completed","response":{"id":"resp-1"}}
         assert!(third.is_none());
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn shutdown_terminates_accept_loop() {
         let (server, _) = start_streaming_sse_server(Vec::new()).await;
         let shutdown = timeout(Duration::from_millis(200), server.shutdown()).await;

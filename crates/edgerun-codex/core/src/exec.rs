@@ -11,11 +11,11 @@ use std::time::Duration;
 use std::time::Instant;
 
 use edgerun_async_channel::Sender;
-use tokio::io::AsyncRead;
-use tokio::io::AsyncReadExt;
-use tokio::io::BufReader;
-use tokio::process::Child;
-use tokio_util::sync::CancellationToken;
+use edgerun_tokio::io::AsyncRead;
+use edgerun_tokio::io::AsyncReadExt;
+use edgerun_tokio::io::BufReader;
+use edgerun_tokio::process::Child;
+use edgerun_tokio_util::sync::CancellationToken;
 
 use crate::sandboxing::ExecOptions;
 use crate::sandboxing::ExecRequest;
@@ -186,11 +186,11 @@ impl ExecExpiration {
     pub async fn wait_with_outcome(self) -> ExecExpirationOutcome {
         match self {
             ExecExpiration::Timeout(duration) => {
-                tokio::time::sleep(duration).await;
+                edgerun_tokio::time::sleep(duration).await;
                 ExecExpirationOutcome::TimedOut
             }
             ExecExpiration::DefaultTimeout => {
-                tokio::time::sleep(Duration::from_millis(DEFAULT_EXEC_COMMAND_TIMEOUT_MS)).await;
+                edgerun_tokio::time::sleep(Duration::from_millis(DEFAULT_EXEC_COMMAND_TIMEOUT_MS)).await;
                 ExecExpirationOutcome::TimedOut
             }
             ExecExpiration::Cancellation(cancel) => {
@@ -201,10 +201,10 @@ impl ExecExpiration {
                 timeout,
                 cancellation,
             } => {
-                tokio::select! {
+                edgerun_tokio::select! {
                     biased;
                     _ = cancellation.cancelled() => ExecExpirationOutcome::Cancelled,
-                    _ = tokio::time::sleep(timeout) => ExecExpirationOutcome::TimedOut,
+                    _ = edgerun_tokio::time::sleep(timeout) => ExecExpirationOutcome::TimedOut,
                 }
             }
         }
@@ -252,8 +252,8 @@ pub(crate) fn cancel_when_either(
 ) -> CancellationToken {
     let combined = CancellationToken::new();
     let cancel = combined.clone();
-    tokio::spawn(async move {
-        tokio::select! {
+    edgerun_tokio::spawn(async move {
+        edgerun_tokio::select! {
             _ = first.cancelled() => {}
             _ = second.cancelled() => {}
         }
@@ -628,7 +628,7 @@ async fn exec_windows_sandbox(
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
-    let spawn_res = tokio::task::spawn_blocking(move || {
+    let spawn_res = edgerun_tokio::task::spawn_blocking(move || {
         if use_elevated {
             run_windows_sandbox_capture_elevated(
                 codex_windows_sandbox::ElevatedSandboxCaptureRequest {
@@ -1322,13 +1322,13 @@ async fn consume_output(
     })?;
 
     let retained_bytes_cap = capture_policy.retained_bytes_cap();
-    let stdout_handle = tokio::spawn(read_output(
+    let stdout_handle = edgerun_tokio::spawn(read_output(
         BufReader::new(stdout_reader),
         stdout_stream.clone(),
         /*is_stderr*/ false,
         retained_bytes_cap,
     ));
-    let stderr_handle = tokio::spawn(read_output(
+    let stderr_handle = edgerun_tokio::spawn(read_output(
         BufReader::new(stderr_reader),
         stdout_stream.clone(),
         /*is_stderr*/ true,
@@ -1342,8 +1342,8 @@ async fn consume_output(
             std::future::pending::<Option<ExecExpirationOutcome>>().await
         }
     };
-    tokio::pin!(expiration_wait);
-    let (exit_status, timed_out) = tokio::select! {
+    edgerun_tokio::pin!(expiration_wait);
+    let (exit_status, timed_out) = edgerun_tokio::select! {
         status_result = child.wait() => {
             let exit_status = status_result?;
             (exit_status, false)
@@ -1359,7 +1359,7 @@ async fn consume_output(
             };
             (exit_status, timed_out)
         }
-        _ = tokio::signal::ctrl_c() => {
+        _ = edgerun_tokio::signal::ctrl_c() => {
             kill_child_process_group(&mut child)?;
             child.start_kill()?;
             (synthetic_exit_status(EXIT_CODE_SIGNAL_BASE + SIGKILL_CODE), false)
@@ -1367,13 +1367,13 @@ async fn consume_output(
     };
 
     // We need mutable bindings so we can `abort()` them on timeout.
-    use tokio::task::JoinHandle;
+    use edgerun_tokio::task::JoinHandle;
 
     async fn await_output(
         handle: &mut JoinHandle<std::io::Result<StreamOutput<Vec<u8>>>>,
         timeout: Duration,
     ) -> std::io::Result<StreamOutput<Vec<u8>>> {
-        match tokio::time::timeout(timeout, &mut *handle).await {
+        match edgerun_tokio::time::timeout(timeout, &mut *handle).await {
             Ok(join_res) => match join_res {
                 Ok(io_res) => io_res,
                 Err(join_err) => Err(std::io::Error::other(join_err)),

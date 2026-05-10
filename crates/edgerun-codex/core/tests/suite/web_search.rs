@@ -22,7 +22,7 @@ fn find_web_search_tool(body: &Value) -> &Value {
         .expect("tools should include a web_search tool")
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn web_search_mode_cached_sets_external_web_access_false() {
     skip_if_no_network!();
 
@@ -60,7 +60,7 @@ async fn web_search_mode_cached_sets_external_web_access_false() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn web_search_mode_takes_precedence_over_legacy_flags() {
     skip_if_no_network!();
 
@@ -102,7 +102,7 @@ async fn web_search_mode_takes_precedence_over_legacy_flags() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn web_search_mode_defaults_to_cached_when_features_disabled() {
     skip_if_no_network!();
 
@@ -148,7 +148,7 @@ async fn web_search_mode_defaults_to_cached_when_features_disabled() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn web_search_mode_updates_between_turns_with_permission_profile() {
     skip_if_no_network!();
 
@@ -218,7 +218,7 @@ async fn web_search_mode_updates_between_turns_with_permission_profile() {
     );
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn web_search_tool_config_from_config_toml_is_forwarded_to_request() {
     skip_if_no_network!();
 

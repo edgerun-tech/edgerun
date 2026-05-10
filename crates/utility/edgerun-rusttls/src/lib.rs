@@ -12,6 +12,7 @@ use core::fmt;
 use edgerun_node::rt::{AsyncRead, AsyncWrite, IoError};
 #[cfg(feature = "std")]
 pub use edgerun_node::tls::{AsyncTlsServerStream, AsyncTlsStream};
+#[cfg(feature = "std")]
 use edgerun_protocols::tls::certificate_gen::CertificateAndKey;
 #[cfg(feature = "std")]
 use std::io::{self, Read, Write};
@@ -93,9 +94,24 @@ impl fmt::Display for Error {
 #[cfg(feature = "std")]
 impl std::error::Error for Error {}
 
+#[cfg(feature = "std")]
 #[derive(Clone)]
 pub struct ServerConfig {
     certificate: CertificateAndKey,
+}
+
+#[cfg(not(feature = "std"))]
+#[derive(Clone)]
+pub struct ServerConfig {
+    certificate: RawCertificateAndKey,
+}
+
+#[cfg(not(feature = "std"))]
+#[derive(Clone)]
+pub struct RawCertificateAndKey {
+    pub cert_der: Vec<u8>,
+    pub cert_chain_der: Vec<Vec<u8>>,
+    pub private_key_der: Vec<u8>,
 }
 
 #[derive(Clone, Default)]
@@ -104,6 +120,7 @@ pub struct ClientConfig;
 pub struct ConfigBuilder;
 pub struct ClientConfigBuilder;
 
+#[cfg(feature = "std")]
 impl ServerConfig {
     pub fn builder_with_protocol_versions(
         _versions: &[&'static version::SupportedProtocolVersion],
@@ -115,7 +132,39 @@ impl ServerConfig {
         Self { certificate }
     }
 
+    pub fn from_der_pair(cert_der: &[u8], private_key_der: &[u8]) -> Result<Self, Error> {
+        let certificate = CertificateAndKey::from_der_pair(cert_der, private_key_der)
+            .map_err(|error| Error::new(format!("invalid TLS material: {error}")))?;
+        Ok(Self { certificate })
+    }
+
     pub fn certificate(&self) -> &CertificateAndKey {
+        &self.certificate
+    }
+}
+
+#[cfg(not(feature = "std"))]
+impl ServerConfig {
+    pub fn builder_with_protocol_versions(
+        _versions: &[&'static version::SupportedProtocolVersion],
+    ) -> ConfigBuilder {
+        ConfigBuilder
+    }
+
+    pub fn from_der_pair(cert_der: &[u8], private_key_der: &[u8]) -> Result<Self, Error> {
+        if cert_der.is_empty() || private_key_der.is_empty() {
+            return Err(Error::new("missing TLS material"));
+        }
+        Ok(Self {
+            certificate: RawCertificateAndKey {
+                cert_der: cert_der.to_vec(),
+                cert_chain_der: alloc::vec![cert_der.to_vec()],
+                private_key_der: private_key_der.to_vec(),
+            },
+        })
+    }
+
+    pub fn certificate(&self) -> &RawCertificateAndKey {
         &self.certificate
     }
 }
@@ -133,9 +182,7 @@ impl ConfigBuilder {
         let cert = cert_chain
             .first()
             .ok_or_else(|| Error::new("missing TLS certificate"))?;
-        let certificate = CertificateAndKey::from_der_pair(cert.as_ref(), private_key.as_ref())
-            .map_err(|error| Error::new(format!("invalid TLS material: {error}")))?;
-        Ok(ServerConfig { certificate })
+        ServerConfig::from_der_pair(cert.as_ref(), private_key.as_ref())
     }
 }
 

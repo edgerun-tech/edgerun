@@ -29,7 +29,7 @@ use core_test_support::wait_for_event;
 use edgerun_json::serde_json::Value;
 use edgerun_json::serde_json::json;
 use pretty_assertions::assert_eq;
-use tokio::sync::oneshot;
+use edgerun_tokio::sync::oneshot;
 
 async fn run_turn(test: &TestCodex, prompt: &str) -> anyhow::Result<()> {
     let session_model = test.session_configured.model.clone();
@@ -83,7 +83,7 @@ fn assert_parallel_duration(actual: Duration) {
     );
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn read_file_tools_run_in_parallel() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -145,7 +145,7 @@ async fn read_file_tools_run_in_parallel() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn shell_tools_run_in_parallel() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -180,7 +180,7 @@ async fn shell_tools_run_in_parallel() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn mixed_parallel_tools_run_in_parallel() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -216,7 +216,7 @@ async fn mixed_parallel_tools_run_in_parallel() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn tool_results_grouped() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -294,7 +294,7 @@ async fn tool_results_grouped() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn shell_tools_start_before_response_completed_when_stream_delayed() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -382,7 +382,7 @@ async fn shell_tools_start_before_response_completed_when_stream_delayed() -> an
     let _ = first_gate_tx.send(());
     let _ = follow_up_gate_tx.send(());
 
-    let timestamps = tokio::time::timeout(Duration::from_secs(5), async {
+    let timestamps = edgerun_tokio::time::timeout(Duration::from_secs(5), async {
         loop {
             let contents = fs::read_to_string(output_path)?;
             let timestamps = contents
@@ -397,7 +397,7 @@ async fn shell_tools_start_before_response_completed_when_stream_delayed() -> an
             if timestamps.len() == 4 {
                 return Ok::<_, anyhow::Error>(timestamps);
             }
-            tokio::time::sleep(Duration::from_millis(10)).await;
+            edgerun_tokio::time::sleep(Duration::from_millis(10)).await;
         }
     })
     .await??;

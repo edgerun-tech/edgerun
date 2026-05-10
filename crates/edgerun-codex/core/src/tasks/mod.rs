@@ -7,11 +7,11 @@ use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
 
-use futures::future::BoxFuture;
-use tokio::select;
-use tokio::sync::Notify;
-use tokio_util::sync::CancellationToken;
-use tokio_util::task::AbortOnDropHandle;
+use edgerun_futures::future::BoxFuture;
+use edgerun_tokio::select;
+use edgerun_tokio::sync::Notify;
+use edgerun_tokio_util::sync::CancellationToken;
+use edgerun_tokio_util::task::AbortOnDropHandle;
 use tracing::Instrument;
 use tracing::Span;
 use tracing::field;
@@ -381,7 +381,7 @@ impl Session {
             codex.turn.token_usage.reasoning_output_tokens = field::Empty,
             codex.turn.token_usage.total_tokens = field::Empty,
         );
-        let handle = tokio::spawn(
+        let handle = edgerun_tokio::spawn(
             async move {
                 let ctx_for_finish = Arc::clone(&ctx);
                 let last_agent_message = task_for_run
@@ -811,7 +811,7 @@ impl Session {
         select! {
             _ = task.done.notified() => {
             },
-            _ = tokio::time::sleep(Duration::from_millis(GRACEFULL_INTERRUPTION_TIMEOUT_MS)) => {
+            _ = edgerun_tokio::time::sleep(Duration::from_millis(GRACEFULL_INTERRUPTION_TIMEOUT_MS)) => {
                 warn!("task {sub_id} didn't complete gracefully after {}ms", GRACEFULL_INTERRUPTION_TIMEOUT_MS);
             }
         }

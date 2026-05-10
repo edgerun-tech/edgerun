@@ -28,11 +28,11 @@ use codex_rollout_trace::ThreadTraceContext;
 use codex_thread_store::LiveThread;
 use codex_thread_store::ThreadStore;
 use std::path::PathBuf;
-use tokio::runtime::Handle;
-use tokio::sync::Mutex;
-use tokio::sync::RwLock;
-use tokio::sync::watch;
-use tokio_util::sync::CancellationToken;
+use edgerun_tokio::runtime::Handle;
+use edgerun_tokio::sync::Mutex;
+use edgerun_tokio::sync::RwLock;
+use edgerun_tokio::sync::watch;
+use edgerun_tokio_util::sync::CancellationToken;
 
 pub(crate) struct SessionServices {
     pub(crate) mcp_connection_manager: Arc<RwLock<McpConnectionManager>>,

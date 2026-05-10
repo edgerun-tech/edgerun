@@ -145,7 +145,7 @@ mod tests {
     use std::sync::Arc;
     use tempfile::tempdir;
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn openai_file_argument_rewrite_requires_declared_file_params() {
         let (session, turn_context) = make_session_and_context().await;
         let arguments = Some(edgerun_json::serde_json::json!({
@@ -164,7 +164,7 @@ mod tests {
         assert_eq!(rewritten, arguments);
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn build_uploaded_local_argument_value_uploads_local_file_path() {
         use wiremock::Mock;
         use wiremock::MockServer;
@@ -213,7 +213,7 @@ mod tests {
         let auth = CodexAuth::create_dummy_chatgpt_auth_for_testing();
         let dir = tempdir().expect("temp dir");
         let local_path = dir.path().join("file_report.csv");
-        tokio::fs::write(&local_path, b"hello")
+        edgerun_tokio::fs::write(&local_path, b"hello")
             .await
             .expect("write local file");
         turn_context.cwd = AbsolutePathBuf::try_from(dir.path()).expect("absolute path");
@@ -245,7 +245,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn rewrite_argument_value_for_openai_files_rewrites_scalar_path() {
         use wiremock::Mock;
         use wiremock::MockServer;
@@ -294,7 +294,7 @@ mod tests {
         let auth = CodexAuth::create_dummy_chatgpt_auth_for_testing();
         let dir = tempdir().expect("temp dir");
         let local_path = dir.path().join("file_report.csv");
-        tokio::fs::write(&local_path, b"hello")
+        edgerun_tokio::fs::write(&local_path, b"hello")
             .await
             .expect("write local file");
         turn_context.cwd = AbsolutePathBuf::try_from(dir.path()).expect("absolute path");
@@ -324,7 +324,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn rewrite_argument_value_for_openai_files_rewrites_array_paths() {
         use wiremock::Mock;
         use wiremock::MockServer;
@@ -405,10 +405,10 @@ mod tests {
         let (_, mut turn_context) = make_session_and_context().await;
         let auth = CodexAuth::create_dummy_chatgpt_auth_for_testing();
         let dir = tempdir().expect("temp dir");
-        tokio::fs::write(dir.path().join("one.csv"), b"one")
+        edgerun_tokio::fs::write(dir.path().join("one.csv"), b"one")
             .await
             .expect("write first local file");
-        tokio::fs::write(dir.path().join("two.csv"), b"two")
+        edgerun_tokio::fs::write(dir.path().join("two.csv"), b"two")
             .await
             .expect("write second local file");
         turn_context.cwd = AbsolutePathBuf::try_from(dir.path()).expect("absolute path");
@@ -448,7 +448,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn rewrite_mcp_tool_arguments_for_openai_files_surfaces_upload_failures() {
         let (mut session, turn_context) = make_session_and_context().await;
         session.services.auth_manager = crate::test_support::auth_manager_from_auth(

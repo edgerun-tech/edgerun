@@ -78,7 +78,7 @@ fn format_environment_context_subagents_snapshot(subagents: &[&str]) -> String {
     context_snapshot::format_response_items_snapshot(items.as_slice(), &context_snapshot_options())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn snapshot_model_visible_layout_turn_overrides() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -188,7 +188,7 @@ async fn snapshot_model_visible_layout_turn_overrides() -> Result<()> {
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 // TODO(ccunningham): Diff `user_instructions` and emit updates when AGENTS.md content changes
 // (for example after cwd changes), then update this test to assert refreshed AGENTS content.
 async fn snapshot_model_visible_layout_cwd_change_does_not_refresh_agents() -> Result<()> {
@@ -309,7 +309,7 @@ async fn snapshot_model_visible_layout_cwd_change_does_not_refresh_agents() -> R
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn snapshot_model_visible_layout_resume_with_personality_change() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -416,7 +416,7 @@ async fn snapshot_model_visible_layout_resume_with_personality_change() -> Resul
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn snapshot_model_visible_layout_resume_override_matches_rollout_model() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -521,7 +521,7 @@ async fn snapshot_model_visible_layout_resume_override_matches_rollout_model() -
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn snapshot_model_visible_layout_environment_context_includes_one_subagent() -> Result<()> {
     insta::assert_snapshot!(
         "model_visible_layout_environment_context_includes_one_subagent",
@@ -531,7 +531,7 @@ async fn snapshot_model_visible_layout_environment_context_includes_one_subagent
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn snapshot_model_visible_layout_environment_context_includes_two_subagents() -> Result<()> {
     insta::assert_snapshot!(
         "model_visible_layout_environment_context_includes_two_subagents",

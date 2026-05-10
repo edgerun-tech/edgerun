@@ -163,7 +163,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn summarize_input_posts_expected_payload_and_parses_output() {
         let transport = CapturingTransport::new(
             edgerun_json::serde_json::to_vec(&json!({

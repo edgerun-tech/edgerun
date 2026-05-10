@@ -123,7 +123,7 @@ fn wraps_realtime_delegation_input_with_xml_escaping_without_transcript() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn clears_active_handoff_explicitly() {
     let (tx, _rx) = bounded(1);
     let state = RealtimeHandoffState::new(tx, RealtimeSessionKind::V1);

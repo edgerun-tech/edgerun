@@ -18,8 +18,8 @@ use codex_protocol::protocol::ReviewDecision;
 use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::protocol::TurnAbortReason;
 use codex_protocol::protocol::WarningEvent;
-use tokio::sync::oneshot;
-use tokio_util::sync::CancellationToken;
+use edgerun_tokio::sync::oneshot;
+use edgerun_tokio_util::sync::CancellationToken;
 
 use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;
@@ -584,7 +584,7 @@ pub(crate) fn spawn_approval_request_review(
 ) -> oneshot::Receiver<ReviewDecision> {
     let (tx, rx) = oneshot::channel();
     std::thread::spawn(move || {
-        let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
+        let Ok(runtime) = edgerun_tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
         else {

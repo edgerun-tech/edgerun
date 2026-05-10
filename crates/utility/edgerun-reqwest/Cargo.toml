@@ -1,0 +1,37 @@
+[package]
+name = "edgerun-reqwest"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Edgerun-owned Reqwest-compatible HTTP client facade"
+
+[features]
+default = ["compat", "cookies", "native", "http1", "http2", "http3", "rustls-tls-native-roots"]
+compat = ["dep:reqwest"]
+cookies = ["reqwest?/cookies"]
+http1 = ["native", "edgerun-node/http1"]
+http2 = ["native", "edgerun-node/http2"]
+http3 = ["native", "edgerun-node/http3"]
+full = ["cookies", "json", "stream", "http1", "http2", "http3", "rustls-tls-native-roots"]
+json = ["reqwest?/json", "dep:serde"]
+native = ["dep:edgerun-node"]
+native-root = ["native"]
+rustls-tls-native-roots = ["reqwest?/rustls-tls-native-roots", "native", "edgerun-node/tls"]
+stream = ["reqwest?/stream"]
+
+[dependencies]
+edgerun-bytes = { version = "0.1", path = "../edgerun-bytes" }
+edgerun-encoding = { version = "0.1", path = "../edgerun-encoding", default-features = false }
+edgerun-futures = { version = "0.1", path = "../edgerun-futures" }
+edgerun-http = { version = "0.1", path = "../edgerun-http" }
+edgerun-json = { version = "0.1", path = "../edgerun-json", default-features = false, features = ["serde-compat"] }
+edgerun-node = { version = "0.1", path = "../../node/edgerun-node", default-features = false, features = ["client"], optional = true }
+edgerun-url = { version = "0.1", path = "../edgerun-url", default-features = false }
+reqwest = { version = "0.12", optional = true }
+serde = { version = "1", optional = true }
+
+[lints]
+workspace = true

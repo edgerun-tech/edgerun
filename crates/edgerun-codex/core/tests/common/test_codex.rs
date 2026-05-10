@@ -42,7 +42,7 @@ use edgerun_error::Context;
 use edgerun_error::Result;
 use edgerun_error::anyhow;
 use edgerun_json::serde_json::Value;
-use futures::future::BoxFuture;
+use edgerun_futures::future::BoxFuture;
 use tempfile::TempDir;
 use wiremock::MockServer;
 

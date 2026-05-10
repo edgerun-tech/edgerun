@@ -3,8 +3,8 @@ use codex_utils_absolute_path::AbsolutePathBuf;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::process::Stdio;
-use tokio::process::Child;
-use tokio::process::Command;
+use edgerun_tokio::process::Child;
+use edgerun_tokio::process::Command;
 use tracing::trace;
 
 use codex_protocol::permissions::NetworkSandboxPolicy;

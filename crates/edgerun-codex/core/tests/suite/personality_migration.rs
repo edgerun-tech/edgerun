@@ -17,12 +17,12 @@ use pretty_assertions::assert_eq;
 use std::io;
 use std::path::Path;
 use tempfile::TempDir;
-use tokio::io::AsyncWriteExt;
+use edgerun_tokio::io::AsyncWriteExt;
 
 const TEST_TIMESTAMP: &str = "2025-01-01T00-00-00";
 
 async fn read_config_toml(codex_home: &Path) -> io::Result<ConfigToml> {
-    let contents = tokio::fs::read_to_string(codex_home.join("config.toml")).await?;
+    let contents = edgerun_tokio::fs::read_to_string(codex_home.join("config.toml")).await?;
     toml::from_str(&contents).map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
 }
 
@@ -53,9 +53,9 @@ async fn write_session_with_meta_only(codex_home: &Path) -> io::Result<()> {
 }
 
 async fn write_rollout_with_user_event(dir: &Path, thread_id: ThreadId) -> io::Result<()> {
-    tokio::fs::create_dir_all(&dir).await?;
+    edgerun_tokio::fs::create_dir_all(&dir).await?;
     let file_path = dir.join(format!("rollout-{TEST_TIMESTAMP}-{thread_id}.jsonl"));
-    let mut file = tokio::fs::File::create(&file_path).await?;
+    let mut file = edgerun_tokio::fs::File::create(&file_path).await?;
 
     let session_meta = SessionMetaLine {
         meta: SessionMeta {
@@ -99,9 +99,9 @@ async fn write_rollout_with_user_event(dir: &Path, thread_id: ThreadId) -> io::R
 }
 
 async fn write_rollout_with_meta_only(dir: &Path, thread_id: ThreadId) -> io::Result<()> {
-    tokio::fs::create_dir_all(&dir).await?;
+    edgerun_tokio::fs::create_dir_all(&dir).await?;
     let file_path = dir.join(format!("rollout-{TEST_TIMESTAMP}-{thread_id}.jsonl"));
-    let mut file = tokio::fs::File::create(&file_path).await?;
+    let mut file = edgerun_tokio::fs::File::create(&file_path).await?;
 
     let session_meta = SessionMetaLine {
         meta: SessionMeta {
@@ -137,24 +137,24 @@ fn parse_config_toml(contents: &str) -> io::Result<ConfigToml> {
     toml::from_str(contents).map_err(|err| io::Error::new(io::ErrorKind::InvalidData, err))
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn migration_marker_exists_no_sessions_no_change() -> io::Result<()> {
     let temp = TempDir::new()?;
     let marker_path = temp.path().join(PERSONALITY_MIGRATION_FILENAME);
-    tokio::fs::write(&marker_path, "v1\n").await?;
+    edgerun_tokio::fs::write(&marker_path, "v1\n").await?;
 
     let status =
         maybe_migrate_personality(temp.path(), &ConfigToml::default(), /*state_db*/ None).await?;
 
     assert_eq!(status, PersonalityMigrationStatus::SkippedMarker);
     assert_eq!(
-        tokio::fs::try_exists(temp.path().join("config.toml")).await?,
+        edgerun_tokio::fs::try_exists(temp.path().join("config.toml")).await?,
         false
     );
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn no_marker_no_sessions_no_change() -> io::Result<()> {
     let temp = TempDir::new()?;
 
@@ -163,17 +163,17 @@ async fn no_marker_no_sessions_no_change() -> io::Result<()> {
 
     assert_eq!(status, PersonalityMigrationStatus::SkippedNoSessions);
     assert_eq!(
-        tokio::fs::try_exists(temp.path().join(PERSONALITY_MIGRATION_FILENAME)).await?,
+        edgerun_tokio::fs::try_exists(temp.path().join(PERSONALITY_MIGRATION_FILENAME)).await?,
         true
     );
     assert_eq!(
-        tokio::fs::try_exists(temp.path().join("config.toml")).await?,
+        edgerun_tokio::fs::try_exists(temp.path().join("config.toml")).await?,
         false
     );
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn no_marker_sessions_sets_personality() -> io::Result<()> {
     let temp = TempDir::new()?;
     write_session_with_user_event(temp.path()).await?;
@@ -183,7 +183,7 @@ async fn no_marker_sessions_sets_personality() -> io::Result<()> {
 
     assert_eq!(status, PersonalityMigrationStatus::Applied);
     assert_eq!(
-        tokio::fs::try_exists(temp.path().join(PERSONALITY_MIGRATION_FILENAME)).await?,
+        edgerun_tokio::fs::try_exists(temp.path().join(PERSONALITY_MIGRATION_FILENAME)).await?,
         true
     );
 
@@ -192,11 +192,11 @@ async fn no_marker_sessions_sets_personality() -> io::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn no_marker_sessions_preserves_existing_config_fields() -> io::Result<()> {
     let temp = TempDir::new()?;
     write_session_with_user_event(temp.path()).await?;
-    tokio::fs::write(temp.path().join("config.toml"), "model = \"gpt-5.4\"\n").await?;
+    edgerun_tokio::fs::write(temp.path().join("config.toml"), "model = \"gpt-5.4\"\n").await?;
     let config_toml = read_config_toml(temp.path()).await?;
 
     let status = maybe_migrate_personality(temp.path(), &config_toml, /*state_db*/ None).await?;
@@ -208,7 +208,7 @@ async fn no_marker_sessions_preserves_existing_config_fields() -> io::Result<()>
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn no_marker_meta_only_rollout_is_treated_as_no_sessions() -> io::Result<()> {
     let temp = TempDir::new()?;
     write_session_with_meta_only(temp.path()).await?;
@@ -218,17 +218,17 @@ async fn no_marker_meta_only_rollout_is_treated_as_no_sessions() -> io::Result<(
 
     assert_eq!(status, PersonalityMigrationStatus::SkippedNoSessions);
     assert_eq!(
-        tokio::fs::try_exists(temp.path().join(PERSONALITY_MIGRATION_FILENAME)).await?,
+        edgerun_tokio::fs::try_exists(temp.path().join(PERSONALITY_MIGRATION_FILENAME)).await?,
         true
     );
     assert_eq!(
-        tokio::fs::try_exists(temp.path().join("config.toml")).await?,
+        edgerun_tokio::fs::try_exists(temp.path().join("config.toml")).await?,
         false
     );
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn no_marker_explicit_global_personality_skips_migration() -> io::Result<()> {
     let temp = TempDir::new()?;
     write_session_with_user_event(temp.path()).await?;
@@ -241,17 +241,17 @@ async fn no_marker_explicit_global_personality_skips_migration() -> io::Result<(
         PersonalityMigrationStatus::SkippedExplicitPersonality
     );
     assert_eq!(
-        tokio::fs::try_exists(temp.path().join(PERSONALITY_MIGRATION_FILENAME)).await?,
+        edgerun_tokio::fs::try_exists(temp.path().join(PERSONALITY_MIGRATION_FILENAME)).await?,
         true
     );
     assert_eq!(
-        tokio::fs::try_exists(temp.path().join("config.toml")).await?,
+        edgerun_tokio::fs::try_exists(temp.path().join("config.toml")).await?,
         false
     );
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn no_marker_profile_personality_skips_migration() -> io::Result<()> {
     let temp = TempDir::new()?;
     write_session_with_user_event(temp.path()).await?;
@@ -271,20 +271,20 @@ personality = "friendly"
         PersonalityMigrationStatus::SkippedExplicitPersonality
     );
     assert_eq!(
-        tokio::fs::try_exists(temp.path().join(PERSONALITY_MIGRATION_FILENAME)).await?,
+        edgerun_tokio::fs::try_exists(temp.path().join(PERSONALITY_MIGRATION_FILENAME)).await?,
         true
     );
     assert_eq!(
-        tokio::fs::try_exists(temp.path().join("config.toml")).await?,
+        edgerun_tokio::fs::try_exists(temp.path().join("config.toml")).await?,
         false
     );
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn marker_short_circuits_invalid_profile_resolution() -> io::Result<()> {
     let temp = TempDir::new()?;
-    tokio::fs::write(temp.path().join(PERSONALITY_MIGRATION_FILENAME), "v1\n").await?;
+    edgerun_tokio::fs::write(temp.path().join(PERSONALITY_MIGRATION_FILENAME), "v1\n").await?;
     let config_toml = parse_config_toml("profile = \"missing\"\n")?;
 
     let status = maybe_migrate_personality(temp.path(), &config_toml, /*state_db*/ None).await?;
@@ -293,7 +293,7 @@ async fn marker_short_circuits_invalid_profile_resolution() -> io::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn invalid_selected_profile_returns_error_and_does_not_write_marker() -> io::Result<()> {
     let temp = TempDir::new()?;
     let config_toml = parse_config_toml("profile = \"missing\"\n")?;
@@ -304,13 +304,13 @@ async fn invalid_selected_profile_returns_error_and_does_not_write_marker() -> i
 
     assert_eq!(err.kind(), io::ErrorKind::InvalidData);
     assert_eq!(
-        tokio::fs::try_exists(temp.path().join(PERSONALITY_MIGRATION_FILENAME)).await?,
+        edgerun_tokio::fs::try_exists(temp.path().join(PERSONALITY_MIGRATION_FILENAME)).await?,
         false
     );
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn applied_migration_is_idempotent_on_second_run() -> io::Result<()> {
     let temp = TempDir::new()?;
     write_session_with_user_event(temp.path()).await?;
@@ -327,7 +327,7 @@ async fn applied_migration_is_idempotent_on_second_run() -> io::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn no_marker_archived_sessions_sets_personality() -> io::Result<()> {
     let temp = TempDir::new()?;
     write_archived_session_with_user_event(temp.path()).await?;
@@ -337,7 +337,7 @@ async fn no_marker_archived_sessions_sets_personality() -> io::Result<()> {
 
     assert_eq!(status, PersonalityMigrationStatus::Applied);
     assert_eq!(
-        tokio::fs::try_exists(temp.path().join(PERSONALITY_MIGRATION_FILENAME)).await?,
+        edgerun_tokio::fs::try_exists(temp.path().join(PERSONALITY_MIGRATION_FILENAME)).await?,
         true
     );
 

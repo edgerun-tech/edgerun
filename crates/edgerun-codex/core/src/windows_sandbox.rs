@@ -319,7 +319,7 @@ async fn run_windows_sandbox_setup_and_persist(
     let active_profile = request.active_profile;
     let setup_codex_home = codex_home.clone();
 
-    let setup_result = tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
+    let setup_result = edgerun_tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
         match mode {
             WindowsSandboxSetupMode::Elevated => {
                 if !sandbox_setup_is_complete(setup_codex_home.as_path()) {

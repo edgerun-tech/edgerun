@@ -24,13 +24,13 @@ edgerun-uuid = { workspace = true }
 icu_decimal = { workspace = true }
 icu_locale_core = { workspace = true }
 icu_provider = { workspace = true, features = ["sync"] }
-reqwest = { workspace = true }
+edgerun-reqwest = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-serde_with = { workspace = true, features = ["macros", "base64"] }
-strum = { workspace = true }
-strum_macros = { workspace = true }
-tokio = { workspace = true }
+edgerun-serde-with = { workspace = true, features = ["macros", "base64"] }
+edgerun-strum = { workspace = true }
+edgerun-strum-macros = { workspace = true }
+edgerun-tokio = { workspace = true }
 tracing = { workspace = true }
 ts-rs = { workspace = true, features = [
     "uuid-impl",

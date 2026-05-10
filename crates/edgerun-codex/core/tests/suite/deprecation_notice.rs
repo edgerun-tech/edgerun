@@ -19,7 +19,7 @@ use pretty_assertions::assert_eq;
 use std::collections::BTreeMap;
 use toml::Value as TomlValue;
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn emits_deprecation_notice_for_legacy_feature_flag() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -60,7 +60,7 @@ async fn emits_deprecation_notice_for_legacy_feature_flag() -> anyhow::Result<()
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn emits_deprecation_notice_for_experimental_instructions_file() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -115,7 +115,7 @@ async fn emits_deprecation_notice_for_experimental_instructions_file() -> anyhow
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn emits_deprecation_notice_for_web_search_feature_flag_values() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -162,7 +162,7 @@ async fn emits_deprecation_notice_for_web_search_feature_flag_values() -> anyhow
     Ok(())
 }
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn emits_deprecation_notice_for_use_legacy_landlock() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 

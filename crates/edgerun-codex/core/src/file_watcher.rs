@@ -17,12 +17,12 @@ use notify::EventKind;
 use notify::RecommendedWatcher;
 use notify::RecursiveMode;
 use notify::Watcher;
-use tokio::runtime::Handle;
-use tokio::sync::Mutex as AsyncMutex;
-use tokio::sync::Notify;
-use tokio::sync::mpsc;
-use tokio::time::Instant;
-use tokio::time::sleep_until;
+use edgerun_tokio::runtime::Handle;
+use edgerun_tokio::sync::Mutex as AsyncMutex;
+use edgerun_tokio::sync::Notify;
+use edgerun_tokio::sync::mpsc;
+use edgerun_tokio::time::Instant;
+use edgerun_tokio::time::sleep_until;
 use tracing::warn;
 
 #[derive(Debug, Clone, PartialEq, Eq)]

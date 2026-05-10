@@ -5,16 +5,16 @@ use crate::tools::handlers::multi_agents_spec::create_wait_agent_tool_v1;
 use crate::turn_timing::now_unix_timestamp_ms;
 use codex_protocol::error::CodexErr;
 use codex_tools::ToolSpec;
-use futures::FutureExt;
-use futures::StreamExt;
-use futures::stream::FuturesUnordered;
+use edgerun_futures::FutureExt;
+use edgerun_futures::StreamExt;
+use edgerun_futures::stream::FuturesUnordered;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::watch::Receiver;
-use tokio::time::Instant;
+use edgerun_tokio::sync::watch::Receiver;
+use edgerun_tokio::time::Instant;
 
-use tokio::time::timeout_at;
+use edgerun_tokio::time::timeout_at;
 
 #[derive(Default)]
 pub(crate) struct Handler {

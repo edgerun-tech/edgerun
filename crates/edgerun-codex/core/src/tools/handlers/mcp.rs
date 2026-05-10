@@ -131,9 +131,9 @@ mod tests {
     use pretty_assertions::assert_eq;
     use edgerun_json::serde_json::json;
     use std::time::Duration;
-    use tokio::sync::Mutex;
+    use edgerun_tokio::sync::Mutex;
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn mcp_pre_tool_use_payload_uses_model_tool_name_and_raw_args() {
         let payload = ToolPayload::Mcp {
             server: "memory".to_string(),
@@ -156,7 +156,7 @@ mod tests {
             handler.pre_tool_use_payload(&ToolInvocation {
                 session: session.into(),
                 turn: turn.into(),
-                cancellation_token: tokio_util::sync::CancellationToken::new(),
+                cancellation_token: edgerun_tokio_util::sync::CancellationToken::new(),
                 tracker: Arc::new(Mutex::new(TurnDiffTracker::new())),
                 call_id: "call-mcp-pre".to_string(),
                 tool_name: codex_tools::ToolName::namespaced("mcp__memory__", "create_entities"),
@@ -175,7 +175,7 @@ mod tests {
         );
     }
 
-    #[tokio::test]
+    #[edgerun_tokio::test]
     async fn mcp_post_tool_use_payload_uses_model_tool_name_args_and_result() {
         let payload = ToolPayload::Mcp {
             server: "filesystem".to_string(),
@@ -209,7 +209,7 @@ mod tests {
         let invocation = ToolInvocation {
             session: session.into(),
             turn: turn.into(),
-            cancellation_token: tokio_util::sync::CancellationToken::new(),
+            cancellation_token: edgerun_tokio_util::sync::CancellationToken::new(),
             tracker: Arc::new(Mutex::new(TurnDiffTracker::new())),
             call_id: "call-mcp-post".to_string(),
             tool_name: codex_tools::ToolName::namespaced("mcp__filesystem__", "read_file"),

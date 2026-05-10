@@ -28,7 +28,7 @@ use codex_rollout_trace::RawTraceEventPayload;
 use codex_rollout_trace::RolloutTrace;
 use codex_rollout_trace::TraceWriter;
 use codex_rollout_trace::replay_bundle;
-use futures::StreamExt;
+use edgerun_futures::StreamExt;
 use pretty_assertions::assert_eq;
 use edgerun_json::serde_json::json;
 use std::collections::BTreeMap;
@@ -40,7 +40,7 @@ use std::task::Context;
 use std::task::Poll;
 use std::time::Duration;
 use tempfile::TempDir;
-use tokio::sync::Notify;
+use edgerun_tokio::sync::Notify;
 use tracing::Event;
 use tracing::Subscriber;
 use tracing::field::Visit;
@@ -206,7 +206,7 @@ async fn replay_until_cancelled(temp: &TempDir) -> anyhow::Result<RolloutTrace> 
         if inference.execution.status == ExecutionStatus::Cancelled {
             return Ok(rollout);
         }
-        tokio::time::sleep(Duration::from_millis(10)).await;
+        edgerun_tokio::time::sleep(Duration::from_millis(10)).await;
         rollout = replay_bundle(temp.path())?;
     }
     Ok(rollout)
@@ -219,7 +219,7 @@ struct NotifyAfterEventStream {
     notify: Arc<Notify>,
 }
 
-impl futures::Stream for NotifyAfterEventStream {
+impl edgerun_futures::Stream for NotifyAfterEventStream {
     type Item = std::result::Result<ResponseEvent, ApiError>;
 
     fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -300,7 +300,7 @@ fn build_ws_client_metadata_includes_window_lineage_and_turn_metadata() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn summarize_memories_returns_empty_for_empty_input() {
     let client = test_model_client(SessionSource::Cli);
     let model_info = test_model_info();
@@ -318,7 +318,7 @@ async fn summarize_memories_returns_empty_for_empty_input() {
     assert_eq!(output.len(), 0);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn dropped_response_stream_traces_cancelled_partial_output() -> anyhow::Result<()> {
     let temp = TempDir::new()?;
     let attempt = started_inference_attempt(&temp)?;
@@ -328,8 +328,8 @@ async fn dropped_response_stream_traces_cancelled_partial_output() -> anyhow::Re
     // item in history, so the trace should preserve it when the stream is
     // abandoned.
     let item = output_message("msg-1", "partial answer");
-    let api_stream = futures::stream::iter([Ok(ResponseEvent::OutputItemDone(item))])
-        .chain(futures::stream::pending());
+    let api_stream = edgerun_futures::stream::iter([Ok(ResponseEvent::OutputItemDone(item))])
+        .chain(edgerun_futures::stream::pending());
     let (mut stream, _) = super::map_response_events(
         /*upstream_request_id*/ None,
         api_stream,
@@ -364,14 +364,14 @@ async fn dropped_response_stream_traces_cancelled_partial_output() -> anyhow::Re
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn response_stream_records_last_model_feedback_ids() {
     let tags = Arc::new(Mutex::new(BTreeMap::new()));
     let _guard = tracing_subscriber::registry()
         .with(TagCollectorLayer { tags: tags.clone() })
         .set_default();
 
-    let api_stream = futures::stream::iter([
+    let api_stream = edgerun_futures::stream::iter([
         Ok(ResponseEvent::Created),
         Ok(ResponseEvent::Completed {
             response_id: "resp-123".to_string(),
@@ -399,7 +399,7 @@ async fn response_stream_records_last_model_feedback_ids() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn dropped_backpressured_response_stream_traces_cancelled_partial_output()
 -> anyhow::Result<()> {
     let temp = TempDir::new()?;

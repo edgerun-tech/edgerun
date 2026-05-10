@@ -173,7 +173,7 @@ async fn derive_legacy_sandbox_policy_for_test(
         })
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn load_config_normalizes_relative_cwd_override() -> std::io::Result<()> {
     let expected_cwd = AbsolutePathBuf::relative_to_current_dir("nested")?;
     let codex_home = tempdir()?;
@@ -191,7 +191,7 @@ async fn load_config_normalizes_relative_cwd_override() -> std::io::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn load_config_loads_global_agents_instructions() -> std::io::Result<()> {
     let codex_home = tempdir()?;
     std::fs::write(
@@ -214,7 +214,7 @@ async fn load_config_loads_global_agents_instructions() -> std::io::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn load_config_prefers_global_agents_override_instructions() -> std::io::Result<()> {
     let codex_home = tempdir()?;
     std::fs::write(
@@ -238,7 +238,7 @@ async fn load_config_prefers_global_agents_override_instructions() -> std::io::R
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn test_toml_parsing() {
     let history_with_persistence = r#"
 [history]
@@ -467,7 +467,7 @@ region = "us-west-2"
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn load_config_applies_amazon_bedrock_aws_profile_override() {
     let cfg = toml::from_str::<ConfigToml>(
         r#"
@@ -507,7 +507,7 @@ region = "us-west-2"
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn load_config_rejects_unsupported_amazon_bedrock_overrides() {
     let cfg = toml::from_str::<ConfigToml>(
         r#"
@@ -624,7 +624,7 @@ terminal_resize_reflow_max_rows = 9000
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn runtime_config_defaults_model_availability_nux() {
     let cfg = Config::load_from_base_config_with_overrides(
         ConfigToml::default(),
@@ -698,7 +698,7 @@ fn test_tui_raw_output_mode_true() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn runtime_config_uses_tui_raw_output_mode() {
     let toml = r#"
         [tui]
@@ -788,7 +788,7 @@ allow_upstream_proxy = false
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn permissions_profiles_network_enabled_allows_runtime_network_without_proxy()
 -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
@@ -836,7 +836,7 @@ async fn permissions_profiles_network_enabled_allows_runtime_network_without_pro
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn permissions_profiles_proxy_policy_starts_managed_network_proxy() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cwd = TempDir::new()?;
@@ -891,7 +891,7 @@ async fn permissions_profiles_proxy_policy_starts_managed_network_proxy() -> std
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn permissions_profiles_network_disabled_by_default_does_not_start_proxy()
 -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
@@ -938,7 +938,7 @@ async fn permissions_profiles_network_disabled_by_default_does_not_start_proxy()
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn default_permissions_profile_populates_runtime_sandbox_policy() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cwd = TempDir::new()?;
@@ -1038,7 +1038,7 @@ async fn default_permissions_profile_populates_runtime_sandbox_policy() -> std::
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn permission_profile_override_populates_runtime_permissions() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cwd = TempDir::new()?;
@@ -1064,7 +1064,7 @@ async fn permission_profile_override_populates_runtime_permissions() -> std::io:
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn permission_profile_override_preserves_managed_unrestricted_filesystem()
 -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
@@ -1095,7 +1095,7 @@ async fn permission_profile_override_preserves_managed_unrestricted_filesystem()
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn managed_unrestricted_permission_profile_still_enables_network_requirements()
 -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
@@ -1150,7 +1150,7 @@ async fn managed_unrestricted_permission_profile_still_enables_network_requireme
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn permission_profile_override_applies_runtime_roots_to_legacy_projection()
 -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
@@ -1203,7 +1203,7 @@ async fn permission_profile_override_applies_runtime_roots_to_legacy_projection(
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn permission_profile_override_preserves_configured_network_policy_without_starting_proxy()
 -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
@@ -1258,11 +1258,11 @@ async fn permission_profile_override_preserves_configured_network_policy_without
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn project_root_glob_none_compiles_to_filesystem_pattern_entry() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cwd = TempDir::new()?;
-    tokio::fs::write(cwd.path().join(".git"), "gitdir: nowhere").await?;
+    edgerun_tokio::fs::write(cwd.path().join(".git"), "gitdir: nowhere").await?;
 
     let config = Config::load_from_base_config_with_overrides(
         ConfigToml {
@@ -1334,7 +1334,7 @@ async fn project_root_glob_none_compiles_to_filesystem_pattern_entry() -> std::i
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn permissions_profiles_require_default_permissions() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cwd = TempDir::new()?;
@@ -1376,7 +1376,7 @@ async fn permissions_profiles_require_default_permissions() -> std::io::Result<(
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn default_permissions_can_select_builtin_profile_without_permissions_table()
 -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
@@ -1415,7 +1415,7 @@ async fn default_permissions_can_select_builtin_profile_without_permissions_tabl
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn default_permissions_read_only_applies_additional_writable_roots_as_modifications()
 -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
@@ -1453,7 +1453,7 @@ async fn default_permissions_read_only_applies_additional_writable_roots_as_modi
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn explicit_builtin_workspace_profile_ignores_legacy_workspace_write_settings()
 -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
@@ -1495,7 +1495,7 @@ async fn explicit_builtin_workspace_profile_ignores_legacy_workspace_write_setti
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn empty_config_defaults_to_builtin_profile_for_trusted_project() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cwd = TempDir::new()?;
@@ -1550,7 +1550,7 @@ async fn empty_config_defaults_to_builtin_profile_for_trusted_project() -> std::
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn implicit_builtin_workspace_profile_preserves_sandbox_workspace_write_settings()
 -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
@@ -1619,7 +1619,7 @@ async fn implicit_builtin_workspace_profile_preserves_sandbox_workspace_write_se
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn implicit_builtin_workspace_profile_preserves_add_dir_metadata_carveouts()
 -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
@@ -1669,7 +1669,7 @@ async fn implicit_builtin_workspace_profile_preserves_add_dir_metadata_carveouts
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn empty_config_defaults_to_builtin_read_only_without_trust_decision() -> std::io::Result<()>
 {
     let codex_home = TempDir::new()?;
@@ -1697,7 +1697,7 @@ async fn empty_config_defaults_to_builtin_read_only_without_trust_decision() -> 
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn default_permissions_can_select_builtin_no_sandbox_profile() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cwd = TempDir::new()?;
@@ -1730,7 +1730,7 @@ async fn default_permissions_can_select_builtin_no_sandbox_profile() -> std::io:
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn user_defined_permission_profile_names_cannot_use_builtin_prefix() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cwd = TempDir::new()?;
@@ -1763,7 +1763,7 @@ async fn user_defined_permission_profile_names_cannot_use_builtin_prefix() -> st
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn unknown_builtin_permission_profile_name_is_rejected() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cwd = TempDir::new()?;
@@ -1790,7 +1790,7 @@ async fn unknown_builtin_permission_profile_name_is_rejected() -> std::io::Resul
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn permissions_profiles_allow_direct_write_roots_outside_workspace_root()
 -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
@@ -1849,7 +1849,7 @@ async fn permissions_profiles_allow_direct_write_roots_outside_workspace_root()
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn permissions_profiles_reject_nested_entries_for_non_project_roots() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cwd = TempDir::new()?;
@@ -1919,7 +1919,7 @@ async fn load_workspace_permission_profile(
     .await
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn permissions_profiles_allow_unknown_special_paths() -> std::io::Result<()> {
     let config = load_workspace_permission_profile(PermissionProfileToml {
         filesystem: Some(FilesystemPermissionsToml {
@@ -1961,7 +1961,7 @@ async fn permissions_profiles_allow_unknown_special_paths() -> std::io::Result<(
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn permissions_profiles_allow_unknown_special_paths_with_nested_entries()
 -> std::io::Result<()> {
     let config = load_workspace_permission_profile(PermissionProfileToml {
@@ -1998,7 +1998,7 @@ async fn permissions_profiles_allow_unknown_special_paths_with_nested_entries()
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn permissions_profiles_allow_missing_filesystem_with_warning() -> std::io::Result<()> {
     let config = load_workspace_permission_profile(PermissionProfileToml {
         filesystem: None,
@@ -2026,7 +2026,7 @@ async fn permissions_profiles_allow_missing_filesystem_with_warning() -> std::io
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn permissions_profiles_allow_empty_filesystem_with_warning() -> std::io::Result<()> {
     let config = load_workspace_permission_profile(PermissionProfileToml {
         filesystem: Some(FilesystemPermissionsToml {
@@ -2051,7 +2051,7 @@ async fn permissions_profiles_allow_empty_filesystem_with_warning() -> std::io::
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn permissions_profiles_reject_project_root_parent_traversal() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cwd = TempDir::new()?;
@@ -2097,7 +2097,7 @@ async fn permissions_profiles_reject_project_root_parent_traversal() -> std::io:
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn permissions_profiles_allow_network_enablement() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cwd = TempDir::new()?;
@@ -2220,7 +2220,7 @@ fn tui_config_missing_notifications_field_defaults_to_enabled() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn runtime_config_resolves_terminal_resize_reflow_defaults_and_overrides() {
     let cfg = Config::load_from_base_config_with_overrides(
         ConfigToml::default(),
@@ -2278,7 +2278,7 @@ async fn runtime_config_resolves_terminal_resize_reflow_defaults_and_overrides()
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn legacy_remote_thread_store_endpoint_is_rejected() {
     let cfg: ConfigToml =
         toml::from_str(r#"experimental_thread_store_endpoint = "https://example.com""#)
@@ -2314,7 +2314,7 @@ theme = "dark"
     assert!(err.to_string().contains("theme"));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn runtime_config_resolves_session_picker_view_default_and_override() {
     let cfg = Config::load_from_base_config_with_overrides(
         ConfigToml::default(),
@@ -2371,7 +2371,7 @@ session_picker_view = "comfortable"
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn test_sandbox_config_parsing() {
     let sandbox_full_access = r#"
 sandbox_mode = "danger-full-access"
@@ -2499,7 +2499,7 @@ exclude_slash_tmp = true
     }
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn legacy_sandbox_mode_builds_profiles_with_compatible_projection() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cwd = TempDir::new()?;
@@ -2872,7 +2872,7 @@ fn filter_plugin_mcp_servers_by_allowlist_blocks_unlisted_plugin() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn rebuild_preserving_session_layers_refreshes_requirements() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let user_file = AbsolutePathBuf::resolve_path_against_base(CONFIG_TOML_FILE, codex_home.path());
@@ -3079,7 +3079,7 @@ async fn rebuild_preserving_session_layers_refreshes_requirements() -> std::io::
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn rebuild_preserving_session_layers_refreshes_plugin_derived_mcp_config()
 -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
@@ -3173,7 +3173,7 @@ async fn rebuild_preserving_session_layers_refreshes_plugin_derived_mcp_config()
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn to_mcp_config_applies_plugin_mcp_cloud_requirements() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
     let plugin_root = codex_home
@@ -3259,7 +3259,7 @@ enabled = true
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn to_mcp_config_empty_mcp_requirements_disable_plugin_mcps() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
     let plugin_root = codex_home
@@ -3322,7 +3322,7 @@ enabled = true
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn add_dir_override_extends_workspace_writable_roots() -> std::io::Result<()> {
     let temp_dir = TempDir::new()?;
     let frontend = temp_dir.path().join("frontend");
@@ -3370,7 +3370,7 @@ async fn add_dir_override_extends_workspace_writable_roots() -> std::io::Result<
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn to_mcp_config_empty_mcp_requirements_preserve_builtin_mcps() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
     let requirements = codex_config::ConfigRequirementsToml {
@@ -3398,7 +3398,7 @@ async fn to_mcp_config_empty_mcp_requirements_preserve_builtin_mcps() -> anyhow:
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn to_mcp_config_nonempty_mcp_requirements_preserve_builtin_mcps() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
     let requirements = codex_config::ConfigRequirementsToml {
@@ -3433,7 +3433,7 @@ async fn to_mcp_config_nonempty_mcp_requirements_preserve_builtin_mcps() -> anyh
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn sqlite_home_defaults_to_codex_home_for_workspace_write() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let config = Config::load_from_base_config_with_overrides(
@@ -3451,7 +3451,7 @@ async fn sqlite_home_defaults_to_codex_home_for_workspace_write() -> std::io::Re
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn workspace_write_always_includes_memories_root_once() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let memories_root = codex_home.path().join("memories");
@@ -3502,7 +3502,7 @@ async fn workspace_write_always_includes_memories_root_once() -> std::io::Result
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn config_defaults_to_file_cli_auth_store_mode() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cfg = ConfigToml::default();
@@ -3522,7 +3522,7 @@ async fn config_defaults_to_file_cli_auth_store_mode() -> std::io::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn config_resolves_explicit_keyring_auth_store_mode() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cfg = ConfigToml {
@@ -3548,7 +3548,7 @@ async fn config_resolves_explicit_keyring_auth_store_mode() -> std::io::Result<(
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn config_resolves_default_oauth_store_mode() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cfg = ConfigToml::default();
@@ -3622,7 +3622,7 @@ fn local_dev_builds_force_file_mcp_oauth_store_modes() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn feedback_enabled_defaults_to_true() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cfg = ConfigToml {
@@ -3730,7 +3730,7 @@ fn web_search_mode_for_turn_falls_back_when_live_is_disallowed() -> anyhow::Resu
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn project_profiles_are_ignored() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let workspace = TempDir::new()?;
@@ -3790,7 +3790,7 @@ model = "gpt-project-local"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn profile_sandbox_mode_overrides_base() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let mut profiles = HashMap::new();
@@ -3823,7 +3823,7 @@ async fn profile_sandbox_mode_overrides_base() -> std::io::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn cli_override_takes_precedence_over_profile_sandbox_mode() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let mut profiles = HashMap::new();
@@ -3863,7 +3863,7 @@ async fn cli_override_takes_precedence_over_profile_sandbox_mode() -> std::io::R
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn feature_table_overrides_legacy_flags() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let mut entries = BTreeMap::new();
@@ -3886,7 +3886,7 @@ async fn feature_table_overrides_legacy_flags() -> std::io::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn legacy_toggles_map_to_features() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cfg = ConfigToml {
@@ -3912,7 +3912,7 @@ async fn legacy_toggles_map_to_features() -> std::io::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn responses_websocket_features_do_not_change_wire_api() -> std::io::Result<()> {
     for feature_key in ["responses_websockets", "responses_websockets_v2"] {
         let codex_home = TempDir::new()?;
@@ -3936,7 +3936,7 @@ async fn responses_websocket_features_do_not_change_wire_api() -> std::io::Resul
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn config_honors_explicit_file_oauth_store_mode() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cfg = ConfigToml {
@@ -3959,7 +3959,7 @@ async fn config_honors_explicit_file_oauth_store_mode() -> std::io::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn managed_config_overrides_oauth_store_mode() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
     let managed_path = codex_home.path().join("managed_config.toml");
@@ -4009,7 +4009,7 @@ async fn managed_config_overrides_oauth_store_mode() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn load_global_mcp_servers_returns_empty_if_missing() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
 
@@ -4019,7 +4019,7 @@ async fn load_global_mcp_servers_returns_empty_if_missing() -> anyhow::Result<()
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn replace_mcp_servers_round_trips_entries() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
 
@@ -4092,7 +4092,7 @@ async fn replace_mcp_servers_round_trips_entries() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn managed_config_wins_over_cli_overrides() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
     let managed_path = codex_home.path().join("managed_config.toml");
@@ -4128,7 +4128,7 @@ async fn managed_config_wins_over_cli_overrides() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn load_global_mcp_servers_accepts_legacy_ms_field() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
     let config_path = codex_home.path().join(CONFIG_TOML_FILE);
@@ -4225,7 +4225,7 @@ approval_mode = "approve"
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn to_mcp_config_preserves_apps_feature_from_config() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let mut config = Config::load_from_base_config_with_overrides(
@@ -4255,7 +4255,7 @@ async fn to_mcp_config_preserves_apps_feature_from_config() -> std::io::Result<(
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn to_mcp_config_includes_enabled_builtin_mcps() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let mut config = Config::load_from_base_config_with_overrides(
@@ -4283,7 +4283,7 @@ async fn to_mcp_config_includes_enabled_builtin_mcps() -> std::io::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn to_mcp_config_omits_builtin_mcps_when_feature_is_disabled() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let mut config = Config::load_from_base_config_with_overrides(
@@ -4302,7 +4302,7 @@ async fn to_mcp_config_omits_builtin_mcps_when_feature_is_disabled() -> std::io:
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn to_mcp_config_reserves_enabled_builtin_mcp_names() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let mut config = Config::load_from_base_config_with_overrides(
@@ -4336,7 +4336,7 @@ async fn to_mcp_config_reserves_enabled_builtin_mcp_names() -> std::io::Result<(
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn load_global_mcp_servers_rejects_inline_bearer_token() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
     let config_path = codex_home.path().join(CONFIG_TOML_FILE);
@@ -4361,7 +4361,7 @@ bearer_token = "secret"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn replace_mcp_servers_serializes_env_sorted() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
 
@@ -4440,7 +4440,7 @@ ZIG_VAR = "3"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn replace_mcp_servers_serializes_env_vars() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
 
@@ -4495,7 +4495,7 @@ async fn replace_mcp_servers_serializes_env_vars() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn replace_mcp_servers_serializes_sourced_env_vars() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
 
@@ -4551,7 +4551,7 @@ async fn replace_mcp_servers_serializes_sourced_env_vars() -> anyhow::Result<()>
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn replace_mcp_servers_serializes_cwd() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
 
@@ -4607,7 +4607,7 @@ async fn replace_mcp_servers_serializes_cwd() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn replace_mcp_servers_streamable_http_serializes_bearer_token() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
 
@@ -4674,7 +4674,7 @@ startup_timeout_sec = 2.0
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn replace_mcp_servers_streamable_http_serializes_custom_headers() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
 
@@ -4754,7 +4754,7 @@ X-Auth = "DOCS_AUTH"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn replace_mcp_servers_streamable_http_removes_optional_sections() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
 
@@ -4858,7 +4858,7 @@ url = "https://example.com/mcp"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn replace_mcp_servers_streamable_http_isolates_headers_between_servers() -> anyhow::Result<()>
 {
     let codex_home = TempDir::new()?;
@@ -4976,7 +4976,7 @@ async fn replace_mcp_servers_streamable_http_isolates_headers_between_servers() 
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn replace_mcp_servers_serializes_disabled_flag() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
 
@@ -5026,7 +5026,7 @@ async fn replace_mcp_servers_serializes_disabled_flag() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn replace_mcp_servers_serializes_required_flag() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
 
@@ -5076,7 +5076,7 @@ async fn replace_mcp_servers_serializes_required_flag() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn replace_mcp_servers_serializes_tool_filters() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
 
@@ -5131,7 +5131,7 @@ async fn replace_mcp_servers_serializes_tool_filters() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn replace_mcp_servers_streamable_http_serializes_oauth_resource() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
 
@@ -5180,7 +5180,7 @@ async fn replace_mcp_servers_streamable_http_serializes_oauth_resource() -> anyh
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn set_model_updates_defaults() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
 
@@ -5189,7 +5189,7 @@ async fn set_model_updates_defaults() -> anyhow::Result<()> {
         .apply()
         .await?;
 
-    let serialized = tokio::fs::read_to_string(codex_home.path().join(CONFIG_TOML_FILE)).await?;
+    let serialized = edgerun_tokio::fs::read_to_string(codex_home.path().join(CONFIG_TOML_FILE)).await?;
     let parsed: ConfigToml = toml::from_str(&serialized)?;
 
     assert_eq!(parsed.model.as_deref(), Some("gpt-5.4"));
@@ -5198,12 +5198,12 @@ async fn set_model_updates_defaults() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn set_model_overwrites_existing_model() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
     let config_path = codex_home.path().join(CONFIG_TOML_FILE);
 
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         &config_path,
         r#"
 model = "gpt-5.4"
@@ -5220,7 +5220,7 @@ model = "gpt-4.1"
         .apply()
         .await?;
 
-    let serialized = tokio::fs::read_to_string(config_path).await?;
+    let serialized = edgerun_tokio::fs::read_to_string(config_path).await?;
     let parsed: ConfigToml = toml::from_str(&serialized)?;
 
     assert_eq!(parsed.model.as_deref(), Some("o4-mini"));
@@ -5236,7 +5236,7 @@ model = "gpt-4.1"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn set_model_updates_profile() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
 
@@ -5246,7 +5246,7 @@ async fn set_model_updates_profile() -> anyhow::Result<()> {
         .apply()
         .await?;
 
-    let serialized = tokio::fs::read_to_string(codex_home.path().join(CONFIG_TOML_FILE)).await?;
+    let serialized = edgerun_tokio::fs::read_to_string(codex_home.path().join(CONFIG_TOML_FILE)).await?;
     let parsed: ConfigToml = toml::from_str(&serialized)?;
     let profile = parsed
         .profiles
@@ -5262,12 +5262,12 @@ async fn set_model_updates_profile() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn set_model_updates_existing_profile() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
     let config_path = codex_home.path().join(CONFIG_TOML_FILE);
 
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         &config_path,
         r#"
 [profiles.dev]
@@ -5286,7 +5286,7 @@ model = "gpt-5.4"
         .apply()
         .await?;
 
-    let serialized = tokio::fs::read_to_string(config_path).await?;
+    let serialized = edgerun_tokio::fs::read_to_string(config_path).await?;
     let parsed: ConfigToml = toml::from_str(&serialized)?;
 
     let dev_profile = parsed
@@ -5310,7 +5310,7 @@ model = "gpt-5.4"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn set_feature_enabled_updates_profile() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
 
@@ -5320,7 +5320,7 @@ async fn set_feature_enabled_updates_profile() -> anyhow::Result<()> {
         .apply()
         .await?;
 
-    let serialized = tokio::fs::read_to_string(codex_home.path().join(CONFIG_TOML_FILE)).await?;
+    let serialized = edgerun_tokio::fs::read_to_string(codex_home.path().join(CONFIG_TOML_FILE)).await?;
     let parsed: ConfigToml = toml::from_str(&serialized)?;
     let profile = parsed
         .profiles
@@ -5345,7 +5345,7 @@ async fn set_feature_enabled_updates_profile() -> anyhow::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn set_feature_enabled_persists_feature_disable_in_profile() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
 
@@ -5361,7 +5361,7 @@ async fn set_feature_enabled_persists_feature_disable_in_profile() -> anyhow::Re
         .apply()
         .await?;
 
-    let serialized = tokio::fs::read_to_string(codex_home.path().join(CONFIG_TOML_FILE)).await?;
+    let serialized = edgerun_tokio::fs::read_to_string(codex_home.path().join(CONFIG_TOML_FILE)).await?;
     let parsed: ConfigToml = toml::from_str(&serialized)?;
     let profile = parsed
         .profiles
@@ -5386,7 +5386,7 @@ async fn set_feature_enabled_persists_feature_disable_in_profile() -> anyhow::Re
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn set_feature_enabled_profile_disable_overrides_root_enable() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
 
@@ -5401,7 +5401,7 @@ async fn set_feature_enabled_profile_disable_overrides_root_enable() -> anyhow::
         .apply()
         .await?;
 
-    let serialized = tokio::fs::read_to_string(codex_home.path().join(CONFIG_TOML_FILE)).await?;
+    let serialized = edgerun_tokio::fs::read_to_string(codex_home.path().join(CONFIG_TOML_FILE)).await?;
     let parsed: ConfigToml = toml::from_str(&serialized)?;
     let profile = parsed
         .profiles
@@ -5449,7 +5449,7 @@ impl PrecedenceTestFixture {
     }
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn cli_override_sets_compact_prompt() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let overrides = ConfigOverrides {
@@ -5472,7 +5472,7 @@ async fn cli_override_sets_compact_prompt() -> std::io::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn loads_compact_prompt_from_file() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let workspace = codex_home.path().join("workspace");
@@ -5502,7 +5502,7 @@ async fn loads_compact_prompt_from_file() -> std::io::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn load_config_uses_requirements_guardian_policy_config() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let config_layer_stack = ConfigLayerStack::new(
@@ -5555,7 +5555,7 @@ policy = "Use the user-configured guardian policy."
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn load_config_uses_auto_review_guardian_policy_config() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cfg = ConfigToml {
@@ -5583,7 +5583,7 @@ async fn load_config_uses_auto_review_guardian_policy_config() -> std::io::Resul
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn requirements_guardian_policy_beats_auto_review() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let config_layer_stack = ConfigLayerStack::new(
@@ -5622,7 +5622,7 @@ async fn requirements_guardian_policy_beats_auto_review() -> std::io::Result<()>
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn load_config_ignores_empty_auto_review_guardian_policy_config() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cfg = ConfigToml {
@@ -5647,7 +5647,7 @@ async fn load_config_ignores_empty_auto_review_guardian_policy_config() -> std::
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn load_config_ignores_empty_requirements_guardian_policy_config() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let config_layer_stack = ConfigLayerStack::new(
@@ -5677,7 +5677,7 @@ async fn load_config_ignores_empty_requirements_guardian_policy_config() -> std:
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn load_config_rejects_missing_agent_role_config_file() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let missing_path = codex_home.path().join("agents").join("researcher.toml");
@@ -5714,22 +5714,22 @@ async fn load_config_rejects_missing_agent_role_config_file() -> std::io::Result
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn agent_role_relative_config_file_resolves_against_config_toml() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let role_config_path = codex_home.path().join("agents").join("researcher.toml");
-    tokio::fs::create_dir_all(
+    edgerun_tokio::fs::create_dir_all(
         role_config_path
             .parent()
             .expect("role config should have a parent directory"),
     )
     .await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         &role_config_path,
         "developer_instructions = \"Research carefully\"\nmodel = \"gpt-5\"",
     )
     .await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         codex_home.path().join(CONFIG_TOML_FILE),
         r#"[agents.researcher]
 description = "Research role"
@@ -5763,17 +5763,17 @@ nickname_candidates = ["Hypatia", "Noether"]
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn agent_role_relative_config_file_resolves_from_config_layer() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let role_config_path = codex_home.path().join("agents").join("researcher.toml");
-    tokio::fs::create_dir_all(
+    edgerun_tokio::fs::create_dir_all(
         role_config_path
             .parent()
             .expect("role config should have a parent directory"),
     )
     .await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         &role_config_path,
         "developer_instructions = \"Research carefully\"\nmodel = \"gpt-5\"",
     )
@@ -5820,17 +5820,17 @@ config_file = "./agents/researcher.toml"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn agent_role_file_metadata_overrides_config_toml_metadata() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let role_config_path = codex_home.path().join("agents").join("researcher.toml");
-    tokio::fs::create_dir_all(
+    edgerun_tokio::fs::create_dir_all(
         role_config_path
             .parent()
             .expect("role config should have a parent directory"),
     )
     .await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         &role_config_path,
         r#"
 description = "Role metadata from file"
@@ -5840,7 +5840,7 @@ model = "gpt-5.2"
 "#,
     )
     .await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         codex_home.path().join(CONFIG_TOML_FILE),
         r#"[agents.researcher]
 description = "Research role from config"
@@ -5871,7 +5871,7 @@ nickname_candidates = ["Noether"]
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn agent_role_file_without_developer_instructions_is_dropped_with_warning()
 -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
@@ -5881,7 +5881,7 @@ async fn agent_role_file_without_developer_instructions_is_dropped_with_warning(
     std::fs::create_dir_all(&nested_cwd)?;
 
     let workspace_key = repo_root.path().to_string_lossy().replace('\\', "\\\\");
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         codex_home.path().join(CONFIG_TOML_FILE),
         format!(
             r#"[projects."{workspace_key}"]
@@ -5892,8 +5892,8 @@ trust_level = "trusted"
     .await?;
 
     let standalone_agents_dir = repo_root.path().join(".codex").join("agents");
-    tokio::fs::create_dir_all(&standalone_agents_dir).await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::create_dir_all(&standalone_agents_dir).await?;
+    edgerun_tokio::fs::write(
         standalone_agents_dir.join("researcher.toml"),
         r#"
 name = "researcher"
@@ -5902,7 +5902,7 @@ model = "gpt-5.2"
 "#,
     )
     .await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         standalone_agents_dir.join("reviewer.toml"),
         r#"
 name = "reviewer"
@@ -5939,18 +5939,18 @@ model = "gpt-5.2"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn legacy_agent_role_config_file_allows_missing_developer_instructions() -> std::io::Result<()>
 {
     let codex_home = TempDir::new()?;
     let role_config_path = codex_home.path().join("agents").join("researcher.toml");
-    tokio::fs::create_dir_all(
+    edgerun_tokio::fs::create_dir_all(
         role_config_path
             .parent()
             .expect("role config should have a parent directory"),
     )
     .await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         &role_config_path,
         r#"
 model = "gpt-5.2"
@@ -5958,7 +5958,7 @@ model_reasoning_effort = "high"
 "#,
     )
     .await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         codex_home.path().join(CONFIG_TOML_FILE),
         r#"[agents.researcher]
 description = "Research role from config"
@@ -5990,18 +5990,18 @@ config_file = "./agents/researcher.toml"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn agent_role_without_description_after_merge_is_dropped_with_warning() -> std::io::Result<()>
 {
     let codex_home = TempDir::new()?;
     let role_config_path = codex_home.path().join("agents").join("researcher.toml");
-    tokio::fs::create_dir_all(
+    edgerun_tokio::fs::create_dir_all(
         role_config_path
             .parent()
             .expect("role config should have a parent directory"),
     )
     .await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         &role_config_path,
         r#"
 developer_instructions = "Research carefully"
@@ -6009,7 +6009,7 @@ model = "gpt-5.2"
 "#,
     )
     .await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         codex_home.path().join(CONFIG_TOML_FILE),
         r#"[agents.researcher]
 config_file = "./agents/researcher.toml"
@@ -6043,7 +6043,7 @@ description = "Review role"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn discovered_agent_role_file_without_name_is_dropped_with_warning() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let repo_root = TempDir::new()?;
@@ -6052,7 +6052,7 @@ async fn discovered_agent_role_file_without_name_is_dropped_with_warning() -> st
     std::fs::create_dir_all(&nested_cwd)?;
 
     let workspace_key = repo_root.path().to_string_lossy().replace('\\', "\\\\");
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         codex_home.path().join(CONFIG_TOML_FILE),
         format!(
             r#"[projects."{workspace_key}"]
@@ -6063,8 +6063,8 @@ trust_level = "trusted"
     .await?;
 
     let standalone_agents_dir = repo_root.path().join(".codex").join("agents");
-    tokio::fs::create_dir_all(&standalone_agents_dir).await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::create_dir_all(&standalone_agents_dir).await?;
+    edgerun_tokio::fs::write(
         standalone_agents_dir.join("researcher.toml"),
         r#"
 description = "Role metadata from file"
@@ -6072,7 +6072,7 @@ developer_instructions = "Research carefully"
 "#,
     )
     .await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         standalone_agents_dir.join("reviewer.toml"),
         r#"
 name = "reviewer"
@@ -6108,17 +6108,17 @@ developer_instructions = "Review carefully"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn agent_role_file_name_takes_precedence_over_config_key() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let role_config_path = codex_home.path().join("agents").join("researcher.toml");
-    tokio::fs::create_dir_all(
+    edgerun_tokio::fs::create_dir_all(
         role_config_path
             .parent()
             .expect("role config should have a parent directory"),
     )
     .await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         &role_config_path,
         r#"
 name = "archivist"
@@ -6128,7 +6128,7 @@ model = "gpt-5.2"
 "#,
     )
     .await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         codex_home.path().join(CONFIG_TOML_FILE),
         r#"[agents.researcher]
 description = "Research role from config"
@@ -6153,28 +6153,28 @@ config_file = "./agents/researcher.toml"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn loads_legacy_split_agent_roles_from_config_toml() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let researcher_path = codex_home.path().join("agents").join("researcher.toml");
     let reviewer_path = codex_home.path().join("agents").join("reviewer.toml");
-    tokio::fs::create_dir_all(
+    edgerun_tokio::fs::create_dir_all(
         researcher_path
             .parent()
             .expect("role config should have a parent directory"),
     )
     .await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         &researcher_path,
         "developer_instructions = \"Research carefully\"\nmodel = \"gpt-5\"",
     )
     .await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         &reviewer_path,
         "developer_instructions = \"Review carefully\"\nmodel = \"gpt-4.1\"",
     )
     .await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         codex_home.path().join(CONFIG_TOML_FILE),
         r#"[agents.researcher]
 description = "Research role"
@@ -6243,7 +6243,7 @@ nickname_candidates = ["Atlas"]
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn discovers_multiple_standalone_agent_role_files() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let repo_root = TempDir::new()?;
@@ -6373,7 +6373,7 @@ developer_instructions = "Write carefully"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn mixed_legacy_and_standalone_agent_role_sources_merge_with_precedence()
 -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
@@ -6383,7 +6383,7 @@ async fn mixed_legacy_and_standalone_agent_role_sources_merge_with_precedence()
     std::fs::create_dir_all(&nested_cwd)?;
 
     let workspace_key = repo_root.path().to_string_lossy().replace('\\', "\\\\");
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         codex_home.path().join(CONFIG_TOML_FILE),
         format!(
             r#"[projects."{workspace_key}"]
@@ -6404,8 +6404,8 @@ nickname_candidates = ["Ada"]
     .await?;
 
     let home_agents_dir = codex_home.path().join("agents");
-    tokio::fs::create_dir_all(&home_agents_dir).await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::create_dir_all(&home_agents_dir).await?;
+    edgerun_tokio::fs::write(
         home_agents_dir.join("researcher.toml"),
         r#"
 developer_instructions = "Research carefully"
@@ -6413,7 +6413,7 @@ model = "gpt-5.2"
 "#,
     )
     .await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         home_agents_dir.join("critic.toml"),
         r#"
 developer_instructions = "Critique carefully"
@@ -6423,8 +6423,8 @@ model = "gpt-4.1"
     .await?;
 
     let standalone_agents_dir = repo_root.path().join(".codex").join("agents");
-    tokio::fs::create_dir_all(&standalone_agents_dir).await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::create_dir_all(&standalone_agents_dir).await?;
+    edgerun_tokio::fs::write(
         standalone_agents_dir.join("researcher.toml"),
         r#"
 name = "researcher"
@@ -6435,7 +6435,7 @@ model = "gpt-5-mini"
 "#,
     )
     .await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         standalone_agents_dir.join("writer.toml"),
         r#"
 name = "writer"
@@ -6519,7 +6519,7 @@ model = "gpt-5.2"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn higher_precedence_agent_role_can_inherit_description_from_lower_layer()
 -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
@@ -6529,7 +6529,7 @@ async fn higher_precedence_agent_role_can_inherit_description_from_lower_layer()
     std::fs::create_dir_all(&nested_cwd)?;
 
     let workspace_key = repo_root.path().to_string_lossy().replace('\\', "\\\\");
-    tokio::fs::write(
+    edgerun_tokio::fs::write(
         codex_home.path().join(CONFIG_TOML_FILE),
         format!(
             r#"[projects."{workspace_key}"]
@@ -6544,8 +6544,8 @@ config_file = "./agents/researcher.toml"
     .await?;
 
     let home_agents_dir = codex_home.path().join("agents");
-    tokio::fs::create_dir_all(&home_agents_dir).await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::create_dir_all(&home_agents_dir).await?;
+    edgerun_tokio::fs::write(
         home_agents_dir.join("researcher.toml"),
         r#"
 developer_instructions = "Research carefully"
@@ -6555,8 +6555,8 @@ model = "gpt-5.2"
     .await?;
 
     let standalone_agents_dir = repo_root.path().join(".codex").join("agents");
-    tokio::fs::create_dir_all(&standalone_agents_dir).await?;
-    tokio::fs::write(
+    edgerun_tokio::fs::create_dir_all(&standalone_agents_dir).await?;
+    edgerun_tokio::fs::write(
         standalone_agents_dir.join("researcher.toml"),
         r#"
 name = "researcher"
@@ -6602,7 +6602,7 @@ model = "gpt-5-mini"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn load_config_resolves_agent_interrupt_message() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cfg = ConfigToml {
@@ -6625,7 +6625,7 @@ async fn load_config_resolves_agent_interrupt_message() -> std::io::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn load_config_normalizes_agent_role_nickname_candidates() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cfg = ConfigToml {
@@ -6668,7 +6668,7 @@ async fn load_config_normalizes_agent_role_nickname_candidates() -> std::io::Res
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn load_config_rejects_empty_agent_role_nickname_candidates() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cfg = ConfigToml {
@@ -6705,7 +6705,7 @@ async fn load_config_rejects_empty_agent_role_nickname_candidates() -> std::io::
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn load_config_rejects_duplicate_agent_role_nickname_candidates() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cfg = ConfigToml {
@@ -6742,7 +6742,7 @@ async fn load_config_rejects_duplicate_agent_role_nickname_candidates() -> std::
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn load_config_rejects_unsafe_agent_role_nickname_candidates() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cfg = ConfigToml {
@@ -6778,7 +6778,7 @@ async fn load_config_rejects_unsafe_agent_role_nickname_candidates() -> std::io:
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn model_catalog_json_loads_from_path() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let catalog_path = codex_home.path().join("catalog.json");
@@ -6806,7 +6806,7 @@ async fn model_catalog_json_loads_from_path() -> std::io::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn model_catalog_json_rejects_empty_catalog() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let catalog_path = codex_home.path().join("catalog.json");
@@ -6948,7 +6948,7 @@ model_verbosity = "high"
 ///
 /// Note that profiles are the recommended way to specify a group of
 /// configuration options together.
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn test_precedence_fixture_with_o3_profile() -> std::io::Result<()> {
     let fixture = create_test_fixture()?;
 
@@ -7091,7 +7091,7 @@ async fn test_precedence_fixture_with_o3_profile() -> std::io::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn metrics_exporter_defaults_to_statsig_when_missing() -> std::io::Result<()> {
     let fixture = create_test_fixture()?;
 
@@ -7109,7 +7109,7 @@ async fn metrics_exporter_defaults_to_statsig_when_missing() -> std::io::Result<
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn trace_exporter_defaults_to_none_when_log_exporter_is_set() -> std::io::Result<()> {
     let fixture = create_test_fixture()?;
     let mut cfg = fixture.cfg.clone();
@@ -7142,7 +7142,7 @@ async fn trace_exporter_defaults_to_none_when_log_exporter_is_set() -> std::io::
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn load_config_applies_otel_trace_metadata() -> std::io::Result<()> {
     let mut fixture = create_test_fixture()?;
     fixture.cfg = toml::from_str(
@@ -7184,7 +7184,7 @@ beta = "two"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn load_config_drops_invalid_otel_trace_metadata_entries() -> std::io::Result<()> {
     let mut fixture = create_test_fixture()?;
     fixture.cfg = toml::from_str(
@@ -7255,7 +7255,7 @@ alpha = "one\ntwo"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn explicit_null_service_tier_override_sets_fast_default_opt_out() -> std::io::Result<()> {
     let fixture = create_test_fixture()?;
 
@@ -7275,7 +7275,7 @@ async fn explicit_null_service_tier_override_sets_fast_default_opt_out() -> std:
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn legacy_fast_service_tier_override_uses_priority_request_value() -> std::io::Result<()> {
     let fixture = create_test_fixture()?;
 
@@ -7297,7 +7297,7 @@ async fn legacy_fast_service_tier_override_uses_priority_request_value() -> std:
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn fast_default_opt_out_notice_config_is_respected() -> std::io::Result<()> {
     let fixture = create_test_fixture()?;
     let mut cfg = fixture.cfg.clone();
@@ -7321,7 +7321,7 @@ async fn fast_default_opt_out_notice_config_is_respected() -> std::io::Result<()
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn test_precedence_fixture_with_gpt3_profile() -> std::io::Result<()> {
     let fixture = create_test_fixture()?;
 
@@ -7479,7 +7479,7 @@ async fn test_precedence_fixture_with_gpt3_profile() -> std::io::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn test_precedence_fixture_with_zdr_profile() -> std::io::Result<()> {
     let fixture = create_test_fixture()?;
 
@@ -7622,7 +7622,7 @@ async fn test_precedence_fixture_with_zdr_profile() -> std::io::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn test_precedence_fixture_with_gpt5_profile() -> std::io::Result<()> {
     let fixture = create_test_fixture()?;
 
@@ -7765,7 +7765,7 @@ async fn test_precedence_fixture_with_gpt5_profile() -> std::io::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn test_requirements_web_search_mode_allowlist_does_not_warn_when_unset() -> anyhow::Result<()>
 {
     let fixture = create_test_fixture()?;
@@ -7937,7 +7937,7 @@ trust_level = "trusted"
 }
 
 #[cfg(unix)]
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn active_project_does_not_match_configured_alias_for_canonical_cwd() -> anyhow::Result<()> {
     let tmp = tempdir()?;
     let project_root = tmp.path().join("project");
@@ -8016,7 +8016,7 @@ fn test_set_default_oss_provider_rejects_legacy_ollama_chat_provider() -> std::i
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn test_load_config_rejects_legacy_ollama_chat_provider_with_helpful_error()
 -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
@@ -8043,7 +8043,7 @@ async fn test_load_config_rejects_legacy_ollama_chat_provider_with_helpful_error
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn test_untrusted_project_gets_workspace_write_sandbox() -> anyhow::Result<()> {
     let config_with_untrusted = r#"
 [projects."/tmp/test"]
@@ -8082,7 +8082,7 @@ trust_level = "untrusted"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn derive_sandbox_policy_falls_back_to_read_only_for_implicit_defaults() -> anyhow::Result<()>
 {
     let project_dir = TempDir::new()?;
@@ -8127,7 +8127,7 @@ async fn derive_sandbox_policy_falls_back_to_read_only_for_implicit_defaults() -
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn derive_sandbox_policy_preserves_windows_downgrade_for_unsupported_fallback()
 -> anyhow::Result<()> {
     let project_dir = TempDir::new()?;
@@ -8305,7 +8305,7 @@ fn config_toml_deserializes_mcp_oauth_callback_url() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn config_loads_mcp_oauth_callback_port_from_toml() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let toml = r#"
@@ -8326,7 +8326,7 @@ mcp_oauth_callback_port = 5678
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn config_loads_allow_login_shell_from_toml() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cfg: ConfigToml = toml::from_str(
@@ -8348,7 +8348,7 @@ allow_login_shell = false
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn config_loads_apps_mcp_path_override_from_feature_config() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let toml = r#"
@@ -8374,7 +8374,7 @@ path = "/custom/mcp"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn config_loads_mcp_oauth_callback_url_from_toml() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let toml = r#"
@@ -8398,7 +8398,7 @@ mcp_oauth_callback_url = "https://example.com/callback"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn test_untrusted_project_gets_unless_trusted_approval_policy() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
     let test_project_dir = TempDir::new()?;
@@ -8451,7 +8451,7 @@ async fn test_untrusted_project_gets_unless_trusted_approval_policy() -> anyhow:
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn requirements_disallowing_default_sandbox_falls_back_to_required_default()
 -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
@@ -8473,7 +8473,7 @@ async fn requirements_disallowing_default_sandbox_falls_back_to_required_default
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn explicit_sandbox_mode_falls_back_when_disallowed_by_requirements() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     std::fs::write(
@@ -8515,7 +8515,7 @@ async fn explicit_sandbox_mode_falls_back_when_disallowed_by_requirements() -> s
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn permission_profile_override_falls_back_when_disallowed_by_requirements()
 -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
@@ -8546,7 +8546,7 @@ async fn permission_profile_override_falls_back_when_disallowed_by_requirements(
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn active_profile_is_cleared_when_requirements_force_fallback() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let requirements = codex_config::ConfigRequirementsToml {
@@ -8581,7 +8581,7 @@ async fn active_profile_is_cleared_when_requirements_force_fallback() -> std::io
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn permission_profile_override_preserves_split_write_roots() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cwd = codex_home.path().join("workspace");
@@ -8637,7 +8637,7 @@ async fn permission_profile_override_preserves_split_write_roots() -> std::io::R
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn requirements_web_search_mode_overrides_danger_full_access_default() -> std::io::Result<()>
 {
     let codex_home = TempDir::new()?;
@@ -8672,7 +8672,7 @@ async fn requirements_web_search_mode_overrides_danger_full_access_default() -> 
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn requirements_disallowing_default_approval_falls_back_to_required_default()
 -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
@@ -8707,7 +8707,7 @@ trust_level = "untrusted"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn explicit_approval_policy_falls_back_when_disallowed_by_requirements() -> std::io::Result<()>
 {
     let codex_home = TempDir::new()?;
@@ -8735,7 +8735,7 @@ async fn explicit_approval_policy_falls_back_when_disallowed_by_requirements() -
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn feature_requirements_normalize_effective_feature_values() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
 
@@ -8769,7 +8769,7 @@ async fn feature_requirements_normalize_effective_feature_values() -> std::io::R
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn feature_requirements_auto_review_disables_guardian_approval() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
 
@@ -8791,7 +8791,7 @@ async fn feature_requirements_auto_review_disables_guardian_approval() -> std::i
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn browser_feature_requirements_are_valid() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
 
@@ -8817,7 +8817,7 @@ async fn browser_feature_requirements_are_valid() -> std::io::Result<()> {
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn debug_config_lockfile_export_settings_load_from_nested_table() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     std::fs::write(
@@ -8848,7 +8848,7 @@ save_fields_resolved_from_model_catalog = false
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn debug_config_lockfile_load_path_loads_lock_from_nested_table() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let lock_path = codex_home.path().join("session.config.lock.toml");
@@ -8888,7 +8888,7 @@ save_fields_resolved_from_model_catalog = false
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn explicit_feature_config_is_normalized_by_requirements() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     std::fs::write(
@@ -8931,7 +8931,7 @@ shell_tool = true
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn approvals_reviewer_defaults_to_manual_only_without_guardian_feature() -> std::io::Result<()>
 {
     let codex_home = TempDir::new()?;
@@ -8946,7 +8946,7 @@ async fn approvals_reviewer_defaults_to_manual_only_without_guardian_feature() -
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn prompt_instruction_blocks_can_be_disabled_from_config_and_profiles() -> std::io::Result<()>
 {
     let codex_home = TempDir::new()?;
@@ -8979,7 +8979,7 @@ include_environment_context = true
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn approvals_reviewer_stays_manual_only_when_guardian_feature_is_enabled()
 -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
@@ -9000,7 +9000,7 @@ guardian_approval = true
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn approvals_reviewer_can_be_set_in_config_without_guardian_approval() -> std::io::Result<()>
 {
     let codex_home = TempDir::new()?;
@@ -9020,7 +9020,7 @@ async fn approvals_reviewer_can_be_set_in_config_without_guardian_approval() -> 
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn approvals_reviewer_can_be_set_in_profile_without_guardian_approval() -> std::io::Result<()>
 {
     let codex_home = TempDir::new()?;
@@ -9043,7 +9043,7 @@ approvals_reviewer = "guardian_subagent"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn requirements_disallowing_default_approvals_reviewer_falls_back_to_required_default()
 -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
@@ -9063,7 +9063,7 @@ async fn requirements_disallowing_default_approvals_reviewer_falls_back_to_requi
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn root_approvals_reviewer_falls_back_when_disallowed_by_requirements() -> std::io::Result<()>
 {
     let codex_home = TempDir::new()?;
@@ -9097,7 +9097,7 @@ async fn root_approvals_reviewer_falls_back_when_disallowed_by_requirements() ->
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn profile_approvals_reviewer_falls_back_when_disallowed_by_requirements()
 -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
@@ -9126,7 +9126,7 @@ approvals_reviewer = "user"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn approvals_reviewer_preserves_valid_user_choice_when_allowed_by_requirements()
 -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
@@ -9163,7 +9163,7 @@ async fn approvals_reviewer_preserves_valid_user_choice_when_allowed_by_requirem
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn smart_approvals_alias_is_ignored() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     std::fs::write(
@@ -9182,7 +9182,7 @@ smart_approvals = true
     assert!(config.features.enabled(Feature::GuardianApproval));
     assert_eq!(config.approvals_reviewer, ApprovalsReviewer::User);
 
-    let serialized = tokio::fs::read_to_string(codex_home.path().join(CONFIG_TOML_FILE)).await?;
+    let serialized = edgerun_tokio::fs::read_to_string(codex_home.path().join(CONFIG_TOML_FILE)).await?;
     assert!(serialized.contains("smart_approvals = true"));
     assert!(!serialized.contains("guardian_approval"));
     assert!(!serialized.contains("approvals_reviewer"));
@@ -9190,7 +9190,7 @@ smart_approvals = true
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn smart_approvals_alias_is_ignored_in_profiles() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     std::fs::write(
@@ -9211,7 +9211,7 @@ smart_approvals = true
     assert!(config.features.enabled(Feature::GuardianApproval));
     assert_eq!(config.approvals_reviewer, ApprovalsReviewer::User);
 
-    let serialized = tokio::fs::read_to_string(codex_home.path().join(CONFIG_TOML_FILE)).await?;
+    let serialized = edgerun_tokio::fs::read_to_string(codex_home.path().join(CONFIG_TOML_FILE)).await?;
     assert!(serialized.contains("[profiles.guardian.features]"));
     assert!(serialized.contains("smart_approvals = true"));
     assert!(!serialized.contains("guardian_approval"));
@@ -9220,7 +9220,7 @@ smart_approvals = true
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn multi_agent_v2_config_from_feature_table() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     std::fs::write(
@@ -9265,7 +9265,7 @@ hide_spawn_agent_metadata = true
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn profile_multi_agent_v2_config_overrides_base() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     std::fs::write(
@@ -9318,7 +9318,7 @@ hide_spawn_agent_metadata = false
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn multi_agent_v2_default_session_thread_cap_counts_root() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     std::fs::write(
@@ -9341,7 +9341,7 @@ enabled = true
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn multi_agent_v2_rejects_agents_max_threads() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     std::fs::write(
@@ -9370,7 +9370,7 @@ max_threads = 3
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn multi_agent_v2_rejects_invalid_min_wait_timeout() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     std::fs::write(
@@ -9418,7 +9418,7 @@ min_wait_timeout_ms = 3600001
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn multi_agent_v2_session_thread_cap_one_disallows_subagents() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     std::fs::write(
@@ -9441,7 +9441,7 @@ max_concurrent_threads_per_session = 1
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn feature_requirements_normalize_runtime_feature_mutations() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
 
@@ -9477,7 +9477,7 @@ async fn feature_requirements_normalize_runtime_feature_mutations() -> std::io::
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn feature_requirements_warn_on_collab_legacy_alias() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
 
@@ -9507,7 +9507,7 @@ async fn feature_requirements_warn_on_collab_legacy_alias() -> std::io::Result<(
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn feature_requirements_warn_and_ignore_unknown_feature() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
 
@@ -9537,7 +9537,7 @@ async fn feature_requirements_warn_and_ignore_unknown_feature() -> std::io::Resu
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn tool_suggest_discoverables_load_from_config_toml() -> std::io::Result<()> {
     let cfg: ConfigToml = toml::from_str(
         r#"
@@ -9599,7 +9599,7 @@ discoverables = [
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn tool_suggest_disabled_tools_load_from_config_toml() -> std::io::Result<()> {
     let cfg: ConfigToml = toml::from_str(
         r#"
@@ -9648,7 +9648,7 @@ disabled_tools = [
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn tool_suggest_disabled_tools_merge_across_config_layers() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let workspace = TempDir::new()?;
@@ -9705,7 +9705,7 @@ disabled_tools = [
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn experimental_realtime_start_instructions_load_from_config_toml() -> std::io::Result<()> {
     let cfg: ConfigToml = toml::from_str(
         r#"
@@ -9734,7 +9734,7 @@ experimental_realtime_start_instructions = "start instructions from config"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn experimental_thread_config_endpoint_loads_from_config_toml() -> std::io::Result<()> {
     let cfg: ConfigToml = toml::from_str(
         r#"
@@ -9763,7 +9763,7 @@ experimental_thread_config_endpoint = "http://127.0.0.1:8061"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn experimental_realtime_ws_base_url_loads_from_config_toml() -> std::io::Result<()> {
     let cfg: ConfigToml = toml::from_str(
         r#"
@@ -9792,7 +9792,7 @@ experimental_realtime_ws_base_url = "http://127.0.0.1:8011"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn experimental_realtime_ws_backend_prompt_loads_from_config_toml() -> std::io::Result<()> {
     let cfg: ConfigToml = toml::from_str(
         r#"
@@ -9821,7 +9821,7 @@ experimental_realtime_ws_backend_prompt = "prompt from config"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn experimental_realtime_ws_startup_context_loads_from_config_toml() -> std::io::Result<()> {
     let cfg: ConfigToml = toml::from_str(
         r#"
@@ -9850,7 +9850,7 @@ experimental_realtime_ws_startup_context = "startup context from config"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn experimental_realtime_ws_model_loads_from_config_toml() -> std::io::Result<()> {
     let cfg: ConfigToml = toml::from_str(
         r#"
@@ -9879,7 +9879,7 @@ experimental_realtime_ws_model = "realtime-test-model"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn realtime_config_partial_table_uses_realtime_defaults() -> std::io::Result<()> {
     let cfg: ConfigToml = toml::from_str(
         r#"
@@ -9907,7 +9907,7 @@ voice = "marin"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn realtime_loads_from_config_toml() -> std::io::Result<()> {
     let cfg: ConfigToml = toml::from_str(
         r#"
@@ -9950,7 +9950,7 @@ voice = "cedar"
     Ok(())
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn realtime_audio_loads_from_config_toml() -> std::io::Result<()> {
     let cfg: ConfigToml = toml::from_str(
         r#"

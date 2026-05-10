@@ -10,11 +10,11 @@ description = "Edgerun-backed rustls-shaped TLS compatibility surface"
 
 [dependencies]
 edgerun-node = { version = "0.1", path = "../../node/edgerun-node", default-features = false, features = ["tls", "runtime"], optional = true }
-edgerun-protocols = { workspace = true, default-features = false, features = ["tls"] }
+edgerun-protocols = { workspace = true, default-features = false, features = ["tls-cert"], optional = true }
 
 [features]
 default = []
-std = ["dep:edgerun-node"]
+std = ["dep:edgerun-node", "dep:edgerun-protocols"]
 
 [lints]
 workspace = true

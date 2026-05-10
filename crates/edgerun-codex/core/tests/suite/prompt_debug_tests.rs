@@ -8,7 +8,7 @@ use codex_protocol::user_input::UserInput;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn build_prompt_input_includes_context_and_user_message() -> Result<()> {
     let codex_home = TempDir::new()?;
     let cwd = TempDir::new()?;

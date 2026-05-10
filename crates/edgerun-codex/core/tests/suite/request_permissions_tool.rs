@@ -194,7 +194,7 @@ async fn expect_request_permissions_event(
     }
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[edgerun_tokio::test(flavor = "current_thread")]
 #[cfg(target_os = "macos")]
 async fn approved_folder_write_request_permissions_unblocks_later_exec_without_sandbox_args()
 -> Result<()> {
@@ -321,7 +321,7 @@ async fn approved_folder_write_request_permissions_unblocks_later_exec_without_s
     Ok(())
 }
 
-#[tokio::test(flavor = "current_thread")]
+#[edgerun_tokio::test(flavor = "current_thread")]
 #[cfg(target_os = "macos")]
 async fn approved_folder_write_request_permissions_unblocks_later_apply_patch() -> Result<()> {
     skip_if_no_network!(Ok(()));

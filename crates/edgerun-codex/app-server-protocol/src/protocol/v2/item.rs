@@ -30,10 +30,10 @@ use codex_protocol::protocol::GuardianUserAuthorization as CoreGuardianUserAutho
 use codex_protocol::protocol::PatchApplyStatus as CorePatchApplyStatus;
 use codex_protocol::protocol::ReviewDecision as CoreReviewDecision;
 use edgerun_json::serde_json::Value as JsonValue;
+use edgerun_serde_with::serde_as;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
-use serde_with::serde_as;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use ts_rs::TS;

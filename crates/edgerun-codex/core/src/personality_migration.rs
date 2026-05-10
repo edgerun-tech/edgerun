@@ -9,8 +9,8 @@ use codex_thread_store::ThreadSortKey;
 use codex_thread_store::ThreadStore;
 use std::io;
 use std::path::Path;
-use tokio::fs::OpenOptions;
-use tokio::io::AsyncWriteExt;
+use edgerun_tokio::fs::OpenOptions;
+use edgerun_tokio::io::AsyncWriteExt;
 
 pub const PERSONALITY_MIGRATION_FILENAME: &str = ".personality_migration";
 
@@ -28,7 +28,7 @@ pub async fn maybe_migrate_personality(
     state_db: Option<StateDbHandle>,
 ) -> io::Result<PersonalityMigrationStatus> {
     let marker_path = codex_home.join(PERSONALITY_MIGRATION_FILENAME);
-    if tokio::fs::try_exists(&marker_path).await? {
+    if edgerun_tokio::fs::try_exists(&marker_path).await? {
         return Ok(PersonalityMigrationStatus::SkippedMarker);
     }
 

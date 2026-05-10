@@ -22,7 +22,7 @@ codex-protocol = { workspace = true }
 edgerun-deno-core-icudata = { workspace = true }
 edgerun-json = { workspace = true, features = ["serde-compat"] }
 serde = { workspace = true, features = ["derive"] }
-tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }
-tokio-util = { workspace = true, features = ["rt"] }
+edgerun-tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }
+edgerun-tokio-util = { workspace = true, features = ["rt"] }
 tracing = { workspace = true }
 v8 = { workspace = true }

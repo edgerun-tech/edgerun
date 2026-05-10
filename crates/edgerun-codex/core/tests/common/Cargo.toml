@@ -31,13 +31,13 @@ edgerun-error = { workspace = true }
 edgerun-json = { workspace = true, features = ["serde-compat"] }
 edgerun-shlex = { workspace = true }
 edgerun-similar = { workspace = true }
-futures = { workspace = true }
+edgerun-futures = { workspace = true }
 notify = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry_sdk = { workspace = true }
 regex-lite = { workspace = true }
 tempfile = { workspace = true }
-tokio = { workspace = true, features = ["net", "time"] }
+edgerun-tokio = { workspace = true, features = ["net", "time"] }
 edgerun-tokio-tungstenite = { workspace = true }
 tracing = { workspace = true }
 tracing-opentelemetry = { workspace = true }
@@ -48,4 +48,4 @@ edgerun-zstd = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }
-reqwest = { workspace = true }
+edgerun-reqwest = { workspace = true }

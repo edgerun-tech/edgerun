@@ -232,7 +232,7 @@ fn fixed_section_budgets_apply_per_section_without_total_blob_truncation() {
     assert!(wrapped.contains("## Notes"));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn workspace_section_requires_meaningful_structure() {
     let cwd = TempDir::new().expect("tempdir");
     assert_eq!(
@@ -241,7 +241,7 @@ async fn workspace_section_requires_meaningful_structure() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn workspace_section_includes_tree_when_entries_exist() {
     let cwd = TempDir::new().expect("tempdir");
     fs::create_dir(cwd.path().join("docs")).expect("create docs dir");
@@ -256,7 +256,7 @@ async fn workspace_section_includes_tree_when_entries_exist() {
     assert!(section.contains("- README.md"));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn workspace_section_includes_user_root_tree_when_distinct() {
     let root = TempDir::new().expect("tempdir");
     let cwd = root.path().join("cwd");
@@ -278,7 +278,7 @@ async fn workspace_section_includes_user_root_tree_when_distinct() {
     assert!(!section.contains("- .zshrc"));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn recent_work_section_groups_threads_by_cwd() {
     let root = TempDir::new().expect("tempdir");
     let repo = root.path().join("repo");

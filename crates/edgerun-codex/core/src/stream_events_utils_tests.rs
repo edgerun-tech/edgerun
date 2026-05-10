@@ -110,7 +110,7 @@ fn external_context_pollution_items_exclude_local_tool_calls() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn handle_non_tool_response_item_strips_citations_from_assistant_message() {
     let (session, turn_context) = make_session_and_context().await;
     let item = assistant_output_text(
@@ -208,7 +208,7 @@ fn completed_item_defers_mailbox_delivery_for_image_generation_calls() {
     ));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn save_image_generation_result_saves_base64_to_png_in_codex_home() {
     let codex_home = tempfile::tempdir().expect("create codex home");
     let codex_home = codex_home.path().abs();
@@ -225,7 +225,7 @@ async fn save_image_generation_result_saves_base64_to_png_in_codex_home() {
     let _ = std::fs::remove_file(&saved_path);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn save_image_generation_result_rejects_data_url_payload() {
     let result = "data:image/jpeg;base64,Zm9v";
     let codex_home = tempfile::tempdir().expect("create codex home");
@@ -237,7 +237,7 @@ async fn save_image_generation_result_rejects_data_url_payload() {
     assert!(matches!(err, CodexErr::InvalidRequest(_)));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn save_image_generation_result_overwrites_existing_file() {
     let codex_home = tempfile::tempdir().expect("create codex home");
     let codex_home = codex_home.path().abs();
@@ -259,7 +259,7 @@ async fn save_image_generation_result_overwrites_existing_file() {
     let _ = std::fs::remove_file(&saved_path);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn save_image_generation_result_sanitizes_call_id_for_codex_home_output_path() {
     let codex_home = tempfile::tempdir().expect("create codex home");
     let codex_home = codex_home.path().abs();
@@ -275,7 +275,7 @@ async fn save_image_generation_result_sanitizes_call_id_for_codex_home_output_pa
     let _ = std::fs::remove_file(&saved_path);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn save_image_generation_result_rejects_non_standard_base64() {
     let codex_home = tempfile::tempdir().expect("create codex home");
     let codex_home = codex_home.path().abs();
@@ -285,7 +285,7 @@ async fn save_image_generation_result_rejects_non_standard_base64() {
     assert!(matches!(err, CodexErr::InvalidRequest(_)));
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn save_image_generation_result_rejects_non_base64_data_urls() {
     let codex_home = tempfile::tempdir().expect("create codex home");
     let codex_home = codex_home.path().abs();

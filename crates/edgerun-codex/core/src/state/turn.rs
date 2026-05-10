@@ -4,10 +4,10 @@ use codex_sandboxing::policy_transforms::merge_permission_profiles;
 use indexmap::IndexMap;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::sync::Mutex;
-use tokio::sync::Notify;
-use tokio_util::sync::CancellationToken;
-use tokio_util::task::AbortOnDropHandle;
+use edgerun_tokio::sync::Mutex;
+use edgerun_tokio::sync::Notify;
+use edgerun_tokio_util::sync::CancellationToken;
+use edgerun_tokio_util::task::AbortOnDropHandle;
 
 use codex_protocol::dynamic_tools::DynamicToolResponse;
 use codex_protocol::models::ResponseInputItem;
@@ -17,7 +17,7 @@ use codex_protocol::request_user_input::RequestUserInputResponse;
 use codex_rmcp_client::ElicitationResponse;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use rmcp::model::RequestId;
-use tokio::sync::oneshot;
+use edgerun_tokio::sync::oneshot;
 
 use crate::session::turn_context::TurnContext;
 use crate::tasks::AnySessionTask;

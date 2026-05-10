@@ -15,7 +15,7 @@ use tracing::Level;
 use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_test::internal::MockWriter;
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn list_tool_suggest_discoverable_plugins_returns_uninstalled_curated_plugins() {
     let codex_home = tempdir().expect("tempdir should succeed");
     let curated_root = curated_plugins_repo_path(codex_home.path());
@@ -54,7 +54,7 @@ async fn list_tool_suggest_discoverable_plugins_returns_uninstalled_curated_plug
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn list_tool_suggest_discoverable_plugins_returns_microsoft_curated_plugins() {
     let codex_home = tempdir().expect("tempdir should succeed");
     let curated_root = curated_plugins_repo_path(codex_home.path());
@@ -83,7 +83,7 @@ async fn list_tool_suggest_discoverable_plugins_returns_microsoft_curated_plugin
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn list_tool_suggest_discoverable_plugins_deduplicates_allowlisted_configured_plugin() {
     let codex_home = tempdir().expect("tempdir should succeed");
     let plugin_id = TOOL_SUGGEST_DISCOVERABLE_PLUGIN_ALLOWLIST
@@ -141,7 +141,7 @@ discoverables = [{{ type = "plugin", id = "{plugin_id}" }}]
     assert_eq!(discoverable_plugins[0].id, plugin_id);
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn list_tool_suggest_discoverable_plugins_ignores_missing_allowlisted_plugin() {
     let codex_home = tempdir().expect("tempdir should succeed");
     let curated_root = curated_plugins_repo_path(codex_home.path());
@@ -192,7 +192,7 @@ source = "/tmp/{marketplace_name}"
     assert_eq!(discoverable_plugins[0].id, "slack@openai-curated");
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn list_tool_suggest_discoverable_plugins_returns_empty_when_plugins_feature_disabled() {
     let codex_home = tempdir().expect("tempdir should succeed");
     let curated_root = curated_plugins_repo_path(codex_home.path());
@@ -212,7 +212,7 @@ plugins = false
     assert_eq!(discoverable_plugins, Vec::<DiscoverablePluginInfo>::new());
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn list_tool_suggest_discoverable_plugins_normalizes_description() {
     let codex_home = tempdir().expect("tempdir should succeed");
     let curated_root = curated_plugins_repo_path(codex_home.path());
@@ -244,7 +244,7 @@ async fn list_tool_suggest_discoverable_plugins_normalizes_description() {
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn list_tool_suggest_discoverable_plugins_omits_installed_curated_plugins() {
     let codex_home = tempdir().expect("tempdir should succeed");
     let curated_root = curated_plugins_repo_path(codex_home.path());
@@ -271,7 +271,7 @@ async fn list_tool_suggest_discoverable_plugins_omits_installed_curated_plugins(
     assert_eq!(discoverable_plugins, Vec::<DiscoverablePluginInfo>::new());
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn list_tool_suggest_discoverable_plugins_omits_disabled_tool_suggestions() {
     let codex_home = tempdir().expect("tempdir should succeed");
     let curated_root = curated_plugins_repo_path(codex_home.path());
@@ -296,7 +296,7 @@ disabled_tools = [
     assert_eq!(discoverable_plugins, Vec::<DiscoverablePluginInfo>::new());
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn list_tool_suggest_discoverable_plugins_includes_configured_plugin_ids() {
     let codex_home = tempdir().expect("tempdir should succeed");
     let curated_root = curated_plugins_repo_path(codex_home.path());
@@ -331,7 +331,7 @@ discoverables = [{ type = "plugin", id = "sample@openai-curated" }]
     );
 }
 
-#[tokio::test]
+#[edgerun_tokio::test]
 async fn list_tool_suggest_discoverable_plugins_does_not_reload_marketplace_per_plugin() {
     let codex_home = tempdir().expect("tempdir should succeed");
     let curated_root = curated_plugins_repo_path(codex_home.path());

@@ -22,7 +22,7 @@ use responses::sse;
 use responses::start_mock_server;
 use std::time::Duration;
 
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+#[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn summarize_context_three_requests_and_instructions() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
@@ -70,7 +70,7 @@ mv "${tmp_path}" "${payload_path}""#,
 
     // We fork the notify script, so we need to wait for it to write to the file.
     fs_wait::wait_for_path_exists(&notify_file, Duration::from_secs(5)).await?;
-    let notify_payload_raw = tokio::fs::read_to_string(&notify_file).await?;
+    let notify_payload_raw = edgerun_tokio::fs::read_to_string(&notify_file).await?;
     let payload: Value = edgerun_json::serde_json::from_str(&notify_payload_raw)?;
 
     assert_eq!(payload["type"], json!("agent-turn-complete"));

@@ -1,3 +1,5 @@
+extern crate edgerun_serde_with as serde_with;
+
 mod experimental_api;
 mod export;
 mod jsonrpc_lite;
