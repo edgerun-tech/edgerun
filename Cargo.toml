@@ -23,6 +23,8 @@ exclude = [
 ]
 
 members = [
+  "crates/utility/edgerun-async-channel",
+  "crates/utility/edgerun-async-trait",
   "crates/utility/edgerun-bytes",
   "crates/utility/edgerun-eventsource-stream",
   "crates/utility/edgerun-glob",
@@ -43,6 +45,7 @@ members = [
   "crates/utility/edgerun-url",
   "crates/edgerun-rtl8125",
   "crates/edgerun-platform",
+  "crates/edgerun-unikernel",
   "crates/linux-adapters/edgerun-inotify",
   "crates/linux-adapters/edgerun-alsa-microphone",
   "crates/linux-adapters/edgerun-alsa-speaker",
@@ -61,16 +64,20 @@ members = [
   "crates/authority/edgerun-edgefs",
   "crates/utility/edgerun-encoding",
   "crates/utility/edgerun-error",
+  "crates/utility/edgerun-error-derive",
+  "crates/utility/edgerun-futures",
   "crates/utility/edgerun-unit-macros",
   "crates/linux-adapters/edgerun-evdev-input",
   "crates/linux-adapters/edgerun-goodix-fingerprint",
   "crates/identity/edgerun-hardware-signing",
   "crates/utility/edgerun-hpack",
   "crates/utility/edgerun-http",
+  "crates/utility/edgerun-inventory",
   "crates/utility/edgerun-json",
   "crates/utility/edgerun-locale",
   "crates/utility/edgerun-quick-xml",
   "crates/utility/edgerun-random",
+  "crates/utility/edgerun-serde-with",
   "crates/linux-adapters/edgerun-linux-cec",
   "crates/utility/edgerun-rusttls",
   "crates/linux-adapters/edgerun-linux-gpu",
@@ -106,6 +113,7 @@ members = [
   "crates/identity/edgerun-yubikey",
   "crates/authority/edgerun-vfs",
   "crates/utility/edgerun-clap",
+  "crates/utility/edgerun-deno-core-icudata",
   "crates/protocol/edgerun-wire",
   "crates/edgerun-event",
 ]
@@ -167,14 +175,19 @@ edgerun-bluetooth-gatt = { version = "0.1", path = "crates/linux-adapters/edgeru
 edgerun-tcl-ac = { version = "0.1", path = "crates/edgerun-tcl-ac" }
 edgerun-tcl-ac-cli = { version = "0.1", path = "crates/edgerun-tcl-ac-cli" }
 edgerun-capability-policy = { version = "0.1", path = "crates/capability/edgerun-capability-policy" }
+edgerun-async-channel = { version = "0.1", path = "crates/utility/edgerun-async-channel" }
+edgerun-async-trait = { version = "0.1", path = "crates/utility/edgerun-async-trait" }
 edgerun-linux-wifi = { version = "0.1", path = "crates/linux-adapters/edgerun-linux-wifi" }
 edgerun-evdev-input = { version = "0.1", path = "crates/linux-adapters/edgerun-evdev-input" }
 edgerun-oci = { version = "0.1", path = "crates/edgerun-oci" }
 edgerun-edgefs = { version = "0.1", path = "crates/authority/edgerun-edgefs" }
 edgerun-encoding = { version = "0.1", path = "crates/utility/edgerun-encoding", default-features = false }
+edgerun-futures = { version = "0.1", path = "crates/utility/edgerun-futures" }
 edgerun-url = { version = "0.1", path = "crates/utility/edgerun-url" }
 edgerun-glob = { version = "0.1", path = "crates/utility/edgerun-glob" }
 edgerun-shlex = { version = "0.1", path = "crates/utility/edgerun-shlex" }
+edgerun-inventory = { version = "0.1", path = "crates/utility/edgerun-inventory" }
+edgerun-serde-with = { version = "0.1", path = "crates/utility/edgerun-serde-with" }
 edgerun-time = { version = "0.1", path = "crates/utility/edgerun-time" }
 edgerun-tokio-tungstenite = { version = "0.1", path = "crates/utility/edgerun-tokio-tungstenite" }
 edgerun-tungstenite = { version = "0.1", path = "crates/utility/edgerun-tungstenite" }
@@ -191,6 +204,7 @@ edgerun-locale = { version = "0.1", path = "crates/utility/edgerun-locale", defa
 edgerun-random = { version = "0.1", path = "crates/utility/edgerun-random" }
 edgerun-error = { version = "0.1", path = "crates/utility/edgerun-error" }
 edgerun-clap = { version = "0.1", path = "crates/utility/edgerun-clap" }
+edgerun-deno-core-icudata = { version = "0.1", path = "crates/utility/edgerun-deno-core-icudata" }
 edgerun-compositor = { version = "0.1", path = "crates/edgerun-compositor" }
 edgerun-emoji = { version = "0.1", path = "crates/utility/edgerun-emoji" }
 edgerun-pty = { version = "0.1", path = "crates/utility/edgerun-pty" }

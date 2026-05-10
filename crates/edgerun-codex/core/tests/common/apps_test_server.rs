@@ -1,4 +1,4 @@
-use anyhow::Result;
+use edgerun_error::Result;
 use edgerun_json::serde_json::Value;
 use edgerun_json::serde_json::json;
 use wiremock::Mock;

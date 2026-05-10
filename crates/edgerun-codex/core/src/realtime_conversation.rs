@@ -3,11 +3,6 @@ use crate::realtime_context::build_realtime_startup_context;
 use crate::realtime_prompt::prepare_realtime_backend_prompt;
 use crate::session::session::Session;
 use anyhow::Context;
-use async_channel::Receiver;
-use async_channel::RecvError;
-use async_channel::Sender;
-use async_channel::TrySendError;
-use edgerun_encoding::base64::standard_decode;
 use codex_api::ApiError;
 use codex_api::Provider as ApiProvider;
 use codex_api::RealtimeAudioFrame;
@@ -44,6 +39,11 @@ use codex_protocol::protocol::RealtimeHandoffRequested;
 use codex_protocol::protocol::RealtimeOutputModality;
 use codex_protocol::protocol::RealtimeVoice;
 use codex_protocol::protocol::RealtimeVoicesList;
+use edgerun_async_channel::Receiver;
+use edgerun_async_channel::RecvError;
+use edgerun_async_channel::Sender;
+use edgerun_async_channel::TrySendError;
+use edgerun_encoding::base64::standard_decode;
 use edgerun_http::HeaderMap;
 use edgerun_http::HeaderValue;
 use edgerun_http::header::AUTHORIZATION;
@@ -289,13 +289,13 @@ impl RealtimeConversationManager {
         };
 
         let (audio_tx, audio_rx) =
-            async_channel::bounded::<RealtimeAudioFrame>(AUDIO_IN_QUEUE_CAPACITY);
+            edgerun_async_channel::bounded::<RealtimeAudioFrame>(AUDIO_IN_QUEUE_CAPACITY);
         let (user_text_tx, user_text_rx) =
-            async_channel::bounded::<String>(USER_TEXT_IN_QUEUE_CAPACITY);
+            edgerun_async_channel::bounded::<String>(USER_TEXT_IN_QUEUE_CAPACITY);
         let (handoff_output_tx, handoff_output_rx) =
-            async_channel::bounded::<HandoffOutput>(HANDOFF_OUT_QUEUE_CAPACITY);
+            edgerun_async_channel::bounded::<HandoffOutput>(HANDOFF_OUT_QUEUE_CAPACITY);
         let (events_tx, events_rx) =
-            async_channel::bounded::<RealtimeEvent>(OUTPUT_EVENTS_QUEUE_CAPACITY);
+            edgerun_async_channel::bounded::<RealtimeEvent>(OUTPUT_EVENTS_QUEUE_CAPACITY);
 
         let realtime_active = Arc::new(AtomicBool::new(true));
         let handoff = RealtimeHandoffState::new(handoff_output_tx, session_kind);

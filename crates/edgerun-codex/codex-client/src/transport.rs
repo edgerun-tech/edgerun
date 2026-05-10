@@ -4,7 +4,7 @@ use crate::error::TransportError;
 use crate::request::Request;
 use crate::request::RequestBody;
 use crate::request::Response;
-use async_trait::async_trait;
+use edgerun_async_trait::async_trait;
 use edgerun_bytes::Bytes;
 use edgerun_http::HeaderMap;
 use edgerun_http::Method;

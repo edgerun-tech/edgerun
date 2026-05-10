@@ -9,6 +9,13 @@ homepage.workspace = true
 description = "Minimal structured logging — replaces tracing + tracing-subscriber"
 
 [dependencies]
+tracing = { version = "0.1.44", optional = true }
+tracing-opentelemetry = { version = "0.32.0", optional = true }
+
+[features]
+default = []
+tracing-compat = ["dep:tracing"]
+tracing-opentelemetry-compat = ["tracing-compat", "dep:tracing-opentelemetry"]
 
 [lints]
 workspace = true

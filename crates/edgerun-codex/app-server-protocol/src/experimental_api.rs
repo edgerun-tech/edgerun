@@ -19,7 +19,7 @@ pub struct ExperimentalField {
     pub reason: &'static str,
 }
 
-inventory::collect!(ExperimentalField);
+edgerun_inventory::collect!(ExperimentalField);
 
 pub fn experimental_fields() -> Vec<&'static ExperimentalField> {
     Vec::new()

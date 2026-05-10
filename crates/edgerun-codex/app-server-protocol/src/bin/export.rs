@@ -1,5 +1,5 @@
-use anyhow::Result;
 use edgerun_clap::Parser;
+use edgerun_error::Result;
 use std::path::PathBuf;
 
 #[derive(Parser, Debug)]

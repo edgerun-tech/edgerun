@@ -18,11 +18,6 @@ name = "edgerun-relay-bench"
 path = "src/bin/edgerun-relay-bench.rs"
 required-features = ["std"]
 
-[[bin]]
-name = "edgerun-relay-qemu-smoke"
-path = "src/bin/edgerun-relay-qemu-smoke.rs"
-required-features = ["wss"]
-
 [dependencies]
 edgerun-crypto = { workspace = true, default-features = false, features = ["ed25519", "p256"] }
 edgerun-protocols = { workspace = true, default-features = false, features = ["ed25519", "sign-p256"] }

@@ -1,8 +1,8 @@
-use anyhow::Context;
-use anyhow::Result;
 use codex_app_server_protocol::generate_json_with_experimental;
 use codex_app_server_protocol::generate_typescript_schema_fixture_subtree_for_tests;
 use codex_app_server_protocol::read_schema_fixture_subtree;
+use edgerun_error::Context;
+use edgerun_error::Result;
 use edgerun_similar::TextDiff;
 use std::collections::BTreeMap;
 use std::path::Path;
@@ -82,7 +82,7 @@ Run `just write-app-server-schema` to overwrite with your changes.\n\n{diff}"
     for (path, expected) in fixture_tree {
         let actual = generated_tree
             .get(path)
-            .ok_or_else(|| anyhow::anyhow!("missing generated file: {}", path.display()))?;
+            .ok_or_else(|| edgerun_error::anyhow!("missing generated file: {}", path.display()))?;
 
         if expected == actual {
             continue;
@@ -123,7 +123,7 @@ fn schema_root() -> Result<PathBuf> {
         .parent()
         .and_then(|p| p.parent())
         .context("derive schema root from schema/json/codex_app_server_protocol.schemas.json")?;
-    anyhow::ensure!(
+    edgerun_error::ensure!(
         schema_root == json_root,
         "schema roots disagree: typescript={} json={}",
         schema_root.display(),

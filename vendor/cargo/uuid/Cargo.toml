@@ -11,9 +11,9 @@
 
 [package]
 edition = "2021"
-rust-version = "1.85.0"
+rust-version = "1.63.0"
 name = "uuid"
-version = "1.23.1"
+version = "1.20.0"
 authors = [
     "Ashley Mannix<ashleymannix@live.com.au>",
     "Dylan DPC<dylan.dpc@gmail.com>",
@@ -162,7 +162,7 @@ optional = true
 default-features = false
 
 [dependencies.bytemuck]
-version = "1.22"
+version = "1.20.0"
 features = ["derive"]
 optional = true
 
@@ -209,12 +209,13 @@ version = "1.0.56"
 version = "1.0.52"
 
 [target.'cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))'.dependencies.uuid-rng-internal-lib]
-version = "1.23.1"
+version = "1.20.0"
 optional = true
 package = "uuid-rng-internal"
 
 [target.'cfg(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none")))'.dependencies.wasm-bindgen]
 version = "0.2"
+features = ["msrv"]
 optional = true
 default-features = false
 
@@ -230,11 +231,11 @@ optional = true
 default-features = false
 
 [target.'cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))'.dependencies.getrandom]
-version = "0.4"
+version = "0.3"
 optional = true
 
 [target.'cfg(not(all(target_arch = "wasm32", any(target_os = "unknown", target_os = "none"))))'.dependencies.rand]
-version = "0.10"
+version = "0.9"
 optional = true
 
 [lints.rust.unexpected_cfgs]

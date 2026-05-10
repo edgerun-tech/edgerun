@@ -61,6 +61,7 @@ use codex_shell_escalation::ResolvedPermissionProfile;
 use codex_shell_escalation::ShellCommandExecutor;
 use codex_shell_escalation::Stopwatch;
 use codex_utils_absolute_path::AbsolutePathBuf;
+use edgerun_uuid::Uuid;
 use std::collections::HashMap;
 use std::path::Path;
 use std::path::PathBuf;
@@ -68,7 +69,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::RwLock;
 use tokio_util::sync::CancellationToken;
-use edgerun_uuid::Uuid;
 
 pub(crate) struct PreparedUnifiedExecZshFork {
     pub(crate) exec_request: ExecRequest,
@@ -578,7 +578,7 @@ impl CoreShellActionProvider {
 // execve interception.
 const ENABLE_INTERCEPTED_EXEC_POLICY_SHELL_WRAPPER_PARSING: bool = false;
 
-#[async_trait::async_trait]
+#[edgerun_async_trait::async_trait]
 impl EscalationPolicy for CoreShellActionProvider {
     async fn determine_action(
         &self,
@@ -765,7 +765,7 @@ struct PrepareSandboxedExecParams<'a> {
     additional_permissions: Option<AdditionalPermissionProfile>,
 }
 
-#[async_trait::async_trait]
+#[edgerun_async_trait::async_trait]
 impl ShellCommandExecutor for CoreShellCommandExecutor {
     async fn run(
         &self,

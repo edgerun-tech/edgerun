@@ -34,7 +34,7 @@ use tokio::sync::watch;
 
 struct StaticReloader;
 
-#[async_trait::async_trait]
+#[edgerun_async_trait::async_trait]
 impl ConfigReloader for StaticReloader {
     fn source_label(&self) -> String {
         "test config state".to_string()

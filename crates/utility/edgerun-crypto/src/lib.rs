@@ -297,7 +297,10 @@ pub use ed25519_dalek::Signer as Ed25519Signer;
 pub use ed25519_dalek::Signer;
 #[cfg(feature = "ed25519")]
 pub use ed25519_dalek::SigningKey as Ed25519SigningKey;
-pub use rng::{fill_random, mix_entropy, random_bytes, random_u32, random_u64};
+pub use rng::{
+    fill_random, mix_entropy, random_bytes, random_u32, random_u64, register_random_source,
+    unregister_random_source,
+};
 
 pub use crate::rng::OsRng;
 

@@ -8,8 +8,8 @@ use crate::export::generate_index_ts_tree;
 use crate::export::trim_trailing_line_whitespace;
 use crate::protocol::common::visit_client_response_types;
 use crate::protocol::common::visit_server_response_types;
-use anyhow::Context;
-use anyhow::Result;
+use edgerun_error::Context;
+use edgerun_error::Result;
 use edgerun_json::serde_json::Map;
 use edgerun_json::serde_json::Value;
 use std::any::TypeId;
@@ -322,7 +322,7 @@ fn visit_typescript_fixture_dependencies(
 struct TypeScriptFixtureCollector<'a> {
     files: &'a mut BTreeMap<PathBuf, String>,
     seen: &'a mut HashSet<TypeId>,
-    error: Option<anyhow::Error>,
+    error: Option<edgerun_error::Error>,
 }
 
 impl TypeVisitor for TypeScriptFixtureCollector<'_> {

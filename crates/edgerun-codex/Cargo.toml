@@ -76,17 +76,17 @@ codex-protocol = { path = "protocol" }
 codex-response-debug-context = { path = "response-debug-context" }
 codex-shell-command = { path = "shell-command" }
 codex-tools = { path = "tools" }
-anyhow = "1"
-async-channel = "2.3.1"
-async-trait = "0.1.89"
-deno_core_icudata = "0.77.0"
+edgerun-async-channel = { path = "../utility/edgerun-async-channel" }
+edgerun-async-trait = { path = "../utility/edgerun-async-trait" }
 edgerun-bytes = { path = "../utility/edgerun-bytes" }
 edgerun-clap = { path = "../utility/edgerun-clap", default-features = false, features = ["derive", "std"] }
+edgerun-deno-core-icudata = { path = "../utility/edgerun-deno-core-icudata" }
 edgerun-encoding = { path = "../utility/edgerun-encoding", default-features = false }
-edgerun-error = { path = "../utility/edgerun-error" }
+edgerun-error = { path = "../utility/edgerun-error", features = ["anyhow-compat"] }
 edgerun-eventsource-stream = { path = "../utility/edgerun-eventsource-stream" }
 edgerun-glob = { path = "../utility/edgerun-glob", default-features = false }
 edgerun-http = { path = "../utility/edgerun-http" }
+edgerun-inventory = { path = "../utility/edgerun-inventory" }
 edgerun-json = { path = "../utility/edgerun-json", default-features = false, features = ["derive"] }
 edgerun-locale = { path = "../utility/edgerun-locale" }
 edgerun-quick-xml = { path = "../utility/edgerun-quick-xml" }
@@ -103,7 +103,6 @@ futures = { version = "0.3", default-features = false }
 icu_decimal = "2.1"
 icu_locale_core = "2.1"
 icu_provider = { version = "2.1", features = ["sync"] }
-inventory = "0.3.19"
 landlock = "0.4.4"
 opentelemetry = "0.31.0"
 reqwest = { version = "0.12", features = ["cookies"] }
@@ -119,7 +118,7 @@ strum = "0.27.2"
 strum_macros = "0.28.0"
 tokio = "1"
 tokio-util = "0.7.18"
-tracing = "0.1.44"
+tracing = { package = "edgerun-log", path = "../utility/edgerun-log", features = ["tracing-compat"] }
 tracing-opentelemetry = "0.32.0"
 tree-sitter = "0.25.10"
 tree-sitter-bash = "0.25"

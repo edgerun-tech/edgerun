@@ -66,11 +66,11 @@ struct CompactHistoryResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use async_trait::async_trait;
     use codex_client::Request;
     use codex_client::Response;
     use codex_client::StreamResponse;
     use codex_client::TransportError;
+    use edgerun_async_trait::async_trait;
 
     #[derive(Clone, Default)]
     struct DummyTransport;

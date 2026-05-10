@@ -1,0 +1,15 @@
+[package]
+name = "edgerun-deno-core-icudata"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Edgerun ICU data compatibility surface for V8 code mode"
+
+[dependencies]
+deno_core_icudata = "0.77.0"
+
+[lints]
+workspace = true

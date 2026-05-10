@@ -8,7 +8,7 @@ use std::process::Command;
 use tempfile::tempdir;
 
 #[test]
-fn test_apply_patch_scenarios() -> anyhow::Result<()> {
+fn test_apply_patch_scenarios() -> edgerun_error::Result<()> {
     let scenarios_dir = repo_root()?
         .join("codex-rs")
         .join("apply-patch")
@@ -27,7 +27,7 @@ fn test_apply_patch_scenarios() -> anyhow::Result<()> {
 
 /// Reads a scenario directory, copies the input files to a temporary directory, runs apply-patch,
 /// and asserts that the final state matches the expected state exactly.
-fn run_apply_patch_scenario(dir: &Path) -> anyhow::Result<()> {
+fn run_apply_patch_scenario(dir: &Path) -> edgerun_error::Result<()> {
     let tmp = tempdir()?;
 
     // Copy the input files to the temporary directory
@@ -68,7 +68,7 @@ enum Entry {
     Dir,
 }
 
-fn snapshot_dir(root: &Path) -> anyhow::Result<BTreeMap<PathBuf, Entry>> {
+fn snapshot_dir(root: &Path) -> edgerun_error::Result<BTreeMap<PathBuf, Entry>> {
     let mut entries = BTreeMap::new();
     if root.is_dir() {
         snapshot_dir_recursive(root, root, &mut entries)?;
@@ -80,7 +80,7 @@ fn snapshot_dir_recursive(
     base: &Path,
     dir: &Path,
     entries: &mut BTreeMap<PathBuf, Entry>,
-) -> anyhow::Result<()> {
+) -> edgerun_error::Result<()> {
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
         let path = entry.path();
@@ -104,7 +104,7 @@ fn snapshot_dir_recursive(
     Ok(())
 }
 
-fn copy_dir_recursive(src: &Path, dst: &Path) -> anyhow::Result<()> {
+fn copy_dir_recursive(src: &Path, dst: &Path) -> edgerun_error::Result<()> {
     for entry in fs::read_dir(src)? {
         let entry = entry?;
         let path = entry.path();

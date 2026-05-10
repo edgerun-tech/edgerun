@@ -5,24 +5,27 @@ use std::path::Path;
 use std::path::PathBuf;
 use tempfile::tempdir;
 
-fn run_apply_patch_in_dir(dir: &Path, patch: &str) -> anyhow::Result<assert_cmd::assert::Assert> {
+fn run_apply_patch_in_dir(
+    dir: &Path,
+    patch: &str,
+) -> edgerun_error::Result<assert_cmd::assert::Assert> {
     let mut cmd = Command::new(codex_utils_cargo_bin::cargo_bin("apply_patch")?);
     cmd.current_dir(dir);
     Ok(cmd.arg(patch).assert())
 }
 
-fn apply_patch_command(dir: &Path) -> anyhow::Result<Command> {
+fn apply_patch_command(dir: &Path) -> edgerun_error::Result<Command> {
     let mut cmd = Command::new(codex_utils_cargo_bin::cargo_bin("apply_patch")?);
     cmd.current_dir(dir);
     Ok(cmd)
 }
 
-fn resolved_under(root: &Path, path: &str) -> anyhow::Result<PathBuf> {
+fn resolved_under(root: &Path, path: &str) -> edgerun_error::Result<PathBuf> {
     Ok(root.canonicalize()?.join(path))
 }
 
 #[test]
-fn test_apply_patch_cli_applies_multiple_operations() -> anyhow::Result<()> {
+fn test_apply_patch_cli_applies_multiple_operations() -> edgerun_error::Result<()> {
     let tmp = tempdir()?;
     let add_path = tmp.path().join("nested/new.txt");
     let modify_path = tmp.path().join("modify.txt");
@@ -45,7 +48,7 @@ fn test_apply_patch_cli_applies_multiple_operations() -> anyhow::Result<()> {
 }
 
 #[test]
-fn test_apply_patch_cli_applies_multiple_chunks() -> anyhow::Result<()> {
+fn test_apply_patch_cli_applies_multiple_chunks() -> edgerun_error::Result<()> {
     let tmp = tempdir()?;
     let target_path = tmp.path().join("multi.txt");
     fs::write(&target_path, "line1\nline2\nline3\nline4\n")?;
@@ -65,7 +68,7 @@ fn test_apply_patch_cli_applies_multiple_chunks() -> anyhow::Result<()> {
 }
 
 #[test]
-fn test_apply_patch_cli_moves_file_to_new_directory() -> anyhow::Result<()> {
+fn test_apply_patch_cli_moves_file_to_new_directory() -> edgerun_error::Result<()> {
     let tmp = tempdir()?;
     let original_path = tmp.path().join("old/name.txt");
     let new_path = tmp.path().join("renamed/dir/name.txt");
@@ -85,7 +88,7 @@ fn test_apply_patch_cli_moves_file_to_new_directory() -> anyhow::Result<()> {
 }
 
 #[test]
-fn test_apply_patch_cli_rejects_empty_patch() -> anyhow::Result<()> {
+fn test_apply_patch_cli_rejects_empty_patch() -> edgerun_error::Result<()> {
     let tmp = tempdir()?;
 
     apply_patch_command(tmp.path())?
@@ -98,7 +101,7 @@ fn test_apply_patch_cli_rejects_empty_patch() -> anyhow::Result<()> {
 }
 
 #[test]
-fn test_apply_patch_cli_reports_missing_context() -> anyhow::Result<()> {
+fn test_apply_patch_cli_reports_missing_context() -> edgerun_error::Result<()> {
     let tmp = tempdir()?;
     let target_path = tmp.path().join("modify.txt");
     let expected_target_path = resolved_under(tmp.path(), "modify.txt")?;
@@ -118,7 +121,7 @@ fn test_apply_patch_cli_reports_missing_context() -> anyhow::Result<()> {
 }
 
 #[test]
-fn test_apply_patch_cli_rejects_missing_file_delete() -> anyhow::Result<()> {
+fn test_apply_patch_cli_rejects_missing_file_delete() -> edgerun_error::Result<()> {
     let tmp = tempdir()?;
     let missing_path = resolved_under(tmp.path(), "missing.txt")?;
 
@@ -135,7 +138,7 @@ fn test_apply_patch_cli_rejects_missing_file_delete() -> anyhow::Result<()> {
 }
 
 #[test]
-fn test_apply_patch_cli_rejects_empty_update_hunk() -> anyhow::Result<()> {
+fn test_apply_patch_cli_rejects_empty_update_hunk() -> edgerun_error::Result<()> {
     let tmp = tempdir()?;
 
     apply_patch_command(tmp.path())?
@@ -148,7 +151,7 @@ fn test_apply_patch_cli_rejects_empty_update_hunk() -> anyhow::Result<()> {
 }
 
 #[test]
-fn test_apply_patch_cli_requires_existing_file_for_update() -> anyhow::Result<()> {
+fn test_apply_patch_cli_requires_existing_file_for_update() -> edgerun_error::Result<()> {
     let tmp = tempdir()?;
     let missing_path = resolved_under(tmp.path(), "missing.txt")?;
 
@@ -165,7 +168,7 @@ fn test_apply_patch_cli_requires_existing_file_for_update() -> anyhow::Result<()
 }
 
 #[test]
-fn test_apply_patch_cli_move_overwrites_existing_destination() -> anyhow::Result<()> {
+fn test_apply_patch_cli_move_overwrites_existing_destination() -> edgerun_error::Result<()> {
     let tmp = tempdir()?;
     let original_path = tmp.path().join("old/name.txt");
     let destination = tmp.path().join("renamed/dir/name.txt");
@@ -188,7 +191,7 @@ fn test_apply_patch_cli_move_overwrites_existing_destination() -> anyhow::Result
 }
 
 #[test]
-fn test_apply_patch_cli_add_overwrites_existing_file() -> anyhow::Result<()> {
+fn test_apply_patch_cli_add_overwrites_existing_file() -> edgerun_error::Result<()> {
     let tmp = tempdir()?;
     let path = tmp.path().join("duplicate.txt");
     fs::write(&path, "old content\n")?;
@@ -206,7 +209,7 @@ fn test_apply_patch_cli_add_overwrites_existing_file() -> anyhow::Result<()> {
 }
 
 #[test]
-fn test_apply_patch_cli_delete_directory_fails() -> anyhow::Result<()> {
+fn test_apply_patch_cli_delete_directory_fails() -> edgerun_error::Result<()> {
     let tmp = tempdir()?;
     let dir = tmp.path().join("dir");
     let expected_dir = resolved_under(tmp.path(), "dir")?;
@@ -225,7 +228,7 @@ fn test_apply_patch_cli_delete_directory_fails() -> anyhow::Result<()> {
 }
 
 #[test]
-fn test_apply_patch_cli_rejects_invalid_hunk_header() -> anyhow::Result<()> {
+fn test_apply_patch_cli_rejects_invalid_hunk_header() -> edgerun_error::Result<()> {
     let tmp = tempdir()?;
 
     apply_patch_command(tmp.path())?
@@ -238,7 +241,7 @@ fn test_apply_patch_cli_rejects_invalid_hunk_header() -> anyhow::Result<()> {
 }
 
 #[test]
-fn test_apply_patch_cli_updates_file_appends_trailing_newline() -> anyhow::Result<()> {
+fn test_apply_patch_cli_updates_file_appends_trailing_newline() -> edgerun_error::Result<()> {
     let tmp = tempdir()?;
     let target_path = tmp.path().join("no_newline.txt");
     fs::write(&target_path, "no newline at end")?;
@@ -258,7 +261,8 @@ fn test_apply_patch_cli_updates_file_appends_trailing_newline() -> anyhow::Resul
 }
 
 #[test]
-fn test_apply_patch_cli_failure_after_partial_success_leaves_changes() -> anyhow::Result<()> {
+fn test_apply_patch_cli_failure_after_partial_success_leaves_changes() -> edgerun_error::Result<()>
+{
     let tmp = tempdir()?;
     let new_file = tmp.path().join("created.txt");
     let missing_file = resolved_under(tmp.path(), "missing.txt")?;

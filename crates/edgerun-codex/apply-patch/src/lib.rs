@@ -13,9 +13,9 @@ use std::path::PathBuf;
 
 use crate::file_system::CreateDirectoryOptions;
 use crate::file_system::RemoveOptions;
-use anyhow::Context;
-use anyhow::Result;
+use edgerun_error::Context;
 use edgerun_error::Error;
+use edgerun_error::Result;
 use edgerun_similar::TextDiff;
 pub use parser::Hunk;
 pub use parser::ParseError;
@@ -368,9 +368,9 @@ async fn apply_hunks_to_files(
     fs: &dyn ExecutorFileSystem,
     sandbox: Option<&FileSystemSandboxContext>,
     delta: &mut AppliedPatchDelta,
-) -> anyhow::Result<AffectedPaths> {
+) -> edgerun_error::Result<AffectedPaths> {
     if hunks.is_empty() {
-        anyhow::bail!("No files were modified.");
+        edgerun_error::bail!("No files were modified.");
     }
 
     let mut added: Vec<PathBuf> = Vec::new();
@@ -385,7 +385,7 @@ async fn apply_hunks_to_files(
                 Ok(value) => value,
                 Err(error) => {
                     delta.exact = false;
-                    return Err(anyhow::Error::from(error));
+                    return Err(edgerun_error::Error::from(error));
                 }
             }
         };
@@ -619,7 +619,7 @@ async fn write_file_with_missing_parent_retry(
     path_abs: &AbsolutePathBuf,
     contents: Vec<u8>,
     sandbox: Option<&FileSystemSandboxContext>,
-) -> anyhow::Result<()> {
+) -> edgerun_error::Result<()> {
     match fs.write_file(path_abs, contents.clone(), sandbox).await {
         Ok(()) => Ok(()),
         Err(err) if err.kind() == io::ErrorKind::NotFound => {

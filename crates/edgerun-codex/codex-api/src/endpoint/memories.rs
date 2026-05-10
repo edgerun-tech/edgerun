@@ -71,12 +71,12 @@ mod tests {
     use crate::common::RawMemory;
     use crate::common::RawMemoryMetadata;
     use crate::provider::RetryConfig;
-    use async_trait::async_trait;
     use codex_client::Request;
     use codex_client::RequestBody;
     use codex_client::Response;
     use codex_client::StreamResponse;
     use codex_client::TransportError;
+    use edgerun_async_trait::async_trait;
     use edgerun_http::HeaderMap;
     use edgerun_http::Method;
     use edgerun_http::StatusCode;

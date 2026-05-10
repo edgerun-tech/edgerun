@@ -1,6 +1,6 @@
-use anyhow::Context;
-use anyhow::Result;
 use edgerun_clap::Parser;
+use edgerun_error::Context;
+use edgerun_error::Result;
 use std::path::PathBuf;
 
 #[derive(Parser, Debug)]

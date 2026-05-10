@@ -74,7 +74,7 @@ pub type ProviderAccountResult = std::result::Result<ProviderAccountState, Provi
 /// Implementations own provider-specific behavior for a model backend. The
 /// `ModelProviderInfo` returned by `info` is the serialized/configured provider
 /// metadata used by the default OpenAI-compatible implementation.
-#[async_trait::async_trait]
+#[edgerun_async_trait::async_trait]
 pub trait ModelProvider: fmt::Debug + Send + Sync {
     /// Returns the configured provider metadata.
     fn info(&self) -> &ModelProviderInfo;
@@ -152,7 +152,7 @@ impl ConfiguredModelProvider {
     }
 }
 
-#[async_trait::async_trait]
+#[edgerun_async_trait::async_trait]
 impl ModelProvider for ConfiguredModelProvider {
     fn info(&self) -> &ModelProviderInfo {
         &self.info

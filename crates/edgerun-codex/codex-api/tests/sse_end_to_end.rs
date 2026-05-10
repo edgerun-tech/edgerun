@@ -2,7 +2,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
-use async_trait::async_trait;
 use codex_api::AuthProvider;
 use codex_api::Compression;
 use codex_api::Provider;
@@ -14,6 +13,7 @@ use codex_client::Response;
 use codex_client::StreamResponse;
 use codex_client::TransportError;
 use codex_protocol::models::ResponseItem;
+use edgerun_async_trait::async_trait;
 use edgerun_bytes::Bytes;
 use edgerun_http::HeaderMap;
 use edgerun_http::StatusCode;

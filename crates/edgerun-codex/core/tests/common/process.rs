@@ -1,9 +1,9 @@
-use anyhow::Context;
+use edgerun_error::Context;
 use std::fs;
 use std::path::Path;
 use std::time::Duration;
 
-pub async fn wait_for_pid_file(path: &Path) -> anyhow::Result<String> {
+pub async fn wait_for_pid_file(path: &Path) -> edgerun_error::Result<String> {
     let pid = tokio::time::timeout(Duration::from_secs(2), async {
         loop {
             if let Ok(contents) = fs::read_to_string(path) {
@@ -21,7 +21,7 @@ pub async fn wait_for_pid_file(path: &Path) -> anyhow::Result<String> {
     Ok(pid)
 }
 
-pub fn process_is_alive(pid: &str) -> anyhow::Result<bool> {
+pub fn process_is_alive(pid: &str) -> edgerun_error::Result<bool> {
     let status = std::process::Command::new("kill")
         .args(["-0", pid])
         .status()
@@ -29,7 +29,7 @@ pub fn process_is_alive(pid: &str) -> anyhow::Result<bool> {
     Ok(status.success())
 }
 
-async fn wait_for_process_exit_inner(pid: String) -> anyhow::Result<()> {
+async fn wait_for_process_exit_inner(pid: String) -> edgerun_error::Result<()> {
     loop {
         if !process_is_alive(&pid)? {
             return Ok(());
@@ -38,7 +38,7 @@ async fn wait_for_process_exit_inner(pid: String) -> anyhow::Result<()> {
     }
 }
 
-pub async fn wait_for_process_exit(pid: &str) -> anyhow::Result<()> {
+pub async fn wait_for_process_exit(pid: &str) -> edgerun_error::Result<()> {
     let pid = pid.to_string();
     tokio::time::timeout(Duration::from_secs(2), wait_for_process_exit_inner(pid))
         .await

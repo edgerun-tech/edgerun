@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use async_trait::async_trait;
 use codex_api::ModelsClient;
 use codex_api::RequestTelemetry;
 use codex_api::ReqwestTransport;
@@ -17,6 +16,7 @@ use codex_protocol::error::Result as CoreResult;
 use codex_protocol::openai_models::ModelInfo;
 use codex_response_debug_context::extract_response_debug_context;
 use codex_response_debug_context::telemetry_transport_error_message;
+use edgerun_async_trait::async_trait;
 use edgerun_http::HeaderMap;
 use tokio::time::timeout;
 

@@ -1,10 +1,10 @@
 #![expect(clippy::expect_used)]
 
-use anyhow::Context as _;
-use anyhow::ensure;
 use codex_arg0::Arg0PathEntryGuard;
 use codex_utils_cargo_bin::CargoBinError;
 use ctor::ctor;
+use edgerun_error::Context as _;
+use edgerun_error::ensure;
 use std::sync::OnceLock;
 use tempfile::TempDir;
 
@@ -133,7 +133,7 @@ pub fn test_tmp_path_buf() -> PathBuf {
 pub fn fetch_dotslash_file(
     dotslash_file: &std::path::Path,
     dotslash_cache: Option<&std::path::Path>,
-) -> anyhow::Result<PathBuf> {
+) -> edgerun_error::Result<PathBuf> {
     let mut command = std::process::Command::new("dotslash");
     command.arg("--").arg("fetch").arg(dotslash_file);
     if let Some(dotslash_cache) = dotslash_cache {
@@ -367,7 +367,8 @@ pub fn format_with_current_shell(command: &str) -> Vec<String> {
 
 pub fn format_with_current_shell_display(command: &str) -> String {
     let args = format_with_current_shell(command);
-    edgerun_shlex::try_join(args.iter().map(String::as_str)).expect("serialize current shell command")
+    edgerun_shlex::try_join(args.iter().map(String::as_str))
+        .expect("serialize current shell command")
 }
 
 pub fn format_with_current_shell_non_login(command: &str) -> Vec<String> {
@@ -386,8 +387,8 @@ pub fn stdio_server_bin() -> Result<String, CargoBinError> {
 }
 
 pub mod fs_wait {
-    use anyhow::Result;
-    use anyhow::anyhow;
+    use edgerun_error::Result;
+    use edgerun_error::anyhow;
     use notify::RecursiveMode;
     use notify::Watcher;
     use std::path::Path;

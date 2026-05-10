@@ -16,10 +16,10 @@ sandbox = ["v8/v8_enable_sandbox"]
 workspace = true
 
 [dependencies]
-async-channel = { workspace = true }
-async-trait = { workspace = true }
+edgerun-async-channel = { workspace = true }
+edgerun-async-trait = { workspace = true }
 codex-protocol = { workspace = true }
-deno_core_icudata = { workspace = true }
+edgerun-deno-core-icudata = { workspace = true }
 edgerun-json = { workspace = true, features = ["serde-compat"] }
 serde = { workspace = true, features = ["derive"] }
 tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }

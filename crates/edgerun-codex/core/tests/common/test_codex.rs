@@ -9,9 +9,6 @@ use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use anyhow::Context;
-use anyhow::Result;
-use anyhow::anyhow;
 use codex_config::CloudRequirementsLoader;
 use codex_core::CodexThread;
 use codex_core::ThreadManager;
@@ -41,8 +38,11 @@ use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::TurnEnvironmentSelection;
 use codex_protocol::user_input::UserInput;
 use codex_utils_absolute_path::AbsolutePathBuf;
-use futures::future::BoxFuture;
+use edgerun_error::Context;
+use edgerun_error::Result;
+use edgerun_error::anyhow;
 use edgerun_json::serde_json::Value;
+use futures::future::BoxFuture;
 use tempfile::TempDir;
 use wiremock::MockServer;
 
@@ -293,7 +293,10 @@ impl TestCodexBuilder {
         }
     }
 
-    pub async fn build(&mut self, server: &wiremock::MockServer) -> anyhow::Result<TestCodex> {
+    pub async fn build(
+        &mut self,
+        server: &wiremock::MockServer,
+    ) -> edgerun_error::Result<TestCodex> {
         let home = match self.home.clone() {
             Some(home) => home,
             None => Arc::new(TempDir::new()?),
@@ -307,7 +310,7 @@ impl TestCodexBuilder {
     pub async fn build_remote_aware(
         &mut self,
         server: &wiremock::MockServer,
-    ) -> anyhow::Result<TestCodex> {
+    ) -> edgerun_error::Result<TestCodex> {
         let home = match self.home.clone() {
             Some(home) => home,
             None => Arc::new(TempDir::new()?),
@@ -321,7 +324,7 @@ impl TestCodexBuilder {
     pub async fn build_with_streaming_server(
         &mut self,
         server: &StreamingSseServer,
-    ) -> anyhow::Result<TestCodex> {
+    ) -> edgerun_error::Result<TestCodex> {
         let base_url = server.uri();
         let home = match self.home.clone() {
             Some(home) => home,
@@ -340,7 +343,7 @@ impl TestCodexBuilder {
     pub async fn build_with_websocket_server(
         &mut self,
         server: &WebSocketTestServer,
-    ) -> anyhow::Result<TestCodex> {
+    ) -> edgerun_error::Result<TestCodex> {
         let base_url = format!("{}/v1", server.uri());
         let home = match self.home.clone() {
             Some(home) => home,
@@ -363,7 +366,7 @@ impl TestCodexBuilder {
         server: &wiremock::MockServer,
         home: Arc<TempDir>,
         rollout_path: PathBuf,
-    ) -> anyhow::Result<TestCodex> {
+    ) -> edgerun_error::Result<TestCodex> {
         let base_url = format!("{}/v1", server.uri());
         let test_env = TestEnv::local().await?;
         Box::pin(self.build_with_home_and_base_url(base_url, home, Some(rollout_path), test_env))
@@ -376,7 +379,7 @@ impl TestCodexBuilder {
         home: Arc<TempDir>,
         resume_from: Option<PathBuf>,
         test_env: TestEnv,
-    ) -> anyhow::Result<TestCodex> {
+    ) -> edgerun_error::Result<TestCodex> {
         let (config, fallback_cwd) = self
             .prepare_config(base_url, &home, test_env.cwd().clone())
             .await?;
@@ -421,7 +424,7 @@ impl TestCodexBuilder {
         resume_from: Option<PathBuf>,
         test_env: TestEnv,
         environment_manager: Arc<codex_exec_server::EnvironmentManager>,
-    ) -> anyhow::Result<TestCodex> {
+    ) -> edgerun_error::Result<TestCodex> {
         let auth = self.auth.clone();
         let state_db = codex_core::init_state_db(&config).await;
         let thread_store = thread_store_from_config(&config, state_db.clone());
@@ -492,7 +495,7 @@ impl TestCodexBuilder {
         base_url: String,
         home: &TempDir,
         cwd_override: AbsolutePathBuf,
-    ) -> anyhow::Result<(Config, Arc<TempDir>)> {
+    ) -> edgerun_error::Result<(Config, Arc<TempDir>)> {
         let model_provider = ModelProviderInfo {
             base_url: Some(base_url),
             // Most core tests use SSE-only mock servers, so keep websocket transport off unless
@@ -1014,8 +1017,8 @@ pub fn test_codex() -> TestCodexBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pretty_assertions::assert_eq;
     use edgerun_json::serde_json::json;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn custom_tool_call_output_text_returns_output_text() {

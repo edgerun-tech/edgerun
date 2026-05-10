@@ -5,8 +5,8 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-async-channel = { workspace = true }
-async-trait = { workspace = true }
+edgerun-async-channel = { workspace = true }
+edgerun-async-trait = { workspace = true }
 codex-client = { workspace = true }
 codex-protocol = { workspace = true }
 edgerun-bytes = { workspace = true }

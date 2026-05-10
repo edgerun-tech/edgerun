@@ -369,7 +369,7 @@ macro_rules! client_request_definitions {
         #[allow(clippy::vec_init_then_push)]
         pub fn export_client_response_schemas(
             out_dir: &::std::path::Path,
-        ) -> ::anyhow::Result<Vec<GeneratedSchema>> {
+        ) -> ::edgerun_error::Result<Vec<GeneratedSchema>> {
             let mut schemas = Vec::new();
             $(
                 schemas.push(write_json_schema::<$response>(out_dir, stringify!($response))?);
@@ -380,7 +380,7 @@ macro_rules! client_request_definitions {
         #[allow(clippy::vec_init_then_push)]
         pub fn export_client_param_schemas(
             out_dir: &::std::path::Path,
-        ) -> ::anyhow::Result<Vec<GeneratedSchema>> {
+        ) -> ::edgerun_error::Result<Vec<GeneratedSchema>> {
             let mut schemas = Vec::new();
             $(
                 schemas.push(write_json_schema::<$params>(out_dir, stringify!($params))?);
@@ -1093,7 +1093,7 @@ macro_rules! server_request_definitions {
         #[allow(clippy::vec_init_then_push)]
         pub fn export_server_response_schemas(
             out_dir: &Path,
-        ) -> ::anyhow::Result<Vec<GeneratedSchema>> {
+        ) -> ::edgerun_error::Result<Vec<GeneratedSchema>> {
             let mut schemas = Vec::new();
             $(
                 schemas.push(crate::export::write_json_schema::<$response>(
@@ -1107,7 +1107,7 @@ macro_rules! server_request_definitions {
         #[allow(clippy::vec_init_then_push)]
         pub fn export_server_param_schemas(
             out_dir: &Path,
-        ) -> ::anyhow::Result<Vec<GeneratedSchema>> {
+        ) -> ::edgerun_error::Result<Vec<GeneratedSchema>> {
             let mut schemas = Vec::new();
             $(
                 schemas.push(crate::export::write_json_schema::<$params>(
@@ -1169,7 +1169,7 @@ macro_rules! server_notification_definitions {
         #[allow(clippy::vec_init_then_push)]
         pub fn export_server_notification_schemas(
             out_dir: &::std::path::Path,
-        ) -> ::anyhow::Result<Vec<GeneratedSchema>> {
+        ) -> ::edgerun_error::Result<Vec<GeneratedSchema>> {
             let mut schemas = Vec::new();
             $(schemas.push(crate::export::write_json_schema::<$payload>(out_dir, stringify!($payload))?);)*
             Ok(schemas)
@@ -1196,7 +1196,7 @@ macro_rules! client_notification_definitions {
 
         pub fn export_client_notification_schemas(
             _out_dir: &::std::path::Path,
-        ) -> ::anyhow::Result<Vec<GeneratedSchema>> {
+        ) -> ::edgerun_error::Result<Vec<GeneratedSchema>> {
             let schemas = Vec::new();
             $( $(schemas.push(crate::export::write_json_schema::<$payload>(_out_dir, stringify!($payload))?);)? )*
             Ok(schemas)
@@ -1443,7 +1443,6 @@ client_notification_definitions! {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use anyhow::Result;
     use codex_protocol::ThreadId;
     use codex_protocol::account::PlanType;
     use codex_protocol::compat::absolute_path::AbsolutePathBuf;
@@ -1453,6 +1452,7 @@ mod tests {
     use codex_protocol::protocol::RealtimeConversationVersion;
     use codex_protocol::protocol::RealtimeOutputModality;
     use codex_protocol::protocol::RealtimeVoice;
+    use edgerun_error::Result;
     use edgerun_json::serde_json::json;
     use pretty_assertions::assert_eq;
     use std::path::PathBuf;

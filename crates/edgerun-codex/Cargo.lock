@@ -203,16 +203,17 @@ dependencies = [
 name = "codex-api"
 version = "0.0.0"
 dependencies = [
- "async-channel",
- "async-trait",
  "codex-client",
  "codex-protocol",
+ "edgerun-async-channel",
+ "edgerun-async-trait",
  "edgerun-bytes",
  "edgerun-encoding",
  "edgerun-error",
  "edgerun-eventsource-stream",
  "edgerun-http",
  "edgerun-json",
+ "edgerun-log",
  "edgerun-time",
  "edgerun-tokio-tungstenite",
  "edgerun-tungstenite",
@@ -222,28 +223,26 @@ dependencies = [
  "serde",
  "tokio",
  "tokio-util",
- "tracing",
 ]
 
 [[package]]
 name = "codex-app-server-protocol"
 version = "0.0.0"
 dependencies = [
- "anyhow",
  "codex-protocol",
  "codex-shell-command",
  "edgerun-clap",
  "edgerun-error",
+ "edgerun-inventory",
  "edgerun-json",
+ "edgerun-log",
  "edgerun-similar",
  "edgerun-uuid",
- "inventory",
  "rmcp",
  "schemars 0.8.22",
  "serde",
  "serde_with",
  "strum_macros",
- "tracing",
  "ts-rs",
 ]
 
@@ -251,8 +250,7 @@ dependencies = [
 name = "codex-apply-patch"
 version = "0.0.0"
 dependencies = [
- "anyhow",
- "async-trait",
+ "edgerun-async-trait",
  "edgerun-error",
  "edgerun-similar",
  "tokio",
@@ -264,12 +262,13 @@ dependencies = [
 name = "codex-client"
 version = "0.0.0"
 dependencies = [
- "async-trait",
+ "edgerun-async-trait",
  "edgerun-bytes",
  "edgerun-error",
  "edgerun-eventsource-stream",
  "edgerun-http",
  "edgerun-json",
+ "edgerun-log",
  "edgerun-random",
  "edgerun-zstd",
  "futures",
@@ -280,7 +279,6 @@ dependencies = [
  "rustls-pki-types",
  "serde",
  "tokio",
- "tracing",
  "tracing-opentelemetry",
 ]
 
@@ -288,15 +286,15 @@ dependencies = [
 name = "codex-code-mode"
 version = "0.0.0"
 dependencies = [
- "async-channel",
- "async-trait",
  "codex-protocol",
  "deno_core_icudata",
+ "edgerun-async-channel",
+ "edgerun-async-trait",
  "edgerun-json",
+ "edgerun-log",
  "serde",
  "tokio",
  "tokio-util",
- "tracing",
  "v8",
 ]
 
@@ -312,11 +310,14 @@ dependencies = [
  "codex-protocol",
  "codex-shell-command",
  "codex-tools",
+ "edgerun-async-channel",
+ "edgerun-async-trait",
  "edgerun-encoding",
  "edgerun-error",
  "edgerun-eventsource-stream",
  "edgerun-http",
  "edgerun-json",
+ "edgerun-log",
  "edgerun-random",
  "edgerun-shlex",
  "edgerun-similar",
@@ -329,18 +330,18 @@ dependencies = [
 name = "codex-model-provider"
 version = "0.0.0"
 dependencies = [
- "async-trait",
  "codex-api",
  "codex-client",
  "codex-model-provider-info",
  "codex-models-manager",
  "codex-protocol",
  "codex-response-debug-context",
+ "edgerun-async-trait",
  "edgerun-http",
  "edgerun-json",
+ "edgerun-log",
  "reqwest",
  "tokio",
- "tracing",
 ]
 
 [[package]]
@@ -359,13 +360,13 @@ dependencies = [
 name = "codex-models-manager"
 version = "0.0.0"
 dependencies = [
- "async-trait",
  "codex-app-server-protocol",
  "codex-protocol",
+ "edgerun-async-trait",
  "edgerun-json",
+ "edgerun-log",
  "edgerun-time",
  "tokio",
- "tracing",
 ]
 
 [[package]]
@@ -378,6 +379,7 @@ dependencies = [
  "edgerun-http",
  "edgerun-json",
  "edgerun-locale",
+ "edgerun-log",
  "edgerun-quick-xml",
  "edgerun-time",
  "edgerun-uuid",
@@ -393,7 +395,6 @@ dependencies = [
  "strum",
  "strum_macros",
  "tokio",
- "tracing",
  "ts-rs",
 ]
 
@@ -428,9 +429,9 @@ dependencies = [
  "codex-code-mode",
  "codex-protocol",
  "edgerun-json",
+ "edgerun-log",
  "rmcp",
  "serde",
- "tracing",
 ]
 
 [[package]]
@@ -700,6 +701,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 
 [[package]]
+name = "edgerun-async-channel"
+version = "0.1.1"
+dependencies = [
+ "async-channel",
+]
+
+[[package]]
+name = "edgerun-async-trait"
+version = "0.1.1"
+dependencies = [
+ "async-trait",
+]
+
+[[package]]
 name = "edgerun-bytes"
 version = "0.1.1"
 dependencies = [
@@ -734,6 +749,14 @@ dependencies = [
 [[package]]
 name = "edgerun-error"
 version = "0.1.1"
+dependencies = [
+ "anyhow",
+ "edgerun-error-derive",
+]
+
+[[package]]
+name = "edgerun-error-derive"
+version = "0.1.1"
 
 [[package]]
 name = "edgerun-eventsource-stream"
@@ -751,6 +774,13 @@ name = "edgerun-http"
 version = "0.1.1"
 dependencies = [
  "http",
+]
+
+[[package]]
+name = "edgerun-inventory"
+version = "0.1.1"
+dependencies = [
+ "inventory",
 ]
 
 [[package]]
@@ -773,6 +803,13 @@ dependencies = [
 [[package]]
 name = "edgerun-locale"
 version = "0.1.1"
+
+[[package]]
+name = "edgerun-log"
+version = "0.1.1"
+dependencies = [
+ "tracing",
+]
 
 [[package]]
 name = "edgerun-quick-xml"
@@ -2988,7 +3025,6 @@ version = "0.1.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "63e71662fa4b2a2c3a26f570f037eb95bb1f85397f3cd8076caed2f026a6d100"
 dependencies = [
- "log",
  "pin-project-lite",
  "tracing-attributes",
  "tracing-core",

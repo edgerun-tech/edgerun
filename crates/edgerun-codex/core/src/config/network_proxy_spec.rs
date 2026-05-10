@@ -1,4 +1,3 @@
-use async_trait::async_trait;
 use codex_config::NetworkConstraints;
 use codex_execpolicy::Policy;
 use codex_network_proxy::BlockedRequestObserver;
@@ -17,6 +16,7 @@ use codex_network_proxy::host_and_port_from_network_addr;
 use codex_network_proxy::normalize_host;
 use codex_network_proxy::validate_policy_against_constraints;
 use codex_protocol::models::PermissionProfile;
+use edgerun_async_trait::async_trait;
 use std::collections::HashSet;
 use std::sync::Arc;
 

@@ -376,7 +376,8 @@ mod tests {
             header_value(headers, "content-type"),
             Some("application/json")
         );
-        let parsed: edgerun_json::serde_json::Value = edgerun_json::serde_json::from_str(body).expect("parse json body");
+        let parsed: edgerun_json::serde_json::Value =
+            edgerun_json::serde_json::from_str(body).expect("parse json body");
         assert_eq!(
             parsed,
             edgerun_json::serde_json::json!({

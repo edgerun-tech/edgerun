@@ -1,13 +1,13 @@
 use std::path::Path;
 use std::path::PathBuf;
 
-use anyhow::Result;
 use codex_core::config::Config;
 use codex_core::config::Constrained;
 use codex_features::Feature;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::permissions::NetworkSandboxPolicy;
 use codex_protocol::protocol::AskForApproval;
+use edgerun_error::Result;
 
 use crate::test_codex::TestCodex;
 use crate::test_codex::test_codex;

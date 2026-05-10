@@ -105,7 +105,7 @@ impl BedrockMantleSigV4AuthProvider {
     }
 }
 
-#[async_trait::async_trait]
+#[edgerun_async_trait::async_trait]
 impl AuthProvider for BedrockMantleSigV4AuthProvider {
     fn add_auth_headers(&self, _headers: &mut HeaderMap) {}
 

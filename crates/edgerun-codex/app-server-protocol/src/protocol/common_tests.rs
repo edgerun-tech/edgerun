@@ -1,6 +1,6 @@
 use super::*;
-use anyhow::Result;
 use codex_protocol::protocol::TurnAbortReason;
+use edgerun_error::Result;
 use edgerun_json::serde_json::json;
 use pretty_assertions::assert_eq;
 

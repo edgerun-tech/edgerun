@@ -48,7 +48,7 @@ impl AmazonBedrockModelProvider {
     }
 }
 
-#[async_trait::async_trait]
+#[edgerun_async_trait::async_trait]
 impl ModelProvider for AmazonBedrockModelProvider {
     fn info(&self) -> &ModelProviderInfo {
         &self.info

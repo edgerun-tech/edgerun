@@ -2,14 +2,14 @@ use assert_cmd::Command;
 use std::fs;
 use tempfile::tempdir;
 
-fn apply_patch_command() -> anyhow::Result<Command> {
+fn apply_patch_command() -> edgerun_error::Result<Command> {
     Ok(Command::new(codex_utils_cargo_bin::cargo_bin(
         "apply_patch",
     )?))
 }
 
 #[test]
-fn test_apply_patch_cli_add_and_update() -> anyhow::Result<()> {
+fn test_apply_patch_cli_add_and_update() -> edgerun_error::Result<()> {
     let tmp = tempdir()?;
     let file = "cli_test.txt";
     let absolute_path = tmp.path().join(file);
@@ -50,7 +50,7 @@ fn test_apply_patch_cli_add_and_update() -> anyhow::Result<()> {
 }
 
 #[test]
-fn test_apply_patch_cli_stdin_add_and_update() -> anyhow::Result<()> {
+fn test_apply_patch_cli_stdin_add_and_update() -> edgerun_error::Result<()> {
     let tmp = tempdir()?;
     let file = "cli_test_stdin.txt";
     let absolute_path = tmp.path().join(file);

@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
-use async_trait::async_trait;
+use edgerun_async_trait::async_trait;
 use tokio::io;
 
 use crate::absolute_path::AbsolutePathBuf;

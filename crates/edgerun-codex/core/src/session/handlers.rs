@@ -2,9 +2,9 @@ use crate::realtime_conversation::handle_audio as handle_realtime_conversation_a
 use crate::realtime_conversation::handle_close as handle_realtime_conversation_close;
 use crate::realtime_conversation::handle_start as handle_realtime_conversation_start;
 use crate::realtime_conversation::handle_text as handle_realtime_conversation_text;
-use async_channel::Receiver;
 use codex_otel::set_parent_from_w3c_trace_context;
 use codex_protocol::protocol::Submission;
+use edgerun_async_channel::Receiver;
 use tracing::Instrument;
 use tracing::debug_span;
 use tracing::info_span;
@@ -362,7 +362,9 @@ pub async fn resolve_elicitation(
     };
     let content = match action {
         // Preserve the legacy fallback for clients that only send an action.
-        ElicitationAction::Accept => Some(content.unwrap_or_else(|| edgerun_json::serde_json::json!({}))),
+        ElicitationAction::Accept => {
+            Some(content.unwrap_or_else(|| edgerun_json::serde_json::json!({})))
+        }
         ElicitationAction::Decline | ElicitationAction::Cancel => None,
     };
     let response = ElicitationResponse {

@@ -1,6 +1,5 @@
 use super::process::UnifiedExecProcess;
 use crate::unified_exec::UnifiedExecError;
-use async_trait::async_trait;
 use codex_exec_server::ExecProcess;
 use codex_exec_server::ExecProcessEventReceiver;
 use codex_exec_server::ExecServerError;
@@ -10,6 +9,7 @@ use codex_exec_server::StartedExecProcess;
 use codex_exec_server::WriteResponse;
 use codex_exec_server::WriteStatus;
 use codex_sandboxing::SandboxType;
+use edgerun_async_trait::async_trait;
 use pretty_assertions::assert_eq;
 use std::collections::VecDeque;
 use std::sync::Arc;

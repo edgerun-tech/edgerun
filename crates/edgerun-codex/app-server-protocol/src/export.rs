@@ -14,10 +14,10 @@ use crate::export_server_responses;
 use crate::protocol::common::EXPERIMENTAL_CLIENT_METHOD_PARAM_TYPES;
 use crate::protocol::common::EXPERIMENTAL_CLIENT_METHOD_RESPONSE_TYPES;
 use crate::protocol::common::EXPERIMENTAL_CLIENT_METHODS;
-use anyhow::Context;
-use anyhow::Result;
-use anyhow::anyhow;
 use codex_protocol::protocol::RolloutLine;
+use edgerun_error::Context;
+use edgerun_error::Result;
+use edgerun_error::anyhow;
 use edgerun_json::serde_json::Map;
 use edgerun_json::serde_json::Value;
 use schemars::JsonSchema;
@@ -2092,8 +2092,8 @@ mod tests {
     use super::*;
     use crate::protocol::v2;
     use crate::schema_fixtures::read_schema_fixture_subtree;
-    use anyhow::Context;
-    use anyhow::Result;
+    use edgerun_error::Context;
+    use edgerun_error::Result;
     use edgerun_uuid::Uuid;
     use pretty_assertions::assert_eq;
     use std::collections::BTreeSet;
@@ -2108,7 +2108,7 @@ mod tests {
         let client_request_ts = std::str::from_utf8(
             fixture_tree
                 .get(Path::new("ClientRequest.ts"))
-                .ok_or_else(|| anyhow::anyhow!("missing ClientRequest.ts fixture"))?,
+                .ok_or_else(|| edgerun_error::anyhow!("missing ClientRequest.ts fixture"))?,
         )?;
         assert_eq!(client_request_ts.contains("mock/experimentalMethod"), false);
         assert_eq!(
@@ -2118,13 +2118,13 @@ mod tests {
         let typescript_index = std::str::from_utf8(
             fixture_tree
                 .get(Path::new("index.ts"))
-                .ok_or_else(|| anyhow::anyhow!("missing index.ts fixture"))?,
+                .ok_or_else(|| edgerun_error::anyhow!("missing index.ts fixture"))?,
         )?;
         assert_eq!(typescript_index.contains("export type { EventMsg }"), false);
         let thread_start_ts = std::str::from_utf8(
             fixture_tree
                 .get(Path::new("v2/ThreadStartParams.ts"))
-                .ok_or_else(|| anyhow::anyhow!("missing v2/ThreadStartParams.ts fixture"))?,
+                .ok_or_else(|| edgerun_error::anyhow!("missing v2/ThreadStartParams.ts fixture"))?,
         )?;
         assert_eq!(thread_start_ts.contains("mockExperimentalField"), false);
         assert_eq!(

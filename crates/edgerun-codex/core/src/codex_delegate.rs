@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use async_channel::Receiver;
-use async_channel::Sender;
 use codex_analytics::GuardianApprovalRequestSource;
 use codex_async_utils::OrCancelExt;
 use codex_protocol::protocol::ApplyPatchApprovalRequestEvent;
@@ -24,6 +22,8 @@ use codex_protocol::request_permissions::RequestPermissionsResponse;
 use codex_protocol::request_user_input::RequestUserInputArgs;
 use codex_protocol::request_user_input::RequestUserInputResponse;
 use codex_protocol::user_input::UserInput;
+use edgerun_async_channel::Receiver;
+use edgerun_async_channel::Sender;
 use edgerun_json::serde_json::Value;
 use std::time::Duration;
 use tokio::sync::Mutex;
@@ -72,8 +72,8 @@ pub(crate) async fn run_codex_thread_interactive(
     subagent_source: SubAgentSource,
     initial_history: Option<InitialHistory>,
 ) -> Result<Codex, CodexErr> {
-    let (tx_sub, rx_sub) = async_channel::bounded(SUBMISSION_CHANNEL_CAPACITY);
-    let (tx_ops, rx_ops) = async_channel::bounded(SUBMISSION_CHANNEL_CAPACITY);
+    let (tx_sub, rx_sub) = edgerun_async_channel::bounded(SUBMISSION_CHANNEL_CAPACITY);
+    let (tx_ops, rx_ops) = edgerun_async_channel::bounded(SUBMISSION_CHANNEL_CAPACITY);
     let CodexSpawnOk { codex, .. } = Box::pin(Codex::spawn(CodexSpawnArgs {
         config,
         installation_id: parent_session.installation_id.clone(),
@@ -195,7 +195,7 @@ pub(crate) async fn run_codex_thread_one_shot(
     .await?;
 
     // Bridge events so we can observe completion and shut down automatically.
-    let (tx_bridge, rx_bridge) = async_channel::bounded(SUBMISSION_CHANNEL_CAPACITY);
+    let (tx_bridge, rx_bridge) = edgerun_async_channel::bounded(SUBMISSION_CHANNEL_CAPACITY);
     let ops_tx = io.tx_sub.clone();
     let agent_status = io.agent_status.clone();
     let session = Arc::clone(&io.session);
@@ -225,7 +225,7 @@ pub(crate) async fn run_codex_thread_one_shot(
     // For one-shot usage, return a closed `tx_sub` so callers cannot submit
     // additional ops after the initial request. Create a channel and drop the
     // receiver to close it immediately.
-    let (tx_closed, rx_closed) = async_channel::bounded(SUBMISSION_CHANNEL_CAPACITY);
+    let (tx_closed, rx_closed) = edgerun_async_channel::bounded(SUBMISSION_CHANNEL_CAPACITY);
     drop(rx_closed);
 
     Ok(Codex {

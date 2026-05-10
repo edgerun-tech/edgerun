@@ -1,7 +1,6 @@
 use super::*;
 use crate::mcp_tool_call::MCP_TOOL_APPROVAL_DECLINE_SYNTHETIC;
 use crate::mcp_tool_call::MCP_TOOL_APPROVAL_QUESTION_ID_PREFIX;
-use async_channel::bounded;
 use codex_protocol::config_types::ApprovalsReviewer;
 use codex_protocol::models::NetworkPermissions;
 use codex_protocol::models::ResponseItem;
@@ -25,6 +24,7 @@ use codex_protocol::request_user_input::RequestUserInputEvent;
 use codex_protocol::request_user_input::RequestUserInputQuestion;
 use core_test_support::PathBufExt;
 use core_test_support::test_path_buf;
+use edgerun_async_channel::bounded;
 use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::sync::Arc;

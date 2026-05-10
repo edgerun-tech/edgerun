@@ -1,6 +1,6 @@
-use async_trait::async_trait;
 use codex_client::Request;
 use codex_client::TransportError;
+use edgerun_async_trait::async_trait;
 use edgerun_error::Error;
 use edgerun_http::HeaderMap;
 use std::sync::Arc;

@@ -7,7 +7,6 @@ use std::time::Duration;
 use std::time::Instant;
 
 use anyhow::Context;
-use async_channel::unbounded;
 use codex_api::SharedAuthProvider;
 pub use codex_app_server_protocol::AppBranding;
 pub use codex_app_server_protocol::AppInfo;
@@ -19,6 +18,7 @@ use codex_exec_server::EnvironmentManagerArgs;
 use codex_exec_server::ExecServerRuntimePaths;
 use codex_protocol::models::PermissionProfile;
 use codex_tools::DiscoverableTool;
+use edgerun_async_channel::unbounded;
 use rmcp::model::ToolAnnotations;
 use serde::Deserialize;
 use serde::de::DeserializeOwned;

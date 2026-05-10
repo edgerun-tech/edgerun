@@ -208,7 +208,7 @@ fn initialize_v8() -> Result<(), String> {
     static PLATFORM: OnceLock<Result<v8::SharedRef<v8::Platform>, String>> = OnceLock::new();
 
     match PLATFORM.get_or_init(|| {
-        v8::icu::set_common_data_77(deno_core_icudata::ICU_DATA)
+        v8::icu::set_common_data_77(edgerun_deno_core_icudata::ICU_DATA)
             .map_err(|error_code| format!("failed to initialize ICU data: {error_code}"))?;
         let platform = v8::new_default_platform(0, false).make_shared();
         v8::V8::initialize_platform(platform.clone());

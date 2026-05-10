@@ -12,7 +12,7 @@ fn main() {
     if target_os == "none" {
         println!("cargo:rerun-if-changed={}", linker_script.display());
         println!(
-            "cargo:rustc-link-arg-bin=edgerun-unikernel=-T{}",
+            "cargo:rustc-link-arg-bins=-T{}",
             linker_script.display()
         );
     }

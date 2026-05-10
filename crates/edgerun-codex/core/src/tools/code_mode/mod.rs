@@ -124,7 +124,7 @@ struct CoreTurnHost {
     tool_runtime: ToolCallRuntime,
 }
 
-#[async_trait::async_trait]
+#[edgerun_async_trait::async_trait]
 impl CodeModeTurnHost for CoreTurnHost {
     async fn invoke_tool(
         &self,
@@ -394,8 +394,10 @@ fn serialize_function_tool_arguments(
 ) -> Result<String, String> {
     match input {
         None => Ok("{}".to_string()),
-        Some(JsonValue::Object(map)) => edgerun_json::serde_json::to_string(&JsonValue::Object(map))
-            .map_err(|err| format!("failed to serialize tool `{tool_name}` arguments: {err}")),
+        Some(JsonValue::Object(map)) => {
+            edgerun_json::serde_json::to_string(&JsonValue::Object(map))
+                .map_err(|err| format!("failed to serialize tool `{tool_name}` arguments: {err}"))
+        }
         Some(_) => Err(format!(
             "tool `{tool_name}` expects a JSON object for arguments"
         )),

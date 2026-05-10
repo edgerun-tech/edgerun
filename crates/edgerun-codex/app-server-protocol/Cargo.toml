@@ -13,7 +13,6 @@ doctest = false
 workspace = true
 
 [dependencies]
-anyhow = { workspace = true }
 codex-protocol = { workspace = true }
 codex-shell-command = { workspace = true }
 edgerun-clap = { workspace = true, features = ["derive"] }
@@ -32,5 +31,5 @@ rmcp = { workspace = true, default-features = false, features = [
     "server",
 ] }
 ts-rs = { workspace = true }
-inventory = { workspace = true }
+edgerun-inventory = { workspace = true }
 tracing = { workspace = true }

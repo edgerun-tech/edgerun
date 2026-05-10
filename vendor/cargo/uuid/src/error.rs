@@ -139,7 +139,7 @@ impl fmt::Display for Error {
             ErrorKind::ParseChar {
                 character, index, ..
             } => {
-                write!(f, "invalid character: found `{}` at {}", character, index)
+                write!(f, "invalid character: expected an optional prefix of `urn:uuid:` followed by [0-9a-fA-F-], found `{}` at {}", character, index)
             }
             ErrorKind::ParseSimpleLength { len } => {
                 write!(
@@ -173,4 +173,10 @@ impl fmt::Display for Error {
     }
 }
 
-impl crate::std::error::Error for Error {}
+#[cfg(feature = "std")]
+mod std_support {
+    use super::*;
+    use crate::std::error;
+
+    impl error::Error for Error {}
+}

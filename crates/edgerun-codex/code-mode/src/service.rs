@@ -4,7 +4,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
-use async_trait::async_trait;
+use edgerun_async_trait::async_trait;
 use edgerun_json::serde_json::Value as JsonValue;
 use tokio::sync::Mutex;
 use tokio::sync::mpsc;
@@ -44,8 +44,8 @@ struct SessionHandle {
 struct Inner {
     stored_values: Mutex<HashMap<String, JsonValue>>,
     sessions: Mutex<HashMap<String, SessionHandle>>,
-    turn_message_tx: async_channel::Sender<TurnMessage>,
-    turn_message_rx: async_channel::Receiver<TurnMessage>,
+    turn_message_tx: edgerun_async_channel::Sender<TurnMessage>,
+    turn_message_rx: edgerun_async_channel::Receiver<TurnMessage>,
     next_cell_id: AtomicU64,
 }
 
@@ -55,7 +55,7 @@ pub struct CodeModeService {
 
 impl CodeModeService {
     pub fn new() -> Self {
-        let (turn_message_tx, turn_message_rx) = async_channel::unbounded();
+        let (turn_message_tx, turn_message_rx) = edgerun_async_channel::unbounded();
 
         Self {
             inner: Arc::new(Inner {
@@ -529,7 +529,7 @@ mod tests {
     }
 
     fn test_inner() -> Arc<Inner> {
-        let (turn_message_tx, turn_message_rx) = async_channel::unbounded();
+        let (turn_message_tx, turn_message_rx) = edgerun_async_channel::unbounded();
         Arc::new(Inner {
             stored_values: Mutex::new(HashMap::new()),
             sessions: Mutex::new(HashMap::new()),

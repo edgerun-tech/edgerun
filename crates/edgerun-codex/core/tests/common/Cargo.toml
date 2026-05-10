@@ -12,7 +12,6 @@ doctest = false
 workspace = true
 
 [dependencies]
-anyhow = { workspace = true }
 assert_cmd = { workspace = true }
 codex-arg0 = { workspace = true }
 codex-config = { workspace = true }
@@ -28,6 +27,7 @@ codex-utils-absolute-path = { workspace = true }
 codex-utils-cargo-bin = { workspace = true }
 ctor = { workspace = true }
 edgerun-encoding = { workspace = true }
+edgerun-error = { workspace = true }
 edgerun-json = { workspace = true, features = ["serde-compat"] }
 edgerun-shlex = { workspace = true }
 edgerun-similar = { workspace = true }

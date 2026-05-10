@@ -1,0 +1,15 @@
+[package]
+name = "edgerun-inventory"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Edgerun inventory compatibility surface"
+
+[dependencies]
+inventory = "0.3.19"
+
+[lints]
+workspace = true

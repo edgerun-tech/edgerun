@@ -226,12 +226,12 @@ mod tests {
     use crate::endpoint::realtime_websocket::RealtimeOutputModality;
     use crate::endpoint::realtime_websocket::RealtimeSessionMode;
     use crate::provider::RetryConfig;
-    use async_trait::async_trait;
     use codex_client::Request;
     use codex_client::Response;
     use codex_client::StreamResponse;
     use codex_client::TransportError;
     use codex_protocol::protocol::RealtimeVoice;
+    use edgerun_async_trait::async_trait;
     use edgerun_http::StatusCode;
     use pretty_assertions::assert_eq;
     use std::sync::Mutex;

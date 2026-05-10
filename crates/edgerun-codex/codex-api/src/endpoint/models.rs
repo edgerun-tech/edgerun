@@ -78,11 +78,11 @@ mod tests {
     use super::*;
     use crate::auth::AuthProvider;
     use crate::provider::RetryConfig;
-    use async_trait::async_trait;
     use codex_client::Request;
     use codex_client::Response;
     use codex_client::StreamResponse;
     use codex_client::TransportError;
+    use edgerun_async_trait::async_trait;
     use edgerun_http::HeaderMap;
     use edgerun_http::StatusCode;
     use edgerun_json::serde_json::json;

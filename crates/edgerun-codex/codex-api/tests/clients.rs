@@ -3,7 +3,6 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use anyhow::Result;
-use async_trait::async_trait;
 use codex_api::ApiError;
 use codex_api::AuthError;
 use codex_api::AuthProvider;
@@ -22,6 +21,7 @@ use codex_protocol::models::ContentItem;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
+use edgerun_async_trait::async_trait;
 use edgerun_bytes::Bytes;
 use edgerun_http::HeaderMap;
 use edgerun_http::HeaderValue;

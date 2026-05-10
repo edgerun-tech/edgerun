@@ -161,9 +161,9 @@ use tokio::time::timeout;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use codex_protocol::mcp::CallToolResult as McpCallToolResult;
+use edgerun_json::serde_json::json;
 use pretty_assertions::assert_eq;
 use serde::Deserialize;
-use edgerun_json::serde_json::json;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration as StdDuration;
@@ -1223,16 +1223,17 @@ async fn reload_user_config_layer_refreshes_hooks() -> anyhow::Result<()> {
     let codex_home = session.codex_home().await;
     std::fs::create_dir_all(&codex_home)?;
     let config_toml_path = codex_home.join(CONFIG_TOML_FILE);
-    let user_config: codex_config::TomlValue = edgerun_json::serde_json::from_value(edgerun_json::serde_json::json!({
-        "hooks": {
-            "SessionStart": [{
-                "hooks": [{
-                    "type": "command",
-                    "command": "python3 /tmp/user.py",
+    let user_config: codex_config::TomlValue =
+        edgerun_json::serde_json::from_value(edgerun_json::serde_json::json!({
+            "hooks": {
+                "SessionStart": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": "python3 /tmp/user.py",
+                    }],
                 }],
-            }],
-        },
-    }))?;
+            },
+        }))?;
 
     let request = codex_hooks::SessionStartRequest {
         session_id: session.conversation_id,
@@ -1260,21 +1261,22 @@ async fn reload_user_config_layer_refreshes_hooks() -> anyhow::Result<()> {
         codex_protocol::protocol::HookTrustStatus::Untrusted
     );
 
-    let trusted_user_config: codex_config::TomlValue = edgerun_json::serde_json::from_value(edgerun_json::serde_json::json!({
-        "hooks": {
-            "SessionStart": [{
-                "hooks": [{
-                    "type": "command",
-                    "command": "python3 /tmp/user.py",
+    let trusted_user_config: codex_config::TomlValue =
+        edgerun_json::serde_json::from_value(edgerun_json::serde_json::json!({
+            "hooks": {
+                "SessionStart": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": "python3 /tmp/user.py",
+                    }],
                 }],
-            }],
-            "state": {
-                hook_list.hooks[0].key.clone(): {
-                    "trusted_hash": hook_list.hooks[0].current_hash.clone(),
+                "state": {
+                    hook_list.hooks[0].key.clone(): {
+                        "trusted_hash": hook_list.hooks[0].current_hash.clone(),
+                    },
                 },
             },
-        },
-    }))?;
+        }))?;
     std::fs::write(&config_toml_path, toml::to_string(&trusted_user_config)?)?;
 
     session.reload_user_config_layer().await;
@@ -1321,21 +1323,22 @@ async fn refresh_runtime_config_refreshes_hooks() -> anyhow::Result<()> {
         codex_config::version_for_toml(&identity)
     };
     let hook_key = format!("{}:session_start:0:0", config_toml_path.display());
-    let trusted_user_config: codex_config::TomlValue = edgerun_json::serde_json::from_value(edgerun_json::serde_json::json!({
-        "hooks": {
-            "SessionStart": [{
-                "hooks": [{
-                    "type": "command",
-                    "command": "python3 /tmp/user.py",
+    let trusted_user_config: codex_config::TomlValue =
+        edgerun_json::serde_json::from_value(edgerun_json::serde_json::json!({
+            "hooks": {
+                "SessionStart": [{
+                    "hooks": [{
+                        "type": "command",
+                        "command": "python3 /tmp/user.py",
+                    }],
                 }],
-            }],
-            "state": {
-                hook_key: {
-                    "trusted_hash": trusted_hash,
+                "state": {
+                    hook_key: {
+                        "trusted_hash": trusted_hash,
+                    },
                 },
             },
-        },
-    }))?;
+        }))?;
     std::fs::write(&config_toml_path, toml::to_string(&trusted_user_config)?)?;
 
     let request = codex_hooks::SessionStartRequest {
@@ -2853,7 +2856,8 @@ fn falls_back_to_content_when_structured_is_null() {
     let got = ctr.into_function_call_output_payload();
     let expected = FunctionCallOutputPayload {
         body: FunctionCallOutputBody::Text(
-            edgerun_json::serde_json::to_string(&vec![text_block("hello"), text_block("world")]).unwrap(),
+            edgerun_json::serde_json::to_string(&vec![text_block("hello"), text_block("world")])
+                .unwrap(),
         ),
         success: Some(true),
     };
@@ -2901,7 +2905,9 @@ fn success_flag_true_with_no_error_and_content_used() {
     assert_eq!(expected, got);
 }
 
-async fn wait_for_thread_rolled_back(rx: &async_channel::Receiver<Event>) -> ThreadRolledBackEvent {
+async fn wait_for_thread_rolled_back(
+    rx: &edgerun_async_channel::Receiver<Event>,
+) -> ThreadRolledBackEvent {
     let deadline = StdDuration::from_secs(2);
     let start = std::time::Instant::now();
     loop {
@@ -2917,7 +2923,9 @@ async fn wait_for_thread_rolled_back(rx: &async_channel::Receiver<Event>) -> Thr
     }
 }
 
-async fn wait_for_thread_rollback_failed(rx: &async_channel::Receiver<Event>) -> ErrorEvent {
+async fn wait_for_thread_rollback_failed(
+    rx: &edgerun_async_channel::Receiver<Event>,
+) -> ErrorEvent {
     let deadline = StdDuration::from_secs(2);
     let start = std::time::Instant::now();
     loop {
@@ -3702,7 +3710,7 @@ async fn session_new_fails_when_zsh_fork_enabled_without_zsh_path() {
         user_shell_override: None,
     };
 
-    let (tx_event, _rx_event) = async_channel::unbounded();
+    let (tx_event, _rx_event) = edgerun_async_channel::unbounded();
     let (agent_status_tx, _agent_status_rx) = watch::channel(AgentStatus::PendingInit);
     let plugins_manager = Arc::new(PluginsManager::new(config.codex_home.to_path_buf()));
     let mcp_manager = Arc::new(McpManager::new(Arc::clone(&plugins_manager)));
@@ -3746,7 +3754,7 @@ async fn session_new_fails_when_zsh_fork_enabled_without_zsh_path() {
 
 // todo: use online model info
 pub(crate) async fn make_session_and_context() -> (Session, TurnContext) {
-    let (tx_event, _rx_event) = async_channel::unbounded();
+    let (tx_event, _rx_event) = edgerun_async_channel::unbounded();
     let codex_home = tempfile::tempdir().expect("create temp dir");
     let config = build_test_config(codex_home.path()).await;
     let config = Arc::new(config);
@@ -3977,7 +3985,7 @@ async fn load_latest_config_for_session(session: &Session) -> Config {
 
 async fn make_session_with_config_and_rx(
     mutator: impl FnOnce(&mut Config),
-) -> anyhow::Result<(Arc<Session>, async_channel::Receiver<Event>)> {
+) -> anyhow::Result<(Arc<Session>, edgerun_async_channel::Receiver<Event>)> {
     let codex_home = tempfile::tempdir().expect("create temp dir");
     let mut config = build_test_config(codex_home.path()).await;
     mutator(&mut config);
@@ -4037,7 +4045,7 @@ async fn make_session_with_config_and_rx(
         user_shell_override: None,
     };
 
-    let (tx_event, rx_event) = async_channel::unbounded();
+    let (tx_event, rx_event) = edgerun_async_channel::unbounded();
     let (agent_status_tx, _agent_status_rx) = watch::channel(AgentStatus::PendingInit);
     let plugins_manager = Arc::new(PluginsManager::new(config.codex_home.to_path_buf()));
     let mcp_manager = Arc::new(McpManager::new(Arc::clone(&plugins_manager)));
@@ -4079,7 +4087,7 @@ async fn make_session_with_history_source_and_agent_control_and_rx(
     initial_history: InitialHistory,
     session_source: SessionSource,
     agent_control: AgentControl,
-) -> anyhow::Result<(Arc<Session>, async_channel::Receiver<Event>)> {
+) -> anyhow::Result<(Arc<Session>, edgerun_async_channel::Receiver<Event>)> {
     let codex_home = tempfile::tempdir().expect("create temp dir");
     let mut config = build_test_config(codex_home.path()).await;
     config.ephemeral = true;
@@ -4139,7 +4147,7 @@ async fn make_session_with_history_source_and_agent_control_and_rx(
         user_shell_override: None,
     };
 
-    let (tx_event, rx_event) = async_channel::unbounded();
+    let (tx_event, rx_event) = edgerun_async_channel::unbounded();
     let (agent_status_tx, _agent_status_rx) = watch::channel(AgentStatus::PendingInit);
     let plugins_manager = Arc::new(PluginsManager::new(config.codex_home.to_path_buf()));
     let mcp_manager = Arc::new(McpManager::new(Arc::clone(&plugins_manager)));
@@ -4596,8 +4604,8 @@ async fn request_permissions_is_auto_denied_when_granular_policy_blocks_tool_req
 #[tokio::test]
 async fn submit_with_id_captures_current_span_trace_context() {
     let (session, _turn_context) = make_session_and_context().await;
-    let (tx_sub, rx_sub) = async_channel::bounded(1);
-    let (_tx_event, rx_event) = async_channel::unbounded();
+    let (tx_sub, rx_sub) = edgerun_async_channel::bounded(1);
+    let (_tx_event, rx_event) = edgerun_async_channel::unbounded();
     let (_agent_status_tx, agent_status) = watch::channel(AgentStatus::PendingInit);
     let codex = Codex {
         tx_sub,
@@ -5196,8 +5204,8 @@ async fn shutdown_complete_does_not_append_to_thread_store_after_shutdown() {
 #[tokio::test]
 async fn shutdown_and_wait_allows_multiple_waiters() {
     let (session, _turn_context) = make_session_and_context().await;
-    let (tx_sub, rx_sub) = async_channel::bounded(4);
-    let (_tx_event, rx_event) = async_channel::unbounded();
+    let (tx_sub, rx_sub) = edgerun_async_channel::bounded(4);
+    let (_tx_event, rx_event) = edgerun_async_channel::unbounded();
     let (_agent_status_tx, agent_status) = watch::channel(AgentStatus::PendingInit);
     let session_loop_handle = tokio::spawn(async move {
         let shutdown: Submission = rx_sub.recv().await.expect("shutdown submission");
@@ -5234,9 +5242,9 @@ async fn shutdown_and_wait_allows_multiple_waiters() {
 #[tokio::test]
 async fn shutdown_and_wait_waits_when_shutdown_is_already_in_progress() {
     let (session, _turn_context) = make_session_and_context().await;
-    let (tx_sub, rx_sub) = async_channel::bounded(4);
+    let (tx_sub, rx_sub) = edgerun_async_channel::bounded(4);
     drop(rx_sub);
-    let (_tx_event, rx_event) = async_channel::unbounded();
+    let (_tx_event, rx_event) = edgerun_async_channel::unbounded();
     let (_agent_status_tx, agent_status) = watch::channel(AgentStatus::PendingInit);
     let (shutdown_complete_tx, shutdown_complete_rx) = tokio::sync::oneshot::channel();
     let session_loop_handle = tokio::spawn(async move {
@@ -5273,8 +5281,8 @@ async fn shutdown_and_wait_shuts_down_cached_guardian_subagent() {
     let (parent_session, parent_turn_context) = make_session_and_context().await;
     let parent_session = Arc::new(parent_session);
     let parent_config = Arc::clone(&parent_turn_context.config);
-    let (parent_tx_sub, parent_rx_sub) = async_channel::bounded(4);
-    let (_parent_tx_event, parent_rx_event) = async_channel::unbounded();
+    let (parent_tx_sub, parent_rx_sub) = edgerun_async_channel::bounded(4);
+    let (_parent_tx_event, parent_rx_event) = edgerun_async_channel::unbounded();
     let (_parent_status_tx, parent_agent_status) = watch::channel(AgentStatus::PendingInit);
     let parent_session_for_loop = Arc::clone(&parent_session);
     let parent_session_loop_handle = tokio::spawn(async move {
@@ -5289,8 +5297,8 @@ async fn shutdown_and_wait_shuts_down_cached_guardian_subagent() {
     };
 
     let (child_session, _child_turn_context) = make_session_and_context().await;
-    let (child_tx_sub, child_rx_sub) = async_channel::bounded(4);
-    let (_child_tx_event, child_rx_event) = async_channel::unbounded();
+    let (child_tx_sub, child_rx_sub) = edgerun_async_channel::bounded(4);
+    let (_child_tx_event, child_rx_event) = edgerun_async_channel::unbounded();
     let (_child_status_tx, child_agent_status) = watch::channel(AgentStatus::PendingInit);
     let (child_shutdown_tx, child_shutdown_rx) = tokio::sync::oneshot::channel();
     let child_session_loop_handle = tokio::spawn(async move {
@@ -5332,8 +5340,8 @@ async fn cached_guardian_subagent_exposes_its_rollout_path() {
 
     let (mut child_session, _child_turn_context) = make_session_and_context().await;
     let child_rollout_path = attach_thread_persistence(&mut child_session).await;
-    let (child_tx_sub, _child_rx_sub) = async_channel::bounded(4);
-    let (_child_tx_event, child_rx_event) = async_channel::unbounded();
+    let (child_tx_sub, _child_rx_sub) = edgerun_async_channel::bounded(4);
+    let (_child_tx_event, child_rx_event) = edgerun_async_channel::unbounded();
     let (_child_status_tx, child_agent_status) = watch::channel(AgentStatus::PendingInit);
     let child_session_loop_handle = tokio::spawn(async {});
     let child_codex = Codex {
@@ -5362,8 +5370,8 @@ async fn shutdown_and_wait_shuts_down_tracked_ephemeral_guardian_review() {
     let (parent_session, parent_turn_context) = make_session_and_context().await;
     let parent_session = Arc::new(parent_session);
     let parent_config = Arc::clone(&parent_turn_context.config);
-    let (parent_tx_sub, parent_rx_sub) = async_channel::bounded(4);
-    let (_parent_tx_event, parent_rx_event) = async_channel::unbounded();
+    let (parent_tx_sub, parent_rx_sub) = edgerun_async_channel::bounded(4);
+    let (_parent_tx_event, parent_rx_event) = edgerun_async_channel::unbounded();
     let (_parent_status_tx, parent_agent_status) = watch::channel(AgentStatus::PendingInit);
     let parent_session_for_loop = Arc::clone(&parent_session);
     let parent_session_loop_handle = tokio::spawn(async move {
@@ -5378,8 +5386,8 @@ async fn shutdown_and_wait_shuts_down_tracked_ephemeral_guardian_review() {
     };
 
     let (child_session, _child_turn_context) = make_session_and_context().await;
-    let (child_tx_sub, child_rx_sub) = async_channel::bounded(4);
-    let (_child_tx_event, child_rx_event) = async_channel::unbounded();
+    let (child_tx_sub, child_rx_sub) = edgerun_async_channel::bounded(4);
+    let (_child_tx_event, child_rx_event) = edgerun_async_channel::unbounded();
     let (_child_status_tx, child_agent_status) = watch::channel(AgentStatus::PendingInit);
     let (child_shutdown_tx, child_shutdown_rx) = tokio::sync::oneshot::channel();
     let child_session_loop_handle = tokio::spawn(async move {
@@ -5421,7 +5429,7 @@ async fn make_session_and_context_with_auth_and_config_and_rx<F>(
 ) -> (
     Arc<Session>,
     Arc<TurnContext>,
-    async_channel::Receiver<Event>,
+    edgerun_async_channel::Receiver<Event>,
 )
 where
     F: FnOnce(&mut Config),
@@ -5444,12 +5452,12 @@ async fn make_session_and_context_with_auth_config_home_and_rx<F>(
 ) -> (
     Arc<Session>,
     Arc<TurnContext>,
-    async_channel::Receiver<Event>,
+    edgerun_async_channel::Receiver<Event>,
 )
 where
     F: FnOnce(&mut Config),
 {
-    let (tx_event, rx_event) = async_channel::unbounded();
+    let (tx_event, rx_event) = edgerun_async_channel::unbounded();
     let mut config = build_test_config(codex_home).await;
     configure_config(&mut config);
     let state_db = if config.features.enabled(Feature::Goals) {
@@ -5678,7 +5686,7 @@ pub(crate) async fn make_session_and_context_with_dynamic_tools_and_rx(
 ) -> (
     Arc<Session>,
     Arc<TurnContext>,
-    async_channel::Receiver<Event>,
+    edgerun_async_channel::Receiver<Event>,
 ) {
     make_session_and_context_with_auth_and_config_and_rx(
         CodexAuth::from_api_key("Test API Key"),
@@ -5691,7 +5699,7 @@ pub(crate) async fn make_session_and_context_with_dynamic_tools_and_rx(
 async fn make_goal_session_and_context_with_rx() -> (
     Arc<Session>,
     Arc<TurnContext>,
-    async_channel::Receiver<Event>,
+    edgerun_async_channel::Receiver<Event>,
     tempfile::TempDir,
 ) {
     let codex_home = tempfile::tempdir().expect("create temp dir");
@@ -5739,7 +5747,7 @@ async fn upsert_goal_test_thread(session: &Session) {
 pub(crate) async fn make_session_and_context_with_rx() -> (
     Arc<Session>,
     Arc<TurnContext>,
-    async_channel::Receiver<Event>,
+    edgerun_async_channel::Receiver<Event>,
 ) {
     make_session_and_context_with_dynamic_tools_and_rx(Vec::new()).await
 }
@@ -5751,7 +5759,8 @@ async fn refresh_mcp_servers_is_deferred_until_next_turn() {
     assert!(!old_token.is_cancelled());
 
     let mcp_oauth_credentials_store_mode =
-        edgerun_json::serde_json::to_value(OAuthCredentialsStoreMode::Auto).expect("serialize store mode");
+        edgerun_json::serde_json::to_value(OAuthCredentialsStoreMode::Auto)
+            .expect("serialize store mode");
     let refresh_config = McpServerRefreshConfig {
         mcp_servers: json!({}),
         mcp_oauth_credentials_store_mode,
@@ -6681,7 +6690,8 @@ async fn record_context_updates_and_set_reference_context_item_injects_full_cont
 
     let current_context = session.reference_context_item().await;
     assert_eq!(
-        edgerun_json::serde_json::to_value(current_context).expect("serialize current context item"),
+        edgerun_json::serde_json::to_value(current_context)
+            .expect("serialize current context item"),
         edgerun_json::serde_json::to_value(Some(turn_context.to_turn_context_item()))
             .expect("serialize expected context item")
     );
@@ -8133,7 +8143,8 @@ async fn completed_goal_accounts_current_turn_tokens_before_tool_response() -> a
     let complete_output = responses
         .function_call_output_text("call-complete-goal")
         .expect("complete tool output should be sent to the model");
-    let complete_output: edgerun_json::serde_json::Value = edgerun_json::serde_json::from_str(&complete_output)?;
+    let complete_output: edgerun_json::serde_json::Value =
+        edgerun_json::serde_json::from_str(&complete_output)?;
     assert_eq!(complete_output["goal"]["tokensUsed"], 580);
     assert_eq!(complete_output["goal"]["status"], "complete");
     assert_eq!(complete_output["remainingTokens"], 0);

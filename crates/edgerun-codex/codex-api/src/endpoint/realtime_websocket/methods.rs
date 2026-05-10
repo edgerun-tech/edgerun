@@ -65,9 +65,13 @@ enum WsCommand {
 impl WsStream {
     fn new(
         inner: WebSocketStream<MaybeTlsStream<TcpStream>>,
-    ) -> (Self, async_channel::Receiver<Result<Message, WsError>>) {
+    ) -> (
+        Self,
+        edgerun_async_channel::Receiver<Result<Message, WsError>>,
+    ) {
         let (tx_command, mut rx_command) = mpsc::channel::<WsCommand>(32);
-        let (tx_message, rx_message) = async_channel::unbounded::<Result<Message, WsError>>();
+        let (tx_message, rx_message) =
+            edgerun_async_channel::unbounded::<Result<Message, WsError>>();
 
         let pump_task = tokio::spawn(async move {
             let mut inner = inner;
@@ -208,7 +212,7 @@ pub struct RealtimeWebsocketWriter {
 
 #[derive(Clone)]
 pub struct RealtimeWebsocketEvents {
-    rx_message: async_channel::Receiver<Result<Message, WsError>>,
+    rx_message: edgerun_async_channel::Receiver<Result<Message, WsError>>,
     active_transcript: Arc<Mutex<ActiveTranscriptState>>,
     event_parser: RealtimeEventParser,
     is_closed: Arc<AtomicBool>,
@@ -259,7 +263,7 @@ impl RealtimeWebsocketConnection {
 
     fn new(
         stream: WsStream,
-        rx_message: async_channel::Receiver<Result<Message, WsError>>,
+        rx_message: edgerun_async_channel::Receiver<Result<Message, WsError>>,
         event_parser: RealtimeEventParser,
     ) -> Self {
         let stream = Arc::new(stream);

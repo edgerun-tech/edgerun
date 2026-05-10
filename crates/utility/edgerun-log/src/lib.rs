@@ -5,9 +5,22 @@
 use core::fmt::{self, Write};
 use core::sync::atomic::{AtomicUsize, Ordering};
 
+#[cfg(feature = "tracing-compat")]
+pub use tracing::*;
+
+#[cfg(feature = "tracing-compat")]
+pub mod tracing {
+    pub use tracing::*;
+}
+
+#[cfg(feature = "tracing-opentelemetry-compat")]
+pub mod tracing_opentelemetry {
+    pub use tracing_opentelemetry::*;
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(usize)]
-pub enum Level {
+pub enum LogLevel {
     Trace = 0,
     Debug = 1,
     Info = 2,
@@ -15,36 +28,39 @@ pub enum Level {
     Error = 4,
 }
 
-impl Level {
+#[cfg(not(feature = "tracing-compat"))]
+pub type Level = LogLevel;
+
+impl LogLevel {
     pub fn as_str(self) -> &'static str {
         match self {
-            Level::Trace => "TRACE",
-            Level::Debug => "DEBUG",
-            Level::Info => "INFO",
-            Level::Warn => "WARN",
-            Level::Error => "ERROR",
+            LogLevel::Trace => "TRACE",
+            LogLevel::Debug => "DEBUG",
+            LogLevel::Info => "INFO",
+            LogLevel::Warn => "WARN",
+            LogLevel::Error => "ERROR",
         }
     }
 }
 
-pub type Logger = fn(Level, &str, &str);
-pub type FormatLogger = fn(Level, &str, fmt::Arguments<'_>);
+pub type Logger = fn(LogLevel, &str, &str);
+pub type FormatLogger = fn(LogLevel, &str, fmt::Arguments<'_>);
 
-static LOG_LEVEL: AtomicUsize = AtomicUsize::new(Level::Info as usize);
+static LOG_LEVEL: AtomicUsize = AtomicUsize::new(LogLevel::Info as usize);
 static LOGGER_FN: AtomicUsize = AtomicUsize::new(0);
 static FORMAT_LOGGER_FN: AtomicUsize = AtomicUsize::new(0);
 
-pub fn set_level(level: Level) {
+pub fn set_level(level: LogLevel) {
     LOG_LEVEL.store(level as usize, Ordering::Relaxed);
 }
 
-pub fn level() -> Level {
+pub fn level() -> LogLevel {
     match LOG_LEVEL.load(Ordering::Relaxed) {
-        0 => Level::Trace,
-        1 => Level::Debug,
-        2 => Level::Info,
-        3 => Level::Warn,
-        _ => Level::Error,
+        0 => LogLevel::Trace,
+        1 => LogLevel::Debug,
+        2 => LogLevel::Info,
+        3 => LogLevel::Warn,
+        _ => LogLevel::Error,
     }
 }
 
@@ -66,15 +82,37 @@ pub fn clear_format_logger() {
     FORMAT_LOGGER_FN.store(0, Ordering::Relaxed);
 }
 
-pub fn enabled(level: Level) -> bool {
+pub fn enabled(level: LogLevel) -> bool {
     (level as usize) >= LOG_LEVEL.load(Ordering::Relaxed)
 }
 
-pub fn log(level: Level, module: &str, message: &str) {
+#[cfg(feature = "tracing-compat")]
+pub fn tracing_level(level: LogLevel) -> tracing::Level {
+    match level {
+        LogLevel::Trace => tracing::Level::TRACE,
+        LogLevel::Debug => tracing::Level::DEBUG,
+        LogLevel::Info => tracing::Level::INFO,
+        LogLevel::Warn => tracing::Level::WARN,
+        LogLevel::Error => tracing::Level::ERROR,
+    }
+}
+
+#[cfg(feature = "tracing-compat")]
+pub fn from_tracing_level(level: tracing::Level) -> LogLevel {
+    match level {
+        tracing::Level::TRACE => LogLevel::Trace,
+        tracing::Level::DEBUG => LogLevel::Debug,
+        tracing::Level::INFO => LogLevel::Info,
+        tracing::Level::WARN => LogLevel::Warn,
+        tracing::Level::ERROR => LogLevel::Error,
+    }
+}
+
+pub fn log(level: LogLevel, module: &str, message: &str) {
     log_args(level, module, format_args!("{message}"));
 }
 
-pub fn log_args(level: Level, module: &str, args: fmt::Arguments<'_>) {
+pub fn log_args(level: LogLevel, module: &str, args: fmt::Arguments<'_>) {
     if !enabled(level) {
         return;
     }
@@ -97,7 +135,7 @@ pub fn log_args(level: Level, module: &str, args: fmt::Arguments<'_>) {
     logger(level, module, buffer.as_str());
 }
 
-pub fn write(level: Level, module: &str, value: impl fmt::Display) {
+pub fn write(level: LogLevel, module: &str, value: impl fmt::Display) {
     log_args(level, module, format_args!("{value}"));
 }
 
@@ -136,53 +174,58 @@ impl Write for FixedBuffer {
     }
 }
 
+#[cfg(not(feature = "tracing-compat"))]
 #[macro_export]
 macro_rules! trace {
     ($msg:expr) => {
-        $crate::log($crate::Level::Trace, module_path!(), $msg)
+        $crate::log($crate::LogLevel::Trace, module_path!(), $msg)
     };
     ($fmt:literal, $($a:expr),* $(,)?) => {
-        $crate::log_args($crate::Level::Trace, module_path!(), core::format_args!($fmt, $($a),*))
+        $crate::log_args($crate::LogLevel::Trace, module_path!(), core::format_args!($fmt, $($a),*))
     };
 }
 
+#[cfg(not(feature = "tracing-compat"))]
 #[macro_export]
 macro_rules! debug {
     ($msg:expr) => {
-        $crate::log($crate::Level::Debug, module_path!(), $msg)
+        $crate::log($crate::LogLevel::Debug, module_path!(), $msg)
     };
     ($fmt:literal, $($a:expr),* $(,)?) => {
-        $crate::log_args($crate::Level::Debug, module_path!(), core::format_args!($fmt, $($a),*))
+        $crate::log_args($crate::LogLevel::Debug, module_path!(), core::format_args!($fmt, $($a),*))
     };
 }
 
+#[cfg(not(feature = "tracing-compat"))]
 #[macro_export]
 macro_rules! info {
     ($msg:expr) => {
-        $crate::log($crate::Level::Info, module_path!(), $msg)
+        $crate::log($crate::LogLevel::Info, module_path!(), $msg)
     };
     ($fmt:literal, $($a:expr),* $(,)?) => {
-        $crate::log_args($crate::Level::Info, module_path!(), core::format_args!($fmt, $($a),*))
+        $crate::log_args($crate::LogLevel::Info, module_path!(), core::format_args!($fmt, $($a),*))
     };
 }
 
+#[cfg(not(feature = "tracing-compat"))]
 #[macro_export]
 macro_rules! warn {
     ($msg:expr) => {
-        $crate::log($crate::Level::Warn, module_path!(), $msg)
+        $crate::log($crate::LogLevel::Warn, module_path!(), $msg)
     };
     ($fmt:literal, $($a:expr),* $(,)?) => {
-        $crate::log_args($crate::Level::Warn, module_path!(), core::format_args!($fmt, $($a),*))
+        $crate::log_args($crate::LogLevel::Warn, module_path!(), core::format_args!($fmt, $($a),*))
     };
 }
 
+#[cfg(not(feature = "tracing-compat"))]
 #[macro_export]
 macro_rules! error {
     ($msg:expr) => {
-        $crate::log($crate::Level::Error, module_path!(), $msg)
+        $crate::log($crate::LogLevel::Error, module_path!(), $msg)
     };
     ($fmt:literal, $($a:expr),* $(,)?) => {
-        $crate::log_args($crate::Level::Error, module_path!(), core::format_args!($fmt, $($a),*))
+        $crate::log_args($crate::LogLevel::Error, module_path!(), core::format_args!($fmt, $($a),*))
     };
 }
 
@@ -194,7 +237,7 @@ mod tests {
     static CALLS: AtomicUsize = AtomicUsize::new(0);
     static LAST_LEN: AtomicUsize = AtomicUsize::new(0);
 
-    fn test_logger(_level: Level, _module: &str, message: &str) {
+    fn test_logger(_level: LogLevel, _module: &str, message: &str) {
         CALLS.fetch_add(1, Ordering::SeqCst);
         LAST_LEN.store(message.len(), Ordering::SeqCst);
         assert_eq!(message, "value=42");
@@ -206,9 +249,9 @@ mod tests {
         LAST_LEN.store(0, Ordering::SeqCst);
         clear_format_logger();
         set_logger(test_logger);
-        set_level(Level::Trace);
+        set_level(LogLevel::Trace);
 
-        log_args(Level::Info, "test", format_args!("value={}", 42));
+        log_args(LogLevel::Info, "test", format_args!("value={}", 42));
 
         assert_eq!(CALLS.load(Ordering::SeqCst), 1);
         assert_eq!(LAST_LEN.load(Ordering::SeqCst), "value=42".len());
@@ -220,12 +263,12 @@ mod tests {
         CALLS.store(0, Ordering::SeqCst);
         clear_format_logger();
         set_logger(test_logger);
-        set_level(Level::Warn);
+        set_level(LogLevel::Warn);
 
-        log_args(Level::Info, "test", format_args!("value={}", 42));
+        log_args(LogLevel::Info, "test", format_args!("value={}", 42));
 
         assert_eq!(CALLS.load(Ordering::SeqCst), 0);
         clear_logger();
-        set_level(Level::Info);
+        set_level(LogLevel::Info);
     }
 }
