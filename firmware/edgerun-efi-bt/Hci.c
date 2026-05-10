@@ -1,5 +1,7 @@
 #include "EdgerunEfiBt.h"
 
+#define USB_HCI_COMMAND_REQUEST_TYPE 0x20
+
 STATIC
 EFI_STATUS
 SendHciCommandPacket(
@@ -16,7 +18,7 @@ SendHciCommandPacket(
   }
 
   ZeroMem(&Request, sizeof(Request));
-  Request.RequestType = USB_DEV_H2D | USB_REQ_TYPE_CLASS | USB_TARGET_DEVICE;
+  Request.RequestType = USB_HCI_COMMAND_REQUEST_TYPE;
   Request.Request = 0;
   Request.Value = 0;
   Request.Index = 0;
