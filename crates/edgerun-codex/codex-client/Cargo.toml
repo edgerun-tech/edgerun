@@ -8,6 +8,8 @@ version.workspace = true
 default = ["native-transport"]
 native-transport = [
     "dep:edgerun-reqwest",
+    "dep:opentelemetry",
+    "dep:tracing-opentelemetry",
     "edgerun-reqwest/cookies",
     "edgerun-reqwest/http1",
     "edgerun-reqwest/http2",
@@ -29,14 +31,14 @@ edgerun-http = { workspace = true }
 edgerun-json = { workspace = true }
 edgerun-random = { workspace = true }
 edgerun-futures = { workspace = true }
-opentelemetry = { workspace = true }
+opentelemetry = { workspace = true, optional = true }
 edgerun-reqwest = { workspace = true, default-features = false, optional = true }
 rustls = { workspace = true, optional = true }
 rustls-native-certs = { workspace = true, optional = true }
 rustls-pki-types = { workspace = true, optional = true }
 edgerun-tokio = { workspace = true, features = ["macros", "rt", "time", "sync"] }
 tracing = { workspace = true }
-tracing-opentelemetry = { workspace = true }
+tracing-opentelemetry = { workspace = true, optional = true }
 edgerun-zstd = { workspace = true }
 
 [lints]
