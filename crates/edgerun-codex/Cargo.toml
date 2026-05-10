@@ -92,7 +92,7 @@ edgerun-json = { path = "../utility/edgerun-json", default-features = false, fea
 edgerun-locale = { path = "../utility/edgerun-locale" }
 edgerun-quick-xml = { path = "../utility/edgerun-quick-xml" }
 edgerun-random = { path = "../utility/edgerun-random" }
-edgerun-reqwest = { path = "../utility/edgerun-reqwest", default-features = false, features = ["cookies", "http1", "http2", "http3", "native-root", "rustls-tls-native-roots"] }
+edgerun-reqwest = { path = "../utility/edgerun-reqwest", default-features = false }
 serde = { package = "edgerun-serde", path = "../utility/edgerun-serde" }
 edgerun-serde-with = { path = "../utility/edgerun-serde-with" }
 edgerun-shlex = { path = "../utility/edgerun-shlex", default-features = false }
