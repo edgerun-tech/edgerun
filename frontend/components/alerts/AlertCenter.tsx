@@ -11,6 +11,7 @@ import {
   CheckCircle2,
 } from "lucide-react"
 import { atom, computed } from "nanostores"
+import { statusClass } from "@/lib/status"
 
 export type AlertSeverity = "critical" | "error" | "warning" | "info" | "resolved"
 
@@ -113,17 +114,11 @@ const SEVERITY_ICONS: Record<AlertSeverity, React.ReactNode> = {
   resolved: <CheckCircle2 className="h-4 w-4 text-green-500" />,
 }
 
-const SEVERITY_COLORS: Record<AlertSeverity, string> = {
-  critical: "border-red-600/30 bg-red-600/5",
-  error: "border-red-500/30 bg-red-500/5",
-  warning: "border-yellow-500/30 bg-yellow-500/5",
-  info: "border-blue-500/30 bg-blue-500/5",
-  resolved: "border-green-500/30 bg-green-500/5",
-}
+
 
 function AlertCard({ alert }: { alert: Alert }) {
   const icon = SEVERITY_ICONS[alert.severity]
-  const colorClass = SEVERITY_COLORS[alert.severity]
+  const colorClass = statusClass(alert.severity)
 
   return (
     <div className={cn("rounded border p-3 space-y-1", colorClass)}>

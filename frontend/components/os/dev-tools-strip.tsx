@@ -5,6 +5,7 @@ import { useStore } from "@nanostores/react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { StatusDot } from "@/components/ui/status-dot"
 import { bootstrapBrowserCdpRelay, type BrowserCdpRelayState } from "@/platform/dev/browser-cdp-relay"
 import {
   cdpToolsStore,
@@ -44,33 +45,6 @@ function splitToolArg(value: string) {
     target: first.trim(),
     value: rest.join("|").trim(),
   }
-}
-
-function StatusDot({ status }: { status: Health }) {
-  return (
-    <span
-      className={cn(
-        "h-2 w-2 rounded-full",
-        status === "ready" && "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]",
-        status === "checking" && "bg-amber-300",
-        status === "blocked" && "bg-sky-400",
-        status === "offline" && "bg-zinc-600",
-      )}
-      aria-hidden="true"
-    />
-  )
-}
-
-function RelayStatusDot({ online }: { online: boolean }) {
-  return (
-    <span
-      className={cn(
-        "h-2 w-2 rounded-full",
-        online ? "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]" : "bg-zinc-600"
-      )}
-      aria-hidden="true"
-    />
-  )
 }
 
 function useRelayState() {
@@ -256,7 +230,7 @@ function CdpToolsControl({ backendHealth, backendError, cdpHealth, cdpError }: {
   return (
     <div data-cdp-tools-control className="flex items-center gap-2">
       <span className="flex items-center gap-1 font-mono text-[10px] uppercase text-muted-foreground" title={cdpError ? `CDP ${cdpHealth}: ${cdpError}` : `CDP ${cdpHealth}`}>
-        <StatusDot status={cdpHealth} />
+        <StatusDot className={cn("bg-zinc-600", cdpHealth === "ready" && "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]", cdpHealth === "checking" && "bg-amber-300", cdpHealth === "blocked" && "bg-sky-400")} />
         CDP
       </span>
       <Select value={state.action} onValueChange={(value) => patchCdpTools({ action: value as CdpToolAction })}>
@@ -379,11 +353,11 @@ function RelayRoutingControl({ relayState, backendHealth }: { relayState: Browse
       ) : null}
       <div className="flex items-center gap-2 font-mono text-[10px] uppercase text-muted-foreground">
         <span className={cn("flex items-center gap-1", relayState.frontend === "ready" && "text-emerald-300")}>
-          <RelayStatusDot online={relayState.frontend === "ready"} />
+          <StatusDot className={cn("bg-zinc-600", relayState.frontend === "ready" && "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]")} />
           FE
         </span>
         <span className={cn("flex items-center gap-1", backendOnline && "text-emerald-300")}>
-          <RelayStatusDot online={backendOnline} />
+          <StatusDot className={cn("bg-zinc-600", backendOnline && "bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.7)]")} />
           BE
         </span>
       </div>

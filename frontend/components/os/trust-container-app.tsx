@@ -6,9 +6,10 @@ import { Cloud, Contact, Copy, Download, Inbox, KeyRound, Send, ShieldCheck, Upl
 import { useAuth, type LocalQueuedMessage, type UnlockedProfileContainer } from "@/hooks/use-auth"
 import { edgerunNodeRuntimeStore, ensureEdgerunNodeRuntime } from "@/platform/runtime/edgerun-node"
 
+import { shortHex } from "@/lib/format"
 function shortId(value: string, chars = 10) {
   if (!value) return "missing"
-  return `${value.slice(0, chars)}...${value.slice(-4)}`
+  return shortHex(value, chars, 4)
 }
 
 function EmptyState({ title, detail }: { title: string; detail: string }) {

@@ -5,9 +5,10 @@ import { Copy, IdCard, KeyRound, Lock, Mail, ShieldCheck } from "lucide-react"
 import { useAuth, type UnlockedProfileContainer } from "@/hooks/use-auth"
 import { AppHeader } from "@/components/os/app-chrome"
 
+import { shortHex } from "@/lib/format"
 function shortId(value: string) {
   if (!value) return "missing"
-  return `${value.slice(0, 14)}...${value.slice(-6)}`
+  return shortHex(value, 14, 6)
 }
 
 function contactCard(handle: string, publicKey: string) {

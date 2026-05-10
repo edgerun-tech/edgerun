@@ -105,23 +105,7 @@ const initialItems: Record<TrustTab, TrustItem[]> = {
   ],
 }
 
-function statusClass(status: Status | Risk) {
-  switch (status) {
-    case "strong":
-    case "verified":
-    case "active":
-    case "low":
-      return "border-[var(--status-online)]/25 bg-[var(--status-online)]/10 text-[var(--status-online)]"
-    case "review":
-    case "limited":
-    case "medium":
-      return "border-[var(--status-warning)]/25 bg-[var(--status-warning)]/10 text-[var(--status-warning)]"
-    case "danger":
-    case "revoked":
-    case "high":
-      return "border-[var(--status-error)]/25 bg-[var(--status-error)]/10 text-[var(--status-error)]"
-  }
-}
+import { statusClass } from "@/lib/status"
 
 function nowLabel() {
   return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })

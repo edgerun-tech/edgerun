@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { cn } from "@/lib/utils"
 import { formatBytes } from "@/lib/format"
 import { decodeXrayWireMessage } from "@/features/xray/services/xray-wire-wasm"
+import { StatusDot } from "@/components/ui/status-dot"
 
 type BridgeNode = {
   id: string
@@ -76,20 +77,6 @@ function statusDotClass(status: BridgeStatus) {
   if (status === "online") return "bg-[var(--status-online)] shadow-[0_0_8px_rgba(34,197,94,0.75)]"
   if (status === "checking") return "bg-[var(--status-warning)] shadow-[0_0_8px_rgba(251,191,36,0.75)]"
   return "bg-[var(--status-error)] shadow-[0_0_8px_rgba(239,68,68,0.75)]"
-}
-
-function StatusDot({ status, onClick }: { status: BridgeStatus; onClick?: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex h-7 w-7 items-center justify-center rounded-full text-muted-foreground transition-colors hover:text-foreground"
-      title={status}
-      aria-label={`Bridge status: ${status}`}
-    >
-      <span className={cn("h-2.5 w-2.5 rounded-full", statusDotClass(status))} />
-    </button>
-  )
 }
 
 function useCodelyzerBridge() {
@@ -201,7 +188,7 @@ export function NetworkConnectionsWidget() {
           </div>
           <div className="mt-0.5 truncate text-[10px] text-muted-foreground">Active external IPs</div>
         </div>
-        <StatusDot status={status} onClick={() => void refresh()} />
+        <StatusDot size="md" onClick={() => void refresh()} className={statusDotClass(status)} />
       </div>
 
       <div className="grid min-w-0 grid-cols-2 gap-2">
@@ -268,7 +255,7 @@ export function CodelyzerCodeWidget() {
           </div>
           <div className="mt-0.5 truncate text-[10px] text-muted-foreground">Opened git repo</div>
         </div>
-        <StatusDot status={status} onClick={() => void refresh()} />
+        <StatusDot size="md" onClick={() => void refresh()} className={statusDotClass(status)} />
       </div>
 
       <div className="grid min-w-0 grid-cols-2 gap-2">
@@ -307,7 +294,7 @@ export function CodelyzerNetworkPanel() {
         <Card className="border-[var(--window-border)] bg-card/55 py-4 shadow-none">
           <CardContent className="px-3">
             <div className="mb-1 flex items-center gap-2 text-[10px] uppercase tracking-widest text-muted-foreground"><Server className="h-3 w-3" /> Bridge</div>
-            <StatusDot status={status} onClick={() => void refresh()} />
+            <StatusDot size="md" onClick={() => void refresh()} className={statusDotClass(status)} />
           </CardContent>
         </Card>
         <Card className="border-[var(--window-border)] bg-card/55 py-4 shadow-none"><CardContent className="px-3"><p className="font-mono text-lg font-semibold text-primary">{graph?.node_count ?? graph?.nodes?.length ?? 0}</p><p className="text-[10px] uppercase tracking-widest text-muted-foreground">nodes</p></CardContent></Card>

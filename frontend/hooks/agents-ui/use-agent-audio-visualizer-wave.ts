@@ -1,10 +1,6 @@
-import { useRef, useState, useEffect, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  type AnimationPlaybackControlsWithThen,
   type ValueAnimationTransition,
-  animate,
-  useMotionValue,
-  useMotionValueEvent,
 } from 'motion/react';
 import {
   type AgentState,
@@ -13,27 +9,12 @@ import {
   useTrackVolume,
 } from '@livekit/components-react';
 import { LocalAudioTrack, RemoteAudioTrack } from 'livekit-client';
+import { useAnimatedValue } from './use-animated-value';
 
 const DEFAULT_SPEED = 5;
 const DEFAULT_AMPLITUDE = 0.025;
 const DEFAULT_FREQUENCY = 10;
 const DEFAULT_TRANSITION: ValueAnimationTransition = { duration: 0.2, ease: 'easeOut' };
-
-function useAnimatedValue<T>(initialValue: T) {
-  const [value, setValue] = useState(initialValue);
-  const motionValue = useMotionValue(initialValue);
-  const controlsRef = useRef<AnimationPlaybackControlsWithThen | null>(null);
-  useMotionValueEvent(motionValue, 'change', (value) => setValue(value as T));
-
-  const animateFn = useCallback(
-    (targetValue: T | T[], transition: ValueAnimationTransition) => {
-      controlsRef.current = animate(motionValue, targetValue, transition);
-    },
-    [motionValue],
-  );
-
-  return { value, controls: controlsRef, animate: animateFn };
-}
 
 interface UseAgentAudioVisualizerWaveAnimatorArgs {
   state?: AgentState;

@@ -1,11 +1,7 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect } from 'react';
 import { type LocalAudioTrack, type RemoteAudioTrack } from 'livekit-client';
 import {
-  type AnimationPlaybackControlsWithThen,
   type ValueAnimationTransition,
-  animate,
-  useMotionValue,
-  useMotionValueEvent,
 } from 'motion/react';
 import {
   type AgentState,
@@ -13,6 +9,7 @@ import {
   type TrackReferenceOrPlaceholder,
   useTrackVolume,
 } from '@livekit/components-react';
+import { useAnimatedValue } from './use-animated-value';
 
 const DEFAULT_SPEED = 10;
 const DEFAULT_AMPLITUDE = 2;
@@ -26,22 +23,6 @@ const DEFAULT_PULSE_TRANSITION: ValueAnimationTransition = {
   repeat: Infinity,
   repeatType: 'mirror',
 };
-
-function useAnimatedValue<T>(initialValue: T) {
-  const [value, setValue] = useState(initialValue);
-  const motionValue = useMotionValue(initialValue);
-  const controlsRef = useRef<AnimationPlaybackControlsWithThen | null>(null);
-  useMotionValueEvent(motionValue, 'change', (value) => setValue(value as T));
-
-  const animateFn = useCallback(
-    (targetValue: T | T[], transition: ValueAnimationTransition) => {
-      controlsRef.current = animate(motionValue, targetValue, transition);
-    },
-    [motionValue],
-  );
-
-  return { value, motionValue, controls: controlsRef, animate: animateFn };
-}
 
 export function useAgentAudioVisualizerAura(
   state: AgentState | undefined,

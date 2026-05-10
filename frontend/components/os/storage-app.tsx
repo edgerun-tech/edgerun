@@ -236,28 +236,7 @@ const initialPipelines: Pipeline[] = [
   },
 ]
 
-function statusClass(status: SourceStatus | PipelineStatus | PermissionMode | StorageSource["risk"]) {
-  switch (status) {
-    case "connected":
-    case "ready":
-    case "running":
-    case "read":
-    case "read-write":
-    case "low":
-      return "border-[var(--status-online)]/30 bg-[var(--status-online)]/10 text-[var(--status-online)]"
-    case "limited":
-    case "review":
-    case "draft":
-    case "ask-every-time":
-    case "medium":
-      return "border-[var(--status-warning)]/30 bg-[var(--status-warning)]/10 text-[var(--status-warning)]"
-    case "offline":
-    case "blocked":
-    case "none":
-    case "high":
-      return "border-[var(--status-error)]/30 bg-[var(--status-error)]/10 text-[var(--status-error)]"
-  }
-}
+import { statusClass } from "@/lib/status"
 
 function StatusBadge({ value }: { value: SourceStatus | PipelineStatus | PermissionMode | StorageSource["risk"] }) {
   return <span className={cn("rounded-md border px-1.5 py-0.5 text-[10px] font-semibold uppercase", statusClass(value))}>{value}</span>

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { ChevronRight, Copy, Fingerprint, Mail, MessageSquare, Plus, Save, Search, User, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth, type ContactRecord, type UnlockedProfileContainer } from "@/hooks/use-auth"
+import { shortHex } from "@/lib/format"
 
 type ContactsAppProps = {
   onMessage?: (contact: ContactRecord) => void
@@ -46,10 +47,8 @@ function routeLabel(contact: ContactRecord) {
   if (contact.routeHint === "address-book") return "Address book"
   return contact.routeHint === "local-profile" ? "Local profile" : "Network contact"
 }
-
 function shortId(value: string) {
-  if (value.length <= 22) return value
-  return `${value.slice(0, 12)}...${value.slice(-6)}`
+  return shortHex(value, 12, 6)
 }
 
 export function ContactsApp({ onMessage }: ContactsAppProps) {

@@ -10,6 +10,7 @@ import {
   Ban,
 } from "lucide-react"
 import { atom, computed } from "nanostores"
+import { computedMapToList } from "@/platform/utils/computed"
 
 export interface DepNode {
   name: string

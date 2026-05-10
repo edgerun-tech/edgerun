@@ -8,6 +8,7 @@ import { isRemovedAppId } from "@/platform/registries/app-id-policy"
 import { sessionTracker } from "@/platform/auth/session-tracker"
 import { nodeStore } from "@/platform/state/node-store"
 import { clearAssistantMessages } from "@/stores/assistant-store"
+import { shortHex } from "@/lib/format"
 import { normalizeAppId } from "@/stores/installed-apps-store"
 import {
   addProjectChecklistItem,
@@ -165,10 +166,9 @@ function resolveCommandAppId(value: string): string | null {
   ))
   return builtin?.appId ?? null
 }
-
 function shortId(value?: string | null) {
   if (!value) return "unknown"
-  return value.length > 24 ? `${value.slice(0, 14)}...${value.slice(-8)}` : value
+  return shortHex(value, 14, 8)
 }
 
 function formatNodeIdentity() {

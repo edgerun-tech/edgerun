@@ -1,5 +1,6 @@
 import { atom, computed } from "nanostores"
-import { bytesToHex } from "@/platform/utils/bytes"
+import { bytesToHex, bytesToBase64, base64ToBytes } from "@/platform/utils/bytes"
+import { patchStore } from "@/platform/utils/store"
 import type {
   AuthState,
   NodeProvisionInput,
@@ -113,21 +114,6 @@ function clearTransientAppSessions() {
   if (typeof fetch !== "undefined") {
     void fetch("/api/session/clear", { method: "POST", keepalive: true }).catch(() => undefined)
   }
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = ""
-  for (let offset = 0; offset < bytes.length; offset += 0x8000) {
-    binary += String.fromCharCode(...bytes.slice(offset, offset + 0x8000))
-  }
-  return btoa(binary)
-}
-
-function base64ToBytes(base64: string): Uint8Array {
-  const binary = atob(base64)
-  const bytes = new Uint8Array(binary.length)
-  for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index)
-  return bytes
 }
 
 function profileInitials(handle: string): string {
@@ -1120,7 +1106,7 @@ export function signOutAuth() {
 }
 
 export function clearAuthError() {
-  authStore.set({ ...authStore.get(), error: null })
+  patchStore(authStore, { error: null })
 }
 
 export function exportProfileContainer(): string | null {
@@ -1223,7 +1209,7 @@ export async function createProfileNode(label: string, password: string): Promis
       eventLog: [...profile.eventLog, event],
     }
     await persistUnlockedProfile(nextProfile, password)
-    authStore.set({ ...authStore.get(), isLoading: false })
+    patchStore(authStore, { isLoading: false })
     return true
   } catch (err) {
     authStore.set({ ...authStore.get(), isLoading: false, error: err instanceof Error ? err.message : "Node creation failed." })
@@ -1269,7 +1255,7 @@ export async function publishBrowserNodeRelayRoute(input: { reachableTarget: str
     if (!response.ok || !data || !("ok" in data)) {
       throw new Error(data && "error" in data ? data.error : "Relay publish failed.")
     }
-    authStore.set({ ...authStore.get(), isLoading: false })
+    patchStore(authStore, { isLoading: false })
     return data
   } catch (err) {
     authStore.set({ ...authStore.get(), isLoading: false, error: err instanceof Error ? err.message : "Relay publish failed." })
@@ -1339,7 +1325,7 @@ export async function createNestedSealedContainer(input: {
       writeLocalMessageQueue([...existingQueue, queued])
     }
     await persistUnlockedProfile({ ...profile, sealedContainers: [...profile.sealedContainers, nested], outbox }, input.password)
-    authStore.set({ ...authStore.get(), isLoading: false })
+    patchStore(authStore, { isLoading: false })
     return true
   } catch (err) {
     authStore.set({ ...authStore.get(), isLoading: false, error: err instanceof Error ? err.message : "Sealed container creation failed." })
@@ -1374,7 +1360,7 @@ export async function addContactToProfile(input: {
       ? profile.contacts.map((item) => item.identityIdHex === contact.identityIdHex ? contact : item)
       : [...profile.contacts, contact]
     await persistUnlockedProfile({ ...profile, contacts }, input.password)
-    authStore.set({ ...authStore.get(), isLoading: false })
+    patchStore(authStore, { isLoading: false })
     return true
   } catch (err) {
     authStore.set({ ...authStore.get(), isLoading: false, error: err instanceof Error ? err.message : "Contact import failed." })
@@ -1451,7 +1437,7 @@ export async function saveContactToProfile(input: {
       ? profile.contacts.map((item) => item.id === contact.id || item.identityIdHex === contact.identityIdHex ? contact : item)
       : [...profile.contacts, contact]
     await persistUnlockedProfile({ ...profile, contacts }, input.password)
-    authStore.set({ ...authStore.get(), isLoading: false })
+    patchStore(authStore, { isLoading: false })
     return true
   } catch (err) {
     authStore.set({ ...authStore.get(), isLoading: false, error: err instanceof Error ? err.message : "Contact save failed." })
@@ -1477,7 +1463,7 @@ export async function updateProfilePreferences(input: {
       profilePreferences: preferences,
       eventLog: [...profile.eventLog, event],
     }, input.password)
-    authStore.set({ ...authStore.get(), isLoading: false })
+    patchStore(authStore, { isLoading: false })
     return true
   } catch (err) {
     authStore.set({ ...authStore.get(), isLoading: false, error: err instanceof Error ? err.message : "Profile settings update failed." })
@@ -1517,7 +1503,7 @@ export async function bindWebAuthnToProfile(password: string): Promise<boolean> 
       webAuthnBinding: binding,
       eventLog: [...profile.eventLog, event],
     }, password)
-    authStore.set({ ...authStore.get(), isLoading: false })
+    patchStore(authStore, { isLoading: false })
     return true
   } catch (err) {
     authStore.set({ ...authStore.get(), isLoading: false, error: err instanceof Error ? err.message : "Passkey binding failed." })
@@ -1545,7 +1531,7 @@ export async function saveOAuthProfileSecret(input: { appId: OAuthAppId; passwor
         nextSecret,
       ],
     }, input.password)
-    authStore.set({ ...authStore.get(), isLoading: false })
+    patchStore(authStore, { isLoading: false })
     return true
   } catch (err) {
     authStore.set({ ...authStore.get(), isLoading: false, error: err instanceof Error ? err.message : "OAuth profile secret save failed." })
@@ -1564,7 +1550,7 @@ export async function removeOAuthProfileSecret(appId: OAuthAppId, password: stri
       ...profile,
       appSecrets: profile.appSecrets.filter((secret) => secret.appId !== appId),
     }, password)
-    authStore.set({ ...authStore.get(), isLoading: false })
+    patchStore(authStore, { isLoading: false })
     return true
   } catch (err) {
     authStore.set({ ...authStore.get(), isLoading: false, error: err instanceof Error ? err.message : "OAuth profile secret removal failed." })
