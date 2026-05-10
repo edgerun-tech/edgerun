@@ -31,6 +31,12 @@ Show external references that keep a vendor tree alive:
 python3 scripts/vendor-flattening-inventory.py --show-references
 ```
 
+Print deletion commands for unreferenced nested vendor trees:
+
+```bash
+python3 scripts/vendor-flattening-inventory.py --print-delete-commands
+```
+
 Fail on nested vendor trees once the current debt is removed:
 
 ```bash
@@ -52,6 +58,18 @@ A nested vendor tree can be deleted when all are true:
 3. Package-specific checks pass before deletion.
 4. The same checks pass after deletion.
 5. The deletion does not make `dependency-sovereignty.py` noisier.
+
+Suggested local workflow:
+
+```bash
+python3 scripts/vendor-flattening-inventory.py --show-references
+python3 scripts/vendor-flattening-inventory.py --print-delete-commands
+cargo check -p edgerun-crypto --features rsa,alloc,zeroize
+# run printed git rm commands only for entries that passed the checks above
+cargo check -p edgerun-crypto --features rsa,alloc,zeroize
+python3 scripts/vendor-flattening-inventory.py --strict
+python3 scripts/dependency-sovereignty.py
+```
 
 ## Current known nested vendor debt
 
