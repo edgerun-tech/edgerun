@@ -7,7 +7,7 @@
 export { FinancesOverviewWidget } from "./finance-overviews"
 export { CodelyzerNetworkPanel } from "./codelyzer-network"
 export { AlertCenter } from "@/components/alerts/AlertCenter"
-export { AppList } from "@/components/apps/AppList"
+export { AppList } from "./AppList"
 export { CapabilityList } from "@/components/capabilities/CapabilityList"
 export { DependencyGraph } from "@/components/dependencies/DependencyGraph"
 export { PipelineProgress } from "@/components/pipelines/PipelineProgress"

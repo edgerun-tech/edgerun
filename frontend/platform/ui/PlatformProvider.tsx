@@ -18,7 +18,6 @@ import { appRegistry } from "@/platform/registries/app-registry"
 import { syncBrowserCatalogRegistry } from "@/platform/registries/app-catalog-registry"
 import { browserAppInstallStore } from "@/platform/runtime/browser-app-install-store"
 import { capabilityRegistry } from "@/platform/registries/capability-registry"
-import { connectionRegistry } from "@/platform/registries/connection-registry"
 import { toolRegistry } from "@/platform/registries/tool-registry"
 import { router } from "@/platform/router/edgerun-router"
 import { permissionTracker } from "@/platform/auth/permission-tracker"
@@ -44,7 +43,6 @@ interface PlatformContextValue {
   registries: {
     app: typeof appRegistry
     capability: typeof capabilityRegistry
-    connection: typeof connectionRegistry
     tool: typeof toolRegistry
   }
   router: typeof router
@@ -132,7 +130,6 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
     registries: {
       app: appRegistry,
       capability: capabilityRegistry,
-      connection: connectionRegistry,
       tool: toolRegistry,
     },
     router,

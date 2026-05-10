@@ -1,9 +1,5 @@
-/**
- * Single source of truth for external integrations.
- * Tracks GitHub, cloud providers, local node, OAuth/OIDC status, tokens.
- */
-
 import { atom, computed } from "nanostores"
+import { patchStore } from "@/platform/utils/store"
 
 export type ConnectionType =
   | "local_node"
@@ -35,6 +31,8 @@ export interface ExternalConnection {
 
 export interface ConnectionStoreState {
   connections: Map<string, ExternalConnection>
+  expiredTokens: Set<string>
+  availableResources: Map<string, string[]>
   isLoading: boolean
   error: string | null
   lastRefresh: string | null
@@ -42,6 +40,8 @@ export interface ConnectionStoreState {
 
 const initialState: ConnectionStoreState = {
   connections: new Map(),
+  expiredTokens: new Set(),
+  availableResources: new Map(),
   isLoading: false,
   error: null,
   lastRefresh: null,
@@ -61,14 +61,26 @@ export const githubConnections = computed(connectionStore, (s) =>
   Array.from(s.connections.values()).filter((c) => c.type === "github"),
 )
 
+export const connectedCount = computed(connectionStore, (s) =>
+  Array.from(s.connections.values()).filter((c) => c.status === "connected").length,
+)
+
+export const connectionByType = computed(connectionStore, (s) => {
+  const byType = new Map<string, ExternalConnection[]>()
+  for (const conn of s.connections.values()) {
+    const list = byType.get(conn.type) || []
+    list.push(conn)
+    byType.set(conn.type, list)
+  }
+  return byType
+})
+
 export function getConnection(connectionId: string): ExternalConnection | undefined {
   return connectionStore.get().connections.get(connectionId)
 }
 
 export function listConnectionsByType(type: ConnectionType): ExternalConnection[] {
-  return Array.from(connectionStore.get().connections.values()).filter(
-    (c) => c.type === type,
-  )
+  return connectionByType.get().get(type) || []
 }
 
 export function isConnected(connectionId: string): boolean {
@@ -81,50 +93,75 @@ export function hasExpiredToken(connectionId: string): boolean {
   return new Date(conn.tokenExpiresAt) < new Date()
 }
 
+export function listAvailableResources(connectionId: string): string[] {
+  return connectionStore.get().availableResources.get(connectionId) || []
+}
+
+function updateExpiredTokenSet(connection: ExternalConnection, expired: Set<string>): void {
+  if (connection.tokenExpiresAt) {
+    if (new Date(connection.tokenExpiresAt) < new Date()) {
+      expired.add(connection.connectionId)
+    } else {
+      expired.delete(connection.connectionId)
+    }
+  }
+}
+
 export function updateConnection(
   connectionId: string,
   update: Partial<ExternalConnection>,
 ): void {
   const state = connectionStore.get()
   const existing = state.connections.get(connectionId)
-  if (existing) {
-    const newConnections = new Map(state.connections)
-    newConnections.set(connectionId, { ...existing, ...update })
-    connectionStore.set({ ...state, connections: newConnections })
-  }
+  if (!existing) return
+  const updated = { ...existing, ...update }
+  const newConnections = new Map(state.connections)
+  newConnections.set(connectionId, updated)
+  const newExpired = new Set(state.expiredTokens)
+  updateExpiredTokenSet(updated, newExpired)
+  connectionStore.set({ ...state, connections: newConnections, expiredTokens: newExpired })
+}
+
+export function updateConnectionStatus(
+  connectionId: string,
+  status: ExternalConnection["status"],
+): void {
+  updateConnection(connectionId, { status })
 }
 
 export function addConnection(connection: ExternalConnection): void {
   const state = connectionStore.get()
   const newConnections = new Map(state.connections)
   newConnections.set(connection.connectionId, connection)
-  connectionStore.set({ ...state, connections: newConnections })
+  const newExpired = new Set(state.expiredTokens)
+  updateExpiredTokenSet(connection, newExpired)
+  connectionStore.set({ ...state, connections: newConnections, expiredTokens: newExpired })
 }
 
 export function removeConnection(connectionId: string): void {
   const state = connectionStore.get()
   const newConnections = new Map(state.connections)
   newConnections.delete(connectionId)
-  connectionStore.set({ ...state, connections: newConnections })
+  const newExpired = new Set(state.expiredTokens)
+  newExpired.delete(connectionId)
+  connectionStore.set({ ...state, connections: newConnections, expiredTokens: newExpired })
+}
+
+export function setAvailableResources(connectionId: string, resources: string[]): void {
+  const state = connectionStore.get()
+  const newResources = new Map(state.availableResources)
+  newResources.set(connectionId, resources)
+  connectionStore.set({ ...state, availableResources: newResources })
 }
 
 export async function refreshConnections(): Promise<void> {
-  const state = connectionStore.get()
-  connectionStore.set({ ...state, isLoading: true, error: null })
-
+  patchStore(connectionStore, { isLoading: true, error: null })
   try {
-    // This would call the actual API
-    connectionStore.set({
-      ...connectionStore.get(),
-      isLoading: false,
-      lastRefresh: new Date().toISOString(),
-    })
+    patchStore(connectionStore, { isLoading: false, lastRefresh: new Date().toISOString() })
   } catch (err) {
-    connectionStore.set({
-      ...connectionStore.get(),
+    patchStore(connectionStore, {
       isLoading: false,
-      error:
-        err instanceof Error ? err.message : "Failed to refresh connections",
+      error: err instanceof Error ? err.message : "Failed to refresh connections",
     })
   }
 }

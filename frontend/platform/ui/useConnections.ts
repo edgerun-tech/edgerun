@@ -1,7 +1,3 @@
-/**
- * Hook for accessing connection state and actions.
- */
-
 import { useStore } from "@nanostores/react"
 import {
   connectionStore,
@@ -12,18 +8,14 @@ import {
   listConnectionsByType,
   isConnected,
   hasExpiredToken,
+  listAvailableResources,
   addConnection,
   removeConnection,
+  updateConnection,
+  updateConnectionStatus,
+  setAvailableResources,
   refreshConnections,
 } from "@/platform/state/connection-store"
-import {
-  connectionRegistry,
-  allConnections as registryAllConnections,
-  getConnection as registryGetConnection,
-  listConnectionsByType as registryListByType,
-  isConnected as registryIsConnected,
-  updateConnectionStatus,
-} from "@/platform/registries/connection-registry"
 
 export function useConnections() {
   const store = useStore(connectionStore)
@@ -41,15 +33,12 @@ export function useConnections() {
     listConnectionsByType,
     isConnected,
     hasExpiredToken,
+    listAvailableResources,
     addConnection,
     removeConnection,
+    updateConnection,
+    updateConnectionStatus,
+    setAvailableResources,
     refresh: refreshConnections,
-    registry: {
-      allConnections: registryAllConnections,
-      getConnection: registryGetConnection,
-      listConnectionsByType: registryListByType,
-      isConnected: registryIsConnected,
-      updateConnectionStatus,
-    },
   }
 }

@@ -1,6 +1,11 @@
 import { atom, computed } from "nanostores"
 import { bytesToHex, bytesToBase64, base64ToBytes } from "@/platform/utils/bytes"
 import { patchStore } from "@/platform/utils/store"
+import { canonicalJson, sha256Hex, deriveAesKey, importAesGcmKey, generateP256Identity, generateP256EncryptionIdentity, importP256PrivateKey, importP256EcdhPublicKey, importP256EcdhPrivateKey, sealToRecipient, openSealedNestedContainer } from "@/platform/auth/crypto"
+import { profileIdFor, readProfileIndex, readProfileById, readSealedProfile, persistSealedProfile, activeProfileId, readLocalMessageQueue, writeLocalMessageQueue, localMessagesFor } from "@/platform/auth/persistence"
+import { clearSessionResumeTicket, startSessionResumeHeartbeat, consumeSessionResumeTicket } from "@/platform/auth/session"
+import { webAuthnAvailable, webAuthnVaultExists, hasUsableWebAuthnBinding, credentialCreationOptions, webAuthnPrfResult, requestWebAuthnPrf, writeWebAuthnVault, readWebAuthnVaultPassword } from "@/platform/auth/web-authn"
+import { sanitizeProfilePreferences, isIsoDate, isHex, normalizeUnlockedProfile, deriveProfilePreferences, deriveWebAuthnBinding, selfContact, normalizeOAuthSecret, validateOAuthSecretInput, registrationFor, sanitizeKnownNodeIds } from "@/platform/auth/helpers"
 import type {
   AuthState,
   NodeProvisionInput,
@@ -25,19 +30,8 @@ import type {
   NodeRelayPublishResult,
 } from "./auth-types"
 import {
-  LEGACY_PROFILE_STORAGE_KEY,
-  PROFILE_INDEX_KEY,
-  ACTIVE_PROFILE_KEY,
-  PROFILE_RECORD_PREFIX,
-  LOCAL_MESSAGE_QUEUE_KEY,
-  WEBAUTHN_VAULT_PREFIX,
-  SESSION_RESUME_KEY,
-  LEGACY_KEYS,
-  PBKDF2_ROUNDS,
-  SESSION_RESUME_TTL_MS,
-  SESSION_RESUME_REFRESH_MS,
   ZERO_HASH,
-  DEFAULT_PROFILE_PREFERENCES,
+  PBKDF2_ROUNDS,
 } from "./auth-types"
 
 export type {
@@ -68,7 +62,6 @@ export type {
 const NODE_RELAY_DOMAIN = "nodes.edgerun.tech"
 const textEncoder = new TextEncoder()
 const textDecoder = new TextDecoder()
-let sessionResumeTimer: ReturnType<typeof setInterval> | null = null
 
 const APP_SESSION_COOKIE_NAMES = [
   "gmail_access_token",
@@ -113,424 +106,6 @@ function clearTransientAppSessions() {
   }
   if (typeof fetch !== "undefined") {
     void fetch("/api/session/clear", { method: "POST", keepalive: true }).catch(() => undefined)
-  }
-}
-
-function profileInitials(handle: string): string {
-  const initials = handle.trim().split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()
-  return initials || "ID"
-}
-
-function profileColor(seed: string): string {
-  const hue = seed.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0) % 360
-  return `oklch(0.3 0.1 ${hue})`
-}
-
-function sanitizeProfilePreferences(value: unknown, handle = ""): ProfilePreferences {
-  const input = value && typeof value === "object" ? value as Partial<ProfilePreferences> : {}
-  const initials = typeof input.avatarInitials === "string" && input.avatarInitials.trim()
-    ? input.avatarInitials.trim().slice(0, 2).toUpperCase()
-    : profileInitials(handle)
-  return {
-    avatarInitials: initials,
-    avatarColor: typeof input.avatarColor === "string" && input.avatarColor.trim() ? input.avatarColor.trim() : profileColor(handle),
-    connectToNetwork: typeof input.connectToNetwork === "boolean" ? input.connectToNetwork : DEFAULT_PROFILE_PREFERENCES.connectToNetwork,
-    shareResources: typeof input.shareResources === "boolean" ? input.shareResources : DEFAULT_PROFILE_PREFERENCES.shareResources,
-  }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value && typeof value === "object" && !Array.isArray(value))
-}
-
-function isIsoDate(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0 && Number.isFinite(Date.parse(value))
-}
-
-function isHex(value: unknown, length?: number): value is string {
-  return typeof value === "string" && /^[a-f0-9]+$/i.test(value) && (!length || value.length === length)
-}
-
-function validBase64(value: unknown): value is string {
-  if (typeof value !== "string" || !value) return false
-  try {
-    base64ToBytes(value)
-    return true
-  } catch {
-    return false
-  }
-}
-
-function normalizeOAuthSecret(secret: unknown): OAuthProfileSecret | null {
-  if (!isRecord(secret)) return null
-  const appId = secret.appId
-  if (appId !== "gmail" && appId !== "google-drive" && appId !== "github" && appId !== "cloudflare") return null
-  if (secret.kind !== "oauth2") return null
-  if (typeof secret.email !== "string" || typeof secret.accessToken !== "string" || !secret.accessToken.trim()) return null
-  if (!isIsoDate(secret.expiresAtIso) || !isIsoDate(secret.updatedAtIso)) return null
-  if (!Array.isArray(secret.scopes) || !secret.scopes.every((scope) => typeof scope === "string")) return null
-
-  const normalized: OAuthProfileSecretInput & { appId: OAuthAppId; kind: "oauth2"; updatedAtIso: string } = {
-    appId,
-    kind: "oauth2",
-    email: secret.email,
-    accessToken: secret.accessToken,
-    refreshToken: typeof secret.refreshToken === "string" ? secret.refreshToken : undefined,
-    expiresAtIso: secret.expiresAtIso,
-    scopes: secret.scopes,
-    updatedAtIso: secret.updatedAtIso,
-  }
-  if (appId === "cloudflare") {
-    if (isHex(secret.accountId, 32)) normalized.accountId = secret.accountId
-    if (isHex(secret.tokenId, 32)) normalized.tokenId = secret.tokenId
-    if (isHex(secret.zoneId, 32)) normalized.zoneId = secret.zoneId
-    if (normalized.zoneId && typeof secret.zoneName === "string" && secret.zoneName.trim()) normalized.zoneName = secret.zoneName.trim()
-  }
-  return normalized
-}
-
-function validateOAuthSecretInput(appId: OAuthAppId, secret: OAuthProfileSecretInput) {
-  if (typeof secret.email !== "string") throw new Error("Profile secret is missing a connector label.")
-  if (typeof secret.accessToken !== "string" || !secret.accessToken.trim()) throw new Error("Profile secret is missing an access token.")
-  if (!isIsoDate(secret.expiresAtIso)) throw new Error("Profile secret has an invalid expiration timestamp.")
-  if (!Array.isArray(secret.scopes) || !secret.scopes.every((scope) => typeof scope === "string")) throw new Error("Profile secret scopes are invalid.")
-  if (appId === "cloudflare") {
-    if (secret.accountId && !isHex(secret.accountId, 32)) throw new Error("Cloudflare account ID must be a 32-character hex value.")
-    if (secret.tokenId && !isHex(secret.tokenId, 32)) throw new Error("Cloudflare token ID must be a 32-character hex value.")
-    if (secret.zoneId && !isHex(secret.zoneId, 32)) throw new Error("Cloudflare zone ID must be a 32-character hex value.")
-    if (secret.zoneName && !secret.zoneId) throw new Error("Cloudflare zone name cannot be saved without a zone ID.")
-  }
-}
-
-function normalizeUnlockedProfile(profile: UnlockedProfileContainer): UnlockedProfileContainer {
-  if (profile.version !== 1) throw new Error("Profile validation failed: unsupported profile version.")
-  if (typeof profile.handle !== "string" || !profile.handle.trim()) throw new Error("Profile validation failed: missing handle.")
-  if (!isIsoDate(profile.createdAtIso)) throw new Error("Profile validation failed: invalid creation timestamp.")
-  for (const [label, key] of [["owner", profile.owner], ["owner encryption", profile.ownerEncryption], ["browser node", profile.browserNode]] as const) {
-    if (!isHex(key.identityIdHex)) throw new Error(`Profile validation failed: invalid ${label} identity.`)
-    if (!validBase64(key.publicKeyRawBase64) || !validBase64(key.privateKeyPkcs8Base64)) throw new Error(`Profile validation failed: invalid ${label} key material.`)
-  }
-  return {
-    ...profile,
-    handle: profile.handle.trim(),
-    nodes: Array.isArray(profile.nodes) && profile.nodes.length ? profile.nodes : [profile.browserNode],
-    contacts: Array.isArray(profile.contacts) ? profile.contacts : [selfContact(profile)],
-    eventLog: Array.isArray(profile.eventLog) ? profile.eventLog : [],
-    profilePreferences: sanitizeProfilePreferences(profile.profilePreferences, profile.handle),
-    webAuthnBinding: deriveWebAuthnBinding(Array.isArray(profile.eventLog) ? profile.eventLog : [], profile.webAuthnBinding),
-    appSecrets: Array.isArray(profile.appSecrets) ? profile.appSecrets.map(normalizeOAuthSecret).filter((secret): secret is OAuthProfileSecret => Boolean(secret)) : [],
-    sealedContainers: Array.isArray(profile.sealedContainers) ? profile.sealedContainers : [],
-    outbox: Array.isArray(profile.outbox) ? profile.outbox : [],
-  }
-}
-
-function deriveProfilePreferences(events: ProfileEvent[], fallback: unknown, handle: string): ProfilePreferences {
-  let preferences = sanitizeProfilePreferences(fallback, handle)
-  for (const event of events) {
-    if (event.kind === "PROFILE_SETTINGS_UPDATED") {
-      preferences = sanitizeProfilePreferences(event.payload.preferences, handle)
-    }
-  }
-  return preferences
-}
-
-function deriveWebAuthnBinding(events: ProfileEvent[], fallback?: WebAuthnBinding): WebAuthnBinding | undefined {
-  let binding = fallback
-  for (const event of events) {
-    if (event.kind === "PROFILE_WEBAUTHN_BOUND") binding = event.payload
-  }
-  return binding
-}
-
-function canonicalJson(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value)
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`
-  const record = value as Record<string, unknown>
-  return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`).join(",")}}`
-}
-
-async function sha256Hex(bytes: Uint8Array | string): Promise<string> {
-  const data = typeof bytes === "string" ? textEncoder.encode(bytes) : bytes
-  return bytesToHex(new Uint8Array(await crypto.subtle.digest("SHA-256", data)))
-}
-
-async function deriveAesKey(password: string, salt: Uint8Array, rounds: number): Promise<CryptoKey> {
-  const baseKey = await crypto.subtle.importKey("raw", textEncoder.encode(password), "PBKDF2", false, ["deriveKey"])
-  return crypto.subtle.deriveKey(
-    { name: "PBKDF2", salt, iterations: rounds, hash: "SHA-256" },
-    baseKey,
-    { name: "AES-GCM", length: 256 },
-    false,
-    ["encrypt", "decrypt"],
-  )
-}
-
-async function importAesGcmKey(raw: BufferSource): Promise<CryptoKey> {
-  return crypto.subtle.importKey("raw", raw, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"])
-}
-
-type SessionResumeTicket = {
-  version: 1
-  profileId: string
-  expiresAtIso: string
-  handle: string
-}
-
-type SessionResumeWorkerResponse = {
-  ok: boolean
-  handle?: string
-  profileId?: string
-  expiresAtIso?: string
-  profileJson?: string
-  error?: string
-}
-
-async function sessionResumeWorker(): Promise<ServiceWorker | null> {
-  if (typeof window === "undefined" || !("serviceWorker" in navigator)) return null
-  try {
-    const registration = await navigator.serviceWorker.register("/session-resume-sw.js", { scope: "/" })
-    const ready = await navigator.serviceWorker.ready
-    return ready.active ?? registration.active ?? null
-  } catch {
-    return null
-  }
-}
-
-async function postSessionResumeWorker(message: Record<string, unknown>): Promise<SessionResumeWorkerResponse | null> {
-  const worker = await sessionResumeWorker()
-  if (!worker) return null
-  return new Promise((resolve) => {
-    const channel = new MessageChannel()
-    const timeout = window.setTimeout(() => {
-      channel.port1.close()
-      resolve(null)
-    }, 1500)
-    channel.port1.onmessage = (event: MessageEvent<SessionResumeWorkerResponse>) => {
-      window.clearTimeout(timeout)
-      channel.port1.close()
-      resolve(event.data)
-    }
-    worker.postMessage(message, [channel.port2])
-  })
-}
-
-function clearSessionResumeTicket() {
-  if (typeof window === "undefined") return
-  if (sessionResumeTimer) {
-    clearInterval(sessionResumeTimer)
-    sessionResumeTimer = null
-  }
-  const raw = sessionStorage.getItem(SESSION_RESUME_KEY)
-  if (raw) {
-    try {
-      const ticket = JSON.parse(raw) as SessionResumeTicket
-      if (ticket.handle) void postSessionResumeWorker({ type: "CLEAR_SESSION_RESUME", handle: ticket.handle })
-    } catch {
-      // Ignore malformed local handle records.
-    }
-  }
-  sessionStorage.removeItem(SESSION_RESUME_KEY)
-}
-
-async function writeSessionResumeTicket(profile: UnlockedProfileContainer) {
-  if (typeof window === "undefined") return
-  let previousHandle: string | undefined
-  const existing = sessionStorage.getItem(SESSION_RESUME_KEY)
-  if (existing) {
-    try {
-      previousHandle = (JSON.parse(existing) as SessionResumeTicket).handle
-    } catch {
-      previousHandle = undefined
-    }
-  }
-  const response = await postSessionResumeWorker({
-    type: "STORE_SESSION_RESUME",
-    profileId: profile.ownerEncryption.identityIdHex,
-    profileJson: canonicalJson(profile),
-    ttlMs: SESSION_RESUME_TTL_MS,
-    previousHandle,
-  })
-  if (!response?.ok || !response.handle || !response.expiresAtIso) {
-    sessionStorage.removeItem(SESSION_RESUME_KEY)
-    return
-  }
-  const ticket: SessionResumeTicket = {
-    version: 1,
-    profileId: profile.ownerEncryption.identityIdHex,
-    expiresAtIso: response.expiresAtIso,
-    handle: response.handle,
-  }
-  sessionStorage.setItem(SESSION_RESUME_KEY, JSON.stringify(ticket))
-}
-
-function startSessionResumeHeartbeat(profile: UnlockedProfileContainer) {
-  if (typeof window === "undefined") return
-  if (sessionResumeTimer) clearInterval(sessionResumeTimer)
-  void writeSessionResumeTicket(profile)
-  sessionResumeTimer = setInterval(() => {
-    const current = authStore.get()
-    if (current.authState !== "authenticated" || !current.unlockedProfile) {
-      clearSessionResumeTicket()
-      return
-    }
-    void writeSessionResumeTicket(current.unlockedProfile)
-  }, SESSION_RESUME_REFRESH_MS)
-}
-
-async function consumeSessionResumeTicket(): Promise<UnlockedProfileContainer | null> {
-  if (typeof window === "undefined") return null
-  const raw = sessionStorage.getItem(SESSION_RESUME_KEY)
-  if (!raw) return null
-  sessionStorage.removeItem(SESSION_RESUME_KEY)
-  try {
-    const ticket = JSON.parse(raw) as SessionResumeTicket
-    if (ticket.version !== 1 || !ticket.profileId || !ticket.handle || Date.parse(ticket.expiresAtIso) <= Date.now()) return null
-    const response = await postSessionResumeWorker({ type: "CONSUME_SESSION_RESUME", handle: ticket.handle })
-    if (!response?.ok || response.profileId !== ticket.profileId || !response.profileJson) return null
-    const profile = JSON.parse(response.profileJson) as UnlockedProfileContainer
-    if (profile.ownerEncryption.identityIdHex !== ticket.profileId) return null
-    const sealed = readSealedProfile()
-    if (!sealed || profileIdFor(sealed) !== ticket.profileId) return null
-    await importP256PrivateKey(profile.owner)
-    await importP256PrivateKey(profile.browserNode)
-    return normalizeUnlockedProfile({
-      ...profile,
-      nodes: profile.nodes ?? [profile.browserNode],
-      contacts: profile.contacts ?? [selfContact(profile)],
-      eventLog: profile.eventLog ?? [],
-      profilePreferences: deriveProfilePreferences(profile.eventLog ?? [], profile.profilePreferences, profile.handle),
-      webAuthnBinding: deriveWebAuthnBinding(profile.eventLog ?? [], profile.webAuthnBinding),
-      appSecrets: profile.appSecrets ?? [],
-      sealedContainers: profile.sealedContainers ?? [],
-      outbox: profile.outbox ?? [],
-    })
-  } catch {
-    return null
-  }
-}
-
-async function generateP256Identity(): Promise<{ keyPair: CryptoKeyPair; material: P256KeyMaterial }> {
-  const keyPair = await crypto.subtle.generateKey(
-    { name: "ECDSA", namedCurve: "P-256" },
-    true,
-    ["sign", "verify"],
-  )
-  const publicRaw = new Uint8Array(await crypto.subtle.exportKey("raw", keyPair.publicKey))
-  const privatePkcs8 = new Uint8Array(await crypto.subtle.exportKey("pkcs8", keyPair.privateKey))
-  const identityBytes = publicRaw[0] === 0x04 && publicRaw.length === 65 ? publicRaw.slice(1) : publicRaw
-  return {
-    keyPair,
-    material: {
-      algorithm: "ECDSA_P256_SHA256",
-      identityIdHex: bytesToHex(identityBytes),
-      publicKeyRawBase64: bytesToBase64(publicRaw),
-      privateKeyPkcs8Base64: bytesToBase64(privatePkcs8),
-    },
-  }
-}
-
-async function generateP256EncryptionIdentity(): Promise<{ keyPair: CryptoKeyPair; material: P256EncryptionKeyMaterial }> {
-  const keyPair = await crypto.subtle.generateKey(
-    { name: "ECDH", namedCurve: "P-256" },
-    true,
-    ["deriveKey"],
-  )
-  const publicRaw = new Uint8Array(await crypto.subtle.exportKey("raw", keyPair.publicKey))
-  const privatePkcs8 = new Uint8Array(await crypto.subtle.exportKey("pkcs8", keyPair.privateKey))
-  const identityBytes = publicRaw[0] === 0x04 && publicRaw.length === 65 ? publicRaw.slice(1) : publicRaw
-  return {
-    keyPair,
-    material: {
-      algorithm: "ECDH_P256_HKDF_SHA256",
-      identityIdHex: bytesToHex(identityBytes),
-      publicKeyRawBase64: bytesToBase64(publicRaw),
-      privateKeyPkcs8Base64: bytesToBase64(privatePkcs8),
-    },
-  }
-}
-
-async function importP256PrivateKey(material: P256KeyMaterial): Promise<CryptoKey> {
-  return crypto.subtle.importKey(
-    "pkcs8",
-    base64ToBytes(material.privateKeyPkcs8Base64),
-    { name: "ECDSA", namedCurve: "P-256" },
-    false,
-    ["sign"],
-  )
-}
-
-async function importP256EcdhPublicKey(publicKeyRawBase64: string): Promise<CryptoKey> {
-  return crypto.subtle.importKey(
-    "raw",
-    base64ToBytes(publicKeyRawBase64),
-    { name: "ECDH", namedCurve: "P-256" },
-    false,
-    [],
-  )
-}
-
-async function importP256EcdhPrivateKey(material: P256EncryptionKeyMaterial): Promise<CryptoKey> {
-  return crypto.subtle.importKey(
-    "pkcs8",
-    base64ToBytes(material.privateKeyPkcs8Base64),
-    { name: "ECDH", namedCurve: "P-256" },
-    false,
-    ["deriveKey"],
-  )
-}
-
-async function sealToRecipient(
-  plaintext: Uint8Array,
-  recipientPublicKeyRawBase64: string,
-): Promise<{ ciphertext: Uint8Array; iv: Uint8Array; ephemeralPublicKeyRawBase64: string }> {
-  const recipientPublicKey = await importP256EcdhPublicKey(recipientPublicKeyRawBase64)
-  const ephemeral = await crypto.subtle.generateKey(
-    { name: "ECDH", namedCurve: "P-256" },
-    true,
-    ["deriveKey"],
-  )
-  const key = await crypto.subtle.deriveKey(
-    { name: "ECDH", public: recipientPublicKey },
-    ephemeral.privateKey,
-    { name: "AES-GCM", length: 256 },
-    false,
-    ["encrypt"],
-  )
-  const iv = crypto.getRandomValues(new Uint8Array(12))
-  const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, plaintext))
-  const ephemeralPublicKeyRawBase64 = bytesToBase64(new Uint8Array(await crypto.subtle.exportKey("raw", ephemeral.publicKey)))
-  return { ciphertext, iv, ephemeralPublicKeyRawBase64 }
-}
-
-async function openSealedNestedContainer(container: SealedNestedContainer, recipient: P256EncryptionKeyMaterial): Promise<string> {
-  const privateKey = await importP256EcdhPrivateKey(recipient)
-  const ephemeralPublicKey = await importP256EcdhPublicKey(container.seal.ephemeralPublicKeyRawBase64)
-  const key = await crypto.subtle.deriveKey(
-    { name: "ECDH", public: ephemeralPublicKey },
-    privateKey,
-    { name: "AES-GCM", length: 256 },
-    false,
-    ["decrypt"],
-  )
-  const plaintext = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: base64ToBytes(container.ivBase64) },
-    key,
-    base64ToBytes(container.ciphertextBase64),
-  )
-  const text = textDecoder.decode(plaintext)
-  const digest = await sha256Hex(new Uint8Array(plaintext))
-  if (digest !== container.plaintextSha256) throw new Error("Sealed message digest check failed.")
-  return text
-}
-
-function selfContact(profile: Pick<UnlockedProfileContainer, "handle" | "ownerEncryption">): ContactRecord {
-  return {
-    id: profile.ownerEncryption.identityIdHex,
-    label: `${profile.handle} self`,
-    publicKeyRawBase64: profile.ownerEncryption.publicKeyRawBase64,
-    identityIdHex: profile.ownerEncryption.identityIdHex,
-    routeHint: "local-profile",
-    addedAtIso: new Date().toISOString(),
   }
 }
 
@@ -657,242 +232,32 @@ async function openProfile(sealed: SealedProfileContainer, password: string): Pr
   })
 }
 
-function profileIdFor(sealed: SealedProfileContainer): string {
-  return sealed.profileId ?? sealed.encryptionIdHint ?? sealed.ownerIdHint
-}
-
-function summaryFor(sealed: SealedProfileContainer): ProfileSummary {
-  const profileId = profileIdFor(sealed)
-  return {
-    profileId,
-    handle: sealed.handleHint ?? shortProfileId(sealed.ownerIdHint),
-    ownerIdHint: sealed.ownerIdHint,
-    encryptionIdHint: sealed.encryptionIdHint ?? profileId,
-    encryptionPublicKeyHint: sealed.encryptionPublicKeyHint ?? "",
-    webAuthnCredentialIdHint: sealed.webAuthnCredentialIdHint,
-    webAuthnUnlockAvailable: webAuthnVaultExists(profileId, sealed.webAuthnCredentialIdHint),
-    nodeIdHint: sealed.nodeIdHint,
-    createdAtIso: sealed.createdAtIso,
-  }
-}
-
-function shortProfileId(value: string): string {
-  return value ? `profile-${value.slice(0, 8)}` : "profile"
-}
-
-function readProfileIndex(): ProfileSummary[] {
-  if (typeof window === "undefined") return []
-  const raw = localStorage.getItem(PROFILE_INDEX_KEY)
-  if (!raw) return []
-  try {
-    const parsed = JSON.parse(raw) as ProfileSummary[]
-    return Array.isArray(parsed) ? parsed.filter((item) => item.profileId) : []
-  } catch {
-    localStorage.removeItem(PROFILE_INDEX_KEY)
-    return []
-  }
-}
-
-function writeProfileIndex(summaries: ProfileSummary[]) {
-  localStorage.setItem(PROFILE_INDEX_KEY, JSON.stringify(summaries))
-}
-
-function readProfileById(profileId: string): SealedProfileContainer | null {
-  if (typeof window === "undefined") return null
-  const raw = localStorage.getItem(`${PROFILE_RECORD_PREFIX}${profileId}`)
-  if (!raw) return null
-  try {
-    const parsed = JSON.parse(raw) as SealedProfileContainer
-    if (parsed.kind === "edgerun.browser-profile.sealed" && parsed.version === 1) return parsed
-  } catch {
-    localStorage.removeItem(`${PROFILE_RECORD_PREFIX}${profileId}`)
-  }
-  return null
-}
-
-function migrateLegacyProfile(): SealedProfileContainer | null {
-  if (typeof window === "undefined") return null
-  const raw = localStorage.getItem(LEGACY_PROFILE_STORAGE_KEY)
-  if (!raw) return null
-  try {
-    const parsed = JSON.parse(raw) as SealedProfileContainer
-    if (parsed.kind === "edgerun.browser-profile.sealed" && parsed.version === 1) {
-      persistSealedProfile(parsed)
-      localStorage.removeItem(LEGACY_PROFILE_STORAGE_KEY)
-      return readSealedProfile()
-    }
-  } catch {
-    localStorage.removeItem(LEGACY_PROFILE_STORAGE_KEY)
-  }
-  return null
-}
-
-function readSealedProfile(): SealedProfileContainer | null {
-  if (typeof window === "undefined") return null
-  const index = readProfileIndex()
-  const activeProfileId = localStorage.getItem(ACTIVE_PROFILE_KEY) ?? index[0]?.profileId ?? null
-  if (activeProfileId) {
-    const active = readProfileById(activeProfileId)
-    if (active) return active
-  }
-  return migrateLegacyProfile()
-}
-
-function persistSealedProfile(sealed: SealedProfileContainer) {
-  const profileId = profileIdFor(sealed)
-  const normalized: SealedProfileContainer = {
-    ...sealed,
-    profileId,
-    handleHint: sealed.handleHint ?? shortProfileId(sealed.ownerIdHint),
-    encryptionIdHint: sealed.encryptionIdHint ?? profileId,
-    encryptionPublicKeyHint: sealed.encryptionPublicKeyHint ?? "",
-    webAuthnCredentialIdHint: sealed.webAuthnCredentialIdHint,
-  }
-  localStorage.setItem(`${PROFILE_RECORD_PREFIX}${profileId}`, JSON.stringify(normalized))
-  const nextSummary = summaryFor(normalized)
-  const existing = readProfileIndex().filter((item) => item.profileId !== profileId)
-  writeProfileIndex([...existing, nextSummary].sort((left, right) => left.createdAtIso.localeCompare(right.createdAtIso)))
-  localStorage.setItem(ACTIVE_PROFILE_KEY, profileId)
-  for (const key of LEGACY_KEYS) localStorage.removeItem(key)
-}
-
-function activeProfileId(): string | null {
-  if (typeof window === "undefined") return null
-  return localStorage.getItem(ACTIVE_PROFILE_KEY) ?? readProfileIndex()[0]?.profileId ?? null
-}
-
-function readLocalMessageQueue(): LocalQueuedMessage[] {
-  if (typeof window === "undefined") return []
-  const raw = localStorage.getItem(LOCAL_MESSAGE_QUEUE_KEY)
-  if (!raw) return []
-  try {
-    const parsed = JSON.parse(raw) as LocalQueuedMessage[]
-    return Array.isArray(parsed) ? parsed.filter((item) => item.version === 1 && item.sealedContainer) : []
-  } catch {
-    localStorage.removeItem(LOCAL_MESSAGE_QUEUE_KEY)
-    return []
-  }
-}
-
-function writeLocalMessageQueue(messages: LocalQueuedMessage[]) {
-  localStorage.setItem(LOCAL_MESSAGE_QUEUE_KEY, JSON.stringify(messages))
-}
-
-function localMessagesFor(profile: UnlockedProfileContainer | null): LocalQueuedMessage[] {
-  if (!profile) return []
-  return readLocalMessageQueue().filter((message) => message.toId === profile.ownerEncryption.identityIdHex)
-}
-
-function webAuthnAvailable(): boolean {
-  return typeof window !== "undefined" && "PublicKeyCredential" in window && Boolean(navigator.credentials)
-}
-
-function webAuthnVaultExists(profileId: string, credentialIdBase64?: string): boolean {
-  if (typeof window === "undefined" || !credentialIdBase64) return false
-  try {
-    const raw = localStorage.getItem(`${WEBAUTHN_VAULT_PREFIX}${profileId}`)
-    if (!raw) return false
-    const parsed = JSON.parse(raw) as { version?: number; credentialIdBase64?: string }
-    return parsed.version === 1 && parsed.credentialIdBase64 === credentialIdBase64
-  } catch {
-    localStorage.removeItem(`${WEBAUTHN_VAULT_PREFIX}${profileId}`)
-    return false
-  }
-}
-
-function hasUsableWebAuthnBinding(sealed: SealedProfileContainer | null): boolean {
-  if (!sealed || !sealed.webAuthnCredentialIdHint) return false
-  return webAuthnVaultExists(profileIdFor(sealed), sealed.webAuthnCredentialIdHint)
-}
-
-async function webAuthnPrfSalt(profileId: string): Promise<Uint8Array> {
-  return new Uint8Array(await crypto.subtle.digest("SHA-256", textEncoder.encode(`edgerun:profile-unlock:${profileId}`)))
-}
-
-async function credentialCreationOptions(profile: UnlockedProfileContainer): Promise<PublicKeyCredentialCreationOptions> {
-  const profileId = profile.ownerEncryption.identityIdHex
-  return {
-    challenge: crypto.getRandomValues(new Uint8Array(32)),
-    rp: { name: "Edgerun" },
-    user: {
-      id: base64ToBytes(profile.ownerEncryption.publicKeyRawBase64).slice(0, 32),
-      name: profile.handle,
-      displayName: profile.handle,
-    },
-    pubKeyCredParams: [
-      { type: "public-key", alg: -7 },
-      { type: "public-key", alg: -257 },
-    ],
-    authenticatorSelection: {
-      residentKey: "preferred",
-      userVerification: "required",
-    },
-    timeout: 60_000,
-    extensions: {
-      prf: { eval: { first: await webAuthnPrfSalt(profileId) } },
-    } as AuthenticationExtensionsClientInputs,
-  }
-}
-
-function webAuthnPrfResult(credential: PublicKeyCredential | null): Uint8Array | null {
-  const results = credential?.getClientExtensionResults() as { prf?: { enabled?: boolean; results?: { first?: ArrayBuffer } } }
-  const first = results.prf?.results?.first
-  return first ? new Uint8Array(first) : null
-}
-
-async function requestWebAuthnPrf(credentialIdBase64: string, profileId: string): Promise<Uint8Array> {
-  const assertion = await navigator.credentials.get({
-    publicKey: {
-      challenge: crypto.getRandomValues(new Uint8Array(32)),
-      allowCredentials: [{ type: "public-key", id: base64ToBytes(credentialIdBase64) }],
-      userVerification: "required",
-      timeout: 60_000,
-      extensions: {
-        prf: { eval: { first: await webAuthnPrfSalt(profileId) } },
-      } as AuthenticationExtensionsClientInputs,
-    },
-  }) as PublicKeyCredential | null
-  const first = webAuthnPrfResult(assertion)
-  if (!first) throw new Error("This passkey cannot unlock the profile because WebAuthn PRF/hmac-secret was not returned. Try a YubiKey with FIDO2 hmac-secret enabled, or use the profile password.")
-  return first
-}
-
-async function writeWebAuthnVault(profileId: string, credentialIdBase64: string, profilePassword: string, prfSecret: Uint8Array) {
-  const key = await importAesGcmKey(prfSecret)
-  const iv = crypto.getRandomValues(new Uint8Array(12))
-  const ciphertext = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, textEncoder.encode(profilePassword)))
-  localStorage.setItem(`${WEBAUTHN_VAULT_PREFIX}${profileId}`, JSON.stringify({
-    version: 1,
-    credentialIdBase64,
-    ivBase64: bytesToBase64(iv),
-    ciphertextBase64: bytesToBase64(ciphertext),
-  }))
-}
-
-async function readWebAuthnVaultPassword(profileId: string, credentialIdBase64: string, prfSecret: Uint8Array): Promise<string> {
-  const raw = localStorage.getItem(`${WEBAUTHN_VAULT_PREFIX}${profileId}`)
-  if (!raw) throw new Error("No local passkey unlock vault is bound for this profile.")
-  const parsed = JSON.parse(raw) as { version: 1; credentialIdBase64: string; ivBase64: string; ciphertextBase64: string }
-  if (parsed.version !== 1 || parsed.credentialIdBase64 !== credentialIdBase64) throw new Error("Passkey vault does not match this profile.")
-  const key = await importAesGcmKey(prfSecret)
-  const plaintext = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: base64ToBytes(parsed.ivBase64) },
-    key,
-    base64ToBytes(parsed.ciphertextBase64),
+async function persistUnlockedProfile(profile: UnlockedProfileContainer, password: string): Promise<SealedProfileContainer> {
+  const current = readSealedProfile()
+  if (!current) throw new Error("No sealed profile container found.")
+  await openProfile(current, password)
+  const normalizedProfile = normalizeUnlockedProfile(profile)
+  const sealed = await sealProfile(normalizedProfile, password)
+  persistSealedProfile(sealed)
+  startSessionResumeHeartbeat(
+    normalizedProfile.ownerEncryption.identityIdHex,
+    () => canonicalJson(normalizedProfile),
+    normalizedProfile.handle,
+    () => authStore.get().authState === "authenticated",
   )
-  return textDecoder.decode(plaintext)
-}
-
-function registrationFor(profile: UnlockedProfileContainer): StoredNodeRegistration {
-  const genesis = profile.eventLog[0]
-  return {
-    nodeId: profile.browserNode.identityIdHex,
-    nodeTarget: "browser-contained",
-    username: profile.handle,
-    ownerId: profile.owner.identityIdHex,
-    genesisEventHash: genesis?.eventHash ?? "",
-    registeredAtIso: profile.createdAtIso,
-  }
+  authStore.set({
+    ...authStore.get(),
+    authState: "authenticated",
+    username: normalizedProfile.handle,
+    error: null,
+    nodeRegistration: registrationFor(normalizedProfile),
+    unlockedProfile: normalizedProfile,
+    sealedProfile: sealed,
+    profileSummaries: readProfileIndex(),
+    activeProfileId: profileIdFor(sealed),
+    localMessages: localMessagesFor(normalizedProfile.ownerEncryption.identityIdHex),
+  })
+  return sealed
 }
 
 const initialSealedProfile = typeof window !== "undefined" ? readSealedProfile() : null
@@ -955,7 +320,12 @@ export async function registerAuth(name: string, nodeProvision?: NodeProvisionIn
     profile.contacts = [selfContact(profile)]
     const sealed = await sealProfile(profile, password)
     persistSealedProfile(sealed)
-    startSessionResumeHeartbeat(profile)
+    startSessionResumeHeartbeat(
+      profile.ownerEncryption.identityIdHex,
+      () => canonicalJson(profile),
+      profile.handle,
+      () => authStore.get().authState === "authenticated",
+    )
     authStore.set({
       authState: "authenticated",
       username: profile.handle,
@@ -967,7 +337,7 @@ export async function registerAuth(name: string, nodeProvision?: NodeProvisionIn
       sealedProfile: sealed,
       profileSummaries: readProfileIndex(),
       activeProfileId: profileIdFor(sealed),
-      localMessages: localMessagesFor(profile),
+      localMessages: localMessagesFor(profile.ownerEncryption.identityIdHex),
     })
     return true
   } catch (err) {
@@ -990,7 +360,12 @@ export async function authenticateAuth(password?: string): Promise<boolean> {
     const profile = await openProfile(sealed, password ?? "")
     await importP256PrivateKey(profile.owner)
     await importP256PrivateKey(profile.browserNode)
-    startSessionResumeHeartbeat(profile)
+    startSessionResumeHeartbeat(
+      profile.ownerEncryption.identityIdHex,
+      () => canonicalJson(profile),
+      profile.handle,
+      () => authStore.get().authState === "authenticated",
+    )
     authStore.set({
       authState: "authenticated",
       username: profile.handle,
@@ -1002,7 +377,7 @@ export async function authenticateAuth(password?: string): Promise<boolean> {
       sealedProfile: sealed,
       profileSummaries: readProfileIndex(),
       activeProfileId: profileIdFor(sealed),
-      localMessages: localMessagesFor(profile),
+      localMessages: localMessagesFor(profile.ownerEncryption.identityIdHex),
     })
     return true
   } catch {
@@ -1016,19 +391,29 @@ export async function authenticateWithWebAuthn(): Promise<boolean> {
   if (state.isLoading) return false
   const sealed = readSealedProfile()
   const credentialIdBase64 = sealed?.webAuthnCredentialIdHint
-  if (!sealed || !credentialIdBase64 || !hasUsableWebAuthnBinding(sealed)) {
+  if (!sealed || !credentialIdBase64) {
+    authStore.set({ ...state, error: "No usable passkey unlock vault is bound to this profile." })
+    return false
+  }
+  const sealedProfileId = profileIdFor(sealed)
+  if (!hasUsableWebAuthnBinding(sealed, sealedProfileId)) {
     authStore.set({ ...state, error: "No usable passkey unlock vault is bound to this profile." })
     return false
   }
   authStore.set({ ...state, authState: "authenticating", isLoading: true, error: null, sealedProfile: sealed })
   try {
-    const profileId = profileIdFor(sealed)
+    const profileId = sealedProfileId
     const prfSecret = await requestWebAuthnPrf(credentialIdBase64, profileId)
     const password = await readWebAuthnVaultPassword(profileId, credentialIdBase64, prfSecret)
     const profile = await openProfile(sealed, password)
     await importP256PrivateKey(profile.owner)
     await importP256PrivateKey(profile.browserNode)
-    startSessionResumeHeartbeat(profile)
+    startSessionResumeHeartbeat(
+      profile.ownerEncryption.identityIdHex,
+      () => canonicalJson(profile),
+      profile.handle,
+      () => authStore.get().authState === "authenticated",
+    )
     authStore.set({
       authState: "authenticated",
       username: profile.handle,
@@ -1040,7 +425,7 @@ export async function authenticateWithWebAuthn(): Promise<boolean> {
       sealedProfile: sealed,
       profileSummaries: readProfileIndex(),
       activeProfileId: profileIdFor(sealed),
-      localMessages: localMessagesFor(profile),
+      localMessages: localMessagesFor(profile.ownerEncryption.identityIdHex),
     })
     return true
   } catch (err) {
@@ -1056,12 +441,25 @@ export async function resumeSessionAuth(): Promise<boolean> {
   if (!sealed) return false
   authStore.set({ ...state, authState: "authenticating", isLoading: true, error: null, sealedProfile: sealed })
   try {
-    const profile = await consumeSessionResumeTicket()
-    if (!profile) {
+    const rawProfile = await consumeSessionResumeTicket(
+      sealed.ownerIdHint,
+      () => sealed ? profileIdFor(sealed) : null,
+      async () => {},
+      (raw) => normalizeUnlockedProfile(raw as UnlockedProfileContainer),
+    )
+    if (!rawProfile) {
       authStore.set({ ...authStore.get(), authState: "locked", isLoading: false, error: null, sealedProfile: sealed })
       return false
     }
-    startSessionResumeHeartbeat(profile)
+    const profile = rawProfile as UnlockedProfileContainer
+    await importP256PrivateKey(profile.owner)
+    await importP256PrivateKey(profile.browserNode)
+    startSessionResumeHeartbeat(
+      profile.ownerEncryption.identityIdHex,
+      () => canonicalJson(profile),
+      profile.handle,
+      () => authStore.get().authState === "authenticated",
+    )
     authStore.set({
       authState: "authenticated",
       username: profile.handle,
@@ -1073,7 +471,7 @@ export async function resumeSessionAuth(): Promise<boolean> {
       sealedProfile: sealed,
       profileSummaries: readProfileIndex(),
       activeProfileId: profileIdFor(sealed),
-      localMessages: localMessagesFor(profile),
+      localMessages: localMessagesFor(profile.ownerEncryption.identityIdHex),
     })
     return true
   } catch {
@@ -1152,7 +550,7 @@ export function switchProfile(profileId: string) {
   }
   clearSessionResumeTicket()
   clearTransientAppSessions()
-  localStorage.setItem(ACTIVE_PROFILE_KEY, profileId)
+  localStorage.setItem("edgerun:active_profile_v1", profileId)
   authStore.set({
     ...authStore.get(),
     authState: "locked",
@@ -1165,29 +563,6 @@ export function switchProfile(profileId: string) {
     activeProfileId: profileId,
     localMessages: [],
   })
-}
-
-async function persistUnlockedProfile(profile: UnlockedProfileContainer, password: string): Promise<SealedProfileContainer> {
-  const current = readSealedProfile()
-  if (!current) throw new Error("No sealed profile container found.")
-  await openProfile(current, password)
-  const normalizedProfile = normalizeUnlockedProfile(profile)
-  const sealed = await sealProfile(normalizedProfile, password)
-  persistSealedProfile(sealed)
-  startSessionResumeHeartbeat(normalizedProfile)
-  authStore.set({
-    ...authStore.get(),
-    authState: "authenticated",
-    username: normalizedProfile.handle,
-    error: null,
-    nodeRegistration: registrationFor(normalizedProfile),
-    unlockedProfile: normalizedProfile,
-    sealedProfile: sealed,
-    profileSummaries: readProfileIndex(),
-    activeProfileId: profileIdFor(sealed),
-    localMessages: localMessagesFor(normalizedProfile),
-  })
-  return sealed
 }
 
 export async function createProfileNode(label: string, password: string): Promise<boolean> {
@@ -1366,13 +741,6 @@ export async function addContactToProfile(input: {
     authStore.set({ ...authStore.get(), isLoading: false, error: err instanceof Error ? err.message : "Contact import failed." })
     return false
   }
-}
-
-function sanitizeKnownNodeIds(value: unknown): string[] {
-  if (!Array.isArray(value)) return []
-  return Array.from(new Set(value
-    .map((item) => typeof item === "string" ? item.trim() : "")
-    .filter(Boolean)))
 }
 
 export async function saveContactToProfile(input: {
