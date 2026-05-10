@@ -1,0 +1,36 @@
+## @file
+# EdgeRun UEFI Bluetooth bring-up application.
+#
+# Visible diagnostic/bring-up app for Realtek RTL8922AE USB Bluetooth HCI.
+# No disk writes, no NVRAM writes, no persistence.
+##
+
+[Defines]
+  INF_VERSION                    = 0x0001001B
+  BASE_NAME                      = EdgerunEfiBt
+  FILE_GUID                      = 8D17C436-07F1-49FA-A8C7-8DE91E168922
+  MODULE_TYPE                    = UEFI_APPLICATION
+  VERSION_STRING                 = 0.1
+  ENTRY_POINT                    = UefiMain
+
+[Sources]
+  EdgerunEfiBt.c
+  UsbBt.c
+  Hci.c
+  Realtek.c
+  BleAdv.c
+
+[Packages]
+  MdePkg/MdePkg.dec
+
+[LibraryClasses]
+  UefiApplicationEntryPoint
+  UefiLib
+  UefiBootServicesTableLib
+  MemoryAllocationLib
+  BaseMemoryLib
+  BaseLib
+  PrintLib
+
+[Protocols]
+  gEfiUsbIoProtocolGuid
