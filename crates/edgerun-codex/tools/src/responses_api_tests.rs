@@ -9,8 +9,8 @@ use crate::JsonSchema;
 use crate::ToolDefinition;
 use crate::ToolName;
 use codex_protocol::dynamic_tools::DynamicToolSpec;
-use pretty_assertions::assert_eq;
 use edgerun_json::serde_json::json;
+use pretty_assertions::assert_eq;
 use std::collections::BTreeMap;
 
 #[test]

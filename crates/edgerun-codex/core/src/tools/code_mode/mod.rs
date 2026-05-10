@@ -331,7 +331,7 @@ async fn call_nested_tool(
 
     let call = ToolCall {
         tool_name: tool_call_name,
-        call_id: format!("{PUBLIC_TOOL_NAME}-{}", uuid::Uuid::new_v4()),
+        call_id: format!("{PUBLIC_TOOL_NAME}-{}", edgerun_uuid::Uuid::new_v4()),
         payload,
     };
     let result = tool_runtime

@@ -3,7 +3,6 @@ use std::time::Duration;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use bytes::Bytes;
 use codex_api::AuthProvider;
 use codex_api::Compression;
 use codex_api::Provider;
@@ -15,11 +14,12 @@ use codex_client::Response;
 use codex_client::StreamResponse;
 use codex_client::TransportError;
 use codex_protocol::models::ResponseItem;
-use futures::StreamExt;
-use http::HeaderMap;
-use http::StatusCode;
-use pretty_assertions::assert_eq;
+use edgerun_bytes::Bytes;
+use edgerun_http::HeaderMap;
+use edgerun_http::StatusCode;
 use edgerun_json::serde_json::Value;
+use futures::StreamExt;
+use pretty_assertions::assert_eq;
 
 #[derive(Clone)]
 struct FixtureSseTransport {

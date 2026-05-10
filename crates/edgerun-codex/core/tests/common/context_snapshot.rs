@@ -1,7 +1,7 @@
 use regex_lite::Regex;
 use edgerun_json::serde_json::Value;
-use similar::ChangeTag;
-use similar::TextDiff;
+use edgerun_similar::ChangeTag;
+use edgerun_similar::TextDiff;
 use std::sync::OnceLock;
 
 use crate::responses::ResponsesRequest;

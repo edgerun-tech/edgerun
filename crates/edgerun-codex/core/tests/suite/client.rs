@@ -66,15 +66,15 @@ use core_test_support::test_codex::TestCodex;
 use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
 use dunce::canonicalize as normalize_path;
+use edgerun_json::serde_json::json;
+use edgerun_uuid::Uuid;
 use futures::StreamExt;
 use pretty_assertions::assert_eq;
-use edgerun_json::serde_json::json;
 use std::io::Write;
 use std::num::NonZeroU64;
 use std::sync::Arc;
 use tempfile::TempDir;
 use toml::toml;
-use uuid::Uuid;
 use wiremock::Mock;
 use wiremock::MockServer;
 use wiremock::ResponseTemplate;
@@ -119,8 +119,6 @@ fn write_auth_json(
     access_token: &str,
     account_id: Option<&str>,
 ) -> String {
-    use base64::Engine as _;
-
     let header = json!({ "alg": "none", "typ": "JWT" });
     let payload = json!({
         "email": "user@example.com",
@@ -130,7 +128,7 @@ fn write_auth_json(
         }
     });
 
-    let b64 = |b: &[u8]| base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(b);
+    let b64 = |b: &[u8]| edgerun_encoding::base64::base64url_nopad_encode(b);
     let header_b64 = b64(&edgerun_json::serde_json::to_vec(&header).unwrap());
     let payload_b64 = b64(&edgerun_json::serde_json::to_vec(&payload).unwrap());
     let signature_b64 = b64(b"sig");
@@ -677,7 +675,12 @@ async fn resume_replays_image_tool_outputs_with_detail() {
         .join("resume-image-tool-outputs-with-detail.jsonl");
     let mut file = std::fs::File::create(&session_path).unwrap();
     for line in rollout {
-        writeln!(file, "{}", edgerun_json::serde_json::to_string(&line).unwrap()).unwrap();
+        writeln!(
+            file,
+            "{}",
+            edgerun_json::serde_json::to_string(&line).unwrap()
+        )
+        .unwrap();
     }
 
     let server = MockServer::start().await;
@@ -2653,7 +2656,8 @@ async fn usage_limit_error_emits_rate_limit_event() -> anyhow::Result<()> {
         unreachable!();
     };
 
-    let event_json = edgerun_json::serde_json::to_value(&event).expect("serialize token count event");
+    let event_json =
+        edgerun_json::serde_json::to_value(&event).expect("serialize token count event");
     pretty_assertions::assert_eq!(
         event_json,
         json!({

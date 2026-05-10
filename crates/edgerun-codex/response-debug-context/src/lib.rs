@@ -94,9 +94,9 @@ mod tests {
     use super::telemetry_transport_error_message;
     use codex_api::ApiError;
     use codex_api::TransportError;
-    use http::HeaderMap;
-    use http::HeaderValue;
-    use http::StatusCode;
+    use edgerun_http::HeaderMap;
+    use edgerun_http::HeaderValue;
+    use edgerun_http::StatusCode;
     use pretty_assertions::assert_eq;
 
     #[test]

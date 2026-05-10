@@ -10,7 +10,7 @@ use codex_network_proxy::PROXY_GIT_SSH_COMMAND_ENV_KEY;
 use codex_protocol::user_input::UserInput;
 use tokio_util::sync::CancellationToken;
 use tracing::error;
-use uuid::Uuid;
+use edgerun_uuid::Uuid;
 
 use crate::exec::ExecCapturePolicy;
 use crate::exec::StdoutStream;

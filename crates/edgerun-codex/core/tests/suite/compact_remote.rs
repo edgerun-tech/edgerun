@@ -38,9 +38,9 @@ use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
 use core_test_support::wait_for_event_match;
 use core_test_support::wait_for_event_with_timeout;
-use pretty_assertions::assert_eq;
 use edgerun_json::serde_json::Value;
 use edgerun_json::serde_json::json;
+use pretty_assertions::assert_eq;
 use tokio::time::Duration;
 use wiremock::ResponseTemplate;
 
@@ -3327,9 +3327,11 @@ async fn snapshot_request_shape_remote_manual_compact_without_previous_user_mess
     )
     .await;
 
-    let compact_mock =
-        responses::mount_compact_json_once(harness.server(), edgerun_json::serde_json::json!({ "output": [] }))
-            .await;
+    let compact_mock = responses::mount_compact_json_once(
+        harness.server(),
+        edgerun_json::serde_json::json!({ "output": [] }),
+    )
+    .await;
 
     codex.submit(Op::Compact).await?;
     wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;

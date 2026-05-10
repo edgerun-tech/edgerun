@@ -1,6 +1,5 @@
 use super::*;
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use edgerun_encoding::base64::standard_encode;
 use codex_protocol::AgentPath;
 use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::models::BaseInstructions;
@@ -1865,7 +1864,7 @@ fn original_detail_images_scale_with_dimensions() {
     image
         .write_to(&mut bytes, ImageFormat::Png)
         .expect("encode png");
-    let payload = BASE64_STANDARD.encode(bytes.get_ref());
+    let payload = standard_encode(bytes.get_ref());
     let image_url = format!("data:image/png;base64,{payload}");
     let item = ResponseItem::FunctionCallOutput {
         call_id: "call-original".to_string(),
@@ -1895,7 +1894,7 @@ fn original_detail_images_are_capped_at_max_patch_count() {
     image
         .write_to(&mut bytes, ImageFormat::Png)
         .expect("encode png");
-    let payload = BASE64_STANDARD.encode(bytes.get_ref());
+    let payload = standard_encode(bytes.get_ref());
     let image_url = format!("data:image/png;base64,{payload}");
     let item = ResponseItem::FunctionCallOutput {
         call_id: "call-original-capped".to_string(),
@@ -1928,7 +1927,7 @@ fn original_detail_webp_images_scale_with_dimensions() {
     image
         .write_to(&mut bytes, ImageFormat::WebP)
         .expect("encode webp");
-    let payload = BASE64_STANDARD.encode(bytes.get_ref());
+    let payload = standard_encode(bytes.get_ref());
     let image_url = format!("data:image/webp;base64,{payload}");
     let item = ResponseItem::FunctionCallOutput {
         call_id: "call-original-webp".to_string(),

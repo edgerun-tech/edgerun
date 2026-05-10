@@ -23,11 +23,16 @@ exclude = [
 ]
 
 members = [
+  "crates/utility/edgerun-bytes",
+  "crates/utility/edgerun-eventsource-stream",
   "crates/utility/edgerun-glob",
   "crates/utility/edgerun-shlex",
+  "crates/utility/edgerun-similar",
   "crates/utility/edgerun-time",
   "crates/utility/edgerun-tokio-tungstenite",
   "crates/utility/edgerun-tungstenite",
+  "crates/utility/edgerun-uuid",
+  "crates/utility/edgerun-zstd",
   "crates/utility/edgerun-regex",
   "crates/edgerun-standards",
   "crates/edgerun-unit",
@@ -61,8 +66,10 @@ members = [
   "crates/linux-adapters/edgerun-goodix-fingerprint",
   "crates/identity/edgerun-hardware-signing",
   "crates/utility/edgerun-hpack",
+  "crates/utility/edgerun-http",
   "crates/utility/edgerun-json",
   "crates/utility/edgerun-locale",
+  "crates/utility/edgerun-quick-xml",
   "crates/utility/edgerun-random",
   "crates/linux-adapters/edgerun-linux-cec",
   "crates/utility/edgerun-rusttls",

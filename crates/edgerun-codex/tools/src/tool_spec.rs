@@ -7,8 +7,8 @@ use codex_protocol::config_types::WebSearchContextSize;
 use codex_protocol::config_types::WebSearchFilters as ConfigWebSearchFilters;
 use codex_protocol::config_types::WebSearchUserLocation as ConfigWebSearchUserLocation;
 use codex_protocol::config_types::WebSearchUserLocationType;
-use serde::Serialize;
 use edgerun_json::serde_json::Value;
+use serde::Serialize;
 
 /// When serialized as JSON, this produces a valid "Tool" in the OpenAI
 /// Responses API.

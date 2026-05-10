@@ -9,8 +9,12 @@ homepage.workspace = true
 description = "Edgerun-backed rustls-shaped TLS compatibility surface"
 
 [dependencies]
-edgerun-node = { version = "0.1", path = "../../node/edgerun-node", default-features = false, features = ["tls", "runtime"] }
-edgerun-protocols = { workspace = true, features = ["tls"] }
+edgerun-node = { version = "0.1", path = "../../node/edgerun-node", default-features = false, features = ["tls", "runtime"], optional = true }
+edgerun-protocols = { workspace = true, default-features = false, features = ["tls"] }
+
+[features]
+default = []
+std = ["dep:edgerun-node"]
 
 [lints]
 workspace = true

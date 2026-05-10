@@ -10,8 +10,8 @@ use std::sync::mpsc as std_mpsc;
 use std::thread;
 
 use codex_protocol::ToolName;
-use serde::Serialize;
 use edgerun_json::serde_json::Value as JsonValue;
+use serde::Serialize;
 use tokio::sync::mpsc;
 
 use crate::description::EnabledToolMetadata;

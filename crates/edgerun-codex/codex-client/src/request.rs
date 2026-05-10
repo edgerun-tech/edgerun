@@ -1,6 +1,6 @@
-use bytes::Bytes;
+use edgerun_bytes::Bytes;
+use edgerun_http::Method;
 use edgerun_json::serde_json::Value;
-use http::Method;
 use reqwest::header::HeaderMap;
 use reqwest::header::HeaderValue;
 use serde::Serialize;
@@ -97,10 +97,10 @@ impl Request {
                 })
             }
             Some(RequestBody::Json(body)) => {
-                let json = edgerun_json::serde_json::to_vec(&body)
-                    .map_err(|err| err.to_string())?;
+                let json =
+                    edgerun_json::serde_json::to_vec(&body).map_err(|err| err.to_string())?;
                 let bytes = if self.compression != RequestCompression::None {
-                    if headers.contains_key(http::header::CONTENT_ENCODING) {
+                    if headers.contains_key(edgerun_http::header::CONTENT_ENCODING) {
                         return Err(
                             "request compression was requested but content-encoding is already set"
                                 .to_string(),
@@ -112,7 +112,7 @@ impl Request {
                     let (compressed, content_encoding) = match self.compression {
                         RequestCompression::None => unreachable!("guarded by compression != None"),
                         RequestCompression::Zstd => (
-                            zstd::stream::encode_all(std::io::Cursor::new(json), 3)
+                            edgerun_zstd::stream::encode_all(std::io::Cursor::new(json), 3)
                                 .map_err(|err| err.to_string())?,
                             HeaderValue::from_static("zstd"),
                         ),
@@ -120,7 +120,7 @@ impl Request {
                     let post_compression_bytes = compressed.len();
                     let compression_duration = compression_start.elapsed();
 
-                    headers.insert(http::header::CONTENT_ENCODING, content_encoding);
+                    headers.insert(edgerun_http::header::CONTENT_ENCODING, content_encoding);
 
                     tracing::debug!(
                         pre_compression_bytes,
@@ -134,9 +134,9 @@ impl Request {
                     json
                 };
 
-                if !headers.contains_key(http::header::CONTENT_TYPE) {
+                if !headers.contains_key(edgerun_http::header::CONTENT_TYPE) {
                     headers.insert(
-                        http::header::CONTENT_TYPE,
+                        edgerun_http::header::CONTENT_TYPE,
                         HeaderValue::from_static("application/json"),
                     );
                 }
@@ -157,8 +157,8 @@ impl Request {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use edgerun_http::HeaderValue;
     use edgerun_json::serde_json::json;
-    use http::HeaderValue;
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -177,7 +177,7 @@ mod tests {
         assert_eq!(
             prepared
                 .headers
-                .get(http::header::CONTENT_TYPE)
+                .get(edgerun_http::header::CONTENT_TYPE)
                 .and_then(|value| value.to_str().ok()),
             Some("application/json")
         );
@@ -195,7 +195,7 @@ mod tests {
                 .with_json(&json!({"model": "test-model"}))
                 .with_compression(RequestCompression::Zstd);
         request.headers.insert(
-            http::header::CONTENT_ENCODING,
+            edgerun_http::header::CONTENT_ENCODING,
             HeaderValue::from_static("gzip"),
         );
 
@@ -212,7 +212,7 @@ mod tests {
 
 #[derive(Debug, Clone)]
 pub struct Response {
-    pub status: http::StatusCode,
+    pub status: edgerun_http::StatusCode,
     pub headers: HeaderMap,
     pub body: Bytes,
 }

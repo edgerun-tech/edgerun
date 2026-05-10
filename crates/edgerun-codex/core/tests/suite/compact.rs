@@ -49,9 +49,9 @@ use core_test_support::responses::sse;
 use core_test_support::responses::sse_failed;
 use core_test_support::responses::sse_response;
 use core_test_support::responses::start_mock_server;
-use pretty_assertions::assert_eq;
 use edgerun_json::serde_json::Value;
 use edgerun_json::serde_json::json;
+use pretty_assertions::assert_eq;
 use std::fs;
 use std::path::Path;
 use wiremock::MockServer;
@@ -1065,7 +1065,9 @@ async fn multiple_auto_compact_per_task_runs_after_token_limit_hit() {
         Some(normalized)
     }
 
-    fn normalize_inputs(values: &[edgerun_json::serde_json::Value]) -> Vec<edgerun_json::serde_json::Value> {
+    fn normalize_inputs(
+        values: &[edgerun_json::serde_json::Value],
+    ) -> Vec<edgerun_json::serde_json::Value> {
         values
             .iter()
             .filter_map(|value| {
@@ -1892,8 +1894,11 @@ async fn auto_compact_runs_after_resume_when_token_usage_is_over_limit() {
             encrypted_content: "ENCRYPTED_COMPACTION_SUMMARY".to_string(),
         },
     ];
-    let compact_mock =
-        mount_compact_json_once(&server, edgerun_json::serde_json::json!({ "output": compacted_history })).await;
+    let compact_mock = mount_compact_json_once(
+        &server,
+        edgerun_json::serde_json::json!({ "output": compacted_history }),
+    )
+    .await;
 
     let mut builder = test_codex().with_config(move |config| {
         set_test_compact_prompt(config);
@@ -3057,8 +3062,11 @@ async fn auto_compact_counts_encrypted_reasoning_before_last_user() {
             encrypted_content: "ENCRYPTED_COMPACTION_SUMMARY".to_string(),
         },
     ];
-    let compact_mock =
-        mount_compact_json_once(&server, edgerun_json::serde_json::json!({ "output": compacted_history })).await;
+    let compact_mock = mount_compact_json_once(
+        &server,
+        edgerun_json::serde_json::json!({ "output": compacted_history }),
+    )
+    .await;
     let chatgpt_base_url = format!("{}/backend-api", server.uri());
 
     let codex = test_codex()
@@ -3180,8 +3188,11 @@ async fn auto_compact_runs_when_reasoning_header_clears_between_turns() {
             encrypted_content: "ENCRYPTED_COMPACTION_SUMMARY".to_string(),
         },
     ];
-    let compact_mock =
-        mount_compact_json_once(&server, edgerun_json::serde_json::json!({ "output": compacted_history })).await;
+    let compact_mock = mount_compact_json_once(
+        &server,
+        edgerun_json::serde_json::json!({ "output": compacted_history }),
+    )
+    .await;
 
     let codex = test_codex()
         .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())

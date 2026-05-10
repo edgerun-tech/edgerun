@@ -240,8 +240,8 @@ mod tests {
     use codex_protocol::config_types::ModelProviderAuthInfo;
     use codex_protocol::openai_models::ModelInfo;
     use codex_protocol::openai_models::ModelsResponse;
-    use pretty_assertions::assert_eq;
     use edgerun_json::serde_json::json;
+    use pretty_assertions::assert_eq;
     use wiremock::Mock;
     use wiremock::MockServer;
     use wiremock::ResponseTemplate;

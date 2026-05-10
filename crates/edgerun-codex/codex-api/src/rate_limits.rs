@@ -2,8 +2,8 @@ use codex_protocol::account::PlanType;
 use codex_protocol::protocol::CreditsSnapshot;
 use codex_protocol::protocol::RateLimitSnapshot;
 use codex_protocol::protocol::RateLimitWindow;
+use edgerun_http::HeaderMap;
 use edgerun_json::FromJson;
-use http::HeaderMap;
 use std::collections::BTreeSet;
 use std::fmt::Display;
 
@@ -260,7 +260,7 @@ fn normalize_limit_id(name: impl Into<String>) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use http::HeaderValue;
+    use edgerun_http::HeaderValue;
     use pretty_assertions::assert_eq;
 
     #[test]

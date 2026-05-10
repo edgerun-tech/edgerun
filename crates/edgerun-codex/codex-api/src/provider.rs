@@ -2,9 +2,9 @@ use codex_client::Request;
 use codex_client::RequestCompression;
 use codex_client::RetryOn;
 use codex_client::RetryPolicy;
+use edgerun_http::Method;
+use edgerun_http::header::HeaderMap;
 use edgerun_url::Url;
-use http::Method;
-use http::header::HeaderMap;
 use std::collections::HashMap;
 use std::time::Duration;
 

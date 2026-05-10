@@ -505,7 +505,7 @@ async fn explicit_installation_id_skips_codex_home_file() {
 
     let auth_manager =
         AuthManager::from_auth_for_testing(CodexAuth::create_dummy_chatgpt_auth_for_testing());
-    let installation_id = uuid::Uuid::new_v4().to_string();
+    let installation_id = edgerun_uuid::Uuid::new_v4().to_string();
     let state_db = init_state_db(&config).await;
     let thread_store = thread_store_from_config(&config, state_db.clone());
     let manager = ThreadManager::new(
@@ -738,7 +738,7 @@ async fn rollout_path_resume_and_fork_read_history_through_thread_store() {
     config.codex_home = temp_dir.path().join("codex-home").abs();
     config.cwd = config.codex_home.abs();
     config.experimental_thread_store = ThreadStoreConfig::InMemory {
-        id: format!("thread-manager-{}", uuid::Uuid::new_v4()),
+        id: format!("thread-manager-{}", edgerun_uuid::Uuid::new_v4()),
     };
     std::fs::create_dir_all(&config.codex_home).expect("create codex home");
 

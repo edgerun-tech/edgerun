@@ -1,6 +1,6 @@
 use codex_protocol::protocol::SessionSource;
-use http::HeaderMap;
-use http::HeaderValue;
+use edgerun_http::HeaderMap;
+use edgerun_http::HeaderValue;
 
 pub fn build_session_headers(session_id: Option<String>, thread_id: Option<String>) -> HeaderMap {
     let mut headers = HeaderMap::new();
@@ -32,7 +32,7 @@ pub(crate) fn subagent_header(source: &Option<SessionSource>) -> Option<String> 
 
 pub(crate) fn insert_header(headers: &mut HeaderMap, name: &str, value: &str) {
     if let (Ok(header_name), Ok(header_value)) = (
-        name.parse::<http::HeaderName>(),
+        name.parse::<edgerun_http::HeaderName>(),
         HeaderValue::from_str(value),
     ) {
         headers.insert(header_name, header_value);

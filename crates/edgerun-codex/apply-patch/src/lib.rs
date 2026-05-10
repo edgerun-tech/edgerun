@@ -15,14 +15,14 @@ use crate::file_system::CreateDirectoryOptions;
 use crate::file_system::RemoveOptions;
 use anyhow::Context;
 use anyhow::Result;
+use edgerun_error::Error;
+use edgerun_similar::TextDiff;
 pub use parser::Hunk;
 pub use parser::ParseError;
 use parser::ParseError::*;
 pub use parser::UpdateFileChunk;
 pub use parser::parse_patch;
-use similar::TextDiff;
 pub use streaming_parser::StreamingPatchParser;
-use edgerun_error::Error;
 
 pub use invocation::maybe_parse_apply_patch_verified;
 pub use standalone_executable::main;

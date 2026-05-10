@@ -1,12 +1,11 @@
 #![allow(clippy::expect_used)]
 
 use anyhow::Result;
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use core_test_support::responses::ev_apply_patch_call;
 use core_test_support::responses::ev_apply_patch_custom_tool_call;
 use core_test_support::responses::ev_shell_command_call;
 use core_test_support::test_codex::ApplyPatchModelOutput;
+use edgerun_encoding::base64::standard_encode;
 use pretty_assertions::assert_eq;
 use std::sync::atomic::AtomicI32;
 use std::sync::atomic::Ordering;
@@ -845,12 +844,19 @@ async fn apply_patch_cli_can_use_shell_command_output_as_patch_input() -> Result
             .and_then(edgerun_json::serde_json::Value::as_array)
             .and_then(|items| {
                 items.iter().find(|item| {
-                    item.get("type").and_then(edgerun_json::serde_json::Value::as_str)
+                    item.get("type")
+                        .and_then(edgerun_json::serde_json::Value::as_str)
                         == Some("function_call_output")
-                        && item.get("call_id").and_then(edgerun_json::serde_json::Value::as_str) == Some(call_id)
+                        && item
+                            .get("call_id")
+                            .and_then(edgerun_json::serde_json::Value::as_str)
+                            == Some(call_id)
                 })
             })
-            .and_then(|item| item.get("output").and_then(edgerun_json::serde_json::Value::as_str))
+            .and_then(|item| {
+                item.get("output")
+                    .and_then(edgerun_json::serde_json::Value::as_str)
+            })
             .expect("function_call_output output string")
             .to_string()
     }
@@ -871,7 +877,7 @@ async fn apply_patch_cli_can_use_shell_command_output_as_patch_input() -> Result
                         // read command wrapped in quotes, and suppress progress records so the
                         // shell tool only returns the file contents back to apply_patch.
                         let script = "$ProgressPreference = 'SilentlyContinue'; [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); [System.IO.File]::ReadAllText('source.txt', [System.Text.UTF8Encoding]::new($false))";
-                        let encoded = BASE64_STANDARD.encode(
+                        let encoded = standard_encode(
                             script
                                 .encode_utf16()
                                 .flat_map(u16::to_le_bytes)
@@ -1076,7 +1082,11 @@ async fn apply_patch_shell_command_heredoc_with_cd_emits_turn_diff() -> Result<(
     let bodies = vec![
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "shell_command", &edgerun_json::serde_json::to_string(&args)?),
+            ev_function_call(
+                call_id,
+                "shell_command",
+                &edgerun_json::serde_json::to_string(&args)?,
+            ),
             ev_completed("resp-1"),
         ]),
         sse(vec![
@@ -1216,7 +1226,11 @@ async fn apply_patch_shell_command_failure_propagates_error_and_skips_diff() -> 
     let bodies = vec![
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "shell_command", &edgerun_json::serde_json::to_string(&args)?),
+            ev_function_call(
+                call_id,
+                "shell_command",
+                &edgerun_json::serde_json::to_string(&args)?,
+            ),
             ev_completed("resp-1"),
         ]),
         sse(vec![

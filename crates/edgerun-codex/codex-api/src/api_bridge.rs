@@ -8,10 +8,10 @@ use codex_protocol::error::RetryLimitReachedError;
 use codex_protocol::error::UnexpectedResponseError;
 use codex_protocol::error::UsageLimitReachedError;
 use edgerun_encoding::base64::standard_decode;
+use edgerun_http::HeaderMap;
 use edgerun_json::FromJson;
 use edgerun_json::JsonValue;
 use edgerun_time::chrono::unix_seconds_to_chrono;
-use http::HeaderMap;
 
 pub fn map_api_error(err: ApiError) -> CodexErr {
     match err {
@@ -41,7 +41,7 @@ pub fn map_api_error(err: ApiError) -> CodexErr {
             } => {
                 let body_text = body.unwrap_or_default();
 
-                if status == http::StatusCode::SERVICE_UNAVAILABLE
+                if status == edgerun_http::StatusCode::SERVICE_UNAVAILABLE
                     && let Ok(value) = edgerun_json::from_str(&body_text)
                     && matches!(
                         value
@@ -54,7 +54,7 @@ pub fn map_api_error(err: ApiError) -> CodexErr {
                     return CodexErr::ServerOverloaded;
                 }
 
-                if status == http::StatusCode::BAD_REQUEST {
+                if status == edgerun_http::StatusCode::BAD_REQUEST {
                     if let Ok(parsed) = edgerun_json::from_str(&body_text)
                         && let Some(error) = parsed.get("error")
                         && error.get("code").and_then(JsonValue::as_str)
@@ -74,11 +74,10 @@ pub fn map_api_error(err: ApiError) -> CodexErr {
                     } else {
                         CodexErr::InvalidRequest(body_text)
                     }
-                } else if status == http::StatusCode::INTERNAL_SERVER_ERROR {
+                } else if status == edgerun_http::StatusCode::INTERNAL_SERVER_ERROR {
                     CodexErr::InternalServerError
-                } else if status == http::StatusCode::TOO_MANY_REQUESTS {
-                    if let Ok(err) = edgerun_json::from_json_str::<UsageErrorResponse>(&body_text)
-                    {
+                } else if status == edgerun_http::StatusCode::TOO_MANY_REQUESTS {
+                    if let Ok(err) = edgerun_json::from_json_str::<UsageErrorResponse>(&body_text) {
                         if err.error.error_type.as_deref() == Some("usage_limit_reached") {
                             let limit_id = extract_header(headers.as_ref(), ACTIVE_LIMIT_HEADER);
                             let rate_limits = headers.as_ref().and_then(|map| {
@@ -120,7 +119,7 @@ pub fn map_api_error(err: ApiError) -> CodexErr {
                 }
             }
             TransportError::RetryLimit => CodexErr::RetryLimit(RetryLimitReachedError {
-                status: http::StatusCode::INTERNAL_SERVER_ERROR,
+                status: edgerun_http::StatusCode::INTERNAL_SERVER_ERROR,
                 request_id: None,
             }),
             TransportError::Timeout => CodexErr::Timeout,

@@ -3,7 +3,7 @@ use anyhow::Result;
 use codex_app_server_protocol::generate_json_with_experimental;
 use codex_app_server_protocol::generate_typescript_schema_fixture_subtree_for_tests;
 use codex_app_server_protocol::read_schema_fixture_subtree;
-use similar::TextDiff;
+use edgerun_similar::TextDiff;
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::path::PathBuf;

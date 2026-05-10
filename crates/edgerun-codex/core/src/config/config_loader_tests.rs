@@ -426,8 +426,7 @@ async fn includes_thread_config_layers_in_stack() -> anyhow::Result<()> {
 #[cfg(target_os = "macos")]
 #[tokio::test]
 async fn managed_preferences_take_highest_precedence() {
-    use base64::Engine;
-
+    
     let tmp = tempdir().expect("tempdir");
     let managed_path = tmp.path().join("managed_config.toml");
 
@@ -455,7 +454,7 @@ flag = false
 
     let mut overrides = LoaderOverrides::with_managed_config_path_for_tests(managed_path);
     overrides.managed_preferences_base64 =
-        Some(base64::prelude::BASE64_STANDARD.encode(raw_managed_preferences.as_bytes()));
+        Some(edgerun_encoding::base64::standard_encode(raw_managed_preferences.as_bytes()));
 
     let cwd = AbsolutePathBuf::try_from(tmp.path()).expect("cwd");
     let state = load_config_layers_state(
@@ -498,8 +497,7 @@ flag = false
 #[tokio::test]
 async fn managed_preferences_expand_home_directory_in_workspace_write_roots() -> anyhow::Result<()>
 {
-    use base64::Engine;
-
+    
     let Some(home) = dirs::home_dir() else {
         return Ok(());
     };
@@ -508,7 +506,7 @@ async fn managed_preferences_expand_home_directory_in_workspace_write_roots() ->
     let mut loader_overrides =
         LoaderOverrides::with_managed_config_path_for_tests(tmp.path().join("managed_config.toml"));
     loader_overrides.managed_preferences_base64 = Some(
-        base64::prelude::BASE64_STANDARD.encode(
+        edgerun_encoding::base64::standard_encode(
             r#"
 sandbox_mode = "workspace-write"
 [sandbox_workspace_write]
@@ -545,14 +543,13 @@ writable_roots = ["~/code"]
 #[cfg(target_os = "macos")]
 #[tokio::test]
 async fn managed_preferences_requirements_are_applied() -> anyhow::Result<()> {
-    use base64::Engine;
-
+    
     let tmp = tempdir()?;
 
     let mut loader_overrides =
         LoaderOverrides::with_managed_config_path_for_tests(tmp.path().join("managed_config.toml"));
     loader_overrides.macos_managed_config_requirements_base64 = Some(
-        base64::prelude::BASE64_STANDARD.encode(
+        edgerun_encoding::base64::standard_encode(
             r#"
 allowed_approval_policies = ["never"]
 allowed_sandbox_modes = ["read-only"]
@@ -608,8 +605,7 @@ allowed_sandbox_modes = ["read-only"]
 #[cfg(target_os = "macos")]
 #[tokio::test]
 async fn managed_preferences_requirements_take_precedence() -> anyhow::Result<()> {
-    use base64::Engine;
-
+    
     let tmp = tempdir()?;
     let managed_path = tmp.path().join("managed_config.toml");
 
@@ -617,7 +613,7 @@ async fn managed_preferences_requirements_take_precedence() -> anyhow::Result<()
 
     let mut loader_overrides = LoaderOverrides::with_managed_config_path_for_tests(managed_path);
     loader_overrides.macos_managed_config_requirements_base64 = Some(
-        base64::prelude::BASE64_STANDARD.encode(
+        edgerun_encoding::base64::standard_encode(
             r#"
 allowed_approval_policies = ["never"]
 "#
@@ -752,12 +748,11 @@ personality = true
 #[cfg(target_os = "macos")]
 #[tokio::test]
 async fn cloud_requirements_take_precedence_over_mdm_requirements() -> anyhow::Result<()> {
-    use base64::Engine;
-
+    
     let tmp = tempdir()?;
     let mut loader_overrides = LoaderOverrides::without_managed_config_for_tests();
     loader_overrides.macos_managed_config_requirements_base64 = Some(
-        base64::prelude::BASE64_STANDARD.encode(
+        edgerun_encoding::base64::standard_encode(
             r#"
 allowed_approval_policies = ["on-request"]
 "#

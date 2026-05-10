@@ -1453,8 +1453,8 @@ mod tests {
     use codex_protocol::protocol::RealtimeConversationVersion;
     use codex_protocol::protocol::RealtimeOutputModality;
     use codex_protocol::protocol::RealtimeVoice;
-    use pretty_assertions::assert_eq;
     use edgerun_json::serde_json::json;
+    use pretty_assertions::assert_eq;
     use std::path::PathBuf;
 
     fn absolute_path_string(path: &str) -> String {
@@ -1933,7 +1933,8 @@ mod tests {
 
     #[test]
     fn conversation_id_deserializes_from_plain_string() -> Result<()> {
-        let id: ThreadId = edgerun_json::serde_json::from_value(json!("67e55044-10b1-426f-9247-bb680e5fe0c8"))?;
+        let id: ThreadId =
+            edgerun_json::serde_json::from_value(json!("67e55044-10b1-426f-9247-bb680e5fe0c8"))?;
 
         assert_eq!(
             ThreadId::from_string("67e55044-10b1-426f-9247-bb680e5fe0c8")?,
@@ -2051,15 +2052,16 @@ mod tests {
 
     #[test]
     fn serialize_mcp_server_elicitation_request() -> Result<()> {
-        let requested_schema: v2::McpElicitationSchema = edgerun_json::serde_json::from_value(json!({
-            "type": "object",
-            "properties": {
-                "confirmed": {
-                    "type": "boolean"
-                }
-            },
-            "required": ["confirmed"]
-        }))?;
+        let requested_schema: v2::McpElicitationSchema =
+            edgerun_json::serde_json::from_value(json!({
+                "type": "object",
+                "properties": {
+                    "confirmed": {
+                        "type": "boolean"
+                    }
+                },
+                "required": ["confirmed"]
+            }))?;
         let params = v2::McpServerElicitationRequestParams {
             thread_id: "thr_123".to_string(),
             turn_id: Some("turn_123".to_string()),

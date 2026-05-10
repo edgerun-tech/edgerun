@@ -1,12 +1,12 @@
 use std::fmt::Display;
 
+use edgerun_uuid::Uuid;
 use schemars::JsonSchema;
 use schemars::r#gen::SchemaGenerator;
 use schemars::schema::Schema;
 use serde::Deserialize;
 use serde::Serialize;
 use ts_rs::TS;
-use uuid::Uuid;
 
 use crate::ThreadId;
 
@@ -23,7 +23,7 @@ impl SessionId {
         }
     }
 
-    pub fn from_string(s: &str) -> Result<Self, uuid::Error> {
+    pub fn from_string(s: &str) -> Result<Self, edgerun_uuid::Error> {
         Ok(Self {
             uuid: Uuid::parse_str(s)?,
         })
@@ -31,7 +31,7 @@ impl SessionId {
 }
 
 impl TryFrom<&str> for SessionId {
-    type Error = uuid::Error;
+    type Error = edgerun_uuid::Error;
 
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         Self::from_string(value)
@@ -39,7 +39,7 @@ impl TryFrom<&str> for SessionId {
 }
 
 impl TryFrom<String> for SessionId {
-    type Error = uuid::Error;
+    type Error = edgerun_uuid::Error;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
         Self::from_string(value.as_str())

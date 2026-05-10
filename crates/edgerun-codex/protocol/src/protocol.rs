@@ -49,10 +49,10 @@ use crate::request_permissions::RequestPermissionsEvent;
 use crate::request_permissions::RequestPermissionsResponse;
 use crate::request_user_input::RequestUserInputResponse;
 use crate::user_input::UserInput;
+use edgerun_json::serde_json::Value;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
-use edgerun_json::serde_json::Value;
 use serde_with::serde_as;
 use strum_macros::Display;
 use tracing::error;
@@ -3923,8 +3923,8 @@ mod tests {
     use crate::permissions::FileSystemSpecialPath;
     use crate::permissions::NetworkSandboxPolicy;
     use anyhow::Result;
-    use pretty_assertions::assert_eq;
     use edgerun_json::serde_json::json;
+    use pretty_assertions::assert_eq;
     use std::path::PathBuf;
     use tempfile::NamedTempFile;
     use tempfile::TempDir;
@@ -3988,7 +3988,8 @@ mod tests {
             ResponseInputItem::Message {
                 role: "assistant".to_string(),
                 content: vec![ContentItem::OutputText {
-                    text: edgerun_json::serde_json::to_string(&communication).expect("serialize communication"),
+                    text: edgerun_json::serde_json::to_string(&communication)
+                        .expect("serialize communication"),
                 }],
                 phase: Some(MessagePhase::Commentary),
             }
@@ -4235,11 +4236,13 @@ mod tests {
 
     #[test]
     fn granular_approval_config_defaults_missing_optional_flags_to_false() {
-        let decoded = edgerun_json::serde_json::from_value::<GranularApprovalConfig>(edgerun_json::serde_json::json!({
-            "sandbox_approval": true,
-            "rules": false,
-            "mcp_elicitations": true,
-        }))
+        let decoded = edgerun_json::serde_json::from_value::<GranularApprovalConfig>(
+            edgerun_json::serde_json::json!({
+                "sandbox_approval": true,
+                "rules": false,
+                "mcp_elicitations": true,
+            }),
+        )
         .expect("granular approval config should deserialize");
 
         assert_eq!(
@@ -4923,7 +4926,10 @@ mod tests {
             })
         );
         assert_eq!(
-            edgerun_json::serde_json::from_value::<Op>(edgerun_json::serde_json::to_value(&text).unwrap()).unwrap(),
+            edgerun_json::serde_json::from_value::<Op>(
+                edgerun_json::serde_json::to_value(&text).unwrap()
+            )
+            .unwrap(),
             text
         );
         assert_eq!(
@@ -4933,7 +4939,10 @@ mod tests {
             })
         );
         assert_eq!(
-            edgerun_json::serde_json::from_value::<Op>(edgerun_json::serde_json::to_value(&close).unwrap()).unwrap(),
+            edgerun_json::serde_json::from_value::<Op>(
+                edgerun_json::serde_json::to_value(&close).unwrap()
+            )
+            .unwrap(),
             close
         );
         assert_eq!(
@@ -4943,7 +4952,10 @@ mod tests {
             })
         );
         assert_eq!(
-            edgerun_json::serde_json::from_value::<Op>(edgerun_json::serde_json::to_value(&list_voices).unwrap()).unwrap(),
+            edgerun_json::serde_json::from_value::<Op>(
+                edgerun_json::serde_json::to_value(&list_voices).unwrap()
+            )
+            .unwrap(),
             list_voices
         );
         assert_eq!(
@@ -5029,7 +5041,8 @@ mod tests {
 
     #[test]
     fn user_input_deserializes_without_final_output_json_schema_field() -> Result<()> {
-        let op: Op = edgerun_json::serde_json::from_value(json!({ "type": "user_input", "items": [] }))?;
+        let op: Op =
+            edgerun_json::serde_json::from_value(json!({ "type": "user_input", "items": [] }))?;
 
         assert_eq!(
             op,
@@ -5323,7 +5336,8 @@ mod tests {
             serialized,
         );
 
-        let deserialized: ExecCommandOutputDeltaEvent = edgerun_json::serde_json::from_str(&serialized)?;
+        let deserialized: ExecCommandOutputDeltaEvent =
+            edgerun_json::serde_json::from_str(&serialized)?;
         assert_eq!(deserialized, event);
         Ok(())
     }

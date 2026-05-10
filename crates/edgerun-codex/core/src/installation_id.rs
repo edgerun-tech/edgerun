@@ -12,7 +12,7 @@ use std::os::unix::fs::PermissionsExt;
 
 use codex_utils_absolute_path::AbsolutePathBuf;
 use tokio::fs;
-use uuid::Uuid;
+use edgerun_uuid::Uuid;
 
 pub(crate) const INSTALLATION_ID_FILENAME: &str = "installation_id";
 
@@ -70,7 +70,7 @@ mod tests {
     use core_test_support::PathExt;
     use pretty_assertions::assert_eq;
     use tempfile::TempDir;
-    use uuid::Uuid;
+    use edgerun_uuid::Uuid;
 
     #[cfg(unix)]
     use std::os::unix::fs::PermissionsExt;

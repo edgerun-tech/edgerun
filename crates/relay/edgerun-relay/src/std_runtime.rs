@@ -1334,19 +1334,7 @@ fn read_ws_endpoint(
 fn self_signed_wss_config() -> io::Result<edgerun_rusttls::ServerConfig> {
     let cert = generate_self_signed(&["localhost", "127.0.0.1"])
         .map_err(|error| io::Error::other(error.to_string()))?;
-    let key_der = edgerun_crypto::p256_signing_key_to_der(&cert.signing_key);
-    edgerun_rusttls::ServerConfig::builder_with_protocol_versions(&[
-        &edgerun_rusttls::version::TLS13,
-    ])
-    .with_no_client_auth()
-    .with_single_cert(
-        cert.cert_chain_der
-            .into_iter()
-            .map(edgerun_rusttls::CertificateDer::from)
-            .collect(),
-        edgerun_rusttls::PrivateKeyDer::from(key_der),
-    )
-    .map_err(|error| io::Error::other(error.to_string()))
+    Ok(edgerun_rusttls::ServerConfig::from_certificate(cert))
 }
 
 fn configure_tcp_stream(stream: &TcpStream) -> io::Result<()> {

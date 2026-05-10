@@ -52,9 +52,11 @@ async fn codex_returns_json_result(model: String) -> anyhow::Result<()> {
         ev_completed("r1"),
     ]);
 
-    let expected_schema: edgerun_json::serde_json::Value = edgerun_json::serde_json::from_str(SCHEMA)?;
+    let expected_schema: edgerun_json::serde_json::Value =
+        edgerun_json::serde_json::from_str(SCHEMA)?;
     let match_json_text_param = move |req: &wiremock::Request| {
-        let body: edgerun_json::serde_json::Value = edgerun_json::serde_json::from_slice(&req.body).unwrap_or_default();
+        let body: edgerun_json::serde_json::Value =
+            edgerun_json::serde_json::from_slice(&req.body).unwrap_or_default();
         let Some(text) = body.get("text") else {
             return false;
         };
@@ -62,8 +64,14 @@ async fn codex_returns_json_result(model: String) -> anyhow::Result<()> {
             return false;
         };
 
-        format.get("name") == Some(&edgerun_json::serde_json::Value::String("codex_output_schema".into()))
-            && format.get("type") == Some(&edgerun_json::serde_json::Value::String("json_schema".into()))
+        format.get("name")
+            == Some(&edgerun_json::serde_json::Value::String(
+                "codex_output_schema".into(),
+            ))
+            && format.get("type")
+                == Some(&edgerun_json::serde_json::Value::String(
+                    "json_schema".into(),
+                ))
             && format.get("strict") == Some(&edgerun_json::serde_json::Value::Bool(true))
             && format.get("schema") == Some(&expected_schema)
     };
@@ -98,14 +106,19 @@ async fn codex_returns_json_result(model: String) -> anyhow::Result<()> {
 
     let message = wait_for_event(&codex, |ev| matches!(ev, EventMsg::AgentMessage(_))).await;
     if let EventMsg::AgentMessage(message) = message {
-        let json: edgerun_json::serde_json::Value = edgerun_json::serde_json::from_str(&message.message)?;
+        let json: edgerun_json::serde_json::Value =
+            edgerun_json::serde_json::from_str(&message.message)?;
         assert_eq!(
             json.get("explanation"),
-            Some(&edgerun_json::serde_json::Value::String("explanation".into()))
+            Some(&edgerun_json::serde_json::Value::String(
+                "explanation".into()
+            ))
         );
         assert_eq!(
             json.get("final_answer"),
-            Some(&edgerun_json::serde_json::Value::String("final_answer".into()))
+            Some(&edgerun_json::serde_json::Value::String(
+                "final_answer".into()
+            ))
         );
     } else {
         anyhow::bail!("expected agent message event");

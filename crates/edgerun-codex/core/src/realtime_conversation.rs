@@ -7,8 +7,7 @@ use async_channel::Receiver;
 use async_channel::RecvError;
 use async_channel::Sender;
 use async_channel::TrySendError;
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use edgerun_encoding::base64::standard_decode;
 use codex_api::ApiError;
 use codex_api::Provider as ApiProvider;
 use codex_api::RealtimeAudioFrame;
@@ -45,9 +44,9 @@ use codex_protocol::protocol::RealtimeHandoffRequested;
 use codex_protocol::protocol::RealtimeOutputModality;
 use codex_protocol::protocol::RealtimeVoice;
 use codex_protocol::protocol::RealtimeVoicesList;
-use http::HeaderMap;
-use http::HeaderValue;
-use http::header::AUTHORIZATION;
+use edgerun_http::HeaderMap;
+use edgerun_http::HeaderValue;
+use edgerun_http::header::AUTHORIZATION;
 use edgerun_json::serde_json::json;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -1482,7 +1481,7 @@ fn audio_duration_ms(frame: &RealtimeAudioFrame) -> u32 {
 }
 
 fn decoded_samples_per_channel(frame: &RealtimeAudioFrame) -> Option<u32> {
-    let bytes = BASE64_STANDARD.decode(&frame.data).ok()?;
+    let bytes = standard_decode(&frame.data).ok()?;
     let channels = usize::from(frame.num_channels.max(1));
     let samples = bytes.len().checked_div(2)?.checked_div(channels)?;
     u32::try_from(samples).ok()

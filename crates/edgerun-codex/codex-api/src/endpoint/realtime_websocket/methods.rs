@@ -19,11 +19,17 @@ use codex_client::backoff;
 use codex_client::maybe_build_rustls_client_config_with_custom_ca;
 use codex_client::rustls_provider::ensure_rustls_crypto_provider;
 use codex_protocol::protocol::RealtimeTranscriptDelta;
+use edgerun_http::HeaderMap;
+use edgerun_http::HeaderValue;
+use edgerun_tokio_tungstenite::Error as WsError;
+use edgerun_tokio_tungstenite::MaybeTlsStream;
+use edgerun_tokio_tungstenite::Message;
+use edgerun_tokio_tungstenite::WebSocketStream;
+use edgerun_tungstenite::client::IntoClientRequest;
+use edgerun_tungstenite::protocol::WebSocketConfig;
 use edgerun_url::Url;
 use futures::SinkExt;
 use futures::StreamExt;
-use http::HeaderMap;
-use http::HeaderValue;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -33,17 +39,11 @@ use tokio::sync::Mutex;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio::time::sleep;
-use edgerun_tokio_tungstenite::MaybeTlsStream;
-use edgerun_tokio_tungstenite::WebSocketStream;
-use edgerun_tokio_tungstenite::Error as WsError;
-use edgerun_tokio_tungstenite::Message;
-use edgerun_tungstenite::client::IntoClientRequest;
 use tracing::debug;
 use tracing::error;
 use tracing::info;
 use tracing::trace;
 use tracing::warn;
-use edgerun_tungstenite::protocol::WebSocketConfig;
 
 const REALTIME_WIRE_LOG_TARGET: &str = "codex_api::realtime_websocket::wire";
 
@@ -701,7 +701,7 @@ fn merge_request_headers(
     let mut headers = provider_headers.clone();
     headers.extend(extra_headers);
     for (name, value) in &default_headers {
-        if let http::header::Entry::Vacant(entry) = headers.entry(name) {
+        if let edgerun_http::header::Entry::Vacant(entry) = headers.entry(name) {
             entry.insert(value.clone());
         }
     }
@@ -836,15 +836,15 @@ mod tests {
     use codex_protocol::protocol::RealtimeTranscriptDelta;
     use codex_protocol::protocol::RealtimeTranscriptDone;
     use codex_protocol::protocol::RealtimeVoice;
-    use http::HeaderValue;
-    use pretty_assertions::assert_eq;
+    use edgerun_http::HeaderValue;
     use edgerun_json::serde_json::Value;
     use edgerun_json::serde_json::json;
+    use edgerun_tokio_tungstenite::Message;
+    use edgerun_tokio_tungstenite::accept_async;
+    use pretty_assertions::assert_eq;
     use std::collections::HashMap;
     use std::time::Duration;
     use tokio::net::TcpListener;
-    use edgerun_tokio_tungstenite::accept_async;
-    use edgerun_tokio_tungstenite::Message;
 
     #[test]
     fn parse_session_updated_event() {

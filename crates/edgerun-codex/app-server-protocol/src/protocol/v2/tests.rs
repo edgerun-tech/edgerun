@@ -32,9 +32,9 @@ use codex_protocol::protocol::GranularApprovalConfig as CoreGranularApprovalConf
 use codex_protocol::protocol::NetworkAccess as CoreNetworkAccess;
 use codex_protocol::request_permissions::RequestPermissionProfile as CoreRequestPermissionProfile;
 use codex_protocol::user_input::UserInput as CoreUserInput;
-use pretty_assertions::assert_eq;
 use edgerun_json::serde_json::Value as JsonValue;
 use edgerun_json::serde_json::json;
+use pretty_assertions::assert_eq;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::num::NonZeroUsize;
@@ -62,7 +62,8 @@ fn approvals_reviewer_serializes_auto_review_and_accepts_legacy_guardian_subagen
         "\"user\""
     );
     assert_eq!(
-        edgerun_json::serde_json::to_string(&ApprovalsReviewer::AutoReview).expect("serialize reviewer"),
+        edgerun_json::serde_json::to_string(&ApprovalsReviewer::AutoReview)
+            .expect("serialize reviewer"),
         "\"guardian_subagent\""
     );
 
@@ -273,28 +274,29 @@ fn external_agent_config_import_params_accept_legacy_plugin_details() {
 
 #[test]
 fn command_execution_request_approval_rejects_relative_additional_permission_paths() {
-    let err = edgerun_json::serde_json::from_value::<CommandExecutionRequestApprovalParams>(json!({
-        "threadId": "thr_123",
-        "turnId": "turn_123",
-        "itemId": "call_123",
-        "startedAtMs": 1,
-        "command": "cat file",
-        "cwd": absolute_path_string("tmp"),
-        "commandActions": null,
-        "reason": null,
-        "networkApprovalContext": null,
-        "additionalPermissions": {
-            "network": null,
-            "fileSystem": {
-                "read": ["relative/path"],
-                "write": null
-            }
-        },
-        "proposedExecpolicyAmendment": null,
-        "proposedNetworkPolicyAmendments": null,
-        "availableDecisions": null
-    }))
-    .expect_err("relative additional permission paths should fail");
+    let err =
+        edgerun_json::serde_json::from_value::<CommandExecutionRequestApprovalParams>(json!({
+            "threadId": "thr_123",
+            "turnId": "turn_123",
+            "itemId": "call_123",
+            "startedAtMs": 1,
+            "command": "cat file",
+            "cwd": absolute_path_string("tmp"),
+            "commandActions": null,
+            "reason": null,
+            "networkApprovalContext": null,
+            "additionalPermissions": {
+                "network": null,
+                "fileSystem": {
+                    "read": ["relative/path"],
+                    "write": null
+                }
+            },
+            "proposedExecpolicyAmendment": null,
+            "proposedNetworkPolicyAmendments": null,
+            "availableDecisions": null
+        }))
+        .expect_err("relative additional permission paths should fail");
     assert!(
         err.to_string()
             .contains("AbsolutePathBuf deserialized without a base path"),
@@ -579,18 +581,19 @@ fn permissions_request_approval_response_uses_granted_permission_profile_without
     } else {
         "/tmp/read-write"
     };
-    let response = edgerun_json::serde_json::from_value::<PermissionsRequestApprovalResponse>(json!({
-        "permissions": {
-            "network": {
-                "enabled": true,
+    let response =
+        edgerun_json::serde_json::from_value::<PermissionsRequestApprovalResponse>(json!({
+            "permissions": {
+                "network": {
+                    "enabled": true,
+                },
+                "fileSystem": {
+                    "read": [read_only_path],
+                    "write": [read_write_path],
+                },
             },
-            "fileSystem": {
-                "read": [read_only_path],
-                "write": [read_write_path],
-            },
-        },
-    }))
-    .expect("permissions response should deserialize");
+        }))
+        .expect("permissions response should deserialize");
 
     assert_eq!(
         response.permissions,
@@ -635,10 +638,11 @@ fn permissions_request_approval_response_uses_granted_permission_profile_without
 
 #[test]
 fn permissions_request_approval_response_defaults_scope_to_turn() {
-    let response = edgerun_json::serde_json::from_value::<PermissionsRequestApprovalResponse>(json!({
-        "permissions": {},
-    }))
-    .expect("response should deserialize");
+    let response =
+        edgerun_json::serde_json::from_value::<PermissionsRequestApprovalResponse>(json!({
+            "permissions": {},
+        }))
+        .expect("response should deserialize");
 
     assert_eq!(response.scope, PermissionGrantScope::Turn);
     assert_eq!(response.strict_auto_review, None);
@@ -646,11 +650,12 @@ fn permissions_request_approval_response_defaults_scope_to_turn() {
 
 #[test]
 fn permissions_request_approval_response_accepts_strict_auto_review() {
-    let response = edgerun_json::serde_json::from_value::<PermissionsRequestApprovalResponse>(json!({
-        "permissions": {},
-        "strictAutoReview": true,
-    }))
-    .expect("response should deserialize");
+    let response =
+        edgerun_json::serde_json::from_value::<PermissionsRequestApprovalResponse>(json!({
+            "permissions": {},
+            "strictAutoReview": true,
+        }))
+        .expect("response should deserialize");
 
     assert_eq!(response.strict_auto_review, Some(true));
 }
@@ -665,7 +670,8 @@ fn fs_get_metadata_response_round_trips_minimal_fields() {
         modified_at_ms: 456,
     };
 
-    let value = edgerun_json::serde_json::to_value(&response).expect("serialize fs/getMetadata response");
+    let value =
+        edgerun_json::serde_json::to_value(&response).expect("serialize fs/getMetadata response");
     assert_eq!(
         value,
         json!({
@@ -688,7 +694,8 @@ fn fs_read_file_response_round_trips_base64_data() {
         data_base64: "aGVsbG8=".to_string(),
     };
 
-    let value = edgerun_json::serde_json::to_value(&response).expect("serialize fs/readFile response");
+    let value =
+        edgerun_json::serde_json::to_value(&response).expect("serialize fs/readFile response");
     assert_eq!(
         value,
         json!({
@@ -715,8 +722,8 @@ fn fs_read_file_params_round_trip() {
         })
     );
 
-    let decoded =
-        edgerun_json::serde_json::from_value::<FsReadFileParams>(value).expect("deserialize fs/readFile params");
+    let decoded = edgerun_json::serde_json::from_value::<FsReadFileParams>(value)
+        .expect("deserialize fs/readFile params");
     assert_eq!(decoded, params);
 }
 
@@ -727,7 +734,8 @@ fn fs_create_directory_params_round_trip_with_default_recursive() {
         recursive: None,
     };
 
-    let value = edgerun_json::serde_json::to_value(&params).expect("serialize fs/createDirectory params");
+    let value =
+        edgerun_json::serde_json::to_value(&params).expect("serialize fs/createDirectory params");
     assert_eq!(
         value,
         json!({
@@ -780,8 +788,8 @@ fn fs_copy_params_round_trip_with_recursive_directory_copy() {
         })
     );
 
-    let decoded =
-        edgerun_json::serde_json::from_value::<FsCopyParams>(value).expect("deserialize fs/copy params");
+    let decoded = edgerun_json::serde_json::from_value::<FsCopyParams>(value)
+        .expect("deserialize fs/copy params");
     assert_eq!(decoded, params);
 }
 
@@ -792,7 +800,8 @@ fn thread_shell_command_params_round_trip() {
         command: "printf 'hello world\\n'".to_string(),
     };
 
-    let value = edgerun_json::serde_json::to_value(&params).expect("serialize thread/shellCommand params");
+    let value =
+        edgerun_json::serde_json::to_value(&params).expect("serialize thread/shellCommand params");
     assert_eq!(
         value,
         json!({
@@ -810,7 +819,8 @@ fn thread_shell_command_params_round_trip() {
 fn thread_shell_command_response_round_trip() {
     let response = ThreadShellCommandResponse {};
 
-    let value = edgerun_json::serde_json::to_value(&response).expect("serialize thread/shellCommand response");
+    let value = edgerun_json::serde_json::to_value(&response)
+        .expect("serialize thread/shellCommand response");
     assert_eq!(value, json!({}));
 
     let decoded = edgerun_json::serde_json::from_value::<ThreadShellCommandResponse>(value)
@@ -828,7 +838,8 @@ fn fs_changed_notification_round_trips() {
         ],
     };
 
-    let value = edgerun_json::serde_json::to_value(&notification).expect("serialize fs/changed notification");
+    let value = edgerun_json::serde_json::to_value(&notification)
+        .expect("serialize fs/changed notification");
     assert_eq!(
         value,
         json!({
@@ -911,8 +922,8 @@ fn command_exec_params_round_trips_disable_timeout() {
         })
     );
 
-    let decoded =
-        edgerun_json::serde_json::from_value::<CommandExecParams>(value).expect("deserialize round-trip");
+    let decoded = edgerun_json::serde_json::from_value::<CommandExecParams>(value)
+        .expect("deserialize round-trip");
     assert_eq!(decoded, params);
 }
 
@@ -931,7 +942,8 @@ fn process_spawn_params_round_trips_without_sandbox_policy() {
         size: None,
     };
 
-    let value = edgerun_json::serde_json::to_value(&params).expect("serialize process/spawn params");
+    let value =
+        edgerun_json::serde_json::to_value(&params).expect("serialize process/spawn params");
     assert_eq!(
         value,
         json!({
@@ -943,8 +955,8 @@ fn process_spawn_params_round_trips_without_sandbox_policy() {
         })
     );
 
-    let decoded =
-        edgerun_json::serde_json::from_value::<ProcessSpawnParams>(value).expect("deserialize round-trip");
+    let decoded = edgerun_json::serde_json::from_value::<ProcessSpawnParams>(value)
+        .expect("deserialize round-trip");
     assert_eq!(decoded, params);
 }
 
@@ -968,8 +980,8 @@ fn process_spawn_params_distinguish_omitted_null_and_value_limits() {
         env: None,
         size: None,
     };
-    let decoded =
-        edgerun_json::serde_json::from_value::<ProcessSpawnParams>(base).expect("deserialize omitted limits");
+    let decoded = edgerun_json::serde_json::from_value::<ProcessSpawnParams>(base)
+        .expect("deserialize omitted limits");
     assert_eq!(decoded, expected_omitted);
 
     let decoded = edgerun_json::serde_json::from_value::<ProcessSpawnParams>(json!({
@@ -1044,8 +1056,8 @@ fn command_exec_params_round_trips_disable_output_cap() {
         })
     );
 
-    let decoded =
-        edgerun_json::serde_json::from_value::<CommandExecParams>(value).expect("deserialize round-trip");
+    let decoded = edgerun_json::serde_json::from_value::<CommandExecParams>(value)
+        .expect("deserialize round-trip");
     assert_eq!(decoded, params);
 }
 
@@ -1092,8 +1104,8 @@ fn command_exec_params_round_trips_env_overrides_and_unsets() {
         })
     );
 
-    let decoded =
-        edgerun_json::serde_json::from_value::<CommandExecParams>(value).expect("deserialize round-trip");
+    let decoded = edgerun_json::serde_json::from_value::<CommandExecParams>(value)
+        .expect("deserialize round-trip");
     assert_eq!(decoded, params);
 }
 
@@ -1105,7 +1117,8 @@ fn command_exec_write_round_trips_close_only_payload() {
         close_stdin: true,
     };
 
-    let value = edgerun_json::serde_json::to_value(&params).expect("serialize command/exec/write params");
+    let value =
+        edgerun_json::serde_json::to_value(&params).expect("serialize command/exec/write params");
     assert_eq!(
         value,
         json!({
@@ -1115,8 +1128,8 @@ fn command_exec_write_round_trips_close_only_payload() {
         })
     );
 
-    let decoded =
-        edgerun_json::serde_json::from_value::<CommandExecWriteParams>(value).expect("deserialize round-trip");
+    let decoded = edgerun_json::serde_json::from_value::<CommandExecWriteParams>(value)
+        .expect("deserialize round-trip");
     assert_eq!(decoded, params);
 }
 
@@ -1126,7 +1139,8 @@ fn command_exec_terminate_round_trips() {
         process_id: "proc-8".to_string(),
     };
 
-    let value = edgerun_json::serde_json::to_value(&params).expect("serialize command/exec/terminate params");
+    let value = edgerun_json::serde_json::to_value(&params)
+        .expect("serialize command/exec/terminate params");
     assert_eq!(
         value,
         json!({
@@ -1181,8 +1195,8 @@ fn command_exec_params_round_trip_with_size() {
         })
     );
 
-    let decoded =
-        edgerun_json::serde_json::from_value::<CommandExecParams>(value).expect("deserialize round-trip");
+    let decoded = edgerun_json::serde_json::from_value::<CommandExecParams>(value)
+        .expect("deserialize round-trip");
     assert_eq!(decoded, params);
 }
 
@@ -1196,7 +1210,8 @@ fn command_exec_resize_round_trips() {
         },
     };
 
-    let value = edgerun_json::serde_json::to_value(&params).expect("serialize command/exec/resize params");
+    let value =
+        edgerun_json::serde_json::to_value(&params).expect("serialize command/exec/resize params");
     assert_eq!(
         value,
         json!({
@@ -1208,8 +1223,8 @@ fn command_exec_resize_round_trips() {
         })
     );
 
-    let decoded =
-        edgerun_json::serde_json::from_value::<CommandExecResizeParams>(value).expect("deserialize round-trip");
+    let decoded = edgerun_json::serde_json::from_value::<CommandExecResizeParams>(value)
+        .expect("deserialize round-trip");
     assert_eq!(decoded, params);
 }
 
@@ -1246,7 +1261,8 @@ fn process_control_params_round_trip() {
         delta_base64: None,
         close_stdin: true,
     };
-    let value = edgerun_json::serde_json::to_value(&write).expect("serialize process/writeStdin params");
+    let value =
+        edgerun_json::serde_json::to_value(&write).expect("serialize process/writeStdin params");
     assert_eq!(
         value,
         json!({
@@ -1266,7 +1282,8 @@ fn process_control_params_round_trip() {
             cols: 160,
         },
     };
-    let value = edgerun_json::serde_json::to_value(&resize).expect("serialize process/resizePty params");
+    let value =
+        edgerun_json::serde_json::to_value(&resize).expect("serialize process/resizePty params");
     assert_eq!(
         value,
         json!({
@@ -1291,8 +1308,8 @@ fn process_control_params_round_trip() {
             "processHandle": "proc-7",
         })
     );
-    let decoded =
-        edgerun_json::serde_json::from_value::<ProcessKillParams>(value).expect("deserialize process/kill");
+    let decoded = edgerun_json::serde_json::from_value::<ProcessKillParams>(value)
+        .expect("deserialize process/kill");
     assert_eq!(decoded, kill);
 }
 
@@ -1364,8 +1381,9 @@ fn command_execution_output_delta_round_trips() {
         })
     );
 
-    let decoded = edgerun_json::serde_json::from_value::<CommandExecutionOutputDeltaNotification>(value)
-        .expect("deserialize round-trip");
+    let decoded =
+        edgerun_json::serde_json::from_value::<CommandExecutionOutputDeltaNotification>(value)
+            .expect("deserialize round-trip");
     assert_eq!(decoded, notification);
 }
 
@@ -1433,14 +1451,15 @@ fn ask_for_approval_granular_round_trips_request_permissions_flag() {
 
 #[test]
 fn ask_for_approval_granular_defaults_missing_optional_flags_to_false() {
-    let decoded = edgerun_json::serde_json::from_value::<AskForApproval>(edgerun_json::serde_json::json!({
-        "granular": {
-            "sandbox_approval": true,
-            "rules": false,
-            "mcp_elicitations": true,
-        }
-    }))
-    .expect("granular approval policy should deserialize");
+    let decoded =
+        edgerun_json::serde_json::from_value::<AskForApproval>(edgerun_json::serde_json::json!({
+            "granular": {
+                "sandbox_approval": true,
+                "rules": false,
+                "mcp_elicitations": true,
+            }
+        }))
+        .expect("granular approval policy should deserialize");
 
     assert_eq!(
         decoded,
@@ -2223,7 +2242,8 @@ fn network_requirements_serializes_canonical_and_legacy_fields() {
     };
 
     assert_eq!(
-        edgerun_json::serde_json::to_value(requirements).expect("network requirements should serialize"),
+        edgerun_json::serde_json::to_value(requirements)
+            .expect("network requirements should serialize"),
         json!({
             "enabled": true,
             "httpPort": 8080,
@@ -3063,7 +3083,8 @@ fn plugin_summary_defaults_missing_availability_to_available() {
 
 #[test]
 fn plugin_availability_deserializes_enabled_alias() {
-    let availability: PluginAvailability = edgerun_json::serde_json::from_value(json!("ENABLED")).unwrap();
+    let availability: PluginAvailability =
+        edgerun_json::serde_json::from_value(json!("ENABLED")).unwrap();
 
     assert_eq!(availability, PluginAvailability::Available);
     assert_eq!(
@@ -3332,7 +3353,8 @@ fn dynamic_tool_spec_legacy_expose_to_context_inverts_to_defer_loading() {
 #[test]
 fn thread_start_params_preserve_explicit_null_service_tier() {
     let params: ThreadStartParams =
-        edgerun_json::serde_json::from_value(json!({ "serviceTier": null })).expect("params should deserialize");
+        edgerun_json::serde_json::from_value(json!({ "serviceTier": null }))
+            .expect("params should deserialize");
     assert_eq!(params.service_tier, Some(None));
 
     let serialized = edgerun_json::serde_json::to_value(&params).expect("params should serialize");
@@ -3342,7 +3364,8 @@ fn thread_start_params_preserve_explicit_null_service_tier() {
     );
 
     let serialized_without_override =
-        edgerun_json::serde_json::to_value(ThreadStartParams::default()).expect("params should serialize");
+        edgerun_json::serde_json::to_value(ThreadStartParams::default())
+            .expect("params should serialize");
     assert_eq!(serialized_without_override.get("serviceTier"), None);
 }
 
@@ -3383,7 +3406,8 @@ fn thread_lifecycle_responses_default_missing_optional_fields() {
         edgerun_json::serde_json::from_value(response.clone()).expect("thread/start response");
     let resume: ThreadResumeResponse =
         edgerun_json::serde_json::from_value(response.clone()).expect("thread/resume response");
-    let fork: ThreadForkResponse = edgerun_json::serde_json::from_value(response).expect("thread/fork response");
+    let fork: ThreadForkResponse =
+        edgerun_json::serde_json::from_value(response).expect("thread/fork response");
 
     assert_eq!(start.instruction_sources, Vec::<AbsolutePathBuf>::new());
     assert_eq!(resume.instruction_sources, Vec::<AbsolutePathBuf>::new());

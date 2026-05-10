@@ -1,7 +1,7 @@
-use serde::Deserialize;
-use serde::Serialize;
 use edgerun_json::serde_json::Value as JsonValue;
 use edgerun_json::serde_json::json;
+use serde::Deserialize;
+use serde::Serialize;
 use std::collections::BTreeMap;
 
 /// Primitive JSON Schema type names we support in tool definitions.
@@ -146,7 +146,9 @@ impl From<JsonSchema> for AdditionalProperties {
 }
 
 /// Parse the tool `input_schema` or return an error for invalid schema.
-pub fn parse_tool_input_schema(input_schema: &JsonValue) -> Result<JsonSchema, edgerun_json::serde_json::Error> {
+pub fn parse_tool_input_schema(
+    input_schema: &JsonValue,
+) -> Result<JsonSchema, edgerun_json::serde_json::Error> {
     let mut input_schema = input_schema.clone();
     sanitize_json_schema(&mut input_schema);
     let schema: JsonSchema = edgerun_json::serde_json::from_value(input_schema)?;

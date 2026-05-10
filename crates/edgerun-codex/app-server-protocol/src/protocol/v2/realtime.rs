@@ -3,10 +3,10 @@ use codex_protocol::protocol::RealtimeConversationVersion;
 use codex_protocol::protocol::RealtimeOutputModality;
 use codex_protocol::protocol::RealtimeVoice;
 use codex_protocol::protocol::RealtimeVoicesList;
+use edgerun_json::serde_json::Value as JsonValue;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
-use edgerun_json::serde_json::Value as JsonValue;
 use ts_rs::TS;
 
 /// EXPERIMENTAL - thread realtime audio chunk.

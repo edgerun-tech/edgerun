@@ -29,7 +29,7 @@ use tokio::sync::watch::Receiver;
 use tokio::time::Duration;
 use tokio::time::Instant;
 use tokio::time::timeout;
-use uuid::Uuid;
+use edgerun_uuid::Uuid;
 
 mod report_agent_job_result;
 mod spawn_agents_on_csv;

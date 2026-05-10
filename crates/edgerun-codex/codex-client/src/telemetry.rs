@@ -1,5 +1,5 @@
 use crate::error::TransportError;
-use http::StatusCode;
+use edgerun_http::StatusCode;
 use std::time::Duration;
 
 /// API specific telemetry.

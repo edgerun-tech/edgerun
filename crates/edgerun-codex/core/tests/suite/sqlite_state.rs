@@ -30,13 +30,13 @@ use core_test_support::test_codex::test_codex;
 use core_test_support::test_codex::turn_permission_fields;
 use core_test_support::wait_for_event;
 use core_test_support::wait_for_event_match;
-use pretty_assertions::assert_eq;
 use edgerun_json::serde_json::json;
+use edgerun_uuid::Uuid;
+use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::fs;
 use tokio::time::Duration;
 use tracing_subscriber::prelude::*;
-use uuid::Uuid;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn new_thread_is_recorded_in_state_db() -> Result<()> {
@@ -175,7 +175,10 @@ async fn backfill_scans_existing_rollouts() -> Result<()> {
 
             let jsonl = lines
                 .iter()
-                .map(|line| edgerun_json::serde_json::to_string(line).expect("rollout line should serialize"))
+                .map(|line| {
+                    edgerun_json::serde_json::to_string(line)
+                        .expect("rollout line should serialize")
+                })
                 .collect::<Vec<_>>()
                 .join("\n");
             fs::write(&rollout_path, format!("{jsonl}\n")).expect("should write rollout file");

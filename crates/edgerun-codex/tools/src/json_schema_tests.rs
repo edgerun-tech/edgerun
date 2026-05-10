@@ -18,7 +18,8 @@ fn parse_tool_input_schema_coerces_boolean_schemas() {
     // - JSON Schema boolean forms are coerced to `{ "type": "string" }`
     //   because the baseline enum model cannot represent boolean-schema
     //   semantics directly.
-    let schema = parse_tool_input_schema(&edgerun_json::serde_json::json!(true)).expect("parse schema");
+    let schema =
+        parse_tool_input_schema(&edgerun_json::serde_json::json!(true)).expect("parse schema");
 
     assert_eq!(schema, JsonSchema::string(/*description*/ None));
 }
@@ -238,13 +239,19 @@ fn parse_tool_input_schema_infers_string_from_enum_const_and_format_keywords() {
     assert_eq!(
         enum_schema,
         JsonSchema::string_enum(
-            vec![edgerun_json::serde_json::json!("fast"), edgerun_json::serde_json::json!("safe")],
+            vec![
+                edgerun_json::serde_json::json!("fast"),
+                edgerun_json::serde_json::json!("safe")
+            ],
             /*description*/ None,
         )
     );
     assert_eq!(
         const_schema,
-        JsonSchema::string_enum(vec![edgerun_json::serde_json::json!("file")], /*description*/ None)
+        JsonSchema::string_enum(
+            vec![edgerun_json::serde_json::json!("file")],
+            /*description*/ None
+        )
     );
     assert_eq!(format_schema, JsonSchema::string(/*description*/ None));
 }
@@ -257,7 +264,8 @@ fn parse_tool_input_schema_defaults_empty_schema_to_string() {
     // Expected normalization behavior:
     // - With no structural hints at all, the normalizer falls back to a
     //   permissive string schema.
-    let schema = parse_tool_input_schema(&edgerun_json::serde_json::json!({})).expect("parse schema");
+    let schema =
+        parse_tool_input_schema(&edgerun_json::serde_json::json!({})).expect("parse schema");
 
     assert_eq!(schema, JsonSchema::string(/*description*/ None));
 }
@@ -378,7 +386,10 @@ fn parse_tool_input_schema_rewrites_const_to_single_value_enum() {
 
     assert_eq!(
         schema,
-        JsonSchema::string_enum(vec![edgerun_json::serde_json::json!("tagged")], /*description*/ None)
+        JsonSchema::string_enum(
+            vec![edgerun_json::serde_json::json!("tagged")],
+            /*description*/ None
+        )
     );
 }
 
@@ -774,7 +785,10 @@ fn parse_tool_input_schema_preserves_string_enum_constraints() {
                 (
                     "scope".to_string(),
                     JsonSchema::string_enum(
-                        vec![edgerun_json::serde_json::json!("one"), edgerun_json::serde_json::json!("two")],
+                        vec![
+                            edgerun_json::serde_json::json!("one"),
+                            edgerun_json::serde_json::json!("two")
+                        ],
                         /*description*/ None,
                     ),
                 ),

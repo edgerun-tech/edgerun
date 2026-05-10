@@ -15,5 +15,5 @@ workspace = true
 [dependencies]
 codex-api = { workspace = true }
 edgerun-encoding = { workspace = true }
+edgerun-http = { workspace = true }
 edgerun-json = { workspace = true }
-http = { workspace = true }

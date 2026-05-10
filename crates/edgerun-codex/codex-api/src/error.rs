@@ -1,7 +1,7 @@
 use crate::rate_limits::RateLimitError;
 use codex_client::TransportError;
 use edgerun_error::Error;
-use http::StatusCode;
+use edgerun_http::StatusCode;
 use std::time::Duration;
 
 #[derive(Debug, Error)]

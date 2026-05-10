@@ -169,8 +169,19 @@ pub struct ModelPreset {
 
 /// Visibility of a model in the picker or APIs.
 #[derive(
-    Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, TS, JsonSchema, EnumIter, Display,
-    ToJson, FromJson,
+    Debug,
+    Serialize,
+    Deserialize,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    TS,
+    JsonSchema,
+    EnumIter,
+    Display,
+    ToJson,
+    FromJson,
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
@@ -207,7 +218,9 @@ pub enum ConfigShellToolType {
     ShellCommand,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, TS, JsonSchema, ToJson, FromJson)]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Hash, TS, JsonSchema, ToJson, FromJson,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ApplyPatchToolType {
     Freeform,
@@ -215,7 +228,18 @@ pub enum ApplyPatchToolType {
 }
 
 #[derive(
-    Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash, TS, JsonSchema, Default, ToJson,
+    Debug,
+    Clone,
+    Copy,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Eq,
+    Hash,
+    TS,
+    JsonSchema,
+    Default,
+    ToJson,
     FromJson,
 )]
 #[serde(rename_all = "snake_case")]
@@ -226,14 +250,18 @@ pub enum WebSearchToolType {
 }
 
 /// Server-provided truncation policy metadata for a model.
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, TS, JsonSchema, ToJson, FromJson)]
+#[derive(
+    Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, TS, JsonSchema, ToJson, FromJson,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum TruncationMode {
     Bytes,
     Tokens,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, TS, JsonSchema, ToJson, FromJson)]
+#[derive(
+    Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, TS, JsonSchema, ToJson, FromJson,
+)]
 pub struct TruncationPolicyConfig {
     pub mode: TruncationMode,
     pub limit: i64,
@@ -444,7 +472,9 @@ impl From<&ModelUpgrade> for ModelInfoUpgrade {
 }
 
 /// Response wrapper for `/models`.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, TS, JsonSchema, Default, ToJson, FromJson)]
+#[derive(
+    Debug, Serialize, Deserialize, Clone, PartialEq, Eq, TS, JsonSchema, Default, ToJson, FromJson,
+)]
 pub struct ModelsResponse {
     pub models: Vec<ModelInfo>,
 }
@@ -779,36 +809,37 @@ mod tests {
 
     #[test]
     fn model_info_defaults_availability_nux_to_none_when_omitted() {
-        let model: ModelInfo = edgerun_json::serde_json::from_value(edgerun_json::serde_json::json!({
-            "slug": "test-model",
-            "display_name": "Test Model",
-            "description": null,
-            "supported_reasoning_levels": [],
-            "shell_type": "shell_command",
-            "visibility": "list",
-            "supported_in_api": true,
-            "priority": 1,
-            "upgrade": null,
-            "base_instructions": "base",
-            "model_messages": null,
-            "supports_reasoning_summaries": false,
-            "default_reasoning_summary": "auto",
-            "support_verbosity": false,
-            "default_verbosity": null,
-            "apply_patch_tool_type": null,
-            "truncation_policy": {
-                "mode": "bytes",
-                "limit": 10000
-            },
-            "supports_parallel_tool_calls": false,
-            "supports_image_detail_original": false,
-            "context_window": null,
-            "auto_compact_token_limit": null,
-            "effective_context_window_percent": 95,
-            "experimental_supported_tools": [],
-            "input_modalities": ["text", "image"]
-        }))
-        .expect("deserialize model info");
+        let model: ModelInfo =
+            edgerun_json::serde_json::from_value(edgerun_json::serde_json::json!({
+                "slug": "test-model",
+                "display_name": "Test Model",
+                "description": null,
+                "supported_reasoning_levels": [],
+                "shell_type": "shell_command",
+                "visibility": "list",
+                "supported_in_api": true,
+                "priority": 1,
+                "upgrade": null,
+                "base_instructions": "base",
+                "model_messages": null,
+                "supports_reasoning_summaries": false,
+                "default_reasoning_summary": "auto",
+                "support_verbosity": false,
+                "default_verbosity": null,
+                "apply_patch_tool_type": null,
+                "truncation_policy": {
+                    "mode": "bytes",
+                    "limit": 10000
+                },
+                "supports_parallel_tool_calls": false,
+                "supports_image_detail_original": false,
+                "context_window": null,
+                "auto_compact_token_limit": null,
+                "effective_context_window_percent": 95,
+                "experimental_supported_tools": [],
+                "input_modalities": ["text", "image"]
+            }))
+            .expect("deserialize model info");
 
         assert_eq!(model.availability_nux, None);
         assert!(!model.supports_image_detail_original);

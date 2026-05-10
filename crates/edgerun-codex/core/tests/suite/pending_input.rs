@@ -27,10 +27,10 @@ use core_test_support::test_codex::TestCodex;
 use core_test_support::test_codex::test_codex;
 use core_test_support::test_codex::turn_permission_fields;
 use core_test_support::wait_for_event;
-use pretty_assertions::assert_eq;
 use edgerun_json::serde_json::Value;
 use edgerun_json::serde_json::from_slice;
 use edgerun_json::serde_json::json;
+use pretty_assertions::assert_eq;
 use tokio::sync::oneshot;
 
 fn ev_message_item_done(id: &str, text: &str) -> Value {
@@ -314,8 +314,10 @@ async fn injected_user_input_triggers_follow_up_request_with_deltas() {
     let requests = server.requests().await;
     assert_eq!(requests.len(), 2);
 
-    let first_body: Value = edgerun_json::serde_json::from_slice(&requests[0]).expect("parse first request");
-    let second_body: Value = edgerun_json::serde_json::from_slice(&requests[1]).expect("parse second request");
+    let first_body: Value =
+        edgerun_json::serde_json::from_slice(&requests[0]).expect("parse first request");
+    let second_body: Value =
+        edgerun_json::serde_json::from_slice(&requests[1]).expect("parse second request");
 
     let first_texts = message_input_texts(&first_body, "user");
     assert!(first_texts.iter().any(|text| text == "first prompt"));

@@ -11,8 +11,8 @@ use alloc::vec::Vec;
 
 use edgerun_crypto::error::CryptoError;
 use edgerun_crypto::{
-    p256, p256_signing_key_from_der, p256_signing_key_from_pem, p256_signing_key_to_pem,
-    pem_encode, x509_cert_from_pem,
+    p256, p256_signing_key_from_der, p256_signing_key_from_pem, p256_signing_key_to_der,
+    p256_signing_key_to_pem, pem_encode, x509_cert_from_pem,
 };
 use edgerun_encoding::base64::standard_decode;
 
@@ -76,6 +76,11 @@ impl CertificateAndKey {
     /// Serialize the private key as PEM.
     pub fn key_pem(&self) -> Result<String, CryptoError> {
         Ok(p256_signing_key_to_pem(&self.signing_key))
+    }
+
+    /// Serialize the private key as PKCS#8 DER.
+    pub fn key_der(&self) -> Vec<u8> {
+        p256_signing_key_to_der(&self.signing_key)
     }
 
     /// Serialize both certificate and key as a single PEM string.

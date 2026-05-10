@@ -6,9 +6,9 @@ use codex_utils_cargo_bin::find_resource;
 use core_test_support::fs_wait;
 use core_test_support::responses;
 use core_test_support::skip_if_no_network;
+use edgerun_uuid::Uuid;
 use std::time::Duration;
 use tempfile::TempDir;
-use uuid::Uuid;
 use wiremock::MockServer;
 
 fn repo_root() -> std::path::PathBuf {
@@ -413,7 +413,8 @@ async fn integration_creates_and_checks_session_file() -> anyhow::Result<()> {
         if line.trim().is_empty() {
             continue;
         }
-        let Ok(item) = edgerun_json::serde_json::from_str::<edgerun_json::serde_json::Value>(line) else {
+        let Ok(item) = edgerun_json::serde_json::from_str::<edgerun_json::serde_json::Value>(line)
+        else {
             continue;
         };
         if item.get("type").and_then(|t| t.as_str()) == Some("response_item")

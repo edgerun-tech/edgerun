@@ -957,7 +957,9 @@ fn prefix_combined_str_len(prefix: &[String]) -> usize {
 fn render_command_prefix(prefix: &[String]) -> String {
     let tokens = prefix
         .iter()
-        .map(|token| edgerun_json::serde_json::to_string(token).unwrap_or_else(|_| format!("{token:?}")))
+        .map(|token| {
+            edgerun_json::serde_json::to_string(token).unwrap_or_else(|_| format!("{token:?}"))
+        })
         .collect::<Vec<_>>()
         .join(", ");
     format!("[{tokens}]")
@@ -1611,7 +1613,8 @@ fn convert_mcp_content_to_items(
                 }
             }
             Ok(McpContent::Unknown) | Err(_) => FunctionCallOutputContentItem::InputText {
-                text: edgerun_json::serde_json::to_string(content).unwrap_or_else(|_| "<content>".to_string()),
+                text: edgerun_json::serde_json::to_string(content)
+                    .unwrap_or_else(|_| "<content>".to_string()),
             },
         };
         items.push(item);
@@ -1725,14 +1728,15 @@ mod tests {
 
     #[test]
     fn response_item_parses_image_generation_call() {
-        let item = edgerun_json::serde_json::from_value::<ResponseItem>(edgerun_json::serde_json::json!({
-            "id": "ig_123",
-            "type": "image_generation_call",
-            "status": "completed",
-            "revised_prompt": "A small blue square",
-            "result": "Zm9v",
-        }))
-        .expect("image generation item should deserialize");
+        let item =
+            edgerun_json::serde_json::from_value::<ResponseItem>(edgerun_json::serde_json::json!({
+                "id": "ig_123",
+                "type": "image_generation_call",
+                "status": "completed",
+                "revised_prompt": "A small blue square",
+                "result": "Zm9v",
+            }))
+            .expect("image generation item should deserialize");
 
         assert_eq!(
             item,
@@ -1747,13 +1751,14 @@ mod tests {
 
     #[test]
     fn response_item_parses_image_generation_call_without_revised_prompt() {
-        let item = edgerun_json::serde_json::from_value::<ResponseItem>(edgerun_json::serde_json::json!({
-            "id": "ig_123",
-            "type": "image_generation_call",
-            "status": "completed",
-            "result": "Zm9v",
-        }))
-        .expect("image generation item should deserialize");
+        let item =
+            edgerun_json::serde_json::from_value::<ResponseItem>(edgerun_json::serde_json::json!({
+                "id": "ig_123",
+                "type": "image_generation_call",
+                "status": "completed",
+                "result": "Zm9v",
+            }))
+            .expect("image generation item should deserialize");
 
         assert_eq!(
             item,
@@ -1998,10 +2003,12 @@ mod tests {
 
     #[test]
     fn file_system_permissions_rejects_zero_glob_scan_depth() {
-        edgerun_json::serde_json::from_value::<FileSystemPermissions>(edgerun_json::serde_json::json!({
-            "entries": [],
-            "glob_scan_max_depth": 0,
-        }))
+        edgerun_json::serde_json::from_value::<FileSystemPermissions>(
+            edgerun_json::serde_json::json!({
+                "entries": [],
+                "glob_scan_max_depth": 0,
+            }),
+        )
         .expect_err("zero glob scan depth should fail deserialization");
     }
 
@@ -2093,14 +2100,15 @@ mod tests {
 
     #[test]
     fn function_call_deserializes_optional_namespace() {
-        let item: ResponseItem = edgerun_json::serde_json::from_value(edgerun_json::serde_json::json!({
-            "type": "function_call",
-            "name": "mcp__codex_apps__gmail_get_recent_emails",
-            "namespace": "mcp__codex_apps__gmail",
-            "arguments": "{\"top_k\":5}",
-            "call_id": "call-1",
-        }))
-        .expect("function_call should deserialize");
+        let item: ResponseItem =
+            edgerun_json::serde_json::from_value(edgerun_json::serde_json::json!({
+                "type": "function_call",
+                "name": "mcp__codex_apps__gmail_get_recent_emails",
+                "namespace": "mcp__codex_apps__gmail",
+                "arguments": "{\"top_k\":5}",
+                "call_id": "call-1",
+            }))
+            .expect("function_call should deserialize");
 
         assert_eq!(
             item,
@@ -2535,7 +2543,8 @@ mod tests {
             assert_eq!(parsed, expected);
 
             let serialized = edgerun_json::serde_json::to_value(&parsed)?;
-            let mut expected_serialized: edgerun_json::serde_json::Value = edgerun_json::serde_json::from_str(json_literal)?;
+            let mut expected_serialized: edgerun_json::serde_json::Value =
+                edgerun_json::serde_json::from_str(json_literal)?;
             if !expect_roundtrip && let Some(obj) = expected_serialized.as_object_mut() {
                 obj.remove("id");
             }

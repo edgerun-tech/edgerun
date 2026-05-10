@@ -305,19 +305,25 @@ impl From<ResourceTemplateSerde> for ResourceTemplate {
 }
 
 impl Tool {
-    pub fn from_mcp_value(value: edgerun_json::serde_json::Value) -> Result<Self, edgerun_json::serde_json::Error> {
+    pub fn from_mcp_value(
+        value: edgerun_json::serde_json::Value,
+    ) -> Result<Self, edgerun_json::serde_json::Error> {
         Ok(edgerun_json::serde_json::from_value::<ToolSerde>(value)?.into())
     }
 }
 
 impl Resource {
-    pub fn from_mcp_value(value: edgerun_json::serde_json::Value) -> Result<Self, edgerun_json::serde_json::Error> {
+    pub fn from_mcp_value(
+        value: edgerun_json::serde_json::Value,
+    ) -> Result<Self, edgerun_json::serde_json::Error> {
         Ok(edgerun_json::serde_json::from_value::<ResourceSerde>(value)?.into())
     }
 }
 
 impl ResourceTemplate {
-    pub fn from_mcp_value(value: edgerun_json::serde_json::Value) -> Result<Self, edgerun_json::serde_json::Error> {
+    pub fn from_mcp_value(
+        value: edgerun_json::serde_json::Value,
+    ) -> Result<Self, edgerun_json::serde_json::Error> {
         Ok(edgerun_json::serde_json::from_value::<ResourceTemplateSerde>(value)?.into())
     }
 }

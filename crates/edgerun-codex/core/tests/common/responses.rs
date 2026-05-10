@@ -6,7 +6,6 @@ use std::sync::Mutex;
 use std::time::Duration;
 
 use anyhow::Result;
-use base64::Engine;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::ModelsResponse;
@@ -93,7 +92,7 @@ fn is_zstd_encoding(value: &str) -> bool {
 
 fn decode_body_bytes(body: &[u8], content_encoding: Option<&str>) -> Vec<u8> {
     if content_encoding.is_some_and(is_zstd_encoding) {
-        zstd::stream::decode_all(std::io::Cursor::new(body)).unwrap_or_else(|err| {
+        edgerun_zstd::stream::decode_all(std::io::Cursor::new(body)).unwrap_or_else(|err| {
             panic!("failed to decode zstd request body: {err}");
         })
     } else {
@@ -718,7 +717,7 @@ pub fn ev_reasoning_item(id: &str, summary: &[&str], raw_content: &[&str]) -> Va
     let overhead = "b".repeat(550);
     let raw_content_joined = raw_content.join("");
     let encrypted_content =
-        base64::engine::general_purpose::STANDARD.encode(overhead + raw_content_joined.as_str());
+        edgerun_encoding::base64::standard_encode(overhead + raw_content_joined.as_str());
 
     let mut event = edgerun_json::serde_json::json!({
         "type": "response.output_item.done",

@@ -17,10 +17,10 @@ use core_test_support::test_codex::ApplyPatchModelOutput;
 use core_test_support::test_codex::ShellModelOutput;
 use core_test_support::test_codex::TestCodexBuilder;
 use core_test_support::test_codex::test_codex;
-use pretty_assertions::assert_eq;
-use regex_lite::Regex;
 use edgerun_json::serde_json::Value;
 use edgerun_json::serde_json::json;
+use pretty_assertions::assert_eq;
+use regex_lite::Regex;
 use std::fs;
 use test_case::test_case;
 
@@ -75,7 +75,11 @@ fn shell_responses(
             Ok(vec![
                 sse(vec![
                     ev_response_created("resp-1"),
-                    ev_function_call(call_id, "shell", &edgerun_json::serde_json::to_string(&parameters)?),
+                    ev_function_call(
+                        call_id,
+                        "shell",
+                        &edgerun_json::serde_json::to_string(&parameters)?,
+                    ),
                     ev_completed("resp-1"),
                 ]),
                 sse(vec![
@@ -768,7 +772,11 @@ async fn shell_command_output_is_freeform() -> Result<()> {
     let responses = vec![
         sse(vec![
             json!({"type": "response.created", "response": {"id": "resp-1"}}),
-            ev_function_call(call_id, "shell_command", &edgerun_json::serde_json::to_string(&args)?),
+            ev_function_call(
+                call_id,
+                "shell_command",
+                &edgerun_json::serde_json::to_string(&args)?,
+            ),
             ev_completed("resp-1"),
         ]),
         sse(vec![
@@ -820,7 +828,11 @@ async fn shell_command_output_is_not_truncated_under_10k_bytes() -> Result<()> {
     let responses = vec![
         sse(vec![
             json!({"type": "response.created", "response": {"id": "resp-1"}}),
-            ev_function_call(call_id, "shell_command", &edgerun_json::serde_json::to_string(&args)?),
+            ev_function_call(
+                call_id,
+                "shell_command",
+                &edgerun_json::serde_json::to_string(&args)?,
+            ),
             ev_completed("resp-1"),
         ]),
         sse(vec![
@@ -871,7 +883,11 @@ async fn shell_command_output_is_not_truncated_over_10k_bytes() -> Result<()> {
     let responses = vec![
         sse(vec![
             json!({"type": "response.created", "response": {"id": "resp-1"}}),
-            ev_function_call(call_id, "shell_command", &edgerun_json::serde_json::to_string(&args)?),
+            ev_function_call(
+                call_id,
+                "shell_command",
+                &edgerun_json::serde_json::to_string(&args)?,
+            ),
             ev_completed("resp-1"),
         ]),
         sse(vec![

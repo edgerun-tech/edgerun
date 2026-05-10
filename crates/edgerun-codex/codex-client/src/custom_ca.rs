@@ -48,13 +48,13 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::rustls_provider::ensure_rustls_crypto_provider;
+use edgerun_error::Error;
 use rustls::ClientConfig;
 use rustls::RootCertStore;
 use rustls_pki_types::CertificateDer;
 use rustls_pki_types::pem::PemObject;
 use rustls_pki_types::pem::SectionKind;
 use rustls_pki_types::pem::{self};
-use edgerun_error::Error;
 use tracing::info;
 use tracing::warn;
 

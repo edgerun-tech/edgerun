@@ -12,9 +12,12 @@ description = "Consolidated encoding utilities for the edgerun workspace"
 default = []
 std = []
 hpack = ["dep:edgerun-hpack"]
+text-encoding = ["dep:chardetng", "dep:encoding_rs"]
 
 [dependencies]
+chardetng = { version = "0.1.17", optional = true }
 edgerun-hpack = { version = "0.1", path = "../edgerun-hpack", optional = true }
+encoding_rs = { version = "0.8.35", optional = true }
 
 [lints]
 workspace = true

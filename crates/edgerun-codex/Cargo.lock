@@ -205,19 +205,19 @@ version = "0.0.0"
 dependencies = [
  "async-channel",
  "async-trait",
- "bytes",
  "codex-client",
  "codex-protocol",
+ "edgerun-bytes",
  "edgerun-encoding",
  "edgerun-error",
+ "edgerun-eventsource-stream",
+ "edgerun-http",
  "edgerun-json",
  "edgerun-time",
  "edgerun-tokio-tungstenite",
  "edgerun-tungstenite",
  "edgerun-url",
- "eventsource-stream",
  "futures",
- "http",
  "reqwest",
  "serde",
  "tokio",
@@ -235,6 +235,8 @@ dependencies = [
  "edgerun-clap",
  "edgerun-error",
  "edgerun-json",
+ "edgerun-similar",
+ "edgerun-uuid",
  "inventory",
  "rmcp",
  "schemars 0.8.22",
@@ -243,7 +245,6 @@ dependencies = [
  "strum_macros",
  "tracing",
  "ts-rs",
- "uuid",
 ]
 
 [[package]]
@@ -253,7 +254,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "edgerun-error",
- "similar",
+ "edgerun-similar",
  "tokio",
  "tree-sitter",
  "tree-sitter-bash",
@@ -264,13 +265,14 @@ name = "codex-client"
 version = "0.0.0"
 dependencies = [
  "async-trait",
- "bytes",
+ "edgerun-bytes",
  "edgerun-error",
+ "edgerun-eventsource-stream",
+ "edgerun-http",
  "edgerun-json",
  "edgerun-random",
- "eventsource-stream",
+ "edgerun-zstd",
  "futures",
- "http",
  "opentelemetry",
  "reqwest",
  "rustls",
@@ -280,7 +282,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-opentelemetry",
- "zstd",
 ]
 
 [[package]]
@@ -311,12 +312,17 @@ dependencies = [
  "codex-protocol",
  "codex-shell-command",
  "codex-tools",
+ "edgerun-encoding",
  "edgerun-error",
+ "edgerun-eventsource-stream",
+ "edgerun-http",
  "edgerun-json",
  "edgerun-random",
  "edgerun-shlex",
+ "edgerun-similar",
  "edgerun-time",
  "edgerun-tokio-tungstenite",
+ "edgerun-uuid",
 ]
 
 [[package]]
@@ -330,8 +336,8 @@ dependencies = [
  "codex-models-manager",
  "codex-protocol",
  "codex-response-debug-context",
+ "edgerun-http",
  "edgerun-json",
- "http",
  "reqwest",
  "tokio",
  "tracing",
@@ -344,7 +350,7 @@ dependencies = [
  "codex-api",
  "codex-app-server-protocol",
  "codex-protocol",
- "http",
+ "edgerun-http",
  "schemars 0.8.22",
  "serde",
 ]
@@ -366,19 +372,19 @@ dependencies = [
 name = "codex-protocol"
 version = "0.0.0"
 dependencies = [
- "chardetng",
  "edgerun-encoding",
  "edgerun-error",
  "edgerun-glob",
+ "edgerun-http",
  "edgerun-json",
  "edgerun-locale",
+ "edgerun-quick-xml",
  "edgerun-time",
- "encoding_rs",
+ "edgerun-uuid",
  "icu_decimal",
  "icu_locale_core",
  "icu_provider",
  "landlock",
- "quick-xml",
  "reqwest",
  "schemars 0.8.22",
  "seccompiler",
@@ -389,7 +395,6 @@ dependencies = [
  "tokio",
  "tracing",
  "ts-rs",
- "uuid",
 ]
 
 [[package]]
@@ -398,8 +403,8 @@ version = "0.0.0"
 dependencies = [
  "codex-api",
  "edgerun-encoding",
+ "edgerun-http",
  "edgerun-json",
- "http",
 ]
 
 [[package]]
@@ -695,6 +700,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0881ea181b1df73ff77ffaaf9c7544ecc11e82fba9b5f27b262a3c73a332555"
 
 [[package]]
+name = "edgerun-bytes"
+version = "0.1.1"
+dependencies = [
+ "bytes",
+]
+
+[[package]]
 name = "edgerun-clap"
 version = "0.1.1"
 dependencies = [
@@ -714,14 +726,32 @@ dependencies = [
 [[package]]
 name = "edgerun-encoding"
 version = "0.1.1"
+dependencies = [
+ "chardetng",
+ "encoding_rs",
+]
 
 [[package]]
 name = "edgerun-error"
 version = "0.1.1"
 
 [[package]]
+name = "edgerun-eventsource-stream"
+version = "0.1.1"
+dependencies = [
+ "eventsource-stream",
+]
+
+[[package]]
 name = "edgerun-glob"
 version = "0.1.1"
+
+[[package]]
+name = "edgerun-http"
+version = "0.1.1"
+dependencies = [
+ "http",
+]
 
 [[package]]
 name = "edgerun-json"
@@ -745,12 +775,26 @@ name = "edgerun-locale"
 version = "0.1.1"
 
 [[package]]
+name = "edgerun-quick-xml"
+version = "0.1.1"
+dependencies = [
+ "quick-xml",
+]
+
+[[package]]
 name = "edgerun-random"
 version = "0.1.1"
 
 [[package]]
 name = "edgerun-shlex"
 version = "0.1.1"
+
+[[package]]
+name = "edgerun-similar"
+version = "0.1.1"
+dependencies = [
+ "similar",
+]
 
 [[package]]
 name = "edgerun-time"
@@ -788,6 +832,20 @@ name = "edgerun-url"
 version = "0.1.1"
 dependencies = [
  "edgerun-json",
+]
+
+[[package]]
+name = "edgerun-uuid"
+version = "0.1.1"
+dependencies = [
+ "uuid",
+]
+
+[[package]]
+name = "edgerun-zstd"
+version = "0.1.1"
+dependencies = [
+ "zstd",
 ]
 
 [[package]]

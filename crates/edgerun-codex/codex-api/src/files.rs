@@ -151,8 +151,8 @@ pub async fn upload_local_file(
             body: create_body,
         });
     }
-    let create_payload: CreateFileResponse =
-        edgerun_json::serde_json::from_str(&create_body).map_err(|source| OpenAiFileError::Decode {
+    let create_payload: CreateFileResponse = edgerun_json::serde_json::from_str(&create_body)
+        .map_err(|source| OpenAiFileError::Decode {
             url: create_url.clone(),
             source,
         })?;
@@ -210,9 +210,11 @@ pub async fn upload_local_file(
             });
         }
         let finalize_payload: DownloadLinkResponse =
-            edgerun_json::serde_json::from_str(&finalize_body).map_err(|source| OpenAiFileError::Decode {
-                url: finalize_url.clone(),
-                source,
+            edgerun_json::serde_json::from_str(&finalize_body).map_err(|source| {
+                OpenAiFileError::Decode {
+                    url: finalize_url.clone(),
+                    source,
+                }
             })?;
 
         match finalize_payload.status.as_str() {
@@ -257,7 +259,7 @@ fn authorized_request(
     method: reqwest::Method,
     url: &str,
 ) -> reqwest::RequestBuilder {
-    let mut headers = http::HeaderMap::new();
+    let mut headers = edgerun_http::HeaderMap::new();
     auth.add_auth_headers(&mut headers);
 
     let client = build_reqwest_client();
@@ -343,9 +345,11 @@ mod tests {
             .and(path("/backend-api/files/file_123/uploaded"))
             .respond_with(move |_request: &Request| {
                 if finalize_attempts_responder.fetch_add(1, Ordering::SeqCst) == 0 {
-                    return ResponseTemplate::new(200).set_body_json(edgerun_json::serde_json::json!({
-                        "status": "retry"
-                    }));
+                    return ResponseTemplate::new(200).set_body_json(
+                        edgerun_json::serde_json::json!({
+                            "status": "retry"
+                        }),
+                    );
                 }
 
                 ResponseTemplate::new(200).set_body_json(edgerun_json::serde_json::json!({

@@ -1,11 +1,11 @@
 use super::*;
 use crate::exec_output::StreamOutput;
 use crate::protocol::RateLimitWindow;
+use edgerun_http::Response as HttpResponse;
 use edgerun_time::chrono::ChronoDuration;
 use edgerun_time::chrono::ChronoTimeZone;
 use edgerun_time::chrono::ChronoUtc as Utc;
 use edgerun_time::chrono::ChronoUtcDateTime as DateTime;
-use http::Response as HttpResponse;
 use pretty_assertions::assert_eq;
 use reqwest::Response;
 use reqwest::ResponseBuilderExt;

@@ -1,8 +1,7 @@
 use std::pin::Pin;
 use std::sync::Arc;
 
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use edgerun_encoding::base64::standard_decode;
 use codex_protocol::config_types::ModeKind;
 use codex_protocol::items::TurnItem;
 use codex_utils_stream_parser::strip_citations;
@@ -109,8 +108,7 @@ async fn save_image_generation_result(
     call_id: &str,
     result: &str,
 ) -> Result<AbsolutePathBuf> {
-    let bytes = BASE64_STANDARD
-        .decode(result.trim().as_bytes())
+    let bytes = standard_decode(result.trim())
         .map_err(|err| {
             CodexErr::InvalidRequest(format!("invalid image generation payload: {err}"))
         })?;

@@ -345,7 +345,7 @@ impl CodexThread {
     /// can consume that pending input through the normal turn pipeline.
     #[cfg(test)]
     pub(crate) async fn append_message(&self, message: ResponseItem) -> CodexResult<String> {
-        let submission_id = uuid::Uuid::new_v4().to_string();
+        let submission_id = edgerun_uuid::Uuid::new_v4().to_string();
         let pending_item = pending_message_input_item(&message)?;
         if let Err(items) = self
             .codex

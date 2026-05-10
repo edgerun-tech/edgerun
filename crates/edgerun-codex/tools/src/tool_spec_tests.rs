@@ -14,8 +14,8 @@ use codex_protocol::config_types::WebSearchContextSize;
 use codex_protocol::config_types::WebSearchFilters as ConfigWebSearchFilters;
 use codex_protocol::config_types::WebSearchUserLocation as ConfigWebSearchUserLocation;
 use codex_protocol::config_types::WebSearchUserLocationType;
-use pretty_assertions::assert_eq;
 use edgerun_json::serde_json::json;
+use pretty_assertions::assert_eq;
 use std::collections::BTreeMap;
 
 #[test]

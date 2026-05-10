@@ -9,10 +9,10 @@ use codex_login::ExternalAuthRefreshContext;
 use codex_login::ExternalAuthTokens;
 use codex_login::TokenData;
 use codex_protocol::openai_models::ModelsResponse;
+use edgerun_json::serde_json::json;
 use edgerun_time::chrono::ChronoDuration;
 use edgerun_time::chrono::ChronoUtc as Utc;
 use pretty_assertions::assert_eq;
-use edgerun_json::serde_json::json;
 use std::collections::VecDeque;
 use std::path::Path;
 use std::sync::Arc;
@@ -770,10 +770,10 @@ fn bundled_models_json_roundtrips() {
     let response = crate::bundled_models_response()
         .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
 
-    let serialized =
-        edgerun_json::serde_json::to_string(&response).expect("bundled models.json should serialize");
-    let roundtripped: ModelsResponse =
-        edgerun_json::serde_json::from_str(&serialized).expect("serialized models.json should deserialize");
+    let serialized = edgerun_json::serde_json::to_string(&response)
+        .expect("bundled models.json should serialize");
+    let roundtripped: ModelsResponse = edgerun_json::serde_json::from_str(&serialized)
+        .expect("serialized models.json should deserialize");
 
     assert_eq!(
         response, roundtripped,

@@ -5,8 +5,8 @@ pub use codex_protocol::protocol::RealtimeEvent;
 pub use codex_protocol::protocol::RealtimeOutputModality;
 pub use codex_protocol::protocol::RealtimeTranscriptEntry;
 pub use codex_protocol::protocol::RealtimeVoice;
-use serde::Serialize;
 use edgerun_json::serde_json::Value;
+use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RealtimeEventParser {

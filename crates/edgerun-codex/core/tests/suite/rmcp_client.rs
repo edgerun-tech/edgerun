@@ -56,10 +56,10 @@ use core_test_support::test_codex::test_codex;
 use core_test_support::test_codex::turn_permission_fields;
 use core_test_support::wait_for_event;
 use core_test_support::wait_for_event_with_timeout;
-use reqwest::Client;
-use reqwest::StatusCode;
 use edgerun_json::serde_json::Value;
 use edgerun_json::serde_json::json;
+use reqwest::Client;
+use reqwest::StatusCode;
 use serial_test::serial;
 use tempfile::tempdir;
 use tokio::process::Child;
@@ -2001,8 +2001,9 @@ async fn streamable_http_with_oauth_round_trip_impl() -> anyhow::Result<()> {
         .with_config(move |config| {
             // Keep OAuth credentials isolated to this test home because Bazel
             // runs the full core suite in one process.
-            config.mcp_oauth_credentials_store_mode = edgerun_json::serde_json::from_value(json!("file"))
-                .expect("`file` should deserialize as OAuthCredentialsStoreMode");
+            config.mcp_oauth_credentials_store_mode =
+                edgerun_json::serde_json::from_value(json!("file"))
+                    .expect("`file` should deserialize as OAuthCredentialsStoreMode");
             insert_mcp_server(
                 config,
                 server_name,

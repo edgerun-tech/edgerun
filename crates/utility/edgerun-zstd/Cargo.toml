@@ -1,0 +1,15 @@
+[package]
+name = "edgerun-zstd"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Edgerun zstd compatibility utilities"
+
+[dependencies]
+zstd = "0.13"
+
+[lints]
+workspace = true

@@ -6,16 +6,21 @@ use edgerun_protocols::ethernet_ipv4::{
     ARP_OP_REQUEST, ETH_TYPE_IPV4, IP_PROTO_TCP, IpAddr, IpStack, Network, ParsedPacket,
     TCP_FLAG_ACK, TCP_FLAG_FIN, TCP_FLAG_PSH, TCP_FLAG_RST, TCP_FLAG_SYN, TcpHeader, checksum,
 };
+use edgerun_virtio::{VirtNet, VirtioError};
 use edgerun_wire::RelayMessage;
 
 use crate::nostd_relay::{RelayEngine, RelayOutput};
 use crate::{MAX_FRAME_LEN, decode_packet, encode_packet};
+#[cfg(feature = "wss")]
+use edgerun_rusttls::ServerConfig;
 
 const TCP_MSS: usize = 1200;
 const TCP_INITIAL_SEQ: u32 = 0xED6E_0001;
 const TCP_RETRANSMIT_AFTER_MS: u64 = 1000;
 const TCP_MAX_RETRANSMITS: u8 = 4;
 const TCP_CONNECTION_LIFETIME_MS: u64 = 60_000;
+const VIRTIO_RX_BUFFER_LEN: usize = 2048;
+const VIRTIO_DEFAULT_POLL_BUDGET: usize = 64;
 
 #[derive(Clone, PartialEq)]
 pub enum EthernetRelayPeer {
@@ -28,6 +33,34 @@ pub struct EthernetRelay {
     stack: IpStack,
     tcp_sessions: BTreeMap<TcpKey, TcpSession>,
     listen_port: u16,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EthernetRelayEventKind {
+    TcpOpened,
+    TcpClosed { reason: &'static str },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EthernetRelayEvent {
+    pub kind: EthernetRelayEventKind,
+    pub ip: [u8; 4],
+    pub port: u16,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct VirtioRelayPoll {
+    pub rx_frames: usize,
+    pub tx_frames: usize,
+    pub tx_errors: usize,
+    pub dropped_rx_frames: usize,
+}
+
+pub struct VirtioRelay {
+    relay: EthernetRelay,
+    #[cfg(feature = "wss")]
+    wss_config: Option<ServerConfig>,
+    rx_buf: [u8; VIRTIO_RX_BUFFER_LEN],
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -77,7 +110,7 @@ impl EthernetRelay {
     pub fn remove_peer(&mut self, peer: &EthernetRelayPeer) {
         self.engine.remove_peer(peer);
         if let EthernetRelayPeer::Tcp { ip, port } = peer {
-            self.tcp_sessions.remove(&TcpKey {
+            self.close_tcp(TcpKey {
                 ip: *ip,
                 port: *port,
             });
@@ -89,6 +122,16 @@ impl EthernetRelay {
     }
 
     pub fn handle_frame_at(&mut self, frame: &[u8], now_ms: u64) -> Vec<Vec<u8>> {
+        let mut events = Vec::new();
+        self.handle_frame_at_with_events(frame, now_ms, &mut events)
+    }
+
+    pub fn handle_frame_at_with_events(
+        &mut self,
+        frame: &[u8],
+        now_ms: u64,
+        events: &mut Vec<EthernetRelayEvent>,
+    ) -> Vec<Vec<u8>> {
         let mut out = Vec::new();
         let mut network = Network::new(&mut self.stack);
         let Some(parsed) = network.recv(frame) else {
@@ -129,7 +172,7 @@ impl EthernetRelay {
                 payload,
             } if header.dst_port == self.listen_port => {
                 drop(network);
-                self.handle_tcp_packet(eth.src, ip.src, header, payload, now_ms, &mut out);
+                self.handle_tcp_packet(eth.src, ip.src, header, payload, now_ms, &mut out, events);
             }
             _ => {}
         }
@@ -138,6 +181,15 @@ impl EthernetRelay {
     }
 
     pub fn poll_tcp(&mut self, now_ms: u64) -> Vec<Vec<u8>> {
+        let mut events = Vec::new();
+        self.poll_tcp_with_events(now_ms, &mut events)
+    }
+
+    pub fn poll_tcp_with_events(
+        &mut self,
+        now_ms: u64,
+        events: &mut Vec<EthernetRelayEvent>,
+    ) -> Vec<Vec<u8>> {
         let mut out = Vec::new();
         let expired = self
             .tcp_sessions
@@ -151,7 +203,7 @@ impl EthernetRelay {
             if let Some(frame) = self.send_tcp_control(key, TCP_FLAG_FIN | TCP_FLAG_ACK, now_ms) {
                 out.push(frame);
             }
-            self.close_tcp(key);
+            self.close_tcp_with_event(key, "lifetime_exceeded", events);
         }
 
         let mut retransmits = Vec::new();
@@ -183,7 +235,7 @@ impl EthernetRelay {
             }
         }
         for key in close {
-            self.close_tcp(key);
+            self.close_tcp_with_event(key, "retransmit_exhausted", events);
         }
         out
     }
@@ -235,6 +287,7 @@ impl EthernetRelay {
         payload: &[u8],
         now_ms: u64,
         out: &mut Vec<Vec<u8>>,
+        events: &mut Vec<EthernetRelayEvent>,
     ) {
         let key = TcpKey {
             ip: peer_ip,
@@ -242,7 +295,7 @@ impl EthernetRelay {
         };
 
         if header.flags & TCP_FLAG_RST != 0 {
-            self.close_tcp(key);
+            self.close_tcp_with_event(key, "rst", events);
             return;
         }
 
@@ -261,6 +314,11 @@ impl EthernetRelay {
             if let Some(frame) = self.send_tcp_control(key, TCP_FLAG_SYN | TCP_FLAG_ACK, now_ms) {
                 out.push(frame);
             }
+            events.push(EthernetRelayEvent {
+                kind: EthernetRelayEventKind::TcpOpened,
+                ip: key.ip,
+                port: key.port,
+            });
             return;
         }
 
@@ -271,7 +329,7 @@ impl EthernetRelay {
             if let Some(frame) = self.send_tcp_control(key, TCP_FLAG_ACK, now_ms) {
                 out.push(frame);
             }
-            self.close_tcp(key);
+            self.close_tcp_with_event(key, "fin", events);
             return;
         }
 
@@ -287,7 +345,7 @@ impl EthernetRelay {
                     if let Some(frame) = self.send_tcp_control(key, TCP_FLAG_RST, now_ms) {
                         out.push(frame);
                     }
-                    self.close_tcp(key);
+                    self.close_tcp_with_event(key, "frame_too_large", events);
                     return;
                 }
                 session.read_buf.extend_from_slice(payload);
@@ -417,6 +475,119 @@ impl EthernetRelay {
             ip: key.ip,
             port: key.port,
         });
+    }
+
+    fn close_tcp_with_event(
+        &mut self,
+        key: TcpKey,
+        reason: &'static str,
+        events: &mut Vec<EthernetRelayEvent>,
+    ) {
+        let existed = self.tcp_sessions.remove(&key).is_some();
+        self.engine.remove_peer(&EthernetRelayPeer::Tcp {
+            ip: key.ip,
+            port: key.port,
+        });
+        if existed {
+            events.push(EthernetRelayEvent {
+                kind: EthernetRelayEventKind::TcpClosed { reason },
+                ip: key.ip,
+                port: key.port,
+            });
+        }
+    }
+}
+
+impl VirtioRelay {
+    pub fn new(relay: EthernetRelay) -> Self {
+        Self {
+            relay,
+            #[cfg(feature = "wss")]
+            wss_config: None,
+            rx_buf: [0; VIRTIO_RX_BUFFER_LEN],
+        }
+    }
+
+    #[cfg(feature = "wss")]
+    pub fn with_wss_config(relay: EthernetRelay, wss_config: ServerConfig) -> Self {
+        Self {
+            relay,
+            wss_config: Some(wss_config),
+            rx_buf: [0; VIRTIO_RX_BUFFER_LEN],
+        }
+    }
+
+    pub fn relay(&self) -> &EthernetRelay {
+        &self.relay
+    }
+
+    pub fn relay_mut(&mut self) -> &mut EthernetRelay {
+        &mut self.relay
+    }
+
+    #[cfg(feature = "wss")]
+    pub fn wss_config(&self) -> Option<&ServerConfig> {
+        self.wss_config.as_ref()
+    }
+
+    #[cfg(feature = "wss")]
+    pub fn set_wss_config(&mut self, wss_config: ServerConfig) {
+        self.wss_config = Some(wss_config);
+    }
+
+    pub fn poll(
+        &mut self,
+        net: &mut VirtNet,
+        now_ms: u64,
+        events: &mut Vec<EthernetRelayEvent>,
+    ) -> VirtioRelayPoll {
+        self.poll_with_budget(net, now_ms, VIRTIO_DEFAULT_POLL_BUDGET, events)
+    }
+
+    pub fn poll_with_budget(
+        &mut self,
+        net: &mut VirtNet,
+        now_ms: u64,
+        budget: usize,
+        events: &mut Vec<EthernetRelayEvent>,
+    ) -> VirtioRelayPoll {
+        let mut stats = VirtioRelayPoll::default();
+
+        for frame in self.relay.poll_tcp_with_events(now_ms, events) {
+            send_virtio_frame(net, &frame, &mut stats);
+        }
+
+        for _ in 0..budget {
+            match net.try_recv(&mut self.rx_buf) {
+                Ok(Some(len)) => {
+                    stats.rx_frames += 1;
+                    let frames =
+                        self.relay
+                            .handle_frame_at_with_events(&self.rx_buf[..len], now_ms, events);
+                    for frame in frames {
+                        send_virtio_frame(net, &frame, &mut stats);
+                    }
+                }
+                Ok(None) => break,
+                Err(VirtioError::InvalidBufferLength) => {
+                    stats.dropped_rx_frames += 1;
+                    break;
+                }
+                Err(_) => {
+                    stats.dropped_rx_frames += 1;
+                    break;
+                }
+            }
+        }
+
+        stats
+    }
+}
+
+fn send_virtio_frame(net: &mut VirtNet, frame: &[u8], stats: &mut VirtioRelayPoll) {
+    match net.try_send(frame) {
+        Ok(()) => stats.tx_frames += 1,
+        Err(_) => stats.tx_errors += 1,
     }
 }
 

@@ -39,7 +39,8 @@ fn shell_responses_with_timeout(
     });
 
     #[allow(clippy::expect_used)]
-    let arguments = edgerun_json::serde_json::to_string(&args).expect("serialize shell command arguments");
+    let arguments =
+        edgerun_json::serde_json::to_string(&args).expect("serialize shell command arguments");
 
     vec![
         sse(vec![

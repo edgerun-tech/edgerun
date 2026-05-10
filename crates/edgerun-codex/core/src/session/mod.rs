@@ -162,7 +162,7 @@ use tracing::info;
 use tracing::info_span;
 use tracing::instrument;
 use tracing::warn;
-use uuid::Uuid;
+use edgerun_uuid::Uuid;
 
 use crate::client::ModelClient;
 use crate::codex_thread::ThreadConfigSnapshot;

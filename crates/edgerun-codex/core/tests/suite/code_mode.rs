@@ -1,8 +1,6 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use anyhow::Result;
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use codex_config::types::McpServerConfig;
 use codex_config::types::McpServerTransportConfig;
 use codex_features::Feature;
@@ -33,8 +31,9 @@ use core_test_support::test_codex::test_codex;
 use core_test_support::test_codex::turn_permission_fields;
 use core_test_support::wait_for_event;
 use core_test_support::wait_for_event_match;
-use pretty_assertions::assert_eq;
+use edgerun_encoding::base64::standard_decode;
 use edgerun_json::serde_json::Value;
+use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fs;
@@ -1838,12 +1837,17 @@ text("done");
         .inputs_of_type("custom_tool_call_output")
         .iter()
         .any(|item| {
-            item.get("call_id").and_then(edgerun_json::serde_json::Value::as_str) == Some("call-1")
+            item.get("call_id")
+                .and_then(edgerun_json::serde_json::Value::as_str)
+                == Some("call-1")
                 && item
                     .get("output")
                     .and_then(edgerun_json::serde_json::Value::as_str)
                     .is_some_and(|text| text.contains("code_mode_notify_marker"))
-                && item.get("name").and_then(edgerun_json::serde_json::Value::as_str) == Some("exec")
+                && item
+                    .get("name")
+                    .and_then(edgerun_json::serde_json::Value::as_str)
+                    == Some("exec")
         });
     assert!(
         has_notify_output,
@@ -1998,13 +2002,15 @@ async fn code_mode_can_use_view_image_result_with_image_helper() -> Result<()> {
         });
     let test = builder.build(&server).await?;
 
-    let image_bytes = BASE64_STANDARD.decode(
+    let image_bytes = standard_decode(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==",
-    )?;
+    )
+    .map_err(anyhow::Error::msg)?;
     let image_path = test.cwd_path().join("code_mode_view_image.png");
     fs::write(&image_path, image_bytes)?;
 
-    let image_path_json = edgerun_json::serde_json::to_string(&image_path.to_string_lossy().to_string())?;
+    let image_path_json =
+        edgerun_json::serde_json::to_string(&image_path.to_string_lossy().to_string())?;
     let code = format!(
         r#"
 const out = await tools.view_image({{ path: {image_path_json}, detail: "original" }});
@@ -2643,7 +2649,10 @@ text(
     .await;
     assert_eq!(request.namespace.as_deref(), Some("codex_app"));
     assert_eq!(request.tool, "hidden_dynamic_tool");
-    assert_eq!(request.arguments, edgerun_json::serde_json::json!({ "city": "Paris" }));
+    assert_eq!(
+        request.arguments,
+        edgerun_json::serde_json::json!({ "city": "Paris" })
+    );
     test.codex
         .submit(Op::DynamicToolResponse {
             id: request.call_id,

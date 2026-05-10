@@ -15,9 +15,9 @@ use codex_client::HttpTransport;
 use codex_client::RequestCompression;
 use codex_client::RequestTelemetry;
 use codex_protocol::protocol::SessionSource;
-use http::HeaderMap;
-use http::HeaderValue;
-use http::Method;
+use edgerun_http::HeaderMap;
+use edgerun_http::HeaderValue;
+use edgerun_http::Method;
 use edgerun_json::serde_json::Value;
 use std::sync::Arc;
 use std::sync::OnceLock;
@@ -135,7 +135,7 @@ impl<T: HttpTransport> ResponsesClient<T> {
                 Some(body),
                 |req| {
                     req.headers.insert(
-                        http::header::ACCEPT,
+                        edgerun_http::header::ACCEPT,
                         HeaderValue::from_static("text/event-stream"),
                     );
                     req.compression = request_compression;

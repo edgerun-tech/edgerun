@@ -9,11 +9,11 @@ use codex_client::TransportError;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::protocol::ModelVerification;
 use codex_protocol::protocol::TokenUsage;
-use eventsource_stream::Eventsource;
+use edgerun_eventsource_stream::Eventsource;
+use edgerun_json::serde_json::Value;
 use futures::StreamExt;
 use futures::TryStreamExt;
 use serde::Deserialize;
-use edgerun_json::serde_json::Value;
 use std::io::BufRead;
 use std::path::Path;
 use std::sync::Arc;
@@ -602,16 +602,16 @@ fn cyber_policy_message(message: Option<String>) -> String {
 mod tests {
     use super::*;
     use assert_matches::assert_matches;
-    use bytes::Bytes;
     use codex_client::StreamResponse;
     use codex_protocol::models::MessagePhase;
     use codex_protocol::models::ResponseItem;
-    use futures::stream;
-    use http::HeaderMap;
-    use http::HeaderValue;
-    use http::StatusCode;
-    use pretty_assertions::assert_eq;
+    use edgerun_bytes::Bytes;
+    use edgerun_http::HeaderMap;
+    use edgerun_http::HeaderValue;
+    use edgerun_http::StatusCode;
     use edgerun_json::serde_json::json;
+    use futures::stream;
+    use pretty_assertions::assert_eq;
     use tokio::sync::mpsc;
     use tokio_test::io::Builder as IoBuilder;
 

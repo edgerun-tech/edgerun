@@ -1,8 +1,6 @@
 #![cfg(not(target_os = "windows"))]
 
 use anyhow::Context;
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use codex_exec_server::CreateDirectoryOptions;
 use codex_exec_server::LOCAL_ENVIRONMENT_ID;
 use codex_exec_server::REMOTE_ENVIRONMENT_ID;
@@ -40,14 +38,15 @@ use core_test_support::test_codex::TestCodex;
 use core_test_support::test_codex::test_codex;
 use core_test_support::test_codex::turn_permission_fields;
 use core_test_support::wait_for_event_with_timeout;
+use edgerun_encoding::base64::standard_decode;
+use edgerun_json::serde_json::Value;
+use edgerun_json::serde_json::json;
 use image::DynamicImage;
 use image::GenericImageView;
 use image::ImageBuffer;
 use image::Rgba;
 use image::load_from_memory;
 use pretty_assertions::assert_eq;
-use edgerun_json::serde_json::Value;
-use edgerun_json::serde_json::json;
 use std::fs;
 use std::io::Cursor;
 use std::path::PathBuf;
@@ -231,8 +230,8 @@ async fn assert_user_turn_local_image_resizes_to(
         .context("image url contains data prefix")?;
     assert_eq!(prefix, "data:image/png;base64");
 
-    let decoded = BASE64_STANDARD
-        .decode(encoded)
+    let decoded = standard_decode(encoded)
+        .map_err(anyhow::Error::msg)
         .context("image data decodes from base64 for request")?;
     let resized = load_from_memory(&decoded).context("load resized image")?;
     let (width, height) = resized.dimensions();
@@ -393,9 +392,7 @@ async fn view_image_tool_attaches_local_image() -> anyhow::Result<()> {
         .expect("image url contains data prefix");
     assert_eq!(prefix, "data:image/png;base64");
 
-    let decoded = BASE64_STANDARD
-        .decode(encoded)
-        .expect("image data decodes from base64 for request");
+    let decoded = standard_decode(encoded).expect("image data decodes from base64 for request");
     let resized = load_from_memory(&decoded).expect("load resized image");
     let (resized_width, resized_height) = resized.dimensions();
     assert_eq!((resized_width, resized_height), (2048, 768));
@@ -501,9 +498,10 @@ async fn view_image_routes_to_selected_remote_environment() -> anyhow::Result<()
             /*sandbox*/ None,
         )
         .await?;
-    let png = BASE64_STANDARD.decode(
+    let png = standard_decode(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
-    )?;
+    )
+    .map_err(anyhow::Error::msg)?;
     test.fs()
         .write_file(&image_path, png, /*sandbox*/ None)
         .await?;
@@ -603,7 +601,8 @@ async fn view_image_tool_can_preserve_original_resolution_when_requested_on_gpt5
     .await?;
 
     let call_id = "view-image-original";
-    let arguments = edgerun_json::serde_json::json!({ "path": rel_path, "detail": "original" }).to_string();
+    let arguments =
+        edgerun_json::serde_json::json!({ "path": rel_path, "detail": "original" }).to_string();
 
     let first_response = sse(vec![
         ev_response_created("resp-1"),
@@ -657,9 +656,7 @@ async fn view_image_tool_can_preserve_original_resolution_when_requested_on_gpt5
     let (_, encoded) = image_url
         .split_once(',')
         .expect("image url contains data prefix");
-    let decoded = BASE64_STANDARD
-        .decode(encoded)
-        .expect("image data decodes from base64 for request");
+    let decoded = standard_decode(encoded).expect("image data decodes from base64 for request");
     let preserved = load_from_memory(&decoded).expect("load preserved image");
     let (width, height) = preserved.dimensions();
     assert_eq!(width, original_width);
@@ -692,7 +689,8 @@ async fn view_image_tool_errors_clearly_for_unsupported_detail_values() -> anyho
     .await?;
 
     let call_id = "view-image-unsupported-detail";
-    let arguments = edgerun_json::serde_json::json!({ "path": rel_path, "detail": "low" }).to_string();
+    let arguments =
+        edgerun_json::serde_json::json!({ "path": rel_path, "detail": "low" }).to_string();
 
     let first_response = sse(vec![
         ev_response_created("resp-1"),
@@ -772,7 +770,8 @@ async fn view_image_tool_treats_null_detail_as_omitted() -> anyhow::Result<()> {
     .await?;
 
     let call_id = "view-image-null-detail";
-    let arguments = edgerun_json::serde_json::json!({ "path": rel_path, "detail": null }).to_string();
+    let arguments =
+        edgerun_json::serde_json::json!({ "path": rel_path, "detail": null }).to_string();
 
     let first_response = sse(vec![
         ev_response_created("resp-1"),
@@ -826,9 +825,7 @@ async fn view_image_tool_treats_null_detail_as_omitted() -> anyhow::Result<()> {
     let (_, encoded) = image_url
         .split_once(',')
         .expect("image url contains data prefix");
-    let decoded = BASE64_STANDARD
-        .decode(encoded)
-        .expect("image data decodes from base64 for request");
+    let decoded = standard_decode(encoded).expect("image data decodes from base64 for request");
     let resized = load_from_memory(&decoded).expect("load resized image");
     let (width, height) = resized.dimensions();
     assert_eq!((width, height), (2048, 768));
@@ -919,9 +916,7 @@ async fn view_image_tool_resizes_when_model_lacks_original_detail_support() -> a
         .expect("image url contains data prefix");
     assert_eq!(prefix, "data:image/png;base64");
 
-    let decoded = BASE64_STANDARD
-        .decode(encoded)
-        .expect("image data decodes from base64 for request");
+    let decoded = standard_decode(encoded).expect("image data decodes from base64 for request");
     let resized = load_from_memory(&decoded).expect("load resized image");
     let (resized_width, resized_height) = resized.dimensions();
     assert_eq!((resized_width, resized_height), (2048, 768));
@@ -1010,9 +1005,7 @@ async fn view_image_tool_does_not_force_original_resolution_with_capability_only
     let (_, encoded) = image_url
         .split_once(',')
         .expect("image url contains data prefix");
-    let decoded = BASE64_STANDARD
-        .decode(encoded)
-        .expect("image data decodes from base64 for request");
+    let decoded = standard_decode(encoded).expect("image data decodes from base64 for request");
     let resized = load_from_memory(&decoded).expect("load resized image");
     let (resized_width, resized_height) = resized.dimensions();
     assert_eq!((resized_width, resized_height), (2048, 768));

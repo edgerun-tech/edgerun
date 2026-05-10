@@ -7,21 +7,21 @@ license.workspace = true
 [dependencies]
 async-channel = { workspace = true }
 async-trait = { workspace = true }
-bytes = { workspace = true }
 codex-client = { workspace = true }
 codex-protocol = { workspace = true }
+edgerun-bytes = { workspace = true }
 edgerun-encoding = { workspace = true }
 edgerun-error = { workspace = true }
+edgerun-eventsource-stream = { workspace = true }
+edgerun-http = { workspace = true }
 edgerun-json = { workspace = true, features = ["serde-compat"] }
 edgerun-tokio-tungstenite = { workspace = true }
 edgerun-tungstenite = { workspace = true }
 edgerun-time = { workspace = true }
 edgerun-url = { workspace = true }
 futures = { workspace = true }
-http = { workspace = true }
 reqwest = { workspace = true, features = ["json", "stream"] }
 serde = { workspace = true, features = ["derive"] }
 tokio = { workspace = true, features = ["fs", "macros", "net", "rt", "sync", "time"] }
 tracing = { workspace = true }
-eventsource-stream = { workspace = true }
 tokio-util = { workspace = true, features = ["codec", "io"] }

@@ -6,10 +6,10 @@ use codex_protocol::mcp::Resource as McpResource;
 pub use codex_protocol::mcp::ResourceContent as McpResourceContent;
 use codex_protocol::mcp::ResourceTemplate as McpResourceTemplate;
 use codex_protocol::mcp::Tool as McpTool;
+use edgerun_json::serde_json::Value as JsonValue;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
-use edgerun_json::serde_json::Value as JsonValue;
 use std::collections::BTreeMap;
 use ts_rs::TS;
 

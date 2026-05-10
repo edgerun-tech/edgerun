@@ -3,8 +3,7 @@ use crate::event_mapping::has_non_contextual_dev_message_content;
 use crate::event_mapping::is_contextual_dev_message_content;
 use crate::event_mapping::is_contextual_user_message_content;
 use crate::session::turn_context::TurnContext;
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
+use edgerun_encoding::base64::standard_decode;
 use codex_protocol::models::BaseInstructions;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::FunctionCallOutputBody;
@@ -603,7 +602,7 @@ fn estimate_original_image_bytes(image_url: &str) -> Option<i64> {
                 return None;
             }
         };
-        let bytes = match BASE64_STANDARD.decode(payload) {
+        let bytes = match standard_decode(payload) {
             Ok(bytes) => bytes,
             Err(error) => {
                 tracing::trace!("failed to decode original-detail image payload: {error}");

@@ -21,9 +21,9 @@ use core_test_support::responses::mount_sse_sequence;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::test_codex::test_codex;
-use pretty_assertions::assert_eq;
 use edgerun_json::serde_json::Value;
 use edgerun_json::serde_json::json;
+use pretty_assertions::assert_eq;
 use wiremock::Mock;
 use wiremock::ResponseTemplate;
 use wiremock::matchers::body_json;
@@ -87,7 +87,9 @@ fn read_post_tool_use_hook_inputs(home: &Path) -> Result<Vec<Value>> {
         .context("read post tool use hook log")?
         .lines()
         .filter(|line| !line.trim().is_empty())
-        .map(|line| edgerun_json::serde_json::from_str(line).context("parse post tool use hook input"))
+        .map(|line| {
+            edgerun_json::serde_json::from_str(line).context("parse post tool use hook input")
+        })
         .collect()
 }
 

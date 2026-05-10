@@ -1,5 +1,4 @@
 use super::*;
-use base64::Engine;
 use pretty_assertions::assert_eq;
 
 #[test]
@@ -17,7 +16,7 @@ fn map_api_error_maps_server_overloaded_from_503_body() {
     })
     .to_string();
     let err = map_api_error(ApiError::Transport(TransportError::Http {
-        status: http::StatusCode::SERVICE_UNAVAILABLE,
+        status: edgerun_http::StatusCode::SERVICE_UNAVAILABLE,
         url: Some("http://example.com/v1/responses".to_string()),
         headers: None,
         body: Some(body),
@@ -38,7 +37,7 @@ fn map_api_error_maps_cyber_policy_from_400_body() {
     })
     .to_string();
     let err = map_api_error(ApiError::Transport(TransportError::Http {
-        status: http::StatusCode::BAD_REQUEST,
+        status: edgerun_http::StatusCode::BAD_REQUEST,
         url: Some("http://example.com/v1/responses".to_string()),
         headers: None,
         body: Some(body),
@@ -66,7 +65,7 @@ fn map_api_error_maps_wrapped_websocket_cyber_policy_from_400_body() {
     })
     .to_string();
     let err = map_api_error(ApiError::Transport(TransportError::Http {
-        status: http::StatusCode::BAD_REQUEST,
+        status: edgerun_http::StatusCode::BAD_REQUEST,
         url: Some("ws://example.com/v1/responses".to_string()),
         headers: None,
         body: Some(body),
@@ -87,7 +86,7 @@ fn map_api_error_uses_cyber_policy_fallback_for_missing_message() {
     })
     .to_string();
     let err = map_api_error(ApiError::Transport(TransportError::Http {
-        status: http::StatusCode::BAD_REQUEST,
+        status: edgerun_http::StatusCode::BAD_REQUEST,
         url: Some("http://example.com/v1/responses".to_string()),
         headers: None,
         body: Some(body),
@@ -112,7 +111,7 @@ fn map_api_error_keeps_unknown_400_errors_generic() {
     })
     .to_string();
     let err = map_api_error(ApiError::Transport(TransportError::Http {
-        status: http::StatusCode::BAD_REQUEST,
+        status: edgerun_http::StatusCode::BAD_REQUEST,
         url: Some("http://example.com/v1/responses".to_string()),
         headers: None,
         body: Some(body.clone()),
@@ -129,11 +128,11 @@ fn map_api_error_maps_usage_limit_limit_name_header() {
     let mut headers = HeaderMap::new();
     headers.insert(
         ACTIVE_LIMIT_HEADER,
-        http::HeaderValue::from_static("codex_other"),
+        edgerun_http::HeaderValue::from_static("codex_other"),
     );
     headers.insert(
         "x-codex-other-limit-name",
-        http::HeaderValue::from_static("codex_other"),
+        edgerun_http::HeaderValue::from_static("codex_other"),
     );
     let body = edgerun_json::serde_json::json!({
         "error": {
@@ -143,7 +142,7 @@ fn map_api_error_maps_usage_limit_limit_name_header() {
     })
     .to_string();
     let err = map_api_error(ApiError::Transport(TransportError::Http {
-        status: http::StatusCode::TOO_MANY_REQUESTS,
+        status: edgerun_http::StatusCode::TOO_MANY_REQUESTS,
         url: Some("http://example.com/v1/responses".to_string()),
         headers: Some(headers),
         body: Some(body),
@@ -166,7 +165,7 @@ fn map_api_error_does_not_fallback_limit_name_to_limit_id() {
     let mut headers = HeaderMap::new();
     headers.insert(
         ACTIVE_LIMIT_HEADER,
-        http::HeaderValue::from_static("codex_other"),
+        edgerun_http::HeaderValue::from_static("codex_other"),
     );
     let body = edgerun_json::serde_json::json!({
         "error": {
@@ -176,7 +175,7 @@ fn map_api_error_does_not_fallback_limit_name_to_limit_id() {
     })
     .to_string();
     let err = map_api_error(ApiError::Transport(TransportError::Http {
-        status: http::StatusCode::TOO_MANY_REQUESTS,
+        status: edgerun_http::StatusCode::TOO_MANY_REQUESTS,
         url: Some("http://example.com/v1/responses".to_string()),
         headers: Some(headers),
         body: Some(body),
@@ -197,21 +196,27 @@ fn map_api_error_does_not_fallback_limit_name_to_limit_id() {
 #[test]
 fn map_api_error_extracts_identity_auth_details_from_headers() {
     let mut headers = HeaderMap::new();
-    headers.insert(REQUEST_ID_HEADER, http::HeaderValue::from_static("req-401"));
-    headers.insert(CF_RAY_HEADER, http::HeaderValue::from_static("ray-401"));
+    headers.insert(
+        REQUEST_ID_HEADER,
+        edgerun_http::HeaderValue::from_static("req-401"),
+    );
+    headers.insert(
+        CF_RAY_HEADER,
+        edgerun_http::HeaderValue::from_static("ray-401"),
+    );
     headers.insert(
         X_OPENAI_AUTHORIZATION_ERROR_HEADER,
-        http::HeaderValue::from_static("missing_authorization_header"),
+        edgerun_http::HeaderValue::from_static("missing_authorization_header"),
     );
     let x_error_json =
-        base64::engine::general_purpose::STANDARD.encode(r#"{"error":{"code":"token_expired"}}"#);
+        edgerun_encoding::base64::standard_encode(r#"{"error":{"code":"token_expired"}}"#);
     headers.insert(
         X_ERROR_JSON_HEADER,
-        http::HeaderValue::from_str(&x_error_json).expect("valid x-error-json header"),
+        edgerun_http::HeaderValue::from_str(&x_error_json).expect("valid x-error-json header"),
     );
 
     let err = map_api_error(ApiError::Transport(TransportError::Http {
-        status: http::StatusCode::UNAUTHORIZED,
+        status: edgerun_http::StatusCode::UNAUTHORIZED,
         url: Some("https://chatgpt.com/backend-api/codex/models".to_string()),
         headers: Some(headers),
         body: Some(r#"{"detail":"Unauthorized"}"#.to_string()),

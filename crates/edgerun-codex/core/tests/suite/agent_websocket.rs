@@ -10,8 +10,8 @@ use core_test_support::responses::start_websocket_server;
 use core_test_support::responses::start_websocket_server_with_headers;
 use core_test_support::skip_if_no_network;
 use core_test_support::test_codex::test_codex;
-use pretty_assertions::assert_eq;
 use edgerun_json::serde_json::Value;
+use pretty_assertions::assert_eq;
 use std::time::Duration;
 
 const WS_V2_BETA_HEADER_VALUE: &str = "responses_websockets=2026-02-06";

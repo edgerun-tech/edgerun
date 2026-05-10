@@ -277,7 +277,7 @@ impl TurnDiffTracker {
         };
 
         let unified =
-            similar::TextDiff::from_lines(left_content.unwrap_or(""), right_content.unwrap_or(""))
+            edgerun_similar::TextDiff::from_lines(left_content.unwrap_or(""), right_content.unwrap_or(""))
                 .unified_diff()
                 .context_radius(3)
                 .header(&old_header, &new_header)

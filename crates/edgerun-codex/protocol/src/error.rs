@@ -12,6 +12,7 @@ use crate::protocol::CodexErrorInfo;
 use crate::protocol::ErrorEvent;
 use crate::protocol::RateLimitSnapshot;
 use crate::protocol::TruncationPolicy;
+use edgerun_error::Error;
 use edgerun_time::chrono::ChronoDatelike;
 use edgerun_time::chrono::ChronoLocal as Local;
 use edgerun_time::chrono::ChronoUtc as Utc;
@@ -19,7 +20,6 @@ use edgerun_time::chrono::ChronoUtcDateTime as DateTime;
 use reqwest::StatusCode;
 use std::io;
 use std::time::Duration;
-use edgerun_error::Error;
 use tokio::task::JoinError;
 
 pub type Result<T> = std::result::Result<T, CodexErr>;
@@ -326,7 +326,9 @@ impl UnexpectedResponseError {
     }
 
     fn extract_error_message(&self) -> Option<String> {
-        let json = edgerun_json::serde_json::from_str::<edgerun_json::serde_json::Value>(&self.body).ok()?;
+        let json =
+            edgerun_json::serde_json::from_str::<edgerun_json::serde_json::Value>(&self.body)
+                .ok()?;
         let message = json
             .get("error")
             .and_then(|error| error.get("message"))

@@ -40,8 +40,8 @@ use core_test_support::streaming_sse::StreamingSseChunk;
 use core_test_support::streaming_sse::start_streaming_sse_server;
 use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
-use pretty_assertions::assert_eq;
 use edgerun_json::serde_json::Value;
+use pretty_assertions::assert_eq;
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
@@ -93,8 +93,8 @@ fn trust_plugin_hooks(config: &mut Config, plugin_hook_sources: Vec<PluginHookSo
 fn write_stop_hook(home: &Path, block_prompts: &[&str]) -> Result<()> {
     let script_path = home.join("stop_hook.py");
     let log_path = home.join("stop_hook_log.jsonl");
-    let prompts_json =
-        edgerun_json::serde_json::to_string(block_prompts).context("serialize stop hook prompts for test")?;
+    let prompts_json = edgerun_json::serde_json::to_string(block_prompts)
+        .context("serialize stop hook prompts for test")?;
     let script = format!(
         r#"import json
 from pathlib import Path
@@ -187,8 +187,8 @@ fn write_user_prompt_submit_hook(
     let script_path = home.join("user_prompt_submit_hook.py");
     let log_path = home.join("user_prompt_submit_hook_log.jsonl");
     let log_path = log_path.display();
-    let blocked_prompt_json =
-        edgerun_json::serde_json::to_string(blocked_prompt).context("serialize blocked prompt for test")?;
+    let blocked_prompt_json = edgerun_json::serde_json::to_string(blocked_prompt)
+        .context("serialize blocked prompt for test")?;
     let additional_context_json = edgerun_json::serde_json::to_string(additional_context)
         .context("serialize user prompt submit additional context for test")?;
     let script = format!(
@@ -236,8 +236,10 @@ fn write_pre_tool_use_hook(
 ) -> Result<()> {
     let script_path = home.join("pre_tool_use_hook.py");
     let log_path = home.join("pre_tool_use_hook_log.jsonl");
-    let mode_json = edgerun_json::serde_json::to_string(mode).context("serialize pre tool use mode")?;
-    let reason_json = edgerun_json::serde_json::to_string(reason).context("serialize pre tool use reason")?;
+    let mode_json =
+        edgerun_json::serde_json::to_string(mode).context("serialize pre tool use mode")?;
+    let reason_json =
+        edgerun_json::serde_json::to_string(reason).context("serialize pre tool use reason")?;
     let script = format!(
         r#"import json
 from pathlib import Path
@@ -317,8 +319,10 @@ fn write_pre_tool_use_hook_toml(
 ) -> Result<()> {
     let script_path = home.join(script_name);
     let log_path = home.join(log_name);
-    let mode_json = edgerun_json::serde_json::to_string(mode).context("serialize pre tool use mode")?;
-    let reason_json = edgerun_json::serde_json::to_string(reason).context("serialize pre tool use reason")?;
+    let mode_json =
+        edgerun_json::serde_json::to_string(mode).context("serialize pre tool use mode")?;
+    let reason_json =
+        edgerun_json::serde_json::to_string(reason).context("serialize pre tool use reason")?;
     let script = format!(
         r#"import json
 from pathlib import Path
@@ -383,9 +387,10 @@ fn write_permission_request_hook(
 ) -> Result<()> {
     let script_path = home.join("permission_request_hook.py");
     let log_path = home.join("permission_request_hook_log.jsonl");
-    let mode_json = edgerun_json::serde_json::to_string(mode).context("serialize permission request mode")?;
-    let reason_json =
-        edgerun_json::serde_json::to_string(reason).context("serialize permission request reason")?;
+    let mode_json =
+        edgerun_json::serde_json::to_string(mode).context("serialize permission request mode")?;
+    let reason_json = edgerun_json::serde_json::to_string(reason)
+        .context("serialize permission request reason")?;
     let script = format!(
         r#"import json
 from pathlib import Path
@@ -465,8 +470,10 @@ fn write_post_tool_use_hook(
 ) -> Result<()> {
     let script_path = home.join("post_tool_use_hook.py");
     let log_path = home.join("post_tool_use_hook_log.jsonl");
-    let mode_json = edgerun_json::serde_json::to_string(mode).context("serialize post tool use mode")?;
-    let reason_json = edgerun_json::serde_json::to_string(reason).context("serialize post tool use reason")?;
+    let mode_json =
+        edgerun_json::serde_json::to_string(mode).context("serialize post tool use mode")?;
+    let reason_json =
+        edgerun_json::serde_json::to_string(reason).context("serialize post tool use reason")?;
     let script = format!(
         r#"import json
 from pathlib import Path
@@ -534,8 +541,8 @@ fn write_logging_pre_and_blocking_post_tool_use_hooks(home: &Path, feedback: &st
     let pre_log_path = home.join("pre_tool_use_hook_log.jsonl");
     let post_script_path = home.join("post_tool_use_hook.py");
     let post_log_path = home.join("post_tool_use_hook_log.jsonl");
-    let feedback_json =
-        edgerun_json::serde_json::to_string(feedback).context("serialize post tool use feedback")?;
+    let feedback_json = edgerun_json::serde_json::to_string(feedback)
+        .context("serialize post tool use feedback")?;
     let pre_script = format!(
         r#"import json
 from pathlib import Path
@@ -663,7 +670,8 @@ fn rollout_hook_prompt_texts(text: &str) -> Result<Vec<String>> {
         if trimmed.is_empty() {
             continue;
         }
-        let rollout: RolloutLine = edgerun_json::serde_json::from_str(trimmed).context("parse rollout line")?;
+        let rollout: RolloutLine =
+            edgerun_json::serde_json::from_str(trimmed).context("parse rollout line")?;
         if let RolloutItem::ResponseItem(ResponseItem::Message { role, content, .. }) = rollout.item
             && role == "user"
         {
@@ -707,12 +715,17 @@ fn read_pre_tool_use_hook_inputs(home: &Path) -> Result<Vec<edgerun_json::serde_
     read_hook_inputs_from_log(home.join("pre_tool_use_hook_log.jsonl").as_path())
 }
 
-fn read_permission_request_hook_inputs(home: &Path) -> Result<Vec<edgerun_json::serde_json::Value>> {
+fn read_permission_request_hook_inputs(
+    home: &Path,
+) -> Result<Vec<edgerun_json::serde_json::Value>> {
     fs::read_to_string(home.join("permission_request_hook_log.jsonl"))
         .context("read permission request hook log")?
         .lines()
         .filter(|line| !line.trim().is_empty())
-        .map(|line| edgerun_json::serde_json::from_str(line).context("parse permission request hook log line"))
+        .map(|line| {
+            edgerun_json::serde_json::from_str(line)
+                .context("parse permission request hook log line")
+        })
         .collect()
 }
 
@@ -775,16 +788,23 @@ fn read_session_start_hook_inputs(home: &Path) -> Result<Vec<edgerun_json::serde
         .context("read session start hook log")?
         .lines()
         .filter(|line| !line.trim().is_empty())
-        .map(|line| edgerun_json::serde_json::from_str(line).context("parse session start hook log line"))
+        .map(|line| {
+            edgerun_json::serde_json::from_str(line).context("parse session start hook log line")
+        })
         .collect()
 }
 
-fn read_user_prompt_submit_hook_inputs(home: &Path) -> Result<Vec<edgerun_json::serde_json::Value>> {
+fn read_user_prompt_submit_hook_inputs(
+    home: &Path,
+) -> Result<Vec<edgerun_json::serde_json::Value>> {
     fs::read_to_string(home.join("user_prompt_submit_hook_log.jsonl"))
         .context("read user prompt submit hook log")?
         .lines()
         .filter(|line| !line.trim().is_empty())
-        .map(|line| edgerun_json::serde_json::from_str(line).context("parse user prompt submit hook log line"))
+        .map(|line| {
+            edgerun_json::serde_json::from_str(line)
+                .context("parse user prompt submit hook log line")
+        })
         .collect()
 }
 
@@ -1684,7 +1704,11 @@ allow_local_binding = true
         vec![
             sse(vec![
                 ev_response_created("resp-1"),
-                ev_function_call(call_id, "shell_command", &edgerun_json::serde_json::to_string(&args)?),
+                ev_function_call(
+                    call_id,
+                    "shell_command",
+                    &edgerun_json::serde_json::to_string(&args)?,
+                ),
                 ev_completed("resp-1"),
             ]),
             sse(vec![

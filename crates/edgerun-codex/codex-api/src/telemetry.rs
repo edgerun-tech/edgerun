@@ -6,13 +6,13 @@ use codex_client::RetryPolicy;
 use codex_client::StreamResponse;
 use codex_client::TransportError;
 use codex_client::run_with_retry;
-use http::StatusCode;
+use edgerun_http::StatusCode;
+use edgerun_tokio_tungstenite::Error;
+use edgerun_tokio_tungstenite::Message;
 use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::Instant;
-use edgerun_tokio_tungstenite::Error;
-use edgerun_tokio_tungstenite::Message;
 
 /// Generic telemetry.
 pub trait SseTelemetry: Send + Sync {
@@ -21,8 +21,8 @@ pub trait SseTelemetry: Send + Sync {
         result: &Result<
             Option<
                 Result<
-                    eventsource_stream::Event,
-                    eventsource_stream::EventStreamError<TransportError>,
+                    edgerun_eventsource_stream::Event,
+                    edgerun_eventsource_stream::EventStreamError<TransportError>,
                 >,
             >,
             tokio::time::error::Elapsed,

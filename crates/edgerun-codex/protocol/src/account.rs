@@ -154,7 +154,8 @@ mod tests {
             "\"enterprise_cbp_usage_based\""
         );
         assert_eq!(
-            edgerun_json::serde_json::to_string(&PlanType::ProLite).expect("prolite should serialize"),
+            edgerun_json::serde_json::to_string(&PlanType::ProLite)
+                .expect("prolite should serialize"),
             "\"prolite\""
         );
         assert_eq!(
@@ -163,7 +164,8 @@ mod tests {
             PlanType::SelfServeBusinessUsageBased
         );
         assert_eq!(
-            edgerun_json::serde_json::from_str::<PlanType>("\"prolite\"").expect("prolite should deserialize"),
+            edgerun_json::serde_json::from_str::<PlanType>("\"prolite\"")
+                .expect("prolite should deserialize"),
             PlanType::ProLite
         );
         assert_eq!(

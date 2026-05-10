@@ -438,7 +438,7 @@ impl Session {
     /// This helper generates a fresh sub-id for the synthetic turn before delegating to the
     /// explicit-sub-id variant.
     pub(crate) async fn maybe_start_turn_for_pending_work(self: &Arc<Self>) {
-        self.maybe_start_turn_for_pending_work_with_sub_id(uuid::Uuid::new_v4().to_string())
+        self.maybe_start_turn_for_pending_work_with_sub_id(edgerun_uuid::Uuid::new_v4().to_string())
             .await;
     }
 

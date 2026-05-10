@@ -24,8 +24,8 @@ use crate::protocol::WebSearchEndEvent;
 use crate::user_input::ByteRange;
 use crate::user_input::TextElement;
 use crate::user_input::UserInput;
-use quick_xml::de::from_str as from_xml_str;
-use quick_xml::se::to_string as to_xml_string;
+use edgerun_quick_xml::de::from_str as from_xml_str;
+use edgerun_quick_xml::se::to_string as to_xml_string;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
@@ -214,7 +214,7 @@ pub struct ContextCompactionItem {
 impl ContextCompactionItem {
     pub fn new() -> Self {
         Self {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: edgerun_uuid::Uuid::new_v4().to_string(),
         }
     }
 
@@ -232,7 +232,7 @@ impl Default for ContextCompactionItem {
 impl UserMessageItem {
     pub fn new(content: &[UserInput]) -> Self {
         Self {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: edgerun_uuid::Uuid::new_v4().to_string(),
             content: content.to_vec(),
         }
     }
@@ -312,7 +312,7 @@ impl HookPromptItem {
         Self {
             id: id
                 .cloned()
-                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+                .unwrap_or_else(|| edgerun_uuid::Uuid::new_v4().to_string()),
             fragments,
         }
     }
@@ -342,7 +342,7 @@ pub fn build_hook_prompt_message(fragments: &[HookPromptFragment]) -> Option<Res
     }
 
     Some(ResponseItem::Message {
-        id: Some(uuid::Uuid::new_v4().to_string()),
+        id: Some(edgerun_uuid::Uuid::new_v4().to_string()),
         role: "user".to_string(),
         content,
         phase: None,
@@ -394,7 +394,7 @@ fn serialize_hook_prompt_fragment(text: &str, hook_run_id: &str) -> Option<Strin
 impl AgentMessageItem {
     pub fn new(content: &[AgentMessageContent]) -> Self {
         Self {
-            id: uuid::Uuid::new_v4().to_string(),
+            id: edgerun_uuid::Uuid::new_v4().to_string(),
             content: content.to_vec(),
             phase: None,
             memory_citation: None,

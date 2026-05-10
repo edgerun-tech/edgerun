@@ -17,7 +17,7 @@ use codex_protocol::error::Result as CoreResult;
 use codex_protocol::openai_models::ModelInfo;
 use codex_response_debug_context::extract_response_debug_context;
 use codex_response_debug_context::telemetry_transport_error_message;
-use http::HeaderMap;
+use edgerun_http::HeaderMap;
 use tokio::time::timeout;
 
 use crate::auth::resolve_provider_auth;
@@ -101,7 +101,7 @@ impl RequestTelemetry for ModelsRequestTelemetry {
     fn on_request(
         &self,
         attempt: u64,
-        status: Option<http::StatusCode>,
+        status: Option<edgerun_http::StatusCode>,
         error: Option<&TransportError>,
         duration: Duration,
     ) {

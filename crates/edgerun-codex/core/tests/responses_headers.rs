@@ -427,7 +427,8 @@ async fn responses_stream_includes_turn_metadata_header_for_git_workspace_e2e() 
         .header("x-codex-turn-metadata")
         .expect("x-codex-turn-metadata header should be present");
     let initial_parsed: edgerun_json::serde_json::Value =
-        edgerun_json::serde_json::from_str(&initial_header).expect("x-codex-turn-metadata should be valid JSON");
+        edgerun_json::serde_json::from_str(&initial_header)
+            .expect("x-codex-turn-metadata should be valid JSON");
     let initial_turn_id = initial_parsed
         .get("turn_id")
         .and_then(edgerun_json::serde_json::Value::as_str)

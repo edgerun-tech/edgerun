@@ -397,7 +397,8 @@ async fn explicit_plugin_mentions_track_plugin_used_analytics() -> Result<()> {
             .into_iter()
             .filter(|request| request.url.path() == "/codex/analytics-events/events")
             .find_map(|request| {
-                let payload: edgerun_json::serde_json::Value = edgerun_json::serde_json::from_slice(&request.body).ok()?;
+                let payload: edgerun_json::serde_json::Value =
+                    edgerun_json::serde_json::from_slice(&request.body).ok()?;
                 payload["events"].as_array().and_then(|events| {
                     events
                         .iter()

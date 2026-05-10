@@ -9,7 +9,6 @@ use codex_core::RolloutRecorderParams;
 use codex_core::config::ConfigBuilder;
 use codex_core::find_archived_thread_path_by_id_str;
 use codex_core::find_thread_meta_by_name_str;
-use edgerun_time::chrono::ChronoUtc as Utc;
 use codex_core::find_thread_path_by_id_str;
 use codex_protocol::ThreadId;
 use codex_protocol::models::BaseInstructions;
@@ -17,9 +16,10 @@ use codex_protocol::protocol::SessionSource;
 use codex_rollout::StateDbHandle;
 use codex_state::StateRuntime;
 use codex_state::ThreadMetadataBuilder;
+use edgerun_time::chrono::ChronoUtc as Utc;
+use edgerun_uuid::Uuid;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
-use uuid::Uuid;
 
 /// Create <subdir>/YYYY/MM/DD and write a minimal rollout file containing the
 /// provided conversation id in the SessionMeta line. Returns the absolute path.

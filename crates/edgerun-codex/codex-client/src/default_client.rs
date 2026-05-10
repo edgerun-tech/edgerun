@@ -1,7 +1,7 @@
-use http::Error as HttpError;
-use http::HeaderMap;
-use http::HeaderName;
-use http::HeaderValue;
+use edgerun_http::Error as HttpError;
+use edgerun_http::HeaderMap;
+use edgerun_http::HeaderName;
+use edgerun_http::HeaderValue;
 use opentelemetry::global;
 use opentelemetry::propagation::Injector;
 use reqwest::IntoUrl;

@@ -38,10 +38,10 @@ use core_test_support::wait_for_event_with_timeout;
 use core_test_support::zsh_fork::build_zsh_fork_test;
 use core_test_support::zsh_fork::restrictive_workspace_write_profile;
 use core_test_support::zsh_fork::zsh_fork_runtime;
-use pretty_assertions::assert_eq;
-use regex_lite::Regex;
 use edgerun_json::serde_json::Value;
 use edgerun_json::serde_json::json;
+use pretty_assertions::assert_eq;
+use regex_lite::Regex;
 use std::env;
 use std::fs;
 use std::path::PathBuf;
@@ -792,7 +792,7 @@ fn body_contains(req: &Request, text: &str) -> bool {
                 .any(|entry| entry.trim().eq_ignore_ascii_case("zstd"))
         });
     let bytes = if is_zstd {
-        zstd::stream::decode_all(std::io::Cursor::new(&req.body)).ok()
+        edgerun_zstd::stream::decode_all(std::io::Cursor::new(&req.body)).ok()
     } else {
         Some(req.body.clone())
     };

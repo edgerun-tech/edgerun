@@ -21,6 +21,8 @@ pub mod nostd_virtio;
 
 #[cfg(not(feature = "std"))]
 use edgerun_crypto::sha256;
+#[cfg(all(not(feature = "std"), feature = "wss"))]
+use edgerun_protocols::tls::certificate_gen::generate_self_signed;
 #[cfg(not(feature = "std"))]
 use edgerun_protocols::verify::verify_message_signature;
 #[cfg(not(feature = "std"))]
@@ -56,6 +58,8 @@ pub enum RelayWireError {
     EmptyPacket,
     PacketTooLarge,
     InvalidPacket,
+    #[cfg(feature = "wss")]
+    TlsConfig,
 }
 
 #[cfg(not(feature = "std"))]
@@ -65,8 +69,18 @@ impl fmt::Display for RelayWireError {
             Self::EmptyPacket => write!(f, "empty relay packet"),
             Self::PacketTooLarge => write!(f, "relay packet too large"),
             Self::InvalidPacket => write!(f, "invalid relay packet"),
+            #[cfg(feature = "wss")]
+            Self::TlsConfig => write!(f, "invalid relay TLS configuration"),
         }
     }
+}
+
+#[cfg(all(not(feature = "std"), feature = "wss"))]
+pub fn self_signed_wss_config(
+    hostnames: &[&str],
+) -> Result<edgerun_rusttls::ServerConfig, RelayWireError> {
+    let certificate = generate_self_signed(hostnames).map_err(|_| RelayWireError::TlsConfig)?;
+    Ok(edgerun_rusttls::ServerConfig::from_certificate(certificate))
 }
 
 #[cfg(not(feature = "std"))]
@@ -257,6 +271,7 @@ pub fn encode_packet(message: &RelayMessage) -> Result<Vec<u8>, RelayWireError> 
 mod tests {
     extern crate std;
 
+    use alloc::vec;
     use alloc::vec::Vec;
     use edgerun_crypto::{Ed25519SigningKey, Signer};
     use edgerun_wire::{
@@ -272,7 +287,7 @@ mod tests {
 
     use crate::nostd_relay::{RelayEngine, RelayOutput};
     #[cfg(feature = "virtio")]
-    use crate::nostd_virtio::EthernetRelay;
+    use crate::nostd_virtio::{EthernetRelay, EthernetRelayEventKind};
     use crate::{register_preimage, sha256_array, submit_preimage};
 
     fn ed25519_identity(seed: u8) -> (Ed25519SigningKey, RelayIdentity) {
@@ -373,6 +388,14 @@ mod tests {
         assert_eq!(engine.pending_len(), 1);
     }
 
+    #[cfg(feature = "wss")]
+    #[test]
+    fn no_std_wss_self_signed_config_builds() {
+        let config = crate::self_signed_wss_config(&["localhost"]).expect("wss config");
+        assert!(!config.certificate().cert_der.is_empty());
+        assert_eq!(config.certificate().cert_chain_der.len(), 1);
+    }
+
     #[cfg(feature = "virtio")]
     #[test]
     fn no_std_ethernet_relay_registers_and_forwards_udp() {
@@ -458,7 +481,10 @@ mod tests {
         assert_eq!(outputs.len(), 1);
         let (syn_ack, payload) = parse_tcp_frame(&outputs[0]);
         assert_eq!(payload.len(), 0);
-        assert_eq!(syn_ack.flags & (TCP_FLAG_SYN | TCP_FLAG_ACK), TCP_FLAG_SYN | TCP_FLAG_ACK);
+        assert_eq!(
+            syn_ack.flags & (TCP_FLAG_SYN | TCP_FLAG_ACK),
+            TCP_FLAG_SYN | TCP_FLAG_ACK
+        );
         assert_eq!(syn_ack.ack, 1001);
 
         let register = register_ed25519(2, 1);
@@ -503,9 +529,79 @@ mod tests {
             Some(RelayMessage::DeliveryRequest(_))
         )));
         assert!(outputs.iter().any(|frame| matches!(
-            parse_udp_relay_message(frame),
-            RelayMessage::Ack(ack) if ack.ok && ack.code == 202
+            parse_udp_relay_message_opt(frame),
+            Some(RelayMessage::Ack(ack)) if ack.ok && ack.code == 202
         )));
+    }
+
+    #[cfg(feature = "virtio")]
+    #[test]
+    fn no_std_ethernet_relay_expires_tcp_after_one_minute() {
+        let relay_mac = [0x52, 0x54, 0x00, 0x12, 0x34, 0x56];
+        let relay_ip = IpAddr::new(10, 0, 2, 15);
+        let mut relay = EthernetRelay::new(
+            relay_ip,
+            IpAddr::new(255, 255, 255, 0),
+            IpAddr::new(10, 0, 2, 2),
+            relay_mac,
+            7373,
+        );
+        let peer_mac = [0x02, 0, 0, 0, 0, 30];
+        let peer_ip = IpAddr::new(10, 0, 2, 30);
+        let syn = tcp_frame(
+            peer_mac,
+            *peer_ip.as_bytes(),
+            relay_mac,
+            *relay_ip.as_bytes(),
+            40002,
+            7373,
+            2000,
+            0,
+            TCP_FLAG_SYN,
+            &[],
+        );
+        let mut events = Vec::new();
+        let outputs = relay.handle_frame_at_with_events(&syn, 10, &mut events);
+        assert_eq!(outputs.len(), 1);
+        assert!(matches!(
+            events.as_slice(),
+            [event] if event.kind == EthernetRelayEventKind::TcpOpened
+        ));
+
+        events.clear();
+        let outputs = relay.poll_tcp_with_events(60_010, &mut events);
+        assert_eq!(outputs.len(), 1);
+        assert!(matches!(
+            events.as_slice(),
+            [event] if event.kind == EthernetRelayEventKind::TcpClosed {
+                reason: "lifetime_exceeded"
+            }
+        ));
+    }
+
+    #[cfg(all(feature = "virtio", feature = "wss"))]
+    #[test]
+    fn no_std_virtio_relay_keeps_wss_cert_in_memory() {
+        let relay_mac = [0x52, 0x54, 0x00, 0x12, 0x34, 0x56];
+        let relay_ip = IpAddr::new(10, 0, 2, 15);
+        let relay = EthernetRelay::new(
+            relay_ip,
+            IpAddr::new(255, 255, 255, 0),
+            IpAddr::new(10, 0, 2, 2),
+            relay_mac,
+            7373,
+        );
+        let config = crate::self_signed_wss_config(&["localhost"]).expect("wss config");
+        let virtio = crate::nostd_virtio::VirtioRelay::with_wss_config(relay, config);
+        assert!(virtio.wss_config().is_some());
+        assert!(
+            !virtio
+                .wss_config()
+                .expect("wss config")
+                .certificate()
+                .cert_der
+                .is_empty()
+        );
     }
 
     #[cfg(feature = "virtio")]
@@ -535,13 +631,16 @@ mod tests {
 
     #[cfg(feature = "virtio")]
     fn parse_udp_relay_message(frame: &[u8]) -> RelayMessage {
+        parse_udp_relay_message_opt(frame).expect("expected udp")
+    }
+
+    #[cfg(feature = "virtio")]
+    fn parse_udp_relay_message_opt(frame: &[u8]) -> Option<RelayMessage> {
         let mut stack = IpStack::new();
         let mut network = Network::new(&mut stack);
-        match network.recv(frame).expect("parse frame") {
-            ParsedPacket::Udp { payload, .. } => {
-                crate::decode_packet(payload).expect("decode relay packet")
-            }
-            _ => panic!("expected udp"),
+        match network.recv(frame)? {
+            ParsedPacket::Udp { payload, .. } => crate::decode_packet(payload).ok(),
+            _ => None,
         }
     }
 

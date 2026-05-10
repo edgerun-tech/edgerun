@@ -12,17 +12,26 @@ use crate::telemetry::WebsocketTelemetry;
 use codex_client::TransportError;
 use codex_client::maybe_build_rustls_client_config_with_custom_ca;
 use codex_client::rustls_provider::ensure_rustls_crypto_provider;
+use edgerun_http::HeaderMap;
+use edgerun_http::HeaderName;
+use edgerun_http::HeaderValue;
+use edgerun_http::StatusCode;
 use edgerun_json::FromJson;
 use edgerun_json::JsonValue as EdgeJsonValue;
 use edgerun_json::Map as EdgeJsonMap;
+use edgerun_json::serde_json::Value;
+use edgerun_tokio_tungstenite::Error as WsError;
+use edgerun_tokio_tungstenite::MaybeTlsStream;
+use edgerun_tokio_tungstenite::Message;
+use edgerun_tokio_tungstenite::WebSocketStream;
+use edgerun_tokio_tungstenite::connect_async_tls_with_config;
+use edgerun_tungstenite::client::IntoClientRequest;
+use edgerun_tungstenite::extensions::ExtensionsConfig;
+use edgerun_tungstenite::extensions::compression::deflate::DeflateConfig;
+use edgerun_tungstenite::protocol::WebSocketConfig;
 use edgerun_url::Url;
 use futures::SinkExt;
 use futures::StreamExt;
-use http::HeaderMap;
-use http::HeaderName;
-use http::HeaderValue;
-use http::StatusCode;
-use edgerun_json::serde_json::Value;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -31,12 +40,6 @@ use tokio::sync::Mutex;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio::time::Instant;
-use edgerun_tokio_tungstenite::MaybeTlsStream;
-use edgerun_tokio_tungstenite::WebSocketStream;
-use edgerun_tokio_tungstenite::connect_async_tls_with_config;
-use edgerun_tokio_tungstenite::Error as WsError;
-use edgerun_tokio_tungstenite::Message;
-use edgerun_tungstenite::client::IntoClientRequest;
 use tracing::Instrument;
 use tracing::Span;
 use tracing::debug;
@@ -44,9 +47,6 @@ use tracing::error;
 use tracing::info;
 use tracing::instrument;
 use tracing::trace;
-use edgerun_tungstenite::extensions::ExtensionsConfig;
-use edgerun_tungstenite::extensions::compression::deflate::DeflateConfig;
-use edgerun_tungstenite::protocol::WebSocketConfig;
 
 struct WsStream {
     tx_command: mpsc::Sender<WsCommand>,
@@ -375,7 +375,7 @@ fn merge_request_headers(
     let mut headers = provider_headers.clone();
     headers.extend(extra_headers);
     for (name, value) in &default_headers {
-        if let http::header::Entry::Vacant(entry) = headers.entry(name) {
+        if let edgerun_http::header::Entry::Vacant(entry) = headers.entry(name) {
             entry.insert(value.clone());
         }
     }
@@ -623,7 +623,8 @@ async fn run_websocket_response_stream(
                     return Err(error);
                 }
 
-                let event = match edgerun_json::serde_json::from_str::<ResponsesStreamEvent>(&text) {
+                let event = match edgerun_json::serde_json::from_str::<ResponsesStreamEvent>(&text)
+                {
                     Ok(event) => event,
                     Err(err) => {
                         debug!("failed to parse websocket event: {err}, data: {text}");
@@ -729,8 +730,8 @@ async fn send_websocket_request(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pretty_assertions::assert_eq;
     use edgerun_json::serde_json::json;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn websocket_config_enables_permessage_deflate() {

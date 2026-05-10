@@ -324,9 +324,7 @@ fn looks_like_url(token: &str) -> bool {
 }
 
 fn trim_url_token(token: &str) -> &str {
-    token.trim_matches(|ch: char| {
-        ch.is_whitespace() || matches!(ch, '"' | '\'' | '(' | ')' | ';')
-    })
+    token.trim_matches(|ch: char| ch.is_whitespace() || matches!(ch, '"' | '\'' | '(' | ')' | ';'))
 }
 
 fn executable_basename(exe: &str) -> Option<String> {

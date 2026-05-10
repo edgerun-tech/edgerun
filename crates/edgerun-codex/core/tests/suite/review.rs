@@ -25,12 +25,12 @@ use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
 use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
+use edgerun_uuid::Uuid;
 use pretty_assertions::assert_eq;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;
 use tokio::io::AsyncWriteExt as _;
-use uuid::Uuid;
 use wiremock::MockServer;
 
 /// Verify that submitting `Op::Review` spawns a child task and emits
@@ -131,7 +131,8 @@ async fn review_op_emits_lifecycle_and_review_output() {
         if line.trim().is_empty() {
             continue;
         }
-        let v: edgerun_json::serde_json::Value = edgerun_json::serde_json::from_str(line).expect("jsonl line");
+        let v: edgerun_json::serde_json::Value =
+            edgerun_json::serde_json::from_str(line).expect("jsonl line");
         let rl: RolloutLine = edgerun_json::serde_json::from_value(v).expect("rollout line");
         if let RolloutItem::ResponseItem(ResponseItem::Message { role, content, .. }) = rl.item {
             if role == "user" {
@@ -641,7 +642,8 @@ async fn review_input_isolated_from_parent_history() {
         if line.trim().is_empty() {
             continue;
         }
-        let v: edgerun_json::serde_json::Value = edgerun_json::serde_json::from_str(line).expect("jsonl line");
+        let v: edgerun_json::serde_json::Value =
+            edgerun_json::serde_json::from_str(line).expect("jsonl line");
         let rl: RolloutLine = edgerun_json::serde_json::from_value(v).expect("rollout line");
         if let RolloutItem::ResponseItem(ResponseItem::Message { role, content, .. }) = rl.item
             && role == "user"

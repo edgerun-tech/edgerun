@@ -159,7 +159,11 @@ async fn user_shell_command_does_not_replace_active_turn() -> anyhow::Result<()>
     };
     let first = sse(vec![
         ev_response_created("resp-1"),
-        ev_function_call(call_id, "shell_command", &edgerun_json::serde_json::to_string(&args)?),
+        ev_function_call(
+            call_id,
+            "shell_command",
+            &edgerun_json::serde_json::to_string(&args)?,
+        ),
         ev_completed("resp-1"),
     ]);
     let second = sse(vec![
@@ -286,7 +290,8 @@ async fn user_shell_command_history_is_persisted_and_shared_with_model() -> anyh
     .await;
     assert_eq!(begin_event.source, ExecCommandSource::UserShell);
     let matches_last_arg = begin_event.command.last() == Some(&command);
-    let matches_split = edgerun_shlex::split(&command).is_some_and(|split| split == begin_event.command);
+    let matches_split =
+        edgerun_shlex::split(&command).is_some_and(|split| split == begin_event.command);
     assert!(
         matches_last_arg || matches_split,
         "user command begin event should include the original command; got: {:?}",
@@ -473,7 +478,11 @@ async fn user_shell_command_is_truncated_only_once() -> anyhow::Result<()> {
         &server,
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "shell_command", &edgerun_json::serde_json::to_string(&args)?),
+            ev_function_call(
+                call_id,
+                "shell_command",
+                &edgerun_json::serde_json::to_string(&args)?,
+            ),
             ev_completed("resp-1"),
         ]),
     )

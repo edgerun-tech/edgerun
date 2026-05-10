@@ -18,8 +18,8 @@ use core_test_support::test_codex::test_codex;
 use core_test_support::test_codex::turn_permission_fields;
 use core_test_support::wait_for_event;
 use core_test_support::wait_for_event_match;
-use pretty_assertions::assert_eq;
 use edgerun_json::serde_json::json;
+use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::path::Path;
 use std::path::PathBuf;
@@ -139,7 +139,11 @@ async fn run_snapshot_command_with_options(
     let responses = vec![
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "exec_command", &edgerun_json::serde_json::to_string(&args)?),
+            ev_function_call(
+                call_id,
+                "exec_command",
+                &edgerun_json::serde_json::to_string(&args)?,
+            ),
             ev_completed("resp-1"),
         ]),
         sse(vec![
@@ -234,7 +238,11 @@ async fn run_shell_command_snapshot_with_options(
     let responses = vec![
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "shell_command", &edgerun_json::serde_json::to_string(&args)?),
+            ev_function_call(
+                call_id,
+                "shell_command",
+                &edgerun_json::serde_json::to_string(&args)?,
+            ),
             ev_completed("resp-1"),
         ]),
         sse(vec![
@@ -311,7 +319,11 @@ async fn run_tool_turn_on_harness(
     let responses = vec![
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, tool_name, &edgerun_json::serde_json::to_string(&args)?),
+            ev_function_call(
+                call_id,
+                tool_name,
+                &edgerun_json::serde_json::to_string(&args)?,
+            ),
             ev_completed("resp-1"),
         ]),
         sse(vec![
@@ -553,7 +565,11 @@ async fn shell_command_snapshot_still_intercepts_apply_patch() -> Result<()> {
     let responses = vec![
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "shell_command", &edgerun_json::serde_json::to_string(&args)?),
+            ev_function_call(
+                call_id,
+                "shell_command",
+                &edgerun_json::serde_json::to_string(&args)?,
+            ),
             ev_completed("resp-1"),
         ]),
         sse(vec![

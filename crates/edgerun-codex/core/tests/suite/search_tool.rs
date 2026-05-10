@@ -36,9 +36,9 @@ use core_test_support::stdio_server_bin;
 use core_test_support::test_codex::TestCodexBuilder;
 use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
-use pretty_assertions::assert_eq;
 use edgerun_json::serde_json::Value;
 use edgerun_json::serde_json::json;
+use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::time::Duration;
 

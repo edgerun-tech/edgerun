@@ -7,7 +7,7 @@ use codex_config::config_toml::ConfigToml;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
-use similar::TextDiff;
+use edgerun_similar::TextDiff;
 
 pub(crate) const CONFIG_LOCK_VERSION: u32 = 1;
 

@@ -6,10 +6,10 @@ use crate::provider::Provider;
 use codex_client::HttpTransport;
 use codex_client::RequestTelemetry;
 use codex_protocol::models::ResponseItem;
-use http::HeaderMap;
-use http::Method;
-use serde::Deserialize;
+use edgerun_http::HeaderMap;
+use edgerun_http::Method;
 use edgerun_json::serde_json::to_value;
+use serde::Deserialize;
 use std::sync::Arc;
 
 pub struct CompactClient<T: HttpTransport> {
@@ -42,8 +42,8 @@ impl<T: HttpTransport> CompactClient<T> {
             .session
             .execute(Method::POST, Self::path(), extra_headers, Some(body))
             .await?;
-        let parsed: CompactHistoryResponse =
-            edgerun_json::serde_json::from_slice(&resp.body).map_err(|e| ApiError::Stream(e.to_string()))?;
+        let parsed: CompactHistoryResponse = edgerun_json::serde_json::from_slice(&resp.body)
+            .map_err(|e| ApiError::Stream(e.to_string()))?;
         Ok(parsed.output)
     }
 

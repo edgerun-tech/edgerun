@@ -12,7 +12,7 @@ use codex_client::RequestCompression;
 use codex_model_provider_info::ModelProviderAwsAuthInfo;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::Result;
-use http::HeaderMap;
+use edgerun_http::HeaderMap;
 
 use crate::BearerAuthProvider;
 
@@ -135,7 +135,7 @@ impl AuthProvider for BedrockMantleSigV4AuthProvider {
 #[cfg(test)]
 mod tests {
     use codex_api::AuthProvider;
-    use http::HeaderValue;
+    use edgerun_http::HeaderValue;
     use pretty_assertions::assert_eq;
 
     use super::*;
@@ -153,14 +153,14 @@ mod tests {
             account_id: None,
             is_fedramp_account: false,
         };
-        let mut headers = http::HeaderMap::new();
+        let mut headers = edgerun_http::HeaderMap::new();
 
         provider.add_auth_headers(&mut headers);
 
         assert_eq!(region, "us-west-2");
         assert!(
             headers
-                .get(http::header::AUTHORIZATION)
+                .get(edgerun_http::header::AUTHORIZATION)
                 .and_then(|value| value.to_str().ok())
                 .is_some_and(|value| value.starts_with("Bearer bedrock-api-key-"))
         );

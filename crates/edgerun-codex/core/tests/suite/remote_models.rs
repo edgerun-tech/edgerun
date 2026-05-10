@@ -40,8 +40,8 @@ use core_test_support::test_codex::test_codex;
 use core_test_support::test_codex::turn_permission_fields;
 use core_test_support::wait_for_event;
 use core_test_support::wait_for_event_match;
-use pretty_assertions::assert_eq;
 use edgerun_json::serde_json::json;
+use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 use tokio::time::Duration;
 use tokio::time::Instant;
@@ -618,7 +618,11 @@ async fn remote_models_remote_model_uses_unified_exec() -> Result<()> {
     let responses = vec![
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "exec_command", &edgerun_json::serde_json::to_string(&args)?),
+            ev_function_call(
+                call_id,
+                "exec_command",
+                &edgerun_json::serde_json::to_string(&args)?,
+            ),
             ev_completed("resp-1"),
         ]),
         sse(vec![

@@ -54,9 +54,9 @@ use codex_protocol::protocol::UserMessageEvent;
 use codex_protocol::protocol::ViewImageToolCallEvent;
 use codex_protocol::protocol::WebSearchBeginEvent;
 use codex_protocol::protocol::WebSearchEndEvent;
+use edgerun_uuid::Uuid;
 use std::collections::HashMap;
 use tracing::warn;
-use uuid::Uuid;
 
 #[cfg(test)]
 use crate::protocol::v2::CommandAction;
@@ -1228,10 +1228,10 @@ mod tests {
     use codex_protocol::protocol::TurnStartedEvent;
     use codex_protocol::protocol::UserMessageEvent;
     use codex_protocol::protocol::WebSearchEndEvent;
+    use edgerun_uuid::Uuid;
     use pretty_assertions::assert_eq;
     use std::path::PathBuf;
     use std::time::Duration;
-    use uuid::Uuid;
 
     #[test]
     fn builds_multiple_turns_with_reasoning_items() {

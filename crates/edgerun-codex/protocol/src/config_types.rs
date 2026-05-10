@@ -1,6 +1,7 @@
 use crate::compat::absolute_path::AbsolutePathBuf;
 use edgerun_json::FromJson;
 use edgerun_json::ToJson;
+use edgerun_json::serde_json::Value;
 use schemars::JsonSchema;
 use schemars::r#gen::SchemaGenerator;
 use schemars::schema::InstanceType;
@@ -9,7 +10,6 @@ use schemars::schema::Schema;
 use schemars::schema::SchemaObject;
 use serde::Deserialize;
 use serde::Serialize;
-use edgerun_json::serde_json::Value;
 use std::collections::HashMap;
 use std::fmt;
 use std::num::NonZeroU64;
@@ -24,8 +24,19 @@ use crate::openai_models::ReasoningEffort;
 /// debugging and understanding the model's reasoning process.
 /// See https://platform.openai.com/docs/guides/reasoning?api-mode=responses#reasoning-summaries
 #[derive(
-    Debug, Serialize, Deserialize, Default, Clone, Copy, PartialEq, Eq, Display, JsonSchema, TS,
-    ToJson, FromJson,
+    Debug,
+    Serialize,
+    Deserialize,
+    Default,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Display,
+    JsonSchema,
+    TS,
+    ToJson,
+    FromJson,
 )]
 #[serde(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
@@ -781,7 +792,8 @@ mod tests {
     fn mode_kind_deserializes_alias_values_to_default() {
         for alias in ["code", "pair_programming", "execute", "custom"] {
             let json = format!("\"{alias}\"");
-            let mode: ModeKind = edgerun_json::serde_json::from_str(&json).expect("deserialize mode");
+            let mode: ModeKind =
+                edgerun_json::serde_json::from_str(&json).expect("deserialize mode");
             assert_eq!(ModeKind::Default, mode);
         }
     }
@@ -790,11 +802,13 @@ mod tests {
     fn approvals_reviewer_serializes_auto_review_and_accepts_legacy_guardian_subagent() {
         assert_eq!(ApprovalsReviewer::User.to_string(), "user");
         assert_eq!(
-            edgerun_json::serde_json::to_string(&ApprovalsReviewer::User).expect("serialize reviewer"),
+            edgerun_json::serde_json::to_string(&ApprovalsReviewer::User)
+                .expect("serialize reviewer"),
             "\"user\""
         );
         assert_eq!(
-            edgerun_json::serde_json::to_string(&ApprovalsReviewer::AutoReview).expect("serialize reviewer"),
+            edgerun_json::serde_json::to_string(&ApprovalsReviewer::AutoReview)
+                .expect("serialize reviewer"),
             "\"guardian_subagent\""
         );
 

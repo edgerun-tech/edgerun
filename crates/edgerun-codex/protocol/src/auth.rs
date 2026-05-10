@@ -1,8 +1,8 @@
+use edgerun_error::Error;
 use edgerun_json::FromJson;
 use edgerun_json::JsonValue;
 use edgerun_json::JsonValueError;
 use edgerun_json::ToJson;
-use edgerun_error::Error;
 use serde::Deserialize;
 use serde::Serialize;
 
@@ -167,7 +167,8 @@ mod tests {
     #[test]
     fn plan_type_deserializes_raw_aliases() {
         assert_eq!(
-            edgerun_json::serde_json::from_str::<PlanType>("\"hc\"").expect("hc should deserialize"),
+            edgerun_json::serde_json::from_str::<PlanType>("\"hc\"")
+                .expect("hc should deserialize"),
             PlanType::Known(KnownPlan::Enterprise)
         );
         assert_eq!(

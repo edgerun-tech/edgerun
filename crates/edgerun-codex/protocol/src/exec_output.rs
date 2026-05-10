@@ -6,10 +6,10 @@
 //! automatically detect and decode the vast majority of legacy encodings before falling back to
 //! lossy UTF-8 decoding.
 
-use chardetng::EncodingDetector;
-use encoding_rs::Encoding;
-use encoding_rs::IBM866;
-use encoding_rs::WINDOWS_1252;
+use edgerun_encoding::chardetng::EncodingDetector;
+use edgerun_encoding::encoding_rs::Encoding;
+use edgerun_encoding::encoding_rs::IBM866;
+use edgerun_encoding::encoding_rs::WINDOWS_1252;
 use std::time::Duration;
 
 #[derive(Debug, Clone)]

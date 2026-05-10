@@ -1,10 +1,23 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
+
+use alloc::format;
+use alloc::string::{String, ToString};
+use alloc::sync::Arc;
+use alloc::vec::Vec;
+
+use core::fmt;
+#[cfg(feature = "std")]
 use edgerun_node::rt::{AsyncRead, AsyncWrite, IoError};
-use edgerun_node::tls::{AsyncTlsServerStream, AsyncTlsStream};
+#[cfg(feature = "std")]
+pub use edgerun_node::tls::{AsyncTlsServerStream, AsyncTlsStream};
 use edgerun_protocols::tls::certificate_gen::CertificateAndKey;
-use std::fmt;
+#[cfg(feature = "std")]
 use std::io::{self, Read, Write};
+#[cfg(feature = "std")]
 use std::pin::Pin;
-use std::sync::Arc;
+#[cfg(feature = "std")]
 use std::task::{Context, Poll};
 
 pub mod version {
@@ -15,6 +28,8 @@ pub mod version {
 }
 
 pub mod pki_types {
+    use alloc::vec::Vec;
+
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub struct CertificateDer<'a>(pub Vec<u8>, core::marker::PhantomData<&'a ()>);
 
@@ -75,6 +90,7 @@ impl fmt::Display for Error {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for Error {}
 
 #[derive(Clone)]
@@ -93,6 +109,14 @@ impl ServerConfig {
         _versions: &[&'static version::SupportedProtocolVersion],
     ) -> ConfigBuilder {
         ConfigBuilder
+    }
+
+    pub fn from_certificate(certificate: CertificateAndKey) -> Self {
+        Self { certificate }
+    }
+
+    pub fn certificate(&self) -> &CertificateAndKey {
+        &self.certificate
     }
 }
 
@@ -175,6 +199,7 @@ impl ClientConnection {
     }
 }
 
+#[cfg(feature = "std")]
 pub struct StreamOwned<C, T: Read + Write> {
     pub conn: C,
     sock: Option<T>,
@@ -182,6 +207,7 @@ pub struct StreamOwned<C, T: Read + Write> {
     client_tls: Option<AsyncTlsStream<BlockingIo<T>>>,
 }
 
+#[cfg(feature = "std")]
 impl<T: Read + Write + Unpin> StreamOwned<ServerConnection, T> {
     pub fn new(conn: ServerConnection, sock: T) -> Self {
         Self {
@@ -248,6 +274,7 @@ impl<T: Read + Write + Unpin> StreamOwned<ServerConnection, T> {
     }
 }
 
+#[cfg(feature = "std")]
 impl<T: Read + Write + Unpin> Read for StreamOwned<ServerConnection, T> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let tls = self.ensure_handshake()?;
@@ -255,6 +282,7 @@ impl<T: Read + Write + Unpin> Read for StreamOwned<ServerConnection, T> {
     }
 }
 
+#[cfg(feature = "std")]
 impl<T: Read + Write + Unpin> StreamOwned<ClientConnection, T> {
     pub fn new(conn: ClientConnection, sock: T) -> Self {
         Self {
@@ -325,6 +353,7 @@ impl<T: Read + Write + Unpin> StreamOwned<ClientConnection, T> {
     }
 }
 
+#[cfg(feature = "std")]
 impl<T: Read + Write + Unpin> Read for StreamOwned<ClientConnection, T> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let tls = self.ensure_handshake()?;
@@ -332,6 +361,7 @@ impl<T: Read + Write + Unpin> Read for StreamOwned<ClientConnection, T> {
     }
 }
 
+#[cfg(feature = "std")]
 impl<T: Read + Write + Unpin> Write for StreamOwned<ClientConnection, T> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let tls = self.ensure_handshake()?;
@@ -344,6 +374,7 @@ impl<T: Read + Write + Unpin> Write for StreamOwned<ClientConnection, T> {
     }
 }
 
+#[cfg(feature = "std")]
 impl<T: Read + Write + Unpin> Write for StreamOwned<ServerConnection, T> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let tls = self.ensure_handshake()?;
@@ -356,10 +387,12 @@ impl<T: Read + Write + Unpin> Write for StreamOwned<ServerConnection, T> {
     }
 }
 
+#[cfg(feature = "std")]
 struct BlockingIo<T> {
     inner: T,
 }
 
+#[cfg(feature = "std")]
 impl<T> BlockingIo<T> {
     fn new(inner: T) -> Self {
         Self { inner }
@@ -378,6 +411,7 @@ impl<T> BlockingIo<T> {
     }
 }
 
+#[cfg(feature = "std")]
 impl<T: Read + Unpin> AsyncRead for BlockingIo<T> {
     fn poll_read(
         mut self: Pin<&mut Self>,
@@ -392,6 +426,7 @@ impl<T: Read + Unpin> AsyncRead for BlockingIo<T> {
     }
 }
 
+#[cfg(feature = "std")]
 impl<T: Write + Unpin> AsyncWrite for BlockingIo<T> {
     fn poll_write(
         mut self: Pin<&mut Self>,
@@ -417,6 +452,7 @@ impl<T: Write + Unpin> AsyncWrite for BlockingIo<T> {
     }
 }
 
+#[cfg(feature = "std")]
 fn poll_blocking<T>(
     mut f: impl FnMut(&mut Context<'_>) -> Poll<edgerun_node::rt::io::Result<T>>,
 ) -> io::Result<T> {
@@ -431,6 +467,7 @@ fn poll_blocking<T>(
     }
 }
 
+#[cfg(feature = "std")]
 fn poll_once<T>(
     mut f: impl FnMut(&mut Context<'_>) -> Poll<edgerun_node::rt::io::Result<T>>,
 ) -> io::Result<T> {
@@ -443,6 +480,7 @@ fn poll_once<T>(
     }
 }
 
+#[cfg(feature = "std")]
 fn io_error(error: io::Error) -> IoError {
     match error.kind() {
         io::ErrorKind::UnexpectedEof => IoError::UnexpectedEof,

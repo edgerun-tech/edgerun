@@ -42,3 +42,8 @@ pub use base64::{
     standard_encode_wrapped,
 };
 pub use crc32::{Crc32, crc32};
+
+#[cfg(feature = "text-encoding")]
+pub use chardetng;
+#[cfg(feature = "text-encoding")]
+pub use encoding_rs;

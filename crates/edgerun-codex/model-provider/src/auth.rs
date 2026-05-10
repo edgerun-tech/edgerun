@@ -5,7 +5,7 @@ use codex_api::SharedAuthProvider;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_models_manager::auth::AuthManager;
 use codex_models_manager::auth::CodexAuth;
-use http::HeaderMap;
+use edgerun_http::HeaderMap;
 
 use crate::bearer_auth_provider::BearerAuthProvider;
 

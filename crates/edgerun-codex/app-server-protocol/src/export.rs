@@ -18,11 +18,11 @@ use anyhow::Context;
 use anyhow::Result;
 use anyhow::anyhow;
 use codex_protocol::protocol::RolloutLine;
+use edgerun_json::serde_json::Map;
+use edgerun_json::serde_json::Value;
 use schemars::JsonSchema;
 use schemars::schema_for;
 use serde::Serialize;
-use edgerun_json::serde_json::Map;
-use edgerun_json::serde_json::Value;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -700,7 +700,8 @@ fn json_files_in_recursive(dir: &Path) -> Result<Vec<PathBuf>> {
 fn read_json_value(path: &Path) -> Result<Value> {
     let content =
         fs::read_to_string(path).with_context(|| format!("Failed to read {}", path.display()))?;
-    edgerun_json::serde_json::from_str(&content).with_context(|| format!("Failed to parse {}", path.display()))
+    edgerun_json::serde_json::from_str(&content)
+        .with_context(|| format!("Failed to parse {}", path.display()))
 }
 
 fn split_type_alias(content: &str) -> Option<(String, String, String)> {
@@ -2093,11 +2094,11 @@ mod tests {
     use crate::schema_fixtures::read_schema_fixture_subtree;
     use anyhow::Context;
     use anyhow::Result;
+    use edgerun_uuid::Uuid;
     use pretty_assertions::assert_eq;
     use std::collections::BTreeSet;
     use std::path::Path;
     use std::path::PathBuf;
-    use uuid::Uuid;
 
     #[test]
     fn generated_ts_optional_nullable_fields_only_in_params() -> Result<()> {

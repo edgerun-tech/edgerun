@@ -6,9 +6,9 @@ use codex_client::HttpTransport;
 use codex_client::RequestTelemetry;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::openai_models::ModelsResponse;
-use http::HeaderMap;
-use http::Method;
-use http::header::ETAG;
+use edgerun_http::HeaderMap;
+use edgerun_http::Method;
+use edgerun_http::header::ETAG;
 use std::sync::Arc;
 
 pub struct ModelsClient<T: HttpTransport> {
@@ -83,10 +83,10 @@ mod tests {
     use codex_client::Response;
     use codex_client::StreamResponse;
     use codex_client::TransportError;
-    use http::HeaderMap;
-    use http::StatusCode;
-    use pretty_assertions::assert_eq;
+    use edgerun_http::HeaderMap;
+    use edgerun_http::StatusCode;
     use edgerun_json::serde_json::json;
+    use pretty_assertions::assert_eq;
     use std::sync::Arc;
     use std::sync::Mutex;
     use std::time::Duration;

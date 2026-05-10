@@ -338,7 +338,7 @@ impl ThreadManager {
         set_thread_manager_test_mode_for_tests(/*enabled*/ true);
         let codex_home = std::env::temp_dir().join(format!(
             "codex-thread-manager-test-{}",
-            uuid::Uuid::new_v4()
+            edgerun_uuid::Uuid::new_v4()
         ));
         std::fs::create_dir_all(&codex_home)
             .unwrap_or_else(|err| panic!("temp codex home dir create failed: {err}"));
@@ -378,7 +378,7 @@ impl ThreadManager {
     ) -> Self {
         set_thread_manager_test_mode_for_tests(/*enabled*/ true);
         let auth_manager = AuthManager::from_auth_for_testing(auth);
-        let installation_id = uuid::Uuid::new_v4().to_string();
+        let installation_id = edgerun_uuid::Uuid::new_v4().to_string();
         let skills_codex_home = match AbsolutePathBuf::from_absolute_path_checked(&codex_home) {
             Ok(codex_home) => codex_home,
             Err(err) => panic!("test codex_home should be absolute: {err}"),

@@ -57,7 +57,7 @@ const GUARDIAN_TIMEOUT_INSTRUCTIONS: &str = concat!(
 );
 
 pub(crate) fn new_guardian_review_id() -> String {
-    uuid::Uuid::new_v4().to_string()
+    edgerun_uuid::Uuid::new_v4().to_string()
 }
 
 pub(crate) async fn guardian_rejection_message(session: &Session, review_id: &str) -> String {

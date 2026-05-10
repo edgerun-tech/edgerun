@@ -7,9 +7,9 @@ use core_test_support::responses::sse;
 use core_test_support::responses::sse_response;
 use core_test_support::responses::start_mock_server;
 use core_test_support::test_codex::test_codex;
-use regex_lite::Regex;
 use edgerun_json::serde_json::Value;
 use edgerun_json::serde_json::json;
+use regex_lite::Regex;
 use std::fs;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
@@ -159,7 +159,7 @@ fn decode_body_bytes(request: &wiremock::Request) -> Vec<u8> {
         .split(',')
         .any(|entry| entry.trim().eq_ignore_ascii_case("zstd"))
     {
-        zstd::stream::decode_all(std::io::Cursor::new(&request.body))
+        edgerun_zstd::stream::decode_all(std::io::Cursor::new(&request.body))
             .unwrap_or_else(|_| request.body.clone())
     } else {
         request.body.clone()

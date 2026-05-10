@@ -1,6 +1,6 @@
 use codex_api::AuthProvider;
-use http::HeaderMap;
-use http::HeaderValue;
+use edgerun_http::HeaderMap;
+use edgerun_http::HeaderValue;
 
 /// Bearer-token auth provider for OpenAI-compatible model-provider requests.
 #[derive(Clone, Default)]
@@ -33,7 +33,7 @@ impl AuthProvider for BearerAuthProvider {
         if let Some(token) = self.token.as_ref()
             && let Ok(header) = HeaderValue::from_str(&format!("Bearer {token}"))
         {
-            let _ = headers.insert(http::header::AUTHORIZATION, header);
+            let _ = headers.insert(edgerun_http::header::AUTHORIZATION, header);
         }
         if let Some(account_id) = self.account_id.as_ref()
             && let Ok(header) = HeaderValue::from_str(account_id)
@@ -77,7 +77,7 @@ mod tests {
 
         assert_eq!(
             headers
-                .get(http::header::AUTHORIZATION)
+                .get(edgerun_http::header::AUTHORIZATION)
                 .and_then(|value| value.to_str().ok()),
             Some("Bearer access-token")
         );

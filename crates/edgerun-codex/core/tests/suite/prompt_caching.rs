@@ -498,7 +498,10 @@ async fn overrides_turn_context_but_keeps_cached_prefix_and_key_constant() -> an
     let mut expected_body2 = body1_input.to_vec();
     expected_body2.push(expected_permissions_msg_2);
     expected_body2.push(expected_user_message_2);
-    assert_eq!(body2["input"], edgerun_json::serde_json::Value::Array(expected_body2));
+    assert_eq!(
+        body2["input"],
+        edgerun_json::serde_json::Value::Array(expected_body2)
+    );
 
     Ok(())
 }
@@ -788,7 +791,10 @@ async fn per_turn_overrides_keep_cached_prefix_and_key_constant() -> anyhow::Res
     expected_body2.push(expected_settings_update_msg);
     expected_body2.push(expected_env_msg_2);
     expected_body2.push(expected_user_message_2);
-    assert_eq!(body2["input"], edgerun_json::serde_json::Value::Array(expected_body2));
+    assert_eq!(
+        body2["input"],
+        edgerun_json::serde_json::Value::Array(expected_body2)
+    );
 
     Ok(())
 }

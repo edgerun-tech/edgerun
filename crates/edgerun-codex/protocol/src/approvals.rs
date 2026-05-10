@@ -6,10 +6,10 @@ use crate::parse_command::ParsedCommand;
 use crate::protocol::FileChange;
 use crate::protocol::ReviewDecision;
 use crate::request_permissions::RequestPermissionProfile;
+use edgerun_json::serde_json::Value as JsonValue;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
-use edgerun_json::serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use ts_rs::TS;
@@ -398,13 +398,14 @@ mod tests {
 
     #[test]
     fn guardian_assessment_action_deserializes_command_shape() {
-        let action: GuardianAssessmentAction = edgerun_json::serde_json::from_value(edgerun_json::serde_json::json!({
-            "type": "command",
-            "source": "shell",
-            "command": "rm -rf /tmp/guardian",
-            "cwd": test_path_buf("/tmp"),
-        }))
-        .expect("guardian action");
+        let action: GuardianAssessmentAction =
+            edgerun_json::serde_json::from_value(edgerun_json::serde_json::json!({
+                "type": "command",
+                "source": "shell",
+                "command": "rm -rf /tmp/guardian",
+                "cwd": test_path_buf("/tmp"),
+            }))
+            .expect("guardian action");
 
         assert_eq!(
             action,

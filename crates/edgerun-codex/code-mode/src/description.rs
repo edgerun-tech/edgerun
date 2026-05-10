@@ -1,7 +1,7 @@
 use codex_protocol::ToolName;
+use edgerun_json::serde_json::Value as JsonValue;
 use serde::Deserialize;
 use serde::Serialize;
-use edgerun_json::serde_json::Value as JsonValue;
 use std::collections::BTreeMap;
 
 use crate::PUBLIC_TOOL_NAME;
@@ -700,7 +700,8 @@ fn render_json_schema_property_name(name: &str) -> String {
     if normalize_code_mode_identifier(name) == name {
         name.to_string()
     } else {
-        edgerun_json::serde_json::to_string(name).unwrap_or_else(|_| format!("\"{}\"", name.replace('"', "\\\"")))
+        edgerun_json::serde_json::to_string(name)
+            .unwrap_or_else(|_| format!("\"{}\"", name.replace('"', "\\\"")))
     }
 }
 
@@ -719,9 +720,9 @@ mod tests {
     use super::normalize_code_mode_identifier;
     use super::parse_exec_source;
     use codex_protocol::ToolName;
-    use pretty_assertions::assert_eq;
     use edgerun_json::serde_json::Value as JsonValue;
     use edgerun_json::serde_json::json;
+    use pretty_assertions::assert_eq;
     use std::collections::BTreeMap;
 
     fn mcp_call_tool_result_schema(structured_content_schema: JsonValue) -> JsonValue {

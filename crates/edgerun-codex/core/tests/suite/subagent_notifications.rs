@@ -17,8 +17,8 @@ use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
 use core_test_support::test_codex::TestCodex;
 use core_test_support::test_codex::test_codex;
-use pretty_assertions::assert_eq;
 use edgerun_json::serde_json::json;
+use pretty_assertions::assert_eq;
 use std::fs;
 use std::path::Path;
 use std::time::Duration;
@@ -49,7 +49,7 @@ fn body_contains(req: &wiremock::Request, text: &str) -> bool {
                 .any(|entry| entry.trim().eq_ignore_ascii_case("zstd"))
         });
     let bytes = if is_zstd {
-        zstd::stream::decode_all(std::io::Cursor::new(&req.body)).ok()
+        edgerun_zstd::stream::decode_all(std::io::Cursor::new(&req.body)).ok()
     } else {
         Some(req.body.clone())
     };
@@ -74,7 +74,11 @@ fn tool_parameter_description(
         .and_then(edgerun_json::serde_json::Value::as_array)
         .and_then(|tools| {
             tools.iter().find_map(|tool| {
-                if tool.get("name").and_then(edgerun_json::serde_json::Value::as_str) == Some(tool_name) {
+                if tool
+                    .get("name")
+                    .and_then(edgerun_json::serde_json::Value::as_str)
+                    == Some(tool_name)
+                {
                     tool.get("parameters")
                         .and_then(|parameters| parameters.get("properties"))
                         .and_then(|properties| properties.get(parameter_name))

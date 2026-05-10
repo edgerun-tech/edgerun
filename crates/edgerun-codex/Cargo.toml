@@ -79,32 +79,33 @@ codex-tools = { path = "tools" }
 anyhow = "1"
 async-channel = "2.3.1"
 async-trait = "0.1.89"
-bytes = "1.10.1"
-chardetng = "0.1.17"
 deno_core_icudata = "0.77.0"
+edgerun-bytes = { path = "../utility/edgerun-bytes" }
 edgerun-clap = { path = "../utility/edgerun-clap", default-features = false, features = ["derive", "std"] }
 edgerun-encoding = { path = "../utility/edgerun-encoding", default-features = false }
 edgerun-error = { path = "../utility/edgerun-error" }
+edgerun-eventsource-stream = { path = "../utility/edgerun-eventsource-stream" }
 edgerun-glob = { path = "../utility/edgerun-glob", default-features = false }
+edgerun-http = { path = "../utility/edgerun-http" }
 edgerun-json = { path = "../utility/edgerun-json", default-features = false, features = ["derive"] }
 edgerun-locale = { path = "../utility/edgerun-locale" }
+edgerun-quick-xml = { path = "../utility/edgerun-quick-xml" }
 edgerun-random = { path = "../utility/edgerun-random" }
 edgerun-shlex = { path = "../utility/edgerun-shlex", default-features = false }
+edgerun-similar = { path = "../utility/edgerun-similar" }
 edgerun-time = { path = "../utility/edgerun-time", default-features = false, features = ["chrono"] }
 edgerun-tokio-tungstenite = { path = "../utility/edgerun-tokio-tungstenite", features = ["proxy", "rustls-tls-native-roots"] }
 edgerun-tungstenite = { path = "../utility/edgerun-tungstenite", features = ["deflate", "proxy"] }
 edgerun-url = { path = "../utility/edgerun-url", default-features = false }
-encoding_rs = "0.8.35"
-eventsource-stream = "0.2.3"
+edgerun-uuid = { path = "../utility/edgerun-uuid", features = ["serde", "v4", "v7"] }
+edgerun-zstd = { path = "../utility/edgerun-zstd" }
 futures = { version = "0.3", default-features = false }
-http = "1.3.1"
 icu_decimal = "2.1"
 icu_locale_core = "2.1"
 icu_provider = { version = "2.1", features = ["sync"] }
 inventory = "0.3.19"
 landlock = "0.4.4"
 opentelemetry = "0.31.0"
-quick-xml = "0.38.4"
 reqwest = { version = "0.12", features = ["cookies"] }
 rmcp = { version = "0.15.0", default-features = false }
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
@@ -114,7 +115,6 @@ schemars = "0.8.22"
 seccompiler = "0.5.0"
 serde = "1"
 serde_with = "3.17"
-similar = "2.7.0"
 strum = "0.27.2"
 strum_macros = "0.28.0"
 tokio = "1"
@@ -124,6 +124,4 @@ tracing-opentelemetry = "0.32.0"
 tree-sitter = "0.25.10"
 tree-sitter-bash = "0.25"
 ts-rs = "11"
-uuid = "1"
 v8 = "=146.4.0"
-zstd = "0.13"

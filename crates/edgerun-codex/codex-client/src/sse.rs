@@ -1,6 +1,6 @@
 use crate::error::StreamError;
 use crate::transport::ByteStream;
-use eventsource_stream::Eventsource;
+use edgerun_eventsource_stream::Eventsource;
 use futures::StreamExt;
 use tokio::sync::mpsc;
 use tokio::time::Duration;

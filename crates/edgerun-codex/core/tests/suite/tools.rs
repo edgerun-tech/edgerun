@@ -35,9 +35,9 @@ use core_test_support::skip_if_no_network;
 use core_test_support::skip_if_sandbox;
 use core_test_support::stdio_server_bin;
 use core_test_support::test_codex::test_codex;
-use regex_lite::Regex;
 use edgerun_json::serde_json::Value;
 use edgerun_json::serde_json::json;
+use regex_lite::Regex;
 use serial_test::serial;
 use tempfile::TempDir;
 
@@ -475,7 +475,11 @@ async fn sandbox_denied_shell_returns_original_output() -> Result<()> {
     let responses = vec![
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "shell", &edgerun_json::serde_json::to_string(&args)?),
+            ev_function_call(
+                call_id,
+                "shell",
+                &edgerun_json::serde_json::to_string(&args)?,
+            ),
             ev_completed("resp-1"),
         ]),
         sse(vec![
@@ -593,7 +597,11 @@ async fn shell_enforces_glob_deny_read_policy() -> Result<()> {
     let responses = vec![
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "shell", &edgerun_json::serde_json::to_string(&args)?),
+            ev_function_call(
+                call_id,
+                "shell",
+                &edgerun_json::serde_json::to_string(&args)?,
+            ),
             ev_completed("resp-1"),
         ]),
         sse(vec![
@@ -728,7 +736,11 @@ async fn shell_timeout_includes_timeout_prefix_and_metadata() -> Result<()> {
         &server,
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "shell", &edgerun_json::serde_json::to_string(&args)?),
+            ev_function_call(
+                call_id,
+                "shell",
+                &edgerun_json::serde_json::to_string(&args)?,
+            ),
             ev_completed("resp-1"),
         ]),
     )
@@ -818,7 +830,11 @@ time.sleep(60)
         &server,
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "shell", &edgerun_json::serde_json::to_string(&args)?),
+            ev_function_call(
+                call_id,
+                "shell",
+                &edgerun_json::serde_json::to_string(&args)?,
+            ),
             ev_completed("resp-1"),
         ]),
     )
@@ -906,7 +922,11 @@ async fn shell_spawn_failure_truncates_exec_error() -> Result<()> {
         &server,
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "shell", &edgerun_json::serde_json::to_string(&args)?),
+            ev_function_call(
+                call_id,
+                "shell",
+                &edgerun_json::serde_json::to_string(&args)?,
+            ),
             ev_completed("resp-1"),
         ]),
     )

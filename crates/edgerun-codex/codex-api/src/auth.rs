@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use codex_client::Request;
 use codex_client::TransportError;
 use edgerun_error::Error;
-use http::HeaderMap;
+use edgerun_http::HeaderMap;
 use std::sync::Arc;
 
 /// Error returned while applying authentication to an outbound request.
@@ -73,7 +73,7 @@ pub fn auth_header_telemetry(auth: &dyn AuthProvider) -> AuthHeaderTelemetry {
     let mut headers = HeaderMap::new();
     auth.add_auth_headers(&mut headers);
     let name = headers
-        .contains_key(http::header::AUTHORIZATION)
+        .contains_key(edgerun_http::header::AUTHORIZATION)
         .then_some("authorization");
     AuthHeaderTelemetry {
         attached: name.is_some(),

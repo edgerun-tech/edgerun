@@ -31,10 +31,12 @@ fn write_skill_metadata(home: &Path, name: &str, contents: &str) -> Result<()> {
 }
 
 fn shell_command_arguments(command: &str) -> Result<String> {
-    Ok(edgerun_json::serde_json::to_string(&edgerun_json::serde_json::json!({
-        "command": command,
-        "timeout_ms": 500,
-    }))?)
+    Ok(edgerun_json::serde_json::to_string(
+        &edgerun_json::serde_json::json!({
+            "command": command,
+            "timeout_ms": 500,
+        }),
+    )?)
 }
 
 async fn submit_turn_with_policies(
@@ -106,7 +108,9 @@ fn skill_script_command(test: &TestCodex, script_name: &str) -> Result<String> {
             .join("skills/mbolin-test-skill/scripts")
             .join(script_name),
     )?;
-    Ok(edgerun_shlex::try_join([script_path.to_string_lossy().as_ref()])?)
+    Ok(edgerun_shlex::try_join([script_path
+        .to_string_lossy()
+        .as_ref()])?)
 }
 
 async fn wait_for_exec_approval_request(test: &TestCodex) -> Option<ExecApprovalRequestEvent> {

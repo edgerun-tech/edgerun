@@ -1,6 +1,6 @@
-use http::HeaderMap;
-use http::StatusCode;
 use edgerun_error::Error;
+use edgerun_http::HeaderMap;
+use edgerun_http::StatusCode;
 
 #[derive(Debug, Error)]
 pub enum TransportError {

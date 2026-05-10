@@ -4,7 +4,6 @@ use std::time::Duration;
 
 use anyhow::Result;
 use async_trait::async_trait;
-use bytes::Bytes;
 use codex_api::ApiError;
 use codex_api::AuthError;
 use codex_api::AuthProvider;
@@ -23,9 +22,10 @@ use codex_protocol::models::ContentItem;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
-use http::HeaderMap;
-use http::HeaderValue;
-use http::StatusCode;
+use edgerun_bytes::Bytes;
+use edgerun_http::HeaderMap;
+use edgerun_http::HeaderValue;
+use edgerun_http::StatusCode;
 use pretty_assertions::assert_eq;
 
 fn assert_path_ends_with(requests: &[Request], suffix: &str) {
@@ -115,7 +115,7 @@ impl AuthProvider for StaticAuth {
     fn add_auth_headers(&self, headers: &mut HeaderMap) {
         let token = &self.token;
         if let Ok(header) = HeaderValue::from_str(&format!("Bearer {token}")) {
-            headers.insert(http::header::AUTHORIZATION, header);
+            headers.insert(edgerun_http::header::AUTHORIZATION, header);
         }
         if let Ok(header) = HeaderValue::from_str(&self.account_id) {
             headers.insert("ChatGPT-Account-ID", header);
@@ -293,7 +293,7 @@ async fn streaming_client_adds_auth_headers() -> Result<()> {
     assert_eq!(requests.len(), 1);
     let req = &requests[0];
 
-    let auth_header = req.headers.get(http::header::AUTHORIZATION);
+    let auth_header = req.headers.get(edgerun_http::header::AUTHORIZATION);
     assert!(auth_header.is_some(), "missing auth header");
     assert_eq!(
         auth_header.unwrap().to_str().ok(),
@@ -304,7 +304,7 @@ async fn streaming_client_adds_auth_headers() -> Result<()> {
     assert!(account_header.is_some(), "missing account header");
     assert_eq!(account_header.unwrap().to_str().ok(), Some("acct-1"));
 
-    let accept_header = req.headers.get(http::header::ACCEPT);
+    let accept_header = req.headers.get(edgerun_http::header::ACCEPT);
     assert!(accept_header.is_some(), "missing Accept header");
     assert_eq!(
         accept_header.unwrap().to_str().ok(),

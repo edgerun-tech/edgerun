@@ -4,19 +4,19 @@ use crate::endpoint::realtime_websocket::session_update_session_json;
 use crate::endpoint::session::EndpointSession;
 use crate::error::ApiError;
 use crate::provider::Provider;
-use bytes::Bytes;
 use codex_client::HttpTransport;
 use codex_client::RequestBody;
 use codex_client::RequestTelemetry;
-use http::HeaderMap;
-use http::HeaderValue;
-use http::Method;
-use http::header::CONTENT_TYPE;
-use http::header::LOCATION;
-use serde::Serialize;
+use edgerun_bytes::Bytes;
+use edgerun_http::HeaderMap;
+use edgerun_http::HeaderValue;
+use edgerun_http::Method;
+use edgerun_http::header::CONTENT_TYPE;
+use edgerun_http::header::LOCATION;
 use edgerun_json::serde_json::Value;
 use edgerun_json::serde_json::to_string;
 use edgerun_json::serde_json::to_value;
+use serde::Serialize;
 use std::sync::Arc;
 use tracing::instrument;
 use tracing::trace;
@@ -232,7 +232,7 @@ mod tests {
     use codex_client::StreamResponse;
     use codex_client::TransportError;
     use codex_protocol::protocol::RealtimeVoice;
-    use http::StatusCode;
+    use edgerun_http::StatusCode;
     use pretty_assertions::assert_eq;
     use std::sync::Mutex;
     use std::time::Duration;
@@ -287,7 +287,7 @@ mod tests {
     impl AuthProvider for DummyAuth {
         fn add_auth_headers(&self, headers: &mut HeaderMap) {
             headers.insert(
-                http::header::AUTHORIZATION,
+                edgerun_http::header::AUTHORIZATION,
                 HeaderValue::from_static("Bearer test-token"),
             );
         }
@@ -354,7 +354,7 @@ mod tests {
         assert_eq!(
             request
                 .headers
-                .get(http::header::AUTHORIZATION)
+                .get(edgerun_http::header::AUTHORIZATION)
                 .and_then(|value| value.to_str().ok()),
             Some("Bearer test-token")
         );
