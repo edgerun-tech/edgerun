@@ -131,7 +131,7 @@ pub async fn handle(
             .iter()
             .zip(row.iter())
             .map(|(header, value)| (header.clone(), Value::String(value.clone())))
-            .collect::<serde_json::Map<_, _>>();
+            .collect::<edgerun_json::serde_json::Map<_, _>>();
         items.push(codex_state::AgentJobItemCreateParams {
             item_id,
             row_index: idx as i64,
@@ -271,7 +271,7 @@ pub async fn handle(
     } else {
         None
     };
-    let content = serde_json::to_string(&SpawnAgentsOnCsvResult {
+    let content = edgerun_json::serde_json::to_string(&SpawnAgentsOnCsvResult {
         job_id,
         status: job.status.as_str().to_string(),
         output_csv_path: job.output_csv_path,

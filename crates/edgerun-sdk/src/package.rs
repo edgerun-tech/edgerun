@@ -842,13 +842,15 @@ pub(crate) struct NativeLibrary {
 impl NativeLibrary {
     #[cfg(unix)]
     pub(crate) unsafe fn open(path: &Path) -> Result<Self, String> {
-        let path = CString::new(path.as_os_str().as_bytes())
-            .map_err(|_| format!("library path contains NUL: {}", path.display()))?;
-        let handle = dlopen(path.as_ptr(), RTLD_NOW);
-        if handle.is_null() {
-            Err(dl_error())
-        } else {
-            Ok(Self { handle })
+        unsafe {
+            let path = CString::new(path.as_os_str().as_bytes())
+                .map_err(|_| format!("library path contains NUL: {}", path.display()))?;
+            let handle = dlopen(path.as_ptr(), RTLD_NOW);
+            if handle.is_null() {
+                Err(dl_error())
+            } else {
+                Ok(Self { handle })
+            }
         }
     }
 
@@ -860,12 +862,14 @@ impl NativeLibrary {
 
     #[cfg(unix)]
     pub(crate) unsafe fn symbol<T: Copy>(&self, name: &str) -> Result<T, String> {
-        let name = CString::new(name).map_err(|_| format!("symbol contains NUL: {name}"))?;
-        let symbol = dlsym(self.handle, name.as_ptr());
-        if symbol.is_null() {
-            Err(dl_error())
-        } else {
-            Ok(core::mem::transmute_copy(&symbol))
+        unsafe {
+            let name = CString::new(name).map_err(|_| format!("symbol contains NUL: {name}"))?;
+            let symbol = dlsym(self.handle, name.as_ptr());
+            if symbol.is_null() {
+                Err(dl_error())
+            } else {
+                Ok(core::mem::transmute_copy(&symbol))
+            }
         }
     }
 
@@ -914,41 +918,45 @@ unsafe extern "C" {
 
 #[cfg(unix)]
 pub(crate) unsafe fn dl_error() -> String {
-    let err = dlerror();
-    if err.is_null() {
-        "dynamic loader error".to_owned()
-    } else {
-        CStr::from_ptr(err).to_string_lossy().into_owned()
+    unsafe {
+        let err = dlerror();
+        if err.is_null() {
+            "dynamic loader error".to_owned()
+        } else {
+            CStr::from_ptr(err).to_string_lossy().into_owned()
+        }
     }
 }
 
 #[cfg(unix)]
 pub(crate) unsafe fn map_low_memory(len: usize) -> Result<*mut u8, String> {
-    const PROT_READ: core::ffi::c_int = 0x1;
-    const PROT_WRITE: core::ffi::c_int = 0x2;
-    const MAP_PRIVATE: core::ffi::c_int = 0x02;
-    const MAP_ANON: core::ffi::c_int = 0x20;
-    #[cfg(target_arch = "x86_64")]
-    const MAP_32BIT: core::ffi::c_int = 0x40;
-    #[cfg(not(target_arch = "x86_64"))]
-    const MAP_32BIT: core::ffi::c_int = 0x0;
+    unsafe {
+        const PROT_READ: core::ffi::c_int = 0x1;
+        const PROT_WRITE: core::ffi::c_int = 0x2;
+        const MAP_PRIVATE: core::ffi::c_int = 0x02;
+        const MAP_ANON: core::ffi::c_int = 0x20;
+        #[cfg(target_arch = "x86_64")]
+        const MAP_32BIT: core::ffi::c_int = 0x40;
+        #[cfg(not(target_arch = "x86_64"))]
+        const MAP_32BIT: core::ffi::c_int = 0x0;
 
-    let ptr = mmap(
-        core::ptr::null_mut(),
-        len,
-        PROT_READ | PROT_WRITE,
-        MAP_PRIVATE | MAP_ANON | MAP_32BIT,
-        -1,
-        0,
-    );
-    if ptr as isize == -1 {
-        return Err("mmap failed for native unit memory".to_owned());
+        let ptr = mmap(
+            core::ptr::null_mut(),
+            len,
+            PROT_READ | PROT_WRITE,
+            MAP_PRIVATE | MAP_ANON | MAP_32BIT,
+            -1,
+            0,
+        );
+        if ptr as isize == -1 {
+            return Err("mmap failed for native unit memory".to_owned());
+        }
+        if u32::try_from(ptr as usize).is_err() {
+            let _ = munmap(ptr, len);
+            return Err("native unit memory did not map below 4GiB".to_owned());
+        }
+        Ok(ptr.cast::<u8>())
     }
-    if u32::try_from(ptr as usize).is_err() {
-        let _ = munmap(ptr, len);
-        return Err("native unit memory did not map below 4GiB".to_owned());
-    }
-    Ok(ptr.cast::<u8>())
 }
 
 #[cfg(not(unix))]

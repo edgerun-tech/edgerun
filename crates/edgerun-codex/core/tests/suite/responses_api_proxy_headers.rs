@@ -23,7 +23,7 @@ use core_test_support::test_codex::TestCodex;
 use core_test_support::test_codex::test_codex;
 use core_test_support::test_codex::turn_permission_fields;
 use pretty_assertions::assert_eq;
-use serde_json::json;
+use edgerun_json::serde_json::json;
 use std::time::Duration;
 
 const PARENT_PROMPT: &str = "spawn a subagent and report when it is started";
@@ -37,7 +37,7 @@ async fn responses_api_parent_and_subagent_requests_include_identity_headers() -
 
     let server = start_mock_server().await;
 
-    let spawn_args = serde_json::to_string(&json!({ "message": CHILD_PROMPT }))?;
+    let spawn_args = edgerun_json::serde_json::to_string(&json!({ "message": CHILD_PROMPT }))?;
     let parent_mock = mount_sse_once_match(
         &server,
         |req: &wiremock::Request| {

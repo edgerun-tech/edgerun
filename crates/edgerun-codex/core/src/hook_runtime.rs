@@ -29,7 +29,7 @@ use codex_protocol::protocol::HookRunSummary;
 use codex_protocol::protocol::HookSource;
 use codex_protocol::protocol::HookStartedEvent;
 use codex_protocol::user_input::UserInput;
-use serde_json::Value;
+use edgerun_json::serde_json::Value;
 
 use crate::context::ContextualUserFragment;
 use crate::context::HookAdditionalContext;

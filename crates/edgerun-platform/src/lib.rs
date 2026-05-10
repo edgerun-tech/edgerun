@@ -73,22 +73,26 @@ pub use waker::make_ipi_waker;
 
 #[inline]
 pub unsafe fn halt() -> ! {
-    #[cfg(target_arch = "x86_64")]
-    core::arch::asm!("hlt", options(noreturn));
-    #[cfg(target_arch = "xtensa")]
-    loop {
-        core::arch::asm!("waiti 0");
+    unsafe {
+        #[cfg(target_arch = "x86_64")]
+        core::arch::asm!("hlt", options(noreturn));
+        #[cfg(target_arch = "xtensa")]
+        loop {
+            core::arch::asm!("waiti 0");
+        }
+        #[cfg(not(any(target_arch = "x86_64", target_arch = "xtensa")))]
+        loop {}
     }
-    #[cfg(not(any(target_arch = "x86_64", target_arch = "xtensa")))]
-    loop {}
 }
 
 #[inline]
 pub unsafe fn yield_cpu() {
-    #[cfg(target_arch = "x86_64")]
-    core::arch::asm!("pause");
-    #[cfg(target_arch = "xtensa")]
-    core::arch::asm!("nop");
-    #[cfg(not(any(target_arch = "x86_64", target_arch = "xtensa")))]
-    core::hint::spin_loop();
+    unsafe {
+        #[cfg(target_arch = "x86_64")]
+        core::arch::asm!("pause");
+        #[cfg(target_arch = "xtensa")]
+        core::arch::asm!("nop");
+        #[cfg(not(any(target_arch = "x86_64", target_arch = "xtensa")))]
+        core::hint::spin_loop();
+    }
 }

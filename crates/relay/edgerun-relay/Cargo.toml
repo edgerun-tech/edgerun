@@ -11,10 +11,28 @@ description = "Edgerun relay node protocol and TCP relay runtime"
 [[bin]]
 name = "edgerun-relay"
 path = "src/main.rs"
+required-features = ["std"]
+
+[[bin]]
+name = "edgerun-relay-bench"
+path = "src/bin/edgerun-relay-bench.rs"
+required-features = ["std"]
 
 [dependencies]
-edgerun-crypto = { workspace = true, default-features = false, features = ["ed25519"] }
-rkyv.workspace = true
+edgerun-crypto = { workspace = true, default-features = false, features = ["ed25519", "p256"] }
+edgerun-protocols = { workspace = true, default-features = false, features = ["ed25519", "sign-p256"] }
+edgerun-rusttls = { version = "0.1", path = "../../utility/edgerun-rusttls", optional = true }
+edgerun-tungstenite = { version = "0.1", path = "../../utility/edgerun-tungstenite", default-features = false, features = ["deflate", "handshake"], optional = true }
+edgerun-virtio = { workspace = true, optional = true }
+edgerun-wire = { workspace = true, default-features = false }
+
+[features]
+default = []
+std = ["edgerun-wire/std", "edgerun-protocols/keygen", "dep:edgerun-rusttls", "dep:edgerun-tungstenite"]
+virtio = ["dep:edgerun-virtio", "edgerun-protocols/ethernet-ipv4"]
+
+[dev-dependencies]
+edgerun-protocols = { workspace = true, default-features = false, features = ["keygen"] }
 
 [lints]
 workspace = true

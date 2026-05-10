@@ -246,8 +246,8 @@ pub fn find_codex_linux_sandbox_exe() -> Result<PathBuf, CargoBinError> {
 /// makes it trivial to extend the fixtures as OpenAI adds new event kinds or
 /// fields.
 pub fn load_sse_fixture(path: impl AsRef<std::path::Path>) -> String {
-    let events: Vec<serde_json::Value> =
-        serde_json::from_reader(std::fs::File::open(path).expect("read fixture"))
+    let events: Vec<edgerun_json::serde_json::Value> =
+        edgerun_json::serde_json::from_reader(std::fs::File::open(path).expect("read fixture"))
             .expect("parse JSON fixture");
     events
         .into_iter()
@@ -267,8 +267,8 @@ pub fn load_sse_fixture(path: impl AsRef<std::path::Path>) -> String {
 
 pub fn load_sse_fixture_with_id_from_str(raw: &str, id: &str) -> String {
     let replaced = raw.replace("__ID__", id);
-    let events: Vec<serde_json::Value> =
-        serde_json::from_str(&replaced).expect("parse JSON fixture");
+    let events: Vec<edgerun_json::serde_json::Value> =
+        edgerun_json::serde_json::from_str(&replaced).expect("parse JSON fixture");
     events
         .into_iter()
         .map(|e| {
@@ -367,7 +367,7 @@ pub fn format_with_current_shell(command: &str) -> Vec<String> {
 
 pub fn format_with_current_shell_display(command: &str) -> String {
     let args = format_with_current_shell(command);
-    shlex::try_join(args.iter().map(String::as_str)).expect("serialize current shell command")
+    edgerun_shlex::try_join(args.iter().map(String::as_str)).expect("serialize current shell command")
 }
 
 pub fn format_with_current_shell_non_login(command: &str) -> Vec<String> {
@@ -377,7 +377,7 @@ pub fn format_with_current_shell_non_login(command: &str) -> Vec<String> {
 
 pub fn format_with_current_shell_display_non_login(command: &str) -> String {
     let args = format_with_current_shell_non_login(command);
-    shlex::try_join(args.iter().map(String::as_str))
+    edgerun_shlex::try_join(args.iter().map(String::as_str))
         .expect("serialize current shell command without login")
 }
 

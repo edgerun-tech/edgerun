@@ -9,7 +9,7 @@ use codex_protocol::models::ResponseItem;
 use http::HeaderMap;
 use http::Method;
 use serde::Deserialize;
-use serde_json::to_value;
+use edgerun_json::serde_json::to_value;
 use std::sync::Arc;
 
 pub struct CompactClient<T: HttpTransport> {
@@ -35,7 +35,7 @@ impl<T: HttpTransport> CompactClient<T> {
 
     pub async fn compact(
         &self,
-        body: serde_json::Value,
+        body: edgerun_json::serde_json::Value,
         extra_headers: HeaderMap,
     ) -> Result<Vec<ResponseItem>, ApiError> {
         let resp = self
@@ -43,7 +43,7 @@ impl<T: HttpTransport> CompactClient<T> {
             .execute(Method::POST, Self::path(), extra_headers, Some(body))
             .await?;
         let parsed: CompactHistoryResponse =
-            serde_json::from_slice(&resp.body).map_err(|e| ApiError::Stream(e.to_string()))?;
+            edgerun_json::serde_json::from_slice(&resp.body).map_err(|e| ApiError::Stream(e.to_string()))?;
         Ok(parsed.output)
     }
 

@@ -38,7 +38,7 @@ impl TestCodexExecBuilder {
 }
 
 fn toml_string_literal(value: &str) -> String {
-    serde_json::to_string(value).expect("serialize TOML string literal")
+    edgerun_json::serde_json::to_string(value).expect("serialize TOML string literal")
 }
 
 pub fn test_codex_exec() -> TestCodexExecBuilder {

@@ -18,7 +18,7 @@ use codex_protocol::protocol::SessionSource;
 use http::HeaderMap;
 use http::HeaderValue;
 use http::Method;
-use serde_json::Value;
+use edgerun_json::serde_json::Value;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use tracing::instrument;
@@ -81,7 +81,7 @@ impl<T: HttpTransport> ResponsesClient<T> {
             turn_state,
         } = options;
 
-        let mut body = serde_json::to_value(&request)
+        let mut body = edgerun_json::serde_json::to_value(&request)
             .map_err(|e| ApiError::Stream(format!("failed to encode responses request: {e}")))?;
         if request.store && self.session.provider().is_azure_responses_endpoint() {
             attach_item_ids(&mut body, &request.input);

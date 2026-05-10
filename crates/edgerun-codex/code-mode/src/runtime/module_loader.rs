@@ -1,4 +1,4 @@
-use serde_json::Value as JsonValue;
+use edgerun_json::serde_json::Value as JsonValue;
 
 use super::CompletionState;
 use super::EXIT_SENTINEL;

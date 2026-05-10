@@ -2,8 +2,8 @@ use codex_protocol::openai_models::ModelPreset;
 use codex_tools::JsonSchema;
 use codex_tools::ResponsesApiTool;
 use codex_tools::ToolSpec;
-use serde_json::Value;
-use serde_json::json;
+use edgerun_json::serde_json::Value;
+use edgerun_json::serde_json::json;
 use std::collections::BTreeMap;
 
 const SPAWN_AGENT_INHERITED_MODEL_GUIDANCE: &str = "Spawned agents inherit your current model by default. Omit `model` to use that preferred default; set `model` only when an explicit override is needed.";

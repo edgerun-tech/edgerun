@@ -174,7 +174,7 @@ pub struct McpToolCallItem {
     pub id: String,
     pub server: String,
     pub tool: String,
-    pub arguments: serde_json::Value,
+    pub arguments: edgerun_json::serde_json::Value,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub mcp_app_resource_uri: Option<String>,

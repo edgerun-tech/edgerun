@@ -1283,40 +1283,45 @@ impl VirtNet {
     }
 
     unsafe fn init_rx_queue(&mut self) {
-        self.rx_last_used_idx = 0;
-        self.rx_received = 0;
-        self.rx_invalid = 0;
-        self.rx_empty = 0;
-        write_volatile_u16(core::ptr::addr_of_mut!(RX_AVAIL.idx), 0);
-        write_volatile_u16(core::ptr::addr_of_mut!(RX_USED.idx), 0);
+        unsafe {
+            self.rx_last_used_idx = 0;
+            self.rx_received = 0;
+            self.rx_invalid = 0;
+            self.rx_empty = 0;
+            write_volatile_u16(core::ptr::addr_of_mut!(RX_AVAIL.idx), 0);
+            write_volatile_u16(core::ptr::addr_of_mut!(RX_USED.idx), 0);
 
-        for i in 0..QUEUE_SIZE {
-            let buffer = (core::ptr::addr_of_mut!(RX_BUFFERS.0) as *mut [u8; BUFFER_SIZE]).add(i);
-            core::ptr::write(
-                (core::ptr::addr_of_mut!(RX_DESC.0) as *mut VirtqDesc).add(i),
-                VirtqDesc {
-                    addr: buffer as u64,
-                    len: BUFFER_SIZE as u32,
-                    flags: VIRTQ_DESC_F_WRITE,
-                    next: 0,
-                },
-            );
-            self.post_rx_descriptor(i as u16);
+            for i in 0..QUEUE_SIZE {
+                let buffer =
+                    (core::ptr::addr_of_mut!(RX_BUFFERS.0) as *mut [u8; BUFFER_SIZE]).add(i);
+                core::ptr::write(
+                    (core::ptr::addr_of_mut!(RX_DESC.0) as *mut VirtqDesc).add(i),
+                    VirtqDesc {
+                        addr: buffer as u64,
+                        len: BUFFER_SIZE as u32,
+                        flags: VIRTQ_DESC_F_WRITE,
+                        next: 0,
+                    },
+                );
+                self.post_rx_descriptor(i as u16);
+            }
         }
     }
 
     unsafe fn init_tx_queue(&mut self) {
-        self.tx_last_used_idx = 0;
-        self.tx_free_mask = TX_FREE_ALL_MASK;
-        self.tx_submitted = 0;
-        self.tx_completed = 0;
-        write_volatile_u16(core::ptr::addr_of_mut!(TX_AVAIL.idx), 0);
-        write_volatile_u16(core::ptr::addr_of_mut!(TX_USED.idx), 0);
-        core::ptr::write_bytes(
-            core::ptr::addr_of_mut!(TX_BUFFERS.0) as *mut u8,
-            0,
-            QUEUE_SIZE * BUFFER_SIZE,
-        );
+        unsafe {
+            self.tx_last_used_idx = 0;
+            self.tx_free_mask = TX_FREE_ALL_MASK;
+            self.tx_submitted = 0;
+            self.tx_completed = 0;
+            write_volatile_u16(core::ptr::addr_of_mut!(TX_AVAIL.idx), 0);
+            write_volatile_u16(core::ptr::addr_of_mut!(TX_USED.idx), 0);
+            core::ptr::write_bytes(
+                core::ptr::addr_of_mut!(TX_BUFFERS.0) as *mut u8,
+                0,
+                QUEUE_SIZE * BUFFER_SIZE,
+            );
+        }
     }
 
     fn take_tx_descriptor(&mut self) -> Option<u16> {
@@ -1330,18 +1335,26 @@ impl VirtNet {
     }
 
     unsafe fn post_rx_descriptor(&self, desc_id: u16) {
-        post_split_queue_descriptor(core::ptr::addr_of_mut!(RX_AVAIL), self.queue_size, desc_id);
+        unsafe {
+            post_split_queue_descriptor(
+                core::ptr::addr_of_mut!(RX_AVAIL),
+                self.queue_size,
+                desc_id,
+            );
+        }
     }
 
     unsafe fn reap_tx_used(&mut self) {
-        let used = core::ptr::addr_of!(TX_USED);
-        while let Some(elem) =
-            take_next_used_completion(used, QUEUE_SIZE as u16, &mut self.tx_last_used_idx)
-        {
-            if elem.id < QUEUE_SIZE as u32 {
-                self.tx_free_mask |= 1u16 << elem.id;
+        unsafe {
+            let used = core::ptr::addr_of!(TX_USED);
+            while let Some(elem) =
+                take_next_used_completion(used, QUEUE_SIZE as u16, &mut self.tx_last_used_idx)
+            {
+                if elem.id < QUEUE_SIZE as u32 {
+                    self.tx_free_mask |= 1u16 << elem.id;
+                }
+                self.tx_completed = self.tx_completed.wrapping_add(1);
             }
-            self.tx_completed = self.tx_completed.wrapping_add(1);
         }
     }
 
@@ -1444,24 +1457,26 @@ fn notify_split_queue(notify_cfg: *mut u8, notify_off_multiplier: u32, queue_off
 }
 
 unsafe fn post_split_queue_descriptor(avail: *mut VirtqAvail, queue_size: u16, desc_id: u16) {
-    if queue_size == 0 {
-        return;
-    }
+    unsafe {
+        if queue_size == 0 {
+            return;
+        }
 
-    let idx = read_volatile_u16(core::ptr::addr_of!((*avail).idx));
-    core::ptr::write_volatile(
-        (*avail)
-            .ring
-            .as_mut_ptr()
-            .add((idx as usize) % queue_size as usize),
-        desc_id,
-    );
-    fence(Ordering::SeqCst);
-    write_volatile_u16(core::ptr::addr_of_mut!((*avail).idx), idx.wrapping_add(1));
+        let idx = read_volatile_u16(core::ptr::addr_of!((*avail).idx));
+        core::ptr::write_volatile(
+            (*avail)
+                .ring
+                .as_mut_ptr()
+                .add((idx as usize) % queue_size as usize),
+            desc_id,
+        );
+        fence(Ordering::SeqCst);
+        write_volatile_u16(core::ptr::addr_of_mut!((*avail).idx), idx.wrapping_add(1));
+    }
 }
 
 unsafe fn split_queue_used_idx(used: *const VirtqUsed) -> u16 {
-    read_volatile_u16(core::ptr::addr_of!((*used).idx))
+    unsafe { read_volatile_u16(core::ptr::addr_of!((*used).idx)) }
 }
 
 unsafe fn split_queue_used_elem(
@@ -1469,8 +1484,10 @@ unsafe fn split_queue_used_elem(
     queue_size: u16,
     used_idx: u16,
 ) -> VirtqUsedElem {
-    let ring_idx = (used_idx as usize) % queue_size as usize;
-    read_volatile_used_elem((*used).ring.as_ptr().add(ring_idx))
+    unsafe {
+        let ring_idx = (used_idx as usize) % queue_size as usize;
+        read_volatile_used_elem((*used).ring.as_ptr().add(ring_idx))
+    }
 }
 
 unsafe fn take_next_used_completion(
@@ -1478,14 +1495,16 @@ unsafe fn take_next_used_completion(
     queue_size: u16,
     last_used_idx: &mut u16,
 ) -> Option<VirtqUsedElem> {
-    let used_idx = split_queue_used_idx(used);
-    if used_idx == *last_used_idx {
-        return None;
-    }
+    unsafe {
+        let used_idx = split_queue_used_idx(used);
+        if used_idx == *last_used_idx {
+            return None;
+        }
 
-    let elem = split_queue_used_elem(used, queue_size, *last_used_idx);
-    *last_used_idx = (*last_used_idx).wrapping_add(1);
-    Some(elem)
+        let elem = split_queue_used_elem(used, queue_size, *last_used_idx);
+        *last_used_idx = (*last_used_idx).wrapping_add(1);
+        Some(elem)
+    }
 }
 
 unsafe fn take_single_used_completion(
@@ -1493,32 +1512,36 @@ unsafe fn take_single_used_completion(
     queue_size: u16,
     last_used_idx: &mut u16,
 ) -> VirtioResult<Option<VirtqUsedElem>> {
-    let used_idx = split_queue_used_idx(used);
-    if used_idx == *last_used_idx {
-        return Ok(None);
-    }
+    unsafe {
+        let used_idx = split_queue_used_idx(used);
+        if used_idx == *last_used_idx {
+            return Ok(None);
+        }
 
-    let elem = split_queue_used_elem(used, queue_size, *last_used_idx);
-    let next_used_idx = last_used_idx.wrapping_add(1);
-    if used_idx != next_used_idx {
-        *last_used_idx = used_idx;
-        return Err(VirtioError::InvalidUsedDescriptor);
-    }
+        let elem = split_queue_used_elem(used, queue_size, *last_used_idx);
+        let next_used_idx = last_used_idx.wrapping_add(1);
+        if used_idx != next_used_idx {
+            *last_used_idx = used_idx;
+            return Err(VirtioError::InvalidUsedDescriptor);
+        }
 
-    *last_used_idx = next_used_idx;
-    Ok(Some(elem))
+        *last_used_idx = next_used_idx;
+        Ok(Some(elem))
+    }
 }
 
 unsafe fn wait_for_used_completion(used: *const VirtqUsed, last_used_idx: u16) -> VirtioResult<()> {
-    let mut spins = 0;
-    while split_queue_used_idx(used) == last_used_idx {
-        spins += 1;
-        if spins > VIRTIO_POLL_SPINS {
-            return Err(VirtioError::DeviceTimeout);
+    unsafe {
+        let mut spins = 0;
+        while split_queue_used_idx(used) == last_used_idx {
+            spins += 1;
+            if spins > VIRTIO_POLL_SPINS {
+                return Err(VirtioError::DeviceTimeout);
+            }
+            core::hint::spin_loop();
         }
-        core::hint::spin_loop();
+        Ok(())
     }
-    Ok(())
 }
 
 pub struct VirtBlk {
@@ -1840,15 +1863,17 @@ impl VirtBlk {
     }
 
     unsafe fn init_queue(&mut self) {
-        self.last_used_idx = 0;
-        write_volatile_u16(core::ptr::addr_of_mut!(BLK_AVAIL.idx), 0);
-        write_volatile_u16(core::ptr::addr_of_mut!(BLK_USED.idx), 0);
-        core::ptr::write_bytes(
-            core::ptr::addr_of_mut!(BLK_DATA.0) as *mut u8,
-            0,
-            SECTOR_SIZE,
-        );
-        BLK_STATUS = 0xff;
+        unsafe {
+            self.last_used_idx = 0;
+            write_volatile_u16(core::ptr::addr_of_mut!(BLK_AVAIL.idx), 0);
+            write_volatile_u16(core::ptr::addr_of_mut!(BLK_USED.idx), 0);
+            core::ptr::write_bytes(
+                core::ptr::addr_of_mut!(BLK_DATA.0) as *mut u8,
+                0,
+                SECTOR_SIZE,
+            );
+            BLK_STATUS = 0xff;
+        }
     }
 
     unsafe fn submit_request(
@@ -1858,30 +1883,32 @@ impl VirtBlk {
         data_len: usize,
         read: bool,
     ) -> VirtioResult<()> {
-        if !self.prepare_request_descriptors(request_type, sector, data_len, read) {
-            return Err(VirtioError::InvalidBufferLength);
-        }
+        unsafe {
+            if !self.prepare_request_descriptors(request_type, sector, data_len, read) {
+                return Err(VirtioError::InvalidBufferLength);
+            }
 
-        post_split_queue_descriptor(core::ptr::addr_of_mut!(BLK_AVAIL), self.queue_size, 0);
-        self.notify_queue();
+            post_split_queue_descriptor(core::ptr::addr_of_mut!(BLK_AVAIL), self.queue_size, 0);
+            self.notify_queue();
 
-        wait_for_used_completion(core::ptr::addr_of!(BLK_USED), self.last_used_idx)?;
+            wait_for_used_completion(core::ptr::addr_of!(BLK_USED), self.last_used_idx)?;
 
-        let Some(elem) = take_single_used_completion(
-            core::ptr::addr_of!(BLK_USED),
-            self.queue_size,
-            &mut self.last_used_idx,
-        )?
-        else {
-            return Err(VirtioError::InvalidUsedDescriptor);
-        };
-        if elem.id != 0 {
-            return Err(VirtioError::InvalidUsedDescriptor);
+            let Some(elem) = take_single_used_completion(
+                core::ptr::addr_of!(BLK_USED),
+                self.queue_size,
+                &mut self.last_used_idx,
+            )?
+            else {
+                return Err(VirtioError::InvalidUsedDescriptor);
+            };
+            if elem.id != 0 {
+                return Err(VirtioError::InvalidUsedDescriptor);
+            }
+            if read_u8(core::ptr::addr_of!(BLK_STATUS)) != VIRTIO_BLK_S_OK {
+                return Err(VirtioError::DeviceError);
+            }
+            Ok(())
         }
-        if read_u8(core::ptr::addr_of!(BLK_STATUS)) != VIRTIO_BLK_S_OK {
-            return Err(VirtioError::DeviceError);
-        }
-        Ok(())
     }
 
     unsafe fn prepare_request_descriptors(
@@ -1891,52 +1918,54 @@ impl VirtBlk {
         data_len: usize,
         read: bool,
     ) -> bool {
-        if data_len > SECTOR_SIZE {
-            return false;
-        }
-        BLK_HEADER = VirtioBlkReqHeader {
-            request_type,
-            reserved: 0,
-            sector,
-        };
-        BLK_STATUS = 0xff;
+        unsafe {
+            if data_len > SECTOR_SIZE {
+                return false;
+            }
+            BLK_HEADER = VirtioBlkReqHeader {
+                request_type,
+                reserved: 0,
+                sector,
+            };
+            BLK_STATUS = 0xff;
 
-        let desc = core::ptr::addr_of_mut!(BLK_DESC.0) as *mut VirtqDesc;
-        let has_data = data_len != 0;
-        core::ptr::write(
-            desc,
-            VirtqDesc {
-                addr: core::ptr::addr_of!(BLK_HEADER) as u64,
-                len: core::mem::size_of::<VirtioBlkReqHeader>() as u32,
-                flags: VIRTQ_DESC_F_NEXT,
-                next: if has_data { 1 } else { 2 },
-            },
-        );
-        if has_data {
+            let desc = core::ptr::addr_of_mut!(BLK_DESC.0) as *mut VirtqDesc;
+            let has_data = data_len != 0;
             core::ptr::write(
-                desc.add(1),
+                desc,
                 VirtqDesc {
-                    addr: core::ptr::addr_of_mut!(BLK_DATA.0) as u64,
-                    len: data_len as u32,
-                    flags: if read {
-                        VIRTQ_DESC_F_WRITE | VIRTQ_DESC_F_NEXT
-                    } else {
-                        VIRTQ_DESC_F_NEXT
-                    },
-                    next: 2,
+                    addr: core::ptr::addr_of!(BLK_HEADER) as u64,
+                    len: core::mem::size_of::<VirtioBlkReqHeader>() as u32,
+                    flags: VIRTQ_DESC_F_NEXT,
+                    next: if has_data { 1 } else { 2 },
                 },
             );
+            if has_data {
+                core::ptr::write(
+                    desc.add(1),
+                    VirtqDesc {
+                        addr: core::ptr::addr_of_mut!(BLK_DATA.0) as u64,
+                        len: data_len as u32,
+                        flags: if read {
+                            VIRTQ_DESC_F_WRITE | VIRTQ_DESC_F_NEXT
+                        } else {
+                            VIRTQ_DESC_F_NEXT
+                        },
+                        next: 2,
+                    },
+                );
+            }
+            core::ptr::write(
+                desc.add(2),
+                VirtqDesc {
+                    addr: core::ptr::addr_of_mut!(BLK_STATUS) as u64,
+                    len: 1,
+                    flags: VIRTQ_DESC_F_WRITE,
+                    next: 0,
+                },
+            );
+            true
         }
-        core::ptr::write(
-            desc.add(2),
-            VirtqDesc {
-                addr: core::ptr::addr_of_mut!(BLK_STATUS) as u64,
-                len: 1,
-                flags: VIRTQ_DESC_F_WRITE,
-                next: 0,
-            },
-        );
-        true
     }
 
     fn notify_queue(&self) {
@@ -2089,56 +2118,60 @@ impl VirtRng {
     }
 
     unsafe fn init_queue(&mut self) {
-        self.last_used_idx = 0;
-        write_volatile_u16(core::ptr::addr_of_mut!(RNG_AVAIL.idx), 0);
-        write_volatile_u16(core::ptr::addr_of_mut!(RNG_USED.idx), 0);
-        core::ptr::write_bytes(core::ptr::addr_of_mut!(RNG_DATA.0) as *mut u8, 0, 256);
+        unsafe {
+            self.last_used_idx = 0;
+            write_volatile_u16(core::ptr::addr_of_mut!(RNG_AVAIL.idx), 0);
+            write_volatile_u16(core::ptr::addr_of_mut!(RNG_USED.idx), 0);
+            core::ptr::write_bytes(core::ptr::addr_of_mut!(RNG_DATA.0) as *mut u8, 0, 256);
+        }
     }
 
     unsafe fn request_entropy(&mut self, out: &mut [u8]) -> VirtioResult<usize> {
-        let request_len = core::cmp::min(out.len(), 256);
-        if request_len == 0 {
-            return Ok(0);
+        unsafe {
+            let request_len = core::cmp::min(out.len(), 256);
+            if request_len == 0 {
+                return Ok(0);
+            }
+
+            let desc = core::ptr::addr_of_mut!(RNG_DESC.0) as *mut VirtqDesc;
+            core::ptr::write(
+                desc,
+                VirtqDesc {
+                    addr: core::ptr::addr_of_mut!(RNG_DATA.0) as u64,
+                    len: request_len as u32,
+                    flags: VIRTQ_DESC_F_WRITE,
+                    next: 0,
+                },
+            );
+
+            post_split_queue_descriptor(core::ptr::addr_of_mut!(RNG_AVAIL), self.queue_size, 0);
+            self.notify_queue();
+
+            wait_for_used_completion(core::ptr::addr_of!(RNG_USED), self.last_used_idx)?;
+
+            let Some(elem) = take_single_used_completion(
+                core::ptr::addr_of!(RNG_USED),
+                self.queue_size,
+                &mut self.last_used_idx,
+            )?
+            else {
+                return Err(VirtioError::InvalidUsedDescriptor);
+            };
+            if elem.id != 0 {
+                return Err(VirtioError::InvalidUsedDescriptor);
+            }
+
+            let len = core::cmp::min(elem.len as usize, request_len);
+            if len == 0 {
+                return Err(VirtioError::InvalidUsedLength);
+            }
+            core::ptr::copy_nonoverlapping(
+                core::ptr::addr_of!(RNG_DATA.0) as *const u8,
+                out.as_mut_ptr(),
+                len,
+            );
+            Ok(len)
         }
-
-        let desc = core::ptr::addr_of_mut!(RNG_DESC.0) as *mut VirtqDesc;
-        core::ptr::write(
-            desc,
-            VirtqDesc {
-                addr: core::ptr::addr_of_mut!(RNG_DATA.0) as u64,
-                len: request_len as u32,
-                flags: VIRTQ_DESC_F_WRITE,
-                next: 0,
-            },
-        );
-
-        post_split_queue_descriptor(core::ptr::addr_of_mut!(RNG_AVAIL), self.queue_size, 0);
-        self.notify_queue();
-
-        wait_for_used_completion(core::ptr::addr_of!(RNG_USED), self.last_used_idx)?;
-
-        let Some(elem) = take_single_used_completion(
-            core::ptr::addr_of!(RNG_USED),
-            self.queue_size,
-            &mut self.last_used_idx,
-        )?
-        else {
-            return Err(VirtioError::InvalidUsedDescriptor);
-        };
-        if elem.id != 0 {
-            return Err(VirtioError::InvalidUsedDescriptor);
-        }
-
-        let len = core::cmp::min(elem.len as usize, request_len);
-        if len == 0 {
-            return Err(VirtioError::InvalidUsedLength);
-        }
-        core::ptr::copy_nonoverlapping(
-            core::ptr::addr_of!(RNG_DATA.0) as *const u8,
-            out.as_mut_ptr(),
-            len,
-        );
-        Ok(len)
     }
 
     fn notify_queue(&self) {
@@ -2366,85 +2399,91 @@ impl VirtConsole {
     }
 
     unsafe fn init_tx_queue(&mut self) {
-        self.tx_last_used_idx = 0;
-        write_volatile_u16(core::ptr::addr_of_mut!(CONSOLE_AVAIL.idx), 0);
-        write_volatile_u16(core::ptr::addr_of_mut!(CONSOLE_USED.idx), 0);
-        core::ptr::write_bytes(
-            core::ptr::addr_of_mut!(CONSOLE_DATA.0) as *mut u8,
-            0,
-            CONSOLE_BUFFER_SIZE,
-        );
+        unsafe {
+            self.tx_last_used_idx = 0;
+            write_volatile_u16(core::ptr::addr_of_mut!(CONSOLE_AVAIL.idx), 0);
+            write_volatile_u16(core::ptr::addr_of_mut!(CONSOLE_USED.idx), 0);
+            core::ptr::write_bytes(
+                core::ptr::addr_of_mut!(CONSOLE_DATA.0) as *mut u8,
+                0,
+                CONSOLE_BUFFER_SIZE,
+            );
+        }
     }
 
     unsafe fn init_rx_queue(&mut self) {
-        self.rx_last_used_idx = 0;
-        write_volatile_u16(core::ptr::addr_of_mut!(CONSOLE_RX_AVAIL.idx), 0);
-        write_volatile_u16(core::ptr::addr_of_mut!(CONSOLE_RX_USED.idx), 0);
-        core::ptr::write_bytes(
-            core::ptr::addr_of_mut!(CONSOLE_RX_DATA) as *mut u8,
-            0,
-            QUEUE_SIZE * CONSOLE_BUFFER_SIZE,
-        );
-
-        for i in 0..self.rx_queue_size as usize {
-            let buffer = (core::ptr::addr_of_mut!(CONSOLE_RX_DATA) as *mut ConsoleData).add(i);
-            core::ptr::write(
-                (core::ptr::addr_of_mut!(CONSOLE_RX_DESC.0) as *mut VirtqDesc).add(i),
-                VirtqDesc {
-                    addr: buffer as u64,
-                    len: CONSOLE_BUFFER_SIZE as u32,
-                    flags: VIRTQ_DESC_F_WRITE,
-                    next: 0,
-                },
+        unsafe {
+            self.rx_last_used_idx = 0;
+            write_volatile_u16(core::ptr::addr_of_mut!(CONSOLE_RX_AVAIL.idx), 0);
+            write_volatile_u16(core::ptr::addr_of_mut!(CONSOLE_RX_USED.idx), 0);
+            core::ptr::write_bytes(
+                core::ptr::addr_of_mut!(CONSOLE_RX_DATA) as *mut u8,
+                0,
+                QUEUE_SIZE * CONSOLE_BUFFER_SIZE,
             );
-            self.post_rx_descriptor(i as u16);
+
+            for i in 0..self.rx_queue_size as usize {
+                let buffer = (core::ptr::addr_of_mut!(CONSOLE_RX_DATA) as *mut ConsoleData).add(i);
+                core::ptr::write(
+                    (core::ptr::addr_of_mut!(CONSOLE_RX_DESC.0) as *mut VirtqDesc).add(i),
+                    VirtqDesc {
+                        addr: buffer as u64,
+                        len: CONSOLE_BUFFER_SIZE as u32,
+                        flags: VIRTQ_DESC_F_WRITE,
+                        next: 0,
+                    },
+                );
+                self.post_rx_descriptor(i as u16);
+            }
         }
     }
 
     unsafe fn write_chunk(&mut self, bytes: &[u8]) -> VirtioResult<usize> {
-        let len = core::cmp::min(bytes.len(), CONSOLE_BUFFER_SIZE);
-        if len == 0 {
-            return Ok(0);
-        }
+        unsafe {
+            let len = core::cmp::min(bytes.len(), CONSOLE_BUFFER_SIZE);
+            if len == 0 {
+                return Ok(0);
+            }
 
-        core::ptr::copy_nonoverlapping(
-            bytes.as_ptr(),
-            core::ptr::addr_of_mut!(CONSOLE_DATA.0) as *mut u8,
-            len,
-        );
+            core::ptr::copy_nonoverlapping(
+                bytes.as_ptr(),
+                core::ptr::addr_of_mut!(CONSOLE_DATA.0) as *mut u8,
+                len,
+            );
 
-        let desc = core::ptr::addr_of_mut!(CONSOLE_DESC.0) as *mut VirtqDesc;
-        core::ptr::write(
-            desc,
-            VirtqDesc {
-                addr: core::ptr::addr_of!(CONSOLE_DATA.0) as u64,
-                len: len as u32,
-                flags: 0,
-                next: 0,
-            },
-        );
+            let desc = core::ptr::addr_of_mut!(CONSOLE_DESC.0) as *mut VirtqDesc;
+            core::ptr::write(
+                desc,
+                VirtqDesc {
+                    addr: core::ptr::addr_of!(CONSOLE_DATA.0) as u64,
+                    len: len as u32,
+                    flags: 0,
+                    next: 0,
+                },
+            );
 
-        post_split_queue_descriptor(
-            core::ptr::addr_of_mut!(CONSOLE_AVAIL),
-            self.tx_queue_size,
-            0,
-        );
-        self.notify_tx_queue();
+            post_split_queue_descriptor(
+                core::ptr::addr_of_mut!(CONSOLE_AVAIL),
+                self.tx_queue_size,
+                0,
+            );
+            self.notify_tx_queue();
 
-        wait_for_used_completion(core::ptr::addr_of!(CONSOLE_USED), self.tx_last_used_idx)?;
+            wait_for_used_completion(core::ptr::addr_of!(CONSOLE_USED), self.tx_last_used_idx)?;
 
-        let Some(elem) = take_single_used_completion(
-            core::ptr::addr_of!(CONSOLE_USED),
-            self.tx_queue_size,
-            &mut self.tx_last_used_idx,
-        )?
-        else {
-            return Err(VirtioError::InvalidUsedDescriptor);
-        };
-        if elem.id == 0 {
-            Ok(len)
-        } else {
-            Err(VirtioError::InvalidUsedDescriptor)
+            let Some(elem) = take_single_used_completion(
+                core::ptr::addr_of!(CONSOLE_USED),
+                self.tx_queue_size,
+                &mut self.tx_last_used_idx,
+            )?
+            else {
+                return Err(VirtioError::InvalidUsedDescriptor);
+            };
+            if elem.id == 0 {
+                Ok(len)
+            } else {
+                Err(VirtioError::InvalidUsedDescriptor)
+            }
         }
     }
 
@@ -2455,11 +2494,13 @@ impl VirtConsole {
     }
 
     unsafe fn post_rx_descriptor(&self, desc_id: u16) {
-        post_split_queue_descriptor(
-            core::ptr::addr_of_mut!(CONSOLE_RX_AVAIL),
-            self.rx_queue_size,
-            desc_id,
-        );
+        unsafe {
+            post_split_queue_descriptor(
+                core::ptr::addr_of_mut!(CONSOLE_RX_AVAIL),
+                self.rx_queue_size,
+                desc_id,
+            );
+        }
     }
 
     fn notify_rx_queue(&self) {

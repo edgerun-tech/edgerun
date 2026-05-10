@@ -87,7 +87,7 @@ use codex_utils_pty::DEFAULT_OUTPUT_BYTES_CAP;
 use rmcp::model::ToolAnnotations;
 use serde::Deserialize;
 use serde::Serialize;
-use serde_json::Value as JsonValue;
+use edgerun_json::serde_json::Value as JsonValue;
 use std::sync::Arc;
 use toml_edit::value;
 use tracing::Instrument;
@@ -123,13 +123,13 @@ pub(crate) async fn handle_mcp_tool_call(
     let arguments_value = if arguments.trim().is_empty() {
         None
     } else {
-        match serde_json::from_str::<serde_json::Value>(&arguments) {
+        match edgerun_json::serde_json::from_str::<edgerun_json::serde_json::Value>(&arguments) {
             Ok(value) => Some(value),
             Err(e) => {
                 error!("failed to parse tool call arguments: {e}");
                 return HandledMcpToolCall {
                     result: CallToolResult::from_error_text(format!("err: {e}")),
-                    tool_input: JsonValue::Object(serde_json::Map::new()),
+                    tool_input: JsonValue::Object(edgerun_json::serde_json::Map::new()),
                 };
             }
         }
@@ -190,7 +190,7 @@ pub(crate) async fn handle_mcp_tool_call(
         return HandledMcpToolCall {
             result: CallToolResult::from_result(result),
             tool_input: arguments_value
-                .unwrap_or_else(|| JsonValue::Object(serde_json::Map::new())),
+                .unwrap_or_else(|| JsonValue::Object(edgerun_json::serde_json::Map::new())),
         };
     }
     let request_meta = build_mcp_tool_call_request_meta(
@@ -294,7 +294,7 @@ pub(crate) async fn handle_mcp_tool_call(
         return HandledMcpToolCall {
             result: CallToolResult::from_result(result),
             tool_input: arguments_value
-                .unwrap_or_else(|| JsonValue::Object(serde_json::Map::new())),
+                .unwrap_or_else(|| JsonValue::Object(edgerun_json::serde_json::Map::new())),
         };
     }
 
@@ -350,7 +350,7 @@ async fn handle_approved_mcp_tool_call(
         Ok(Some(rewritten_arguments)) => rewritten_arguments.clone(),
         Ok(None) | Err(_) => arguments_value
             .clone()
-            .unwrap_or_else(|| JsonValue::Object(serde_json::Map::new())),
+            .unwrap_or_else(|| JsonValue::Object(edgerun_json::serde_json::Map::new())),
     };
     let result = async {
         let rewritten_arguments = rewrite?;
@@ -709,8 +709,8 @@ async fn augment_mcp_tool_request_meta_with_sandbox_state(
     sess: &Session,
     turn_context: &TurnContext,
     server: &str,
-    mut meta: Option<serde_json::Value>,
-) -> anyhow::Result<Option<serde_json::Value>> {
+    mut meta: Option<edgerun_json::serde_json::Value>,
+) -> anyhow::Result<Option<edgerun_json::serde_json::Value>> {
     let supports_sandbox_state_meta = sess
         .services
         .mcp_connection_manager
@@ -723,7 +723,7 @@ async fn augment_mcp_tool_request_meta_with_sandbox_state(
         return Ok(meta);
     }
 
-    let sandbox_state = serde_json::to_value(SandboxState {
+    let sandbox_state = edgerun_json::serde_json::to_value(SandboxState {
         permission_profile: Some(turn_context.permission_profile()),
         sandbox_policy: turn_context.sandbox_policy(),
         codex_linux_sandbox_exe: turn_context.codex_linux_sandbox_exe.clone(),
@@ -732,7 +732,7 @@ async fn augment_mcp_tool_request_meta_with_sandbox_state(
     })?;
 
     match meta.as_mut() {
-        Some(serde_json::Value::Object(map)) => {
+        Some(edgerun_json::serde_json::Value::Object(map)) => {
             map.insert(
                 codex_mcp::MCP_SANDBOX_STATE_META_CAPABILITY.to_string(),
                 sandbox_state,
@@ -740,12 +740,12 @@ async fn augment_mcp_tool_request_meta_with_sandbox_state(
         }
         Some(_) => {}
         None => {
-            let mut map = serde_json::Map::new();
+            let mut map = edgerun_json::serde_json::Map::new();
             map.insert(
                 codex_mcp::MCP_SANDBOX_STATE_META_CAPABILITY.to_string(),
                 sandbox_state,
             );
-            meta = Some(serde_json::Value::Object(map));
+            meta = Some(edgerun_json::serde_json::Value::Object(map));
         }
     }
 
@@ -790,10 +790,10 @@ fn sanitize_mcp_tool_result_for_model(
             .content
             .iter()
             .map(|block| {
-                if let Some(content_type) = block.get("type").and_then(serde_json::Value::as_str)
+                if let Some(content_type) = block.get("type").and_then(edgerun_json::serde_json::Value::as_str)
                     && content_type == "image"
                 {
-                    return serde_json::json!({
+                    return edgerun_json::serde_json::json!({
                         "type": "text",
                         "text": "<image content omitted because you do not support image input>",
                     });
@@ -815,7 +815,7 @@ fn truncate_mcp_tool_result_for_event(
         Ok(call_tool_result) => {
             // The app-server rebuilds `ThreadItem::McpToolCall` from this item,
             // so avoid persisting multi-megabyte results in rollout storage.
-            let Ok(serialized) = serde_json::to_string(call_tool_result) else {
+            let Ok(serialized) = edgerun_json::serde_json::to_string(call_tool_result) else {
                 return Ok(call_tool_result.clone());
             };
             if serialized.len() <= MCP_TOOL_CALL_EVENT_RESULT_MAX_BYTES {
@@ -836,7 +836,7 @@ fn truncate_mcp_tool_result_for_event(
                 TruncationPolicy::Bytes(MCP_TOOL_CALL_EVENT_RESULT_MAX_BYTES),
             );
             Ok(CallToolResult {
-                content: vec![serde_json::json!({
+                content: vec![edgerun_json::serde_json::json!({
                     "type": "text",
                     "text": truncated,
                 })],
@@ -979,7 +979,7 @@ pub(crate) struct McpToolApprovalMetadata {
     tool_title: Option<String>,
     tool_description: Option<String>,
     mcp_app_resource_uri: Option<String>,
-    codex_apps_meta: Option<serde_json::Map<String, serde_json::Value>>,
+    codex_apps_meta: Option<edgerun_json::serde_json::Map<String, edgerun_json::serde_json::Value>>,
     openai_file_input_params: Option<Vec<String>>,
 }
 
@@ -1041,8 +1041,8 @@ fn build_mcp_tool_call_request_meta(
     server: &str,
     call_id: &str,
     metadata: Option<&McpToolApprovalMetadata>,
-) -> Option<serde_json::Value> {
-    let mut request_meta = serde_json::Map::new();
+) -> Option<edgerun_json::serde_json::Value> {
+    let mut request_meta = edgerun_json::serde_json::Map::new();
 
     if let Some(turn_metadata) = turn_context
         .turn_metadata_state
@@ -1063,36 +1063,36 @@ fn build_mcp_tool_call_request_meta(
             .unwrap_or_default();
         codex_apps_meta.insert(
             "call_id".to_string(),
-            serde_json::Value::String(call_id.to_string()),
+            edgerun_json::serde_json::Value::String(call_id.to_string()),
         );
         request_meta.insert(
             MCP_TOOL_CODEX_APPS_META_KEY.to_string(),
-            serde_json::Value::Object(codex_apps_meta),
+            edgerun_json::serde_json::Value::Object(codex_apps_meta),
         );
     }
 
-    (!request_meta.is_empty()).then_some(serde_json::Value::Object(request_meta))
+    (!request_meta.is_empty()).then_some(edgerun_json::serde_json::Value::Object(request_meta))
 }
 
 fn with_mcp_tool_call_thread_id_meta(
-    meta: Option<serde_json::Value>,
+    meta: Option<edgerun_json::serde_json::Value>,
     thread_id: &str,
-) -> Option<serde_json::Value> {
+) -> Option<edgerun_json::serde_json::Value> {
     match meta {
-        Some(serde_json::Value::Object(mut map)) => {
+        Some(edgerun_json::serde_json::Value::Object(mut map)) => {
             map.insert(
                 MCP_TOOL_THREAD_ID_META_KEY.to_string(),
-                serde_json::Value::String(thread_id.to_string()),
+                edgerun_json::serde_json::Value::String(thread_id.to_string()),
             );
-            Some(serde_json::Value::Object(map))
+            Some(edgerun_json::serde_json::Value::Object(map))
         }
         None => {
-            let mut map = serde_json::Map::new();
+            let mut map = edgerun_json::serde_json::Map::new();
             map.insert(
                 MCP_TOOL_THREAD_ID_META_KEY.to_string(),
-                serde_json::Value::String(thread_id.to_string()),
+                edgerun_json::serde_json::Value::String(thread_id.to_string()),
             );
-            Some(serde_json::Value::Object(map))
+            Some(edgerun_json::serde_json::Value::Object(map))
         }
         other => other,
     }
@@ -1107,7 +1107,7 @@ struct McpToolApprovalPromptOptions {
 struct McpToolApprovalElicitationRequest<'a> {
     server: &'a str,
     metadata: Option<&'a McpToolApprovalMetadata>,
-    tool_params: Option<&'a serde_json::Value>,
+    tool_params: Option<&'a edgerun_json::serde_json::Value>,
     tool_params_display: Option<&'a [RenderedMcpToolApprovalParam]>,
     question: RequestUserInputQuestion,
     message_override: Option<&'a str>,
@@ -1221,7 +1221,7 @@ async fn maybe_request_mcp_tool_approval(
             tool_input: invocation
                 .arguments
                 .clone()
-                .unwrap_or_else(|| serde_json::Value::Object(serde_json::Map::new())),
+                .unwrap_or_else(|| edgerun_json::serde_json::Value::Object(edgerun_json::serde_json::Map::new())),
         },
     )
     .await
@@ -1375,13 +1375,13 @@ async fn maybe_monitor_auto_approved_mcp_tool_call(
 fn prepare_arc_request_action(
     invocation: &McpInvocation,
     metadata: Option<&McpToolApprovalMetadata>,
-) -> serde_json::Value {
+) -> edgerun_json::serde_json::Value {
     let request = build_guardian_mcp_tool_review_request("arc-monitor", invocation, metadata);
     match guardian_approval_request_to_json(&request) {
         Ok(action) => action,
         Err(error) => {
             error!(error = %error, "failed to serialize guardian MCP approval request for ARC");
-            serde_json::Value::Null
+            edgerun_json::serde_json::Value::Null
         }
     }
 }
@@ -1529,7 +1529,7 @@ pub(crate) async fn lookup_mcp_tool_metadata(
             .meta
             .as_ref()
             .and_then(|meta| meta.get(MCP_TOOL_CODEX_APPS_META_KEY))
-            .and_then(serde_json::Value::as_object)
+            .and_then(edgerun_json::serde_json::Value::as_object)
             .cloned(),
         // Disallow custom MCPs from uploading files via fileParams.
         openai_file_input_params: openai_file_input_params_for_server(
@@ -1541,7 +1541,7 @@ pub(crate) async fn lookup_mcp_tool_metadata(
 
 fn openai_file_input_params_for_server(
     server: &str,
-    meta: Option<&serde_json::Map<String, serde_json::Value>>,
+    meta: Option<&edgerun_json::serde_json::Map<String, edgerun_json::serde_json::Value>>,
 ) -> Option<Vec<String>> {
     (server == CODEX_APPS_MCP_SERVER_NAME)
         .then_some(declared_openai_file_input_param_names(meta))
@@ -1549,20 +1549,20 @@ fn openai_file_input_params_for_server(
 }
 
 fn get_mcp_app_resource_uri(
-    meta: Option<&serde_json::Map<String, serde_json::Value>>,
+    meta: Option<&edgerun_json::serde_json::Map<String, edgerun_json::serde_json::Value>>,
 ) -> Option<String> {
     meta.and_then(|meta| {
         meta.get("ui")
-            .and_then(serde_json::Value::as_object)
+            .and_then(edgerun_json::serde_json::Value::as_object)
             .and_then(|ui| ui.get("resourceUri"))
-            .and_then(serde_json::Value::as_str)
+            .and_then(edgerun_json::serde_json::Value::as_str)
             .or_else(|| {
                 meta.get(MCP_TOOL_UI_RESOURCE_URI_META_KEY)
-                    .and_then(serde_json::Value::as_str)
+                    .and_then(edgerun_json::serde_json::Value::as_str)
             })
             .or_else(|| {
                 meta.get(MCP_TOOL_OPENAI_OUTPUT_TEMPLATE_META_KEY)
-                    .and_then(serde_json::Value::as_str)
+                    .and_then(edgerun_json::serde_json::Value::as_str)
             })
             .map(str::to_string)
     })
@@ -1716,14 +1716,14 @@ fn build_mcp_tool_approval_elicitation_request(
 fn build_mcp_tool_approval_elicitation_meta(
     server: &str,
     metadata: Option<&McpToolApprovalMetadata>,
-    tool_params: Option<&serde_json::Value>,
+    tool_params: Option<&edgerun_json::serde_json::Value>,
     tool_params_display: Option<&[RenderedMcpToolApprovalParam]>,
     prompt_options: McpToolApprovalPromptOptions,
-) -> Option<serde_json::Value> {
-    let mut meta = serde_json::Map::new();
+) -> Option<edgerun_json::serde_json::Value> {
+    let mut meta = edgerun_json::serde_json::Map::new();
     meta.insert(
         MCP_TOOL_APPROVAL_KIND_KEY.to_string(),
-        serde_json::Value::String(MCP_TOOL_APPROVAL_KIND_MCP_TOOL_CALL.to_string()),
+        edgerun_json::serde_json::Value::String(MCP_TOOL_APPROVAL_KIND_MCP_TOOL_CALL.to_string()),
     );
     match (
         prompt_options.allow_session_remember,
@@ -1732,7 +1732,7 @@ fn build_mcp_tool_approval_elicitation_meta(
         (true, true) => {
             meta.insert(
                 MCP_TOOL_APPROVAL_PERSIST_KEY.to_string(),
-                serde_json::json!([
+                edgerun_json::serde_json::json!([
                     MCP_TOOL_APPROVAL_PERSIST_SESSION,
                     MCP_TOOL_APPROVAL_PERSIST_ALWAYS,
                 ]),
@@ -1741,13 +1741,13 @@ fn build_mcp_tool_approval_elicitation_meta(
         (true, false) => {
             meta.insert(
                 MCP_TOOL_APPROVAL_PERSIST_KEY.to_string(),
-                serde_json::Value::String(MCP_TOOL_APPROVAL_PERSIST_SESSION.to_string()),
+                edgerun_json::serde_json::Value::String(MCP_TOOL_APPROVAL_PERSIST_SESSION.to_string()),
             );
         }
         (false, true) => {
             meta.insert(
                 MCP_TOOL_APPROVAL_PERSIST_KEY.to_string(),
-                serde_json::Value::String(MCP_TOOL_APPROVAL_PERSIST_ALWAYS.to_string()),
+                edgerun_json::serde_json::Value::String(MCP_TOOL_APPROVAL_PERSIST_ALWAYS.to_string()),
             );
         }
         (false, false) => {}
@@ -1756,13 +1756,13 @@ fn build_mcp_tool_approval_elicitation_meta(
         if let Some(tool_title) = metadata.tool_title.as_ref() {
             meta.insert(
                 MCP_TOOL_APPROVAL_TOOL_TITLE_KEY.to_string(),
-                serde_json::Value::String(tool_title.clone()),
+                edgerun_json::serde_json::Value::String(tool_title.clone()),
             );
         }
         if let Some(tool_description) = metadata.tool_description.as_ref() {
             meta.insert(
                 MCP_TOOL_APPROVAL_TOOL_DESCRIPTION_KEY.to_string(),
-                serde_json::Value::String(tool_description.clone()),
+                edgerun_json::serde_json::Value::String(tool_description.clone()),
             );
         }
         if server == CODEX_APPS_MCP_SERVER_NAME
@@ -1772,24 +1772,24 @@ fn build_mcp_tool_approval_elicitation_meta(
         {
             meta.insert(
                 MCP_TOOL_APPROVAL_SOURCE_KEY.to_string(),
-                serde_json::Value::String(MCP_TOOL_APPROVAL_SOURCE_CONNECTOR.to_string()),
+                edgerun_json::serde_json::Value::String(MCP_TOOL_APPROVAL_SOURCE_CONNECTOR.to_string()),
             );
             if let Some(connector_id) = metadata.connector_id.as_deref() {
                 meta.insert(
                     MCP_TOOL_APPROVAL_CONNECTOR_ID_KEY.to_string(),
-                    serde_json::Value::String(connector_id.to_string()),
+                    edgerun_json::serde_json::Value::String(connector_id.to_string()),
                 );
             }
             if let Some(connector_name) = metadata.connector_name.as_ref() {
                 meta.insert(
                     MCP_TOOL_APPROVAL_CONNECTOR_NAME_KEY.to_string(),
-                    serde_json::Value::String(connector_name.clone()),
+                    edgerun_json::serde_json::Value::String(connector_name.clone()),
                 );
             }
             if let Some(connector_description) = metadata.connector_description.as_ref() {
                 meta.insert(
                     MCP_TOOL_APPROVAL_CONNECTOR_DESCRIPTION_KEY.to_string(),
-                    serde_json::Value::String(connector_description.clone()),
+                    edgerun_json::serde_json::Value::String(connector_description.clone()),
                 );
             }
         }
@@ -1801,18 +1801,18 @@ fn build_mcp_tool_approval_elicitation_meta(
         );
     }
     if let Some(tool_params_display) = tool_params_display
-        && let Ok(tool_params_display) = serde_json::to_value(tool_params_display)
+        && let Ok(tool_params_display) = edgerun_json::serde_json::to_value(tool_params_display)
     {
         meta.insert(
             MCP_TOOL_APPROVAL_TOOL_PARAMS_DISPLAY_KEY.to_string(),
             tool_params_display,
         );
     }
-    (!meta.is_empty()).then_some(serde_json::Value::Object(meta))
+    (!meta.is_empty()).then_some(edgerun_json::serde_json::Value::Object(meta))
 }
 
 fn build_mcp_tool_approval_display_params(
-    tool_params: Option<&serde_json::Value>,
+    tool_params: Option<&edgerun_json::serde_json::Value>,
 ) -> Option<Vec<crate::mcp_tool_approval_templates::RenderedMcpToolApprovalParam>> {
     let tool_params = tool_params?.as_object()?;
     let mut display_params = tool_params
@@ -1841,9 +1841,9 @@ fn parse_mcp_tool_approval_elicitation_response(
             match response
                 .meta
                 .as_ref()
-                .and_then(serde_json::Value::as_object)
+                .and_then(edgerun_json::serde_json::Value::as_object)
                 .and_then(|meta| meta.get(MCP_TOOL_APPROVAL_PERSIST_KEY))
-                .and_then(serde_json::Value::as_str)
+                .and_then(edgerun_json::serde_json::Value::as_str)
             {
                 Some(MCP_TOOL_APPROVAL_PERSIST_SESSION) => {
                     return McpToolApprovalDecision::AcceptForSession;
@@ -1868,7 +1868,7 @@ fn parse_mcp_tool_approval_elicitation_response(
 }
 
 fn request_user_input_response_from_elicitation_content(
-    content: Option<serde_json::Value>,
+    content: Option<edgerun_json::serde_json::Value>,
 ) -> Option<RequestUserInputResponse> {
     let Some(content) = content else {
         return Some(RequestUserInputResponse {
@@ -1880,8 +1880,8 @@ fn request_user_input_response_from_elicitation_content(
         .iter()
         .filter_map(|(question_id, value)| {
             let answers = match value {
-                serde_json::Value::String(answer) => vec![answer.clone()],
-                serde_json::Value::Array(values) => values
+                edgerun_json::serde_json::Value::String(answer) => vec![answer.clone()],
+                edgerun_json::serde_json::Value::Array(values) => values
                     .iter()
                     .filter_map(|value| value.as_str().map(ToString::to_string))
                     .collect(),

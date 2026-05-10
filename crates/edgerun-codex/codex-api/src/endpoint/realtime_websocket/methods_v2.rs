@@ -25,7 +25,7 @@ use crate::endpoint::realtime_websocket::protocol::SessionTurnDetection;
 use crate::endpoint::realtime_websocket::protocol::SessionType;
 use crate::endpoint::realtime_websocket::protocol::SessionUpdateSession;
 use crate::endpoint::realtime_websocket::protocol::TurnDetectionType;
-use serde_json::json;
+use edgerun_json::serde_json::json;
 
 const REALTIME_V2_OUTPUT_MODALITY_AUDIO: &str = "audio";
 const REALTIME_V2_OUTPUT_MODALITY_TEXT: &str = "text";

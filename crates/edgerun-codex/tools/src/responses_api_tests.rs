@@ -10,7 +10,7 @@ use crate::ToolDefinition;
 use crate::ToolName;
 use codex_protocol::dynamic_tools::DynamicToolSpec;
 use pretty_assertions::assert_eq;
-use serde_json::json;
+use edgerun_json::serde_json::json;
 use std::collections::BTreeMap;
 
 #[test]
@@ -149,7 +149,7 @@ fn loadable_tool_spec_namespace_serializes_with_deferred_child_tools() {
         })],
     });
 
-    let value = serde_json::to_value(namespace).expect("serialize namespace");
+    let value = edgerun_json::serde_json::to_value(namespace).expect("serialize namespace");
 
     assert_eq!(
         value,

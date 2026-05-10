@@ -15,17 +15,17 @@ fn config_schema_matches_fixture() {
     let fixture_path = codex_utils_cargo_bin::find_resource!("config.schema.json")
         .expect("resolve config schema fixture path");
     let fixture = std::fs::read_to_string(fixture_path).expect("read config schema fixture");
-    let fixture_value: serde_json::Value =
-        serde_json::from_str(&fixture).expect("parse config schema fixture");
+    let fixture_value: edgerun_json::serde_json::Value =
+        edgerun_json::serde_json::from_str(&fixture).expect("parse config schema fixture");
     let schema_json = config_schema_json().expect("serialize config schema");
-    let schema_value: serde_json::Value =
-        serde_json::from_slice(&schema_json).expect("decode schema json");
+    let schema_value: edgerun_json::serde_json::Value =
+        edgerun_json::serde_json::from_slice(&schema_json).expect("decode schema json");
     let fixture_value = canonicalize(&fixture_value);
     let schema_value = canonicalize(&schema_value);
     if fixture_value != schema_value {
         let expected =
-            serde_json::to_string_pretty(&fixture_value).expect("serialize fixture json");
-        let actual = serde_json::to_string_pretty(&schema_value).expect("serialize schema json");
+            edgerun_json::serde_json::to_string_pretty(&fixture_value).expect("serialize fixture json");
+        let actual = edgerun_json::serde_json::to_string_pretty(&schema_value).expect("serialize schema json");
         let diff = TextDiff::from_lines(&expected, &actual)
             .unified_diff()
             .header("fixture", "generated")
@@ -57,8 +57,8 @@ Run `just write-config-schema` to overwrite with your changes.\n\n{diff}"
 #[test]
 fn config_schema_hides_unsupported_inline_mcp_bearer_token() {
     let schema_json = config_schema_json().expect("serialize config schema");
-    let schema_value: serde_json::Value =
-        serde_json::from_slice(&schema_json).expect("decode schema json");
+    let schema_value: edgerun_json::serde_json::Value =
+        edgerun_json::serde_json::from_slice(&schema_json).expect("decode schema json");
     let properties = schema_value
         .pointer("/definitions/RawMcpServerConfig/properties")
         .expect("RawMcpServerConfig properties should exist")

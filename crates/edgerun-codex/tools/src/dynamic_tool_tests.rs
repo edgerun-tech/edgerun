@@ -11,7 +11,7 @@ fn parse_dynamic_tool_sanitizes_input_schema() {
         namespace: None,
         name: "lookup_ticket".to_string(),
         description: "Fetch a ticket".to_string(),
-        input_schema: serde_json::json!({
+        input_schema: edgerun_json::serde_json::json!({
             "properties": {
                 "id": {
                     "description": "Ticket identifier"
@@ -46,7 +46,7 @@ fn parse_dynamic_tool_preserves_defer_loading() {
         namespace: None,
         name: "lookup_ticket".to_string(),
         description: "Fetch a ticket".to_string(),
-        input_schema: serde_json::json!({
+        input_schema: edgerun_json::serde_json::json!({
             "type": "object",
             "properties": {}
         }),

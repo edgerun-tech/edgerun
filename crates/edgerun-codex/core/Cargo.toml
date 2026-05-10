@@ -22,7 +22,8 @@ codex-protocol = { workspace = true }
 codex-shell-command = { workspace = true }
 codex-tools = { workspace = true }
 edgerun-error = { workspace = true }
-edgerun-json = { workspace = true }
+edgerun-json = { workspace = true, features = ["serde-compat"] }
 edgerun-random = { workspace = true }
+edgerun-shlex = { workspace = true }
 edgerun-time = { workspace = true }
 edgerun-tokio-tungstenite = { workspace = true }

@@ -21,8 +21,8 @@ use codex_protocol::protocol::RolloutLine;
 use schemars::JsonSchema;
 use schemars::schema_for;
 use serde::Serialize;
-use serde_json::Map;
-use serde_json::Value;
+use edgerun_json::serde_json::Map;
+use edgerun_json::serde_json::Value;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -700,7 +700,7 @@ fn json_files_in_recursive(dir: &Path) -> Result<Vec<PathBuf>> {
 fn read_json_value(path: &Path) -> Result<Value> {
     let content =
         fs::read_to_string(path).with_context(|| format!("Failed to read {}", path.display()))?;
-    serde_json::from_str(&content).with_context(|| format!("Failed to parse {}", path.display()))
+    edgerun_json::serde_json::from_str(&content).with_context(|| format!("Failed to parse {}", path.display()))
 }
 
 fn split_type_alias(content: &str) -> Option<(String, String, String)> {
@@ -1318,7 +1318,7 @@ where
     let include_in_json_codegen =
         raw_namespace != Some("v1") || JSON_V1_ALLOWLIST.contains(&logical_name);
     let schema = schema_for!(T);
-    let mut schema_value = serde_json::to_value(schema)?;
+    let mut schema_value = edgerun_json::serde_json::to_value(schema)?;
     if include_in_json_codegen {
         if file_stem == "ClientRequest" {
             strip_v1_client_request_variants_from_json_schema(&mut schema_value);
@@ -1525,7 +1525,7 @@ where
 }
 
 fn write_pretty_json(path: PathBuf, value: &impl Serialize) -> Result<()> {
-    let json = serde_json::to_vec_pretty(value)
+    let json = edgerun_json::serde_json::to_vec_pretty(value)
         .with_context(|| format!("Failed to serialize JSON schema to {}", path.display()))?;
     fs::write(&path, json).with_context(|| format!("Failed to write {}", path.display()))?;
     Ok(())
@@ -2395,7 +2395,7 @@ mod tests {
                 namespace: None,
                 logical_name: "LegacyEnvelope".to_string(),
                 in_v1_dir: false,
-                value: serde_json::json!({
+                value: edgerun_json::serde_json::json!({
                     "title": "LegacyEnvelope",
                     "type": "object",
                     "properties": {
@@ -2421,7 +2421,7 @@ mod tests {
                 namespace: Some("v2".to_string()),
                 logical_name: "ThreadId".to_string(),
                 in_v1_dir: false,
-                value: serde_json::json!({
+                value: edgerun_json::serde_json::json!({
                     "title": "ThreadId",
                     "type": "string"
                 }),
@@ -2430,7 +2430,7 @@ mod tests {
                 namespace: Some("v2".to_string()),
                 logical_name: "MessagePhase".to_string(),
                 in_v1_dir: false,
-                value: serde_json::json!({
+                value: edgerun_json::serde_json::json!({
                     "title": "MessagePhase",
                     "type": "string"
                 }),
@@ -2439,7 +2439,7 @@ mod tests {
                 namespace: Some("v2".to_string()),
                 logical_name: "UserInput".to_string(),
                 in_v1_dir: false,
-                value: serde_json::json!({
+                value: edgerun_json::serde_json::json!({
                     "title": "UserInput",
                     "type": "string"
                 }),
@@ -2448,23 +2448,23 @@ mod tests {
 
         assert_eq!(
             bundle["definitions"]["LegacyEnvelope"]["properties"]["current_thread"]["$ref"],
-            serde_json::json!("#/definitions/v2/ThreadId")
+            edgerun_json::serde_json::json!("#/definitions/v2/ThreadId")
         );
         assert_eq!(
             bundle["definitions"]["LegacyEnvelope"]["properties"]["turn_item"]["$ref"],
-            serde_json::json!("#/definitions/TurnItem")
+            edgerun_json::serde_json::json!("#/definitions/TurnItem")
         );
         assert_eq!(
             bundle["definitions"]["TurnItem"]["properties"]["thread_id"]["$ref"],
-            serde_json::json!("#/definitions/v2/ThreadId")
+            edgerun_json::serde_json::json!("#/definitions/v2/ThreadId")
         );
         assert_eq!(
             bundle["definitions"]["TurnItem"]["properties"]["phase"]["$ref"],
-            serde_json::json!("#/definitions/v2/MessagePhase")
+            edgerun_json::serde_json::json!("#/definitions/v2/MessagePhase")
         );
         assert_eq!(
             bundle["definitions"]["TurnItem"]["properties"]["content"]["items"]["$ref"],
-            serde_json::json!("#/definitions/v2/UserInput")
+            edgerun_json::serde_json::json!("#/definitions/v2/UserInput")
         );
 
         Ok(())
@@ -2472,7 +2472,7 @@ mod tests {
 
     #[test]
     fn build_flat_v2_schema_keeps_shared_root_schemas_and_dependencies() -> Result<()> {
-        let bundle = serde_json::json!({
+        let bundle = edgerun_json::serde_json::json!({
             "$schema": "http://json-schema.org/draft-07/schema#",
             "title": "CodexAppServerProtocol",
             "type": "object",
@@ -2590,7 +2590,7 @@ mod tests {
 
         assert_eq!(
             flat_bundle["title"],
-            serde_json::json!("CodexAppServerProtocolV2")
+            edgerun_json::serde_json::json!("CodexAppServerProtocolV2")
         );
         assert_eq!(definitions.contains_key("v2"), false);
         assert_eq!(definitions.contains_key("ThreadStartParams"), true);
@@ -2813,7 +2813,7 @@ permissionProfile?: PermissionProfile | null};
         let mut bundle = build_schema_bundle(vec![schema])?;
         filter_experimental_schema(&mut bundle)?;
 
-        let bundle_str = serde_json::to_string(&bundle)?;
+        let bundle_str = edgerun_json::serde_json::to_string(&bundle)?;
         assert_eq!(bundle_str.contains("mock/experimentalMethod"), false);
         let _cleanup = fs::remove_dir_all(&output_dir);
         Ok(())

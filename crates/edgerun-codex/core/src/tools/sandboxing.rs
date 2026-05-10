@@ -48,7 +48,7 @@ impl ApprovalStore {
     where
         K: Serialize,
     {
-        let s = serde_json::to_string(key).ok()?;
+        let s = edgerun_json::serde_json::to_string(key).ok()?;
         self.map.get(&s).cloned()
     }
 
@@ -56,7 +56,7 @@ impl ApprovalStore {
     where
         K: Serialize,
     {
-        if let Ok(s) = serde_json::to_string(&key) {
+        if let Ok(s) = edgerun_json::serde_json::to_string(&key) {
             self.map.insert(s, value);
         }
     }
@@ -135,23 +135,23 @@ pub(crate) struct ApprovalCtx<'a> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PermissionRequestPayload {
     pub tool_name: HookToolName,
-    pub tool_input: serde_json::Value,
+    pub tool_input: edgerun_json::serde_json::Value,
 }
 
 impl PermissionRequestPayload {
     pub(crate) fn bash(command: String, description: Option<String>) -> Self {
-        let mut tool_input = serde_json::Map::new();
-        tool_input.insert("command".to_string(), serde_json::Value::String(command));
+        let mut tool_input = edgerun_json::serde_json::Map::new();
+        tool_input.insert("command".to_string(), edgerun_json::serde_json::Value::String(command));
         if let Some(description) = description {
             tool_input.insert(
                 "description".to_string(),
-                serde_json::Value::String(description),
+                edgerun_json::serde_json::Value::String(description),
             );
         }
 
         Self {
             tool_name: HookToolName::bash(),
-            tool_input: serde_json::Value::Object(tool_input),
+            tool_input: edgerun_json::serde_json::Value::Object(tool_input),
         }
     }
 }

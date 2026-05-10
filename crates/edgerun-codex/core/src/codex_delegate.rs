@@ -24,7 +24,7 @@ use codex_protocol::request_permissions::RequestPermissionsResponse;
 use codex_protocol::request_user_input::RequestUserInputArgs;
 use codex_protocol::request_user_input::RequestUserInputResponse;
 use codex_protocol::user_input::UserInput;
-use serde_json::Value;
+use edgerun_json::serde_json::Value;
 use std::time::Duration;
 use tokio::sync::Mutex;
 use tokio::time::timeout;

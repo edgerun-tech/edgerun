@@ -11,8 +11,8 @@ use codex_protocol::protocol::RealtimeNoopRequested;
 use codex_protocol::protocol::RealtimeResponseCancelled;
 use codex_protocol::protocol::RealtimeResponseCreated;
 use codex_protocol::protocol::RealtimeResponseDone;
-use serde_json::Map as JsonMap;
-use serde_json::Value;
+use edgerun_json::serde_json::Map as JsonMap;
+use edgerun_json::serde_json::Value;
 use tracing::debug;
 
 const BACKGROUND_AGENT_TOOL_NAME: &str = "background_agent";
@@ -193,7 +193,7 @@ fn extract_input_transcript(arguments: &str) -> String {
         return String::new();
     }
 
-    if let Ok(arguments_json) = serde_json::from_str::<Value>(arguments)
+    if let Ok(arguments_json) = edgerun_json::serde_json::from_str::<Value>(arguments)
         && let Some(arguments_object) = arguments_json.as_object()
     {
         for key in TOOL_ARGUMENT_KEYS {

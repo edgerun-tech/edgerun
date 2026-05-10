@@ -13,7 +13,7 @@ use eventsource_stream::Eventsource;
 use futures::StreamExt;
 use futures::TryStreamExt;
 use serde::Deserialize;
-use serde_json::Value;
+use edgerun_json::serde_json::Value;
 use std::io::BufRead;
 use std::path::Path;
 use std::sync::Arc;
@@ -300,7 +300,7 @@ pub fn process_responses_event(
     match event.kind.as_str() {
         "response.output_item.done" => {
             if let Some(item_val) = event.item {
-                if let Ok(item) = serde_json::from_value::<ResponseItem>(item_val) {
+                if let Ok(item) = edgerun_json::serde_json::from_value::<ResponseItem>(item_val) {
                     return Ok(Some(ResponseEvent::OutputItemDone(item)));
                 }
                 debug!("failed to parse ResponseItem from output_item.done");
@@ -347,7 +347,7 @@ pub fn process_responses_event(
             if let Some(resp_val) = event.response {
                 let mut response_error = ApiError::Stream("response.failed event received".into());
                 if let Some(error) = resp_val.get("error")
-                    && let Ok(error) = serde_json::from_value::<Error>(error.clone())
+                    && let Ok(error) = edgerun_json::serde_json::from_value::<Error>(error.clone())
                 {
                     if is_context_window_error(&error) {
                         response_error = ApiError::ContextWindowExceeded;
@@ -391,7 +391,7 @@ pub fn process_responses_event(
         }
         "response.completed" => {
             if let Some(resp_val) = event.response {
-                match serde_json::from_value::<ResponseCompleted>(resp_val) {
+                match edgerun_json::serde_json::from_value::<ResponseCompleted>(resp_val) {
                     Ok(resp) => {
                         return Ok(Some(ResponseEvent::Completed {
                             response_id: resp.id,
@@ -409,7 +409,7 @@ pub fn process_responses_event(
         }
         "response.output_item.added" => {
             if let Some(item_val) = event.item {
-                if let Ok(item) = serde_json::from_value::<ResponseItem>(item_val) {
+                if let Ok(item) = edgerun_json::serde_json::from_value::<ResponseItem>(item_val) {
                     return Ok(Some(ResponseEvent::OutputItemAdded(item)));
                 }
                 debug!("failed to parse ResponseItem from output_item.added");
@@ -470,7 +470,7 @@ pub async fn process_sse(
 
         trace!("SSE event: {}", &sse.data);
 
-        let event: ResponsesStreamEvent = match serde_json::from_str(&sse.data) {
+        let event: ResponsesStreamEvent = match edgerun_json::serde_json::from_str(&sse.data) {
             Ok(event) => event,
             Err(e) => {
                 debug!("Failed to parse SSE event: {e}, data: {}", &sse.data);
@@ -611,7 +611,7 @@ mod tests {
     use http::HeaderValue;
     use http::StatusCode;
     use pretty_assertions::assert_eq;
-    use serde_json::json;
+    use edgerun_json::serde_json::json;
     use tokio::sync::mpsc;
     use tokio_test::io::Builder as IoBuilder;
 
@@ -639,7 +639,7 @@ mod tests {
         events
     }
 
-    async fn run_sse(events: Vec<serde_json::Value>) -> Vec<ResponseEvent> {
+    async fn run_sse(events: Vec<edgerun_json::serde_json::Value>) -> Vec<ResponseEvent> {
         let mut body = String::new();
         for e in events {
             let kind = e
@@ -1006,7 +1006,7 @@ mod tests {
     async fn table_driven_event_kinds() {
         struct TestCase {
             name: &'static str,
-            event: serde_json::Value,
+            event: edgerun_json::serde_json::Value,
             expect_first: fn(&ResponseEvent) -> bool,
             expected_len: usize,
         }
@@ -1259,7 +1259,7 @@ mod tests {
 
     #[test]
     fn responses_stream_event_response_model_reads_top_level_headers() {
-        let ev: ResponsesStreamEvent = serde_json::from_value(json!({
+        let ev: ResponsesStreamEvent = edgerun_json::serde_json::from_value(json!({
             "type": "response.metadata",
             "headers": {
                 "openai-model": CYBER_RESTRICTED_MODEL_FOR_TESTS,
@@ -1275,7 +1275,7 @@ mod tests {
 
     #[test]
     fn responses_stream_event_response_model_prefers_response_headers() {
-        let ev: ResponsesStreamEvent = serde_json::from_value(json!({
+        let ev: ResponsesStreamEvent = edgerun_json::serde_json::from_value(json!({
             "type": "response.created",
             "headers": {
                 "openai-model": "top-level-model"
@@ -1306,7 +1306,7 @@ mod tests {
             }
         });
         let event: ResponsesStreamEvent =
-            serde_json::from_value(event).expect("expected event to deserialize");
+            edgerun_json::serde_json::from_value(event).expect("expected event to deserialize");
 
         assert_eq!(
             event.model_verifications(),
@@ -1323,7 +1323,7 @@ mod tests {
             }
         });
         let event: ResponsesStreamEvent =
-            serde_json::from_value(event).expect("expected event to deserialize");
+            edgerun_json::serde_json::from_value(event).expect("expected event to deserialize");
 
         assert_eq!(event.model_verifications(), None);
     }
@@ -1337,7 +1337,7 @@ mod tests {
             }
         });
         let event: ResponsesStreamEvent =
-            serde_json::from_value(event).expect("expected event to deserialize");
+            edgerun_json::serde_json::from_value(event).expect("expected event to deserialize");
 
         assert_eq!(event.model_verifications(), None);
     }

@@ -179,7 +179,7 @@ async fn run_remote_compact_task_inner_impl(
     };
 
     let turn_metadata_header = turn_context.turn_metadata_state.current_header_value();
-    let trace_attempt = compaction_trace.start_attempt(&serde_json::json!({
+    let trace_attempt = compaction_trace.start_attempt(&edgerun_json::serde_json::json!({
         "model": turn_context.model_info.slug.as_str(),
         "instructions": prompt.base_instructions.text.as_str(),
         "input": &prompt.input,

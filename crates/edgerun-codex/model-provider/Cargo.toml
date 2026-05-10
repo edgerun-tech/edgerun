@@ -20,6 +20,7 @@ codex-model-provider-info = { workspace = true }
 codex-models-manager = { workspace = true }
 codex-protocol = { workspace = true }
 codex-response-debug-context = { workspace = true }
+edgerun-json = { workspace = true, features = ["serde-compat"] }
 http = { workspace = true }
 reqwest = { workspace = true, features = ["json", "stream"] }
 tokio = { workspace = true, features = ["sync", "time"] }

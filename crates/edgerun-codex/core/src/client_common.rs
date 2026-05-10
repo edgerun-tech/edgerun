@@ -7,7 +7,7 @@ use codex_protocol::models::ResponseItem;
 use codex_tools::ToolSpec;
 use futures::Stream;
 use serde::Deserialize;
-use serde_json::Value;
+use edgerun_json::serde_json::Value;
 use std::collections::HashSet;
 use std::pin::Pin;
 use std::task::Context;
@@ -142,7 +142,7 @@ struct ExecOutputMetadataJson {
 }
 
 fn parse_structured_shell_output(raw: &str) -> Option<String> {
-    let parsed: ExecOutputJson = serde_json::from_str(raw).ok()?;
+    let parsed: ExecOutputJson = edgerun_json::serde_json::from_str(raw).ok()?;
     Some(build_structured_output(&parsed))
 }
 

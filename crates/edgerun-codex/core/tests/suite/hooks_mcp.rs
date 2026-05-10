@@ -22,8 +22,8 @@ use core_test_support::skip_if_no_network;
 use core_test_support::stdio_server_bin;
 use core_test_support::test_codex::test_codex;
 use pretty_assertions::assert_eq;
-use serde_json::Value;
-use serde_json::json;
+use edgerun_json::serde_json::Value;
+use edgerun_json::serde_json::json;
 
 const RMCP_SERVER: &str = "rmcp";
 const RMCP_NAMESPACE: &str = "mcp__rmcp__";
@@ -34,7 +34,7 @@ const RMCP_ECHO_MESSAGE: &str = "hook e2e ping";
 fn write_pre_tool_use_hook(home: &Path, reason: &str) -> Result<()> {
     let script_path = home.join("pre_tool_use_hook.py");
     let log_path = home.join("pre_tool_use_hook_log.jsonl");
-    let reason_json = serde_json::to_string(reason).context("serialize pre tool use reason")?;
+    let reason_json = edgerun_json::serde_json::to_string(reason).context("serialize pre tool use reason")?;
     let script = format!(
         r#"import json
 from pathlib import Path
@@ -56,7 +56,7 @@ print(json.dumps({{
         log_path = log_path.display(),
         reason_json = reason_json,
     );
-    let hooks = serde_json::json!({
+    let hooks = edgerun_json::serde_json::json!({
         "hooks": {
             "PreToolUse": [{
                 "matcher": RMCP_HOOK_MATCHER,
@@ -78,7 +78,7 @@ fn write_post_tool_use_hook(home: &Path, additional_context: &str) -> Result<()>
     let script_path = home.join("post_tool_use_hook.py");
     let log_path = home.join("post_tool_use_hook_log.jsonl");
     let additional_context_json =
-        serde_json::to_string(additional_context).context("serialize post tool use context")?;
+        edgerun_json::serde_json::to_string(additional_context).context("serialize post tool use context")?;
     let script = format!(
         r#"import json
 from pathlib import Path
@@ -99,7 +99,7 @@ print(json.dumps({{
         log_path = log_path.display(),
         additional_context_json = additional_context_json,
     );
-    let hooks = serde_json::json!({
+    let hooks = edgerun_json::serde_json::json!({
         "hooks": {
             "PostToolUse": [{
                 "matcher": RMCP_HOOK_MATCHER,
@@ -122,7 +122,7 @@ fn read_hook_inputs(home: &Path, log_name: &str) -> Result<Vec<Value>> {
         .with_context(|| format!("read {log_name}"))?
         .lines()
         .filter(|line| !line.trim().is_empty())
-        .map(|line| serde_json::from_str(line).with_context(|| format!("parse {log_name} line")))
+        .map(|line| edgerun_json::serde_json::from_str(line).with_context(|| format!("parse {log_name} line")))
         .collect()
 }
 

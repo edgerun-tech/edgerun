@@ -167,11 +167,11 @@ mod tests {
     #[test]
     fn plan_type_deserializes_raw_aliases() {
         assert_eq!(
-            serde_json::from_str::<PlanType>("\"hc\"").expect("hc should deserialize"),
+            edgerun_json::serde_json::from_str::<PlanType>("\"hc\"").expect("hc should deserialize"),
             PlanType::Known(KnownPlan::Enterprise)
         );
         assert_eq!(
-            serde_json::from_str::<PlanType>("\"education\"")
+            edgerun_json::serde_json::from_str::<PlanType>("\"education\"")
                 .expect("education should deserialize"),
             PlanType::Known(KnownPlan::Edu)
         );

@@ -135,7 +135,7 @@ async fn cyber_policy_response_emits_typed_error_without_retry() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
-    let response = ResponseTemplate::new(400).set_body_json(serde_json::json!({
+    let response = ResponseTemplate::new(400).set_body_json(edgerun_json::serde_json::json!({
         "error": {
             "message": CYBER_POLICY_MESSAGE,
             "type": "invalid_request",
@@ -170,7 +170,7 @@ async fn response_model_field_mismatch_emits_warning_when_header_matches_request
 
     let server = start_mock_server().await;
     let response = sse_response(sse(vec![
-        serde_json::json!({
+        edgerun_json::serde_json::json!({
             "type": "response.created",
             "response": {
                 "id": "resp-1",
@@ -231,7 +231,7 @@ async fn openai_model_header_mismatch_only_emits_one_warning_per_turn() -> Resul
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
-    let tool_args = serde_json::json!({
+    let tool_args = edgerun_json::serde_json::json!({
         "command": "echo hello",
         "timeout_ms": 1_000
     });
@@ -241,7 +241,7 @@ async fn openai_model_header_mismatch_only_emits_one_warning_per_turn() -> Resul
         ev_function_call(
             "call-1",
             "shell_command",
-            &serde_json::to_string(&tool_args)?,
+            &edgerun_json::serde_json::to_string(&tool_args)?,
         ),
         core_test_support::responses::ev_completed("resp-1"),
     ]))
@@ -384,7 +384,7 @@ async fn model_verification_only_emits_once_per_turn() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
-    let tool_args = serde_json::json!({
+    let tool_args = edgerun_json::serde_json::json!({
         "command": "echo hello",
         "timeout_ms": 1_000
     });
@@ -394,7 +394,7 @@ async fn model_verification_only_emits_once_per_turn() -> Result<()> {
         ev_function_call(
             "call-1",
             "shell_command",
-            &serde_json::to_string(&tool_args)?,
+            &edgerun_json::serde_json::to_string(&tool_args)?,
         ),
         ev_model_verification_metadata("resp-1", vec![TRUSTED_ACCESS_FOR_CYBER_VERIFICATION]),
         core_test_support::responses::ev_completed("resp-1"),

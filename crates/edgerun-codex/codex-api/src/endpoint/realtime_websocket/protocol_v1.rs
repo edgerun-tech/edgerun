@@ -6,7 +6,7 @@ use crate::endpoint::realtime_websocket::protocol_common::parse_transcript_done_
 use codex_protocol::protocol::RealtimeAudioFrame;
 use codex_protocol::protocol::RealtimeEvent;
 use codex_protocol::protocol::RealtimeHandoffRequested;
-use serde_json::Value;
+use edgerun_json::serde_json::Value;
 use tracing::debug;
 
 pub(super) fn parse_realtime_event_v1(payload: &str) -> Option<RealtimeEvent> {

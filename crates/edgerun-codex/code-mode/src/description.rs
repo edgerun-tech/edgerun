@@ -1,7 +1,7 @@
 use codex_protocol::ToolName;
 use serde::Deserialize;
 use serde::Serialize;
-use serde_json::Value as JsonValue;
+use edgerun_json::serde_json::Value as JsonValue;
 use std::collections::BTreeMap;
 
 use crate::PUBLIC_TOOL_NAME;
@@ -196,7 +196,7 @@ pub fn parse_exec_source(input: &str) -> Result<ParsedExecSource, String> {
         );
     }
 
-    let value: serde_json::Value = serde_json::from_str(directive).map_err(|err| {
+    let value: edgerun_json::serde_json::Value = edgerun_json::serde_json::from_str(directive).map_err(|err| {
         format!(
             "exec pragma must be valid JSON with supported fields `yield_time_ms` and `max_output_tokens`: {err}"
         )
@@ -216,7 +216,7 @@ pub fn parse_exec_source(input: &str) -> Result<ParsedExecSource, String> {
         }
     }
 
-    let pragma: CodeModeExecPragma = serde_json::from_value(value).map_err(|err| {
+    let pragma: CodeModeExecPragma = edgerun_json::serde_json::from_value(value).map_err(|err| {
         format!(
             "exec pragma fields `yield_time_ms` and `max_output_tokens` must be non-negative safe integers: {err}"
         )
@@ -564,7 +564,7 @@ fn render_json_schema_to_typescript_inner(schema: &JsonValue) -> String {
 }
 
 fn render_json_schema_type_keyword(
-    map: &serde_json::Map<String, JsonValue>,
+    map: &edgerun_json::serde_json::Map<String, JsonValue>,
     schema_type: &str,
 ) -> String {
     match schema_type {
@@ -578,7 +578,7 @@ fn render_json_schema_type_keyword(
     }
 }
 
-fn render_json_schema_array(map: &serde_json::Map<String, JsonValue>) -> String {
+fn render_json_schema_array(map: &edgerun_json::serde_json::Map<String, JsonValue>) -> String {
     if let Some(items) = map.get("items") {
         let item_type = render_json_schema_to_typescript_inner(items);
         return format!("Array<{item_type}>");
@@ -599,8 +599,8 @@ fn render_json_schema_array(map: &serde_json::Map<String, JsonValue>) -> String 
 
 fn append_additional_properties_line(
     lines: &mut Vec<String>,
-    map: &serde_json::Map<String, JsonValue>,
-    properties: &serde_json::Map<String, JsonValue>,
+    map: &edgerun_json::serde_json::Map<String, JsonValue>,
+    properties: &edgerun_json::serde_json::Map<String, JsonValue>,
     line_prefix: &str,
 ) {
     if let Some(additional_properties) = map.get("additionalProperties") {
@@ -636,7 +636,7 @@ fn render_json_schema_object_property(name: &str, value: &JsonValue, required: &
     format!("{property_name}{optional}: {property_type};")
 }
 
-fn render_json_schema_object(map: &serde_json::Map<String, JsonValue>) -> String {
+fn render_json_schema_object(map: &edgerun_json::serde_json::Map<String, JsonValue>) -> String {
     let required = map
         .get("required")
         .and_then(JsonValue::as_array)
@@ -700,12 +700,12 @@ fn render_json_schema_property_name(name: &str) -> String {
     if normalize_code_mode_identifier(name) == name {
         name.to_string()
     } else {
-        serde_json::to_string(name).unwrap_or_else(|_| format!("\"{}\"", name.replace('"', "\\\"")))
+        edgerun_json::serde_json::to_string(name).unwrap_or_else(|_| format!("\"{}\"", name.replace('"', "\\\"")))
     }
 }
 
 fn render_json_schema_literal(value: &JsonValue) -> String {
-    serde_json::to_string(value).unwrap_or_else(|_| "unknown".to_string())
+    edgerun_json::serde_json::to_string(value).unwrap_or_else(|_| "unknown".to_string())
 }
 
 #[cfg(test)]
@@ -720,8 +720,8 @@ mod tests {
     use super::parse_exec_source;
     use codex_protocol::ToolName;
     use pretty_assertions::assert_eq;
-    use serde_json::Value as JsonValue;
-    use serde_json::json;
+    use edgerun_json::serde_json::Value as JsonValue;
+    use edgerun_json::serde_json::json;
     use std::collections::BTreeMap;
 
     fn mcp_call_tool_result_schema(structured_content_schema: JsonValue) -> JsonValue {

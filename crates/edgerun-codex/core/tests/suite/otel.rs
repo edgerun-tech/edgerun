@@ -272,7 +272,7 @@ async fn process_sse_failed_event_records_response_error_message() {
 
     mount_sse_once(
         &server,
-        sse(vec![serde_json::json!({
+        sse(vec![edgerun_json::serde_json::json!({
             "type": "response.failed",
             "response": {
                 "error": {
@@ -339,7 +339,7 @@ async fn process_sse_failed_event_logs_parse_error() {
 
     mount_sse_once(
         &server,
-        sse(vec![serde_json::json!({
+        sse(vec![edgerun_json::serde_json::json!({
             "type": "response.failed",
             "response": {
                 "error": "not-an-object"
@@ -400,7 +400,7 @@ async fn process_sse_failed_event_logs_missing_error() {
 
     mount_sse_once(
         &server,
-        sse(vec![serde_json::json!({
+        sse(vec![edgerun_json::serde_json::json!({
             "type": "response.failed",
             "response": {}
         })]),
@@ -451,7 +451,7 @@ async fn process_sse_failed_event_logs_response_completed_parse_error() {
 
     mount_sse_once(
         &server,
-        sse(vec![serde_json::json!({
+        sse(vec![edgerun_json::serde_json::json!({
             "type": "response.completed",
             "response": {}
         })]),
@@ -514,7 +514,7 @@ async fn process_sse_emits_completed_telemetry() {
 
     mount_sse_once(
         &server,
-        sse(vec![serde_json::json!({
+        sse(vec![edgerun_json::serde_json::json!({
             "type": "response.completed",
             "response": {
                 "id": "resp1",
@@ -580,7 +580,7 @@ async fn turn_and_completed_response_spans_record_token_usage() {
 
     mount_sse_once(
         &server,
-        sse(vec![serde_json::json!({
+        sse(vec![edgerun_json::serde_json::json!({
             "type": "response.completed",
             "response": {
                 "id": "resp1",
@@ -747,7 +747,7 @@ async fn record_responses_sets_span_fields_for_response_events() {
 
     let sse_body = sse(vec![
         ev_response_created("resp-1"),
-        serde_json::json!({
+        edgerun_json::serde_json::json!({
             "type": "response.output_item.added",
             "item": {
                 "type": "function_call",
@@ -1002,7 +1002,7 @@ async fn handle_response_item_records_tool_result_for_local_shell_missing_ids() 
     mount_sse_once(
         &server,
         sse(vec![
-            serde_json::json!({
+            edgerun_json::serde_json::json!({
                 "type": "response.output_item.done",
                 "item": {
                     "type": "local_shell_call",

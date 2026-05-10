@@ -97,7 +97,7 @@ fn post_unified_exec_tool_use_payload(
     Some(PostToolUsePayload {
         tool_name: HookToolName::bash(),
         tool_use_id,
-        tool_input: serde_json::json!({ "command": command }),
+        tool_input: edgerun_json::serde_json::json!({ "command": command }),
         tool_response,
     })
 }

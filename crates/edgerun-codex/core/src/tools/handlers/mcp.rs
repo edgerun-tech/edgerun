@@ -14,7 +14,7 @@ use crate::tools::registry::PreToolUsePayload;
 use crate::tools::registry::ToolHandler;
 use crate::tools::registry::ToolKind;
 use codex_tools::ToolName;
-use serde_json::Value;
+use edgerun_json::serde_json::Value;
 
 pub struct McpHandler {
     tool_name: ToolName,
@@ -116,10 +116,10 @@ impl ToolHandler for McpHandler {
 
 fn mcp_hook_tool_input(raw_arguments: &str) -> Value {
     if raw_arguments.trim().is_empty() {
-        return Value::Object(serde_json::Map::new());
+        return Value::Object(edgerun_json::serde_json::Map::new());
     }
 
-    serde_json::from_str(raw_arguments).unwrap_or_else(|_| Value::String(raw_arguments.to_string()))
+    edgerun_json::serde_json::from_str(raw_arguments).unwrap_or_else(|_| Value::String(raw_arguments.to_string()))
 }
 
 #[cfg(test)]
@@ -129,7 +129,7 @@ mod tests {
     use crate::tools::context::ToolCallSource;
     use crate::turn_diff_tracker::TurnDiffTracker;
     use pretty_assertions::assert_eq;
-    use serde_json::json;
+    use edgerun_json::serde_json::json;
     use std::time::Duration;
     use tokio::sync::Mutex;
 

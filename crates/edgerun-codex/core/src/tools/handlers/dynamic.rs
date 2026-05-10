@@ -14,7 +14,7 @@ use codex_protocol::models::FunctionCallOutputContentItem;
 use codex_protocol::protocol::DynamicToolCallResponseEvent;
 use codex_protocol::protocol::EventMsg;
 use codex_tools::ToolName;
-use serde_json::Value;
+use edgerun_json::serde_json::Value;
 use std::time::Instant;
 use tokio::sync::oneshot;
 use tracing::warn;

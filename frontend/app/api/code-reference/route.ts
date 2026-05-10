@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises"
 import path from "node:path"
 import { NextRequest, NextResponse } from "next/server"
 
@@ -23,7 +22,33 @@ const EXTENSION_LANGUAGES: Record<string, string> = {
 }
 
 function workspaceRoot() {
-  return path.resolve(process.env.CODEX_WORKSPACE || path.resolve(process.cwd(), ".."))
+  if (process.env.CODEX_WORKSPACE) return normalizePath(process.env.CODEX_WORKSPACE)
+
+  const pwd = process.env.PWD || ""
+  if (pwd.endsWith("/frontend")) return normalizePath(pwd.slice(0, -"/frontend".length))
+  return ".."
+}
+
+function normalizePath(filePath: string) {
+  const absolute = filePath.startsWith("/")
+  const parts: string[] = []
+
+  for (const part of filePath.split("/")) {
+    if (!part || part === ".") continue
+    if (part === "..") {
+      if (parts.length > 0 && parts[parts.length - 1] !== "..") {
+        parts.pop()
+      } else if (!absolute) {
+        parts.push(part)
+      }
+      continue
+    }
+    parts.push(part)
+  }
+
+  const normalized = parts.join("/")
+  if (absolute) return `/${normalized}`
+  return normalized || "."
 }
 
 function parseTarget(target: string, explicitLine: string | null) {
@@ -36,9 +61,9 @@ function parseTarget(target: string, explicitLine: string | null) {
 }
 
 function safeAbsolutePath(root: string, filePath: string) {
-  const absolutePath = path.isAbsolute(filePath)
-    ? path.resolve(filePath)
-    : path.resolve(root, filePath)
+  const absolutePath = filePath.startsWith("/")
+    ? normalizePath(filePath)
+    : normalizePath(`${root}/${filePath}`)
 
   if (absolutePath !== root && !absolutePath.startsWith(`${root}${path.sep}`)) {
     return null
@@ -49,6 +74,11 @@ function safeAbsolutePath(root: string, filePath: string) {
 
 function languageFor(filePath: string) {
   return EXTENSION_LANGUAGES[path.extname(filePath).toLowerCase()] || "text"
+}
+
+async function readWorkspaceFile(filePath: string) {
+  const { readFile } = await import("node:fs/promises")
+  return await readFile(filePath, "utf8")
 }
 
 export async function GET(request: NextRequest) {
@@ -66,7 +96,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const text = await readFile(absolutePath, "utf8")
+    const text = await readWorkspaceFile(absolutePath)
     if (text.includes("\0")) {
       return NextResponse.json({ error: "Binary files cannot be previewed" }, { status: 415 })
     }

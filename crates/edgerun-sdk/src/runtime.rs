@@ -3188,28 +3188,32 @@ impl NativeFunction {
         name: &str,
         param_count: usize,
     ) -> Result<Self, String> {
-        match param_count {
-            0 => Ok(Self::Arity0(library.symbol(name)?)),
-            1 => Ok(Self::Arity1(library.symbol(name)?)),
-            2 => Ok(Self::Arity2(library.symbol(name)?)),
-            3 => Ok(Self::Arity3(library.symbol(name)?)),
-            4 => Ok(Self::Arity4(library.symbol(name)?)),
-            5 => Ok(Self::Arity5(library.symbol(name)?)),
-            _ => Err(format!(
-                "unsupported native function arity: {name}/{param_count}"
-            )),
+        unsafe {
+            match param_count {
+                0 => Ok(Self::Arity0(library.symbol(name)?)),
+                1 => Ok(Self::Arity1(library.symbol(name)?)),
+                2 => Ok(Self::Arity2(library.symbol(name)?)),
+                3 => Ok(Self::Arity3(library.symbol(name)?)),
+                4 => Ok(Self::Arity4(library.symbol(name)?)),
+                5 => Ok(Self::Arity5(library.symbol(name)?)),
+                _ => Err(format!(
+                    "unsupported native function arity: {name}/{param_count}"
+                )),
+            }
         }
     }
 
     unsafe fn call(&self, args: &[u32; 5]) -> i32 {
-        let arg = |index: usize| args[index] as i32;
-        match self {
-            Self::Arity0(func) => func(),
-            Self::Arity1(func) => func(arg(0)),
-            Self::Arity2(func) => func(arg(0), arg(1)),
-            Self::Arity3(func) => func(arg(0), arg(1), arg(2)),
-            Self::Arity4(func) => func(arg(0), arg(1), arg(2), arg(3)),
-            Self::Arity5(func) => func(arg(0), arg(1), arg(2), arg(3), arg(4)),
+        unsafe {
+            let arg = |index: usize| args[index] as i32;
+            match self {
+                Self::Arity0(func) => func(),
+                Self::Arity1(func) => func(arg(0)),
+                Self::Arity2(func) => func(arg(0), arg(1)),
+                Self::Arity3(func) => func(arg(0), arg(1), arg(2)),
+                Self::Arity4(func) => func(arg(0), arg(1), arg(2), arg(3)),
+                Self::Arity5(func) => func(arg(0), arg(1), arg(2), arg(3), arg(4)),
+            }
         }
     }
 }

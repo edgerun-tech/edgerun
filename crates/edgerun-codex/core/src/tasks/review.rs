@@ -192,13 +192,13 @@ async fn process_review_events(
 /// If parsing still fails, return a structured fallback carrying the plain text
 /// in `overall_explanation`.
 fn parse_review_output_event(text: &str) -> ReviewOutputEvent {
-    if let Ok(ev) = serde_json::from_str::<ReviewOutputEvent>(text) {
+    if let Ok(ev) = edgerun_json::serde_json::from_str::<ReviewOutputEvent>(text) {
         return ev;
     }
     if let (Some(start), Some(end)) = (text.find('{'), text.rfind('}'))
         && start < end
         && let Some(slice) = text.get(start..=end)
-        && let Ok(ev) = serde_json::from_str::<ReviewOutputEvent>(slice)
+        && let Ok(ev) = edgerun_json::serde_json::from_str::<ReviewOutputEvent>(slice)
     {
         return ev;
     }

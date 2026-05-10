@@ -10,7 +10,7 @@ use core_test_support::skip_if_no_network;
 use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
 use pretty_assertions::assert_eq;
-use serde_json::json;
+use edgerun_json::serde_json::json;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn quota_exceeded_emits_single_error_event() -> Result<()> {

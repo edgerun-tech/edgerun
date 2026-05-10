@@ -8,7 +8,7 @@ use crate::ResponsesApiTool;
 use crate::ToolName;
 use crate::ToolSpec;
 use pretty_assertions::assert_eq;
-use serde_json::json;
+use edgerun_json::serde_json::json;
 use std::collections::BTreeMap;
 
 #[test]

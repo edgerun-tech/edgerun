@@ -29,7 +29,7 @@ impl fmt::Display for RequestId {
     }
 }
 
-pub type Result = serde_json::Value;
+pub type Result = edgerun_json::serde_json::Value;
 
 /// Refers to any valid JSON-RPC object that can be decoded off the wire, or encoded to be sent.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, JsonSchema, TS)]
@@ -48,7 +48,7 @@ pub struct JSONRPCRequest {
     pub method: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
-    pub params: Option<serde_json::Value>,
+    pub params: Option<edgerun_json::serde_json::Value>,
     /// Optional W3C Trace Context for distributed tracing.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
@@ -61,7 +61,7 @@ pub struct JSONRPCNotification {
     pub method: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
-    pub params: Option<serde_json::Value>,
+    pub params: Option<edgerun_json::serde_json::Value>,
 }
 
 /// A successful (non-error) response to a request.
@@ -83,6 +83,6 @@ pub struct JSONRPCErrorError {
     pub code: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
-    pub data: Option<serde_json::Value>,
+    pub data: Option<edgerun_json::serde_json::Value>,
     pub message: String,
 }

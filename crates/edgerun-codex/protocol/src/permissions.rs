@@ -1857,19 +1857,19 @@ mod tests {
 
     #[test]
     fn legacy_current_working_directory_special_path_deserializes_as_project_roots()
-    -> serde_json::Result<()> {
-        let value = serde_json::json!({
+    -> edgerun_json::serde_json::Result<()> {
+        let value = edgerun_json::serde_json::json!({
             "kind": "current_working_directory",
         });
 
-        let special_path = serde_json::from_value::<FileSystemSpecialPath>(value)?;
+        let special_path = edgerun_json::serde_json::from_value::<FileSystemSpecialPath>(value)?;
         assert_eq!(
             special_path,
             FileSystemSpecialPath::project_roots(/*subpath*/ None)
         );
         assert_eq!(
-            serde_json::to_value(&special_path)?,
-            serde_json::json!({
+            edgerun_json::serde_json::to_value(&special_path)?,
+            edgerun_json::serde_json::json!({
                 "kind": "project_roots",
             })
         );

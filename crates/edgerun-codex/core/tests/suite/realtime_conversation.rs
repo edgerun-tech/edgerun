@@ -41,8 +41,8 @@ use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
 use core_test_support::wait_for_event_match;
 use pretty_assertions::assert_eq;
-use serde_json::Value;
-use serde_json::json;
+use edgerun_json::serde_json::Value;
+use edgerun_json::serde_json::json;
 use std::fs;
 use std::process::Command;
 use std::sync::Arc;
@@ -100,8 +100,8 @@ impl Match for RealtimeCallRequestCapture {
 }
 
 fn normalized_json_string(raw: &str) -> Result<String> {
-    let value: Value = serde_json::from_str(raw).context("expected JSON fixture to parse")?;
-    serde_json::to_string(&value).context("expected JSON fixture to serialize")
+    let value: Value = edgerun_json::serde_json::from_str(raw).context("expected JSON fixture to parse")?;
+    edgerun_json::serde_json::to_string(&value).context("expected JSON fixture to serialize")
 }
 
 fn websocket_request_text(
@@ -3547,8 +3547,8 @@ async fn inbound_handoff_request_steers_active_turn() -> Result<()> {
     let requests = api_server.requests().await;
     assert_eq!(requests.len(), 2);
 
-    let first_body: Value = serde_json::from_slice(&requests[0]).expect("parse first request");
-    let second_body: Value = serde_json::from_slice(&requests[1]).expect("parse second request");
+    let first_body: Value = edgerun_json::serde_json::from_slice(&requests[0]).expect("parse first request");
+    let second_body: Value = edgerun_json::serde_json::from_slice(&requests[1]).expect("parse second request");
     let first_texts = message_input_texts(&first_body, "user");
     let second_texts = message_input_texts(&second_body, "user");
 
@@ -3678,7 +3678,7 @@ async fn inbound_handoff_request_starts_turn_and_does_not_block_realtime_audio()
 
     let requests = api_server.requests().await;
     assert_eq!(requests.len(), 1);
-    let first_body: Value = serde_json::from_slice(&requests[0]).expect("parse first request");
+    let first_body: Value = edgerun_json::serde_json::from_slice(&requests[0]).expect("parse first request");
     let first_texts = message_input_texts(&first_body, "user");
     let expected_text = format!(
         "<realtime_delegation>\n  <input>{delegated_text}</input>\n  <transcript_delta>user: {delegated_text}</transcript_delta>\n</realtime_delegation>"

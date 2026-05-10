@@ -9,7 +9,7 @@ use codex_client::RequestTelemetry;
 use http::HeaderMap;
 use http::Method;
 use serde::Deserialize;
-use serde_json::to_value;
+use edgerun_json::serde_json::to_value;
 use std::sync::Arc;
 
 pub struct MemoriesClient<T: HttpTransport> {
@@ -35,7 +35,7 @@ impl<T: HttpTransport> MemoriesClient<T> {
 
     pub async fn summarize(
         &self,
-        body: serde_json::Value,
+        body: edgerun_json::serde_json::Value,
         extra_headers: HeaderMap,
     ) -> Result<Vec<MemorySummarizeOutput>, ApiError> {
         let resp = self
@@ -43,7 +43,7 @@ impl<T: HttpTransport> MemoriesClient<T> {
             .execute(Method::POST, Self::path(), extra_headers, Some(body))
             .await?;
         let parsed: SummarizeResponse =
-            serde_json::from_slice(&resp.body).map_err(|e| ApiError::Stream(e.to_string()))?;
+            edgerun_json::serde_json::from_slice(&resp.body).map_err(|e| ApiError::Stream(e.to_string()))?;
         Ok(parsed.output)
     }
 
@@ -81,7 +81,7 @@ mod tests {
     use http::Method;
     use http::StatusCode;
     use pretty_assertions::assert_eq;
-    use serde_json::json;
+    use edgerun_json::serde_json::json;
     use std::sync::Arc;
     use std::sync::Mutex;
     use std::time::Duration;
@@ -166,7 +166,7 @@ mod tests {
     #[tokio::test]
     async fn summarize_input_posts_expected_payload_and_parses_output() {
         let transport = CapturingTransport::new(
-            serde_json::to_vec(&json!({
+            edgerun_json::serde_json::to_vec(&json!({
                 "output": [
                     {
                         "trace_summary": "raw summary",

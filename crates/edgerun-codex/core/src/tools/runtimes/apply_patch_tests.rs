@@ -109,7 +109,7 @@ fn permission_request_payload_uses_apply_patch_hook_name_and_aliases() {
     );
     assert_eq!(
         payload.tool_input,
-        serde_json::json!({ "command": expected_patch })
+        edgerun_json::serde_json::json!({ "command": expected_patch })
     );
 }
 

@@ -40,7 +40,7 @@ fn shell_command_for_invocation(invocation: &ToolInvocation) -> Option<(Vec<Stri
         invocation.tool_name.namespace.as_deref(),
         invocation.tool_name.name.as_str(),
     ) {
-        (None, "shell") => serde_json::from_str::<ShellToolCallParams>(arguments)
+        (None, "shell") => edgerun_json::serde_json::from_str::<ShellToolCallParams>(arguments)
             .ok()
             .map(|params| {
                 (
@@ -48,7 +48,7 @@ fn shell_command_for_invocation(invocation: &ToolInvocation) -> Option<(Vec<Stri
                     invocation.turn.resolve_path(params.workdir).to_path_buf(),
                 )
             }),
-        (None, "shell_command") => serde_json::from_str::<ShellCommandToolCallParams>(arguments)
+        (None, "shell_command") => edgerun_json::serde_json::from_str::<ShellCommandToolCallParams>(arguments)
             .ok()
             .map(|params| {
                 if !invocation.turn.tools_config.allow_login_shell && params.login == Some(true) {
@@ -69,7 +69,7 @@ fn shell_command_for_invocation(invocation: &ToolInvocation) -> Option<(Vec<Stri
                     invocation.turn.resolve_path(params.workdir).to_path_buf(),
                 )
             }),
-        (None, "exec_command") => serde_json::from_str::<ExecCommandArgs>(arguments)
+        (None, "exec_command") => edgerun_json::serde_json::from_str::<ExecCommandArgs>(arguments)
             .ok()
             .and_then(|params| {
                 let command = crate::tools::handlers::unified_exec::get_command(

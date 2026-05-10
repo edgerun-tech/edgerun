@@ -8,7 +8,7 @@ use codex_protocol::config_types::WebSearchFilters as ConfigWebSearchFilters;
 use codex_protocol::config_types::WebSearchUserLocation as ConfigWebSearchUserLocation;
 use codex_protocol::config_types::WebSearchUserLocationType;
 use serde::Serialize;
-use serde_json::Value;
+use edgerun_json::serde_json::Value;
 
 /// When serialized as JSON, this produces a valid "Tool" in the OpenAI
 /// Responses API.
@@ -99,11 +99,11 @@ impl ConfiguredToolSpec {
 /// https://platform.openai.com/docs/guides/function-calling?api-mode=responses
 pub fn create_tools_json_for_responses_api(
     tools: &[ToolSpec],
-) -> Result<Vec<Value>, serde_json::Error> {
+) -> Result<Vec<Value>, edgerun_json::serde_json::Error> {
     let mut tools_json = Vec::new();
 
     for tool in tools {
-        let json = serde_json::to_value(tool)?;
+        let json = edgerun_json::serde_json::to_value(tool)?;
         tools_json.push(json);
     }
 

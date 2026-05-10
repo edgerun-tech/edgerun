@@ -12,7 +12,7 @@ use codex_protocol::plan_tool::UpdatePlanArgs;
 use codex_protocol::protocol::EventMsg;
 use codex_tools::ToolName;
 use codex_tools::ToolSpec;
-use serde_json::Value as JsonValue;
+use edgerun_json::serde_json::Value as JsonValue;
 
 pub struct PlanHandler;
 
@@ -40,7 +40,7 @@ impl ToolOutput for PlanToolOutput {
     }
 
     fn code_mode_result(&self, _payload: &ToolPayload) -> JsonValue {
-        JsonValue::Object(serde_json::Map::new())
+        JsonValue::Object(edgerun_json::serde_json::Map::new())
     }
 }
 
@@ -93,7 +93,7 @@ impl ToolHandler for PlanHandler {
 }
 
 fn parse_update_plan_arguments(arguments: &str) -> Result<UpdatePlanArgs, FunctionCallError> {
-    serde_json::from_str::<UpdatePlanArgs>(arguments).map_err(|e| {
+    edgerun_json::serde_json::from_str::<UpdatePlanArgs>(arguments).map_err(|e| {
         FunctionCallError::RespondToModel(format!("failed to parse function arguments: {e}"))
     })
 }

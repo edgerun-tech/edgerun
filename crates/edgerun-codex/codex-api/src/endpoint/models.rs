@@ -86,7 +86,7 @@ mod tests {
     use http::HeaderMap;
     use http::StatusCode;
     use pretty_assertions::assert_eq;
-    use serde_json::json;
+    use edgerun_json::serde_json::json;
     use std::sync::Arc;
     use std::sync::Mutex;
     use std::time::Duration;
@@ -112,7 +112,7 @@ mod tests {
     impl HttpTransport for CapturingTransport {
         async fn execute(&self, req: Request) -> Result<Response, TransportError> {
             *self.last_request.lock().unwrap() = Some(req);
-            let body = serde_json::to_vec(&*self.body).unwrap();
+            let body = edgerun_json::serde_json::to_vec(&*self.body).unwrap();
             let mut headers = HeaderMap::new();
             if let Some(etag) = &self.etag {
                 headers.insert(ETAG, etag.parse().unwrap());
@@ -194,7 +194,7 @@ mod tests {
     async fn parses_models_response() {
         let response = ModelsResponse {
             models: vec![
-                serde_json::from_value(json!({
+                edgerun_json::serde_json::from_value(json!({
                     "slug": "gpt-test",
                     "display_name": "gpt-test",
                     "description": "desc",

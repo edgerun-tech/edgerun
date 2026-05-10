@@ -144,30 +144,30 @@ mod tests {
     #[test]
     fn usage_based_plan_types_use_expected_wire_names() {
         assert_eq!(
-            serde_json::to_string(&PlanType::SelfServeBusinessUsageBased)
+            edgerun_json::serde_json::to_string(&PlanType::SelfServeBusinessUsageBased)
                 .expect("self-serve business usage based should serialize"),
             "\"self_serve_business_usage_based\""
         );
         assert_eq!(
-            serde_json::to_string(&PlanType::EnterpriseCbpUsageBased)
+            edgerun_json::serde_json::to_string(&PlanType::EnterpriseCbpUsageBased)
                 .expect("enterprise cbp usage based should serialize"),
             "\"enterprise_cbp_usage_based\""
         );
         assert_eq!(
-            serde_json::to_string(&PlanType::ProLite).expect("prolite should serialize"),
+            edgerun_json::serde_json::to_string(&PlanType::ProLite).expect("prolite should serialize"),
             "\"prolite\""
         );
         assert_eq!(
-            serde_json::from_str::<PlanType>("\"self_serve_business_usage_based\"")
+            edgerun_json::serde_json::from_str::<PlanType>("\"self_serve_business_usage_based\"")
                 .expect("self-serve business usage based should deserialize"),
             PlanType::SelfServeBusinessUsageBased
         );
         assert_eq!(
-            serde_json::from_str::<PlanType>("\"prolite\"").expect("prolite should deserialize"),
+            edgerun_json::serde_json::from_str::<PlanType>("\"prolite\"").expect("prolite should deserialize"),
             PlanType::ProLite
         );
         assert_eq!(
-            serde_json::from_str::<PlanType>("\"enterprise_cbp_usage_based\"")
+            edgerun_json::serde_json::from_str::<PlanType>("\"enterprise_cbp_usage_based\"")
                 .expect("enterprise cbp usage based should deserialize"),
             PlanType::EnterpriseCbpUsageBased
         );

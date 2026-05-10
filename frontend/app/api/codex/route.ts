@@ -1,7 +1,4 @@
 import { spawn, type ChildProcessWithoutNullStreams } from "child_process"
-import { mkdtemp, readFile, rm } from "fs/promises"
-import { tmpdir } from "os"
-import path from "path"
 
 export const runtime = "nodejs"
 export const maxDuration = 900
@@ -22,7 +19,7 @@ function codexBinary(): string {
 }
 
 function workspaceRoot(): string {
-  return process.env.CODEX_WORKSPACE || path.resolve(process.cwd(), "..")
+  return process.env.CODEX_WORKSPACE || ".."
 }
 
 function codexPolicyArgs(): string[] {
@@ -37,10 +34,9 @@ function appendLimited(current: string, chunk: Buffer): string {
 function codexExecArgs(options: {
   resume: boolean
   json?: boolean
-  outputFile: string
   workDir: string
 }): string[] {
-  const args = ["exec", ...codexPolicyArgs(), "-C", options.workDir, "-o", options.outputFile]
+  const args = ["exec", ...codexPolicyArgs(), "-C", options.workDir]
   if (options.json) args.push("--json")
   if (options.resume) return [...args, "resume", "--last", "-"]
   return [...args, "-"]
@@ -63,8 +59,7 @@ async function checkCodex(): Promise<{ ok: boolean; version?: string; error?: st
       resolve(result)
     }
 
-    const proc = spawn(codexBinary(), ["--version"], {
-      cwd: workspaceRoot(),
+    const proc = spawn("env", [codexBinary(), "--version"], {
       shell: false,
       env: { ...process.env, CI: "1", NO_COLOR: "1" },
       stdio: ["ignore", "pipe", "pipe"],
@@ -99,12 +94,9 @@ async function checkCodex(): Promise<{ ok: boolean; version?: string; error?: st
 
 async function runCodex(resume: boolean, prompt: string, signal?: AbortSignal): Promise<{ ok: boolean; text: string; error?: string }> {
   const workDir = workspaceRoot()
-  const tempDir = await mkdtemp(path.join(tmpdir(), "edgerun-codex-"))
-  const outputFile = path.join(tempDir, "last-message.txt")
-  const procArgs = codexExecArgs({ resume, outputFile, workDir })
+  const procArgs = codexExecArgs({ resume, workDir })
 
-  try {
-    return await new Promise((resolve) => {
+  return await new Promise((resolve) => {
       let settled = false
       let stdout = ""
       let stderr = ""
@@ -117,8 +109,7 @@ async function runCodex(resume: boolean, prompt: string, signal?: AbortSignal): 
         if (timeout) clearTimeout(timeout)
         signal?.removeEventListener("abort", onAbort)
 
-        const fileText = await readFile(outputFile, "utf8").catch(() => "")
-        const text = (fileText || stdout || stderr).trim().slice(-OUTPUT_LIMIT)
+        const text = (stdout || stderr).trim().slice(-OUTPUT_LIMIT)
         resolve({ ok: result.ok, text, error: result.error })
       }
 
@@ -133,8 +124,7 @@ async function runCodex(resume: boolean, prompt: string, signal?: AbortSignal): 
       }
       signal?.addEventListener("abort", onAbort, { once: true })
 
-      proc = spawn(codexBinary(), procArgs, {
-        cwd: workDir,
+      proc = spawn("env", [codexBinary(), ...procArgs], {
         shell: false,
         env: { ...process.env, CI: "1", NO_COLOR: "1" },
         stdio: ["pipe", "pipe", "pipe"],
@@ -166,9 +156,6 @@ async function runCodex(resume: boolean, prompt: string, signal?: AbortSignal): 
         void finish({ ok: false, error: "codex timed out" })
       }, CODEX_TIMEOUT_MS)
     })
-  } finally {
-    await rm(tempDir, { recursive: true, force: true }).catch(() => undefined)
-  }
 }
 
 function codexStreamResponse(prompt: string, useResume: boolean, signal?: AbortSignal): Response {
@@ -218,16 +205,10 @@ function codexStreamResponse(prompt: string, useResume: boolean, signal?: AbortS
       const runAttempt = async (resume: boolean): Promise<{ ok: boolean; text: string; error?: string }> => {
         if (closed || signal?.aborted) return { ok: false, text: "", error: "codex request stopped" }
         const workDir = workspaceRoot()
-        const tempDir = await mkdtemp(path.join(tmpdir(), "edgerun-codex-"))
-        const outputFile = path.join(tempDir, "last-message.txt")
-        const procArgs = codexExecArgs({ resume, json: true, outputFile, workDir })
-        if (closed || signal?.aborted) {
-          await rm(tempDir, { recursive: true, force: true }).catch(() => undefined)
-          return { ok: false, text: "", error: "codex request stopped" }
-        }
+        const procArgs = codexExecArgs({ resume, json: true, workDir })
+        if (closed || signal?.aborted) return { ok: false, text: "", error: "codex request stopped" }
 
-        try {
-          return await new Promise((resolve) => {
+        return await new Promise((resolve) => {
             let settled = false
             let stdout = ""
             let stderr = ""
@@ -239,8 +220,7 @@ function codexStreamResponse(prompt: string, useResume: boolean, signal?: AbortS
               settled = true
               clearTimeout(timeout)
 
-              const fileText = await readFile(outputFile, "utf8").catch(() => "")
-              const text = (fileText || finalText || stdout || stderr).trim().slice(-OUTPUT_LIMIT)
+              const text = (finalText || stdout || stderr).trim().slice(-OUTPUT_LIMIT)
               resolve({ ok: result.ok, text, error: result.error })
             }
 
@@ -269,8 +249,7 @@ function codexStreamResponse(prompt: string, useResume: boolean, signal?: AbortS
               }
             }
 
-            currentProc = spawn(codexBinary(), procArgs, {
-              cwd: workDir,
+            currentProc = spawn("env", [codexBinary(), ...procArgs], {
               shell: false,
               env: { ...process.env, CI: "1", NO_COLOR: "1" },
               stdio: ["pipe", "pipe", "pipe"],
@@ -307,9 +286,6 @@ function codexStreamResponse(prompt: string, useResume: boolean, signal?: AbortS
               void finish({ ok: false, error: "codex timed out" })
             }, CODEX_TIMEOUT_MS)
           })
-        } finally {
-          await rm(tempDir, { recursive: true, force: true }).catch(() => undefined)
-        }
       }
 
       void (async () => {

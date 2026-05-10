@@ -5,7 +5,7 @@ use crate::ToolDefinition;
 use pretty_assertions::assert_eq;
 use std::collections::BTreeMap;
 
-fn mcp_tool(name: &str, description: &str, input_schema: serde_json::Value) -> rmcp::model::Tool {
+fn mcp_tool(name: &str, description: &str, input_schema: edgerun_json::serde_json::Value) -> rmcp::model::Tool {
     rmcp::model::Tool {
         name: name.to_string().into(),
         title: None,
@@ -24,7 +24,7 @@ fn parse_mcp_tool_inserts_empty_properties() {
     let tool = mcp_tool(
         "no_props",
         "No properties",
-        serde_json::json!({
+        edgerun_json::serde_json::json!({
             "type": "object"
         }),
     );
@@ -39,7 +39,7 @@ fn parse_mcp_tool_inserts_empty_properties() {
                 /*required*/ None,
                 /*additional_properties*/ None
             ),
-            output_schema: Some(mcp_call_tool_result_output_schema(serde_json::json!({}))),
+            output_schema: Some(mcp_call_tool_result_output_schema(edgerun_json::serde_json::json!({}))),
             defer_loading: false,
         }
     );
@@ -50,12 +50,12 @@ fn parse_mcp_tool_preserves_top_level_output_schema() {
     let mut tool = mcp_tool(
         "with_output",
         "Has output schema",
-        serde_json::json!({
+        edgerun_json::serde_json::json!({
             "type": "object"
         }),
     );
     tool.output_schema = Some(std::sync::Arc::new(rmcp::model::object(
-        serde_json::json!({
+        edgerun_json::serde_json::json!({
             "properties": {
                 "result": {
                     "properties": {
@@ -77,7 +77,7 @@ fn parse_mcp_tool_preserves_top_level_output_schema() {
                 /*required*/ None,
                 /*additional_properties*/ None
             ),
-            output_schema: Some(mcp_call_tool_result_output_schema(serde_json::json!({
+            output_schema: Some(mcp_call_tool_result_output_schema(edgerun_json::serde_json::json!({
                 "properties": {
                     "result": {
                         "properties": {
@@ -97,12 +97,12 @@ fn parse_mcp_tool_preserves_output_schema_without_inferred_type() {
     let mut tool = mcp_tool(
         "with_enum_output",
         "Has enum output schema",
-        serde_json::json!({
+        edgerun_json::serde_json::json!({
             "type": "object"
         }),
     );
     tool.output_schema = Some(std::sync::Arc::new(rmcp::model::object(
-        serde_json::json!({
+        edgerun_json::serde_json::json!({
             "enum": ["ok", "error"]
         }),
     )));
@@ -117,7 +117,7 @@ fn parse_mcp_tool_preserves_output_schema_without_inferred_type() {
                 /*required*/ None,
                 /*additional_properties*/ None
             ),
-            output_schema: Some(mcp_call_tool_result_output_schema(serde_json::json!({
+            output_schema: Some(mcp_call_tool_result_output_schema(edgerun_json::serde_json::json!({
                 "enum": ["ok", "error"]
             }))),
             defer_loading: false,

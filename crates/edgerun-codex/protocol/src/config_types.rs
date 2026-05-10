@@ -9,7 +9,7 @@ use schemars::schema::Schema;
 use schemars::schema::SchemaObject;
 use serde::Deserialize;
 use serde::Serialize;
-use serde_json::Value;
+use edgerun_json::serde_json::Value;
 use std::collections::HashMap;
 use std::fmt;
 use std::num::NonZeroU64;
@@ -781,7 +781,7 @@ mod tests {
     fn mode_kind_deserializes_alias_values_to_default() {
         for alias in ["code", "pair_programming", "execute", "custom"] {
             let json = format!("\"{alias}\"");
-            let mode: ModeKind = serde_json::from_str(&json).expect("deserialize mode");
+            let mode: ModeKind = edgerun_json::serde_json::from_str(&json).expect("deserialize mode");
             assert_eq!(ModeKind::Default, mode);
         }
     }
@@ -790,18 +790,18 @@ mod tests {
     fn approvals_reviewer_serializes_auto_review_and_accepts_legacy_guardian_subagent() {
         assert_eq!(ApprovalsReviewer::User.to_string(), "user");
         assert_eq!(
-            serde_json::to_string(&ApprovalsReviewer::User).expect("serialize reviewer"),
+            edgerun_json::serde_json::to_string(&ApprovalsReviewer::User).expect("serialize reviewer"),
             "\"user\""
         );
         assert_eq!(
-            serde_json::to_string(&ApprovalsReviewer::AutoReview).expect("serialize reviewer"),
+            edgerun_json::serde_json::to_string(&ApprovalsReviewer::AutoReview).expect("serialize reviewer"),
             "\"guardian_subagent\""
         );
 
         for value in ["user", "auto_review", "guardian_subagent"] {
             let json = format!("\"{value}\"");
             let reviewer: ApprovalsReviewer =
-                serde_json::from_str(&json).expect("deserialize reviewer");
+                edgerun_json::serde_json::from_str(&json).expect("deserialize reviewer");
             let expected = if value == "user" {
                 ApprovalsReviewer::User
             } else {

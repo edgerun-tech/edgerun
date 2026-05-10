@@ -57,7 +57,7 @@ use codex_protocol::mcp::RequestId as ProtocolRequestId;
 use codex_protocol::user_input::UserInput;
 use codex_rmcp_client::ElicitationAction;
 use codex_rmcp_client::ElicitationResponse;
-use serde_json::Value;
+use edgerun_json::serde_json::Value;
 use std::sync::Arc;
 use tracing::debug;
 use tracing::info;
@@ -362,7 +362,7 @@ pub async fn resolve_elicitation(
     };
     let content = match action {
         // Preserve the legacy fallback for clients that only send an action.
-        ElicitationAction::Accept => Some(content.unwrap_or_else(|| serde_json::json!({}))),
+        ElicitationAction::Accept => Some(content.unwrap_or_else(|| edgerun_json::serde_json::json!({}))),
         ElicitationAction::Decline | ElicitationAction::Cancel => None,
     };
     let response = ElicitationResponse {
@@ -915,11 +915,11 @@ async fn approve_guardian_denied_action(sess: &Arc<Session>, event: GuardianAsse
         return;
     }
 
-    let approved_action = serde_json::json!({
+    let approved_action = edgerun_json::serde_json::json!({
         "action": &event.action,
         "outcome": "allowed",
     });
-    let approved_action_json = match serde_json::to_string_pretty(&approved_action) {
+    let approved_action_json = match edgerun_json::serde_json::to_string_pretty(&approved_action) {
         Ok(approved_action_json) => approved_action_json,
         Err(error) => {
             warn!(%error, review_id = event.id.as_str(), "failed to serialize approved Guardian action");

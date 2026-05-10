@@ -17,7 +17,7 @@ chardetng = { workspace = true }
 edgerun-encoding = { workspace = true }
 edgerun-error = { workspace = true }
 edgerun-glob = { workspace = true }
-edgerun-json = { workspace = true }
+edgerun-json = { workspace = true, features = ["serde-compat"] }
 edgerun-locale = { workspace = true }
 edgerun-time = { workspace = true }
 encoding_rs = { workspace = true }
@@ -28,7 +28,6 @@ quick-xml = { workspace = true, features = ["serialize"] }
 reqwest = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
 serde_with = { workspace = true, features = ["macros", "base64"] }
 strum = { workspace = true }
 strum_macros = { workspace = true }

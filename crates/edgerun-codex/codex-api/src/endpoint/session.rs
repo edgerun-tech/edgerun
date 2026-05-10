@@ -11,7 +11,7 @@ use codex_client::StreamResponse;
 use codex_client::TransportError;
 use http::HeaderMap;
 use http::Method;
-use serde_json::Value;
+use edgerun_json::serde_json::Value;
 use std::sync::Arc;
 use tracing::instrument;
 

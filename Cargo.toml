@@ -65,6 +65,7 @@ members = [
   "crates/utility/edgerun-locale",
   "crates/utility/edgerun-random",
   "crates/linux-adapters/edgerun-linux-cec",
+  "crates/utility/edgerun-rusttls",
   "crates/linux-adapters/edgerun-linux-gpu",
   "crates/linux-adapters/edgerun-linux-netif",
   "crates/linux-adapters/edgerun-linux-nfc",

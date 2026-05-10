@@ -41,7 +41,7 @@ use core_test_support::streaming_sse::start_streaming_sse_server;
 use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
 use pretty_assertions::assert_eq;
-use serde_json::Value;
+use edgerun_json::serde_json::Value;
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
@@ -94,7 +94,7 @@ fn write_stop_hook(home: &Path, block_prompts: &[&str]) -> Result<()> {
     let script_path = home.join("stop_hook.py");
     let log_path = home.join("stop_hook_log.jsonl");
     let prompts_json =
-        serde_json::to_string(block_prompts).context("serialize stop hook prompts for test")?;
+        edgerun_json::serde_json::to_string(block_prompts).context("serialize stop hook prompts for test")?;
     let script = format!(
         r#"import json
 from pathlib import Path
@@ -120,7 +120,7 @@ else:
         log_path = log_path.display(),
         prompts_json = prompts_json,
     );
-    let hooks = serde_json::json!({
+    let hooks = edgerun_json::serde_json::json!({
         "hooks": {
             "Stop": [{
                 "hooks": [{
@@ -160,14 +160,14 @@ else:
                     script_path.display()
                 )
             })?;
-            Ok(serde_json::json!({
+            Ok(edgerun_json::serde_json::json!({
                 "type": "command",
                 "command": format!("python3 {}", script_path.display()),
             }))
         })
         .collect::<Result<Vec<_>>>()?;
 
-    let hooks = serde_json::json!({
+    let hooks = edgerun_json::serde_json::json!({
         "hooks": {
             "Stop": [{
                 "hooks": hook_entries,
@@ -188,8 +188,8 @@ fn write_user_prompt_submit_hook(
     let log_path = home.join("user_prompt_submit_hook_log.jsonl");
     let log_path = log_path.display();
     let blocked_prompt_json =
-        serde_json::to_string(blocked_prompt).context("serialize blocked prompt for test")?;
-    let additional_context_json = serde_json::to_string(additional_context)
+        edgerun_json::serde_json::to_string(blocked_prompt).context("serialize blocked prompt for test")?;
+    let additional_context_json = edgerun_json::serde_json::to_string(additional_context)
         .context("serialize user prompt submit additional context for test")?;
     let script = format!(
         r#"import json
@@ -211,7 +211,7 @@ if payload.get("prompt") == {blocked_prompt_json}:
     }}))
 "#,
     );
-    let hooks = serde_json::json!({
+    let hooks = edgerun_json::serde_json::json!({
         "hooks": {
             "UserPromptSubmit": [{
                 "hooks": [{
@@ -236,8 +236,8 @@ fn write_pre_tool_use_hook(
 ) -> Result<()> {
     let script_path = home.join("pre_tool_use_hook.py");
     let log_path = home.join("pre_tool_use_hook_log.jsonl");
-    let mode_json = serde_json::to_string(mode).context("serialize pre tool use mode")?;
-    let reason_json = serde_json::to_string(reason).context("serialize pre tool use reason")?;
+    let mode_json = edgerun_json::serde_json::to_string(mode).context("serialize pre tool use mode")?;
+    let reason_json = edgerun_json::serde_json::to_string(reason).context("serialize pre tool use reason")?;
     let script = format!(
         r#"import json
 from pathlib import Path
@@ -285,7 +285,7 @@ elif mode == "exit_2":
         reason_json = reason_json,
     );
 
-    let mut group = serde_json::json!({
+    let mut group = edgerun_json::serde_json::json!({
         "hooks": [{
             "type": "command",
             "command": format!("python3 {}", script_path.display()),
@@ -296,7 +296,7 @@ elif mode == "exit_2":
         group["matcher"] = Value::String(matcher.to_string());
     }
 
-    let hooks = serde_json::json!({
+    let hooks = edgerun_json::serde_json::json!({
         "hooks": {
             "PreToolUse": [group]
         }
@@ -317,8 +317,8 @@ fn write_pre_tool_use_hook_toml(
 ) -> Result<()> {
     let script_path = home.join(script_name);
     let log_path = home.join(log_name);
-    let mode_json = serde_json::to_string(mode).context("serialize pre tool use mode")?;
-    let reason_json = serde_json::to_string(reason).context("serialize pre tool use reason")?;
+    let mode_json = edgerun_json::serde_json::to_string(mode).context("serialize pre tool use mode")?;
+    let reason_json = edgerun_json::serde_json::to_string(reason).context("serialize pre tool use reason")?;
     let script = format!(
         r#"import json
 from pathlib import Path
@@ -383,9 +383,9 @@ fn write_permission_request_hook(
 ) -> Result<()> {
     let script_path = home.join("permission_request_hook.py");
     let log_path = home.join("permission_request_hook_log.jsonl");
-    let mode_json = serde_json::to_string(mode).context("serialize permission request mode")?;
+    let mode_json = edgerun_json::serde_json::to_string(mode).context("serialize permission request mode")?;
     let reason_json =
-        serde_json::to_string(reason).context("serialize permission request reason")?;
+        edgerun_json::serde_json::to_string(reason).context("serialize permission request reason")?;
     let script = format!(
         r#"import json
 from pathlib import Path
@@ -426,7 +426,7 @@ elif mode == "exit_2":
         reason_json = reason_json,
     );
 
-    let mut group = serde_json::json!({
+    let mut group = edgerun_json::serde_json::json!({
         "hooks": [{
             "type": "command",
             "command": format!("python3 {}", script_path.display()),
@@ -437,7 +437,7 @@ elif mode == "exit_2":
         group["matcher"] = Value::String(matcher.to_string());
     }
 
-    let hooks = serde_json::json!({
+    let hooks = edgerun_json::serde_json::json!({
         "hooks": {
             "PermissionRequest": [group]
         }
@@ -465,8 +465,8 @@ fn write_post_tool_use_hook(
 ) -> Result<()> {
     let script_path = home.join("post_tool_use_hook.py");
     let log_path = home.join("post_tool_use_hook_log.jsonl");
-    let mode_json = serde_json::to_string(mode).context("serialize post tool use mode")?;
-    let reason_json = serde_json::to_string(reason).context("serialize post tool use reason")?;
+    let mode_json = edgerun_json::serde_json::to_string(mode).context("serialize post tool use mode")?;
+    let reason_json = edgerun_json::serde_json::to_string(reason).context("serialize post tool use reason")?;
     let script = format!(
         r#"import json
 from pathlib import Path
@@ -507,7 +507,7 @@ elif mode == "exit_2":
         reason_json = reason_json,
     );
 
-    let mut group = serde_json::json!({
+    let mut group = edgerun_json::serde_json::json!({
         "hooks": [{
             "type": "command",
             "command": format!("python3 {}", script_path.display()),
@@ -518,7 +518,7 @@ elif mode == "exit_2":
         group["matcher"] = Value::String(matcher.to_string());
     }
 
-    let hooks = serde_json::json!({
+    let hooks = edgerun_json::serde_json::json!({
         "hooks": {
             "PostToolUse": [group]
         }
@@ -535,7 +535,7 @@ fn write_logging_pre_and_blocking_post_tool_use_hooks(home: &Path, feedback: &st
     let post_script_path = home.join("post_tool_use_hook.py");
     let post_log_path = home.join("post_tool_use_hook_log.jsonl");
     let feedback_json =
-        serde_json::to_string(feedback).context("serialize post tool use feedback")?;
+        edgerun_json::serde_json::to_string(feedback).context("serialize post tool use feedback")?;
     let pre_script = format!(
         r#"import json
 from pathlib import Path
@@ -560,7 +560,7 @@ raise SystemExit(2)
 "#,
         post_log_path = post_log_path.display(),
     );
-    let hooks = serde_json::json!({
+    let hooks = edgerun_json::serde_json::json!({
         "hooks": {
             "PreToolUse": [{
                 "matcher": "Bash",
@@ -607,7 +607,7 @@ with Path(r"{log_path}").open("a", encoding="utf-8") as handle:
 "#,
         log_path = log_path.display(),
     );
-    let hooks = serde_json::json!({
+    let hooks = edgerun_json::serde_json::json!({
         "hooks": {
             "SessionStart": [{
                 "hooks": [{
@@ -626,7 +626,7 @@ with Path(r"{log_path}").open("a", encoding="utf-8") as handle:
 
 fn write_session_start_hook_with_context(home: &Path, additional_context: &str) -> Result<()> {
     let script_path = home.join("session_start_hook.py");
-    let additional_context_json = serde_json::to_string(additional_context)
+    let additional_context_json = edgerun_json::serde_json::to_string(additional_context)
         .context("serialize session start additional context for test")?;
     let script = format!(
         r#"import json
@@ -639,7 +639,7 @@ print(json.dumps({{
 }}))
 "#,
     );
-    let hooks = serde_json::json!({
+    let hooks = edgerun_json::serde_json::json!({
         "hooks": {
             "SessionStart": [{
                 "hooks": [{
@@ -663,7 +663,7 @@ fn rollout_hook_prompt_texts(text: &str) -> Result<Vec<String>> {
         if trimmed.is_empty() {
             continue;
         }
-        let rollout: RolloutLine = serde_json::from_str(trimmed).context("parse rollout line")?;
+        let rollout: RolloutLine = edgerun_json::serde_json::from_str(trimmed).context("parse rollout line")?;
         if let RolloutItem::ResponseItem(ResponseItem::Message { role, content, .. }) = rollout.item
             && role == "user"
         {
@@ -694,25 +694,25 @@ fn spilled_hook_output_path(text: &str) -> Option<&str> {
         .find_map(|line| line.strip_prefix("Full hook output saved to: "))
 }
 
-fn read_stop_hook_inputs(home: &Path) -> Result<Vec<serde_json::Value>> {
+fn read_stop_hook_inputs(home: &Path) -> Result<Vec<edgerun_json::serde_json::Value>> {
     fs::read_to_string(home.join("stop_hook_log.jsonl"))
         .context("read stop hook log")?
         .lines()
         .filter(|line| !line.trim().is_empty())
-        .map(|line| serde_json::from_str(line).context("parse stop hook log line"))
+        .map(|line| edgerun_json::serde_json::from_str(line).context("parse stop hook log line"))
         .collect()
 }
 
-fn read_pre_tool_use_hook_inputs(home: &Path) -> Result<Vec<serde_json::Value>> {
+fn read_pre_tool_use_hook_inputs(home: &Path) -> Result<Vec<edgerun_json::serde_json::Value>> {
     read_hook_inputs_from_log(home.join("pre_tool_use_hook_log.jsonl").as_path())
 }
 
-fn read_permission_request_hook_inputs(home: &Path) -> Result<Vec<serde_json::Value>> {
+fn read_permission_request_hook_inputs(home: &Path) -> Result<Vec<edgerun_json::serde_json::Value>> {
     fs::read_to_string(home.join("permission_request_hook_log.jsonl"))
         .context("read permission request hook log")?
         .lines()
         .filter(|line| !line.trim().is_empty())
-        .map(|line| serde_json::from_str(line).context("parse permission request hook log line"))
+        .map(|line| edgerun_json::serde_json::from_str(line).context("parse permission request hook log line"))
         .collect()
 }
 
@@ -741,7 +741,7 @@ fn assert_single_permission_request_hook_input(
     home: &Path,
     command: &str,
     description: Option<&str>,
-) -> Result<Vec<serde_json::Value>> {
+) -> Result<Vec<edgerun_json::serde_json::Value>> {
     assert_single_permission_request_hook_input_for_tool(home, "Bash", command, description)
 }
 
@@ -750,46 +750,46 @@ fn assert_single_permission_request_hook_input_for_tool(
     tool_name: &str,
     command: &str,
     description: Option<&str>,
-) -> Result<Vec<serde_json::Value>> {
+) -> Result<Vec<edgerun_json::serde_json::Value>> {
     let hook_inputs = read_permission_request_hook_inputs(home)?;
     assert_eq!(hook_inputs.len(), 1);
     assert_permission_request_hook_input(&hook_inputs[0], tool_name, command, description);
     Ok(hook_inputs)
 }
 
-fn read_post_tool_use_hook_inputs(home: &Path) -> Result<Vec<serde_json::Value>> {
+fn read_post_tool_use_hook_inputs(home: &Path) -> Result<Vec<edgerun_json::serde_json::Value>> {
     read_hook_inputs_from_log(home.join("post_tool_use_hook_log.jsonl").as_path())
 }
 
-fn read_hook_inputs_from_log(log_path: &Path) -> Result<Vec<serde_json::Value>> {
+fn read_hook_inputs_from_log(log_path: &Path) -> Result<Vec<edgerun_json::serde_json::Value>> {
     fs::read_to_string(log_path)
         .with_context(|| format!("read hook log {}", log_path.display()))?
         .lines()
         .filter(|line| !line.trim().is_empty())
-        .map(|line| serde_json::from_str(line).context("parse hook log line"))
+        .map(|line| edgerun_json::serde_json::from_str(line).context("parse hook log line"))
         .collect()
 }
 
-fn read_session_start_hook_inputs(home: &Path) -> Result<Vec<serde_json::Value>> {
+fn read_session_start_hook_inputs(home: &Path) -> Result<Vec<edgerun_json::serde_json::Value>> {
     fs::read_to_string(home.join("session_start_hook_log.jsonl"))
         .context("read session start hook log")?
         .lines()
         .filter(|line| !line.trim().is_empty())
-        .map(|line| serde_json::from_str(line).context("parse session start hook log line"))
+        .map(|line| edgerun_json::serde_json::from_str(line).context("parse session start hook log line"))
         .collect()
 }
 
-fn read_user_prompt_submit_hook_inputs(home: &Path) -> Result<Vec<serde_json::Value>> {
+fn read_user_prompt_submit_hook_inputs(home: &Path) -> Result<Vec<edgerun_json::serde_json::Value>> {
     fs::read_to_string(home.join("user_prompt_submit_hook_log.jsonl"))
         .context("read user prompt submit hook log")?
         .lines()
         .filter(|line| !line.trim().is_empty())
-        .map(|line| serde_json::from_str(line).context("parse user prompt submit hook log line"))
+        .map(|line| edgerun_json::serde_json::from_str(line).context("parse user prompt submit hook log line"))
         .collect()
 }
 
 fn ev_message_item_done(id: &str, text: &str) -> Value {
-    serde_json::json!({
+    edgerun_json::serde_json::json!({
         "type": "response.output_item.done",
         "item": {
             "type": "message",
@@ -805,7 +805,7 @@ fn sse_event(event: Value) -> String {
 }
 
 fn request_message_input_texts(body: &[u8], role: &str) -> Vec<String> {
-    let body: Value = match serde_json::from_slice(body) {
+    let body: Value = match edgerun_json::serde_json::from_slice(body) {
         Ok(body) => body,
         Err(error) => panic!("parse request body: {error}"),
     };
@@ -1439,7 +1439,7 @@ async fn permission_request_hook_allows_shell_command_without_user_approval() ->
     let call_id = "permissionrequest-shell-command";
     let marker = std::env::temp_dir().join("permissionrequest-shell-command-marker");
     let command = format!("rm -f {}", marker.display());
-    let args = serde_json::json!({ "command": command });
+    let args = edgerun_json::serde_json::json!({ "command": command });
     let responses = mount_sse_sequence(
         &server,
         vec![
@@ -1448,7 +1448,7 @@ async fn permission_request_hook_allows_shell_command_without_user_approval() ->
                 core_test_support::responses::ev_function_call(
                     call_id,
                     "shell_command",
-                    &serde_json::to_string(&args)?,
+                    &edgerun_json::serde_json::to_string(&args)?,
                 ),
                 ev_completed("resp-1"),
             ]),
@@ -1588,7 +1588,7 @@ async fn permission_request_hook_sees_raw_exec_command_input() -> Result<()> {
     let marker = std::env::temp_dir().join("permissionrequest-exec-command-marker");
     let command = format!("rm -f {}", marker.display());
     let justification = "remove the temporary marker";
-    let args = serde_json::json!({
+    let args = edgerun_json::serde_json::json!({
         "cmd": command,
         "login": true,
         "sandbox_permissions": "require_escalated",
@@ -1602,7 +1602,7 @@ async fn permission_request_hook_sees_raw_exec_command_input() -> Result<()> {
                 core_test_support::responses::ev_function_call(
                     call_id,
                     "exec_command",
-                    &serde_json::to_string(&args)?,
+                    &edgerun_json::serde_json::to_string(&args)?,
                 ),
                 ev_completed("resp-1"),
             ]),
@@ -1678,13 +1678,13 @@ allow_local_binding = true
     )?;
     let call_id = "permissionrequest-network-approval";
     let command = r#"python3 -c "import urllib.request; opener = urllib.request.build_opener(urllib.request.ProxyHandler()); print('OK:' + opener.open('http://codex-network-test.invalid', timeout=2).read().decode(errors='replace'))""#;
-    let args = serde_json::json!({ "command": command });
+    let args = edgerun_json::serde_json::json!({ "command": command });
     let _responses = mount_sse_sequence(
         &server,
         vec![
             sse(vec![
                 ev_response_created("resp-1"),
-                ev_function_call(call_id, "shell_command", &serde_json::to_string(&args)?),
+                ev_function_call(call_id, "shell_command", &edgerun_json::serde_json::to_string(&args)?),
                 ev_completed("resp-1"),
             ]),
             sse(vec![
@@ -1789,7 +1789,7 @@ async fn permission_request_hook_sees_retry_context_after_sandbox_denial() -> Re
     let call_id = "permissionrequest-retry-shell-command";
     let marker = "permissionrequest_retry_marker.txt";
     let command = format!("printf retry > {marker}");
-    let args = serde_json::json!({ "command": command });
+    let args = edgerun_json::serde_json::json!({ "command": command });
     let responses = mount_sse_sequence(
         &server,
         vec![
@@ -1798,7 +1798,7 @@ async fn permission_request_hook_sees_retry_context_after_sandbox_denial() -> Re
                 core_test_support::responses::ev_function_call(
                     call_id,
                     "shell_command",
-                    &serde_json::to_string(&args)?,
+                    &edgerun_json::serde_json::to_string(&args)?,
                 ),
                 ev_completed("resp-1"),
             ]),
@@ -1854,7 +1854,7 @@ async fn pre_tool_use_blocks_shell_command_before_execution() -> Result<()> {
     let call_id = "pretooluse-shell-command";
     let marker = std::env::temp_dir().join("pretooluse-shell-command-marker");
     let command = format!("printf blocked > {}", marker.display());
-    let args = serde_json::json!({ "command": command });
+    let args = edgerun_json::serde_json::json!({ "command": command });
     let responses = mount_sse_sequence(
         &server,
         vec![
@@ -1863,7 +1863,7 @@ async fn pre_tool_use_blocks_shell_command_before_execution() -> Result<()> {
                 core_test_support::responses::ev_function_call(
                     call_id,
                     "shell_command",
-                    &serde_json::to_string(&args)?,
+                    &edgerun_json::serde_json::to_string(&args)?,
                 ),
                 ev_completed("resp-1"),
             ]),
@@ -1950,7 +1950,7 @@ async fn pre_tool_use_records_additional_context_for_shell_command() -> Result<(
     let server = start_mock_server().await;
     let call_id = "pretooluse-shell-command-context";
     let command = "printf pre-tool-output".to_string();
-    let args = serde_json::json!({ "command": command });
+    let args = edgerun_json::serde_json::json!({ "command": command });
     let responses = mount_sse_sequence(
         &server,
         vec![
@@ -1959,7 +1959,7 @@ async fn pre_tool_use_records_additional_context_for_shell_command() -> Result<(
                 core_test_support::responses::ev_function_call(
                     call_id,
                     "shell_command",
-                    &serde_json::to_string(&args)?,
+                    &edgerun_json::serde_json::to_string(&args)?,
                 ),
                 ev_completed("resp-1"),
             ]),
@@ -2016,7 +2016,7 @@ async fn blocked_pre_tool_use_records_additional_context_for_shell_command() -> 
     let call_id = "pretooluse-shell-command-blocked-context";
     let marker = std::env::temp_dir().join("pretooluse-shell-command-blocked-context-marker");
     let command = format!("printf blocked > {}", marker.display());
-    let args = serde_json::json!({ "command": command });
+    let args = edgerun_json::serde_json::json!({ "command": command });
     let responses = mount_sse_sequence(
         &server,
         vec![
@@ -2025,7 +2025,7 @@ async fn blocked_pre_tool_use_records_additional_context_for_shell_command() -> 
                 core_test_support::responses::ev_function_call(
                     call_id,
                     "shell_command",
-                    &serde_json::to_string(&args)?,
+                    &edgerun_json::serde_json::to_string(&args)?,
                 ),
                 ev_completed("resp-1"),
             ]),
@@ -2093,7 +2093,7 @@ async fn plugin_pre_tool_use_blocks_shell_command_before_execution() -> Result<(
     let call_id = "plugin-pretooluse-shell-command";
     let marker = std::env::temp_dir().join("plugin-pretooluse-shell-command-marker");
     let command = format!("printf blocked > {}", marker.display());
-    let args = serde_json::json!({ "command": command });
+    let args = edgerun_json::serde_json::json!({ "command": command });
     let responses = mount_sse_sequence(
         &server,
         vec![
@@ -2102,7 +2102,7 @@ async fn plugin_pre_tool_use_blocks_shell_command_before_execution() -> Result<(
                 core_test_support::responses::ev_function_call(
                     call_id,
                     "shell_command",
-                    &serde_json::to_string(&args)?,
+                    &edgerun_json::serde_json::to_string(&args)?,
                 ),
                 ev_completed("resp-1"),
             ]),
@@ -2184,7 +2184,7 @@ print(json.dumps({{
         plugin_data_root,
         source_path: plugin_hooks_path_abs,
         source_relative_path: "hooks/hooks.json".to_string(),
-        hooks: serde_json::from_str::<codex_config::HooksFile>(plugin_hooks_json)
+        hooks: edgerun_json::serde_json::from_str::<codex_config::HooksFile>(plugin_hooks_json)
             .context("parse plugin hooks")?
             .hooks,
     }];
@@ -2248,7 +2248,7 @@ async fn pre_tool_use_blocks_shell_when_defined_in_config_toml() -> Result<()> {
     let call_id = "pretooluse-config-toml";
     let marker = std::env::temp_dir().join("pretooluse-config-toml-marker");
     let command = format!("printf blocked > {}", marker.display());
-    let args = serde_json::json!({ "command": command });
+    let args = edgerun_json::serde_json::json!({ "command": command });
     let responses = mount_sse_sequence(
         &server,
         vec![
@@ -2257,7 +2257,7 @@ async fn pre_tool_use_blocks_shell_when_defined_in_config_toml() -> Result<()> {
                 core_test_support::responses::ev_function_call(
                     call_id,
                     "shell_command",
-                    &serde_json::to_string(&args)?,
+                    &edgerun_json::serde_json::to_string(&args)?,
                 ),
                 ev_completed("resp-1"),
             ]),
@@ -2332,7 +2332,7 @@ async fn pre_tool_use_merges_hooks_json_and_config_toml() -> Result<()> {
     let server = start_mock_server().await;
     let call_id = "pretooluse-merged-sources";
     let command = "printf merged-hooks".to_string();
-    let args = serde_json::json!({ "command": command });
+    let args = edgerun_json::serde_json::json!({ "command": command });
     let responses = mount_sse_sequence(
         &server,
         vec![
@@ -2341,7 +2341,7 @@ async fn pre_tool_use_merges_hooks_json_and_config_toml() -> Result<()> {
                 core_test_support::responses::ev_function_call(
                     call_id,
                     "shell_command",
-                    &serde_json::to_string(&args)?,
+                    &edgerun_json::serde_json::to_string(&args)?,
                 ),
                 ev_completed("resp-1"),
             ]),
@@ -2391,7 +2391,7 @@ async fn pre_tool_use_merges_hooks_json_and_config_toml() -> Result<()> {
     let json_hook_inputs = read_pre_tool_use_hook_inputs(test.codex_home_path())?
         .into_iter()
         .map(|hook_input| {
-            serde_json::json!({
+            edgerun_json::serde_json::json!({
                 "hook_event_name": hook_input["hook_event_name"],
                 "tool_name": hook_input["tool_name"],
                 "tool_use_id": hook_input["tool_use_id"],
@@ -2406,7 +2406,7 @@ async fn pre_tool_use_merges_hooks_json_and_config_toml() -> Result<()> {
     )?
     .into_iter()
     .map(|hook_input| {
-        serde_json::json!({
+        edgerun_json::serde_json::json!({
             "hook_event_name": hook_input["hook_event_name"],
             "tool_name": hook_input["tool_name"],
             "tool_use_id": hook_input["tool_use_id"],
@@ -2414,7 +2414,7 @@ async fn pre_tool_use_merges_hooks_json_and_config_toml() -> Result<()> {
         })
     })
     .collect::<Vec<_>>();
-    let expected_hook_inputs = vec![serde_json::json!({
+    let expected_hook_inputs = vec![edgerun_json::serde_json::json!({
         "hook_event_name": "PreToolUse",
         "tool_name": "Bash",
         "tool_use_id": call_id,
@@ -2525,7 +2525,7 @@ async fn pre_tool_use_blocks_exec_command_before_execution() -> Result<()> {
     let call_id = "pretooluse-exec-command";
     let marker = std::env::temp_dir().join("pretooluse-exec-command-marker");
     let command = format!("printf blocked > {}", marker.display());
-    let args = serde_json::json!({ "cmd": command });
+    let args = edgerun_json::serde_json::json!({ "cmd": command });
     let responses = mount_sse_sequence(
         &server,
         vec![
@@ -2534,7 +2534,7 @@ async fn pre_tool_use_blocks_exec_command_before_execution() -> Result<()> {
                 core_test_support::responses::ev_function_call(
                     call_id,
                     "exec_command",
-                    &serde_json::to_string(&args)?,
+                    &edgerun_json::serde_json::to_string(&args)?,
                 ),
                 ev_completed("resp-1"),
             ]),
@@ -2753,7 +2753,7 @@ async fn pre_tool_use_does_not_fire_for_plan_tool() -> Result<()> {
 
     let server = start_mock_server().await;
     let call_id = "pretooluse-update-plan";
-    let args = serde_json::json!({
+    let args = edgerun_json::serde_json::json!({
         "plan": [{
             "step": "watch the tide",
             "status": "pending",
@@ -2767,7 +2767,7 @@ async fn pre_tool_use_does_not_fire_for_plan_tool() -> Result<()> {
                 core_test_support::responses::ev_function_call(
                     call_id,
                     "update_plan",
-                    &serde_json::to_string(&args)?,
+                    &edgerun_json::serde_json::to_string(&args)?,
                 ),
                 ev_completed("resp-1"),
             ]),
@@ -2821,7 +2821,7 @@ async fn post_tool_use_records_additional_context_for_shell_command() -> Result<
     let server = start_mock_server().await;
     let call_id = "posttooluse-shell-command";
     let command = "printf post-tool-output".to_string();
-    let args = serde_json::json!({ "command": command });
+    let args = edgerun_json::serde_json::json!({ "command": command });
     let responses = mount_sse_sequence(
         &server,
         vec![
@@ -2830,7 +2830,7 @@ async fn post_tool_use_records_additional_context_for_shell_command() -> Result<
                 core_test_support::responses::ev_function_call(
                     call_id,
                     "shell_command",
-                    &serde_json::to_string(&args)?,
+                    &edgerun_json::serde_json::to_string(&args)?,
                 ),
                 ev_completed("resp-1"),
             ]),
@@ -2913,7 +2913,7 @@ async fn post_tool_use_block_decision_replaces_shell_command_output_with_reason(
     let server = start_mock_server().await;
     let call_id = "posttooluse-shell-command-block";
     let command = "printf blocked-output".to_string();
-    let args = serde_json::json!({ "command": command });
+    let args = edgerun_json::serde_json::json!({ "command": command });
     let responses = mount_sse_sequence(
         &server,
         vec![
@@ -2922,7 +2922,7 @@ async fn post_tool_use_block_decision_replaces_shell_command_output_with_reason(
                 core_test_support::responses::ev_function_call(
                     call_id,
                     "shell_command",
-                    &serde_json::to_string(&args)?,
+                    &edgerun_json::serde_json::to_string(&args)?,
                 ),
                 ev_completed("resp-1"),
             ]),
@@ -2977,7 +2977,7 @@ async fn post_tool_use_continue_false_replaces_shell_command_output_with_stop_re
     let server = start_mock_server().await;
     let call_id = "posttooluse-shell-command-stop";
     let command = "printf stop-output".to_string();
-    let args = serde_json::json!({ "command": command });
+    let args = edgerun_json::serde_json::json!({ "command": command });
     let responses = mount_sse_sequence(
         &server,
         vec![
@@ -2986,7 +2986,7 @@ async fn post_tool_use_continue_false_replaces_shell_command_output_with_stop_re
                 core_test_support::responses::ev_function_call(
                     call_id,
                     "shell_command",
-                    &serde_json::to_string(&args)?,
+                    &edgerun_json::serde_json::to_string(&args)?,
                 ),
                 ev_completed("resp-1"),
             ]),
@@ -3110,7 +3110,7 @@ async fn post_tool_use_exit_two_replaces_one_shot_exec_command_output_with_feedb
     let server = start_mock_server().await;
     let call_id = "posttooluse-exec-command";
     let command = "printf post-hook-output".to_string();
-    let args = serde_json::json!({ "cmd": command, "tty": false });
+    let args = edgerun_json::serde_json::json!({ "cmd": command, "tty": false });
     let responses = mount_sse_sequence(
         &server,
         vec![
@@ -3119,7 +3119,7 @@ async fn post_tool_use_exit_two_replaces_one_shot_exec_command_output_with_feedb
                 core_test_support::responses::ev_function_call(
                     call_id,
                     "exec_command",
-                    &serde_json::to_string(&args)?,
+                    &edgerun_json::serde_json::to_string(&args)?,
                 ),
                 ev_completed("resp-1"),
             ]),
@@ -3181,7 +3181,7 @@ async fn post_tool_use_spills_large_feedback_message() -> Result<()> {
     let server = start_mock_server().await;
     let call_id = "posttooluse-large-feedback";
     let command = "printf post-hook-output".to_string();
-    let args = serde_json::json!({ "cmd": command, "tty": false });
+    let args = edgerun_json::serde_json::json!({ "cmd": command, "tty": false });
     let responses = mount_sse_sequence(
         &server,
         vec![
@@ -3190,7 +3190,7 @@ async fn post_tool_use_spills_large_feedback_message() -> Result<()> {
                 core_test_support::responses::ev_function_call(
                     call_id,
                     "exec_command",
-                    &serde_json::to_string(&args)?,
+                    &edgerun_json::serde_json::to_string(&args)?,
                 ),
                 ev_completed("resp-1"),
             ]),
@@ -3251,14 +3251,14 @@ async fn post_tool_use_blocks_when_exec_session_completes_via_write_stdin() -> R
     let start_call_id = "posttooluse-exec-session-start";
     let poll_call_id = "posttooluse-exec-session-poll";
     let command = "sleep 1; printf session-post-hook-output".to_string();
-    let start_args = serde_json::json!({
+    let start_args = edgerun_json::serde_json::json!({
         "cmd": command,
         "shell": "/bin/sh",
         "login": false,
         "tty": false,
         "yield_time_ms": 250,
     });
-    let poll_args = serde_json::json!({
+    let poll_args = edgerun_json::serde_json::json!({
         "session_id": 1000,
         "chars": "",
         "yield_time_ms": 5_000,
@@ -3272,7 +3272,7 @@ async fn post_tool_use_blocks_when_exec_session_completes_via_write_stdin() -> R
                 core_test_support::responses::ev_function_call(
                     start_call_id,
                     "exec_command",
-                    &serde_json::to_string(&start_args)?,
+                    &edgerun_json::serde_json::to_string(&start_args)?,
                 ),
                 ev_completed("resp-1"),
             ]),
@@ -3281,7 +3281,7 @@ async fn post_tool_use_blocks_when_exec_session_completes_via_write_stdin() -> R
                 core_test_support::responses::ev_function_call(
                     poll_call_id,
                     "write_stdin",
-                    &serde_json::to_string(&poll_args)?,
+                    &edgerun_json::serde_json::to_string(&poll_args)?,
                 ),
                 ev_completed("resp-2"),
             ]),
@@ -3413,7 +3413,7 @@ async fn post_tool_use_records_additional_context_for_apply_patch() -> Result<()
     let tool_response = hook_inputs[0]["tool_response"]
         .as_str()
         .context("apply_patch tool_response should be a string")?;
-    let mut parsed_tool_response = serde_json::from_str::<Value>(tool_response)?;
+    let mut parsed_tool_response = edgerun_json::serde_json::from_str::<Value>(tool_response)?;
     if let Some(metadata) = parsed_tool_response
         .get_mut("metadata")
         .and_then(Value::as_object_mut)
@@ -3422,7 +3422,7 @@ async fn post_tool_use_records_additional_context_for_apply_patch() -> Result<()
     }
     assert_eq!(
         parsed_tool_response,
-        serde_json::json!({
+        edgerun_json::serde_json::json!({
             "output": "Success. Updated the following files:\nA post_tool_use_apply_patch.txt\n",
             "metadata": {
                 "exit_code": 0,
@@ -3509,7 +3509,7 @@ async fn post_tool_use_does_not_fire_for_plan_tool() -> Result<()> {
 
     let server = start_mock_server().await;
     let call_id = "posttooluse-update-plan";
-    let args = serde_json::json!({
+    let args = edgerun_json::serde_json::json!({
         "plan": [{
             "step": "watch the tide",
             "status": "pending",
@@ -3523,7 +3523,7 @@ async fn post_tool_use_does_not_fire_for_plan_tool() -> Result<()> {
                 core_test_support::responses::ev_function_call(
                     call_id,
                     "update_plan",
-                    &serde_json::to_string(&args)?,
+                    &edgerun_json::serde_json::to_string(&args)?,
                 ),
                 ev_completed("resp-1"),
             ]),

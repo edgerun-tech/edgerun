@@ -542,7 +542,7 @@ pub(crate) fn estimate_response_item_model_visible_bytes(item: &ResponseItem) ->
             encrypted_content: Some(content),
         } => i64::try_from(estimate_reasoning_length(content.len())).unwrap_or(i64::MAX),
         item => {
-            let raw = serde_json::to_string(item)
+            let raw = edgerun_json::serde_json::to_string(item)
                 .map(|serialized| i64::try_from(serialized.len()).unwrap_or(i64::MAX))
                 .unwrap_or_default();
             let (payload_bytes, replacement_bytes) = image_data_url_estimate_adjustment(item);

@@ -1,6 +1,6 @@
 use super::*;
 use pretty_assertions::assert_eq;
-use serde_json::json;
+use edgerun_json::serde_json::json;
 
 #[test]
 fn parse_csv_supports_quotes_and_commas() {

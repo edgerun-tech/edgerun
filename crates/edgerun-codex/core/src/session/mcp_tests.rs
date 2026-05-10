@@ -2,7 +2,7 @@ use super::*;
 use rmcp::model::BooleanSchema;
 use rmcp::model::ElicitationSchema;
 use rmcp::model::PrimitiveSchema;
-use serde_json::json;
+use edgerun_json::serde_json::json;
 
 fn meta(value: Value) -> Option<Meta> {
     let Value::Object(map) = value else {

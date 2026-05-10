@@ -220,7 +220,6 @@ dependencies = [
  "http",
  "reqwest",
  "serde",
- "serde_json",
  "tokio",
  "tokio-util",
  "tracing",
@@ -235,11 +234,11 @@ dependencies = [
  "codex-shell-command",
  "edgerun-clap",
  "edgerun-error",
+ "edgerun-json",
  "inventory",
  "rmcp",
  "schemars 0.8.22",
  "serde",
- "serde_json",
  "serde_with",
  "strum_macros",
  "tracing",
@@ -267,6 +266,7 @@ dependencies = [
  "async-trait",
  "bytes",
  "edgerun-error",
+ "edgerun-json",
  "edgerun-random",
  "eventsource-stream",
  "futures",
@@ -277,7 +277,6 @@ dependencies = [
  "rustls-native-certs",
  "rustls-pki-types",
  "serde",
- "serde_json",
  "tokio",
  "tracing",
  "tracing-opentelemetry",
@@ -292,8 +291,8 @@ dependencies = [
  "async-trait",
  "codex-protocol",
  "deno_core_icudata",
+ "edgerun-json",
  "serde",
- "serde_json",
  "tokio",
  "tokio-util",
  "tracing",
@@ -315,6 +314,7 @@ dependencies = [
  "edgerun-error",
  "edgerun-json",
  "edgerun-random",
+ "edgerun-shlex",
  "edgerun-time",
  "edgerun-tokio-tungstenite",
 ]
@@ -330,6 +330,7 @@ dependencies = [
  "codex-models-manager",
  "codex-protocol",
  "codex-response-debug-context",
+ "edgerun-json",
  "http",
  "reqwest",
  "tokio",
@@ -382,7 +383,6 @@ dependencies = [
  "schemars 0.8.22",
  "seccompiler",
  "serde",
- "serde_json",
  "serde_with",
  "strum",
  "strum_macros",
@@ -422,9 +422,9 @@ dependencies = [
  "codex-app-server-protocol",
  "codex-code-mode",
  "codex-protocol",
+ "edgerun-json",
  "rmcp",
  "serde",
- "serde_json",
  "tracing",
 ]
 
@@ -728,6 +728,7 @@ name = "edgerun-json"
 version = "0.1.1"
 dependencies = [
  "edgerun-json-derive",
+ "serde_json",
 ]
 
 [[package]]

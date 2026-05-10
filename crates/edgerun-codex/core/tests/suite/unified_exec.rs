@@ -38,8 +38,8 @@ use core_test_support::wait_for_event_match;
 use core_test_support::wait_for_event_with_timeout;
 use pretty_assertions::assert_eq;
 use regex_lite::Regex;
-use serde_json::Value;
-use serde_json::json;
+use edgerun_json::serde_json::Value;
+use edgerun_json::serde_json::json;
 use tokio::time::Duration;
 
 const UNIFIED_EXEC_LAGGED_OUTPUT_TIMEOUT: Duration = Duration::from_secs(30);
@@ -256,7 +256,7 @@ async fn unified_exec_intercepts_apply_patch_exec_command() -> Result<()> {
     let responses = vec![
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "exec_command", &serde_json::to_string(&args)?),
+            ev_function_call(call_id, "exec_command", &edgerun_json::serde_json::to_string(&args)?),
             ev_completed("resp-1"),
         ]),
         sse(vec![
@@ -391,7 +391,7 @@ async fn unified_exec_emits_exec_command_begin_event() -> Result<()> {
     let responses = vec![
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "exec_command", &serde_json::to_string(&args)?),
+            ev_function_call(call_id, "exec_command", &edgerun_json::serde_json::to_string(&args)?),
             ev_completed("resp-1"),
         ]),
         sse(vec![
@@ -452,7 +452,7 @@ async fn unified_exec_resolves_relative_workdir() -> Result<()> {
     let responses = vec![
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "exec_command", &serde_json::to_string(&args)?),
+            ev_function_call(call_id, "exec_command", &edgerun_json::serde_json::to_string(&args)?),
             ev_completed("resp-1"),
         ]),
         sse(vec![
@@ -520,7 +520,7 @@ async fn unified_exec_respects_workdir_override() -> Result<()> {
     let responses = vec![
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "exec_command", &serde_json::to_string(&args)?),
+            ev_function_call(call_id, "exec_command", &edgerun_json::serde_json::to_string(&args)?),
             ev_completed("resp-1"),
         ]),
         sse(vec![
@@ -588,7 +588,7 @@ async fn unified_exec_emits_exec_command_end_event() -> Result<()> {
     let responses = vec![
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "exec_command", &serde_json::to_string(&args)?),
+            ev_function_call(call_id, "exec_command", &edgerun_json::serde_json::to_string(&args)?),
             ev_completed("resp-1"),
         ]),
         sse(vec![
@@ -596,7 +596,7 @@ async fn unified_exec_emits_exec_command_end_event() -> Result<()> {
             ev_function_call(
                 poll_call_id,
                 "write_stdin",
-                &serde_json::to_string(&poll_args)?,
+                &edgerun_json::serde_json::to_string(&poll_args)?,
             ),
             ev_completed("resp-2"),
         ]),
@@ -655,7 +655,7 @@ async fn unified_exec_emits_output_delta_for_exec_command() -> Result<()> {
     let responses = vec![
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "exec_command", &serde_json::to_string(&args)?),
+            ev_function_call(call_id, "exec_command", &edgerun_json::serde_json::to_string(&args)?),
             ev_completed("resp-1"),
         ]),
         sse(vec![
@@ -714,7 +714,7 @@ async fn unified_exec_full_lifecycle_with_background_end_event() -> Result<()> {
     let responses = vec![
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "exec_command", &serde_json::to_string(&args)?),
+            ev_function_call(call_id, "exec_command", &edgerun_json::serde_json::to_string(&args)?),
             ev_completed("resp-1"),
         ]),
         sse(vec![
@@ -958,7 +958,7 @@ async fn mount_unified_exec_network_denial_responses(
     let responses = vec![
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "exec_command", &serde_json::to_string(&args)?),
+            ev_function_call(call_id, "exec_command", &edgerun_json::serde_json::to_string(&args)?),
             ev_completed("resp-1"),
         ]),
         sse(vec![
@@ -1044,7 +1044,7 @@ async fn unified_exec_emits_terminal_interaction_for_write_stdin() -> Result<()>
             ev_function_call(
                 open_call_id,
                 "exec_command",
-                &serde_json::to_string(&open_args)?,
+                &edgerun_json::serde_json::to_string(&open_args)?,
             ),
             ev_completed("resp-1"),
         ]),
@@ -1053,7 +1053,7 @@ async fn unified_exec_emits_terminal_interaction_for_write_stdin() -> Result<()>
             ev_function_call(
                 stdin_call_id,
                 "write_stdin",
-                &serde_json::to_string(&stdin_args)?,
+                &edgerun_json::serde_json::to_string(&stdin_args)?,
             ),
             ev_completed("resp-2"),
         ]),
@@ -1143,7 +1143,7 @@ async fn unified_exec_terminal_interaction_captures_delayed_output() -> Result<(
             ev_function_call(
                 open_call_id,
                 "exec_command",
-                &serde_json::to_string(&open_args)?,
+                &edgerun_json::serde_json::to_string(&open_args)?,
             ),
             ev_completed("resp-1"),
         ]),
@@ -1152,7 +1152,7 @@ async fn unified_exec_terminal_interaction_captures_delayed_output() -> Result<(
             ev_function_call(
                 first_poll_call_id,
                 "write_stdin",
-                &serde_json::to_string(&first_poll_args)?,
+                &edgerun_json::serde_json::to_string(&first_poll_args)?,
             ),
             ev_completed("resp-2"),
         ]),
@@ -1161,7 +1161,7 @@ async fn unified_exec_terminal_interaction_captures_delayed_output() -> Result<(
             ev_function_call(
                 second_poll_call_id,
                 "write_stdin",
-                &serde_json::to_string(&second_poll_args)?,
+                &edgerun_json::serde_json::to_string(&second_poll_args)?,
             ),
             ev_completed("resp-3"),
         ]),
@@ -1170,7 +1170,7 @@ async fn unified_exec_terminal_interaction_captures_delayed_output() -> Result<(
             ev_function_call(
                 third_poll_call_id,
                 "write_stdin",
-                &serde_json::to_string(&third_poll_args)?,
+                &edgerun_json::serde_json::to_string(&third_poll_args)?,
             ),
             ev_completed("resp-4"),
         ]),
@@ -1306,7 +1306,7 @@ async fn unified_exec_emits_one_begin_and_one_end_event() -> Result<()> {
             ev_function_call(
                 open_call_id,
                 "exec_command",
-                &serde_json::to_string(&open_args)?,
+                &edgerun_json::serde_json::to_string(&open_args)?,
             ),
             ev_completed("resp-1"),
         ]),
@@ -1315,7 +1315,7 @@ async fn unified_exec_emits_one_begin_and_one_end_event() -> Result<()> {
             ev_function_call(
                 poll_call_id,
                 "write_stdin",
-                &serde_json::to_string(&poll_args)?,
+                &edgerun_json::serde_json::to_string(&poll_args)?,
             ),
             ev_completed("resp-2"),
         ]),
@@ -1401,7 +1401,7 @@ async fn exec_command_reports_chunk_and_exit_metadata() -> Result<()> {
     let test = builder.build_remote_aware(&server).await?;
 
     let call_id = "uexec-metadata";
-    let args = serde_json::json!({
+    let args = edgerun_json::serde_json::json!({
         "cmd": "printf 'token one token two token three token four token five token six token seven'",
         "yield_time_ms": 500,
         "max_output_tokens": 6,
@@ -1410,7 +1410,7 @@ async fn exec_command_reports_chunk_and_exit_metadata() -> Result<()> {
     let responses = vec![
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "exec_command", &serde_json::to_string(&args)?),
+            ev_function_call(call_id, "exec_command", &edgerun_json::serde_json::to_string(&args)?),
             ev_completed("resp-1"),
         ]),
         sse(vec![
@@ -1496,7 +1496,7 @@ async fn exec_command_clamps_model_requested_max_output_tokens_to_policy() -> Re
     let test = builder.build_remote_aware(&server).await?;
 
     let call_id = "uexec-clamped-max-output";
-    let args = serde_json::json!({
+    let args = edgerun_json::serde_json::json!({
         "cmd": "line_number=1; while [ \"$line_number\" -le 999 ]; do printf 'EXEC-LINE-%04d xxxxxxxxxxxxxxxxxxxx\\n' \"$line_number\"; line_number=$((line_number + 1)); done",
         "yield_time_ms": 3_000,
         "max_output_tokens": 70_000,
@@ -1505,7 +1505,7 @@ async fn exec_command_clamps_model_requested_max_output_tokens_to_policy() -> Re
     let responses = vec![
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "exec_command", &serde_json::to_string(&args)?),
+            ev_function_call(call_id, "exec_command", &edgerun_json::serde_json::to_string(&args)?),
             ev_completed("resp-1"),
         ]),
         sse(vec![
@@ -1558,14 +1558,14 @@ async fn write_stdin_clamps_model_requested_max_output_tokens_to_policy() -> Res
     let test = builder.build_remote_aware(&server).await?;
 
     let start_call_id = "uexec-stdin-clamp-start";
-    let start_args = serde_json::json!({
+    let start_args = edgerun_json::serde_json::json!({
         "cmd": "printf 'READY\\n'; read trigger; line_number=1; while [ \"$line_number\" -le 999 ]; do printf 'STDIN-LINE-%04d yyyyyyyyyyyyyyyyyyyy\\n' \"$line_number\"; line_number=$((line_number + 1)); done",
         "yield_time_ms": 500,
         "tty": true,
     });
 
     let stdin_call_id = "uexec-stdin-clamped-max-output";
-    let stdin_args = serde_json::json!({
+    let stdin_args = edgerun_json::serde_json::json!({
         "chars": "go\n",
         "session_id": 1000,
         "yield_time_ms": 3_000,
@@ -1578,7 +1578,7 @@ async fn write_stdin_clamps_model_requested_max_output_tokens_to_policy() -> Res
             ev_function_call(
                 start_call_id,
                 "exec_command",
-                &serde_json::to_string(&start_args)?,
+                &edgerun_json::serde_json::to_string(&start_args)?,
             ),
             ev_completed("resp-1"),
         ]),
@@ -1587,7 +1587,7 @@ async fn write_stdin_clamps_model_requested_max_output_tokens_to_policy() -> Res
             ev_function_call(
                 stdin_call_id,
                 "write_stdin",
-                &serde_json::to_string(&stdin_args)?,
+                &edgerun_json::serde_json::to_string(&stdin_args)?,
             ),
             ev_completed("resp-2"),
         ]),
@@ -1645,7 +1645,7 @@ async fn unified_exec_defaults_to_pipe() -> Result<()> {
     let test = builder.build_remote_aware(&server).await?;
 
     let call_id = "uexec-default-pipe";
-    let args = serde_json::json!({
+    let args = edgerun_json::serde_json::json!({
         "cmd": "python3 -c \"import sys; print(sys.stdin.isatty())\"",
         "yield_time_ms": 1500,
     });
@@ -1653,7 +1653,7 @@ async fn unified_exec_defaults_to_pipe() -> Result<()> {
     let responses = vec![
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "exec_command", &serde_json::to_string(&args)?),
+            ev_function_call(call_id, "exec_command", &edgerun_json::serde_json::to_string(&args)?),
             ev_completed("resp-1"),
         ]),
         sse(vec![
@@ -1714,7 +1714,7 @@ async fn unified_exec_can_enable_tty() -> Result<()> {
     let test = builder.build_remote_aware(&server).await?;
 
     let call_id = "uexec-tty-enabled";
-    let args = serde_json::json!({
+    let args = edgerun_json::serde_json::json!({
         "cmd": "python3 -c \"import sys; print(sys.stdin.isatty())\"",
         "yield_time_ms": 1500,
         "tty": true,
@@ -1723,7 +1723,7 @@ async fn unified_exec_can_enable_tty() -> Result<()> {
     let responses = vec![
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "exec_command", &serde_json::to_string(&args)?),
+            ev_function_call(call_id, "exec_command", &edgerun_json::serde_json::to_string(&args)?),
             ev_completed("resp-1"),
         ]),
         sse(vec![
@@ -1780,7 +1780,7 @@ async fn unified_exec_respects_early_exit_notifications() -> Result<()> {
     let test = builder.build_remote_aware(&server).await?;
 
     let call_id = "uexec-early-exit";
-    let args = serde_json::json!({
+    let args = edgerun_json::serde_json::json!({
         "cmd": "sleep 0.05",
         "yield_time_ms": 31415,
     });
@@ -1788,7 +1788,7 @@ async fn unified_exec_respects_early_exit_notifications() -> Result<()> {
     let responses = vec![
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "exec_command", &serde_json::to_string(&args)?),
+            ev_function_call(call_id, "exec_command", &edgerun_json::serde_json::to_string(&args)?),
             ev_completed("resp-1"),
         ]),
         sse(vec![
@@ -1866,17 +1866,17 @@ async fn write_stdin_returns_exit_metadata_and_clears_session() -> Result<()> {
     let send_call_id = "uexec-cat-send";
     let exit_call_id = "uexec-cat-exit";
 
-    let start_args = serde_json::json!({
+    let start_args = edgerun_json::serde_json::json!({
         "cmd": "/bin/cat",
         "yield_time_ms": 500,
         "tty": true,
     });
-    let send_args = serde_json::json!({
+    let send_args = edgerun_json::serde_json::json!({
         "chars": "hello unified exec\n",
         "session_id": 1000,
         "yield_time_ms": 500,
     });
-    let exit_args = serde_json::json!({
+    let exit_args = edgerun_json::serde_json::json!({
         "chars": "\u{0004}",
         "session_id": 1000,
         "yield_time_ms": 500,
@@ -1888,7 +1888,7 @@ async fn write_stdin_returns_exit_metadata_and_clears_session() -> Result<()> {
             ev_function_call(
                 start_call_id,
                 "exec_command",
-                &serde_json::to_string(&start_args)?,
+                &edgerun_json::serde_json::to_string(&start_args)?,
             ),
             ev_completed("resp-1"),
         ]),
@@ -1897,7 +1897,7 @@ async fn write_stdin_returns_exit_metadata_and_clears_session() -> Result<()> {
             ev_function_call(
                 send_call_id,
                 "write_stdin",
-                &serde_json::to_string(&send_args)?,
+                &edgerun_json::serde_json::to_string(&send_args)?,
             ),
             ev_completed("resp-2"),
         ]),
@@ -1906,7 +1906,7 @@ async fn write_stdin_returns_exit_metadata_and_clears_session() -> Result<()> {
             ev_function_call(
                 exit_call_id,
                 "write_stdin",
-                &serde_json::to_string(&exit_args)?,
+                &edgerun_json::serde_json::to_string(&exit_args)?,
             ),
             ev_completed("resp-3"),
         ]),
@@ -2017,21 +2017,21 @@ async fn unified_exec_emits_end_event_when_session_dies_via_stdin() -> Result<()
     let test = builder.build_remote_aware(&server).await?;
 
     let start_call_id = "uexec-end-on-exit-start";
-    let start_args = serde_json::json!({
+    let start_args = edgerun_json::serde_json::json!({
         "cmd": "/bin/cat",
         "yield_time_ms": 200,
         "tty": true,
     });
 
     let echo_call_id = "uexec-end-on-exit-echo";
-    let echo_args = serde_json::json!({
+    let echo_args = edgerun_json::serde_json::json!({
         "chars": "bye-END\n",
         "session_id": 1000,
         "yield_time_ms": 300,
     });
 
     let exit_call_id = "uexec-end-on-exit";
-    let exit_args = serde_json::json!({
+    let exit_args = edgerun_json::serde_json::json!({
         "chars": "\u{0004}",
         "session_id": 1000,
         "yield_time_ms": 500,
@@ -2043,7 +2043,7 @@ async fn unified_exec_emits_end_event_when_session_dies_via_stdin() -> Result<()
             ev_function_call(
                 start_call_id,
                 "exec_command",
-                &serde_json::to_string(&start_args)?,
+                &edgerun_json::serde_json::to_string(&start_args)?,
             ),
             ev_completed("resp-1"),
         ]),
@@ -2052,7 +2052,7 @@ async fn unified_exec_emits_end_event_when_session_dies_via_stdin() -> Result<()
             ev_function_call(
                 echo_call_id,
                 "write_stdin",
-                &serde_json::to_string(&echo_args)?,
+                &edgerun_json::serde_json::to_string(&echo_args)?,
             ),
             ev_completed("resp-2"),
         ]),
@@ -2061,7 +2061,7 @@ async fn unified_exec_emits_end_event_when_session_dies_via_stdin() -> Result<()
             ev_function_call(
                 exit_call_id,
                 "write_stdin",
-                &serde_json::to_string(&exit_args)?,
+                &edgerun_json::serde_json::to_string(&exit_args)?,
             ),
             ev_completed("resp-3"),
         ]),
@@ -2127,7 +2127,7 @@ async fn unified_exec_keeps_long_running_session_after_turn_end() -> Result<()> 
     let responses = vec![
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "exec_command", &serde_json::to_string(&args)?),
+            ev_function_call(call_id, "exec_command", &edgerun_json::serde_json::to_string(&args)?),
             ev_completed("resp-1"),
         ]),
         sse(vec![
@@ -2228,7 +2228,7 @@ async fn unified_exec_interrupt_preserves_long_running_session() -> Result<()> {
 
     let responses = vec![sse(vec![
         ev_response_created("resp-1"),
-        ev_function_call(call_id, "exec_command", &serde_json::to_string(&args)?),
+        ev_function_call(call_id, "exec_command", &edgerun_json::serde_json::to_string(&args)?),
         ev_completed("resp-1"),
     ])];
     mount_sse_sequence(&server, responses).await;
@@ -2300,14 +2300,14 @@ async fn unified_exec_reuses_session_via_stdin() -> Result<()> {
     let test = builder.build_remote_aware(&server).await?;
 
     let first_call_id = "uexec-start";
-    let first_args = serde_json::json!({
+    let first_args = edgerun_json::serde_json::json!({
         "cmd": "/bin/cat",
         "yield_time_ms": 200,
         "tty": true,
     });
 
     let second_call_id = "uexec-stdin";
-    let second_args = serde_json::json!({
+    let second_args = edgerun_json::serde_json::json!({
         "chars": "hello unified exec\n",
         "session_id": 1000,
         "yield_time_ms": 500,
@@ -2319,7 +2319,7 @@ async fn unified_exec_reuses_session_via_stdin() -> Result<()> {
             ev_function_call(
                 first_call_id,
                 "exec_command",
-                &serde_json::to_string(&first_args)?,
+                &edgerun_json::serde_json::to_string(&first_args)?,
             ),
             ev_completed("resp-1"),
         ]),
@@ -2328,7 +2328,7 @@ async fn unified_exec_reuses_session_via_stdin() -> Result<()> {
             ev_function_call(
                 second_call_id,
                 "write_stdin",
-                &serde_json::to_string(&second_args)?,
+                &edgerun_json::serde_json::to_string(&second_args)?,
             ),
             ev_completed("resp-2"),
         ]),
@@ -2418,14 +2418,14 @@ PY
 "#;
 
     let first_call_id = "uexec-lag-start";
-    let first_args = serde_json::json!({
+    let first_args = edgerun_json::serde_json::json!({
         "cmd": script,
         "yield_time_ms": 25,
         "tty": true,
     });
 
     let second_call_id = "uexec-lag-poll";
-    let second_args = serde_json::json!({
+    let second_args = edgerun_json::serde_json::json!({
         "chars": "",
         "session_id": 1000,
         "yield_time_ms": 2_000,
@@ -2437,7 +2437,7 @@ PY
             ev_function_call(
                 first_call_id,
                 "exec_command",
-                &serde_json::to_string(&first_args)?,
+                &edgerun_json::serde_json::to_string(&first_args)?,
             ),
             ev_completed("resp-1"),
         ]),
@@ -2446,7 +2446,7 @@ PY
             ev_function_call(
                 second_call_id,
                 "write_stdin",
-                &serde_json::to_string(&second_args)?,
+                &edgerun_json::serde_json::to_string(&second_args)?,
             ),
             ev_completed("resp-2"),
         ]),
@@ -2519,13 +2519,13 @@ async fn unified_exec_timeout_and_followup_poll() -> Result<()> {
     let test = builder.build_remote_aware(&server).await?;
 
     let first_call_id = "uexec-timeout";
-    let first_args = serde_json::json!({
+    let first_args = edgerun_json::serde_json::json!({
         "cmd": "sleep 0.5; echo ready",
         "yield_time_ms": 10,
     });
 
     let second_call_id = "uexec-poll";
-    let second_args = serde_json::json!({
+    let second_args = edgerun_json::serde_json::json!({
         "chars": "",
         "session_id": 1000,
         "yield_time_ms": 800,
@@ -2537,7 +2537,7 @@ async fn unified_exec_timeout_and_followup_poll() -> Result<()> {
             ev_function_call(
                 first_call_id,
                 "exec_command",
-                &serde_json::to_string(&first_args)?,
+                &edgerun_json::serde_json::to_string(&first_args)?,
             ),
             ev_completed("resp-1"),
         ]),
@@ -2546,7 +2546,7 @@ async fn unified_exec_timeout_and_followup_poll() -> Result<()> {
             ev_function_call(
                 second_call_id,
                 "write_stdin",
-                &serde_json::to_string(&second_args)?,
+                &edgerun_json::serde_json::to_string(&second_args)?,
             ),
             ev_completed("resp-2"),
         ]),
@@ -2614,7 +2614,7 @@ PY
 "#;
 
     let call_id = "uexec-large-output";
-    let args = serde_json::json!({
+    let args = edgerun_json::serde_json::json!({
         "cmd": script,
         "max_output_tokens": 100,
         "yield_time_ms": 500,
@@ -2623,7 +2623,7 @@ PY
     let responses = vec![
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "exec_command", &serde_json::to_string(&args)?),
+            ev_function_call(call_id, "exec_command", &edgerun_json::serde_json::to_string(&args)?),
             ev_completed("resp-1"),
         ]),
         sse(vec![
@@ -2689,7 +2689,7 @@ async fn unified_exec_runs_under_sandbox() -> Result<()> {
     } = builder.build(&server).await?;
 
     let call_id = "uexec";
-    let args = serde_json::json!({
+    let args = edgerun_json::serde_json::json!({
         "cmd": "echo 'hello'",
         "yield_time_ms": 500,
     });
@@ -2697,7 +2697,7 @@ async fn unified_exec_runs_under_sandbox() -> Result<()> {
     let responses = vec![
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "exec_command", &serde_json::to_string(&args)?),
+            ev_function_call(call_id, "exec_command", &edgerun_json::serde_json::to_string(&args)?),
             ev_completed("resp-1"),
         ]),
         sse(vec![
@@ -2809,7 +2809,7 @@ async fn unified_exec_enforces_glob_deny_read_policy() -> Result<()> {
     let cmd = format!(
         "read_status=0; cat {denied_path:?} || read_status=$?; cat {allowed_path:?}; exit $read_status"
     );
-    let args = serde_json::json!({
+    let args = edgerun_json::serde_json::json!({
         "cmd": cmd,
         "yield_time_ms": 5_000,
     });
@@ -2817,7 +2817,7 @@ async fn unified_exec_enforces_glob_deny_read_policy() -> Result<()> {
     let responses = vec![
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "exec_command", &serde_json::to_string(&args)?),
+            ev_function_call(call_id, "exec_command", &edgerun_json::serde_json::to_string(&args)?),
             ev_completed("resp-1"),
         ]),
         sse(vec![
@@ -2916,14 +2916,14 @@ async fn unified_exec_python_prompt_under_seatbelt() -> Result<()> {
     } = builder.build(&server).await?;
 
     let startup_call_id = "uexec-python-seatbelt";
-    let startup_args = serde_json::json!({
+    let startup_args = edgerun_json::serde_json::json!({
         "cmd": format!("{} -i", python.display()),
         "yield_time_ms": 1_500,
         "tty": true,
     });
 
     let exit_call_id = "uexec-python-exit";
-    let exit_args = serde_json::json!({
+    let exit_args = edgerun_json::serde_json::json!({
         "chars": "exit()\n",
         "session_id": 1000,
         "yield_time_ms": 1_500,
@@ -2935,7 +2935,7 @@ async fn unified_exec_python_prompt_under_seatbelt() -> Result<()> {
             ev_function_call(
                 startup_call_id,
                 "exec_command",
-                &serde_json::to_string(&startup_args)?,
+                &edgerun_json::serde_json::to_string(&startup_args)?,
             ),
             ev_completed("resp-1"),
         ]),
@@ -2944,7 +2944,7 @@ async fn unified_exec_python_prompt_under_seatbelt() -> Result<()> {
             ev_function_call(
                 exit_call_id,
                 "write_stdin",
-                &serde_json::to_string(&exit_args)?,
+                &edgerun_json::serde_json::to_string(&exit_args)?,
             ),
             ev_completed("resp-2"),
         ]),
@@ -3036,14 +3036,14 @@ async fn unified_exec_runs_on_all_platforms() -> Result<()> {
     let test = builder.build_remote_aware(&server).await?;
 
     let call_id = "uexec";
-    let args = serde_json::json!({
+    let args = edgerun_json::serde_json::json!({
         "cmd": "echo 'hello crossplat'",
     });
 
     let responses = vec![
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "exec_command", &serde_json::to_string(&args)?),
+            ev_function_call(call_id, "exec_command", &edgerun_json::serde_json::to_string(&args)?),
             ev_completed("resp-1"),
         ]),
         sse(vec![
@@ -3103,7 +3103,7 @@ async fn unified_exec_prunes_exited_sessions_first() -> Result<()> {
     const FILLER_SESSIONS: i32 = MAX_SESSIONS_FOR_TEST - 1;
 
     let keep_call_id = "uexec-prune-keep";
-    let keep_args = serde_json::json!({
+    let keep_args = edgerun_json::serde_json::json!({
         "cmd": "/bin/cat",
         "yield_time_ms": 250,
         "tty": true,
@@ -3111,7 +3111,7 @@ async fn unified_exec_prunes_exited_sessions_first() -> Result<()> {
 
     let prune_call_id = "uexec-prune-target";
     // Give the sleeper time to exit before the filler sessions trigger pruning.
-    let prune_args = serde_json::json!({
+    let prune_args = edgerun_json::serde_json::json!({
         "cmd": "sleep 1",
         "yield_time_ms": 1_250,
         "tty": true,
@@ -3121,16 +3121,16 @@ async fn unified_exec_prunes_exited_sessions_first() -> Result<()> {
     events.push(ev_function_call(
         keep_call_id,
         "exec_command",
-        &serde_json::to_string(&keep_args)?,
+        &edgerun_json::serde_json::to_string(&keep_args)?,
     ));
     events.push(ev_function_call(
         prune_call_id,
         "exec_command",
-        &serde_json::to_string(&prune_args)?,
+        &edgerun_json::serde_json::to_string(&prune_args)?,
     ));
 
     for idx in 0..FILLER_SESSIONS {
-        let filler_args = serde_json::json!({
+        let filler_args = edgerun_json::serde_json::json!({
             "cmd": format!("echo filler {idx}"),
             "yield_time_ms": 250,
         });
@@ -3138,12 +3138,12 @@ async fn unified_exec_prunes_exited_sessions_first() -> Result<()> {
         events.push(ev_function_call(
             &call_id,
             "exec_command",
-            &serde_json::to_string(&filler_args)?,
+            &edgerun_json::serde_json::to_string(&filler_args)?,
         ));
     }
 
     let keep_write_call_id = "uexec-prune-keep-write";
-    let keep_write_args = serde_json::json!({
+    let keep_write_args = edgerun_json::serde_json::json!({
         "chars": "still alive\n",
         "session_id": 1000,
         "yield_time_ms": 500,
@@ -3151,11 +3151,11 @@ async fn unified_exec_prunes_exited_sessions_first() -> Result<()> {
     events.push(ev_function_call(
         keep_write_call_id,
         "write_stdin",
-        &serde_json::to_string(&keep_write_args)?,
+        &edgerun_json::serde_json::to_string(&keep_write_args)?,
     ));
 
     let probe_call_id = "uexec-prune-probe";
-    let probe_args = serde_json::json!({
+    let probe_args = edgerun_json::serde_json::json!({
         "chars": "should fail\n",
         "session_id": 1001,
         "yield_time_ms": 500,
@@ -3163,7 +3163,7 @@ async fn unified_exec_prunes_exited_sessions_first() -> Result<()> {
     events.push(ev_function_call(
         probe_call_id,
         "write_stdin",
-        &serde_json::to_string(&probe_args)?,
+        &edgerun_json::serde_json::to_string(&probe_args)?,
     ));
 
     events.push(ev_completed("resp-prune-1"));

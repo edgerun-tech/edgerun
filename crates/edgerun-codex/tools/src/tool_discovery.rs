@@ -135,7 +135,7 @@ pub struct RequestPluginInstallEntry {
 
 pub fn tool_search_result_source_to_loadable_tool_spec(
     source: ToolSearchResultSource<'_>,
-) -> Result<LoadableToolSpec, serde_json::Error> {
+) -> Result<LoadableToolSpec, edgerun_json::serde_json::Error> {
     Ok(LoadableToolSpec::Namespace(ResponsesApiNamespace {
         name: source.tool_namespace.to_string(),
         description: tool_search_result_source_namespace_description(source),
@@ -161,7 +161,7 @@ fn tool_search_result_source_namespace_description(source: ToolSearchResultSourc
 
 fn tool_search_result_source_to_namespace_tool(
     source: ToolSearchResultSource<'_>,
-) -> Result<ResponsesApiNamespaceTool, serde_json::Error> {
+) -> Result<ResponsesApiNamespaceTool, edgerun_json::serde_json::Error> {
     let tool_name = ToolName::namespaced(source.tool_namespace, source.tool_name);
     mcp_tool_to_deferred_responses_api_tool(&tool_name, source.tool)
         .map(ResponsesApiNamespaceTool::Function)

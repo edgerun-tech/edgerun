@@ -44,7 +44,7 @@ impl TisTpmTransport {
     /// The caller must ensure the TPM TIS MMIO window is identity-mapped and
     /// that locality 0 is safe to claim.
     pub const unsafe fn new_default_x86() -> Self {
-        Self::new(DEFAULT_X86_TIS_BASE)
+        unsafe { Self::new(DEFAULT_X86_TIS_BASE) }
     }
 
     /// Create a TIS transport at an explicit locality base.

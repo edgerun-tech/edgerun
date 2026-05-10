@@ -475,7 +475,7 @@ impl CodexThread {
         &self,
         server: &str,
         uri: &str,
-    ) -> anyhow::Result<serde_json::Value> {
+    ) -> anyhow::Result<edgerun_json::serde_json::Value> {
         let result = self
             .codex
             .session
@@ -488,15 +488,15 @@ impl CodexThread {
             )
             .await?;
 
-        Ok(serde_json::to_value(result)?)
+        Ok(edgerun_json::serde_json::to_value(result)?)
     }
 
     pub async fn call_mcp_tool(
         &self,
         server: &str,
         tool: &str,
-        arguments: Option<serde_json::Value>,
-        meta: Option<serde_json::Value>,
+        arguments: Option<edgerun_json::serde_json::Value>,
+        meta: Option<edgerun_json::serde_json::Value>,
     ) -> anyhow::Result<CallToolResult> {
         self.codex
             .session

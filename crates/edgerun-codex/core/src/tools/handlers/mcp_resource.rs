@@ -15,7 +15,7 @@ use rmcp::model::ResourceTemplate;
 use serde::Deserialize;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
-use serde_json::Value;
+use edgerun_json::serde_json::Value;
 
 use crate::function_tool::FunctionCallError;
 use crate::session::session::Session;
@@ -178,7 +178,7 @@ struct ReadResourcePayload {
 
 fn call_tool_result_from_content(content: &str, success: Option<bool>) -> CallToolResult {
     CallToolResult {
-        content: vec![serde_json::json!({"type": "text", "text": content})],
+        content: vec![edgerun_json::serde_json::json!({"type": "text", "text": content})],
         structured_content: None,
         is_error: success.map(|value| !value),
         meta: None,
@@ -272,7 +272,7 @@ fn serialize_function_output<T>(payload: T) -> Result<FunctionToolOutput, Functi
 where
     T: Serialize,
 {
-    let content = serde_json::to_string(&payload).map_err(|err| {
+    let content = edgerun_json::serde_json::to_string(&payload).map_err(|err| {
         FunctionCallError::RespondToModel(format!(
             "failed to serialize MCP resource response: {err}"
         ))
@@ -285,7 +285,7 @@ fn parse_arguments(raw_args: &str) -> Result<Option<Value>, FunctionCallError> {
     if raw_args.trim().is_empty() {
         Ok(None)
     } else {
-        let value: Value = serde_json::from_str(raw_args).map_err(|err| {
+        let value: Value = edgerun_json::serde_json::from_str(raw_args).map_err(|err| {
             FunctionCallError::RespondToModel(format!("failed to parse function arguments: {err}"))
         })?;
         if value.is_null() {
@@ -301,7 +301,7 @@ where
     T: DeserializeOwned,
 {
     match arguments {
-        Some(value) => serde_json::from_value(value).map_err(|err| {
+        Some(value) => edgerun_json::serde_json::from_value(value).map_err(|err| {
             FunctionCallError::RespondToModel(format!("failed to parse function arguments: {err}"))
         }),
         None => Err(FunctionCallError::RespondToModel(

@@ -147,19 +147,19 @@ async fn user_shell_command_does_not_replace_active_turn() -> anyhow::Result<()>
 
     let call_id = "active-turn-shell-call";
     let args = if cfg!(windows) {
-        serde_json::json!({
+        edgerun_json::serde_json::json!({
             "command": "Start-Sleep -Seconds 2; Write-Output model-shell",
             "timeout_ms": 10_000,
         })
     } else {
-        serde_json::json!({
+        edgerun_json::serde_json::json!({
             "command": "sleep 2; echo model-shell",
             "timeout_ms": 10_000,
         })
     };
     let first = sse(vec![
         ev_response_created("resp-1"),
-        ev_function_call(call_id, "shell_command", &serde_json::to_string(&args)?),
+        ev_function_call(call_id, "shell_command", &edgerun_json::serde_json::to_string(&args)?),
         ev_completed("resp-1"),
     ]);
     let second = sse(vec![
@@ -286,7 +286,7 @@ async fn user_shell_command_history_is_persisted_and_shared_with_model() -> anyh
     .await;
     assert_eq!(begin_event.source, ExecCommandSource::UserShell);
     let matches_last_arg = begin_event.command.last() == Some(&command);
-    let matches_split = shlex::split(&command).is_some_and(|split| split == begin_event.command);
+    let matches_split = edgerun_shlex::split(&command).is_some_and(|split| split == begin_event.command);
     assert!(
         matches_last_arg || matches_split,
         "user command begin event should include the original command; got: {:?}",
@@ -458,12 +458,12 @@ async fn user_shell_command_is_truncated_only_once() -> anyhow::Result<()> {
 
     let call_id = "user-shell-double-truncation";
     let args = if cfg!(windows) {
-        serde_json::json!({
+        edgerun_json::serde_json::json!({
             "command": "for ($i=1; $i -le 2000; $i++) { Write-Output $i }",
             "timeout_ms": 5_000,
         })
     } else {
-        serde_json::json!({
+        edgerun_json::serde_json::json!({
             "command": "seq 1 2000",
             "timeout_ms": 5_000,
         })
@@ -473,7 +473,7 @@ async fn user_shell_command_is_truncated_only_once() -> anyhow::Result<()> {
         &server,
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "shell_command", &serde_json::to_string(&args)?),
+            ev_function_call(call_id, "shell_command", &edgerun_json::serde_json::to_string(&args)?),
             ev_completed("resp-1"),
         ]),
     )

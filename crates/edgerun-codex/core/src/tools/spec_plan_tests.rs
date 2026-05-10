@@ -63,7 +63,7 @@ use codex_tools::ToolsConfigParams;
 use codex_tools::mcp_call_tool_result_output_schema;
 use codex_tools::request_user_input_available_modes;
 use pretty_assertions::assert_eq;
-use serde_json::json;
+use edgerun_json::serde_json::json;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 
@@ -891,8 +891,8 @@ fn image_generation_tools_require_feature_and_supported_model() {
     assert_contains_tool_names(&supported_tools, &["image_generation"]);
     let image_generation_tool = find_tool(&supported_tools, "image_generation");
     assert_eq!(
-        serde_json::to_value(&image_generation_tool.spec).expect("serialize image tool"),
-        serde_json::json!({
+        edgerun_json::serde_json::to_value(&image_generation_tool.spec).expect("serialize image tool"),
+        edgerun_json::serde_json::json!({
             "type": "image_generation",
             "output_format": "png"
         })
@@ -1225,7 +1225,7 @@ fn test_build_specs_mcp_tools_converted() {
             mcp_tool(
                 "do_something_cool",
                 "Do something cool",
-                serde_json::json!({
+                edgerun_json::serde_json::json!({
                     "type": "object",
                     "properties": {
                         "string_argument": { "type": "string" },
@@ -1288,7 +1288,7 @@ fn test_build_specs_mcp_tools_converted() {
             ),
             description: "Do something cool".to_string(),
             strict: false,
-            output_schema: Some(mcp_call_tool_result_output_schema(serde_json::json!({}))),
+            output_schema: Some(mcp_call_tool_result_output_schema(edgerun_json::serde_json::json!({}))),
             defer_loading: None,
         }
     );
@@ -1315,7 +1315,7 @@ fn namespace_specs_are_hidden_when_namespace_tools_are_disabled() {
         &tools_config,
         Some(HashMap::from([(
             ToolName::namespaced("mcp__sample__", "echo"),
-            mcp_tool("echo", "Echo", serde_json::json!({"type": "object"})),
+            mcp_tool("echo", "Echo", edgerun_json::serde_json::json!({"type": "object"})),
         )])),
         /*deferred_mcp_tools*/ None,
         &[],
@@ -1392,7 +1392,7 @@ fn test_build_specs_mcp_namespace_description_falls_back_when_missing() {
             mcp_tool(
                 "do_something_cool",
                 "Do something cool",
-                serde_json::json!({"type": "object"}),
+                edgerun_json::serde_json::json!({"type": "object"}),
             ),
         )])),
         /*deferred_mcp_tools*/ None,
@@ -1429,15 +1429,15 @@ fn test_build_specs_mcp_tools_sorted_by_name() {
     let tools_map = HashMap::from([
         (
             ToolName::namespaced("test_server/", "do"),
-            mcp_tool("do", "a", serde_json::json!({"type": "object"})),
+            mcp_tool("do", "a", edgerun_json::serde_json::json!({"type": "object"})),
         ),
         (
             ToolName::namespaced("test_server/", "something"),
-            mcp_tool("something", "b", serde_json::json!({"type": "object"})),
+            mcp_tool("something", "b", edgerun_json::serde_json::json!({"type": "object"})),
         ),
         (
             ToolName::namespaced("test_server/", "cool"),
-            mcp_tool("cool", "c", serde_json::json!({"type": "object"})),
+            mcp_tool("cool", "c", edgerun_json::serde_json::json!({"type": "object"})),
         ),
     ]);
 
@@ -1484,12 +1484,12 @@ fn search_tool_description_lists_each_mcp_source_once() {
                 mcp_tool(
                     "calendar_create_event",
                     "Create calendar event",
-                    serde_json::json!({"type": "object"}),
+                    edgerun_json::serde_json::json!({"type": "object"}),
                 ),
             ),
             (
                 ToolName::namespaced("mcp__rmcp__", "echo"),
-                mcp_tool("echo", "Echo", serde_json::json!({"type": "object"})),
+                mcp_tool("echo", "Echo", edgerun_json::serde_json::json!({"type": "object"})),
             ),
         ])),
         Some(vec![
@@ -2003,7 +2003,7 @@ fn code_mode_augments_mcp_tool_descriptions_with_namespaced_sample() {
             mcp_tool(
                 "echo",
                 "Echo text",
-                serde_json::json!({
+                edgerun_json::serde_json::json!({
                     "type": "object",
                     "properties": {
                         "message": {"type": "string"}
@@ -2056,7 +2056,7 @@ fn code_mode_preserves_nullable_and_literal_mcp_input_shapes() {
             mcp_tool(
                 "fn",
                 "Sample fn",
-                serde_json::json!({
+                edgerun_json::serde_json::json!({
                     "type": "object",
                     "properties": {
                         "open": {
@@ -2224,7 +2224,7 @@ fn code_mode_exec_description_omits_nested_tool_details_when_not_code_mode_only(
 }
 
 fn model_info() -> ModelInfo {
-    serde_json::from_value(json!({
+    edgerun_json::serde_json::from_value(json!({
         "slug": "gpt-5-codex",
         "display_name": "GPT-5 Codex",
         "description": null,
@@ -2330,7 +2330,7 @@ fn build_specs_with_optional_tool_namespaces<'a>(
     builder.build()
 }
 
-fn mcp_tool(name: &str, description: &str, input_schema: serde_json::Value) -> rmcp::model::Tool {
+fn mcp_tool(name: &str, description: &str, input_schema: edgerun_json::serde_json::Value) -> rmcp::model::Tool {
     rmcp::model::Tool {
         name: name.to_string().into(),
         title: None,
@@ -2366,7 +2366,7 @@ fn code_mode_augments_mcp_tool_descriptions_with_structured_output_sample() {
     let mut tool = mcp_tool(
         "echo",
         "Echo text",
-        serde_json::json!({
+        edgerun_json::serde_json::json!({
             "type": "object",
             "properties": {
                 "message": {"type": "string"}
@@ -2376,7 +2376,7 @@ fn code_mode_augments_mcp_tool_descriptions_with_structured_output_sample() {
         }),
     );
     tool.output_schema = Some(std::sync::Arc::new(rmcp::model::object(
-        serde_json::json!({
+        edgerun_json::serde_json::json!({
             "type": "object",
             "properties": {
                 "echo": {"type": "string"},

@@ -33,7 +33,7 @@ struct ArcMonitorRequest {
     input: Option<Vec<ResponseItem>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     policies: Option<ArcMonitorPolicies>,
-    action: serde_json::Map<String, serde_json::Value>,
+    action: edgerun_json::serde_json::Map<String, edgerun_json::serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -50,7 +50,7 @@ struct ArcMonitorResult {
 #[derive(Debug, Serialize, PartialEq)]
 struct ArcMonitorChatMessage {
     role: String,
-    content: serde_json::Value,
+    content: edgerun_json::serde_json::Value,
 }
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -98,7 +98,7 @@ enum ArcMonitorRiskLevel {
 pub(crate) async fn monitor_action(
     sess: &Session,
     turn_context: &TurnContext,
-    action: serde_json::Value,
+    action: edgerun_json::serde_json::Value,
     protection_client_callsite: &'static str,
 ) -> ArcMonitorOutcome {
     let auth = match turn_context.auth_manager.as_ref() {
@@ -120,7 +120,7 @@ pub(crate) async fn monitor_action(
         )
     });
     let action = match action {
-        serde_json::Value::Object(action) => action,
+        edgerun_json::serde_json::Value::Object(action) => action,
         _ => {
             warn!("skipping safety monitor because action payload is not an object");
             return ArcMonitorOutcome::Ok;
@@ -220,7 +220,7 @@ fn read_non_empty_env_var(key: &str) -> Option<String> {
 async fn build_arc_monitor_request(
     sess: &Session,
     turn_context: &TurnContext,
-    action: serde_json::Map<String, serde_json::Value>,
+    action: edgerun_json::serde_json::Map<String, edgerun_json::serde_json::Value>,
     protection_client_callsite: &'static str,
 ) -> ArcMonitorRequest {
     let history = sess.clone_history().await;
@@ -228,7 +228,7 @@ async fn build_arc_monitor_request(
     if messages.is_empty() {
         messages.push(build_arc_monitor_message(
             "user",
-            serde_json::Value::String(
+            edgerun_json::serde_json::Value::String(
                 "No prior conversation history is available for this ARC evaluation.".to_string(),
             ),
         ));
@@ -327,7 +327,7 @@ fn build_arc_monitor_message_item(
         {
             Some(build_arc_monitor_message(
                 "assistant",
-                serde_json::json!([{
+                edgerun_json::serde_json::json!([{
                     "type": "encrypted_reasoning",
                     "encrypted_content": encrypted_content,
                 }]),
@@ -337,7 +337,7 @@ fn build_arc_monitor_message_item(
         ResponseItem::LocalShellCall { action, .. } if Some(index) == last_tool_call_index => {
             Some(build_arc_monitor_message(
                 "assistant",
-                serde_json::json!([{
+                edgerun_json::serde_json::json!([{
                     "type": "tool_call",
                     "tool_name": "shell",
                     "action": action,
@@ -348,7 +348,7 @@ fn build_arc_monitor_message_item(
             name, arguments, ..
         } if Some(index) == last_tool_call_index => Some(build_arc_monitor_message(
             "assistant",
-            serde_json::json!([{
+            edgerun_json::serde_json::json!([{
                 "type": "tool_call",
                 "tool_name": name,
                 "arguments": arguments,
@@ -357,7 +357,7 @@ fn build_arc_monitor_message_item(
         ResponseItem::CustomToolCall { name, input, .. } if Some(index) == last_tool_call_index => {
             Some(build_arc_monitor_message(
                 "assistant",
-                serde_json::json!([{
+                edgerun_json::serde_json::json!([{
                     "type": "tool_call",
                     "tool_name": name,
                     "input": input,
@@ -367,7 +367,7 @@ fn build_arc_monitor_message_item(
         ResponseItem::WebSearchCall { action, .. } if Some(index) == last_tool_call_index => {
             Some(build_arc_monitor_message(
                 "assistant",
-                serde_json::json!([{
+                edgerun_json::serde_json::json!([{
                     "type": "tool_call",
                     "tool_name": "web_search",
                     "action": action,
@@ -396,14 +396,14 @@ fn build_arc_monitor_text_message(
 ) -> ArcMonitorChatMessage {
     build_arc_monitor_message(
         role,
-        serde_json::json!([{
+        edgerun_json::serde_json::json!([{
             "type": part_type,
             "text": text,
         }]),
     )
 }
 
-fn build_arc_monitor_message(role: &str, content: serde_json::Value) -> ArcMonitorChatMessage {
+fn build_arc_monitor_message(role: &str, content: edgerun_json::serde_json::Value) -> ArcMonitorChatMessage {
     ArcMonitorChatMessage {
         role: role.to_string(),
         content,

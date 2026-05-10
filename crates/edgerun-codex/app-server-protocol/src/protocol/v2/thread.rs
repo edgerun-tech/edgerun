@@ -22,7 +22,7 @@ use codex_protocol::protocol::TokenUsageInfo as CoreTokenUsageInfo;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
-use serde_json::Value as JsonValue;
+use edgerun_json::serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use ts_rs::TS;
@@ -261,7 +261,7 @@ pub struct ThreadResumeParams {
     #[ts(optional = nullable)]
     pub permissions: Option<PermissionProfileSelectionParams>,
     #[ts(optional = nullable)]
-    pub config: Option<HashMap<String, serde_json::Value>>,
+    pub config: Option<HashMap<String, edgerun_json::serde_json::Value>>,
     #[ts(optional = nullable)]
     pub base_instructions: Option<String>,
     #[ts(optional = nullable)]
@@ -357,7 +357,7 @@ pub struct ThreadForkParams {
     #[ts(optional = nullable)]
     pub permissions: Option<PermissionProfileSelectionParams>,
     #[ts(optional = nullable)]
-    pub config: Option<HashMap<String, serde_json::Value>>,
+    pub config: Option<HashMap<String, edgerun_json::serde_json::Value>>,
     #[ts(optional = nullable)]
     pub base_instructions: Option<String>,
     #[ts(optional = nullable)]

@@ -68,7 +68,7 @@ pub fn format_exec_output_for_model_structured(
     };
 
     #[expect(clippy::expect_used)]
-    serde_json::to_string(&payload).expect("serialize ExecOutput")
+    edgerun_json::serde_json::to_string(&payload).expect("serialize ExecOutput")
 }
 
 pub fn format_exec_output_for_model_freeform(

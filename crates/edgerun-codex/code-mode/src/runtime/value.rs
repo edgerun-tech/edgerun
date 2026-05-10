@@ -1,4 +1,4 @@
-use serde_json::Value as JsonValue;
+use edgerun_json::serde_json::Value as JsonValue;
 
 use crate::response::DEFAULT_IMAGE_DETAIL;
 use crate::response::FunctionCallOutputContentItem;
@@ -192,7 +192,7 @@ pub(super) fn v8_value_to_json(
         }
         return Ok(None);
     };
-    serde_json::from_str(&stringified.to_rust_string_lossy(&tc))
+    edgerun_json::serde_json::from_str(&stringified.to_rust_string_lossy(&tc))
         .map(Some)
         .map_err(|err| format!("failed to serialize JavaScript value: {err}"))
 }
@@ -201,7 +201,7 @@ pub(super) fn json_to_v8<'s>(
     scope: &mut v8::PinScope<'s, '_>,
     value: &JsonValue,
 ) -> Option<v8::Local<'s, v8::Value>> {
-    let json = serde_json::to_string(value).ok()?;
+    let json = edgerun_json::serde_json::to_string(value).ok()?;
     let json = v8::String::new(scope, &json)?;
     v8::json::parse(scope, json)
 }

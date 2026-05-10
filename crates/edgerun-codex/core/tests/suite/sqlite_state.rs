@@ -31,7 +31,7 @@ use core_test_support::test_codex::turn_permission_fields;
 use core_test_support::wait_for_event;
 use core_test_support::wait_for_event_match;
 use pretty_assertions::assert_eq;
-use serde_json::json;
+use edgerun_json::serde_json::json;
 use std::collections::HashMap;
 use std::fs;
 use tokio::time::Duration;
@@ -175,7 +175,7 @@ async fn backfill_scans_existing_rollouts() -> Result<()> {
 
             let jsonl = lines
                 .iter()
-                .map(|line| serde_json::to_string(line).expect("rollout line should serialize"))
+                .map(|line| edgerun_json::serde_json::to_string(line).expect("rollout line should serialize"))
                 .collect::<Vec<_>>()
                 .join("\n");
             fs::write(&rollout_path, format!("{jsonl}\n")).expect("should write rollout file");
@@ -543,7 +543,7 @@ async fn tool_call_logs_include_thread_id() -> Result<()> {
         "timeout_ms": 1_000,
         "login": false,
     });
-    let args_json = serde_json::to_string(&args)?;
+    let args_json = edgerun_json::serde_json::to_string(&args)?;
     mount_sse_sequence(
         &server,
         vec![

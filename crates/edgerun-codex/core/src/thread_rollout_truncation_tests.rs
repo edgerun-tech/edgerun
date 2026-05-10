@@ -80,15 +80,15 @@ fn truncates_rollout_from_start_before_nth_user_only() {
         RolloutItem::ResponseItem(items[2].clone()),
     ];
     assert_eq!(
-        serde_json::to_value(&truncated).unwrap(),
-        serde_json::to_value(&expected).unwrap()
+        edgerun_json::serde_json::to_value(&truncated).unwrap(),
+        edgerun_json::serde_json::to_value(&expected).unwrap()
     );
 
     let truncated2 =
         truncate_rollout_before_nth_user_message_from_start(&rollout, /*n_from_start*/ 2);
     assert_eq!(
-        serde_json::to_value(&truncated2).unwrap(),
-        serde_json::to_value(&rollout).unwrap()
+        edgerun_json::serde_json::to_value(&truncated2).unwrap(),
+        edgerun_json::serde_json::to_value(&rollout).unwrap()
     );
 }
 
@@ -103,8 +103,8 @@ fn truncation_max_keeps_full_rollout() {
     let truncated = truncate_rollout_before_nth_user_message_from_start(&rollout, usize::MAX);
 
     assert_eq!(
-        serde_json::to_value(&truncated).unwrap(),
-        serde_json::to_value(&rollout).unwrap()
+        edgerun_json::serde_json::to_value(&truncated).unwrap(),
+        edgerun_json::serde_json::to_value(&rollout).unwrap()
     );
 }
 
@@ -132,8 +132,8 @@ fn truncates_rollout_from_start_applies_thread_rollback_markers() {
     );
     let expected = rollout_items[..7].to_vec();
     assert_eq!(
-        serde_json::to_value(&truncated).unwrap(),
-        serde_json::to_value(&expected).unwrap()
+        edgerun_json::serde_json::to_value(&truncated).unwrap(),
+        edgerun_json::serde_json::to_value(&expected).unwrap()
     );
 }
 
@@ -164,8 +164,8 @@ async fn ignores_session_prefix_messages_when_truncating_rollout_from_start() {
     ];
 
     assert_eq!(
-        serde_json::to_value(&truncated).unwrap(),
-        serde_json::to_value(&expected).unwrap()
+        edgerun_json::serde_json::to_value(&truncated).unwrap(),
+        edgerun_json::serde_json::to_value(&expected).unwrap()
     );
 }
 
@@ -192,8 +192,8 @@ fn truncates_rollout_to_last_n_fork_turns_counts_trigger_turn_messages() {
     let expected = rollout[4..].to_vec();
 
     assert_eq!(
-        serde_json::to_value(&truncated).unwrap(),
-        serde_json::to_value(&expected).unwrap()
+        edgerun_json::serde_json::to_value(&truncated).unwrap(),
+        edgerun_json::serde_json::to_value(&expected).unwrap()
     );
 }
 
@@ -217,8 +217,8 @@ fn truncates_rollout_to_last_n_fork_turns_applies_thread_rollback_markers() {
     let truncated = truncate_rollout_to_last_n_fork_turns(&rollout, /*n_from_end*/ 2);
 
     assert_eq!(
-        serde_json::to_value(&truncated).unwrap(),
-        serde_json::to_value(&rollout).unwrap()
+        edgerun_json::serde_json::to_value(&truncated).unwrap(),
+        edgerun_json::serde_json::to_value(&rollout).unwrap()
     );
 }
 
@@ -261,8 +261,8 @@ fn truncates_rollout_to_last_n_fork_turns_discards_trigger_boundaries_in_rolled_
     let expected = rollout[1..].to_vec();
 
     assert_eq!(
-        serde_json::to_value(&truncated).unwrap(),
-        serde_json::to_value(&expected).unwrap()
+        edgerun_json::serde_json::to_value(&truncated).unwrap(),
+        edgerun_json::serde_json::to_value(&expected).unwrap()
     );
 }
 
@@ -290,8 +290,8 @@ fn truncates_rollout_to_last_n_fork_turns_discards_rolled_back_assistant_instruc
     let expected = rollout[5..].to_vec();
 
     assert_eq!(
-        serde_json::to_value(&truncated).unwrap(),
-        serde_json::to_value(&expected).unwrap()
+        edgerun_json::serde_json::to_value(&truncated).unwrap(),
+        edgerun_json::serde_json::to_value(&expected).unwrap()
     );
 }
 
@@ -310,7 +310,7 @@ fn truncates_rollout_to_last_n_fork_turns_keeps_full_rollout_when_n_is_large() {
     let truncated = truncate_rollout_to_last_n_fork_turns(&rollout, /*n_from_end*/ 10);
 
     assert_eq!(
-        serde_json::to_value(&truncated).unwrap(),
-        serde_json::to_value(&rollout).unwrap()
+        edgerun_json::serde_json::to_value(&truncated).unwrap(),
+        edgerun_json::serde_json::to_value(&rollout).unwrap()
     );
 }

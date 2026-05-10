@@ -1,7 +1,7 @@
 use serde::Deserialize;
 use serde::Serialize;
-use serde_json::Value as JsonValue;
-use serde_json::json;
+use edgerun_json::serde_json::Value as JsonValue;
+use edgerun_json::serde_json::json;
 use std::collections::BTreeMap;
 
 /// Primitive JSON Schema type names we support in tool definitions.
@@ -146,10 +146,10 @@ impl From<JsonSchema> for AdditionalProperties {
 }
 
 /// Parse the tool `input_schema` or return an error for invalid schema.
-pub fn parse_tool_input_schema(input_schema: &JsonValue) -> Result<JsonSchema, serde_json::Error> {
+pub fn parse_tool_input_schema(input_schema: &JsonValue) -> Result<JsonSchema, edgerun_json::serde_json::Error> {
     let mut input_schema = input_schema.clone();
     sanitize_json_schema(&mut input_schema);
-    let schema: JsonSchema = serde_json::from_value(input_schema)?;
+    let schema: JsonSchema = edgerun_json::serde_json::from_value(input_schema)?;
     if matches!(
         schema.schema_type,
         Some(JsonSchemaType::Single(JsonSchemaPrimitiveType::Null))
@@ -159,7 +159,7 @@ pub fn parse_tool_input_schema(input_schema: &JsonValue) -> Result<JsonSchema, s
     Ok(schema)
 }
 
-/// Sanitize a JSON Schema (as serde_json::Value) so it can fit our limited
+/// Sanitize a JSON Schema (as edgerun_json::serde_json::Value) so it can fit our limited
 /// schema representation. This function:
 /// - Ensures every typed schema object has a `"type"` when required.
 /// - Preserves explicit `anyOf`.
@@ -240,13 +240,13 @@ fn sanitize_json_schema(value: &mut JsonValue) {
 }
 
 fn ensure_default_children_for_schema_types(
-    map: &mut serde_json::Map<String, JsonValue>,
+    map: &mut edgerun_json::serde_json::Map<String, JsonValue>,
     schema_types: &[JsonSchemaPrimitiveType],
 ) {
     if schema_types.contains(&JsonSchemaPrimitiveType::Object) && !map.contains_key("properties") {
         map.insert(
             "properties".to_string(),
-            JsonValue::Object(serde_json::Map::new()),
+            JsonValue::Object(edgerun_json::serde_json::Map::new()),
         );
     }
 
@@ -256,7 +256,7 @@ fn ensure_default_children_for_schema_types(
 }
 
 fn normalized_schema_types(
-    map: &serde_json::Map<String, JsonValue>,
+    map: &edgerun_json::serde_json::Map<String, JsonValue>,
 ) -> Vec<JsonSchemaPrimitiveType> {
     let Some(schema_type) = map.get("type") else {
         return Vec::new();
@@ -274,7 +274,7 @@ fn normalized_schema_types(
 }
 
 fn write_schema_types(
-    map: &mut serde_json::Map<String, JsonValue>,
+    map: &mut edgerun_json::serde_json::Map<String, JsonValue>,
     schema_types: &[JsonSchemaPrimitiveType],
 ) {
     match schema_types {
@@ -328,8 +328,8 @@ fn schema_type_name(schema_type: JsonSchemaPrimitiveType) -> &'static str {
     }
 }
 
-fn singleton_null_schema_error() -> serde_json::Error {
-    serde_json::Error::io(std::io::Error::new(
+fn singleton_null_schema_error() -> edgerun_json::serde_json::Error {
+    edgerun_json::serde_json::Error::io(std::io::Error::new(
         std::io::ErrorKind::InvalidInput,
         "tool input schema must not be a singleton null type",
     ))

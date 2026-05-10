@@ -15,7 +15,7 @@ use codex_protocol::config_types::WebSearchFilters as ConfigWebSearchFilters;
 use codex_protocol::config_types::WebSearchUserLocation as ConfigWebSearchUserLocation;
 use codex_protocol::config_types::WebSearchUserLocationType;
 use pretty_assertions::assert_eq;
-use serde_json::json;
+use edgerun_json::serde_json::json;
 use std::collections::BTreeMap;
 
 #[test]
@@ -177,7 +177,7 @@ fn create_tools_json_for_responses_api_includes_top_level_name() {
 #[test]
 fn namespace_tool_spec_serializes_expected_wire_shape() {
     assert_eq!(
-        serde_json::to_value(ToolSpec::Namespace(ResponsesApiNamespace {
+        edgerun_json::serde_json::to_value(ToolSpec::Namespace(ResponsesApiNamespace {
             name: "mcp__demo__".to_string(),
             description: "Demo tools".to_string(),
             tools: vec![ResponsesApiNamespaceTool::Function(ResponsesApiTool {
@@ -222,7 +222,7 @@ fn namespace_tool_spec_serializes_expected_wire_shape() {
 #[test]
 fn web_search_tool_spec_serializes_expected_wire_shape() {
     assert_eq!(
-        serde_json::to_value(ToolSpec::WebSearch {
+        edgerun_json::serde_json::to_value(ToolSpec::WebSearch {
             external_web_access: Some(true),
             filters: Some(ResponsesApiWebSearchFilters {
                 allowed_domains: Some(vec!["example.com".to_string()]),
@@ -260,7 +260,7 @@ fn web_search_tool_spec_serializes_expected_wire_shape() {
 #[test]
 fn tool_search_tool_spec_serializes_expected_wire_shape() {
     assert_eq!(
-        serde_json::to_value(ToolSpec::ToolSearch {
+        edgerun_json::serde_json::to_value(ToolSpec::ToolSearch {
             execution: "sync".to_string(),
             description: "Search app tools".to_string(),
             parameters: JsonSchema::object(

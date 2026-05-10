@@ -20,7 +20,7 @@ use futures::StreamExt;
 use futures::stream::FuturesUnordered;
 use serde::Deserialize;
 use serde::Serialize;
-use serde_json::Value;
+use edgerun_json::serde_json::Value;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -545,10 +545,10 @@ fn build_worker_prompt(
     let output_schema = job
         .output_schema_json
         .as_ref()
-        .map(serde_json::to_string_pretty)
+        .map(edgerun_json::serde_json::to_string_pretty)
         .transpose()?
         .unwrap_or_else(|| "{}".to_string());
-    let row_json = serde_json::to_string_pretty(&item.row_json)?;
+    let row_json = edgerun_json::serde_json::to_string_pretty(&item.row_json)?;
     Ok(format!(
         "You are processing one item for a generic agent job.\n\
 Job ID: {job_id}\n\

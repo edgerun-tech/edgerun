@@ -36,7 +36,7 @@ use codex_shell_escalation::ExecResult;
 use codex_shell_escalation::ResolvedPermissionProfile;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
-use serde_json::Value;
+use edgerun_json::serde_json::Value;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -340,7 +340,7 @@ async fn execve_permission_request_hook_short_circuits_prompt() -> anyhow::Resul
         &script_path,
         format!(
             "#!/bin/sh\ncat > {log_path}\nprintf '%s\\n' '{response}'\n",
-            log_path = shlex::try_quote(log_path.to_string_lossy().as_ref())?,
+            log_path = edgerun_shlex::try_quote(log_path.to_string_lossy().as_ref())?,
             response = "{\"hookSpecificOutput\":{\"hookEventName\":\"PermissionRequest\",\"decision\":{\"behavior\":\"allow\"}}}",
         ),
     )
@@ -358,7 +358,7 @@ async fn execve_permission_request_hook_short_circuits_prompt() -> anyhow::Resul
     }
     std::fs::write(
         turn_context.config.codex_home.join("hooks.json"),
-        serde_json::json!({
+        edgerun_json::serde_json::json!({
             "hooks": {
                 "PermissionRequest": [{
                     "hooks": [{
@@ -383,7 +383,7 @@ async fn execve_permission_request_hook_short_circuits_prompt() -> anyhow::Resul
     assert_eq!(hook_list.hooks.len(), 1);
     let trusted_config_layer_stack = turn_context.config.config_layer_stack.with_user_config(
         &config_toml_path,
-        serde_json::from_value(serde_json::json!({
+        edgerun_json::serde_json::from_value(edgerun_json::serde_json::json!({
             "hooks": {
                 "state": {
                     hook_list.hooks[0].key.clone(): {
@@ -462,8 +462,8 @@ async fn execve_permission_request_hook_short_circuits_prompt() -> anyhow::Resul
     let hook_inputs: Vec<Value> = std::fs::read_to_string(&log_path)
         .with_context(|| format!("read hook log at {}", log_path.display()))?
         .lines()
-        .map(serde_json::from_str)
-        .collect::<serde_json::Result<_>>()
+        .map(edgerun_json::serde_json::from_str)
+        .collect::<edgerun_json::serde_json::Result<_>>()
         .context("parse hook log")?;
     assert_eq!(hook_inputs.len(), 1);
     assert_eq!(
@@ -472,7 +472,7 @@ async fn execve_permission_request_hook_short_circuits_prompt() -> anyhow::Resul
     );
     assert_eq!(
         hook_inputs[0]["tool_input"]["description"],
-        serde_json::Value::Null
+        edgerun_json::serde_json::Value::Null
     );
 
     Ok(())

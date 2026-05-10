@@ -18,9 +18,11 @@ std = []
 yaml = []
 toml = []
 derive = ["dep:edgerun-json-derive"]
+serde-compat = ["dep:serde_json"]
 
 [dependencies]
 edgerun-json-derive = { version = "0.1", path = "../edgerun-json-derive", optional = true }
+serde_json = { version = "1", optional = true }
 
 [lints]
 workspace = true

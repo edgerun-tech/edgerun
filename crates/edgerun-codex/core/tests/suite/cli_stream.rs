@@ -393,7 +393,7 @@ async fn integration_creates_and_checks_session_file() -> anyhow::Result<()> {
         .next()
         .ok_or("missing session meta line")
         .unwrap_or_else(|_| panic!("missing session meta line"));
-    let meta: serde_json::Value = serde_json::from_str(meta_line)
+    let meta: edgerun_json::serde_json::Value = edgerun_json::serde_json::from_str(meta_line)
         .unwrap_or_else(|_| panic!("Failed to parse session meta line as JSON"));
     assert_eq!(
         meta.get("type").and_then(|v| v.as_str()),
@@ -413,7 +413,7 @@ async fn integration_creates_and_checks_session_file() -> anyhow::Result<()> {
         if line.trim().is_empty() {
             continue;
         }
-        let Ok(item) = serde_json::from_str::<serde_json::Value>(line) else {
+        let Ok(item) = edgerun_json::serde_json::from_str::<edgerun_json::serde_json::Value>(line) else {
             continue;
         };
         if item.get("type").and_then(|t| t.as_str()) == Some("response_item")
@@ -617,8 +617,8 @@ async fn integration_git_info_unit_test() {
     println!("   Repo: {repo_url}");
 
     // 5. Test serialization to ensure it works in SessionMeta
-    let serialized = serde_json::to_string(&git_info).unwrap();
-    let deserialized: GitInfo = serde_json::from_str(&serialized).unwrap();
+    let serialized = edgerun_json::serde_json::to_string(&git_info).unwrap();
+    let deserialized: GitInfo = edgerun_json::serde_json::from_str(&serialized).unwrap();
 
     assert_eq!(git_info.commit_hash, deserialized.commit_hash);
     assert_eq!(git_info.branch, deserialized.branch);

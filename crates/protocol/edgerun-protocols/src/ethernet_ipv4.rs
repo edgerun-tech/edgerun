@@ -638,12 +638,18 @@ impl<'a> Network<'a> {
                     payload: &payload[8..udp_len],
                 })
             }
-            IP_PROTO_TCP if payload.len() >= 20 => Some(ParsedPacket::Tcp {
-                eth,
-                ip,
-                header: TcpHeader::from_slice(payload),
-                payload: &payload[20..],
-            }),
+            IP_PROTO_TCP if payload.len() >= 20 => {
+                let tcp_header_len = 4 * ((payload[12] >> 4) as usize);
+                if tcp_header_len < 20 || tcp_header_len > payload.len() {
+                    return None;
+                }
+                Some(ParsedPacket::Tcp {
+                    eth,
+                    ip,
+                    header: TcpHeader::from_slice(payload),
+                    payload: &payload[tcp_header_len..],
+                })
+            }
             IP_PROTO_ICMP if payload.len() >= 8 => Some(ParsedPacket::Icmp {
                 eth,
                 ip,

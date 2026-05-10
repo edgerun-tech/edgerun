@@ -30,7 +30,7 @@ use codex_rollout_trace::TraceWriter;
 use codex_rollout_trace::replay_bundle;
 use futures::StreamExt;
 use pretty_assertions::assert_eq;
-use serde_json::json;
+use edgerun_json::serde_json::json;
 use std::collections::BTreeMap;
 use std::collections::VecDeque;
 use std::pin::Pin;
@@ -68,7 +68,7 @@ fn test_model_client(session_source: SessionSource) -> ModelClient {
 }
 
 fn test_model_info() -> ModelInfo {
-    serde_json::from_value(json!({
+    edgerun_json::serde_json::from_value(json!({
         "slug": "gpt-test",
         "display_name": "gpt-test",
         "description": "desc",

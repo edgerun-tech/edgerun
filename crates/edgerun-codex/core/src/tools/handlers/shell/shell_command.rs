@@ -157,7 +157,7 @@ impl ToolHandler for ShellCommandHandler {
             return true;
         };
 
-        serde_json::from_str::<ShellCommandToolCallParams>(arguments)
+        edgerun_json::serde_json::from_str::<ShellCommandToolCallParams>(arguments)
             .map(|params| {
                 let use_login_shell = match Self::resolve_use_login_shell(
                     params.login,
@@ -176,7 +176,7 @@ impl ToolHandler for ShellCommandHandler {
     fn pre_tool_use_payload(&self, invocation: &ToolInvocation) -> Option<PreToolUsePayload> {
         shell_command_payload_command(&invocation.payload).map(|command| PreToolUsePayload {
             tool_name: HookToolName::bash(),
-            tool_input: serde_json::json!({ "command": command }),
+            tool_input: edgerun_json::serde_json::json!({ "command": command }),
         })
     }
 
@@ -191,7 +191,7 @@ impl ToolHandler for ShellCommandHandler {
         Some(PostToolUsePayload {
             tool_name: HookToolName::bash(),
             tool_use_id: invocation.call_id.clone(),
-            tool_input: serde_json::json!({ "command": command }),
+            tool_input: edgerun_json::serde_json::json!({ "command": command }),
             tool_response,
         })
     }

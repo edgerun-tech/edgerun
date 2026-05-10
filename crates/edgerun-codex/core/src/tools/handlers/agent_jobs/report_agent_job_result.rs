@@ -83,7 +83,7 @@ pub async fn handle(
             .await;
     }
     let content =
-        serde_json::to_string(&ReportAgentJobResultToolResult { accepted }).map_err(|err| {
+        edgerun_json::serde_json::to_string(&ReportAgentJobResultToolResult { accepted }).map_err(|err| {
             FunctionCallError::Fatal(format!(
                 "failed to serialize report_agent_job_result result: {err}"
             ))

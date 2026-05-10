@@ -762,20 +762,22 @@ fn volatile_write<T: Copy + Sized>(dst: &mut T, src: T) {
 /// Also `dst` must be properly aligned.
 #[inline(always)]
 unsafe fn volatile_set<T: Copy + Sized>(dst: *mut T, src: T, count: usize) {
-    // TODO(tarcieri): use `volatile_set_memory` when stabilized
-    for i in 0..count {
-        // Safety:
-        //
-        // This is safe because there is room for at least `count` objects of type `T` in the
-        // allocation pointed to by `dst`, because `count <= isize::MAX` and because
-        // `dst.add(count)` must not wrap around the address space.
-        let ptr = dst.add(i);
+    unsafe {
+        // TODO(tarcieri): use `volatile_set_memory` when stabilized
+        for i in 0..count {
+            // Safety:
+            //
+            // This is safe because there is room for at least `count` objects of type `T` in the
+            // allocation pointed to by `dst`, because `count <= isize::MAX` and because
+            // `dst.add(count)` must not wrap around the address space.
+            let ptr = dst.add(i);
 
-        // Safety:
-        //
-        // This is safe, because the pointer is valid and because `dst` is well aligned for `T` and
-        // `ptr` is an offset of `dst` by a multiple of `size_of::<T>()` bytes.
-        ptr::write_volatile(ptr, src);
+            // Safety:
+            //
+            // This is safe, because the pointer is valid and because `dst` is well aligned for `T` and
+            // `ptr` is an offset of `dst` by a multiple of `size_of::<T>()` bytes.
+            ptr::write_volatile(ptr, src);
+        }
     }
 }
 
@@ -828,13 +830,15 @@ unsafe fn volatile_set<T: Copy + Sized>(dst: *mut T, src: T, count: usize) {
 /// ```
 #[inline(always)]
 pub unsafe fn zeroize_flat_type<F: Sized>(data: *mut F) {
-    let size = size_of::<F>();
-    // Safety:
-    //
-    // This is safe because `size_of<T>()` returns the exact size of the object in memory, and
-    // `data_ptr` points directly to the first byte of the data.
-    volatile_set(data as *mut u8, 0, size);
-    atomic_fence()
+    unsafe {
+        let size = size_of::<F>();
+        // Safety:
+        //
+        // This is safe because `size_of<T>()` returns the exact size of the object in memory, and
+        // `data_ptr` points directly to the first byte of the data.
+        volatile_set(data as *mut u8, 0, size);
+        atomic_fence()
+    }
 }
 
 /// Internal module used as support for `AssertZeroizeOnDrop`.

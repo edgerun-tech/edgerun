@@ -18,7 +18,7 @@ fn parse_tool_input_schema_coerces_boolean_schemas() {
     // - JSON Schema boolean forms are coerced to `{ "type": "string" }`
     //   because the baseline enum model cannot represent boolean-schema
     //   semantics directly.
-    let schema = parse_tool_input_schema(&serde_json::json!(true)).expect("parse schema");
+    let schema = parse_tool_input_schema(&edgerun_json::serde_json::json!(true)).expect("parse schema");
 
     assert_eq!(schema, JsonSchema::string(/*description*/ None));
 }
@@ -35,7 +35,7 @@ fn parse_tool_input_schema_infers_object_shape_and_defaults_properties() {
     // Expected normalization behavior:
     // - `properties` implies an object schema when `type` is omitted.
     // - The child property keeps its description and defaults to a string type.
-    let schema = parse_tool_input_schema(&serde_json::json!({
+    let schema = parse_tool_input_schema(&edgerun_json::serde_json::json!({
         "properties": {
             "query": {"description": "search query"}
         }
@@ -69,7 +69,7 @@ fn parse_tool_input_schema_preserves_integer_and_defaults_array_items() {
     // Expected normalization behavior:
     // - `"integer"` is preserved distinctly from `"number"`.
     // - Arrays missing `items` receive a permissive string `items` schema.
-    let schema = parse_tool_input_schema(&serde_json::json!({
+    let schema = parse_tool_input_schema(&edgerun_json::serde_json::json!({
         "type": "object",
         "properties": {
             "page": {"type": "integer"},
@@ -121,7 +121,7 @@ fn parse_tool_input_schema_sanitizes_additional_properties_schema() {
     // Expected normalization behavior:
     // - `additionalProperties` schema objects are recursively sanitized.
     // - The nested schema is normalized into the current object/anyOf form.
-    let schema = parse_tool_input_schema(&serde_json::json!({
+    let schema = parse_tool_input_schema(&edgerun_json::serde_json::json!({
         "type": "object",
         "additionalProperties": {
             "required": ["value"],
@@ -165,7 +165,7 @@ fn parse_tool_input_schema_infers_object_shape_from_boolean_additional_propertie
     // Expected normalization behavior:
     // - `additionalProperties` implies an object schema when `type` is omitted.
     // - The boolean `additionalProperties` setting is preserved.
-    let schema = parse_tool_input_schema(&serde_json::json!({
+    let schema = parse_tool_input_schema(&edgerun_json::serde_json::json!({
         "additionalProperties": false
     }))
     .expect("parse schema");
@@ -186,7 +186,7 @@ fn parse_tool_input_schema_infers_number_from_numeric_keywords() {
     // Expected normalization behavior:
     // - Numeric constraint keywords imply a number schema when `type` is
     //   omitted.
-    let schema = parse_tool_input_schema(&serde_json::json!({
+    let schema = parse_tool_input_schema(&edgerun_json::serde_json::json!({
         "minimum": 1
     }))
     .expect("parse schema");
@@ -204,7 +204,7 @@ fn parse_tool_input_schema_infers_number_from_multiple_of() {
     // Expected normalization behavior:
     // - `multipleOf` follows the same numeric-keyword inference path as
     //   `minimum` / `maximum`.
-    let schema = parse_tool_input_schema(&serde_json::json!({
+    let schema = parse_tool_input_schema(&edgerun_json::serde_json::json!({
         "multipleOf": 5
     }))
     .expect("parse schema");
@@ -222,15 +222,15 @@ fn parse_tool_input_schema_infers_string_from_enum_const_and_format_keywords() {
     // Expected normalization behavior:
     // - `enum` and `const` normalize into explicit string-enum schemas.
     // - `format` still falls back to a plain string schema.
-    let enum_schema = parse_tool_input_schema(&serde_json::json!({
+    let enum_schema = parse_tool_input_schema(&edgerun_json::serde_json::json!({
         "enum": ["fast", "safe"]
     }))
     .expect("parse enum schema");
-    let const_schema = parse_tool_input_schema(&serde_json::json!({
+    let const_schema = parse_tool_input_schema(&edgerun_json::serde_json::json!({
         "const": "file"
     }))
     .expect("parse const schema");
-    let format_schema = parse_tool_input_schema(&serde_json::json!({
+    let format_schema = parse_tool_input_schema(&edgerun_json::serde_json::json!({
         "format": "date-time"
     }))
     .expect("parse format schema");
@@ -238,13 +238,13 @@ fn parse_tool_input_schema_infers_string_from_enum_const_and_format_keywords() {
     assert_eq!(
         enum_schema,
         JsonSchema::string_enum(
-            vec![serde_json::json!("fast"), serde_json::json!("safe")],
+            vec![edgerun_json::serde_json::json!("fast"), edgerun_json::serde_json::json!("safe")],
             /*description*/ None,
         )
     );
     assert_eq!(
         const_schema,
-        JsonSchema::string_enum(vec![serde_json::json!("file")], /*description*/ None)
+        JsonSchema::string_enum(vec![edgerun_json::serde_json::json!("file")], /*description*/ None)
     );
     assert_eq!(format_schema, JsonSchema::string(/*description*/ None));
 }
@@ -257,7 +257,7 @@ fn parse_tool_input_schema_defaults_empty_schema_to_string() {
     // Expected normalization behavior:
     // - With no structural hints at all, the normalizer falls back to a
     //   permissive string schema.
-    let schema = parse_tool_input_schema(&serde_json::json!({})).expect("parse schema");
+    let schema = parse_tool_input_schema(&edgerun_json::serde_json::json!({})).expect("parse schema");
 
     assert_eq!(schema, JsonSchema::string(/*description*/ None));
 }
@@ -275,7 +275,7 @@ fn parse_tool_input_schema_infers_array_from_prefix_items() {
     // - `prefixItems` implies an array schema when `type` is omitted.
     // - The normalized result is stored as a regular array schema with string
     //   items.
-    let schema = parse_tool_input_schema(&serde_json::json!({
+    let schema = parse_tool_input_schema(&edgerun_json::serde_json::json!({
         "prefixItems": [
             {"type": "string"}
         ]
@@ -307,7 +307,7 @@ fn parse_tool_input_schema_preserves_boolean_additional_properties_on_inferred_o
     // - The nested `metadata` schema is inferred to be an object because it has
     //   `additionalProperties`.
     // - `additionalProperties: true` is preserved rather than rewritten.
-    let schema = parse_tool_input_schema(&serde_json::json!({
+    let schema = parse_tool_input_schema(&edgerun_json::serde_json::json!({
         "type": "object",
         "properties": {
             "metadata": {
@@ -344,7 +344,7 @@ fn parse_tool_input_schema_infers_object_shape_from_schema_additional_properties
     //   when `type` is omitted.
     // - The nested schema is preserved as the object's
     //   `additionalProperties` definition.
-    let schema = parse_tool_input_schema(&serde_json::json!({
+    let schema = parse_tool_input_schema(&edgerun_json::serde_json::json!({
         "additionalProperties": {
             "type": "string"
         }
@@ -371,20 +371,20 @@ fn parse_tool_input_schema_rewrites_const_to_single_value_enum() {
     // Expected normalization behavior:
     // - `const` is rewritten through the sanitizer's `map.remove("const")`
     //   path into an equivalent single-value string enum schema.
-    let schema = parse_tool_input_schema(&serde_json::json!({
+    let schema = parse_tool_input_schema(&edgerun_json::serde_json::json!({
         "const": "tagged"
     }))
     .expect("parse schema");
 
     assert_eq!(
         schema,
-        JsonSchema::string_enum(vec![serde_json::json!("tagged")], /*description*/ None)
+        JsonSchema::string_enum(vec![edgerun_json::serde_json::json!("tagged")], /*description*/ None)
     );
 }
 
 #[test]
 fn parse_tool_input_schema_rejects_singleton_null_type() {
-    let err = parse_tool_input_schema(&serde_json::json!({
+    let err = parse_tool_input_schema(&edgerun_json::serde_json::json!({
         "type": "null"
     }))
     .expect_err("singleton null should be rejected");
@@ -406,7 +406,7 @@ fn parse_tool_input_schema_fills_default_properties_for_nullable_object_union() 
     // Expected normalization behavior:
     // - The full union is preserved.
     // - Object members of the union still receive default `properties`.
-    let schema = parse_tool_input_schema(&serde_json::json!({
+    let schema = parse_tool_input_schema(&edgerun_json::serde_json::json!({
         "type": ["object", "null"]
     }))
     .expect("parse schema");
@@ -434,7 +434,7 @@ fn parse_tool_input_schema_fills_default_items_for_nullable_array_union() {
     // Expected normalization behavior:
     // - The full union is preserved.
     // - Array members of the union still receive default `items`.
-    let schema = parse_tool_input_schema(&serde_json::json!({
+    let schema = parse_tool_input_schema(&edgerun_json::serde_json::json!({
         "type": ["array", "null"]
     }))
     .expect("parse schema");
@@ -483,7 +483,7 @@ fn parse_tool_input_schema_preserves_nested_nullable_any_of_shape() {
     //
     // Expected normalization behavior:
     // - Nested nullable `anyOf` shapes are preserved all the way down.
-    let schema = parse_tool_input_schema(&serde_json::json!({
+    let schema = parse_tool_input_schema(&edgerun_json::serde_json::json!({
         "type": "object",
         "properties": {
             "open": {
@@ -566,7 +566,7 @@ fn parse_tool_input_schema_preserves_nested_nullable_type_union() {
     // Expected normalization behavior:
     // - The nested property keeps the explicit `["string", "null"]` union.
     // - The object-level `required` and `additionalProperties: false` stay intact.
-    let schema = parse_tool_input_schema(&serde_json::json!({
+    let schema = parse_tool_input_schema(&edgerun_json::serde_json::json!({
         "type": "object",
         "properties": {
             "nickname": {
@@ -617,7 +617,7 @@ fn parse_tool_input_schema_preserves_nested_any_of_property() {
     // Expected normalization behavior:
     // - The nested `anyOf` is preserved rather than flattened into a single
     //   fallback type.
-    let schema = parse_tool_input_schema(&serde_json::json!({
+    let schema = parse_tool_input_schema(&edgerun_json::serde_json::json!({
         "type": "object",
         "properties": {
             "query": {
@@ -660,7 +660,7 @@ fn parse_tool_input_schema_preserves_type_unions_without_rewriting_to_any_of() {
     // Expected normalization behavior:
     // - Explicit type unions are preserved as unions rather than rewritten to
     //   `anyOf`.
-    let schema = parse_tool_input_schema(&serde_json::json!({
+    let schema = parse_tool_input_schema(&edgerun_json::serde_json::json!({
         "type": ["string", "null"],
         "description": "optional string"
     }))
@@ -690,7 +690,7 @@ fn parse_tool_input_schema_preserves_explicit_enum_type_union() {
     //
     // Expected normalization behavior:
     // - The explicit string/null union is preserved alongside the enum values.
-    let schema = super::parse_tool_input_schema(&serde_json::json!({
+    let schema = super::parse_tool_input_schema(&edgerun_json::serde_json::json!({
         "type": ["string", "null"],
         "enum": ["short", "medium", "long"],
         "description": "optional response length"
@@ -706,9 +706,9 @@ fn parse_tool_input_schema_preserves_explicit_enum_type_union() {
             ])),
             description: Some("optional response length".to_string()),
             enum_values: Some(vec![
-                serde_json::json!("short"),
-                serde_json::json!("medium"),
-                serde_json::json!("long"),
+                edgerun_json::serde_json::json!("short"),
+                edgerun_json::serde_json::json!("medium"),
+                edgerun_json::serde_json::json!("long"),
             ]),
             ..Default::default()
         }
@@ -730,7 +730,7 @@ fn parse_tool_input_schema_preserves_string_enum_constraints() {
     // Expected normalization behavior:
     // - Legacy `type: "enum"` and `type: "const"` inputs are normalized into
     //   the current string-enum representation.
-    let schema = super::parse_tool_input_schema(&serde_json::json!({
+    let schema = super::parse_tool_input_schema(&edgerun_json::serde_json::json!({
         "type": "object",
         "properties": {
             "response_length": {
@@ -756,7 +756,7 @@ fn parse_tool_input_schema_preserves_string_enum_constraints() {
                 (
                     "kind".to_string(),
                     JsonSchema::string_enum(
-                        vec![serde_json::json!("tagged")],
+                        vec![edgerun_json::serde_json::json!("tagged")],
                         /*description*/ None,
                     ),
                 ),
@@ -764,9 +764,9 @@ fn parse_tool_input_schema_preserves_string_enum_constraints() {
                     "response_length".to_string(),
                     JsonSchema::string_enum(
                         vec![
-                            serde_json::json!("short"),
-                            serde_json::json!("medium"),
-                            serde_json::json!("long"),
+                            edgerun_json::serde_json::json!("short"),
+                            edgerun_json::serde_json::json!("medium"),
+                            edgerun_json::serde_json::json!("long"),
                         ],
                         /*description*/ None,
                     ),
@@ -774,7 +774,7 @@ fn parse_tool_input_schema_preserves_string_enum_constraints() {
                 (
                     "scope".to_string(),
                     JsonSchema::string_enum(
-                        vec![serde_json::json!("one"), serde_json::json!("two")],
+                        vec![edgerun_json::serde_json::json!("one"), edgerun_json::serde_json::json!("two")],
                         /*description*/ None,
                     ),
                 ),

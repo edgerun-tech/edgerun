@@ -17,7 +17,6 @@ use edgerun_time::chrono::ChronoLocal as Local;
 use edgerun_time::chrono::ChronoUtc as Utc;
 use edgerun_time::chrono::ChronoUtcDateTime as DateTime;
 use reqwest::StatusCode;
-use serde_json;
 use std::io;
 use std::time::Duration;
 use edgerun_error::Error;
@@ -147,7 +146,7 @@ pub enum CodexErr {
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error(transparent)]
-    Json(#[from] serde_json::Error),
+    Json(#[from] edgerun_json::serde_json::Error),
     #[cfg(target_os = "linux")]
     #[error(transparent)]
     LandlockRuleset(#[from] landlock::RulesetError),
@@ -327,11 +326,11 @@ impl UnexpectedResponseError {
     }
 
     fn extract_error_message(&self) -> Option<String> {
-        let json = serde_json::from_str::<serde_json::Value>(&self.body).ok()?;
+        let json = edgerun_json::serde_json::from_str::<edgerun_json::serde_json::Value>(&self.body).ok()?;
         let message = json
             .get("error")
             .and_then(|error| error.get("message"))
-            .and_then(serde_json::Value::as_str)?;
+            .and_then(edgerun_json::serde_json::Value::as_str)?;
         let message = message.trim();
         if message.is_empty() {
             None

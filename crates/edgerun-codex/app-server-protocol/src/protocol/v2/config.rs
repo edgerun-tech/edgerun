@@ -12,7 +12,7 @@ use codex_protocol::openai_models::ReasoningEffort;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
-use serde_json::Value as JsonValue;
+use edgerun_json::serde_json::Value as JsonValue;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::path::PathBuf;

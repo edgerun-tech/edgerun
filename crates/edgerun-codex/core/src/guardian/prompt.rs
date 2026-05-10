@@ -5,7 +5,7 @@ use codex_protocol::protocol::GuardianRiskLevel;
 use codex_protocol::protocol::GuardianUserAuthorization;
 use codex_protocol::user_input::UserInput;
 use serde::Deserialize;
-use serde_json::Value;
+use edgerun_json::serde_json::Value;
 
 use crate::compact::content_items_to_text;
 use crate::event_mapping::is_contextual_user_message_content;
@@ -91,7 +91,7 @@ pub(crate) async fn build_guardian_prompt_items(
     retry_reason: Option<String>,
     request: GuardianApprovalRequest,
     mode: GuardianPromptMode,
-) -> serde_json::Result<GuardianPromptItems> {
+) -> edgerun_json::serde_json::Result<GuardianPromptItems> {
     let history = session.clone_history().await;
     let transcript_entries = collect_guardian_transcript_entries(history.raw_items());
     let transcript_cursor = GuardianTranscriptCursor {
@@ -405,7 +405,7 @@ pub(crate) fn collect_guardian_transcript_entries(
             }
             ResponseItem::LocalShellCall { action, .. } => serialized_entry(
                 GuardianTranscriptEntryKind::Tool("tool shell call".to_string()),
-                serde_json::to_string(action).ok(),
+                edgerun_json::serde_json::to_string(action).ok(),
             ),
             ResponseItem::FunctionCall {
                 call_id,
@@ -434,7 +434,7 @@ pub(crate) fn collect_guardian_transcript_entries(
             ResponseItem::WebSearchCall { action, .. } => action.as_ref().and_then(|action| {
                 serialized_entry(
                     GuardianTranscriptEntryKind::Tool("tool web_search call".to_string()),
-                    serde_json::to_string(action).ok(),
+                    edgerun_json::serde_json::to_string(action).ok(),
                 )
             }),
             ResponseItem::FunctionCallOutput {
@@ -535,13 +535,13 @@ pub(crate) fn parse_guardian_assessment(text: Option<&str>) -> anyhow::Result<Gu
         anyhow::bail!("guardian review completed without an assessment payload");
     };
     let parsed_payload =
-        if let Ok(payload) = serde_json::from_str::<GuardianAssessmentPayload>(text) {
+        if let Ok(payload) = edgerun_json::serde_json::from_str::<GuardianAssessmentPayload>(text) {
             payload
         } else if let (Some(start), Some(end)) = (text.find('{'), text.rfind('}'))
             && start < end
             && let Some(slice) = text.get(start..=end)
         {
-            serde_json::from_str::<GuardianAssessmentPayload>(slice)?
+            edgerun_json::serde_json::from_str::<GuardianAssessmentPayload>(slice)?
         } else {
             anyhow::bail!("guardian assessment was not valid JSON");
         };
@@ -587,7 +587,7 @@ struct GuardianAssessmentPayload {
 /// Keep this next to `guardian_output_contract_prompt()` so the prompt text and
 /// output schema stay aligned.
 pub(crate) fn guardian_output_schema() -> Value {
-    serde_json::json!({
+    edgerun_json::serde_json::json!({
         "type": "object",
         "additionalProperties": false,
         "properties": {

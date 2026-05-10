@@ -192,7 +192,7 @@ impl Approvable<ApplyPatchRequest> for ApplyPatchRuntime {
     ) -> Option<PermissionRequestPayload> {
         Some(PermissionRequestPayload {
             tool_name: HookToolName::apply_patch(),
-            tool_input: serde_json::json!({ "command": req.action.patch }),
+            tool_input: edgerun_json::serde_json::json!({ "command": req.action.patch }),
         })
     }
 }

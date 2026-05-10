@@ -39,7 +39,7 @@ fn write_minimal_rollout_with_id_at_path(file: &Path, id: Uuid) {
     writeln!(
         f,
         "{}",
-        serde_json::json!({
+        edgerun_json::serde_json::json!({
             "timestamp": "2024-01-01T00:00:00.000Z",
             "type": "session_meta",
             "payload": {
@@ -203,7 +203,7 @@ async fn find_locates_rollout_file_written_by_recorder() -> std::io::Result<()> 
         &index_path,
         format!(
             "{}\n",
-            serde_json::json!({
+            edgerun_json::serde_json::json!({
                 "id": thread_id,
                 "thread_name": thread_name,
                 "updated_at": "2024-01-01T00:00:00Z"

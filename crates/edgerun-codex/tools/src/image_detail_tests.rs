@@ -4,10 +4,10 @@ use codex_protocol::models::FunctionCallOutputContentItem;
 use codex_protocol::models::ImageDetail;
 use codex_protocol::openai_models::ModelInfo;
 use pretty_assertions::assert_eq;
-use serde_json::json;
+use edgerun_json::serde_json::json;
 
 fn model_info() -> ModelInfo {
-    serde_json::from_value(json!({
+    edgerun_json::serde_json::from_value(json!({
         "slug": "test-model",
         "display_name": "Test Model",
         "description": null,

@@ -1,9 +1,9 @@
 use bytes::Bytes;
+use edgerun_json::serde_json::Value;
 use http::Method;
 use reqwest::header::HeaderMap;
 use reqwest::header::HeaderValue;
 use serde::Serialize;
-use serde_json::Value;
 use std::time::Duration;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -63,7 +63,9 @@ impl Request {
     }
 
     pub fn with_json<T: Serialize>(mut self, body: &T) -> Self {
-        self.body = serde_json::to_value(body).ok().map(RequestBody::Json);
+        self.body = edgerun_json::serde_json::to_value(body)
+            .ok()
+            .map(RequestBody::Json);
         self
     }
 
@@ -95,7 +97,8 @@ impl Request {
                 })
             }
             Some(RequestBody::Json(body)) => {
-                let json = serde_json::to_vec(&body).map_err(|err| err.to_string())?;
+                let json = edgerun_json::serde_json::to_vec(&body)
+                    .map_err(|err| err.to_string())?;
                 let bytes = if self.compression != RequestCompression::None {
                     if headers.contains_key(http::header::CONTENT_ENCODING) {
                         return Err(
@@ -154,9 +157,9 @@ impl Request {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use edgerun_json::serde_json::json;
     use http::HeaderValue;
     use pretty_assertions::assert_eq;
-    use serde_json::json;
 
     #[test]
     fn prepare_body_for_send_serializes_json_and_sets_content_type() {

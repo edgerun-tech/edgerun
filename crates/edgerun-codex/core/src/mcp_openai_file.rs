@@ -14,7 +14,7 @@ use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;
 use codex_api::upload_local_file;
 use codex_login::CodexAuth;
-use serde_json::Value as JsonValue;
+use edgerun_json::serde_json::Value as JsonValue;
 
 pub(crate) async fn rewrite_mcp_tool_arguments_for_openai_files(
     sess: &Session,
@@ -126,7 +126,7 @@ async fn build_uploaded_local_argument_value(
         }
         None => format!("failed to upload `{file_path}` for `{field_name}`: {error}"),
     })?;
-    Ok(serde_json::json!({
+    Ok(edgerun_json::serde_json::json!({
         "download_url": uploaded.download_url,
         "file_id": uploaded.file_id,
         "mime_type": uploaded.mime_type,
@@ -148,7 +148,7 @@ mod tests {
     #[tokio::test]
     async fn openai_file_argument_rewrite_requires_declared_file_params() {
         let (session, turn_context) = make_session_and_context().await;
-        let arguments = Some(serde_json::json!({
+        let arguments = Some(edgerun_json::serde_json::json!({
             "file": "/tmp/codex-smoke-file.txt"
         }));
 
@@ -178,12 +178,12 @@ mod tests {
         Mock::given(method("POST"))
             .and(path("/backend-api/files"))
             .and(header("chatgpt-account-id", "account_id"))
-            .and(body_json(serde_json::json!({
+            .and(body_json(edgerun_json::serde_json::json!({
                 "file_name": "file_report.csv",
                 "file_size": 5,
                 "use_case": "codex",
             })))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            .respond_with(ResponseTemplate::new(200).set_body_json(edgerun_json::serde_json::json!({
                 "file_id": "file_123",
                 "upload_url": format!("{}/upload/file_123", server.uri()),
             })))
@@ -198,7 +198,7 @@ mod tests {
             .await;
         Mock::given(method("POST"))
             .and(path("/backend-api/files/file_123/uploaded"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            .respond_with(ResponseTemplate::new(200).set_body_json(edgerun_json::serde_json::json!({
                 "status": "success",
                 "download_url": format!("{}/download/file_123", server.uri()),
                 "file_name": "file_report.csv",
@@ -234,7 +234,7 @@ mod tests {
 
         assert_eq!(
             rewritten,
-            serde_json::json!({
+            edgerun_json::serde_json::json!({
                 "download_url": format!("{}/download/file_123", server.uri()),
                 "file_id": "file_123",
                 "mime_type": "text/csv",
@@ -259,12 +259,12 @@ mod tests {
         Mock::given(method("POST"))
             .and(path("/backend-api/files"))
             .and(header("chatgpt-account-id", "account_id"))
-            .and(body_json(serde_json::json!({
+            .and(body_json(edgerun_json::serde_json::json!({
                 "file_name": "file_report.csv",
                 "file_size": 5,
                 "use_case": "codex",
             })))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            .respond_with(ResponseTemplate::new(200).set_body_json(edgerun_json::serde_json::json!({
                 "file_id": "file_123",
                 "upload_url": format!("{}/upload/file_123", server.uri()),
             })))
@@ -279,7 +279,7 @@ mod tests {
             .await;
         Mock::given(method("POST"))
             .and(path("/backend-api/files/file_123/uploaded"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            .respond_with(ResponseTemplate::new(200).set_body_json(edgerun_json::serde_json::json!({
                 "status": "success",
                 "download_url": format!("{}/download/file_123", server.uri()),
                 "file_name": "file_report.csv",
@@ -306,14 +306,14 @@ mod tests {
             &turn_context,
             Some(&auth),
             "file",
-            &serde_json::json!("file_report.csv"),
+            &edgerun_json::serde_json::json!("file_report.csv"),
         )
         .await
         .expect("rewrite should succeed");
 
         assert_eq!(
             rewritten,
-            Some(serde_json::json!({
+            Some(edgerun_json::serde_json::json!({
                 "download_url": format!("{}/download/file_123", server.uri()),
                 "file_id": "file_123",
                 "mime_type": "text/csv",
@@ -338,12 +338,12 @@ mod tests {
         Mock::given(method("POST"))
             .and(path("/backend-api/files"))
             .and(header("chatgpt-account-id", "account_id"))
-            .and(body_json(serde_json::json!({
+            .and(body_json(edgerun_json::serde_json::json!({
                 "file_name": "one.csv",
                 "file_size": 3,
                 "use_case": "codex",
             })))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            .respond_with(ResponseTemplate::new(200).set_body_json(edgerun_json::serde_json::json!({
                 "file_id": "file_1",
                 "upload_url": format!("{}/upload/file_1", server.uri()),
             })))
@@ -353,12 +353,12 @@ mod tests {
         Mock::given(method("POST"))
             .and(path("/backend-api/files"))
             .and(header("chatgpt-account-id", "account_id"))
-            .and(body_json(serde_json::json!({
+            .and(body_json(edgerun_json::serde_json::json!({
                 "file_name": "two.csv",
                 "file_size": 3,
                 "use_case": "codex",
             })))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            .respond_with(ResponseTemplate::new(200).set_body_json(edgerun_json::serde_json::json!({
                 "file_id": "file_2",
                 "upload_url": format!("{}/upload/file_2", server.uri()),
             })))
@@ -379,7 +379,7 @@ mod tests {
             .await;
         Mock::given(method("POST"))
             .and(path("/backend-api/files/file_1/uploaded"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            .respond_with(ResponseTemplate::new(200).set_body_json(edgerun_json::serde_json::json!({
                 "status": "success",
                 "download_url": format!("{}/download/file_1", server.uri()),
                 "file_name": "one.csv",
@@ -391,7 +391,7 @@ mod tests {
             .await;
         Mock::given(method("POST"))
             .and(path("/backend-api/files/file_2/uploaded"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+            .respond_with(ResponseTemplate::new(200).set_body_json(edgerun_json::serde_json::json!({
                 "status": "success",
                 "download_url": format!("{}/download/file_2", server.uri()),
                 "file_name": "two.csv",
@@ -420,14 +420,14 @@ mod tests {
             &turn_context,
             Some(&auth),
             "files",
-            &serde_json::json!(["one.csv", "two.csv"]),
+            &edgerun_json::serde_json::json!(["one.csv", "two.csv"]),
         )
         .await
         .expect("rewrite should succeed");
 
         assert_eq!(
             rewritten,
-            Some(serde_json::json!([
+            Some(edgerun_json::serde_json::json!([
                 {
                     "download_url": format!("{}/download/file_1", server.uri()),
                     "file_id": "file_1",
@@ -457,7 +457,7 @@ mod tests {
         let error = rewrite_mcp_tool_arguments_for_openai_files(
             &session,
             &turn_context,
-            Some(serde_json::json!({
+            Some(edgerun_json::serde_json::json!({
                 "file": "/definitely/missing/file.csv",
             })),
             Some(&["file".to_string()]),

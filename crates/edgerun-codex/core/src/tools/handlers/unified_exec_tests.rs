@@ -181,7 +181,7 @@ fn test_get_command_ignores_explicit_shell_in_zsh_fork_mode() -> anyhow::Result<
 #[tokio::test]
 async fn exec_command_pre_tool_use_payload_uses_raw_command() {
     let payload = ToolPayload::Function {
-        arguments: serde_json::json!({ "cmd": "printf exec command" }).to_string(),
+        arguments: edgerun_json::serde_json::json!({ "cmd": "printf exec command" }).to_string(),
     };
     let (session, turn) = make_session_and_context().await;
     let handler = ExecCommandHandler::default();
@@ -199,7 +199,7 @@ async fn exec_command_pre_tool_use_payload_uses_raw_command() {
         }),
         Some(crate::tools::registry::PreToolUsePayload {
             tool_name: HookToolName::bash(),
-            tool_input: serde_json::json!({ "command": "printf exec command" }),
+            tool_input: edgerun_json::serde_json::json!({ "command": "printf exec command" }),
         })
     );
 }
@@ -207,7 +207,7 @@ async fn exec_command_pre_tool_use_payload_uses_raw_command() {
 #[tokio::test]
 async fn exec_command_pre_tool_use_payload_skips_write_stdin() {
     let payload = ToolPayload::Function {
-        arguments: serde_json::json!({ "chars": "echo hi" }).to_string(),
+        arguments: edgerun_json::serde_json::json!({ "chars": "echo hi" }).to_string(),
     };
     let (session, turn) = make_session_and_context().await;
     let handler = WriteStdinHandler;
@@ -230,7 +230,7 @@ async fn exec_command_pre_tool_use_payload_skips_write_stdin() {
 #[tokio::test]
 async fn exec_command_post_tool_use_payload_uses_output_for_noninteractive_one_shot_commands() {
     let payload = ToolPayload::Function {
-        arguments: serde_json::json!({ "cmd": "echo three", "tty": false }).to_string(),
+        arguments: edgerun_json::serde_json::json!({ "cmd": "echo three", "tty": false }).to_string(),
     };
     let output = ExecCommandToolOutput {
         event_call_id: "call-43".to_string(),
@@ -250,8 +250,8 @@ async fn exec_command_post_tool_use_payload_uses_output_for_noninteractive_one_s
         Some(crate::tools::registry::PostToolUsePayload {
             tool_name: HookToolName::bash(),
             tool_use_id: "call-43".to_string(),
-            tool_input: serde_json::json!({ "command": "echo three" }),
-            tool_response: serde_json::json!("three"),
+            tool_input: edgerun_json::serde_json::json!({ "command": "echo three" }),
+            tool_response: edgerun_json::serde_json::json!("three"),
         })
     );
 }
@@ -259,7 +259,7 @@ async fn exec_command_post_tool_use_payload_uses_output_for_noninteractive_one_s
 #[tokio::test]
 async fn exec_command_post_tool_use_payload_uses_output_for_interactive_completion() {
     let payload = ToolPayload::Function {
-        arguments: serde_json::json!({ "cmd": "echo three", "tty": true }).to_string(),
+        arguments: edgerun_json::serde_json::json!({ "cmd": "echo three", "tty": true }).to_string(),
     };
     let output = ExecCommandToolOutput {
         event_call_id: "call-44".to_string(),
@@ -280,8 +280,8 @@ async fn exec_command_post_tool_use_payload_uses_output_for_interactive_completi
         Some(crate::tools::registry::PostToolUsePayload {
             tool_name: HookToolName::bash(),
             tool_use_id: "call-44".to_string(),
-            tool_input: serde_json::json!({ "command": "echo three" }),
-            tool_response: serde_json::json!("three"),
+            tool_input: edgerun_json::serde_json::json!({ "command": "echo three" }),
+            tool_response: edgerun_json::serde_json::json!("three"),
         })
     );
 }
@@ -289,7 +289,7 @@ async fn exec_command_post_tool_use_payload_uses_output_for_interactive_completi
 #[tokio::test]
 async fn exec_command_post_tool_use_payload_skips_running_sessions() {
     let payload = ToolPayload::Function {
-        arguments: serde_json::json!({ "cmd": "echo three", "tty": false }).to_string(),
+        arguments: edgerun_json::serde_json::json!({ "cmd": "echo three", "tty": false }).to_string(),
     };
     let output = ExecCommandToolOutput {
         event_call_id: "event-45".to_string(),
@@ -310,7 +310,7 @@ async fn exec_command_post_tool_use_payload_skips_running_sessions() {
 #[tokio::test]
 async fn write_stdin_post_tool_use_payload_uses_original_exec_call_id_and_command_on_completion() {
     let payload = ToolPayload::Function {
-        arguments: serde_json::json!({
+        arguments: edgerun_json::serde_json::json!({
             "session_id": 45,
             "chars": "",
         })
@@ -335,8 +335,8 @@ async fn write_stdin_post_tool_use_payload_uses_original_exec_call_id_and_comman
         Some(crate::tools::registry::PostToolUsePayload {
             tool_name: HookToolName::bash(),
             tool_use_id: "exec-call-45".to_string(),
-            tool_input: serde_json::json!({ "command": "sleep 1; echo finished" }),
-            tool_response: serde_json::json!("finished\n"),
+            tool_input: edgerun_json::serde_json::json!({ "command": "sleep 1; echo finished" }),
+            tool_response: edgerun_json::serde_json::json!("finished\n"),
         })
     );
 }
@@ -344,7 +344,7 @@ async fn write_stdin_post_tool_use_payload_uses_original_exec_call_id_and_comman
 #[tokio::test]
 async fn write_stdin_post_tool_use_payload_keeps_parallel_session_metadata_separate() {
     let payload = ToolPayload::Function {
-        arguments: serde_json::json!({ "session_id": 45, "chars": "" }).to_string(),
+        arguments: edgerun_json::serde_json::json!({ "session_id": 45, "chars": "" }).to_string(),
     };
     let output_a = ExecCommandToolOutput {
         event_call_id: "exec-call-a".to_string(),
@@ -383,14 +383,14 @@ async fn write_stdin_post_tool_use_payload_keeps_parallel_session_metadata_separ
             Some(crate::tools::registry::PostToolUsePayload {
                 tool_name: HookToolName::bash(),
                 tool_use_id: "exec-call-b".to_string(),
-                tool_input: serde_json::json!({ "command": "sleep 1; echo beta" }),
-                tool_response: serde_json::json!("beta\n"),
+                tool_input: edgerun_json::serde_json::json!({ "command": "sleep 1; echo beta" }),
+                tool_response: edgerun_json::serde_json::json!("beta\n"),
             }),
             Some(crate::tools::registry::PostToolUsePayload {
                 tool_name: HookToolName::bash(),
                 tool_use_id: "exec-call-a".to_string(),
-                tool_input: serde_json::json!({ "command": "sleep 2; echo alpha" }),
-                tool_response: serde_json::json!("alpha\n"),
+                tool_input: edgerun_json::serde_json::json!({ "command": "sleep 2; echo alpha" }),
+                tool_response: edgerun_json::serde_json::json!("alpha\n"),
             }),
         ]
     );

@@ -6,7 +6,7 @@
 use codex_tools::JsonSchema;
 use codex_tools::ResponsesApiTool;
 use codex_tools::ToolSpec;
-use serde_json::json;
+use edgerun_json::serde_json::json;
 use std::collections::BTreeMap;
 
 pub const GET_GOAL_TOOL_NAME: &str = "get_goal";

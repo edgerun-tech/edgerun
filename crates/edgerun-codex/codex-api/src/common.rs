@@ -10,7 +10,7 @@ use codex_protocol::protocol::W3cTraceContext;
 use futures::Stream;
 use serde::Deserialize;
 use serde::Serialize;
-use serde_json::Value;
+use edgerun_json::serde_json::Value;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::task::Context;
@@ -172,7 +172,7 @@ pub struct ResponsesApiRequest {
     #[serde(skip_serializing_if = "String::is_empty")]
     pub instructions: String,
     pub input: Vec<ResponseItem>,
-    pub tools: Vec<serde_json::Value>,
+    pub tools: Vec<edgerun_json::serde_json::Value>,
     pub tool_choice: String,
     pub parallel_tool_calls: bool,
     pub reasoning: Option<Reasoning>,

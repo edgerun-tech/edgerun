@@ -36,8 +36,8 @@ use core_test_support::responses::sse;
 use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
 use pretty_assertions::assert_eq;
-use serde_json::Value;
-use serde_json::json;
+use edgerun_json::serde_json::Value;
+use edgerun_json::serde_json::json;
 use std::sync::Arc;
 use tempfile::TempDir;
 use wiremock::MockServer;
@@ -54,7 +54,7 @@ fn body_contains_text(body: &str, text: &str) -> bool {
 }
 
 fn json_fragment(text: &str) -> String {
-    serde_json::to_string(text)
+    edgerun_json::serde_json::to_string(text)
         .expect("serialize text to JSON")
         .trim_matches('"')
         .to_string()

@@ -36,6 +36,8 @@
 #![no_std]
 
 extern crate alloc;
+#[cfg(feature = "serde-compat")]
+extern crate serde_json as serde_json_compat_crate;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 extern crate std;
 #[cfg(all(test, not(feature = "std")))]
@@ -101,6 +103,12 @@ pub use value::{JsonValue, JsonValueError, Number, Value};
 
 #[cfg(feature = "derive")]
 pub use edgerun_json_derive::{FromJson, ToJson};
+
+/// Compatibility surface for crates migrating away from a direct `serde_json` dependency.
+#[cfg(feature = "serde-compat")]
+pub mod serde_json {
+    pub use crate::serde_json_compat_crate::*;
+}
 
 #[cfg(feature = "toml")]
 pub use toml::{

@@ -1,467 +1,648 @@
-use edgerun_crypto::ed25519_dalek::{Signature, Verifier, VerifyingKey};
-use rkyv::{Archive, Deserialize, Serialize};
-use std::collections::HashMap;
-use std::fmt;
-use std::io::{self, ErrorKind, Read, Write};
-use std::net::{TcpListener, TcpStream, ToSocketAddrs};
-use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time::{SystemTime, UNIX_EPOCH};
+#![cfg_attr(not(feature = "std"), no_std)]
 
-pub const NODE_ID_LEN: usize = 32;
-pub const SIGNATURE_LEN: usize = 64;
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+
+#[cfg(feature = "std")]
+mod std_runtime;
+
+#[cfg(feature = "std")]
+pub use std_runtime::*;
+
+#[cfg(not(feature = "std"))]
+use alloc::vec::Vec;
+#[cfg(not(feature = "std"))]
+use core::fmt;
+
+#[cfg(not(feature = "std"))]
+pub mod nostd_relay;
+#[cfg(all(not(feature = "std"), feature = "virtio"))]
+pub mod nostd_virtio;
+
+#[cfg(not(feature = "std"))]
+use edgerun_crypto::sha256;
+#[cfg(not(feature = "std"))]
+use edgerun_protocols::verify::verify_message_signature;
+#[cfg(not(feature = "std"))]
+use edgerun_wire::{
+    RELAY_DELIVERY_STATUS_ACCEPTED, RELAY_REPORT_STATUS_ACCEPTED, RELAY_WIRE_ABI_VERSION,
+    RelayDeliveryReceipt, RelayDeliveryReport, RelayDeliveryReportReceipt, RelayDeliveryRequest,
+    RelayIdentity, RelayMessage, RelayRegister, RelaySignature, RelaySubmit,
+    SIGNATURE_ALGORITHM_ECDSA_P256_SHA256, SIGNATURE_ALGORITHM_ED25519, relay_message_bytes,
+    relay_message_from_bytes,
+};
+
+#[cfg(not(feature = "std"))]
 pub const MAX_FRAME_LEN: usize = 1024 * 1024;
+#[cfg(not(feature = "std"))]
+pub const MAX_PAYLOAD_LEN: usize = 512 * 1024;
+#[cfg(not(feature = "std"))]
+pub const MAX_ROUTES: usize = 65_536;
+#[cfg(not(feature = "std"))]
+pub const MAX_PENDING_DELIVERIES: usize = 65_536;
 
-pub type NodeId = [u8; NODE_ID_LEN];
-pub type SignatureBytes = [u8; SIGNATURE_LEN];
-
+#[cfg(not(feature = "std"))]
 const REGISTER_DOMAIN: &[u8] = b"edgerun:v0:relay:register";
-const SEND_DOMAIN: &[u8] = b"edgerun:v0:relay:send";
+#[cfg(not(feature = "std"))]
+const SUBMIT_DOMAIN: &[u8] = b"edgerun:v0:relay:submit";
+#[cfg(not(feature = "std"))]
+const DELIVERY_RECEIPT_DOMAIN: &[u8] = b"edgerun:v0:relay:delivery-receipt";
+#[cfg(not(feature = "std"))]
+const REPORT_RECEIPT_DOMAIN: &[u8] = b"edgerun:v0:relay:delivery-report-receipt";
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-pub struct Register {
-    pub node_id: NodeId,
-    pub sequence: u64,
-    pub log_head: [u8; 32],
-    pub signature: SignatureBytes,
+#[cfg(not(feature = "std"))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RelayWireError {
+    EmptyPacket,
+    PacketTooLarge,
+    InvalidPacket,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-pub struct Send {
-    pub from: NodeId,
-    pub to: NodeId,
-    pub sequence: u64,
-    pub payload: Vec<u8>,
-    pub signature: SignatureBytes,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-pub struct Delivered {
-    pub from: NodeId,
-    pub to: NodeId,
-    pub sequence: u64,
-    pub received_unix_ms: u64,
-    pub payload: Vec<u8>,
-    pub signature: SignatureBytes,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-pub struct Ack {
-    pub ok: bool,
-    pub code: u16,
-    pub text: String,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-pub enum RelayMessage {
-    Register(Register),
-    Send(Send),
-    Delivered(Delivered),
-    Ack(Ack),
-}
-
-impl RelayMessage {
-    pub fn encode_rkyv(&self) -> Result<Vec<u8>, rkyv::rancor::Error> {
-        rkyv::to_bytes::<rkyv::rancor::Error>(self).map(|bytes| bytes.to_vec())
-    }
-
-    pub fn decode_rkyv(bytes: &[u8]) -> Result<Self, rkyv::rancor::Error> {
-        let archived = rkyv::access::<ArchivedRelayMessage, rkyv::rancor::Error>(bytes)?;
-        rkyv::deserialize::<RelayMessage, rkyv::rancor::Error>(archived)
-    }
-}
-
-impl Register {
-    pub fn signing_preimage(&self) -> Vec<u8> {
-        register_preimage(&self.node_id, self.sequence, &self.log_head)
-    }
-
-    pub fn verify(&self) -> bool {
-        verify_ed25519(&self.node_id, &self.signing_preimage(), &self.signature)
-    }
-}
-
-impl Send {
-    pub fn signing_preimage(&self) -> Vec<u8> {
-        send_preimage(&self.from, &self.to, self.sequence, &self.payload)
-    }
-
-    pub fn verify(&self) -> bool {
-        verify_ed25519(&self.from, &self.signing_preimage(), &self.signature)
-    }
-}
-
-pub fn register_preimage(node_id: &NodeId, sequence: u64, log_head: &[u8; 32]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(REGISTER_DOMAIN.len() + 1 + NODE_ID_LEN + 8 + 32);
-    out.extend_from_slice(REGISTER_DOMAIN);
-    out.push(0);
-    out.extend_from_slice(node_id);
-    out.extend_from_slice(&sequence.to_be_bytes());
-    out.extend_from_slice(log_head);
-    out
-}
-
-pub fn send_preimage(from: &NodeId, to: &NodeId, sequence: u64, payload: &[u8]) -> Vec<u8> {
-    let mut out =
-        Vec::with_capacity(SEND_DOMAIN.len() + 1 + NODE_ID_LEN * 2 + 8 + 8 + payload.len());
-    out.extend_from_slice(SEND_DOMAIN);
-    out.push(0);
-    out.extend_from_slice(from);
-    out.extend_from_slice(to);
-    out.extend_from_slice(&sequence.to_be_bytes());
-    out.extend_from_slice(&(payload.len() as u64).to_be_bytes());
-    out.extend_from_slice(payload);
-    out
-}
-
-pub fn verify_ed25519(node_id: &NodeId, preimage: &[u8], signature: &SignatureBytes) -> bool {
-    let Ok(public_key) = VerifyingKey::from_bytes(node_id) else {
-        return false;
-    };
-    let sig = Signature::from_bytes(signature);
-    public_key.verify(preimage, &sig).is_ok()
-}
-
-#[derive(Clone, Default)]
-pub struct Relay {
-    routes: Arc<Mutex<HashMap<NodeId, PeerWriter>>>,
-}
-
-#[derive(Clone)]
-struct PeerWriter {
-    writer: Arc<Mutex<TcpStream>>,
-}
-
-impl Relay {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn serve<A: ToSocketAddrs>(&self, addr: A) -> io::Result<()> {
-        let listener = TcpListener::bind(addr)?;
-        self.serve_listener(listener)
-    }
-
-    pub fn serve_listener(&self, listener: TcpListener) -> io::Result<()> {
-        for stream in listener.incoming() {
-            match stream {
-                Ok(stream) => {
-                    let relay = self.clone();
-                    thread::spawn(move || {
-                        let _ = relay.handle_stream(stream);
-                    });
-                }
-                Err(error) => return Err(error),
-            }
-        }
-        Ok(())
-    }
-
-    pub fn handle_stream(&self, mut stream: TcpStream) -> io::Result<()> {
-        let writer = Arc::new(Mutex::new(stream.try_clone()?));
-        let mut registered_node = None;
-
-        loop {
-            let message = match read_message(&mut stream) {
-                Ok(message) => message,
-                Err(error)
-                    if error.kind() == ErrorKind::UnexpectedEof
-                        || error.kind() == ErrorKind::ConnectionReset =>
-                {
-                    break;
-                }
-                Err(error) => {
-                    let _ = write_ack(&writer, false, 400, &format!("read failed: {error}"));
-                    break;
-                }
-            };
-
-            match message {
-                RelayMessage::Register(register) => {
-                    if !register.verify() {
-                        write_ack(&writer, false, 401, "invalid register signature")?;
-                        continue;
-                    }
-
-                    registered_node = Some(register.node_id);
-                    self.routes.lock().expect("relay routes poisoned").insert(
-                        register.node_id,
-                        PeerWriter {
-                            writer: Arc::clone(&writer),
-                        },
-                    );
-                    write_ack(&writer, true, 200, "registered")?;
-                }
-                RelayMessage::Send(send) => {
-                    if !send.verify() {
-                        write_ack(&writer, false, 401, "invalid send signature")?;
-                        continue;
-                    }
-
-                    match self.forward(send) {
-                        Ok(()) => write_ack(&writer, true, 202, "forwarded")?,
-                        Err(error) => write_ack(&writer, false, error.code(), &error.to_string())?,
-                    }
-                }
-                RelayMessage::Delivered(_) | RelayMessage::Ack(_) => {
-                    write_ack(&writer, false, 400, "message type is relay-output only")?;
-                }
-            }
-        }
-
-        if let Some(node_id) = registered_node {
-            self.remove_route_if_same_writer(node_id, &writer);
-        }
-
-        Ok(())
-    }
-
-    pub fn registered_len(&self) -> usize {
-        self.routes.lock().expect("relay routes poisoned").len()
-    }
-
-    fn forward(&self, send: Send) -> Result<(), RelayError> {
-        let peer = {
-            let routes = self.routes.lock().expect("relay routes poisoned");
-            routes.get(&send.to).cloned()
-        }
-        .ok_or(RelayError::NodeNotRegistered)?;
-
-        let delivered = Delivered {
-            from: send.from,
-            to: send.to,
-            sequence: send.sequence,
-            received_unix_ms: unix_ms_now(),
-            payload: send.payload,
-            signature: send.signature,
-        };
-
-        write_message_locked(&peer.writer, &RelayMessage::Delivered(delivered))
-            .map_err(RelayError::ForwardWrite)
-    }
-
-    fn remove_route_if_same_writer(&self, node_id: NodeId, writer: &Arc<Mutex<TcpStream>>) {
-        let mut routes = self.routes.lock().expect("relay routes poisoned");
-        if routes
-            .get(&node_id)
-            .is_some_and(|peer| Arc::ptr_eq(&peer.writer, writer))
-        {
-            routes.remove(&node_id);
-        }
-    }
-}
-
-#[derive(Debug)]
-pub enum RelayError {
-    NodeNotRegistered,
-    ForwardWrite(io::Error),
-}
-
-impl RelayError {
-    fn code(&self) -> u16 {
-        match self {
-            RelayError::NodeNotRegistered => 404,
-            RelayError::ForwardWrite(_) => 502,
-        }
-    }
-}
-
-impl fmt::Display for RelayError {
+#[cfg(not(feature = "std"))]
+impl fmt::Display for RelayWireError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            RelayError::NodeNotRegistered => write!(f, "destination node is not registered"),
-            RelayError::ForwardWrite(error) => write!(f, "forward write failed: {error}"),
+            Self::EmptyPacket => write!(f, "empty relay packet"),
+            Self::PacketTooLarge => write!(f, "relay packet too large"),
+            Self::InvalidPacket => write!(f, "invalid relay packet"),
         }
     }
 }
 
-impl std::error::Error for RelayError {}
+#[cfg(not(feature = "std"))]
+pub fn verify_register(register: &RelayRegister) -> bool {
+    register.abi_version == RELAY_WIRE_ABI_VERSION
+        && identity_shape_ok(&register.node)
+        && signature_shape_ok(&register.signature)
+        && signature_matches_identity(&register.node, &register.signature)
+        && verify_signature(&register.signature, &register_preimage(register))
+}
 
-pub fn read_message(reader: &mut impl Read) -> io::Result<RelayMessage> {
-    let mut len_bytes = [0u8; 4];
-    reader.read_exact(&mut len_bytes)?;
-    let len = u32::from_be_bytes(len_bytes) as usize;
-    if len == 0 || len > MAX_FRAME_LEN {
-        return Err(io::Error::new(
-            ErrorKind::InvalidData,
-            "invalid relay frame length",
-        ));
-    }
+#[cfg(not(feature = "std"))]
+pub fn verify_submit(submit: &RelaySubmit) -> bool {
+    submit.abi_version == RELAY_WIRE_ABI_VERSION
+        && submit.payload.len() <= MAX_PAYLOAD_LEN
+        && sha256_array(&submit.payload) == submit.payload_sha256
+        && identity_shape_ok(&submit.from)
+        && identity_shape_ok(&submit.to)
+        && signature_shape_ok(&submit.signature)
+        && signature_matches_identity(&submit.from, &submit.signature)
+        && verify_signature(&submit.signature, &submit_preimage(submit))
+}
 
-    let mut bytes = vec![0u8; len];
-    reader.read_exact(&mut bytes)?;
-    RelayMessage::decode_rkyv(&bytes).map_err(|error| {
-        io::Error::new(
-            ErrorKind::InvalidData,
-            format!("invalid rkyv frame: {error}"),
+#[cfg(not(feature = "std"))]
+pub fn verify_delivery_receipt(receipt: &RelayDeliveryReceipt) -> bool {
+    receipt.abi_version == RELAY_WIRE_ABI_VERSION
+        && matches!(
+            receipt.status,
+            RELAY_DELIVERY_STATUS_ACCEPTED | edgerun_wire::RELAY_DELIVERY_STATUS_REJECTED
         )
-    })
+        && identity_shape_ok(&receipt.recipient)
+        && signature_shape_ok(&receipt.signature)
+        && signature_matches_identity(&receipt.recipient, &receipt.signature)
+        && verify_signature(&receipt.signature, &delivery_receipt_preimage(receipt))
 }
 
-pub fn write_message(writer: &mut impl Write, message: &RelayMessage) -> io::Result<()> {
-    let bytes = message.encode_rkyv().map_err(|error| {
-        io::Error::new(
-            ErrorKind::InvalidData,
-            format!("rkyv encode failed: {error}"),
+#[cfg(not(feature = "std"))]
+pub fn verify_report_receipt(receipt: &RelayDeliveryReportReceipt) -> bool {
+    receipt.abi_version == RELAY_WIRE_ABI_VERSION
+        && matches!(
+            receipt.status,
+            RELAY_REPORT_STATUS_ACCEPTED | edgerun_wire::RELAY_REPORT_STATUS_REJECTED
         )
-    })?;
-    if bytes.len() > MAX_FRAME_LEN {
-        return Err(io::Error::new(
-            ErrorKind::InvalidInput,
-            "relay frame too large",
-        ));
+        && identity_shape_ok(&receipt.sender)
+        && signature_shape_ok(&receipt.signature)
+        && signature_matches_identity(&receipt.sender, &receipt.signature)
+        && verify_signature(&receipt.signature, &report_receipt_preimage(receipt))
+}
+
+#[cfg(not(feature = "std"))]
+fn identity_shape_ok(identity: &RelayIdentity) -> bool {
+    match identity.algorithm {
+        SIGNATURE_ALGORITHM_ED25519 => identity.public_key.len() == 32,
+        SIGNATURE_ALGORITHM_ECDSA_P256_SHA256 => matches!(identity.public_key.len(), 33 | 64 | 65),
+        _ => false,
     }
-    writer.write_all(&(bytes.len() as u32).to_be_bytes())?;
-    writer.write_all(&bytes)?;
-    writer.flush()
 }
 
-fn write_message_locked(writer: &Arc<Mutex<TcpStream>>, message: &RelayMessage) -> io::Result<()> {
-    let mut writer = writer.lock().expect("relay writer poisoned");
-    write_message(&mut *writer, message)
+#[cfg(not(feature = "std"))]
+fn signature_shape_ok(signature: &RelaySignature) -> bool {
+    match signature.algorithm {
+        SIGNATURE_ALGORITHM_ED25519 => {
+            signature.public_key.len() == 32 && signature.signature.len() == 64
+        }
+        SIGNATURE_ALGORITHM_ECDSA_P256_SHA256 => {
+            matches!(signature.public_key.len(), 33 | 64 | 65) && signature.signature.len() == 64
+        }
+        _ => false,
+    }
 }
 
-fn write_ack(writer: &Arc<Mutex<TcpStream>>, ok: bool, code: u16, text: &str) -> io::Result<()> {
-    write_message_locked(
-        writer,
-        &RelayMessage::Ack(Ack {
-            ok,
-            code,
-            text: text.to_owned(),
-        }),
+#[cfg(not(feature = "std"))]
+fn signature_matches_identity(identity: &RelayIdentity, signature: &RelaySignature) -> bool {
+    identity.algorithm == signature.algorithm && identity.public_key == signature.public_key
+}
+
+#[cfg(not(feature = "std"))]
+fn verify_signature(signature: &RelaySignature, preimage: &[u8]) -> bool {
+    verify_message_signature(
+        signature.algorithm,
+        &signature.public_key,
+        preimage,
+        &signature.signature,
     )
+    .is_ok()
 }
 
-fn unix_ms_now() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis() as u64)
-        .unwrap_or(0)
+#[cfg(not(feature = "std"))]
+pub fn register_preimage(register: &RelayRegister) -> Vec<u8> {
+    let mut out = Vec::new();
+    out.extend_from_slice(REGISTER_DOMAIN);
+    out.push(0);
+    encode_identity(&mut out, &register.node);
+    out.extend_from_slice(&register.sequence.to_be_bytes());
+    out.extend_from_slice(&register.log_head);
+    out
 }
 
-#[cfg(test)]
+#[cfg(not(feature = "std"))]
+pub fn submit_preimage(submit: &RelaySubmit) -> Vec<u8> {
+    let mut out = Vec::new();
+    out.extend_from_slice(SUBMIT_DOMAIN);
+    out.push(0);
+    out.extend_from_slice(&submit.message_id);
+    encode_identity(&mut out, &submit.from);
+    encode_identity(&mut out, &submit.to);
+    out.extend_from_slice(&submit.sequence.to_be_bytes());
+    out.extend_from_slice(&submit.payload_sha256);
+    out.extend_from_slice(&(submit.payload.len() as u64).to_be_bytes());
+    out.extend_from_slice(&submit.payload);
+    out
+}
+
+#[cfg(not(feature = "std"))]
+pub fn delivery_receipt_preimage(receipt: &RelayDeliveryReceipt) -> Vec<u8> {
+    let mut out = Vec::new();
+    out.extend_from_slice(DELIVERY_RECEIPT_DOMAIN);
+    out.push(0);
+    out.extend_from_slice(&receipt.message_id);
+    encode_identity(&mut out, &receipt.recipient);
+    out.extend_from_slice(&receipt.status.to_be_bytes());
+    out.extend_from_slice(&receipt.recipient_sequence.to_be_bytes());
+    out.extend_from_slice(&receipt.recipient_log_head);
+    out.extend_from_slice(&receipt.request_sha256);
+    out
+}
+
+#[cfg(not(feature = "std"))]
+pub fn report_receipt_preimage(receipt: &RelayDeliveryReportReceipt) -> Vec<u8> {
+    let mut out = Vec::new();
+    out.extend_from_slice(REPORT_RECEIPT_DOMAIN);
+    out.push(0);
+    out.extend_from_slice(&receipt.message_id);
+    encode_identity(&mut out, &receipt.sender);
+    out.extend_from_slice(&receipt.status.to_be_bytes());
+    out.extend_from_slice(&receipt.sender_sequence.to_be_bytes());
+    out.extend_from_slice(&receipt.sender_log_head);
+    out.extend_from_slice(&receipt.report_sha256);
+    out
+}
+
+#[cfg(not(feature = "std"))]
+pub fn request_hash(request: &RelayDeliveryRequest) -> [u8; 32] {
+    sha256_array(&relay_message_bytes(&RelayMessage::DeliveryRequest(request.clone())).unwrap())
+}
+
+#[cfg(not(feature = "std"))]
+pub fn report_hash(report: &RelayDeliveryReport) -> [u8; 32] {
+    sha256_array(&relay_message_bytes(&RelayMessage::DeliveryReport(report.clone())).unwrap())
+}
+
+#[cfg(not(feature = "std"))]
+pub fn sha256_array(bytes: &[u8]) -> [u8; 32] {
+    let digest = sha256(bytes);
+    let mut out = [0u8; 32];
+    out.copy_from_slice(&digest);
+    out
+}
+
+#[cfg(not(feature = "std"))]
+fn encode_identity(out: &mut Vec<u8>, identity: &RelayIdentity) {
+    out.extend_from_slice(&identity.algorithm.to_be_bytes());
+    out.extend_from_slice(&(identity.public_key.len() as u64).to_be_bytes());
+    out.extend_from_slice(&identity.public_key);
+}
+
+#[cfg(not(feature = "std"))]
+pub fn decode_packet(bytes: &[u8]) -> Result<RelayMessage, RelayWireError> {
+    if bytes.is_empty() {
+        return Err(RelayWireError::EmptyPacket);
+    }
+    if bytes.len() > MAX_FRAME_LEN {
+        return Err(RelayWireError::PacketTooLarge);
+    }
+    relay_message_from_bytes(bytes).map_err(|_| RelayWireError::InvalidPacket)
+}
+
+#[cfg(not(feature = "std"))]
+pub fn encode_packet(message: &RelayMessage) -> Result<Vec<u8>, RelayWireError> {
+    let bytes = relay_message_bytes(message).map_err(|_| RelayWireError::InvalidPacket)?;
+    if bytes.len() > MAX_FRAME_LEN {
+        return Err(RelayWireError::PacketTooLarge);
+    }
+    Ok(bytes)
+}
+
+#[cfg(all(test, not(feature = "std")))]
 mod tests {
-    use super::*;
-    use edgerun_crypto::{Ed25519SigningKey, Signer};
-    use std::net::TcpListener;
-    use std::time::Duration;
+    extern crate std;
 
-    fn key(byte: u8) -> Ed25519SigningKey {
-        Ed25519SigningKey::from_bytes(&[byte; 32])
+    use alloc::vec::Vec;
+    use edgerun_crypto::{Ed25519SigningKey, Signer};
+    use edgerun_wire::{
+        RELAY_WIRE_ABI_VERSION, RelayIdentity, RelayMessage, RelayRegister, RelaySignature,
+        RelaySubmit, SIGNATURE_ALGORITHM_ED25519,
+    };
+
+    #[cfg(feature = "virtio")]
+    use edgerun_protocols::ethernet_ipv4::{
+        ETH_TYPE_IPV4, IP_PROTO_TCP, IpAddr, IpStack, Network, ParsedPacket, TCP_FLAG_ACK,
+        TCP_FLAG_PSH, TCP_FLAG_SYN, TcpHeader, checksum,
+    };
+
+    use crate::nostd_relay::{RelayEngine, RelayOutput};
+    #[cfg(feature = "virtio")]
+    use crate::nostd_virtio::EthernetRelay;
+    use crate::{register_preimage, sha256_array, submit_preimage};
+
+    fn ed25519_identity(seed: u8) -> (Ed25519SigningKey, RelayIdentity) {
+        let key = Ed25519SigningKey::from_bytes(&[seed; 32]);
+        let identity = RelayIdentity {
+            algorithm: SIGNATURE_ALGORITHM_ED25519,
+            public_key: key.verifying_key().as_bytes().to_vec(),
+        };
+        (key, identity)
     }
 
-    fn signed_register(key: &Ed25519SigningKey, sequence: u64) -> Register {
-        let node_id = *key.verifying_key().as_bytes();
-        let log_head = [0xA5; 32];
-        let preimage = register_preimage(&node_id, sequence, &log_head);
-        Register {
-            node_id,
-            sequence,
-            log_head,
-            signature: key.sign(&preimage).to_bytes(),
+    fn sign_ed25519(
+        key: &Ed25519SigningKey,
+        identity: &RelayIdentity,
+        preimage: &[u8],
+    ) -> RelaySignature {
+        RelaySignature {
+            algorithm: identity.algorithm,
+            public_key: identity.public_key.clone(),
+            signature: key.sign(preimage).to_bytes().to_vec(),
         }
     }
 
-    fn signed_send(key: &Ed25519SigningKey, to: NodeId, payload: &[u8]) -> Send {
-        let from = *key.verifying_key().as_bytes();
-        let preimage = send_preimage(&from, &to, 7, payload);
-        Send {
+    fn register_ed25519(seed: u8, sequence: u64) -> RelayRegister {
+        let (key, node) = ed25519_identity(seed);
+        let mut register = RelayRegister {
+            abi_version: RELAY_WIRE_ABI_VERSION,
+            flags: 1,
+            node,
+            sequence,
+            log_head: [0xA5; 32],
+            signature: RelaySignature {
+                algorithm: 0,
+                public_key: Vec::new(),
+                signature: Vec::new(),
+            },
+        };
+        register.signature = sign_ed25519(&key, &register.node, &register_preimage(&register));
+        register
+    }
+
+    fn submit_ed25519(
+        sender_seed: u8,
+        to: RelayIdentity,
+        message_id: [u8; 32],
+        payload: &[u8],
+    ) -> RelaySubmit {
+        let (key, from) = ed25519_identity(sender_seed);
+        let mut submit = RelaySubmit {
+            abi_version: RELAY_WIRE_ABI_VERSION,
+            flags: 1,
+            message_id,
             from,
             to,
             sequence: 7,
+            payload_sha256: sha256_array(payload),
             payload: payload.to_vec(),
-            signature: key.sign(&preimage).to_bytes(),
-        }
+            signature: RelaySignature {
+                algorithm: 0,
+                public_key: Vec::new(),
+                signature: Vec::new(),
+            },
+        };
+        submit.signature = sign_ed25519(&key, &submit.from, &submit_preimage(&submit));
+        submit
     }
 
     #[test]
-    fn register_signature_verifies() {
-        let key = key(9);
-        let register = signed_register(&key, 1);
-        assert!(register.verify());
+    fn no_std_engine_registers_and_forwards_submit() {
+        let mut engine = RelayEngine::<u16>::new();
+        let register = register_ed25519(2, 1);
+        let recipient = register.node.clone();
 
-        let mut tampered = register.clone();
-        tampered.sequence += 1;
-        assert!(!tampered.verify());
+        let outputs = engine.handle_message(10, RelayMessage::Register(register));
+        assert!(matches!(
+            &outputs[..],
+            [RelayOutput::Ack {
+                peer: 10,
+                ack
+            }] if ack.ok && ack.code == 200
+        ));
+
+        let submit = submit_ed25519(3, recipient, [0x11; 32], b"hello");
+        let outputs = engine.handle_message(20, RelayMessage::Submit(submit));
+        assert!(matches!(
+            &outputs[..],
+            [
+                RelayOutput::Message {
+                    peer: 10,
+                    message: RelayMessage::DeliveryRequest(_)
+                },
+                RelayOutput::Ack {
+                    peer: 20,
+                    ack
+                }
+            ] if ack.ok && ack.code == 202
+        ));
+        assert_eq!(engine.pending_len(), 1);
     }
 
+    #[cfg(feature = "virtio")]
     #[test]
-    fn rkyv_frame_round_trips() {
-        let key = key(1);
-        let message = RelayMessage::Register(signed_register(&key, 3));
-        let mut bytes = Vec::new();
-        write_message(&mut bytes, &message).expect("write message");
-        let recovered = read_message(&mut bytes.as_slice()).expect("read message");
-        assert_eq!(message, recovered);
-    }
+    fn no_std_ethernet_relay_registers_and_forwards_udp() {
+        let relay_mac = [0x52, 0x54, 0x00, 0x12, 0x34, 0x56];
+        let relay_ip = IpAddr::new(10, 0, 2, 15);
+        let netmask = IpAddr::new(255, 255, 255, 0);
+        let gateway = IpAddr::new(10, 0, 2, 2);
+        let mut relay = EthernetRelay::new(relay_ip, netmask, gateway, relay_mac, 7373);
 
-    #[test]
-    fn relay_forwards_to_registered_socket() {
-        let relay = Relay::new();
-        let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
-        let addr = listener.local_addr().expect("local addr");
-        let serving_relay = relay.clone();
-        thread::spawn(move || {
-            let _ = serving_relay.serve_listener(listener);
-        });
-
-        let dest_key = key(2);
-        let dest_id = *dest_key.verifying_key().as_bytes();
-        let mut dest = TcpStream::connect(addr).expect("connect dest");
-        dest.set_read_timeout(Some(Duration::from_secs(2)))
-            .expect("timeout");
-        write_message(
-            &mut dest,
-            &RelayMessage::Register(signed_register(&dest_key, 1)),
-        )
-        .expect("register dest");
-        let ack = read_message(&mut dest).expect("read register ack");
-        assert_eq!(
-            ack,
-            RelayMessage::Ack(Ack {
-                ok: true,
-                code: 200,
-                text: "registered".to_owned(),
-            })
+        let dest_mac = [0x02, 0, 0, 0, 0, 10];
+        let dest_ip = IpAddr::new(10, 0, 2, 20);
+        let dest_register = register_ed25519(2, 1);
+        let dest_identity = dest_register.node.clone();
+        let register_frame = udp_frame(
+            dest_mac,
+            dest_ip,
+            relay_mac,
+            relay_ip,
+            40000,
+            7373,
+            &RelayMessage::Register(dest_register),
         );
 
-        let src_key = key(3);
-        let mut src = TcpStream::connect(addr).expect("connect src");
-        src.set_read_timeout(Some(Duration::from_secs(2)))
-            .expect("timeout");
-        write_message(
-            &mut src,
-            &RelayMessage::Send(signed_send(&src_key, dest_id, b"hello")),
-        )
-        .expect("send payload");
+        let outputs = relay.handle_frame(&register_frame);
+        assert_eq!(relay.registered_len(), 1);
+        assert_eq!(outputs.len(), 1);
+        assert!(matches!(
+            parse_udp_relay_message(&outputs[0]),
+            RelayMessage::Ack(ack) if ack.ok && ack.code == 200
+        ));
 
-        let delivered = read_message(&mut dest).expect("read delivered");
-        match delivered {
-            RelayMessage::Delivered(delivered) => {
-                assert_eq!(delivered.to, dest_id);
-                assert_eq!(delivered.payload, b"hello");
-                assert!(verify_ed25519(
-                    &delivered.from,
-                    &send_preimage(
-                        &delivered.from,
-                        &delivered.to,
-                        delivered.sequence,
-                        &delivered.payload
-                    ),
-                    &delivered.signature,
-                ));
+        let src_mac = [0x02, 0, 0, 0, 0, 20];
+        let src_ip = IpAddr::new(10, 0, 2, 21);
+        let submit = submit_ed25519(3, dest_identity, [0x44; 32], b"hello virtio udp");
+        let submit_frame = udp_frame(
+            src_mac,
+            src_ip,
+            relay_mac,
+            relay_ip,
+            40001,
+            7373,
+            &RelayMessage::Submit(submit),
+        );
+
+        let outputs = relay.handle_frame(&submit_frame);
+        assert_eq!(relay.pending_len(), 1);
+        assert_eq!(outputs.len(), 2);
+        assert!(matches!(
+            parse_udp_relay_message(&outputs[0]),
+            RelayMessage::DeliveryRequest(_)
+        ));
+        assert!(matches!(
+            parse_udp_relay_message(&outputs[1]),
+            RelayMessage::Ack(ack) if ack.ok && ack.code == 202
+        ));
+    }
+
+    #[cfg(feature = "virtio")]
+    #[test]
+    fn no_std_ethernet_relay_registers_and_forwards_tcp() {
+        let relay_mac = [0x52, 0x54, 0x00, 0x12, 0x34, 0x56];
+        let relay_ip = IpAddr::new(10, 0, 2, 15);
+        let netmask = IpAddr::new(255, 255, 255, 0);
+        let gateway = IpAddr::new(10, 0, 2, 2);
+        let mut relay = EthernetRelay::new(relay_ip, netmask, gateway, relay_mac, 7373);
+
+        let dest_mac = [0x02, 0, 0, 0, 0, 10];
+        let dest_ip = IpAddr::new(10, 0, 2, 20);
+        let dest_port = 40000;
+        let syn = tcp_frame(
+            dest_mac,
+            *dest_ip.as_bytes(),
+            relay_mac,
+            *relay_ip.as_bytes(),
+            dest_port,
+            7373,
+            1000,
+            0,
+            TCP_FLAG_SYN,
+            &[],
+        );
+        let outputs = relay.handle_frame_at(&syn, 1);
+        assert_eq!(outputs.len(), 1);
+        let (syn_ack, payload) = parse_tcp_frame(&outputs[0]);
+        assert_eq!(payload.len(), 0);
+        assert_eq!(syn_ack.flags & (TCP_FLAG_SYN | TCP_FLAG_ACK), TCP_FLAG_SYN | TCP_FLAG_ACK);
+        assert_eq!(syn_ack.ack, 1001);
+
+        let register = register_ed25519(2, 1);
+        let dest_identity = register.node.clone();
+        let register_payload = framed_relay_payload(&RelayMessage::Register(register));
+        let register_frame = tcp_frame(
+            dest_mac,
+            *dest_ip.as_bytes(),
+            relay_mac,
+            *relay_ip.as_bytes(),
+            dest_port,
+            7373,
+            1001,
+            syn_ack.seq.wrapping_add(1),
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            &register_payload,
+        );
+        let outputs = relay.handle_frame_at(&register_frame, 2);
+        assert_eq!(relay.registered_len(), 1);
+        assert!(outputs.iter().any(|frame| matches!(
+            parse_tcp_relay_message(frame),
+            Some(RelayMessage::Ack(ack)) if ack.ok && ack.code == 200
+        )));
+
+        let src_mac = [0x02, 0, 0, 0, 0, 20];
+        let src_ip = IpAddr::new(10, 0, 2, 21);
+        let submit = submit_ed25519(3, dest_identity, [0x55; 32], b"hello virtio tcp");
+        let submit_frame = udp_frame(
+            src_mac,
+            src_ip,
+            relay_mac,
+            relay_ip,
+            40001,
+            7373,
+            &RelayMessage::Submit(submit),
+        );
+
+        let outputs = relay.handle_frame_at(&submit_frame, 3);
+        assert_eq!(relay.pending_len(), 1);
+        assert!(outputs.iter().any(|frame| matches!(
+            parse_tcp_relay_message(frame),
+            Some(RelayMessage::DeliveryRequest(_))
+        )));
+        assert!(outputs.iter().any(|frame| matches!(
+            parse_udp_relay_message(frame),
+            RelayMessage::Ack(ack) if ack.ok && ack.code == 202
+        )));
+    }
+
+    #[cfg(feature = "virtio")]
+    fn udp_frame(
+        src_mac: [u8; 6],
+        src_ip: IpAddr,
+        dst_mac: [u8; 6],
+        dst_ip: IpAddr,
+        src_port: u16,
+        dst_port: u16,
+        message: &RelayMessage,
+    ) -> Vec<u8> {
+        let bytes = crate::encode_packet(message).expect("encode relay message");
+        let mut stack = IpStack::new();
+        stack.configure(
+            src_ip,
+            IpAddr::new(255, 255, 255, 0),
+            IpAddr::zero(),
+            src_mac,
+        );
+        let mut network = Network::new(&mut stack);
+        network
+            .send_udp_eth(dst_mac, dst_ip, src_port, dst_port, &bytes)
+            .expect("udp frame")
+            .to_vec()
+    }
+
+    #[cfg(feature = "virtio")]
+    fn parse_udp_relay_message(frame: &[u8]) -> RelayMessage {
+        let mut stack = IpStack::new();
+        let mut network = Network::new(&mut stack);
+        match network.recv(frame).expect("parse frame") {
+            ParsedPacket::Udp { payload, .. } => {
+                crate::decode_packet(payload).expect("decode relay packet")
             }
-            other => panic!("expected delivered frame, got {other:?}"),
+            _ => panic!("expected udp"),
         }
+    }
 
-        let ack = read_message(&mut src).expect("read send ack");
-        assert_eq!(
-            ack,
-            RelayMessage::Ack(Ack {
-                ok: true,
-                code: 202,
-                text: "forwarded".to_owned(),
-            })
-        );
+    #[cfg(feature = "virtio")]
+    #[allow(clippy::too_many_arguments)]
+    fn tcp_frame(
+        src_mac: [u8; 6],
+        src_ip: [u8; 4],
+        dst_mac: [u8; 6],
+        dst_ip: [u8; 4],
+        src_port: u16,
+        dst_port: u16,
+        seq: u32,
+        ack: u32,
+        flags: u8,
+        payload: &[u8],
+    ) -> Vec<u8> {
+        let tcp_len = 20 + payload.len();
+        let ip_len = 20 + tcp_len;
+        let mut frame = vec![0u8; 14 + ip_len];
+        frame[0..6].copy_from_slice(&dst_mac);
+        frame[6..12].copy_from_slice(&src_mac);
+        write_u16(&mut frame, 12, ETH_TYPE_IPV4);
+
+        let ip_start = 14;
+        frame[ip_start] = 0x45;
+        write_u16(&mut frame, ip_start + 2, ip_len as u16);
+        frame[ip_start + 8] = 64;
+        frame[ip_start + 9] = IP_PROTO_TCP;
+        frame[ip_start + 12..ip_start + 16].copy_from_slice(&src_ip);
+        frame[ip_start + 16..ip_start + 20].copy_from_slice(&dst_ip);
+        let ip_sum = checksum(&frame[ip_start..ip_start + 20]);
+        write_u16(&mut frame, ip_start + 10, ip_sum);
+
+        let tcp_start = ip_start + 20;
+        write_u16(&mut frame, tcp_start, src_port);
+        write_u16(&mut frame, tcp_start + 2, dst_port);
+        write_u32(&mut frame, tcp_start + 4, seq);
+        write_u32(&mut frame, tcp_start + 8, ack);
+        frame[tcp_start + 12] = 5 << 4;
+        frame[tcp_start + 13] = flags;
+        write_u16(&mut frame, tcp_start + 14, 64240);
+        frame[tcp_start + 20..tcp_start + 20 + payload.len()].copy_from_slice(payload);
+        let tcp_sum = tcp_checksum(&src_ip, &dst_ip, &frame[tcp_start..tcp_start + tcp_len]);
+        write_u16(&mut frame, tcp_start + 16, tcp_sum);
+        frame
+    }
+
+    #[cfg(feature = "virtio")]
+    fn framed_relay_payload(message: &RelayMessage) -> Vec<u8> {
+        let bytes = crate::encode_packet(message).expect("encode relay message");
+        let mut out = Vec::with_capacity(4 + bytes.len());
+        out.extend_from_slice(&(bytes.len() as u32).to_be_bytes());
+        out.extend_from_slice(&bytes);
+        out
+    }
+
+    #[cfg(feature = "virtio")]
+    fn parse_tcp_relay_message(frame: &[u8]) -> Option<RelayMessage> {
+        let (_, payload) = parse_tcp_frame(frame);
+        if payload.len() < 4 {
+            return None;
+        }
+        let len = u32::from_be_bytes([payload[0], payload[1], payload[2], payload[3]]) as usize;
+        if payload.len() != 4 + len {
+            return None;
+        }
+        crate::decode_packet(&payload[4..]).ok()
+    }
+
+    #[cfg(feature = "virtio")]
+    fn parse_tcp_frame(frame: &[u8]) -> (TcpHeader, Vec<u8>) {
+        let mut stack = IpStack::new();
+        let mut network = Network::new(&mut stack);
+        match network.recv(frame).expect("parse frame") {
+            ParsedPacket::Tcp {
+                header, payload, ..
+            } => (header, payload.to_vec()),
+            _ => panic!("expected tcp"),
+        }
+    }
+
+    #[cfg(feature = "virtio")]
+    fn tcp_checksum(src_ip: &[u8; 4], dst_ip: &[u8; 4], tcp_segment: &[u8]) -> u16 {
+        let mut pseudo = Vec::with_capacity(12 + tcp_segment.len());
+        pseudo.extend_from_slice(src_ip);
+        pseudo.extend_from_slice(dst_ip);
+        pseudo.push(0);
+        pseudo.push(IP_PROTO_TCP);
+        pseudo.extend_from_slice(&(tcp_segment.len() as u16).to_be_bytes());
+        pseudo.extend_from_slice(tcp_segment);
+        checksum(&pseudo)
+    }
+
+    #[cfg(feature = "virtio")]
+    fn write_u16(out: &mut [u8], offset: usize, value: u16) {
+        out[offset..offset + 2].copy_from_slice(&value.to_be_bytes());
+    }
+
+    #[cfg(feature = "virtio")]
+    fn write_u32(out: &mut [u8], offset: usize, value: u32) {
+        out[offset..offset + 4].copy_from_slice(&value.to_be_bytes());
     }
 }

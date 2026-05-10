@@ -31,7 +31,7 @@ fn write_skill_metadata(home: &Path, name: &str, contents: &str) -> Result<()> {
 }
 
 fn shell_command_arguments(command: &str) -> Result<String> {
-    Ok(serde_json::to_string(&serde_json::json!({
+    Ok(edgerun_json::serde_json::to_string(&edgerun_json::serde_json::json!({
         "command": command,
         "timeout_ms": 500,
     }))?)
@@ -106,7 +106,7 @@ fn skill_script_command(test: &TestCodex, script_name: &str) -> Result<String> {
             .join("skills/mbolin-test-skill/scripts")
             .join(script_name),
     )?;
-    Ok(shlex::try_join([script_path.to_string_lossy().as_ref()])?)
+    Ok(edgerun_shlex::try_join([script_path.to_string_lossy().as_ref()])?)
 }
 
 async fn wait_for_exec_approval_request(test: &TestCodex) -> Option<ExecApprovalRequestEvent> {
@@ -152,7 +152,7 @@ async fn shell_zsh_fork_skill_scripts_ignore_declared_permissions() -> Result<()
     let allowed_dir = outside_dir.path().join("allowed-output");
     fs::create_dir_all(&allowed_dir)?;
     let allowed_path = allowed_dir.join("allowed.txt");
-    let allowed_path_quoted = shlex::try_join([allowed_path.to_string_lossy().as_ref()])?;
+    let allowed_path_quoted = edgerun_shlex::try_join([allowed_path.to_string_lossy().as_ref()])?;
     let script_contents = format!(
         "#!/bin/sh\nprintf '%s' allowed > {allowed_path_quoted}\nif [ -f {allowed_path_quoted} ]; then cat {allowed_path_quoted}; fi\n"
     );

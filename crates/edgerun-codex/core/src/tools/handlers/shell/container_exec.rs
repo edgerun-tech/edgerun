@@ -42,7 +42,7 @@ impl ToolHandler for ContainerExecHandler {
             return true;
         };
 
-        serde_json::from_str::<ShellToolCallParams>(arguments)
+        edgerun_json::serde_json::from_str::<ShellToolCallParams>(arguments)
             .map(|params| !is_known_safe_command(&params.command))
             .unwrap_or(true)
     }

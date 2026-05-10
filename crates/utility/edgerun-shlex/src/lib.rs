@@ -93,6 +93,12 @@ where
     Ok(out)
 }
 
+pub fn try_quote(word: &str) -> Result<String, QuoteError> {
+    let mut out = String::new();
+    append_quoted(&mut out, word)?;
+    Ok(out)
+}
+
 fn append_quoted(out: &mut String, word: &str) -> Result<(), QuoteError> {
     if word.as_bytes().contains(&0) {
         return Err(QuoteError);
@@ -172,5 +178,11 @@ mod tests {
         );
         assert_eq!(try_join([""]).unwrap(), "''");
         assert_eq!(try_join(["can't"]).unwrap(), "'can'\\''t'");
+    }
+
+    #[test]
+    fn quotes_single_shell_word() {
+        assert_eq!(try_quote("plain").unwrap(), "plain");
+        assert_eq!(try_quote("two words").unwrap(), "'two words'");
     }
 }

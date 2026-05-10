@@ -671,7 +671,9 @@ pub fn open_ioctl_socket() -> Result<c_int, std::io::Error> {
 /// `fd` must be a valid file descriptor returned from `open_ioctl_socket`.
 #[cfg(unix)]
 pub unsafe fn close_ioctl_fd(fd: c_int) {
-    close(fd);
+    unsafe {
+        close(fd);
+    }
 }
 
 /// Close an ioctl socket file descriptor.
@@ -688,7 +690,7 @@ pub unsafe fn close_ioctl_fd(_fd: c_int) {}
 /// the expected ioctl signature for the given fd.
 #[cfg(unix)]
 pub unsafe fn ioctl_call(fd: c_int, request: c_ulong, arg: *mut std::ffi::c_void) -> c_int {
-    ioctl(fd, request, arg)
+    unsafe { ioctl(fd, request, arg) }
 }
 
 /// Perform an ioctl call.

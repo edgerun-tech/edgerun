@@ -2,7 +2,7 @@ use super::*;
 use anyhow::Result;
 use codex_protocol::protocol::TurnAbortReason;
 use pretty_assertions::assert_eq;
-use serde_json::json;
+use edgerun_json::serde_json::json;
 
 #[test]
 fn client_response_payload_returns_jsonrpc_parts_and_client_response() -> Result<()> {

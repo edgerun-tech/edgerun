@@ -32,7 +32,7 @@ use codex_protocol::protocol::ReviewDecision as CoreReviewDecision;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
-use serde_json::Value as JsonValue;
+use edgerun_json::serde_json::Value as JsonValue;
 use serde_with::serde_as;
 use std::collections::HashMap;
 use std::path::PathBuf;

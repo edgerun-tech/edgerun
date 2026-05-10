@@ -46,7 +46,7 @@ fn inter_agent_assistant_message(text: &str) -> ResponseItem {
         id: None,
         role: "assistant".to_string(),
         content: vec![ContentItem::OutputText {
-            text: serde_json::to_string(&communication).unwrap(),
+            text: edgerun_json::serde_json::to_string(&communication).unwrap(),
         }],
         phase: None,
     }
@@ -270,9 +270,9 @@ async fn reconstruct_history_rollback_keeps_history_and_metadata_in_sync_for_com
         })
     );
     assert_eq!(
-        serde_json::to_value(reconstructed.reference_context_item)
+        edgerun_json::serde_json::to_value(reconstructed.reference_context_item)
             .expect("serialize reconstructed reference context item"),
-        serde_json::to_value(Some(first_context_item))
+        edgerun_json::serde_json::to_value(Some(first_context_item))
             .expect("serialize expected reference context item")
     );
 }
@@ -357,9 +357,9 @@ async fn reconstruct_history_rollback_keeps_history_and_metadata_in_sync_for_inc
         })
     );
     assert_eq!(
-        serde_json::to_value(reconstructed.reference_context_item)
+        edgerun_json::serde_json::to_value(reconstructed.reference_context_item)
             .expect("serialize reconstructed reference context item"),
-        serde_json::to_value(Some(first_context_item))
+        edgerun_json::serde_json::to_value(Some(first_context_item))
             .expect("serialize expected reference context item")
     );
 }
@@ -475,9 +475,9 @@ async fn reconstruct_history_rollback_skips_non_user_turns_for_history_and_metad
         })
     );
     assert_eq!(
-        serde_json::to_value(reconstructed.reference_context_item)
+        edgerun_json::serde_json::to_value(reconstructed.reference_context_item)
             .expect("serialize reconstructed reference context item"),
-        serde_json::to_value(Some(first_context_item))
+        edgerun_json::serde_json::to_value(Some(first_context_item))
             .expect("serialize expected reference context item")
     );
 }
@@ -571,9 +571,9 @@ async fn reconstruct_history_rollback_counts_inter_agent_assistant_turns() {
         })
     );
     assert_eq!(
-        serde_json::to_value(reconstructed.reference_context_item)
+        edgerun_json::serde_json::to_value(reconstructed.reference_context_item)
             .expect("serialize reconstructed reference context item"),
-        serde_json::to_value(Some(first_context_item))
+        edgerun_json::serde_json::to_value(Some(first_context_item))
             .expect("serialize expected reference context item")
     );
 }
@@ -778,9 +778,9 @@ async fn record_initial_history_resumed_rollback_drops_incomplete_user_turn_comp
         })
     );
     assert_eq!(
-        serde_json::to_value(session.reference_context_item().await)
+        edgerun_json::serde_json::to_value(session.reference_context_item().await)
             .expect("serialize seeded reference context item"),
-        serde_json::to_value(Some(previous_context_item))
+        edgerun_json::serde_json::to_value(Some(previous_context_item))
             .expect("serialize expected reference context item")
     );
 }
@@ -984,9 +984,9 @@ async fn record_initial_history_resumed_turn_context_after_compaction_reestablis
         })
     );
     assert_eq!(
-        serde_json::to_value(session.reference_context_item().await)
+        edgerun_json::serde_json::to_value(session.reference_context_item().await)
             .expect("serialize seeded reference context item"),
-        serde_json::to_value(Some(TurnContextItem {
+        edgerun_json::serde_json::to_value(Some(TurnContextItem {
             turn_id: Some(turn_context.sub_id.clone()),
             trace_id: turn_context.trace_id.clone(),
             cwd: turn_context.cwd.to_path_buf(),
@@ -1234,9 +1234,9 @@ async fn record_initial_history_resumed_unmatched_abort_preserves_active_turn_fo
         })
     );
     assert_eq!(
-        serde_json::to_value(session.reference_context_item().await)
+        edgerun_json::serde_json::to_value(session.reference_context_item().await)
             .expect("serialize seeded reference context item"),
-        serde_json::to_value(Some(current_context_item))
+        edgerun_json::serde_json::to_value(Some(current_context_item))
             .expect("serialize expected reference context item")
     );
 }
@@ -1386,9 +1386,9 @@ async fn record_initial_history_resumed_trailing_incomplete_turn_preserves_turn_
         })
     );
     assert_eq!(
-        serde_json::to_value(session.reference_context_item().await)
+        edgerun_json::serde_json::to_value(session.reference_context_item().await)
             .expect("serialize seeded reference context item"),
-        serde_json::to_value(Some(current_context_item))
+        edgerun_json::serde_json::to_value(Some(current_context_item))
             .expect("serialize expected reference context item")
     );
 }

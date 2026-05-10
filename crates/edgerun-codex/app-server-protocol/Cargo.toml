@@ -18,9 +18,9 @@ codex-protocol = { workspace = true }
 codex-shell-command = { workspace = true }
 edgerun-clap = { workspace = true, features = ["derive"] }
 edgerun-error = { workspace = true }
+edgerun-json = { workspace = true, features = ["serde-compat"] }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
 serde_with = { workspace = true }
 strum_macros = { workspace = true }
 rmcp = { workspace = true, default-features = false, features = [

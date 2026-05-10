@@ -37,19 +37,19 @@ pub struct Tool {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub description: Option<String>,
-    pub input_schema: serde_json::Value,
+    pub input_schema: edgerun_json::serde_json::Value,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
-    pub output_schema: Option<serde_json::Value>,
+    pub output_schema: Option<edgerun_json::serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
-    pub annotations: Option<serde_json::Value>,
+    pub annotations: Option<edgerun_json::serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
-    pub icons: Option<Vec<serde_json::Value>>,
+    pub icons: Option<Vec<edgerun_json::serde_json::Value>>,
     #[serde(rename = "_meta", default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
-    pub meta: Option<serde_json::Value>,
+    pub meta: Option<edgerun_json::serde_json::Value>,
 }
 
 /// A known resource that the server is capable of reading.
@@ -58,7 +58,7 @@ pub struct Tool {
 pub struct Resource {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
-    pub annotations: Option<serde_json::Value>,
+    pub annotations: Option<edgerun_json::serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub description: Option<String>,
@@ -76,10 +76,10 @@ pub struct Resource {
     pub uri: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
-    pub icons: Option<Vec<serde_json::Value>>,
+    pub icons: Option<Vec<edgerun_json::serde_json::Value>>,
     #[serde(rename = "_meta", default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
-    pub meta: Option<serde_json::Value>,
+    pub meta: Option<edgerun_json::serde_json::Value>,
 }
 
 /// Contents returned when reading a resource from an MCP server.
@@ -97,7 +97,7 @@ pub enum ResourceContent {
         text: String,
         #[serde(rename = "_meta", default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
-        meta: Option<serde_json::Value>,
+        meta: Option<edgerun_json::serde_json::Value>,
     },
     #[serde(rename_all = "camelCase")]
     #[ts(rename_all = "camelCase")]
@@ -110,7 +110,7 @@ pub enum ResourceContent {
         blob: String,
         #[serde(rename = "_meta", default, skip_serializing_if = "Option::is_none")]
         #[ts(optional)]
-        meta: Option<serde_json::Value>,
+        meta: Option<edgerun_json::serde_json::Value>,
     },
 }
 
@@ -120,7 +120,7 @@ pub enum ResourceContent {
 pub struct ResourceTemplate {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
-    pub annotations: Option<serde_json::Value>,
+    pub annotations: Option<edgerun_json::serde_json::Value>,
     pub uri_template: String,
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -138,16 +138,16 @@ pub struct ResourceTemplate {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct CallToolResult {
-    pub content: Vec<serde_json::Value>,
+    pub content: Vec<edgerun_json::serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
-    pub structured_content: Option<serde_json::Value>,
+    pub structured_content: Option<edgerun_json::serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub is_error: Option<bool>,
     #[serde(rename = "_meta", default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
-    pub meta: Option<serde_json::Value>,
+    pub meta: Option<edgerun_json::serde_json::Value>,
 }
 
 // === Adapter helpers ===
@@ -160,7 +160,7 @@ fn deserialize_lossy_opt_i64<'de, D>(deserializer: D) -> Result<Option<i64>, D::
 where
     D: serde::Deserializer<'de>,
 {
-    match Option::<serde_json::Number>::deserialize(deserializer)? {
+    match Option::<edgerun_json::serde_json::Number>::deserialize(deserializer)? {
         Some(number) => {
             if let Some(v) = number.as_i64() {
                 Ok(Some(v))
@@ -183,15 +183,15 @@ struct ToolSerde {
     #[serde(default)]
     description: Option<String>,
     #[serde(default, rename = "inputSchema", alias = "input_schema")]
-    input_schema: serde_json::Value,
+    input_schema: edgerun_json::serde_json::Value,
     #[serde(default, rename = "outputSchema", alias = "output_schema")]
-    output_schema: Option<serde_json::Value>,
+    output_schema: Option<edgerun_json::serde_json::Value>,
     #[serde(default)]
-    annotations: Option<serde_json::Value>,
+    annotations: Option<edgerun_json::serde_json::Value>,
     #[serde(default)]
-    icons: Option<Vec<serde_json::Value>>,
+    icons: Option<Vec<edgerun_json::serde_json::Value>>,
     #[serde(rename = "_meta", default)]
-    meta: Option<serde_json::Value>,
+    meta: Option<edgerun_json::serde_json::Value>,
 }
 
 impl From<ToolSerde> for Tool {
@@ -223,7 +223,7 @@ impl From<ToolSerde> for Tool {
 #[serde(rename_all = "camelCase")]
 struct ResourceSerde {
     #[serde(default)]
-    annotations: Option<serde_json::Value>,
+    annotations: Option<edgerun_json::serde_json::Value>,
     #[serde(default)]
     description: Option<String>,
     #[serde(rename = "mimeType", alias = "mime_type", default)]
@@ -235,9 +235,9 @@ struct ResourceSerde {
     title: Option<String>,
     uri: String,
     #[serde(default)]
-    icons: Option<Vec<serde_json::Value>>,
+    icons: Option<Vec<edgerun_json::serde_json::Value>>,
     #[serde(rename = "_meta", default)]
-    meta: Option<serde_json::Value>,
+    meta: Option<edgerun_json::serde_json::Value>,
 }
 
 impl From<ResourceSerde> for Resource {
@@ -271,7 +271,7 @@ impl From<ResourceSerde> for Resource {
 #[serde(rename_all = "camelCase")]
 struct ResourceTemplateSerde {
     #[serde(default)]
-    annotations: Option<serde_json::Value>,
+    annotations: Option<edgerun_json::serde_json::Value>,
     #[serde(rename = "uriTemplate", alias = "uri_template")]
     uri_template: String,
     name: String,
@@ -305,20 +305,20 @@ impl From<ResourceTemplateSerde> for ResourceTemplate {
 }
 
 impl Tool {
-    pub fn from_mcp_value(value: serde_json::Value) -> Result<Self, serde_json::Error> {
-        Ok(serde_json::from_value::<ToolSerde>(value)?.into())
+    pub fn from_mcp_value(value: edgerun_json::serde_json::Value) -> Result<Self, edgerun_json::serde_json::Error> {
+        Ok(edgerun_json::serde_json::from_value::<ToolSerde>(value)?.into())
     }
 }
 
 impl Resource {
-    pub fn from_mcp_value(value: serde_json::Value) -> Result<Self, serde_json::Error> {
-        Ok(serde_json::from_value::<ResourceSerde>(value)?.into())
+    pub fn from_mcp_value(value: edgerun_json::serde_json::Value) -> Result<Self, edgerun_json::serde_json::Error> {
+        Ok(edgerun_json::serde_json::from_value::<ResourceSerde>(value)?.into())
     }
 }
 
 impl ResourceTemplate {
-    pub fn from_mcp_value(value: serde_json::Value) -> Result<Self, serde_json::Error> {
-        Ok(serde_json::from_value::<ResourceTemplateSerde>(value)?.into())
+    pub fn from_mcp_value(value: edgerun_json::serde_json::Value) -> Result<Self, edgerun_json::serde_json::Error> {
+        Ok(edgerun_json::serde_json::from_value::<ResourceTemplateSerde>(value)?.into())
     }
 }
 
@@ -330,7 +330,7 @@ mod tests {
 
     #[test]
     fn resource_size_deserializes_without_narrowing() {
-        let resource = serde_json::json!({
+        let resource = edgerun_json::serde_json::json!({
             "name": "big",
             "uri": "file:///tmp/big",
             "size": 5_000_000_000u64,
@@ -339,7 +339,7 @@ mod tests {
         let parsed = Resource::from_mcp_value(resource).expect("should deserialize");
         assert_eq!(parsed.size, Some(5_000_000_000));
 
-        let resource = serde_json::json!({
+        let resource = edgerun_json::serde_json::json!({
             "name": "negative",
             "uri": "file:///tmp/negative",
             "size": -1,
@@ -348,7 +348,7 @@ mod tests {
         let parsed = Resource::from_mcp_value(resource).expect("should deserialize");
         assert_eq!(parsed.size, Some(-1));
 
-        let resource = serde_json::json!({
+        let resource = edgerun_json::serde_json::json!({
             "name": "too_big_for_i64",
             "uri": "file:///tmp/too_big_for_i64",
             "size": 18446744073709551615u64,

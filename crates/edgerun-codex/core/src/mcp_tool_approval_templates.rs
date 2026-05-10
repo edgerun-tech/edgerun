@@ -3,8 +3,8 @@ use std::sync::LazyLock;
 
 use serde::Deserialize;
 use serde::Serialize;
-use serde_json::Map;
-use serde_json::Value;
+use edgerun_json::serde_json::Map;
+use edgerun_json::serde_json::Value;
 use tracing::warn;
 
 const CONSEQUENTIAL_TOOL_MESSAGE_TEMPLATES_SCHEMA_VERSION: u8 = 4;
@@ -69,7 +69,7 @@ pub(crate) fn render_mcp_tool_approval_template(
 }
 
 fn load_consequential_tool_message_templates() -> Option<Vec<ConsequentialToolMessageTemplate>> {
-    let templates = match serde_json::from_str::<ConsequentialToolMessageTemplatesFile>(
+    let templates = match edgerun_json::serde_json::from_str::<ConsequentialToolMessageTemplatesFile>(
         include_str!("consequential_tool_message_templates.json"),
     ) {
         Ok(templates) => templates,
@@ -192,7 +192,7 @@ fn render_tool_params(
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
-    use serde_json::json;
+    use edgerun_json::serde_json::json;
 
     use super::*;
 

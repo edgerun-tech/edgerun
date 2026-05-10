@@ -23,8 +23,8 @@ use core_test_support::skip_if_no_network;
 use core_test_support::stdio_server_bin;
 use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
-use serde_json::Value;
-use serde_json::json;
+use edgerun_json::serde_json::Value;
+use edgerun_json::serde_json::json;
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -57,7 +57,7 @@ async fn tool_call_output_configured_limit_chars_type() -> Result<()> {
     } else {
         "seq 1 100000"
     };
-    let args = serde_json::json!({
+    let args = edgerun_json::serde_json::json!({
         "command": command,
         "timeout_ms": 5_000,
     });
@@ -67,7 +67,7 @@ async fn tool_call_output_configured_limit_chars_type() -> Result<()> {
         &server,
         sse(vec![
             responses::ev_response_created("resp-1"),
-            responses::ev_function_call(call_id, "shell_command", &serde_json::to_string(&args)?),
+            responses::ev_function_call(call_id, "shell_command", &edgerun_json::serde_json::to_string(&args)?),
             responses::ev_completed("resp-1"),
         ]),
     )
@@ -98,7 +98,7 @@ async fn tool_call_output_configured_limit_chars_type() -> Result<()> {
 
     // Expect plain text (not JSON) containing the entire shell output.
     assert!(
-        serde_json::from_str::<Value>(&output).is_err(),
+        edgerun_json::serde_json::from_str::<Value>(&output).is_err(),
         "expected truncated shell output to be plain text"
     );
 
@@ -134,7 +134,7 @@ async fn tool_call_output_exceeds_limit_truncated_chars_limit() -> Result<()> {
     } else {
         "seq 1 100000"
     };
-    let args = serde_json::json!({
+    let args = edgerun_json::serde_json::json!({
         "command": command,
         "timeout_ms": 5_000,
     });
@@ -144,7 +144,7 @@ async fn tool_call_output_exceeds_limit_truncated_chars_limit() -> Result<()> {
         &server,
         sse(vec![
             responses::ev_response_created("resp-1"),
-            responses::ev_function_call(call_id, "shell_command", &serde_json::to_string(&args)?),
+            responses::ev_function_call(call_id, "shell_command", &edgerun_json::serde_json::to_string(&args)?),
             responses::ev_completed("resp-1"),
         ]),
     )
@@ -175,7 +175,7 @@ async fn tool_call_output_exceeds_limit_truncated_chars_limit() -> Result<()> {
 
     // Expect plain text (not JSON) containing the entire shell output.
     assert!(
-        serde_json::from_str::<Value>(&output).is_err(),
+        edgerun_json::serde_json::from_str::<Value>(&output).is_err(),
         "expected truncated shell output to be plain text"
     );
 
@@ -210,7 +210,7 @@ async fn tool_call_output_exceeds_limit_truncated_for_model() -> Result<()> {
     } else {
         "seq 1 100000"
     };
-    let args = serde_json::json!({
+    let args = edgerun_json::serde_json::json!({
         "command": command,
         "timeout_ms": 5_000,
     });
@@ -220,7 +220,7 @@ async fn tool_call_output_exceeds_limit_truncated_for_model() -> Result<()> {
         &server,
         sse(vec![
             responses::ev_response_created("resp-1"),
-            responses::ev_function_call(call_id, "shell_command", &serde_json::to_string(&args)?),
+            responses::ev_function_call(call_id, "shell_command", &edgerun_json::serde_json::to_string(&args)?),
             responses::ev_completed("resp-1"),
         ]),
     )
@@ -251,7 +251,7 @@ async fn tool_call_output_exceeds_limit_truncated_for_model() -> Result<()> {
 
     // Expect plain text (not JSON) containing the entire shell output.
     assert!(
-        serde_json::from_str::<Value>(&output).is_err(),
+        edgerun_json::serde_json::from_str::<Value>(&output).is_err(),
         "expected truncated shell output to be plain text"
     );
     let truncated_pattern = r#"(?s)^Exit code: 0
@@ -288,7 +288,7 @@ async fn tool_call_output_truncated_only_once() -> Result<()> {
     } else {
         "seq 1 10000"
     };
-    let args = serde_json::json!({
+    let args = edgerun_json::serde_json::json!({
         "command": command,
         "timeout_ms": 5_000,
     });
@@ -297,7 +297,7 @@ async fn tool_call_output_truncated_only_once() -> Result<()> {
         &server,
         sse(vec![
             responses::ev_response_created("resp-1"),
-            responses::ev_function_call(call_id, "shell_command", &serde_json::to_string(&args)?),
+            responses::ev_function_call(call_id, "shell_command", &edgerun_json::serde_json::to_string(&args)?),
             responses::ev_completed("resp-1"),
         ]),
     )
@@ -347,7 +347,7 @@ async fn mcp_tool_call_output_exceeds_limit_truncated_for_model() -> Result<()> 
 
     // Build a very large message to exceed 10KiB once serialized.
     let large_msg = "long-message-with-newlines-".repeat(6000);
-    let args_json = serde_json::json!({ "message": large_msg });
+    let args_json = edgerun_json::serde_json::json!({ "message": large_msg });
 
     mount_sse_once(
         &server,
@@ -576,7 +576,7 @@ async fn token_policy_marker_reports_tokens() -> Result<()> {
         &server,
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "shell_command", &serde_json::to_string(&args)?),
+            ev_function_call(call_id, "shell_command", &edgerun_json::serde_json::to_string(&args)?),
             ev_completed("resp-1"),
         ]),
     )
@@ -627,7 +627,7 @@ async fn byte_policy_marker_reports_bytes() -> Result<()> {
         &server,
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "shell_command", &serde_json::to_string(&args)?),
+            ev_function_call(call_id, "shell_command", &edgerun_json::serde_json::to_string(&args)?),
             ev_completed("resp-1"),
         ]),
     )
@@ -679,7 +679,7 @@ async fn shell_command_output_not_truncated_with_custom_limit() -> Result<()> {
         &server,
         sse(vec![
             ev_response_created("resp-1"),
-            ev_function_call(call_id, "shell_command", &serde_json::to_string(&args)?),
+            ev_function_call(call_id, "shell_command", &edgerun_json::serde_json::to_string(&args)?),
             ev_completed("resp-1"),
         ]),
     )
@@ -728,7 +728,7 @@ async fn mcp_tool_call_output_not_truncated_with_custom_limit() -> Result<()> {
     let server_name = "rmcp";
     let namespace = format!("mcp__{server_name}__");
     let large_msg = "a".repeat(80_000);
-    let args_json = serde_json::json!({ "message": large_msg });
+    let args_json = edgerun_json::serde_json::json!({ "message": large_msg });
 
     mount_sse_once(
         &server,

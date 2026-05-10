@@ -11,11 +11,11 @@ use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
-use serde_json::json;
+use edgerun_json::serde_json::json;
 use std::path::PathBuf;
 
 fn model_info() -> ModelInfo {
-    serde_json::from_value(json!({
+    edgerun_json::serde_json::from_value(json!({
         "slug": "test-model",
         "display_name": "Test Model",
         "description": null,

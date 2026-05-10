@@ -28,8 +28,8 @@ use core_test_support::test_codex::turn_permission_fields;
 use core_test_support::wait_for_event;
 use core_test_support::wait_for_event_match;
 use pretty_assertions::assert_eq;
-use serde_json::Value;
-use serde_json::json;
+use edgerun_json::serde_json::Value;
+use edgerun_json::serde_json::json;
 
 fn call_output(req: &ResponsesRequest, call_id: &str) -> String {
     let raw = req.function_call_output(call_id);
@@ -189,7 +189,7 @@ async fn request_user_input_round_trip_for_mode(mode: ModeKind) -> anyhow::Resul
 
     let req = second_mock.single_request();
     let output_text = call_output(&req, call_id);
-    let output_json: Value = serde_json::from_str(&output_text)?;
+    let output_json: Value = edgerun_json::serde_json::from_str(&output_text)?;
     assert_eq!(
         output_json,
         json!({

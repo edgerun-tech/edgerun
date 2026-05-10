@@ -1,7 +1,7 @@
 use codex_features::Feature;
 use codex_protocol::models::ShellCommandToolCallParams;
 use codex_protocol::models::ShellToolCallParams;
-use serde_json::Value as JsonValue;
+use edgerun_json::serde_json::Value as JsonValue;
 use std::sync::Arc;
 
 use crate::exec::ExecParams;
@@ -88,7 +88,7 @@ struct RunExecLikeArgs {
 fn shell_function_pre_tool_use_payload(invocation: &ToolInvocation) -> Option<PreToolUsePayload> {
     shell_function_payload_command(&invocation.payload).map(|command| PreToolUsePayload {
         tool_name: HookToolName::bash(),
-        tool_input: serde_json::json!({ "command": command }),
+        tool_input: edgerun_json::serde_json::json!({ "command": command }),
     })
 }
 
@@ -101,7 +101,7 @@ fn shell_function_post_tool_use_payload(
     Some(PostToolUsePayload {
         tool_name: HookToolName::bash(),
         tool_use_id: invocation.call_id.clone(),
-        tool_input: serde_json::json!({ "command": command }),
+        tool_input: edgerun_json::serde_json::json!({ "command": command }),
         tool_response,
     })
 }

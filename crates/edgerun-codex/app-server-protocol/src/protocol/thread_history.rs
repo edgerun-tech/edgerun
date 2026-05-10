@@ -523,7 +523,7 @@ impl ThreadHistoryBuilder {
                 .invocation
                 .arguments
                 .clone()
-                .unwrap_or(serde_json::Value::Null),
+                .unwrap_or(edgerun_json::serde_json::Value::Null),
             mcp_app_resource_uri: payload.mcp_app_resource_uri.clone(),
             result: None,
             error: None,
@@ -564,7 +564,7 @@ impl ThreadHistoryBuilder {
                 .invocation
                 .arguments
                 .clone()
-                .unwrap_or(serde_json::Value::Null),
+                .unwrap_or(edgerun_json::serde_json::Value::Null),
             mcp_app_resource_uri: payload.mcp_app_resource_uri.clone(),
             result,
             error,
@@ -1846,7 +1846,7 @@ mod tests {
                 invocation: McpInvocation {
                     server: "docs".into(),
                     tool: "lookup".into(),
-                    arguments: Some(serde_json::json!({"id":"123"})),
+                    arguments: Some(edgerun_json::serde_json::json!({"id":"123"})),
                 },
                 mcp_app_resource_uri: None,
                 duration: Duration::from_millis(8),
@@ -1896,7 +1896,7 @@ mod tests {
                 server: "docs".into(),
                 tool: "lookup".into(),
                 status: McpToolCallStatus::Failed,
-                arguments: serde_json::json!({"id":"123"}),
+                arguments: edgerun_json::serde_json::json!({"id":"123"}),
                 mcp_app_resource_uri: None,
                 result: None,
                 error: Some(McpToolCallError {
@@ -1921,18 +1921,18 @@ mod tests {
                 invocation: McpInvocation {
                     server: "docs".into(),
                     tool: "lookup".into(),
-                    arguments: Some(serde_json::json!({"id":"123"})),
+                    arguments: Some(edgerun_json::serde_json::json!({"id":"123"})),
                 },
                 mcp_app_resource_uri: Some("ui://widget/lookup.html".into()),
                 duration: Duration::from_millis(8),
                 result: Ok(CallToolResult {
-                    content: vec![serde_json::json!({
+                    content: vec![edgerun_json::serde_json::json!({
                         "type": "text",
                         "text": "result"
                     })],
-                    structured_content: Some(serde_json::json!({"id":"123"})),
+                    structured_content: Some(edgerun_json::serde_json::json!({"id":"123"})),
                     is_error: Some(false),
-                    meta: Some(serde_json::json!({
+                    meta: Some(edgerun_json::serde_json::json!({
                         "ui/resourceUri": "ui://widget/lookup.html"
                     })),
                 }),
@@ -1952,15 +1952,15 @@ mod tests {
                 server: "docs".into(),
                 tool: "lookup".into(),
                 status: McpToolCallStatus::Completed,
-                arguments: serde_json::json!({"id":"123"}),
+                arguments: edgerun_json::serde_json::json!({"id":"123"}),
                 mcp_app_resource_uri: Some("ui://widget/lookup.html".into()),
                 result: Some(Box::new(McpToolCallResult {
-                    content: vec![serde_json::json!({
+                    content: vec![edgerun_json::serde_json::json!({
                         "type": "text",
                         "text": "result"
                     })],
-                    structured_content: Some(serde_json::json!({"id":"123"})),
-                    meta: Some(serde_json::json!({
+                    structured_content: Some(edgerun_json::serde_json::json!({"id":"123"})),
+                    meta: Some(edgerun_json::serde_json::json!({
                         "ui/resourceUri": "ui://widget/lookup.html"
                     })),
                 })),
@@ -1992,7 +1992,7 @@ mod tests {
                     started_at_ms: 0,
                     namespace: Some("codex_app".into()),
                     tool: "lookup_ticket".into(),
-                    arguments: serde_json::json!({"id":"ABC-123"}),
+                    arguments: edgerun_json::serde_json::json!({"id":"ABC-123"}),
                 },
             ),
             EventMsg::DynamicToolCallResponse(DynamicToolCallResponseEvent {
@@ -2001,7 +2001,7 @@ mod tests {
                 completed_at_ms: 0,
                 namespace: Some("codex_app".into()),
                 tool: "lookup_ticket".into(),
-                arguments: serde_json::json!({"id":"ABC-123"}),
+                arguments: edgerun_json::serde_json::json!({"id":"ABC-123"}),
                 content_items: vec![CoreDynamicToolCallOutputContentItem::InputText {
                     text: "Ticket is open".into(),
                 }],
@@ -2024,7 +2024,7 @@ mod tests {
                 id: "dyn-1".into(),
                 namespace: Some("codex_app".into()),
                 tool: "lookup_ticket".into(),
-                arguments: serde_json::json!({"id":"ABC-123"}),
+                arguments: edgerun_json::serde_json::json!({"id":"ABC-123"}),
                 status: DynamicToolCallStatus::Completed,
                 content_items: Some(vec![DynamicToolCallOutputContentItem::InputText {
                     text: "Ticket is open".into(),
@@ -2150,7 +2150,7 @@ mod tests {
                 user_authorization: None,
                 rationale: None,
                 decision_source: None,
-                action: serde_json::from_value(serde_json::json!({
+                action: edgerun_json::serde_json::from_value(edgerun_json::serde_json::json!({
                     "type": "command",
                     "source": "shell",
                     "command": "rm -rf /tmp/guardian",
@@ -2171,7 +2171,7 @@ mod tests {
                 decision_source: Some(
                     codex_protocol::protocol::GuardianAssessmentDecisionSource::Agent,
                 ),
-                action: serde_json::from_value(serde_json::json!({
+                action: edgerun_json::serde_json::from_value(edgerun_json::serde_json::json!({
                     "type": "command",
                     "source": "shell",
                     "command": "rm -rf /tmp/guardian",
@@ -2233,7 +2233,7 @@ mod tests {
                 user_authorization: None,
                 rationale: None,
                 decision_source: None,
-                action: serde_json::from_value(serde_json::json!({
+                action: edgerun_json::serde_json::from_value(edgerun_json::serde_json::json!({
                     "type": "execve",
                     "source": "shell",
                     "program": "/bin/rm",

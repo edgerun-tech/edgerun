@@ -12,7 +12,7 @@ codex-client = { workspace = true }
 codex-protocol = { workspace = true }
 edgerun-encoding = { workspace = true }
 edgerun-error = { workspace = true }
-edgerun-json = { workspace = true }
+edgerun-json = { workspace = true, features = ["serde-compat"] }
 edgerun-tokio-tungstenite = { workspace = true }
 edgerun-tungstenite = { workspace = true }
 edgerun-time = { workspace = true }
@@ -21,7 +21,6 @@ futures = { workspace = true }
 http = { workspace = true }
 reqwest = { workspace = true, features = ["json", "stream"] }
 serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
 tokio = { workspace = true, features = ["fs", "macros", "net", "rt", "sync", "time"] }
 tracing = { workspace = true }
 eventsource-stream = { workspace = true }

@@ -13,7 +13,7 @@ use codex_code_mode::RuntimeResponse;
 use codex_protocol::models::FunctionCallOutputContentItem;
 use codex_protocol::models::FunctionCallOutputPayload;
 use codex_protocol::models::ResponseInputItem;
-use serde_json::Value as JsonValue;
+use edgerun_json::serde_json::Value as JsonValue;
 use tokio_util::sync::CancellationToken;
 
 use crate::function_tool::FunctionCallError;
@@ -394,7 +394,7 @@ fn serialize_function_tool_arguments(
 ) -> Result<String, String> {
     match input {
         None => Ok("{}".to_string()),
-        Some(JsonValue::Object(map)) => serde_json::to_string(&JsonValue::Object(map))
+        Some(JsonValue::Object(map)) => edgerun_json::serde_json::to_string(&JsonValue::Object(map))
             .map_err(|err| format!("failed to serialize tool `{tool_name}` arguments: {err}")),
         Some(_) => Err(format!(
             "tool `{tool_name}` expects a JSON object for arguments"

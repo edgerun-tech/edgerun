@@ -211,6 +211,16 @@ impl<S> AsyncTlsStream<S> {
         self.stream
     }
 
+    /// Get a reference to the underlying transport stream.
+    pub fn get_ref(&self) -> &S {
+        &self.stream
+    }
+
+    /// Get a mutable reference to the underlying transport stream.
+    pub fn get_mut(&mut self) -> &mut S {
+        &mut self.stream
+    }
+
     /// Returns the negotiated ALPN protocol, or `None` if none was negotiated.
     pub fn alpn_protocol(&self) -> Option<&[u8]> {
         self.alpn_protocol.as_deref()
@@ -998,6 +1008,16 @@ impl<S> AsyncTlsServerStream<S> {
     /// Consume the TLS server stream and return the underlying transport stream.
     pub fn into_inner(self) -> S {
         self.stream
+    }
+
+    /// Get a reference to the underlying transport stream.
+    pub fn get_ref(&self) -> &S {
+        &self.stream
+    }
+
+    /// Get a mutable reference to the underlying transport stream.
+    pub fn get_mut(&mut self) -> &mut S {
+        &mut self.stream
     }
 }
 

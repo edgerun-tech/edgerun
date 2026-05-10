@@ -22,7 +22,7 @@ use http::HeaderMap;
 use http::HeaderName;
 use http::HeaderValue;
 use http::StatusCode;
-use serde_json::Value;
+use edgerun_json::serde_json::Value;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::time::Duration;
@@ -219,7 +219,7 @@ impl ResponsesWebsocketConnection {
     pub async fn send_response_processed(&self, response_id: String) -> Result<(), ApiError> {
         let request =
             ResponsesWsRequest::ResponseProcessed(ResponseProcessedWsRequest { response_id });
-        let request_body = serde_json::to_value(&request).map_err(|err| {
+        let request_body = edgerun_json::serde_json::to_value(&request).map_err(|err| {
             ApiError::Stream(format!("failed to encode websocket request: {err}"))
         })?;
 
@@ -259,7 +259,7 @@ impl ResponsesWebsocketConnection {
         let models_etag = self.models_etag.clone();
         let server_model = self.server_model.clone();
         let telemetry = self.telemetry.clone();
-        let request_body = serde_json::to_value(&request).map_err(|err| {
+        let request_body = edgerun_json::serde_json::to_value(&request).map_err(|err| {
             ApiError::Stream(format!("failed to encode websocket request: {err}"))
         })?;
 
@@ -623,7 +623,7 @@ async fn run_websocket_response_stream(
                     return Err(error);
                 }
 
-                let event = match serde_json::from_str::<ResponsesStreamEvent>(&text) {
+                let event = match edgerun_json::serde_json::from_str::<ResponsesStreamEvent>(&text) {
                     Ok(event) => event,
                     Err(err) => {
                         debug!("failed to parse websocket event: {err}, data: {text}");
@@ -692,7 +692,7 @@ async fn send_websocket_request(
     telemetry: Option<&Arc<dyn WebsocketTelemetry>>,
     connection_reused: bool,
 ) -> Result<(), ApiError> {
-    let request_text = match serde_json::to_string(&request_body) {
+    let request_text = match edgerun_json::serde_json::to_string(&request_body) {
         Ok(text) => text,
         Err(err) => {
             return Err(ApiError::Stream(format!(
@@ -730,7 +730,7 @@ async fn send_websocket_request(
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
-    use serde_json::json;
+    use edgerun_json::serde_json::json;
 
     #[test]
     fn websocket_config_enables_permessage_deflate() {

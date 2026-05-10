@@ -770,6 +770,11 @@ pub fn p256_signing_key_from_der(der: &[u8]) -> Option<SigningKey> {
 pub fn p256_signing_key_to_pem(key: &SigningKey) -> alloc::string::String {
     pem_encode_labeled("PRIVATE KEY", &p256_private_key_info_der(key))
 }
+
+#[cfg(feature = "p256")]
+pub fn p256_signing_key_to_der(key: &SigningKey) -> alloc::vec::Vec<u8> {
+    p256_private_key_info_der(key)
+}
 pub fn pem_encode(data: &[u8]) -> alloc::string::String {
     pem_encode_labeled("CERTIFICATE", data)
 }

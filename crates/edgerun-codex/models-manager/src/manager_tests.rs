@@ -12,7 +12,7 @@ use codex_protocol::openai_models::ModelsResponse;
 use edgerun_time::chrono::ChronoDuration;
 use edgerun_time::chrono::ChronoUtc as Utc;
 use pretty_assertions::assert_eq;
-use serde_json::json;
+use edgerun_json::serde_json::json;
 use std::collections::VecDeque;
 use std::path::Path;
 use std::sync::Arc;
@@ -34,7 +34,7 @@ fn remote_model_with_visibility(
     priority: i32,
     visibility: &str,
 ) -> ModelInfo {
-    serde_json::from_value(json!({
+    edgerun_json::serde_json::from_value(json!({
             "slug": slug,
             "display_name": display,
             "description": format!("{display} desc"),
@@ -216,7 +216,7 @@ c2ln",
     std::fs::create_dir_all(codex_home).expect("codex home should be created");
     std::fs::write(
         codex_home.join("auth.json"),
-        serde_json::to_string(&auth_dot_json).expect("auth should serialize"),
+        edgerun_json::serde_json::to_string(&auth_dot_json).expect("auth should serialize"),
     )
     .expect("auth.json should be written");
 
@@ -771,9 +771,9 @@ fn bundled_models_json_roundtrips() {
         .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
 
     let serialized =
-        serde_json::to_string(&response).expect("bundled models.json should serialize");
+        edgerun_json::serde_json::to_string(&response).expect("bundled models.json should serialize");
     let roundtripped: ModelsResponse =
-        serde_json::from_str(&serialized).expect("serialized models.json should deserialize");
+        edgerun_json::serde_json::from_str(&serialized).expect("serialized models.json should deserialize");
 
     assert_eq!(
         response, roundtripped,

@@ -603,8 +603,8 @@ fn test_git_info_serialization() {
         repository_url: Some("https://github.com/example/repo.git".to_string()),
     };
 
-    let json = serde_json::to_string(&git_info).expect("Should serialize GitInfo");
-    let parsed: serde_json::Value = serde_json::from_str(&json).expect("Should parse JSON");
+    let json = edgerun_json::serde_json::to_string(&git_info).expect("Should serialize GitInfo");
+    let parsed: edgerun_json::serde_json::Value = edgerun_json::serde_json::from_str(&json).expect("Should parse JSON");
 
     assert_eq!(parsed["commit_hash"], "abc123def456");
     assert_eq!(parsed["branch"], "main");
@@ -622,8 +622,8 @@ fn test_git_info_serialization_with_nones() {
         repository_url: None,
     };
 
-    let json = serde_json::to_string(&git_info).expect("Should serialize GitInfo");
-    let parsed: serde_json::Value = serde_json::from_str(&json).expect("Should parse JSON");
+    let json = edgerun_json::serde_json::to_string(&git_info).expect("Should serialize GitInfo");
+    let parsed: edgerun_json::serde_json::Value = edgerun_json::serde_json::from_str(&json).expect("Should parse JSON");
 
     // Fields with None values should be omitted due to skip_serializing_if
     assert!(!parsed.as_object().unwrap().contains_key("commit_hash"));

@@ -46,8 +46,8 @@ use image::ImageBuffer;
 use image::Rgba;
 use image::load_from_memory;
 use pretty_assertions::assert_eq;
-use serde_json::Value;
-use serde_json::json;
+use edgerun_json::serde_json::Value;
+use edgerun_json::serde_json::json;
 use std::fs;
 use std::io::Cursor;
 use std::path::PathBuf;
@@ -284,7 +284,7 @@ async fn view_image_tool_attaches_local_image() -> anyhow::Result<()> {
     .await?;
 
     let call_id = "view-image-call";
-    let arguments = serde_json::json!({ "path": rel_path }).to_string();
+    let arguments = edgerun_json::serde_json::json!({ "path": rel_path }).to_string();
 
     let first_response = sse(vec![
         ev_response_created("resp-1"),
@@ -603,7 +603,7 @@ async fn view_image_tool_can_preserve_original_resolution_when_requested_on_gpt5
     .await?;
 
     let call_id = "view-image-original";
-    let arguments = serde_json::json!({ "path": rel_path, "detail": "original" }).to_string();
+    let arguments = edgerun_json::serde_json::json!({ "path": rel_path, "detail": "original" }).to_string();
 
     let first_response = sse(vec![
         ev_response_created("resp-1"),
@@ -692,7 +692,7 @@ async fn view_image_tool_errors_clearly_for_unsupported_detail_values() -> anyho
     .await?;
 
     let call_id = "view-image-unsupported-detail";
-    let arguments = serde_json::json!({ "path": rel_path, "detail": "low" }).to_string();
+    let arguments = edgerun_json::serde_json::json!({ "path": rel_path, "detail": "low" }).to_string();
 
     let first_response = sse(vec![
         ev_response_created("resp-1"),
@@ -772,7 +772,7 @@ async fn view_image_tool_treats_null_detail_as_omitted() -> anyhow::Result<()> {
     .await?;
 
     let call_id = "view-image-null-detail";
-    let arguments = serde_json::json!({ "path": rel_path, "detail": null }).to_string();
+    let arguments = edgerun_json::serde_json::json!({ "path": rel_path, "detail": null }).to_string();
 
     let first_response = sse(vec![
         ev_response_created("resp-1"),
@@ -862,7 +862,7 @@ async fn view_image_tool_resizes_when_model_lacks_original_detail_support() -> a
     .await?;
 
     let call_id = "view-image-original-lower-model";
-    let arguments = serde_json::json!({ "path": rel_path }).to_string();
+    let arguments = edgerun_json::serde_json::json!({ "path": rel_path }).to_string();
 
     let first_response = sse(vec![
         ev_response_created("resp-1"),
@@ -956,7 +956,7 @@ async fn view_image_tool_does_not_force_original_resolution_with_capability_only
     .await?;
 
     let call_id = "view-image-capability-only";
-    let arguments = serde_json::json!({ "path": rel_path }).to_string();
+    let arguments = edgerun_json::serde_json::json!({ "path": rel_path }).to_string();
 
     let first_response = sse(vec![
         ev_response_created("resp-1"),
@@ -1038,7 +1038,7 @@ async fn view_image_tool_errors_when_path_is_directory() -> anyhow::Result<()> {
     let abs_path = create_workspace_directory(&test, rel_path).await?;
 
     let call_id = "view-image-directory";
-    let arguments = serde_json::json!({ "path": rel_path }).to_string();
+    let arguments = edgerun_json::serde_json::json!({ "path": rel_path }).to_string();
 
     let first_response = sse(vec![
         ev_response_created("resp-1"),
@@ -1109,7 +1109,7 @@ async fn view_image_tool_errors_for_non_image_files() -> anyhow::Result<()> {
         write_workspace_file(&test, rel_path, br#"{ "message": "hello" }"#.to_vec()).await?;
 
     let call_id = "view-image-non-image";
-    let arguments = serde_json::json!({ "path": rel_path }).to_string();
+    let arguments = edgerun_json::serde_json::json!({ "path": rel_path }).to_string();
 
     let first_response = sse(vec![
         ev_response_created("resp-1"),
@@ -1186,7 +1186,7 @@ async fn view_image_tool_errors_when_file_missing() -> anyhow::Result<()> {
     let abs_path = config.cwd.join(rel_path);
 
     let call_id = "view-image-missing";
-    let arguments = serde_json::json!({ "path": rel_path }).to_string();
+    let arguments = edgerun_json::serde_json::json!({ "path": rel_path }).to_string();
 
     let first_response = sse(vec![
         ev_response_created("resp-1"),
@@ -1318,7 +1318,7 @@ async fn view_image_tool_returns_unsupported_message_for_text_only_model() -> an
     .await?;
 
     let call_id = "view-image-unsupported-model";
-    let arguments = serde_json::json!({ "path": rel_path }).to_string();
+    let arguments = edgerun_json::serde_json::json!({ "path": rel_path }).to_string();
     let first_response = sse(vec![
         ev_response_created("resp-1"),
         ev_function_call(call_id, "view_image", &arguments),

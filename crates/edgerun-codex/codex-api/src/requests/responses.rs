@@ -1,5 +1,5 @@
 use codex_protocol::models::ResponseItem;
-use serde_json::Value;
+use edgerun_json::serde_json::Value;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum Compression {

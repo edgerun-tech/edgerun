@@ -9,7 +9,7 @@ use crate::request_permissions::RequestPermissionProfile;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
-use serde_json::Value as JsonValue;
+use edgerun_json::serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use ts_rs::TS;
@@ -398,7 +398,7 @@ mod tests {
 
     #[test]
     fn guardian_assessment_action_deserializes_command_shape() {
-        let action: GuardianAssessmentAction = serde_json::from_value(serde_json::json!({
+        let action: GuardianAssessmentAction = edgerun_json::serde_json::from_value(edgerun_json::serde_json::json!({
             "type": "command",
             "source": "shell",
             "command": "rm -rf /tmp/guardian",
@@ -419,7 +419,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn guardian_assessment_action_round_trips_execve_shape() {
-        let value = serde_json::json!({
+        let value = edgerun_json::serde_json::json!({
             "type": "execve",
             "source": "shell",
             "program": "/bin/rm",
@@ -427,10 +427,10 @@ mod tests {
             "cwd": "/tmp",
         });
         let action: GuardianAssessmentAction =
-            serde_json::from_value(value.clone()).expect("guardian action");
+            edgerun_json::serde_json::from_value(value.clone()).expect("guardian action");
 
         assert_eq!(
-            serde_json::to_value(&action).expect("serialize guardian action"),
+            edgerun_json::serde_json::to_value(&action).expect("serialize guardian action"),
             value
         );
 

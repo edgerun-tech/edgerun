@@ -18,7 +18,7 @@ use core_test_support::skip_if_no_network;
 use core_test_support::test_codex::TestCodex;
 use core_test_support::test_codex::test_codex;
 use pretty_assertions::assert_eq;
-use serde_json::json;
+use edgerun_json::serde_json::json;
 use std::fs;
 use std::path::Path;
 use std::time::Duration;
@@ -71,15 +71,15 @@ fn tool_parameter_description(
 ) -> Option<String> {
     req.body_json()
         .get("tools")
-        .and_then(serde_json::Value::as_array)
+        .and_then(edgerun_json::serde_json::Value::as_array)
         .and_then(|tools| {
             tools.iter().find_map(|tool| {
-                if tool.get("name").and_then(serde_json::Value::as_str) == Some(tool_name) {
+                if tool.get("name").and_then(edgerun_json::serde_json::Value::as_str) == Some(tool_name) {
                     tool.get("parameters")
                         .and_then(|parameters| parameters.get("properties"))
                         .and_then(|properties| properties.get(parameter_name))
                         .and_then(|parameter| parameter.get("description"))
-                        .and_then(serde_json::Value::as_str)
+                        .and_then(edgerun_json::serde_json::Value::as_str)
                         .map(str::to_owned)
                 } else {
                     None
@@ -161,14 +161,14 @@ async fn setup_turn_one_with_spawned_child(
 
 async fn setup_turn_one_with_custom_spawned_child(
     server: &MockServer,
-    spawn_args: serde_json::Value,
+    spawn_args: edgerun_json::serde_json::Value,
     child_response_delay: Option<Duration>,
     wait_for_parent_notification: bool,
     configure_test: impl FnOnce(
         core_test_support::test_codex::TestCodexBuilder,
     ) -> core_test_support::test_codex::TestCodexBuilder,
 ) -> Result<(TestCodex, String)> {
-    let spawn_args = serde_json::to_string(&spawn_args)?;
+    let spawn_args = edgerun_json::serde_json::to_string(&spawn_args)?;
 
     mount_sse_once_match(
         server,
@@ -257,7 +257,7 @@ async fn setup_turn_one_with_custom_spawned_child(
 
 async fn spawn_child_and_capture_snapshot(
     server: &MockServer,
-    spawn_args: serde_json::Value,
+    spawn_args: edgerun_json::serde_json::Value,
     configure_test: impl FnOnce(
         core_test_support::test_codex::TestCodexBuilder,
     ) -> core_test_support::test_codex::TestCodexBuilder,
@@ -322,7 +322,7 @@ async fn spawned_child_receives_forked_parent_context() -> Result<()> {
     )
     .await;
 
-    let spawn_args = serde_json::to_string(&json!({
+    let spawn_args = edgerun_json::serde_json::to_string(&json!({
         "message": CHILD_PROMPT,
         "fork_context": true,
     }))?;
@@ -428,7 +428,7 @@ async fn spawned_multi_agent_v2_child_inherits_parent_developer_context() -> Res
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
-    let spawn_args = serde_json::to_string(&json!({
+    let spawn_args = edgerun_json::serde_json::to_string(&json!({
         "message": CHILD_PROMPT,
         "task_name": "worker",
     }))?;
@@ -513,7 +513,7 @@ async fn skills_toggle_skips_instructions_for_parent_and_spawned_child() -> Resu
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
-    let spawn_args = serde_json::to_string(&json!({
+    let spawn_args = edgerun_json::serde_json::to_string(&json!({
         "message": CHILD_PROMPT,
         "task_name": "worker",
     }))?;

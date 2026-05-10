@@ -20,10 +20,9 @@ async-channel = { workspace = true }
 async-trait = { workspace = true }
 codex-protocol = { workspace = true }
 deno_core_icudata = { workspace = true }
+edgerun-json = { workspace = true, features = ["serde-compat"] }
 serde = { workspace = true, features = ["derive"] }
-serde_json = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }
 tokio-util = { workspace = true, features = ["rt"] }
 tracing = { workspace = true }
 v8 = { workspace = true }
-

@@ -28,12 +28,13 @@ codex-protocol = { workspace = true }
 codex-utils-absolute-path = { workspace = true }
 codex-utils-cargo-bin = { workspace = true }
 ctor = { workspace = true }
+edgerun-json = { workspace = true, features = ["serde-compat"] }
+edgerun-shlex = { workspace = true }
 futures = { workspace = true }
 notify = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry_sdk = { workspace = true }
 regex-lite = { workspace = true }
-serde_json = { workspace = true }
 similar = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["net", "time"] }
@@ -43,7 +44,6 @@ tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true }
 walkdir = { workspace = true }
 wiremock = { workspace = true }
-shlex = { workspace = true }
 zstd = { workspace = true }
 
 [dev-dependencies]

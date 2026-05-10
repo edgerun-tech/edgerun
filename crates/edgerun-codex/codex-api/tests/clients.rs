@@ -257,7 +257,7 @@ async fn responses_client_uses_responses_path() -> Result<()> {
     let transport = RecordingTransport::new(state.clone());
     let client = ResponsesClient::new(transport, provider("openai"), Arc::new(NoAuth));
 
-    let body = serde_json::json!({ "echo": true });
+    let body = edgerun_json::serde_json::json!({ "echo": true });
     let _stream = client
         .stream(
             body,
@@ -279,7 +279,7 @@ async fn streaming_client_adds_auth_headers() -> Result<()> {
     let auth = Arc::new(StaticAuth::new("secret-token", "acct-1"));
     let client = ResponsesClient::new(transport, provider("openai"), auth);
 
-    let body = serde_json::json!({ "model": "gpt-test" });
+    let body = edgerun_json::serde_json::json!({ "model": "gpt-test" });
     let _stream = client
         .stream(
             body,
@@ -361,7 +361,7 @@ async fn streaming_client_retries_on_transient_auth_error() -> Result<()> {
     provider.retry.max_attempts = 2;
 
     let client = ResponsesClient::new(transport, provider, Arc::new(auth.clone()));
-    let body = serde_json::json!({ "model": "gpt-test" });
+    let body = edgerun_json::serde_json::json!({ "model": "gpt-test" });
     let _stream = client
         .stream(
             body,
@@ -386,7 +386,7 @@ async fn streaming_client_does_not_retry_auth_build_error() -> Result<()> {
     provider.retry.max_attempts = 2;
 
     let client = ResponsesClient::new(transport, provider, Arc::new(auth.clone()));
-    let body = serde_json::json!({ "model": "gpt-test" });
+    let body = edgerun_json::serde_json::json!({ "model": "gpt-test" });
     let result = client
         .stream(
             body,

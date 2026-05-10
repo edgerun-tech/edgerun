@@ -22,7 +22,7 @@ use codex_tools::collect_request_plugin_install_entries;
 use codex_tools::filter_request_plugin_install_discoverable_tools_for_client;
 use codex_tools::verified_connector_install_completed;
 use rmcp::model::RequestId;
-use serde_json::Value;
+use edgerun_json::serde_json::Value;
 use tracing::warn;
 
 use crate::config::edit::ConfigEdit;
@@ -178,7 +178,7 @@ impl ToolHandler for RequestPluginInstallHandler {
                 .await;
         }
 
-        let content = serde_json::to_string(&RequestPluginInstallResult {
+        let content = edgerun_json::serde_json::to_string(&RequestPluginInstallResult {
             completed,
             user_confirmed,
             tool_type: args.tool_type,

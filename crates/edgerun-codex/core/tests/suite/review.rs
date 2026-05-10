@@ -43,7 +43,7 @@ async fn review_op_emits_lifecycle_and_review_output() {
 
     // Start mock Responses API server. Return a single assistant message whose
     // text is a JSON-encoded ReviewOutputEvent.
-    let review_json = serde_json::json!({
+    let review_json = edgerun_json::serde_json::json!({
         "findings": [
             {
                 "title": "Prefer Stylize helpers",
@@ -68,7 +68,7 @@ async fn review_op_emits_lifecycle_and_review_output() {
             }},
             {"type":"response.completed", "response": {"id": "__ID__"}}
         ]"#;
-    let review_json_escaped = serde_json::to_string(&review_json).unwrap();
+    let review_json_escaped = edgerun_json::serde_json::to_string(&review_json).unwrap();
     let sse_raw = sse_template.replace("__REVIEW__", &review_json_escaped);
     let (server, _request_log) =
         start_responses_server_with_sse(&sse_raw, /*expected_requests*/ 1).await;
@@ -131,8 +131,8 @@ async fn review_op_emits_lifecycle_and_review_output() {
         if line.trim().is_empty() {
             continue;
         }
-        let v: serde_json::Value = serde_json::from_str(line).expect("jsonl line");
-        let rl: RolloutLine = serde_json::from_value(v).expect("rollout line");
+        let v: edgerun_json::serde_json::Value = edgerun_json::serde_json::from_str(line).expect("jsonl line");
+        let rl: RolloutLine = edgerun_json::serde_json::from_value(v).expect("rollout line");
         if let RolloutItem::ResponseItem(ResponseItem::Message { role, content, .. }) = rl.item {
             if role == "user" {
                 for c in content {
@@ -307,7 +307,7 @@ async fn review_filters_agent_message_related_events() {
 async fn review_does_not_emit_agent_message_on_structured_output() {
     skip_if_no_network!();
 
-    let review_json = serde_json::json!({
+    let review_json = edgerun_json::serde_json::json!({
         "findings": [
             {
                 "title": "Example",
@@ -332,7 +332,7 @@ async fn review_does_not_emit_agent_message_on_structured_output() {
             }},
             {"type":"response.completed", "response": {"id": "__ID__"}}
         ]"#;
-    let review_json_escaped = serde_json::to_string(&review_json).unwrap();
+    let review_json_escaped = edgerun_json::serde_json::to_string(&review_json).unwrap();
     let sse_raw = sse_template.replace("__REVIEW__", &review_json_escaped);
     let (server, _request_log) =
         start_responses_server_with_sse(&sse_raw, /*expected_requests*/ 1).await;
@@ -511,7 +511,7 @@ async fn review_input_isolated_from_parent_history() {
         let mut f = tokio::fs::File::create(&session_file).await.unwrap();
         let convo_id = Uuid::new_v4();
         // Proper session_meta line (enveloped) with a conversation id
-        let meta_line = serde_json::json!({
+        let meta_line = edgerun_json::serde_json::json!({
             "timestamp": "2024-01-01T00:00:00.000Z",
             "type": "session_meta",
             "payload": {
@@ -536,8 +536,8 @@ async fn review_input_isolated_from_parent_history() {
             }],
             phase: None,
         };
-        let user_json = serde_json::to_value(&user).unwrap();
-        let user_line = serde_json::json!({
+        let user_json = edgerun_json::serde_json::to_value(&user).unwrap();
+        let user_line = edgerun_json::serde_json::json!({
             "timestamp": "2024-01-01T00:00:01.000Z",
             "type": "response_item",
             "payload": user_json
@@ -555,8 +555,8 @@ async fn review_input_isolated_from_parent_history() {
             }],
             phase: None,
         };
-        let assistant_json = serde_json::to_value(&assistant).unwrap();
-        let assistant_line = serde_json::json!({
+        let assistant_json = edgerun_json::serde_json::to_value(&assistant).unwrap();
+        let assistant_line = edgerun_json::serde_json::json!({
             "timestamp": "2024-01-01T00:00:02.000Z",
             "type": "response_item",
             "payload": assistant_json
@@ -641,8 +641,8 @@ async fn review_input_isolated_from_parent_history() {
         if line.trim().is_empty() {
             continue;
         }
-        let v: serde_json::Value = serde_json::from_str(line).expect("jsonl line");
-        let rl: RolloutLine = serde_json::from_value(v).expect("rollout line");
+        let v: edgerun_json::serde_json::Value = edgerun_json::serde_json::from_str(line).expect("jsonl line");
+        let rl: RolloutLine = edgerun_json::serde_json::from_value(v).expect("rollout line");
         if let RolloutItem::ResponseItem(ResponseItem::Message { role, content, .. }) = rl.item
             && role == "user"
         {

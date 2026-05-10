@@ -318,72 +318,76 @@ impl Rtl8125 {
     }
 
     unsafe fn init_rings(&mut self) {
-        self.tx_cur = 0;
-        self.tx_dirty = 0;
-        self.rx_cur = 0;
-        self.tx_submitted = 0;
-        self.tx_completed = 0;
-        self.tx_dropped = 0;
-        self.rx_received = 0;
-        self.rx_dropped = 0;
-        self.rx_errors = 0;
+        unsafe {
+            self.tx_cur = 0;
+            self.tx_dirty = 0;
+            self.rx_cur = 0;
+            self.tx_submitted = 0;
+            self.tx_completed = 0;
+            self.tx_dropped = 0;
+            self.rx_received = 0;
+            self.rx_dropped = 0;
+            self.rx_errors = 0;
 
-        core::ptr::write_bytes(
-            core::ptr::addr_of_mut!(TX_BUFFERS.0) as *mut u8,
-            0,
-            NUM_TX_DESC * TX_BUF_SIZE,
-        );
-        core::ptr::write_bytes(
-            core::ptr::addr_of_mut!(RX_BUFFERS.0) as *mut u8,
-            0,
-            NUM_RX_DESC * RX_BUF_SIZE,
-        );
+            core::ptr::write_bytes(
+                core::ptr::addr_of_mut!(TX_BUFFERS.0) as *mut u8,
+                0,
+                NUM_TX_DESC * TX_BUF_SIZE,
+            );
+            core::ptr::write_bytes(
+                core::ptr::addr_of_mut!(RX_BUFFERS.0) as *mut u8,
+                0,
+                NUM_RX_DESC * RX_BUF_SIZE,
+            );
 
-        for i in 0..NUM_TX_DESC {
-            let desc = descriptor_mut(core::ptr::addr_of_mut!(TX_DESC.0) as *mut RtlDesc, i);
-            let buffer =
-                (core::ptr::addr_of_mut!(TX_BUFFERS.0) as *mut [u8; TX_BUF_SIZE]).add(i) as *mut u8;
-            write_desc(
-                desc,
-                RtlDesc {
-                    opts1: if i == NUM_TX_DESC - 1 {
-                        DESC_RING_END
-                    } else {
-                        0
+            for i in 0..NUM_TX_DESC {
+                let desc = descriptor_mut(core::ptr::addr_of_mut!(TX_DESC.0) as *mut RtlDesc, i);
+                let buffer = (core::ptr::addr_of_mut!(TX_BUFFERS.0) as *mut [u8; TX_BUF_SIZE])
+                    .add(i) as *mut u8;
+                write_desc(
+                    desc,
+                    RtlDesc {
+                        opts1: if i == NUM_TX_DESC - 1 {
+                            DESC_RING_END
+                        } else {
+                            0
+                        },
+                        opts2: 0,
+                        addr: buffer as u64,
                     },
-                    opts2: 0,
-                    addr: buffer as u64,
-                },
-            );
-        }
+                );
+            }
 
-        for i in 0..NUM_RX_DESC {
-            let buffer =
-                (core::ptr::addr_of_mut!(RX_BUFFERS.0) as *mut [u8; RX_BUF_SIZE]).add(i) as *mut u8;
-            write_desc(
-                descriptor_mut(core::ptr::addr_of_mut!(RX_DESC.0) as *mut RtlDesc, i),
-                RtlDesc {
-                    opts1: rx_owned_opts1(i),
-                    opts2: 0,
-                    addr: buffer as u64,
-                },
-            );
+            for i in 0..NUM_RX_DESC {
+                let buffer = (core::ptr::addr_of_mut!(RX_BUFFERS.0) as *mut [u8; RX_BUF_SIZE])
+                    .add(i) as *mut u8;
+                write_desc(
+                    descriptor_mut(core::ptr::addr_of_mut!(RX_DESC.0) as *mut RtlDesc, i),
+                    RtlDesc {
+                        opts1: rx_owned_opts1(i),
+                        opts2: 0,
+                        addr: buffer as u64,
+                    },
+                );
+            }
+            fence(Ordering::SeqCst);
         }
-        fence(Ordering::SeqCst);
     }
 
     unsafe fn release_rx_desc(&self, entry: usize) {
-        let desc = descriptor_mut(core::ptr::addr_of_mut!(RX_DESC.0) as *mut RtlDesc, entry);
-        let addr = read_desc_addr(desc);
-        write_desc(
-            desc,
-            RtlDesc {
-                opts1: rx_owned_opts1(entry),
-                opts2: 0,
-                addr,
-            },
-        );
-        fence(Ordering::Release);
+        unsafe {
+            let desc = descriptor_mut(core::ptr::addr_of_mut!(RX_DESC.0) as *mut RtlDesc, entry);
+            let addr = read_desc_addr(desc);
+            write_desc(
+                desc,
+                RtlDesc {
+                    opts1: rx_owned_opts1(entry),
+                    opts2: 0,
+                    addr,
+                },
+            );
+            fence(Ordering::Release);
+        }
     }
 
     fn reap_tx(&mut self) {
@@ -515,19 +519,21 @@ fn rx_payload_len(status: u32) -> usize {
 }
 
 unsafe fn descriptor_mut(base: *mut RtlDesc, entry: usize) -> *mut RtlDesc {
-    base.add(entry)
+    unsafe { base.add(entry) }
 }
 
 unsafe fn read_desc_opts1(desc: *const RtlDesc) -> u32 {
-    core::ptr::addr_of!((*desc).opts1).read_volatile()
+    unsafe { core::ptr::addr_of!((*desc).opts1).read_volatile() }
 }
 
 unsafe fn read_desc_addr(desc: *const RtlDesc) -> u64 {
-    core::ptr::addr_of!((*desc).addr).read_volatile()
+    unsafe { core::ptr::addr_of!((*desc).addr).read_volatile() }
 }
 
 unsafe fn write_desc(desc: *mut RtlDesc, value: RtlDesc) {
-    core::ptr::write_volatile(desc, value);
+    unsafe {
+        core::ptr::write_volatile(desc, value);
+    }
 }
 
 fn find_memory_bar(bus: u8, slot: u8, func: u8) -> Option<usize> {

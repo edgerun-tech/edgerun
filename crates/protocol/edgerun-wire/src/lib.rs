@@ -313,6 +313,20 @@ pub fn relay_message_bytes(message: &RelayMessage) -> Result<Vec<u8>, WireError>
 }
 
 pub fn relay_message_from_bytes(bytes: &[u8]) -> Result<RelayMessage, WireError> {
+    if bytes
+        .as_ptr()
+        .align_offset(core::mem::align_of::<ArchivedRelayMessage>())
+        != 0
+    {
+        let mut aligned = util::AlignedVec::<16>::with_capacity(bytes.len());
+        aligned.extend_from_slice(bytes);
+        return relay_message_from_aligned_bytes(aligned.as_slice());
+    }
+
+    relay_message_from_aligned_bytes(bytes)
+}
+
+fn relay_message_from_aligned_bytes(bytes: &[u8]) -> Result<RelayMessage, WireError> {
     let archived = access::<ArchivedRelayMessage, WireError>(bytes)?;
     deserialize::<RelayMessage, WireError>(archived)
 }

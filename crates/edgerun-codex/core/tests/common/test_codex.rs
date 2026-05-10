@@ -42,7 +42,7 @@ use codex_protocol::protocol::TurnEnvironmentSelection;
 use codex_protocol::user_input::UserInput;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use futures::future::BoxFuture;
-use serde_json::Value;
+use edgerun_json::serde_json::Value;
 use tempfile::TempDir;
 use wiremock::MockServer;
 
@@ -1015,7 +1015,7 @@ pub fn test_codex() -> TestCodexBuilder {
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
-    use serde_json::json;
+    use edgerun_json::serde_json::json;
 
     #[test]
     fn custom_tool_call_output_text_returns_output_text() {

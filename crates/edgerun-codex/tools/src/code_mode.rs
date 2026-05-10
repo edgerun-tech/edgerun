@@ -36,7 +36,7 @@ pub fn augment_tool_spec_for_code_mode(spec: ToolSpec) -> ToolSpec {
                             tool_name,
                             description: tool.description.clone(),
                             kind: CodeModeToolKind::Function,
-                            input_schema: serde_json::to_value(&tool.parameters).ok(),
+                            input_schema: edgerun_json::serde_json::to_value(&tool.parameters).ok(),
                             output_schema: tool.output_schema.clone(),
                         };
                         tool.description =
@@ -104,7 +104,7 @@ fn code_mode_tool_definitions_for_spec(spec: &ToolSpec) -> Vec<CodeModeToolDefin
                 name,
                 description: tool.description.clone(),
                 kind: CodeModeToolKind::Function,
-                input_schema: serde_json::to_value(&tool.parameters).ok(),
+                input_schema: edgerun_json::serde_json::to_value(&tool.parameters).ok(),
                 output_schema: tool.output_schema.clone(),
             }]
         }
@@ -130,7 +130,7 @@ fn code_mode_tool_definitions_for_spec(spec: &ToolSpec) -> Vec<CodeModeToolDefin
                         tool_name,
                         description: tool.description.clone(),
                         kind: CodeModeToolKind::Function,
-                        input_schema: serde_json::to_value(&tool.parameters).ok(),
+                        input_schema: edgerun_json::serde_json::to_value(&tool.parameters).ok(),
                         output_schema: tool.output_schema.clone(),
                     }
                 }

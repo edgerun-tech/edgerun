@@ -65,7 +65,7 @@ async fn request_permissions_routes_to_guardian_when_reviewer_is_enabled() {
             ev_response_created("resp-guardian"),
             ev_assistant_message(
                 "msg-guardian",
-                &serde_json::json!({
+                &edgerun_json::serde_json::json!({
                     "risk_level": "low",
                     "user_authorization": "high",
                     "outcome": "allow",
@@ -246,7 +246,7 @@ async fn guardian_allows_shell_additional_permissions_requests_past_policy_valid
             ev_response_created("resp-guardian"),
             ev_assistant_message(
                 "msg-guardian",
-                &serde_json::json!({
+                &edgerun_json::serde_json::json!({
                     "risk_level": "low",
                     "user_authorization": "high",
                     "outcome": "allow",
@@ -334,7 +334,7 @@ async fn guardian_allows_shell_additional_permissions_requests_past_policy_valid
             tool_name: codex_tools::ToolName::plain("shell"),
             source: crate::tools::context::ToolCallSource::Direct,
             payload: ToolPayload::Function {
-                arguments: serde_json::json!({
+                arguments: edgerun_json::serde_json::json!({
                     "command": params.command.clone(),
                     "workdir": Some(turn_context.cwd.to_string_lossy().to_string()),
                     "timeout_ms": params.expiration.timeout_ms(),
@@ -366,7 +366,7 @@ async fn guardian_allows_shell_additional_permissions_requests_past_policy_valid
     }
 
     let exec_output: ResponseExecOutput =
-        serde_json::from_str(&output).expect("valid exec output json");
+        edgerun_json::serde_json::from_str(&output).expect("valid exec output json");
 
     assert_eq!(exec_output.metadata, ResponseExecMetadata { exit_code: 0 });
     assert!(exec_output.output.contains("hi"));
@@ -381,7 +381,7 @@ async fn strict_auto_review_turn_grant_forces_guardian_for_shell_policy_skip() {
             ev_response_created("resp-guardian"),
             ev_assistant_message(
                 "msg-guardian",
-                &serde_json::json!({
+                &edgerun_json::serde_json::json!({
                     "risk_level": "low",
                     "user_authorization": "high",
                     "outcome": "allow",
@@ -463,7 +463,7 @@ async fn strict_auto_review_turn_grant_forces_guardian_for_shell_policy_skip() {
             tool_name: codex_tools::ToolName::plain("shell"),
             source: ToolCallSource::Direct,
             payload: ToolPayload::Function {
-                arguments: serde_json::json!({
+                arguments: edgerun_json::serde_json::json!({
                     "command": command,
                     "workdir": Some(turn_context.cwd.to_string_lossy().to_string()),
                     "timeout_ms": 1_000_u64,
@@ -509,7 +509,7 @@ async fn guardian_allows_unified_exec_additional_permissions_requests_past_polic
             tool_name: codex_tools::ToolName::plain("exec_command"),
             source: crate::tools::context::ToolCallSource::Direct,
             payload: ToolPayload::Function {
-                arguments: serde_json::json!({
+                arguments: edgerun_json::serde_json::json!({
                     "cmd": "echo hi",
                     "sandbox_permissions": SandboxPermissions::WithAdditionalPermissions,
                     "justification": "need additional sandbox permissions",
@@ -626,7 +626,7 @@ async fn shell_handler_allows_sticky_turn_permissions_without_inline_request_per
             tool_name: codex_tools::ToolName::plain("shell"),
             source: crate::tools::context::ToolCallSource::Direct,
             payload: ToolPayload::Function {
-                arguments: serde_json::json!({
+                arguments: edgerun_json::serde_json::json!({
                     "command": [
                         "/bin/sh",
                         "-c",
@@ -656,7 +656,7 @@ async fn shell_handler_allows_sticky_turn_permissions_without_inline_request_per
             }
 
             let exec_output: ResponseExecOutput =
-                serde_json::from_str(&output).expect("valid exec output json");
+                edgerun_json::serde_json::from_str(&output).expect("valid exec output json");
 
             assert_eq!(exec_output.metadata, ResponseExecMetadata { exit_code: 0 });
             assert!(exec_output.output.contains("hi"));

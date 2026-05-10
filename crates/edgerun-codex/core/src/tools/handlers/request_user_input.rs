@@ -77,7 +77,7 @@ impl ToolHandler for RequestUserInputHandler {
                 ))
             })?;
 
-        let content = serde_json::to_string(&response).map_err(|err| {
+        let content = edgerun_json::serde_json::to_string(&response).map_err(|err| {
             FunctionCallError::Fatal(format!(
                 "failed to serialize {REQUEST_USER_INPUT_TOOL_NAME} response: {err}"
             ))

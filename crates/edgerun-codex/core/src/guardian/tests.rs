@@ -239,7 +239,7 @@ fn normalize_guardian_snapshot_paths(text: String) -> String {
             continue;
         }
 
-        let escaped_platform_path = serde_json::to_string(&platform_path)
+        let escaped_platform_path = edgerun_json::serde_json::to_string(&platform_path)
             .expect("test path should serialize")
             .trim_matches('"')
             .to_string();
@@ -260,18 +260,18 @@ fn guardian_prompt_text(items: &[codex_protocol::user_input::UserInput]) -> Stri
         .collect::<String>()
 }
 
-fn last_user_message_text_from_body(body: &serde_json::Value) -> String {
+fn last_user_message_text_from_body(body: &edgerun_json::serde_json::Value) -> String {
     body["input"]
         .as_array()
         .expect("request input array")
         .iter()
-        .filter(|item| item.get("role").and_then(serde_json::Value::as_str) == Some("user"))
-        .filter_map(|item| item.get("content").and_then(serde_json::Value::as_array))
+        .filter(|item| item.get("role").and_then(edgerun_json::serde_json::Value::as_str) == Some("user"))
+        .filter_map(|item| item.get("content").and_then(edgerun_json::serde_json::Value::as_array))
         .next_back()
         .expect("user message content")
         .iter()
-        .filter(|span| span.get("type").and_then(serde_json::Value::as_str) == Some("input_text"))
-        .filter_map(|span| span.get("text").and_then(serde_json::Value::as_str))
+        .filter(|span| span.get("type").and_then(edgerun_json::serde_json::Value::as_str) == Some("input_text"))
+        .filter_map(|span| span.get("text").and_then(edgerun_json::serde_json::Value::as_str))
         .collect::<String>()
 }
 
@@ -682,7 +682,7 @@ fn guardian_truncate_text_keeps_prefix_suffix_and_xml_marker() {
 }
 
 #[test]
-fn format_guardian_action_pretty_truncates_large_string_fields() -> serde_json::Result<()> {
+fn format_guardian_action_pretty_truncates_large_string_fields() -> edgerun_json::serde_json::Result<()> {
     let patch = "line\n".repeat(100_000);
     let action = GuardianApprovalRequest::ApplyPatch {
         id: "patch-1".to_string(),
@@ -701,7 +701,7 @@ fn format_guardian_action_pretty_truncates_large_string_fields() -> serde_json::
 }
 
 #[test]
-fn format_guardian_action_pretty_reports_no_truncation_for_small_payload() -> serde_json::Result<()>
+fn format_guardian_action_pretty_reports_no_truncation_for_small_payload() -> edgerun_json::serde_json::Result<()>
 {
     let action = GuardianApprovalRequest::ApplyPatch {
         id: "patch-1".to_string(),
@@ -718,12 +718,12 @@ fn format_guardian_action_pretty_reports_no_truncation_for_small_payload() -> se
 }
 
 #[test]
-fn guardian_approval_request_to_json_renders_mcp_tool_call_shape() -> serde_json::Result<()> {
+fn guardian_approval_request_to_json_renders_mcp_tool_call_shape() -> edgerun_json::serde_json::Result<()> {
     let action = GuardianApprovalRequest::McpToolCall {
         id: "call-1".to_string(),
         server: "mcp_server".to_string(),
         tool_name: "browser_navigate".to_string(),
-        arguments: Some(serde_json::json!({
+        arguments: Some(edgerun_json::serde_json::json!({
             "url": "https://example.com",
         })),
         connector_id: None,
@@ -740,7 +740,7 @@ fn guardian_approval_request_to_json_renders_mcp_tool_call_shape() -> serde_json
 
     assert_eq!(
         guardian_approval_request_to_json(&action)?,
-        serde_json::json!({
+        edgerun_json::serde_json::json!({
             "tool": "mcp_tool_call",
             "server": "mcp_server",
             "tool_name": "browser_navigate",
@@ -759,7 +759,7 @@ fn guardian_approval_request_to_json_renders_mcp_tool_call_shape() -> serde_json
 }
 
 #[test]
-fn guardian_approval_request_to_json_renders_network_access_trigger() -> serde_json::Result<()> {
+fn guardian_approval_request_to_json_renders_network_access_trigger() -> edgerun_json::serde_json::Result<()> {
     let cwd = test_path_buf("/repo").abs();
     let action = GuardianApprovalRequest::NetworkAccess {
         id: "network-1".to_string(),
@@ -782,7 +782,7 @@ fn guardian_approval_request_to_json_renders_network_access_trigger() -> serde_j
 
     assert_eq!(
         guardian_approval_request_to_json(&action)?,
-        serde_json::json!({
+        edgerun_json::serde_json::json!({
             "tool": "network_access",
             "target": "https://example.com:443",
             "host": "example.com",
@@ -884,8 +884,8 @@ fn guardian_assessment_action_redacts_apply_patch_patch_text() {
     };
 
     assert_eq!(
-        serde_json::to_value(guardian_assessment_action(&action)).expect("serialize action"),
-        serde_json::json!({
+        edgerun_json::serde_json::to_value(guardian_assessment_action(&action)).expect("serialize action"),
+        edgerun_json::serde_json::json!({
             "type": "apply_patch",
             "cwd": cwd,
             "files": [file],
@@ -1086,7 +1086,7 @@ fn build_guardian_transcript_preserves_recent_tool_context_when_user_history_is_
     entries.extend([
         GuardianTranscriptEntry {
             kind: GuardianTranscriptEntryKind::Tool("tool shell call".to_string()),
-            text: serde_json::json!({
+            text: edgerun_json::serde_json::json!({
                 "command": ["curl", "-X", "POST", "https://example.com/upload"],
                 "cwd": "/repo",
             })
@@ -1178,7 +1178,7 @@ fn guardian_output_schema_requires_only_outcome_and_allows_optional_details() {
 
     assert_eq!(
         schema,
-        serde_json::json!({
+        edgerun_json::serde_json::json!({
             "type": "object",
             "additionalProperties": false,
             "properties": {
@@ -1209,7 +1209,7 @@ async fn guardian_review_request_layout_matches_model_visible_request_snapshot()
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
-    let guardian_assessment = serde_json::json!({
+    let guardian_assessment = edgerun_json::serde_json::json!({
         "risk_level": "medium",
         "user_authorization": "high",
         "outcome": "allow",
@@ -1286,11 +1286,11 @@ async fn guardian_review_request_layout_matches_model_visible_request_snapshot()
     let request_body = request.body_json();
     assert_eq!(
         request_body.pointer("/text/format/strict"),
-        Some(&serde_json::json!(false))
+        Some(&edgerun_json::serde_json::json!(false))
     );
     assert_eq!(
         request_body.pointer("/text/format/schema"),
-        Some(&serde_json::json!({
+        Some(&edgerun_json::serde_json::json!({
             "type": "object",
             "additionalProperties": false,
             "properties": {
@@ -1792,7 +1792,7 @@ async fn guardian_review_surfaces_responses_api_errors_in_rejection_reason() -> 
         "Item 'rs_test' of type 'reasoning' was provided without its required following item.";
     let _request_log = mount_response_once(
         &server,
-        wiremock::ResponseTemplate::new(400).set_body_json(serde_json::json!({
+        wiremock::ResponseTemplate::new(400).set_body_json(edgerun_json::serde_json::json!({
             "error": {
                 "message": error_message,
                 "type": "invalid_request_error",
@@ -1905,21 +1905,21 @@ async fn guardian_parallel_reviews_fork_from_last_committed_trunk_history() -> a
                     .enable_all()
                     .build()?;
                 runtime.block_on(Box::pin(async {
-        let first_assessment = serde_json::json!({
+        let first_assessment = edgerun_json::serde_json::json!({
             "risk_level": "low",
             "user_authorization": "high",
             "outcome": "allow",
             "rationale": "first guardian rationale",
         })
         .to_string();
-        let second_assessment = serde_json::json!({
+        let second_assessment = edgerun_json::serde_json::json!({
             "risk_level": "low",
             "user_authorization": "high",
             "outcome": "allow",
             "rationale": "second guardian rationale",
         })
         .to_string();
-        let third_assessment = serde_json::json!({
+        let third_assessment = edgerun_json::serde_json::json!({
             "risk_level": "low",
             "user_authorization": "high",
             "outcome": "allow",
@@ -2084,7 +2084,7 @@ async fn guardian_parallel_reviews_fork_from_last_committed_trunk_history() -> a
         assert_eq!(third_decision, ReviewDecision::Approved);
         let requests = server.requests().await;
         assert_eq!(requests.len(), 3);
-        let third_request_body = serde_json::from_slice::<serde_json::Value>(&requests[2])?;
+        let third_request_body = edgerun_json::serde_json::from_slice::<edgerun_json::serde_json::Value>(&requests[2])?;
         let third_request_body_text = third_request_body.to_string();
         assert!(
             third_request_body_text.contains("first guardian rationale"),

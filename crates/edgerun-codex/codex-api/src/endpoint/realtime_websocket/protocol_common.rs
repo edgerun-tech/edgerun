@@ -1,11 +1,11 @@
 use codex_protocol::protocol::RealtimeEvent;
 use codex_protocol::protocol::RealtimeTranscriptDelta;
 use codex_protocol::protocol::RealtimeTranscriptDone;
-use serde_json::Value;
+use edgerun_json::serde_json::Value;
 use tracing::debug;
 
 pub(super) fn parse_realtime_payload(payload: &str, parser_name: &str) -> Option<(Value, String)> {
-    let parsed: Value = match serde_json::from_str(payload) {
+    let parsed: Value = match edgerun_json::serde_json::from_str(payload) {
         Ok(message) => message,
         Err(err) => {
             debug!("failed to parse {parser_name} event: {err}, data: {payload}");

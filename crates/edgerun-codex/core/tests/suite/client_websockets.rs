@@ -45,7 +45,7 @@ use core_test_support::wait_for_event;
 use futures::StreamExt;
 use opentelemetry_sdk::metrics::InMemoryMetricExporter;
 use pretty_assertions::assert_eq;
-use serde_json::json;
+use edgerun_json::serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
@@ -59,13 +59,13 @@ const WS_V2_BETA_HEADER_VALUE: &str = "responses_websockets=2026-02-06";
 const X_CLIENT_REQUEST_ID_HEADER: &str = "x-client-request-id";
 const TEST_INSTALLATION_ID: &str = "11111111-1111-4111-8111-111111111111";
 
-fn assert_request_trace_matches(body: &serde_json::Value, expected_trace: &W3cTraceContext) {
+fn assert_request_trace_matches(body: &edgerun_json::serde_json::Value, expected_trace: &W3cTraceContext) {
     let client_metadata = body["client_metadata"]
         .as_object()
         .expect("missing client_metadata payload");
     let actual_traceparent = client_metadata
         .get(WS_REQUEST_HEADER_TRACEPARENT_CLIENT_METADATA_KEY)
-        .and_then(serde_json::Value::as_str)
+        .and_then(edgerun_json::serde_json::Value::as_str)
         .expect("missing traceparent");
     let expected_traceparent = expected_trace
         .traceparent
@@ -76,7 +76,7 @@ fn assert_request_trace_matches(body: &serde_json::Value, expected_trace: &W3cTr
     assert_eq!(
         client_metadata
             .get(WS_REQUEST_HEADER_TRACESTATE_CLIENT_METADATA_KEY)
-            .and_then(serde_json::Value::as_str),
+            .and_then(edgerun_json::serde_json::Value::as_str),
         expected_trace.tracestate.as_deref()
     );
     assert!(
@@ -118,7 +118,7 @@ async fn responses_websocket_streams_request() {
 
     assert_eq!(body["type"].as_str(), Some("response.create"));
     assert_eq!(body["model"].as_str(), Some(MODEL));
-    assert_eq!(body["stream"], serde_json::Value::Bool(true));
+    assert_eq!(body["stream"], edgerun_json::serde_json::Value::Bool(true));
     assert_eq!(body["input"].as_array().map(Vec::len), Some(1));
     let handshake = server.single_handshake();
     assert_eq!(
@@ -518,10 +518,10 @@ async fn responses_websocket_request_prewarm_reuses_connection() {
 
     assert_eq!(warmup["type"].as_str(), Some("response.create"));
     assert_eq!(warmup["generate"].as_bool(), Some(false));
-    assert_eq!(warmup["tools"], serde_json::json!([]));
+    assert_eq!(warmup["tools"], edgerun_json::serde_json::json!([]));
     assert_eq!(follow_up["type"].as_str(), Some("response.create"));
     assert_eq!(follow_up["previous_response_id"].as_str(), Some("warm-1"));
-    assert_eq!(follow_up["input"], serde_json::json!([]));
+    assert_eq!(follow_up["input"], edgerun_json::serde_json::json!([]));
 
     server.shutdown().await;
 }
@@ -655,10 +655,10 @@ async fn responses_websocket_request_prewarm_is_reused_even_with_header_changes(
         .body_json();
     assert_eq!(warmup["type"].as_str(), Some("response.create"));
     assert_eq!(warmup["generate"].as_bool(), Some(false));
-    assert_eq!(warmup["tools"], serde_json::json!([]));
+    assert_eq!(warmup["tools"], edgerun_json::serde_json::json!([]));
     assert_eq!(follow_up["type"].as_str(), Some("response.create"));
     assert_eq!(follow_up["previous_response_id"].as_str(), Some("warm-1"));
-    assert_eq!(follow_up["input"], serde_json::json!([]));
+    assert_eq!(follow_up["input"], edgerun_json::serde_json::json!([]));
 
     server.shutdown().await;
 }
@@ -714,7 +714,7 @@ async fn responses_websocket_prewarm_uses_v2_when_provider_supports_websockets()
     assert_eq!(prewarm["type"].as_str(), Some("response.create"));
     assert_eq!(
         prewarm["input"],
-        serde_json::to_value(&prompt.input).unwrap()
+        edgerun_json::serde_json::to_value(&prompt.input).unwrap()
     );
 
     server.shutdown().await;
@@ -792,7 +792,7 @@ async fn responses_websocket_v2_requests_use_v2_when_provider_supports_websocket
     assert_eq!(second["previous_response_id"].as_str(), Some("resp-1"));
     assert_eq!(
         second["input"],
-        serde_json::to_value(&prompt_two.input[2..]).unwrap()
+        edgerun_json::serde_json::to_value(&prompt_two.input[2..]).unwrap()
     );
 
     let handshake = server.single_handshake();
@@ -846,7 +846,7 @@ async fn responses_websocket_v2_incremental_requests_are_reused_across_turns() {
     assert_eq!(second["previous_response_id"].as_str(), Some("resp-1"));
     assert_eq!(
         second["input"],
-        serde_json::to_value(&prompt_two.input[2..]).unwrap()
+        edgerun_json::serde_json::to_value(&prompt_two.input[2..]).unwrap()
     );
 
     server.shutdown().await;
@@ -885,7 +885,7 @@ async fn responses_websocket_v2_wins_when_both_features_enabled() {
     assert_eq!(second["previous_response_id"].as_str(), Some("resp-1"));
     assert_eq!(
         second["input"],
-        serde_json::to_value(&prompt_two.input[2..]).unwrap()
+        edgerun_json::serde_json::to_value(&prompt_two.input[2..]).unwrap()
     );
 
     let handshake = server.single_handshake();
@@ -939,7 +939,7 @@ async fn responses_websocket_includes_timing_metrics_header_when_runtime_metrics
 
     let server = start_websocket_server(vec![vec![vec![
         ev_response_created("resp-1"),
-        serde_json::json!({
+        edgerun_json::serde_json::json!({
             "type": "responsesapi.websocket_timing",
             "timing_metrics": {
                 "responses_duration_excl_engine_and_client_tool_time_ms": 120,
@@ -1209,7 +1209,7 @@ async fn responses_websocket_usage_limit_error_emits_rate_limit_event() {
         unreachable!();
     };
 
-    let event_json = serde_json::to_value(&event).expect("serialize token count event");
+    let event_json = edgerun_json::serde_json::to_value(&event).expect("serialize token count event");
     pretty_assertions::assert_eq!(
         event_json,
         json!({
@@ -1390,13 +1390,13 @@ async fn responses_websocket_uses_incremental_create_on_prefix() {
 
     assert_eq!(first["type"].as_str(), Some("response.create"));
     assert_eq!(first["model"].as_str(), Some(MODEL));
-    assert_eq!(first["stream"], serde_json::Value::Bool(true));
+    assert_eq!(first["stream"], edgerun_json::serde_json::Value::Bool(true));
     assert_eq!(first["input"].as_array().map(Vec::len), Some(1));
     assert_eq!(second["type"].as_str(), Some("response.create"));
     assert_eq!(second["previous_response_id"].as_str(), Some("resp-1"));
     assert_eq!(
         second["input"],
-        serde_json::to_value(&prompt_two.input[2..]).expect("serialize incremental items")
+        edgerun_json::serde_json::to_value(&prompt_two.input[2..]).expect("serialize incremental items")
     );
 
     server.shutdown().await;
@@ -1462,9 +1462,9 @@ async fn responses_websocket_forwards_turn_metadata_on_initial_and_incremental_c
         Some(enriched_turn_metadata)
     );
 
-    let first_metadata: serde_json::Value =
-        serde_json::from_str(first_turn_metadata).expect("first metadata should be valid json");
-    let second_metadata: serde_json::Value = serde_json::from_str(enriched_turn_metadata)
+    let first_metadata: edgerun_json::serde_json::Value =
+        edgerun_json::serde_json::from_str(first_turn_metadata).expect("first metadata should be valid json");
+    let second_metadata: edgerun_json::serde_json::Value = edgerun_json::serde_json::from_str(enriched_turn_metadata)
         .expect("enriched metadata should be valid json");
 
     assert_eq!(first_metadata["turn_id"].as_str(), Some("turn-123"));
@@ -1518,7 +1518,7 @@ async fn responses_websocket_preserves_custom_turn_metadata_fields() {
     assert_eq!(
         body["client_metadata"]["x-codex-turn-metadata"]
             .as_str()
-            .map(|value| serde_json::from_str::<serde_json::Value>(value).expect("valid json")),
+            .map(|value| edgerun_json::serde_json::from_str::<edgerun_json::serde_json::Value>(value).expect("valid json")),
         Some(json!({
             "turn_id": "turn-123",
             "fiber_run_id": "fiber-123",
@@ -1563,7 +1563,7 @@ async fn responses_websocket_uses_previous_response_id_when_prefix_after_complet
     assert_eq!(second["previous_response_id"].as_str(), Some("resp-1"));
     assert_eq!(
         second["input"],
-        serde_json::to_value(&prompt_two.input[2..]).expect("serialize incremental input")
+        edgerun_json::serde_json::to_value(&prompt_two.input[2..]).expect("serialize incremental input")
     );
 
     server.shutdown().await;
@@ -1593,10 +1593,10 @@ async fn responses_websocket_creates_on_non_prefix() {
 
     assert_eq!(second["type"].as_str(), Some("response.create"));
     assert_eq!(second["model"].as_str(), Some(MODEL));
-    assert_eq!(second["stream"], serde_json::Value::Bool(true));
+    assert_eq!(second["stream"], edgerun_json::serde_json::Value::Bool(true));
     assert_eq!(
         second["input"],
-        serde_json::to_value(&prompt_two.input).unwrap()
+        edgerun_json::serde_json::to_value(&prompt_two.input).unwrap()
     );
 
     server.shutdown().await;
@@ -1632,7 +1632,7 @@ async fn responses_websocket_creates_when_non_input_request_fields_change() {
     assert_eq!(second.get("previous_response_id"), None);
     assert_eq!(
         second["input"],
-        serde_json::to_value(&prompt_two.input).expect("serialize full input")
+        edgerun_json::serde_json::to_value(&prompt_two.input).expect("serialize full input")
     );
 
     server.shutdown().await;
@@ -1674,7 +1674,7 @@ async fn responses_websocket_v2_creates_with_previous_response_id_on_prefix() {
     assert_eq!(second["previous_response_id"].as_str(), Some("resp-1"));
     assert_eq!(
         second["input"],
-        serde_json::to_value(&prompt_two.input[2..]).unwrap()
+        edgerun_json::serde_json::to_value(&prompt_two.input[2..]).unwrap()
     );
 
     server.shutdown().await;
@@ -1711,7 +1711,7 @@ async fn responses_websocket_v2_creates_without_previous_response_id_when_non_in
     assert_eq!(second.get("previous_response_id"), None);
     assert_eq!(
         second["input"],
-        serde_json::to_value(&prompt_two.input).expect("serialize full input")
+        edgerun_json::serde_json::to_value(&prompt_two.input).expect("serialize full input")
     );
 
     server.shutdown().await;
@@ -1802,7 +1802,7 @@ async fn responses_websocket_v2_after_error_uses_full_create_without_previous_re
     assert_eq!(third.get("previous_response_id"), None);
     assert_eq!(
         third["input"],
-        serde_json::to_value(&prompt_three.input).unwrap()
+        edgerun_json::serde_json::to_value(&prompt_three.input).unwrap()
     );
 
     server.shutdown().await;

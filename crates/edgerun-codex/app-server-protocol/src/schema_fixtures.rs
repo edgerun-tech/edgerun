@@ -10,8 +10,8 @@ use crate::protocol::common::visit_client_response_types;
 use crate::protocol::common::visit_server_response_types;
 use anyhow::Context;
 use anyhow::Result;
-use serde_json::Map;
-use serde_json::Value;
+use edgerun_json::serde_json::Map;
+use edgerun_json::serde_json::Value;
 use std::any::TypeId;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -125,10 +125,10 @@ fn read_file_bytes(path: &Path) -> Result<Vec<u8>> {
     let bytes =
         std::fs::read(path).with_context(|| format!("failed to read {}", path.display()))?;
     if path.extension().is_some_and(|ext| ext == "json") {
-        let value: Value = serde_json::from_slice(&bytes)
+        let value: Value = edgerun_json::serde_json::from_slice(&bytes)
             .with_context(|| format!("failed to parse JSON in {}", path.display()))?;
         let value = canonicalize_json(&value);
-        let normalized = serde_json::to_vec_pretty(&value)
+        let normalized = edgerun_json::serde_json::to_vec_pretty(&value)
             .with_context(|| format!("failed to reserialize JSON in {}", path.display()))?;
         return Ok(normalized);
     }
@@ -177,7 +177,7 @@ fn canonicalize_json(value: &Value) -> Value {
                 let Some(key) = schema_array_item_sort_key(item) else {
                     return Value::Array(items);
                 };
-                let stable = serde_json::to_string(item).unwrap_or_default();
+                let stable = edgerun_json::serde_json::to_string(item).unwrap_or_default();
                 sortable.push((key, stable));
             }
 
@@ -341,18 +341,18 @@ mod tests {
 
     #[test]
     fn canonicalize_json_sorts_string_arrays() {
-        let value = serde_json::json!(["b", "a"]);
-        let expected = serde_json::json!(["a", "b"]);
+        let value = edgerun_json::serde_json::json!(["b", "a"]);
+        let expected = edgerun_json::serde_json::json!(["a", "b"]);
         assert_eq!(canonicalize_json(&value), expected);
     }
 
     #[test]
     fn canonicalize_json_sorts_schema_ref_arrays() {
-        let value = serde_json::json!([
+        let value = edgerun_json::serde_json::json!([
             {"$ref": "#/definitions/B"},
             {"$ref": "#/definitions/A"}
         ]);
-        let expected = serde_json::json!([
+        let expected = edgerun_json::serde_json::json!([
             {"$ref": "#/definitions/A"},
             {"$ref": "#/definitions/B"}
         ]);

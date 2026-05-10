@@ -6,7 +6,7 @@ use codex_protocol::protocol::RealtimeVoicesList;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
-use serde_json::Value as JsonValue;
+use edgerun_json::serde_json::Value as JsonValue;
 use ts_rs::TS;
 
 /// EXPERIMENTAL - thread realtime audio chunk.

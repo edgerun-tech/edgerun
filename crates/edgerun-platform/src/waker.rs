@@ -12,23 +12,27 @@ unsafe fn ipi_clone(_d: *const ()) -> RawWaker {
 }
 
 unsafe fn ipi_wake(d: *const ()) {
-    let _cpu = if d.is_null() {
-        WAKE_CPU
-    } else {
-        (*(d as *const IpiWakerCpu)).0
-    };
-    #[cfg(target_arch = "x86_64")]
-    crate::arch::x86_64::send_ipi(_cpu, 0xFEE0);
+    unsafe {
+        let _cpu = if d.is_null() {
+            WAKE_CPU
+        } else {
+            (*(d as *const IpiWakerCpu)).0
+        };
+        #[cfg(target_arch = "x86_64")]
+        crate::arch::x86_64::send_ipi(_cpu, 0xFEE0);
+    }
 }
 
 unsafe fn ipi_wake_by_ref(d: *const ()) {
-    let _cpu = if d.is_null() {
-        WAKE_CPU
-    } else {
-        (*(d as *const IpiWakerCpu)).0
-    };
-    #[cfg(target_arch = "x86_64")]
-    crate::arch::x86_64::send_ipi(_cpu, 0xFEE0);
+    unsafe {
+        let _cpu = if d.is_null() {
+            WAKE_CPU
+        } else {
+            (*(d as *const IpiWakerCpu)).0
+        };
+        #[cfg(target_arch = "x86_64")]
+        crate::arch::x86_64::send_ipi(_cpu, 0xFEE0);
+    }
 }
 
 unsafe fn ipi_drop(_d: *const ()) {}
@@ -37,8 +41,10 @@ static IPI_VTABLE: RawWakerVTable =
     RawWakerVTable::new(ipi_clone, ipi_wake, ipi_wake_by_ref, ipi_drop);
 
 pub unsafe fn make_ipi_waker(cpu_id: CpuId) -> Waker {
-    WAKE_CPU = cpu_id.0;
-    let w = IpiWakerCpu(cpu_id.0);
-    let ptr = (&w as *const IpiWakerCpu) as *const ();
-    Waker::from_raw(RawWaker::new(ptr, &IPI_VTABLE))
+    unsafe {
+        WAKE_CPU = cpu_id.0;
+        let w = IpiWakerCpu(cpu_id.0);
+        let ptr = (&w as *const IpiWakerCpu) as *const ();
+        Waker::from_raw(RawWaker::new(ptr, &IPI_VTABLE))
+    }
 }

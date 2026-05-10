@@ -12,7 +12,7 @@ fn tool_definition() -> ToolDefinition {
             /*required*/ None,
             /*additional_properties*/ None,
         ),
-        output_schema: Some(serde_json::json!({
+        output_schema: Some(edgerun_json::serde_json::json!({
             "type": "object",
         })),
         defer_loading: false,

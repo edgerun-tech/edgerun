@@ -70,7 +70,7 @@ pub(crate) fn build_tool_search_entries_for_config(
     build_tool_search_entries(mcp_tools, &dynamic_tools)
 }
 
-fn mcp_tool_search_entry(info: &ToolInfo) -> Result<ToolSearchEntry, serde_json::Error> {
+fn mcp_tool_search_entry(info: &ToolInfo) -> Result<ToolSearchEntry, edgerun_json::serde_json::Error> {
     Ok(ToolSearchEntry {
         search_text: build_mcp_search_text(info),
         output: tool_search_result_source_to_loadable_tool_spec(ToolSearchResultSource {
@@ -85,7 +85,7 @@ fn mcp_tool_search_entry(info: &ToolInfo) -> Result<ToolSearchEntry, serde_json:
     })
 }
 
-fn dynamic_tool_search_entry(tool: &DynamicToolSpec) -> Result<ToolSearchEntry, serde_json::Error> {
+fn dynamic_tool_search_entry(tool: &DynamicToolSpec) -> Result<ToolSearchEntry, edgerun_json::serde_json::Error> {
     Ok(ToolSearchEntry {
         search_text: build_dynamic_search_text(tool),
         output: dynamic_tool_to_loadable_tool_spec(tool)?,
@@ -138,7 +138,7 @@ fn build_mcp_search_text(info: &ToolInfo) -> String {
         info.tool
             .input_schema
             .get("properties")
-            .and_then(serde_json::Value::as_object)
+            .and_then(edgerun_json::serde_json::Value::as_object)
             .map(|map| map.keys().cloned().collect::<Vec<_>>())
             .unwrap_or_default(),
     );
@@ -160,7 +160,7 @@ fn build_dynamic_search_text(tool: &DynamicToolSpec) -> String {
     parts.extend(
         tool.input_schema
             .get("properties")
-            .and_then(serde_json::Value::as_object)
+            .and_then(edgerun_json::serde_json::Value::as_object)
             .map(|map| map.keys().cloned().collect::<Vec<_>>())
             .unwrap_or_default(),
     );

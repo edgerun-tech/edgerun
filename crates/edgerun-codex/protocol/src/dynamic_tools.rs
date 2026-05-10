@@ -2,7 +2,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Deserializer;
 use serde::Serialize;
-use serde_json::Value as JsonValue;
+use edgerun_json::serde_json::Value as JsonValue;
 use ts_rs::TS;
 
 #[derive(Debug, Clone, Serialize, PartialEq, JsonSchema, TS)]
@@ -87,7 +87,7 @@ impl<'de> Deserialize<'de> for DynamicToolSpec {
 mod tests {
     use super::DynamicToolSpec;
     use pretty_assertions::assert_eq;
-    use serde_json::json;
+    use edgerun_json::serde_json::json;
 
     #[test]
     fn dynamic_tool_spec_deserializes_defer_loading() {
@@ -103,7 +103,7 @@ mod tests {
             "deferLoading": true,
         });
 
-        let actual: DynamicToolSpec = serde_json::from_value(value).expect("deserialize");
+        let actual: DynamicToolSpec = edgerun_json::serde_json::from_value(value).expect("deserialize");
 
         assert_eq!(
             actual,
@@ -134,7 +134,7 @@ mod tests {
             "exposeToContext": false,
         });
 
-        let actual: DynamicToolSpec = serde_json::from_value(value).expect("deserialize");
+        let actual: DynamicToolSpec = edgerun_json::serde_json::from_value(value).expect("deserialize");
 
         assert!(actual.defer_loading);
     }

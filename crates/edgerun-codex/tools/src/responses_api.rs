@@ -6,7 +6,7 @@ use crate::parse_mcp_tool;
 use codex_protocol::dynamic_tools::DynamicToolSpec;
 use serde::Deserialize;
 use serde::Serialize;
-use serde_json::Value;
+use edgerun_json::serde_json::Value;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct FreeformTool {
@@ -68,7 +68,7 @@ pub enum ResponsesApiNamespaceTool {
 
 pub fn dynamic_tool_to_responses_api_tool(
     tool: &DynamicToolSpec,
-) -> Result<ResponsesApiTool, serde_json::Error> {
+) -> Result<ResponsesApiTool, edgerun_json::serde_json::Error> {
     Ok(tool_definition_to_responses_api_tool(parse_dynamic_tool(
         tool,
     )?))
@@ -76,7 +76,7 @@ pub fn dynamic_tool_to_responses_api_tool(
 
 pub fn dynamic_tool_to_loadable_tool_spec(
     tool: &DynamicToolSpec,
-) -> Result<LoadableToolSpec, serde_json::Error> {
+) -> Result<LoadableToolSpec, edgerun_json::serde_json::Error> {
     let output_tool = dynamic_tool_to_responses_api_tool(tool)?;
     Ok(match tool.namespace.as_ref() {
         Some(namespace) => LoadableToolSpec::Namespace(ResponsesApiNamespace {
@@ -122,7 +122,7 @@ pub fn coalesce_loadable_tool_specs(
 pub fn mcp_tool_to_responses_api_tool(
     tool_name: &ToolName,
     tool: &rmcp::model::Tool,
-) -> Result<ResponsesApiTool, serde_json::Error> {
+) -> Result<ResponsesApiTool, edgerun_json::serde_json::Error> {
     Ok(tool_definition_to_responses_api_tool(
         parse_mcp_tool(tool)?.renamed(tool_name.name.clone()),
     ))
@@ -131,7 +131,7 @@ pub fn mcp_tool_to_responses_api_tool(
 pub fn mcp_tool_to_deferred_responses_api_tool(
     tool_name: &ToolName,
     tool: &rmcp::model::Tool,
-) -> Result<ResponsesApiTool, serde_json::Error> {
+) -> Result<ResponsesApiTool, edgerun_json::serde_json::Error> {
     Ok(tool_definition_to_responses_api_tool(
         parse_mcp_tool(tool)?
             .renamed(tool_name.name.clone())

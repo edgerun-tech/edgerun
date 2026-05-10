@@ -180,12 +180,12 @@ macro_rules! client_request_definitions {
             }
 
             pub fn method(&self) -> String {
-                serde_json::to_value(self)
+                edgerun_json::serde_json::to_value(self)
                     .ok()
                     .and_then(|value| {
                         value
                             .get("method")
-                            .and_then(serde_json::Value::as_str)
+                            .and_then(edgerun_json::serde_json::Value::as_str)
                             .map(str::to_owned)
                     })
                     .unwrap_or_else(|| "<unknown>".to_string())
@@ -228,12 +228,12 @@ macro_rules! client_request_definitions {
             }
 
             pub fn method(&self) -> String {
-                serde_json::to_value(self)
+                edgerun_json::serde_json::to_value(self)
                     .ok()
                     .and_then(|value| {
                         value
                             .get("method")
-                            .and_then(serde_json::Value::as_str)
+                            .and_then(edgerun_json::serde_json::Value::as_str)
                             .map(str::to_owned)
                     })
                     .unwrap_or_else(|| "<unknown>".to_string())
@@ -241,11 +241,11 @@ macro_rules! client_request_definitions {
 
             pub fn into_jsonrpc_parts(
                 self,
-            ) -> std::result::Result<(RequestId, crate::Result), serde_json::Error> {
+            ) -> std::result::Result<(RequestId, crate::Result), edgerun_json::serde_json::Error> {
                 match self {
                     $(
                         Self::$variant { request_id, response } => {
-                            serde_json::to_value(response).map(|result| (request_id, result))
+                            edgerun_json::serde_json::to_value(response).map(|result| (request_id, result))
                         }
                     )*
                 }
@@ -265,17 +265,17 @@ macro_rules! client_request_definitions {
                 request_id: RequestId,
             ) -> std::result::Result<
                 (RequestId, crate::Result, Option<ClientResponsePayload>),
-                serde_json::Error,
+                edgerun_json::serde_json::Error,
             > {
                 match self {
                     $(
                         Self::$variant(response) => {
-                            let result = serde_json::to_value(&response)?;
+                            let result = edgerun_json::serde_json::to_value(&response)?;
                             Ok((request_id, result, Some(Self::$variant(response))))
                         }
                     )*
                     Self::InterruptConversation(response) => {
-                        serde_json::to_value(response).map(|result| (request_id, result, None))
+                        edgerun_json::serde_json::to_value(response).map(|result| (request_id, result, None))
                     }
                 }
             }
@@ -297,22 +297,22 @@ macro_rules! client_request_definitions {
             pub fn into_jsonrpc_parts(
                 self,
                 request_id: RequestId,
-            ) -> std::result::Result<(RequestId, crate::Result), serde_json::Error> {
+            ) -> std::result::Result<(RequestId, crate::Result), edgerun_json::serde_json::Error> {
                 self.to_jsonrpc_parts(request_id)
             }
 
             pub fn to_jsonrpc_parts(
                 &self,
                 request_id: RequestId,
-            ) -> std::result::Result<(RequestId, crate::Result), serde_json::Error> {
+            ) -> std::result::Result<(RequestId, crate::Result), edgerun_json::serde_json::Error> {
                 match self {
                     $(
                         Self::$variant(response) => {
-                            serde_json::to_value(response).map(|result| (request_id, result))
+                            edgerun_json::serde_json::to_value(response).map(|result| (request_id, result))
                         }
                     )*
                     Self::InterruptConversation(response) => {
-                        serde_json::to_value(response).map(|result| (request_id, result))
+                        edgerun_json::serde_json::to_value(response).map(|result| (request_id, result))
                     }
                 }
             }
@@ -1011,11 +1011,11 @@ macro_rules! server_request_definitions {
             pub fn response_from_result(
                 &self,
                 result: crate::Result,
-            ) -> serde_json::Result<ServerResponse> {
+            ) -> edgerun_json::serde_json::Result<ServerResponse> {
                 match self {
                     $(
                         Self::$variant { request_id, .. } => {
-                            let response = serde_json::from_value::<$response>(result)?;
+                            let response = edgerun_json::serde_json::from_value::<$response>(result)?;
                             Ok(ServerResponse::$variant {
                                 request_id: request_id.clone(),
                                 response,
@@ -1049,12 +1049,12 @@ macro_rules! server_request_definitions {
             }
 
             pub fn method(&self) -> String {
-                serde_json::to_value(self)
+                edgerun_json::serde_json::to_value(self)
                     .ok()
                     .and_then(|value| {
                         value
                             .get("method")
-                            .and_then(serde_json::Value::as_str)
+                            .and_then(edgerun_json::serde_json::Value::as_str)
                             .map(str::to_owned)
                     })
                     .unwrap_or_else(|| "<unknown>".to_string())
@@ -1151,18 +1151,18 @@ macro_rules! server_notification_definitions {
         }
 
         impl ServerNotification {
-            pub fn to_params(self) -> Result<serde_json::Value, serde_json::Error> {
+            pub fn to_params(self) -> Result<edgerun_json::serde_json::Value, edgerun_json::serde_json::Error> {
                 match self {
-                    $(Self::$variant(params) => serde_json::to_value(params),)*
+                    $(Self::$variant(params) => edgerun_json::serde_json::to_value(params),)*
                 }
             }
         }
 
         impl TryFrom<JSONRPCNotification> for ServerNotification {
-            type Error = serde_json::Error;
+            type Error = edgerun_json::serde_json::Error;
 
-            fn try_from(value: JSONRPCNotification) -> Result<Self, serde_json::Error> {
-                serde_json::from_value(serde_json::to_value(value)?)
+            fn try_from(value: JSONRPCNotification) -> Result<Self, edgerun_json::serde_json::Error> {
+                edgerun_json::serde_json::from_value(edgerun_json::serde_json::to_value(value)?)
             }
         }
 
@@ -1205,10 +1205,10 @@ macro_rules! client_notification_definitions {
 }
 
 impl TryFrom<JSONRPCRequest> for ServerRequest {
-    type Error = serde_json::Error;
+    type Error = edgerun_json::serde_json::Error;
 
     fn try_from(value: JSONRPCRequest) -> Result<Self, Self::Error> {
-        serde_json::from_value(serde_json::to_value(value)?)
+        edgerun_json::serde_json::from_value(edgerun_json::serde_json::to_value(value)?)
     }
 }
 
@@ -1454,7 +1454,7 @@ mod tests {
     use codex_protocol::protocol::RealtimeOutputModality;
     use codex_protocol::protocol::RealtimeVoice;
     use pretty_assertions::assert_eq;
-    use serde_json::json;
+    use edgerun_json::serde_json::json;
     use std::path::PathBuf;
 
     fn absolute_path_string(path: &str) -> String {
@@ -1827,7 +1827,7 @@ mod tests {
                     "conversationId": "67e55044-10b1-426f-9247-bb680e5fe0c8"
                 }
             }),
-            serde_json::to_value(&request)?,
+            edgerun_json::serde_json::to_value(&request)?,
         );
         Ok(())
     }
@@ -1871,14 +1871,14 @@ mod tests {
                     }
                 }
             }),
-            serde_json::to_value(&request)?,
+            edgerun_json::serde_json::to_value(&request)?,
         );
         Ok(())
     }
 
     #[test]
     fn deserialize_initialize_with_opt_out_notification_methods() -> Result<()> {
-        let request: ClientRequest = serde_json::from_value(json!({
+        let request: ClientRequest = edgerun_json::serde_json::from_value(json!({
             "method": "initialize",
             "id": 42,
             "params": {
@@ -1926,14 +1926,14 @@ mod tests {
 
         assert_eq!(
             json!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
-            serde_json::to_value(id)?
+            edgerun_json::serde_json::to_value(id)?
         );
         Ok(())
     }
 
     #[test]
     fn conversation_id_deserializes_from_plain_string() -> Result<()> {
-        let id: ThreadId = serde_json::from_value(json!("67e55044-10b1-426f-9247-bb680e5fe0c8"))?;
+        let id: ThreadId = edgerun_json::serde_json::from_value(json!("67e55044-10b1-426f-9247-bb680e5fe0c8"))?;
 
         assert_eq!(
             ThreadId::from_string("67e55044-10b1-426f-9247-bb680e5fe0c8")?,
@@ -1950,7 +1950,7 @@ mod tests {
             json!({
                 "method": "initialized",
             }),
-            serde_json::to_value(&notification)?,
+            edgerun_json::serde_json::to_value(&notification)?,
         );
         Ok(())
     }
@@ -1993,7 +1993,7 @@ mod tests {
                     ]
                 }
             }),
-            serde_json::to_value(&request)?,
+            edgerun_json::serde_json::to_value(&request)?,
         );
 
         let payload = ServerRequestPayload::ExecCommandApproval(params);
@@ -2020,7 +2020,7 @@ mod tests {
                     "previousAccountId": "org-123"
                 }
             }),
-            serde_json::to_value(&request)?,
+            edgerun_json::serde_json::to_value(&request)?,
         );
         Ok(())
     }
@@ -2044,14 +2044,14 @@ mod tests {
                     "decision": "acceptForSession"
                 }
             }),
-            serde_json::to_value(&response)?,
+            edgerun_json::serde_json::to_value(&response)?,
         );
         Ok(())
     }
 
     #[test]
     fn serialize_mcp_server_elicitation_request() -> Result<()> {
-        let requested_schema: v2::McpElicitationSchema = serde_json::from_value(json!({
+        let requested_schema: v2::McpElicitationSchema = edgerun_json::serde_json::from_value(json!({
             "type": "object",
             "properties": {
                 "confirmed": {
@@ -2097,7 +2097,7 @@ mod tests {
                     }
                 }
             }),
-            serde_json::to_value(&request)?,
+            edgerun_json::serde_json::to_value(&request)?,
         );
 
         let payload = ServerRequestPayload::McpServerElicitationRequest(params);
@@ -2119,7 +2119,7 @@ mod tests {
                 "method": "account/rateLimits/read",
                 "id": 1,
             }),
-            serde_json::to_value(&request)?,
+            edgerun_json::serde_json::to_value(&request)?,
         );
         Ok(())
     }
@@ -2210,7 +2210,7 @@ mod tests {
                     "reasoningEffort": null
                 }
             }),
-            serde_json::to_value(&response)?,
+            edgerun_json::serde_json::to_value(&response)?,
         );
         Ok(())
     }
@@ -2226,7 +2226,7 @@ mod tests {
                 "method": "configRequirements/read",
                 "id": 1,
             }),
-            serde_json::to_value(&request)?,
+            edgerun_json::serde_json::to_value(&request)?,
         );
         Ok(())
     }
@@ -2248,7 +2248,7 @@ mod tests {
                     "apiKey": "secret"
                 }
             }),
-            serde_json::to_value(&request)?,
+            edgerun_json::serde_json::to_value(&request)?,
         );
         Ok(())
     }
@@ -2269,7 +2269,7 @@ mod tests {
                     "type": "chatgpt"
                 }
             }),
-            serde_json::to_value(&request)?,
+            edgerun_json::serde_json::to_value(&request)?,
         );
         Ok(())
     }
@@ -2291,7 +2291,7 @@ mod tests {
                     "codexStreamlinedLogin": true
                 }
             }),
-            serde_json::to_value(&request)?,
+            edgerun_json::serde_json::to_value(&request)?,
         );
         Ok(())
     }
@@ -2310,7 +2310,7 @@ mod tests {
                     "type": "chatgptDeviceCode"
                 }
             }),
-            serde_json::to_value(&request)?,
+            edgerun_json::serde_json::to_value(&request)?,
         );
         Ok(())
     }
@@ -2326,7 +2326,7 @@ mod tests {
                 "method": "account/logout",
                 "id": 5,
             }),
-            serde_json::to_value(&request)?,
+            edgerun_json::serde_json::to_value(&request)?,
         );
         Ok(())
     }
@@ -2352,7 +2352,7 @@ mod tests {
                     "chatgptPlanType": "business"
                 }
             }),
-            serde_json::to_value(&request)?,
+            edgerun_json::serde_json::to_value(&request)?,
         );
         Ok(())
     }
@@ -2373,7 +2373,7 @@ mod tests {
                     "refreshToken": false
                 }
             }),
-            serde_json::to_value(&request)?,
+            edgerun_json::serde_json::to_value(&request)?,
         );
         Ok(())
     }
@@ -2385,7 +2385,7 @@ mod tests {
             json!({
                 "type": "apiKey",
             }),
-            serde_json::to_value(&api_key)?,
+            edgerun_json::serde_json::to_value(&api_key)?,
         );
 
         let chatgpt = v2::Account::Chatgpt {
@@ -2398,7 +2398,7 @@ mod tests {
                 "email": "user@example.com",
                 "planType": "plus",
             }),
-            serde_json::to_value(&chatgpt)?,
+            edgerun_json::serde_json::to_value(&chatgpt)?,
         );
 
         Ok(())
@@ -2420,7 +2420,7 @@ mod tests {
                     "includeHidden": null
                 }
             }),
-            serde_json::to_value(&request)?,
+            edgerun_json::serde_json::to_value(&request)?,
         );
         Ok(())
     }
@@ -2437,7 +2437,7 @@ mod tests {
                 "id": 7,
                 "params": {}
             }),
-            serde_json::to_value(&request)?,
+            edgerun_json::serde_json::to_value(&request)?,
         );
         Ok(())
     }
@@ -2454,7 +2454,7 @@ mod tests {
                 "id": 7,
                 "params": {}
             }),
-            serde_json::to_value(&request)?,
+            edgerun_json::serde_json::to_value(&request)?,
         );
         Ok(())
     }
@@ -2475,7 +2475,7 @@ mod tests {
                     "threadId": null
                 }
             }),
-            serde_json::to_value(&request)?,
+            edgerun_json::serde_json::to_value(&request)?,
         );
         Ok(())
     }
@@ -2496,7 +2496,7 @@ mod tests {
                     "path": absolute_path_string("tmp/example")
                 }
             }),
-            serde_json::to_value(&request)?,
+            edgerun_json::serde_json::to_value(&request)?,
         );
         Ok(())
     }
@@ -2519,7 +2519,7 @@ mod tests {
                     "path": absolute_path_string("tmp/repo/.git")
                 }
             }),
-            serde_json::to_value(&request)?,
+            edgerun_json::serde_json::to_value(&request)?,
         );
         Ok(())
     }
@@ -2539,7 +2539,7 @@ mod tests {
                     "limit": null
                 }
             }),
-            serde_json::to_value(&request)?,
+            edgerun_json::serde_json::to_value(&request)?,
         );
         Ok(())
     }
@@ -2560,7 +2560,7 @@ mod tests {
                     "threadId": "thr_123"
                 }
             }),
-            serde_json::to_value(&request)?,
+            edgerun_json::serde_json::to_value(&request)?,
         );
         Ok(())
     }
@@ -2591,7 +2591,7 @@ mod tests {
                     "voice": "marin"
                 }
             }),
-            serde_json::to_value(&request)?,
+            edgerun_json::serde_json::to_value(&request)?,
         );
         Ok(())
     }
@@ -2621,7 +2621,7 @@ mod tests {
                     "voice": null
                 }
             }),
-            serde_json::to_value(&default_prompt_request)?,
+            edgerun_json::serde_json::to_value(&default_prompt_request)?,
         );
 
         let null_prompt_request = ClientRequest::ThreadRealtimeStart {
@@ -2648,7 +2648,7 @@ mod tests {
                     "voice": null
                 }
             }),
-            serde_json::to_value(&null_prompt_request)?,
+            edgerun_json::serde_json::to_value(&null_prompt_request)?,
         );
 
         let default_prompt_value = json!({
@@ -2663,7 +2663,7 @@ mod tests {
             }
         });
         assert_eq!(
-            serde_json::from_value::<ClientRequest>(default_prompt_value)?,
+            edgerun_json::serde_json::from_value::<ClientRequest>(default_prompt_value)?,
             default_prompt_request,
         );
 
@@ -2680,7 +2680,7 @@ mod tests {
             }
         });
         assert_eq!(
-            serde_json::from_value::<ClientRequest>(null_prompt_value)?,
+            edgerun_json::serde_json::from_value::<ClientRequest>(null_prompt_value)?,
             null_prompt_request,
         );
 
@@ -2704,7 +2704,7 @@ mod tests {
                     },
                 }
             }),
-            serde_json::to_value(&notification)?,
+            edgerun_json::serde_json::to_value(&notification)?,
         );
         Ok(())
     }
@@ -2737,7 +2737,7 @@ mod tests {
                     }
                 }
             }),
-            serde_json::to_value(&notification)?,
+            edgerun_json::serde_json::to_value(&notification)?,
         );
         Ok(())
     }

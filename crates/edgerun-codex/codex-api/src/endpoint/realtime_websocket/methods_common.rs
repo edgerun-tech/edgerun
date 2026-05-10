@@ -13,9 +13,9 @@ use crate::endpoint::realtime_websocket::protocol::RealtimeSessionConfig;
 use crate::endpoint::realtime_websocket::protocol::RealtimeSessionMode;
 use crate::endpoint::realtime_websocket::protocol::RealtimeVoice;
 use crate::endpoint::realtime_websocket::protocol::SessionUpdateSession;
-use serde_json::Result as JsonResult;
-use serde_json::Value;
-use serde_json::to_value;
+use edgerun_json::serde_json::Result as JsonResult;
+use edgerun_json::serde_json::Value;
+use edgerun_json::serde_json::to_value;
 
 pub(super) const REALTIME_AUDIO_SAMPLE_RATE: u32 = 24_000;
 const AGENT_FINAL_MESSAGE_PREFIX: &str = "\"Agent Final Message\":\n\n";

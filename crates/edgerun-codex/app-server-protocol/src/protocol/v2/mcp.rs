@@ -9,7 +9,7 @@ use codex_protocol::mcp::Tool as McpTool;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
-use serde_json::Value as JsonValue;
+use edgerun_json::serde_json::Value as JsonValue;
 use std::collections::BTreeMap;
 use ts_rs::TS;
 
@@ -120,7 +120,7 @@ pub struct McpServerToolCallResponse {
 #[ts(export_to = "v2/")]
 pub struct McpToolCallResult {
     // NOTE: `rmcp::model::Content` (and its `RawContent` variants) would be a more precise Rust
-    // representation of MCP content blocks. We intentionally use `serde_json::Value` here because
+    // representation of MCP content blocks. We intentionally use `edgerun_json::serde_json::Value` here because
     // this crate exports JSON schema + TS types (`schemars`/`ts-rs`), and the rmcp model types
     // aren't set up to be schema/TS friendly (and would introduce heavier coupling to rmcp's Rust
     // representations). Using `JsonValue` keeps the payload wire-shaped and easy to export.
@@ -640,7 +640,7 @@ pub enum McpServerElicitationRequest {
 }
 
 impl TryFrom<CoreElicitationRequest> for McpServerElicitationRequest {
-    type Error = serde_json::Error;
+    type Error = edgerun_json::serde_json::Error;
 
     fn try_from(value: CoreElicitationRequest) -> Result<Self, Self::Error> {
         match value {
@@ -651,7 +651,7 @@ impl TryFrom<CoreElicitationRequest> for McpServerElicitationRequest {
             } => Ok(Self::Form {
                 meta,
                 message,
-                requested_schema: serde_json::from_value(requested_schema)?,
+                requested_schema: edgerun_json::serde_json::from_value(requested_schema)?,
             }),
             CoreElicitationRequest::Url {
                 meta,

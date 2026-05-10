@@ -18,7 +18,7 @@ use codex_utils_absolute_path::AbsolutePathBuf;
 use core_test_support::PathExt;
 use pretty_assertions::assert_eq;
 use rmcp::model::ElicitationAction;
-use serde_json::json;
+use edgerun_json::serde_json::json;
 use tempfile::tempdir;
 
 #[tokio::test]

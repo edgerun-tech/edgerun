@@ -163,7 +163,7 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use codex_protocol::mcp::CallToolResult as McpCallToolResult;
 use pretty_assertions::assert_eq;
 use serde::Deserialize;
-use serde_json::json;
+use edgerun_json::serde_json::json;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration as StdDuration;
@@ -306,7 +306,7 @@ async fn request_mcp_server_elicitation_auto_accepts_when_auto_deny_is_enabled()
         .await
         .set_elicitations_auto_deny(/*auto_deny*/ true);
 
-    let requested_schema: McpElicitationSchema = serde_json::from_value(json!({
+    let requested_schema: McpElicitationSchema = edgerun_json::serde_json::from_value(json!({
         "type": "object",
         "properties": {},
     }))
@@ -1223,7 +1223,7 @@ async fn reload_user_config_layer_refreshes_hooks() -> anyhow::Result<()> {
     let codex_home = session.codex_home().await;
     std::fs::create_dir_all(&codex_home)?;
     let config_toml_path = codex_home.join(CONFIG_TOML_FILE);
-    let user_config: codex_config::TomlValue = serde_json::from_value(serde_json::json!({
+    let user_config: codex_config::TomlValue = edgerun_json::serde_json::from_value(edgerun_json::serde_json::json!({
         "hooks": {
             "SessionStart": [{
                 "hooks": [{
@@ -1260,7 +1260,7 @@ async fn reload_user_config_layer_refreshes_hooks() -> anyhow::Result<()> {
         codex_protocol::protocol::HookTrustStatus::Untrusted
     );
 
-    let trusted_user_config: codex_config::TomlValue = serde_json::from_value(serde_json::json!({
+    let trusted_user_config: codex_config::TomlValue = edgerun_json::serde_json::from_value(edgerun_json::serde_json::json!({
         "hooks": {
             "SessionStart": [{
                 "hooks": [{
@@ -1321,7 +1321,7 @@ async fn refresh_runtime_config_refreshes_hooks() -> anyhow::Result<()> {
         codex_config::version_for_toml(&identity)
     };
     let hook_key = format!("{}:session_start:0:0", config_toml_path.display());
-    let trusted_user_config: codex_config::TomlValue = serde_json::from_value(serde_json::json!({
+    let trusted_user_config: codex_config::TomlValue = edgerun_json::serde_json::from_value(edgerun_json::serde_json::json!({
         "hooks": {
             "SessionStart": [{
                 "hooks": [{
@@ -2040,9 +2040,9 @@ async fn record_initial_history_forked_hydrates_previous_turn_settings() {
     );
     assert_eq!(history.raw_items(), &[]);
     assert_eq!(
-        serde_json::to_value(session.reference_context_item().await)
+        edgerun_json::serde_json::to_value(session.reference_context_item().await)
             .expect("serialize fork reference context item"),
-        serde_json::to_value(Some(previous_context_item))
+        edgerun_json::serde_json::to_value(Some(previous_context_item))
             .expect("serialize expected reference context item")
     );
 }
@@ -2273,9 +2273,9 @@ async fn thread_rollback_recomputes_previous_turn_settings_and_reference_context
         })
     );
     assert_eq!(
-        serde_json::to_value(sess.reference_context_item().await)
+        edgerun_json::serde_json::to_value(sess.reference_context_item().await)
             .expect("serialize replay reference context item"),
-        serde_json::to_value(Some(first_context_item))
+        edgerun_json::serde_json::to_value(Some(first_context_item))
             .expect("serialize expected reference context item")
     );
 }
@@ -2768,7 +2768,7 @@ fn prefers_structured_content_when_present() {
     let got = ctr.into_function_call_output_payload();
     let expected = FunctionCallOutputPayload {
         body: FunctionCallOutputBody::Text(
-            serde_json::to_string(&json!({
+            edgerun_json::serde_json::to_string(&json!({
                 "ok": true,
                 "value": 42
             }))
@@ -2846,14 +2846,14 @@ fn falls_back_to_content_when_structured_is_null() {
     let ctr = McpCallToolResult {
         content: vec![text_block("hello"), text_block("world")],
         is_error: None,
-        structured_content: Some(serde_json::Value::Null),
+        structured_content: Some(edgerun_json::serde_json::Value::Null),
         meta: None,
     };
 
     let got = ctr.into_function_call_output_payload();
     let expected = FunctionCallOutputPayload {
         body: FunctionCallOutputBody::Text(
-            serde_json::to_string(&vec![text_block("hello"), text_block("world")]).unwrap(),
+            edgerun_json::serde_json::to_string(&vec![text_block("hello"), text_block("world")]).unwrap(),
         ),
         success: Some(true),
     };
@@ -2873,7 +2873,7 @@ fn success_flag_reflects_is_error_true() {
     let got = ctr.into_function_call_output_payload();
     let expected = FunctionCallOutputPayload {
         body: FunctionCallOutputBody::Text(
-            serde_json::to_string(&json!({ "message": "bad" })).unwrap(),
+            edgerun_json::serde_json::to_string(&json!({ "message": "bad" })).unwrap(),
         ),
         success: Some(false),
     };
@@ -2893,7 +2893,7 @@ fn success_flag_true_with_no_error_and_content_used() {
     let got = ctr.into_function_call_output_payload();
     let expected = FunctionCallOutputPayload {
         body: FunctionCallOutputBody::Text(
-            serde_json::to_string(&vec![text_block("alpha")]).unwrap(),
+            edgerun_json::serde_json::to_string(&vec![text_block("alpha")]).unwrap(),
         ),
         success: Some(true),
     };
@@ -2975,7 +2975,7 @@ async fn attach_thread_persistence(session: &mut Session) -> PathBuf {
         .expect("thread should have rollout path")
 }
 
-fn text_block(s: &str) -> serde_json::Value {
+fn text_block(s: &str) -> edgerun_json::serde_json::Value {
     json!({
         "type": "text",
         "text": s,
@@ -5751,7 +5751,7 @@ async fn refresh_mcp_servers_is_deferred_until_next_turn() {
     assert!(!old_token.is_cancelled());
 
     let mcp_oauth_credentials_store_mode =
-        serde_json::to_value(OAuthCredentialsStoreMode::Auto).expect("serialize store mode");
+        edgerun_json::serde_json::to_value(OAuthCredentialsStoreMode::Auto).expect("serialize store mode");
     let refresh_config = McpServerRefreshConfig {
         mcp_servers: json!({}),
         mcp_oauth_credentials_store_mode,
@@ -6681,8 +6681,8 @@ async fn record_context_updates_and_set_reference_context_item_injects_full_cont
 
     let current_context = session.reference_context_item().await;
     assert_eq!(
-        serde_json::to_value(current_context).expect("serialize current context item"),
-        serde_json::to_value(Some(turn_context.to_turn_context_item()))
+        edgerun_json::serde_json::to_value(current_context).expect("serialize current context item"),
+        edgerun_json::serde_json::to_value(Some(turn_context.to_turn_context_item()))
             .expect("serialize expected context item")
     );
 }
@@ -6759,9 +6759,9 @@ async fn record_context_updates_and_set_reference_context_item_persists_baseline
         Vec::new()
     );
     assert_eq!(
-        serde_json::to_value(session.reference_context_item().await)
+        edgerun_json::serde_json::to_value(session.reference_context_item().await)
             .expect("serialize current context item"),
-        serde_json::to_value(Some(turn_context.to_turn_context_item()))
+        edgerun_json::serde_json::to_value(Some(turn_context.to_turn_context_item()))
             .expect("serialize expected context item")
     );
     session.ensure_rollout_materialized().await;
@@ -6778,9 +6778,9 @@ async fn record_context_updates_and_set_reference_context_item_persists_baseline
         _ => None,
     });
     assert_eq!(
-        serde_json::to_value(persisted_turn_context)
+        edgerun_json::serde_json::to_value(persisted_turn_context)
             .expect("serialize persisted turn context item"),
-        serde_json::to_value(Some(turn_context.to_turn_context_item()))
+        edgerun_json::serde_json::to_value(Some(turn_context.to_turn_context_item()))
             .expect("serialize expected turn context item")
     );
 }
@@ -6895,9 +6895,9 @@ async fn record_context_updates_and_set_reference_context_item_persists_full_rei
     });
 
     assert_eq!(
-        serde_json::to_value(persisted_turn_context)
+        edgerun_json::serde_json::to_value(persisted_turn_context)
             .expect("serialize persisted turn context item"),
-        serde_json::to_value(Some(turn_context.to_turn_context_item()))
+        edgerun_json::serde_json::to_value(Some(turn_context.to_turn_context_item()))
             .expect("serialize expected turn context item")
     );
 }
@@ -8133,7 +8133,7 @@ async fn completed_goal_accounts_current_turn_tokens_before_tool_response() -> a
     let complete_output = responses
         .function_call_output_text("call-complete-goal")
         .expect("complete tool output should be sent to the model");
-    let complete_output: serde_json::Value = serde_json::from_str(&complete_output)?;
+    let complete_output: edgerun_json::serde_json::Value = edgerun_json::serde_json::from_str(&complete_output)?;
     assert_eq!(complete_output["goal"]["tokensUsed"], 580);
     assert_eq!(complete_output["goal"]["status"], "complete");
     assert_eq!(complete_output["remainingTokens"], 0);
@@ -8692,7 +8692,7 @@ async fn create_goal_tool_rejects_existing_goal() {
             tool_name: codex_tools::ToolName::plain("create_goal"),
             source: ToolCallSource::Direct,
             payload: ToolPayload::Function {
-                arguments: serde_json::json!({
+                arguments: edgerun_json::serde_json::json!({
                     "objective": "Keep the watcher alive",
                     "token_budget": 123,
                 })
@@ -8712,7 +8712,7 @@ async fn create_goal_tool_rejects_existing_goal() {
             tool_name: codex_tools::ToolName::plain("create_goal"),
             source: ToolCallSource::Direct,
             payload: ToolPayload::Function {
-                arguments: serde_json::json!({
+                arguments: edgerun_json::serde_json::json!({
                     "objective": "Replace the watcher",
                     "token_budget": 456,
                 })
@@ -8755,7 +8755,7 @@ async fn update_goal_tool_rejects_pausing_goal() {
             tool_name: codex_tools::ToolName::plain("create_goal"),
             source: ToolCallSource::Direct,
             payload: ToolPayload::Function {
-                arguments: serde_json::json!({
+                arguments: edgerun_json::serde_json::json!({
                     "objective": "Keep the watcher alive",
                     "token_budget": 123,
                 })
@@ -8775,7 +8775,7 @@ async fn update_goal_tool_rejects_pausing_goal() {
             tool_name: codex_tools::ToolName::plain("update_goal"),
             source: ToolCallSource::Direct,
             payload: ToolPayload::Function {
-                arguments: serde_json::json!({
+                arguments: edgerun_json::serde_json::json!({
                     "status": "paused",
                 })
                 .to_string(),
@@ -8816,7 +8816,7 @@ async fn update_goal_tool_marks_goal_complete() {
             tool_name: codex_tools::ToolName::plain("create_goal"),
             source: ToolCallSource::Direct,
             payload: ToolPayload::Function {
-                arguments: serde_json::json!({
+                arguments: edgerun_json::serde_json::json!({
                     "objective": "Keep the watcher alive",
                     "token_budget": 123,
                 })
@@ -8836,7 +8836,7 @@ async fn update_goal_tool_marks_goal_complete() {
             tool_name: codex_tools::ToolName::plain("update_goal"),
             source: ToolCallSource::Direct,
             payload: ToolPayload::Function {
-                arguments: serde_json::json!({
+                arguments: edgerun_json::serde_json::json!({
                     "status": "complete",
                 })
                 .to_string(),
@@ -8919,7 +8919,7 @@ async fn rejects_escalated_permissions_when_policy_not_on_request() {
             tool_name: codex_tools::ToolName::plain(tool_name),
             source: crate::tools::context::ToolCallSource::Direct,
             payload: ToolPayload::Function {
-                arguments: serde_json::json!({
+                arguments: edgerun_json::serde_json::json!({
                     "command": params.command.clone(),
                     "workdir": Some(turn_context.cwd.to_string_lossy().to_string()),
                     "timeout_ms": params.expiration.timeout_ms(),
@@ -8994,7 +8994,7 @@ async fn unified_exec_rejects_escalated_permissions_when_policy_not_on_request()
             tool_name: codex_tools::ToolName::plain("exec_command"),
             source: crate::tools::context::ToolCallSource::Direct,
             payload: ToolPayload::Function {
-                arguments: serde_json::json!({
+                arguments: edgerun_json::serde_json::json!({
                     "cmd": "echo hi",
                     "sandbox_permissions": SandboxPermissions::RequireEscalated,
                     "justification": "need unsandboxed execution",

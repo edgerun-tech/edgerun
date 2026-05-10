@@ -67,7 +67,7 @@ pub enum OpenAiFileError {
     Decode {
         url: String,
         #[source]
-        source: serde_json::Error,
+        source: edgerun_json::serde_json::Error,
     },
     #[error("OpenAI file upload for `{file_id}` is not ready yet")]
     UploadNotReady { file_id: String },
@@ -131,7 +131,7 @@ pub async fn upload_local_file(
         .to_string();
     let create_url = format!("{}/files", base_url.trim_end_matches('/'));
     let create_response = authorized_request(auth, reqwest::Method::POST, &create_url)
-        .json(&serde_json::json!({
+        .json(&edgerun_json::serde_json::json!({
             "file_name": file_name,
             "file_size": metadata.len(),
             "use_case": OPENAI_FILE_USE_CASE,
@@ -152,7 +152,7 @@ pub async fn upload_local_file(
         });
     }
     let create_payload: CreateFileResponse =
-        serde_json::from_str(&create_body).map_err(|source| OpenAiFileError::Decode {
+        edgerun_json::serde_json::from_str(&create_body).map_err(|source| OpenAiFileError::Decode {
             url: create_url.clone(),
             source,
         })?;
@@ -193,7 +193,7 @@ pub async fn upload_local_file(
     let finalize_started_at = Instant::now();
     loop {
         let finalize_response = authorized_request(auth, reqwest::Method::POST, &finalize_url)
-            .json(&serde_json::json!({}))
+            .json(&edgerun_json::serde_json::json!({}))
             .send()
             .await
             .map_err(|source| OpenAiFileError::Request {
@@ -210,7 +210,7 @@ pub async fn upload_local_file(
             });
         }
         let finalize_payload: DownloadLinkResponse =
-            serde_json::from_str(&finalize_body).map_err(|source| OpenAiFileError::Decode {
+            edgerun_json::serde_json::from_str(&finalize_body).map_err(|source| OpenAiFileError::Decode {
                 url: finalize_url.clone(),
                 source,
             })?;
@@ -319,14 +319,14 @@ mod tests {
         Mock::given(method("POST"))
             .and(path("/backend-api/files"))
             .and(header("chatgpt-account-id", "account_id"))
-            .and(body_json(serde_json::json!({
+            .and(body_json(edgerun_json::serde_json::json!({
                 "file_name": "hello.txt",
                 "file_size": 5,
                 "use_case": "codex",
             })))
             .respond_with(
                 ResponseTemplate::new(200)
-                    .set_body_json(serde_json::json!({"file_id": "file_123", "upload_url": format!("{}/upload/file_123", server.uri())})),
+                    .set_body_json(edgerun_json::serde_json::json!({"file_id": "file_123", "upload_url": format!("{}/upload/file_123", server.uri())})),
             )
             .mount(&server)
             .await;
@@ -343,12 +343,12 @@ mod tests {
             .and(path("/backend-api/files/file_123/uploaded"))
             .respond_with(move |_request: &Request| {
                 if finalize_attempts_responder.fetch_add(1, Ordering::SeqCst) == 0 {
-                    return ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                    return ResponseTemplate::new(200).set_body_json(edgerun_json::serde_json::json!({
                         "status": "retry"
                     }));
                 }
 
-                ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                ResponseTemplate::new(200).set_body_json(edgerun_json::serde_json::json!({
                     "status": "success",
                     "download_url": download_url,
                     "file_name": "hello.txt",

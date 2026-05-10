@@ -323,9 +323,11 @@ fn layout_array<T>(n: usize) -> Result<Layout, CollectionAllocErr> {
 }
 
 unsafe fn deallocate<T>(ptr: NonNull<T>, capacity: usize) {
-    // This unwrap should succeed since the same did when allocating.
-    let layout = layout_array::<T>(capacity).unwrap();
-    alloc::alloc::dealloc(ptr.as_ptr() as *mut u8, layout)
+    unsafe {
+        // This unwrap should succeed since the same did when allocating.
+        let layout = layout_array::<T>(capacity).unwrap();
+        alloc::alloc::dealloc(ptr.as_ptr() as *mut u8, layout)
+    }
 }
 
 // An iterator that removes the items from a `SmallVec` and yields them by value.
@@ -682,16 +684,20 @@ impl<T, const N: usize> SmallVecData<[T; N]> {
 impl<A: Array> SmallVecData<A> {
     #[inline]
     unsafe fn inline(&self) -> ConstNonNull<A::Item> {
-        match self {
-            SmallVecData::Inline(a) => ConstNonNull::new(a.as_ptr() as *const A::Item).unwrap(),
-            _ => debug_unreachable!(),
+        unsafe {
+            match self {
+                SmallVecData::Inline(a) => ConstNonNull::new(a.as_ptr() as *const A::Item).unwrap(),
+                _ => debug_unreachable!(),
+            }
         }
     }
     #[inline]
     unsafe fn inline_mut(&mut self) -> NonNull<A::Item> {
-        match self {
-            SmallVecData::Inline(a) => NonNull::new(a.as_mut_ptr() as *mut A::Item).unwrap(),
-            _ => debug_unreachable!(),
+        unsafe {
+            match self {
+                SmallVecData::Inline(a) => NonNull::new(a.as_mut_ptr() as *mut A::Item).unwrap(),
+                _ => debug_unreachable!(),
+            }
         }
     }
     #[inline]
@@ -700,23 +706,29 @@ impl<A: Array> SmallVecData<A> {
     }
     #[inline]
     unsafe fn into_inline(self) -> MaybeUninit<A> {
-        match self {
-            SmallVecData::Inline(a) => a,
-            _ => debug_unreachable!(),
+        unsafe {
+            match self {
+                SmallVecData::Inline(a) => a,
+                _ => debug_unreachable!(),
+            }
         }
     }
     #[inline]
     unsafe fn heap(&self) -> (ConstNonNull<A::Item>, usize) {
-        match self {
-            SmallVecData::Heap { ptr, len } => (ConstNonNull(*ptr), *len),
-            _ => debug_unreachable!(),
+        unsafe {
+            match self {
+                SmallVecData::Heap { ptr, len } => (ConstNonNull(*ptr), *len),
+                _ => debug_unreachable!(),
+            }
         }
     }
     #[inline]
     unsafe fn heap_mut(&mut self) -> (NonNull<A::Item>, &mut usize) {
-        match self {
-            SmallVecData::Heap { ptr, len } => (*ptr, len),
-            _ => debug_unreachable!(),
+        unsafe {
+            match self {
+                SmallVecData::Heap { ptr, len } => (*ptr, len),
+                _ => debug_unreachable!(),
+            }
         }
     }
     #[inline]

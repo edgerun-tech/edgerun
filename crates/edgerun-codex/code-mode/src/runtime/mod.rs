@@ -11,7 +11,7 @@ use std::thread;
 
 use codex_protocol::ToolName;
 use serde::Serialize;
-use serde_json::Value as JsonValue;
+use edgerun_json::serde_json::Value as JsonValue;
 use tokio::sync::mpsc;
 
 use crate::description::EnabledToolMetadata;
