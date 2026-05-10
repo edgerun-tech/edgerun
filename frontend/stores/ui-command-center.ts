@@ -95,6 +95,11 @@ const UI_COMMANDS: UiCommandDescriptor[] = [
     examples: ["~summarize current UI state"],
   },
   {
+    command: "!<message>",
+    description: "Send a message to ChatGPT from the prompt through local CDP.",
+    examples: ["!draft a PR summary"],
+  },
+  {
     command: "?<query>",
     aliases: ["?commands", "/help"],
     description: "Search available prompt commands.",
@@ -219,10 +224,10 @@ export function registerUiCommandHandler(name: string, handler: UiCommandHandler
   }
 }
 
-export function focusDockInput(prefix: "/" | "?" | "~" = "~", value?: string) {
+export function focusDockInput(prefix: "/" | "?" | "~" | "!" = "~", value?: string, submit = false) {
   if (typeof window === "undefined") return
   window.dispatchEvent(new CustomEvent("edgerun:dock-command-input", {
-    detail: { prefix, value },
+    detail: { prefix, value, submit },
   }))
 }
 
@@ -274,6 +279,13 @@ export async function executeUiCommand(rawCommand: string, source: UiCommandSour
     focusAssistantInput(message, true)
     appendTerminalLog("info", `${sourceLabel(source)}> assistant ${message}`)
     return message ? "Sent to assistant" : "Focused assistant"
+  }
+
+  if (command.startsWith("!")) {
+    const message = command.slice(1).trim()
+    focusDockInput("!", message, true)
+    appendTerminalLog("info", `${sourceLabel(source)}> chatgpt ${message}`)
+    return message ? "Sent to chatgpt" : "Focused chatgpt"
   }
 
   const lower = command.toLowerCase()

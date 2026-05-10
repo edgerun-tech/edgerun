@@ -16,12 +16,12 @@ proxy = ["handshake", "tungstenite/proxy"]
 rustls-tls-native-roots = ["handshake", "dep:rustls", "tungstenite/rustls-tls-native-roots"]
 
 [dependencies]
-bytes = "1.10.1"
+bytes = { package = "edgerun-bytes", workspace = true }
 edgerun-encoding = { workspace = true, default-features = false }
 edgerun-random = { workspace = true }
-http = "1.3.1"
-rustls = { version = "0.23", default-features = false, optional = true }
-tungstenite = { git = "https://github.com/openai-oss-forks/tungstenite-rs", rev = "9200079d3b54a1ff51072e24d81fd354f085156f", default-features = false }
+http = { package = "edgerun-http", workspace = true }
+rustls = { package = "edgerun-rusttls", path = "../edgerun-rusttls", default-features = false, optional = true }
+tungstenite = { path = "../../vendor/cargo/tungstenite", default-features = false }
 
 [lints]
 workspace = true

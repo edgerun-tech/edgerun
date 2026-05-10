@@ -17,8 +17,51 @@ type CdpResponse = {
 }
 
 type RelayDestination = "frontend" | "backend" | "chatgpt"
+type RelayChatSession = {
+  query: string
+  label: string
+}
+
 type BackendBridge = (message: string, options?: Record<string, unknown>) => unknown | Promise<unknown>
 type BrowserTimer = ReturnType<typeof setTimeout>
+
+type ChatMessage = {
+  role: string
+  text: string
+}
+
+type ChatPageState = {
+  messages: ChatMessage[]
+  userCount: number
+  assistantCount: number
+  totalCount: number
+}
+
+type ChatInputSelection = {
+  found: boolean
+  selector: string | null
+  selectorHint: string
+  role: string | null
+  isContentEditable: boolean
+  isInput: boolean
+  tagName: string
+  textLabel: string
+  score: number
+  reason: string
+}
+
+type ChatInputPatch = {
+  ok: boolean
+  selector: string | null
+  matchedRole?: string | null
+  isContentEditable?: boolean
+  isInput?: boolean
+  isFocused?: boolean
+  isDisabled?: boolean
+  beforeText?: string
+  afterText?: string
+  error?: string
+}
 
 export type BrowserCdpRelayState = {
   destination: RelayDestination
@@ -26,6 +69,7 @@ export type BrowserCdpRelayState = {
   backend: "ready" | "offline"
   backendBridgeRegistered: boolean
   endpoint: string
+  chatSession: RelayChatSession
   updatedAtIso: string
 }
 
@@ -35,6 +79,7 @@ export type BrowserCdpRelay = {
   destination: RelayDestination
   setEndpoint(endpoint: string): string
   setDestination(destination: RelayDestination): RelayDestination
+  setChatSession(session: string): string
   setBackendBridge(bridge: BackendBridge): void
   status(): BrowserCdpRelayState
   subscribeStatus(handler: (state: BrowserCdpRelayState) => void): () => void
@@ -52,6 +97,7 @@ const DEFAULT_TIMEOUT_MS = 30_000
 const FRONTEND_EVENT = "edgerun:cdp-relay-message"
 const FRONTEND_CHANNEL = "edgerun:frontend-relay"
 const DESTINATION_STORAGE_KEY = "edgerun:cdp-relay-destination"
+const CHAT_SESSION_STORAGE_KEY = "edgerun:cdp-relay-chat-session"
 
 function normalizeEndpoint(endpoint?: string): string {
   const raw = (endpoint || DEFAULT_ENDPOINT).trim()
@@ -64,10 +110,196 @@ function normalizeEndpoint(endpoint?: string): string {
 function storedDestination(): RelayDestination {
   try {
     const value = window.localStorage.getItem(DESTINATION_STORAGE_KEY)
-    return value === "backend" || value === "frontend" || value === "chatgpt" ? value : "backend"
+    if (value === "backend" || value === "frontend" || value === "chatgpt") return value
+    return "backend"
   } catch {
     return "backend"
   }
+}
+
+function storedChatSession(): RelayChatSession {
+  try {
+    const value = window.localStorage.getItem(CHAT_SESSION_STORAGE_KEY)
+    return parseChatSession(value)
+  } catch {
+    return { query: "chatgpt.com", label: "chatgpt.com" }
+  }
+}
+
+function parseChatSession(value: string | null): RelayChatSession {
+  const text = (value || "").trim()
+  if (!text) return { query: "chatgpt.com", label: "chatgpt.com" }
+
+  const delimiter = text.indexOf("|")
+  if (delimiter >= 0) {
+    const labelCandidate = text.slice(0, delimiter).trim()
+    const queryCandidate = text.slice(delimiter + 1).trim()
+    if (queryCandidate) {
+      return {
+        query: queryCandidate,
+        label: labelCandidate || queryCandidate,
+      }
+    }
+  }
+
+  if (text.includes("|")) {
+    return {
+      query: text.replace(/\|/g, "").trim(),
+      label: text.replace(/\|/g, "").trim(),
+    }
+  }
+
+  return { query: text, label: text }
+}
+
+function defaultChatInputScore(input: Element): number {
+  const role = (input.getAttribute("role") || "").toLowerCase()
+  const ariaLabel = (input.getAttribute("aria-label") || "").toLowerCase()
+  const placeholder = (input.getAttribute("placeholder") || "").toLowerCase()
+  const tagName = input.tagName.toLowerCase()
+  const rect = input.getBoundingClientRect()
+  const hasSpace = rect.width > 0 && rect.height > 0
+  if (!hasSpace) return -500
+
+  let score = 0
+  if (tagName === "textarea") score += 40
+  if (input instanceof HTMLInputElement) score += 10
+  if (role === "textbox") score += 30
+  if (input instanceof HTMLElement && input.isContentEditable) score += 50
+  const fieldText = `${ariaLabel} ${placeholder}`
+  if (fieldText.includes("prompt") || fieldText.includes("message") || fieldText.includes("chat") || fieldText.includes("ask")) score += 50
+  const classText = input.className.toLowerCase()
+  if (classText.includes("send") || classText.includes("compose") || classText.includes("prompt") || classText.includes("reply")) score += 10
+  if (rect.bottom >= window.innerHeight * 0.45) score += 25
+  return score
+}
+
+function buildCssSelector(target: Element): string {
+  const id = target.getAttribute("id")?.trim()
+  if (id) return `#${CSS.escape(id)}`
+
+  const testId = target.getAttribute("data-testid")?.trim() || target.getAttribute("data-test-id")?.trim()
+  if (testId) return `[data-testid="${CSS.escape(testId)}"]`
+
+  const name = (target as HTMLInputElement).getAttribute?.("name")?.trim()
+  if (name && target.tagName.toLowerCase() === "input") return `input[name="${CSS.escape(name)}"]`
+
+  const parts: string[] = []
+  let current: Element | null = target
+  let steps = 0
+  while (current && current.tagName.toLowerCase() !== "html" && steps < 8) {
+    const parent: HTMLElement | null = current.parentElement
+    if (!parent) break
+    const tag = current.tagName.toLowerCase()
+    const siblings = Array.from(parent.children).filter((candidate: Element) => candidate.tagName.toLowerCase() === tag)
+    const index = siblings.indexOf(current) + 1
+    parts.unshift(index > 1 ? `${tag}:nth-of-type(${index})` : tag)
+    current = parent
+    steps += 1
+  }
+  return parts.length ? parts.join(" > ") : target.tagName.toLowerCase()
+}
+
+function readChatMessages(): ChatPageState {
+  const nodes = Array.from(document.querySelectorAll("[data-message-author-role]"))
+  const messages = nodes.map((node) => ({
+    role: node.getAttribute("data-message-author-role") || "",
+    text: (node.textContent || "").replace(/\s+/g, " ").trim(),
+  }))
+  return {
+    messages,
+    totalCount: messages.length,
+    userCount: messages.filter((message) => message.role === "user").length,
+    assistantCount: messages.filter((message) => message.role === "assistant").length,
+  }
+}
+
+function findChatComposer(targetHint?: string): ChatInputSelection {
+  return findChatComposerForSession(targetHint)
+}
+
+function readChatComposer(selector: string): ChatInputPatch {
+  const element = document.querySelector(selector)
+  if (!(element instanceof Element)) {
+    return { ok: false, selector: null, error: "Selected composer disappeared" }
+  }
+
+  const matchedRole = element.getAttribute("role")
+  if (element instanceof HTMLTextAreaElement || element instanceof HTMLInputElement) {
+    return {
+      ok: true,
+      selector,
+      matchedRole,
+      isContentEditable: false,
+      isInput: true,
+      isFocused: document.activeElement === element,
+      isDisabled: element.disabled,
+      beforeText: String((element as HTMLInputElement).value || ""),
+      afterText: String((element as HTMLInputElement).value || ""),
+    }
+  }
+
+  if (element instanceof HTMLElement && element.isContentEditable) {
+    return {
+      ok: true,
+      selector,
+      matchedRole,
+      isContentEditable: true,
+      isInput: false,
+      isFocused: document.activeElement === element,
+      isDisabled: element.getAttribute("contenteditable") !== "true" && element.getAttribute("contenteditable") !== "",
+      beforeText: (element.textContent || "").trim(),
+      afterText: (element.textContent || "").trim(),
+    }
+  }
+
+  return { ok: false, selector, error: "Selected composer type is not editable" }
+}
+
+function setChatComposer(selector: string, text: string): ChatInputPatch {
+  const element = document.querySelector(selector)
+  if (!(element instanceof Element)) return { ok: false, selector: null, error: "Selected composer disappeared" }
+
+  const safeText = typeof text === "string" ? text : String(text)
+  if (element instanceof HTMLTextAreaElement || element instanceof HTMLInputElement) {
+    element.focus({ preventScroll: true })
+    element.value = safeText
+    element.selectionStart = safeText.length
+    element.selectionEnd = safeText.length
+    element.dispatchEvent(new Event("input", { bubbles: true }))
+    element.dispatchEvent(new Event("change", { bubbles: true }))
+    return {
+      ok: true,
+      selector,
+      matchedRole: element.getAttribute("role"),
+      isInput: true,
+      isContentEditable: false,
+      isFocused: document.activeElement === element,
+      isDisabled: element.disabled,
+      beforeText: "",
+      afterText: element.value,
+    }
+  }
+
+  if (element instanceof HTMLElement && element.isContentEditable) {
+    element.focus({ preventScroll: true })
+    element.textContent = safeText
+    element.dispatchEvent(new Event("input", { bubbles: true, composed: true }))
+    element.dispatchEvent(new Event("change", { bubbles: true, composed: true }))
+    return {
+      ok: true,
+      selector,
+      matchedRole: element.getAttribute("role"),
+      isInput: false,
+      isContentEditable: true,
+      isFocused: document.activeElement === element,
+      isDisabled: element.getAttribute("contenteditable") !== "true" && element.getAttribute("contenteditable") !== "",
+      beforeText: "",
+      afterText: (element.textContent || "").trim(),
+    }
+  }
+
+  return { ok: false, selector, error: "Selected composer type is not editable" }
 }
 
 function scoreTarget(target: CdpTarget, query?: string): number {
@@ -262,21 +494,261 @@ async function connectWebSocket(webSocketUrl: string, target: Partial<CdpTarget>
   })
 }
 
+type ChatSendAssessment = {
+  ok: boolean
+  sent: boolean
+  message: string
+  response: string
+  error?: string
+  before: ChatPageState
+  after: ChatPageState
+  composer: ChatInputSelection & {
+    beforeText: string
+    afterText: string
+    postText: string
+  }
+  responseMessages: ChatMessage[]
+}
+
+type ChatSendError = ChatSendAssessment
+
+function normalizeText(text: string): string {
+  return (text || "").replace(/\s+/g, " ").trim().toLowerCase()
+}
+
+function classifyDispatch(before: ChatPageState, after: ChatPageState, message: string): { sent: boolean; responseMessages: ChatMessage[] } {
+  const normalized = normalizeText(message)
+  const newMessages = after.messages.slice(before.totalCount)
+  const responseMessages = newMessages.filter((entry) => entry.role === "assistant")
+  const sentByCount = after.totalCount > before.totalCount
+  const sentByMatch = newMessages.some((entry) => entry.role === "user" && normalizeText(entry.text).includes(normalized))
+  return { sent: sentByCount || sentByMatch, responseMessages }
+}
+
+function pickResponse(after: ChatPageState): string {
+  return after.messages.slice().reverse().find((entry) => entry.role === "assistant")?.text || ""
+}
+
+function makeSendError(message: string, reason: string, fallback: Partial<Pick<ChatSendAssessment, "before" | "after" | "composer" | "responseMessages" | "response">> = {}): ChatSendError {
+  return {
+    ok: false,
+    sent: false,
+    message,
+    error: reason,
+    response: fallback.response || "",
+    before: fallback.before || { messages: [], totalCount: 0, userCount: 0, assistantCount: 0 },
+    after: fallback.after || { messages: [], totalCount: 0, userCount: 0, assistantCount: 0 },
+    composer: {
+      found: false,
+      selector: null,
+      selectorHint: "",
+      role: null,
+      isContentEditable: false,
+      isInput: false,
+      tagName: "",
+      textLabel: "",
+      score: 0,
+      reason,
+      beforeText: "",
+      afterText: "",
+      postText: "",
+      ...fallback.composer,
+    },
+    responseMessages: fallback.responseMessages || [],
+  }
+}
+
+function findChatComposerForSession(targetHint?: string): ChatInputSelection {
+  const hint = (targetHint || "").toLowerCase()
+  const candidates = Array.from(document.querySelectorAll("textarea, input, [role='textbox'], [contenteditable='true'], [contenteditable='']"))
+  const locationHint = document.location.href.toLowerCase()
+
+  const ranked = candidates
+    .map((element) => {
+      const rect = element.getBoundingClientRect()
+      const label = [
+        element.getAttribute("aria-label"),
+        element.getAttribute("placeholder"),
+        element.getAttribute("data-placeholder"),
+        element.getAttribute("data-testid"),
+        element.getAttribute("data-test-id"),
+      ].filter(Boolean).join(" ").toLowerCase()
+
+      const style = getComputedStyle(element)
+      if (style.display === "none" || style.visibility === "hidden") return null
+      if (rect.width < 2 || rect.height < 2) return null
+      if (
+        element.tagName.toLowerCase() === "input" &&
+        (element.getAttribute("type") || "").toLowerCase() !== "text" &&
+        (element.getAttribute("type") || "").toLowerCase() !== "search"
+      ) {
+        return null
+      }
+
+      let score = defaultChatInputScore(element)
+      if (hint && label.includes(hint)) score += 90
+      if (hint && locationHint.includes(hint)) score += 80
+      if (hint && String(element.textContent || "").toLowerCase().includes(hint)) score += 40
+      const text = (element.textContent || "").toLowerCase()
+      if (text.includes("chatgpt") || text.includes("ask") || text.includes("message") || text.includes("prompt")) score += 20
+
+      return {
+        element,
+        score,
+        label,
+        rect,
+      }
+    })
+    .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+
+  if (!ranked.length) {
+    return {
+      found: false,
+      selector: null,
+      selectorHint: "no-match",
+      role: null,
+      isContentEditable: false,
+      isInput: false,
+      tagName: "",
+      textLabel: "",
+      score: 0,
+      reason: "No visible composer candidate found in page.",
+    }
+  }
+
+  const best = ranked
+    .sort((left, right) => {
+      if (right.score !== left.score) return right.score - left.score
+      if (right.rect.bottom !== left.rect.bottom) return right.rect.bottom - left.rect.bottom
+      return 0
+    })[0]
+
+  if (best.score < 35) {
+    return {
+      found: false,
+      selector: null,
+      selectorHint: best.element.tagName.toLowerCase(),
+      role: best.element.getAttribute("role"),
+      isContentEditable: (best.element as HTMLElement).isContentEditable || false,
+      isInput: best.element instanceof HTMLInputElement || best.element instanceof HTMLTextAreaElement,
+      tagName: best.element.tagName.toLowerCase(),
+      textLabel: ([
+        best.element.getAttribute("aria-label"),
+        best.element.getAttribute("placeholder"),
+        best.element.getAttribute("data-placeholder"),
+        best.element.getAttribute("data-testid"),
+        best.element.getAttribute("data-test-id"),
+      ].filter(Boolean).join(" ").slice(0, 140)),
+      score: best.score,
+      reason: `Selection confidence too low (${best.score}); refusing to use it as composer.`,
+    }
+  }
+
+  return {
+    found: true,
+    selector: buildCssSelector(best.element),
+    selectorHint: best.element.tagName.toLowerCase(),
+    role: best.element.getAttribute("role"),
+    isContentEditable: (best.element as HTMLElement).isContentEditable || false,
+    isInput: best.element instanceof HTMLInputElement || best.element instanceof HTMLTextAreaElement,
+    tagName: best.element.tagName.toLowerCase(),
+    textLabel: best.label.slice(0, 140),
+    score: best.score,
+    reason: `selected ${best.element.tagName.toLowerCase()} composer (${best.element.tagName.toLowerCase()}), score=${best.score}`,
+  }
+}
+
 async function sendToChatGpt(message: string, options: { endpoint?: string; target?: string; webSocketUrl?: string; waitMs?: number } = {}) {
-  const page = options.webSocketUrl
-    ? await connectWebSocket(options.webSocketUrl, { url: options.target || "chatgpt.com" })
-    : await connectPage(options.endpoint, options.target || "chatgpt.com")
+  const requestedMessage = String(message || "").trim()
+  if (!requestedMessage) {
+    return makeSendError(message, "Cannot send an empty message")
+  }
+
+  const target = (options.target || "chatgpt.com").trim()
+  const expectedMessage = requestedMessage
+  const expectedMessageNormalized = normalizeText(requestedMessage)
+  const waitMs = typeof options.waitMs === "number" && options.waitMs >= 0 ? options.waitMs : 6000
+
+  let before: ChatPageState = { messages: [], totalCount: 0, userCount: 0, assistantCount: 0 }
+  let after: ChatPageState = { messages: [], totalCount: 0, userCount: 0, assistantCount: 0 }
+  let selection: ChatInputSelection = {
+    found: false,
+    selector: null,
+    selectorHint: "",
+    role: null,
+    isContentEditable: false,
+    isInput: false,
+    tagName: "",
+    textLabel: "",
+    score: 0,
+    reason: "Selection did not run.",
+  }
+  let postComposer = { afterText: "" } as ChatInputPatch
+
+  let page: BrowserCdpPage | undefined
   try {
-    const before = await page.evaluate<Array<{ role: string | null; text: string }>>(`Array.from(document.querySelectorAll('[data-message-author-role]')).map((el) => ({ role: el.getAttribute('data-message-author-role'), text: el.innerText }))`)
-    await page.type(message, "role=textbox")
+    page = options.webSocketUrl
+      ? await connectWebSocket(options.webSocketUrl, { url: target || "chatgpt.com" })
+      : await connectPage(options.endpoint, target || "chatgpt.com")
+
+    before = await page.evaluate<ChatPageState>(`(${readChatMessages.toString()})()`)
+    selection = await page.evaluate<ChatInputSelection>(`(${findChatComposer.toString()})(${JSON.stringify(target)})`)
+    if (!selection.found || !selection.selector) throw new Error(selection.reason || "No chat composer found")
+    if (!selection.isContentEditable && !selection.isInput) throw new Error("Selected composer is not editable")
+
+    const preComposer = await page.evaluate<ChatInputPatch>(`(${readChatComposer.toString()})(${JSON.stringify(selection.selector)})`)
+    if (!preComposer.ok) throw new Error(preComposer.error || "Selected composer read failed")
+    if (preComposer.isDisabled) throw new Error("Selected composer is disabled")
+
+    const writeResult = await page.evaluate<ChatInputPatch>(`(${setChatComposer.toString()})(${JSON.stringify(selection.selector)}, ${JSON.stringify(expectedMessage)})`)
+    if (!writeResult.ok) throw new Error(writeResult.error || "Failed to write to composer")
+
+    const afterWrite = await page.evaluate<ChatInputPatch>(`(${readChatComposer.toString()})(${JSON.stringify(selection.selector)})`)
+    if (normalizeText(writeResult.afterText || "") !== expectedMessageNormalized || normalizeText(afterWrite.afterText || "") !== expectedMessageNormalized) {
+      throw new Error("Composer text verification failed")
+    }
+
     await page.press("Enter")
-    await new Promise((resolve) => setTimeout(resolve, options.waitMs ?? 6000))
-    const after = await page.evaluate<Array<{ role: string | null; text: string }>>(`Array.from(document.querySelectorAll('[data-message-author-role]')).map((el) => ({ role: el.getAttribute('data-message-author-role'), text: el.innerText }))`)
-    const newMessages = after.slice(before.length)
-    const response = [...newMessages].reverse().find((item) => item.role === "assistant") ?? [...after].reverse().find((item) => item.role === "assistant")
-    return { ok: true, sent: message, response: response?.text ?? "", messages: newMessages }
+    await new Promise((resolve) => setTimeout(resolve, waitMs))
+
+    after = await page.evaluate<ChatPageState>(`(${readChatMessages.toString()})()`)
+    postComposer = await page.evaluate<ChatInputPatch>(`(${readChatComposer.toString()})(${JSON.stringify(selection.selector)})`)
+    const classify = classifyDispatch(before, after, expectedMessage)
+    const postTextNormalized = normalizeText(postComposer.afterText || "")
+    const response = pickResponse(after)
+    const sent = classify.sent || response !== "" || postTextNormalized === ""
+    if (!sent) {
+      throw new Error("Send not confirmed: no new message appeared and composer still contains the submitted text")
+    }
+
+    return {
+      ok: sent,
+      sent,
+      message: expectedMessage,
+      response,
+      before,
+      after,
+      composer: {
+        ...selection,
+        beforeText: preComposer.beforeText || "",
+        afterText: writeResult.afterText || "",
+        postText: postComposer.afterText || "",
+      },
+      responseMessages: classify.responseMessages,
+    }
+  } catch (error) {
+    return makeSendError(expectedMessage, error instanceof Error ? error.message : String(error), {
+      before,
+      after,
+      composer: {
+        ...selection,
+        beforeText: "",
+        afterText: "",
+        postText: postComposer.afterText || "",
+      },
+    })
   } finally {
-    page.close()
+    page?.close()
   }
 }
 
@@ -286,6 +758,7 @@ export function bootstrapBrowserCdpRelay(): BrowserCdpRelay | undefined {
   if (existing) return existing
 
   let backendBridge: BackendBridge | null = null
+  let chatSession = storedChatSession()
   const statusSubscribers = new Set<(state: BrowserCdpRelayState) => void>()
   const channel = "BroadcastChannel" in window ? new BroadcastChannel(FRONTEND_CHANNEL) : null
   channel?.addEventListener("message", (event) => {
@@ -298,6 +771,7 @@ export function bootstrapBrowserCdpRelay(): BrowserCdpRelay | undefined {
     backend: backendBridge ? "ready" : "offline",
     backendBridgeRegistered: Boolean(backendBridge),
     endpoint: relay.endpoint,
+    chatSession,
     updatedAtIso: new Date().toISOString(),
   })
 
@@ -311,6 +785,17 @@ export function bootstrapBrowserCdpRelay(): BrowserCdpRelay | undefined {
     endpoint: DEFAULT_ENDPOINT,
     eventName: FRONTEND_EVENT,
     destination: storedDestination(),
+    setChatSession(session: string) {
+      const next = parseChatSession(session)
+      chatSession = next
+      try {
+        window.localStorage.setItem(CHAT_SESSION_STORAGE_KEY, `${next.label}|${next.query}`)
+      } catch {
+        // Ignore storage failures; the in-memory session still updates.
+      }
+      publishStatus()
+      return next.query
+    },
     setEndpoint(endpoint: string) {
       relay.endpoint = normalizeEndpoint(endpoint)
       publishStatus()
@@ -350,7 +835,7 @@ export function bootstrapBrowserCdpRelay(): BrowserCdpRelay | undefined {
       return connectWebSocket(webSocketUrl, target)
     },
     sendToChatGpt(message: string, options?: { target?: string; webSocketUrl?: string; waitMs?: number }) {
-      return sendToChatGpt(message, { endpoint: relay.endpoint, ...options })
+      return sendToChatGpt(message, { endpoint: relay.endpoint, target: options?.target || chatSession.query, ...options })
     },
     sendToFrontend(message: string, detail: Record<string, unknown> = {}) {
       const payload = { message, createdAtIso: new Date().toISOString(), ...detail }
@@ -369,7 +854,11 @@ export function bootstrapBrowserCdpRelay(): BrowserCdpRelay | undefined {
         if (!backendBridge) throw new Error("No backend bridge registered. Call window.edgerunCdpRelay.setBackendBridge(fn).")
         return await backendBridge(message, options)
       }
-      return await relay.sendToChatGpt(message, options as { target?: string; webSocketUrl?: string; waitMs?: number })
+      if (destination === "chatgpt") {
+        return await relay.sendToChatGpt(message, options as { target?: string; webSocketUrl?: string; waitMs?: number })
+      }
+
+      return sendToChatGpt(message, { endpoint: relay.endpoint, ...options as { target?: string; webSocketUrl?: string; waitMs?: number } })
     },
   }
 

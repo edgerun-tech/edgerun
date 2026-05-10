@@ -116,6 +116,7 @@ export function Desktop() {
   }, [catalogAppList, installedAppIds, openIdentity, openSurfaceById])
 
   const dockContext = useMemo<FloatingDockContext>(() => ({ mode: "apps" }), [])
+  const showDesktopChrome = false
 
   const handleDockCommand = useCallback(async (command: string) => {
     return executeUiCommand(command, "dock")
@@ -161,15 +162,17 @@ export function Desktop() {
         <DevToolsStrip />
       </div>
       <AgentUiBridge />
-      <ProjectChecklist />
-      <ProfileMenu />
-      <AppOverlayHost
-        surfaces={appSurfaces}
-        surfaceOrder={appSurfaceOrder}
-        focusedSurfaceId={focusedAppSurfaceId}
-        onFocus={focusAppSurface}
-        onClose={handleCloseAppSurface}
-      />
+      {showDesktopChrome ? <ProjectChecklist /> : null}
+      {showDesktopChrome ? <ProfileMenu /> : null}
+      {showDesktopChrome ? (
+        <AppOverlayHost
+          surfaces={appSurfaces}
+          surfaceOrder={appSurfaceOrder}
+          focusedSurfaceId={focusedAppSurfaceId}
+          onFocus={focusAppSurface}
+          onClose={handleCloseAppSurface}
+        />
+      ) : null}
       {pendingGate ? (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
           <div className="h-[min(620px,calc(100vh-2rem))] w-[min(460px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-border bg-background shadow-2xl">

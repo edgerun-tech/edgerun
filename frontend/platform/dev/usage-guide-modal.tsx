@@ -21,7 +21,19 @@ const relayExamples = [
   },
   {
     label: "Backend bridge",
-    code: `window.edgerunCdpRelay.setBackendBridge(async (message) => fetch("/api/agent-ui-bridge", { method: "POST", body: JSON.stringify({ message }) }))`,
+    code: `window.edgerunCdpRelay.setBackendBridge(async (message) => fetch("/api/codex", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ prompt: message, resume: true, stream: false }),
+}))`,
+  },
+  {
+    label: "CDP destination (browser route)",
+    code: `window.edgerunCdpRelay.setDestination("chatgpt")`,
+  },
+  {
+    label: "Select chat session",
+    code: `window.edgerunCdpRelay.setChatSession("chatgpt.com")`,
   },
   {
     label: "Direct CDP target",

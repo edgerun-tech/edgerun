@@ -107,20 +107,21 @@ edgerun-tungstenite = { path = "../utility/edgerun-tungstenite", features = ["de
 edgerun-url = { path = "../utility/edgerun-url", default-features = false }
 edgerun-uuid = { path = "../utility/edgerun-uuid", features = ["serde", "v4", "v7"] }
 edgerun-zstd = { path = "../utility/edgerun-zstd" }
-icu_decimal = "2.1"
-icu_locale_core = "2.1"
-icu_provider = { version = "2.1", features = ["sync"] }
-landlock = "0.4.4"
-opentelemetry = "0.31.0"
+icu_decimal = { package = "edgerun-icu-decimal", path = "../utility/edgerun-icu-decimal" }
+icu_locale_core = { package = "edgerun-icu-locale-core", path = "../utility/edgerun-icu-locale-core" }
+icu_provider = { package = "edgerun-icu-provider", path = "../utility/edgerun-icu-provider", features = ["sync"] }
+landlock = { package = "edgerun-landlock", path = "../utility/edgerun-landlock" }
+opentelemetry = { package = "edgerun-opentelemetry", path = "../utility/edgerun-opentelemetry" }
 rmcp = { package = "edgerun-rmcp", path = "../utility/edgerun-rmcp", default-features = false }
-rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
-rustls-native-certs = "0.8.3"
-rustls-pki-types = "1.14.0"
-schemars = "0.8.22"
-seccompiler = "0.5.0"
+opentelemetry_sdk = { package = "edgerun-opentelemetry-sdk", path = "../utility/edgerun-opentelemetry-sdk" }
+rustls = { package = "edgerun-rusttls", path = "../utility/edgerun-rusttls", default-features = false, features = ["ring", "std"] }
+rustls-native-certs = { package = "edgerun-rustls-native-certs", path = "../utility/edgerun-rustls-native-certs" }
+rustls-pki-types = { package = "edgerun-rustls-pki-types", path = "../utility/edgerun-rustls-pki-types" }
+schemars = { package = "edgerun-schemars", path = "../utility/edgerun-schemars" }
+seccompiler = { package = "edgerun-seccompiler", path = "../utility/edgerun-seccompiler" }
 tracing = { package = "edgerun-log", path = "../utility/edgerun-log", features = ["tracing-compat"] }
-tracing-opentelemetry = "0.32.0"
-tree-sitter = "0.25.10"
-tree-sitter-bash = "0.25"
-ts-rs = "11"
-v8 = "=146.4.0"
+tracing-opentelemetry = { package = "edgerun-tracing-opentelemetry", path = "../utility/edgerun-tracing-opentelemetry" }
+tree-sitter = { package = "edgerun-tree-sitter", path = "../utility/edgerun-tree-sitter" }
+tree-sitter-bash = { package = "edgerun-tree-sitter-bash", path = "../utility/edgerun-tree-sitter-bash" }
+ts-rs = { package = "edgerun-ts-rs", path = "../utility/edgerun-ts-rs" }
+v8 = { package = "edgerun-v8", path = "../utility/edgerun-v8" }

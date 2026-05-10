@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { cn } from "@/lib/utils"
 import { bootstrapBrowserCdpRelay, type BrowserCdpRelayState } from "@/platform/dev/browser-cdp-relay"
 
-type DesktopRelayDestination = "frontend" | "backend"
+type DesktopRelayDestination = "frontend" | "backend" | "chatgpt"
 type CdpToolAction = "api" | "status" | "endpoint" | "targets" | "eval" | "focus" | "text" | "ws-eval" | "frontend" | "chatgpt"
 type Health = "checking" | "ready" | "blocked" | "offline"
 
@@ -18,6 +18,10 @@ const initialRelayState: BrowserCdpRelayState = {
   backend: "offline",
   backendBridgeRegistered: false,
   endpoint: "http://127.0.0.1:9222",
+  chatSession: {
+    query: "chatgpt.com",
+    label: "chatgpt.com",
+  },
   updatedAtIso: "",
 }
 
@@ -91,19 +95,38 @@ function useDevHealth() {
   const [cdpHealth, setCdpHealth] = useState<Health>("checking")
   const [cdpError, setCdpError] = useState("")
   const [backendError, setBackendError] = useState("")
+  const [destination, setDestination] = useState<DesktopRelayDestination | null>(null)
+
+  useEffect(() => {
+    const relay = bootstrapBrowserCdpRelay()
+    if (!relay) return
+
+    setDestination(relay.status().destination)
+    return relay.subscribeStatus((state) => setDestination(state.destination))
+  }, [])
 
   const refresh = useCallback(async () => {
     const relay = bootstrapBrowserCdpRelay()
+    const activeDestination = destination || relay?.status().destination || null
 
     setCdpHealth("checking")
     setCdpError("")
-    try {
-      await relay?.targets()
-      setCdpHealth("ready")
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      setCdpError(message)
-      setCdpHealth(/failed to fetch|cors|load failed/i.test(message) ? "blocked" : "offline")
+    if (!relay) {
+      setCdpError("CDP relay unavailable.")
+      setCdpHealth("offline")
+    } else if (activeDestination !== "frontend") {
+      setCdpHealth("blocked")
+      const label = activeDestination ?? "unknown"
+      setCdpError(`Direct CDP checks are disabled for destination "${label}".`)
+    } else {
+      try {
+        await relay.targets()
+        setCdpHealth("ready")
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        setCdpError(message)
+        setCdpHealth(/failed to fetch|cors|load failed/i.test(message) ? "blocked" : "offline")
+      }
     }
 
     setBackendHealth("checking")
@@ -117,7 +140,7 @@ function useDevHealth() {
       setBackendError(error instanceof Error ? error.message : String(error))
       setBackendHealth("offline")
     }
-  }, [])
+  }, [destination])
 
   useEffect(() => {
     void refresh()
@@ -202,7 +225,7 @@ function CdpToolsControl({ backendHealth, backendError, cdpHealth, cdpError }: {
       }
 
       if (action === "chatgpt") {
-        setOutput(await relay.sendToChatGpt(arg.trim() || "hello from edgerun", { waitMs: 6000 }))
+        setOutput(await relay.relay(arg.trim() || "hello from edgerun", "chatgpt", { waitMs: 6000 }))
         return
       }
 
@@ -307,13 +330,26 @@ function CdpToolsControl({ backendHealth, backendError, cdpHealth, cdpError }: {
 }
 
 function RelayRoutingControl({ relayState, backendHealth }: { relayState: BrowserCdpRelayState; backendHealth: Health }) {
-  const selectedDestination: DesktopRelayDestination = relayState.destination === "backend" ? "backend" : "frontend"
+  const selectedDestination: DesktopRelayDestination = relayState.destination
   const backendOnline = relayState.backendBridgeRegistered && backendHealth === "ready"
+  const [chatSessionInput, setChatSessionInput] = useState(relayState.chatSession.label || relayState.chatSession.query)
+
+  useEffect(() => {
+    if (selectedDestination === "chatgpt") {
+      setChatSessionInput(relayState.chatSession.label || relayState.chatSession.query)
+    }
+  }, [relayState.chatSession.label, relayState.chatSession.query, selectedDestination])
 
   const updateDestination = useCallback((destination: DesktopRelayDestination) => {
     const relay = bootstrapBrowserCdpRelay()
     relay?.setDestination(destination)
   }, [])
+
+  const setSession = useCallback(() => {
+    const relay = bootstrapBrowserCdpRelay()
+    const next = relay?.setChatSession(chatSessionInput.trim() || "chatgpt.com")
+    if (next) setChatSessionInput(next)
+  }, [chatSessionInput])
 
   return (
     <div data-relay-routing-control className="flex items-center gap-3">
@@ -328,8 +364,30 @@ function RelayRoutingControl({ relayState, backendHealth }: { relayState: Browse
         <SelectContent align="center" className="min-w-[96px]">
           <SelectItem value="frontend" className="font-mono text-xs">frontend</SelectItem>
           <SelectItem value="backend" className="font-mono text-xs">backend</SelectItem>
+          <SelectItem value="chatgpt" className="font-mono text-xs">chatgpt</SelectItem>
         </SelectContent>
       </Select>
+      {selectedDestination === "chatgpt" ? (
+        <div className="flex items-center gap-2">
+          <input
+            value={chatSessionInput}
+            onChange={(event) => setChatSessionInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") setSession()
+            }}
+            placeholder="chatgpt.com"
+            className="h-6 w-40 bg-transparent font-mono text-[10px] text-muted-foreground outline-none placeholder:text-muted-foreground/45 hover:text-foreground focus:text-foreground"
+            aria-label="ChatGPT session"
+          />
+          <button
+            type="button"
+            onClick={() => void setSession()}
+            className="h-6 font-mono text-[10px] text-muted-foreground hover:text-foreground"
+          >
+            set
+          </button>
+        </div>
+      ) : null}
       <div className="flex items-center gap-2 font-mono text-[10px] uppercase text-muted-foreground">
         <span className={cn("flex items-center gap-1", relayState.frontend === "ready" && "text-emerald-300")}>
           <RelayStatusDot online={relayState.frontend === "ready"} />

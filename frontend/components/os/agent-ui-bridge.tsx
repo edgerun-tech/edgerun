@@ -22,7 +22,7 @@ type BridgePayload = {
   selector?: string
   value?: string
   submit?: boolean
-  prefix?: "/" | "?" | "~"
+  prefix?: "/" | "?" | "~" | "!"
 }
 
 function payloadOf(command: BridgeCommand): BridgePayload {
@@ -107,7 +107,7 @@ export function AgentUiBridge() {
         if (payload.action) executeUiAction(payload.action, "system")
         break
       case "focus-dock":
-        focusDockInput(payload.prefix || "~", payload.value)
+        focusDockInput(payload.prefix || "~", payload.value, Boolean(payload.submit))
         break
       case "launch-app":
         if (payload.appId) launchAppById(payload.appId)
