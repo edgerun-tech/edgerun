@@ -24,7 +24,6 @@ edgerun-uuid = { workspace = true }
 icu_decimal = { workspace = true }
 icu_locale_core = { workspace = true }
 icu_provider = { workspace = true, features = ["sync"] }
-edgerun-reqwest = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 edgerun-serde-with = { workspace = true, features = ["macros", "base64"] }
