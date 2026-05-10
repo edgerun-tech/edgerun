@@ -55,6 +55,7 @@ export const cdpToolsStore = atom<CdpToolsState>({
 })
 
 export const chatSessionInputStore = atom(initialRelayState.chatSession.label || initialRelayState.chatSession.query)
+export const usageGuideOpenStore = atom(false)
 
 export function setRelayState(value: BrowserCdpRelayState) {
   relayStateStore.set(value)
@@ -77,4 +78,12 @@ export function setCdpToolOutput(value: unknown) {
 
 export function setChatSessionInput(value: string) {
   chatSessionInputStore.set(value)
+}
+
+export function setUsageGuideOpen(open: boolean) {
+  usageGuideOpenStore.set(open)
+}
+
+export function toggleUsageGuideOpen() {
+  usageGuideOpenStore.set(!usageGuideOpenStore.get())
 }
