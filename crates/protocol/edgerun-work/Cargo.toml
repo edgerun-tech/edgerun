@@ -1,0 +1,21 @@
+[package]
+name = "edgerun-work"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[features]
+default = ["std"]
+std = ["edgerun-wire/std"]
+
+[dependencies]
+edgerun-crypto = { workspace = true, default-features = false, features = ["ed25519"] }
+edgerun-wire = { workspace = true, default-features = false }
+rkyv = { workspace = true, default-features = false, features = ["alloc", "bytecheck"] }
+blake3 = { workspace = true, default-features = false }
+
+[lints]
+workspace = true
