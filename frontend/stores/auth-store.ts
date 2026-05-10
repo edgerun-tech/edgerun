@@ -1,4 +1,5 @@
 import { atom, computed } from "nanostores"
+import { bytesToHex } from "@/platform/utils/bytes"
 import type {
   AuthState,
   NodeProvisionInput,
@@ -127,10 +128,6 @@ function base64ToBytes(base64: string): Uint8Array {
   const bytes = new Uint8Array(binary.length)
   for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index)
   return bytes
-}
-
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")
 }
 
 function profileInitials(handle: string): string {

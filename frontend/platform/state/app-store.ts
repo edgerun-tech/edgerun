@@ -6,6 +6,7 @@
 import { atom, computed } from "nanostores"
 import { protocolClient } from "@/platform/protocol/client"
 import { edgerun as edgerunStream } from "@/gen/edgerun/v0/stream"
+import { bytesToHex } from "@/platform/utils/bytes"
 
 export interface AppStoreState {
   apps: Map<string, edgerunStream.v0.stream.AppPackage>
@@ -30,11 +31,6 @@ export const installedApps = computed(appStore, (s) =>
 )
 
 export const appCount = computed(appStore, (s) => s.apps.size)
-
-function bytesToHex(bytes?: Uint8Array): string {
-  if (!bytes || bytes.byteLength === 0) return ""
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")
-}
 
 export function appPackageId(app: edgerunStream.v0.stream.AppPackage): string {
   return bytesToHex(app.wasm_object?.object_id) || app.name || "unknown-app"

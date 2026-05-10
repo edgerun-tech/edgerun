@@ -8,6 +8,7 @@
  * If measured, link to footprint evidence.
  */
 
+import { bytesToHex } from "@/platform/utils/bytes"
 import { edgerun as edgerunStream } from "@/gen/edgerun/v0/stream"
 
 export type AppKind = "builtin" | "installed" | "wasm" | "external" | "preview"
@@ -60,11 +61,6 @@ export interface AppDefinition {
   externalBindings?: ExternalAppBinding[]
   footprint?: AppFootprint
   displayMetadata?: Record<string, unknown>
-}
-
-function bytesToHex(bytes?: Uint8Array): string {
-  if (!bytes || bytes.byteLength === 0) return ""
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")
 }
 
 /**

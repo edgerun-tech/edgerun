@@ -170,13 +170,6 @@ const portfolioAssets = [
   { symbol: "SOL", network: "Solana", amount: "0.00", value: 0, fill: ASSET_COLORS.SOL },
 ]
 
-function formatDate(d: Date) {
-  const diff = Date.now() - d.getTime()
-  if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-}
-
 function parseAssetId(value: string): AssetInfo {
   const [symbol, network] = value.split(":")
   return { symbol: symbol || "", network: network || "" }
