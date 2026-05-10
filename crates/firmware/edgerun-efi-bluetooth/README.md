@@ -82,7 +82,7 @@ The firmware upload parser is not implemented yet. The current code reports that
 
 ## Next implementation step
 
-Port only the RTL8922A branch from Linux `drivers/bluetooth/btrtl.c`:
+Reimplement the RTL8922A firmware upload behavior without copying GPL source into this MIT/Apache crate:
 
 - verify Realtek EPATCH signature
 - read RTL ROM version using vendor opcode `0xfc6d`
