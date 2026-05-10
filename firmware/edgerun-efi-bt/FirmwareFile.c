@@ -154,6 +154,35 @@ EdgerunFreeFirmwareFiles(
   ZeroMem(Files, sizeof(*Files));
 }
 
+STATIC
+EFI_STATUS
+LoadFirstExisting(
+  IN EFI_HANDLE ImageHandle,
+  IN CONST CHAR16 *Path0,
+  IN CONST CHAR16 *Path1,
+  IN CONST CHAR16 *Path2,
+  IN CONST CHAR16 *Path3,
+  OUT UINT8 **Data,
+  OUT UINTN *DataLen
+  )
+{
+  EFI_STATUS Status;
+
+  Status = EdgerunLoadFileFromBootVolume(ImageHandle, Path0, Data, DataLen);
+  if (!EFI_ERROR(Status)) {
+    return Status;
+  }
+  Status = EdgerunLoadFileFromBootVolume(ImageHandle, Path1, Data, DataLen);
+  if (!EFI_ERROR(Status)) {
+    return Status;
+  }
+  Status = EdgerunLoadFileFromBootVolume(ImageHandle, Path2, Data, DataLen);
+  if (!EFI_ERROR(Status)) {
+    return Status;
+  }
+  return EdgerunLoadFileFromBootVolume(ImageHandle, Path3, Data, DataLen);
+}
+
 EFI_STATUS
 EdgerunLoadRtl8922aFirmwareFiles(
   IN EFI_HANDLE ImageHandle,
@@ -168,48 +197,38 @@ EdgerunLoadRtl8922aFirmwareFiles(
 
   ZeroMem(Files, sizeof(*Files));
 
-  Status = EdgerunLoadFileFromBootVolume(
+  Status = LoadFirstExisting(
              ImageHandle,
+             L"\\EFI\\BOOT\\firmware\\rtl8922au_fw",
              L"\\EFI\\BOOT\\firmware\\rtl8922au_fw.bin",
+             L"\\firmware\\rtl8922au_fw",
+             L"\\firmware\\rtl8922au_fw.bin",
              &Files->FwData,
              &Files->FwLen
              );
   if (EFI_ERROR(Status)) {
-    Status = EdgerunLoadFileFromBootVolume(
-               ImageHandle,
-               L"\\firmware\\rtl8922au_fw.bin",
-               &Files->FwData,
-               &Files->FwLen
-               );
-  }
-  if (EFI_ERROR(Status)) {
-    Print(L"rtl8922au_fw.bin not found on boot volume\r\n");
+    Print(L"rtl8922au_fw not found on boot volume\r\n");
     return Status;
   }
 
-  Status = EdgerunLoadFileFromBootVolume(
+  Status = LoadFirstExisting(
              ImageHandle,
+             L"\\EFI\\BOOT\\firmware\\rtl8922au_config",
              L"\\EFI\\BOOT\\firmware\\rtl8922au_config.bin",
+             L"\\firmware\\rtl8922au_config",
+             L"\\firmware\\rtl8922au_config.bin",
              &Files->CfgData,
              &Files->CfgLen
              );
   if (EFI_ERROR(Status)) {
-    Status = EdgerunLoadFileFromBootVolume(
-               ImageHandle,
-               L"\\firmware\\rtl8922au_config.bin",
-               &Files->CfgData,
-               &Files->CfgLen
-               );
-  }
-  if (EFI_ERROR(Status)) {
     Files->CfgData = NULL;
     Files->CfgLen = 0;
-    Print(L"rtl8922au_config.bin not found; continuing without config\r\n");
+    Print(L"rtl8922au_config not found; continuing without config\r\n");
   }
 
-  Print(L"loaded rtl8922au_fw.bin bytes=%u\r\n", (UINT32)Files->FwLen);
+  Print(L"loaded rtl8922au_fw bytes=%u\r\n", (UINT32)Files->FwLen);
   if (Files->CfgData != NULL) {
-    Print(L"loaded rtl8922au_config.bin bytes=%u\r\n", (UINT32)Files->CfgLen);
+    Print(L"loaded rtl8922au_config bytes=%u\r\n", (UINT32)Files->CfgLen);
   }
 
   return EFI_SUCCESS;
