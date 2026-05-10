@@ -8,7 +8,7 @@ use edgerun_wire::{
 };
 
 use crate::{
-    MAX_PENDING_DELIVERIES, MAX_ROUTES, RelayWireError, report_hash, sha256_array,
+    MAX_PENDING_DELIVERIES, MAX_ROUTES, RelayWireError, report_hash, request_hash, sha256_array,
     verify_delivery_receipt, verify_register, verify_report_receipt, verify_submit,
 };
 
@@ -37,6 +37,8 @@ pub enum RelayOutput<Peer> {
 pub enum RelayEngineError {
     InvalidSignature,
     InvalidPayloadHash,
+    InvalidReceiptHash,
+    InvalidState,
     PayloadTooLarge,
     RouteTableFull,
     PendingTableFull,
@@ -44,6 +46,7 @@ pub enum RelayEngineError {
     UnknownMessage,
     WrongSigner,
     DuplicateMessage,
+    StaleRegister,
     Wire(RelayWireError),
 }
 
@@ -51,11 +54,14 @@ impl RelayEngineError {
     pub fn code(&self) -> u16 {
         match self {
             Self::InvalidSignature => 401,
-            Self::InvalidPayloadHash | Self::Wire(_) => 400,
+            Self::InvalidPayloadHash | Self::InvalidReceiptHash | Self::Wire(_) => 400,
             Self::PayloadTooLarge => 413,
             Self::RouteTableFull | Self::PendingTableFull => 503,
             Self::NodeNotRegistered | Self::UnknownMessage => 404,
-            Self::WrongSigner | Self::DuplicateMessage => 409,
+            Self::WrongSigner
+            | Self::DuplicateMessage
+            | Self::StaleRegister
+            | Self::InvalidState => 409,
         }
     }
 
@@ -63,6 +69,8 @@ impl RelayEngineError {
         match self {
             Self::InvalidSignature => "invalid signature",
             Self::InvalidPayloadHash => "invalid payload hash",
+            Self::InvalidReceiptHash => "relay receipt hash does not match pending delivery",
+            Self::InvalidState => "relay message is invalid for current pending state",
             Self::PayloadTooLarge => "relay payload is too large",
             Self::RouteTableFull => "relay route table is full",
             Self::PendingTableFull => "relay pending table is full",
@@ -70,9 +78,16 @@ impl RelayEngineError {
             Self::UnknownMessage => "unknown relay message id",
             Self::WrongSigner => "receipt signer does not match pending delivery",
             Self::DuplicateMessage => "duplicate relay message id",
+            Self::StaleRegister => "stale relay registration sequence",
             Self::Wire(_) => "invalid relay wire packet",
         }
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum PendingState {
+    DeliveryRequested,
+    DeliveryReported,
 }
 
 #[derive(Clone)]
@@ -80,7 +95,11 @@ struct PendingDelivery<Peer> {
     sender: RelayIdentity,
     recipient: RelayIdentity,
     sender_peer: Peer,
+    recipient_peer: Peer,
     submit: RelaySubmit,
+    request_sha256: [u8; 32],
+    report_sha256: Option<[u8; 32]>,
+    state: PendingState,
 }
 
 #[derive(Clone)]
@@ -89,6 +108,7 @@ where
     Peer: Clone + PartialEq,
 {
     routes: BTreeMap<RelayPeerKey, Peer>,
+    register_sequences: BTreeMap<RelayPeerKey, u64>,
     pending: BTreeMap<[u8; 32], PendingDelivery<Peer>>,
 }
 
@@ -108,6 +128,7 @@ where
     pub const fn new() -> Self {
         Self {
             routes: BTreeMap::new(),
+            register_sequences: BTreeMap::new(),
             pending: BTreeMap::new(),
         }
     }
@@ -122,8 +143,9 @@ where
 
     pub fn remove_peer(&mut self, peer: &Peer) {
         self.routes.retain(|_, route_peer| route_peer != peer);
-        self.pending
-            .retain(|_, pending| &pending.sender_peer != peer);
+        self.pending.retain(|_, pending| {
+            &pending.sender_peer != peer && &pending.recipient_peer != peer
+        });
     }
 
     pub fn handle_message(&mut self, peer: Peer, message: RelayMessage) -> Vec<RelayOutput<Peer>> {
@@ -154,9 +176,15 @@ where
                     return Err(RelayEngineError::InvalidSignature);
                 }
                 let key = RelayPeerKey::from(&register.node);
+                if let Some(previous_sequence) = self.register_sequences.get(&key) {
+                    if register.sequence <= *previous_sequence {
+                        return Err(RelayEngineError::StaleRegister);
+                    }
+                }
                 if self.routes.len() >= MAX_ROUTES && !self.routes.contains_key(&key) {
                     return Err(RelayEngineError::RouteTableFull);
                 }
+                self.register_sequences.insert(key.clone(), register.sequence);
                 self.routes.insert(key, peer);
                 Ok(ok_ack(200, "registered"))
             }
@@ -204,24 +232,30 @@ where
             .get(&RelayPeerKey::from(&submit.to))
             .cloned()
             .ok_or(RelayEngineError::NodeNotRegistered)?;
+        let request = RelayDeliveryRequest {
+            abi_version: RELAY_WIRE_ABI_VERSION,
+            flags: 1,
+            relay_id: b"edgerun-relay".to_vec(),
+            submit: submit.clone(),
+            received_unix_ms: 0,
+        };
+        let request_sha256 = request_hash(&request);
         self.pending.insert(
             submit.message_id,
             PendingDelivery {
                 sender: submit.from.clone(),
                 recipient: submit.to.clone(),
                 sender_peer,
-                submit: submit.clone(),
+                recipient_peer: recipient_peer.clone(),
+                submit,
+                request_sha256,
+                report_sha256: None,
+                state: PendingState::DeliveryRequested,
             },
         );
         out.push(RelayOutput::Message {
             peer: recipient_peer,
-            message: RelayMessage::DeliveryRequest(RelayDeliveryRequest {
-                abi_version: RELAY_WIRE_ABI_VERSION,
-                flags: 1,
-                relay_id: b"edgerun-relay".to_vec(),
-                submit,
-                received_unix_ms: 0,
-            }),
+            message: RelayMessage::DeliveryRequest(request),
         });
         Ok(())
     }
@@ -236,22 +270,34 @@ where
             .get(&receipt.message_id)
             .cloned()
             .ok_or(RelayEngineError::UnknownMessage)?;
+        if pending.state != PendingState::DeliveryRequested {
+            return Err(RelayEngineError::InvalidState);
+        }
         if pending.recipient != receipt.recipient {
             return Err(RelayEngineError::WrongSigner);
+        }
+        if receipt.request_sha256 != pending.request_sha256 {
+            return Err(RelayEngineError::InvalidReceiptHash);
         }
         if !verify_delivery_receipt(&receipt) {
             return Err(RelayEngineError::InvalidSignature);
         }
+        let report = RelayDeliveryReport {
+            abi_version: RELAY_WIRE_ABI_VERSION,
+            flags: 1,
+            relay_id: b"edgerun-relay".to_vec(),
+            submit: pending.submit,
+            recipient_receipt: receipt,
+            reported_unix_ms: 0,
+        };
+        let report_sha256 = report_hash(&report);
+        if let Some(pending) = self.pending.get_mut(&report.submit.message_id) {
+            pending.report_sha256 = Some(report_sha256);
+            pending.state = PendingState::DeliveryReported;
+        }
         out.push(RelayOutput::Message {
             peer: pending.sender_peer,
-            message: RelayMessage::DeliveryReport(RelayDeliveryReport {
-                abi_version: RELAY_WIRE_ABI_VERSION,
-                flags: 1,
-                relay_id: b"edgerun-relay".to_vec(),
-                submit: pending.submit,
-                recipient_receipt: receipt,
-                reported_unix_ms: 0,
-            }),
+            message: RelayMessage::DeliveryReport(report),
         });
         Ok(())
     }
@@ -265,8 +311,14 @@ where
             .get(&receipt.message_id)
             .cloned()
             .ok_or(RelayEngineError::UnknownMessage)?;
+        if pending.state != PendingState::DeliveryReported {
+            return Err(RelayEngineError::InvalidState);
+        }
         if pending.sender != receipt.sender {
             return Err(RelayEngineError::WrongSigner);
+        }
+        if Some(receipt.report_sha256) != pending.report_sha256 {
+            return Err(RelayEngineError::InvalidReceiptHash);
         }
         if !verify_report_receipt(&receipt) {
             return Err(RelayEngineError::InvalidSignature);
