@@ -30,7 +30,9 @@ zeroize = { package = "edgerun-zeroize", path = "../edgerun-zeroize", default-fe
 
 That keeps source imports stable while changing package ownership. After call sites are stable, APIs can be renamed from compatibility names to Edgerun names.
 
-## First completed replacement
+## Completed direct replacements
+
+### `zeroize` → `edgerun-zeroize`
 
 `zeroize` is now represented by `crates/utility/edgerun-zeroize`, a small `no_std` crate with optional `alloc` support.
 
@@ -42,6 +44,16 @@ Direct replacements completed:
 Remaining related debt:
 
 - Nested vendored manifests under `crates/utility/edgerun-crypto/vendor/*` may still reference upstream `zeroize` internally. Those trees should either be deleted after their code is fully internalized or patched to use `edgerun-zeroize` as part of the crypto cleanup.
+
+### `subtle` → `edgerun-subtle`
+
+`subtle` is now represented by `crates/utility/edgerun-subtle`.
+
+Direct replacements completed:
+
+- `crates/utility/edgerun-rusttls`
+
+Implementation note: `edgerun-subtle` currently exposes the already-internalized implementation from `edgerun-crypto/src/subtle.rs` to avoid duplicating constant-time primitive code. The intended final shape is to make `edgerun-subtle` the canonical implementation and have `edgerun-crypto` consume it directly.
 
 ## CI status
 
