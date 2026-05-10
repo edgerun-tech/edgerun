@@ -37,7 +37,7 @@ ReadRealtekRomVersion(
     return Status;
   }
 
-  // Return parameters for Realtek ROM version are: status, version.
+  // EdgerunHciCommand already validated the first return byte as command status.
   if (EventLen < 7) {
     return EFI_DEVICE_ERROR;
   }
@@ -68,15 +68,13 @@ ReadRealtekReg16(
     return Status;
   }
 
-  // Return parameters are expected to include status + two-byte register value.
+  // EdgerunHciCommand already validated the first return byte as command status,
+  // so the two-byte register value starts immediately after it.
   if (EventLen < 8) {
     return EFI_DEVICE_ERROR;
   }
-  if (Event[6] != 0) {
-    return EFI_DEVICE_ERROR;
-  }
 
-  *Value = (UINT16)(Event[7] | ((UINT16)Event[8] << 8));
+  *Value = (UINT16)(Event[6] | ((UINT16)Event[7] << 8));
   return EFI_SUCCESS;
 }
 
