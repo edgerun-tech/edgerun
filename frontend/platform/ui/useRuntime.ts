@@ -1,31 +1,22 @@
 /**
  * Hook for accessing runtime state and actions.
+ * WASM operations delegate to wasm-registry; app lifecycle delegates to app-runtime.
  */
 
 import { useStore } from "@nanostores/react"
-import {
-  runtimeStore,
-  runningAppsList,
-  startRuntimeApp,
-  stopRuntimeApp,
-  cacheWasm,
-  getCachedWasm,
-  getWasmUrl,
-  removeWasmCache,
-} from "@/platform/state/runtime-store"
 import {
   wasmRegistry,
   allWasmModules,
   resolveWasmObject,
   loadWasmForApp,
-  getWasmUrl as registryGetWasmUrl,
+  getWasmUrl,
   getWasmBytes,
   removeWasm,
   validateWasmHash,
 } from "@/platform/runtime/wasm-registry"
 import {
   appRuntime,
-  runningAppsList as appRuntimeRunning,
+  runningAppsList,
   startApp,
   stopApp,
   getRunningApp,
@@ -34,34 +25,23 @@ import {
 } from "@/platform/runtime/app-runtime"
 
 export function useRuntime() {
-  const store = useStore(runtimeStore)
   const wasmRegistryState = useStore(wasmRegistry)
   const appRuntimeState = useStore(appRuntime)
 
   return {
-    // Runtime store
-    runningApps: store.runningApps,
-    wasmCache: store.wasmCache,
-    startRuntimeApp,
-    stopRuntimeApp,
-    cacheWasm,
-    getCachedWasm,
-    getWasmUrl,
-    removeWasmCache,
-    // WASM registry
     wasmModules: useStore(allWasmModules),
     resolveWasmObject,
     loadWasmForApp,
-    registryGetWasmUrl,
+    getWasmUrl,
     getWasmBytes,
     removeWasm,
     validateWasmHash,
-    // App runtime
-    appRuntimeRunning,
+    runningApps: useStore(runningAppsList),
     startApp,
     stopApp,
     getRunningApp,
     isAppRunning,
     setRuntimeError,
+    appRuntimeState,
   }
 }

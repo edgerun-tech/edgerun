@@ -5,9 +5,8 @@ import { AlertCircle, CheckCircle2, ExternalLink, GitBranch, LogOut, RefreshCw, 
 import { cn } from "@/lib/utils"
 import { useAuth, type OAuthProfileSecret } from "@/hooks/use-auth"
 import { deleteAppSession, storeAppSession } from "@/platform/runtime/app-session-broker"
-import { readCookie, deleteCookie } from "@/lib/oauth-utils"
+import { readCookie, deleteCookie, readPendingOAuthSecret, type PendingOAuthSecret } from "@/lib/oauth-utils"
 
-type PendingGitHubSecret = Omit<OAuthProfileSecret, "appId" | "kind" | "updatedAtIso">
 const PENDING_GITHUB_STORAGE_KEY = "edgerun:oauth-pending:github"
 
 type GitHubRepo = {
@@ -21,28 +20,7 @@ type GitHubRepo = {
   default_branch?: string
 }
 
-function readPendingGitHubSecret(): PendingGitHubSecret | null {
-  const stored = sessionStorage.getItem(PENDING_GITHUB_STORAGE_KEY)
-  if (stored) {
-    try {
-      const parsed = JSON.parse(stored) as PendingGitHubSecret
-      return parsed.accessToken && parsed.expiresAtIso ? { ...parsed, scopes: parsed.scopes ?? [] } : null
-    } catch {
-      sessionStorage.removeItem(PENDING_GITHUB_STORAGE_KEY)
-    }
-  }
-  const raw = readCookie("github_profile_pending")
-  if (!raw) return null
-  try {
-    const parsed = JSON.parse(atob(raw.replace(/-/g, "+").replace(/_/g, "/"))) as PendingGitHubSecret
-    return parsed.accessToken && parsed.expiresAtIso ? { ...parsed, scopes: parsed.scopes ?? [] } : null
-  } catch {
-    deleteCookie("github_profile_pending", PENDING_GITHUB_STORAGE_KEY)
-    return null
-  }
-}
-
-async function restoreGitHubSession(secret: PendingGitHubSecret, profileId?: string): Promise<boolean> {
+async function restoreGitHubSession(secret: PendingOAuthSecret, profileId?: string): Promise<boolean> {
   return storeAppSession({
     appId: "github",
     accessToken: secret.accessToken,
@@ -59,7 +37,7 @@ export function GitHubApp({ className }: { className?: string }) {
   const [connected, setConnected] = useState<boolean | null>(null)
   const [login, setLogin] = useState("")
   const [repos, setRepos] = useState<GitHubRepo[]>([])
-  const [pendingSecret, setPendingSecret] = useState<PendingGitHubSecret | null>(null)
+  const [pendingSecret, setPendingSecret] = useState<PendingOAuthSecret | null>(null)
   const [profilePassword, setProfilePassword] = useState("")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -86,7 +64,7 @@ export function GitHubApp({ className }: { className?: string }) {
   }, [])
 
   useEffect(() => {
-    const pending = readPendingGitHubSecret()
+    const pending = readPendingOAuthSecret(PENDING_GITHUB_STORAGE_KEY, "github_profile_pending")
     if (pending) {
       setPendingSecret(pending)
       setLogin(pending.email)
@@ -95,7 +73,7 @@ export function GitHubApp({ className }: { className?: string }) {
     if (params.get("github_connected") === "true") {
       setConnected(true)
       window.history.replaceState({}, "", "/")
-      const pendingAfterRedirect = pending ?? readPendingGitHubSecret()
+      const pendingAfterRedirect = pending ?? readPendingOAuthSecret(PENDING_GITHUB_STORAGE_KEY, "github_profile_pending")
       if (pendingAfterRedirect) void restoreGitHubSession(pendingAfterRedirect, profileId).then(() => fetchRepos())
       else void fetchRepos()
     } else if (params.get("github_error")) {

@@ -5,9 +5,9 @@ import { AlertCircle, CheckCircle2, ExternalLink, FileText, Folder, LogOut, Refr
 import { cn } from "@/lib/utils"
 import { useAuth, type OAuthProfileSecret } from "@/hooks/use-auth"
 import { deleteAppSession, storeAppSession } from "@/platform/runtime/app-session-broker"
-import { readCookie, deleteCookie, GoogleMark } from "@/lib/oauth-utils"
+import { formatBytes } from "@/lib/format"
+import { readCookie, deleteCookie, readPendingOAuthSecret, GoogleMark, type PendingOAuthSecret } from "@/lib/oauth-utils"
 
-type PendingDriveSecret = Omit<OAuthProfileSecret, "appId" | "kind" | "updatedAtIso">
 const PENDING_DRIVE_STORAGE_KEY = "edgerun:oauth-pending:google-drive"
 
 type DriveFile = {
@@ -19,28 +19,7 @@ type DriveFile = {
   webViewLink?: string
 }
 
-function readPendingDriveSecret(): PendingDriveSecret | null {
-  const stored = sessionStorage.getItem(PENDING_DRIVE_STORAGE_KEY)
-  if (stored) {
-    try {
-      const parsed = JSON.parse(stored) as PendingDriveSecret
-      return parsed.accessToken && parsed.expiresAtIso ? { ...parsed, scopes: parsed.scopes ?? [] } : null
-    } catch {
-      sessionStorage.removeItem(PENDING_DRIVE_STORAGE_KEY)
-    }
-  }
-  const raw = readCookie("google_drive_profile_pending")
-  if (!raw) return null
-  try {
-    const parsed = JSON.parse(atob(raw.replace(/-/g, "+").replace(/_/g, "/"))) as PendingDriveSecret
-    return parsed.accessToken && parsed.expiresAtIso ? { ...parsed, scopes: parsed.scopes ?? [] } : null
-  } catch {
-    deleteCookie("google_drive_profile_pending", PENDING_DRIVE_STORAGE_KEY)
-    return null
-  }
-}
-
-async function restoreDriveSession(secret: PendingDriveSecret, profileId?: string): Promise<boolean> {
+async function restoreDriveSession(secret: PendingOAuthSecret, profileId?: string): Promise<boolean> {
   return storeAppSession({
     appId: "google-drive",
     accessToken: secret.accessToken,
@@ -50,13 +29,6 @@ async function restoreDriveSession(secret: PendingDriveSecret, profileId?: strin
   })
 }
 
-function formatBytes(value?: string): string {
-  const bytes = Number(value ?? 0)
-  if (!Number.isFinite(bytes) || bytes <= 0) return "folder or Google doc"
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
 export function GoogleDriveApp({ className }: { className?: string }) {
   const auth = useAuth()
   const savedSecret = auth.unlockedProfile?.appSecrets.find((secret) => secret.appId === "google-drive")
@@ -64,7 +36,7 @@ export function GoogleDriveApp({ className }: { className?: string }) {
   const [connected, setConnected] = useState<boolean | null>(null)
   const [email, setEmail] = useState("")
   const [files, setFiles] = useState<DriveFile[]>([])
-  const [pendingSecret, setPendingSecret] = useState<PendingDriveSecret | null>(null)
+  const [pendingSecret, setPendingSecret] = useState<PendingOAuthSecret | null>(null)
   const [profilePassword, setProfilePassword] = useState("")
   const [nextPage, setNextPage] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -98,7 +70,7 @@ export function GoogleDriveApp({ className }: { className?: string }) {
   }, [])
 
   useEffect(() => {
-    const pending = readPendingDriveSecret()
+    const pending = readPendingOAuthSecret(PENDING_DRIVE_STORAGE_KEY, "google_drive_profile_pending")
     if (pending) {
       setPendingSecret(pending)
       setEmail(pending.email)
@@ -107,7 +79,7 @@ export function GoogleDriveApp({ className }: { className?: string }) {
     if (connectedParam.get("google_drive_connected") === "true") {
       setConnected(true)
       window.history.replaceState({}, "", "/")
-      const pendingAfterRedirect = pending ?? readPendingDriveSecret()
+      const pendingAfterRedirect = pending ?? readPendingOAuthSecret(PENDING_DRIVE_STORAGE_KEY, "google_drive_profile_pending")
       if (pendingAfterRedirect) void restoreDriveSession(pendingAfterRedirect, profileId).then(() => fetchFiles())
       else void fetchFiles()
     } else if (connectedParam.get("google_drive_error")) {
@@ -273,7 +245,7 @@ export function GoogleDriveApp({ className }: { className?: string }) {
                 <Icon className="h-4 w-4 shrink-0 text-primary" />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium text-foreground">{file.name}</div>
-                  <div className="mt-0.5 text-[11px] text-muted-foreground">{formatBytes(file.size)} · {file.modifiedTime ? new Date(file.modifiedTime).toLocaleString() : "modified time unavailable"}</div>
+                  <div className="mt-0.5 text-[11px] text-muted-foreground">{formatBytes(file.size, "folder or Google doc")} · {file.modifiedTime ? new Date(file.modifiedTime).toLocaleString() : "modified time unavailable"}</div>
                 </div>
                 <ExternalLink className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
               </a>

@@ -18,6 +18,7 @@ import {
   Trash2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { formatBytes, shortHex } from "@/lib/format"
 import { getIconById, listBuiltinApps } from "@/platform/registries/builtin-app-registry"
 import { catalogApps, installCatalogApp, seedBuiltinCatalogApps, uninstallCatalogApp } from "@/platform/registries/app-catalog-registry"
 import type { AppDefinition } from "@/platform/types/app-definition"
@@ -65,16 +66,9 @@ function appGroupRank(app: AppDefinition): number {
   return 2
 }
 
-function formatBytes(value: unknown): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) return "unknown"
-  if (value < 1024) return `${value} B`
-  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
-  return `${(value / (1024 * 1024)).toFixed(1)} MB`
-}
-
 function shortHash(value: unknown): string {
   if (typeof value !== "string" || value.length < 12) return "unknown"
-  return `${value.slice(0, 12)}...${value.slice(-8)}`
+  return shortHex(value, 12, 8)
 }
 
 function metadataString(app: AppDefinition, key: string): string | undefined {
@@ -311,7 +305,7 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
 
             <div className="mt-4 grid gap-2 sm:grid-cols-3">
               <InfoCell label="Runtime" value={runtime ?? selectedApp.kind} />
-              <InfoCell label="Package" value={formatBytes(packageBytes)} />
+              <InfoCell label="Package" value={typeof packageBytes === "number" ? formatBytes(packageBytes) : "unknown"} />
               <InfoCell label="Assets" value={typeof verifiedAssets === "number" ? `${verifiedAssets} verified` : "on install"} />
             </div>
 

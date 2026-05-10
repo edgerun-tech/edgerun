@@ -41,6 +41,7 @@ import {
 } from "lucide-react"
 import { useStore } from "@nanostores/react"
 import { useForm } from "react-hook-form"
+import { formatBytes } from "@/lib/format"
 
 import componentInventory from "@/COMPONENT_INVENTORY.json"
 import { AgentAudioVisualizerAura } from "@/components/agents-ui/agent-audio-visualizer-aura"
@@ -569,13 +570,6 @@ function PanelPreviewFrame({ children }: { children: React.ReactNode }) {
       {children}
     </div>
   )
-}
-
-function formatBytes(bytes?: number) {
-  if (!bytes || bytes <= 0) return "0 B"
-  const units = ["B", "KB", "MB", "GB", "TB"]
-  const index = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
-  return `${(bytes / 1024 ** index).toFixed(index === 0 ? 0 : 1)} ${units[index]}`
 }
 
 function fileIcon(entry: FileEntry) {

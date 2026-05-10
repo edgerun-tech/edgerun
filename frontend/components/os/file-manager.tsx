@@ -26,6 +26,7 @@ import {
   Upload,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { formatBytes } from "@/lib/format"
 
 type ProviderId = "drive" | "browser-fs" | "local-storage" | "memory"
 type FileType = "folder" | "text" | "image" | "video" | "audio" | "code" | "archive" | "unknown"
@@ -126,14 +127,6 @@ function fileType(name: string, mime = ""): FileType {
   if (/\.(txt|log|csv)$/.test(lower) || mime.startsWith("text/")) return "text"
   if (/\.(zip|tar|gz|wasm|bin)$/.test(lower)) return "archive"
   return "unknown"
-}
-
-function formatBytes(bytes?: number | string): string | undefined {
-  const value = typeof bytes === "string" ? Number(bytes) : bytes
-  if (!Number.isFinite(value ?? NaN)) return undefined
-  if ((value ?? 0) < 1024) return `${value} B`
-  if ((value ?? 0) < 1024 * 1024) return `${((value ?? 0) / 1024).toFixed(1)} KB`
-  return `${((value ?? 0) / (1024 * 1024)).toFixed(1)} MB`
 }
 
 function nodeToEntry(node: StoredNode): FSEntry {

@@ -6,12 +6,10 @@
 import { atom, computed } from "nanostores"
 import { protocolClient } from "@/platform/protocol/client"
 import { edgerun as edgerunStream } from "@/gen/edgerun/v0/stream"
-import { edgerun as edgerunCap } from "@/gen/edgerun/v0/capability"
 
 export interface AppStoreState {
   apps: Map<string, edgerunStream.v0.stream.AppPackage>
   principals: Map<string, edgerunStream.v0.stream.AppPrincipal>
-  grants: Map<string, edgerunCap.v0.capability.CapabilityGrant[]>
   isLoading: boolean
   error: string | null
   lastRefresh: string | null
@@ -20,7 +18,6 @@ export interface AppStoreState {
 const initialState: AppStoreState = {
   apps: new Map(),
   principals: new Map(),
-  grants: new Map(),
   isLoading: false,
   error: null,
   lastRefresh: null,
@@ -72,19 +69,13 @@ export function removeApp(appId: string): void {
   const state = appStore.get()
   const apps = new Map(state.apps)
   const principals = new Map(state.principals)
-  const grants = new Map(state.grants)
   apps.delete(appId)
   principals.delete(appId)
-  grants.delete(appId)
-  appStore.set({ ...state, apps, principals, grants, lastRefresh: new Date().toISOString() })
+  appStore.set({ ...state, apps, principals, lastRefresh: new Date().toISOString() })
 }
 
 export function getAppPrincipal(appId: string): edgerunStream.v0.stream.AppPrincipal | undefined {
   return appStore.get().principals.get(appId)
-}
-
-export function listGrantsForApp(appId: string): edgerunCap.v0.capability.CapabilityGrant[] {
-  return appStore.get().grants.get(appId) ?? []
 }
 
 export async function loadApps(): Promise<void> {
@@ -124,25 +115,4 @@ export async function loadApps(): Promise<void> {
   }
 }
 
-export async function loadAppGrants(appId: string): Promise<void> {
-  try {
-    const response = await protocolClient.send({
-      method: "GET",
-      path: `/protocol/app/${appId}/grants`,
-      headers: { Accept: "application/json" },
-    })
 
-    if (response.status === 200) {
-      const text = new TextDecoder().decode(response.body)
-      const parsed = JSON.parse(text)
-      const items = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.grants) ? parsed.grants : []
-      const grants = items.map((obj: any) => edgerunCap.v0.capability.CapabilityGrant.fromObject(obj))
-      const state = appStore.get()
-      const newGrants = new Map(state.grants)
-      newGrants.set(appId, grants)
-      appStore.set({ ...state, grants: newGrants })
-    }
-  } catch {
-    // Grant loading is best-effort because native node/browser runtime may not expose it yet.
-  }
-}

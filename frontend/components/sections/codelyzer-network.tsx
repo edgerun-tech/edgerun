@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { formatBytes } from "@/lib/format"
 import { decodeXrayWireMessage } from "@/features/xray/services/xray-wire-wasm"
 
 type BridgeNode = {
@@ -69,13 +70,6 @@ function shortFile(file?: string) {
   if (!file) return "unknown"
   const parts = file.split("/")
   return parts.length > 3 ? parts.slice(-3).join("/") : file
-}
-
-function formatBytes(bytes?: number) {
-  if (!bytes) return "0 B"
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KiB`
-  return `${(bytes / 1024 / 1024).toFixed(1)} MiB`
 }
 
 function statusDotClass(status: BridgeStatus) {

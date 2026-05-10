@@ -15,6 +15,7 @@ import {
   TrendingUp,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { formatDate } from "@/lib/format"
 
 type TxType = "send" | "receive" | "earn" | "exchange"
 
@@ -23,6 +24,75 @@ type AssetInfo = {
   network: string
   contract?: string
 }
+
+type QuoteResponse = {
+  id: string
+  settlement_asset: string
+  pay_asset: string
+  settlement_amount: string
+  pay_amount: string
+  rate: string
+  expires_at_ms: number
+  estimated_seconds?: number
+}
+
+type OrderResponse = {
+  id: string
+  status: string
+  deposit_address: string
+  settlement_asset: string
+  settlement_amount: string
+  pay_amount: string
+}
+
+type OrderStatusResponse = {
+  id: string
+  status: string
+  canonical_status?: number
+  deposit_address: string
+  settlement_amount: string
+  pay_amount: string
+  event_count?: number
+  terminal?: boolean
+  manual_review_required?: boolean
+  last_event_type?: string
+}
+
+type Transaction = {
+  id: string
+  type: TxType
+  label: string
+  amount: number
+  ts: Date
+  status: "confirmed" | "pending"
+}
+
+const ADDRESS = "edge1qxy2kgdygjrsqtzq2n0yrf249.run"
+const SHORT_ADDRESS = "edge1qxy…249.run"
+
+const FALLBACK_ASSETS: AssetInfo[] = [
+  { symbol: "USDT", network: "Tron", contract: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" },
+  { symbol: "BTC", network: "Bitcoin" },
+  { symbol: "ETH", network: "Ethereum" },
+  { symbol: "DOGE", network: "Dogecoin" },
+  { symbol: "SOL", network: "Solana" },
+]
+
+const ASSET_COLORS: Record<string, string> = {
+  EDGE: "#22c55e",
+  USDT: "#26a17b",
+  BTC: "#f7931a",
+  ETH: "#627eea",
+  DOGE: "#c2a633",
+  SOL: "#9945ff",
+}
+
+const portfolioAssets = [
+  { symbol: "EDGE", network: "Edgerun", amount: "134.57", value: 247.61, fill: ASSET_COLORS.EDGE },
+  { symbol: "USDT", network: "Tron", amount: "0.00", value: 0, fill: ASSET_COLORS.USDT },
+  { symbol: "BTC", network: "Bitcoin", amount: "0.0000", value: 0, fill: ASSET_COLORS.BTC },
+  { symbol: "SOL", network: "Solana", amount: "0.00", value: 0, fill: ASSET_COLORS.SOL },
+]
 
 type QuoteResponse = {
   id: string

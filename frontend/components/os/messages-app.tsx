@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Lock, Send } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { formatTime } from "@/lib/format"
+import { AppAvatar } from "@/components/ui/app-avatar"
 import { useAuth, type ContactRecord, type LocalQueuedMessage, type UnlockedProfileContainer } from "@/hooks/use-auth"
 
 type MessagesAppProps = {
@@ -12,27 +14,6 @@ type MessagesAppProps = {
 type OpenedMessage = {
   message: LocalQueuedMessage
   text?: string
-}
-
-function Avatar({ name, size = "sm" }: { name: string; size?: "xs" | "sm" }) {
-  const initials = name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "ID"
-  const hue = name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0) % 360
-  return (
-    <div
-      className={cn(
-        "flex flex-shrink-0 items-center justify-center rounded-full font-mono font-bold",
-        size === "xs" && "h-6 w-6 text-[9px]",
-        size === "sm" && "h-8 w-8 text-xs",
-      )}
-      style={{ background: `oklch(0.25 0.1 ${hue})`, color: `oklch(0.85 0.1 ${hue})` }}
-    >
-      {initials}
-    </div>
-  )
-}
-
-function formatTime(date: Date) {
-  return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })
 }
 
 function senderName(profile: UnlockedProfileContainer, message: LocalQueuedMessage) {
@@ -125,7 +106,7 @@ export function MessagesApp({ initialRecipientId }: MessagesAppProps) {
                   contact.identityIdHex === activeContact?.identityIdHex ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                <Avatar name={contact.label} size="xs" />
+                <AppAvatar name={contact.label} size="xs" />
                 <span className="flex-1 truncate text-xs">{contact.label.split(" ")[0]}</span>
                 {unread > 0 && (
                   <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground">
@@ -145,7 +126,7 @@ export function MessagesApp({ initialRecipientId }: MessagesAppProps) {
 
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex h-10 flex-shrink-0 items-center gap-2 border-b border-[var(--window-border)] px-4">
-            {activeContact ? <Avatar name={activeContact.label} size="xs" /> : null}
+            {activeContact ? <AppAvatar name={activeContact.label} size="xs" /> : null}
             <span className="text-sm font-medium text-foreground">{activeContact?.label ?? "No contact selected"}</span>
             <span className="ml-auto text-[10px] text-muted-foreground">{threadMessages.length} messages</span>
           </div>
@@ -162,7 +143,7 @@ export function MessagesApp({ initialRecipientId }: MessagesAppProps) {
               const showSender = index === 0 || previousName !== name
               return (
                 <div key={message.id} className={cn("flex gap-2.5", self && "flex-row-reverse")}>
-                  {showSender && !self && <Avatar name={name} size="sm" />}
+                  {showSender && !self && <AppAvatar name={name} size="sm" />}
                   {!showSender && !self && <div className="w-8 flex-shrink-0" />}
                   <div className={cn("flex max-w-[75%] flex-col gap-0.5", self && "items-end")}>
                     {showSender && (

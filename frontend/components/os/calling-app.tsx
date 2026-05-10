@@ -3,6 +3,8 @@
 import { useState, useEffect, useRef } from "react"
 import { Phone, PhoneOff, Mic, MicOff, Volume2, VolumeX, Video, VideoOff, Signal } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { formatDuration } from "@/lib/format"
+import { AppAvatar } from "@/components/ui/app-avatar"
 
 type CallState = "idle" | "dialing" | "ringing" | "connected" | "ended"
 
@@ -19,33 +21,6 @@ const DEMO_PEERS: Peer[] = [
   { id: "3", name: "Priya Mehta", handle: "@priya.m", nodeId: "ed3f:i9j0" },
   { id: "4", name: "Mila Dube", handle: "@mila", nodeId: "ed3f:m3n4" },
 ]
-
-function Avatar({ name, pulse }: { name: string; pulse?: boolean }) {
-  const initials = name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
-  const hue = name.split("").reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360
-  return (
-    <div className="relative flex items-center justify-center">
-      {pulse && (
-        <>
-          <div
-            className="absolute h-28 w-28 animate-ping rounded-full opacity-20"
-            style={{ background: `oklch(0.65 0.2 145)` }}
-          />
-          <div
-            className="absolute h-24 w-24 animate-ping rounded-full opacity-10"
-            style={{ animationDelay: "0.3s", background: `oklch(0.65 0.2 145)` }}
-          />
-        </>
-      )}
-      <div
-        className="relative flex h-20 w-20 items-center justify-center rounded-full text-2xl font-bold"
-        style={{ background: `oklch(0.25 0.1 ${hue})`, color: `oklch(0.85 0.1 ${hue})` }}
-      >
-        {initials}
-      </div>
-    </div>
-  )
-}
 
 function SignalBars({ quality }: { quality: number }) {
   return (
@@ -115,11 +90,6 @@ export function CallingApp({ initialPeer }: CallingAppProps) {
 
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current) }, [])
 
-  const formatTime = (s: number) => {
-    const m = Math.floor(s / 60)
-    return `${String(m).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`
-  }
-
   const isInCall = callState === "connected" || callState === "dialing" || callState === "ringing"
 
   return (
@@ -131,7 +101,7 @@ export function CallingApp({ initialPeer }: CallingAppProps) {
       )}>
         {isInCall || callState === "ended" ? (
           <>
-            <Avatar name={activePeer!.name} pulse={callState === "ringing"} />
+            <AppAvatar name={activePeer!.name} size="lg" pulse={callState === "ringing"} />
             <div className="text-center">
               <h2 className="text-xl font-semibold text-foreground">{activePeer!.name}</h2>
               <p className="text-sm text-muted-foreground">{activePeer!.handle}</p>
@@ -149,7 +119,7 @@ export function CallingApp({ initialPeer }: CallingAppProps) {
               {callState === "connected" && (
                 <div className="flex items-center gap-2">
                   <SignalBars quality={quality} />
-                  <p className="font-mono text-sm text-[var(--status-online)]">{formatTime(elapsed)}</p>
+                  <p className="font-mono text-sm text-[var(--status-online)]">{formatDuration(elapsed)}</p>
                 </div>
               )}
               {callState === "ended" && (

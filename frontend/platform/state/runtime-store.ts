@@ -1,5 +1,7 @@
 /**
- * Single source of truth for runtime state (WASM modules, execution state).
+ * @deprecated WASM cache is managed by wasm-registry.ts (loadWasmForApp, getWasmUrl, removeWasm).
+ * Running apps are managed by app-runtime.ts (startApp, stopApp, getRunningApp, isAppRunning).
+ * This file is preserved for backward compatibility. New code should use the canonical stores.
  */
 
 import { atom, computed } from "nanostores"

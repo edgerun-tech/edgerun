@@ -13,9 +13,11 @@ import {
   CheckCircle2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { formatDateFromIso } from "@/lib/format"
+import { AppAvatar } from "@/components/ui/app-avatar"
 import { useAuth, type GmailProfileSecret } from "@/hooks/use-auth"
 import { deleteAppSession, storeAppSession } from "@/platform/runtime/app-session-broker"
-import { readCookie, deleteCookie, GoogleMark } from "@/lib/oauth-utils"
+import { readCookie, deleteCookie, readPendingOAuthSecret, GoogleMark, type PendingOAuthSecret } from "@/lib/oauth-utils"
 
 interface Email {
   id: string
@@ -32,31 +34,9 @@ interface GmailAppProps {
   className?: string
 }
 
-type PendingGmailSecret = Omit<GmailProfileSecret, "appId" | "kind" | "updatedAtIso">
 const PENDING_GMAIL_STORAGE_KEY = "edgerun:oauth-pending:gmail"
 
-function readPendingGmailSecret(): PendingGmailSecret | null {
-  const stored = sessionStorage.getItem(PENDING_GMAIL_STORAGE_KEY)
-  if (stored) {
-    try {
-      const parsed = JSON.parse(stored) as PendingGmailSecret
-      return parsed.accessToken && parsed.expiresAtIso ? { ...parsed, scopes: parsed.scopes ?? [] } : null
-    } catch {
-      sessionStorage.removeItem(PENDING_GMAIL_STORAGE_KEY)
-    }
-  }
-  const raw = readCookie("gmail_profile_pending")
-  if (!raw) return null
-  try {
-    const parsed = JSON.parse(atob(raw.replace(/-/g, "+").replace(/_/g, "/"))) as PendingGmailSecret
-    return parsed.accessToken && parsed.expiresAtIso ? { ...parsed, scopes: parsed.scopes ?? [] } : null
-  } catch {
-    deleteCookie("gmail_profile_pending", PENDING_GMAIL_STORAGE_KEY)
-    return null
-  }
-}
-
-async function restoreGmailSession(secret: PendingGmailSecret, profileId?: string): Promise<boolean> {
+async function restoreGmailSession(secret: PendingOAuthSecret, profileId?: string): Promise<boolean> {
   return storeAppSession({
     appId: "gmail",
     accessToken: secret.accessToken,
@@ -73,28 +53,7 @@ function parseFromField(from: string): { name: string; email: string } {
 }
 
 function formatDate(dateStr: string): string {
-  try {
-    const d = new Date(dateStr)
-    const now = new Date()
-    if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })
-    return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
-  } catch {
-    return dateStr
-  }
-}
-
-function Avatar({ name, size = "sm" }: { name: string; size?: "sm" | "md" }) {
-  const { name: displayName } = parseFromField(name)
-  const initials = displayName.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
-  const hue = displayName.split("").reduce((a, c) => a + c.charCodeAt(0), 0) % 360
-  return (
-    <div
-      className={cn("flex flex-shrink-0 items-center justify-center rounded-full font-mono font-bold", size === "sm" && "h-8 w-8 text-[10px]", size === "md" && "h-10 w-10 text-xs")}
-      style={{ background: `oklch(0.3 0.1 ${hue})`, color: `oklch(0.85 0.1 ${hue})` }}
-    >
-      {initials}
-    </div>
-  )
+  try { return formatDateFromIso(dateStr) } catch { return dateStr }
 }
 
 export function GmailApp({ className }: GmailAppProps) {
@@ -108,7 +67,7 @@ export function GmailApp({ className }: GmailAppProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [nextPage, setNextPage] = useState<string | null>(null)
-  const [pendingSecret, setPendingSecret] = useState<PendingGmailSecret | null>(null)
+  const [pendingSecret, setPendingSecret] = useState<PendingOAuthSecret | null>(null)
   const [profilePassword, setProfilePassword] = useState("")
 
   useEffect(() => {
@@ -175,7 +134,7 @@ export function GmailApp({ className }: GmailAppProps) {
   }, [])
 
   useEffect(() => {
-    const pending = readPendingGmailSecret()
+    const pending = readPendingOAuthSecret(PENDING_GMAIL_STORAGE_KEY, "gmail_profile_pending")
     if (pending) {
       setPendingSecret(pending)
       setEmail(pending.email)
@@ -247,7 +206,7 @@ export function GmailApp({ className }: GmailAppProps) {
     const params = new URLSearchParams(window.location.search)
     if (params.get("gmail_connected") === "true") {
       setConnected(true)
-      const pending = readPendingGmailSecret()
+      const pending = readPendingOAuthSecret(PENDING_GMAIL_STORAGE_KEY, "gmail_profile_pending")
       if (pending) {
         setPendingSecret(pending)
         setEmail(pending.email)
@@ -375,7 +334,7 @@ export function GmailApp({ className }: GmailAppProps) {
             const { name } = parseFromField(email.from)
             return (
               <button key={email.id} onClick={() => setSelected(email)} className={cn("flex w-full gap-2.5 border-b border-[var(--window-border)]/50 px-3 py-2.5 text-left transition-colors hover:bg-secondary/50", selected?.id === email.id && "bg-secondary", email.unread && "bg-primary/5")}> 
-                <Avatar name={email.from} size="sm" />
+                <AppAvatar name={name} size="sm" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1">{email.unread && <Circle className="h-2 w-2 flex-shrink-0 fill-primary text-primary" />}<span className={cn("truncate text-xs", email.unread ? "font-semibold" : "font-medium", "text-foreground")}>{name}</span></div>
                   <p className={cn("truncate text-xs", email.unread ? "font-medium" : "font-normal", "text-foreground")}>{email.subject}</p>
@@ -395,7 +354,7 @@ export function GmailApp({ className }: GmailAppProps) {
             <div className="border-b border-[var(--window-border)] px-4 py-3">
               <h2 className="text-sm font-semibold text-foreground">{selected.subject}</h2>
               <div className="mt-2 flex items-center gap-2">
-                <Avatar name={selected.from} size="sm" />
+                <AppAvatar name={parseFromField(selected.from).name} size="sm" />
                 <div className="min-w-0 flex-1"><p className="text-xs font-medium text-foreground">{parseFromField(selected.from).name}</p><p className="text-[10px] text-muted-foreground">{parseFromField(selected.from).email}</p></div>
                 <span className="flex items-center gap-1 text-[10px] text-muted-foreground"><Clock className="h-3 w-3" />{formatDate(selected.date)}</span>
               </div>

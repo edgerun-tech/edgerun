@@ -23,7 +23,7 @@ export { connectionStore, addConnection, removeConnection } from "./state/connec
 export { permissionStore, hasPermission, requiresApproval } from "./state/permission-store"
 export { objectStore, fetchObjectMetadata as fetchObjectMeta } from "./state/object-store"
 export { commandStore, addPendingCommand } from "./state/command-store"
-export { runtimeStore, cacheWasm, removeWasmCache } from "./state/runtime-store"
+export { getWasmUrl, getWasmBytes } from "./runtime/wasm-registry"
 
 // Registries
 export { capabilityRegistry, registerCapability } from "./registries/capability-registry"

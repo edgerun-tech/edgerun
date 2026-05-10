@@ -12,6 +12,35 @@ export function writeCookie(name: string, value: string) {
   document.cookie = `${name}=${encodeURIComponent(value)}; Max-Age=31536000; path=/; SameSite=Lax`
 }
 
+export type PendingOAuthSecret = {
+  email: string
+  accessToken: string
+  refreshToken?: string
+  expiresAtIso: string
+  scopes: string[]
+}
+
+export function readPendingOAuthSecret(storageKey: string, cookieName: string): PendingOAuthSecret | null {
+  const stored = sessionStorage.getItem(storageKey)
+  if (stored) {
+    try {
+      const parsed = JSON.parse(stored) as PendingOAuthSecret
+      return parsed.accessToken && parsed.expiresAtIso ? { ...parsed, scopes: parsed.scopes ?? [] } : null
+    } catch {
+      sessionStorage.removeItem(storageKey)
+    }
+  }
+  const raw = readCookie(cookieName)
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(atob(raw.replace(/-/g, "+").replace(/_/g, "/"))) as PendingOAuthSecret
+    return parsed.accessToken && parsed.expiresAtIso ? { ...parsed, scopes: parsed.scopes ?? [] } : null
+  } catch {
+    deleteCookie(cookieName, storageKey)
+    return null
+  }
+}
+
 export function GoogleMark({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" aria-hidden="true">

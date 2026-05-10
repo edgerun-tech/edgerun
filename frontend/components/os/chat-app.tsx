@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import { cn } from "@/lib/utils"
+import { formatTime } from "@/lib/format"
+import { AppAvatar } from "@/components/ui/app-avatar"
 import {
   Send,
   Lock,
@@ -59,27 +61,6 @@ const DEMO_CHANNELS: Channel[] = [
     ],
   },
 ]
-
-function Avatar({ name, size = "sm" }: { name: string; size?: "xs" | "sm" }) {
-  const initials = name === "You" ? "ME" : name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase()
-  const hue = name === "You" ? 145 : name.split("").reduce((a, c) => a + c.charCodeAt(0), 0) % 360
-  return (
-    <div
-      className={cn(
-        "flex flex-shrink-0 items-center justify-center rounded-full font-mono font-bold",
-        size === "xs" && "h-6 w-6 text-[9px]",
-        size === "sm" && "h-8 w-8 text-xs",
-      )}
-      style={{ background: `oklch(0.25 0.1 ${hue})`, color: `oklch(0.85 0.1 ${hue})` }}
-    >
-      {initials}
-    </div>
-  )
-}
-
-function formatTime(d: Date) {
-  return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false })
-}
 
 interface DemoChatAppProps {
   initialChannelId?: string
@@ -175,7 +156,7 @@ export function DemoChatApp({ initialChannelId }: DemoChatAppProps) {
               c.id === activeId ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground"
             )}
           >
-            <Avatar name={c.name} size="xs" />
+            <AppAvatar name={c.name} size="xs" />
             <span className="truncate flex-1 text-xs">{c.name.split(" ")[0]}</span>
             {c.unread > 0 && (
               <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-bold text-primary-foreground">
@@ -199,7 +180,7 @@ export function DemoChatApp({ initialChannelId }: DemoChatAppProps) {
           {active.type === "channel" ? (
             <Hash className="h-4 w-4 text-muted-foreground" />
           ) : (
-            <Avatar name={active.name} size="xs" />
+            <AppAvatar name={active.name} size="xs" />
           )}
           <span className="text-sm font-medium text-foreground">
             {active.type === "channel" ? active.name : active.name.split(" ")[0]}
@@ -220,7 +201,7 @@ export function DemoChatApp({ initialChannelId }: DemoChatAppProps) {
             const showSender = i === 0 || active.messages[i - 1].sender !== msg.sender
             return (
               <div key={msg.id} className={cn("flex gap-2.5", msg.self && "flex-row-reverse")}>
-                {showSender && !msg.self && <Avatar name={msg.sender} size="sm" />}
+                {showSender && !msg.self && <AppAvatar name={msg.sender} size="sm" />}
                 {!showSender && !msg.self && <div className="w-8 flex-shrink-0" />}
                 <div className={cn("flex max-w-[75%] flex-col gap-0.5", msg.self && "items-end")}>
                   {showSender && (
