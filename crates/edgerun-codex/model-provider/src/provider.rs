@@ -278,9 +278,9 @@ impl ModelProvider for ConfiguredModelProvider {
 mod tests {
     use std::num::NonZeroU64;
 
-    use codex_api::Request;
-    use codex_api::Response;
-    use codex_api::StreamResponse;
+    use codex_client::Request;
+    use codex_client::Response;
+    use codex_client::StreamResponse;
     use codex_api::TransportError;
     use codex_model_provider_info::ModelProviderAwsAuthInfo;
     use codex_model_provider_info::WireApi;
@@ -290,11 +290,17 @@ mod tests {
     use codex_protocol::openai_models::ModelsResponse;
     use edgerun_json::json;
     use pretty_assertions::assert_eq;
+    #[cfg(feature = "native-transport")]
     use wiremock::Mock;
+    #[cfg(feature = "native-transport")]
     use wiremock::MockServer;
+    #[cfg(feature = "native-transport")]
     use wiremock::ResponseTemplate;
+    #[cfg(feature = "native-transport")]
     use wiremock::matchers::header_regex;
+    #[cfg(feature = "native-transport")]
     use wiremock::matchers::method;
+    #[cfg(feature = "native-transport")]
     use wiremock::matchers::path;
 
     use super::*;
@@ -360,6 +366,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "native-transport")]
     fn remote_model(slug: &str) -> ModelInfo {
         edgerun_json::from_json_value(json!({
             "slug": slug,
