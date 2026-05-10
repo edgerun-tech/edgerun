@@ -81,7 +81,7 @@ FindProjectId(
     return EFI_INVALID_PARAMETER;
   }
   if (!HasExtensionSignature(Fw, FwLen)) {
-    return EFI_COMPROMISED_DATA;
+    return EFI_SECURITY_VIOLATION;
   }
 
   Cursor = Fw + FwLen - 4;
@@ -100,14 +100,14 @@ FindProjectId(
       break;
     }
     if (Length == 0) {
-      return EFI_COMPROMISED_DATA;
+      return EFI_SECURITY_VIOLATION;
     }
     if (Opcode == 0 && Length == 1) {
       *ProjectId = Data;
       return EFI_SUCCESS;
     }
     if ((UINTN)(Cursor - Fw) < Length) {
-      return EFI_COMPROMISED_DATA;
+      return EFI_SECURITY_VIOLATION;
     }
     Cursor -= Length;
   }
@@ -178,8 +178,6 @@ BuildPatchImageWithOptionalConfig(
     return EFI_OUT_OF_RESOURCES;
   }
 
-  // Realtek patch payloads keep a four-byte trailer at the end. Config data is
-  // inserted immediately before that trailer, matching the observed Linux flow.
   CopyMem(Out, PatchData, PatchLen - 4);
   CopyMem(Out + PatchLen - 4, ConfigData, ConfigLen);
   CopyMem(Out + PatchLen - 4 + ConfigLen, PatchData + PatchLen - 4, 4);
@@ -209,16 +207,17 @@ ParseLegacyEpatch(
   CONST UINT8 *PatchOffBase;
   UINT16 TargetChipId;
   UINTN Index;
+  EFI_STATUS Status;
 
   Fw = Files->FwData;
   FwLen = Files->FwLen;
 
   if (FwLen < 14 || !BytesEqual(Fw, RTL_EPATCH_SIGNATURE, 8)) {
-    return EFI_COMPROMISED_DATA;
+    return EFI_SECURITY_VIOLATION;
   }
 
   ProjectId = 0;
-  EFI_STATUS Status = FindProjectId(Fw, FwLen, 14, &ProjectId);
+  Status = FindProjectId(Fw, FwLen, 14, &ProjectId);
   if (EFI_ERROR(Status)) {
     return Status;
   }
@@ -231,7 +230,7 @@ ParseLegacyEpatch(
   MetaOff = 14;
   Needed = MetaOff + ((UINTN)NumPatches * 2) + ((UINTN)NumPatches * 2) + ((UINTN)NumPatches * 4);
   if (NumPatches == 0 || Needed > FwLen) {
-    return EFI_COMPROMISED_DATA;
+    return EFI_SECURITY_VIOLATION;
   }
 
   ChipIdBase = Fw + MetaOff;
@@ -252,7 +251,7 @@ ParseLegacyEpatch(
     PatchLen = ReadLe16(PatchLenBase + Index * 2);
     PatchOff = ReadLe32(PatchOffBase + Index * 4);
     if (PatchLen < 4 || PatchOff > FwLen || PatchLen > FwLen - PatchOff) {
-      return EFI_COMPROMISED_DATA;
+      return EFI_SECURITY_VIOLATION;
     }
 
     Print(
@@ -314,6 +313,7 @@ ParseV2Subsections(
   IN CONST UINT8 *Data,
   IN UINTN Len,
   IN UINT8 RomVersion,
+  IN UINT8 KeyId,
   IN OUT RTL_SUBSECTION_REF *Sections,
   IN OUT UINTN *SectionCount,
   IN UINTN MaxSections
@@ -324,7 +324,7 @@ ParseV2Subsections(
   UINTN Index;
 
   if (Data == NULL || Len < 4) {
-    return EFI_COMPROMISED_DATA;
+    return EFI_SECURITY_VIOLATION;
   }
 
   Count = ReadLe16(Data);
@@ -333,28 +333,29 @@ ParseV2Subsections(
   for (Index = 0; Index < Count; Index++) {
     UINT8 Eco;
     UINT8 Prio;
+    UINT8 SectionKey;
     UINTN PayloadLen;
     CONST UINT8 *Payload;
 
     if (Offset + 8 > Len) {
-      return EFI_COMPROMISED_DATA;
+      return EFI_SECURITY_VIOLATION;
     }
 
     Eco = Data[Offset + 0];
     Prio = Data[Offset + 1];
+    SectionKey = Data[Offset + 2];
     PayloadLen = ReadLe32(Data + Offset + 4);
     Payload = Data + Offset + 8;
 
     if (PayloadLen > Len - Offset - 8) {
-      return EFI_COMPROMISED_DATA;
+      return EFI_SECURITY_VIOLATION;
     }
 
     if (Opcode == RTL_PATCH_SECURITY_HEADER) {
-      // RTL8922A can carry security-header subsections. We do not yet read the
-      // chip key id, so skip them instead of accidentally selecting the wrong
-      // signed section.
-      Offset += 8 + PayloadLen;
-      continue;
+      if (KeyId == 0 || SectionKey != KeyId) {
+        Offset += 8 + PayloadLen;
+        continue;
+      }
     }
 
     if (Eco == (UINT8)(RomVersion + 1)) {
@@ -400,7 +401,7 @@ BuildPatchFromSections(
     Total += Sections[Index].Len;
   }
   if (Total < 4) {
-    return EFI_COMPROMISED_DATA;
+    return EFI_SECURITY_VIOLATION;
   }
 
   Merged = AllocateZeroPool(Total);
@@ -429,6 +430,7 @@ ParseV2Epatch(
   IN CONST EDGERUN_RTL_FIRMWARE_FILES *Files,
   IN CONST EDGERUN_HCI_LOCAL_VERSION *Version,
   IN UINT8 RomVersion,
+  IN UINT8 KeyId,
   OUT EDGERUN_RTL_PATCH_IMAGE *Patch
   )
 {
@@ -441,12 +443,14 @@ ParseV2Epatch(
   RTL_SUBSECTION_REF Sections[64];
   UINTN SectionCount;
   EFI_STATUS Status;
+  CONST UINT8 *ConfigData;
+  UINTN ConfigLen;
 
   Fw = Files->FwData;
   FwLen = Files->FwLen;
 
   if (FwLen < 20 || !BytesEqual(Fw, RTL_EPATCH_SIGNATURE_V2, 8)) {
-    return EFI_COMPROMISED_DATA;
+    return EFI_SECURITY_VIOLATION;
   }
 
   ProjectId = 0;
@@ -470,7 +474,7 @@ ParseV2Epatch(
     CONST UINT8 *SectionData;
 
     if (Offset + 8 > FwLen) {
-      return EFI_COMPROMISED_DATA;
+      return EFI_SECURITY_VIOLATION;
     }
 
     Opcode = ReadLe32(Fw + Offset);
@@ -479,11 +483,11 @@ ParseV2Epatch(
     Offset += 8;
 
     if ((UINTN)SectionLen > FwLen - Offset) {
-      return EFI_COMPROMISED_DATA;
+      return EFI_SECURITY_VIOLATION;
     }
 
     if (Opcode == RTL_PATCH_SNIPPETS || Opcode == RTL_PATCH_DUMMY_HEADER || Opcode == RTL_PATCH_SECURITY_HEADER) {
-      Status = ParseV2Subsections(Opcode, SectionData, SectionLen, RomVersion, Sections, &SectionCount, 64);
+      Status = ParseV2Subsections(Opcode, SectionData, SectionLen, RomVersion, KeyId, Sections, &SectionCount, 64);
       if (EFI_ERROR(Status)) {
         return Status;
       }
@@ -492,8 +496,15 @@ ParseV2Epatch(
     Offset += SectionLen;
   }
 
-  Print(L"RTBTCore selected %u subsection(s) for ROM eco 0x%02x\r\n", (UINT32)SectionCount, (UINT8)(RomVersion + 1));
-  return BuildPatchFromSections(Sections, SectionCount, Files->CfgData, Files->CfgLen, Patch);
+  ConfigData = Files->CfgData;
+  ConfigLen = Files->CfgLen;
+  if (KeyId != 0) {
+    ConfigData = NULL;
+    ConfigLen = 0;
+  }
+
+  Print(L"RTBTCore selected %u subsection(s) for ROM eco 0x%02x key_id=0x%02x\r\n", (UINT32)SectionCount, (UINT8)(RomVersion + 1), KeyId);
+  return BuildPatchFromSections(Sections, SectionCount, ConfigData, ConfigLen, Patch);
 }
 
 EFI_STATUS
@@ -501,6 +512,7 @@ EdgerunParseRtl8922aFirmware(
   IN CONST EDGERUN_RTL_FIRMWARE_FILES *Files,
   IN CONST EDGERUN_HCI_LOCAL_VERSION *Version,
   IN UINT8 RomVersion,
+  IN UINT8 KeyId,
   OUT EDGERUN_RTL_PATCH_IMAGE *Patch
   )
 {
@@ -511,14 +523,14 @@ EdgerunParseRtl8922aFirmware(
   ZeroMem(Patch, sizeof(*Patch));
 
   if (Files->FwLen >= 8 && BytesEqual(Files->FwData, RTL_EPATCH_SIGNATURE_V2, 8)) {
-    return ParseV2Epatch(Files, Version, RomVersion, Patch);
+    return ParseV2Epatch(Files, Version, RomVersion, KeyId, Patch);
   }
   if (Files->FwLen >= 8 && BytesEqual(Files->FwData, RTL_EPATCH_SIGNATURE, 8)) {
     return ParseLegacyEpatch(Files, Version, RomVersion, Patch);
   }
 
   Print(L"unknown Realtek firmware signature\r\n");
-  return EFI_COMPROMISED_DATA;
+  return EFI_SECURITY_VIOLATION;
 }
 
 EFI_STATUS
