@@ -166,9 +166,9 @@ mod tests {
     use std::num::NonZeroU64;
 
     use super::*;
-    use codex_api::Request;
-    use codex_api::Response;
-    use codex_api::StreamResponse;
+    use codex_client::Request;
+    use codex_client::Response;
+    use codex_client::StreamResponse;
     use codex_protocol::config_types::ModelProviderAuthInfo;
 
     #[derive(Debug)]
