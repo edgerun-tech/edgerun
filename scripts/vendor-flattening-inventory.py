@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import shlex
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -61,13 +62,21 @@ class VendorManifest:
     nested: bool
     references: tuple[Reference, ...]
 
+    @property
+    def is_delete_candidate(self) -> bool:
+        return self.nested and not self.references
+
+    def rm_command(self) -> str:
+        rel = self.root.relative_to(ROOT).as_posix()
+        return f"git rm -r -- {shlex.quote(rel)}"
+
     def format(self, *, show_references: bool) -> str:
         rel = self.path.relative_to(ROOT)
         vendor_kind = "nested-vendor" if self.nested else "top-level-vendor"
         name = self.name or "<unknown>"
         version = self.version or "<unknown>"
         reference_count = len(self.references)
-        status = "delete-candidate" if self.nested and reference_count == 0 else "referenced"
+        status = "delete-candidate" if self.is_delete_candidate else "referenced"
         line = f"{vendor_kind}: {rel}: {name} {version}: external_refs={reference_count}: {status}"
         if show_references and self.references:
             refs = "\n".join(f"    {reference.format()}" for reference in self.references[:20])
@@ -175,6 +184,11 @@ def main() -> int:
         action="store_true",
         help="print external reference locations for each vendor tree",
     )
+    parser.add_argument(
+        "--print-delete-commands",
+        action="store_true",
+        help="print git rm commands for nested vendor trees with no external references",
+    )
     args = parser.parse_args()
 
     manifests = sorted(
@@ -191,14 +205,18 @@ def main() -> int:
     for manifest in vendor_manifests:
         print(manifest.format(show_references=args.show_references))
 
+    delete_candidates = [manifest for manifest in vendor_manifests if manifest.is_delete_candidate]
     nested_count = sum(1 for manifest in vendor_manifests if manifest.nested)
-    delete_candidates = sum(
-        1 for manifest in vendor_manifests if manifest.nested and not manifest.references
-    )
     print(
         f"\ntotal={len(vendor_manifests)} nested={nested_count} "
-        f"delete_candidates={delete_candidates}"
+        f"delete_candidates={len(delete_candidates)}"
     )
+
+    if args.print_delete_commands and delete_candidates:
+        print("\ndelete commands:")
+        for manifest in delete_candidates:
+            print(manifest.rm_command())
+
     return 1 if args.strict and nested_count else 0
 
 
