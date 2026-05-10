@@ -1,9 +1,11 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect } from "react"
+import { useStore } from "@nanostores/react"
 import { HardDrive, Wifi, WifiOff, Activity, Server, Lock } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { EdgerunLogo } from "./edgerun-logo"
+import { clientMountedStore, markClientMounted } from "@/stores/ui-runtime-store"
 
 interface TopBarProps {
   nodeCount: number
@@ -26,8 +28,11 @@ export function TopBar({
   onLock,
   onSignIn,
 }: TopBarProps) {
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => { setMounted(true) }, [])
+  const mounted = useStore(clientMountedStore)
+
+  useEffect(() => {
+    markClientMounted()
+  }, [])
 
   return (
     <div className="flex h-10 items-center gap-3 border-b border-[var(--window-border)] px-4">
