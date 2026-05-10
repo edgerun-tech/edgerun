@@ -12,6 +12,7 @@ import type {
   OAuthAppId,
   OAuthProfileSecret,
   OAuthProfileSecretInput,
+  GmailProfileSecret,
   ProfileEvent,
   SealedNestedContainer,
   RoutedSealedEnvelope,
@@ -39,6 +40,7 @@ import {
 
 export type {
   AuthState,
+  AuthStore,
   NodeProvisionInput,
   StoredNodeRegistration,
   ContactRecord,
