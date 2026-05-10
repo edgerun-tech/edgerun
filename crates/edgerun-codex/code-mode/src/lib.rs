@@ -1,3 +1,5 @@
+extern crate serde as edgerun_serde;
+
 mod description;
 mod response;
 mod runtime;

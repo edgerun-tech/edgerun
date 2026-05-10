@@ -9,23 +9,23 @@ homepage.workspace = true
 description = "Edgerun-owned Tokio-compatible async runtime facade"
 
 [features]
-default = ["compat", "edgerun-runtime"]
-compat = ["dep:tokio"]
+default = ["edgerun-runtime"]
+compat = []
 edgerun-runtime = ["dep:edgerun-node"]
-fs = ["tokio?/fs"]
-io-util = ["tokio?/io-util"]
-macros = ["tokio?/macros"]
-net = ["tokio?/net"]
-process = ["tokio?/process"]
-rt = ["tokio?/rt"]
-rt-multi-thread = ["tokio?/rt-multi-thread"]
-signal = ["tokio?/signal"]
-sync = ["tokio?/sync"]
-time = ["tokio?/time"]
+fs = []
+io-util = []
+macros = []
+net = []
+process = []
+rt = []
+rt-multi-thread = []
+signal = []
+sync = []
+time = []
 
 [dependencies]
+edgerun-futures = { version = "0.1", path = "../edgerun-futures" }
 edgerun-node = { version = "0.1", path = "../../node/edgerun-node", default-features = false, features = ["runtime"], optional = true }
-tokio = { version = "1", default-features = false, optional = true }
 
 [lints]
 workspace = true

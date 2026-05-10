@@ -16,7 +16,6 @@ rmcp = { workspace = true, default-features = false, features = [
     "base64",
     "macros",
     "schemars",
-    "server",
 ] }
 serde = { workspace = true, features = ["derive"] }
 tracing = { workspace = true }

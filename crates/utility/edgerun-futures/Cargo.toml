@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "Edgerun futures compatibility surface"
 
 [dependencies]
-futures = { version = "0.3", default-features = false }
+futures = "0.3"
 
 [lints]
 workspace = true

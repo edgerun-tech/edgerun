@@ -21,7 +21,7 @@ codex-models-manager = { workspace = true }
 codex-protocol = { workspace = true }
 codex-response-debug-context = { workspace = true }
 edgerun-http = { workspace = true }
-edgerun-json = { workspace = true, features = ["serde-compat"] }
-edgerun-reqwest = { workspace = true, features = ["json", "stream"] }
+edgerun-json = { workspace = true }
+edgerun-reqwest = { workspace = true, features = ["stream"] }
 edgerun-tokio = { workspace = true, features = ["sync", "time"] }
 tracing = { workspace = true }

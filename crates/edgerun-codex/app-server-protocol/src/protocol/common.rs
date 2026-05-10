@@ -8,10 +8,10 @@ use crate::export::GeneratedSchema;
 use crate::export::write_json_schema;
 use crate::protocol::v1;
 use crate::protocol::v2;
+use edgerun_serde::Deserialize;
+use edgerun_serde::Serialize;
 use edgerun_strum_macros::Display;
 use schemars::JsonSchema;
-use serde::Deserialize;
-use serde::Serialize;
 use ts_rs::TS;
 
 /// Authentication mode for OpenAI-backed providers.

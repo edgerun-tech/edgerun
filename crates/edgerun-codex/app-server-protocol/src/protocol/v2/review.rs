@@ -1,8 +1,8 @@
 use super::Turn;
 use super::shared::v2_enum_from_core;
+use edgerun_serde::Deserialize;
+use edgerun_serde::Serialize;
 use schemars::JsonSchema;
-use serde::Deserialize;
-use serde::Serialize;
 use ts_rs::TS;
 
 v2_enum_from_core!(

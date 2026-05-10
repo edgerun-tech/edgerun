@@ -29,6 +29,8 @@ import { bootstrapBrowserCapabilityRuntime } from "@/platform/runtime/browser-ru
 import { NodeWebSocketBridge } from "@/platform/runtime/edgerun-node"
 import { registerPlatformTools } from "@/platform/tools/register-tools"
 import { applyUiSettings, uiSettingsStore } from "@/stores/ui-settings-store"
+import { bootstrapBrowserCdpRelay } from "@/platform/dev/browser-cdp-relay"
+import { UsageGuideModal } from "@/platform/dev/usage-guide-modal"
 
 interface PlatformContextValue {
   protocolClient: typeof protocolClient
@@ -69,6 +71,18 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
     loadCapabilities()
     registerPlatformTools()
     bootstrapBrowserCapabilityRuntime()
+    const cdpRelay = bootstrapBrowserCdpRelay()
+    cdpRelay?.setBackendBridge(async (message) => {
+      const response = await fetch("/api/codex", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ prompt: message, resume: true, stream: false }),
+      })
+      const data = await response.json().catch(() => ({})) as { text?: unknown; error?: unknown }
+      if (!response.ok) throw new Error(typeof data.error === "string" ? data.error : `Backend bridge failed: HTTP ${response.status}`)
+      return typeof data.text === "string" ? data.text : data
+    })
     applyUiSettings(uiSettingsStore.get())
     const unsubscribeUiSettings = uiSettingsStore.subscribe(applyUiSettings)
 
@@ -136,6 +150,7 @@ export function PlatformProvider({ children }: { children: ReactNode }) {
   return (
     <PlatformContext.Provider value={value}>
       {children}
+      <UsageGuideModal />
     </PlatformContext.Provider>
   )
 }

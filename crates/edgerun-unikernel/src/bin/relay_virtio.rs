@@ -8,7 +8,9 @@ use core::panic::PanicInfo;
 
 use edgerun_platform as _;
 use edgerun_protocols::ethernet_ipv4::IpAddr;
-use edgerun_relay::nostd_virtio::{EthernetRelay, EthernetRelayEvent, VirtioRelay};
+use edgerun_relay::nostd_virtio::{
+    EthernetRelay, EthernetRelayEvent, EthernetRelayEventKind, VirtioRelay,
+};
 use edgerun_virtio::{VirtRng, find_initialized_virtio_net, find_initialized_virtio_rng};
 
 #[cfg(target_arch = "x86_64")]
@@ -86,7 +88,13 @@ pub extern "C" fn edgerun_unikernel_relay_virtio_main() -> ! {
     let now_ms = 0u64;
     loop {
         events.clear();
-        relay.poll(&mut net, now_ms, &mut events);
+        let stats = relay.poll(&mut net, now_ms, &mut events);
+        if stats.tx_errors != 0 {
+            debug_write(b"edgerun-unikernel relay virtio: tx error\n");
+        }
+        for event in &events {
+            log_relay_event(event);
+        }
 
         #[cfg(feature = "relay-virtio-smoke")]
         {
@@ -96,8 +104,8 @@ pub extern "C" fn edgerun_unikernel_relay_virtio_main() -> ! {
 
         #[cfg(not(feature = "relay-virtio-smoke"))]
         {
-            now_ms = now_ms.wrapping_add(10);
             spin();
+            now_ms = now_ms.wrapping_add(1);
         }
     }
 }
@@ -140,9 +148,22 @@ fn debug_write(bytes: &[u8]) {
     }
 }
 
+fn log_relay_event(event: &EthernetRelayEvent) {
+    match event.kind {
+        EthernetRelayEventKind::TcpOpened => {
+            debug_write(b"edgerun-unikernel relay virtio: tcp opened\n");
+        }
+        EthernetRelayEventKind::TcpClosed { reason } => {
+            debug_write(b"edgerun-unikernel relay virtio: tcp closed ");
+            debug_write(reason.as_bytes());
+            debug_write(b"\n");
+        }
+    }
+}
+
 #[cfg(not(feature = "relay-virtio-smoke"))]
 fn spin() {
-    for _ in 0..10_000 {
+    for _ in 0..128 {
         core::hint::spin_loop();
     }
 }

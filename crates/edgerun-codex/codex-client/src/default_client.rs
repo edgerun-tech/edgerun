@@ -2,12 +2,12 @@ use edgerun_http::Error as HttpError;
 use edgerun_http::HeaderMap;
 use edgerun_http::HeaderName;
 use edgerun_http::HeaderValue;
-use opentelemetry::global;
-use opentelemetry::propagation::Injector;
 use edgerun_reqwest::IntoUrl;
 use edgerun_reqwest::Method;
 use edgerun_reqwest::Response;
-use serde::Serialize;
+use edgerun_json::ToJson;
+use opentelemetry::global;
+use opentelemetry::propagation::Injector;
 use std::fmt::Display;
 use std::time::Duration;
 use tracing::Span;
@@ -63,7 +63,10 @@ impl CodexRequestBuilder {
         }
     }
 
-    fn map(self, f: impl FnOnce(edgerun_reqwest::RequestBuilder) -> edgerun_reqwest::RequestBuilder) -> Self {
+    fn map(
+        self,
+        f: impl FnOnce(edgerun_reqwest::RequestBuilder) -> edgerun_reqwest::RequestBuilder,
+    ) -> Self {
         Self {
             builder: f(self.builder),
             method: self.method,
@@ -98,9 +101,9 @@ impl CodexRequestBuilder {
 
     pub fn json<T>(self, value: &T) -> Self
     where
-        T: ?Sized + Serialize,
+        T: ?Sized + ToJson,
     {
-        self.map(|builder| builder.json(value))
+        self.map(|builder| builder.json_edgerun(value))
     }
 
     pub fn body<B>(self, body: B) -> Self

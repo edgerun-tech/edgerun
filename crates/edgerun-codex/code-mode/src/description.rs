@@ -1,7 +1,7 @@
 use codex_protocol::ToolName;
 use edgerun_json::serde_json::Value as JsonValue;
-use serde::Deserialize;
-use serde::Serialize;
+use edgerun_serde::Deserialize;
+use edgerun_serde::Serialize;
 use std::collections::BTreeMap;
 
 use crate::PUBLIC_TOOL_NAME;

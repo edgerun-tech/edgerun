@@ -1,4 +1,5 @@
 extern crate edgerun_serde_with as serde_with;
+extern crate serde as edgerun_serde;
 
 mod experimental_api;
 mod export;

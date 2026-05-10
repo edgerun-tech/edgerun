@@ -10,9 +10,9 @@ use codex_protocol::protocol::HookRunSummary as CoreHookRunSummary;
 use codex_protocol::protocol::HookScope as CoreHookScope;
 use codex_protocol::protocol::HookSource as CoreHookSource;
 use codex_protocol::protocol::HookTrustStatus as CoreHookTrustStatus;
+use edgerun_serde::Deserialize;
+use edgerun_serde::Serialize;
 use schemars::JsonSchema;
-use serde::Deserialize;
-use serde::Serialize;
 use ts_rs::TS;
 
 v2_enum_from_core!(

@@ -16,7 +16,7 @@ use edgerun_http::header::LOCATION;
 use edgerun_json::serde_json::Value;
 use edgerun_json::serde_json::to_string;
 use edgerun_json::serde_json::to_value;
-use serde::Serialize;
+use edgerun_serde::Serialize;
 use std::sync::Arc;
 use tracing::instrument;
 use tracing::trace;

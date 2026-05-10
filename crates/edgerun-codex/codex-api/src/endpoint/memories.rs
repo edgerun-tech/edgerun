@@ -8,8 +8,8 @@ use codex_client::HttpTransport;
 use codex_client::RequestTelemetry;
 use edgerun_http::HeaderMap;
 use edgerun_http::Method;
-use edgerun_json::serde_json::to_value;
-use serde::Deserialize;
+use edgerun_json::FromJson;
+use edgerun_json::ToJson;
 use std::sync::Arc;
 
 pub struct MemoriesClient<T: HttpTransport> {
@@ -35,14 +35,14 @@ impl<T: HttpTransport> MemoriesClient<T> {
 
     pub async fn summarize(
         &self,
-        body: edgerun_json::serde_json::Value,
+        body: edgerun_json::JsonValue,
         extra_headers: HeaderMap,
     ) -> Result<Vec<MemorySummarizeOutput>, ApiError> {
         let resp = self
             .session
-            .execute(Method::POST, Self::path(), extra_headers, Some(body))
+            .execute_json(Method::POST, Self::path(), extra_headers, Some(body))
             .await?;
-        let parsed: SummarizeResponse = edgerun_json::serde_json::from_slice(&resp.body)
+        let parsed: SummarizeResponse = edgerun_json::from_json_slice(&resp.body)
             .map_err(|e| ApiError::Stream(e.to_string()))?;
         Ok(parsed.output)
     }
@@ -52,14 +52,12 @@ impl<T: HttpTransport> MemoriesClient<T> {
         input: &MemorySummarizeInput,
         extra_headers: HeaderMap,
     ) -> Result<Vec<MemorySummarizeOutput>, ApiError> {
-        let body = to_value(input).map_err(|e| {
-            ApiError::Stream(format!("failed to encode memory summarize input: {e}"))
-        })?;
+        let body = input.to_json();
         self.summarize(body, extra_headers).await
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, FromJson)]
 struct SummarizeResponse {
     output: Vec<MemorySummarizeOutput>,
 }
@@ -80,7 +78,7 @@ mod tests {
     use edgerun_http::HeaderMap;
     use edgerun_http::Method;
     use edgerun_http::StatusCode;
-    use edgerun_json::serde_json::json;
+    use edgerun_json::json;
     use pretty_assertions::assert_eq;
     use std::sync::Arc;
     use std::sync::Mutex;
@@ -166,7 +164,7 @@ mod tests {
     #[edgerun_tokio::test]
     async fn summarize_input_posts_expected_payload_and_parses_output() {
         let transport = CapturingTransport::new(
-            edgerun_json::serde_json::to_vec(&json!({
+            edgerun_json::to_json_vec(&json!({
                 "output": [
                     {
                         "trace_summary": "raw summary",

@@ -5,10 +5,10 @@ use std::path::Path;
 
 use crate::compat::image::PromptImageMode;
 use crate::compat::image::load_for_prompt_bytes;
-use serde::Deserialize;
-use serde::Deserializer;
-use serde::Serialize;
-use serde::ser::Serializer;
+use edgerun_serde::Deserialize;
+use edgerun_serde::Deserializer;
+use edgerun_serde::Serialize;
+use edgerun_serde::ser::Serializer;
 use ts_rs::TS;
 
 use crate::compat::absolute_path::AbsolutePathBuf;
@@ -1560,7 +1560,7 @@ fn convert_mcp_content_to_items(
 ) -> Option<Vec<FunctionCallOutputContentItem>> {
     const CODEX_IMAGE_DETAIL_META_KEY: &str = "codex/imageDetail";
 
-    #[derive(serde::Deserialize)]
+    #[derive(edgerun_serde::Deserialize)]
     #[serde(tag = "type")]
     enum McpContent {
         #[serde(rename = "text")]

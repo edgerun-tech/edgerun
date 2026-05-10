@@ -6,6 +6,7 @@
 import { atom, computed } from "nanostores"
 import { edgerun as edgerunStream } from "@/gen/edgerun/v0/stream"
 import { edgerun } from "@/gen/edgerun/v0/common"
+import { bytesToHex } from "@/platform/utils/bytes"
 
 export interface PendingCommand {
   envelope: edgerunStream.v0.stream.CommandEnvelope
@@ -35,7 +36,7 @@ export function addPendingCommand(
   envelope: edgerunStream.v0.stream.CommandEnvelope,
 ): void {
   const state = commandStore.get()
-  const commandId = Buffer.from(envelope.command_id).toString("hex")
+  const commandId = bytesToHex(envelope.command_id)
   const newPending = new Map(state.pending)
   newPending.set(commandId, {
     envelope,

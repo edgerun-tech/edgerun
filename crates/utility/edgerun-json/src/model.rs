@@ -32,7 +32,12 @@ pub fn from_json_value<T: FromJson>(value: JsonValue) -> Result<T, JsonValueErro
 }
 
 pub fn from_json_str<T: FromJson>(input: &str) -> Result<T, JsonValueError> {
-    from_json_value(crate::parse_json(input)?)
+    let tape = crate::parse_json_tape(input)?;
+    let value = tape
+        .root(input)
+        .and_then(|root| root.to_json_value())
+        .ok_or_else(|| JsonValueError::WrongType("missing JSON root value".to_string()))?;
+    from_json_value(value)
 }
 
 pub fn from_json_slice<T: FromJson>(input: &[u8]) -> Result<T, JsonValueError> {

@@ -1,7 +1,7 @@
 use edgerun_json::serde_json::Value as JsonValue;
 use edgerun_json::serde_json::json;
-use serde::Deserialize;
-use serde::Serialize;
+use edgerun_serde::Deserialize;
+use edgerun_serde::Serialize;
 use std::collections::BTreeMap;
 
 /// Primitive JSON Schema type names we support in tool definitions.

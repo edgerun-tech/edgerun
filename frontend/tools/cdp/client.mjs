@@ -74,13 +74,14 @@ export function scoreTarget(target, query) {
     if (field === q) score += 100
     if (field.includes(q)) score += field.startsWith(q) ? 50 : 25
   }
-  if (target.type === "page") score += 5
+  if (target.type === "page") score += query ? 40 : 10
+  else score -= query ? 20 : 0
   return score
 }
 
 export async function findTarget(endpoint = DEFAULT_ENDPOINT, query, options = {}) {
   const targets = await listTargets(endpoint, options)
-  const pages = targets.filter((target) => target.webSocketDebuggerUrl)
+  const pages = targets.filter((target) => target.webSocketDebuggerUrl && (options.includeNonPage || target.type === "page"))
   const ranked = pages
     .map((target) => ({ target, score: scoreTarget(target, query) }))
     .filter((item) => item.score > 0 || !query)

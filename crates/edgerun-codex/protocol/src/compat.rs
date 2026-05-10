@@ -5,11 +5,11 @@ pub mod absolute_path {
     use std::path::Path;
     use std::path::PathBuf;
 
+    use edgerun_serde::Deserialize;
+    use edgerun_serde::Deserializer;
+    use edgerun_serde::Serialize;
+    use edgerun_serde::de::Error as _;
     use schemars::JsonSchema;
-    use serde::Deserialize;
-    use serde::Deserializer;
-    use serde::Serialize;
-    use serde::de::Error as _;
     use ts_rs::TS;
 
     #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, JsonSchema, TS)]
@@ -282,7 +282,7 @@ pub mod image {
 }
 
 pub mod network_proxy {
-    use serde::Deserialize;
+    use edgerun_serde::Deserialize;
 
     #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
     #[serde(rename_all = "snake_case")]

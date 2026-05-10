@@ -14,13 +14,13 @@ edgerun-encoding = { workspace = true }
 edgerun-error = { workspace = true }
 edgerun-eventsource-stream = { workspace = true }
 edgerun-http = { workspace = true }
-edgerun-json = { workspace = true, features = ["serde-compat"] }
+edgerun-json = { workspace = true, features = ["std", "serde-compat"] }
 edgerun-tokio-tungstenite = { workspace = true }
 edgerun-tungstenite = { workspace = true }
 edgerun-time = { workspace = true }
 edgerun-url = { workspace = true }
 edgerun-futures = { workspace = true }
-edgerun-reqwest = { workspace = true, features = ["json", "stream"] }
+edgerun-reqwest = { workspace = true, features = ["stream"] }
 serde = { workspace = true, features = ["derive"] }
 edgerun-tokio = { workspace = true, features = ["fs", "macros", "net", "rt", "sync", "time"] }
 tracing = { workspace = true }

@@ -1,8 +1,8 @@
 use super::PermissionProfile;
 use super::SandboxPolicy;
+use edgerun_serde::Deserialize;
+use edgerun_serde::Serialize;
 use schemars::JsonSchema;
-use serde::Deserialize;
-use serde::Serialize;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use ts_rs::TS;

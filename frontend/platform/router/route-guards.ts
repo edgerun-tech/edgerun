@@ -6,6 +6,7 @@ import type { RouteGuard, RouteParams } from "./route-types"
 import { hasPermission } from "@/platform/auth/permission-tracker"
 import { canSatisfy } from "@/platform/registries/capability-registry"
 import type { PermissionScope } from "@/platform/state/permission-store"
+import { bytesToHex } from "@/platform/utils/bytes"
 
 export function createCapabilityGuard(
   requiredCapabilities: string[],
@@ -15,7 +16,7 @@ export function createCapabilityGuard(
       if (requiredCapabilities.length === 0) return true
       const available = canSatisfy({})
       const availableIds = new Set(
-        available.map((c) => Buffer.from(c.capability_id).toString("hex"))
+        available.map((c) => bytesToHex(c.capability_id))
       )
       return requiredCapabilities.every((id) => availableIds.has(id))
     },

@@ -17,6 +17,9 @@ npm run cdp -- focus 'placeholder=Ask anything' --target chatgpt.com
 npm run cdp -- type 'hello from CDP' --target chatgpt.com
 npm run cdp -- click 'text=Submit'
 npm run cdp -- eval 'location.href'
+npm run cdp -- observe --duration 3000 --target dash.edgerun.tech
+npm run cdp -- storage --target dash.edgerun.tech
+npm run cdp -- cookies --target dash.edgerun.tech
 npm run cdp -- screenshot tmp/page.png --target dash.edgerun.tech
 ```
 

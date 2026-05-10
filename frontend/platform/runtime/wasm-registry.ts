@@ -6,6 +6,7 @@
 import { atom, computed } from "nanostores"
 import { edgerun } from "@/gen/edgerun/v0/common"
 import { protocolClient } from "@/platform/protocol/client"
+import { bytesToHex } from "@/platform/utils/bytes"
 
 export interface WasmModule {
   name: string
@@ -51,7 +52,7 @@ export async function loadWasmForApp(
   try {
     const response = await protocolClient.send({
       method: "GET",
-      path: `/protocol/object/${Buffer.from(objectRef.object_id).toString("hex")}`,
+      path: `/protocol/object/${bytesToHex(objectRef.object_id)}`,
     })
     if (response.status !== 200) throw new Error(`Failed: ${response.status}`)
     const bytes = response.body
@@ -80,7 +81,7 @@ export async function loadWasmForApp(
     const newModules = new Map(state.modules)
     newModules.set(appId, module)
     const newCache = new Map(state.cache)
-    newCache.set(Buffer.from(objectRef.object_id).toString("hex"), bytes)
+    newCache.set(bytesToHex(objectRef.object_id), bytes)
     wasmRegistry.set({
       modules: newModules,
       cache: newCache,
@@ -111,7 +112,7 @@ export function removeWasm(appId: string): void {
   newModules.delete(appId)
   const newCache = new Map(state.cache)
   if (module) {
-    newCache.delete(Buffer.from(module.objectRef.object_id).toString("hex"))
+    newCache.delete(bytesToHex(module.objectRef.object_id))
   }
   wasmRegistry.set({
     modules: newModules,

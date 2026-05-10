@@ -11,7 +11,7 @@ use std::thread;
 
 use codex_protocol::ToolName;
 use edgerun_json::serde_json::Value as JsonValue;
-use serde::Serialize;
+use edgerun_serde::Serialize;
 use edgerun_tokio::sync::mpsc;
 
 use crate::description::EnabledToolMetadata;
@@ -359,8 +359,8 @@ mod tests {
     use std::collections::HashMap;
     use std::time::Duration;
 
-    use pretty_assertions::assert_eq;
     use edgerun_tokio::sync::mpsc;
+    use pretty_assertions::assert_eq;
 
     use super::ExecuteRequest;
     use super::RuntimeEvent;

@@ -1,7 +1,7 @@
-use serde::Deserialize;
-use serde::Deserializer;
-use serde::Serialize;
-use serde::Serializer;
+use edgerun_serde::Deserialize;
+use edgerun_serde::Deserializer;
+use edgerun_serde::Serialize;
+use edgerun_serde::Serializer;
 
 pub fn deserialize_double_option<'de, T, D>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
 where

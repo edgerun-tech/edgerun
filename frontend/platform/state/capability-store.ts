@@ -7,6 +7,7 @@ import { atom, computed } from "nanostores"
 import { protocolClient } from "@/platform/protocol/client"
 import { edgerun as edgerunCap } from "@/gen/edgerun/v0/capability"
 import { edgerun as edgerunTrust } from "@/gen/edgerun/v0/trust"
+import { bytesToHex } from "@/platform/utils/bytes"
 
 export interface CapabilityStoreState {
   descriptors: Map<string, edgerunCap.v0.capability.CapabilityDescriptor>
@@ -41,7 +42,7 @@ export function listCapabilitiesByNode(nodeId: string): edgerunCap.v0.capability
   return Array.from(capabilityStore.get().descriptors.values()).filter(
     (d) => {
       const providerId = d.provider_node?.node_id
-      return providerId && Buffer.from(providerId).toString("hex").startsWith(nodeId)
+      return providerId && bytesToHex(providerId).startsWith(nodeId)
     },
   )
 }
@@ -63,7 +64,7 @@ export async function loadCapabilities(): Promise<void> {
     const descriptors = items.map((obj) => edgerunCap.v0.capability.CapabilityDescriptor.fromObject(obj))
     const newDescriptors = new Map<string, edgerunCap.v0.capability.CapabilityDescriptor>()
     for (const desc of descriptors) {
-      const id = Buffer.from(desc.capability_id).toString("hex")
+      const id = bytesToHex(desc.capability_id)
       newDescriptors.set(id, desc)
     }
     capabilityStore.set({

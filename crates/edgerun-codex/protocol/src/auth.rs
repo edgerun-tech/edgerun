@@ -3,8 +3,8 @@ use edgerun_json::FromJson;
 use edgerun_json::JsonValue;
 use edgerun_json::JsonValueError;
 use edgerun_json::ToJson;
-use serde::Deserialize;
-use serde::Serialize;
+use edgerun_serde::Deserialize;
+use edgerun_serde::Serialize;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]

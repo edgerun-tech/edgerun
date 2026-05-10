@@ -6,6 +6,7 @@
 import { atom, computed } from "nanostores"
 import { edgerun as edgerunCap } from "@/gen/edgerun/v0/capability"
 import { capabilityStore } from "@/platform/state/capability-store"
+import { bytesToHex } from "@/platform/utils/bytes"
 
 export interface CapabilityRegistryState {
   descriptors: Map<string, edgerunCap.v0.capability.CapabilityDescriptor>
@@ -28,7 +29,7 @@ export const allDescriptors = computed(capabilityRegistry, (s) =>
 export function registerCapability(desc: edgerunCap.v0.capability.CapabilityDescriptor): void {
   const state = capabilityRegistry.get()
   const newDescriptors = new Map(state.descriptors)
-  const id = Buffer.from(desc.capability_id).toString("hex")
+  const id = bytesToHex(desc.capability_id)
   newDescriptors.set(id, desc)
   capabilityRegistry.set({ ...state, descriptors: newDescriptors })
 }
@@ -36,7 +37,7 @@ export function registerCapability(desc: edgerunCap.v0.capability.CapabilityDesc
 export function registerGrant(grant: edgerunCap.v0.capability.CapabilityGrant): void {
   const state = capabilityRegistry.get()
   const newGrants = new Map(state.grants)
-  const granteeId = Buffer.from(grant.grantee?.identity_id || new Uint8Array(0)).toString("hex")
+  const granteeId = bytesToHex(grant.grantee?.identity_id)
   const existing = newGrants.get(granteeId) || []
   newGrants.set(granteeId, [...existing, grant])
   capabilityRegistry.set({ ...state, grants: newGrants })
@@ -78,7 +79,7 @@ export function canSatisfy(
 ): edgerunCap.v0.capability.CapabilityDescriptor[] {
   const state = capabilityRegistry.get()
   return Array.from(state.descriptors.values()).filter((cap) => {
-    if (selector.capabilityType && Buffer.from(cap.capability_id).toString("hex") !== selector.capabilityType)
+    if (selector.capabilityType && bytesToHex(cap.capability_id) !== selector.capabilityType)
       return false
     return true
   })

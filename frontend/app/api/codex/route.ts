@@ -13,6 +13,7 @@ const CODEX_TIMEOUT_MS = Number(process.env.CODEX_TIMEOUT_MS || 15 * 60_000)
 const CODEX_HEALTH_TIMEOUT_MS = 5_000
 const OUTPUT_LIMIT = 12000
 const encoder = new TextEncoder()
+const decoder = new TextDecoder()
 
 function codexBinary(): string {
   return process.env.CODEX_BINARY || "codex"
@@ -27,8 +28,12 @@ function codexPolicyArgs(): string[] {
   return ["--dangerously-bypass-approvals-and-sandbox"]
 }
 
-function appendLimited(current: string, chunk: Buffer): string {
-  return (current + chunk.toString()).slice(-OUTPUT_LIMIT)
+function chunkText(chunk: Uint8Array): string {
+  return decoder.decode(chunk)
+}
+
+function appendLimited(current: string, chunk: Uint8Array): string {
+  return (current + chunkText(chunk)).slice(-OUTPUT_LIMIT)
 }
 
 function codexExecArgs(options: {
@@ -255,16 +260,16 @@ function codexStreamResponse(prompt: string, useResume: boolean, signal?: AbortS
               stdio: ["pipe", "pipe", "pipe"],
             })
 
-            currentProc.stdout.on("data", (data: Buffer) => {
-              lineBuffer += data.toString()
+            currentProc.stdout.on("data", (data: Uint8Array) => {
+              lineBuffer += chunkText(data)
               const lines = lineBuffer.split(/\r?\n/)
               lineBuffer = lines.pop() || ""
               for (const line of lines) processLine(line)
             })
 
-            currentProc.stderr.on("data", (data: Buffer) => {
+            currentProc.stderr.on("data", (data: Uint8Array) => {
               stderr = appendLimited(stderr, data)
-              emit("stderr", { text: data.toString() })
+              emit("stderr", { text: chunkText(data) })
             })
 
             currentProc.on("close", (code) => {

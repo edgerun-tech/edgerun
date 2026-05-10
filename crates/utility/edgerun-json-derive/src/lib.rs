@@ -13,6 +13,7 @@ use syn::Type;
 #[derive(Default)]
 struct ContainerAttrs {
     rename_all: Option<String>,
+    tag: Option<String>,
 }
 
 #[derive(Default)]
@@ -65,6 +66,9 @@ fn parse_container_attrs(attrs: &[Attribute]) -> ContainerAttrs {
             if meta.path.is_ident("rename_all") {
                 let value = meta.value()?.parse::<LitStr>()?;
                 out.rename_all = Some(value.value());
+            } else if meta.path.is_ident("tag") {
+                let value = meta.value()?.parse::<LitStr>()?;
+                out.tag = Some(value.value());
             }
             Ok(())
         });
@@ -230,6 +234,75 @@ fn derive_to_json_enum(input: &DeriveInput, data: &syn::DataEnum) -> proc_macro2
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let container = parse_container_attrs(&input.attrs);
+    if let Some(tag) = container.tag.as_ref() {
+        let arms = data.variants.iter().map(|variant| {
+            let ident = &variant.ident;
+            let attrs = parse_field_attrs(&variant.attrs);
+            let value = attrs.rename.unwrap_or_else(|| {
+                apply_rename_all(&ident.to_string(), container.rename_all.as_deref())
+            });
+            match &variant.fields {
+                Fields::Unit => {
+                    quote! {
+                        Self::#ident => {
+                            let mut object = edgerun_json::Map::new();
+                            object.push_field(#tag, edgerun_json::JsonValue::String(#value.to_string()));
+                            edgerun_json::JsonValue::Object(object)
+                        }
+                    }
+                }
+                Fields::Named(fields) => {
+                    let field_idents: Vec<_> = fields
+                        .named
+                        .iter()
+                        .map(|field| field.ident.as_ref().expect("named field"))
+                        .collect();
+                    let writes = fields.named.iter().map(|field| {
+                        let ident = field.ident.as_ref().expect("named field");
+                        let key = field_json_key(field, &container);
+                        let attrs = parse_field_attrs(&field.attrs);
+                        if attrs.skip_serializing {
+                            quote! {}
+                        } else if attrs.skip_serializing_if.as_deref() == Some("Option::is_none")
+                            && is_option_type(&field.ty)
+                        {
+                            quote! {
+                                if let Some(value) = #ident {
+                                    object.push_field(#key, edgerun_json::ToJson::to_json(value));
+                                }
+                            }
+                        } else {
+                            quote! {
+                                object.push_field(#key, edgerun_json::ToJson::to_json(#ident));
+                            }
+                        }
+                    });
+                    quote! {
+                        Self::#ident { #(#field_idents),* } => {
+                            let mut object = edgerun_json::Map::new();
+                            object.push_field(#tag, edgerun_json::JsonValue::String(#value.to_string()));
+                            #(#writes)*
+                            edgerun_json::JsonValue::Object(object)
+                        }
+                    }
+                }
+                Fields::Unnamed(_) => quote! {
+                    Self::#ident(..) => compile_error!("ToJson does not support tuple variants")
+                },
+            }
+        });
+
+        return quote! {
+            impl #impl_generics edgerun_json::ToJson for #name #ty_generics #where_clause {
+                fn to_json(&self) -> edgerun_json::JsonValue {
+                    match self {
+                        #(#arms,)*
+                    }
+                }
+            }
+        };
+    }
+
     let arms = data.variants.iter().map(|variant| {
         let ident = &variant.ident;
         let attrs = parse_field_attrs(&variant.attrs);
@@ -257,6 +330,83 @@ fn derive_from_json_enum(input: &DeriveInput, data: &syn::DataEnum) -> proc_macr
     let name = &input.ident;
     let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
     let container = parse_container_attrs(&input.attrs);
+    if let Some(tag) = container.tag.as_ref() {
+        let arms = data.variants.iter().map(|variant| {
+            let ident = &variant.ident;
+            let attrs = parse_field_attrs(&variant.attrs);
+            let value = attrs.rename.unwrap_or_else(|| {
+                apply_rename_all(&ident.to_string(), container.rename_all.as_deref())
+            });
+            match &variant.fields {
+                Fields::Unit => quote! {
+                    #value => Ok(Self::#ident)
+                },
+                Fields::Named(fields) => {
+                    let reads = fields.named.iter().map(|field| {
+                        let ident = field.ident.as_ref().expect("named field");
+                        let keys = field_json_keys(field, &container);
+                        let attrs = parse_field_attrs(&field.attrs);
+                        if attrs.skip_deserializing {
+                            quote! {
+                                #ident: Default::default()
+                            }
+                        } else if let Some(default_fn) = attrs.default_fn {
+                            match syn::parse_str::<syn::Path>(&default_fn) {
+                                Ok(default_fn) => quote! {
+                                    #ident: object.take_optional_any(&[#(#keys),*])?.unwrap_or_else(#default_fn)
+                                },
+                                Err(err) => err.to_compile_error(),
+                            }
+                        } else if attrs.default {
+                            quote! {
+                                #ident: object.take_optional_any(&[#(#keys),*])?.unwrap_or_default()
+                            }
+                        } else if is_option_type(&field.ty) {
+                            quote! {
+                                #ident: object.take_optional_any(&[#(#keys),*])?
+                            }
+                        } else {
+                            quote! {
+                                #ident: object.take_required_any(&[#(#keys),*])?
+                            }
+                        }
+                    });
+                    quote! {
+                        #value => Ok(Self::#ident {
+                            #(#reads),*
+                        })
+                    }
+                }
+                Fields::Unnamed(_) => quote! {
+                    #value => Err(edgerun_json::JsonValueError::WrongType(
+                        edgerun_json::__json_error_message("tuple variants are not supported")
+                    ))
+                },
+            }
+        });
+
+        return quote! {
+            impl #impl_generics edgerun_json::FromJson for #name #ty_generics #where_clause {
+                fn from_json(value: edgerun_json::JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
+                    let mut object = value.into_object(core::any::type_name::<Self>())?;
+                    let tag = <String as edgerun_json::FromJson>::from_json(
+                        object.remove(#tag).ok_or_else(|| {
+                            edgerun_json::JsonValueError::WrongType(
+                                edgerun_json::__json_error_message("missing JSON tag field")
+                            )
+                        })?
+                    )?;
+                    match tag.as_str() {
+                        #(#arms,)*
+                        _ => Err(edgerun_json::JsonValueError::WrongType(
+                            edgerun_json::__json_error_message("unknown enum tag")
+                        )),
+                    }
+                }
+            }
+        };
+    }
+
     let arms = data.variants.iter().filter_map(|variant| {
         let ident = &variant.ident;
         if !matches!(variant.fields, Fields::Unit) {

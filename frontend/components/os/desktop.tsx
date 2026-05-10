@@ -7,6 +7,7 @@ import { Bot, IdCard, Settings, Store } from "lucide-react"
 import { AuthOverlay } from "./auth-overlay"
 import { AppOverlayHost } from "./app-overlay-host"
 import { AgentUiBridge } from "./agent-ui-bridge"
+import { DevToolsStrip } from "./dev-tools-strip"
 import { ProfileMenu } from "./profile-menu"
 import { ProjectChecklist } from "./project-checklist"
 import { CapabilityGatePrompt } from "@/components/capability-gate-prompt"
@@ -123,6 +124,9 @@ export function Desktop() {
   if (!showDesktop) {
     return (
       <div className="relative h-screen w-screen overflow-hidden bg-black">
+        <div className="fixed bottom-2 left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-1">
+          <DevToolsStrip />
+        </div>
         <AuthOverlay
           authState={auth.authState}
           username={auth.username}
@@ -146,13 +150,16 @@ export function Desktop() {
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-black">
-      <FloatingDock
-        items={dockItems}
-        context={dockContext}
-        onCommandSubmit={handleDockCommand}
-        desktopClassName="fixed bottom-5 left-1/2 z-50 -translate-x-1/2"
-        mobileClassName="fixed bottom-5 left-1/2 z-50 -translate-x-1/2"
-      />
+      <div className="fixed bottom-2 left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-1">
+        <FloatingDock
+          items={dockItems}
+          context={dockContext}
+          onCommandSubmit={handleDockCommand}
+          desktopClassName="relative z-50"
+          mobileClassName="relative z-50"
+        />
+        <DevToolsStrip />
+      </div>
       <AgentUiBridge />
       <ProjectChecklist />
       <ProfileMenu />

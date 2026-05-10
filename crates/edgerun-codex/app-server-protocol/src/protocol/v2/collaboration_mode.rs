@@ -1,9 +1,9 @@
 use codex_protocol::config_types::CollaborationModeMask as CoreCollaborationModeMask;
 use codex_protocol::config_types::ModeKind;
 use codex_protocol::openai_models::ReasoningEffort;
+use edgerun_serde::Deserialize;
+use edgerun_serde::Serialize;
 use schemars::JsonSchema;
-use serde::Deserialize;
-use serde::Serialize;
 use ts_rs::TS;
 
 /// EXPERIMENTAL - list collaboration mode presets.

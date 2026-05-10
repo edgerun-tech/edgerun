@@ -6,8 +6,8 @@ use codex_app_server_protocol::McpElicitationSchema;
 use codex_app_server_protocol::McpServerElicitationRequest;
 use codex_app_server_protocol::McpServerElicitationRequestParams;
 use edgerun_json::serde_json::json;
-use serde::Deserialize;
-use serde::Serialize;
+use edgerun_serde::Deserialize;
+use edgerun_serde::Serialize;
 
 use crate::DiscoverableTool;
 use crate::DiscoverableToolAction;

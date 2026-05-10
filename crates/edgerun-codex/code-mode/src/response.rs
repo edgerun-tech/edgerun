@@ -1,5 +1,5 @@
-use serde::Deserialize;
-use serde::Serialize;
+use edgerun_serde::Deserialize;
+use edgerun_serde::Serialize;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]

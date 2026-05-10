@@ -5,9 +5,9 @@ use codex_protocol::protocol::CreditsSnapshot as CoreCreditsSnapshot;
 use codex_protocol::protocol::RateLimitReachedType as CoreRateLimitReachedType;
 use codex_protocol::protocol::RateLimitSnapshot as CoreRateLimitSnapshot;
 use codex_protocol::protocol::RateLimitWindow as CoreRateLimitWindow;
+use edgerun_serde::Deserialize;
+use edgerun_serde::Serialize;
 use schemars::JsonSchema;
-use serde::Deserialize;
-use serde::Serialize;
 use std::collections::HashMap;
 use ts_rs::TS;
 

@@ -7,6 +7,7 @@ import { atom, computed } from "nanostores"
 import { edgerun as edgerunStream } from "@/gen/edgerun/v0/stream"
 import { edgerun } from "@/gen/edgerun/v0/common"
 import { wasmRegistry, loadWasmForApp } from "./wasm-registry"
+import { bytesToHex } from "@/platform/utils/bytes"
 
 export type RuntimeStatus = "stopped" | "starting" | "running" | "stopping" | "error"
 
@@ -39,7 +40,7 @@ export async function startApp(
   app: edgerunStream.v0.stream.AppPackage,
 ): Promise<RunningApp | null> {
   const state = appRuntime.get()
-  const appId = Buffer.from(app.wasm_object?.object_id || new Uint8Array(0)).toString("hex")
+  const appId = bytesToHex(app.wasm_object?.object_id)
 
   // Load WASM if needed
   const wasmModule = await loadWasmForApp(

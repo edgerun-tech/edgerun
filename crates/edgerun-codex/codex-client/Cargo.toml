@@ -10,15 +10,14 @@ edgerun-bytes = { workspace = true }
 edgerun-error = { workspace = true }
 edgerun-eventsource-stream = { workspace = true }
 edgerun-http = { workspace = true }
-edgerun-json = { workspace = true, features = ["serde-compat"] }
+edgerun-json = { workspace = true }
 edgerun-random = { workspace = true }
 edgerun-futures = { workspace = true }
 opentelemetry = { workspace = true }
-edgerun-reqwest = { workspace = true, features = ["json", "rustls-tls-native-roots", "stream"] }
+edgerun-reqwest = { workspace = true, features = ["rustls-tls-native-roots", "stream"] }
 rustls = { workspace = true }
 rustls-native-certs = { workspace = true }
 rustls-pki-types = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
 edgerun-tokio = { workspace = true, features = ["macros", "rt", "time", "sync"] }
 tracing = { workspace = true }
 tracing-opentelemetry = { workspace = true }

@@ -1,22 +1,18 @@
-//! Compatibility surface for crates that currently use `tokio-tungstenite`.
-//!
-//! This crate owns the async boundary used by Edgerun Codex and converts to the
-//! temporary upstream backend internally.
+//! Edgerun-native async facade for tungstenite-style WebSocket APIs.
 
-use backend::tungstenite as backend_ws;
-use edgerun_tungstenite::protocol::CloseFrame;
-use edgerun_tungstenite::protocol::Role;
-use edgerun_tungstenite::protocol::WebSocketConfig;
-use futures_util::Sink;
-use futures_util::Stream;
+use std::io::{Read, Write};
 use std::pin::Pin;
 #[cfg(feature = "rustls-tls-native-roots")]
 use std::sync::Arc;
-use std::task::Context;
-use std::task::Poll;
-use tokio::io::AsyncRead;
-use tokio::io::AsyncWrite;
-use tokio::io::ReadBuf;
+use std::task::{Context, Poll};
+
+use edgerun_futures::Sink;
+use edgerun_futures::Stream;
+use edgerun_tokio::net::TcpStream;
+use edgerun_tungstenite::client::IntoClientRequest;
+use edgerun_tungstenite::protocol::CloseFrame;
+use edgerun_tungstenite::protocol::Role;
+use edgerun_tungstenite::protocol::WebSocketConfig;
 
 pub mod tungstenite {
     pub use edgerun_tungstenite::*;
@@ -24,31 +20,6 @@ pub mod tungstenite {
 
 pub use edgerun_tungstenite::Error;
 pub use edgerun_tungstenite::Message;
-
-mod backend {
-    #[cfg(any(feature = "connect", feature = "rustls-tls-native-roots"))]
-    pub use tokio_tungstenite::Connector;
-    #[cfg(feature = "stream")]
-    pub use tokio_tungstenite::MaybeTlsStream;
-    pub use tokio_tungstenite::WebSocketStream;
-    #[cfg(feature = "handshake")]
-    pub use tokio_tungstenite::accept_async;
-    #[cfg(feature = "handshake")]
-    pub use tokio_tungstenite::accept_async_with_config;
-    #[cfg(feature = "handshake")]
-    pub use tokio_tungstenite::accept_hdr_async;
-    #[cfg(feature = "handshake")]
-    pub use tokio_tungstenite::accept_hdr_async_with_config;
-    #[cfg(feature = "rustls-tls-native-roots")]
-    pub use tokio_tungstenite::client_async_tls_with_config;
-    #[cfg(feature = "handshake")]
-    pub use tokio_tungstenite::client_async_with_config;
-    #[cfg(all(feature = "connect", feature = "rustls-tls-native-roots"))]
-    pub use tokio_tungstenite::connect_async_tls_with_config;
-    #[cfg(feature = "connect")]
-    pub use tokio_tungstenite::connect_async_with_config;
-    pub use tokio_tungstenite::tungstenite;
-}
 
 #[non_exhaustive]
 #[derive(Clone)]
@@ -58,180 +29,148 @@ pub enum Connector {
     Rustls(Arc<rustls::ClientConfig>),
 }
 
-#[cfg(any(feature = "connect", feature = "rustls-tls-native-roots"))]
-impl From<Connector> for backend::Connector {
+#[cfg(feature = "rustls-tls-native-roots")]
+impl From<Connector> for edgerun_tungstenite::Connector {
     fn from(value: Connector) -> Self {
         match value {
-            Connector::Plain => backend::Connector::Plain,
-            #[cfg(feature = "rustls-tls-native-roots")]
-            Connector::Rustls(config) => backend::Connector::Rustls(config),
+            Connector::Plain => Self::Plain,
+            Connector::Rustls(config) => Self::Rustls(config),
         }
     }
 }
 
 #[cfg(feature = "stream")]
 #[derive(Debug)]
-pub struct MaybeTlsStream<S>(backend::MaybeTlsStream<S>);
+pub struct MaybeTlsStream<S>(edgerun_tungstenite::MaybeTlsStream<S>)
+where
+    S: Read + Write;
 
 #[cfg(feature = "stream")]
-impl<S> MaybeTlsStream<S> {
+impl<S> MaybeTlsStream<S>
+where
+    S: Read + Write,
+{
+    fn plain(stream: S) -> Self {
+        Self(edgerun_tungstenite::MaybeTlsStream::Plain(stream))
+    }
+
+    fn from_inner(inner: edgerun_tungstenite::MaybeTlsStream<S>) -> Self {
+        Self(inner)
+    }
+
     pub fn get_ref(&self) -> &S {
-        self.0.get_ref()
+        match &self.0 {
+            edgerun_tungstenite::MaybeTlsStream::Plain(stream) => stream,
+            _ => panic!("TLS stream does not expose an Edgerun plain stream reference"),
+        }
     }
 
     pub fn get_mut(&mut self) -> &mut S {
         match &mut self.0 {
-            backend::MaybeTlsStream::Plain(stream) => stream,
-            #[cfg(feature = "rustls-tls-native-roots")]
-            backend::MaybeTlsStream::Rustls(stream) => stream.get_mut().0,
-            _ => unreachable!("unsupported backend TLS stream variant"),
+            edgerun_tungstenite::MaybeTlsStream::Plain(stream) => stream,
+            _ => panic!("TLS stream does not expose an Edgerun plain stream reference"),
         }
     }
 }
 
 #[cfg(feature = "stream")]
-pub trait MaybeTlsStreamExt<S> {
+impl<S> Read for MaybeTlsStream<S>
+where
+    S: Read + Write,
+{
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.0.read(buf)
+    }
+}
+
+#[cfg(feature = "stream")]
+impl<S> Write for MaybeTlsStream<S>
+where
+    S: Read + Write,
+{
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.write(buf)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.0.flush()
+    }
+}
+
+#[cfg(feature = "stream")]
+pub trait MaybeTlsStreamExt<S>
+where
+    S: Read + Write,
+{
     fn is_plain(&self) -> bool;
     fn plain_ref(&self) -> Option<&S>;
     fn plain_mut(&mut self) -> Option<&mut S>;
 }
 
 #[cfg(feature = "stream")]
-impl<S> MaybeTlsStreamExt<S> for MaybeTlsStream<S> {
+impl<S> MaybeTlsStreamExt<S> for MaybeTlsStream<S>
+where
+    S: Read + Write,
+{
     fn is_plain(&self) -> bool {
-        matches!(self.0, backend::MaybeTlsStream::Plain(_))
+        matches!(self.0, edgerun_tungstenite::MaybeTlsStream::Plain(_))
     }
 
     fn plain_ref(&self) -> Option<&S> {
         match &self.0 {
-            backend::MaybeTlsStream::Plain(stream) => Some(stream),
+            edgerun_tungstenite::MaybeTlsStream::Plain(stream) => Some(stream),
             _ => None,
         }
     }
 
     fn plain_mut(&mut self) -> Option<&mut S> {
         match &mut self.0 {
-            backend::MaybeTlsStream::Plain(stream) => Some(stream),
+            edgerun_tungstenite::MaybeTlsStream::Plain(stream) => Some(stream),
             _ => None,
         }
     }
 }
 
-#[cfg(feature = "stream")]
-impl<S: AsyncRead + AsyncWrite + Unpin> AsyncRead for MaybeTlsStream<S> {
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut ReadBuf<'_>,
-    ) -> Poll<std::io::Result<()>> {
-        Pin::new(&mut self.0).poll_read(cx, buf)
-    }
-}
-
-#[cfg(feature = "stream")]
-impl<S: AsyncRead + AsyncWrite + Unpin> AsyncWrite for MaybeTlsStream<S> {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<Result<usize, std::io::Error>> {
-        Pin::new(&mut self.0).poll_write(cx, buf)
-    }
-
-    fn poll_flush(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<(), std::io::Error>> {
-        Pin::new(&mut self.0).poll_flush(cx)
-    }
-
-    fn poll_shutdown(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<(), std::io::Error>> {
-        Pin::new(&mut self.0).poll_shutdown(cx)
-    }
-}
-
 #[derive(Debug)]
-pub struct WebSocketStream<S>(WebSocketStreamInner<S>);
-
-#[derive(Debug)]
-enum WebSocketStreamInner<S> {
-    Direct(backend::WebSocketStream<S>),
-}
-
-impl<S> WebSocketStream<S> {
-    fn direct(inner: backend::WebSocketStream<S>) -> Self {
-        Self(WebSocketStreamInner::Direct(inner))
-    }
-}
-
-#[cfg(feature = "stream")]
-impl<S> WebSocketStream<MaybeTlsStream<S>>
+pub struct WebSocketStream<S>
 where
-    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+    S: Read + Write,
 {
-    async fn from_backend_maybe_tls(
-        inner: backend::WebSocketStream<backend::MaybeTlsStream<S>>,
-    ) -> Self {
-        let config = inner.get_config().into();
-        let stream = MaybeTlsStream(inner.into_inner());
-        Self::from_raw_socket(stream, Role::Client, Some(config)).await
-    }
+    inner: edgerun_tungstenite::WebSocket<S>,
 }
 
-impl<S> WebSocketStream<S> {
+impl<S> WebSocketStream<S>
+where
+    S: Read + Write,
+{
+    fn direct(inner: edgerun_tungstenite::WebSocket<S>) -> Self {
+        Self { inner }
+    }
+
     pub fn into_inner(self) -> S {
-        match self.0 {
-            WebSocketStreamInner::Direct(inner) => inner.into_inner(),
-        }
+        self.inner.into_inner()
     }
 
-    pub fn get_ref(&self) -> &S
-    where
-        S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
-    {
-        match &self.0 {
-            WebSocketStreamInner::Direct(inner) => inner.get_ref(),
-        }
+    pub fn get_ref(&self) -> &S {
+        self.inner.get_ref()
     }
 
-    pub fn get_mut(&mut self) -> &mut S
-    where
-        S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
-    {
-        match &mut self.0 {
-            WebSocketStreamInner::Direct(inner) => inner.get_mut(),
-        }
+    pub fn get_mut(&mut self) -> &mut S {
+        self.inner.get_mut()
     }
 
     pub fn get_config(&self) -> WebSocketConfig {
-        match &self.0 {
-            WebSocketStreamInner::Direct(inner) => inner.get_config().into(),
-        }
+        self.inner.get_config()
     }
 
-    pub async fn close(&mut self, frame: Option<CloseFrame>) -> Result<(), Error>
-    where
-        S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
-    {
-        match &mut self.0 {
-            WebSocketStreamInner::Direct(inner) => inner
-                .close(frame.map(Into::into))
-                .await
-                .map_err(Error::from),
-        }
+    pub async fn close(&mut self, frame: Option<CloseFrame>) -> Result<(), Error> {
+        self.inner.close(frame)
     }
 
-    pub async fn from_raw_socket(stream: S, role: Role, config: Option<WebSocketConfig>) -> Self
-    where
-        S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
-    {
-        Self::direct(
-            backend::WebSocketStream::from_raw_socket(stream, role.into(), config.map(Into::into))
-                .await,
-        )
+    pub async fn from_raw_socket(stream: S, role: Role, config: Option<WebSocketConfig>) -> Self {
+        Self::direct(edgerun_tungstenite::WebSocket::from_raw_socket(
+            stream, role, config,
+        ))
     }
 
     pub async fn from_partially_read(
@@ -239,106 +178,103 @@ impl<S> WebSocketStream<S> {
         part: Vec<u8>,
         role: Role,
         config: Option<WebSocketConfig>,
-    ) -> Self
-    where
-        S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
-    {
-        Self::direct(
-            backend::WebSocketStream::from_partially_read(
-                stream,
-                part,
-                role.into(),
-                config.map(Into::into),
-            )
-            .await,
-        )
+    ) -> Self {
+        Self::direct(edgerun_tungstenite::WebSocket::from_partially_read(
+            stream, part, role, config,
+        ))
+    }
+
+    pub async fn send(&mut self, message: Message) -> Result<(), Error> {
+        self.inner.send(message)
     }
 }
 
 impl<S> Stream for WebSocketStream<S>
 where
-    backend::WebSocketStream<S>:
-        Stream<Item = Result<backend_ws::Message, backend_ws::Error>> + Unpin,
+    S: Read + Write + Unpin,
 {
     type Item = Result<Message, Error>;
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        match &mut self.0 {
-            WebSocketStreamInner::Direct(inner) => Pin::new(inner)
-                .poll_next(cx)
-                .map(|option| option.map(|result| result.map(Message::from).map_err(Error::from))),
-        }
+    fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        Poll::Ready(Some(self.inner.read()))
     }
 }
 
 impl<S> Sink<Message> for WebSocketStream<S>
 where
-    backend::WebSocketStream<S>: Sink<backend_ws::Message, Error = backend_ws::Error> + Unpin,
+    S: Read + Write + Unpin,
 {
     type Error = Error;
 
-    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        match &mut self.0 {
-            WebSocketStreamInner::Direct(inner) => {
-                Pin::new(inner).poll_ready(cx).map_err(Error::from)
-            }
-        }
+    fn poll_ready(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
     }
 
     fn start_send(mut self: Pin<&mut Self>, item: Message) -> Result<(), Self::Error> {
-        match &mut self.0 {
-            WebSocketStreamInner::Direct(inner) => {
-                Pin::new(inner).start_send(item.into()).map_err(Error::from)
-            }
-        }
+        self.inner.send(item)
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        match &mut self.0 {
-            WebSocketStreamInner::Direct(inner) => {
-                Pin::new(inner).poll_flush(cx).map_err(Error::from)
-            }
-        }
+    fn poll_flush(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(self.inner.flush())
     }
 
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        match &mut self.0 {
-            WebSocketStreamInner::Direct(inner) => {
-                Pin::new(inner).poll_close(cx).map_err(Error::from)
-            }
-        }
+    fn poll_close(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(self.inner.close(None))
     }
+}
+
+fn request_addr(request: &http::Request<()>) -> Result<String, Error> {
+    let uri = request.uri();
+    let host = uri
+        .host()
+        .ok_or_else(|| Error::Other("websocket URI has no host".to_string()))?;
+    let port = uri.port_u16().unwrap_or_else(|| {
+        if uri.scheme_str() == Some("wss") {
+            443
+        } else {
+            80
+        }
+    });
+    Ok(format!("{host}:{port}"))
+}
+
+fn is_tls_request(request: &http::Request<()>) -> bool {
+    request.uri().scheme_str() == Some("wss")
 }
 
 #[cfg(all(feature = "connect", feature = "rustls-tls-native-roots"))]
 pub async fn connect_async_tls_with_config<R>(
     request: R,
     config: Option<WebSocketConfig>,
-    disable_nagle: bool,
+    _disable_nagle: bool,
     connector: Option<Connector>,
 ) -> Result<
     (
-        WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>,
+        WebSocketStream<MaybeTlsStream<TcpStream>>,
         http::Response<Option<Vec<u8>>>,
     ),
     Error,
 >
 where
-    R: edgerun_tungstenite::client::IntoClientRequest + Unpin,
+    R: IntoClientRequest + Unpin,
 {
     let request = request.into_client_request()?;
-    let (stream, response) = backend::connect_async_tls_with_config(
-        request,
-        config.map(Into::into),
-        disable_nagle,
-        connector.map(Into::into),
-    )
-    .await
-    .map_err(Error::from)?;
-    Ok((
-        WebSocketStream::from_backend_maybe_tls(stream).await,
-        response,
-    ))
+    let stream = TcpStream::connect(request_addr(&request)?)
+        .await
+        .map_err(|error| Error::Io(std::io::Error::other(error.to_string())))?;
+
+    if is_tls_request(&request) {
+        let (ws, response) =
+            edgerun_tungstenite::client_tls_with_config(request, stream, config, connector.map(Into::into))?;
+        let config = ws.get_config();
+        let stream = MaybeTlsStream::from_inner(ws.into_inner());
+        let ws = edgerun_tungstenite::WebSocket::from_raw_socket(stream, Role::Client, Some(config));
+        Ok((WebSocketStream::direct(ws), response))
+    } else {
+        let stream = MaybeTlsStream::plain(stream);
+        let (ws, response) = edgerun_tungstenite::client_with_config(request, stream, config)?;
+        Ok((WebSocketStream::direct(ws), response))
+    }
 }
 
 #[cfg(feature = "connect")]
@@ -346,13 +282,13 @@ pub async fn connect_async<R>(
     request: R,
 ) -> Result<
     (
-        WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>,
+        WebSocketStream<MaybeTlsStream<TcpStream>>,
         http::Response<Option<Vec<u8>>>,
     ),
     Error,
 >
 where
-    R: edgerun_tungstenite::client::IntoClientRequest + Unpin,
+    R: IntoClientRequest + Unpin,
 {
     connect_async_with_config(request, None, false).await
 }
@@ -364,40 +300,38 @@ pub async fn connect_async_with_config<R>(
     disable_nagle: bool,
 ) -> Result<
     (
-        WebSocketStream<MaybeTlsStream<tokio::net::TcpStream>>,
+        WebSocketStream<MaybeTlsStream<TcpStream>>,
         http::Response<Option<Vec<u8>>>,
     ),
     Error,
 >
 where
-    R: edgerun_tungstenite::client::IntoClientRequest + Unpin,
+    R: IntoClientRequest + Unpin,
 {
-    let request = request.into_client_request()?;
-    let (stream, response) =
-        backend::connect_async_with_config(request, config.map(Into::into), disable_nagle)
+    #[cfg(feature = "rustls-tls-native-roots")]
+    {
+        connect_async_tls_with_config(request, config, disable_nagle, None).await
+    }
+    #[cfg(not(feature = "rustls-tls-native-roots"))]
+    {
+        let request = request.into_client_request()?;
+        let stream = TcpStream::connect(request_addr(&request)?)
             .await
-            .map_err(Error::from)?;
-    Ok((
-        WebSocketStream::from_backend_maybe_tls(stream).await,
-        response,
-    ))
+            .map_err(|error| Error::Io(std::io::Error::other(error.to_string())))?;
+        let stream = MaybeTlsStream::plain(stream);
+        let (ws, response) = edgerun_tungstenite::client_with_config(request, stream, config)?;
+        Ok((WebSocketStream::direct(ws), response))
+    }
 }
 
 #[cfg(feature = "rustls-tls-native-roots")]
 pub async fn client_async_tls<R, S>(
     request: R,
     stream: S,
-) -> Result<
-    (
-        WebSocketStream<MaybeTlsStream<S>>,
-        http::Response<Option<Vec<u8>>>,
-    ),
-    Error,
->
+) -> Result<(WebSocketStream<MaybeTlsStream<S>>, http::Response<Option<Vec<u8>>>), Error>
 where
-    R: edgerun_tungstenite::client::IntoClientRequest + Unpin,
-    S: 'static + tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin,
-    MaybeTlsStream<S>: Unpin,
+    R: IntoClientRequest + Unpin,
+    S: Read + Write + Send + Unpin + 'static,
 {
     client_async_tls_with_config(request, stream, None, None).await
 }
@@ -408,31 +342,21 @@ pub async fn client_async_tls_with_config<R, S>(
     stream: S,
     config: Option<WebSocketConfig>,
     connector: Option<Connector>,
-) -> Result<
-    (
-        WebSocketStream<MaybeTlsStream<S>>,
-        http::Response<Option<Vec<u8>>>,
-    ),
-    Error,
->
+) -> Result<(WebSocketStream<MaybeTlsStream<S>>, http::Response<Option<Vec<u8>>>), Error>
 where
-    R: edgerun_tungstenite::client::IntoClientRequest + Unpin,
-    S: 'static + tokio::io::AsyncRead + tokio::io::AsyncWrite + Send + Unpin,
-    MaybeTlsStream<S>: Unpin,
+    R: IntoClientRequest + Unpin,
+    S: Read + Write + Send + Unpin + 'static,
 {
-    let request = request.into_client_request()?;
-    let (stream, response) = backend::client_async_tls_with_config(
+    let (ws, response) = edgerun_tungstenite::client_tls_with_config(
         request,
         stream,
-        config.map(Into::into),
+        config,
         connector.map(Into::into),
-    )
-    .await
-    .map_err(Error::from)?;
-    Ok((
-        WebSocketStream::from_backend_maybe_tls(stream).await,
-        response,
-    ))
+    )?;
+    let config = ws.get_config();
+    let stream = MaybeTlsStream::from_inner(ws.into_inner());
+    let ws = edgerun_tungstenite::WebSocket::from_raw_socket(stream, Role::Client, Some(config));
+    Ok((WebSocketStream::direct(ws), response))
 }
 
 #[cfg(feature = "handshake")]
@@ -441,8 +365,8 @@ pub async fn client_async<R, S>(
     stream: S,
 ) -> Result<(WebSocketStream<S>, http::Response<Option<Vec<u8>>>), Error>
 where
-    R: edgerun_tungstenite::client::IntoClientRequest + Unpin,
-    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+    R: IntoClientRequest + Unpin,
+    S: Read + Write,
 {
     client_async_with_config(request, stream, None).await
 }
@@ -454,26 +378,19 @@ pub async fn client_async_with_config<R, S>(
     config: Option<WebSocketConfig>,
 ) -> Result<(WebSocketStream<S>, http::Response<Option<Vec<u8>>>), Error>
 where
-    R: edgerun_tungstenite::client::IntoClientRequest + Unpin,
-    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+    R: IntoClientRequest + Unpin,
+    S: Read + Write,
 {
-    let request = request.into_client_request()?;
-    let (stream, response) =
-        backend::client_async_with_config(request, stream, config.map(Into::into))
-            .await
-            .map_err(Error::from)?;
-    Ok((WebSocketStream::direct(stream), response))
+    edgerun_tungstenite::client_with_config(request, stream, config)
+        .map(|(ws, response)| (WebSocketStream::direct(ws), response))
 }
 
 #[cfg(feature = "handshake")]
 pub async fn accept_async<S>(stream: S) -> Result<WebSocketStream<S>, Error>
 where
-    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+    S: Read + Write,
 {
-    backend::accept_async(stream)
-        .await
-        .map(WebSocketStream::direct)
-        .map_err(Error::from)
+    edgerun_tungstenite::accept(stream).map(WebSocketStream::direct)
 }
 
 #[cfg(feature = "handshake")]
@@ -482,23 +399,16 @@ pub async fn accept_async_with_config<S>(
     config: Option<WebSocketConfig>,
 ) -> Result<WebSocketStream<S>, Error>
 where
-    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+    S: Read + Write,
 {
-    backend::accept_async_with_config(stream, config.map(Into::into))
-        .await
-        .map(WebSocketStream::direct)
-        .map_err(Error::from)
+    edgerun_tungstenite::accept_with_config(stream, config).map(WebSocketStream::direct)
 }
 
 #[cfg(feature = "handshake")]
 pub async fn accept_hdr_async<S, C>(stream: S, callback: C) -> Result<WebSocketStream<S>, Error>
 where
-    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
-    C: FnOnce(
-            &http::Request<()>,
-            http::Response<()>,
-        ) -> Result<http::Response<()>, http::Response<Option<String>>>
-        + Unpin,
+    S: Read + Write,
+    C: edgerun_tungstenite::handshake::server::Callback,
 {
     accept_hdr_async_with_config(stream, callback, None).await
 }
@@ -510,15 +420,8 @@ pub async fn accept_hdr_async_with_config<S, C>(
     config: Option<WebSocketConfig>,
 ) -> Result<WebSocketStream<S>, Error>
 where
-    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
-    C: FnOnce(
-            &http::Request<()>,
-            http::Response<()>,
-        ) -> Result<http::Response<()>, http::Response<Option<String>>>
-        + Unpin,
+    S: Read + Write,
+    C: edgerun_tungstenite::handshake::server::Callback,
 {
-    backend::accept_hdr_async_with_config(stream, callback, config.map(Into::into))
-        .await
-        .map(WebSocketStream::direct)
-        .map_err(Error::from)
+    edgerun_tungstenite::accept_hdr_with_config(stream, callback, config).map(WebSocketStream::direct)
 }

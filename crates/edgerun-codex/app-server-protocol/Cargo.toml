@@ -28,7 +28,6 @@ rmcp = { workspace = true, default-features = false, features = [
     "base64",
     "macros",
     "schemars",
-    "server",
 ] }
 ts-rs = { workspace = true }
 edgerun-inventory = { workspace = true }

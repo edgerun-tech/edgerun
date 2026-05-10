@@ -1,8 +1,8 @@
 use edgerun_json::serde_json::Value as JsonValue;
+use edgerun_serde::Deserialize;
+use edgerun_serde::Deserializer;
+use edgerun_serde::Serialize;
 use schemars::JsonSchema;
-use serde::Deserialize;
-use serde::Deserializer;
-use serde::Serialize;
 use ts_rs::TS;
 
 #[derive(Debug, Clone, Serialize, PartialEq, JsonSchema, TS)]

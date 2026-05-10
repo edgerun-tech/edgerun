@@ -50,11 +50,11 @@ use crate::request_permissions::RequestPermissionsResponse;
 use crate::request_user_input::RequestUserInputResponse;
 use crate::user_input::UserInput;
 use edgerun_json::serde_json::Value;
+use edgerun_serde::Deserialize;
+use edgerun_serde::Serialize;
 use edgerun_serde_with::serde_as;
 use edgerun_strum_macros::Display;
 use schemars::JsonSchema;
-use serde::Deserialize;
-use serde::Serialize;
 use tracing::error;
 use ts_rs::TS;
 
@@ -184,8 +184,8 @@ pub enum RealtimeOutputModality {
 }
 
 mod conversation_start_prompt_serde {
-    use serde::Deserializer;
-    use serde::Serializer;
+    use edgerun_serde::Deserializer;
+    use edgerun_serde::Serializer;
 
     pub(crate) fn deserialize<'de, D>(deserializer: D) -> Result<Option<Option<String>>, D::Error>
     where
@@ -3473,7 +3473,7 @@ pub struct SessionConfiguredEvent {
 impl<'de> Deserialize<'de> for SessionConfiguredEvent {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>,
+        D: edgerun_serde::Deserializer<'de>,
     {
         #[derive(Deserialize)]
         struct Wire {
@@ -3513,7 +3513,9 @@ impl<'de> Deserialize<'de> for SessionConfiguredEvent {
                 wire.cwd.as_path(),
             ),
             (None, None) => {
-                return Err(serde::de::Error::missing_field("permission_profile"));
+                return Err(edgerun_serde::de::Error::missing_field(
+                    "permission_profile",
+                ));
             }
         };
 

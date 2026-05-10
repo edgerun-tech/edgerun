@@ -9,6 +9,7 @@ import { appRegistry } from "@/platform/registries/app-registry"
 import { edgerun as edgerunTrust } from "@/gen/edgerun/v0/trust"
 import { edgerun as edgerunStream } from "@/gen/edgerun/v0/stream"
 import { edgerun as edgerunCap } from "@/gen/edgerun/v0/capability"
+import { bytesToHex } from "@/platform/utils/bytes"
 
 export interface ResolutionPlan {
   satisfied: boolean
@@ -53,7 +54,7 @@ function registeredCapabilityLabels(): Map<string, edgerunCap.v0.capability.Capa
   const state = capabilityRegistry.get()
   const byLabel = new Map<string, edgerunCap.v0.capability.CapabilityDescriptor>()
   for (const [, desc] of state.descriptors) {
-    const id = Buffer.from(desc.capability_id).toString("hex")
+    const id = bytesToHex(desc.capability_id)
     if (desc.provider_name) {
       byLabel.set(desc.provider_name, desc)
     }
@@ -128,11 +129,11 @@ function resolveCapabilities(
   const grants = registryState.grants.get(appId) || []
   for (const grant of grants) {
     if (grant.selector?.capability_id) {
-      const grantCapId = Buffer.from(grant.selector.capability_id).toString("hex")
+      const grantCapId = bytesToHex(grant.selector.capability_id)
       appGrants.add(grantCapId)
     }
     if (grant.grantee?.identity_id) {
-      const granteeId = Buffer.from(grant.grantee.identity_id).toString("hex")
+      const granteeId = bytesToHex(grant.grantee.identity_id)
       if (granteeId === appId) {
         appGrants.add(granteeId)
       }
@@ -142,7 +143,7 @@ function resolveCapabilities(
   for (const label of required) {
     const desc = available.get(label)
     const isAvailable = !!desc
-    const isGranted = desc ? appGrants.has(Buffer.from(desc.capability_id).toString("hex")) : false
+    const isGranted = desc ? appGrants.has(bytesToHex(desc.capability_id)) : false
 
     if (!isAvailable) {
       plan.missing.push(label)

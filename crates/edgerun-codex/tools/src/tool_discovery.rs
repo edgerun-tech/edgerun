@@ -5,8 +5,8 @@ use crate::ToolName;
 use crate::default_namespace_description;
 use crate::mcp_tool_to_deferred_responses_api_tool;
 use codex_app_server_protocol::AppInfo;
-use serde::Deserialize;
-use serde::Serialize;
+use edgerun_serde::Deserialize;
+use edgerun_serde::Serialize;
 
 const TUI_CLIENT_NAME: &str = "codex-tui";
 pub const TOOL_SEARCH_TOOL_NAME: &str = "tool_search";

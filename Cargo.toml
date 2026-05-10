@@ -39,11 +39,13 @@ members = [
   "crates/utility/edgerun-zstd",
   "crates/utility/edgerun-regex",
   "crates/utility/edgerun-reqwest",
+  "crates/utility/edgerun-rmcp",
   "crates/edgerun-standards",
   "crates/edgerun-unit",
   "crates/edgerun-sdk",
   "crates/edgerun-codelyzer",
   "crates/edgerun-deploy",
+  "crates/edgerun-network-driver",
   "crates/edgerun-ssh",
   "crates/utility/edgerun-url",
   "crates/edgerun-rtl8125",
@@ -79,6 +81,7 @@ members = [
   "crates/utility/edgerun-locale",
   "crates/utility/edgerun-quick-xml",
   "crates/utility/edgerun-random",
+  "crates/utility/edgerun-serde",
   "crates/utility/edgerun-serde-with",
   "crates/utility/edgerun-strum",
   "crates/utility/edgerun-strum-macros",
@@ -191,6 +194,7 @@ edgerun-url = { version = "0.1", path = "crates/utility/edgerun-url" }
 edgerun-glob = { version = "0.1", path = "crates/utility/edgerun-glob" }
 edgerun-shlex = { version = "0.1", path = "crates/utility/edgerun-shlex" }
 edgerun-inventory = { version = "0.1", path = "crates/utility/edgerun-inventory" }
+edgerun-serde = { version = "0.1", path = "crates/utility/edgerun-serde" }
 edgerun-serde-with = { version = "0.1", path = "crates/utility/edgerun-serde-with" }
 edgerun-strum = { version = "0.1", path = "crates/utility/edgerun-strum" }
 edgerun-strum-macros = { version = "0.1", path = "crates/utility/edgerun-strum-macros" }
@@ -201,6 +205,7 @@ edgerun-tokio-util = { version = "0.1", path = "crates/utility/edgerun-tokio-uti
 edgerun-tungstenite = { version = "0.1", path = "crates/utility/edgerun-tungstenite" }
 edgerun-regex = { version = "0.1", path = "crates/utility/edgerun-regex" }
 edgerun-reqwest = { version = "0.1", path = "crates/utility/edgerun-reqwest" }
+edgerun-rmcp = { version = "0.1", path = "crates/utility/edgerun-rmcp" }
 edgerun-email = { version = "0.1", path = "crates/apps/edgerun-email" }
 edgerun-wallet-app = { version = "0.1", path = "crates/apps/edgerun-wallet-app" }
 edgerun-log = { version = "0.1", path = "crates/utility/edgerun-log" }
@@ -220,6 +225,8 @@ edgerun-pty = { version = "0.1", path = "crates/utility/edgerun-pty" }
 edgerun-sixel = { version = "0.1", path = "crates/utility/edgerun-sixel" }
 edgerun-terminal-parser = { version = "0.1", path = "crates/utility/edgerun-terminal-parser" }
 edgerun-virtio = { version = "0.1", path = "crates/edgerun-virtio" }
+edgerun-rtl8125 = { version = "0.1", path = "crates/edgerun-rtl8125" }
+edgerun-network-driver = { version = "0.1", path = "crates/edgerun-network-driver", default-features = false }
 edgerun-event = { version = "0.1", path = "crates/edgerun-event" }
 edgerun-wallet = { version = "0.1", path = "crates/edgerun-wallet" }
 edgerun-exchange = { version = "0.1", path = "crates/edgerun-exchange" }

@@ -497,10 +497,10 @@ mod tests {
     use std::sync::atomic::AtomicU64;
     use std::time::Duration;
 
-    use pretty_assertions::assert_eq;
     use edgerun_tokio::sync::Mutex;
     use edgerun_tokio::sync::mpsc;
     use edgerun_tokio::sync::oneshot;
+    use pretty_assertions::assert_eq;
 
     use super::CodeModeService;
     use super::Inner;

@@ -1,9 +1,9 @@
 use edgerun_bytes::Bytes;
 use edgerun_http::Method;
-use edgerun_json::serde_json::Value;
+use edgerun_json::JsonValue;
+use edgerun_json::ToJson;
 use edgerun_reqwest::header::HeaderMap;
 use edgerun_reqwest::header::HeaderValue;
-use serde::Serialize;
 use std::time::Duration;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -15,12 +15,12 @@ pub enum RequestCompression {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RequestBody {
-    Json(Value),
+    Json(JsonValue),
     Raw(Bytes),
 }
 
 impl RequestBody {
-    pub fn json(&self) -> Option<&Value> {
+    pub fn json(&self) -> Option<&JsonValue> {
         match self {
             Self::Json(value) => Some(value),
             Self::Raw(_) => None,
@@ -62,10 +62,8 @@ impl Request {
         }
     }
 
-    pub fn with_json<T: Serialize>(mut self, body: &T) -> Self {
-        self.body = edgerun_json::serde_json::to_value(body)
-            .ok()
-            .map(RequestBody::Json);
+    pub fn with_json<T: ToJson + ?Sized>(mut self, body: &T) -> Self {
+        self.body = Some(RequestBody::Json(body.to_json()));
         self
     }
 
@@ -97,8 +95,7 @@ impl Request {
                 })
             }
             Some(RequestBody::Json(body)) => {
-                let json =
-                    edgerun_json::serde_json::to_vec(&body).map_err(|err| err.to_string())?;
+                let json = edgerun_json::to_json_vec(body).map_err(|err| err.to_string())?;
                 let bytes = if self.compression != RequestCompression::None {
                     if headers.contains_key(edgerun_http::header::CONTENT_ENCODING) {
                         return Err(
@@ -158,7 +155,7 @@ impl Request {
 mod tests {
     use super::*;
     use edgerun_http::HeaderValue;
-    use edgerun_json::serde_json::json;
+    use edgerun_json::json;
     use pretty_assertions::assert_eq;
 
     #[test]

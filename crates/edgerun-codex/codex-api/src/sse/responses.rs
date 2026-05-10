@@ -10,19 +10,19 @@ use codex_protocol::models::ResponseItem;
 use codex_protocol::protocol::ModelVerification;
 use codex_protocol::protocol::TokenUsage;
 use edgerun_eventsource_stream::Eventsource;
-use edgerun_json::serde_json::Value;
 use edgerun_futures::StreamExt;
 use edgerun_futures::TryStreamExt;
-use serde::Deserialize;
+use edgerun_json::serde_json::Value;
+use edgerun_serde::Deserialize;
+use edgerun_tokio::sync::mpsc;
+use edgerun_tokio::time::Instant;
+use edgerun_tokio::time::timeout;
+use edgerun_tokio_util::io::ReaderStream;
 use std::io::BufRead;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::time::Duration;
-use edgerun_tokio::sync::mpsc;
-use edgerun_tokio::time::Instant;
-use edgerun_tokio::time::timeout;
-use edgerun_tokio_util::io::ReaderStream;
 use tracing::debug;
 use tracing::trace;
 
@@ -606,13 +606,13 @@ mod tests {
     use codex_protocol::models::MessagePhase;
     use codex_protocol::models::ResponseItem;
     use edgerun_bytes::Bytes;
+    use edgerun_futures::stream;
     use edgerun_http::HeaderMap;
     use edgerun_http::HeaderValue;
     use edgerun_http::StatusCode;
     use edgerun_json::serde_json::json;
-    use edgerun_futures::stream;
-    use pretty_assertions::assert_eq;
     use edgerun_tokio::sync::mpsc;
+    use pretty_assertions::assert_eq;
     use tokio_test::io::Builder as IoBuilder;
 
     async fn collect_events(chunks: &[&[u8]]) -> Vec<Result<ResponseEvent, ApiError>> {

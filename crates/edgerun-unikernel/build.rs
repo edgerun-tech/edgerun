@@ -11,10 +11,7 @@ fn main() {
 
     if target_os == "none" {
         println!("cargo:rerun-if-changed={}", linker_script.display());
-        println!(
-            "cargo:rustc-link-arg-bins=-T{}",
-            linker_script.display()
-        );
+        println!("cargo:rustc-link-arg-bins=-T{}", linker_script.display());
     }
 
     if target_arch == "xtensa" && target_os == "none" {

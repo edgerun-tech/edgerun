@@ -1,5 +1,5 @@
-use serde::Deserialize;
-use serde::Serialize;
+use edgerun_serde::Deserialize;
+use edgerun_serde::Serialize;
 use std::fmt;
 
 /// Identifies a callable tool, preserving the namespace split when the model

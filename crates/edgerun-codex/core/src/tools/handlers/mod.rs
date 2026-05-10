@@ -35,8 +35,8 @@ use codex_sandboxing::policy_transforms::merge_permission_profiles;
 use codex_sandboxing::policy_transforms::normalize_additional_permissions;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_absolute_path::AbsolutePathBufGuard;
-use serde::Deserialize;
 use edgerun_json::serde_json::Value;
+use serde::Deserialize;
 use std::path::Path;
 
 use crate::function_tool::FunctionCallError;
@@ -99,10 +99,13 @@ fn resolve_workdir_base_path(
     arguments: &str,
     default_cwd: &AbsolutePathBuf,
 ) -> Result<AbsolutePathBuf, FunctionCallError> {
-    let arguments: Value = parse_arguments(arguments)?;
-    Ok(arguments
-        .get("workdir")
-        .and_then(Value::as_str)
+    let tape = edgerun_json::parse_json_tape(arguments).map_err(|err| {
+        FunctionCallError::RespondToModel(format!("failed to parse function arguments: {err}"))
+    })?;
+    let root = tape.root(arguments);
+    Ok(root
+        .and_then(|root| root.get("workdir"))
+        .and_then(|workdir| workdir.as_str())
         .filter(|workdir| !workdir.is_empty())
         .map_or_else(|| default_cwd.clone(), |workdir| default_cwd.join(workdir)))
 }

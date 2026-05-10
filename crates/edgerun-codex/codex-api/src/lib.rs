@@ -1,3 +1,5 @@
+extern crate serde as edgerun_serde;
+
 pub(crate) mod api_bridge;
 pub(crate) mod auth;
 pub(crate) mod common;

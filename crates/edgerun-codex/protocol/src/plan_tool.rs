@@ -1,6 +1,6 @@
+use edgerun_serde::Deserialize;
+use edgerun_serde::Serialize;
 use schemars::JsonSchema;
-use serde::Deserialize;
-use serde::Serialize;
 use ts_rs::TS;
 
 // Types for the TODO tool arguments matching codex-vscode/todo-mcp/src/main.rs

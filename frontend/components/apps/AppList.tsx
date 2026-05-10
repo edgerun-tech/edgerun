@@ -9,6 +9,7 @@ import { useApps } from "@/platform/ui/useApps"
 import { useCapabilities } from "@/platform/ui/useCapabilities"
 import { edgerun as streamTypes } from "@/gen/edgerun/v0/stream"
 import { edgerun as capTypes } from "@/gen/edgerun/v0/capability"
+import { bytesToHex } from "@/platform/utils/bytes"
 
 interface AppListProps {
   apps: streamTypes.v0.stream.AppPackage[]
@@ -32,7 +33,7 @@ export function AppList({ apps, getGrants, onRefresh }: AppListProps) {
       </div>
       <div className="grid grid-cols-2 gap-3">
         {apps.map((app) => {
-          const appId = Buffer.from(app.wasm_object?.object_id || new Uint8Array(0)).toString("hex")
+          const appId = bytesToHex(app.wasm_object?.object_id)
           return (
             <div
               key={appId}
@@ -42,10 +43,10 @@ export function AppList({ apps, getGrants, onRefresh }: AppListProps) {
               <div className="mt-2 flex flex-wrap gap-1">
                 {listGrantsForApp(appId).map((grant: capTypes.v0.capability.CapabilityGrant) => (
                   <span
-                    key={Buffer.from(grant.grant_id || new Uint8Array(0)).toString("hex")}
+                    key={bytesToHex(grant.grant_id)}
                     className="rounded bg-primary/10 px-1.5 py-0.5 text-[9px]"
                   >
-                    {Buffer.from(grant.grant_id || new Uint8Array(0)).toString("hex").slice(0, 8)}...
+                    {bytesToHex(grant.grant_id).slice(0, 8)}...
                   </span>
                 ))}
               </div>

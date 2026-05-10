@@ -7,15 +7,17 @@ use codex_protocol::protocol::ModelVerification;
 use codex_protocol::protocol::RateLimitSnapshot;
 use codex_protocol::protocol::TokenUsage;
 use codex_protocol::protocol::W3cTraceContext;
-use edgerun_json::serde_json::Value;
 use edgerun_futures::Stream;
-use serde::Deserialize;
-use serde::Serialize;
+use edgerun_json::JsonValue;
+use edgerun_json::serde_json::Value;
+use edgerun_json::FromJson;
+use edgerun_json::ToJson;
+use edgerun_serde::Serialize;
+use edgerun_tokio::sync::mpsc;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
-use edgerun_tokio::sync::mpsc;
 
 pub const WS_REQUEST_HEADER_TRACEPARENT_CLIENT_METADATA_KEY: &str = "ws_request_header_traceparent";
 pub const WS_REQUEST_HEADER_TRACESTATE_CLIENT_METADATA_KEY: &str = "ws_request_header_tracestate";
@@ -40,7 +42,7 @@ pub struct CompactionInput<'a> {
 }
 
 /// Canonical input payload for the memory summarize endpoint.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, ToJson)]
 pub struct MemorySummarizeInput {
     pub model: String,
     #[serde(rename = "traces")]
@@ -49,19 +51,19 @@ pub struct MemorySummarizeInput {
     pub reasoning: Option<Reasoning>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, ToJson)]
 pub struct RawMemory {
     pub id: String,
     pub metadata: RawMemoryMetadata,
-    pub items: Vec<Value>,
+    pub items: Vec<JsonValue>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, ToJson)]
 pub struct RawMemoryMetadata {
     pub source_path: String,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, FromJson, PartialEq, Eq)]
 pub struct MemorySummarizeOutput {
     #[serde(rename = "trace_summary", alias = "raw_memory")]
     pub raw_memory: String,
@@ -110,7 +112,7 @@ pub enum ResponseEvent {
     ModelsEtag(String),
 }
 
-#[derive(Debug, Serialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, ToJson, Clone, PartialEq)]
 pub struct Reasoning {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub effort: Option<ReasoningEffortConfig>,

@@ -20,9 +20,9 @@ use codex_protocol::protocol::ThreadGoalStatus as CoreThreadGoalStatus;
 use codex_protocol::protocol::TokenUsage as CoreTokenUsage;
 use codex_protocol::protocol::TokenUsageInfo as CoreTokenUsageInfo;
 use edgerun_json::serde_json::Value as JsonValue;
+use edgerun_serde::Deserialize;
+use edgerun_serde::Serialize;
 use schemars::JsonSchema;
-use serde::Deserialize;
-use serde::Serialize;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use ts_rs::TS;
@@ -62,7 +62,7 @@ struct DynamicToolSpecDe {
 impl<'de> Deserialize<'de> for DynamicToolSpec {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>,
+        D: edgerun_serde::Deserializer<'de>,
     {
         let DynamicToolSpecDe {
             namespace,

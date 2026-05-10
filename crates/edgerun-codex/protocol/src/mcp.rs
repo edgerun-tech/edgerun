@@ -3,9 +3,9 @@
 //!
 //! We intentionally keep these types TS/JSON-schema friendly (via `ts-rs` and
 //! `schemars`) so they can be embedded in Codex's own protocol structures.
+use edgerun_serde::Deserialize;
+use edgerun_serde::Serialize;
 use schemars::JsonSchema;
-use serde::Deserialize;
-use serde::Serialize;
 use ts_rs::TS;
 
 /// ID of a request, which can be either a string or an integer.
@@ -158,7 +158,7 @@ pub struct CallToolResult {
 
 fn deserialize_lossy_opt_i64<'de, D>(deserializer: D) -> Result<Option<i64>, D::Error>
 where
-    D: serde::Deserializer<'de>,
+    D: edgerun_serde::Deserializer<'de>,
 {
     match Option::<edgerun_json::serde_json::Number>::deserialize(deserializer)? {
         Some(number) => {

@@ -191,6 +191,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-network-driver"
+version = "0.1.1"
+dependencies = [
+ "edgerun-virtio",
+]
+
+[[package]]
 name = "edgerun-node"
 version = "0.1.1"
 dependencies = [
@@ -262,6 +269,7 @@ name = "edgerun-relay"
 version = "0.1.1"
 dependencies = [
  "edgerun-crypto",
+ "edgerun-network-driver",
  "edgerun-protocols",
  "edgerun-rusttls",
  "edgerun-virtio",
@@ -326,6 +334,7 @@ dependencies = [
  "edgerun-edgefs",
  "edgerun-encoding",
  "edgerun-event",
+ "edgerun-network-driver",
  "edgerun-node",
  "edgerun-oci",
  "edgerun-platform",

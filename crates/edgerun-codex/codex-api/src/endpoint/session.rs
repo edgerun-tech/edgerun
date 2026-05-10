@@ -54,7 +54,7 @@ impl<T: HttpTransport> EndpointSession<T> {
         let mut req = self.provider.build_request(method.clone(), path);
         req.headers.extend(extra_headers.clone());
         if let Some(body) = body {
-            req.body = Some(RequestBody::Json(body.clone()));
+            req.body = serde_value_to_edgerun_json(body).map(RequestBody::Json);
         }
         req
     }
@@ -67,6 +67,17 @@ impl<T: HttpTransport> EndpointSession<T> {
         body: Option<Value>,
     ) -> Result<Response, ApiError> {
         self.execute_with(method, path, extra_headers, body, |_| {})
+            .await
+    }
+
+    pub(crate) async fn execute_json(
+        &self,
+        method: Method,
+        path: &str,
+        extra_headers: HeaderMap,
+        body: Option<edgerun_json::JsonValue>,
+    ) -> Result<Response, ApiError> {
+        self.execute_json_with(method, path, extra_headers, body, |_| {})
             .await
     }
 
@@ -89,6 +100,51 @@ impl<T: HttpTransport> EndpointSession<T> {
     {
         let make_request = || {
             let mut req = self.make_request(&method, path, &extra_headers, body.as_ref());
+            configure(&mut req);
+            req
+        };
+
+        let response = run_with_request_telemetry(
+            self.provider.retry.to_policy(),
+            self.request_telemetry.clone(),
+            make_request,
+            |req| {
+                let auth = self.auth.clone();
+                let transport = &self.transport;
+                async move {
+                    let req = auth.apply_auth(req).await.map_err(TransportError::from)?;
+                    transport.execute(req).await
+                }
+            },
+        )
+        .await?;
+
+        Ok(response)
+    }
+
+    #[instrument(
+        name = "endpoint_session.execute_json_with",
+        level = "info",
+        skip_all,
+        fields(http.method = %method, api.path = path)
+    )]
+    pub(crate) async fn execute_json_with<C>(
+        &self,
+        method: Method,
+        path: &str,
+        extra_headers: HeaderMap,
+        body: Option<edgerun_json::JsonValue>,
+        configure: C,
+    ) -> Result<Response, ApiError>
+    where
+        C: Fn(&mut Request),
+    {
+        let make_request = || {
+            let mut req = self.provider.build_request(method.clone(), path);
+            req.headers.extend(extra_headers.clone());
+            if let Some(body) = body.as_ref() {
+                req.body = Some(RequestBody::Json(body.clone()));
+            }
             configure(&mut req);
             req
         };
@@ -151,4 +207,10 @@ impl<T: HttpTransport> EndpointSession<T> {
 
         Ok(stream)
     }
+}
+
+fn serde_value_to_edgerun_json(value: &Value) -> Option<edgerun_json::JsonValue> {
+    let input = value.to_string();
+    let tape = edgerun_json::parse_json_tape(&input).ok()?;
+    tape.root(&input)?.to_json_value()
 }

@@ -41,6 +41,9 @@ Commands:
   text [selector]                 Print innerText for selector
   wait <locator> [--timeout ms]   Wait until an element is visible
   metrics                         Print performance metrics
+  observe [--duration ms]         Collect console/log/network events
+  cookies [url] [--raw]           Print cookies visible to the page
+  storage [--raw]                 Print localStorage and sessionStorage
 
 Locators:
   CSS selectors by default, or text=Save, placeholder=Ask anything, role=textbox, testid=submit.
@@ -114,6 +117,9 @@ async function main() {
     if (command === "text") return page.text(args._[1] || "body")
     if (command === "wait") return page.waitFor(locatorFromArg(args._[1]), { timeoutMs: Number(args.timeout || 10_000) })
     if (command === "metrics") return page.metrics()
+    if (command === "observe") return page.observe({ durationMs: Number(args.duration || 5_000) })
+    if (command === "cookies") return page.cookies(args._[1] ? [args._[1]] : [], { raw: Boolean(args.raw) })
+    if (command === "storage") return page.storage({ raw: Boolean(args.raw) })
     throw new Error(`Unknown command: ${command}\n\n${usage()}`)
   })
   print(result, { raw: command === "html" || command === "text" })

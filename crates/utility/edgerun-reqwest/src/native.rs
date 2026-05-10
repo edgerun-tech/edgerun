@@ -759,6 +759,18 @@ impl RequestBuilder {
         }
     }
 
+    pub fn json_edgerun<T: edgerun_json::ToJson + ?Sized>(self, value: &T) -> Self {
+        match edgerun_json::to_json_vec(value) {
+            Ok(body) => self
+                .header(header::CONTENT_TYPE, "application/json")
+                .body(body),
+            Err(error) => RequestBuilder {
+                url: Err(Error::builder(error.to_string())),
+                ..self
+            },
+        }
+    }
+
     pub fn build(self) -> Result<Request, Error> {
         let url = self.url?;
         let mut headers = self.client.default_headers.clone();

@@ -5,14 +5,14 @@ use codex_protocol::protocol::CodexErrorInfo as CoreCodexErrorInfo;
 use codex_protocol::protocol::GranularApprovalConfig as CoreGranularApprovalConfig;
 use codex_protocol::protocol::NonSteerableTurnKind as CoreNonSteerableTurnKind;
 use edgerun_json::serde_json::Value as JsonValue;
+use edgerun_serde::Deserialize;
+use edgerun_serde::Serialize;
 use schemars::JsonSchema;
 use schemars::r#gen::SchemaGenerator;
 use schemars::schema::InstanceType;
 use schemars::schema::Metadata;
 use schemars::schema::Schema;
 use schemars::schema::SchemaObject;
-use serde::Deserialize;
-use serde::Serialize;
 use ts_rs::TS;
 
 // Macro to declare a camelCased API v2 enum mirroring a core enum which

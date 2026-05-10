@@ -6,6 +6,7 @@
 import { atom, computed } from "nanostores"
 import { edgerun as edgerunStream } from "@/gen/edgerun/v0/stream"
 import { appStore } from "@/platform/state/app-store"
+import { bytesToHex } from "@/platform/utils/bytes"
 
 export interface AppRegistryState {
   apps: Map<string, edgerunStream.v0.stream.AppPackage>
@@ -24,7 +25,7 @@ export const allApps = computed(appRegistry, (s) =>
 export function registerApp(app: edgerunStream.v0.stream.AppPackage): void {
   const state = appRegistry.get()
   const newApps = new Map(state.apps)
-  const appId = Buffer.from(app.wasm_object?.object_id || new Uint8Array(0)).toString("hex")
+  const appId = bytesToHex(app.wasm_object?.object_id)
   newApps.set(appId, app)
   appRegistry.set({ apps: newApps })
 }

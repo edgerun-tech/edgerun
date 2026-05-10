@@ -9,7 +9,7 @@ use codex_protocol::models::ResponseItem;
 use edgerun_http::HeaderMap;
 use edgerun_http::Method;
 use edgerun_json::serde_json::to_value;
-use serde::Deserialize;
+use edgerun_serde::Deserialize;
 use std::sync::Arc;
 
 pub struct CompactClient<T: HttpTransport> {

@@ -19,8 +19,15 @@ use codex_client::backoff;
 use codex_client::maybe_build_rustls_client_config_with_custom_ca;
 use codex_client::rustls_provider::ensure_rustls_crypto_provider;
 use codex_protocol::protocol::RealtimeTranscriptDelta;
+use edgerun_futures::SinkExt;
+use edgerun_futures::StreamExt;
 use edgerun_http::HeaderMap;
 use edgerun_http::HeaderValue;
+use edgerun_tokio::net::TcpStream;
+use edgerun_tokio::sync::Mutex;
+use edgerun_tokio::sync::mpsc;
+use edgerun_tokio::sync::oneshot;
+use edgerun_tokio::time::sleep;
 use edgerun_tokio_tungstenite::Error as WsError;
 use edgerun_tokio_tungstenite::MaybeTlsStream;
 use edgerun_tokio_tungstenite::Message;
@@ -28,17 +35,10 @@ use edgerun_tokio_tungstenite::WebSocketStream;
 use edgerun_tungstenite::client::IntoClientRequest;
 use edgerun_tungstenite::protocol::WebSocketConfig;
 use edgerun_url::Url;
-use edgerun_futures::SinkExt;
-use edgerun_futures::StreamExt;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
-use edgerun_tokio::net::TcpStream;
-use edgerun_tokio::sync::Mutex;
-use edgerun_tokio::sync::mpsc;
-use edgerun_tokio::sync::oneshot;
-use edgerun_tokio::time::sleep;
 use tracing::debug;
 use tracing::error;
 use tracing::info;
@@ -843,12 +843,12 @@ mod tests {
     use edgerun_http::HeaderValue;
     use edgerun_json::serde_json::Value;
     use edgerun_json::serde_json::json;
+    use edgerun_tokio::net::TcpListener;
     use edgerun_tokio_tungstenite::Message;
     use edgerun_tokio_tungstenite::accept_async;
     use pretty_assertions::assert_eq;
     use std::collections::HashMap;
     use std::time::Duration;
-    use edgerun_tokio::net::TcpListener;
 
     #[test]
     fn parse_session_updated_event() {

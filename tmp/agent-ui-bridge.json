@@ -1,6 +1,6 @@
 {
   "state": {
-    "updatedAt": "2026-05-09T02:01:08.251Z",
+    "updatedAt": "2026-05-10T03:07:44.052Z",
     "route": "/",
     "visibility": "visible",
     "viewport": {
@@ -14,7 +14,7 @@
     },
     "dockPage": "command",
     "activeElement": {
-      "tagName": "body",
+      "tagName": "input",
       "id": null,
       "role": null,
       "ariaLabel": null,

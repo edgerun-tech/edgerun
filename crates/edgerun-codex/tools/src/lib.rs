@@ -1,6 +1,8 @@
 //! Shared tool definitions and Responses API tool primitives that can live
 //! outside `codex-core`.
 
+extern crate serde as edgerun_serde;
+
 mod code_mode;
 mod dynamic_tool;
 mod features;

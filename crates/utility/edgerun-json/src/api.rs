@@ -158,7 +158,12 @@ where
     T: TryFrom<JsonValue, Error = E>,
     E: fmt::Display,
 {
-    from_value_as(parse_json(input)?)
+    let tape = parse_json_tape(input)?;
+    let value = tape
+        .root(input)
+        .and_then(|root| root.to_json_value())
+        .ok_or_else(|| JsonValueError::WrongType("missing JSON root value".to_string()))?;
+    from_value_as(value)
 }
 
 /// Parses a UTF-8 JSON byte slice and converts it into a caller-defined type.

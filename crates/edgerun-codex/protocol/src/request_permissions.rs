@@ -2,9 +2,9 @@ use crate::compat::absolute_path::AbsolutePathBuf;
 use crate::models::AdditionalPermissionProfile;
 use crate::models::FileSystemPermissions;
 use crate::models::NetworkPermissions;
+use edgerun_serde::Deserialize;
+use edgerun_serde::Serialize;
 use schemars::JsonSchema;
-use serde::Deserialize;
-use serde::Serialize;
 use ts_rs::TS;
 
 #[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]

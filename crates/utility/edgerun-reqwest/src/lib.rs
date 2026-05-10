@@ -1,9 +1,8 @@
 //! Edgerun-owned compatibility surface for Reqwest-shaped HTTP client APIs.
 //!
-//! The crate root currently forwards Reqwest's API so Codex can move imports
-//! behind an Edgerun-owned boundary without losing behavior. Native Edgerun
-//! HTTP building blocks are exposed under `edgerun` for progressive internal
-//! replacement.
+//! The crate root exposes a Reqwest-shaped API backed by Edgerun HTTP building
+//! blocks. Native Edgerun building blocks are also exposed under `edgerun` for
+//! progressive internal replacement.
 
 pub mod edgerun {
     pub mod encoding {
@@ -28,6 +27,3 @@ pub mod native;
 
 #[cfg(feature = "native-root")]
 pub use native::*;
-
-#[cfg(all(feature = "compat", not(feature = "native-root")))]
-pub use reqwest::*;

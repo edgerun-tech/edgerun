@@ -75,7 +75,7 @@ export class CdpPage {
     if (this.endpoint && this.target?.id) {
       await activateTarget(this.endpoint, this.target.id).catch(() => undefined)
     }
-    await this.connection.send("Page.bringToFront")
+    await this.connection.send("Page.bringToFront").catch(() => undefined)
   }
 
   async enable() {
@@ -219,6 +219,85 @@ export class CdpPage {
     return { metrics: metrics?.metrics ?? [], navigation: performance }
   }
 
+  async cookies(urls = [], options = {}) {
+    const result = await this.connection.send("Network.getCookies", { urls })
+    if (options.raw) return result
+    return {
+      cookies: result.cookies?.map((cookie) => ({
+        ...cookie,
+        value: redactValue(cookie.name, cookie.value),
+      })) ?? [],
+    }
+  }
+
+  async storage(options = {}) {
+    const result = await this.evaluate(`(() => ({
+      localStorage: Object.fromEntries(Array.from({ length: localStorage.length }, (_, index) => {
+        const key = localStorage.key(index);
+        return [key, localStorage.getItem(key)];
+      })),
+      sessionStorage: Object.fromEntries(Array.from({ length: sessionStorage.length }, (_, index) => {
+        const key = sessionStorage.key(index);
+        return [key, sessionStorage.getItem(key)];
+      }))
+    }))()`)
+    if (options.raw) return result
+    return {
+      localStorage: redactRecord(result.localStorage),
+      sessionStorage: redactRecord(result.sessionStorage),
+    }
+  }
+
+  async observe(options = {}) {
+    const durationMs = options.durationMs ?? 5_000
+    const events = []
+    await Promise.allSettled([
+      this.connection.send("Runtime.enable"),
+      this.connection.send("Log.enable"),
+      this.connection.send("Network.enable"),
+    ])
+    const off = [
+      this.connection.on("Runtime.consoleAPICalled", (params) => {
+        events.push({
+          kind: "console",
+          type: params.type,
+          text: params.args?.map((arg) => arg.value ?? arg.description ?? arg.type).join(" "),
+          timestamp: params.timestamp,
+        })
+      }),
+      this.connection.on("Log.entryAdded", (params) => {
+        events.push({ kind: "log", ...params.entry })
+      }),
+      this.connection.on("Network.requestWillBeSent", (params) => {
+        events.push({
+          kind: "request",
+          requestId: params.requestId,
+          method: params.request?.method,
+          url: params.request?.url,
+          type: params.type,
+          timestamp: params.timestamp,
+        })
+      }),
+      this.connection.on("Network.responseReceived", (params) => {
+        events.push({
+          kind: "response",
+          requestId: params.requestId,
+          url: params.response?.url,
+          status: params.response?.status,
+          mimeType: params.response?.mimeType,
+          type: params.type,
+          timestamp: params.timestamp,
+        })
+      }),
+      this.connection.on("Network.loadingFailed", (params) => {
+        events.push({ kind: "requestFailed", ...params })
+      }),
+    ]
+    await new Promise((resolve) => setTimeout(resolve, durationMs))
+    for (const unsubscribe of off) unsubscribe()
+    return events
+  }
+
   async waitFor(locator, options = {}) {
     const timeoutMs = options.timeoutMs ?? 10_000
     const intervalMs = options.intervalMs ?? 100
@@ -233,5 +312,21 @@ export class CdpPage {
 
   close() {
     this.connection.close()
+  }
+}
+
+function redactRecord(record = {}) {
+  return Object.fromEntries(Object.entries(record).map(([key, value]) => [key, redactValue(key, value)]))
+}
+
+function redactValue(key, value) {
+  if (value == null) return value
+  const text = String(value)
+  const sensitive = /token|secret|credential|password|profile|vault|sealed|session|auth|cookie|key/i.test(String(key))
+  if (!sensitive && text.length <= 160) return text
+  return {
+    redacted: true,
+    length: text.length,
+    preview: sensitive ? undefined : `${text.slice(0, 120)}...`,
   }
 }

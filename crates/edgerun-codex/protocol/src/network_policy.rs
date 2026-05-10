@@ -1,7 +1,7 @@
 use crate::approvals::NetworkApprovalProtocol;
 use crate::compat::network_proxy::NetworkDecisionSource;
 use crate::compat::network_proxy::NetworkPolicyDecision;
-use serde::Deserialize;
+use edgerun_serde::Deserialize;
 
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]

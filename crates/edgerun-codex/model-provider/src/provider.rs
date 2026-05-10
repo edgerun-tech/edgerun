@@ -240,7 +240,7 @@ mod tests {
     use codex_protocol::config_types::ModelProviderAuthInfo;
     use codex_protocol::openai_models::ModelInfo;
     use codex_protocol::openai_models::ModelsResponse;
-    use edgerun_json::serde_json::json;
+    use edgerun_json::json;
     use pretty_assertions::assert_eq;
     use wiremock::Mock;
     use wiremock::MockServer;
@@ -295,7 +295,7 @@ mod tests {
     }
 
     fn remote_model(slug: &str) -> ModelInfo {
-        edgerun_json::serde_json::from_value(json!({
+        edgerun_json::from_json_value(json!({
             "slug": slug,
             "display_name": slug,
             "description": null,

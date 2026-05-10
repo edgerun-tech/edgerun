@@ -16,8 +16,10 @@ relay-wss-smoke = ["dep:edgerun-relay"]
 relay-virtio-runtime = [
   "dep:edgerun-relay",
   "dep:edgerun-virtio",
+  "dep:edgerun-network-driver",
   "dep:edgerun-protocols",
   "edgerun-protocols/ethernet-ipv4",
+  "edgerun-relay/fast-public-relay",
   "edgerun-relay/p256-message",
   "edgerun-relay/virtio",
 ]
@@ -60,6 +62,7 @@ edgerun-oci = { version = "0.1", path = "../edgerun-oci", default-features = fal
 edgerun-edgefs = { version = "0.1", path = "../authority/edgerun-edgefs", optional = true }
 edgerun-storage = { version = "0.1", path = "../authority/edgerun-storage", optional = true }
 edgerun-capabilities = { version = "0.1", path = "../capability/edgerun-capabilities", optional = true }
+edgerun-network-driver = { version = "0.1", path = "../edgerun-network-driver", default-features = false, features = ["virtio"], optional = true }
 
 [[bin]]
 name = "edgerun-unikernel-relay-wss-smoke"

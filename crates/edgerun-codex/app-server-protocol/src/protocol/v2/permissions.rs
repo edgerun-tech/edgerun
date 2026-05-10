@@ -20,9 +20,9 @@ use codex_protocol::permissions::NetworkSandboxPolicy as CoreNetworkSandboxPolic
 use codex_protocol::protocol::NetworkAccess as CoreNetworkAccess;
 use codex_protocol::request_permissions::PermissionGrantScope as CorePermissionGrantScope;
 use codex_protocol::request_permissions::RequestPermissionProfile as CoreRequestPermissionProfile;
+use edgerun_serde::Deserialize;
+use edgerun_serde::Serialize;
 use schemars::JsonSchema;
-use serde::Deserialize;
-use serde::Serialize;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
 use ts_rs::TS;
@@ -659,7 +659,7 @@ enum LegacyReadOnlyAccess {
 impl<'de> Deserialize<'de> for SandboxPolicy {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>,
+        D: edgerun_serde::Deserializer<'de>,
     {
         match SandboxPolicyDeserialize::deserialize(deserializer)? {
             SandboxPolicyDeserialize::DangerFullAccess => Ok(SandboxPolicy::DangerFullAccess),
@@ -668,7 +668,7 @@ impl<'de> Deserialize<'de> for SandboxPolicy {
                 access,
             } => {
                 if matches!(access, Some(LegacyReadOnlyAccess::Restricted)) {
-                    return Err(serde::de::Error::custom(
+                    return Err(edgerun_serde::de::Error::custom(
                         "readOnly.access is no longer supported; use permissionProfile for restricted reads",
                     ));
                 }
@@ -685,7 +685,7 @@ impl<'de> Deserialize<'de> for SandboxPolicy {
                 exclude_slash_tmp,
             } => {
                 if matches!(read_only_access, Some(LegacyReadOnlyAccess::Restricted)) {
-                    return Err(serde::de::Error::custom(
+                    return Err(edgerun_serde::de::Error::custom(
                         "workspaceWrite.readOnlyAccess is no longer supported; use permissionProfile for restricted reads",
                     ));
                 }

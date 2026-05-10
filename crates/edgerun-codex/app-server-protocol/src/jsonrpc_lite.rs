@@ -2,9 +2,9 @@
 //! "jsonrpc": "2.0" field.
 
 use codex_protocol::protocol::W3cTraceContext;
+use edgerun_serde::Deserialize;
+use edgerun_serde::Serialize;
 use schemars::JsonSchema;
-use serde::Deserialize;
-use serde::Serialize;
 use std::fmt;
 use ts_rs::TS;
 

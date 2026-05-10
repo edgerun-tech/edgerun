@@ -5,9 +5,10 @@ use std::time::Duration;
 use crate::AuthProvider;
 use codex_client::build_reqwest_client_with_custom_ca;
 use edgerun_error::Error;
+use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
 use edgerun_reqwest::StatusCode;
 use edgerun_reqwest::header::CONTENT_LENGTH;
-use serde::Deserialize;
 use edgerun_tokio::fs::File;
 use edgerun_tokio::time::Instant;
 use edgerun_tokio_util::io::ReaderStream;
@@ -67,7 +68,7 @@ pub enum OpenAiFileError {
     Decode {
         url: String,
         #[source]
-        source: edgerun_json::serde_json::Error,
+        source: JsonValueError,
     },
     #[error("OpenAI file upload for `{file_id}` is not ready yet")]
     UploadNotReady { file_id: String },
@@ -75,14 +76,13 @@ pub enum OpenAiFileError {
     UploadFailed { file_id: String, message: String },
 }
 
-#[derive(Deserialize)]
+#[derive(FromJson)]
 struct CreateFileResponse {
     file_id: String,
     upload_url: String,
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(FromJson)]
 struct DownloadLinkResponse {
     status: String,
     download_url: Option<String>,
@@ -100,17 +100,18 @@ pub async fn upload_local_file(
     auth: &dyn AuthProvider,
     path: &Path,
 ) -> Result<UploadedOpenAiFile, OpenAiFileError> {
-    let metadata = edgerun_tokio::fs::metadata(path)
-        .await
-        .map_err(|source| match source.kind() {
-            std::io::ErrorKind::NotFound => OpenAiFileError::MissingPath {
-                path: path.to_path_buf(),
-            },
-            _ => OpenAiFileError::ReadFile {
-                path: path.to_path_buf(),
-                source,
-            },
-        })?;
+    let metadata =
+        edgerun_tokio::fs::metadata(path)
+            .await
+            .map_err(|source| match source.kind() {
+                std::io::ErrorKind::NotFound => OpenAiFileError::MissingPath {
+                    path: path.to_path_buf(),
+                },
+                _ => OpenAiFileError::ReadFile {
+                    path: path.to_path_buf(),
+                    source,
+                },
+            })?;
     if !metadata.is_file() {
         return Err(OpenAiFileError::NotAFile {
             path: path.to_path_buf(),
@@ -131,8 +132,8 @@ pub async fn upload_local_file(
         .to_string();
     let create_url = format!("{}/files", base_url.trim_end_matches('/'));
     let create_response = authorized_request(auth, edgerun_reqwest::Method::POST, &create_url)
-        .json(&edgerun_json::serde_json::json!({
-            "file_name": file_name,
+        .json_edgerun(&edgerun_json::json!({
+            "file_name": file_name.clone(),
             "file_size": metadata.len(),
             "use_case": OPENAI_FILE_USE_CASE,
         }))
@@ -151,7 +152,7 @@ pub async fn upload_local_file(
             body: create_body,
         });
     }
-    let create_payload: CreateFileResponse = edgerun_json::serde_json::from_str(&create_body)
+    let create_payload: CreateFileResponse = edgerun_json::from_json_str(&create_body)
         .map_err(|source| OpenAiFileError::Decode {
             url: create_url.clone(),
             source,
@@ -168,7 +169,9 @@ pub async fn upload_local_file(
         .timeout(OPENAI_FILE_REQUEST_TIMEOUT)
         .header("x-ms-blob-type", "BlockBlob")
         .header(CONTENT_LENGTH, metadata.len())
-        .body(edgerun_reqwest::Body::wrap_stream(ReaderStream::new(upload_file)))
+        .body(edgerun_reqwest::Body::wrap_stream(ReaderStream::new(
+            upload_file,
+        )))
         .send()
         .await
         .map_err(|source| OpenAiFileError::Request {
@@ -192,14 +195,15 @@ pub async fn upload_local_file(
     );
     let finalize_started_at = Instant::now();
     loop {
-        let finalize_response = authorized_request(auth, edgerun_reqwest::Method::POST, &finalize_url)
-            .json(&edgerun_json::serde_json::json!({}))
-            .send()
-            .await
-            .map_err(|source| OpenAiFileError::Request {
-                url: finalize_url.clone(),
-                source,
-            })?;
+        let finalize_response =
+            authorized_request(auth, edgerun_reqwest::Method::POST, &finalize_url)
+                .json_edgerun(&edgerun_json::json!({}))
+                .send()
+                .await
+                .map_err(|source| OpenAiFileError::Request {
+                    url: finalize_url.clone(),
+                    source,
+                })?;
         let finalize_status = finalize_response.status();
         let finalize_body = finalize_response.text().await.unwrap_or_default();
         if !finalize_status.is_success() {
@@ -209,12 +213,10 @@ pub async fn upload_local_file(
                 body: finalize_body,
             });
         }
-        let finalize_payload: DownloadLinkResponse =
-            edgerun_json::serde_json::from_str(&finalize_body).map_err(|source| {
-                OpenAiFileError::Decode {
-                    url: finalize_url.clone(),
-                    source,
-                }
+        let finalize_payload: DownloadLinkResponse = edgerun_json::from_json_str(&finalize_body)
+            .map_err(|source| OpenAiFileError::Decode {
+                url: finalize_url.clone(),
+                source,
             })?;
 
         match finalize_payload.status.as_str() {
@@ -270,17 +272,19 @@ fn authorized_request(
 }
 
 fn build_reqwest_client() -> edgerun_reqwest::Client {
-    build_reqwest_client_with_custom_ca(edgerun_reqwest::Client::builder()).unwrap_or_else(|error| {
-        tracing::warn!(error = %error, "failed to build OpenAI file upload client");
-        edgerun_reqwest::Client::new()
-    })
+    build_reqwest_client_with_custom_ca(edgerun_reqwest::Client::builder()).unwrap_or_else(
+        |error| {
+            tracing::warn!(error = %error, "failed to build OpenAI file upload client");
+            edgerun_reqwest::Client::new()
+        },
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pretty_assertions::assert_eq;
     use edgerun_reqwest::header::HeaderValue;
+    use pretty_assertions::assert_eq;
     use std::sync::Arc;
     use std::sync::atomic::AtomicUsize;
     use std::sync::atomic::Ordering;
@@ -366,7 +370,9 @@ mod tests {
         let base_url = base_url_for(&server);
         let dir = TempDir::new().expect("temp dir");
         let path = dir.path().join("hello.txt");
-        edgerun_tokio::fs::write(&path, b"hello").await.expect("write file");
+        edgerun_tokio::fs::write(&path, b"hello")
+            .await
+            .expect("write file");
 
         let uploaded = upload_local_file(&base_url, &chatgpt_auth(), &path)
             .await

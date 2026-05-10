@@ -1,7 +1,7 @@
 use codex_protocol::compat::absolute_path::AbsolutePathBuf;
+use edgerun_serde::Deserialize;
+use edgerun_serde::Serialize;
 use schemars::JsonSchema;
-use serde::Deserialize;
-use serde::Serialize;
 use std::collections::HashMap;
 use ts_rs::TS;
 

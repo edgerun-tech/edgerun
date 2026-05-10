@@ -2,6 +2,8 @@ use crate::compat::absolute_path::AbsolutePathBuf;
 use edgerun_json::FromJson;
 use edgerun_json::ToJson;
 use edgerun_json::serde_json::Value;
+use edgerun_serde::Deserialize;
+use edgerun_serde::Serialize;
 use edgerun_strum_macros::Display;
 use edgerun_strum_macros::EnumIter;
 use schemars::JsonSchema;
@@ -10,8 +12,6 @@ use schemars::schema::InstanceType;
 use schemars::schema::Metadata;
 use schemars::schema::Schema;
 use schemars::schema::SchemaObject;
-use serde::Deserialize;
-use serde::Serialize;
 use std::collections::HashMap;
 use std::fmt;
 use std::num::NonZeroU64;
@@ -557,7 +557,8 @@ fn non_zero_u64(value: u64, field_name: &str) -> NonZeroU64 {
 }
 
 fn default_provider_auth_cwd() -> AbsolutePathBuf {
-    let deserializer = serde::de::value::StrDeserializer::<serde::de::value::Error>::new(".");
+    let deserializer =
+        edgerun_serde::de::value::StrDeserializer::<edgerun_serde::de::value::Error>::new(".");
     if let Ok(cwd) = AbsolutePathBuf::deserialize(deserializer) {
         return cwd;
     }

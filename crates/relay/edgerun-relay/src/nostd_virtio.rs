@@ -2,11 +2,11 @@ use alloc::collections::BTreeMap;
 use alloc::vec;
 use alloc::vec::Vec;
 
+use edgerun_network_driver::{FrameDevice, FrameDriverError};
 use edgerun_protocols::ethernet_ipv4::{
     ARP_OP_REQUEST, ETH_TYPE_IPV4, IP_PROTO_TCP, IpAddr, IpStack, Network, ParsedPacket,
     TCP_FLAG_ACK, TCP_FLAG_FIN, TCP_FLAG_PSH, TCP_FLAG_RST, TCP_FLAG_SYN, TcpHeader, checksum,
 };
-use edgerun_virtio::{VirtNet, VirtioError};
 use edgerun_wire::RelayMessage;
 
 use crate::nostd_relay::{RelayEngine, RelayOutput};
@@ -19,19 +19,36 @@ const TCP_INITIAL_SEQ: u32 = 0xED6E_0001;
 const TCP_RETRANSMIT_AFTER_MS: u64 = 1000;
 const TCP_MAX_RETRANSMITS: u8 = 4;
 const TCP_CONNECTION_LIFETIME_MS: u64 = 60_000;
+const CUSTOM_QUIC_RETRANSMIT_AFTER_MS: u64 = 60_000;
+const CUSTOM_QUIC_MAX_RETRANSMITS: u8 = 32;
+const CUSTOM_QUIC_SESSION_LIFETIME_MS: u64 = 60_000;
 const VIRTIO_RX_BUFFER_LEN: usize = 2048;
 const VIRTIO_DEFAULT_POLL_BUDGET: usize = 64;
 
 #[derive(Clone, PartialEq)]
 pub enum EthernetRelayPeer {
-    Udp { mac: [u8; 6], ip: IpAddr, port: u16 },
-    Tcp { ip: [u8; 4], port: u16 },
+    Udp {
+        mac: [u8; 6],
+        ip: IpAddr,
+        port: u16,
+    },
+    CustomQuicUdp {
+        mac: [u8; 6],
+        ip: IpAddr,
+        port: u16,
+        connection_id: u64,
+    },
+    Tcp {
+        ip: [u8; 4],
+        port: u16,
+    },
 }
 
 pub struct EthernetRelay {
     engine: RelayEngine<EthernetRelayPeer>,
     stack: IpStack,
     tcp_sessions: BTreeMap<TcpKey, TcpSession>,
+    custom_quic_sessions: BTreeMap<CustomQuicKey, CustomQuicSession>,
     listen_port: u16,
 }
 
@@ -87,6 +104,27 @@ struct TcpUnacked {
     attempts: u8,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct CustomQuicKey {
+    ip: [u8; 4],
+    port: u16,
+    connection_id: u64,
+}
+
+struct CustomQuicSession {
+    peer_mac: [u8; 6],
+    next_packet_number: u64,
+    unacked: Vec<CustomQuicUnacked>,
+    last_seen_ms: u64,
+}
+
+struct CustomQuicUnacked {
+    packet_number: u64,
+    payload: Vec<u8>,
+    sent_ms: u64,
+    attempts: u8,
+}
+
 impl EthernetRelay {
     pub fn new(ip: IpAddr, netmask: IpAddr, gateway: IpAddr, mac: [u8; 6], port: u16) -> Self {
         let mut stack = IpStack::new();
@@ -95,6 +133,7 @@ impl EthernetRelay {
             engine: RelayEngine::new(),
             stack,
             tcp_sessions: BTreeMap::new(),
+            custom_quic_sessions: BTreeMap::new(),
             listen_port: port,
         }
     }
@@ -109,11 +148,26 @@ impl EthernetRelay {
 
     pub fn remove_peer(&mut self, peer: &EthernetRelayPeer) {
         self.engine.remove_peer(peer);
-        if let EthernetRelayPeer::Tcp { ip, port } = peer {
-            self.close_tcp(TcpKey {
-                ip: *ip,
-                port: *port,
-            });
+        match peer {
+            EthernetRelayPeer::Tcp { ip, port } => {
+                self.close_tcp(TcpKey {
+                    ip: *ip,
+                    port: *port,
+                });
+            }
+            EthernetRelayPeer::CustomQuicUdp {
+                ip,
+                port,
+                connection_id,
+                ..
+            } => {
+                self.custom_quic_sessions.remove(&CustomQuicKey {
+                    ip: *ip.as_bytes(),
+                    port: *port,
+                    connection_id: *connection_id,
+                });
+            }
+            EthernetRelayPeer::Udp { .. } => {}
         }
     }
 
@@ -152,18 +206,86 @@ impl EthernetRelay {
                 header,
                 payload,
             } if header.dst_port == self.listen_port => {
-                let peer = EthernetRelayPeer::Udp {
-                    mac: eth.src,
-                    ip: IpAddr::from_slice(&ip.src),
-                    port: header.src_port,
-                };
-                let Ok(message) = decode_packet(payload) else {
+                let ip = IpAddr::from_slice(&ip.src);
+                if let Some((connection_id, packet_number)) = custom_quic_decode_ack(payload) {
+                    drop(network);
+                    self.custom_quic_ack(
+                        CustomQuicKey {
+                            ip: *ip.as_bytes(),
+                            port: header.src_port,
+                            connection_id,
+                        },
+                        packet_number,
+                        now_ms,
+                    );
                     return out;
-                };
-                drop(network);
-                for output in self.engine.handle_message(peer, message) {
-                    self.push_output(output, now_ms, &mut out);
                 }
+                let (peer, messages, transport_ack) =
+                    if let Some((connection_id, packet_number, relay_payload)) =
+                        custom_quic_decode_data(payload)
+                    {
+                        let peer = EthernetRelayPeer::CustomQuicUdp {
+                            mac: eth.src,
+                            ip,
+                            port: header.src_port,
+                            connection_id,
+                        };
+                        let Some(messages) = custom_quic_decode_relay_messages(relay_payload)
+                        else {
+                            return out;
+                        };
+                        (
+                            peer,
+                            messages,
+                            custom_quic_encode_ack(connection_id, packet_number),
+                        )
+                    } else {
+                        let peer = EthernetRelayPeer::Udp {
+                            mac: eth.src,
+                            ip,
+                            port: header.src_port,
+                        };
+                        let Ok(message) = decode_packet(payload) else {
+                            return out;
+                        };
+                        (peer, vec![message], Vec::new())
+                    };
+                if !transport_ack.is_empty() {
+                    if let Some(frame) = network.send_udp_eth(
+                        eth.src,
+                        ip,
+                        self.listen_port,
+                        header.src_port,
+                        &transport_ack,
+                    ) {
+                        out.push(frame.to_vec());
+                    }
+                }
+                drop(network);
+                if let EthernetRelayPeer::CustomQuicUdp {
+                    mac,
+                    ip,
+                    port,
+                    connection_id,
+                } = &peer
+                {
+                    self.custom_quic_seen(
+                        CustomQuicKey {
+                            ip: *ip.as_bytes(),
+                            port: *port,
+                            connection_id: *connection_id,
+                        },
+                        *mac,
+                        now_ms,
+                    );
+                }
+                let mut relay_outputs = Vec::new();
+                for message in messages {
+                    for output in self.engine.handle_message(peer.clone(), message) {
+                        relay_outputs.push(output);
+                    }
+                }
+                self.push_outputs(relay_outputs, now_ms, &mut out);
             }
             ParsedPacket::Tcp {
                 eth,
@@ -237,7 +359,74 @@ impl EthernetRelay {
         for key in close {
             self.close_tcp_with_event(key, "retransmit_exhausted", events);
         }
+        self.poll_custom_quic(now_ms, &mut out);
         out
+    }
+
+    fn custom_quic_seen(&mut self, key: CustomQuicKey, peer_mac: [u8; 6], now_ms: u64) {
+        let session = self
+            .custom_quic_sessions
+            .entry(key)
+            .or_insert_with(|| CustomQuicSession {
+                peer_mac,
+                next_packet_number: 0,
+                unacked: Vec::new(),
+                last_seen_ms: now_ms,
+            });
+        session.peer_mac = peer_mac;
+        session.last_seen_ms = now_ms;
+    }
+
+    fn custom_quic_ack(&mut self, key: CustomQuicKey, packet_number: u64, now_ms: u64) {
+        if let Some(session) = self.custom_quic_sessions.get_mut(&key) {
+            session.last_seen_ms = now_ms;
+            session
+                .unacked
+                .retain(|packet| packet.packet_number != packet_number);
+        }
+    }
+
+    fn poll_custom_quic(&mut self, now_ms: u64, out: &mut Vec<Vec<u8>>) {
+        let expired = self
+            .custom_quic_sessions
+            .iter()
+            .filter_map(|(key, session)| {
+                (now_ms.saturating_sub(session.last_seen_ms) >= CUSTOM_QUIC_SESSION_LIFETIME_MS)
+                    .then_some(*key)
+            })
+            .collect::<Vec<_>>();
+        for key in expired {
+            self.custom_quic_sessions.remove(&key);
+        }
+
+        let mut retransmits = Vec::new();
+        for (key, session) in self.custom_quic_sessions.iter_mut() {
+            session.unacked.retain_mut(|packet| {
+                if now_ms.saturating_sub(packet.sent_ms) < CUSTOM_QUIC_RETRANSMIT_AFTER_MS {
+                    return true;
+                }
+                if packet.attempts >= CUSTOM_QUIC_MAX_RETRANSMITS {
+                    return false;
+                }
+                packet.attempts += 1;
+                packet.sent_ms = now_ms;
+                retransmits.push((*key, session.peer_mac, packet.payload.clone()));
+                true
+            });
+        }
+
+        let mut network = Network::new(&mut self.stack);
+        for (key, mac, payload) in retransmits {
+            if let Some(frame) = network.send_udp_eth(
+                mac,
+                IpAddr::from_slice(&key.ip),
+                self.listen_port,
+                key.port,
+                &payload,
+            ) {
+                out.push(frame.to_vec());
+            }
+        }
     }
 
     fn push_output(
@@ -256,6 +445,17 @@ impl EthernetRelay {
         }
     }
 
+    fn push_outputs(
+        &mut self,
+        outputs: Vec<RelayOutput<EthernetRelayPeer>>,
+        now_ms: u64,
+        out: &mut Vec<Vec<u8>>,
+    ) {
+        for output in outputs {
+            self.push_output(output, now_ms, out);
+        }
+    }
+
     fn push_message_to_peer(
         &mut self,
         peer: EthernetRelayPeer,
@@ -263,6 +463,32 @@ impl EthernetRelay {
         now_ms: u64,
         out: &mut Vec<Vec<u8>>,
     ) {
+        self.push_messages_to_peer(peer, &[message], now_ms, out);
+    }
+
+    fn push_messages_to_peer(
+        &mut self,
+        peer: EthernetRelayPeer,
+        messages: &[RelayMessage],
+        now_ms: u64,
+        out: &mut Vec<Vec<u8>>,
+    ) {
+        if messages.is_empty() {
+            return;
+        }
+        if messages.len() > 1 {
+            if let EthernetRelayPeer::CustomQuicUdp {
+                mac,
+                ip,
+                port,
+                connection_id,
+            } = peer
+            {
+                self.push_custom_quic_messages(mac, ip, port, connection_id, messages, now_ms, out);
+                return;
+            }
+        }
+        let message = messages[0].clone();
         let Ok(bytes) = encode_packet(&message) else {
             return;
         };
@@ -273,9 +499,95 @@ impl EthernetRelay {
                     out.push(frame.to_vec());
                 }
             }
+            EthernetRelayPeer::CustomQuicUdp {
+                mac,
+                ip,
+                port,
+                connection_id,
+            } => {
+                self.push_custom_quic_payload(mac, ip, port, connection_id, &bytes, now_ms, out);
+            }
             EthernetRelayPeer::Tcp { ip, port } => {
                 out.extend(self.write_tcp_message_at(TcpKey { ip, port }, &bytes, now_ms));
             }
+        }
+    }
+
+    fn push_custom_quic_payload(
+        &mut self,
+        mac: [u8; 6],
+        ip: IpAddr,
+        port: u16,
+        connection_id: u64,
+        relay_payload: &[u8],
+        now_ms: u64,
+        out: &mut Vec<Vec<u8>>,
+    ) {
+        let key = CustomQuicKey {
+            ip: *ip.as_bytes(),
+            port,
+            connection_id,
+        };
+        let packet_number = {
+            let session =
+                self.custom_quic_sessions
+                    .entry(key)
+                    .or_insert_with(|| CustomQuicSession {
+                        peer_mac: mac,
+                        next_packet_number: 0,
+                        unacked: Vec::new(),
+                        last_seen_ms: now_ms,
+                    });
+            session.peer_mac = mac;
+            session.last_seen_ms = now_ms;
+            let packet_number = session.next_packet_number;
+            session.next_packet_number = session.next_packet_number.wrapping_add(1);
+            packet_number
+        };
+        let payload = custom_quic_encode_data(connection_id, packet_number, relay_payload);
+        if let Some(session) = self.custom_quic_sessions.get_mut(&key) {
+            session.unacked.push(CustomQuicUnacked {
+                packet_number,
+                payload: payload.clone(),
+                sent_ms: now_ms,
+                attempts: 0,
+            });
+        }
+        let mut network = Network::new(&mut self.stack);
+        if let Some(frame) = network.send_udp_eth(mac, ip, self.listen_port, port, &payload) {
+            out.push(frame.to_vec());
+        }
+    }
+
+    fn push_custom_quic_messages(
+        &mut self,
+        mac: [u8; 6],
+        ip: IpAddr,
+        port: u16,
+        connection_id: u64,
+        messages: &[RelayMessage],
+        now_ms: u64,
+        out: &mut Vec<Vec<u8>>,
+    ) {
+        let mut chunk = Vec::new();
+        let mut chunk_len = 6usize;
+        for message in messages {
+            let Ok(encoded) = encode_packet(message) else {
+                continue;
+            };
+            let item_len = 4 + encoded.len();
+            if !chunk.is_empty() && chunk_len + item_len > CUSTOM_QUIC_MAX_RELAY_PAYLOAD {
+                let payload = custom_quic_encode_encoded_relay_batch(&chunk);
+                self.push_custom_quic_payload(mac, ip, port, connection_id, &payload, now_ms, out);
+                chunk.clear();
+                chunk_len = 6;
+            }
+            chunk_len += item_len;
+            chunk.push(encoded);
+        }
+        if !chunk.is_empty() {
+            let payload = custom_quic_encode_encoded_relay_batch(&chunk);
+            self.push_custom_quic_payload(mac, ip, port, connection_id, &payload, now_ms, out);
         }
     }
 
@@ -537,7 +849,7 @@ impl VirtioRelay {
 
     pub fn poll(
         &mut self,
-        net: &mut VirtNet,
+        net: &mut impl FrameDevice,
         now_ms: u64,
         events: &mut Vec<EthernetRelayEvent>,
     ) -> VirtioRelayPoll {
@@ -546,7 +858,7 @@ impl VirtioRelay {
 
     pub fn poll_with_budget(
         &mut self,
-        net: &mut VirtNet,
+        net: &mut impl FrameDevice,
         now_ms: u64,
         budget: usize,
         events: &mut Vec<EthernetRelayEvent>,
@@ -554,22 +866,22 @@ impl VirtioRelay {
         let mut stats = VirtioRelayPoll::default();
 
         for frame in self.relay.poll_tcp_with_events(now_ms, events) {
-            send_virtio_frame(net, &frame, &mut stats);
+            send_frame(net, &frame, &mut stats);
         }
 
         for _ in 0..budget {
-            match net.try_recv(&mut self.rx_buf) {
+            match net.try_recv_frame(&mut self.rx_buf) {
                 Ok(Some(len)) => {
                     stats.rx_frames += 1;
                     let frames =
                         self.relay
                             .handle_frame_at_with_events(&self.rx_buf[..len], now_ms, events);
                     for frame in frames {
-                        send_virtio_frame(net, &frame, &mut stats);
+                        send_frame(net, &frame, &mut stats);
                     }
                 }
                 Ok(None) => break,
-                Err(VirtioError::InvalidBufferLength) => {
+                Err(FrameDriverError::InvalidBufferLength) => {
                     stats.dropped_rx_frames += 1;
                     break;
                 }
@@ -584,11 +896,121 @@ impl VirtioRelay {
     }
 }
 
-fn send_virtio_frame(net: &mut VirtNet, frame: &[u8], stats: &mut VirtioRelayPoll) {
-    match net.try_send(frame) {
+fn send_frame(net: &mut impl FrameDevice, frame: &[u8], stats: &mut VirtioRelayPoll) {
+    match net.try_send_frame(frame) {
         Ok(()) => stats.tx_frames += 1,
         Err(_) => stats.tx_errors += 1,
     }
+}
+
+const CUSTOM_QUIC_MAGIC: &[u8; 4] = b"ERQ0";
+const CUSTOM_QUIC_DATA: u8 = 1;
+const CUSTOM_QUIC_ACK: u8 = 2;
+const CUSTOM_QUIC_HEADER_LEN: usize = 4 + 1 + 8 + 8 + 2;
+const CUSTOM_QUIC_BATCH_MAGIC: &[u8; 4] = b"ERQB";
+const CUSTOM_QUIC_MAX_RELAY_PAYLOAD: usize = 1100;
+
+fn custom_quic_decode_data(payload: &[u8]) -> Option<(u64, u64, &[u8])> {
+    if payload.len() < CUSTOM_QUIC_HEADER_LEN
+        || &payload[..4] != CUSTOM_QUIC_MAGIC
+        || payload[4] != CUSTOM_QUIC_DATA
+    {
+        return None;
+    }
+    let connection_id = u64::from_be_bytes(payload[5..13].try_into().ok()?);
+    let packet_number = u64::from_be_bytes(payload[13..21].try_into().ok()?);
+    let len = u16::from_be_bytes(payload[21..23].try_into().ok()?) as usize;
+    let end = CUSTOM_QUIC_HEADER_LEN.checked_add(len)?;
+    if end > payload.len() {
+        return None;
+    }
+    Some((
+        connection_id,
+        packet_number,
+        &payload[CUSTOM_QUIC_HEADER_LEN..end],
+    ))
+}
+
+fn custom_quic_decode_ack(payload: &[u8]) -> Option<(u64, u64)> {
+    if payload.len() < CUSTOM_QUIC_HEADER_LEN
+        || &payload[..4] != CUSTOM_QUIC_MAGIC
+        || payload[4] != CUSTOM_QUIC_ACK
+    {
+        return None;
+    }
+    let connection_id = u64::from_be_bytes(payload[5..13].try_into().ok()?);
+    let packet_number = u64::from_be_bytes(payload[13..21].try_into().ok()?);
+    Some((connection_id, packet_number))
+}
+
+fn custom_quic_decode_relay_messages(payload: &[u8]) -> Option<Vec<RelayMessage>> {
+    if payload.len() < 6 || &payload[..4] != CUSTOM_QUIC_BATCH_MAGIC {
+        return decode_packet(payload).ok().map(|message| vec![message]);
+    }
+    let count = u16::from_be_bytes(payload[4..6].try_into().ok()?) as usize;
+    let mut offset = 6usize;
+    let mut messages = Vec::with_capacity(count);
+    for _ in 0..count {
+        if payload.len().saturating_sub(offset) < 4 {
+            return None;
+        }
+        let len = u32::from_be_bytes(payload[offset..offset + 4].try_into().ok()?) as usize;
+        offset = offset.checked_add(4)?;
+        let end = offset.checked_add(len)?;
+        if end > payload.len() {
+            return None;
+        }
+        messages.push(decode_packet(&payload[offset..end]).ok()?);
+        offset = end;
+    }
+    Some(messages)
+}
+
+fn custom_quic_encode_relay_batch(messages: &[RelayMessage]) -> Vec<u8> {
+    let encoded = messages
+        .iter()
+        .map(|message| encode_packet(message).ok())
+        .collect::<Option<Vec<_>>>()
+        .unwrap_or_default();
+    custom_quic_encode_encoded_relay_batch(&encoded)
+}
+
+fn custom_quic_encode_encoded_relay_batch(encoded: &[Vec<u8>]) -> Vec<u8> {
+    let len = encoded.iter().map(|item| 4 + item.len()).sum::<usize>();
+    let mut out = Vec::with_capacity(6 + len);
+    out.extend_from_slice(CUSTOM_QUIC_BATCH_MAGIC);
+    out.extend_from_slice(&(encoded.len().min(u16::MAX as usize) as u16).to_be_bytes());
+    for item in encoded {
+        out.extend_from_slice(&(item.len() as u32).to_be_bytes());
+        out.extend_from_slice(&item);
+    }
+    out
+}
+
+fn custom_quic_encode_data(
+    connection_id: u64,
+    packet_number: u64,
+    relay_payload: &[u8],
+) -> Vec<u8> {
+    let len = relay_payload.len().min(u16::MAX as usize);
+    let mut out = Vec::with_capacity(CUSTOM_QUIC_HEADER_LEN + len);
+    out.extend_from_slice(CUSTOM_QUIC_MAGIC);
+    out.push(CUSTOM_QUIC_DATA);
+    out.extend_from_slice(&connection_id.to_be_bytes());
+    out.extend_from_slice(&packet_number.to_be_bytes());
+    out.extend_from_slice(&(len as u16).to_be_bytes());
+    out.extend_from_slice(&relay_payload[..len]);
+    out
+}
+
+fn custom_quic_encode_ack(connection_id: u64, packet_number: u64) -> Vec<u8> {
+    let mut out = Vec::with_capacity(CUSTOM_QUIC_HEADER_LEN);
+    out.extend_from_slice(CUSTOM_QUIC_MAGIC);
+    out.push(CUSTOM_QUIC_ACK);
+    out.extend_from_slice(&connection_id.to_be_bytes());
+    out.extend_from_slice(&packet_number.to_be_bytes());
+    out.extend_from_slice(&0u16.to_be_bytes());
+    out
 }
 
 fn drain_tcp_messages(buf: &mut Vec<u8>) -> Vec<RelayMessage> {

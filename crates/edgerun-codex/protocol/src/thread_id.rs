@@ -1,11 +1,11 @@
 use std::fmt::Display;
 
+use edgerun_serde::Deserialize;
+use edgerun_serde::Serialize;
 use edgerun_uuid::Uuid;
 use schemars::JsonSchema;
 use schemars::r#gen::SchemaGenerator;
 use schemars::schema::Schema;
-use serde::Deserialize;
-use serde::Serialize;
 use ts_rs::TS;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, TS, Hash)]
@@ -65,7 +65,7 @@ impl Display for ThreadId {
 impl Serialize for ThreadId {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer,
+        S: edgerun_serde::Serializer,
     {
         serializer.collect_str(&self.uuid)
     }
@@ -74,10 +74,10 @@ impl Serialize for ThreadId {
 impl<'de> Deserialize<'de> for ThreadId {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>,
+        D: edgerun_serde::Deserializer<'de>,
     {
         let value = String::deserialize(deserializer)?;
-        let uuid = Uuid::parse_str(&value).map_err(serde::de::Error::custom)?;
+        let uuid = Uuid::parse_str(&value).map_err(edgerun_serde::de::Error::custom)?;
         Ok(Self { uuid })
     }
 }

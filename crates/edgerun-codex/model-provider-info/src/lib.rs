@@ -5,6 +5,8 @@
 //!   2. User-defined entries inside `~/.codex/config.toml` under the `model_providers`
 //!      key. These override or extend the defaults at runtime.
 
+extern crate serde as edgerun_serde;
+
 use codex_api::Provider as ApiProvider;
 use codex_api::RetryConfig as ApiRetryConfig;
 use codex_api::is_azure_responses_provider;
@@ -16,9 +18,9 @@ use codex_protocol::error::Result as CodexResult;
 use edgerun_http::HeaderMap;
 use edgerun_http::header::HeaderName;
 use edgerun_http::header::HeaderValue;
+use edgerun_serde::Deserialize;
+use edgerun_serde::Serialize;
 use schemars::JsonSchema;
-use serde::Deserialize;
-use serde::Serialize;
 use std::collections::HashMap;
 use std::fmt;
 use std::time::Duration;
@@ -63,13 +65,18 @@ impl fmt::Display for WireApi {
 impl<'de> Deserialize<'de> for WireApi {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>,
+        D: edgerun_serde::Deserializer<'de>,
     {
         let value = String::deserialize(deserializer)?;
         match value.as_str() {
             "responses" => Ok(Self::Responses),
-            "chat" => Err(serde::de::Error::custom(CHAT_WIRE_API_REMOVED_ERROR)),
-            _ => Err(serde::de::Error::unknown_variant(&value, &["responses"])),
+            "chat" => Err(edgerun_serde::de::Error::custom(
+                CHAT_WIRE_API_REMOVED_ERROR,
+            )),
+            _ => Err(edgerun_serde::de::Error::unknown_variant(
+                &value,
+                &["responses"],
+            )),
         }
     }
 }

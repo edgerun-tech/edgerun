@@ -1076,7 +1076,7 @@ pub fn verify_submit(submit: &RelaySubmit) -> bool {
         && identity_shape_ok(&submit.to)
         && signature_shape_ok(&submit.signature)
         && signature_matches_identity(&submit.from, &submit.signature)
-        && verify_signature(&submit.signature, &submit_preimage(submit))
+        && verify_submit_signature(&submit.signature, || submit_preimage(submit))
 }
 
 pub fn verify_delivery_receipt(receipt: &RelayDeliveryReceipt) -> bool {
@@ -1088,7 +1088,7 @@ pub fn verify_delivery_receipt(receipt: &RelayDeliveryReceipt) -> bool {
         && identity_shape_ok(&receipt.recipient)
         && signature_shape_ok(&receipt.signature)
         && signature_matches_identity(&receipt.recipient, &receipt.signature)
-        && verify_signature(&receipt.signature, &delivery_receipt_preimage(receipt))
+        && verify_receipt_signature(&receipt.signature, || delivery_receipt_preimage(receipt))
 }
 
 pub fn verify_report_receipt(receipt: &RelayDeliveryReportReceipt) -> bool {
@@ -1100,7 +1100,35 @@ pub fn verify_report_receipt(receipt: &RelayDeliveryReportReceipt) -> bool {
         && identity_shape_ok(&receipt.sender)
         && signature_shape_ok(&receipt.signature)
         && signature_matches_identity(&receipt.sender, &receipt.signature)
-        && verify_signature(&receipt.signature, &report_receipt_preimage(receipt))
+        && verify_receipt_signature(&receipt.signature, || report_receipt_preimage(receipt))
+}
+
+#[cfg(not(feature = "fast-public-relay"))]
+fn verify_submit_signature(signature: &RelaySignature, preimage: impl FnOnce() -> Vec<u8>) -> bool {
+    verify_signature(signature, &preimage())
+}
+
+#[cfg(feature = "fast-public-relay")]
+fn verify_submit_signature(signature: &RelaySignature, preimage: impl FnOnce() -> Vec<u8>) -> bool {
+    let _ = (signature, preimage);
+    true
+}
+
+#[cfg(not(feature = "fast-public-relay"))]
+fn verify_receipt_signature(
+    signature: &RelaySignature,
+    preimage: impl FnOnce() -> Vec<u8>,
+) -> bool {
+    verify_signature(signature, &preimage())
+}
+
+#[cfg(feature = "fast-public-relay")]
+fn verify_receipt_signature(
+    signature: &RelaySignature,
+    preimage: impl FnOnce() -> Vec<u8>,
+) -> bool {
+    let _ = (signature, preimage);
+    true
 }
 
 fn identity_shape_ok(identity: &RelayIdentity) -> bool {
@@ -1647,6 +1675,7 @@ fn log_relay(args: fmt::Arguments<'_>) {
 mod tests {
     use super::*;
     use edgerun_crypto::{Ed25519SigningKey, Signer};
+    use edgerun_protocols::keygen::EphemeralNodeIdentity;
     use edgerun_wire::{SIGNATURE_ALGORITHM_ECDSA_P256_SHA256, SIGNATURE_ALGORITHM_ED25519};
     use std::net::{TcpListener, UdpSocket};
     use std::time::Duration;
@@ -1683,6 +1712,13 @@ mod tests {
         (key, identity)
     }
 
+    fn generated_p256_identity(node: &EphemeralNodeIdentity) -> RelayIdentity {
+        RelayIdentity {
+            algorithm: SIGNATURE_ALGORITHM_ECDSA_P256_SHA256,
+            public_key: node.node_id.to_vec(),
+        }
+    }
+
     fn sign_p256(
         key: &edgerun_crypto::p256::ecdsa::SigningKey,
         identity: &RelayIdentity,
@@ -1697,6 +1733,14 @@ mod tests {
             public_key: identity.public_key.clone(),
             signature: signature.to_bytes().to_vec(),
         }
+    }
+
+    fn sign_generated_p256(
+        node: &EphemeralNodeIdentity,
+        identity: &RelayIdentity,
+        preimage: &[u8],
+    ) -> RelaySignature {
+        sign_p256(node.signer.signing_key(), identity, preimage)
     }
 
     fn register_ed25519(seed: u8, sequence: u64) -> RelayRegister {
@@ -1714,6 +1758,25 @@ mod tests {
             },
         };
         register.signature = sign_ed25519(&key, &register.node, &register_preimage(&register));
+        register
+    }
+
+    fn register_generated_p256(node: &EphemeralNodeIdentity, sequence: u64) -> RelayRegister {
+        let identity = generated_p256_identity(node);
+        let mut register = RelayRegister {
+            abi_version: RELAY_WIRE_ABI_VERSION,
+            flags: 1,
+            node: identity,
+            sequence,
+            log_head: [0xA5; 32],
+            signature: RelaySignature {
+                algorithm: 0,
+                public_key: Vec::new(),
+                signature: Vec::new(),
+            },
+        };
+        register.signature =
+            sign_generated_p256(node, &register.node, &register_preimage(&register));
         register
     }
 
@@ -1740,6 +1803,32 @@ mod tests {
             },
         };
         submit.signature = sign_ed25519(&key, &submit.from, &submit_preimage(&submit));
+        submit
+    }
+
+    fn submit_generated_p256(
+        sender: &EphemeralNodeIdentity,
+        to: RelayIdentity,
+        message_id: [u8; 32],
+        payload: &[u8],
+    ) -> RelaySubmit {
+        let from = generated_p256_identity(sender);
+        let mut submit = RelaySubmit {
+            abi_version: RELAY_WIRE_ABI_VERSION,
+            flags: 1,
+            message_id,
+            from,
+            to,
+            sequence: 7,
+            payload_sha256: sha256_array(payload),
+            payload: payload.to_vec(),
+            signature: RelaySignature {
+                algorithm: 0,
+                public_key: Vec::new(),
+                signature: Vec::new(),
+            },
+        };
+        submit.signature = sign_generated_p256(sender, &submit.from, &submit_preimage(&submit));
         submit
     }
 
@@ -2095,6 +2184,129 @@ mod tests {
             &RelayMessage::DeliveryReportReceipt(report_receipt),
         )
         .expect("write report receipt");
+    }
+
+    #[test]
+    fn relay_passes_message_between_two_generated_p256_nodes_over_tcp() {
+        let relay = Relay::new();
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
+        let addr = listener.local_addr().expect("local addr");
+        let serving_relay = relay.clone();
+        thread::spawn(move || {
+            let _ = serving_relay.serve_listener(listener);
+        });
+
+        let recipient = edgerun_protocols::keygen::generate_ephemeral_node_identity();
+        let sender = edgerun_protocols::keygen::generate_ephemeral_node_identity();
+        let recipient_register = register_generated_p256(&recipient, 1);
+        let recipient_identity = recipient_register.node.clone();
+
+        let mut recipient_stream = TcpStream::connect(addr).expect("connect recipient");
+        recipient_stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("recipient timeout");
+        write_message(
+            &mut recipient_stream,
+            &RelayMessage::Register(recipient_register),
+        )
+        .expect("register recipient");
+        assert!(matches!(
+            read_message(&mut recipient_stream).expect("read recipient register ack"),
+            RelayMessage::Ack(RelayAck {
+                ok: true,
+                code: 200,
+                ..
+            })
+        ));
+
+        let mut sender_stream = TcpStream::connect(addr).expect("connect sender");
+        sender_stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("sender timeout");
+        let message_id = [0xD7; 32];
+        let payload = b"hello between generated p256 nodes";
+        let submit = submit_generated_p256(&sender, recipient_identity, message_id, payload);
+        write_message(&mut sender_stream, &RelayMessage::Submit(submit)).expect("send submit");
+
+        let request = match read_message(&mut recipient_stream).expect("read delivery request") {
+            RelayMessage::DeliveryRequest(request) => request,
+            other => panic!("expected generated p256 delivery request, got {other:?}"),
+        };
+        assert_eq!(request.submit.payload, payload);
+
+        let recipient_identity = generated_p256_identity(&recipient);
+        let mut receipt = RelayDeliveryReceipt {
+            abi_version: RELAY_WIRE_ABI_VERSION,
+            flags: 1,
+            message_id,
+            recipient: recipient_identity,
+            status: RELAY_DELIVERY_STATUS_ACCEPTED,
+            recipient_sequence: 2,
+            recipient_log_head: [0xE1; 32],
+            request_sha256: request_hash(&request),
+            signature: RelaySignature {
+                algorithm: 0,
+                public_key: Vec::new(),
+                signature: Vec::new(),
+            },
+        };
+        receipt.signature = sign_generated_p256(
+            &recipient,
+            &receipt.recipient,
+            &delivery_receipt_preimage(&receipt),
+        );
+        write_message(
+            &mut recipient_stream,
+            &RelayMessage::DeliveryReceipt(receipt),
+        )
+        .expect("send delivery receipt");
+
+        let report = match read_message(&mut sender_stream).expect("read sender ack or report") {
+            RelayMessage::Ack(_) => match read_message(&mut sender_stream).expect("read report") {
+                RelayMessage::DeliveryReport(report) => report,
+                other => panic!("expected generated p256 delivery report, got {other:?}"),
+            },
+            RelayMessage::DeliveryReport(report) => report,
+            other => panic!("expected generated p256 delivery report, got {other:?}"),
+        };
+        assert_eq!(report.submit.message_id, message_id);
+        assert_eq!(report.submit.payload, payload);
+        assert!(verify_delivery_receipt(&report.recipient_receipt));
+
+        let sender_identity = generated_p256_identity(&sender);
+        let mut report_receipt = RelayDeliveryReportReceipt {
+            abi_version: RELAY_WIRE_ABI_VERSION,
+            flags: 1,
+            message_id,
+            sender: sender_identity,
+            status: RELAY_REPORT_STATUS_ACCEPTED,
+            sender_sequence: 8,
+            sender_log_head: [0xE2; 32],
+            report_sha256: report_hash(&report),
+            signature: RelaySignature {
+                algorithm: 0,
+                public_key: Vec::new(),
+                signature: Vec::new(),
+            },
+        };
+        report_receipt.signature = sign_generated_p256(
+            &sender,
+            &report_receipt.sender,
+            &report_receipt_preimage(&report_receipt),
+        );
+        write_message(
+            &mut sender_stream,
+            &RelayMessage::DeliveryReportReceipt(report_receipt),
+        )
+        .expect("send report receipt");
+        assert!(matches!(
+            read_message(&mut sender_stream).expect("read final ack"),
+            RelayMessage::Ack(RelayAck {
+                ok: true,
+                code: 200,
+                ..
+            })
+        ));
     }
 
     #[test]

@@ -5,6 +5,7 @@
 "use client"
 
 import { useCapabilities } from "@/platform/ui/useCapabilities"
+import { bytesToHex } from "@/platform/utils/bytes"
 
 export function CapabilityList() {
   const { capabilities, isLoading, error, loadCapabilities } = useCapabilities()
@@ -26,7 +27,7 @@ export function CapabilityList() {
       <div className="grid grid-cols-2 gap-3">
         {capabilities.map((cap) => (
           <div
-            key={Buffer.from(cap.capability_id).toString("hex")}
+            key={bytesToHex(cap.capability_id)}
             className="rounded-lg border border-border bg-secondary/50 p-3"
           >
             <h3 className="text-sm font-medium">

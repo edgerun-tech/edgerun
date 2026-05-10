@@ -14,6 +14,7 @@ import {
 import type { MotionValue } from "motion/react";
 
 import { useEffect, useMemo, useRef, useState, useCallback, type ReactNode } from "react";
+import { bootstrapBrowserCdpRelay } from "@/platform/dev/browser-cdp-relay";
 import {
   appendAssistantMessage,
   assistantElapsedMsStore,
@@ -127,6 +128,21 @@ function formatRequestDuration(ms: number) {
   const remainingSeconds = seconds % 60;
   if (minutes > 0) return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
   return `${remainingSeconds}s`;
+}
+
+function formatRelayResponse(result: unknown, destination: "frontend" | "backend") {
+  const label = destination === "backend" ? "backend" : "frontend";
+  if (typeof result === "string" && result.trim()) return result.trim();
+  if (destination === "frontend") return "Sent to frontend relay.";
+  if (result && typeof result === "object") {
+    const data = result as { text?: unknown; response?: unknown; ok?: unknown };
+    for (const key of ["text", "response"] as const) {
+      if (typeof data[key] === "string" && data[key].trim()) return data[key].trim();
+    }
+    if (data.ok === true) return `Sent to ${label}.`;
+    return JSON.stringify(result, null, 2);
+  }
+  return `Sent to ${label}.`;
 }
 
 export const FloatingDock = ({
@@ -246,6 +262,7 @@ const FloatingDockDesktop = ({
   const placeholder = commandPrefix === "~" ? assistantPlaceholder(assistantStatus) : `${commandMode.label.toLowerCase()}...`;
   const commandQuery = commandBody(command).toLowerCase();
   const assistantDurationMs = assistantLoading ? assistantElapsedMs : assistantLastDurationMs;
+  const hasCommandText = Boolean(commandBody(command).trim());
   const lastAssistantUserMessage = useMemo(() => getLastAssistantUserMessage(assistantMessages), [assistantMessages]);
   const assistantUserMessages = useMemo(() => getAssistantUserMessageContents(assistantMessages), [assistantMessages]);
   const canRetryAssistant = Boolean(lastAssistantUserMessage) && hasRetryableAssistantError(assistantMessages);
@@ -391,14 +408,9 @@ const FloatingDockDesktop = ({
   }, [commandPrefix, setPrefix]);
 
   const sendAssistantMessage = useCallback(async (message: string, options: { appendUser?: boolean; force?: boolean } = {}) => {
-    if (assistantStatus === "offline" && !options.force) {
-      appendAssistantMessage({
-        role: "assistant",
-        content: "Codex bridge is offline.",
-      }, 4);
-      return;
-    }
-
+    const relay = bootstrapBrowserCdpRelay();
+    const relayDestination = relay?.status().destination;
+    const selectedRelayDestination = relayDestination === "frontend" || relayDestination === "backend" ? relayDestination : null;
     const startedAt = Date.now();
     const controller = new AbortController();
     startAssistantRequest(startedAt);
@@ -412,10 +424,34 @@ const FloatingDockDesktop = ({
     const assistantId = `assistant-${Date.now()}`;
     updateAssistantMessages((current) => [
       ...current.slice(-3),
-      { id: assistantId, role: "assistant", content: "Starting Codex..." },
+      { id: assistantId, role: "assistant", content: selectedRelayDestination ? `Sending to ${selectedRelayDestination}...` : "Starting Codex..." },
     ]);
 
     try {
+      if (selectedRelayDestination) {
+        const result = await relay!.relay(message, selectedRelayDestination, {
+          source: "floating-dock",
+          route: "dock-prompt",
+          prefix: "~",
+        });
+        updateAssistantMessages((current) => current.map((item) => (
+          item.id === assistantId
+            ? { ...item, content: formatRelayResponse(result, selectedRelayDestination) }
+            : item
+        )));
+        setAssistantStatus("ready");
+        return;
+      }
+
+      if (assistantStatus === "offline" && !options.force) {
+        updateAssistantMessages((current) => current.map((item) => (
+          item.id === assistantId
+            ? { ...item, content: "Codex bridge is offline." }
+            : item
+        )));
+        return;
+      }
+
       await sendCodexMessage(message, {
         onStatus: (text) => {
           updateAssistantMessages((current) => current.map((item) => (
@@ -542,6 +578,16 @@ const FloatingDockDesktop = ({
     setCopiedMessageId(message.id);
     window.setTimeout(() => setCopiedMessageId((current) => current === message.id ? null : current), 1200);
   }, []);
+
+  const clearDockPrompt = useCallback(() => {
+    if (hasCommandText) {
+      setCommand(commandPrefix);
+      setHistoryIndex(null);
+      inputRef.current?.focus();
+      return;
+    }
+    clearAssistantMessages();
+  }, [commandPrefix, hasCommandText]);
 
   return (
     <motion.div
@@ -720,14 +766,16 @@ const FloatingDockDesktop = ({
                   Stop
                 </button>
               ) : null}
-              {commandPrefix === "~" && assistantMessages.length > 0 ? (
+              {commandPrefix === "~" && (hasCommandText || assistantMessages.length > 0) ? (
                 <button
                   type="button"
-                  onClick={clearAssistantMessages}
+                  onClick={clearDockPrompt}
                   disabled={assistantLoading}
-                  className="hidden h-7 shrink-0 rounded-full border border-border px-2 text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground disabled:opacity-40 sm:inline-flex sm:items-center"
+                  className="hidden h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-white/10 hover:text-foreground disabled:opacity-40 sm:inline-flex"
+                  aria-label="Clear"
+                  title="Clear"
                 >
-                  Clear
+                  x
                 </button>
               ) : null}
               {commandPrefix === "~" && assistantDurationMs !== null ? (
