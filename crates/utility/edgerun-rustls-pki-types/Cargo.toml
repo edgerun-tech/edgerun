@@ -14,7 +14,7 @@ default = ["alloc"]
 std = ["alloc", "zeroize"]
 
 [dependencies]
-zeroize = { package = "zeroize", path = "../../vendor/cargo/zeroize", optional = true }
+zeroize = { package = "edgerun-zeroize", path = "../edgerun-zeroize", optional = true }
 
 [lints]
 workspace = true
