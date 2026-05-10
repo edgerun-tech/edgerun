@@ -83,7 +83,7 @@ impl Hci {
 
         let mut polls = 0usize;
         while polls < max_polls {
-            match self.usb.read_hci_event(out, 50_000) {
+            match self.usb.read_hci_event(out, 50) {
                 Ok(n) => {
                     if n < 3 {
                         polls += 1;
@@ -166,10 +166,10 @@ impl Hci {
     }
 
     pub fn write_acl(&mut self, data: &mut [u8]) -> Result<usize, EfiStatus> {
-        self.usb.write_acl(data, 1_000_000)
+        self.usb.write_acl(data, 1_000)
     }
 
     pub fn read_acl(&mut self, out: &mut [u8]) -> Result<usize, EfiStatus> {
-        self.usb.read_acl(out, 1_000_000)
+        self.usb.read_acl(out, 1_000)
     }
 }
