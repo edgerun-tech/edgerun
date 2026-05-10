@@ -1,9 +1,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
+use codex_api::HttpTransport;
 use codex_api::ModelsClient;
 use codex_api::RequestTelemetry;
-use codex_api::ReqwestTransport;
 use codex_api::TransportError;
 use codex_api::auth_header_telemetry;
 use codex_api::map_api_error;
@@ -26,20 +26,33 @@ const MODELS_REFRESH_TIMEOUT: Duration = Duration::from_secs(5);
 const MODELS_ENDPOINT: &str = "/models";
 
 /// Provider-owned OpenAI-compatible `/models` endpoint.
-#[derive(Debug)]
+#[derive(Clone)]
 pub(crate) struct OpenAiModelsEndpoint {
     provider_info: ModelProviderInfo,
     auth_manager: Option<Arc<AuthManager>>,
+    transport: Arc<dyn HttpTransport>,
+}
+
+impl std::fmt::Debug for OpenAiModelsEndpoint {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OpenAiModelsEndpoint")
+            .field("provider_info", &self.provider_info)
+            .field("auth_manager", &self.auth_manager.as_ref().map(|_| "<auth-manager>"))
+            .field("transport", &"<http-transport>")
+            .finish()
+    }
 }
 
 impl OpenAiModelsEndpoint {
     pub(crate) fn new(
         provider_info: ModelProviderInfo,
         auth_manager: Option<Arc<AuthManager>>,
+        transport: Arc<dyn HttpTransport>,
     ) -> Self {
         Self {
             provider_info,
             auth_manager,
+            transport,
         }
     }
 
@@ -72,7 +85,7 @@ impl ModelsEndpointClient for OpenAiModelsEndpoint {
         let auth_mode = auth.as_ref().map(CodexAuth::auth_mode);
         let api_provider = self.provider_info.to_api_provider(auth_mode)?;
         let api_auth = resolve_provider_auth(auth.as_ref(), &self.provider_info)?;
-        let transport = ReqwestTransport::new(edgerun_reqwest::Client::new());
+        let transport = Arc::clone(&self.transport);
         let auth_telemetry = auth_header_telemetry(api_auth.as_ref());
         let request_telemetry: Arc<dyn RequestTelemetry> = Arc::new(ModelsRequestTelemetry {
             auth_header_attached: auth_telemetry.attached,
@@ -153,7 +166,28 @@ mod tests {
     use std::num::NonZeroU64;
 
     use super::*;
+    use codex_api::Request;
+    use codex_api::Response;
+    use codex_api::StreamResponse;
     use codex_protocol::config_types::ModelProviderAuthInfo;
+
+    #[derive(Debug)]
+    struct UnusedTransport;
+
+    #[async_trait]
+    impl HttpTransport for UnusedTransport {
+        async fn execute(&self, _req: Request) -> Result<Response, TransportError> {
+            unreachable!("these endpoint metadata tests do not execute HTTP requests")
+        }
+
+        async fn stream(&self, _req: Request) -> Result<StreamResponse, TransportError> {
+            unreachable!("these endpoint metadata tests do not execute HTTP requests")
+        }
+    }
+
+    fn unused_transport() -> Arc<dyn HttpTransport> {
+        Arc::new(UnusedTransport)
+    }
 
     fn provider_info_with_command_auth() -> ModelProviderInfo {
         ModelProviderInfo {
@@ -177,6 +211,7 @@ mod tests {
         let endpoint = OpenAiModelsEndpoint::new(
             provider_info_with_command_auth(),
             /*auth_manager*/ None,
+            unused_transport(),
         );
 
         assert!(endpoint.has_command_auth());
@@ -187,6 +222,7 @@ mod tests {
         let endpoint = OpenAiModelsEndpoint::new(
             ModelProviderInfo::create_openai_provider(/*base_url*/ None),
             /*auth_manager*/ None,
+            unused_transport(),
         );
 
         assert!(!endpoint.has_command_auth());
