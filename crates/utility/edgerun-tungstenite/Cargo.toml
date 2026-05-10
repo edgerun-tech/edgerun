@@ -16,10 +16,10 @@ proxy = ["handshake", "tungstenite/proxy"]
 rustls-tls-native-roots = ["handshake", "dep:rustls", "tungstenite/rustls-tls-native-roots"]
 
 [dependencies]
-bytes = { package = "edgerun-bytes", workspace = true }
+bytes = { package = "edgerun-bytes", version = "0.1", path = "../edgerun-bytes" }
 edgerun-encoding = { workspace = true, default-features = false }
 edgerun-random = { workspace = true }
-http = { package = "edgerun-http", workspace = true }
+http = { package = "edgerun-http", version = "0.1", path = "../edgerun-http" }
 rustls = { package = "edgerun-rusttls", path = "../edgerun-rusttls", default-features = false, optional = true }
 tungstenite = { path = "../../vendor/cargo/tungstenite", default-features = false }
 
