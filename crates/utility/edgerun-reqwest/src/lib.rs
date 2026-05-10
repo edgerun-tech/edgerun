@@ -25,5 +25,5 @@ pub mod edgerun {
 #[cfg(feature = "native")]
 pub mod native;
 
-#[cfg(feature = "native-root")]
+#[cfg(feature = "native")]
 pub use native::*;
