@@ -1,5 +1,7 @@
-import { bytesToHex, bytesToBase64, base64ToBytes } from "@/platform/utils/bytes"
-import type { P256KeyMaterial, P256EncryptionKeyMaterial } from "@/stores/auth-types"
+import { bytesToHex, bytesToBase64, base64ToBytes, sha256Hex } from "@/platform/utils/bytes"
+import type { P256KeyMaterial, P256EncryptionKeyMaterial, SealedProfileContainer, UnlockedProfileContainer } from "@/stores/auth-types"
+import { PBKDF2_ROUNDS } from "@/stores/auth-types"
+import { deriveProfilePreferences, deriveWebAuthnBinding, normalizeUnlockedProfile, selfContact } from "./helpers"
 
 const textEncoder = new TextEncoder()
 const textDecoder = new TextDecoder()
@@ -9,11 +11,6 @@ export function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`
   const record = value as Record<string, unknown>
   return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`).join(",")}}`
-}
-
-export async function sha256Hex(bytes: Uint8Array | string): Promise<string> {
-  const data = typeof bytes === "string" ? textEncoder.encode(bytes) : bytes
-  return bytesToHex(new Uint8Array(await crypto.subtle.digest("SHA-256", data)))
 }
 
 export async function deriveAesKey(password: string, salt: Uint8Array, rounds: number): Promise<CryptoKey> {
@@ -146,4 +143,61 @@ export async function openSealedNestedContainer(
   const digest = await sha256Hex(new Uint8Array(plaintext))
   if (digest !== container.plaintextSha256) throw new Error("Sealed message digest check failed.")
   return text
+}
+
+export async function sealProfile(profile: UnlockedProfileContainer, password: string): Promise<SealedProfileContainer> {
+  if (password.length < 8) throw new Error("Password must be at least 8 characters.")
+  const salt = crypto.getRandomValues(new Uint8Array(16))
+  const iv = crypto.getRandomValues(new Uint8Array(12))
+  const key = await deriveAesKey(password, salt, PBKDF2_ROUNDS)
+  const ciphertext = new Uint8Array(await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    key,
+    textEncoder.encode(canonicalJson(profile)),
+  ))
+  return {
+    version: 1,
+    kind: "edgerun.browser-profile.sealed",
+    cipher: "AES-GCM-256",
+    kdf: { name: "PBKDF2-HMAC-SHA256", rounds: PBKDF2_ROUNDS, saltBase64: bytesToBase64(salt) },
+    ivBase64: bytesToBase64(iv),
+    ciphertextBase64: bytesToBase64(ciphertext),
+    profileId: profile.ownerEncryption.identityIdHex,
+    handleHint: profile.handle,
+    ownerIdHint: profile.owner.identityIdHex,
+    encryptionIdHint: profile.ownerEncryption.identityIdHex,
+    encryptionPublicKeyHint: profile.ownerEncryption.publicKeyRawBase64,
+    webAuthnCredentialIdHint: profile.webAuthnBinding?.credentialIdBase64,
+    nodeIdHint: profile.browserNode.identityIdHex,
+    createdAtIso: profile.createdAtIso,
+  }
+}
+
+export async function openProfile(sealed: SealedProfileContainer, password: string): Promise<UnlockedProfileContainer> {
+  const key = await deriveAesKey(password, base64ToBytes(sealed.kdf.saltBase64), sealed.kdf.rounds)
+  const plaintext = await crypto.subtle.decrypt(
+    { name: "AES-GCM", iv: base64ToBytes(sealed.ivBase64) },
+    key,
+    base64ToBytes(sealed.ciphertextBase64),
+  )
+  const parsed = JSON.parse(textDecoder.decode(plaintext)) as UnlockedProfileContainer
+  if (parsed.version !== 1 || parsed.owner.identityIdHex !== sealed.ownerIdHint || parsed.browserNode.identityIdHex !== sealed.nodeIdHint) {
+    throw new Error("Profile container integrity check failed.")
+  }
+  const ownerEncryption = parsed.ownerEncryption ?? (await generateP256EncryptionIdentity()).material
+  const eventLog = parsed.eventLog ?? []
+  const profilePreferences = deriveProfilePreferences(eventLog, parsed.profilePreferences, parsed.handle)
+  const webAuthnBinding = deriveWebAuthnBinding(eventLog, parsed.webAuthnBinding)
+  return normalizeUnlockedProfile({
+    ...parsed,
+    ownerEncryption,
+    nodes: parsed.nodes ?? [parsed.browserNode],
+    contacts: parsed.contacts ?? [selfContact({ handle: parsed.handle, ownerEncryption })],
+    eventLog,
+    profilePreferences,
+    webAuthnBinding,
+    appSecrets: parsed.appSecrets ?? [],
+    sealedContainers: parsed.sealedContainers ?? [],
+    outbox: parsed.outbox ?? [],
+  })
 }

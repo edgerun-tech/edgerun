@@ -17,3 +17,8 @@ export function base64ToBytes(base64: string): Uint8Array {
   for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index)
   return bytes
 }
+
+export async function sha256Hex(data: Uint8Array | string): Promise<string> {
+  const bytes = typeof data === "string" ? new TextEncoder().encode(data) : data
+  return bytesToHex(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)))
+}

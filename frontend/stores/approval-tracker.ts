@@ -4,7 +4,7 @@
 
 import { atom, computed } from "nanostores"
 import type { PendingApproval } from "@/platform/state/permission-store"
-import { permissionTracker } from "@/platform/auth/permission-tracker"
+import { permissionTracker } from "@/stores/permission-tracker"
 
 export interface ApprovalTrackerState {
   pending: Map<string, PendingApproval>

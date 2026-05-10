@@ -21,7 +21,7 @@ import {
   addPendingApproval as trackerAddPending,
   approvePending as trackerApprove,
   rejectPending as trackerReject,
-} from "@/platform/auth/permission-tracker"
+} from "@/stores/permission-tracker"
 import {
   approvalTracker,
   addApproval,
@@ -29,7 +29,7 @@ import {
   reject,
   listPending,
   listHistory,
-} from "@/platform/auth/approval-tracker"
+} from "@/stores/approval-tracker"
 
 export function usePermissions() {
   const store = useStore(permissionStore)

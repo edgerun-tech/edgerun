@@ -1,3 +1,5 @@
+import { sha256Hex as _sha256Hex } from "@/platform/utils/bytes"
+
 export type AppAddress = string
 export type HexString = string
 
@@ -167,9 +169,7 @@ export function createRuntimeId(prefix = "rt"): string {
 }
 
 export async function sha256Hex(data: Uint8Array | string): Promise<HexString> {
-  const bytes = typeof data === "string" ? new TextEncoder().encode(data) : data
-  const digest = await crypto.subtle.digest("SHA-256", bytes)
-  return Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, "0")).join("")
+  return _sha256Hex(data)
 }
 
 export function utf8Encode(value: string): Uint8Array {

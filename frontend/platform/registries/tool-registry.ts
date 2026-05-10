@@ -19,7 +19,7 @@ import type { RiskClass } from "@/platform/assistant"
 import {
   capabilityRegistry,
 } from "@/platform/registries/capability-registry"
-import { approvalTracker, addApproval } from "@/platform/auth/approval-tracker"
+import { approvalTracker, addApproval } from "@/stores/approval-tracker"
 
 export interface ToolDefinition {
   toolId: string

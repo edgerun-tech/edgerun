@@ -1,4 +1,4 @@
-import { addApproval, approve, reject } from "@/platform/auth/approval-tracker"
+import { addApproval, approve, reject } from "@/stores/approval-tracker"
 import { protocolClient } from "./client"
 import type { PendingApproval, PermissionScope } from "@/platform/state/permission-store"
 

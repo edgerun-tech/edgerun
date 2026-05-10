@@ -1,7 +1,8 @@
 import { atom, computed } from "nanostores"
-import { bytesToHex, bytesToBase64, base64ToBytes } from "@/platform/utils/bytes"
+import { bytesToHex, bytesToBase64, base64ToBytes, sha256Hex } from "@/platform/utils/bytes"
 import { patchStore } from "@/platform/utils/store"
-import { canonicalJson, sha256Hex, deriveAesKey, importAesGcmKey, generateP256Identity, generateP256EncryptionIdentity, importP256PrivateKey, importP256EcdhPublicKey, importP256EcdhPrivateKey, sealToRecipient, openSealedNestedContainer } from "@/platform/auth/crypto"
+import { canonicalJson, generateP256Identity, generateP256EncryptionIdentity, importP256PrivateKey, importP256EcdhPublicKey, sealToRecipient, openSealedNestedContainer, sealProfile, openProfile } from "@/platform/auth/crypto"
+import { createGenesisEvent, createProfileSettingsEvent, createWebAuthnBoundEvent } from "@/platform/auth/events"
 import { profileIdFor, readProfileIndex, readProfileById, readSealedProfile, persistSealedProfile, activeProfileId, readLocalMessageQueue, writeLocalMessageQueue, localMessagesFor } from "@/platform/auth/persistence"
 import { clearSessionResumeTicket, startSessionResumeHeartbeat, consumeSessionResumeTicket } from "@/platform/auth/session"
 import { webAuthnAvailable, webAuthnVaultExists, hasUsableWebAuthnBinding, credentialCreationOptions, webAuthnPrfResult, requestWebAuthnPrf, writeWebAuthnVault, readWebAuthnVaultPassword } from "@/platform/auth/web-authn"
@@ -11,8 +12,6 @@ import type {
   NodeProvisionInput,
   StoredNodeRegistration,
   AuthStore,
-  P256KeyMaterial,
-  P256EncryptionKeyMaterial,
   ContactRecord,
   ProfilePreferences,
   WebAuthnBinding,
@@ -29,10 +28,7 @@ import type {
   LocalQueuedMessage,
   NodeRelayPublishResult,
 } from "./auth-types"
-import {
-  ZERO_HASH,
-  PBKDF2_ROUNDS,
-} from "./auth-types"
+
 
 export type {
   AuthState,
@@ -61,7 +57,6 @@ export type {
 
 const NODE_RELAY_DOMAIN = "nodes.edgerun.tech"
 const textEncoder = new TextEncoder()
-const textDecoder = new TextDecoder()
 
 const APP_SESSION_COOKIE_NAMES = [
   "gmail_access_token",
@@ -107,129 +102,6 @@ function clearTransientAppSessions() {
   if (typeof fetch !== "undefined") {
     void fetch("/api/session/clear", { method: "POST", keepalive: true }).catch(() => undefined)
   }
-}
-
-async function createGenesisEvent(node: P256KeyMaterial, nodePrivateKey: CryptoKey, ownerId: string, label?: string): Promise<ProfileEvent> {
-  const payload = {
-    nodeId: node.identityIdHex,
-    initialControllers: [ownerId],
-    createdAtIso: new Date().toISOString(),
-    ...(label ? { label } : {}),
-  }
-  const payloadSha256 = await sha256Hex(canonicalJson(payload))
-  const unsigned = {
-    seq: 0,
-    kind: "NODE_GENESIS" as const,
-    previousEventHash: ZERO_HASH,
-    payloadSha256,
-    payload,
-  }
-  const signature = new Uint8Array(await crypto.subtle.sign(
-    { name: "ECDSA", hash: "SHA-256" },
-    nodePrivateKey,
-    textEncoder.encode(canonicalJson(unsigned)),
-  ))
-  const eventHash = await sha256Hex(canonicalJson({ ...unsigned, signatureBase64: bytesToBase64(signature) }))
-  return { ...unsigned, signatureBase64: bytesToBase64(signature), eventHash }
-}
-
-async function createProfileSettingsEvent(profile: UnlockedProfileContainer, nodePrivateKey: CryptoKey, preferences: ProfilePreferences): Promise<ProfileEvent> {
-  const previous = profile.eventLog[profile.eventLog.length - 1]
-  const payload = {
-    preferences,
-    updatedAtIso: new Date().toISOString(),
-  }
-  const payloadSha256 = await sha256Hex(canonicalJson(payload))
-  const unsigned = {
-    seq: profile.eventLog.length,
-    kind: "PROFILE_SETTINGS_UPDATED" as const,
-    previousEventHash: previous?.eventHash ?? ZERO_HASH,
-    payloadSha256,
-    payload,
-  }
-  const signature = new Uint8Array(await crypto.subtle.sign(
-    { name: "ECDSA", hash: "SHA-256" },
-    nodePrivateKey,
-    textEncoder.encode(canonicalJson(unsigned)),
-  ))
-  const eventHash = await sha256Hex(canonicalJson({ ...unsigned, signatureBase64: bytesToBase64(signature) }))
-  return { ...unsigned, signatureBase64: bytesToBase64(signature), eventHash }
-}
-
-async function createWebAuthnBoundEvent(profile: UnlockedProfileContainer, nodePrivateKey: CryptoKey, binding: WebAuthnBinding): Promise<ProfileEvent> {
-  const previous = profile.eventLog[profile.eventLog.length - 1]
-  const payloadSha256 = await sha256Hex(canonicalJson(binding))
-  const unsigned = {
-    seq: profile.eventLog.length,
-    kind: "PROFILE_WEBAUTHN_BOUND" as const,
-    previousEventHash: previous?.eventHash ?? ZERO_HASH,
-    payloadSha256,
-    payload: binding,
-  }
-  const signature = new Uint8Array(await crypto.subtle.sign(
-    { name: "ECDSA", hash: "SHA-256" },
-    nodePrivateKey,
-    textEncoder.encode(canonicalJson(unsigned)),
-  ))
-  const eventHash = await sha256Hex(canonicalJson({ ...unsigned, signatureBase64: bytesToBase64(signature) }))
-  return { ...unsigned, signatureBase64: bytesToBase64(signature), eventHash }
-}
-
-async function sealProfile(profile: UnlockedProfileContainer, password: string): Promise<SealedProfileContainer> {
-  if (password.length < 8) throw new Error("Password must be at least 8 characters.")
-  const salt = crypto.getRandomValues(new Uint8Array(16))
-  const iv = crypto.getRandomValues(new Uint8Array(12))
-  const key = await deriveAesKey(password, salt, PBKDF2_ROUNDS)
-  const ciphertext = new Uint8Array(await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
-    key,
-    textEncoder.encode(canonicalJson(profile)),
-  ))
-  return {
-    version: 1,
-    kind: "edgerun.browser-profile.sealed",
-    cipher: "AES-GCM-256",
-    kdf: { name: "PBKDF2-HMAC-SHA256", rounds: PBKDF2_ROUNDS, saltBase64: bytesToBase64(salt) },
-    ivBase64: bytesToBase64(iv),
-    ciphertextBase64: bytesToBase64(ciphertext),
-    profileId: profile.ownerEncryption.identityIdHex,
-    handleHint: profile.handle,
-    ownerIdHint: profile.owner.identityIdHex,
-    encryptionIdHint: profile.ownerEncryption.identityIdHex,
-    encryptionPublicKeyHint: profile.ownerEncryption.publicKeyRawBase64,
-    webAuthnCredentialIdHint: profile.webAuthnBinding?.credentialIdBase64,
-    nodeIdHint: profile.browserNode.identityIdHex,
-    createdAtIso: profile.createdAtIso,
-  }
-}
-
-async function openProfile(sealed: SealedProfileContainer, password: string): Promise<UnlockedProfileContainer> {
-  const key = await deriveAesKey(password, base64ToBytes(sealed.kdf.saltBase64), sealed.kdf.rounds)
-  const plaintext = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv: base64ToBytes(sealed.ivBase64) },
-    key,
-    base64ToBytes(sealed.ciphertextBase64),
-  )
-  const parsed = JSON.parse(textDecoder.decode(plaintext)) as UnlockedProfileContainer
-  if (parsed.version !== 1 || parsed.owner.identityIdHex !== sealed.ownerIdHint || parsed.browserNode.identityIdHex !== sealed.nodeIdHint) {
-    throw new Error("Profile container integrity check failed.")
-  }
-  const ownerEncryption = parsed.ownerEncryption ?? (await generateP256EncryptionIdentity()).material
-  const eventLog = parsed.eventLog ?? []
-  const profilePreferences = deriveProfilePreferences(eventLog, parsed.profilePreferences, parsed.handle)
-  const webAuthnBinding = deriveWebAuthnBinding(eventLog, parsed.webAuthnBinding)
-  return normalizeUnlockedProfile({
-    ...parsed,
-    ownerEncryption,
-    nodes: parsed.nodes ?? [parsed.browserNode],
-    contacts: parsed.contacts ?? [selfContact({ handle: parsed.handle, ownerEncryption })],
-    eventLog,
-    profilePreferences,
-    webAuthnBinding,
-    appSecrets: parsed.appSecrets ?? [],
-    sealedContainers: parsed.sealedContainers ?? [],
-    outbox: parsed.outbox ?? [],
-  })
 }
 
 async function persistUnlockedProfile(profile: UnlockedProfileContainer, password: string): Promise<SealedProfileContainer> {

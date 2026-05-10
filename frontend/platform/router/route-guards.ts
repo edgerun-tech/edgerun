@@ -3,7 +3,7 @@
  */
 
 import type { RouteGuard, RouteParams } from "./route-types"
-import { hasPermission } from "@/platform/auth/permission-tracker"
+import { hasPermission } from "@/stores/permission-tracker"
 import { canSatisfy } from "@/platform/registries/capability-registry"
 import type { PermissionScope } from "@/platform/state/permission-store"
 import { bytesToHex } from "@/platform/utils/bytes"

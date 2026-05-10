@@ -1,6 +1,5 @@
 import { commandBody, isCommandPrefix, type CommandPrefix } from "@/stores/floating-dock-ui-store";
-
-type UnknownRecord = Record<string, unknown>;
+import { isRecord } from "@/platform/auth/helpers";
 
 type DockCommandInputEventDetail = {
   prefix?: unknown;
@@ -19,14 +18,11 @@ export function parseDockCommandInputEvent(event: Event): ResolvedDockCommandInp
   const detail = event.detail;
   if (!isRecord(detail)) return null;
   const payload = detail as DockCommandInputEventDetail;
-  const prefix = isCommandPrefix(normalizePrefix(payload.prefix)) ? payload.prefix : "~";
+  const rawPrefix = normalizePrefix(payload.prefix)
+  const prefix = isCommandPrefix(rawPrefix) ? rawPrefix : "~";
   const body = typeof payload.value === "string" ? commandBody(payload.value) : "";
   const shouldSubmit = payload.submit === true && body.trim().length > 0;
   return { prefix, body, shouldSubmit };
-}
-
-function isRecord(value: unknown): value is UnknownRecord {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function normalizePrefix(value: unknown): string {
