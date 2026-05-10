@@ -1,6 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect } from "react"
+import { useStore } from "@nanostores/react"
 import {
   Dialog,
   DialogContent,
@@ -9,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Kbd, KbdGroup } from "@/components/ui/kbd"
+import { setUsageGuideOpen, toggleUsageGuideOpen, usageGuideOpenStore } from "@/stores/dev-tools-store"
 
 const relayExamples = [
   {
@@ -42,7 +44,7 @@ const relayExamples = [
 ]
 
 export function UsageGuideModal() {
-  const [open, setOpen] = useState(false)
+  const open = useStore(usageGuideOpenStore)
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -50,7 +52,7 @@ export function UsageGuideModal() {
       if (event.key.toLowerCase() !== "h") return
       event.preventDefault()
       event.stopPropagation()
-      setOpen((current) => !current)
+      toggleUsageGuideOpen()
     }
 
     window.addEventListener("keydown", onKeyDown, { capture: true })
@@ -58,7 +60,7 @@ export function UsageGuideModal() {
   }, [])
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={setUsageGuideOpen}>
       <DialogContent className="max-h-[86vh] overflow-hidden p-0 sm:max-w-2xl">
         <DialogHeader className="border-b border-border px-5 py-4">
           <div className="flex items-center justify-between gap-4 pr-8">
