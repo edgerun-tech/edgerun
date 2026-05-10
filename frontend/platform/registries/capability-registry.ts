@@ -5,7 +5,7 @@
 
 import { atom, computed } from "nanostores"
 import { edgerun as edgerunCap } from "@/gen/edgerun/v0/capability"
-import { capabilityStore } from "@/platform/state/capability-store"
+import { capabilityStore } from "@/stores/capability-store"
 import { bytesToHex } from "@/platform/utils/bytes"
 
 export interface CapabilityRegistryState {

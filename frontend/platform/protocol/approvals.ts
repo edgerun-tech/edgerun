@@ -1,6 +1,6 @@
 import { addApproval, approve, reject } from "@/stores/approval-tracker"
 import { protocolClient } from "./client"
-import type { PendingApproval, PermissionScope } from "@/platform/state/permission-store"
+import type { PendingApproval, PermissionScope } from "@/stores/permission-store"
 
 type ProtocolApproval = PendingApproval & {
   source?: string

@@ -7,7 +7,7 @@ import {
   commandStore,
   pendingCommands,
   addPendingCommand,
-} from "@/platform/state/command-store"
+} from "@/stores/command-store"
 import { edgerun as edgerunStream } from "@/gen/edgerun/v0/stream"
 
 export function useCommands() {

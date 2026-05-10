@@ -4,7 +4,7 @@
 
 "use client"
 
-import { useCapabilities } from "@/platform/ui/useCapabilities"
+import { useCapabilities } from "@/hooks/useCapabilities"
 import { bytesToHex } from "@/platform/utils/bytes"
 
 export function CapabilityList() {

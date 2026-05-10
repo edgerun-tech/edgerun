@@ -5,7 +5,7 @@
 import type { RouteGuard, RouteParams } from "./route-types"
 import { hasPermission } from "@/stores/permission-tracker"
 import { canSatisfy } from "@/platform/registries/capability-registry"
-import type { PermissionScope } from "@/platform/state/permission-store"
+import type { PermissionScope } from "@/stores/permission-store"
 import { bytesToHex } from "@/platform/utils/bytes"
 
 export function createCapabilityGuard(

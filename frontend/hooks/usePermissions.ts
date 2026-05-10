@@ -14,7 +14,7 @@ import {
   rejectPending,
   setExternalAuthStatus,
   isExternalAuthConnected,
-} from "@/platform/state/permission-store"
+} from "@/stores/permission-store"
 import {
   permissionTracker,
   hasPending,

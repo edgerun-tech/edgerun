@@ -12,7 +12,7 @@ import {
   getNodeId,
   getNodeHealth,
   setNodeRegistration,
-} from "@/platform/state/node-store"
+} from "@/stores/node-store"
 
 export function useNode() {
   const store = useStore(nodeStore)

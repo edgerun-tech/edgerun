@@ -1,7 +1,7 @@
 "use client"
 
 import { useStore } from "@nanostores/react"
-import { pipelineStore, allRuns, activeRuns, type PipelineRun, type StepStatus } from "@/platform/state/pipeline-store"
+import { pipelineStore, allRuns, activeRuns, type PipelineRun, type StepStatus } from "@/stores/pipeline-store"
 import { getDashboardMode } from "@/platform/runtime/dashboard-mode"
 import { cn } from "@/lib/utils"
 import { Progress } from "@/components/ui/progress"

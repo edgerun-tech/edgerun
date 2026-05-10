@@ -5,7 +5,7 @@
 
 import { atom, computed } from "nanostores"
 import { edgerun as edgerunStream } from "@/gen/edgerun/v0/stream"
-import { appStore } from "@/platform/state/app-store"
+import { appStore } from "@/stores/app-store"
 import { bytesToHex } from "@/platform/utils/bytes"
 
 export interface AppRegistryState {

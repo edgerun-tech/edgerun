@@ -3,7 +3,7 @@
  */
 
 import { atom, computed } from "nanostores"
-import type { PendingApproval } from "@/platform/state/permission-store"
+import type { PendingApproval } from "@/stores/permission-store"
 import { permissionTracker } from "@/stores/permission-tracker"
 
 export interface ApprovalTrackerState {

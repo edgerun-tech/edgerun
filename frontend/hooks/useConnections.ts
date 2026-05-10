@@ -15,7 +15,7 @@ import {
   updateConnectionStatus,
   setAvailableResources,
   refreshConnections,
-} from "@/platform/state/connection-store"
+} from "@/stores/connection-store"
 
 export function useConnections() {
   const store = useStore(connectionStore)

@@ -7,7 +7,7 @@ import {
   objectStore,
   storedObjects,
   fetchObjectMetadata,
-} from "@/platform/state/object-store"
+} from "@/stores/object-store"
 
 export function useObjects() {
   const store = useStore(objectStore)

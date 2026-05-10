@@ -1,6 +1,6 @@
 git stash
 git pull --rebase
-git stash pop
+git stash apply
 git add .
 git commit -am "latest changes"
 git push 

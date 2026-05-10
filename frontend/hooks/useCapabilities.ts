@@ -11,7 +11,7 @@ import {
   listGrantsForAppFromStore,
   loadCapabilities,
   loadGrantsForApp,
-} from "@/platform/state/capability-store"
+} from "@/stores/capability-store"
 import { capabilityRegistry, canSatisfy } from "@/platform/registries/capability-registry"
 import { resolveCapabilityForAction, resolveCapabilityForPipeline } from "@/platform/runtime/capability-resolver"
 

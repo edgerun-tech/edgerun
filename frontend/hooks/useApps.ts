@@ -10,7 +10,7 @@ import {
   getApp,
   listApps,
   loadApps,
-} from "@/platform/state/app-store"
+} from "@/stores/app-store"
 import {
   appRegistry,
   getApp as getAppFromRegistry,

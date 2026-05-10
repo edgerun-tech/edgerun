@@ -5,8 +5,8 @@
 
 "use client"
 
-import { useApps } from "@/platform/ui/useApps"
-import { useCapabilities } from "@/platform/ui/useCapabilities"
+import { useApps } from "@/hooks/useApps"
+import { useCapabilities } from "@/hooks/useCapabilities"
 import { edgerun as streamTypes } from "@/gen/edgerun/v0/stream"
 import { edgerun as capTypes } from "@/gen/edgerun/v0/capability"
 import { bytesToHex } from "@/platform/utils/bytes"

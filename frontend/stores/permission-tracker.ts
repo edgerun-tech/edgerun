@@ -8,8 +8,8 @@ import type {
   PermissionScope,
   PendingApproval,
   PermissionPrompt,
-} from "@/platform/state/permission-store"
-import { permissionStore } from "@/platform/state/permission-store"
+} from "@/stores/permission-store"
+import { permissionStore } from "@/stores/permission-store"
 
 export interface PermissionTrackerState {
   sessionId: string | null

@@ -70,8 +70,8 @@ export function isOfflineMode(): boolean {
 
 // Auto-detect: if node-store reports a connected node, switch to real
 if (typeof window !== "undefined") {
-  import("@/platform/state/node-store").then((mod) => {
-    import("@/platform/state/connection-store").then((connMod) => {
+  import("@/stores/node-store").then((mod) => {
+    import("@/stores/connection-store").then((connMod) => {
       mod.nodeStore.listen((state) => {
         const current = dashboardModeStore.get()
         const connections = Array.from(connMod.connectionStore.get().connections.values())
