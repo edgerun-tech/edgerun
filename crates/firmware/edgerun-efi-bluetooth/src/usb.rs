@@ -93,7 +93,7 @@ pub struct EfiUsbIoProtocol {
         this: *mut EfiUsbIoProtocol,
         request: *mut EfiUsbDeviceRequest,
         direction: EfiUsbDataDirection,
-        timeout: u32,
+        timeout_ms: u32,
         data: *mut c_void,
         data_length: usize,
         status: *mut u32,
@@ -103,7 +103,7 @@ pub struct EfiUsbIoProtocol {
         device_endpoint: u8,
         data: *mut c_void,
         data_length: *mut usize,
-        timeout: usize,
+        timeout_ms: usize,
         status: *mut u32,
     ) -> EfiStatus,
     pub usb_async_interrupt_transfer: usize,
@@ -112,7 +112,7 @@ pub struct EfiUsbIoProtocol {
         device_endpoint: u8,
         data: *mut c_void,
         data_length: *mut usize,
-        timeout: usize,
+        timeout_ms: usize,
         status: *mut u32,
     ) -> EfiStatus,
     pub usb_isochronous_transfer: usize,
@@ -172,7 +172,7 @@ impl BtUsb {
         }
     }
 
-    pub fn read_hci_event(&mut self, out: &mut [u8], timeout_us: usize) -> Result<usize, EfiStatus> {
+    pub fn read_hci_event(&mut self, out: &mut [u8], timeout_ms: usize) -> Result<usize, EfiStatus> {
         if self.event_ep == 0 || out.is_empty() {
             return Err(EFI_INVALID_PARAMETER);
         }
@@ -184,18 +184,14 @@ impl BtUsb {
                 self.event_ep,
                 out.as_mut_ptr().cast(),
                 &mut len,
-                timeout_us,
+                timeout_ms,
                 &mut usb_status,
             )
         };
-        if status == EFI_SUCCESS {
-            Ok(len)
-        } else {
-            Err(status)
-        }
+        if status == EFI_SUCCESS { Ok(len) } else { Err(status) }
     }
 
-    pub fn write_acl(&mut self, data: &mut [u8], timeout_us: usize) -> Result<usize, EfiStatus> {
+    pub fn write_acl(&mut self, data: &mut [u8], timeout_ms: usize) -> Result<usize, EfiStatus> {
         if self.acl_out_ep == 0 || data.is_empty() {
             return Err(EFI_INVALID_PARAMETER);
         }
@@ -207,14 +203,14 @@ impl BtUsb {
                 self.acl_out_ep,
                 data.as_mut_ptr().cast(),
                 &mut len,
-                timeout_us,
+                timeout_ms,
                 &mut usb_status,
             )
         };
         if status == EFI_SUCCESS { Ok(len) } else { Err(status) }
     }
 
-    pub fn read_acl(&mut self, out: &mut [u8], timeout_us: usize) -> Result<usize, EfiStatus> {
+    pub fn read_acl(&mut self, out: &mut [u8], timeout_ms: usize) -> Result<usize, EfiStatus> {
         if self.acl_in_ep == 0 || out.is_empty() {
             return Err(EFI_INVALID_PARAMETER);
         }
@@ -226,7 +222,7 @@ impl BtUsb {
                 self.acl_in_ep,
                 out.as_mut_ptr().cast(),
                 &mut len,
-                timeout_us,
+                timeout_ms,
                 &mut usb_status,
             )
         };
