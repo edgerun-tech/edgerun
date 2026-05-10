@@ -16,6 +16,7 @@ use edgerun_http::HeaderMap;
 #[cfg(feature = "native-transport")]
 use edgerun_http::Method;
 use edgerun_http::StatusCode;
+use std::sync::Arc;
 #[cfg(feature = "native-transport")]
 use tracing::Level;
 #[cfg(feature = "native-transport")]
@@ -35,6 +36,20 @@ pub struct StreamResponse {
 pub trait HttpTransport: Send + Sync {
     async fn execute(&self, req: Request) -> Result<Response, TransportError>;
     async fn stream(&self, req: Request) -> Result<StreamResponse, TransportError>;
+}
+
+#[async_trait]
+impl<T> HttpTransport for Arc<T>
+where
+    T: HttpTransport + ?Sized,
+{
+    async fn execute(&self, req: Request) -> Result<Response, TransportError> {
+        self.as_ref().execute(req).await
+    }
+
+    async fn stream(&self, req: Request) -> Result<StreamResponse, TransportError> {
+        self.as_ref().stream(req).await
+    }
 }
 
 #[cfg(feature = "native-transport")]
