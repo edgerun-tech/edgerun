@@ -282,21 +282,23 @@ where
         if !verify_delivery_receipt(&receipt) {
             return Err(RelayEngineError::InvalidSignature);
         }
+        let sender_peer = pending.sender_peer.clone();
+        let message_id = receipt.message_id;
         let report = RelayDeliveryReport {
             abi_version: RELAY_WIRE_ABI_VERSION,
             flags: 1,
             relay_id: b"edgerun-relay".to_vec(),
-            submit: pending.submit,
+            submit: pending.submit.clone(),
             recipient_receipt: receipt,
             reported_unix_ms: 0,
         };
         let report_sha256 = report_hash(&report);
-        if let Some(pending) = self.pending.get_mut(&report.submit.message_id) {
+        if let Some(pending) = self.pending.get_mut(&message_id) {
             pending.report_sha256 = Some(report_sha256);
             pending.state = PendingState::DeliveryReported;
         }
         out.push(RelayOutput::Message {
-            peer: pending.sender_peer,
+            peer: sender_peer,
             message: RelayMessage::DeliveryReport(report),
         });
         Ok(())
