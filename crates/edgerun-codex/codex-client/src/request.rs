@@ -1,9 +1,9 @@
 use edgerun_bytes::Bytes;
+use edgerun_http::HeaderMap;
+use edgerun_http::HeaderValue;
 use edgerun_http::Method;
 use edgerun_json::JsonValue;
 use edgerun_json::ToJson;
-use edgerun_reqwest::header::HeaderMap;
-use edgerun_reqwest::header::HeaderValue;
 use std::time::Duration;
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -154,7 +154,6 @@ impl Request {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_http::HeaderValue;
     use edgerun_json::json;
     use pretty_assertions::assert_eq;
 
