@@ -1,22 +1,21 @@
 "use client"
 
 import { useStore } from "@nanostores/react"
-import { getDashboardMode } from "@/platform/runtime/dashboard-mode"
 import { cn } from "@/lib/utils"
+import { DashboardPanel } from "@/components/ui/dashboard-panel"
 import {
   GitBranch,
   AlertTriangle,
   Package,
   Ban,
-  CheckCircle2,
 } from "lucide-react"
+import { atom, computed } from "nanostores"
 
-// Dependency graph derived from real package manifests
 export interface DepNode {
   name: string
   version: string
   source: "crates_io" | "workspace" | "external" | "demo"
-  isIllegal: boolean // external dep not in workspace deps
+  isIllegal: boolean
   usedBy: string[]
   usesIllegalDeps: string[]
 }
@@ -26,8 +25,6 @@ export interface DependencyGraph {
   illegalEdges: Array<{ from: string; to: string; reason: string }>
   source: "real" | "demo"
 }
-
-import { atom, computed } from "nanostores"
 
 const initialGraph: DependencyGraph = {
   nodes: new Map(),
@@ -87,27 +84,18 @@ export function DependencyGraph() {
   const nodes = useStore(allDepNodes)
   const illegalEdges = useStore(illegalDeps)
   const graph = useStore(dependencyStore)
-  const mode = getDashboardMode()
 
   const workspaceNodes = nodes.filter(n => n.source === "workspace")
   const externalNodes = nodes.filter(n => n.source === "external" || n.isIllegal)
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-foreground">Dependency Graph</h3>
-        <div className="flex items-center gap-2">
-          {mode === "demo" && (
-            <span className="rounded bg-yellow-500/20 px-1.5 py-0.5 text-[9px] font-medium text-yellow-400">
-              Demo
-            </span>
-          )}
-          <span className="text-xs text-muted-foreground">
-            {nodes.length} deps · {illegalEdges.length} illegal
-          </span>
-        </div>
-      </div>
-
+    <DashboardPanel
+      title="Dependency Graph"
+      summary={`${nodes.length} deps · ${illegalEdges.length} illegal`}
+      empty={nodes.length === 0}
+      emptyMessage="No dependency data"
+      demoMessage="No real dependency data (demo mode)"
+    >
       {illegalEdges.length > 0 && (
         <div className="rounded border border-red-500/30 bg-red-500/5 p-3">
           <div className="flex items-center gap-2 mb-2">
@@ -121,14 +109,6 @@ export function DependencyGraph() {
               </p>
             ))}
           </div>
-        </div>
-      )}
-
-      {nodes.length === 0 && (
-        <div className="rounded-lg border border-border bg-card p-4 text-center">
-          <p className="text-sm text-muted-foreground">
-            {mode === "demo" ? "No real dependency data (demo mode)" : "No dependency data"}
-          </p>
         </div>
       )}
 
@@ -160,6 +140,6 @@ export function DependencyGraph() {
           </div>
         </>
       )}
-    </div>
+    </DashboardPanel>
   )
 }

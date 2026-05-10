@@ -1,22 +1,16 @@
 "use client"
 
 import { useStore } from "@nanostores/react"
-import { getDashboardMode } from "@/platform/runtime/dashboard-mode"
-import { cn } from "@/lib/utils"
 import { Progress } from "@/components/ui/progress"
+import { DashboardPanel } from "@/components/ui/dashboard-panel"
 import {
-  Coins,
-  TrendingUp,
-  TrendingDown,
   AlertTriangle,
 } from "lucide-react"
-
-// Token usage derived from real API responses, not estimated
 export interface TokenUsage {
   promptTokens: number
   completionTokens: number
   totalTokens: number
-  estimatedCost?: number // only if pricing is known from real API
+  estimatedCost?: number
   model: string
   provider: string
   timestamp: number
@@ -61,9 +55,9 @@ export function recordTokenUsage(usage: TokenUsage): void {
   const entries = [...state.entries, usage]
   const today = new Date().toDateString()
   const todayEntries = entries.filter(e => new Date(e.timestamp).toDateString() === today)
-  
+
   const topModels = computeTopModels(entries)
-  
+
   tokenStore.set({
     entries,
     totalPromptTokens: entries.reduce((a, e) => a + e.promptTokens, 0),
@@ -106,24 +100,15 @@ function formatCost(c: number): string {
 export function TokenUsagePanel() {
   const state = useStore(tokenStore)
   const recent = useStore(recentTokens)
-  const mode = getDashboardMode()
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-foreground">Token Usage</h3>
-        <div className="flex items-center gap-2">
-          {mode === "demo" && (
-            <span className="rounded bg-yellow-500/20 px-1.5 py-0.5 text-[9px] font-medium text-yellow-400">
-              Demo
-            </span>
-          )}
-          <span className="text-xs text-muted-foreground">
-            {formatTokens(state.totalTokens)} total
-          </span>
-        </div>
-      </div>
-
+    <DashboardPanel
+      title="Token Usage"
+      summary={`${formatTokens(state.totalTokens)} total`}
+      empty={recent.length === 0}
+      emptyMessage="No token usage recorded"
+      demoMessage="No real token data (demo mode)"
+    >
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <div className="rounded-lg border border-border bg-card p-3">
           <p className="text-[10px] text-muted-foreground">Today</p>
@@ -157,21 +142,13 @@ export function TokenUsagePanel() {
                   <span className="truncate flex-1">{m.model}</span>
                   <span className="text-muted-foreground">{formatTokens(m.tokens)}</span>
                 </div>
-                <Progress 
-                  value={state.totalTokens > 0 ? (m.tokens / state.totalTokens) * 100 : 0} 
-                  className="h-1" 
+                <Progress
+                  value={state.totalTokens > 0 ? (m.tokens / state.totalTokens) * 100 : 0}
+                  className="h-1"
                 />
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {recent.length === 0 && (
-        <div className="rounded-lg border border-border bg-card p-4 text-center">
-          <p className="text-sm text-muted-foreground">
-            {mode === "demo" ? "No real token data (demo mode)" : "No token usage recorded"}
-          </p>
         </div>
       )}
 
@@ -191,6 +168,6 @@ export function TokenUsagePanel() {
           </div>
         </div>
       )}
-    </div>
+    </DashboardPanel>
   )
 }

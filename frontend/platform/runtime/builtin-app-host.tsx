@@ -11,7 +11,7 @@ const AppStoreApp = dynamic(
   { ssr: false, loading: LoadingApp },
 )
 const TrustManagerSurface = dynamic(
-  () => import("@/components/os/trust-manager-surface").then((mod) => mod.TrustManagerSurface),
+  () => import("@/components/os/trust-manager-app").then((mod) => mod.TrustManagerSurface),
   { ssr: false, loading: LoadingApp },
 )
 const FileManagerApp = dynamic(

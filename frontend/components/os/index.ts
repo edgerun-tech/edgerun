@@ -14,7 +14,7 @@ export { AuthOverlay } from "./auth-overlay"
 export { EdgerunLogo } from "./edgerun-logo"
 
 export { SettingsApp } from "./settings-app"
-export { TrustManagerSurface } from "./trust-manager-surface"
+export { TrustManagerApp as TrustManagerSurface, TrustManagerApp } from "./trust-manager-app"
 export { TrustContainerApp } from "./trust-container-app"
 export { IdentityApp } from "./identity-app"
 export { ProfileMenu } from "./profile-menu"

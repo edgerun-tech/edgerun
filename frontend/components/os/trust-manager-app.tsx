@@ -396,3 +396,6 @@ export function TrustManagerApp() {
     </div>
   )
 }
+
+/** @deprecated Use TrustManagerApp instead */
+export const TrustManagerSurface = TrustManagerApp

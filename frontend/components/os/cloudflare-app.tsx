@@ -5,6 +5,7 @@ import { AlertCircle, CheckCircle2, Cloud, Edit3, LogOut, Plus, RefreshCw, Save,
 import { cn } from "@/lib/utils"
 import { useAuth, type CloudflareProfileSecret } from "@/hooks/use-auth"
 import { deleteAppSession, storeAppSession } from "@/platform/runtime/app-session-broker"
+import { readCookie, deleteCookie, writeCookie } from "@/lib/oauth-utils"
 
 type PendingCloudflareSecret = Omit<CloudflareProfileSecret, "appId" | "kind" | "updatedAtIso">
 
@@ -37,19 +38,6 @@ type CloudflareSessionResult = {
 
 const DNS_TYPES = ["A", "AAAA", "CNAME", "TXT", "MX", "SRV", "CAA"] as const
 type CloudflareSessionState = "checking" | "disconnected" | "ready" | "error"
-
-function readCookie(name: string): string | null {
-  const prefix = `${name}=`
-  return document.cookie.split("; ").find((cookie) => cookie.startsWith(prefix))?.slice(prefix.length) ?? null
-}
-
-function deleteCookie(name: string) {
-  document.cookie = `${name}=; Max-Age=0; path=/`
-}
-
-function writeCookie(name: string, value: string) {
-  document.cookie = `${name}=${encodeURIComponent(value)}; Max-Age=31536000; path=/; SameSite=Lax`
-}
 
 async function restoreCloudflareSession(secret: PendingCloudflareSecret, profileId?: string): Promise<CloudflareSessionResult> {
   const res = await fetch("/api/cloudflare/session", {

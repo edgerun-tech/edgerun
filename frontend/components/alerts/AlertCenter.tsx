@@ -1,16 +1,14 @@
 "use client"
 
 import { useStore } from "@nanostores/react"
-import { getDashboardMode } from "@/platform/runtime/dashboard-mode"
 import { cn } from "@/lib/utils"
+import { DashboardPanel } from "@/components/ui/dashboard-panel"
 import {
   AlertTriangle,
   XCircle,
   AlertCircle,
   Info,
   CheckCircle2,
-  X,
-  Clock,
 } from "lucide-react"
 import { atom, computed } from "nanostores"
 
@@ -20,7 +18,7 @@ export interface Alert {
   alertId: string
   severity: AlertSeverity
   source: "node" | "coordinator" | "controller" | "agent" | "pipeline" | "test" | "system" | "demo"
-  category: string // e.g., "provisioning", "resource", "connection", "security"
+  category: string
   title: string
   message: string
   nodeId?: string
@@ -59,14 +57,14 @@ export function raiseAlert(alert: Omit<Alert, "alertId" | "firstSeen" | "lastSee
   const state = alertStore.get()
   const id = `${alert.source}:${alert.category}:${alert.nodeId || alert.agentId || "system"}`
   const existing = state.alerts.get(id)
-  
+
   if (existing) {
     const updated = {
       ...existing,
       lastSeen: Date.now(),
       count: existing.count + 1,
       isActive: true,
-      message: alert.message, // update message
+      message: alert.message,
     }
     const newAlerts = new Map(state.alerts)
     newAlerts.set(id, updated)
@@ -126,7 +124,7 @@ const SEVERITY_COLORS: Record<AlertSeverity, string> = {
 function AlertCard({ alert }: { alert: Alert }) {
   const icon = SEVERITY_ICONS[alert.severity]
   const colorClass = SEVERITY_COLORS[alert.severity]
-  
+
   return (
     <div className={cn("rounded border p-3 space-y-1", colorClass)}>
       <div className="flex items-start justify-between">
@@ -150,16 +148,16 @@ function AlertCard({ alert }: { alert: Alert }) {
           )}
         </div>
       </div>
-      
+
       <p className="text-[10px] text-muted-foreground">{alert.message}</p>
-      
+
       <div className="flex items-center gap-3 text-[9px] text-muted-foreground">
         <span>Source: {alert.source}</span>
         {alert.nodeId && <span>Node: {alert.nodeId.slice(0, 12)}</span>}
         {alert.agentId && <span>Agent: {alert.agentId}</span>}
         <span>{new Date(alert.lastSeen).toLocaleTimeString()}</span>
       </div>
-      
+
       {alert.evidenceRefs.length > 0 && (
         <p className="text-[9px] text-muted-foreground">
           {alert.evidenceRefs.length} evidence refs
@@ -172,47 +170,35 @@ function AlertCard({ alert }: { alert: Alert }) {
 export function AlertCenter() {
   const alerts = useStore(activeAlerts)
   const state = useStore(alertStore)
-  const mode = getDashboardMode()
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-foreground">Alert Center</h3>
-        <div className="flex items-center gap-2">
-          {mode === "demo" && (
-            <span className="rounded bg-yellow-500/20 px-1.5 py-0.5 text-[9px] font-medium text-yellow-400">
-              Demo
-            </span>
-          )}
-          <span className="text-xs text-muted-foreground">
-            {state.activeCount} active · {state.criticalCount} critical
-          </span>
-        </div>
-      </div>
-
-      {state.criticalCount > 0 && (
-        <div className="rounded border border-red-600/30 bg-red-600/5 p-2 flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4 text-red-600" />
-          <span className="text-xs text-red-400">
-            {state.criticalCount} critical alert(s) require attention
-          </span>
-        </div>
-      )}
-
-      {alerts.length === 0 && (
+    <DashboardPanel
+      title="Alert Center"
+      summary={`${state.activeCount} active · ${state.criticalCount} critical`}
+    >
+      {alerts.length === 0 ? (
         <div className="rounded-lg border border-border bg-card p-4 text-center">
           <CheckCircle2 className="h-8 w-8 text-green-500 mx-auto mb-2" />
-          <p className="text-sm text-muted-foreground">
-            {mode === "demo" ? "No real alerts (demo mode)" : "No active alerts"}
-          </p>
+          <p className="text-sm text-muted-foreground">No active alerts</p>
         </div>
-      )}
+      ) : (
+        <>
+          {state.criticalCount > 0 && (
+            <div className="rounded border border-red-600/30 bg-red-600/5 p-2 flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4 text-red-600" />
+              <span className="text-xs text-red-400">
+                {state.criticalCount} critical alert(s) require attention
+              </span>
+            </div>
+          )}
 
-      <div className="grid grid-cols-1 gap-2">
-        {alerts.map((alert: Alert) => (
-          <AlertCard key={alert.alertId} alert={alert} />
-        ))}
-      </div>
-    </div>
+          <div className="grid grid-cols-1 gap-2">
+            {alerts.map((alert: Alert) => (
+              <AlertCard key={alert.alertId} alert={alert} />
+            ))}
+          </div>
+        </>
+      )}
+    </DashboardPanel>
   )
 }

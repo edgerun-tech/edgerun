@@ -1,19 +1,17 @@
 "use client"
 
 import { useStore } from "@nanostores/react"
-import { getDashboardMode } from "@/platform/runtime/dashboard-mode"
 import { cn } from "@/lib/utils"
 import { Progress } from "@/components/ui/progress"
+import { DashboardPanel } from "@/components/ui/dashboard-panel"
 import {
   TestTube,
   CheckCircle2,
   XCircle,
-  AlertTriangle,
   SkipForward,
-  Loader2,
 } from "lucide-react"
+import { atom, computed } from "nanostores"
 
-// Test state is derived from actual test artifacts, not faked
 export interface TestResult {
   id: string
   name: string
@@ -41,8 +39,6 @@ export interface TestState {
   lastRunTimestamp?: number
 }
 
-import { atom, computed } from "nanostores"
-
 const initialTestState: TestState = {
   suites: new Map(),
   totalPassed: 0,
@@ -60,7 +56,7 @@ export function updateTestSuite(suite: TestSuite): void {
   const state = testStore.get()
   const newSuites = new Map(state.suites)
   newSuites.set(suite.suiteId, suite)
-  
+
   const allResults = Array.from(newSuites.values()).flatMap(s => s.results)
   testStore.set({
     suites: newSuites,
@@ -138,27 +134,18 @@ function SuiteCard({ suite }: { suite: TestSuite }) {
 export function TestStatusPanel() {
   const suites = useStore(allSuites)
   const state = useStore(testStore)
-  const mode = getDashboardMode()
 
   const total = state.totalPassed + state.totalFailed + state.totalSkipped
   const passPct = total > 0 ? Math.round((state.totalPassed / total) * 100) : 0
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-foreground">Test Status</h3>
-        <div className="flex items-center gap-2">
-          {mode === "demo" && (
-            <span className="rounded bg-yellow-500/20 px-1.5 py-0.5 text-[9px] font-medium text-yellow-400">
-              Demo
-            </span>
-          )}
-          <span className="text-xs text-muted-foreground">
-            {state.totalPassed}/{total} passed ({passPct}%)
-          </span>
-        </div>
-      </div>
-
+    <DashboardPanel
+      title="Test Status"
+      summary={`${state.totalPassed}/${total} passed (${passPct}%)`}
+      empty={suites.length === 0}
+      emptyMessage="No test suites"
+      demoMessage="No real test data (demo mode)"
+    >
       {state.coveragePct !== undefined && (
         <div className="rounded-lg border border-border bg-card p-3">
           <div className="flex items-center justify-between mb-1">
@@ -169,19 +156,11 @@ export function TestStatusPanel() {
         </div>
       )}
 
-      {suites.length === 0 && (
-        <div className="rounded-lg border border-border bg-card p-4 text-center">
-          <p className="text-sm text-muted-foreground">
-            {mode === "demo" ? "No real test data (demo mode)" : "No test suites"}
-          </p>
-        </div>
-      )}
-
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         {suites.map((suite) => (
           <SuiteCard key={suite.suiteId} suite={suite} />
         ))}
       </div>
-    </div>
+    </DashboardPanel>
   )
 }

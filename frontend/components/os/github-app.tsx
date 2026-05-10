@@ -5,6 +5,7 @@ import { AlertCircle, CheckCircle2, ExternalLink, GitBranch, LogOut, RefreshCw, 
 import { cn } from "@/lib/utils"
 import { useAuth, type OAuthProfileSecret } from "@/hooks/use-auth"
 import { deleteAppSession, storeAppSession } from "@/platform/runtime/app-session-broker"
+import { readCookie, deleteCookie } from "@/lib/oauth-utils"
 
 type PendingGitHubSecret = Omit<OAuthProfileSecret, "appId" | "kind" | "updatedAtIso">
 const PENDING_GITHUB_STORAGE_KEY = "edgerun:oauth-pending:github"
@@ -18,16 +19,6 @@ type GitHubRepo = {
   updated_at?: string
   stargazers_count?: number
   default_branch?: string
-}
-
-function readCookie(name: string): string | null {
-  const prefix = `${name}=`
-  return document.cookie.split("; ").find((cookie) => cookie.startsWith(prefix))?.slice(prefix.length) ?? null
-}
-
-function deleteCookie(name: string) {
-  document.cookie = `${name}=; Max-Age=0; path=/`
-  if (name === "github_profile_pending") sessionStorage.removeItem(PENDING_GITHUB_STORAGE_KEY)
 }
 
 function readPendingGitHubSecret(): PendingGitHubSecret | null {
@@ -46,7 +37,7 @@ function readPendingGitHubSecret(): PendingGitHubSecret | null {
     const parsed = JSON.parse(atob(raw.replace(/-/g, "+").replace(/_/g, "/"))) as PendingGitHubSecret
     return parsed.accessToken && parsed.expiresAtIso ? { ...parsed, scopes: parsed.scopes ?? [] } : null
   } catch {
-    deleteCookie("github_profile_pending")
+    deleteCookie("github_profile_pending", PENDING_GITHUB_STORAGE_KEY)
     return null
   }
 }
@@ -166,7 +157,7 @@ export function GitHubApp({ className }: { className?: string }) {
     const ok = await auth.saveOAuthSecret({ appId: "github", password: profilePassword, secret: pendingSecret })
     if (ok) {
       await restoreGitHubSession(pendingSecret, profileId)
-      deleteCookie("github_profile_pending")
+      deleteCookie("github_profile_pending", PENDING_GITHUB_STORAGE_KEY)
       setPendingSecret(null)
       setProfilePassword("")
       setConnected(true)
@@ -184,7 +175,7 @@ export function GitHubApp({ className }: { className?: string }) {
   const disconnect = useCallback(() => {
     void deleteAppSession("github")
     void fetch("/api/github/session", { method: "DELETE" })
-    deleteCookie("github_profile_pending")
+    deleteCookie("github_profile_pending", PENDING_GITHUB_STORAGE_KEY)
     setConnected(false)
     setLogin("")
     setRepos([])
