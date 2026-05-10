@@ -11,13 +11,13 @@ description = "Edgerun shim for rustls"
 [features]
 default = []
 ring = ["dep:ring", "webpki/ring"]
-std = ["pki_types/std", "webpki/std", "once_cell/std"]
+std = ["pki_types/std", "webpki/std", "once_cell/std", "subtle/std"]
 
 [dependencies]
 pki_types = { package = "edgerun-rustls-pki-types", path = "../edgerun-rustls-pki-types", default-features = false, features = ["alloc"] }
 webpki = { package = "rustls-webpki", path = "../../vendor/cargo/rustls-webpki", default-features = false }
 ring = { path = "../../vendor/cargo/ring", default-features = false, optional = true }
-subtle = { package = "subtle", path = "../../vendor/cargo/subtle", default-features = false }
+subtle = { package = "edgerun-subtle", path = "../edgerun-subtle", default-features = false }
 once_cell = { package = "once_cell", path = "../../vendor/cargo/once_cell", default-features = false, features = ["alloc", "race"] }
 zeroize = { package = "edgerun-zeroize", path = "../edgerun-zeroize", default-features = false }
 
