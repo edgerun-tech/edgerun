@@ -18,6 +18,8 @@
   UsbBt.c
   Hci.c
   Realtek.c
+  RtlFirmware.c
+  FirmwareFile.c
   BleAdv.c
 
 [Packages]
@@ -34,3 +36,8 @@
 
 [Protocols]
   gEfiUsbIoProtocolGuid
+  gEfiLoadedImageProtocolGuid
+  gEfiSimpleFileSystemProtocolGuid
+
+[Guids]
+  gEfiFileInfoGuid
