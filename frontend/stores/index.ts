@@ -98,14 +98,6 @@ export {
 } from "./codebase-context"
 
 export {
-  wasmCacheStore,
-  installWasm,
-  getWasmFromCache,
-  removeWasm,
-  fetchWasmPackage,
-} from "./wasm-store"
-
-export {
   fileSystemStore,
 } from "./file-system-store"
 
