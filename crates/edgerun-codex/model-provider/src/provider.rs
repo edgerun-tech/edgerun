@@ -2,7 +2,10 @@ use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use codex_api::HttpTransport;
 use codex_api::Provider;
+#[cfg(feature = "native-transport")]
+use codex_api::ReqwestTransport;
 use codex_api::SharedAuthProvider;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_models_manager::auth::AuthManager;
@@ -127,27 +130,67 @@ pub trait ModelProvider: fmt::Debug + Send + Sync {
 /// Shared runtime model provider handle.
 pub type SharedModelProvider = Arc<dyn ModelProvider>;
 
-/// Creates the default runtime model provider for configured provider metadata.
+/// Creates the default native runtime model provider for configured provider metadata.
+///
+/// Browser and WASM callers should use [`create_model_provider_with_transport`] so they can provide
+/// a fetch-backed transport without compiling native HTTP/TLS machinery.
+#[cfg(feature = "native-transport")]
 pub fn create_model_provider(
     provider_info: ModelProviderInfo,
     auth_manager: Option<Arc<AuthManager>>,
 ) -> SharedModelProvider {
-    Arc::new(ConfiguredModelProvider::new(provider_info, auth_manager))
+    create_model_provider_with_transport(
+        provider_info,
+        auth_manager,
+        Arc::new(ReqwestTransport::new(edgerun_reqwest::Client::new())),
+    )
+}
+
+/// Creates a runtime model provider using caller-supplied HTTP transport.
+///
+/// This is the portable constructor. Native builds can pass `ReqwestTransport`; browser/WASM builds
+/// should pass a fetch-backed implementation of `HttpTransport`.
+pub fn create_model_provider_with_transport(
+    provider_info: ModelProviderInfo,
+    auth_manager: Option<Arc<AuthManager>>,
+    models_transport: Arc<dyn HttpTransport>,
+) -> SharedModelProvider {
+    Arc::new(ConfiguredModelProvider::new(
+        provider_info,
+        auth_manager,
+        models_transport,
+    ))
 }
 
 /// Runtime model provider backed by configured `ModelProviderInfo`.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct ConfiguredModelProvider {
     info: ModelProviderInfo,
     auth_manager: Option<Arc<AuthManager>>,
+    models_transport: Arc<dyn HttpTransport>,
+}
+
+impl fmt::Debug for ConfiguredModelProvider {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ConfiguredModelProvider")
+            .field("info", &self.info)
+            .field("auth_manager", &self.auth_manager.as_ref().map(|_| "<auth-manager>"))
+            .field("models_transport", &"<http-transport>")
+            .finish()
+    }
 }
 
 impl ConfiguredModelProvider {
-    fn new(provider_info: ModelProviderInfo, auth_manager: Option<Arc<AuthManager>>) -> Self {
+    fn new(
+        provider_info: ModelProviderInfo,
+        auth_manager: Option<Arc<AuthManager>>,
+        models_transport: Arc<dyn HttpTransport>,
+    ) -> Self {
         let auth_manager = auth_manager_for_provider(auth_manager, &provider_info);
         Self {
             info: provider_info,
             auth_manager,
+            models_transport,
         }
     }
 }
@@ -219,6 +262,7 @@ impl ModelProvider for ConfiguredModelProvider {
                 let endpoint = Arc::new(OpenAiModelsEndpoint::new(
                     self.info.clone(),
                     self.auth_manager.clone(),
+                    Arc::clone(&self.models_transport),
                 ));
                 Arc::new(OpenAiModelsManager::new(
                     codex_home,
@@ -234,6 +278,10 @@ impl ModelProvider for ConfiguredModelProvider {
 mod tests {
     use std::num::NonZeroU64;
 
+    use codex_api::Request;
+    use codex_api::Response;
+    use codex_api::StreamResponse;
+    use codex_api::TransportError;
     use codex_model_provider_info::ModelProviderAwsAuthInfo;
     use codex_model_provider_info::WireApi;
     use codex_models_manager::manager::RefreshStrategy;
@@ -250,6 +298,24 @@ mod tests {
     use wiremock::matchers::path;
 
     use super::*;
+
+    #[derive(Debug)]
+    struct UnusedTransport;
+
+    #[edgerun_async_trait::async_trait]
+    impl HttpTransport for UnusedTransport {
+        async fn execute(&self, _req: Request) -> Result<Response, TransportError> {
+            unreachable!("this test does not execute HTTP requests")
+        }
+
+        async fn stream(&self, _req: Request) -> Result<StreamResponse, TransportError> {
+            unreachable!("this test does not execute HTTP requests")
+        }
+    }
+
+    fn unused_transport() -> Arc<dyn HttpTransport> {
+        Arc::new(UnusedTransport)
+    }
 
     fn provider_info_with_command_auth() -> ModelProviderInfo {
         ModelProviderInfo {
@@ -323,9 +389,10 @@ mod tests {
 
     #[test]
     fn configured_provider_uses_default_capabilities() {
-        let provider = create_model_provider(
+        let provider = create_model_provider_with_transport(
             ModelProviderInfo::create_openai_provider(/*base_url*/ None),
             /*auth_manager*/ None,
+            unused_transport(),
         );
 
         assert_eq!(provider.capabilities(), ProviderCapabilities::default());
@@ -333,9 +400,10 @@ mod tests {
 
     #[edgerun_tokio::test]
     async fn configured_provider_runtime_base_url_uses_configured_base_url() {
-        let provider = create_model_provider(
+        let provider = create_model_provider_with_transport(
             provider_for("https://example.test/v1".to_string()),
             /*auth_manager*/ None,
+            unused_transport(),
         );
 
         assert_eq!(
@@ -349,9 +417,10 @@ mod tests {
 
     #[test]
     fn create_model_provider_builds_command_auth_manager_without_base_manager() {
-        let provider = create_model_provider(
+        let provider = create_model_provider_with_transport(
             provider_info_with_command_auth(),
             /*auth_manager*/ None,
+            unused_transport(),
         );
 
         let auth_manager = provider
@@ -363,7 +432,7 @@ mod tests {
 
     #[test]
     fn create_model_provider_does_not_use_openai_auth_manager_for_amazon_bedrock_provider() {
-        let provider = create_model_provider(
+        let provider = create_model_provider_with_transport(
             ModelProviderInfo::create_amazon_bedrock_provider(Some(ModelProviderAwsAuthInfo {
                 profile: Some("codex-bedrock".to_string()),
                 region: None,
@@ -371,6 +440,7 @@ mod tests {
             Some(AuthManager::from_auth_for_testing(CodexAuth::from_api_key(
                 "openai-api-key",
             ))),
+            unused_transport(),
         );
 
         assert!(provider.auth_manager().is_none());
@@ -378,9 +448,10 @@ mod tests {
 
     #[test]
     fn openai_provider_returns_unauthenticated_openai_account_state() {
-        let provider = create_model_provider(
+        let provider = create_model_provider_with_transport(
             ModelProviderInfo::create_openai_provider(/*base_url*/ None),
             /*auth_manager*/ None,
+            unused_transport(),
         );
 
         assert_eq!(
@@ -394,11 +465,12 @@ mod tests {
 
     #[test]
     fn openai_provider_returns_api_key_account_state() {
-        let provider = create_model_provider(
+        let provider = create_model_provider_with_transport(
             ModelProviderInfo::create_openai_provider(/*base_url*/ None),
             Some(AuthManager::from_auth_for_testing(CodexAuth::from_api_key(
                 "openai-api-key",
             ))),
+            unused_transport(),
         );
 
         assert_eq!(
@@ -412,7 +484,7 @@ mod tests {
 
     #[test]
     fn custom_non_openai_provider_returns_no_account_state() {
-        let provider = create_model_provider(
+        let provider = create_model_provider_with_transport(
             ModelProviderInfo {
                 name: "Custom".to_string(),
                 base_url: Some("http://localhost:1234/v1".to_string()),
@@ -421,6 +493,7 @@ mod tests {
                 ..Default::default()
             },
             /*auth_manager*/ None,
+            unused_transport(),
         );
 
         assert_eq!(
@@ -434,9 +507,10 @@ mod tests {
 
     #[test]
     fn amazon_bedrock_provider_returns_bedrock_account_state() {
-        let provider = create_model_provider(
+        let provider = create_model_provider_with_transport(
             ModelProviderInfo::create_amazon_bedrock_provider(/*aws*/ None),
             /*auth_manager*/ None,
+            unused_transport(),
         );
 
         assert_eq!(
@@ -450,9 +524,10 @@ mod tests {
 
     #[edgerun_tokio::test]
     async fn amazon_bedrock_provider_creates_static_models_manager() {
-        let provider = create_model_provider(
+        let provider = create_model_provider_with_transport(
             ModelProviderInfo::create_amazon_bedrock_provider(/*aws*/ None),
             /*auth_manager*/ None,
+            unused_transport(),
         );
         let manager =
             provider.models_manager(test_codex_home(), /*config_model_catalog*/ None);
@@ -488,9 +563,10 @@ mod tests {
         let custom_model =
             codex_models_manager::model_info::model_info_from_slug("custom-bedrock-model");
 
-        let provider = create_model_provider(
+        let provider = create_model_provider_with_transport(
             ModelProviderInfo::create_amazon_bedrock_provider(/*aws*/ None),
             /*auth_manager*/ None,
+            unused_transport(),
         );
         let manager = provider.models_manager(
             test_codex_home(),
@@ -505,6 +581,7 @@ mod tests {
         assert_eq!(catalog.models[0].slug, "custom-bedrock-model");
     }
 
+    #[cfg(feature = "native-transport")]
     #[edgerun_tokio::test]
     async fn configured_provider_models_manager_uses_provider_bearer_token() {
         let server = MockServer::start().await;
