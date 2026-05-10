@@ -47,6 +47,66 @@ ReadRealtekRomVersion(
 }
 
 STATIC
+EFI_STATUS
+ReadRealtekReg16(
+  IN OUT EDGERUN_BT_USB *Device,
+  IN CONST UINT8 RegCommand[5],
+  OUT UINT16 *Value
+  )
+{
+  EFI_STATUS Status;
+  UINT8 Event[260];
+  UINTN EventLen;
+
+  if (Device == NULL || RegCommand == NULL || Value == NULL) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  EventLen = sizeof(Event);
+  Status = EdgerunHciCommand(Device, HCI_OP_RTL_READ_REG16, RegCommand, 5, Event, &EventLen);
+  if (EFI_ERROR(Status)) {
+    return Status;
+  }
+
+  // Return parameters are expected to include status + two-byte register value.
+  if (EventLen < 8) {
+    return EFI_DEVICE_ERROR;
+  }
+  if (Event[6] != 0) {
+    return EFI_DEVICE_ERROR;
+  }
+
+  *Value = (UINT16)(Event[7] | ((UINT16)Event[8] << 8));
+  return EFI_SUCCESS;
+}
+
+STATIC
+EFI_STATUS
+ReadRealtekSecurityProjectKey(
+  IN OUT EDGERUN_BT_USB *Device,
+  OUT UINT8 *KeyId
+  )
+{
+  EFI_STATUS Status;
+  UINT16 Value;
+  CONST UINT8 SecurityProjectRegister[5] = { 0x10, 0xA4, 0xAD, 0x00, 0xB0 };
+
+  if (KeyId == NULL) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  *KeyId = 0;
+  Value = 0;
+  Status = ReadRealtekReg16(Device, SecurityProjectRegister, &Value);
+  if (EFI_ERROR(Status)) {
+    return Status;
+  }
+
+  *KeyId = (UINT8)(Value & 0xFF);
+  return EFI_SUCCESS;
+}
+
+STATIC
 BOOLEAN
 LooksLikeRtl8922A(
   IN CONST EDGERUN_HCI_LOCAL_VERSION *Version
@@ -69,6 +129,7 @@ EdgerunRealtekInitRtl8922A(
   EDGERUN_RTL_FIRMWARE_FILES Files;
   EDGERUN_RTL_PATCH_IMAGE Patch;
   UINT8 RomVersion;
+  UINT8 KeyId;
 
   if (Device == NULL || Device->UsbIo == NULL) {
     return EFI_INVALID_PARAMETER;
@@ -104,6 +165,17 @@ EdgerunRealtekInitRtl8922A(
   }
   Print(L"Realtek ROM version=0x%02x\r\n", RomVersion);
 
+  KeyId = 0;
+  Status = ReadRealtekSecurityProjectKey(Device, &KeyId);
+  if (EFI_ERROR(Status)) {
+    Print(L"Realtek security project key read failed; using key_id=0: ");
+    EdgerunPrintStatus(Status);
+    Print(L"\r\n");
+    KeyId = 0;
+  } else {
+    Print(L"Realtek security project key_id=0x%02x\r\n", KeyId);
+  }
+
   Status = EdgerunLoadRtl8922aFirmwareFiles(ImageHandle, &Files);
   if (EFI_ERROR(Status)) {
     Print(L"firmware files unavailable; continuing without upload: ");
@@ -112,7 +184,7 @@ EdgerunRealtekInitRtl8922A(
     return EFI_SUCCESS;
   }
 
-  Status = EdgerunParseRtl8922aFirmware(&Files, &Version, RomVersion, &Patch);
+  Status = EdgerunParseRtl8922aFirmware(&Files, &Version, RomVersion, KeyId, &Patch);
   if (EFI_ERROR(Status)) {
     Print(L"Realtek firmware parse failed: ");
     EdgerunPrintStatus(Status);
