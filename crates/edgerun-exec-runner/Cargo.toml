@@ -13,3 +13,7 @@ name = "edgerun-exec-runner"
 path = "src/main.rs"
 
 [dependencies]
+
+# Keep this crate independently buildable while the protocol is evolving.
+# It is intended to be copied into an initramfs or run as init/PID1.
+[workspace]
