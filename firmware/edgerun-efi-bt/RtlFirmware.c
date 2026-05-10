@@ -128,10 +128,7 @@ ValidateRtl8922aProject(
   }
 
   if (Version != NULL && Version->LmpPalSubversion != RTL_ROM_LMP_8922A) {
-    Print(
-      L"firmware targets RTL8922A but controller LMP subversion is 0x%04x\r\n",
-      Version->LmpPalSubversion
-      );
+    Print(L"firmware targets RTL8922A but controller LMP subversion is 0x%04x\r\n", Version->LmpPalSubversion);
     return EFI_UNSUPPORTED;
   }
 
@@ -140,7 +137,7 @@ ValidateRtl8922aProject(
 
 STATIC
 EFI_STATUS
-BuildPatchImageWithOptionalConfig(
+BuildPatchImageWithAppendedConfig(
   IN CONST UINT8 *PatchData,
   IN UINTN PatchLen,
   IN CONST UINT8 *ConfigData,
@@ -151,40 +148,69 @@ BuildPatchImageWithOptionalConfig(
   UINTN OutLen;
   UINT8 *Out;
 
-  if (PatchData == NULL || Patch == NULL || PatchLen < 4) {
+  if (PatchData == NULL || Patch == NULL || PatchLen == 0) {
     return EFI_INVALID_PARAMETER;
   }
 
   ZeroMem(Patch, sizeof(*Patch));
 
   if (ConfigData == NULL || ConfigLen == 0) {
-    Out = AllocateZeroPool(PatchLen);
-    if (Out == NULL) {
-      return EFI_OUT_OF_RESOURCES;
+    OutLen = PatchLen;
+  } else {
+    if (ConfigLen > MAX_UINTN - PatchLen) {
+      return EFI_BAD_BUFFER_SIZE;
     }
-    CopyMem(Out, PatchData, PatchLen);
-    Patch->Data = Out;
-    Patch->Len = PatchLen;
-    return EFI_SUCCESS;
+    OutLen = PatchLen + ConfigLen;
   }
 
-  if (ConfigLen > MAX_UINTN - PatchLen) {
-    return EFI_BAD_BUFFER_SIZE;
-  }
-
-  OutLen = PatchLen + ConfigLen;
   Out = AllocateZeroPool(OutLen);
   if (Out == NULL) {
     return EFI_OUT_OF_RESOURCES;
   }
 
-  CopyMem(Out, PatchData, PatchLen - 4);
-  CopyMem(Out + PatchLen - 4, ConfigData, ConfigLen);
-  CopyMem(Out + PatchLen - 4 + ConfigLen, PatchData + PatchLen - 4, 4);
+  CopyMem(Out, PatchData, PatchLen);
+  if (ConfigData != NULL && ConfigLen > 0) {
+    CopyMem(Out + PatchLen, ConfigData, ConfigLen);
+  }
 
   Patch->Data = Out;
   Patch->Len = OutLen;
   return EFI_SUCCESS;
+}
+
+STATIC
+EFI_STATUS
+BuildLegacyPatch(
+  IN CONST UINT8 *Fw,
+  IN UINTN FwLen,
+  IN UINT32 PatchOff,
+  IN UINT16 PatchLen,
+  IN CONST UINT8 *ConfigData,
+  IN UINTN ConfigLen,
+  OUT EDGERUN_RTL_PATCH_IMAGE *Patch
+  )
+{
+  EFI_STATUS Status;
+  UINT8 *Tmp;
+
+  if (Fw == NULL || Patch == NULL || PatchLen < 4 || PatchOff > FwLen || PatchLen > FwLen - PatchOff) {
+    return EFI_INVALID_PARAMETER;
+  }
+
+  Tmp = AllocateZeroPool(PatchLen);
+  if (Tmp == NULL) {
+    return EFI_OUT_OF_RESOURCES;
+  }
+
+  // Legacy EPATCH patches use the selected patch body, but the final four bytes
+  // are replaced with the EPATCH header firmware version before optional config
+  // is appended. This mirrors the Linux btrtl setup flow without copying code.
+  CopyMem(Tmp, Fw + PatchOff, PatchLen - 4);
+  CopyMem(Tmp + PatchLen - 4, Fw + 8, 4);
+
+  Status = BuildPatchImageWithAppendedConfig(Tmp, PatchLen, ConfigData, ConfigLen, Patch);
+  FreePool(Tmp);
+  return Status;
 }
 
 STATIC
@@ -254,19 +280,8 @@ ParseLegacyEpatch(
       return EFI_SECURITY_VIOLATION;
     }
 
-    Print(
-      L"legacy EPATCH selected chip_id=0x%04x patch_off=0x%08x patch_len=%u\r\n",
-      ChipId,
-      PatchOff,
-      PatchLen
-      );
-    return BuildPatchImageWithOptionalConfig(
-             Fw + PatchOff,
-             PatchLen,
-             Files->CfgData,
-             Files->CfgLen,
-             Patch
-             );
+    Print(L"legacy EPATCH selected chip_id=0x%04x patch_off=0x%08x patch_len=%u\r\n", ChipId, PatchOff, PatchLen);
+    return BuildLegacyPatch(Fw, FwLen, PatchOff, PatchLen, Files->CfgData, Files->CfgLen, Patch);
   }
 
   Print(L"legacy EPATCH has no chip_id=0x%04x patch for ROM version 0x%02x\r\n", TargetChipId, RomVersion);
@@ -351,11 +366,9 @@ ParseV2Subsections(
       return EFI_SECURITY_VIOLATION;
     }
 
-    if (Opcode == RTL_PATCH_SECURITY_HEADER) {
-      if (KeyId == 0 || SectionKey != KeyId) {
-        Offset += 8 + PayloadLen;
-        continue;
-      }
+    if (Opcode == RTL_PATCH_SECURITY_HEADER && (KeyId == 0 || SectionKey != KeyId)) {
+      Offset += 8 + PayloadLen;
+      continue;
     }
 
     if (Eco == (UINT8)(RomVersion + 1)) {
@@ -386,7 +399,6 @@ BuildPatchFromSections(
   UINTN Index;
   UINT8 *Merged;
   UINTN Offset;
-  EDGERUN_RTL_PATCH_IMAGE Raw;
   EFI_STATUS Status;
 
   if (Sections == NULL || SectionCount == 0 || Patch == NULL) {
@@ -400,7 +412,7 @@ BuildPatchFromSections(
     }
     Total += Sections[Index].Len;
   }
-  if (Total < 4) {
+  if (Total == 0) {
     return EFI_SECURITY_VIOLATION;
   }
 
@@ -415,11 +427,7 @@ BuildPatchFromSections(
     Offset += Sections[Index].Len;
   }
 
-  ZeroMem(&Raw, sizeof(Raw));
-  Raw.Data = Merged;
-  Raw.Len = Total;
-
-  Status = BuildPatchImageWithOptionalConfig(Raw.Data, Raw.Len, ConfigData, ConfigLen, Patch);
+  Status = BuildPatchImageWithAppendedConfig(Merged, Total, ConfigData, ConfigLen, Patch);
   FreePool(Merged);
   return Status;
 }
@@ -543,15 +551,13 @@ EdgerunDownloadRtlFirmware(
   UINTN FragCount;
   UINTN FragIndex;
   UINTN Offset;
-  UINT8 DownloadIndex;
 
   if (Device == NULL || Data == NULL || DataLen == 0) {
     return EFI_INVALID_PARAMETER;
   }
 
-  FragCount = (DataLen + RTL_FRAG_LEN - 1) / RTL_FRAG_LEN;
+  FragCount = (DataLen / RTL_FRAG_LEN) + 1;
   Offset = 0;
-  DownloadIndex = 0;
 
   Print(L"downloading Realtek firmware bytes=%u fragments=%u\r\n", (UINT32)DataLen, (UINT32)FragCount);
 
@@ -561,23 +567,29 @@ EdgerunDownloadRtlFirmware(
     UINTN FragLen;
     UINT8 Event[260];
     UINTN EventLen;
+    UINT8 IndexByte;
 
-    FragLen = DataLen - Offset;
-    if (FragLen > RTL_FRAG_LEN) {
+    if (FragIndex == FragCount - 1) {
+      FragLen = DataLen % RTL_FRAG_LEN;
+    } else {
       FragLen = RTL_FRAG_LEN;
     }
 
-    Params[0] = DownloadIndex;
-    DownloadIndex++;
-    if (DownloadIndex == 0x7F) {
-      DownloadIndex = 1;
+    if (FragIndex > 0x7F) {
+      IndexByte = (UINT8)((FragIndex & 0x7F) + 1);
+    } else {
+      IndexByte = (UINT8)FragIndex;
     }
 
     if (FragIndex == FragCount - 1) {
-      Params[0] |= 0x80;
+      IndexByte |= 0x80;
     }
 
-    CopyMem(&Params[1], Data + Offset, FragLen);
+    ZeroMem(Params, sizeof(Params));
+    Params[0] = IndexByte;
+    if (FragLen > 0) {
+      CopyMem(&Params[1], Data + Offset, FragLen);
+    }
 
     EventLen = sizeof(Event);
     Status = EdgerunHciCommand(Device, HCI_OP_RTL_DOWNLOAD_FW, Params, FragLen + 1, Event, &EventLen);
