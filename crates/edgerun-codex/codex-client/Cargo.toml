@@ -4,6 +4,19 @@ license.workspace = true
 name = "codex-client"
 version.workspace = true
 
+[features]
+default = ["native-transport"]
+native-transport = [
+    "edgerun-reqwest/http1",
+    "edgerun-reqwest/http2",
+    "edgerun-reqwest/http3",
+    "edgerun-reqwest/native-root",
+    "edgerun-reqwest/rustls-tls-native-roots",
+    "dep:rustls",
+    "dep:rustls-native-certs",
+    "dep:rustls-pki-types",
+]
+
 [dependencies]
 edgerun-async-trait = { workspace = true }
 edgerun-bytes = { workspace = true }
@@ -14,10 +27,10 @@ edgerun-json = { workspace = true }
 edgerun-random = { workspace = true }
 edgerun-futures = { workspace = true }
 opentelemetry = { workspace = true }
-edgerun-reqwest = { workspace = true, features = ["rustls-tls-native-roots", "stream"] }
-rustls = { workspace = true }
-rustls-native-certs = { workspace = true }
-rustls-pki-types = { workspace = true }
+edgerun-reqwest = { workspace = true, default-features = false, features = ["stream"] }
+rustls = { workspace = true, optional = true }
+rustls-native-certs = { workspace = true, optional = true }
+rustls-pki-types = { workspace = true, optional = true }
 edgerun-tokio = { workspace = true, features = ["macros", "rt", "time", "sync"] }
 tracing = { workspace = true }
 tracing-opentelemetry = { workspace = true }
