@@ -20,7 +20,7 @@ stream = []
 edgerun-tungstenite = { version = "0.1", path = "../edgerun-tungstenite", features = ["deflate"] }
 edgerun-futures = { version = "0.1", path = "../edgerun-futures" }
 edgerun-tokio = { version = "0.1", path = "../edgerun-tokio", default-features = false, features = ["edgerun-runtime", "net"] }
-http = { package = "edgerun-http", workspace = true }
+http = { package = "edgerun-http", version = "0.1", path = "../edgerun-http" }
 rustls = { package = "edgerun-rusttls", path = "../edgerun-rusttls", default-features = false, optional = true }
 
 [lints]
