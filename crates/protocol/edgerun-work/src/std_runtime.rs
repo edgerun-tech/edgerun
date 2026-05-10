@@ -1,7 +1,7 @@
-mod admission_v1;
+mod admission_v2;
 mod framing;
 mod relay_client;
 
-pub use admission_v1::*;
+pub use admission_v2::*;
 pub use framing::*;
 pub use relay_client::*;
