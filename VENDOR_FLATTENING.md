@@ -19,10 +19,16 @@ zeroize = { package = "edgerun-zeroize", path = "../edgerun-zeroize", default-fe
 
 ## Inventory commands
 
-Report nested vendor trees:
+Report vendor trees and deletion candidates:
 
 ```bash
 python3 scripts/vendor-flattening-inventory.py
+```
+
+Show external references that keep a vendor tree alive:
+
+```bash
+python3 scripts/vendor-flattening-inventory.py --show-references
 ```
 
 Fail on nested vendor trees once the current debt is removed:
@@ -37,6 +43,16 @@ Report all external dependency escape hatches:
 python3 scripts/dependency-sovereignty.py
 ```
 
+## Deletion gate
+
+A nested vendor tree can be deleted when all are true:
+
+1. `vendor-flattening-inventory.py` marks it as `delete-candidate`.
+2. `vendor-flattening-inventory.py --show-references` shows no external references.
+3. Package-specific checks pass before deletion.
+4. The same checks pass after deletion.
+5. The deletion does not make `dependency-sovereignty.py` noisier.
+
 ## Current known nested vendor debt
 
 ### `crates/utility/edgerun-crypto/vendor/num-bigint-dig-0.8.6`
@@ -47,7 +63,7 @@ Observation: `edgerun-crypto` already contains internalized big integer source u
 
 Decision path:
 
-1. Run repository search for `vendor/num-bigint-dig`, `num-bigint-dig-0.8.6`, and path references into the nested tree.
+1. Run `python3 scripts/vendor-flattening-inventory.py --show-references`.
 2. Run `cargo check -p edgerun-crypto --features rsa,alloc,zeroize` before deletion.
 3. Delete the nested vendor directory if no source/build/test path depends on it.
 4. Run the crypto checks again.
