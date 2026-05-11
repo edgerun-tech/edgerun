@@ -228,10 +228,8 @@ mod tests {
         })
     }
 
-    #[test]
-    fn role_stores_and_retrieves_with_memory_adapter() {
+    fn assert_role_roundtrip<S: ObjectStorageAdapter>(mut role: TypedObjectStoreRole<S>) {
         let local = [8u8; 32];
-        let mut role = TypedObjectStoreRole::memory_with_capacity(4096);
         let object = store_request(b"role adapter data");
         let retrieve = retrieve_request(&object);
         let context = RoleContext {
@@ -275,5 +273,18 @@ mod tests {
         };
         assert_eq!(response.bytes, b"role adapter data");
         assert!(verify_retrieve_response(&response));
+    }
+
+    #[test]
+    fn role_stores_and_retrieves_with_memory_adapter() {
+        assert_role_roundtrip(TypedObjectStoreRole::memory_with_capacity(4096));
+    }
+
+    #[cfg(feature = "virtual-disk")]
+    #[test]
+    fn role_stores_and_retrieves_with_memory_virtual_disk_adapter() {
+        let role = TypedObjectStoreRole::memory_virtual_disk(64 * 1024, 512, 4096)
+            .expect("memory virtual disk role");
+        assert_role_roundtrip(role);
     }
 }
