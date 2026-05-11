@@ -3,6 +3,7 @@ use alloc::vec::Vec;
 use edgerun_crypto::{Ed25519Signer, Ed25519SigningKey, sha256};
 use edgerun_wire::{WireError, access, deserialize, to_bytes, util};
 
+use crate::channel::ChannelEndpoint;
 use crate::protocol::*;
 
 const NODE_AVAILABLE_DOMAIN: &[u8] = b"edgerun:v1:work:node-available";
@@ -166,7 +167,8 @@ pub fn work_admission_preimage(value: &WorkAdmission) -> Vec<u8> {
     out.extend_from_slice(&value.dao_id);
     encode_node(&mut out, &value.admission_node);
     out.extend_from_slice(&value.request_hash);
-    encode_relay(&mut out, &value.assigned_relay);
+    out.extend_from_slice(&value.assigned_route_hash);
+    encode_channel(&mut out, &value.assigned_channel);
     out.extend_from_slice(&value.admitted_budget.to_be_bytes());
     out.extend_from_slice(&value.policy_hash);
     out.extend_from_slice(&value.sequence.to_be_bytes());
@@ -274,6 +276,13 @@ fn encode_relay(out: &mut Vec<u8>, relay: &RelayEndpoint) {
     out.extend_from_slice(&relay.relay_node_id);
     encode_bytes(out, relay.host.as_bytes());
     out.extend_from_slice(&relay.port.to_be_bytes());
+}
+
+fn encode_channel(out: &mut Vec<u8>, channel: &ChannelEndpoint) {
+    out.extend_from_slice(&channel.channel_id);
+    out.extend_from_slice(&channel.kind.to_be_bytes());
+    encode_bytes(out, &channel.address);
+    encode_bytes(out, channel.label.as_bytes());
 }
 
 fn encode_bytes(out: &mut Vec<u8>, bytes: &[u8]) {
