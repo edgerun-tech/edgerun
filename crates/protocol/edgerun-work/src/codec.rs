@@ -6,18 +6,6 @@ use edgerun_wire::{access, deserialize, to_bytes, util, WireError};
 
 use crate::protocol::*;
 
-pub use crate::identity::{derive_node_id, node_identity_from_key, verify_node_identity};
-pub use crate::signing::{
-    empty_signature, network_message_preimage, node_available_preimage,
-    node_heartbeat_preimage, relay_assignment_preimage, sign_ed25519,
-    sign_network_message, sign_node_available, sign_node_heartbeat,
-    sign_relay_assignment, sign_work_admission, sign_work_receipt,
-    verify_network_message, verify_node_available, verify_node_heartbeat,
-    verify_relay_assignment, verify_signature, verify_solana_ed25519,
-    verify_work_admission, verify_work_receipt, work_admission_preimage,
-    work_receipt_preimage,
-};
-
 pub type AlignedWorkPacketBytes = util::AlignedVec<16>;
 
 pub struct EncodedWorkPacket {
