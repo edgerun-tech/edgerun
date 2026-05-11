@@ -3,6 +3,8 @@ use alloc::vec::Vec;
 
 use rkyv::{Archive, Deserialize, Serialize};
 
+use crate::channel::ChannelEndpoint;
+
 pub const WORK_WIRE_ABI_VERSION: u16 = 1;
 pub const DEFAULT_HEARTBEAT_SECS: u64 = 10;
 pub const MAX_WORK_FRAME_LEN: usize = 1024 * 1024;
@@ -160,7 +162,8 @@ pub struct WorkAdmission {
     pub dao_id: PublicKey,
     pub admission_node: NodeIdentity,
     pub request_hash: Hash,
-    pub assigned_relay: RelayEndpoint,
+    pub assigned_route_hash: Hash,
+    pub assigned_channel: ChannelEndpoint,
     pub admitted_budget: u64,
     pub policy_hash: Hash,
     pub sequence: u64,
