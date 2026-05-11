@@ -165,6 +165,7 @@ pub fn work_admission_preimage(value: &WorkAdmission) -> Vec<u8> {
     let mut out = domain(WORK_ADMISSION_DOMAIN);
     out.extend_from_slice(&value.admission_id);
     out.extend_from_slice(&value.dao_id);
+    out.extend_from_slice(&value.user);
     encode_node(&mut out, &value.admission_node);
     out.extend_from_slice(&value.request_hash);
     out.extend_from_slice(&value.assigned_route_hash);
