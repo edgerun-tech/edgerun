@@ -16,10 +16,24 @@ const WORK_RECEIPT_DOMAIN: &[u8] = b"edgerun:v1:work:receipt";
 
 pub type AlignedWorkPacketBytes = util::AlignedVec<16>;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EncodedWorkPacket {
-    pub bytes: Vec<u8>,
+    pub bytes: AlignedWorkPacketBytes,
     pub hash: Hash,
+}
+
+impl fmt::Debug for EncodedWorkPacket {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("EncodedWorkPacket")
+            .field("len", &self.bytes.as_slice().len())
+            .field("hash", &self.hash)
+            .finish()
+    }
+}
+
+impl EncodedWorkPacket {
+    pub fn as_bytes(&self) -> &[u8] {
+        self.bytes.as_slice()
+    }
 }
 
 pub struct ArchivedWorkPacketFrame {
@@ -63,17 +77,22 @@ pub fn packet_hash(packet: &WorkPacket) -> Result<Hash, WorkProtocolError> {
 }
 
 pub fn encode_work_packet_once(packet: &WorkPacket) -> Result<EncodedWorkPacket, WorkProtocolError> {
-    let bytes = packet_bytes(packet)?;
-    let hash = blake3_hash(&bytes);
+    let bytes = packet_aligned_bytes(packet)?;
+    let hash = blake3_hash(bytes.as_slice());
     Ok(EncodedWorkPacket { bytes, hash })
 }
 
-pub fn packet_bytes(packet: &WorkPacket) -> Result<Vec<u8>, WorkProtocolError> {
-    let bytes = to_bytes::<WireError>(packet).map_err(|_| WorkProtocolError::InvalidPacket)?;
+pub fn packet_aligned_bytes(packet: &WorkPacket) -> Result<AlignedWorkPacketBytes, WorkProtocolError> {
+    let bytes: AlignedWorkPacketBytes =
+        to_bytes::<WireError>(packet).map_err(|_| WorkProtocolError::InvalidPacket)?;
     if bytes.len() > MAX_WORK_FRAME_LEN {
         return Err(WorkProtocolError::PacketTooLarge);
     }
-    Ok(bytes.to_vec())
+    Ok(bytes)
+}
+
+pub fn packet_bytes(packet: &WorkPacket) -> Result<Vec<u8>, WorkProtocolError> {
+    Ok(packet_aligned_bytes(packet)?.to_vec())
 }
 
 pub fn archived_packet_frame_from_bytes(bytes: &[u8]) -> Result<ArchivedWorkPacketFrame, WorkProtocolError> {
