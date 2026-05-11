@@ -1,10 +1,11 @@
 use alloc::vec::Vec;
 
-use crate::codec::blake3_hash;
 use crate::erasure_storage::{ErasureManifest, ErasureShard};
+use crate::preimage::HashBuilder;
 use crate::protocol::{Hash, NodeId};
 
 pub const COST_UNIT_BYTES: u64 = 1024;
+const STORAGE_COST_ESTIMATE_DOMAIN: &[u8] = b"edgerun:v1:work:storage-cost-estimate";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct UnitPriceTable {
@@ -139,26 +140,29 @@ pub fn cost_for_bytes(bytes: u64, price_per_kib: u64) -> u64 {
 }
 
 pub fn storage_cost_estimate_hash(estimate: &StorageCostEstimate) -> Hash {
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(&estimate.original_bytes.to_be_bytes());
-    bytes.extend_from_slice(&estimate.stored_bytes.to_be_bytes());
-    bytes.extend_from_slice(&estimate.erasure_overhead_bps.to_be_bytes());
-    bytes.extend_from_slice(&estimate.storage_epochs.to_be_bytes());
-    bytes.extend_from_slice(&estimate.storage_total.to_be_bytes());
-    bytes.extend_from_slice(&estimate.retrieval_total.to_be_bytes());
-    bytes.extend_from_slice(&estimate.relay_total.to_be_bytes());
-    bytes.extend_from_slice(&estimate.total.to_be_bytes());
-    encode_shares(&mut bytes, &estimate.storage_shares);
-    encode_shares(&mut bytes, &estimate.retrieval_shares);
-    encode_shares(&mut bytes, &estimate.relay_shares);
-    blake3_hash(&bytes)
+    let mut builder = HashBuilder::domain(STORAGE_COST_ESTIMATE_DOMAIN)
+        .u64(estimate.original_bytes)
+        .u64(estimate.stored_bytes)
+        .u64(estimate.erasure_overhead_bps)
+        .u64(estimate.storage_epochs)
+        .u64(estimate.storage_total)
+        .u64(estimate.retrieval_total)
+        .u64(estimate.relay_total)
+        .u64(estimate.receipt_base_total)
+        .u64(estimate.total);
+    builder = encode_shares(builder, &estimate.storage_shares);
+    builder = encode_shares(builder, &estimate.retrieval_shares);
+    builder = encode_shares(builder, &estimate.relay_shares);
+    builder.finish()
 }
 
-fn encode_shares(bytes: &mut Vec<u8>, shares: &[NodeCostShare]) {
-    bytes.extend_from_slice(&(shares.len() as u64).to_be_bytes());
+fn encode_shares(mut builder: HashBuilder, shares: &[NodeCostShare]) -> HashBuilder {
+    builder = builder.u64(shares.len() as u64);
     for share in shares {
-        bytes.extend_from_slice(&share.node_id);
-        bytes.extend_from_slice(&share.bytes.to_be_bytes());
-        bytes.extend_from_slice(&share.amount.to_be_bytes());
+        builder = builder
+            .node_id(&share.node_id)
+            .u64(share.bytes)
+            .u64(share.amount);
     }
+    builder
 }
