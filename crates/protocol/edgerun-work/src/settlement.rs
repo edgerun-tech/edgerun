@@ -60,7 +60,6 @@ impl SettlementLedger {
 
     pub fn settle_receipt(
         &mut self,
-        user: PublicKey,
         admission: &WorkAdmission,
         receipt: &WorkReceipt,
     ) -> Result<SettlementResult, SettlementError> {
@@ -86,7 +85,10 @@ impl SettlementLedger {
         if !self.paid_receipts.insert(receipt_hash) {
             return Err(SettlementError::DuplicateReceipt);
         }
-        let user_balance = self.user_balances.get_mut(&user).ok_or(SettlementError::UnknownUser)?;
+        let user_balance = self
+            .user_balances
+            .get_mut(&admission.user)
+            .ok_or(SettlementError::UnknownUser)?;
         if *user_balance < receipt.total_claim {
             self.paid_receipts.remove(&receipt_hash);
             return Err(SettlementError::InsufficientBalance);
@@ -96,7 +98,7 @@ impl SettlementLedger {
         let worker_balance = self.worker_balances.entry(receipt.worker.node_id).or_default();
         *worker_balance = worker_balance.saturating_add(receipt.total_claim);
         Ok(SettlementResult {
-            user,
+            user: admission.user,
             worker: receipt.worker.node_id,
             amount: receipt.total_claim,
             user_balance_after: *user_balance,
