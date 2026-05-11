@@ -65,6 +65,10 @@ pub fn derive_node_id(public_key: &PublicKey, role: u16) -> NodeId {
     blake3_hash(&input)
 }
 
+pub fn verify_node_identity(identity: &NodeIdentity) -> bool {
+    identity.role != 0 && identity.node_id == derive_node_id(&identity.public_key, identity.role)
+}
+
 pub fn empty_signature() -> WorkSignature {
     WorkSignature {
         algorithm: SIGNATURE_ALGORITHM_SOLANA_ED25519,
@@ -92,6 +96,9 @@ pub fn sign_ed25519(key: &Ed25519SigningKey, preimage: &[u8]) -> WorkSignature {
 }
 
 pub fn verify_signature(identity: &NodeIdentity, signature: &WorkSignature, preimage: &[u8]) -> bool {
+    if !verify_node_identity(identity) {
+        return false;
+    }
     if signature.algorithm != SIGNATURE_ALGORITHM_SOLANA_ED25519 {
         return false;
     }
@@ -225,14 +232,11 @@ pub fn sign_work_receipt(key: &Ed25519SigningKey, mut value: WorkReceipt) -> Wor
 
 pub fn verify_node_available(value: &NodeAvailable) -> bool {
     value.abi_version == WORK_WIRE_ABI_VERSION
-        && value.node.role != 0
-        && value.node.node_id == derive_node_id(&value.node.public_key, value.node.role)
         && verify_signature(&value.node, &value.signature, &node_available_preimage(value))
 }
 
 pub fn verify_node_heartbeat(value: &NodeHeartbeat) -> bool {
     value.abi_version == WORK_WIRE_ABI_VERSION
-        && value.node.node_id == derive_node_id(&value.node.public_key, value.node.role)
         && verify_signature(&value.node, &value.signature, &node_heartbeat_preimage(value))
 }
 
