@@ -37,7 +37,7 @@ fn signed_relay_admission(
 }
 
 #[test]
-fn relay_forwards_ordered_message_to_final_node_and_gets_paid() {
+fn relay_forwards_ordered_message_to_final_node_and_gets_paid_with_delivery_proof() {
     let admission = SimNode::from_seed(141, NODE_ROLE_ADMISSION);
     let user = public_key_from_seed(142);
     let mut sender = SimNode::from_seed(143, NODE_ROLE_MESSAGE);
@@ -98,12 +98,29 @@ fn relay_forwards_ordered_message_to_final_node_and_gets_paid() {
     receiver
         .accept_ordered(&forwarded, receiver_route_hash)
         .expect("receiver accepts relay forwarded message");
+    let recipient_proof = channel_proof_for_ordered(
+        &receiver.key,
+        &receiver.identity,
+        relay.identity.node_id,
+        &forwarded,
+    )
+    .expect("receiver signs delivery proof");
+
+    let evidence = DeliverySettlementEvidence {
+        admission: &admission_doc,
+        receipt: &result.receipt,
+        relay_input: &to_relay,
+        recipient_delivery: &forwarded,
+        recipient: &receiver.identity,
+        recipient_proof: &recipient_proof,
+        previous_transit_hash: [0u8; 32],
+    };
 
     let mut ledger = SettlementLedger::new();
     ledger.deposit_user_credit(user, 10);
     let settle = ledger
-        .settle_receipt(&admission_doc, &result.receipt)
-        .expect("relay receipt settles");
+        .settle_delivery(&evidence)
+        .expect("relay delivery receipt settles only with proof");
     assert_eq!(settle.amount, 3);
     assert_eq!(ledger.user_balance(&user), 7);
     assert_eq!(ledger.worker_balance(&relay.identity.node_id), 3);
