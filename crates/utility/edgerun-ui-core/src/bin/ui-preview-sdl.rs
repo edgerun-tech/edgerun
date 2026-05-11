@@ -3,7 +3,8 @@ use std::os::raw::{c_char, c_int, c_void};
 use std::ptr;
 use std::time::{Duration, Instant};
 
-use edgerun_ui_core::{demo_dashboard, DashboardState, Painter, EDGERUN_DARK};
+use edgerun_ui_core::visual::demo_dashboard_polished;
+use edgerun_ui_core::{DashboardState, Painter, EDGERUN_DARK};
 
 const SDL_INIT_VIDEO: u32 = 0x0000_0020;
 const SDL_WINDOWPOS_CENTERED: c_int = 0x2fff_0000u32 as c_int;
@@ -206,11 +207,11 @@ fn run() -> Result<(), String> {
                 height: fb_height,
                 pitch,
             };
-            demo_dashboard(
+            demo_dashboard_polished(
                 &mut painter,
                 DashboardState {
                     title: "EdgeRun",
-                    subtitle: "SDL preview / same CPU renderer as compositor UI",
+                    subtitle: "rounded / antialiased / soft-shadow CPU UI",
                     node_status: "preview",
                     cpu_permille: cpu.min(1000),
                     memory_mb: ram,
