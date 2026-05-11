@@ -68,6 +68,10 @@ impl MemoryShardStore {
     pub fn len(&self) -> usize {
         self.shards.len()
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.shards.is_empty()
+    }
 }
 
 pub fn encode_xor_2_1(
@@ -119,8 +123,14 @@ pub fn encode_xor_2_1(
     Ok((manifest, shards))
 }
 
-pub fn verify_manifest(manifest: &ErasureManifest, shards: &[ErasureShard]) -> Result<(), ErasureStorageError> {
-    if manifest.scheme != ERASURE_SCHEME_XOR_2_1 || manifest.data_shards != 2 || manifest.parity_shards != 1 {
+pub fn verify_manifest(
+    manifest: &ErasureManifest,
+    shards: &[ErasureShard],
+) -> Result<(), ErasureStorageError> {
+    if manifest.scheme != ERASURE_SCHEME_XOR_2_1
+        || manifest.data_shards != 2
+        || manifest.parity_shards != 1
+    {
         return Err(ErasureStorageError::InvalidDataShardCount);
     }
     for shard in shards {
@@ -157,12 +167,19 @@ pub fn reconstruct_xor_2_1(
         }
     }
 
-    match (&data[0], &data[1], &parity) {
-        (Some(_), Some(_), _) => {}
-        (Some(a), None, Some(p)) => data[1] = Some(xor_bytes(a, p)),
-        (None, Some(b), Some(p)) => data[0] = Some(xor_bytes(b, p)),
-        (None, None, _) => return Err(ErasureStorageError::TooManyMissingDataShards),
-        (_, None, None) | (None, _, None) => return Err(ErasureStorageError::MissingParityShard),
+    if data[0].is_none() && data[1].is_none() {
+        return Err(ErasureStorageError::TooManyMissingDataShards);
+    }
+    if data[0].is_none() || data[1].is_none() {
+        let parity = parity.as_ref().ok_or(ErasureStorageError::MissingParityShard)?;
+        if data[0].is_none() {
+            let data1 = data[1].as_ref().ok_or(ErasureStorageError::MissingShard)?;
+            data[0] = Some(xor_bytes(data1, parity));
+        }
+        if data[1].is_none() {
+            let data0 = data[0].as_ref().ok_or(ErasureStorageError::MissingShard)?;
+            data[1] = Some(xor_bytes(data0, parity));
+        }
     }
 
     let mut output = Vec::with_capacity((manifest.shard_len * 2) as usize);
@@ -175,7 +192,11 @@ pub fn reconstruct_xor_2_1(
     Ok(output)
 }
 
-pub fn retrieve_shards(store: &MemoryShardStore, manifest: &ErasureManifest, available_indexes: &[u16]) -> Vec<ErasureShard> {
+pub fn retrieve_shards(
+    store: &MemoryShardStore,
+    manifest: &ErasureManifest,
+    available_indexes: &[u16],
+) -> Vec<ErasureShard> {
     let mut out = Vec::new();
     for index in available_indexes {
         if let Some(hash) = manifest.shard_hashes.get(*index as usize) {
