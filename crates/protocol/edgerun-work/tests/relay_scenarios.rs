@@ -78,13 +78,13 @@ fn relay_forwards_ordered_message_to_final_node_and_gets_paid_with_delivery_proo
     )
     .expect("sender to relay ordered delivery");
 
-    let mut result = relay
+    let result = relay
         .forward_ordered(&mut channel, &to_relay, request_hash, admission_hash)
         .expect("relay forwards");
     assert_eq!(result.delivered_to, receiver.identity.node_id);
     assert_eq!(result.destination_route_hash, receiver_route_hash);
-    assert_eq!(result.receipt.total_claim, 3);
-    assert_eq!(result.receipt.output_hash, result.transit_hash);
+    assert_eq!(result.transit_receipt.total_claim, 3);
+    assert_eq!(result.transit_receipt.output_hash, result.transit_hash);
     assert_eq!(relay.last_transit_hash, result.transit_hash);
     assert_ne!(result.transit_hash, result.forwarded_packet_hash);
 
@@ -105,11 +105,11 @@ fn relay_forwards_ordered_message_to_final_node_and_gets_paid_with_delivery_proo
         &forwarded,
     )
     .expect("receiver signs delivery proof");
-    result.receipt = relay.finalized_delivery_receipt(&result, channel_proof_hash(&recipient_proof));
+    let payable_receipt = relay.finalized_delivery_receipt(&result, channel_proof_hash(&recipient_proof));
 
     let evidence = DeliverySettlementEvidence {
         admission: &admission_doc,
-        receipt: &result.receipt,
+        receipt: &payable_receipt,
         relay_input: &to_relay,
         recipient_delivery: &forwarded,
         recipient: &receiver.identity,
@@ -181,10 +181,10 @@ fn relay_transit_hashes_chain_across_forwarded_packets() {
 
     assert_ne!(first_result.transit_hash, second_result.transit_hash);
     assert_eq!(relay.last_transit_hash, second_result.transit_hash);
-    assert_eq!(first_result.receipt.output_hash, first_result.transit_hash);
-    assert_eq!(second_result.receipt.output_hash, second_result.transit_hash);
-    assert_eq!(first_result.receipt.sequence, 1);
-    assert_eq!(second_result.receipt.sequence, 2);
+    assert_eq!(first_result.transit_receipt.output_hash, first_result.transit_hash);
+    assert_eq!(second_result.transit_receipt.output_hash, second_result.transit_hash);
+    assert_eq!(first_result.transit_receipt.sequence, 1);
+    assert_eq!(second_result.transit_receipt.sequence, 2);
 }
 
 #[test]
