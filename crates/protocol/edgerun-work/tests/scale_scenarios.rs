@@ -163,7 +163,8 @@ fn scale_many_routes_messages_files_and_payments() {
             i as u64 + 1,
         );
         let admission_hash = work_admission_hash(&admission_doc).expect("admission hash");
-        let packet = senders[i].message_to(
+        let sender = &mut senders[i];
+        let packet = sender.message_to(
             receivers[i].identity.node_id,
             relay.identity.node_id,
             DEPARTMENT_MESSAGE,
@@ -172,8 +173,8 @@ fn scale_many_routes_messages_files_and_payments() {
         );
         let to_relay = deliver_ordered(
             &mut channel,
-            &mut senders[i].order,
-            senders[i].identity.node_id,
+            &mut sender.order,
+            sender.identity.node_id,
             relay.identity.node_id,
             packet,
         )
