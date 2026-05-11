@@ -15,6 +15,7 @@ pub mod roles;
 pub mod route_auth;
 pub mod route_builder;
 pub mod route_plan;
+pub mod settlement;
 
 #[cfg(feature = "std")]
 pub mod std_runtime;
@@ -32,6 +33,7 @@ pub use roles::*;
 pub use route_auth::*;
 pub use route_builder::*;
 pub use route_plan::*;
+pub use settlement::*;
 
 #[cfg(feature = "std")]
 pub use std_runtime::*;
