@@ -4,10 +4,12 @@ use alloc::vec::Vec;
 use crate::channel::*;
 use crate::codec::{blake3_hash, packet_bytes};
 use crate::protocol::{Hash, NodeId, WorkPacket, WORK_WIRE_ABI_VERSION};
+use crate::route_auth::verify_route_advertisement;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MemoryChannelError {
     RouteMissing,
+    RouteInvalid,
     PacketHashFailed,
     InboxMissing,
 }
@@ -23,7 +25,18 @@ impl MemoryChannelEngine {
         Self::default()
     }
 
-    pub fn add_route(&mut self, route: RouteAdvertisement) -> Hash {
+    pub fn add_route(&mut self, route: RouteAdvertisement) -> Result<Hash, MemoryChannelError> {
+        if !verify_route_advertisement(&route) {
+            return Err(MemoryChannelError::RouteInvalid);
+        }
+        let node_id = route.node.node_id;
+        let hash = route_hash(&route);
+        self.routes.insert(node_id, route);
+        self.inboxes.entry(node_id).or_default();
+        Ok(hash)
+    }
+
+    pub fn add_unchecked_route(&mut self, route: RouteAdvertisement) -> Hash {
         let node_id = route.node.node_id;
         let hash = route_hash(&route);
         self.routes.insert(node_id, route);
