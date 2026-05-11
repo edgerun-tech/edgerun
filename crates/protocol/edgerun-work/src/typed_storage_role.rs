@@ -38,6 +38,43 @@ impl TypedObjectStoreRole<crate::storage_adapter::FileObjectStorage> {
     }
 }
 
+#[cfg(feature = "virtual-disk")]
+impl TypedObjectStoreRole<crate::storage_adapter::VirtualDiskObjectStorage<edgerun_virtual_disk::MemoryBlockBackend>> {
+    pub fn memory_virtual_disk(
+        capacity_bytes: u64,
+        block_size: u32,
+        slot_size: u64,
+    ) -> Result<Self, StorageAdapterError> {
+        Ok(Self::with_storage(
+            crate::storage_adapter::VirtualDiskObjectStorage::memory(
+                capacity_bytes,
+                block_size,
+                slot_size,
+            )?,
+        ))
+    }
+}
+
+#[cfg(feature = "virtual-disk")]
+#[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
+impl TypedObjectStoreRole<crate::storage_adapter::VirtualDiskObjectStorage<edgerun_virtual_disk::FileBlockBackend>> {
+    pub fn file_virtual_disk(
+        path: impl AsRef<std::path::Path>,
+        capacity_bytes: u64,
+        block_size: u32,
+        slot_size: u64,
+    ) -> Result<Self, StorageAdapterError> {
+        Ok(Self::with_storage(
+            crate::storage_adapter::VirtualDiskObjectStorage::open_file_image(
+                path,
+                capacity_bytes,
+                block_size,
+                slot_size,
+            )?,
+        ))
+    }
+}
+
 impl<S: ObjectStorageAdapter> TypedObjectStoreRole<S> {
     pub const fn with_storage(storage: S) -> Self {
         Self { storage }
