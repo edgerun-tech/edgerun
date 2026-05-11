@@ -6,10 +6,8 @@ import {
   Activity,
   AlertTriangle,
   BadgeCheck,
-  Boxes,
   Copy,
   Fingerprint,
-  GitBranch,
   KeyRound,
   Lock,
   Package,
@@ -75,7 +73,7 @@ function matchesFilter(item: TrustProjectionItem, filter: Filter) {
   return true
 }
 
-function Badge({ value }: { value: TrustProjectionItem["status"] | TrustProjectionItem["risk"] }) {
+function Badge({ value }: { value?: TrustProjectionItem["status"] | TrustProjectionItem["risk"] }) {
   if (!value) return null
   return <span className={cn("rounded-md border px-1.5 py-0.5 text-[10px] font-semibold uppercase", statusClass(value))}>{value}</span>
 }
