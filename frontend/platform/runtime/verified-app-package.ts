@@ -1,6 +1,8 @@
 import type { AppDefinition, AppSignatureInfo } from "@/platform/types/app-definition"
 import type { BrowserCatalogApp, InstalledBrowserApp } from "@/platform/runtime/browser-app-install-store"
 
+export type AppAccessPolicyMode = "free-run" | "paid-run" | "paid-cache" | "license-required"
+
 export interface VerifiedAppPackageProjection {
   appId: string
   name: string
@@ -28,6 +30,8 @@ export interface VerifiedAppPackageProjection {
   installEventKind?: "app_package_verified"
   distributionModel: "network-storage-run"
   localCacheStatus: "not-cached" | "cached"
+  appPolicyHash?: string
+  accessPolicyMode: AppAccessPolicyMode
 }
 
 export function browserCatalogAppToPackageProjection(
@@ -61,6 +65,8 @@ export function browserCatalogAppToPackageProjection(
     installEventKind: installed ? "app_package_verified" : undefined,
     distributionModel: "network-storage-run",
     localCacheStatus: installed ? "cached" : "not-cached",
+    appPolicyHash: undefined,
+    accessPolicyMode: "free-run",
   }
 }
 
@@ -93,6 +99,8 @@ export function packageProjectionToAppDefinition(pkg: VerifiedAppPackageProjecti
       sourceOfTruth: "sdk-signed-content-addressed-package",
       distributionModel: pkg.distributionModel,
       localCacheStatus: pkg.localCacheStatus,
+      appPolicyHash: pkg.appPolicyHash,
+      accessPolicyMode: pkg.accessPolicyMode,
       runtimeManifest: {
         runtime: pkg.runtime,
         permissions: pkg.requiredCapabilityIds,
