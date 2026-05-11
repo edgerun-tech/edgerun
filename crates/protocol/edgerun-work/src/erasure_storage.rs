@@ -3,9 +3,12 @@ use alloc::vec;
 use alloc::vec::Vec;
 
 use crate::codec::blake3_hash;
+use crate::preimage::HashBuilder;
 use crate::protocol::{Hash, NodeId};
 
 pub const ERASURE_SCHEME_XOR_2_1: u16 = 1;
+const ERASURE_JOB_ID_DOMAIN: &[u8] = b"edgerun:v1:work:erasure-job";
+const ERASURE_SHARD_HASH_DOMAIN: &[u8] = b"edgerun:v1:work:erasure-shard";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ErasureStorageError {
@@ -96,7 +99,7 @@ pub fn encode_xor_2_1(
     let mut shards = Vec::with_capacity(3);
     let mut shard_hashes = Vec::with_capacity(3);
     for (index, bytes) in shard_bytes.into_iter().enumerate() {
-        let hash = shard_hash(job_id, index as u16, index == 2, &bytes);
+        let hash = erasure_shard_hash(job_id, index as u16, index == 2, &bytes);
         shard_hashes.push(hash);
         shards.push(ErasureShard {
             job_id,
@@ -134,7 +137,7 @@ pub fn verify_manifest(
         return Err(ErasureStorageError::InvalidDataShardCount);
     }
     for shard in shards {
-        let expected_hash = shard_hash(shard.job_id, shard.index, shard.is_parity, &shard.bytes);
+        let expected_hash = erasure_shard_hash(shard.job_id, shard.index, shard.is_parity, &shard.bytes);
         if shard.hash != expected_hash {
             return Err(ErasureStorageError::HashMismatch);
         }
@@ -217,20 +220,19 @@ fn xor_bytes(a: &[u8], b: &[u8]) -> Vec<u8> {
     out
 }
 
-fn erasure_job_id(original_hash: Hash, original_len: u64, scheme: u16) -> Hash {
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(&original_hash);
-    bytes.extend_from_slice(&original_len.to_be_bytes());
-    bytes.extend_from_slice(&scheme.to_be_bytes());
-    blake3_hash(&bytes)
+pub fn erasure_job_id(original_hash: Hash, original_len: u64, scheme: u16) -> Hash {
+    HashBuilder::domain(ERASURE_JOB_ID_DOMAIN)
+        .hash(&original_hash)
+        .u64(original_len)
+        .u16(scheme)
+        .finish()
 }
 
-fn shard_hash(job_id: Hash, index: u16, is_parity: bool, bytes: &[u8]) -> Hash {
-    let mut input = Vec::new();
-    input.extend_from_slice(&job_id);
-    input.extend_from_slice(&index.to_be_bytes());
-    input.push(is_parity as u8);
-    input.extend_from_slice(&(bytes.len() as u64).to_be_bytes());
-    input.extend_from_slice(bytes);
-    blake3_hash(&input)
+pub fn erasure_shard_hash(job_id: Hash, index: u16, is_parity: bool, bytes: &[u8]) -> Hash {
+    HashBuilder::domain(ERASURE_SHARD_HASH_DOMAIN)
+        .hash(&job_id)
+        .u16(index)
+        .raw(&[is_parity as u8])
+        .bytes(bytes)
+        .finish()
 }
