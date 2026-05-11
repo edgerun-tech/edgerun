@@ -37,7 +37,7 @@ pub fn verify_work_request(value: &WorkRequest) -> bool {
     if value.signature.algorithm != SIGNATURE_ALGORITHM_SOLANA_ED25519 {
         return false;
     }
-    if value.signature.public_key.as_slice() != value.user {
+    if value.signature.public_key.as_slice() != &value.user[..] {
         return false;
     }
     verify_solana_ed25519(
