@@ -7,11 +7,11 @@ use std::time::Duration;
 
 use crate::channel::{ChannelEnvelope, RouteAdvertisement, ROUTE_STATUS_AVAILABLE};
 use crate::channel_order::{ChannelOrderBook, OrderedChannelEnvelope};
-use crate::codec::encode_work_packet_once;
+use crate::codec::{encode_work_packet_once, ArchivedWorkPacketFrame};
 use crate::memory_channel::route_hash;
 use crate::protocol::{Hash, NodeId, WorkPacket, WORK_WIRE_ABI_VERSION};
 use crate::route_auth::verify_route_advertisement;
-use crate::std_runtime::framing::{read_work_packet, unix_ms, write_encoded_work_packet};
+use crate::std_runtime::framing::{read_work_packet_frame, unix_ms, write_encoded_work_packet};
 use crate::work_channel::{WorkChannel, WorkChannelError};
 
 const ACCEPT_POLL_MS: u64 = 10;
@@ -22,7 +22,7 @@ pub struct TcpNodeRuntime {
     node_id: NodeId,
     listen_addr: SocketAddr,
     routes: BTreeMap<NodeId, RouteAdvertisement>,
-    inbox: Arc<Mutex<Vec<WorkPacket>>>,
+    inbox: Arc<Mutex<Vec<ArchivedWorkPacketFrame>>>,
     shutdown: Arc<AtomicBool>,
     accept_thread: Arc<Mutex<Option<JoinHandle<()>>>>,
     worker_threads: Arc<Mutex<Vec<JoinHandle<()>>>>,
@@ -109,8 +109,15 @@ impl TcpNodeRuntime {
         Ok(())
     }
 
-    pub fn drain_packets(&self) -> Vec<WorkPacket> {
+    pub fn drain_packet_frames(&self) -> Vec<ArchivedWorkPacketFrame> {
         self.inbox.lock().expect("tcp node inbox poisoned").drain(..).collect()
+    }
+
+    pub fn drain_packets(&self) -> Vec<WorkPacket> {
+        self.drain_packet_frames()
+            .into_iter()
+            .filter_map(|frame| frame.into_packet().ok())
+            .collect()
     }
 
     pub fn drain_ordered(
@@ -120,10 +127,11 @@ impl TcpNodeRuntime {
         route_hash: Hash,
         channel_id: Hash,
     ) -> Vec<OrderedChannelEnvelope> {
-        self.drain_packets()
+        self.drain_packet_frames()
             .into_iter()
-            .filter_map(|packet| {
-                let encoded = encode_work_packet_once(&packet).ok()?;
+            .filter_map(|frame| {
+                let packet_hash = frame.hash;
+                let packet = frame.into_packet().ok()?;
                 let sequence = order.next_sequence(channel_id, from, self.node_id);
                 let previous_message_hash = order.last_message_hash(channel_id, from, self.node_id);
                 let envelope = ChannelEnvelope {
@@ -132,7 +140,7 @@ impl TcpNodeRuntime {
                     from,
                     to: self.node_id,
                     route_hash,
-                    packet_hash: encoded.hash,
+                    packet_hash,
                     packet,
                 };
                 let ordered = OrderedChannelEnvelope {
@@ -214,17 +222,18 @@ impl WorkChannel for TcpNodeRuntime {
         if node_id != self.node_id {
             return Vec::new();
         }
-        self.drain_packets()
+        self.drain_packet_frames()
             .into_iter()
-            .filter_map(|packet| {
-                let encoded = encode_work_packet_once(&packet).ok()?;
+            .filter_map(|frame| {
+                let packet_hash = frame.hash;
+                let packet = frame.into_packet().ok()?;
                 Some(ChannelEnvelope {
                     abi_version: WORK_WIRE_ABI_VERSION,
                     channel_id: [0u8; 32],
                     from: [0u8; 32],
                     to: self.node_id,
                     route_hash: [0u8; 32],
-                    packet_hash: encoded.hash,
+                    packet_hash,
                     packet,
                 })
             })
@@ -234,15 +243,15 @@ impl WorkChannel for TcpNodeRuntime {
 
 fn read_stream_into_inbox(
     mut stream: TcpStream,
-    inbox: Arc<Mutex<Vec<WorkPacket>>>,
+    inbox: Arc<Mutex<Vec<ArchivedWorkPacketFrame>>>,
     shutdown: Arc<AtomicBool>,
 ) -> io::Result<()> {
     if shutdown.load(Ordering::Acquire) {
         return Ok(());
     }
-    let packet = read_work_packet(&mut stream)?;
+    let frame = read_work_packet_frame(&mut stream)?;
     if !shutdown.load(Ordering::Acquire) {
-        inbox.lock().expect("tcp node inbox poisoned").push(packet);
+        inbox.lock().expect("tcp node inbox poisoned").push(frame);
     }
     Ok(())
 }
