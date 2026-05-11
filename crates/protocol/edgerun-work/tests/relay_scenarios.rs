@@ -78,7 +78,7 @@ fn relay_forwards_ordered_message_to_final_node_and_gets_paid_with_delivery_proo
     )
     .expect("sender to relay ordered delivery");
 
-    let result = relay
+    let mut result = relay
         .forward_ordered(&mut channel, &to_relay, request_hash, admission_hash)
         .expect("relay forwards");
     assert_eq!(result.delivered_to, receiver.identity.node_id);
@@ -105,6 +105,7 @@ fn relay_forwards_ordered_message_to_final_node_and_gets_paid_with_delivery_proo
         &forwarded,
     )
     .expect("receiver signs delivery proof");
+    result.receipt = relay.finalized_delivery_receipt(&result, channel_proof_hash(&recipient_proof));
 
     let evidence = DeliverySettlementEvidence {
         admission: &admission_doc,
