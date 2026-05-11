@@ -21,7 +21,6 @@ import "@xyflow/react/dist/style.css"
 import {
   BrainCircuit,
   Cloud,
-  Fingerprint,
   HardDrive,
   Network,
   Plus,
@@ -30,14 +29,13 @@ import {
   Wallet,
   type LucideIcon,
 } from "lucide-react"
-import { useStore } from "@nanostores/react"
 import { cn } from "@/lib/utils"
 import { AppHeader, AppToolbar } from "@/components/os/app-chrome"
 import { useAuth } from "@/hooks/use-auth"
-import { runtimeEventLog, runtimeEventLogStore } from "@/platform/runtime/runtime-event-log"
+import { runtimeEventLog } from "@/platform/runtime/runtime-event-log"
 
-type NodeRole = "browser" | "admission" | "relay" | "storage" | "compute" | "publishing" | "settlement"
-type RuntimeTarget = "browser-wasm" | "localhost-native" | "vps-native" | "remote-native"
+type NodeRole = "admission" | "relay" | "storage" | "compute" | "publishing" | "settlement"
+type NodeRuntime = "wasm" | "native"
 type PolicyId = "dao-default" | "personal" | "family" | "business"
 
 type PolicyTemplate = {
@@ -51,11 +49,13 @@ type PolicyTemplate = {
 type GraphNodeData = {
   label: string
   role: NodeRole
-  runtime: RuntimeTarget
+  runtime: NodeRuntime
+  admissionAddress: string
   policyId: PolicyId
   owner: string
   budget: string
   endpoint: string
+  capabilities: string[]
   status: "running" | "available" | "draft" | "offline"
 }
 
@@ -63,14 +63,14 @@ const policies: Record<PolicyId, PolicyTemplate> = {
   "dao-default": {
     id: "dao-default",
     name: "EdgeRun DAO default",
-    summary: "Default shared network admission and baseline policy inheritance.",
+    summary: "Default admission policy shared by the network.",
     budget: "network default",
     hash: "policy:dao:default",
   },
   personal: {
     id: "personal",
     name: "Personal strict",
-    summary: "Only your browser identity, approved relays, and your own machines.",
+    summary: "Only approved identities, relays, storage, and compute nodes may receive work.",
     budget: "low daily spend",
     hash: "policy:personal:strict",
   },
@@ -92,7 +92,6 @@ const policies: Record<PolicyId, PolicyTemplate> = {
 
 function roleIcon(role: NodeRole): LucideIcon {
   switch (role) {
-    case "browser": return Fingerprint
     case "admission": return Shield
     case "relay": return Route
     case "storage": return HardDrive
@@ -104,7 +103,6 @@ function roleIcon(role: NodeRole): LucideIcon {
 
 function roleTitle(role: NodeRole): string {
   switch (role) {
-    case "browser": return "Browser"
     case "admission": return "Admission"
     case "relay": return "Relay"
     case "storage": return "Storage"
@@ -114,13 +112,8 @@ function roleTitle(role: NodeRole): string {
   }
 }
 
-function runtimeTitle(runtime: RuntimeTarget): string {
-  switch (runtime) {
-    case "browser-wasm": return "Browser WASM"
-    case "localhost-native": return "Localhost native"
-    case "vps-native": return "VPS native"
-    case "remote-native": return "Remote native"
-  }
+function runtimeTitle(runtime: NodeRuntime): string {
+  return runtime === "wasm" ? "WASM" : "Native"
 }
 
 function statusClass(status: GraphNodeData["status"]) {
@@ -134,7 +127,6 @@ function statusClass(status: GraphNodeData["status"]) {
 
 function nodeRoleColor(role: NodeRole) {
   switch (role) {
-    case "browser": return "#22c55e"
     case "admission": return "#8b5cf6"
     case "relay": return "#06b6d4"
     case "storage": return "#f59e0b"
@@ -149,7 +141,7 @@ function EdgeRunNode({ data, selected }: NodeProps<Node<GraphNodeData>>) {
   const policy = policies[data.policyId]
   return (
     <div className={cn(
-      "w-60 rounded-xl border bg-card/95 p-3 shadow-xl backdrop-blur",
+      "w-64 rounded-xl border bg-card/95 p-3 shadow-xl backdrop-blur",
       selected ? "border-primary ring-2 ring-primary/30" : "border-border",
     )}>
       <Handle type="target" position={Position.Left} className="!h-3 !w-3 !border-background !bg-primary" />
@@ -161,13 +153,13 @@ function EdgeRunNode({ data, selected }: NodeProps<Node<GraphNodeData>>) {
           </div>
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold text-foreground">{data.label}</div>
-            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{roleTitle(data.role)}</div>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{roleTitle(data.role)} · {runtimeTitle(data.runtime)}</div>
           </div>
         </div>
         <span className={cn("rounded border px-1.5 py-0.5 text-[10px] font-semibold uppercase", statusClass(data.status))}>{data.status}</span>
       </div>
       <div className="mt-3 grid gap-1.5 text-[11px] text-muted-foreground">
-        <div className="flex justify-between gap-2"><span>runtime</span><span className="text-foreground">{runtimeTitle(data.runtime)}</span></div>
+        <div className="flex justify-between gap-2"><span>follows</span><span className="truncate text-foreground">{data.admissionAddress}</span></div>
         <div className="flex justify-between gap-2"><span>policy</span><span className="truncate text-foreground">{policy.name}</span></div>
         <div className="flex justify-between gap-2"><span>budget</span><span className="text-foreground">{data.budget}</span></div>
       </div>
@@ -177,54 +169,122 @@ function EdgeRunNode({ data, selected }: NodeProps<Node<GraphNodeData>>) {
 
 const nodeTypes = { edgerun: EdgeRunNode }
 
-function initialNodes(owner: string, browserNodeId?: string): Node<GraphNodeData>[] {
+function initialNodes(owner: string): Node<GraphNodeData>[] {
   return [
     {
-      id: "browser",
+      id: "personal-admission",
       type: "edgerun",
-      position: { x: 40, y: 220 },
-      data: { label: "My browser", role: "browser", runtime: "browser-wasm", policyId: "personal", owner, budget: "local approvals", endpoint: browserNodeId ? `node:${browserNodeId}` : "browser:local", status: "running" },
+      position: { x: 80, y: 220 },
+      data: {
+        label: "Personal admission",
+        role: "admission",
+        runtime: "wasm",
+        admissionAddress: "self",
+        policyId: "personal",
+        owner,
+        budget: "low daily spend",
+        endpoint: "admission://personal",
+        capabilities: ["sign_admissions", "select_relays", "enforce_policy"],
+        status: "running",
+      },
     },
     {
       id: "dao-admission",
       type: "edgerun",
-      position: { x: 400, y: 60 },
-      data: { label: "DAO admission", role: "admission", runtime: "remote-native", policyId: "dao-default", owner: "EdgeRun DAO", budget: "network default", endpoint: "admission.edgerun.network", status: "available" },
+      position: { x: 420, y: 60 },
+      data: {
+        label: "DAO admission",
+        role: "admission",
+        runtime: "native",
+        admissionAddress: "self",
+        policyId: "dao-default",
+        owner: "EdgeRun DAO",
+        budget: "network default",
+        endpoint: "admission://dao",
+        capabilities: ["sign_admissions", "publish_baseline_policy"],
+        status: "available",
+      },
     },
     {
       id: "family-admission",
       type: "edgerun",
-      position: { x: 400, y: 280 },
-      data: { label: "Family admission", role: "admission", runtime: "browser-wasm", policyId: "family", owner, budget: "family cap", endpoint: "browser:admission:family", status: "draft" },
+      position: { x: 420, y: 320 },
+      data: {
+        label: "Family admission",
+        role: "admission",
+        runtime: "wasm",
+        admissionAddress: "admission://dao",
+        policyId: "family",
+        owner,
+        budget: "family cap",
+        endpoint: "admission://family",
+        capabilities: ["sign_admissions", "family_budget", "select_relays"],
+        status: "draft",
+      },
     },
     {
       id: "private-relay",
       type: "edgerun",
-      position: { x: 760, y: 280 },
-      data: { label: "Private relay", role: "relay", runtime: "localhost-native", policyId: "personal", owner, budget: "private traffic", endpoint: "ws://127.0.0.1:8787", status: "draft" },
+      position: { x: 780, y: 220 },
+      data: {
+        label: "Private relay",
+        role: "relay",
+        runtime: "native",
+        admissionAddress: "admission://personal",
+        policyId: "personal",
+        owner,
+        budget: "private traffic",
+        endpoint: "relay://127.0.0.1:8787",
+        capabilities: ["relay_packets", "hash_transit"],
+        status: "draft",
+      },
     },
     {
       id: "home-storage",
       type: "edgerun",
-      position: { x: 1120, y: 140 },
-      data: { label: "Home storage", role: "storage", runtime: "localhost-native", policyId: "personal", owner, budget: "own hardware", endpoint: "localhost:storage", status: "draft" },
+      position: { x: 1140, y: 120 },
+      data: {
+        label: "Home storage",
+        role: "storage",
+        runtime: "native",
+        admissionAddress: "admission://personal",
+        policyId: "personal",
+        owner,
+        budget: "own hardware",
+        endpoint: "storage://localhost",
+        capabilities: ["object_store", "object_retrieve", "object_pin"],
+        status: "draft",
+      },
     },
     {
-      id: "browser-compute",
+      id: "local-compute",
       type: "edgerun",
-      position: { x: 1120, y: 380 },
-      data: { label: "Browser compute", role: "compute", runtime: "browser-wasm", policyId: "personal", owner, budget: "local only", endpoint: "browser:compute", status: "running" },
+      position: { x: 1140, y: 380 },
+      data: {
+        label: "Local compute",
+        role: "compute",
+        runtime: "wasm",
+        admissionAddress: "admission://personal",
+        policyId: "personal",
+        owner,
+        budget: "local only",
+        endpoint: "compute://local",
+        capabilities: ["compute_run"],
+        status: "running",
+      },
     },
   ]
 }
 
 const initialEdges: Edge[] = [
-  { id: "browser-dao", source: "browser", target: "dao-admission", label: "default WorkRequest", animated: true, markerEnd: { type: MarkerType.ArrowClosed } },
-  { id: "browser-family", source: "browser", target: "family-admission", label: "family WorkRequest", animated: true, markerEnd: { type: MarkerType.ArrowClosed } },
-  { id: "family-dao", source: "family-admission", target: "dao-admission", label: "inherits policy", markerEnd: { type: MarkerType.ArrowClosed } },
-  { id: "family-relay", source: "family-admission", target: "private-relay", label: "assigns relay", markerEnd: { type: MarkerType.ArrowClosed } },
-  { id: "relay-storage", source: "private-relay", target: "home-storage", label: "routes storage", markerEnd: { type: MarkerType.ArrowClosed } },
-  { id: "relay-compute", source: "private-relay", target: "browser-compute", label: "routes compute", markerEnd: { type: MarkerType.ArrowClosed } },
+  { id: "personal-dao", source: "personal-admission", target: "dao-admission", label: "receives policy", markerEnd: { type: MarkerType.ArrowClosed } },
+  { id: "family-dao", source: "family-admission", target: "dao-admission", label: "receives policy", markerEnd: { type: MarkerType.ArrowClosed } },
+  { id: "relay-follows-personal", source: "private-relay", target: "personal-admission", label: "follows admission", animated: true, markerEnd: { type: MarkerType.ArrowClosed } },
+  { id: "storage-follows-personal", source: "home-storage", target: "personal-admission", label: "follows admission", markerEnd: { type: MarkerType.ArrowClosed } },
+  { id: "compute-follows-personal", source: "local-compute", target: "personal-admission", label: "follows admission", markerEnd: { type: MarkerType.ArrowClosed } },
+  { id: "admission-selects-relay", source: "personal-admission", target: "private-relay", label: "assigns relay", markerEnd: { type: MarkerType.ArrowClosed } },
+  { id: "relay-storage", source: "private-relay", target: "home-storage", label: "routes admitted storage", markerEnd: { type: MarkerType.ArrowClosed } },
+  { id: "relay-compute", source: "private-relay", target: "local-compute", label: "routes admitted compute", markerEnd: { type: MarkerType.ArrowClosed } },
 ]
 
 function Inspector({ node, onUpdatePolicy }: { node?: Node<GraphNodeData>; onUpdatePolicy: (policyId: PolicyId) => void }) {
@@ -256,12 +316,14 @@ function Inspector({ node, onUpdatePolicy }: { node?: Node<GraphNodeData>; onUpd
       <div className="mt-5 grid gap-2 text-xs">
         <Info label="Owner" value={data.owner} />
         <Info label="Budget" value={data.budget} />
+        <Info label="Admission" value={data.admissionAddress} />
         <Info label="Endpoint" value={data.endpoint} />
+        <Info label="Capabilities" value={data.capabilities.join(", ")} />
         <Info label="Node ID" value={node.id} />
       </div>
 
       <div className="mt-5 rounded-lg border border-primary/20 bg-primary/5 p-3 text-xs leading-5 text-muted-foreground">
-        Drag nodes around the canvas. Connect handles to draw new policy/route lines. Admission nodes decide which workloads may enter the network; relays carry admitted ordered packets; workers/storage only receive admitted relay traffic.
+        Each node is a standalone unit. It follows exactly one admission-node address, uses only capabilities granted to it, and enforces its own policy. Multiple nodes can run on the same machine at the same time.
       </div>
     </aside>
   )
@@ -283,10 +345,9 @@ function nextPosition(index: number) {
 export function NodePolicyGraph() {
   const auth = useAuth()
   const owner = auth.unlockedProfile?.handle ?? "Local user"
-  const browserNodeId = auth.unlockedProfile?.browserNode.identityIdHex
-  const [nodes, setNodes, onNodesChange] = useNodesState<GraphNodeData>(initialNodes(owner, browserNodeId))
+  const [nodes, setNodes, onNodesChange] = useNodesState<GraphNodeData>(initialNodes(owner))
   const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges)
-  const [selectedId, setSelectedId] = React.useState<string | null>("browser")
+  const [selectedId, setSelectedId] = React.useState<string | null>("personal-admission")
   const selected = nodes.find((node) => node.id === selectedId)
 
   const onConnect = React.useCallback((connection: Connection) => {
@@ -296,13 +357,14 @@ export function NodePolicyGraph() {
       actor: "node-dashboard",
       target: `${connection.source}->${connection.target}`,
       capabilityId: "node.graph.connect",
-      reason: "connected nodes in policy graph",
+      reason: "connected standalone nodes in policy graph",
       metadata: { source: connection.source, target: connection.target },
     })
   }, [setEdges])
 
-  function addNode(role: NodeRole, runtime: RuntimeTarget, policyId: PolicyId) {
+  function addNode(role: NodeRole, runtime: NodeRuntime, policyId: PolicyId) {
     const id = `${role}-${Date.now()}`
+    const admissionAddress = role === "admission" ? "self" : "admission://personal"
     setNodes((current) => [
       ...current,
       {
@@ -313,10 +375,12 @@ export function NodePolicyGraph() {
           label: `${policies[policyId].name} ${roleTitle(role)}`,
           role,
           runtime,
+          admissionAddress,
           policyId,
           owner,
           budget: policies[policyId].budget,
-          endpoint: runtime === "browser-wasm" ? `browser:${role}:${id}` : runtime === "localhost-native" ? `localhost:${role}` : `${runtime}:${role}`,
+          endpoint: `${role}://${id}`,
+          capabilities: role === "admission" ? ["sign_admissions", "enforce_policy"] : [role],
           status: "draft",
         },
       },
@@ -331,8 +395,8 @@ export function NodePolicyGraph() {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background text-foreground">
-      <AppHeader title="Node Network" icon={<Network className="h-4 w-4" />}>
-        Drag node instances, connect them with lines, and assign policies/budgets
+      <AppHeader title="Admission Network" icon={<Network className="h-4 w-4" />}>
+        Drag standalone nodes, connect them with lines, and assign admission policy/capabilities
       </AppHeader>
       <AppToolbar className="border-b border-border">
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -340,10 +404,10 @@ export function NodePolicyGraph() {
           <span className="rounded border border-border bg-card px-2 py-1">{edges.length} links</span>
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <button onClick={() => addNode("admission", "browser-wasm", "personal")} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90"><Plus className="h-3.5 w-3.5" />Admission</button>
-          <button onClick={() => addNode("relay", "browser-wasm", "personal")} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-semibold text-foreground hover:bg-secondary"><Plus className="h-3.5 w-3.5" />Relay</button>
-          <button onClick={() => addNode("storage", "localhost-native", "personal")} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-semibold text-foreground hover:bg-secondary"><Plus className="h-3.5 w-3.5" />Storage</button>
-          <button onClick={() => addNode("compute", "browser-wasm", "personal")} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-semibold text-foreground hover:bg-secondary"><Plus className="h-3.5 w-3.5" />Compute</button>
+          <button onClick={() => addNode("admission", "wasm", "personal")} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-2 text-xs font-semibold text-primary-foreground hover:bg-primary/90"><Plus className="h-3.5 w-3.5" />Admission</button>
+          <button onClick={() => addNode("relay", "wasm", "personal")} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-semibold text-foreground hover:bg-secondary"><Plus className="h-3.5 w-3.5" />Relay</button>
+          <button onClick={() => addNode("storage", "native", "personal")} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-semibold text-foreground hover:bg-secondary"><Plus className="h-3.5 w-3.5" />Storage</button>
+          <button onClick={() => addNode("compute", "wasm", "personal")} className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-2 text-xs font-semibold text-foreground hover:bg-secondary"><Plus className="h-3.5 w-3.5" />Compute</button>
         </div>
       </AppToolbar>
       <div className="min-h-0 flex-1 flex">
