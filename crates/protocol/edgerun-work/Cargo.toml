@@ -11,9 +11,18 @@ rust-version.workspace = true
 [features]
 default = ["std"]
 std = ["edgerun-wire/std"]
+virtual-disk = [
+  "std",
+  "dep:edgerun-protocols",
+  "dep:edgerun-virtual-disk",
+  "edgerun-protocols/block",
+  "edgerun-virtual-disk/std",
+]
 
 [dependencies]
 edgerun-crypto = { workspace = true, default-features = false, features = ["ed25519"] }
+edgerun-protocols = { workspace = true, default-features = false, optional = true }
+edgerun-virtual-disk = { workspace = true, default-features = false, features = ["std"], optional = true }
 edgerun-wire = { workspace = true, default-features = false }
 rkyv = { workspace = true, default-features = false, features = ["alloc", "bytecheck"] }
 blake3 = { version = "1", default-features = false }
