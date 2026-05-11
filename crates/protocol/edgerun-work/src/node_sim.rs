@@ -2,10 +2,12 @@ use alloc::vec::Vec;
 
 use crate::channel::ChannelEnvelope;
 use crate::channel_order::{ChannelOrderBook, ChannelOrderError, OrderedChannelEnvelope};
-use crate::codec::{blake3_hash, empty_signature, node_identity_from_key, packet_bytes, sign_network_message};
+use crate::codec::{blake3_hash, packet_bytes};
+use crate::identity::node_identity_from_key;
 use crate::memory_channel::{route_hash, MemoryChannelEngine, MemoryChannelError};
 use crate::protocol::*;
 use crate::route_builder::{memory_endpoint, RouteAdvertisementBuilder};
+use crate::signing::{empty_signature, sign_network_message};
 use edgerun_crypto::Ed25519SigningKey;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
