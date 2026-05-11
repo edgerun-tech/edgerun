@@ -75,16 +75,3 @@ pub struct ChannelEnvelope {
     pub packet_hash: Hash,
     pub packet: WorkPacket,
 }
-
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
-pub struct ChannelProof {
-    pub abi_version: u16,
-    pub channel_id: ChannelId,
-    pub relay_node_id: NodeId,
-    pub from: NodeId,
-    pub to: NodeId,
-    pub message_hash: Hash,
-    pub sequence: u64,
-    pub signature: WorkSignature,
-}

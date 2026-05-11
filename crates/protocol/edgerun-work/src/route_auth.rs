@@ -3,8 +3,8 @@ use alloc::vec::Vec;
 use edgerun_crypto::Ed25519SigningKey;
 
 use crate::channel::*;
-use crate::codec::{blake3_hash, empty_signature, sign_ed25519, verify_signature};
-use crate::protocol::{NodeIdentity, WorkSignature, WORK_WIRE_ABI_VERSION};
+use crate::codec::{blake3_hash, sign_ed25519, verify_signature};
+use crate::protocol::{NodeIdentity, WORK_WIRE_ABI_VERSION};
 
 const ROUTE_ADVERTISEMENT_DOMAIN: &[u8] = b"edgerun:v1:work:route-advertisement";
 const ROUTE_SNAPSHOT_DOMAIN: &[u8] = b"edgerun:v1:work:route-snapshot";
@@ -27,7 +27,6 @@ pub fn sign_route_advertisement(
     key: &Ed25519SigningKey,
     mut value: RouteAdvertisement,
 ) -> RouteAdvertisement {
-    value.signature = empty_signature();
     value.signature = sign_ed25519(key, &route_advertisement_preimage(&value));
     value
 }
@@ -58,7 +57,6 @@ pub fn route_snapshot_preimage(value: &RouteSnapshot) -> Vec<u8> {
 }
 
 pub fn sign_route_snapshot(key: &Ed25519SigningKey, mut value: RouteSnapshot) -> RouteSnapshot {
-    value.signature = empty_signature();
     value.signature = sign_ed25519(key, &route_snapshot_preimage(&value));
     value
 }
@@ -66,10 +64,6 @@ pub fn sign_route_snapshot(key: &Ed25519SigningKey, mut value: RouteSnapshot) ->
 pub fn verify_route_snapshot(value: &RouteSnapshot) -> bool {
     value.abi_version == WORK_WIRE_ABI_VERSION
         && verify_signature(&value.issued_by, &value.signature, &route_snapshot_preimage(value))
-}
-
-pub fn empty_route_signature() -> WorkSignature {
-    empty_signature()
 }
 
 fn domain(domain: &[u8]) -> Vec<u8> {

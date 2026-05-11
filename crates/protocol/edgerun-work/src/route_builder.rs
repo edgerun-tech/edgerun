@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 use edgerun_crypto::Ed25519SigningKey;
 
 use crate::channel::*;
-use crate::codec::{blake3_hash, empty_signature, node_identity_from_key};
+use crate::codec::{blake3_hash, node_identity_from_key};
 use crate::protocol::*;
 use crate::route_auth::sign_route_advertisement;
 
@@ -83,7 +83,11 @@ impl RouteAdvertisementBuilder {
                 sequence: self.sequence,
                 valid_until_unix_ms: self.valid_until_unix_ms,
                 previous_route_hash: self.previous_route_hash,
-                signature: empty_signature(),
+                signature: WorkSignature {
+                    algorithm: 0,
+                    public_key: Vec::new(),
+                    signature: Vec::new(),
+                },
             },
         )
     }

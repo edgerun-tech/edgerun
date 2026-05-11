@@ -123,7 +123,7 @@ impl TcpWorkChannel {
     }
 
     fn route_addr(route: &RouteAdvertisement) -> Option<String> {
-        String::from_utf8(route.endpoint.address.clone()).ok()
+        Some(String::from_utf8_lossy(&route.endpoint.address).into_owned())
     }
 }
 

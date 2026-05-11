@@ -155,7 +155,7 @@ impl TcpNodeRuntime {
     }
 
     fn route_addr(route: &RouteAdvertisement) -> Option<String> {
-        String::from_utf8(route.endpoint.address.clone()).ok()
+        Some(String::from_utf8_lossy(&route.endpoint.address).into_owned())
     }
 
     fn route_available(route: &RouteAdvertisement, now_unix_ms: u64) -> bool {

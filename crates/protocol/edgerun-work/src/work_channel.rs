@@ -2,7 +2,6 @@ use alloc::vec::Vec;
 
 use crate::channel::{ChannelEnvelope, RouteAdvertisement};
 use crate::channel_order::{ChannelOrderBook, ChannelOrderError, OrderedChannelEnvelope};
-use crate::codec::blake3_hash;
 use crate::memory_channel::{route_hash, MemoryChannelEngine, MemoryChannelError};
 use crate::protocol::{Hash, NodeId, WorkPacket};
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -140,14 +139,4 @@ impl WorkChannel for MemoryWorkChannel {
     fn recv_all(&mut self, node_id: NodeId) -> Vec<ChannelEnvelope> {
         WorkChannel::recv_all(&mut self.engine, node_id)
     }
-}
-
-pub fn channel_envelope_hash(envelope: &ChannelEnvelope) -> Hash {
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(&envelope.channel_id);
-    bytes.extend_from_slice(&envelope.from);
-    bytes.extend_from_slice(&envelope.to);
-    bytes.extend_from_slice(&envelope.route_hash);
-    bytes.extend_from_slice(&envelope.packet_hash);
-    blake3_hash(&bytes)
 }
