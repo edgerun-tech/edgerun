@@ -2,8 +2,8 @@ use alloc::vec::Vec;
 
 use crate::channel::{ChannelEnvelope, RouteAdvertisement};
 use crate::channel_order::{ChannelOrderBook, OrderedChannelEnvelope};
-use crate::frame_codec::{channel_envelope_bytes, channel_envelope_from_bytes};
-use crate::protocol::{Hash, NodeIdentity, NodeId, WorkPacket, WorkProtocolError};
+use crate::frame_codec::channel_envelope_from_bytes;
+use crate::protocol::{Hash, NodeIdentity, NodeId, WorkPacket};
 use crate::roles::{RoleContext, RoleInput, RoleOutput, WorkRole};
 use crate::work_channel::{OrderedWorkChannel, WorkChannel, WorkChannelError};
 use crate::ws_channel::{WsFrame, WsWorkChannel};
@@ -44,13 +44,8 @@ impl<R: WorkRole> WasmWorkerNode<R> {
         self.channel.drain_outbound_frames()
     }
 
-    pub fn drain_outbound_envelope_bytes(&mut self) -> Result<Vec<Vec<u8>>, WorkProtocolError> {
-        let envelopes = self.channel.recv_all(self.identity.node_id);
-        let mut out = Vec::with_capacity(envelopes.len());
-        for envelope in envelopes {
-            out.push(channel_envelope_bytes(&envelope)?);
-        }
-        Ok(out)
+    pub fn drain_outbound_envelope_bytes(&mut self) -> Vec<Vec<u8>> {
+        self.channel.drain_outbound_envelope_bytes()
     }
 
     pub fn accept_inbound_bytes(
