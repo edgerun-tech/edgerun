@@ -39,37 +39,26 @@ impl SettlementLedger {
         receipts: &[WorkReceipt],
     ) -> Result<BatchSettlementResult, BatchSettlementError> {
         let batch = build_receipt_batch(admission, receipts)?;
-        if self.user_balance(&admission.user) < batch.total_claim {
-            return Err(BatchSettlementError::Settlement(SettlementError::InsufficientBalance));
-        }
-        let already_spent = self.admission_spent(&batch.admission_hash);
-        if already_spent.saturating_add(batch.total_claim) > admission.admitted_budget {
-            return Err(BatchSettlementError::Settlement(
-                SettlementError::ClaimExceedsAdmissionBudget,
-            ));
-        }
-        for receipt_hash in &batch.receipt_hashes {
-            if self.is_receipt_paid(receipt_hash) {
-                return Err(BatchSettlementError::DuplicateAlreadyPaid);
-            }
-        }
+        let mut committed = self.clone();
         for receipt in receipts {
-            self.can_settle_receipt(admission, receipt)
-                .map_err(BatchSettlementError::Settlement)?;
-        }
-        for receipt in receipts {
-            self.settle_receipt(admission, receipt)
-                .map_err(BatchSettlementError::Settlement)?;
+            committed
+                .settle_receipt(admission, receipt)
+                .map_err(|error| match error {
+                    SettlementError::DuplicateReceipt => BatchSettlementError::DuplicateAlreadyPaid,
+                    other => BatchSettlementError::Settlement(other),
+                })?;
         }
         let mut workers = BTreeSet::new();
         for receipt in receipts {
             workers.insert(receipt.worker.node_id);
         }
+        let user_balance_after = committed.user_balance(&admission.user);
+        *self = committed;
         Ok(BatchSettlementResult {
             batch_root: batch.batch_root,
             receipt_count: receipts.len() as u64,
             total_claim: batch.total_claim,
-            user_balance_after: self.user_balance(&admission.user),
+            user_balance_after,
             worker_count: workers.len() as u64,
         })
     }
