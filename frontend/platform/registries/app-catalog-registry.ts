@@ -8,6 +8,10 @@ import {
   type BrowserCatalogApp,
   type InstalledBrowserApp,
 } from "@/platform/runtime/browser-app-install-store"
+import {
+  browserCatalogAppToPackageProjection,
+  packageProjectionToAppDefinition,
+} from "@/platform/runtime/verified-app-package"
 
 export interface AppCatalogState {
   apps: Map<string, AppDefinition>
@@ -22,45 +26,7 @@ export const catalogApps = computed(appCatalogRegistry, (state) =>
 )
 
 function browserCatalogAppToDefinition(app: BrowserCatalogApp, installed?: InstalledBrowserApp): AppDefinition {
-  return {
-    appId: app.appId,
-    name: app.name,
-    description: app.description,
-    iconId: "wasm-generic",
-    kind: "wasm",
-    source: "catalog",
-    requiredCapabilityIds: app.requiredCapabilityIds,
-    optionalCapabilityIds: app.optionalCapabilityIds,
-    status: installed ? "installed" : "available",
-    signature: {
-      developerId: app.developer,
-      developerName: app.developer,
-      packageHash: app.eappSha256,
-      manifestHash: app.manifestSha256,
-      verified: Boolean(installed),
-      verifiedAt: installed?.installedAt,
-      authorityRef: "catalog:/apps/catalog.ecat",
-      proofRef: app.packageUrl,
-    },
-    displayMetadata: {
-      runtimeManifest: {
-        runtime: "browser-iframe",
-        permissions: app.requiredCapabilityIds,
-        optionalPermissions: app.optionalCapabilityIds,
-      },
-      runtime: "browser-iframe",
-      packageUrl: app.packageUrl,
-      manifestUrl: app.manifestUrl,
-      launchUrl: app.launchUrl,
-      eappSha256: app.eappSha256,
-      packageBytes: app.packageBytes,
-      runtimeAppId: installed?.runtimeAppId ?? app.runtimeAppId,
-      releaseId: installed?.releaseId ?? app.releaseId,
-      developerId: installed?.developerId ?? app.developerId,
-      installedAt: installed?.installedAt,
-      verifiedAssets: installed?.verifiedAssets.length ?? 0,
-    },
-  }
+  return packageProjectionToAppDefinition(browserCatalogAppToPackageProjection(app, installed))
 }
 
 export function registerCatalogApp(app: AppDefinition): void {
@@ -102,6 +68,10 @@ export function verifyCatalogApp(appId: string): AppDefinition | undefined {
       verified: true,
       verifiedAt: new Date().toISOString(),
     } : undefined,
+    displayMetadata: {
+      ...app.displayMetadata,
+      verifiedAt: new Date().toISOString(),
+    },
   }
   registerCatalogApp(verified)
   return verified
