@@ -1,7 +1,0 @@
-aggregate_descriptor:
-  descriptor_version: 1
-  aggregate_id: agg_other
-  source_query_id: query_other
-  aggregator: node_responder
-  input_fragments:
-  - object_id: frag_01

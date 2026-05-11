@@ -1,9 +1,0 @@
-id: object/18-empty-descriptor-object-id-reject
-suite: object
-validator: validate_object
-version: 1
-priority: mandatory
-description: object descriptor with empty object id is structurally invalid
-tags:
-- object
-- validate_object

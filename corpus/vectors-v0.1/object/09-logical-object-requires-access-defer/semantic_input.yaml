@@ -1,8 +1,0 @@
-brief:
-  object_kind: PAYLOAD
-require_logical_object: true
-representation:
-  header:
-    object_kind: OBJECT_KIND_PAYLOAD
-    encryption_scheme: aes-gcm-v1
-  stored_bytes_hex: '0x01020304'

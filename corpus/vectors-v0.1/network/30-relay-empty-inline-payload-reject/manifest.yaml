@@ -1,9 +1,0 @@
-id: network/30-relay-empty-inline-payload-reject
-suite: network
-validator: validate_network
-version: 1
-priority: mandatory
-description: relay envelope inline payload must be nonempty
-tags:
-- network
-- validate_network

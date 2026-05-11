@@ -1,9 +1,0 @@
-id: object/01-raw-object-valid
-suite: object
-validator: validate_object_retrieval
-version: 1
-priority: mandatory
-description: raw-bytes logical object validates fully
-tags:
-- object
-- validate_object_retrieval

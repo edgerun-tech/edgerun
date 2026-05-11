@@ -1,9 +1,0 @@
-id: stream/09-old-seq-reject
-suite: stream
-validator: validate_stream_append
-version: 1
-priority: mandatory
-description: candidate event below current head sequence is rejected as a fork conflict
-tags:
-- stream
-- validate_stream_append

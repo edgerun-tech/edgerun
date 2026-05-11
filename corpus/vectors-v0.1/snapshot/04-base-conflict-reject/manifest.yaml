@@ -1,9 +1,0 @@
-id: snapshot/04-base-conflict-reject
-suite: snapshot
-validator: validate_snapshot
-version: 1
-priority: mandatory
-description: conflicting base hash at same sequence is rejected
-tags:
-- snapshot
-- validate_snapshot

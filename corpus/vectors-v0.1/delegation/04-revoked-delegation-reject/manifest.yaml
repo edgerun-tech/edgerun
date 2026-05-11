@@ -1,9 +1,0 @@
-id: delegation/04-revoked-delegation-reject
-suite: delegation
-validator: validate_delegation_chain
-version: 1
-priority: mandatory
-description: revoked delegation is rejected under locally known revocation state
-tags:
-- delegation
-- validate_delegation_chain

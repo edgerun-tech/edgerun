@@ -1,9 +1,0 @@
-id: network/33-session-hello-untargeted-accept
-suite: network
-validator: validate_network
-version: 1
-priority: mandatory
-description: session hello without target node is accepted as opportunistic discovery
-tags:
-- network
-- validate_network

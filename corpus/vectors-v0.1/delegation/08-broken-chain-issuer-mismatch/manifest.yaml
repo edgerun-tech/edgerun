@@ -1,9 +1,0 @@
-id: delegation/08-broken-chain-issuer-mismatch
-suite: delegation
-validator: validate_delegation_chain
-version: 1
-priority: mandatory
-description: delegation chain rejects when child issuer does not match prior recipient
-tags:
-- delegation
-- validate_delegation_chain

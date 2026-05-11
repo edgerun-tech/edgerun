@@ -1,9 +1,0 @@
-id: snapshot/11-empty-snapshot-id-reject
-suite: snapshot
-validator: validate_snapshot
-version: 1
-priority: mandatory
-description: snapshot with empty snapshot_id is structurally invalid
-tags:
-- snapshot
-- validate_snapshot

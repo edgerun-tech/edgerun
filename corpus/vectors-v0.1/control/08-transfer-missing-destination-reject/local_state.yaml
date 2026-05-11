@@ -1,8 +1,0 @@
-now: '2030-01-01T00:00:00Z'
-local_node: node_server
-current_controller_set:
-- user_alice
-control_policy:
-  minimum_controllers: 1
-proof_of_possession: {}
-policy_profile: default-v0

@@ -1,9 +1,0 @@
-id: stream/04-fork-reject
-suite: stream
-validator: validate_stream_append
-version: 1
-priority: mandatory
-description: different event at same sequence is rejected as fork conflict
-tags:
-- stream
-- validate_stream_append

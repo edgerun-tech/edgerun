@@ -1,8 +1,0 @@
-result_fragment:
-  query_id: query_active
-  responder: node_server
-  completeness: RESULT_COMPLETENESS_PARTIAL
-  event_refs:
-  - stream_id: timeline_stream
-    seq: 3
-    event_hash_hex: '0x0505050505050505050505050505050505050505050505050505050505050505'

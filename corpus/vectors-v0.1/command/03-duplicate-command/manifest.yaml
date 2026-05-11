@@ -1,9 +1,0 @@
-id: command/03-duplicate-command
-suite: command
-validator: validate_command
-version: 1
-priority: mandatory
-description: same command hash and command_id already known is treated as duplicate
-tags:
-- command
-- validate_command

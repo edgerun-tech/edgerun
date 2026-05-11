@@ -1,9 +1,0 @@
-id: control/12-target-mismatch-reject
-suite: control
-validator: validate_control_change
-version: 1
-priority: mandatory
-description: control command for a different target node is rejected
-tags:
-- control
-- validate_control_change

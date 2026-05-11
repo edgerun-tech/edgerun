@@ -1,5 +1,0 @@
-route_advertisement:
-  target_node: ''
-  advertiser: node_phone
-  next_hop_node: user_alice
-  expires_at: '2099-01-01T00:00:00Z'

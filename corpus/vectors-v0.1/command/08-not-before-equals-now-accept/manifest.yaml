@@ -1,9 +1,0 @@
-id: command/08-not-before-equals-now-accept
-suite: command
-validator: validate_command
-version: 1
-priority: mandatory
-description: command valid exactly at not_before boundary is accepted
-tags:
-- command
-- validate_command

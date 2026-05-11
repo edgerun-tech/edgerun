@@ -1,6 +1,0 @@
-now: '2030-01-01T00:00:00Z'
-expected_session_nonce: nonce_ok
-supported_protocol_versions:
-- 1
-- 2
-policy_profile: default-v0

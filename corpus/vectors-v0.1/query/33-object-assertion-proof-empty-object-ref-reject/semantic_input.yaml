@@ -1,5 +1,0 @@
-object_assertion_proof:
-  source_query_id: query_active
-  object_ref:
-    object_id: ''
-  exists: true

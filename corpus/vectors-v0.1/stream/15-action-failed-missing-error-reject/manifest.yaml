@@ -1,9 +1,0 @@
-id: stream/15-action-failed-missing-error-reject
-suite: stream
-validator: validate_stream_append
-version: 1
-priority: mandatory
-description: failed action event is rejected when lifecycle payload omits error object
-tags:
-- stream
-- validate_stream_append

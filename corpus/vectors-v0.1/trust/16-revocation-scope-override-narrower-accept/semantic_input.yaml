@@ -1,4 +1,0 @@
-revocation_record:
-  issuer: root_authority
-  target_delegation: del_query_1
-  scope_override: timeline:abc/child

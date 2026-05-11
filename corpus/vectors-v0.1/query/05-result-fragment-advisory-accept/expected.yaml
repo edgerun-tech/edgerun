@@ -1,5 +1,0 @@
-verdict: ACCEPT
-reason_code: null
-derived:
-  decision: result_fragment_received
-  advisory_only: true

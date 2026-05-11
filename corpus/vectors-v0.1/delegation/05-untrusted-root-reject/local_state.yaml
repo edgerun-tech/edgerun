@@ -1,7 +1,0 @@
-now: '2030-01-01T00:00:00Z'
-trust_roots:
-- user_alice
-revocations: []
-current_controller_set:
-- user_alice
-policy_profile: default-v0

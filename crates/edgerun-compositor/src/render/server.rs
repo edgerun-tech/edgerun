@@ -163,6 +163,9 @@ pub fn render_and_flip(
         }
     }
 
+    // Draw native EdgeRun system UI above Wayland surfaces and below cursor.
+    crate::render::system_ui::draw_system_ui_overlay(pixels, width, height, stride);
+
     // Draw cursor
     cursor.draw(pixels, width, height, stride);
 

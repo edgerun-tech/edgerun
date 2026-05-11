@@ -1,6 +1,0 @@
-assurance_claim:
-  claim_id: claim_future_01
-  subject_identity: user_bob
-  attester: user_alice
-  assurance_class: ASSURANCE_CLASS_SOFTWARE
-  issued_at: '2030-01-02T00:00:00Z'

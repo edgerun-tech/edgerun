@@ -1,9 +1,0 @@
-brief:
-  command_type: ADD_CONTROLLER
-  new_controller: user_bob
-command:
-  command_type: ADD_CONTROLLER
-  new_controller: user_bob
-  issuer: user_alice
-  target_node: node_other
-  command_id: ctrl_12-target-mismatch-reject

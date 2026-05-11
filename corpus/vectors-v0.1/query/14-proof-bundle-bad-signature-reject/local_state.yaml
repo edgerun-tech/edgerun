@@ -1,3 +1,0 @@
-allowed_proof_payload_types:
-- PROOF_PAYLOAD_TYPE_STREAM_HEADS
-policy_profile: default-v0

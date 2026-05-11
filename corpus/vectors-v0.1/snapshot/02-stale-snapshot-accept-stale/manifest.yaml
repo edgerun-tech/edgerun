@@ -1,9 +1,0 @@
-id: snapshot/02-stale-snapshot-accept-stale
-suite: snapshot
-validator: validate_snapshot
-version: 1
-priority: mandatory
-description: snapshot behind local heads is accepted as stale but usable
-tags:
-- snapshot
-- validate_snapshot

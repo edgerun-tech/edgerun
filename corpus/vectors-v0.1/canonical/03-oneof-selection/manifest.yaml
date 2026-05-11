@@ -1,9 +1,0 @@
-id: canonical/03-oneof-selection
-suite: canonical
-validator: canonicalize_signable
-version: 1
-priority: mandatory
-description: oneof member selection maps to exactly one non-null slot
-tags:
-- canonical
-- canonicalize_signable

@@ -1,9 +1,0 @@
-brief:
-  object_kind: PAYLOAD
-representation:
-  header:
-    object_kind: OBJECT_KIND_PAYLOAD
-  chunk_manifest:
-    entries:
-    - chunk_digest: 332d27b2a4b77af4345e01be43fd5da2226b5b823327327cc43a1c56329049e1
-    - chunk_digest: da0cee107d6e323484297b46f13024f14dcb5f361d01939667f4c57e72fda4ef

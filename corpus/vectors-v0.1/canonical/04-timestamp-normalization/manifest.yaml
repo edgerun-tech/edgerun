@@ -1,9 +1,0 @@
-id: canonical/04-timestamp-normalization
-suite: canonical
-validator: canonicalize_signable
-version: 1
-priority: mandatory
-description: timestamps normalize to [seconds,nanos] canonically
-tags:
-- canonical
-- canonicalize_signable

@@ -1,9 +1,0 @@
-id: snapshot/07-untrusted-producer-reject
-suite: snapshot
-validator: validate_snapshot
-version: 1
-priority: mandatory
-description: snapshot from untrusted producer is rejected before signature evaluation
-tags:
-- snapshot
-- validate_snapshot

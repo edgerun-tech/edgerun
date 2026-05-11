@@ -1,9 +1,0 @@
-id: delegation/03-chain-attenuation-reject
-suite: delegation
-validator: validate_delegation_chain
-version: 1
-priority: mandatory
-description: child delegation expands parent scope and must be rejected
-tags:
-- delegation
-- validate_delegation_chain

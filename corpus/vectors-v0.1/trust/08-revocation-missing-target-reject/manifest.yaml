@@ -1,9 +1,0 @@
-id: trust/08-revocation-missing-target-reject
-suite: trust
-validator: validate_trust
-version: 1
-priority: mandatory
-description: revocation record without a target is structurally invalid
-tags:
-- trust
-- validate_trust

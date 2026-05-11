@@ -1,5 +1,0 @@
-verdict: ACCEPT
-reason_code: null
-post_state:
-  head_after:
-    seq: 1

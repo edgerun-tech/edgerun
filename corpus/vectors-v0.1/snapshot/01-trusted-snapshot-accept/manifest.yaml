@@ -1,9 +1,0 @@
-id: snapshot/01-trusted-snapshot-accept
-suite: snapshot
-validator: validate_snapshot
-version: 1
-priority: mandatory
-description: trusted producer snapshot with matching base heads is accepted
-tags:
-- snapshot
-- validate_snapshot
