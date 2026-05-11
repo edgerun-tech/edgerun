@@ -55,6 +55,17 @@ impl ThreadSafeSettlementLedger {
             .settle_receipt_unchecked_evidence(admission, receipt)
     }
 
+    pub fn settle_receipt(
+        &self,
+        admission: &WorkAdmission,
+        receipt: &WorkReceipt,
+    ) -> Result<SettlementResult, SettlementError> {
+        self.inner
+            .lock()
+            .expect("settlement ledger poisoned")
+            .settle_receipt(admission, receipt)
+    }
+
     pub fn settle_delivery(
         &self,
         evidence: &DeliverySettlementEvidence<'_>,
@@ -74,6 +85,17 @@ impl ThreadSafeSettlementLedger {
             .lock()
             .expect("settlement ledger poisoned")
             .settle_receipt_batch_unchecked_evidence(admission, receipts)
+    }
+
+    pub fn settle_receipt_batch(
+        &self,
+        admission: &WorkAdmission,
+        receipts: &[WorkReceipt],
+    ) -> Result<BatchSettlementResult, BatchSettlementError> {
+        self.inner
+            .lock()
+            .expect("settlement ledger poisoned")
+            .settle_receipt_batch(admission, receipts)
     }
 
     pub fn prune_finalized_admission(&self, admission_hash: &Hash) -> SettlementPruneResult {

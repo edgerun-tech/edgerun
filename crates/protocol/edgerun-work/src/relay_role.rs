@@ -30,6 +30,7 @@ pub struct RelayDeliveryResult {
     pub forwarded_packet_hash: Hash,
     pub transit_hash: Hash,
     pub transit_receipt: WorkReceipt,
+    pub receipt: WorkReceipt,
 }
 
 pub struct RelayRole {
@@ -200,7 +201,8 @@ impl RelayRole {
             destination_route_hash,
             forwarded_packet_hash,
             transit_hash,
-            transit_receipt,
+            transit_receipt: transit_receipt.clone(),
+            receipt: transit_receipt.clone(),
         }
     }
 }

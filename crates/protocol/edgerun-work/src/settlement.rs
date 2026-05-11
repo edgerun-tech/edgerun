@@ -3,6 +3,7 @@ use alloc::collections::{BTreeMap, BTreeSet};
 use crate::channel::ChannelProof;
 use crate::channel_order::OrderedChannelEnvelope;
 use crate::codec::{blake3_hash, packet_bytes};
+use crate::batch_settlement::{BatchSettlementError, BatchSettlementResult};
 use crate::delivery_proof::{
     channel_proof_hash, verify_channel_proof_for_ordered_with_policy,
 };
@@ -140,6 +141,23 @@ impl SettlementLedger {
     ) -> Result<SettlementResult, SettlementError> {
         self.can_settle_receipt_unchecked_evidence(admission, receipt)?;
         self.commit_settlement(admission, receipt)
+    }
+
+    pub fn settle_receipt(
+        &mut self,
+        admission: &WorkAdmission,
+        receipt: &WorkReceipt,
+    ) -> Result<SettlementResult, SettlementError> {
+        self.can_settle_receipt_common(admission, receipt)?;
+        self.commit_settlement(admission, receipt)
+    }
+
+    pub fn settle_receipt_batch(
+        &mut self,
+        admission: &WorkAdmission,
+        receipts: &[WorkReceipt],
+    ) -> Result<BatchSettlementResult, BatchSettlementError> {
+        self.settle_receipt_batch_unchecked_evidence(admission, receipts)
     }
 
     pub fn settle_delivery(
