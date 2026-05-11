@@ -124,10 +124,10 @@ fn tcp_node_runtime_removes_expired_route_during_selection() {
     let route = signed_tcp_route(
         &receiver,
         runtime.listen_addr().to_string(),
-        unix_ms().saturating_add(1),
+        unix_ms().saturating_add(50),
     );
     runtime.add_route(route).expect("add short-lived route");
-    thread::sleep(Duration::from_millis(20));
+    thread::sleep(Duration::from_millis(100));
 
     assert_eq!(runtime.route_hash_for(&receiver.identity.node_id), None);
 
