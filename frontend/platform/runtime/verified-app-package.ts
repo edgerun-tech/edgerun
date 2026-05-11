@@ -2,6 +2,22 @@ import type { AppDefinition, AppSignatureInfo } from "@/platform/types/app-defin
 import type { BrowserCatalogApp, InstalledBrowserApp } from "@/platform/runtime/browser-app-install-store"
 
 export type AppAccessPolicyMode = "free-run" | "paid-run" | "paid-cache" | "license-required"
+export type AppCostUnit = "EDGE"
+export type AppCostSource = "policy" | "catalog-default"
+
+const DEFAULT_RETRIEVAL_MICRO_EDGE_PER_MIB = 1
+const DEFAULT_CACHE_WRITE_MICRO_EDGE_PER_MIB = 1
+const BYTES_PER_MIB = 1024 * 1024
+
+export interface AppRunCostProjection {
+  unit: AppCostUnit
+  source: AppCostSource
+  packageBytes: number
+  retrievalMicroEdge: number
+  cacheWriteMicroEdge: number
+  runOnceMicroEdge: number
+  verifyAndCacheMicroEdge: number
+}
 
 export interface VerifiedAppPackageProjection {
   appId: string
@@ -32,12 +48,36 @@ export interface VerifiedAppPackageProjection {
   localCacheStatus: "not-cached" | "cached"
   appPolicyHash?: string
   accessPolicyMode: AppAccessPolicyMode
+  runCost: AppRunCostProjection
+}
+
+export function projectedRunCost(packageBytes: number): AppRunCostProjection {
+  const mib = Math.max(1, Math.ceil(packageBytes / BYTES_PER_MIB))
+  const retrievalMicroEdge = mib * DEFAULT_RETRIEVAL_MICRO_EDGE_PER_MIB
+  const cacheWriteMicroEdge = mib * DEFAULT_CACHE_WRITE_MICRO_EDGE_PER_MIB
+  return {
+    unit: "EDGE",
+    source: "catalog-default",
+    packageBytes,
+    retrievalMicroEdge,
+    cacheWriteMicroEdge,
+    runOnceMicroEdge: retrievalMicroEdge,
+    verifyAndCacheMicroEdge: retrievalMicroEdge + cacheWriteMicroEdge,
+  }
+}
+
+export function formatMicroEdge(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return "0 EDGE"
+  if (value < 1_000) return `${value} µEDGE`
+  const edge = value / 1_000_000
+  return `${edge.toFixed(edge >= 1 ? 4 : 6)} EDGE`
 }
 
 export function browserCatalogAppToPackageProjection(
   app: BrowserCatalogApp,
   installed?: InstalledBrowserApp,
 ): VerifiedAppPackageProjection {
+  const packageBytes = installed?.packageBytes ?? app.packageBytes
   return {
     appId: app.appId,
     name: app.name,
@@ -50,7 +90,7 @@ export function browserCatalogAppToPackageProjection(
     launchUrl: app.launchUrl,
     packageHash: app.eappSha256,
     manifestHash: app.manifestSha256,
-    packageBytes: installed?.packageBytes ?? app.packageBytes,
+    packageBytes,
     runtimeAppId: installed?.runtimeAppId || app.runtimeAppId,
     releaseId: installed?.releaseId || app.releaseId,
     developerId: installed?.developerId || app.developerId,
@@ -67,6 +107,7 @@ export function browserCatalogAppToPackageProjection(
     localCacheStatus: installed ? "cached" : "not-cached",
     appPolicyHash: undefined,
     accessPolicyMode: "free-run",
+    runCost: projectedRunCost(packageBytes),
   }
 }
 
@@ -101,6 +142,12 @@ export function packageProjectionToAppDefinition(pkg: VerifiedAppPackageProjecti
       localCacheStatus: pkg.localCacheStatus,
       appPolicyHash: pkg.appPolicyHash,
       accessPolicyMode: pkg.accessPolicyMode,
+      runCostSource: pkg.runCost.source,
+      runCostUnit: pkg.runCost.unit,
+      retrievalMicroEdge: pkg.runCost.retrievalMicroEdge,
+      cacheWriteMicroEdge: pkg.runCost.cacheWriteMicroEdge,
+      runOnceMicroEdge: pkg.runCost.runOnceMicroEdge,
+      verifyAndCacheMicroEdge: pkg.runCost.verifyAndCacheMicroEdge,
       runtimeManifest: {
         runtime: pkg.runtime,
         permissions: pkg.requiredCapabilityIds,
