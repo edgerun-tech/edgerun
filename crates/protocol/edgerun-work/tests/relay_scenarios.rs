@@ -54,6 +54,7 @@ fn relay_forwards_ordered_message_to_final_node_and_gets_paid_with_delivery_proo
     let mut recipient_policy = open_recipient_message_policy(receiver.identity.clone(), 1, 1_000);
     recipient_policy.allowed_relays.push(relay.identity.node_id);
     recipient_policy = sign_recipient_message_policy(&receiver.key, recipient_policy);
+    let policy_hash = recipient_message_policy_hash(&recipient_policy);
 
     let request_hash = blake3_hash(b"relay-paid-request");
     let admission_doc = signed_relay_admission(
@@ -63,7 +64,7 @@ fn relay_forwards_ordered_message_to_final_node_and_gets_paid_with_delivery_proo
         relay_route_hash,
         relay_route.endpoint.clone(),
         10,
-        recipient_message_policy_hash(&recipient_policy),
+        policy_hash,
     );
     let admission_hash = work_admission_hash(&admission_doc).expect("admission hash");
 
@@ -108,13 +109,14 @@ fn relay_forwards_ordered_message_to_final_node_and_gets_paid_with_delivery_proo
     receiver
         .accept_ordered(&forwarded, receiver_route_hash)
         .expect("receiver accepts relay forwarded message");
-    let recipient_proof = channel_proof_for_ordered(
+    let recipient_proof = channel_proof_for_ordered_with_policy(
         &receiver.key,
         &receiver.identity,
         relay.identity.node_id,
         &forwarded,
+        policy_hash,
     )
-    .expect("receiver signs delivery proof");
+    .expect("receiver signs policy-bound delivery proof");
     let payable_receipt = relay.finalized_delivery_receipt(&result, channel_proof_hash(&recipient_proof));
 
     let evidence = DeliverySettlementEvidence {
