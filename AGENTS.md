@@ -11,6 +11,7 @@ EdgeRun gives users freedom and accountability at the same time.
 Freedom:
 
 - Users own their identity, data, local app cache, contacts, keys, and proof history.
+- Users can own admission nodes that enforce their personal or organizational policy before any work enters the network.
 - Users are not only consumers. With identity routing and built-in internet protocols, every user can become a publisher, host, app seller, website owner, data source, or service provider.
 - Developers can publish and sell apps without Apple, Google, Meta, Stripe, Cloudflare, or AWS as required gatekeepers.
 - Anyone can run useful nodes and earn from bandwidth, storage, relay, compute, hosting, and app distribution.
@@ -19,13 +20,14 @@ Freedom:
 Accountability:
 
 - Identities, packages, policies, routes, requests, admissions, proofs, and receipts are signed or hash-addressed.
+- Admission nodes enforce policy, budget, replay protection, route choice, and whether work may enter the network at all.
 - Nodes get paid only for verifiable work.
 - App access, caching, payments, and capabilities are governed by explicit content-addressed policies.
 - Users see what they are signing and can inspect proof trails.
 
 The public framing should be:
 
-> Own your identity and data. Run apps from verified network storage. Cache locally when you want. Publish from your own node. Developers sell directly. Infrastructure gets paid for useful work.
+> Own your identity and data. Run apps from verified network storage. Cache locally when you want. Publish from your own node. Enforce your own policy. Developers sell directly. Infrastructure gets paid for useful work.
 
 Avoid presenting the product as merely “decentralized cloud” or “DRM”. Internally, policy can enforce app licensing and accountability, but externally the better language is verifiable licensing, publisher-defined access policy, user-owned execution, and proof-backed payments.
 
@@ -50,7 +52,8 @@ The user flow should feel simple:
 ```text
 Create/unlock identity
 → browser node starts
-→ define node policy
+→ choose EdgeRun DAO admission or user-owned admission
+→ define node/admission policy
 → connect contacts and old data sources
 → run app from network storage
 → optional local cache
@@ -72,6 +75,42 @@ Would you like to cache verified bytes locally to avoid repeated retrieval payme
 
 Use “run” as the primary user action. “Install” is the wrong mental model. Local state is a verified cache, not ownership of a copied app from a centralized store.
 
+## Admission model
+
+All workloads enter the network through an admission node.
+
+The admission node is the policy enforcement point. It decides whether a signed `WorkRequest` may enter the network, which relay path should carry it, which routes are acceptable, what budget is admitted, and which content-addressed policy applies.
+
+Default path:
+
+```text
+user/browser node
+→ EdgeRun DAO admission node
+→ assigned relay/channel
+→ worker/recipient/storage through relay
+```
+
+User-owned path:
+
+```text
+user/browser node
+→ user-owned admission node
+→ user-approved relay/storage/compute nodes
+→ worker/recipient/storage through relay
+```
+
+A user-owned admission node lets the user or organization enforce their own policy:
+
+- which browser/user identities may submit work;
+- which worker nodes are trusted;
+- which machines can be storage, relay, compute, or publishing nodes;
+- which relays can carry traffic;
+- which app/data policies are allowed;
+- which budgets and challenge windows apply;
+- which routes are available, draining, or blocked.
+
+Do not model browser nodes as directly dispatching authoritative work to storage/compute nodes. The browser signs intent and sends it to an admission node. The admission node returns a signed `WorkAdmission` telling the browser/node where and how the workload may enter the relay network.
+
 ## Users as publishers
 
 A user-owned node can be more than a browser runtime. EdgeRun nodes already aim to include identity routing and common internet protocol capability such as HTTP, TLS, ACME, SSH, iPXE, TFTP, and related service/provisioning protocols.
@@ -80,7 +119,7 @@ That means a user can become their own publisher:
 
 ```text
 user identity
-→ node policy
+→ admission/node policy
 → signed route / endpoint advertisement
 → content-addressed site/app/file/API/boot image
 → HTTP/TLS/ACME or other protocol exposure
@@ -207,6 +246,7 @@ It contains, or should be understood as containing:
 - owner identity;
 - owner encryption identity;
 - browser node identity;
+- admission node preference/policy;
 - contacts;
 - profile events;
 - app secrets/OAuth tokens;
@@ -214,9 +254,9 @@ It contains, or should be understood as containing:
 - local preferences;
 - local proof/audit context.
 
-Identity app should be the friendly view: profile, browser node, passkey status, public contact card, and local sealed state.
+Identity app should be the friendly view: profile, browser node, passkey status, admission choice, public contact card, and local sealed state.
 
-Trust Manager should be the proof dashboard: identity, browser node, cached packages, capability grants, routes, profile events, runtime events, authority refs, and proof refs. Prefer deriving Trust Manager rows from real stores instead of hardcoded mock data.
+Trust Manager should be the proof dashboard: identity, browser node, admission policy, cached packages, capability grants, routes, profile events, runtime events, authority refs, and proof refs. Prefer deriving Trust Manager rows from real stores instead of hardcoded mock data.
 
 Important frontend stores/surfaces:
 
@@ -235,7 +275,8 @@ Users should understand the node types.
 Browser node:
 
 - default node every user gets;
-- signs local actions;
+- signs local actions and user work intent;
+- submits work requests to the configured admission node;
 - verifies app packages;
 - runs network apps;
 - caches verified package bytes;
@@ -243,11 +284,13 @@ Browser node:
 - can eventually earn from browser-appropriate work;
 - can become a publisher/service endpoint when enabled by policy.
 
-Storage/CDN node:
+Admission node:
 
-- stores content-addressed app/site/package/model objects;
-- serves retrievals and ranges;
-- earns from retrieval/storage receipts.
+- checks signed user request, balance/funding, policy, route plan, budget, and validity window;
+- owns/enforces the route table and node policy for work entry;
+- tells the sender which relay/channel/path to use;
+- admits or rejects work before it enters the network;
+- may be the default EdgeRun DAO admission node or a user-owned admission node.
 
 Relay node:
 
@@ -255,16 +298,17 @@ Relay node:
 - should not need to understand payload content;
 - earns only from admitted, ordered, proof-backed delivery.
 
+Storage/CDN node:
+
+- stores content-addressed app/site/package/model objects;
+- serves retrievals and ranges;
+- earns from retrieval/storage receipts.
+
 Compute node:
 
 - runs deterministic work;
 - should eventually prove input/program/output relation;
 - useful for AI agents and paid jobs.
-
-Admission node:
-
-- checks signed user request, balance/funding, policy, route plan, budget, and validity window;
-- admits work into the network.
 
 Settlement rail:
 
@@ -285,10 +329,10 @@ Do not add new protocol objects unless they create a new cryptographic or econom
 Prefer reusing:
 
 ```text
-WorkRequest        = signed user intent
-WorkAdmission      = funded/policy-approved authorization
+WorkRequest        = signed user intent submitted to admission
+WorkAdmission      = funded/policy-approved authorization and route/channel assignment
 RouteAdvertisement = reachability/capability announcement
-NetworkMessage     = signed payload transfer
+NetworkMessage     = signed payload transfer through relay path
 ChannelEnvelope    = ordered transport context
 ChannelProof       = recipient acceptance/proof
 WorkReceipt        = payable work claim
@@ -300,10 +344,10 @@ For app sales, website hosting, package delivery, CDN retrieval, user-to-user pa
 
 ```text
 User action
-→ WorkRequest
+→ WorkRequest to admission
 → policy_hash
-→ WorkAdmission
-→ execution/delivery/retrieval/publication
+→ WorkAdmission with assigned relay/channel/path
+→ relay-mediated execution/delivery/retrieval/publication
 → ChannelProof or typed proof
 → WorkReceipt
 → settlement
@@ -316,16 +360,17 @@ Keep these invariants intact:
 1. A node identity is valid only if `node_id == derive_node_id(public_key, role)`.
 2. Admission must verify the signed `WorkRequest` before trusting user/request fields.
 3. Admission commits to user, request hash, budget, route/channel, policy hash, validity, and admission node.
-4. Route signatures prove reachability/state; new work should use available routes.
-5. Ordered channels verify packet hash, route hash, sequence, and previous message hash.
-6. Relays hash each packet they handle and commit transit work into a hash chain.
-7. Recipient delivery proof should be policy-bound: the recipient signs acceptance of an ordered message under a specific content-addressed policy hash.
-8. Relay payment should require receiver delivery proof, transit hash, forwarded packet hash, and admission/policy binding.
-9. Storage proofs must eventually include retrieval or availability proof; store-only receipts are not enough for final production payment.
-10. Generic unchecked receipt settlement must not be used for relay payments.
-11. Batch settlement must be atomic: preflight the whole batch before mutating ledger state.
-12. Do not prune paid receipt/admission tracking until an admission is finalized and its challenge window has closed.
-13. Core protocol code should remain `no_std + alloc`. Sockets, threads, filesystem, and locks belong in `std_runtime`.
+4. Admission is the policy and route gate for work entering the network.
+5. Route signatures prove reachability/state; new work should use available routes.
+6. Ordered channels verify packet hash, route hash, sequence, and previous message hash.
+7. Relays hash each packet they handle and commit transit work into a hash chain.
+8. Recipient delivery proof should be policy-bound: the recipient signs acceptance of an ordered message under a specific content-addressed policy hash.
+9. Relay payment should require receiver delivery proof, transit hash, forwarded packet hash, and admission/policy binding.
+10. Storage proofs must eventually include retrieval or availability proof; store-only receipts are not enough for final production payment.
+11. Generic unchecked receipt settlement must not be used for relay payments.
+12. Batch settlement must be atomic: preflight the whole batch before mutating ledger state.
+13. Do not prune paid receipt/admission tracking until an admission is finalized and its challenge window has closed.
+14. Core protocol code should remain `no_std + alloc`. Sockets, threads, filesystem, and locks belong in `std_runtime`.
 
 ## `edgerun-work` module map
 
@@ -381,6 +426,7 @@ Prefer:
 - “Publisher policy” or “app policy” instead of “DRM” in public copy.
 - “Import/sync source” instead of treating Google/GitHub/mail providers as long-term homes.
 - “Publish from your node” or “identity-routed publishing” for user-hosted services.
+- “Admission policy” for the user-owned policy gate that decides what work enters the network.
 
 Internal names may still use `install`/`installed` temporarily for compatibility, but new UX and refactors should move toward cache/run terminology.
 
@@ -411,6 +457,7 @@ The token/settlement rail exists to clear value between users, publishers, and i
 - Keep platform apps coherent: Help teaches, Identity owns, App Store runs/caches, Trust Manager proves, Storage shows content, Finances shows payments/receipts.
 - Make old services feel like import bridges into EdgeRun, not final destinations.
 - Make publishing feel like a natural next step for any user node, not only professional developers.
+- Make user-owned admission visible: the user can use EdgeRun DAO admission or run their own admission node to enforce their own policy.
 
 ## Test expectations
 
@@ -455,6 +502,7 @@ Good next tasks:
 8. Add typed storage retrieval/availability settlement evidence.
 9. Add user publishing UX: publish site/app/API/file from identity-routed node policy.
 10. Add data-source sync UX: Gmail/Drive/GitHub/local imports into EdgeRun storage and personal timeline.
+11. Add user-owned admission UX: choose EdgeRun DAO admission or personal admission node; show admitted routes, relays, workers, and policy hash.
 
 Avoid:
 
@@ -467,7 +515,8 @@ Avoid:
 - using unchecked receipt settlement for relay receipts;
 - moving std-only functionality into core protocol modules;
 - silently changing protocol hashes without updating golden hash tests;
-- presenting users as only consumers when the architecture makes them publishers.
+- presenting users as only consumers when the architecture makes them publishers;
+- bypassing admission by sending authoritative user work directly to worker nodes.
 
 ## Review checklist for new protocol/economic objects
 
