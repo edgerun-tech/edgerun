@@ -7,11 +7,11 @@ use std::time::Duration;
 
 use crate::channel::{ChannelEnvelope, RouteAdvertisement, ROUTE_STATUS_AVAILABLE};
 use crate::channel_order::{ChannelOrderBook, OrderedChannelEnvelope};
-use crate::codec::{blake3_hash, packet_bytes};
+use crate::codec::encode_work_packet_once;
 use crate::memory_channel::route_hash;
 use crate::protocol::{Hash, NodeId, WorkPacket, WORK_WIRE_ABI_VERSION};
 use crate::route_auth::verify_route_advertisement;
-use crate::std_runtime::framing::{read_work_packet, unix_ms, write_work_packet};
+use crate::std_runtime::framing::{read_work_packet, unix_ms, write_encoded_work_packet};
 use crate::work_channel::{WorkChannel, WorkChannelError};
 
 const ACCEPT_POLL_MS: u64 = 10;
@@ -123,7 +123,7 @@ impl TcpNodeRuntime {
         self.drain_packets()
             .into_iter()
             .filter_map(|packet| {
-                let packet_hash = packet_bytes(&packet).ok().map(|bytes| blake3_hash(&bytes))?;
+                let encoded = encode_work_packet_once(&packet).ok()?;
                 let sequence = order.next_sequence(channel_id, from, self.node_id);
                 let previous_message_hash = order.last_message_hash(channel_id, from, self.node_id);
                 let envelope = ChannelEnvelope {
@@ -132,7 +132,7 @@ impl TcpNodeRuntime {
                     from,
                     to: self.node_id,
                     route_hash,
-                    packet_hash,
+                    packet_hash: encoded.hash,
                     packet,
                 };
                 let ordered = OrderedChannelEnvelope {
@@ -195,19 +195,17 @@ impl WorkChannel for TcpNodeRuntime {
             return Err(WorkChannelError::RouteMissing);
         }
         let route = self.routes.get(&to).ok_or(WorkChannelError::RouteMissing)?;
-        let packet_hash = packet_bytes(&packet)
-            .map(|bytes| blake3_hash(&bytes))
-            .map_err(|_| WorkChannelError::PacketHashFailed)?;
+        let encoded = encode_work_packet_once(&packet).map_err(|_| WorkChannelError::PacketHashFailed)?;
         let addr = Self::route_addr(route).ok_or(WorkChannelError::RouteMissing)?;
         let mut stream = TcpStream::connect(addr).map_err(|_| WorkChannelError::DeliveryFailed)?;
-        write_work_packet(&mut stream, &packet).map_err(|_| WorkChannelError::DeliveryFailed)?;
+        write_encoded_work_packet(&mut stream, &encoded.bytes).map_err(|_| WorkChannelError::DeliveryFailed)?;
         Ok(ChannelEnvelope {
             abi_version: WORK_WIRE_ABI_VERSION,
             channel_id: route.endpoint.channel_id,
             from,
             to,
             route_hash: route_hash(route),
-            packet_hash,
+            packet_hash: encoded.hash,
             packet,
         })
     }
@@ -219,14 +217,14 @@ impl WorkChannel for TcpNodeRuntime {
         self.drain_packets()
             .into_iter()
             .filter_map(|packet| {
-                let packet_hash = packet_bytes(&packet).ok().map(|bytes| blake3_hash(&bytes))?;
+                let encoded = encode_work_packet_once(&packet).ok()?;
                 Some(ChannelEnvelope {
                     abi_version: WORK_WIRE_ABI_VERSION,
                     channel_id: [0u8; 32],
                     from: [0u8; 32],
                     to: self.node_id,
                     route_hash: [0u8; 32],
-                    packet_hash,
+                    packet_hash: encoded.hash,
                     packet,
                 })
             })
