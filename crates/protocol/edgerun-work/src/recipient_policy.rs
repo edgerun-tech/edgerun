@@ -4,8 +4,9 @@ use alloc::vec::Vec;
 use edgerun_crypto::Ed25519SigningKey;
 use rkyv::{Archive, Deserialize, Serialize};
 
-use crate::codec::{blake3_hash, empty_signature, sign_ed25519, verify_signature};
+use crate::preimage::PreimageBuilder;
 use crate::protocol::*;
+use crate::signing::{empty_signature, sign_ed25519, verify_signature};
 
 const RECIPIENT_MESSAGE_POLICY_DOMAIN: &[u8] = b"edgerun:v1:work:recipient-message-policy";
 
@@ -42,22 +43,18 @@ pub enum RecipientPolicyError {
 }
 
 pub fn recipient_message_policy_preimage(value: &RecipientMessagePolicy) -> Vec<u8> {
-    let mut out = Vec::new();
-    out.extend_from_slice(RECIPIENT_MESSAGE_POLICY_DOMAIN);
-    out.push(0);
-    out.extend_from_slice(&value.recipient.node_id);
-    out.extend_from_slice(&value.recipient.role.to_be_bytes());
-    out.extend_from_slice(&value.recipient.public_key);
-    out.extend_from_slice(&value.sequence.to_be_bytes());
-    out.extend_from_slice(&value.valid_until_unix_ms.to_be_bytes());
-    out.push(value.allow_unknown_senders as u8);
-    encode_node_id_list(&mut out, &value.allowed_senders);
-    encode_node_id_list(&mut out, &value.blocked_senders);
-    encode_node_id_list(&mut out, &value.allowed_relays);
-    encode_u16_list(&mut out, &value.allowed_departments);
-    encode_u16_list(&mut out, &value.allowed_work_types);
-    out.extend_from_slice(&value.max_payload_bytes.to_be_bytes());
-    out
+    PreimageBuilder::domain(RECIPIENT_MESSAGE_POLICY_DOMAIN)
+        .node(&value.recipient)
+        .u64(value.sequence)
+        .u64(value.valid_until_unix_ms)
+        .raw(&[value.allow_unknown_senders as u8])
+        .hash_list(&value.allowed_senders)
+        .hash_list(&value.blocked_senders)
+        .hash_list(&value.allowed_relays)
+        .u16_list(&value.allowed_departments)
+        .u16_list(&value.allowed_work_types)
+        .u64(value.max_payload_bytes)
+        .finish()
 }
 
 pub fn sign_recipient_message_policy(
@@ -85,7 +82,7 @@ pub fn recipient_message_policy_hash(value: &RecipientMessagePolicy) -> Hash {
 }
 
 pub fn recipient_message_policy_content_hash(value: &RecipientMessagePolicy) -> Hash {
-    blake3_hash(&recipient_message_policy_preimage(value))
+    crate::codec::blake3_hash(&recipient_message_policy_preimage(value))
 }
 
 pub fn recipient_message_policy_allows(
@@ -173,18 +170,4 @@ pub fn allowlist_recipient_message_policy(
 
 fn contains_node_id(values: &[NodeId], value: &NodeId) -> bool {
     values.iter().any(|candidate| candidate == value)
-}
-
-fn encode_node_id_list(out: &mut Vec<u8>, values: &[NodeId]) {
-    out.extend_from_slice(&(values.len() as u64).to_be_bytes());
-    for value in values {
-        out.extend_from_slice(value);
-    }
-}
-
-fn encode_u16_list(out: &mut Vec<u8>, values: &[u16]) {
-    out.extend_from_slice(&(values.len() as u64).to_be_bytes());
-    for value in values {
-        out.extend_from_slice(&value.to_be_bytes());
-    }
 }
