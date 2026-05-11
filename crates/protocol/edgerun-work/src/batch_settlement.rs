@@ -1,9 +1,14 @@
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 
-use crate::codec::{blake3_hash, verify_work_admission, verify_work_receipt};
+use crate::preimage::HashBuilder;
 use crate::protocol::*;
 use crate::settlement::{work_admission_hash, work_receipt_hash, SettlementError, SettlementLedger};
+use crate::signing::{verify_work_admission, verify_work_receipt};
+
+const RECEIPT_BATCH_LEAF_DOMAIN: &[u8] = b"edgerun:v1:work:receipt-batch-leaf";
+const RECEIPT_BATCH_ROOT_DOMAIN: &[u8] = b"edgerun:v1:work:receipt-batch-root";
+const MERKLE_PARENT_DOMAIN: &[u8] = b"edgerun:v1:work:merkle-parent";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BatchSettlementError {
@@ -106,19 +111,30 @@ pub fn build_receipt_batch(
 
 pub fn receipt_batch_root(admission_hash: Hash, receipt_hashes: &[Hash], total_claim: u64) -> Hash {
     let mut leaves = Vec::with_capacity(receipt_hashes.len());
-    for hash in receipt_hashes {
-        let mut leaf = Vec::new();
-        leaf.extend_from_slice(&admission_hash);
-        leaf.extend_from_slice(hash);
-        leaves.push(blake3_hash(&leaf));
+    for receipt_hash in receipt_hashes {
+        leaves.push(receipt_batch_leaf_hash(admission_hash, *receipt_hash));
     }
     let merkle = merkle_root(leaves);
-    let mut root = Vec::new();
-    root.extend_from_slice(&admission_hash);
-    root.extend_from_slice(&total_claim.to_be_bytes());
-    root.extend_from_slice(&(receipt_hashes.len() as u64).to_be_bytes());
-    root.extend_from_slice(&merkle);
-    blake3_hash(&root)
+    HashBuilder::domain(RECEIPT_BATCH_ROOT_DOMAIN)
+        .hash(&admission_hash)
+        .u64(total_claim)
+        .u64(receipt_hashes.len() as u64)
+        .hash(&merkle)
+        .finish()
+}
+
+pub fn receipt_batch_leaf_hash(admission_hash: Hash, receipt_hash: Hash) -> Hash {
+    HashBuilder::domain(RECEIPT_BATCH_LEAF_DOMAIN)
+        .hash(&admission_hash)
+        .hash(&receipt_hash)
+        .finish()
+}
+
+pub fn merkle_parent_hash(left: Hash, right: Hash) -> Hash {
+    HashBuilder::domain(MERKLE_PARENT_DOMAIN)
+        .hash(&left)
+        .hash(&right)
+        .finish()
 }
 
 pub fn merkle_root(mut leaves: Vec<Hash>) -> Hash {
@@ -131,10 +147,7 @@ pub fn merkle_root(mut leaves: Vec<Hash>) -> Hash {
         while i < leaves.len() {
             let left = leaves[i];
             let right = if i + 1 < leaves.len() { leaves[i + 1] } else { left };
-            let mut bytes = Vec::with_capacity(64);
-            bytes.extend_from_slice(&left);
-            bytes.extend_from_slice(&right);
-            next.push(blake3_hash(&bytes));
+            next.push(merkle_parent_hash(left, right));
             i += 2;
         }
         leaves = next;
