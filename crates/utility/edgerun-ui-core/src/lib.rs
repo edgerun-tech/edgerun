@@ -7,6 +7,7 @@
 //! pixel buffer so compositor, terminal, framebuffer, browser canvas, and
 //! remote renderers can share one visual language.
 
+pub mod components;
 pub mod icons;
 pub mod visual;
 #[cfg(feature = "fontdue-text")]
