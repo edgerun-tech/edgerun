@@ -80,7 +80,7 @@ fn receipt_rejects_forged_worker_node_id() {
     let mut ledger = SettlementLedger::new();
     ledger.deposit_user_credit(user, 100);
     assert!(matches!(
-        ledger.settle_receipt(&admission_doc, &receipt),
+        ledger.settle_receipt_unchecked_evidence(&admission_doc, &receipt),
         Err(SettlementError::InvalidReceipt)
     ));
 }
@@ -165,7 +165,7 @@ fn batch_settlement_preflight_keeps_ledger_unchanged_on_failure() {
     let mut ledger = SettlementLedger::new();
     ledger.deposit_user_credit(user, 10);
     assert!(matches!(
-        ledger.settle_receipt_batch(&doc, &receipts),
+        ledger.settle_receipt_batch_unchecked_evidence(&doc, &receipts),
         Err(BatchSettlementError::DuplicateInBatch)
     ));
     assert_eq!(ledger.user_balance(&user), 10);
