@@ -1,0 +1,17 @@
+[workspace]
+
+[package]
+name = "edgerun-stable-deref-trait"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+description = "Edgerun-owned stable_deref_trait crate: marker trait for stable-address deref types"
+
+[lib]
+path = "src/lib.rs"
+
+[features]
+default = ["std"]
+std = ["alloc"]
+alloc = []

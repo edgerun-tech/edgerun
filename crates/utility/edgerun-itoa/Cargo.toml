@@ -1,0 +1,12 @@
+[workspace]
+
+[package]
+name = "edgerun-itoa"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+description = "Edgerun-owned itoa crate: fast integer to string conversion"
+
+[lib]
+path = "src/lib.rs"

@@ -1,0 +1,12 @@
+[workspace]
+
+[package]
+name = "edgerun-lru-slab"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+description = "Edgerun-owned lru-slab crate: pre-allocated storage with constant-time LRU tracking"
+
+[lib]
+path = "src/lib.rs"
