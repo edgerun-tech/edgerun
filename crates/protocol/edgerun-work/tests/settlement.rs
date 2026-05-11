@@ -106,7 +106,7 @@ fn erasure_storage_receipts_debit_user_and_pay_storage_nodes() {
             index as u64 + 1,
         );
         let result = ledger
-            .settle_receipt(&admission_doc, &receipt)
+            .settle_receipt_unchecked_evidence(&admission_doc, &receipt)
             .expect("settle shard receipt");
         assert_eq!(result.amount, 10);
         assert_eq!(result.user, user);
@@ -144,17 +144,17 @@ fn settlement_rejects_duplicate_and_over_budget_receipts() {
 
     let receipt = signed_storage_receipt(&storage0, request_hash, admission_hash, &shards[0], 10, 1);
     ledger
-        .settle_receipt(&admission_doc, &receipt)
+        .settle_receipt_unchecked_evidence(&admission_doc, &receipt)
         .expect("first settlement");
 
     assert!(matches!(
-        ledger.settle_receipt(&admission_doc, &receipt),
+        ledger.settle_receipt_unchecked_evidence(&admission_doc, &receipt),
         Err(SettlementError::DuplicateReceipt)
     ));
 
     let receipt2 = signed_storage_receipt(&storage1, request_hash, admission_hash, &shards[1], 10, 2);
     assert!(matches!(
-        ledger.settle_receipt(&admission_doc, &receipt2),
+        ledger.settle_receipt_unchecked_evidence(&admission_doc, &receipt2),
         Err(SettlementError::ClaimExceedsAdmissionBudget)
     ));
 }
@@ -180,7 +180,7 @@ fn settlement_charges_only_user_committed_in_admission() {
     ledger.deposit_user_credit(real_user, 100);
     ledger.deposit_user_credit(fake_user, 1000);
     ledger
-        .settle_receipt(&admission_doc, &receipt)
+        .settle_receipt_unchecked_evidence(&admission_doc, &receipt)
         .expect("settlement debits real user");
 
     assert_eq!(ledger.user_balance(&real_user), 90);
