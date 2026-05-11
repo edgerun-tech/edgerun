@@ -40,18 +40,26 @@ const nodeCards: NodeCard[] = [
   {
     id: "browser-node",
     title: "Browser node",
-    responsibility: "Receives its own identity, follows your local policy, signs actions, verifies packages, runs apps, caches bytes, records proofs, and can participate in network work when you allow it.",
+    responsibility: "Receives its own identity, follows your local policy, signs actions, verifies packages, runs apps, creates work orders, caches bytes, records proofs, and can participate in network work when you allow it.",
     userBenefit: "Everyone starts included. You do not need tokens first; leave the browser node available and it can earn from useful work.",
     status: "ready",
     icon: Fingerprint,
   },
   {
     id: "storage-node",
+    title: "Storage node",
+    responsibility: "Accepts admitted work orders to store, retrieve, copy, pin, and move content-addressed data between EdgeRun storage, your cloud host, and your other machines.",
+    userBenefit: "Run one on a VPS, home server, or spare machine so your data has a reliable place to live and can earn from useful storage/retrieval work.",
+    status: "optional",
+    icon: HardDrive,
+  },
+  {
+    id: "cdn-node",
     title: "Storage / CDN node",
-    responsibility: "Stores content-addressed app/site/package objects and serves verified retrievals.",
+    responsibility: "Stores content-addressed app/site/package objects and serves verified retrievals for other users.",
     userBenefit: "Lets users run apps from network storage and lets providers earn from useful delivery.",
     status: "network",
-    icon: HardDrive,
+    icon: Cloud,
   },
   {
     id: "relay-node",
@@ -123,7 +131,7 @@ export function OnboardingApp() {
       title: "Give your browser node a policy",
       done: Boolean(profile?.browserNode),
       body: profile?.browserNode
-        ? "Your browser node has an identity and can follow your local policy for work, app execution, and sharing."
+        ? "Your browser node has an identity and can follow your local policy for work orders, app execution, and sharing."
         : "The browser node is created with your profile. You decide what it can do and what it may share.",
       icon: Network,
     },
@@ -136,17 +144,17 @@ export function OnboardingApp() {
       icon: Users,
     },
     {
-      title: "Run a network app",
+      title: "Send storage work orders",
       done: appState.installed.size > 0,
       body: appState.installed.size > 0
-        ? `${appState.installed.size} app package${appState.installed.size === 1 ? "" : "s"} cached locally.`
-        : "Open App Store, run an app from network storage, and optionally cache it locally.",
-      icon: Package,
+        ? "You already have verified cached package data. Storage work orders are the same idea for your files."
+        : "Ask your own host, another machine, or paid network storage to store, copy, pin, retrieve, or move data for you.",
+      icon: HardDrive,
     },
     {
       title: "Inspect proof",
       done: capabilityGrantCount > 0 || appState.installed.size > 0,
-      body: "Trust Manager shows identity, packages, capability grants, routes, and audit events from the same local state.",
+      body: "Trust Manager shows identity, packages, capability grants, routes, work orders, and audit events from the same local state.",
       icon: BadgeCheck,
     },
   ]
@@ -161,11 +169,11 @@ export function OnboardingApp() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-2xl">
               <div className="inline-flex rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-primary">
-                Own identity · earn first · spend later
+                Own identity · issue work orders · earn first
               </div>
               <h2 className="mt-3 text-2xl font-semibold tracking-tight text-foreground">Your browser is your first Edgerun node.</h2>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                Edgerun does not require users to buy tokens before participating. Your browser node gets an identity, follows your policy, and can do useful work when you leave it available. Earnings can arrive from storage, relay, cache, and compute work, then you can spend them on apps, hosting, storage, or direct payments.
+                Edgerun does not require users to buy tokens before participating. Your browser node gets an identity, follows your policy, and can issue signed work orders to other nodes. That means you can ask a cloud host, your home server, another laptop, or paid network storage to store, retrieve, copy, pin, and move data for you with proofs instead of blind trust.
               </p>
             </div>
             <div className="grid min-w-60 gap-2 rounded-xl border border-border bg-background/60 p-3 text-xs">
@@ -196,9 +204,15 @@ export function OnboardingApp() {
         </section>
 
         <section className="mt-5 grid gap-3 lg:grid-cols-3">
+          <FlowCard icon={HardDrive} title="Give storage work orders" body="Your browser node can ask another node to store, retrieve, copy, pin, or move data. The worker returns proof, and payment follows useful work." />
+          <FlowCard icon={Cloud} title="Use cloud or your own machine" body="Run a storage node on a VPS, home server, NAS, or spare computer. Your browser node can move data between them by policy." />
+          <FlowCard icon={Wallet} title="Everyone can start" body="A new user can leave the browser node available and earn before buying. Usage funds the network instead of forcing token purchase upfront." />
+        </section>
+
+        <section className="mt-5 grid gap-3 lg:grid-cols-3">
           <FlowCard icon={MessageCircle} title="Message directly" body="Your contact book stores identities, not platform handles. Messages are sealed and routed by policy, without needing Meta, Apple, or Google as the social graph." />
           <FlowCard icon={PhoneCall} title="Call directly" body="Calls can use the same identity and route model: the network helps connect peers, but your node and your contacts remain the authority." />
-          <FlowCard icon={Wallet} title="Everyone can start" body="A new user can leave the browser node available and earn before buying. Usage funds the network instead of forcing token purchase upfront." />
+          <FlowCard icon={Package} title="Apps run from storage" body="Publishers use the CLI to publish signed SDK packages. Users run them by hash from network storage, or cache locally." />
         </section>
 
         <section className="mt-5">
@@ -229,9 +243,9 @@ export function OnboardingApp() {
         </section>
 
         <section className="mt-5 grid gap-3 lg:grid-cols-3">
-          <FlowCard icon={Package} title="Apps run from storage" body="Publishers use the CLI to publish signed SDK packages. Users run them by hash from network storage, or cache locally." />
-          <FlowCard icon={Cloud} title="Your node can earn" body="Leave your browser node running, set policy, and share only what you allow. Work must be admitted and proof-backed before payment." />
-          <FlowCard icon={Shield} title="Policy keeps control local" body="You decide who can message you, what apps can access, and what your node may contribute. Trust Manager shows the evidence." />
+          <FlowCard icon={Network} title="Your node can earn" body="Leave your browser node running, set policy, and share only what you allow. Work must be admitted and proof-backed before payment." />
+          <FlowCard icon={Shield} title="Policy keeps control local" body="You decide who can message you, what apps can access, where data can be copied, and what your node may contribute. Trust Manager shows the evidence." />
+          <FlowCard icon={Route} title="Move data with proof" body="Data movement is a signed route/work-order flow. The transport can be cloud, home machine, network storage, or another EdgeRun node." />
         </section>
       </div>
     </div>
