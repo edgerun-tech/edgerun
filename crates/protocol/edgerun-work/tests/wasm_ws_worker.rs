@@ -129,13 +129,17 @@ fn wasm_worker_node_processes_storage_work_over_ws_channel() {
         .expect("ws ordered send");
     assert_eq!(ordered.envelope.route_hash, route_hash);
 
-    let ws_frames = worker.drain_outbound_ws_frames();
+    let frame_bytes = channel_envelope_bytes(&ordered.envelope).expect("encode envelope frame");
+    let mut ws_frames = worker.drain_outbound_ws_frames();
     assert_eq!(ws_frames.len(), 1);
     assert_eq!(ws_frames[0].route_hash, route_hash);
     assert_eq!(ws_frames[0].to, wasm_storage.identity.node_id);
+    assert_eq!(ws_frames[0].envelope_bytes, frame_bytes);
+    assert_eq!(ws_frames[0].packet_hash, ordered.envelope.packet_hash);
+    assert_ne!(ws_frames[0].packet_bytes, ws_frames[0].envelope_bytes);
 
-    let frame_bytes = channel_envelope_bytes(&ordered.envelope).expect("encode envelope frame");
-    let decoded = channel_envelope_from_bytes(&frame_bytes).expect("decode envelope frame");
+    let decoded = channel_envelope_from_bytes(&ws_frames.remove(0).envelope_bytes)
+        .expect("decode envelope frame");
     assert_eq!(decoded.packet_hash, ordered.envelope.packet_hash);
 
     let output = worker
