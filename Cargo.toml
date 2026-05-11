@@ -124,6 +124,7 @@ members = [
   "crates/utility/edgerun-clap",
   "crates/utility/edgerun-deno-core-icudata",
   "crates/protocol/edgerun-wire",
+  "crates/protocol/edgerun-work",
   "crates/edgerun-event",
 ]
 
@@ -217,6 +218,7 @@ edgerun-log = { version = "0.1", path = "crates/utility/edgerun-log" }
 edgerun-deploy = { version = "0.1", path = "crates/edgerun-deploy", default-features = false }
 edgerun-ssh = { version = "0.1", path = "crates/edgerun-ssh", default-features = false }
 edgerun-wire = { version = "0.1", path = "crates/protocol/edgerun-wire", default-features = false }
+edgerun-work = { version = "0.1", path = "crates/protocol/edgerun-work", default-features = false }
 edgerun-crypto = { version = "0.1", path = "crates/utility/edgerun-crypto", default-features = false }
 edgerun-json = { version = "0.1", path = "crates/utility/edgerun-json", default-features = false }
 edgerun-locale = { version = "0.1", path = "crates/utility/edgerun-locale", default-features = false }
