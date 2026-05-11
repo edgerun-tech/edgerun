@@ -1,12 +1,11 @@
 use alloc::vec::Vec;
 
-use crate::channel::ChannelEnvelope;
+use crate::channel::{ChannelEnvelope, RouteAdvertisement};
 use crate::channel_order::{ChannelOrderBook, ChannelOrderError, OrderedChannelEnvelope};
 use crate::codec::blake3_hash;
 use crate::memory_channel::{route_hash, MemoryChannelEngine, MemoryChannelError};
 use crate::protocol::{Hash, NodeId, WorkPacket};
 use crate::route_auth::verify_route_advertisement;
-use crate::channel::RouteAdvertisement;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WorkChannelError {
@@ -63,6 +62,14 @@ pub struct MemoryWorkChannel {
 impl MemoryWorkChannel {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn from_engine(engine: MemoryChannelEngine) -> Self {
+        Self { engine }
+    }
+
+    pub fn into_engine(self) -> MemoryChannelEngine {
+        self.engine
     }
 
     pub fn engine(&self) -> &MemoryChannelEngine {
