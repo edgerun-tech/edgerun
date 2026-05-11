@@ -12,6 +12,8 @@ pub const CHANNEL_KIND_WEBRTC: u16 = 4;
 pub const CHANNEL_KIND_BLUETOOTH: u16 = 5;
 pub const CHANNEL_KIND_SERIAL: u16 = 6;
 pub const CHANNEL_KIND_WASM_HOST: u16 = 7;
+pub const CHANNEL_KIND_QUIC: u16 = 8;
+pub const CHANNEL_KIND_WEBTRANSPORT: u16 = 9;
 
 pub const ROUTE_STATUS_AVAILABLE: u16 = 1;
 pub const ROUTE_STATUS_DRAINING: u16 = 2;
