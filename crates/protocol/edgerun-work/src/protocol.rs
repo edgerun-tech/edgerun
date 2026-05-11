@@ -160,6 +160,7 @@ pub struct WorkAdmission {
     pub abi_version: u16,
     pub admission_id: Hash,
     pub dao_id: PublicKey,
+    pub user: PublicKey,
     pub admission_node: NodeIdentity,
     pub request_hash: Hash,
     pub assigned_route_hash: Hash,
