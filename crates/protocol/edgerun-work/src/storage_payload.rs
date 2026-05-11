@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 
 use rkyv::{Archive, Deserialize, Serialize};
 
-use crate::codec::{blake3_hash, packet_bytes, packet_from_bytes};
+use crate::codec::blake3_hash;
 use crate::erasure_storage::{ErasureManifest, ErasureShard};
 use crate::protocol::{Hash, WorkPacket, WorkProtocolError};
 
@@ -135,7 +135,7 @@ pub fn storage_payload_bytes(payload: &StoragePayload) -> Result<Vec<u8>, WorkPr
 }
 
 pub fn storage_payload_from_bytes(bytes: &[u8]) -> Result<StoragePayload, WorkProtocolError> {
-    use edgerun_wire::{access, deserialize, util, WireError};
+    use edgerun_wire::util;
     if bytes.as_ptr().align_offset(core::mem::align_of::<ArchivedStoragePayload>()) != 0 {
         let mut aligned = util::AlignedVec::<16>::with_capacity(bytes.len());
         aligned.extend_from_slice(bytes);

@@ -12,7 +12,7 @@ use crate::memory_channel::route_hash;
 use crate::protocol::{Hash, NodeId, WorkPacket, WORK_WIRE_ABI_VERSION};
 use crate::route_auth::verify_route_advertisement;
 use crate::std_runtime::framing::{read_work_packet, unix_ms, write_work_packet};
-use crate::work_channel::{OrderedWorkChannel, WorkChannel, WorkChannelError};
+use crate::work_channel::{WorkChannel, WorkChannelError};
 
 const ACCEPT_POLL_MS: u64 = 10;
 const CONNECTION_READ_TIMEOUT_MS: u64 = 250;
