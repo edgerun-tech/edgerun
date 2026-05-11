@@ -1,39 +1,64 @@
 use std::collections::BTreeMap;
 use std::io;
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
-use std::sync::{Arc, Mutex};
-use std::thread;
+use std::sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex};
+use std::thread::{self, JoinHandle};
+use std::time::Duration;
 
-use crate::channel::{ChannelEnvelope, RouteAdvertisement};
+use crate::channel::{ChannelEnvelope, RouteAdvertisement, ROUTE_STATUS_AVAILABLE};
 use crate::channel_order::{ChannelOrderBook, OrderedChannelEnvelope};
 use crate::codec::{blake3_hash, packet_bytes};
 use crate::memory_channel::route_hash;
 use crate::protocol::{Hash, NodeId, WorkPacket, WORK_WIRE_ABI_VERSION};
 use crate::route_auth::verify_route_advertisement;
-use crate::std_runtime::framing::{read_work_packet, write_work_packet};
+use crate::std_runtime::framing::{read_work_packet, unix_ms, write_work_packet};
 use crate::work_channel::{OrderedWorkChannel, WorkChannel, WorkChannelError};
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct TcpNodeRuntime {
     node_id: NodeId,
     listen_addr: SocketAddr,
     routes: BTreeMap<NodeId, RouteAdvertisement>,
     inbox: Arc<Mutex<Vec<WorkPacket>>>,
+    shutdown: Arc<AtomicBool>,
+    accept_thread: Arc<Mutex<Option<JoinHandle<()>>>>,
+}
+
+impl Clone for TcpNodeRuntime {
+    fn clone(&self) -> Self {
+        Self {
+            node_id: self.node_id,
+            listen_addr: self.listen_addr,
+            routes: self.routes.clone(),
+            inbox: Arc::clone(&self.inbox),
+            shutdown: Arc::clone(&self.shutdown),
+            accept_thread: Arc::clone(&self.accept_thread),
+        }
+    }
 }
 
 impl TcpNodeRuntime {
     pub fn bind<A: ToSocketAddrs>(node_id: NodeId, addr: A) -> io::Result<Self> {
         let listener = TcpListener::bind(addr)?;
+        listener.set_nonblocking(true)?;
         let listen_addr = listener.local_addr()?;
         let inbox = Arc::new(Mutex::new(Vec::new()));
+        let shutdown = Arc::new(AtomicBool::new(false));
         let inbox_for_thread = Arc::clone(&inbox);
-        thread::spawn(move || {
-            for incoming in listener.incoming() {
-                if let Ok(stream) = incoming {
-                    let inbox = Arc::clone(&inbox_for_thread);
-                    thread::spawn(move || {
-                        let _ = read_stream_into_inbox(stream, inbox);
-                    });
+        let shutdown_for_thread = Arc::clone(&shutdown);
+        let accept_thread = thread::spawn(move || {
+            while !shutdown_for_thread.load(Ordering::Acquire) {
+                match listener.accept() {
+                    Ok((stream, _peer)) => {
+                        let inbox = Arc::clone(&inbox_for_thread);
+                        thread::spawn(move || {
+                            let _ = read_stream_into_inbox(stream, inbox);
+                        });
+                    }
+                    Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                        thread::sleep(Duration::from_millis(10));
+                    }
+                    Err(_) => break,
                 }
             }
         });
@@ -42,6 +67,8 @@ impl TcpNodeRuntime {
             listen_addr,
             routes: BTreeMap::new(),
             inbox,
+            shutdown,
+            accept_thread: Arc::new(Mutex::new(Some(accept_thread))),
         })
     }
 
@@ -51,6 +78,15 @@ impl TcpNodeRuntime {
 
     pub fn listen_addr(&self) -> SocketAddr {
         self.listen_addr
+    }
+
+    pub fn shutdown(&self) -> io::Result<()> {
+        self.shutdown.store(true, Ordering::Release);
+        let _ = TcpStream::connect(self.listen_addr);
+        if let Some(handle) = self.accept_thread.lock().expect("tcp accept thread poisoned").take() {
+            handle.join().map_err(|_| io::Error::new(io::ErrorKind::Other, "tcp accept thread panicked"))?;
+        }
+        Ok(())
     }
 
     pub fn drain_packets(&self) -> Vec<WorkPacket> {
@@ -93,11 +129,15 @@ impl TcpNodeRuntime {
     fn route_addr(route: &RouteAdvertisement) -> Option<String> {
         String::from_utf8(route.endpoint.address.clone()).ok()
     }
+
+    fn route_available(route: &RouteAdvertisement, now_unix_ms: u64) -> bool {
+        route.status == ROUTE_STATUS_AVAILABLE && route.valid_until_unix_ms >= now_unix_ms
+    }
 }
 
 impl WorkChannel for TcpNodeRuntime {
     fn add_route(&mut self, route: RouteAdvertisement) -> Result<Hash, WorkChannelError> {
-        if !verify_route_advertisement(&route) {
+        if !verify_route_advertisement(&route) || !Self::route_available(&route, unix_ms()) {
             return Err(WorkChannelError::RouteInvalid);
         }
         let node_id = route.node.node_id;
@@ -111,7 +151,8 @@ impl WorkChannel for TcpNodeRuntime {
     }
 
     fn route_hash_for(&self, node_id: &NodeId) -> Option<Hash> {
-        self.routes.get(node_id).map(route_hash)
+        let route = self.routes.get(node_id)?;
+        Self::route_available(route, unix_ms()).then(|| route_hash(route))
     }
 
     fn send_unordered(
@@ -120,6 +161,11 @@ impl WorkChannel for TcpNodeRuntime {
         to: NodeId,
         packet: WorkPacket,
     ) -> Result<ChannelEnvelope, WorkChannelError> {
+        let now = unix_ms();
+        if self.routes.get(&to).is_some_and(|route| !Self::route_available(route, now)) {
+            self.routes.remove(&to);
+            return Err(WorkChannelError::RouteMissing);
+        }
         let route = self.routes.get(&to).ok_or(WorkChannelError::RouteMissing)?;
         let packet_hash = packet_bytes(&packet)
             .map(|bytes| blake3_hash(&bytes))
