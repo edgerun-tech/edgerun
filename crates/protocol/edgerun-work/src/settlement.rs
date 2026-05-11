@@ -23,6 +23,7 @@ pub struct SettlementResult {
     pub amount: u64,
     pub user_balance_after: u64,
     pub worker_balance_after: u64,
+    pub admission_spent_after: u64,
     pub receipt_hash: Hash,
 }
 
@@ -30,6 +31,7 @@ pub struct SettlementResult {
 pub struct SettlementLedger {
     user_balances: BTreeMap<PublicKey, u64>,
     worker_balances: BTreeMap<NodeId, u64>,
+    admission_spend: BTreeMap<Hash, u64>,
     paid_receipts: BTreeSet<Hash>,
 }
 
@@ -52,6 +54,10 @@ impl SettlementLedger {
         *self.worker_balances.get(worker).unwrap_or(&0)
     }
 
+    pub fn admission_spent(&self, admission_hash: &Hash) -> u64 {
+        *self.admission_spend.get(admission_hash).unwrap_or(&0)
+    }
+
     pub fn settle_receipt(
         &mut self,
         user: PublicKey,
@@ -71,7 +77,9 @@ impl SettlementLedger {
         if receipt.request_hash != admission.request_hash {
             return Err(SettlementError::ReceiptAdmissionMismatch);
         }
-        if receipt.total_claim > admission.admitted_budget {
+        let already_spent = self.admission_spent(&admission_hash);
+        let next_spend = already_spent.saturating_add(receipt.total_claim);
+        if next_spend > admission.admitted_budget {
             return Err(SettlementError::ClaimExceedsAdmissionBudget);
         }
         let receipt_hash = work_receipt_hash(receipt)?;
@@ -84,6 +92,7 @@ impl SettlementLedger {
             return Err(SettlementError::InsufficientBalance);
         }
         *user_balance -= receipt.total_claim;
+        self.admission_spend.insert(admission_hash, next_spend);
         let worker_balance = self.worker_balances.entry(receipt.worker.node_id).or_default();
         *worker_balance = worker_balance.saturating_add(receipt.total_claim);
         Ok(SettlementResult {
@@ -92,6 +101,7 @@ impl SettlementLedger {
             amount: receipt.total_claim,
             user_balance_after: *user_balance,
             worker_balance_after: *worker_balance,
+            admission_spent_after: next_spend,
             receipt_hash,
         })
     }
