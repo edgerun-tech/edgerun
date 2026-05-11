@@ -57,6 +57,8 @@ pub mod stream_append;
 pub mod tls;
 #[cfg(target_arch = "wasm32")]
 pub mod wasm;
+#[cfg(all(feature = "http3", feature = "quic"))]
+pub mod work_quic_transport;
 #[cfg(feature = "xray")]
 pub mod xray;
 
