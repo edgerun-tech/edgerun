@@ -20,7 +20,7 @@ fn encode_work_packet_once_matches_legacy_bytes_and_hash() {
     let legacy_hash = blake3_hash(&legacy_bytes);
     let encoded = encode_work_packet_once(&packet).expect("encoded packet");
 
-    assert_eq!(encoded.bytes, legacy_bytes);
+    assert_eq!(encoded.as_bytes(), legacy_bytes.as_slice());
     assert_eq!(encoded.hash, legacy_hash);
     assert_eq!(packet_hash(&packet).expect("packet hash"), legacy_hash);
 }
@@ -38,9 +38,9 @@ fn archived_packet_frame_validates_and_roundtrips_without_rehashing_owned_packet
     );
     let encoded = encode_work_packet_once(&packet).expect("encoded packet");
 
-    let frame = archived_packet_frame_from_bytes(&encoded.bytes).expect("archived frame");
+    let frame = archived_packet_frame_from_bytes(encoded.as_bytes()).expect("archived frame");
     assert_eq!(frame.hash, encoded.hash);
-    assert_eq!(frame.as_bytes(), encoded.bytes.as_slice());
+    assert_eq!(frame.as_bytes(), encoded.as_bytes());
     frame.archived().expect("valid rkyv archive");
 
     let decoded = frame.into_packet().expect("owned packet only when requested");
