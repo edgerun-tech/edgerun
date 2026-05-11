@@ -2,6 +2,7 @@
 
 extern crate alloc;
 
+pub mod admitted_route;
 pub mod basic_roles;
 pub mod batch_settlement;
 pub mod channel;
@@ -39,6 +40,7 @@ pub mod ws_channel;
 #[cfg(feature = "std")]
 pub mod std_runtime;
 
+pub use admitted_route::*;
 pub use basic_roles::*;
 pub use batch_settlement::*;
 pub use channel::*;
