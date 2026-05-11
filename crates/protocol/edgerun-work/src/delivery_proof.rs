@@ -4,7 +4,7 @@ use edgerun_crypto::Ed25519SigningKey;
 
 use crate::channel::ChannelProof;
 use crate::channel_order::{ordered_message_hash, OrderedChannelEnvelope};
-use crate::codec::blake3_hash;
+use crate::preimage::{HashBuilder, PreimageBuilder};
 use crate::protocol::{Hash, NodeId, NodeIdentity, WorkPacket, WorkProtocolError, WORK_WIRE_ABI_VERSION};
 use crate::recipient_policy::{
     recipient_message_policy_allows, recipient_message_policy_hash, RecipientMessagePolicy,
@@ -32,26 +32,21 @@ pub enum PolicyBoundChannelProofError {
 }
 
 pub fn channel_proof_preimage(value: &ChannelProof) -> Vec<u8> {
-    let mut out = Vec::new();
-    out.extend_from_slice(CHANNEL_PROOF_DOMAIN);
-    out.push(0);
-    out.extend_from_slice(&value.channel_id);
-    out.extend_from_slice(&value.relay_node_id);
-    out.extend_from_slice(&value.from);
-    out.extend_from_slice(&value.to);
-    out.extend_from_slice(&value.message_hash);
-    out.extend_from_slice(&value.sequence.to_be_bytes());
-    out
+    PreimageBuilder::domain(CHANNEL_PROOF_DOMAIN)
+        .hash(&value.channel_id)
+        .node_id(&value.relay_node_id)
+        .node_id(&value.from)
+        .node_id(&value.to)
+        .hash(&value.message_hash)
+        .u64(value.sequence)
+        .finish()
 }
 
 pub fn policy_bound_ordered_message_hash(ordered: &OrderedChannelEnvelope, policy_hash: Hash) -> Hash {
-    let ordered_hash = ordered_message_hash(ordered);
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(POLICY_BOUND_MESSAGE_DOMAIN);
-    bytes.push(0);
-    bytes.extend_from_slice(&ordered_hash);
-    bytes.extend_from_slice(&policy_hash);
-    blake3_hash(&bytes)
+    HashBuilder::domain(POLICY_BOUND_MESSAGE_DOMAIN)
+        .hash(&ordered_message_hash(ordered))
+        .hash(&policy_hash)
+        .finish()
 }
 
 pub fn sign_channel_proof(key: &Ed25519SigningKey, mut value: ChannelProof) -> ChannelProof {
@@ -199,5 +194,7 @@ fn verify_channel_proof_for_message_hash(
 }
 
 pub fn channel_proof_hash(proof: &ChannelProof) -> Hash {
-    blake3_hash(&channel_proof_preimage(proof))
+    HashBuilder::domain(CHANNEL_PROOF_DOMAIN)
+        .bytes(&channel_proof_preimage(proof))
+        .finish()
 }
