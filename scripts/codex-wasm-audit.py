@@ -9,10 +9,16 @@ from __future__ import annotations
 
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 CODEX = ROOT / "crates" / "edgerun-codex"
+
+FORBIDDEN_ANYWHERE = {
+    "v8": "V8 must not exist inside edgerun-codex. Delegate JS execution to Bun/Node/browser worker/EdgeRun runtime capability.",
+    "edgerun-v8": "V8 must not exist inside edgerun-codex. Delegate JS execution to Bun/Node/browser worker/EdgeRun runtime capability.",
+}
 
 NATIVE_ONLY_DEPS = {
     "edgerun-reqwest",
@@ -24,7 +30,6 @@ NATIVE_ONLY_DEPS = {
     "rustls-pki-types",
     "landlock",
     "seccompiler",
-    "v8",
     "edgerun-zstd",
 }
 
@@ -137,6 +142,18 @@ def native_refs(crate_dir: Path) -> list[tuple[str, int, str]]:
     return refs
 
 
+def forbidden_refs() -> list[str]:
+    hits: list[str] = []
+    for file in CODEX.rglob("*"):
+        if not file.is_file() or file.suffix not in {".rs", ".toml", ".lock"}:
+            continue
+        text = file.read_text(errors="ignore")
+        for token, reason in FORBIDDEN_ANYWHERE.items():
+            if re.search(rf"\b{re.escape(token)}\b", text):
+                hits.append(f"{file.relative_to(ROOT)}: forbidden {token}: {reason}")
+    return hits
+
+
 def print_crate_report() -> None:
     print("Codex wasm/native pruning audit\n")
     print(f"{'crate':30} {'native deps':35} {'heavy deps':35} {'native refs':>11} notes")
@@ -175,8 +192,15 @@ def print_commands() -> None:
 
 def main() -> None:
     print_crate_report()
+    hits = forbidden_refs()
+    if hits:
+        print("\nForbidden dependencies/references found:\n")
+        for hit in hits:
+            print(f"- {hit}")
     print_commands()
-    print("\nPolicy:\n- wasm crates must not depend on native-transport.\n- reqwest/tokio net/fs/process/TLS/native certs stay behind native features.\n- logging must go through edgerun-log facade, not raw tracing trees.\n- tree-sitter/V8 are optional capability nodes, not browser-core dependencies.")
+    print("\nPolicy:\n- V8 must not exist inside edgerun-codex. Delegate JS to Bun/Node/browser worker/EdgeRun runtime capability.\n- wasm crates must not depend on native-transport.\n- reqwest/tokio net/fs/process/TLS/native certs stay behind native features.\n- logging must go through edgerun-log facade, not raw tracing trees.\n- tree-sitter is an optional capability node, not a browser-core dependency.")
+    if hits:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
