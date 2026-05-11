@@ -27,6 +27,7 @@ pub enum SettlementError {
     ReceiptOutputMismatch,
     DeliveryPacketMismatch,
     AdmissionRouteMismatch,
+    EvidenceRequired,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -100,7 +101,44 @@ impl SettlementLedger {
         self.admission_spend.len()
     }
 
-    pub fn can_settle_receipt(
+    pub fn can_settle_receipt_unchecked_evidence(
+        &self,
+        admission: &WorkAdmission,
+        receipt: &WorkReceipt,
+    ) -> Result<(), SettlementError> {
+        if receipt.worker.role == NODE_ROLE_RELAY {
+            return Err(SettlementError::EvidenceRequired);
+        }
+        self.can_settle_receipt_common(admission, receipt)
+    }
+
+    pub fn can_settle_delivery(
+        &self,
+        evidence: &DeliverySettlementEvidence<'_>,
+    ) -> Result<(), SettlementError> {
+        self.can_settle_receipt_common(evidence.admission, evidence.receipt)?;
+        verify_delivery_evidence(evidence)?;
+        Ok(())
+    }
+
+    pub fn settle_receipt_unchecked_evidence(
+        &mut self,
+        admission: &WorkAdmission,
+        receipt: &WorkReceipt,
+    ) -> Result<SettlementResult, SettlementError> {
+        self.can_settle_receipt_unchecked_evidence(admission, receipt)?;
+        self.commit_settlement(admission, receipt)
+    }
+
+    pub fn settle_delivery(
+        &mut self,
+        evidence: &DeliverySettlementEvidence<'_>,
+    ) -> Result<SettlementResult, SettlementError> {
+        self.can_settle_delivery(evidence)?;
+        self.commit_settlement(evidence.admission, evidence.receipt)
+    }
+
+    fn can_settle_receipt_common(
         &self,
         admission: &WorkAdmission,
         receipt: &WorkReceipt,
@@ -135,32 +173,6 @@ impl SettlementLedger {
             return Err(SettlementError::InsufficientBalance);
         }
         Ok(())
-    }
-
-    pub fn can_settle_delivery(
-        &self,
-        evidence: &DeliverySettlementEvidence<'_>,
-    ) -> Result<(), SettlementError> {
-        self.can_settle_receipt(evidence.admission, evidence.receipt)?;
-        verify_delivery_evidence(evidence)?;
-        Ok(())
-    }
-
-    pub fn settle_receipt(
-        &mut self,
-        admission: &WorkAdmission,
-        receipt: &WorkReceipt,
-    ) -> Result<SettlementResult, SettlementError> {
-        self.can_settle_receipt(admission, receipt)?;
-        self.commit_settlement(admission, receipt)
-    }
-
-    pub fn settle_delivery(
-        &mut self,
-        evidence: &DeliverySettlementEvidence<'_>,
-    ) -> Result<SettlementResult, SettlementError> {
-        self.can_settle_delivery(evidence)?;
-        self.commit_settlement(evidence.admission, evidence.receipt)
     }
 
     fn commit_settlement(
