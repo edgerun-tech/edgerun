@@ -86,7 +86,7 @@ export function BuiltinAppHost({ app, onLaunchApp }: BuiltinAppHostProps) {
     case "workflow-builder":
       return <div className="p-4 text-muted-foreground">Desktop demo app disabled: {app.name}</div>
     case "trust-manager":
-      return <TrustManagerSurface />
+      return <TrustManagerSurface onLaunchApp={(a: AppDefinition) => onLaunchApp?.(a)} />
     case "file-browser":
       return <FileManagerApp />
     case "storage":
