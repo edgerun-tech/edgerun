@@ -6,6 +6,9 @@ use crate::channel_order::OrderedChannelEnvelope;
 use crate::codec::{blake3_hash, packet_bytes, verify_work_admission, verify_work_receipt};
 use crate::delivery_proof::{channel_proof_hash, verify_channel_proof_for_ordered};
 use crate::protocol::*;
+use crate::recipient_policy::{
+    recipient_message_policy_allows, recipient_message_policy_hash, RecipientMessagePolicy,
+};
 use crate::relay_role::ordered_message_input_hash;
 use crate::transit_proof::{packet_transit_hash, relay_delivery_output_hash, PacketTransitHashInput};
 
@@ -27,6 +30,8 @@ pub enum SettlementError {
     ReceiptOutputMismatch,
     DeliveryPacketMismatch,
     AdmissionRouteMismatch,
+    PolicyHashMismatch,
+    MessagePolicyRejected,
     EvidenceRequired,
 }
 
@@ -53,8 +58,10 @@ pub struct DeliverySettlementEvidence<'a> {
     pub relay_input: &'a OrderedChannelEnvelope,
     pub recipient_delivery: &'a OrderedChannelEnvelope,
     pub recipient: &'a NodeIdentity,
+    pub recipient_policy: &'a RecipientMessagePolicy,
     pub recipient_proof: &'a ChannelProof,
     pub previous_transit_hash: Hash,
+    pub now_unix_ms: u64,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -233,6 +240,9 @@ pub fn verify_delivery_evidence(
     if receipt.worker.node_id != receipt.relay_node_id {
         return Err(SettlementError::WrongRelay);
     }
+    if recipient_message_policy_hash(evidence.recipient_policy) != evidence.admission.policy_hash {
+        return Err(SettlementError::PolicyHashMismatch);
+    }
     if evidence.admission.assigned_route_hash != evidence.relay_input.envelope.route_hash
         || evidence.admission.assigned_channel.channel_id != evidence.relay_input.envelope.channel_id
     {
@@ -250,6 +260,9 @@ pub fn verify_delivery_evidence(
     let WorkPacket::NetworkMessage(message) = &evidence.relay_input.envelope.packet else {
         return Err(SettlementError::DeliveryPacketMismatch);
     };
+    if recipient_message_policy_allows(evidence.recipient_policy, message, evidence.now_unix_ms).is_err() {
+        return Err(SettlementError::MessagePolicyRejected);
+    }
     if message.via_relay != receipt.worker.node_id || evidence.relay_input.envelope.to != receipt.worker.node_id {
         return Err(SettlementError::WrongRelay);
     }
