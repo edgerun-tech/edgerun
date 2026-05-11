@@ -21,8 +21,15 @@ pub fn read_work_packet(stream: &mut TcpStream) -> io::Result<WorkPacket> {
 pub fn write_work_packet(stream: &mut TcpStream, packet: &WorkPacket) -> io::Result<()> {
     let bytes = packet_bytes(packet)
         .map_err(|error| io::Error::new(ErrorKind::InvalidData, format!("invalid work packet: {error:?}")))?;
+    write_encoded_work_packet(stream, &bytes)
+}
+
+pub fn write_encoded_work_packet(stream: &mut TcpStream, bytes: &[u8]) -> io::Result<()> {
+    if bytes.is_empty() || bytes.len() > MAX_WORK_FRAME_LEN {
+        return Err(io::Error::new(ErrorKind::InvalidData, "invalid work frame length"));
+    }
     stream.write_all(&(bytes.len() as u32).to_be_bytes())?;
-    stream.write_all(&bytes)?;
+    stream.write_all(bytes)?;
     stream.flush()
 }
 
