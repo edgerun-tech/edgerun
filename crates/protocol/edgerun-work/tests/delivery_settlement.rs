@@ -151,6 +151,28 @@ fn settle_delivery_requires_recipient_proof_and_transit_hash() {
 }
 
 #[test]
+fn settle_delivery_rejects_admission_route_mismatch() {
+    let mut fixture = fixture();
+    fixture.admission.assigned_route_hash = [5u8; 32];
+    let admission_key = Ed25519SigningKey::from_bytes(&[181u8; 32]);
+    fixture.admission = sign_work_admission(&admission_key, fixture.admission.clone());
+    let evidence = DeliverySettlementEvidence {
+        admission: &fixture.admission,
+        receipt: &fixture.result.receipt,
+        relay_input: &fixture.relay_input,
+        recipient_delivery: &fixture.recipient_delivery,
+        recipient: &fixture.recipient.identity,
+        recipient_proof: &fixture.recipient_proof,
+        previous_transit_hash: [0u8; 32],
+    };
+
+    assert_eq!(
+        verify_delivery_evidence(&evidence),
+        Err(SettlementError::AdmissionRouteMismatch)
+    );
+}
+
+#[test]
 fn settle_delivery_rejects_wrong_previous_transit_hash() {
     let fixture = fixture();
     let evidence = DeliverySettlementEvidence {
