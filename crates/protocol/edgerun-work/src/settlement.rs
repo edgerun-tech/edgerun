@@ -1,8 +1,13 @@
 use alloc::collections::{BTreeMap, BTreeSet};
 use alloc::vec::Vec;
 
+use crate::channel::ChannelProof;
+use crate::channel_order::OrderedChannelEnvelope;
 use crate::codec::{blake3_hash, packet_bytes, verify_work_admission, verify_work_receipt};
+use crate::delivery_proof::verify_channel_proof_for_ordered;
 use crate::protocol::*;
+use crate::relay_role::ordered_message_input_hash;
+use crate::transit_proof::{packet_transit_hash, PacketTransitHashInput};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SettlementError {
@@ -14,6 +19,13 @@ pub enum SettlementError {
     ClaimExceedsAdmissionBudget,
     ReceiptAdmissionMismatch,
     PacketHashFailed,
+    WrongWorkerRole,
+    WrongRelay,
+    WrongRecipient,
+    InvalidRecipientProof,
+    ReceiptInputMismatch,
+    ReceiptOutputMismatch,
+    DeliveryPacketMismatch,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -31,6 +43,16 @@ pub struct SettlementResult {
 pub struct SettlementPruneResult {
     pub removed_admission: bool,
     pub removed_receipts: u64,
+}
+
+pub struct DeliverySettlementEvidence<'a> {
+    pub admission: &'a WorkAdmission,
+    pub receipt: &'a WorkReceipt,
+    pub relay_input: &'a OrderedChannelEnvelope,
+    pub recipient_delivery: &'a OrderedChannelEnvelope,
+    pub recipient: &'a NodeIdentity,
+    pub recipient_proof: &'a ChannelProof,
+    pub previous_transit_hash: Hash,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -114,12 +136,37 @@ impl SettlementLedger {
         Ok(())
     }
 
+    pub fn can_settle_delivery(
+        &self,
+        evidence: &DeliverySettlementEvidence<'_>,
+    ) -> Result<(), SettlementError> {
+        self.can_settle_receipt(evidence.admission, evidence.receipt)?;
+        verify_delivery_evidence(evidence)?;
+        Ok(())
+    }
+
     pub fn settle_receipt(
         &mut self,
         admission: &WorkAdmission,
         receipt: &WorkReceipt,
     ) -> Result<SettlementResult, SettlementError> {
         self.can_settle_receipt(admission, receipt)?;
+        self.commit_settlement(admission, receipt)
+    }
+
+    pub fn settle_delivery(
+        &mut self,
+        evidence: &DeliverySettlementEvidence<'_>,
+    ) -> Result<SettlementResult, SettlementError> {
+        self.can_settle_delivery(evidence)?;
+        self.commit_settlement(evidence.admission, evidence.receipt)
+    }
+
+    fn commit_settlement(
+        &mut self,
+        admission: &WorkAdmission,
+        receipt: &WorkReceipt,
+    ) -> Result<SettlementResult, SettlementError> {
         let admission_hash = work_admission_hash(admission)?;
         let receipt_hash = work_receipt_hash(receipt)?;
         let already_spent = self.admission_spent(&admission_hash);
@@ -161,6 +208,64 @@ impl SettlementLedger {
             removed_receipts,
         }
     }
+}
+
+pub fn verify_delivery_evidence(
+    evidence: &DeliverySettlementEvidence<'_>,
+) -> Result<Hash, SettlementError> {
+    let receipt = evidence.receipt;
+    if receipt.worker.role != NODE_ROLE_RELAY {
+        return Err(SettlementError::WrongWorkerRole);
+    }
+    if receipt.worker.node_id != receipt.relay_node_id {
+        return Err(SettlementError::WrongRelay);
+    }
+    if evidence.recipient_delivery.envelope.from != receipt.worker.node_id {
+        return Err(SettlementError::WrongRelay);
+    }
+    if evidence.recipient_delivery.envelope.to != evidence.recipient.node_id {
+        return Err(SettlementError::WrongRecipient);
+    }
+    if evidence.relay_input.envelope.packet_hash != evidence.recipient_delivery.envelope.packet_hash {
+        return Err(SettlementError::DeliveryPacketMismatch);
+    }
+    let WorkPacket::NetworkMessage(message) = &evidence.relay_input.envelope.packet else {
+        return Err(SettlementError::DeliveryPacketMismatch);
+    };
+    if message.via_relay != receipt.worker.node_id || evidence.relay_input.envelope.to != receipt.worker.node_id {
+        return Err(SettlementError::WrongRelay);
+    }
+    if message.to != evidence.recipient.node_id {
+        return Err(SettlementError::WrongRecipient);
+    }
+    if verify_channel_proof_for_ordered(
+        evidence.recipient_proof,
+        evidence.recipient,
+        receipt.worker.node_id,
+        evidence.recipient_delivery,
+    )
+    .is_err()
+    {
+        return Err(SettlementError::InvalidRecipientProof);
+    }
+    let expected_input = ordered_message_input_hash(evidence.relay_input);
+    if receipt.input_hash != expected_input {
+        return Err(SettlementError::ReceiptInputMismatch);
+    }
+    let expected_transit_hash = packet_transit_hash(&PacketTransitHashInput {
+        node_id: receipt.worker.node_id,
+        from: evidence.relay_input.envelope.from,
+        to: evidence.recipient.node_id,
+        channel_id: evidence.relay_input.envelope.channel_id,
+        route_hash: evidence.recipient_delivery.envelope.route_hash,
+        packet_hash: evidence.recipient_delivery.envelope.packet_hash,
+        sequence: receipt.sequence,
+        previous_transit_hash: evidence.previous_transit_hash,
+    });
+    if receipt.output_hash != expected_transit_hash {
+        return Err(SettlementError::ReceiptOutputMismatch);
+    }
+    Ok(expected_transit_hash)
 }
 
 pub fn work_admission_hash(admission: &WorkAdmission) -> Result<Hash, SettlementError> {
