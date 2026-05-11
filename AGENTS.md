@@ -1,6 +1,6 @@
 # EdgeRun product and agent guidance
 
-This repository is building EdgeRun: user-owned internet infrastructure for identity, apps, storage, routing, compute, and payments.
+This repository is building EdgeRun: user-owned internet infrastructure for identity, apps, storage, routing, compute, publishing, and payments.
 
 EdgeRun is not a token-first crypto project and not a generic cloud clone. It is usage-first infrastructure where users and developers can run, publish, host, sell, cache, relay, store, compute, and settle through verifiable work. Payments follow proof of useful work.
 
@@ -11,6 +11,7 @@ EdgeRun gives users freedom and accountability at the same time.
 Freedom:
 
 - Users own their identity, data, local app cache, contacts, keys, and proof history.
+- Users are not only consumers. With identity routing and built-in internet protocols, every user can become a publisher, host, app seller, website owner, data source, or service provider.
 - Developers can publish and sell apps without Apple, Google, Meta, Stripe, Cloudflare, or AWS as required gatekeepers.
 - Anyone can run useful nodes and earn from bandwidth, storage, relay, compute, hosting, and app distribution.
 - Apps and sites are content-addressed and can be served by the network.
@@ -24,7 +25,7 @@ Accountability:
 
 The public framing should be:
 
-> Own your identity and data. Run apps from verified network storage. Cache locally when you want. Developers sell directly. Infrastructure gets paid for useful work.
+> Own your identity and data. Run apps from verified network storage. Cache locally when you want. Publish from your own node. Developers sell directly. Infrastructure gets paid for useful work.
 
 Avoid presenting the product as merely “decentralized cloud” or “DRM”. Internally, policy can enforce app licensing and accountability, but externally the better language is verifiable licensing, publisher-defined access policy, user-owned execution, and proof-backed payments.
 
@@ -41,15 +42,19 @@ The browser node should be treated as a first-class local node that can:
 - optionally cache verified packages locally;
 - request and grant capabilities;
 - record local audit/proof events;
-- eventually earn from useful work when resource sharing is enabled.
+- eventually earn from useful work when resource sharing is enabled;
+- publish identity-routed services when the user enables them.
 
 The user flow should feel simple:
 
 ```text
 Create/unlock identity
 → browser node starts
+→ define node policy
+→ connect contacts and old data sources
 → run app from network storage
 → optional local cache
+→ publish or sync what the user chooses
 → inspect proof in Trust Manager
 → earn/spend through usage
 ```
@@ -59,13 +64,41 @@ On first run of a network app, users should see a clear prompt:
 ```text
 This app runs from EdgeRun network storage.
 Your browser node will retrieve signed package bytes, verify hashes, and run locally.
-Retrieval is usually very cheap and may pay storage/CDN nodes.
+Retrieval cost is deterministic from the package size and policy schedule.
 Would you like to cache verified bytes locally to avoid repeated retrieval payments?
 
 [Run once] [Verify & cache] [Cancel]
 ```
 
 Use “run” as the primary user action. “Install” is the wrong mental model. Local state is a verified cache, not ownership of a copied app from a centralized store.
+
+## Users as publishers
+
+A user-owned node can be more than a browser runtime. EdgeRun nodes already aim to include identity routing and common internet protocol capability such as HTTP, TLS, ACME, SSH, iPXE, TFTP, and related service/provisioning protocols.
+
+That means a user can become their own publisher:
+
+```text
+user identity
+→ node policy
+→ signed route / endpoint advertisement
+→ content-addressed site/app/file/API/boot image
+→ HTTP/TLS/ACME or other protocol exposure
+→ proof/audit trail
+→ optional payment/settlement
+```
+
+Examples:
+
+- publish a personal website;
+- host an app or app catalog entry;
+- expose a private API to approved contacts/agents;
+- serve files or package objects from EdgeRun storage;
+- publish boot/provisioning artifacts such as iPXE/TFTP flows;
+- expose an agent service under explicit policy;
+- let contacts message or call directly by identity.
+
+Do not design UX where users are only consumers of apps. The product direction is that users can start as consumers, then become publishers/providers by enabling node policy and route/service capabilities.
 
 ## Developer model
 
@@ -136,6 +169,35 @@ license-required
 
 Do not add new protocol types just to represent app-store semantics. Prefer content-addressed policies referenced by `policy_hash`, combined with existing work/request/admission/proof/receipt primitives.
 
+## Data import and personal timeline model
+
+Third-party connections are migration sources, not permanent homes.
+
+Gmail, other mailboxes, Google Drive, GitHub, photos, contacts, calendars, local folders, browser cache, and other sources should be presented as import/sync connectors into user-owned EdgeRun storage and the Trust Container.
+
+The intended direction:
+
+```text
+connect old services
+→ import/sync selected data into EdgeRun storage
+→ build private indexes/timelines/graphs
+→ grant specialized agents scoped access
+→ slowly stop depending on the old services
+```
+
+This enables app-driven visualization of a person’s life. Apps and agents can visualize timelines, relationships, finances, health records, documents, projects, messages, calls, and media, but only through explicit capability grants.
+
+Specialized AI agents should be scoped by assignment and policy, for example:
+
+- finance agent: invoices, receipts, accounts, tax documents;
+- health agent: health documents, wearable data, food logs, habits;
+- memory agent: timeline, notes, messages, photos, contacts;
+- code agent: repos, issues, docs, release history;
+- travel agent: flights, calendars, locations, documents;
+- publishing agent: sites, apps, DNS/ACME, release metadata.
+
+Each agent must have a clear capability scope and should appear in Trust Manager.
+
 ## Trust Container and Trust Manager
 
 The Trust Container is the user’s local sealed identity/data root.
@@ -164,6 +226,7 @@ Important frontend stores/surfaces:
 - `localCapabilityGrantsStore`: local app capability grants.
 - `TrustManagerSurface`: should show real projected state.
 - `AppStore`: should present run/cache network apps, package proofs, developer identity, policy, and local cache state.
+- Storage/data-source apps: should present external services as import/sync sources into EdgeRun storage.
 
 ## Node responsibilities
 
@@ -177,7 +240,8 @@ Browser node:
 - runs network apps;
 - caches verified package bytes;
 - records runtime/proof events;
-- can eventually earn from browser-appropriate work.
+- can eventually earn from browser-appropriate work;
+- can become a publisher/service endpoint when enabled by policy.
 
 Storage/CDN node:
 
@@ -208,6 +272,12 @@ Settlement rail:
 - may use smart contracts/cross-chain settlement;
 - should keep on-chain logic minimal and hash/proof-oriented.
 
+Publishing/service node:
+
+- exposes user-approved services over identity-routed endpoints and standard protocols;
+- can serve websites, APIs, package objects, boot artifacts, or agent endpoints;
+- must obey user policy and emit auditable events.
+
 ## Existing protocol primitives
 
 Do not add new protocol objects unless they create a new cryptographic or economic guarantee.
@@ -226,14 +296,14 @@ policy_hash        = content-addressed policy commitment
 SettlementLedger   = local settlement model
 ```
 
-For app sales, website hosting, package delivery, CDN retrieval, user-to-user payments, and passkey payments, use existing primitives where possible:
+For app sales, website hosting, package delivery, CDN retrieval, user-to-user payments, passkey payments, and user publishing, use existing primitives where possible:
 
 ```text
 User action
 → WorkRequest
 → policy_hash
 → WorkAdmission
-→ execution/delivery/retrieval
+→ execution/delivery/retrieval/publication
 → ChannelProof or typed proof
 → WorkReceipt
 → settlement
@@ -309,6 +379,8 @@ Prefer:
 - “Trust Container” for the sealed local profile/root.
 - “Proof dashboard” for Trust Manager.
 - “Publisher policy” or “app policy” instead of “DRM” in public copy.
+- “Import/sync source” instead of treating Google/GitHub/mail providers as long-term homes.
+- “Publish from your node” or “identity-routed publishing” for user-hosted services.
 
 Internal names may still use `install`/`installed` temporarily for compatibility, but new UX and refactors should move toward cache/run terminology.
 
@@ -325,7 +397,8 @@ Revenue sources can include:
 - compute job fees;
 - marketplace/publisher tooling;
 - website hosting and domain/DNS/ACME automation;
-- AI agent business activity and payments.
+- AI agent business activity and payments;
+- user-published services and direct identity-routed commerce.
 
 The token/settlement rail exists to clear value between users, publishers, and infrastructure providers. The product should prove utility first: users leave a browser node running, it does useful work, earns, and the user can spend earnings inside the ecosystem.
 
@@ -336,6 +409,8 @@ The token/settlement rail exists to clear value between users, publishers, and i
 - Always expose hashes/proofs for advanced users.
 - Do not fake metrics. If unknown, say unknown. If preview, label preview. If measured, link evidence.
 - Keep platform apps coherent: Help teaches, Identity owns, App Store runs/caches, Trust Manager proves, Storage shows content, Finances shows payments/receipts.
+- Make old services feel like import bridges into EdgeRun, not final destinations.
+- Make publishing feel like a natural next step for any user node, not only professional developers.
 
 ## Test expectations
 
@@ -378,6 +453,8 @@ Good next tasks:
 6. Show runtime events and package proofs consistently across App Store, Trust Manager, and Identity.
 7. Connect browser node earning mode to profile preferences and onboarding.
 8. Add typed storage retrieval/availability settlement evidence.
+9. Add user publishing UX: publish site/app/API/file from identity-routed node policy.
+10. Add data-source sync UX: Gmail/Drive/GitHub/local imports into EdgeRun storage and personal timeline.
 
 Avoid:
 
@@ -389,7 +466,8 @@ Avoid:
 - presenting browser nodes as guaranteed high-availability infrastructure;
 - using unchecked receipt settlement for relay receipts;
 - moving std-only functionality into core protocol modules;
-- silently changing protocol hashes without updating golden hash tests.
+- silently changing protocol hashes without updating golden hash tests;
+- presenting users as only consumers when the architecture makes them publishers.
 
 ## Review checklist for new protocol/economic objects
 
