@@ -17,3 +17,13 @@ tabler-svg-atlas = []
 
 [dependencies]
 fontdue = { version = "0.9", default-features = false, optional = true }
+
+[[bin]]
+name = "ui-preview-sdl-font-icons"
+path = "src/bin/ui-preview-sdl-font-icons.rs"
+required-features = ["fontdue-text"]
+
+[[bin]]
+name = "ui-preview-sdl-gl-svg"
+path = "src/bin/ui-preview-sdl-gl-svg.rs"
+required-features = ["fontdue-text", "tabler-svg-atlas"]
