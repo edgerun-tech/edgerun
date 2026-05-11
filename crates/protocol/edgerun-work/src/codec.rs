@@ -13,6 +13,12 @@ const NETWORK_MESSAGE_DOMAIN: &[u8] = b"edgerun:v1:work:network-message";
 const WORK_ADMISSION_DOMAIN: &[u8] = b"edgerun:v1:work:admission";
 const WORK_RECEIPT_DOMAIN: &[u8] = b"edgerun:v1:work:receipt";
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct EncodedWorkPacket {
+    pub bytes: Vec<u8>,
+    pub hash: Hash,
+}
+
 pub fn blake3_hash(bytes: &[u8]) -> Hash {
     *blake3::hash(bytes).as_bytes()
 }
@@ -22,7 +28,13 @@ pub fn sha256_hash(bytes: &[u8]) -> Hash {
 }
 
 pub fn packet_hash(packet: &WorkPacket) -> Result<Hash, WorkProtocolError> {
-    Ok(blake3_hash(&packet_bytes(packet)?))
+    Ok(encode_work_packet_once(packet)?.hash)
+}
+
+pub fn encode_work_packet_once(packet: &WorkPacket) -> Result<EncodedWorkPacket, WorkProtocolError> {
+    let bytes = packet_bytes(packet)?;
+    let hash = blake3_hash(&bytes);
+    Ok(EncodedWorkPacket { bytes, hash })
 }
 
 pub fn packet_bytes(packet: &WorkPacket) -> Result<Vec<u8>, WorkProtocolError> {
