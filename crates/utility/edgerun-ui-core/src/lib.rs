@@ -9,6 +9,8 @@
 
 pub mod icons;
 pub mod visual;
+#[cfg(feature = "fontdue-text")]
+pub mod font;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Color {
