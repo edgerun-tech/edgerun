@@ -22,7 +22,6 @@ pub struct EncodedWorkPacket {
     pub hash: Hash,
 }
 
-#[derive(Clone)]
 pub struct ArchivedWorkPacketFrame {
     pub bytes: AlignedWorkPacketBytes,
     pub hash: Hash,
