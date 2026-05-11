@@ -7,9 +7,7 @@ use crate::codec::{blake3_hash, packet_bytes, verify_work_admission, verify_work
 use crate::delivery_proof::{channel_proof_hash, verify_channel_proof_for_ordered};
 use crate::protocol::*;
 use crate::relay_role::ordered_message_input_hash;
-use crate::transit_proof::{packet_transit_hash, PacketTransitHashInput};
-
-const RELAY_DELIVERY_RECEIPT_OUTPUT_DOMAIN: &[u8] = b"edgerun:v1:work:relay-delivery-receipt-output";
+use crate::transit_proof::{packet_transit_hash, relay_delivery_output_hash, PacketTransitHashInput};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SettlementError {
@@ -270,7 +268,7 @@ pub fn verify_delivery_evidence(
         sequence: receipt.sequence,
         previous_transit_hash: evidence.previous_transit_hash,
     });
-    let expected_output = relay_delivery_receipt_output_hash(
+    let expected_output = relay_delivery_output_hash(
         transit_hash,
         evidence.recipient_delivery.envelope.packet_hash,
         channel_proof_hash(evidence.recipient_proof),
@@ -279,20 +277,6 @@ pub fn verify_delivery_evidence(
         return Err(SettlementError::ReceiptOutputMismatch);
     }
     Ok(transit_hash)
-}
-
-pub fn relay_delivery_receipt_output_hash(
-    transit_hash: Hash,
-    forwarded_packet_hash: Hash,
-    receiver_channel_proof_hash: Hash,
-) -> Hash {
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(RELAY_DELIVERY_RECEIPT_OUTPUT_DOMAIN);
-    bytes.push(0);
-    bytes.extend_from_slice(&transit_hash);
-    bytes.extend_from_slice(&forwarded_packet_hash);
-    bytes.extend_from_slice(&receiver_channel_proof_hash);
-    blake3_hash(&bytes)
 }
 
 pub fn work_admission_hash(admission: &WorkAdmission) -> Result<Hash, SettlementError> {
