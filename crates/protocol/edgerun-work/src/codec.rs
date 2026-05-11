@@ -1,4 +1,5 @@
 use alloc::vec::Vec;
+use core::fmt;
 
 use edgerun_crypto::{Ed25519Signer, Ed25519SigningKey, sha256};
 use edgerun_wire::{WireError, access, deserialize, to_bytes, util};
@@ -13,10 +14,41 @@ const NETWORK_MESSAGE_DOMAIN: &[u8] = b"edgerun:v1:work:network-message";
 const WORK_ADMISSION_DOMAIN: &[u8] = b"edgerun:v1:work:admission";
 const WORK_RECEIPT_DOMAIN: &[u8] = b"edgerun:v1:work:receipt";
 
+pub type AlignedWorkPacketBytes = util::AlignedVec<16>;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EncodedWorkPacket {
     pub bytes: Vec<u8>,
     pub hash: Hash,
+}
+
+#[derive(Clone)]
+pub struct ArchivedWorkPacketFrame {
+    pub bytes: AlignedWorkPacketBytes,
+    pub hash: Hash,
+}
+
+impl fmt::Debug for ArchivedWorkPacketFrame {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ArchivedWorkPacketFrame")
+            .field("len", &self.bytes.as_slice().len())
+            .field("hash", &self.hash)
+            .finish()
+    }
+}
+
+impl ArchivedWorkPacketFrame {
+    pub fn as_bytes(&self) -> &[u8] {
+        self.bytes.as_slice()
+    }
+
+    pub fn archived(&self) -> Result<&ArchivedWorkPacket, WorkProtocolError> {
+        archived_work_packet_from_aligned_bytes(self.bytes.as_slice())
+    }
+
+    pub fn into_packet(self) -> Result<WorkPacket, WorkProtocolError> {
+        packet_from_aligned_bytes(self.bytes.as_slice())
+    }
 }
 
 pub fn blake3_hash(bytes: &[u8]) -> Hash {
@@ -45,6 +77,32 @@ pub fn packet_bytes(packet: &WorkPacket) -> Result<Vec<u8>, WorkProtocolError> {
     Ok(bytes.to_vec())
 }
 
+pub fn archived_packet_frame_from_bytes(bytes: &[u8]) -> Result<ArchivedWorkPacketFrame, WorkProtocolError> {
+    if bytes.is_empty() {
+        return Err(WorkProtocolError::EmptyPacket);
+    }
+    if bytes.len() > MAX_WORK_FRAME_LEN {
+        return Err(WorkProtocolError::PacketTooLarge);
+    }
+    let mut aligned = util::AlignedVec::<16>::with_capacity(bytes.len());
+    aligned.extend_from_slice(bytes);
+    archived_work_packet_from_aligned_bytes(aligned.as_slice())?;
+    let hash = blake3_hash(aligned.as_slice());
+    Ok(ArchivedWorkPacketFrame { bytes: aligned, hash })
+}
+
+pub fn archived_work_packet_from_aligned_bytes(
+    bytes: &[u8],
+) -> Result<&ArchivedWorkPacket, WorkProtocolError> {
+    if bytes.is_empty() {
+        return Err(WorkProtocolError::EmptyPacket);
+    }
+    if bytes.len() > MAX_WORK_FRAME_LEN {
+        return Err(WorkProtocolError::PacketTooLarge);
+    }
+    access::<ArchivedWorkPacket, WireError>(bytes).map_err(|_| WorkProtocolError::InvalidPacket)
+}
+
 pub fn packet_from_bytes(bytes: &[u8]) -> Result<WorkPacket, WorkProtocolError> {
     if bytes.is_empty() {
         return Err(WorkProtocolError::EmptyPacket);
@@ -64,9 +122,8 @@ pub fn packet_from_bytes(bytes: &[u8]) -> Result<WorkPacket, WorkProtocolError> 
     packet_from_aligned_bytes(bytes)
 }
 
-fn packet_from_aligned_bytes(bytes: &[u8]) -> Result<WorkPacket, WorkProtocolError> {
-    let archived = access::<ArchivedWorkPacket, WireError>(bytes)
-        .map_err(|_| WorkProtocolError::InvalidPacket)?;
+pub fn packet_from_aligned_bytes(bytes: &[u8]) -> Result<WorkPacket, WorkProtocolError> {
+    let archived = archived_work_packet_from_aligned_bytes(bytes)?;
     deserialize::<WorkPacket, WireError>(archived).map_err(|_| WorkProtocolError::InvalidPacket)
 }
 
