@@ -134,9 +134,13 @@ fn wasm_worker_node_processes_storage_work_over_ws_channel() {
     assert_eq!(ws_frames[0].route_hash, route_hash);
     assert_eq!(ws_frames[0].to, wasm_storage.identity.node_id);
 
+    let frame_bytes = channel_envelope_bytes(&ordered.envelope).expect("encode envelope frame");
+    let decoded = channel_envelope_from_bytes(&frame_bytes).expect("decode envelope frame");
+    assert_eq!(decoded.packet_hash, ordered.envelope.packet_hash);
+
     let output = worker
-        .accept_inbound_envelope(ordered.envelope, 1)
-        .expect("wasm worker accepts inbound envelope");
+        .accept_inbound_bytes(&frame_bytes, 1)
+        .expect("wasm worker accepts inbound byte frame");
     assert_eq!(output.status, ROLE_STATUS_ACCEPTED);
     assert_eq!(worker.role.object_count(), 1);
 
