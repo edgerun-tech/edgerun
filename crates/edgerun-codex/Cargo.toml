@@ -124,4 +124,3 @@ tracing-opentelemetry = { package = "edgerun-tracing-opentelemetry", path = "../
 tree-sitter = { package = "edgerun-tree-sitter", path = "../utility/edgerun-tree-sitter" }
 tree-sitter-bash = { package = "edgerun-tree-sitter-bash", path = "../utility/edgerun-tree-sitter-bash" }
 ts-rs = { package = "edgerun-ts-rs", path = "../utility/edgerun-ts-rs" }
-v8 = { package = "edgerun-v8", path = "../utility/edgerun-v8" }
