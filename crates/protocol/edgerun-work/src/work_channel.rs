@@ -5,8 +5,6 @@ use crate::channel_order::{ChannelOrderBook, ChannelOrderError, OrderedChannelEn
 use crate::codec::blake3_hash;
 use crate::memory_channel::{route_hash, MemoryChannelEngine, MemoryChannelError};
 use crate::protocol::{Hash, NodeId, WorkPacket};
-use crate::route_auth::verify_route_advertisement;
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WorkChannelError {
     RouteInvalid,
@@ -119,15 +117,15 @@ impl MemoryWorkChannel {
 
 impl WorkChannel for MemoryWorkChannel {
     fn add_route(&mut self, route: RouteAdvertisement) -> Result<Hash, WorkChannelError> {
-        self.engine.add_route(route)
+        WorkChannel::add_route(&mut self.engine, route)
     }
 
     fn remove_route(&mut self, node_id: NodeId) -> Option<RouteAdvertisement> {
-        self.engine.remove_route(node_id)
+        WorkChannel::remove_route(&mut self.engine, node_id)
     }
 
     fn route_hash_for(&self, node_id: &NodeId) -> Option<Hash> {
-        self.engine.route_hash_for(node_id)
+        WorkChannel::route_hash_for(&self.engine, node_id)
     }
 
     fn send_unordered(
@@ -136,11 +134,11 @@ impl WorkChannel for MemoryWorkChannel {
         to: NodeId,
         packet: WorkPacket,
     ) -> Result<ChannelEnvelope, WorkChannelError> {
-        self.engine.send_unordered(from, to, packet)
+        WorkChannel::send_unordered(&mut self.engine, from, to, packet)
     }
 
     fn recv_all(&mut self, node_id: NodeId) -> Vec<ChannelEnvelope> {
-        self.engine.recv_all(node_id)
+        WorkChannel::recv_all(&mut self.engine, node_id)
     }
 }
 
