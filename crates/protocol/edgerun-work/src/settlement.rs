@@ -27,11 +27,18 @@ pub struct SettlementResult {
     pub receipt_hash: Hash,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SettlementPruneResult {
+    pub removed_admission: bool,
+    pub removed_receipts: u64,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct SettlementLedger {
     user_balances: BTreeMap<PublicKey, u64>,
     worker_balances: BTreeMap<NodeId, u64>,
     admission_spend: BTreeMap<Hash, u64>,
+    admission_receipts: BTreeMap<Hash, BTreeSet<Hash>>,
     paid_receipts: BTreeSet<Hash>,
 }
 
@@ -60,6 +67,14 @@ impl SettlementLedger {
 
     pub fn is_receipt_paid(&self, receipt_hash: &Hash) -> bool {
         self.paid_receipts.contains(receipt_hash)
+    }
+
+    pub fn paid_receipt_count(&self) -> usize {
+        self.paid_receipts.len()
+    }
+
+    pub fn tracked_admission_count(&self) -> usize {
+        self.admission_spend.len()
     }
 
     pub fn can_settle_receipt(
@@ -115,6 +130,10 @@ impl SettlementLedger {
             .ok_or(SettlementError::UnknownUser)?;
 
         self.paid_receipts.insert(receipt_hash);
+        self.admission_receipts
+            .entry(admission_hash)
+            .or_default()
+            .insert(receipt_hash);
         *user_balance -= receipt.total_claim;
         self.admission_spend.insert(admission_hash, next_spend);
         let worker_balance = self.worker_balances.entry(receipt.worker.node_id).or_default();
@@ -128,6 +147,19 @@ impl SettlementLedger {
             admission_spent_after: next_spend,
             receipt_hash,
         })
+    }
+
+    pub fn prune_finalized_admission(&mut self, admission_hash: &Hash) -> SettlementPruneResult {
+        let removed_admission = self.admission_spend.remove(admission_hash).is_some();
+        let receipts = self.admission_receipts.remove(admission_hash).unwrap_or_default();
+        let removed_receipts = receipts.len() as u64;
+        for receipt_hash in receipts {
+            self.paid_receipts.remove(&receipt_hash);
+        }
+        SettlementPruneResult {
+            removed_admission,
+            removed_receipts,
+        }
     }
 }
 
