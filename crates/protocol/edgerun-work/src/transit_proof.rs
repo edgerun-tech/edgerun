@@ -1,6 +1,4 @@
-use alloc::vec::Vec;
-
-use crate::codec::blake3_hash;
+use crate::preimage::HashBuilder;
 use crate::protocol::{Hash, NodeId};
 
 const PACKET_TRANSIT_DOMAIN: &[u8] = b"edgerun:v1:work:packet-transit";
@@ -20,18 +18,16 @@ pub struct PacketTransitHashInput {
 }
 
 pub fn packet_transit_hash(input: &PacketTransitHashInput) -> Hash {
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(PACKET_TRANSIT_DOMAIN);
-    bytes.push(0);
-    bytes.extend_from_slice(&input.node_id);
-    bytes.extend_from_slice(&input.from);
-    bytes.extend_from_slice(&input.to);
-    bytes.extend_from_slice(&input.channel_id);
-    bytes.extend_from_slice(&input.route_hash);
-    bytes.extend_from_slice(&input.packet_hash);
-    bytes.extend_from_slice(&input.sequence.to_be_bytes());
-    bytes.extend_from_slice(&input.previous_transit_hash);
-    blake3_hash(&bytes)
+    HashBuilder::domain(PACKET_TRANSIT_DOMAIN)
+        .node_id(&input.node_id)
+        .node_id(&input.from)
+        .node_id(&input.to)
+        .hash(&input.channel_id)
+        .hash(&input.route_hash)
+        .hash(&input.packet_hash)
+        .u64(input.sequence)
+        .hash(&input.previous_transit_hash)
+        .finish()
 }
 
 pub fn relay_delivery_output_hash(
@@ -39,22 +35,17 @@ pub fn relay_delivery_output_hash(
     forwarded_packet_hash: Hash,
     receiver_channel_proof_hash: Hash,
 ) -> Hash {
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(RELAY_DELIVERY_OUTPUT_DOMAIN);
-    bytes.push(0);
-    bytes.extend_from_slice(&transit_hash);
-    bytes.extend_from_slice(&forwarded_packet_hash);
-    bytes.extend_from_slice(&receiver_channel_proof_hash);
-    blake3_hash(&bytes)
+    HashBuilder::domain(RELAY_DELIVERY_OUTPUT_DOMAIN)
+        .hash(&transit_hash)
+        .hash(&forwarded_packet_hash)
+        .hash(&receiver_channel_proof_hash)
+        .finish()
 }
 
 pub fn packet_transit_chain_hash(transit_hashes: &[Hash]) -> Hash {
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(PACKET_TRANSIT_CHAIN_DOMAIN);
-    bytes.push(0);
-    bytes.extend_from_slice(&(transit_hashes.len() as u64).to_be_bytes());
+    let mut builder = HashBuilder::domain(PACKET_TRANSIT_CHAIN_DOMAIN).u64(transit_hashes.len() as u64);
     for hash in transit_hashes {
-        bytes.extend_from_slice(hash);
+        builder = builder.hash(hash);
     }
-    blake3_hash(&bytes)
+    builder.finish()
 }
