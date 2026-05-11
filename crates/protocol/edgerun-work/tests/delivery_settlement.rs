@@ -65,6 +65,7 @@ fn fixture() -> DeliveryFixture {
     let mut recipient_policy = open_recipient_message_policy(recipient.identity.clone(), 1, 1_000);
     recipient_policy.allowed_relays.push(relay.identity.node_id);
     recipient_policy = sign_recipient_message_policy(&recipient.key, recipient_policy);
+    let policy_hash = recipient_message_policy_hash(&recipient_policy);
 
     let request_hash = blake3_hash(b"delivery-settlement-request");
     let admission = signed_relay_admission(
@@ -74,7 +75,7 @@ fn fixture() -> DeliveryFixture {
         relay_route_hash,
         relay_route.endpoint.clone(),
         10,
-        recipient_message_policy_hash(&recipient_policy),
+        policy_hash,
     );
     let admission_hash = work_admission_hash(&admission).expect("admission hash");
 
@@ -113,13 +114,14 @@ fn fixture() -> DeliveryFixture {
     recipient_order
         .accept(&recipient_delivery, recipient_route_hash)
         .expect("recipient accepts delivery");
-    let recipient_proof = channel_proof_for_ordered(
+    let recipient_proof = channel_proof_for_ordered_with_policy(
         &recipient.key,
         &recipient.identity,
         relay.identity.node_id,
         &recipient_delivery,
+        policy_hash,
     )
-    .expect("recipient proof");
+    .expect("policy-bound recipient proof");
     let payable_receipt = relay.finalized_delivery_receipt(&result, channel_proof_hash(&recipient_proof));
 
     DeliveryFixture {
@@ -150,7 +152,7 @@ fn evidence<'a>(fixture: &'a DeliveryFixture) -> DeliverySettlementEvidence<'a> 
 }
 
 #[test]
-fn settle_delivery_requires_recipient_policy_proof_and_transit_hash() {
+fn settle_delivery_requires_policy_bound_recipient_proof_and_transit_hash() {
     let fixture = fixture();
     let evidence = evidence(&fixture);
 
@@ -176,6 +178,34 @@ fn settle_delivery_requires_recipient_policy_proof_and_transit_hash() {
     assert_eq!(settled.amount, 3);
     assert_eq!(ledger.user_balance(&fixture.user), 7);
     assert_eq!(ledger.worker_balance(&fixture.payable_receipt.worker.node_id), 3);
+}
+
+#[test]
+fn settle_delivery_rejects_legacy_policy_unbound_recipient_proof() {
+    let mut fixture = fixture();
+    fixture.recipient_proof = channel_proof_for_ordered(
+        &fixture.recipient.key,
+        &fixture.recipient.identity,
+        fixture.payable_receipt.worker.node_id,
+        &fixture.recipient_delivery,
+    )
+    .expect("legacy recipient proof");
+    fixture.payable_receipt = sign_work_receipt(
+        &Ed25519SigningKey::from_bytes(&[185u8; 32]),
+        WorkReceipt {
+            output_hash: relay_delivery_output_hash(
+                fixture.result.transit_hash,
+                fixture.result.forwarded_packet_hash,
+                channel_proof_hash(&fixture.recipient_proof),
+            ),
+            ..fixture.payable_receipt.clone()
+        },
+    );
+
+    assert_eq!(
+        verify_delivery_evidence(&evidence(&fixture)),
+        Err(SettlementError::InvalidRecipientProof)
+    );
 }
 
 #[test]
