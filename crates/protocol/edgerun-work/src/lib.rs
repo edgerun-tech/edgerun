@@ -3,6 +3,7 @@
 extern crate alloc;
 
 pub mod basic_roles;
+pub mod batch_settlement;
 pub mod channel;
 pub mod channel_order;
 pub mod codec;
@@ -23,6 +24,7 @@ pub mod settlement;
 pub mod std_runtime;
 
 pub use basic_roles::*;
+pub use batch_settlement::*;
 pub use channel::*;
 pub use channel_order::*;
 pub use codec::*;
