@@ -72,12 +72,11 @@ impl WorkChannel for TcpWorkChannel {
         packet: WorkPacket,
     ) -> Result<ChannelEnvelope, WorkChannelError> {
         let route = self.routes.get(&to).ok_or(WorkChannelError::RouteMissing)?;
+        let addr = Self::route_addr(route).ok_or(WorkChannelError::RouteMissing)?;
         let packet_hash = packet_bytes(&packet)
             .map(|bytes| blake3_hash(&bytes))
             .map_err(|_| WorkChannelError::PacketHashFailed)?;
-        if let Some(addr) = Self::route_addr(route) {
-            let _ = Self::send_packet_to_addr(addr, &packet);
-        }
+        Self::send_packet_to_addr(addr, &packet).map_err(|_| WorkChannelError::DeliveryFailed)?;
         let envelope = ChannelEnvelope {
             abi_version: WORK_WIRE_ABI_VERSION,
             channel_id: route.endpoint.channel_id,
