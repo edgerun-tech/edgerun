@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 
 use edgerun_crypto::Ed25519SigningKey;
 
-use crate::codec::{empty_signature, sign_ed25519, verify_solana_ed25519};
+use crate::codec::{sign_ed25519, verify_solana_ed25519};
 use crate::protocol::*;
 
 const WORK_REQUEST_DOMAIN: &[u8] = b"edgerun:v1:work:request";
@@ -25,7 +25,6 @@ pub fn work_request_preimage(value: &WorkRequest) -> Vec<u8> {
 }
 
 pub fn sign_work_request(key: &Ed25519SigningKey, mut value: WorkRequest) -> WorkRequest {
-    value.signature = empty_signature();
     value.signature = sign_ed25519(key, &work_request_preimage(&value));
     value
 }
