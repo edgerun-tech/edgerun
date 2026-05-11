@@ -8,12 +8,21 @@ use std::time::Duration;
 use edgerun_crypto::Ed25519SigningKey;
 
 use crate::channel::{ChannelEndpoint, CHANNEL_KIND_TCP};
-use crate::codec::*;
+use crate::codec::packet_hash;
+use crate::identity::node_identity_from_key;
+use crate::preimage::HashBuilder;
 use crate::protocol::*;
 use crate::request_auth::verify_work_request;
+use crate::signing::{
+    empty_signature, sign_relay_assignment, sign_work_admission, verify_network_message,
+    verify_node_available, verify_node_heartbeat, verify_work_receipt,
+};
 use crate::std_runtime::framing::{ack, read_work_packet, unix_ms, write_work_packet};
 
 const ADMISSION_ID_DOMAIN: &[u8] = b"edgerun:v1:work:admission-id";
+const RELAY_CHANNEL_ID_DOMAIN: &[u8] = b"edgerun:v1:work:relay-channel-id";
+const RELAY_ROUTE_COMMITMENT_DOMAIN: &[u8] = b"edgerun:v1:work:relay-route-commitment";
+const ADMISSION_CONNECTION_HASH_DOMAIN: &[u8] = b"edgerun:v1:work:admission-connection";
 
 #[derive(Clone)]
 pub struct InMemoryAdmissionController {
@@ -317,8 +326,8 @@ impl InMemoryAdmissionController {
         if on_connection != Some(message.via_relay) {
             return Ok(ack(false, 403, "message not received on claimed relay connection"));
         }
-        let state = self.inner.lock().expect("admission state poisoned");
-        let Some(node) = state.nodes.get(&message.from) else {
+        let mut state = self.inner.lock().expect("admission state poisoned");
+        let Some(node) = state.nodes.get_mut(&message.from) else {
             return Ok(ack(false, 404, "unknown node"));
         };
         if message.via_relay != node.relay.relay_node_id {
@@ -330,16 +339,7 @@ impl InMemoryAdmissionController {
         if !verify_network_message(&message, &node.node) {
             return Ok(ack(false, 401, "invalid message signature"));
         }
-        drop(state);
-        if let Some(node) = self
-            .inner
-            .lock()
-            .expect("admission state poisoned")
-            .nodes
-            .get_mut(&message.from)
-        {
-            node.admitted = true;
-        }
+        node.admitted = true;
         Ok(ack(true, 200, "node admitted"))
     }
 
@@ -443,13 +443,11 @@ fn admission_replay_ack(error: AdmissionReplayError) -> WorkPacket {
 }
 
 fn admission_id_for_request(admission_node_id: NodeId, request_hash: Hash, sequence: u64) -> Hash {
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(ADMISSION_ID_DOMAIN);
-    bytes.push(0);
-    bytes.extend_from_slice(&admission_node_id);
-    bytes.extend_from_slice(&sequence.to_be_bytes());
-    bytes.extend_from_slice(&request_hash);
-    blake3_hash(&bytes)
+    HashBuilder::domain(ADMISSION_ID_DOMAIN)
+        .node_id(&admission_node_id)
+        .u64(sequence)
+        .hash(&request_hash)
+        .finish()
 }
 
 fn relay_channel_commitment(relay: &RelayEndpoint) -> (Hash, ChannelEndpoint) {
@@ -457,20 +455,22 @@ fn relay_channel_commitment(relay: &RelayEndpoint) -> (Hash, ChannelEndpoint) {
     address.extend_from_slice(relay.host.as_bytes());
     address.push(b':');
     address.extend_from_slice(relay.port.to_string().as_bytes());
-    let channel_id = blake3_hash(&address);
+    let channel_id = HashBuilder::domain(RELAY_CHANNEL_ID_DOMAIN)
+        .bytes(&address)
+        .finish();
     let channel = ChannelEndpoint::new(channel_id, CHANNEL_KIND_TCP, address.clone(), relay.host.clone());
-    let mut route = Vec::new();
-    route.extend_from_slice(&relay.relay_node_id);
-    route.extend_from_slice(&channel_id);
-    route.extend_from_slice(&address);
-    (blake3_hash(&route), channel)
+    let route = HashBuilder::domain(RELAY_ROUTE_COMMITMENT_DOMAIN)
+        .node_id(&relay.relay_node_id)
+        .hash(&channel_id)
+        .bytes(&address)
+        .finish();
+    (route, channel)
 }
 
 fn connection_hash(peer: Option<SocketAddr>, now: u64) -> Hash {
-    let mut bytes = Vec::new();
-    if let Some(peer) = peer {
-        bytes.extend_from_slice(peer.to_string().as_bytes());
-    }
-    bytes.extend_from_slice(&now.to_be_bytes());
-    blake3_hash(&bytes)
+    let peer = peer.map(|peer| peer.to_string()).unwrap_or_default();
+    HashBuilder::domain(ADMISSION_CONNECTION_HASH_DOMAIN)
+        .bytes(peer.as_bytes())
+        .u64(now)
+        .finish()
 }
