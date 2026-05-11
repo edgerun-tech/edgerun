@@ -170,6 +170,7 @@ edgerun-protocols = { version = "0.1", path = "crates/protocol/edgerun-protocols
 edgerun-derived-db = { version = "0.1", path = "crates/authority/edgerun-derived-db", default-features = false }
 edgerun-storage = { version = "0.1", path = "crates/authority/edgerun-storage" }
 edgerun-stream = { version = "0.1", path = "crates/authority/edgerun-stream" }
+edgerun-virtual-disk = { version = "0.1", path = "crates/authority/edgerun-virtual-disk", default-features = false }
 edgerun-node = { version = "0.1", path = "crates/node/edgerun-node" }
 edgerun-relay = { version = "0.1", path = "crates/relay/edgerun-relay" }
 edgerun-hardware-signing = { version = "0.1", path = "crates/identity/edgerun-hardware-signing" }
