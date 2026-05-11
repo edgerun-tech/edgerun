@@ -60,7 +60,7 @@ oid = ["digest/oid"]
 std = ["digest/std"]
 
 [target."cfg(any(target_arch = \"aarch64\", target_arch = \"x86\", target_arch = \"x86_64\"))".dependencies.cpufeatures]
-version = "0.2"
+version = "0.3"
 
 [target."cfg(any(target_arch = \"aarch64\", target_arch = \"x86\", target_arch = \"x86_64\"))".dependencies.sha1-asm]
 version = "0.5"

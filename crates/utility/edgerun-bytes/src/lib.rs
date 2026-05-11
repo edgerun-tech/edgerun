@@ -5,6 +5,8 @@
 extern crate alloc;
 
 use alloc::vec::Vec;
+use alloc::string::String;
+use alloc::vec;
 use core::fmt;
 use core::iter::FromIterator;
 use core::ops::{Bound, Deref, DerefMut, RangeBounds};
@@ -164,9 +166,9 @@ impl BytesMut {
         self.0.truncate(len)
     }
 
-    pub fn split_to(&mut self, at: usize) -> Bytes {
+    pub fn split_to(&mut self, at: usize) -> BytesMut {
         let tail = self.0.split_off(at);
-        Bytes(mem::replace(&mut self.0, tail))
+        BytesMut(mem::replace(&mut self.0, tail))
     }
 
     pub fn extend_from_slice(&mut self, bytes: &[u8]) {

@@ -65,7 +65,7 @@ impl<Stream: Read + Write> HandshakeMachine<Stream> {
                         // TODO: this is slow for big headers with too many small packets.
                         // The parser has to be reworked in order to work on streams instead
                         // of buffers.
-                        Ok(if let Some((size, obj)) = Obj::try_parse(cursor_chunk(&buf))? {
+                        Ok(if let Some((size, obj)) = Obj::try_parse(cursor_chunk(&buf.as_cursor()))? {
                             buf.advance(size);
                             RoundResult::StageFinished(StageResult::DoneReading {
                                 result: obj,

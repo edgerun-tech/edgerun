@@ -301,7 +301,7 @@ mod client_hello {
                     if !self.check_binder(
                         self.suite,
                         chm,
-                        &resume.master_secret.0,
+                        resume.master_secret.0.as_ref(),
                         psk_offer.binders[i].as_ref(),
                     ) {
                         return Err(cx.common.send_fatal_alert(
@@ -349,7 +349,7 @@ mod client_hello {
                 chosen_psk_index,
                 resumedata
                     .as_ref()
-                    .map(|x| &x.master_secret.0[..]),
+                    .map(|x| x.master_secret.0.as_ref()),
                 &self.config,
             )?;
             if !self.done_retry {

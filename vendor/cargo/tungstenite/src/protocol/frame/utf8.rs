@@ -9,7 +9,7 @@ pub struct Utf8Bytes(Bytes);
 impl Utf8Bytes {
     /// Creates from a static str.
     #[inline]
-    pub const fn from_static(str: &'static str) -> Self {
+    pub fn from_static(str: &'static str) -> Self {
         Self(Bytes::from_static(str.as_bytes()))
     }
 

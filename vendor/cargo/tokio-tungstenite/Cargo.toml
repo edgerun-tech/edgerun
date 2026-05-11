@@ -71,18 +71,6 @@ default = [
     "handshake",
 ]
 handshake = ["tungstenite/handshake"]
-native-tls = [
-    "native-tls-crate",
-    "tokio-native-tls",
-    "stream",
-    "tungstenite/native-tls",
-    "handshake",
-]
-native-tls-vendored = [
-    "native-tls",
-    "native-tls-crate/vendored",
-    "tungstenite/native-tls-vendored",
-]
 proxy = [
     "tungstenite/proxy",
     "tokio/net",
@@ -159,11 +147,6 @@ features = [
 ]
 default-features = false
 
-[dependencies.native-tls-crate]
-version = "0.2.11"
-optional = true
-package = "native-tls"
-
 [dependencies.rustls]
 version = "0.23.0"
 optional = true
@@ -181,10 +164,6 @@ optional = true
 version = "1.0.0"
 features = ["io-util"]
 default-features = false
-
-[dependencies.tokio-native-tls]
-version = "0.3.1"
-optional = true
 
 [dependencies.tokio-rustls]
 version = "0.26.0"

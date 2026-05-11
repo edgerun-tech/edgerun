@@ -44,7 +44,7 @@ impl MessageFragmenter {
         typ: ContentType,
         version: ProtocolVersion,
         payload: OutboundChunks<'a>,
-    ) -> impl ExactSizeIterator<Item = OutboundPlainMessage<'a>> {
+    ) -> impl ExactSizeIterator<Item = OutboundPlainMessage<'a>> + use<'a> {
         Chunker::new(payload, self.max_frag).map(move |payload| OutboundPlainMessage {
             typ,
             version,

@@ -39,15 +39,18 @@ impl<const CHUNK_SIZE: usize> ReadBuffer<CHUNK_SIZE> {
         &mut self.storage
     }
 
+    /// Returns bytes remaining from the current cursor position to the end.
     pub fn remaining(&self) -> usize {
         self.storage.get_ref().len().saturating_sub(self.storage.position() as usize)
     }
 
+    /// Returns unread bytes from the current cursor position.
     pub fn chunk(&self) -> &[u8] {
         let position = self.storage.position() as usize;
         &self.storage.get_ref()[position..]
     }
 
+    /// Advances the read cursor by at most `cnt` bytes.
     pub fn advance(&mut self, cnt: usize) {
         let mut position = self.storage.position();
         position = position.saturating_add(cnt as u64);

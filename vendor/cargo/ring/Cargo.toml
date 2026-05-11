@@ -268,11 +268,6 @@ default-features = false
 version = "0.2.148"
 default-features = false
 
-[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dev-dependencies.wasm-bindgen-test]
-version = "0.3.37"
-features = ["std"]
-default-features = false
-
 [target.'cfg(any(unix, windows, target_os = "wasi"))'.dev-dependencies.libc]
 version = "0.2.148"
 default-features = false

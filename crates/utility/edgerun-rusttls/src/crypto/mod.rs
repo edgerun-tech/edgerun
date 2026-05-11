@@ -703,7 +703,9 @@ mod static_default {
     use std::sync::OnceLock;
 
     #[cfg(not(feature = "std"))]
-    use once_cell::race::OnceBox;
+    use core::cell::UnsafeCell;
+    use core::mem::MaybeUninit;
+    use core::sync::atomic::{AtomicU8, Ordering};
 
     use super::CryptoProvider;
     use crate::sync::Arc;
@@ -732,6 +734,70 @@ mod static_default {
     static PROCESS_DEFAULT_PROVIDER: OnceLock<Arc<CryptoProvider>> = OnceLock::new();
     #[cfg(not(feature = "std"))]
     static PROCESS_DEFAULT_PROVIDER: OnceBox<Arc<CryptoProvider>> = OnceBox::new();
+
+    #[cfg(not(feature = "std"))]
+    const UNINITIALIZED: u8 = 0;
+    #[cfg(not(feature = "std"))]
+    const INITIALIZING: u8 = 1;
+    #[cfg(not(feature = "std"))]
+    const INITIALIZED: u8 = 2;
+
+    #[cfg(not(feature = "std"))]
+    struct OnceBox<T> {
+        data: UnsafeCell<MaybeUninit<T>>,
+        state: AtomicU8,
+    }
+
+    #[cfg(not(feature = "std"))]
+    impl<T> OnceBox<T> {
+        pub(crate) const fn new() -> Self {
+            Self {
+                data: UnsafeCell::new(MaybeUninit::uninit()),
+                state: AtomicU8::new(UNINITIALIZED),
+            }
+        }
+
+        pub(crate) fn set(&self, value: T) -> Result<(), T> {
+            if self
+                .state
+                .compare_exchange(
+                    UNINITIALIZED,
+                    INITIALIZING,
+                    Ordering::AcqRel,
+                    Ordering::Acquire,
+                )
+                .is_ok()
+            {
+                unsafe {
+                    self.data.get().write(MaybeUninit::new(value));
+                }
+                self.state.store(INITIALIZED, Ordering::Release);
+                Ok(())
+            } else {
+                Err(value)
+            }
+        }
+
+        pub(crate) fn get(&self) -> Option<&T> {
+            if self.state.load(Ordering::Acquire) != INITIALIZED {
+                return None;
+            }
+            Some(unsafe { &*self.data.get().cast::<T>() })
+        }
+    }
+
+    #[cfg(not(feature = "std"))]
+    unsafe impl<T: Send> Send for OnceBox<T> {}
+
+    #[cfg(not(feature = "std"))]
+    unsafe impl<T: Send + Sync> Sync for OnceBox<T> {}
+
+    #[cfg(not(feature = "std"))]
+    impl<T> Default for OnceBox<T> {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
 }
 
 #[cfg(test)]

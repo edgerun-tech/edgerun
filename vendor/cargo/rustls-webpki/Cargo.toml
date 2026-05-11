@@ -77,24 +77,9 @@ enum_variant_marked_deprecated = "warn"
 
 [features]
 alloc = [
-    "ring?/alloc",
     "pki-types/alloc",
 ]
-aws-lc-rs = [
-    "dep:aws-lc-rs",
-    "aws-lc-rs/aws-lc-sys",
-    "aws-lc-rs/prebuilt-nasm",
-]
-aws-lc-rs-fips = [
-    "dep:aws-lc-rs",
-    "aws-lc-rs/fips",
-]
-aws-lc-rs-unstable = [
-    "aws-lc-rs",
-    "aws-lc-rs/unstable",
-]
 default = ["std"]
-ring = ["dep:ring"]
 std = [
     "alloc",
     "pki-types/std",
@@ -104,50 +89,15 @@ std = [
 name = "webpki"
 path = "src/lib.rs"
 
-[dependencies.aws-lc-rs]
-version = "1.14"
-optional = true
-default-features = false
-
 [dependencies.pki-types]
-version = "1.12"
+version = "0.1.1"
 default-features = false
-package = "rustls-pki-types"
-
-[dependencies.ring]
-version = "0.17"
-optional = true
-default-features = false
+package = "edgerun-rustls-pki-types"
+path = "../../../crates/utility/edgerun-rustls-pki-types"
+features = ["alloc"]
 
 [dependencies.untrusted]
 version = "0.9"
-
-[dev-dependencies.base64]
-version = "0.22"
-
-[dev-dependencies.bencher]
-version = "0.1.5"
-
-[dev-dependencies.bzip2]
-version = "0.6"
-
-[dev-dependencies.once_cell]
-version = "1.17.2"
-
-[dev-dependencies.rcgen]
-version = "0.14.2"
-features = ["aws_lc_rs"]
-default-features = false
-
-[dev-dependencies.serde]
-version = "1.0"
-features = ["derive"]
-
-[dev-dependencies.serde_json]
-version = "1.0"
-
-[dev-dependencies.x509-parser]
-version = "0.18.1"
 
 [lints.rust.unexpected_cfgs]
 level = "warn"

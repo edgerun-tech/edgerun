@@ -11,5 +11,8 @@ description = "Edgerun shim for schemars"
 [dependencies]
 schemars = { path = "../../../vendor/cargo/schemars-0.8.22" }
 
+[features]
+chrono04 = ["schemars/chrono"]
+
 [lints]
 workspace = true

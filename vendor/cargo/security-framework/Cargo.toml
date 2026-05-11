@@ -108,9 +108,6 @@ optional = true
 version = "2.17"
 default-features = false
 
-[dev-dependencies.env_logger]
-version = "0.11"
-
 [dev-dependencies.hex]
 version = "0.4.3"
 
@@ -119,9 +116,6 @@ version = "3.12.0"
 
 [dev-dependencies.time]
 version = "0.3.23"
-
-[dev-dependencies.x509-parser]
-version = "0.18"
 
 [lints.clippy]
 cast_possible_truncation = "allow"

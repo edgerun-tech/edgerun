@@ -114,7 +114,7 @@ landlock = { package = "edgerun-landlock", path = "../utility/edgerun-landlock" 
 opentelemetry = { package = "edgerun-opentelemetry", path = "../utility/edgerun-opentelemetry" }
 rmcp = { package = "edgerun-rmcp", path = "../utility/edgerun-rmcp", default-features = false }
 opentelemetry_sdk = { package = "edgerun-opentelemetry-sdk", path = "../utility/edgerun-opentelemetry-sdk" }
-rustls = { package = "edgerun-rusttls", path = "../utility/edgerun-rusttls", default-features = false, features = ["ring", "std"] }
+rustls = { package = "edgerun-rusttls", path = "../utility/edgerun-rusttls", default-features = false, features = ["std"] }
 rustls-native-certs = { package = "edgerun-rustls-native-certs", path = "../utility/edgerun-rustls-native-certs" }
 rustls-pki-types = { package = "edgerun-rustls-pki-types", path = "../utility/edgerun-rustls-pki-types" }
 schemars = { package = "edgerun-schemars", path = "../utility/edgerun-schemars" }
