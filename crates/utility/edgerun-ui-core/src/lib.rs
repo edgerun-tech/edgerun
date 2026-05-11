@@ -9,7 +9,6 @@
 
 pub mod components;
 pub mod icons;
-pub mod tabler_generated;
 pub mod visual;
 #[cfg(feature = "fontdue-text")]
 pub mod font;
@@ -17,6 +16,7 @@ pub mod font;
 pub mod tabler_generated;
 #[cfg(feature = "tabler-icons")]
 pub mod tabler;
+
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Color {
