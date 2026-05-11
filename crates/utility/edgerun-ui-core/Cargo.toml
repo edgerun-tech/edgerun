@@ -11,5 +11,7 @@ rust-version = "1.95"
 [features]
 default = []
 std = []
+fontdue-text = ["std", "dep:fontdue"]
 
 [dependencies]
+fontdue = { version = "0.9", default-features = false, optional = true }
