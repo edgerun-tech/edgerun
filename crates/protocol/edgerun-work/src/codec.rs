@@ -94,7 +94,7 @@ pub fn verify_signature(identity: &NodeIdentity, signature: &WorkSignature, prei
     if signature.algorithm != SIGNATURE_ALGORITHM_SOLANA_ED25519 {
         return false;
     }
-    if signature.public_key.as_slice() != identity.public_key {
+    if signature.public_key.as_slice() != &identity.public_key[..] {
         return false;
     }
     verify_solana_ed25519(&identity.public_key, preimage, &signature.signature)
