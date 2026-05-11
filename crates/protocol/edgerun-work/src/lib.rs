@@ -19,6 +19,7 @@ pub mod route_auth;
 pub mod route_builder;
 pub mod route_plan;
 pub mod settlement;
+pub mod wasm_worker_node;
 pub mod work_channel;
 pub mod ws_channel;
 
@@ -42,6 +43,7 @@ pub use route_auth::*;
 pub use route_builder::*;
 pub use route_plan::*;
 pub use settlement::*;
+pub use wasm_worker_node::*;
 pub use work_channel::*;
 pub use ws_channel::*;
 
