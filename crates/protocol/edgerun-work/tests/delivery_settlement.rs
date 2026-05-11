@@ -15,6 +15,7 @@ fn signed_relay_admission(
     assigned_route_hash: Hash,
     assigned_channel: ChannelEndpoint,
     admitted_budget: u64,
+    policy_hash: Hash,
 ) -> WorkAdmission {
     sign_work_admission(
         &admission.key,
@@ -28,7 +29,7 @@ fn signed_relay_admission(
             assigned_route_hash,
             assigned_channel,
             admitted_budget,
-            policy_hash: [0u8; 32],
+            policy_hash,
             sequence: 1,
             valid_until_unix_ms: u64::MAX,
             signature: empty_signature(),
@@ -42,6 +43,7 @@ struct DeliveryFixture {
     relay_input: OrderedChannelEnvelope,
     recipient_delivery: OrderedChannelEnvelope,
     recipient: SimNode,
+    recipient_policy: RecipientMessagePolicy,
     recipient_proof: ChannelProof,
     result: RelayDeliveryResult,
     payable_receipt: WorkReceipt,
@@ -60,6 +62,9 @@ fn fixture() -> DeliveryFixture {
     let recipient_route = recipient.advertise_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_MESSAGE]);
     let relay_route_hash = channel.add_route(relay_route.clone()).expect("relay route");
     let recipient_route_hash = channel.add_route(recipient_route).expect("recipient route");
+    let mut recipient_policy = open_recipient_message_policy(recipient.identity.clone(), 1, 1_000);
+    recipient_policy.allowed_relays.push(relay.identity.node_id);
+    recipient_policy = sign_recipient_message_policy(&recipient.key, recipient_policy);
 
     let request_hash = blake3_hash(b"delivery-settlement-request");
     let admission = signed_relay_admission(
@@ -69,6 +74,7 @@ fn fixture() -> DeliveryFixture {
         relay_route_hash,
         relay_route.endpoint.clone(),
         10,
+        recipient_message_policy_hash(&recipient_policy),
     );
     let admission_hash = work_admission_hash(&admission).expect("admission hash");
 
@@ -99,6 +105,10 @@ fn fixture() -> DeliveryFixture {
         sequence: 1,
         previous_message_hash: [0u8; 32],
     };
+    let WorkPacket::NetworkMessage(message) = &recipient_delivery.envelope.packet else {
+        panic!("expected forwarded network message");
+    };
+    recipient_message_policy_allows(&recipient_policy, message, 999).expect("recipient policy allows message");
     let mut recipient_order = ChannelOrderBook::new();
     recipient_order
         .accept(&recipient_delivery, recipient_route_hash)
@@ -118,24 +128,31 @@ fn fixture() -> DeliveryFixture {
         relay_input,
         recipient_delivery,
         recipient,
+        recipient_policy,
         recipient_proof,
         result,
         payable_receipt,
     }
 }
 
-#[test]
-fn settle_delivery_requires_recipient_proof_and_transit_hash() {
-    let fixture = fixture();
-    let evidence = DeliverySettlementEvidence {
+fn evidence<'a>(fixture: &'a DeliveryFixture) -> DeliverySettlementEvidence<'a> {
+    DeliverySettlementEvidence {
         admission: &fixture.admission,
         receipt: &fixture.payable_receipt,
         relay_input: &fixture.relay_input,
         recipient_delivery: &fixture.recipient_delivery,
         recipient: &fixture.recipient.identity,
+        recipient_policy: &fixture.recipient_policy,
         recipient_proof: &fixture.recipient_proof,
         previous_transit_hash: [0u8; 32],
-    };
+        now_unix_ms: 999,
+    }
+}
+
+#[test]
+fn settle_delivery_requires_recipient_policy_proof_and_transit_hash() {
+    let fixture = fixture();
+    let evidence = evidence(&fixture);
 
     assert_eq!(
         verify_delivery_evidence(&evidence).expect("delivery evidence verifies"),
@@ -162,23 +179,42 @@ fn settle_delivery_requires_recipient_proof_and_transit_hash() {
 }
 
 #[test]
+fn settle_delivery_rejects_policy_hash_mismatch() {
+    let mut fixture = fixture();
+    fixture.admission.policy_hash = [4u8; 32];
+    let admission_key = Ed25519SigningKey::from_bytes(&[181u8; 32]);
+    fixture.admission = sign_work_admission(&admission_key, fixture.admission.clone());
+    assert_eq!(
+        verify_delivery_evidence(&evidence(&fixture)),
+        Err(SettlementError::PolicyHashMismatch)
+    );
+}
+
+#[test]
+fn settle_delivery_rejects_message_disallowed_by_recipient_policy() {
+    let mut fixture = fixture();
+    fixture.recipient_policy.blocked_senders.push(fixture.relay_input.envelope.from);
+    let recipient_key = Ed25519SigningKey::from_bytes(&[184u8; 32]);
+    fixture.recipient_policy = sign_recipient_message_policy(&recipient_key, fixture.recipient_policy.clone());
+    fixture.admission.policy_hash = recipient_message_policy_hash(&fixture.recipient_policy);
+    let admission_key = Ed25519SigningKey::from_bytes(&[181u8; 32]);
+    fixture.admission = sign_work_admission(&admission_key, fixture.admission.clone());
+
+    assert_eq!(
+        verify_delivery_evidence(&evidence(&fixture)),
+        Err(SettlementError::MessagePolicyRejected)
+    );
+}
+
+#[test]
 fn settle_delivery_rejects_admission_route_mismatch() {
     let mut fixture = fixture();
     fixture.admission.assigned_route_hash = [5u8; 32];
     let admission_key = Ed25519SigningKey::from_bytes(&[181u8; 32]);
     fixture.admission = sign_work_admission(&admission_key, fixture.admission.clone());
-    let evidence = DeliverySettlementEvidence {
-        admission: &fixture.admission,
-        receipt: &fixture.payable_receipt,
-        relay_input: &fixture.relay_input,
-        recipient_delivery: &fixture.recipient_delivery,
-        recipient: &fixture.recipient.identity,
-        recipient_proof: &fixture.recipient_proof,
-        previous_transit_hash: [0u8; 32],
-    };
 
     assert_eq!(
-        verify_delivery_evidence(&evidence),
+        verify_delivery_evidence(&evidence(&fixture)),
         Err(SettlementError::AdmissionRouteMismatch)
     );
 }
@@ -186,15 +222,8 @@ fn settle_delivery_rejects_admission_route_mismatch() {
 #[test]
 fn settle_delivery_rejects_wrong_previous_transit_hash() {
     let fixture = fixture();
-    let evidence = DeliverySettlementEvidence {
-        admission: &fixture.admission,
-        receipt: &fixture.payable_receipt,
-        relay_input: &fixture.relay_input,
-        recipient_delivery: &fixture.recipient_delivery,
-        recipient: &fixture.recipient.identity,
-        recipient_proof: &fixture.recipient_proof,
-        previous_transit_hash: [9u8; 32],
-    };
+    let mut evidence = evidence(&fixture);
+    evidence.previous_transit_hash = [9u8; 32];
 
     assert_eq!(
         verify_delivery_evidence(&evidence),
@@ -206,18 +235,9 @@ fn settle_delivery_rejects_wrong_previous_transit_hash() {
 fn settle_delivery_rejects_tampered_recipient_proof() {
     let mut fixture = fixture();
     fixture.recipient_proof.sequence = fixture.recipient_proof.sequence.saturating_add(1);
-    let evidence = DeliverySettlementEvidence {
-        admission: &fixture.admission,
-        receipt: &fixture.payable_receipt,
-        relay_input: &fixture.relay_input,
-        recipient_delivery: &fixture.recipient_delivery,
-        recipient: &fixture.recipient.identity,
-        recipient_proof: &fixture.recipient_proof,
-        previous_transit_hash: [0u8; 32],
-    };
 
     assert_eq!(
-        verify_delivery_evidence(&evidence),
+        verify_delivery_evidence(&evidence(&fixture)),
         Err(SettlementError::InvalidRecipientProof)
     );
 }
@@ -226,18 +246,9 @@ fn settle_delivery_rejects_tampered_recipient_proof() {
 fn settle_delivery_rejects_wrong_recipient_delivery_packet_hash() {
     let mut fixture = fixture();
     fixture.recipient_delivery.envelope.packet_hash = [8u8; 32];
-    let evidence = DeliverySettlementEvidence {
-        admission: &fixture.admission,
-        receipt: &fixture.payable_receipt,
-        relay_input: &fixture.relay_input,
-        recipient_delivery: &fixture.recipient_delivery,
-        recipient: &fixture.recipient.identity,
-        recipient_proof: &fixture.recipient_proof,
-        previous_transit_hash: [0u8; 32],
-    };
 
     assert_eq!(
-        verify_delivery_evidence(&evidence),
+        verify_delivery_evidence(&evidence(&fixture)),
         Err(SettlementError::DeliveryPacketMismatch)
     );
 }
@@ -248,18 +259,9 @@ fn settle_delivery_rejects_receipt_with_wrong_input_hash() {
     let relay_key = Ed25519SigningKey::from_bytes(&[185u8; 32]);
     fixture.payable_receipt.input_hash = [6u8; 32];
     fixture.payable_receipt = sign_work_receipt(&relay_key, fixture.payable_receipt.clone());
-    let evidence = DeliverySettlementEvidence {
-        admission: &fixture.admission,
-        receipt: &fixture.payable_receipt,
-        relay_input: &fixture.relay_input,
-        recipient_delivery: &fixture.recipient_delivery,
-        recipient: &fixture.recipient.identity,
-        recipient_proof: &fixture.recipient_proof,
-        previous_transit_hash: [0u8; 32],
-    };
 
     assert_eq!(
-        verify_delivery_evidence(&evidence),
+        verify_delivery_evidence(&evidence(&fixture)),
         Err(SettlementError::ReceiptInputMismatch)
     );
 }
@@ -270,18 +272,9 @@ fn settle_delivery_rejects_receipt_with_wrong_output_hash() {
     let relay_key = Ed25519SigningKey::from_bytes(&[185u8; 32]);
     fixture.payable_receipt.output_hash = [7u8; 32];
     fixture.payable_receipt = sign_work_receipt(&relay_key, fixture.payable_receipt.clone());
-    let evidence = DeliverySettlementEvidence {
-        admission: &fixture.admission,
-        receipt: &fixture.payable_receipt,
-        relay_input: &fixture.relay_input,
-        recipient_delivery: &fixture.recipient_delivery,
-        recipient: &fixture.recipient.identity,
-        recipient_proof: &fixture.recipient_proof,
-        previous_transit_hash: [0u8; 32],
-    };
 
     assert_eq!(
-        verify_delivery_evidence(&evidence),
+        verify_delivery_evidence(&evidence(&fixture)),
         Err(SettlementError::ReceiptOutputMismatch)
     );
 }
