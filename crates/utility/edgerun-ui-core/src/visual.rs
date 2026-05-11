@@ -3,7 +3,7 @@
 //! These helpers keep the core renderer small while making the system UI feel
 //! modern: antialiased rounded rectangles, soft shadows, and polished widgets.
 
-use crate::{Color, Painter, Rect, TextSize, Theme};
+use crate::{icons::Icon, Color, Painter, Rect, TextSize, Theme};
 
 const AA_SAMPLES: [(f32, f32); 4] = [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)];
 
@@ -125,6 +125,14 @@ impl<'a> Painter<'a> {
         }
     }
 
+    pub fn icon_bubble(&mut self, rect: Rect, icon: Icon, color: Color, theme: Theme) {
+        let radius = (rect.w.min(rect.h) / 2).max(8);
+        self.rounded_rect(rect, radius, color.with_alpha(36));
+        self.rounded_border(rect, radius, 1, color.with_alpha(140));
+        self.icon(icon, rect.inset(9), color.with_alpha(235));
+        self.rounded_rect(Rect::new(rect.x + 5, rect.y + 4, rect.w.saturating_sub(10), 4), 3, theme.text.with_alpha(26));
+    }
+
     fn rounded_rect_inner(&mut self, rect: Rect, radius: u32, color: Color, _border_only: bool, _thickness: u32) {
         if rect.w == 0 || rect.h == 0 || color.a == 0 {
             return;
@@ -176,8 +184,9 @@ pub fn demo_dashboard_polished(p: &mut Painter<'_>, state: crate::DashboardState
     let margin = 28;
     let hero = Rect::new(margin, margin, p.width.saturating_sub((margin * 2) as u32), 188);
     p.glass_card(hero, theme);
-    p.text(hero.x + 26, hero.y + 24, state.title, theme.text, TextSize::Hero);
-    p.text(hero.x + 28, hero.y + 76, state.subtitle, theme.muted, TextSize::Body);
+    p.icon_bubble(Rect::new(hero.x + 26, hero.y + 25, 54, 54), Icon::Spark, theme.accent, theme);
+    p.text(hero.x + 94, hero.y + 24, state.title, theme.text, TextSize::Hero);
+    p.text(hero.x + 96, hero.y + 76, state.subtitle, theme.muted, TextSize::Body);
 
     let badge = Rect::new(hero.x + hero.w as i32 - 126, hero.y + 24, 96, 28);
     p.pill_badge(badge, state.node_status, theme.accent, theme);
@@ -193,19 +202,22 @@ pub fn demo_dashboard_polished(p: &mut Painter<'_>, state: crate::DashboardState
     let r3 = Rect::new(margin + (stat_w as i32 + gap) * 2, stats_y, stat_w, 134);
 
     p.glass_card(r1, theme);
-    p.text(r1.x + 20, r1.y + 20, "CPU", theme.muted, TextSize::Body);
-    draw_permille_polished(p, r1.x + 20, r1.y + 58, state.cpu_permille, theme.text);
-    p.rounded_progress(Rect::new(r1.x + 20, r1.y + 104, r1.w.saturating_sub(40), 14), state.cpu_permille, theme);
+    p.icon_bubble(Rect::new(r1.x + 18, r1.y + 18, 38, 38), Icon::Cpu, theme.accent, theme);
+    p.text(r1.x + 68, r1.y + 22, "CPU", theme.muted, TextSize::Body);
+    draw_permille_polished(p, r1.x + 20, r1.y + 64, state.cpu_permille, theme.text);
+    p.rounded_progress(Rect::new(r1.x + 20, r1.y + 106, r1.w.saturating_sub(40), 14), state.cpu_permille, theme);
 
     p.glass_card(r2, theme);
-    p.text(r2.x + 20, r2.y + 20, "RAM", theme.muted, TextSize::Body);
-    draw_u32_suffix_polished(p, r2.x + 20, r2.y + 58, state.memory_mb, " MB", theme.text);
-    p.rounded_progress(Rect::new(r2.x + 20, r2.y + 104, r2.w.saturating_sub(40), 14), 420, theme);
+    p.icon_bubble(Rect::new(r2.x + 18, r2.y + 18, 38, 38), Icon::Memory, Color::rgb(0x8b, 0xe9, 0xfd), theme);
+    p.text(r2.x + 68, r2.y + 22, "RAM", theme.muted, TextSize::Body);
+    draw_u32_suffix_polished(p, r2.x + 20, r2.y + 64, state.memory_mb, " MB", theme.text);
+    p.rounded_progress(Rect::new(r2.x + 20, r2.y + 106, r2.w.saturating_sub(40), 14), 420, theme);
 
     p.glass_card(r3, theme);
-    p.text(r3.x + 20, r3.y + 20, "NET", theme.muted, TextSize::Body);
-    p.text(r3.x + 20, r3.y + 62, state.network_status, theme.text, TextSize::Title);
-    p.pill_badge(Rect::new(r3.x + 20, r3.y + 100, 92, 24), "private", Color::rgb(0x50, 0xfa, 0x7b), theme);
+    p.icon_bubble(Rect::new(r3.x + 18, r3.y + 18, 38, 38), Icon::Network, Color::rgb(0x50, 0xfa, 0x7b), theme);
+    p.text(r3.x + 68, r3.y + 22, "NET", theme.muted, TextSize::Body);
+    p.text(r3.x + 20, r3.y + 68, state.network_status, theme.text, TextSize::Title);
+    p.pill_badge(Rect::new(r3.x + 20, r3.y + 104, 92, 24), "private", Color::rgb(0x50, 0xfa, 0x7b), theme);
 }
 
 fn rounded_coverage(x: u32, y: u32, rect: Rect, radius: u32) -> u8 {
