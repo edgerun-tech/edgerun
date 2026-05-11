@@ -173,7 +173,7 @@ impl<'a> Painter<'a> {
     }
 
     fn icon_arc_wifi(&mut self, center: (i32, i32), radius: i32, color: Color) {
-        for deg in 215..=325 {
+        for deg in (215..=325).step_by(3) {
             let (s, c) = sin_cos_deg(deg);
             let x = center.0 + (c * radius) / 1024;
             let y = center.1 + (s * radius) / 1024;
@@ -182,7 +182,7 @@ impl<'a> Painter<'a> {
     }
 
     fn icon_arc_top(&mut self, center: (i32, i32), rx: i32, ry: i32, color: Color) {
-        for deg in 200..=340 {
+        for deg in (200..=340).step_by(3) {
             let (s, c) = sin_cos_deg(deg);
             let x = center.0 + (c * rx) / 1024;
             let y = center.1 + (s * ry) / 1024;
@@ -192,11 +192,38 @@ impl<'a> Painter<'a> {
 }
 
 fn sin_cos_deg(deg: i32) -> (i32, i32) {
-    // Tiny integer approximation good enough for 24px icons. Values scaled by 1024.
+    // no_std friendly lookup. Values are scaled by 1024.
+    const TABLE: [(i32, i32); 24] = [
+        (0, 1024),
+        (265, 989),
+        (512, 887),
+        (724, 724),
+        (887, 512),
+        (989, 265),
+        (1024, 0),
+        (989, -265),
+        (887, -512),
+        (724, -724),
+        (512, -887),
+        (265, -989),
+        (0, -1024),
+        (-265, -989),
+        (-512, -887),
+        (-724, -724),
+        (-887, -512),
+        (-989, -265),
+        (-1024, 0),
+        (-989, 265),
+        (-887, 512),
+        (-724, 724),
+        (-512, 887),
+        (-265, 989),
+    ];
+
     let mut d = deg % 360;
     if d < 0 {
         d += 360;
     }
-    let rad = d as f32 * core::f32::consts::PI / 180.0;
-    ((rad.sin() * 1024.0) as i32, (rad.cos() * 1024.0) as i32)
+    let idx = ((d + 7) / 15) as usize % 24;
+    TABLE[idx]
 }
