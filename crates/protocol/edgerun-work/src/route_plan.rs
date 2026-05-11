@@ -1,9 +1,20 @@
 use alloc::vec::Vec;
 
-use crate::channel::{RouteAdvertisement, RouteSnapshot, ROUTE_STATUS_AVAILABLE};
+use crate::channel::{RouteAdvertisement, RouteSnapshot};
 use crate::protocol::{Hash, NodeId};
 use crate::route_auth::{route_advertisement_preimage, verify_route_advertisement, verify_route_snapshot};
 use crate::codec::blake3_hash;
+use crate::memory_channel::route_is_available;
+
+#[cfg(feature = "std")]
+fn current_unix_ms() -> u64 {
+    crate::std_runtime::unix_ms()
+}
+
+#[cfg(not(feature = "std"))]
+fn current_unix_ms() -> u64 {
+    0
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RoutePlanError {
@@ -35,25 +46,44 @@ impl VerifiedRoutePlan {
     }
 
     pub fn route_for_node(&self, node_id: NodeId) -> Option<&RouteAdvertisement> {
-        self.snapshot.routes.iter().find(|route| route.node.node_id == node_id)
+        self.route_for_node_at(node_id, current_unix_ms())
+    }
+
+    pub fn route_for_node_at(&self, node_id: NodeId, now_unix_ms: u64) -> Option<&RouteAdvertisement> {
+        self.snapshot
+            .routes
+            .iter()
+            .find(|route| route.node.node_id == node_id && route_is_available(route, now_unix_ms))
     }
 
     pub fn first_route_for_department(&self, department: u16) -> Option<&RouteAdvertisement> {
+        self.first_route_for_department_at(department, current_unix_ms())
+    }
+
+    pub fn first_route_for_department_at(&self, department: u16, now_unix_ms: u64) -> Option<&RouteAdvertisement> {
         self.snapshot.routes.iter().find(|route| {
-            route.status == ROUTE_STATUS_AVAILABLE && route.departments.contains(&department)
+            route_is_available(route, now_unix_ms) && route.departments.contains(&department)
         })
     }
 
     pub fn routes_for_department(&self, department: u16) -> Vec<&RouteAdvertisement> {
+        self.routes_for_department_at(department, current_unix_ms())
+    }
+
+    pub fn routes_for_department_at(&self, department: u16, now_unix_ms: u64) -> Vec<&RouteAdvertisement> {
         self.snapshot
             .routes
             .iter()
-            .filter(|route| route.status == ROUTE_STATUS_AVAILABLE && route.departments.contains(&department))
+            .filter(|route| route_is_available(route, now_unix_ms) && route.departments.contains(&department))
             .collect()
     }
 
     pub fn require_department_route(&self, department: u16) -> Result<&RouteAdvertisement, RoutePlanError> {
         self.first_route_for_department(department).ok_or(RoutePlanError::NoRoute)
+    }
+
+    pub fn require_department_route_at(&self, department: u16, now_unix_ms: u64) -> Result<&RouteAdvertisement, RoutePlanError> {
+        self.first_route_for_department_at(department, now_unix_ms).ok_or(RoutePlanError::NoRoute)
     }
 }
 
