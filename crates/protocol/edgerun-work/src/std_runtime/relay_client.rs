@@ -3,9 +3,15 @@ use std::net::{TcpStream, ToSocketAddrs};
 
 use edgerun_crypto::Ed25519SigningKey;
 
-use crate::codec::*;
+use crate::codec::blake3_hash;
+use crate::identity::node_identity_from_key;
+use crate::preimage::HashBuilder;
 use crate::protocol::*;
+use crate::signing::{empty_signature, sign_network_message, sign_node_available, sign_node_heartbeat};
 use crate::std_runtime::framing::{read_work_packet, unix_ms, write_work_packet};
+
+const CLIENT_CONNECTION_HASH_DOMAIN: &[u8] = b"edgerun:v1:work:client-connection";
+const CLIENT_MESSAGE_ID_DOMAIN: &[u8] = b"edgerun:v1:work:client-message-id";
 
 pub struct WorkClient {
     stream: TcpStream,
@@ -41,10 +47,10 @@ impl WorkClient {
         );
         write_work_packet(&mut stream, &WorkPacket::NodeAvailable(available))?;
         let response = read_work_packet(&mut stream)?;
-        let mut seed = Vec::new();
-        seed.extend_from_slice(&identity.node_id);
-        seed.extend_from_slice(&unix_ms().to_be_bytes());
-        let connection_hash = blake3_hash(&seed);
+        let connection_hash = HashBuilder::domain(CLIENT_CONNECTION_HASH_DOMAIN)
+            .node_id(&identity.node_id)
+            .u64(unix_ms())
+            .finish();
         Ok((
             Self {
                 stream,
@@ -89,16 +95,17 @@ impl WorkClient {
     ) -> NetworkMessage {
         self.sequence += 1;
         let payload_hash = blake3_hash(&payload);
-        let mut id_input = Vec::new();
-        id_input.extend_from_slice(&self.identity.node_id);
-        id_input.extend_from_slice(&to);
-        id_input.extend_from_slice(&self.sequence.to_be_bytes());
-        id_input.extend_from_slice(&payload_hash);
+        let message_id = HashBuilder::domain(CLIENT_MESSAGE_ID_DOMAIN)
+            .node_id(&self.identity.node_id)
+            .node_id(&to)
+            .u64(self.sequence)
+            .hash(&payload_hash)
+            .finish();
         sign_network_message(
             &self.key,
             NetworkMessage {
                 abi_version: WORK_WIRE_ABI_VERSION,
-                message_id: blake3_hash(&id_input),
+                message_id,
                 prev_hash: [0u8; 32],
                 from: self.identity.node_id,
                 to,
