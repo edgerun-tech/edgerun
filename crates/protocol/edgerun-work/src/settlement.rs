@@ -26,6 +26,7 @@ pub enum SettlementError {
     ReceiptInputMismatch,
     ReceiptOutputMismatch,
     DeliveryPacketMismatch,
+    AdmissionRouteMismatch,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -219,6 +220,11 @@ pub fn verify_delivery_evidence(
     }
     if receipt.worker.node_id != receipt.relay_node_id {
         return Err(SettlementError::WrongRelay);
+    }
+    if evidence.admission.assigned_route_hash != evidence.relay_input.envelope.route_hash
+        || evidence.admission.assigned_channel.channel_id != evidence.relay_input.envelope.channel_id
+    {
+        return Err(SettlementError::AdmissionRouteMismatch);
     }
     if evidence.recipient_delivery.envelope.from != receipt.worker.node_id {
         return Err(SettlementError::WrongRelay);
