@@ -1,18 +1,21 @@
 use alloc::collections::{BTreeMap, BTreeSet};
-use alloc::vec::Vec;
 
 use crate::channel::ChannelProof;
 use crate::channel_order::OrderedChannelEnvelope;
-use crate::codec::{blake3_hash, packet_bytes, verify_work_admission, verify_work_receipt};
+use crate::codec::{blake3_hash, packet_bytes};
 use crate::delivery_proof::{
     channel_proof_hash, verify_channel_proof_for_ordered_with_policy,
 };
+use crate::preimage::HashBuilder;
 use crate::protocol::*;
 use crate::recipient_policy::{
     recipient_message_policy_allows, recipient_message_policy_hash, RecipientMessagePolicy,
 };
 use crate::relay_role::ordered_message_input_hash;
+use crate::signing::{verify_work_admission, verify_work_receipt};
 use crate::transit_proof::{packet_transit_hash, relay_delivery_output_hash, PacketTransitHashInput};
+
+const RECEIPT_ID_DOMAIN: &[u8] = b"edgerun:v1:work:receipt-id";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SettlementError {
@@ -327,12 +330,12 @@ pub fn receipt_id_for_claim(
     output_hash: Hash,
     sequence: u64,
 ) -> Hash {
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(&request_hash);
-    bytes.extend_from_slice(&admission_hash);
-    bytes.extend_from_slice(&worker);
-    bytes.extend_from_slice(&input_hash);
-    bytes.extend_from_slice(&output_hash);
-    bytes.extend_from_slice(&sequence.to_be_bytes());
-    blake3_hash(&bytes)
+    HashBuilder::domain(RECEIPT_ID_DOMAIN)
+        .hash(&request_hash)
+        .hash(&admission_hash)
+        .node_id(&worker)
+        .hash(&input_hash)
+        .hash(&output_hash)
+        .u64(sequence)
+        .finish()
 }
