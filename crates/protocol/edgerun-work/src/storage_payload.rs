@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 
 use rkyv::{Archive, Deserialize, Serialize};
 
-use crate::erasure_storage::{ErasureManifest, ErasureShard};
+use crate::erasure_storage::{erasure_shard_hash, ErasureManifest, ErasureShard};
 use crate::preimage::HashBuilder;
 use crate::protocol::{Hash, WorkProtocolError};
 
@@ -11,7 +11,6 @@ pub const STORAGE_PAYLOAD_KIND_RETRIEVE_REQUEST: u16 = 2;
 pub const STORAGE_PAYLOAD_KIND_RETRIEVE_RESPONSE: u16 = 3;
 
 const ERASURE_MANIFEST_HASH_DOMAIN: &[u8] = b"edgerun:v1:work:erasure-manifest";
-const TYPED_SHARD_HASH_DOMAIN: &[u8] = b"edgerun:v1:work:typed-shard";
 
 #[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[rkyv(crate = rkyv)]
@@ -151,10 +150,5 @@ fn storage_payload_from_aligned_bytes(bytes: &[u8]) -> Result<StoragePayload, Wo
 }
 
 pub fn typed_shard_hash(job_id: Hash, index: u16, is_parity: bool, bytes: &[u8]) -> Hash {
-    HashBuilder::domain(TYPED_SHARD_HASH_DOMAIN)
-        .hash(&job_id)
-        .u16(index)
-        .raw(&[is_parity as u8])
-        .bytes(bytes)
-        .finish()
+    erasure_shard_hash(job_id, index, is_parity, bytes)
 }
