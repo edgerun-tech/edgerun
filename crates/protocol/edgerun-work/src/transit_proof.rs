@@ -5,6 +5,7 @@ use crate::protocol::{Hash, NodeId};
 
 const PACKET_TRANSIT_DOMAIN: &[u8] = b"edgerun:v1:work:packet-transit";
 const PACKET_TRANSIT_CHAIN_DOMAIN: &[u8] = b"edgerun:v1:work:packet-transit-chain";
+const RELAY_DELIVERY_OUTPUT_DOMAIN: &[u8] = b"edgerun:v1:work:relay-delivery-output";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PacketTransitHashInput {
@@ -30,6 +31,20 @@ pub fn packet_transit_hash(input: &PacketTransitHashInput) -> Hash {
     bytes.extend_from_slice(&input.packet_hash);
     bytes.extend_from_slice(&input.sequence.to_be_bytes());
     bytes.extend_from_slice(&input.previous_transit_hash);
+    blake3_hash(&bytes)
+}
+
+pub fn relay_delivery_output_hash(
+    transit_hash: Hash,
+    forwarded_packet_hash: Hash,
+    receiver_channel_proof_hash: Hash,
+) -> Hash {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(RELAY_DELIVERY_OUTPUT_DOMAIN);
+    bytes.push(0);
+    bytes.extend_from_slice(&transit_hash);
+    bytes.extend_from_slice(&forwarded_packet_hash);
+    bytes.extend_from_slice(&receiver_channel_proof_hash);
     blake3_hash(&bytes)
 }
 
