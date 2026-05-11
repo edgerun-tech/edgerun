@@ -4,6 +4,7 @@ use alloc::vec::Vec;
 use crate::channel::{ChannelEnvelope, RouteAdvertisement, CHANNEL_KIND_WEBSOCKET};
 use crate::channel_order::{ChannelOrderBook, OrderedChannelEnvelope};
 use crate::codec::{blake3_hash, packet_bytes};
+use crate::frame_codec::channel_envelope_bytes;
 use crate::memory_channel::route_hash;
 use crate::protocol::{Hash, NodeId, WorkPacket, WORK_WIRE_ABI_VERSION};
 use crate::route_auth::verify_route_advertisement;
@@ -21,7 +22,8 @@ pub struct WsFrame {
     pub to: NodeId,
     pub route_hash: Hash,
     pub packet_hash: Hash,
-    pub bytes: Vec<u8>,
+    pub packet_bytes: Vec<u8>,
+    pub envelope_bytes: Vec<u8>,
 }
 
 impl WsWorkChannel {
@@ -31,6 +33,13 @@ impl WsWorkChannel {
 
     pub fn drain_outbound_frames(&mut self) -> Vec<WsFrame> {
         self.outbound_frames.drain(..).collect()
+    }
+
+    pub fn drain_outbound_envelope_bytes(&mut self) -> Vec<Vec<u8>> {
+        self.outbound_frames
+            .drain(..)
+            .map(|frame| frame.envelope_bytes)
+            .collect()
     }
 
     pub fn inject_inbound_envelope(&mut self, envelope: ChannelEnvelope) {
@@ -86,8 +95,8 @@ impl WorkChannel for WsWorkChannel {
         packet: WorkPacket,
     ) -> Result<ChannelEnvelope, WorkChannelError> {
         let route = self.routes.get(&to).ok_or(WorkChannelError::RouteMissing)?;
-        let bytes = packet_bytes(&packet).map_err(|_| WorkChannelError::PacketHashFailed)?;
-        let packet_hash = blake3_hash(&bytes);
+        let packet_bytes = packet_bytes(&packet).map_err(|_| WorkChannelError::PacketHashFailed)?;
+        let packet_hash = blake3_hash(&packet_bytes);
         let envelope = ChannelEnvelope {
             abi_version: WORK_WIRE_ABI_VERSION,
             channel_id: route.endpoint.channel_id,
@@ -97,11 +106,14 @@ impl WorkChannel for WsWorkChannel {
             packet_hash,
             packet,
         };
+        let envelope_bytes = channel_envelope_bytes(&envelope)
+            .map_err(|_| WorkChannelError::PacketHashFailed)?;
         self.outbound_frames.push(WsFrame {
             to,
             route_hash: envelope.route_hash,
             packet_hash,
-            bytes,
+            packet_bytes,
+            envelope_bytes,
         });
         self.inboxes.entry(to).or_default().push(envelope.clone());
         Ok(envelope)
