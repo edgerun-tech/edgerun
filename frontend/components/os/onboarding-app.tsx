@@ -46,6 +46,22 @@ const nodeCards: NodeCard[] = [
     icon: Fingerprint,
   },
   {
+    id: "admission-instance",
+    title: "Admission instance",
+    responsibility: "A WASM node instance that enforces one policy and budget before work enters the network. You can run separate instances for apps, family members, projects, or organizations.",
+    userBenefit: "Use EdgeRun DAO admission by default, or run your own admission instances when you want stricter personal rules.",
+    status: "ready",
+    icon: Shield,
+  },
+  {
+    id: "relay-instance",
+    title: "Relay instance",
+    responsibility: "A WASM or native node instance that moves admitted ordered packets without owning the content. Multiple relay instances can enforce different route policies.",
+    userBenefit: "Pick your own relay rules: personal devices, family traffic, paid public traffic, or app-specific paths.",
+    status: "optional",
+    icon: Route,
+  },
+  {
     id: "storage-node",
     title: "Storage node",
     responsibility: "Accepts admitted work orders to store, retrieve, copy, pin, and move content-addressed data between EdgeRun storage, your cloud host, and your other machines.",
@@ -62,28 +78,12 @@ const nodeCards: NodeCard[] = [
     icon: Cloud,
   },
   {
-    id: "relay-node",
-    title: "Relay node",
-    responsibility: "Moves ordered encrypted messages, calls, and work packets between identities without owning the content.",
-    userBenefit: "Enables private direct messaging/calling, app delivery, and proof-backed routing.",
-    status: "network",
-    icon: Route,
-  },
-  {
     id: "compute-node",
     title: "Compute node",
     responsibility: "Runs deterministic work and returns verifiable outputs for admitted jobs. The browser node is already a small local compute node for app execution.",
     userBenefit: "Turns idle hardware into useful paid work once compute proofs are wired.",
     status: "optional",
     icon: BrainCircuit,
-  },
-  {
-    id: "admission-node",
-    title: "Admission node",
-    responsibility: "Checks signed requests, policy, funding, budget, and route before work enters the network.",
-    userBenefit: "Prevents unpaid work and makes users/developers accountable by policy.",
-    status: "network",
-    icon: Shield,
   },
   {
     id: "settlement-node",
@@ -128,12 +128,12 @@ export function OnboardingApp() {
       icon: Fingerprint,
     },
     {
-      title: "Give your browser node a policy",
+      title: "Set admission policy",
       done: Boolean(profile?.browserNode),
       body: profile?.browserNode
-        ? "Your browser node has an identity and can follow your local policy for work orders, app execution, and sharing."
-        : "The browser node is created with your profile. You decide what it can do and what it may share.",
-      icon: Network,
+        ? "Your browser node can use EdgeRun DAO admission or your own WASM admission instances for app, family, or project budgets."
+        : "Choose who can submit work, which relays/workers are allowed, and which budget/policy applies.",
+      icon: Shield,
     },
     {
       title: "Add contacts",
@@ -154,7 +154,7 @@ export function OnboardingApp() {
     {
       title: "Inspect proof",
       done: capabilityGrantCount > 0 || appState.installed.size > 0,
-      body: "Trust Manager shows identity, packages, capability grants, routes, work orders, and audit events from the same local state.",
+      body: "Trust Manager shows identity, admission policy, packages, grants, routes, work orders, and audit events from the same local state.",
       icon: BadgeCheck,
     },
   ]
@@ -169,11 +169,11 @@ export function OnboardingApp() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-2xl">
               <div className="inline-flex rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-primary">
-                Own identity · issue work orders · earn first
+                Own identity · run policy nodes · earn first
               </div>
-              <h2 className="mt-3 text-2xl font-semibold tracking-tight text-foreground">Your browser is your first Edgerun node.</h2>
+              <h2 className="mt-3 text-2xl font-semibold tracking-tight text-foreground">Your browser can run more than one Edgerun node.</h2>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                Edgerun does not require users to buy tokens before participating. Your browser node gets an identity, follows your policy, and can issue signed work orders to other nodes. That means you can ask a cloud host, your home server, another laptop, or paid network storage to store, retrieve, copy, pin, and move data for you with proofs instead of blind trust.
+                Admission nodes, relay nodes, compute nodes, and app runtimes are WASM-capable node instances. You can use the default EdgeRun DAO admission node, or run your own admission instances with different rules and budgets for apps, family members, projects, or organizations. Every workload still enters through admission, then moves through relays under policy.
               </p>
             </div>
             <div className="grid min-w-60 gap-2 rounded-xl border border-border bg-background/60 p-3 text-xs">
@@ -204,15 +204,21 @@ export function OnboardingApp() {
         </section>
 
         <section className="mt-5 grid gap-3 lg:grid-cols-3">
-          <FlowCard icon={HardDrive} title="Give storage work orders" body="Your browser node can ask another node to store, retrieve, copy, pin, or move data. The worker returns proof, and payment follows useful work." />
-          <FlowCard icon={Cloud} title="Use cloud or your own machine" body="Run a storage node on a VPS, home server, NAS, or spare computer. Your browser node can move data between them by policy." />
-          <FlowCard icon={Wallet} title="Everyone can start" body="A new user can leave the browser node available and earn before buying. Usage funds the network instead of forcing token purchase upfront." />
+          <FlowCard icon={Shield} title="Run scoped admission" body="Create separate admission instances for an app, a family member, a project, or a business budget. Each instance can enforce its own policy hash." />
+          <FlowCard icon={Route} title="Run scoped relays" body="Relay instances can carry only the traffic you allow: family routes, app routes, paid public routes, or private machine-to-machine routes." />
+          <FlowCard icon={Wallet} title="Everyone can start" body="A new user can leave browser node instances available and earn before buying. Usage funds the network instead of forcing token purchase upfront." />
+        </section>
+
+        <section className="mt-5 grid gap-3 lg:grid-cols-3">
+          <FlowCard icon={HardDrive} title="Give storage work orders" body="Your browser node can ask admitted storage nodes to store, retrieve, copy, pin, or move data. The worker returns proof, and payment follows useful work." />
+          <FlowCard icon={Cloud} title="Use cloud or your own machine" body="Run storage, relay, admission, or compute nodes on a VPS, home server, NAS, spare computer, or browser tab. Your policy decides what each instance may do." />
+          <FlowCard icon={Package} title="Apps run from storage" body="Publishers use the CLI to publish signed SDK packages. Users run them by hash from network storage, or cache locally." />
         </section>
 
         <section className="mt-5 grid gap-3 lg:grid-cols-3">
           <FlowCard icon={MessageCircle} title="Message directly" body="Your contact book stores identities, not platform handles. Messages are sealed and routed by policy, without needing Meta, Apple, or Google as the social graph." />
           <FlowCard icon={PhoneCall} title="Call directly" body="Calls can use the same identity and route model: the network helps connect peers, but your node and your contacts remain the authority." />
-          <FlowCard icon={Package} title="Apps run from storage" body="Publishers use the CLI to publish signed SDK packages. Users run them by hash from network storage, or cache locally." />
+          <FlowCard icon={Network} title="Move data with proof" body="Data movement is an admitted route/work-order flow. The transport can be cloud, home machine, network storage, or another EdgeRun node." />
         </section>
 
         <section className="mt-5">
@@ -240,12 +246,6 @@ export function OnboardingApp() {
               )
             })}
           </div>
-        </section>
-
-        <section className="mt-5 grid gap-3 lg:grid-cols-3">
-          <FlowCard icon={Network} title="Your node can earn" body="Leave your browser node running, set policy, and share only what you allow. Work must be admitted and proof-backed before payment." />
-          <FlowCard icon={Shield} title="Policy keeps control local" body="You decide who can message you, what apps can access, where data can be copied, and what your node may contribute. Trust Manager shows the evidence." />
-          <FlowCard icon={Route} title="Move data with proof" body="Data movement is a signed route/work-order flow. The transport can be cloud, home machine, network storage, or another EdgeRun node." />
         </section>
       </div>
     </div>
