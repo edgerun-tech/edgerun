@@ -30,11 +30,59 @@ pub struct AdmissionConfig {
     pub heartbeat_grace_secs: u64,
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct AdmissionReplayState {
+    seen_request_ids: HashSet<Hash>,
+    highest_user_sequence: HashMap<PublicKey, u64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AdmissionReplayError {
+    DuplicateRequestId,
+    NonIncreasingUserSequence { last_seen: u64, received: u64 },
+}
+
+impl AdmissionReplayState {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn validate(&self, request: &WorkRequest) -> Result<(), AdmissionReplayError> {
+        if self.seen_request_ids.contains(&request.request_id) {
+            return Err(AdmissionReplayError::DuplicateRequestId);
+        }
+        if let Some(last_seen) = self.highest_user_sequence.get(&request.user) {
+            if request.user_sequence <= *last_seen {
+                return Err(AdmissionReplayError::NonIncreasingUserSequence {
+                    last_seen: *last_seen,
+                    received: request.user_sequence,
+                });
+            }
+        }
+        Ok(())
+    }
+
+    pub fn record_checked(&mut self, request: &WorkRequest) -> Result<(), AdmissionReplayError> {
+        self.validate(request)?;
+        self.seen_request_ids.insert(request.request_id);
+        self.highest_user_sequence.insert(request.user, request.user_sequence);
+        Ok(())
+    }
+
+    pub fn seen_request_count(&self) -> usize {
+        self.seen_request_ids.len()
+    }
+
+    pub fn highest_sequence_for(&self, user: &PublicKey) -> Option<u64> {
+        self.highest_user_sequence.get(user).copied()
+    }
+}
+
 struct AdmissionState {
     seq: u64,
     relays: HashMap<NodeId, RelayRecord>,
     nodes: HashMap<NodeId, NodeRecord>,
-    requests: HashSet<Hash>,
+    replay: AdmissionReplayState,
     balances: HashMap<PublicKey, u64>,
 }
 
@@ -60,7 +108,7 @@ impl InMemoryAdmissionController {
                 seq: 0,
                 relays: HashMap::new(),
                 nodes: HashMap::new(),
-                requests: HashSet::new(),
+                replay: AdmissionReplayState::new(),
                 balances: HashMap::new(),
             })),
             admission_key,
@@ -219,15 +267,22 @@ impl InMemoryAdmissionController {
         if request.valid_until_unix_ms < unix_ms() {
             return Ok(ack(false, 408, "expired request"));
         }
-        let request_hash = blake3_hash(&packet_bytes(&WorkPacket::WorkRequest(request.clone())).unwrap_or_default());
+        let request_hash = match packet_bytes(&WorkPacket::WorkRequest(request.clone())) {
+            Ok(bytes) => blake3_hash(&bytes),
+            Err(_) => return Ok(ack(false, 400, "invalid request packet")),
+        };
         let mut state = self.inner.lock().expect("admission state poisoned");
-        if !state.requests.insert(request_hash) {
-            return Ok(ack(false, 409, "duplicate request"));
+        if let Err(error) = state.replay.validate(&request) {
+            return Ok(admission_replay_ack(error));
         }
         if *state.balances.get(&request.user).unwrap_or(&0) < request.max_total_cost {
             return Ok(ack(false, 402, "insufficient work credit"));
         }
         let Some(relay) = state.relays.values().next().cloned() else { return Ok(ack(false, 503, "no relay available")); };
+        state
+            .replay
+            .record_checked(&request)
+            .expect("validated request replay state changed while locked");
         state.seq += 1;
         let (assigned_route_hash, assigned_channel) = relay_channel_commitment(&relay.endpoint);
         let admission = WorkAdmission {
@@ -263,11 +318,18 @@ impl InMemoryAdmissionController {
     }
 }
 
+fn admission_replay_ack(error: AdmissionReplayError) -> WorkPacket {
+    match error {
+        AdmissionReplayError::DuplicateRequestId => ack(false, 409, "duplicate request id"),
+        AdmissionReplayError::NonIncreasingUserSequence { .. } => ack(false, 409, "stale user request sequence"),
+    }
+}
+
 fn relay_channel_commitment(relay: &RelayEndpoint) -> (Hash, ChannelEndpoint) {
     let mut address = Vec::new();
     address.extend_from_slice(relay.host.as_bytes());
     address.push(b':');
-    address.extend_from_slice(relay.port.to_string().as_bytes());
+    address.extend_from_slice(&relay.port.to_string().as_bytes());
     let channel_id = blake3_hash(&address);
     let channel = ChannelEndpoint::new(channel_id, CHANNEL_KIND_TCP, address.clone(), relay.host.clone());
     let mut route = Vec::new();
