@@ -1,0 +1,15 @@
+[package]
+name = "edgerun-ui-core"
+version = "0.1.1"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+repository = "https://github.com/Sylchi/edgerun_reference_core"
+homepage = "https://github.com/Sylchi/edgerun_reference_core"
+rust-version = "1.95"
+
+[features]
+default = []
+std = []
+
+[dependencies]
