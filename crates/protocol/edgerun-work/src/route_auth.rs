@@ -3,8 +3,9 @@ use alloc::vec::Vec;
 use edgerun_crypto::Ed25519SigningKey;
 
 use crate::channel::*;
-use crate::codec::{blake3_hash, sign_ed25519, verify_signature};
+use crate::codec::blake3_hash;
 use crate::protocol::{NodeIdentity, WORK_WIRE_ABI_VERSION};
+use crate::signing::{sign_ed25519, verify_signature};
 
 const ROUTE_ADVERTISEMENT_DOMAIN: &[u8] = b"edgerun:v1:work:route-advertisement";
 const ROUTE_SNAPSHOT_DOMAIN: &[u8] = b"edgerun:v1:work:route-snapshot";
