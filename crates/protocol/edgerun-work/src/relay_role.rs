@@ -2,6 +2,7 @@ use alloc::vec::Vec;
 
 use edgerun_crypto::Ed25519SigningKey;
 
+use crate::admitted_route::{verify_message_against_admitted_route, AdmittedCapabilityRoute};
 use crate::channel_order::OrderedChannelEnvelope;
 use crate::codec::{blake3_hash, encode_work_packet_once};
 use crate::identity::node_identity_from_key;
@@ -21,6 +22,7 @@ pub enum RelayRoleError {
     PacketSerializationFailed,
     DeliveryFailed,
     LegacyMemoryDelivery(MemoryChannelError),
+    AdmittedRouteMismatch,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -63,6 +65,34 @@ impl RelayRole {
             price_per_message,
             last_transit_hash: [0u8; 32],
         }
+    }
+
+    pub fn forward_ordered_with_admitted_route<C: WorkChannel>(
+        &mut self,
+        channel: &mut C,
+        ordered: &OrderedChannelEnvelope,
+        admitted_route: &AdmittedCapabilityRoute,
+    ) -> Result<RelayDeliveryResult, RelayRoleError> {
+        let WorkPacket::NetworkMessage(message) = &ordered.envelope.packet else {
+            return Err(RelayRoleError::NotNetworkMessage);
+        };
+        verify_message_against_admitted_route(message, admitted_route)
+            .map_err(|_| RelayRoleError::AdmittedRouteMismatch)?;
+        if admitted_route.relay_node_id != self.identity.node_id {
+            return Err(RelayRoleError::WrongRelay);
+        }
+        let destination_route_hash = channel
+            .route_hash_for(&message.to)
+            .ok_or(RelayRoleError::DestinationRouteMissing)?;
+        if destination_route_hash != admitted_route.worker_route_hash {
+            return Err(RelayRoleError::AdmittedRouteMismatch);
+        }
+        self.forward_ordered_on(
+            channel,
+            ordered,
+            admitted_route.request_hash,
+            admitted_route.admission_hash,
+        )
     }
 
     pub fn forward_ordered_on<C: WorkChannel>(
