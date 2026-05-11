@@ -58,11 +58,15 @@ impl SettlementLedger {
         *self.admission_spend.get(admission_hash).unwrap_or(&0)
     }
 
-    pub fn settle_receipt(
-        &mut self,
+    pub fn is_receipt_paid(&self, receipt_hash: &Hash) -> bool {
+        self.paid_receipts.contains(receipt_hash)
+    }
+
+    pub fn can_settle_receipt(
+        &self,
         admission: &WorkAdmission,
         receipt: &WorkReceipt,
-    ) -> Result<SettlementResult, SettlementError> {
+    ) -> Result<(), SettlementError> {
         if !verify_work_admission(admission) {
             return Err(SettlementError::InvalidAdmission);
         }
@@ -76,25 +80,39 @@ impl SettlementLedger {
         if receipt.request_hash != admission.request_hash {
             return Err(SettlementError::ReceiptAdmissionMismatch);
         }
-
         let receipt_hash = work_receipt_hash(receipt)?;
         if self.paid_receipts.contains(&receipt_hash) {
             return Err(SettlementError::DuplicateReceipt);
         }
-
         let already_spent = self.admission_spent(&admission_hash);
         let next_spend = already_spent.saturating_add(receipt.total_claim);
         if next_spend > admission.admitted_budget {
             return Err(SettlementError::ClaimExceedsAdmissionBudget);
         }
-
         let user_balance = self
             .user_balances
-            .get_mut(&admission.user)
+            .get(&admission.user)
             .ok_or(SettlementError::UnknownUser)?;
         if *user_balance < receipt.total_claim {
             return Err(SettlementError::InsufficientBalance);
         }
+        Ok(())
+    }
+
+    pub fn settle_receipt(
+        &mut self,
+        admission: &WorkAdmission,
+        receipt: &WorkReceipt,
+    ) -> Result<SettlementResult, SettlementError> {
+        self.can_settle_receipt(admission, receipt)?;
+        let admission_hash = work_admission_hash(admission)?;
+        let receipt_hash = work_receipt_hash(receipt)?;
+        let already_spent = self.admission_spent(&admission_hash);
+        let next_spend = already_spent.saturating_add(receipt.total_claim);
+        let user_balance = self
+            .user_balances
+            .get_mut(&admission.user)
+            .ok_or(SettlementError::UnknownUser)?;
 
         self.paid_receipts.insert(receipt_hash);
         *user_balance -= receipt.total_claim;
