@@ -90,3 +90,24 @@ impl RouteAdvertisementBuilder {
 pub fn memory_endpoint(label: impl Into<String>, seed: &[u8]) -> ChannelEndpoint {
     ChannelEndpoint::new(blake3_hash(seed), CHANNEL_KIND_MEMORY, Vec::new(), label.into())
 }
+
+pub fn quic_endpoint(label: impl Into<String>, address: impl AsRef<[u8]>) -> ChannelEndpoint {
+    endpoint_from_address(CHANNEL_KIND_QUIC, label, address)
+}
+
+pub fn webtransport_endpoint(label: impl Into<String>, url: impl AsRef<[u8]>) -> ChannelEndpoint {
+    endpoint_from_address(CHANNEL_KIND_WEBTRANSPORT, label, url)
+}
+
+pub fn websocket_endpoint(label: impl Into<String>, url: impl AsRef<[u8]>) -> ChannelEndpoint {
+    endpoint_from_address(CHANNEL_KIND_WEBSOCKET, label, url)
+}
+
+fn endpoint_from_address(
+    kind: u16,
+    label: impl Into<String>,
+    address: impl AsRef<[u8]>,
+) -> ChannelEndpoint {
+    let address = address.as_ref().to_vec();
+    ChannelEndpoint::new(blake3_hash(&address), kind, address, label.into())
+}
