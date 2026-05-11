@@ -76,23 +76,27 @@ impl SettlementLedger {
         if receipt.request_hash != admission.request_hash {
             return Err(SettlementError::ReceiptAdmissionMismatch);
         }
+
+        let receipt_hash = work_receipt_hash(receipt)?;
+        if self.paid_receipts.contains(&receipt_hash) {
+            return Err(SettlementError::DuplicateReceipt);
+        }
+
         let already_spent = self.admission_spent(&admission_hash);
         let next_spend = already_spent.saturating_add(receipt.total_claim);
         if next_spend > admission.admitted_budget {
             return Err(SettlementError::ClaimExceedsAdmissionBudget);
         }
-        let receipt_hash = work_receipt_hash(receipt)?;
-        if !self.paid_receipts.insert(receipt_hash) {
-            return Err(SettlementError::DuplicateReceipt);
-        }
+
         let user_balance = self
             .user_balances
             .get_mut(&admission.user)
             .ok_or(SettlementError::UnknownUser)?;
         if *user_balance < receipt.total_claim {
-            self.paid_receipts.remove(&receipt_hash);
             return Err(SettlementError::InsufficientBalance);
         }
+
+        self.paid_receipts.insert(receipt_hash);
         *user_balance -= receipt.total_claim;
         self.admission_spend.insert(admission_hash, next_spend);
         let worker_balance = self.worker_balances.entry(receipt.worker.node_id).or_default();
