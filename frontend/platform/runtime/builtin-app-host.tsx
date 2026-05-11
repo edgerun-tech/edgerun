@@ -14,6 +14,10 @@ const TrustManagerSurface = dynamic(
   () => import("@/components/os/trust-manager-real-app").then((mod) => mod.TrustManagerSurface),
   { ssr: false, loading: LoadingApp },
 )
+const OnboardingApp = dynamic(
+  () => import("@/components/os/onboarding-app").then((mod) => mod.OnboardingApp),
+  { ssr: false, loading: LoadingApp },
+)
 const FileManagerApp = dynamic(
   () => import("@/components/os/file-manager").then((mod) => mod.FileManager),
   { ssr: false, loading: LoadingApp },
@@ -70,6 +74,8 @@ export function BuiltinAppHost({ app, onLaunchApp }: BuiltinAppHostProps) {
       return <IdentityApp />
     case "app-store":
       return <AppStoreApp onLaunchApp={(a: AppDefinition) => onLaunchApp?.(a)} />
+    case "help":
+      return <OnboardingApp />
     case "people":
     case "contacts":
     case "calling":
@@ -77,7 +83,6 @@ export function BuiltinAppHost({ app, onLaunchApp }: BuiltinAppHostProps) {
     case "finances":
     case "wallet":
     case "calculator":
-    case "help":
     case "workflow-builder":
       return <div className="p-4 text-muted-foreground">Desktop demo app disabled: {app.name}</div>
     case "trust-manager":
