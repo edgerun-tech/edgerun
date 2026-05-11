@@ -66,10 +66,10 @@ unwrap_used = "deny"
 codex-app-server-protocol = { path = "app-server-protocol" }
 codex-apply-patch = { path = "apply-patch" }
 codex-code-mode = { path = "code-mode" }
-codex-api = { path = "codex-api" }
-codex-client = { path = "codex-client" }
-codex-core = { path = "core" }
-codex-model-provider = { path = "model-provider" }
+codex-api = { path = "codex-api", default-features = false }
+codex-client = { path = "codex-client", default-features = false }
+codex-core = { path = "core", default-features = false }
+codex-model-provider = { path = "model-provider", default-features = false }
 codex-model-provider-info = { path = "model-provider-info" }
 codex-models-manager = { path = "models-manager" }
 codex-protocol = { path = "protocol" }
