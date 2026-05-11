@@ -4,8 +4,9 @@ use edgerun_crypto::Ed25519SigningKey;
 
 use crate::channel::ChannelProof;
 use crate::channel_order::{ordered_message_hash, OrderedChannelEnvelope};
-use crate::codec::{empty_signature, sign_ed25519, verify_signature};
+use crate::codec::blake3_hash;
 use crate::protocol::{Hash, NodeId, NodeIdentity, WorkProtocolError, WORK_WIRE_ABI_VERSION};
+use crate::signing::{empty_signature, sign_ed25519, verify_signature};
 
 const CHANNEL_PROOF_DOMAIN: &[u8] = b"edgerun:v1:work:channel-proof";
 
@@ -96,5 +97,5 @@ pub fn verify_channel_proof_for_ordered(
 }
 
 pub fn channel_proof_hash(proof: &ChannelProof) -> Hash {
-    crate::codec::blake3_hash(&channel_proof_preimage(proof))
+    blake3_hash(&channel_proof_preimage(proof))
 }
