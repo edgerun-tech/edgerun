@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use edgerun_crypto::Ed25519SigningKey;
 
+use crate::channel::{ChannelEndpoint, CHANNEL_KIND_TCP};
 use crate::codec::*;
 use crate::protocol::*;
 use crate::request_auth::verify_work_request;
@@ -228,13 +229,15 @@ impl InMemoryAdmissionController {
         }
         let Some(relay) = state.relays.values().next().cloned() else { return Ok(ack(false, 503, "no relay available")); };
         state.seq += 1;
+        let (assigned_route_hash, assigned_channel) = relay_channel_commitment(&relay.endpoint);
         let admission = WorkAdmission {
             abi_version: WORK_WIRE_ABI_VERSION,
             admission_id: blake3_hash(&request_hash),
             dao_id: self.dao_id,
             admission_node: self.admission_identity.clone(),
             request_hash,
-            assigned_relay: relay.endpoint,
+            assigned_route_hash,
+            assigned_channel,
             admitted_budget: request.max_total_cost,
             policy_hash: self.policy_hash,
             sequence: state.seq,
@@ -257,6 +260,20 @@ impl InMemoryAdmissionController {
         for id in &dead { state.relays.remove(id); }
         dead
     }
+}
+
+fn relay_channel_commitment(relay: &RelayEndpoint) -> (Hash, ChannelEndpoint) {
+    let mut address = Vec::new();
+    address.extend_from_slice(relay.host.as_bytes());
+    address.push(b':');
+    address.extend_from_slice(relay.port.to_string().as_bytes());
+    let channel_id = blake3_hash(&address);
+    let channel = ChannelEndpoint::new(channel_id, CHANNEL_KIND_TCP, address.clone(), relay.host.clone());
+    let mut route = Vec::new();
+    route.extend_from_slice(&relay.relay_node_id);
+    route.extend_from_slice(&channel_id);
+    route.extend_from_slice(&address);
+    (blake3_hash(&route), channel)
 }
 
 fn connection_hash(peer: Option<SocketAddr>, now: u64) -> Hash {
