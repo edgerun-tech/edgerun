@@ -54,6 +54,42 @@ pub trait OrderedWorkChannel: WorkChannel {
 
 impl<T: WorkChannel> OrderedWorkChannel for T {}
 
+impl WorkChannel for MemoryChannelEngine {
+    fn add_route(&mut self, route: RouteAdvertisement) -> Result<Hash, WorkChannelError> {
+        MemoryChannelEngine::add_route(self, route).map_err(|error| match error {
+            MemoryChannelError::RouteInvalid => WorkChannelError::RouteInvalid,
+            MemoryChannelError::RouteMissing => WorkChannelError::RouteMissing,
+            MemoryChannelError::PacketHashFailed => WorkChannelError::PacketHashFailed,
+            MemoryChannelError::InboxMissing => WorkChannelError::DeliveryFailed,
+        })
+    }
+
+    fn remove_route(&mut self, node_id: NodeId) -> Option<RouteAdvertisement> {
+        MemoryChannelEngine::remove_route(self, node_id)
+    }
+
+    fn route_hash_for(&self, node_id: &NodeId) -> Option<Hash> {
+        self.route_for(node_id).map(route_hash)
+    }
+
+    fn send_unordered(
+        &mut self,
+        from: NodeId,
+        to: NodeId,
+        packet: WorkPacket,
+    ) -> Result<ChannelEnvelope, WorkChannelError> {
+        self.deliver(from, to, packet).map_err(|error| match error {
+            MemoryChannelError::RouteMissing => WorkChannelError::RouteMissing,
+            MemoryChannelError::PacketHashFailed => WorkChannelError::PacketHashFailed,
+            _ => WorkChannelError::DeliveryFailed,
+        })
+    }
+
+    fn recv_all(&mut self, node_id: NodeId) -> Vec<ChannelEnvelope> {
+        self.drain_inbox(node_id)
+    }
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct MemoryWorkChannel {
     engine: MemoryChannelEngine,
@@ -83,13 +119,7 @@ impl MemoryWorkChannel {
 
 impl WorkChannel for MemoryWorkChannel {
     fn add_route(&mut self, route: RouteAdvertisement) -> Result<Hash, WorkChannelError> {
-        if !verify_route_advertisement(&route) {
-            return Err(WorkChannelError::RouteInvalid);
-        }
-        self.engine.add_route(route).map_err(|error| match error {
-            MemoryChannelError::RouteInvalid => WorkChannelError::RouteInvalid,
-            _ => WorkChannelError::DeliveryFailed,
-        })
+        self.engine.add_route(route)
     }
 
     fn remove_route(&mut self, node_id: NodeId) -> Option<RouteAdvertisement> {
@@ -97,7 +127,7 @@ impl WorkChannel for MemoryWorkChannel {
     }
 
     fn route_hash_for(&self, node_id: &NodeId) -> Option<Hash> {
-        self.engine.route_for(node_id).map(route_hash)
+        self.engine.route_hash_for(node_id)
     }
 
     fn send_unordered(
@@ -106,15 +136,11 @@ impl WorkChannel for MemoryWorkChannel {
         to: NodeId,
         packet: WorkPacket,
     ) -> Result<ChannelEnvelope, WorkChannelError> {
-        self.engine.deliver(from, to, packet).map_err(|error| match error {
-            MemoryChannelError::RouteMissing => WorkChannelError::RouteMissing,
-            MemoryChannelError::PacketHashFailed => WorkChannelError::PacketHashFailed,
-            _ => WorkChannelError::DeliveryFailed,
-        })
+        self.engine.send_unordered(from, to, packet)
     }
 
     fn recv_all(&mut self, node_id: NodeId) -> Vec<ChannelEnvelope> {
-        self.engine.drain_inbox(node_id)
+        self.engine.recv_all(node_id)
     }
 }
 
