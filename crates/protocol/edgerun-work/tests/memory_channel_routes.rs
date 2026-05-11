@@ -82,3 +82,42 @@ fn memory_channel_delivers_available_route() {
     assert_eq!(envelope.route_hash, route_hash);
     assert_eq!(channel.drain_inbox(receiver.identity.node_id).len(), 1);
 }
+
+#[test]
+fn route_hash_changes_when_route_policy_fields_change() {
+    let node = SimNode::from_seed(67, NODE_ROLE_MESSAGE);
+    let base = signed_memory_route(&node, ROUTE_STATUS_AVAILABLE, u64::MAX);
+
+    let mut changed_roles = base.clone();
+    changed_roles.roles.push(NODE_ROLE_STORAGE);
+    changed_roles = sign_route_advertisement(&node.key, changed_roles);
+
+    let mut changed_departments = base.clone();
+    changed_departments.departments.push(DEPARTMENT_STORAGE);
+    changed_departments = sign_route_advertisement(&node.key, changed_departments);
+
+    let mut changed_status = base.clone();
+    changed_status.status = ROUTE_STATUS_DRAINING;
+    changed_status = sign_route_advertisement(&node.key, changed_status);
+
+    assert_ne!(route_hash(&base), route_hash(&changed_roles));
+    assert_ne!(route_hash(&base), route_hash(&changed_departments));
+    assert_ne!(route_hash(&base), route_hash(&changed_status));
+}
+
+#[test]
+fn route_hash_changes_when_route_endpoint_or_chain_changes() {
+    let node = SimNode::from_seed(68, NODE_ROLE_MESSAGE);
+    let base = signed_memory_route(&node, ROUTE_STATUS_AVAILABLE, u64::MAX);
+
+    let mut changed_endpoint = base.clone();
+    changed_endpoint.endpoint.address = b"127.0.0.1:9000".to_vec();
+    changed_endpoint = sign_route_advertisement(&node.key, changed_endpoint);
+
+    let mut changed_previous = base.clone();
+    changed_previous.previous_route_hash = [9u8; 32];
+    changed_previous = sign_route_advertisement(&node.key, changed_previous);
+
+    assert_ne!(route_hash(&base), route_hash(&changed_endpoint));
+    assert_ne!(route_hash(&base), route_hash(&changed_previous));
+}
