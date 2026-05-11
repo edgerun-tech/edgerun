@@ -212,6 +212,43 @@ fn settle_delivery_rejects_wrong_recipient_delivery_packet_hash() {
 #[test]
 fn settle_delivery_rejects_receipt_with_wrong_input_hash() {
     let mut fixture = fixture();
+    let relay_key = Ed25519SigningKey::from_bytes(&[185u8; 32]);
     fixture.result.receipt.input_hash = [6u8; 32];
-    fixture.result.receipt = sign_work_receipt(&fixture.result.receipt.worker.public_key.into(), fixture.result.receipt.clone());
+    fixture.result.receipt = sign_work_receipt(&relay_key, fixture.result.receipt.clone());
+    let evidence = DeliverySettlementEvidence {
+        admission: &fixture.admission,
+        receipt: &fixture.result.receipt,
+        relay_input: &fixture.relay_input,
+        recipient_delivery: &fixture.recipient_delivery,
+        recipient: &fixture.recipient.identity,
+        recipient_proof: &fixture.recipient_proof,
+        previous_transit_hash: [0u8; 32],
+    };
+
+    assert_eq!(
+        verify_delivery_evidence(&evidence),
+        Err(SettlementError::ReceiptInputMismatch)
+    );
+}
+
+#[test]
+fn settle_delivery_rejects_receipt_with_wrong_output_hash() {
+    let mut fixture = fixture();
+    let relay_key = Ed25519SigningKey::from_bytes(&[185u8; 32]);
+    fixture.result.receipt.output_hash = [7u8; 32];
+    fixture.result.receipt = sign_work_receipt(&relay_key, fixture.result.receipt.clone());
+    let evidence = DeliverySettlementEvidence {
+        admission: &fixture.admission,
+        receipt: &fixture.result.receipt,
+        relay_input: &fixture.relay_input,
+        recipient_delivery: &fixture.recipient_delivery,
+        recipient: &fixture.recipient.identity,
+        recipient_proof: &fixture.recipient_proof,
+        previous_transit_hash: [0u8; 32],
+    };
+
+    assert_eq!(
+        verify_delivery_evidence(&evidence),
+        Err(SettlementError::ReceiptOutputMismatch)
+    );
 }
