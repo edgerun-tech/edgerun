@@ -2,9 +2,9 @@ use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
 use crate::channel::*;
-use crate::codec::{blake3_hash, packet_bytes};
+use crate::codec::{blake3_hash, encode_work_packet_once};
 use crate::protocol::{Hash, NodeId, WorkPacket, WORK_WIRE_ABI_VERSION};
-use crate::route_auth::verify_route_advertisement;
+use crate::route_auth::{route_advertisement_preimage, verify_route_advertisement};
 
 #[cfg(feature = "std")]
 fn current_unix_ms() -> u64 {
@@ -76,16 +76,14 @@ impl MemoryChannelEngine {
             return Err(MemoryChannelError::RouteMissing);
         }
         let route = self.routes.get(&to).ok_or(MemoryChannelError::RouteMissing)?;
-        let packet_hash = packet_bytes(&packet)
-            .map(|bytes| blake3_hash(&bytes))
-            .map_err(|_| MemoryChannelError::PacketHashFailed)?;
+        let encoded = encode_work_packet_once(&packet).map_err(|_| MemoryChannelError::PacketHashFailed)?;
         let envelope = ChannelEnvelope {
             abi_version: WORK_WIRE_ABI_VERSION,
             channel_id: route.endpoint.channel_id,
             from,
             to,
             route_hash: route_hash(route),
-            packet_hash,
+            packet_hash: encoded.hash,
             packet,
         };
         self.inboxes
@@ -109,11 +107,5 @@ pub fn route_is_available(route: &RouteAdvertisement, now_unix_ms: u64) -> bool 
 }
 
 pub fn route_hash(route: &RouteAdvertisement) -> Hash {
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(&route.node.node_id);
-    bytes.extend_from_slice(&route.relay_node_id);
-    bytes.extend_from_slice(&route.endpoint.channel_id);
-    bytes.extend_from_slice(&route.sequence.to_be_bytes());
-    bytes.extend_from_slice(&route.valid_until_unix_ms.to_be_bytes());
-    blake3_hash(&bytes)
+    blake3_hash(&route_advertisement_preimage(route))
 }
