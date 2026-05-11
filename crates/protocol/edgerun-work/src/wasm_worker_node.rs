@@ -2,7 +2,8 @@ use alloc::vec::Vec;
 
 use crate::channel::{ChannelEnvelope, RouteAdvertisement};
 use crate::channel_order::{ChannelOrderBook, OrderedChannelEnvelope};
-use crate::protocol::{Hash, NodeIdentity, NodeId, WorkPacket};
+use crate::frame_codec::{channel_envelope_bytes, channel_envelope_from_bytes};
+use crate::protocol::{Hash, NodeIdentity, NodeId, WorkPacket, WorkProtocolError};
 use crate::roles::{RoleContext, RoleInput, RoleOutput, WorkRole};
 use crate::work_channel::{OrderedWorkChannel, WorkChannel, WorkChannelError};
 use crate::ws_channel::{WsFrame, WsWorkChannel};
@@ -41,6 +42,24 @@ impl<R: WorkRole> WasmWorkerNode<R> {
 
     pub fn drain_outbound_ws_frames(&mut self) -> Vec<WsFrame> {
         self.channel.drain_outbound_frames()
+    }
+
+    pub fn drain_outbound_envelope_bytes(&mut self) -> Result<Vec<Vec<u8>>, WorkProtocolError> {
+        let envelopes = self.channel.recv_all(self.identity.node_id);
+        let mut out = Vec::with_capacity(envelopes.len());
+        for envelope in envelopes {
+            out.push(channel_envelope_bytes(&envelope)?);
+        }
+        Ok(out)
+    }
+
+    pub fn accept_inbound_bytes(
+        &mut self,
+        bytes: &[u8],
+        now_unix_ms: u64,
+    ) -> Result<RoleOutput, WorkChannelError> {
+        let envelope = channel_envelope_from_bytes(bytes).map_err(|_| WorkChannelError::PacketHashFailed)?;
+        self.accept_inbound_envelope(envelope, now_unix_ms)
     }
 
     pub fn accept_inbound_envelope(
