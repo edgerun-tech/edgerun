@@ -1,9 +1,11 @@
 use alloc::collections::BTreeMap;
-use alloc::vec::Vec;
 
 use crate::channel::{ChannelEnvelope, ChannelId};
 use crate::codec::{blake3_hash, packet_bytes};
+use crate::preimage::HashBuilder;
 use crate::protocol::{Hash, NodeId};
+
+const ORDERED_MESSAGE_HASH_DOMAIN: &[u8] = b"edgerun:v1:work:ordered-message";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ChannelOrderError {
@@ -96,13 +98,13 @@ impl ChannelOrderBook {
 }
 
 pub fn ordered_message_hash(ordered: &OrderedChannelEnvelope) -> Hash {
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(&ordered.envelope.channel_id);
-    bytes.extend_from_slice(&ordered.envelope.from);
-    bytes.extend_from_slice(&ordered.envelope.to);
-    bytes.extend_from_slice(&ordered.sequence.to_be_bytes());
-    bytes.extend_from_slice(&ordered.previous_message_hash);
-    bytes.extend_from_slice(&ordered.envelope.route_hash);
-    bytes.extend_from_slice(&ordered.envelope.packet_hash);
-    blake3_hash(&bytes)
+    HashBuilder::domain(ORDERED_MESSAGE_HASH_DOMAIN)
+        .hash(&ordered.envelope.channel_id)
+        .node_id(&ordered.envelope.from)
+        .node_id(&ordered.envelope.to)
+        .u64(ordered.sequence)
+        .hash(&ordered.previous_message_hash)
+        .hash(&ordered.envelope.route_hash)
+        .hash(&ordered.envelope.packet_hash)
+        .finish()
 }
