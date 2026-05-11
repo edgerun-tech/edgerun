@@ -39,6 +39,28 @@ fn memory_channel_accepts_ordered_messages_and_rejects_replay() {
         .expect("receiver accepts first message");
     assert_ne!(first_hash, [0u8; 32]);
 
+    let packet2 = sender.message_to(
+        receiver.identity.node_id,
+        relay.identity.node_id,
+        DEPARTMENT_MESSAGE,
+        WORK_TYPE_MESSAGE_DELIVER,
+        b"second".to_vec(),
+    );
+    let ordered2 = deliver_ordered(
+        &mut channel,
+        &mut sender.order,
+        sender.identity.node_id,
+        receiver.identity.node_id,
+        packet2,
+    )
+    .expect("second ordered delivery");
+    assert_eq!(ordered2.sequence, 2);
+    assert_eq!(ordered2.previous_message_hash, first_hash);
+    let second_hash = receiver
+        .accept_ordered(&ordered2, expected_route)
+        .expect("receiver accepts second message");
+    assert_ne!(second_hash, first_hash);
+
     let replay = receiver.accept_ordered(&ordered, expected_route);
     assert!(matches!(
         replay,
