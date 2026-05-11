@@ -405,3 +405,37 @@ For every signed/economic/proof object, answer these before merging:
 8. What makes it payable?
 9. What makes it slashable or challengeable?
 10. What test proves bad data is rejected?
+
+## Latest edgerun-work handoff
+
+The broad hash/preimage consolidation pass has been completed across the main protocol modules. These files now use `PreimageBuilder` or `HashBuilder` where appropriate:
+
+```text
+signing.rs
+request_auth.rs
+route_auth.rs
+delivery_proof.rs
+transit_proof.rs
+batch_settlement.rs
+route_plan.rs
+cost_model.rs
+storage_payload.rs
+erasure_storage.rs
+channel_order.rs
+recipient_policy.rs
+settlement.rs
+std_runtime/admission_v2.rs
+std_runtime/relay_client.rs
+```
+
+The `codec.rs` compatibility re-exports were intentionally removed. If a build fails with unresolved imports from `crate::codec::{empty_signature, sign_*, verify_*, node_identity_from_key}`, fix the caller to import from `signing.rs` or `identity.rs`; do not add those re-exports back to `codec.rs`.
+
+Current known post-consolidation status:
+
+- Tests were reported green after fixing the `codec`/`signing`/`identity` split.
+- `std_runtime/admission_v2.rs` and `std_runtime/relay_client.rs` were patched to use explicit imports and `HashBuilder` domains.
+- `protocol.rs` has been split so node-control structs live in `node_control.rs`, while `protocol.rs` remains focused on core work/economic wire objects.
+- `node_control.rs` is exported from `lib.rs`.
+- Many protocol hash domains changed by design during consolidation. Tests that recompute through canonical helpers should pass; tests with hardcoded old hashes must be updated deliberately.
+
+Immediate next task: add `tests/golden_hashes.rs` using deterministic fixtures from the current green state. First add an ignored printer test that emits candidate constants, then fill those constants into non-ignored assertions. Do not add new protocol features before golden hashes are locked.
