@@ -13,6 +13,7 @@ default = []
 std = []
 fontdue-text = ["std", "dep:fontdue"]
 tabler-icons = []
+tabler-svg-atlas = []
 
 [dependencies]
 fontdue = { version = "0.9", default-features = false, optional = true }
