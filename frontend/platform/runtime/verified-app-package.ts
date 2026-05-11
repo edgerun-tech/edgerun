@@ -26,6 +26,8 @@ export interface VerifiedAppPackageProjection {
   authorityRef: string
   proofRef: string
   installEventKind?: "app_package_verified"
+  distributionModel: "network-storage-run"
+  localCacheStatus: "not-cached" | "cached"
 }
 
 export function browserCatalogAppToPackageProjection(
@@ -57,6 +59,8 @@ export function browserCatalogAppToPackageProjection(
     authorityRef: "catalog:/apps/catalog.ecat",
     proofRef: app.packageUrl,
     installEventKind: installed ? "app_package_verified" : undefined,
+    distributionModel: "network-storage-run",
+    localCacheStatus: installed ? "cached" : "not-cached",
   }
 }
 
@@ -87,6 +91,8 @@ export function packageProjectionToAppDefinition(pkg: VerifiedAppPackageProjecti
     signature: packageProjectionSignatureInfo(pkg),
     displayMetadata: {
       sourceOfTruth: "sdk-signed-content-addressed-package",
+      distributionModel: pkg.distributionModel,
+      localCacheStatus: pkg.localCacheStatus,
       runtimeManifest: {
         runtime: pkg.runtime,
         permissions: pkg.requiredCapabilityIds,
