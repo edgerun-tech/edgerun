@@ -7,17 +7,18 @@ import {
   Boxes,
   BrainCircuit,
   Cloud,
-  Database,
   Fingerprint,
   Globe,
   HardDrive,
   KeyRound,
+  MessageCircle,
   Network,
   Package,
+  PhoneCall,
   Route,
   Shield,
+  Users,
   Wallet,
-  Zap,
   type LucideIcon,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -39,8 +40,8 @@ const nodeCards: NodeCard[] = [
   {
     id: "browser-node",
     title: "Browser node",
-    responsibility: "Signs local actions, verifies app packages, runs network apps, caches bytes, and records proof events.",
-    userBenefit: "This is the default node every user gets immediately in the browser.",
+    responsibility: "Receives its own identity, follows your local policy, signs actions, verifies packages, runs apps, caches bytes, records proofs, and can participate in network work when you allow it.",
+    userBenefit: "Everyone starts included. You do not need tokens first; leave the browser node available and it can earn from useful work.",
     status: "ready",
     icon: Fingerprint,
   },
@@ -55,15 +56,15 @@ const nodeCards: NodeCard[] = [
   {
     id: "relay-node",
     title: "Relay node",
-    responsibility: "Moves ordered encrypted messages and work packets between identities without owning the content.",
-    userBenefit: "Enables private messaging, app delivery, and proof-backed routing.",
+    responsibility: "Moves ordered encrypted messages, calls, and work packets between identities without owning the content.",
+    userBenefit: "Enables private direct messaging/calling, app delivery, and proof-backed routing.",
     status: "network",
     icon: Route,
   },
   {
     id: "compute-node",
     title: "Compute node",
-    responsibility: "Runs deterministic work and returns verifiable outputs for admitted jobs.",
+    responsibility: "Runs deterministic work and returns verifiable outputs for admitted jobs. The browser node is already a small local compute node for app execution.",
     userBenefit: "Turns idle hardware into useful paid work once compute proofs are wired.",
     status: "optional",
     icon: BrainCircuit,
@@ -79,8 +80,8 @@ const nodeCards: NodeCard[] = [
   {
     id: "settlement-node",
     title: "Settlement rail",
-    responsibility: "Settles proof-backed receipts and pays publishers, storage, relay, and compute providers.",
-    userBenefit: "Makes app sales, hosting, caching, and node earnings feel automatic.",
+    responsibility: "Settles proof-backed receipts and pays publishers, storage, relay, browser, and compute providers.",
+    userBenefit: "A user can earn first, then spend inside the network. App sales, hosting, caching, and node earnings feel automatic.",
     status: "network",
     icon: Wallet,
   },
@@ -103,6 +104,7 @@ export function OnboardingApp() {
   const appState = useStore(browserAppInstallStore)
   const capabilityGrants = useStore(localCapabilityGrantsStore)
   const profile = auth.unlockedProfile
+  const contactCount = Math.max((profile?.contacts.length ?? 0) - 1, 0)
   const capabilityGrantCount = useMemo(
     () => Object.values(capabilityGrants).reduce((sum, grants) => sum + grants.length, 0),
     [capabilityGrants],
@@ -118,20 +120,20 @@ export function OnboardingApp() {
       icon: Fingerprint,
     },
     {
-      title: "Bind passkey",
-      done: Boolean(profile?.webAuthnBinding),
-      body: profile?.webAuthnBinding
-        ? "Passkey unlock is bound to this profile."
-        : "Bind a passkey so signing and unlocks feel like normal web actions.",
-      icon: KeyRound,
-    },
-    {
-      title: "Start your browser node",
+      title: "Give your browser node a policy",
       done: Boolean(profile?.browserNode),
       body: profile?.browserNode
-        ? "Your browser node exists and can verify, cache, sign, and eventually earn."
-        : "The browser node is created with your profile and acts as your local runtime node.",
+        ? "Your browser node has an identity and can follow your local policy for work, app execution, and sharing."
+        : "The browser node is created with your profile. You decide what it can do and what it may share.",
       icon: Network,
+    },
+    {
+      title: "Add contacts",
+      done: contactCount > 0,
+      body: contactCount > 0
+        ? `${contactCount} direct contact${contactCount === 1 ? "" : "s"} in your contact book.`
+        : "Your contact book lets you message and call people directly by identity instead of platform account.",
+      icon: Users,
     },
     {
       title: "Run a network app",
@@ -159,18 +161,18 @@ export function OnboardingApp() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="max-w-2xl">
               <div className="inline-flex rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-primary">
-                Own identity · own data · run by proof
+                Own identity · earn first · spend later
               </div>
               <h2 className="mt-3 text-2xl font-semibold tracking-tight text-foreground">Your browser is your first Edgerun node.</h2>
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                Edgerun does not start with a cloud account. It starts with a local Trust Container in your browser. You own your identity, app keys, package cache, messages, and proof history. Network apps run from content-addressed storage, and you can cache verified bytes locally to avoid repeated retrieval payments.
+                Edgerun does not require users to buy tokens before participating. Your browser node gets an identity, follows your policy, and can do useful work when you leave it available. Earnings can arrive from storage, relay, cache, and compute work, then you can spend them on apps, hosting, storage, or direct payments.
               </p>
             </div>
             <div className="grid min-w-60 gap-2 rounded-xl border border-border bg-background/60 p-3 text-xs">
               <Metric label="Trust Container" value={profile ? "unlocked" : "locked"} icon={Shield} />
               <Metric label="Browser node" value={profile?.browserNode ? "ready" : "not started"} icon={Network} />
+              <Metric label="Contacts" value={String(contactCount)} icon={Users} />
               <Metric label="Cached apps" value={String(appState.installed.size)} icon={Package} />
-              <Metric label="Capability grants" value={String(capabilityGrantCount)} icon={KeyRound} />
             </div>
           </div>
         </section>
@@ -191,6 +193,12 @@ export function OnboardingApp() {
               </div>
             )
           })}
+        </section>
+
+        <section className="mt-5 grid gap-3 lg:grid-cols-3">
+          <FlowCard icon={MessageCircle} title="Message directly" body="Your contact book stores identities, not platform handles. Messages are sealed and routed by policy, without needing Meta, Apple, or Google as the social graph." />
+          <FlowCard icon={PhoneCall} title="Call directly" body="Calls can use the same identity and route model: the network helps connect peers, but your node and your contacts remain the authority." />
+          <FlowCard icon={Wallet} title="Everyone can start" body="A new user can leave the browser node available and earn before buying. Usage funds the network instead of forcing token purchase upfront." />
         </section>
 
         <section className="mt-5">
@@ -222,8 +230,8 @@ export function OnboardingApp() {
 
         <section className="mt-5 grid gap-3 lg:grid-cols-3">
           <FlowCard icon={Package} title="Apps run from storage" body="Publishers use the CLI to publish signed SDK packages. Users run them by hash from network storage, or cache locally." />
-          <FlowCard icon={Wallet} title="Usage pays the network" body="Storage, relay, compute, and publishers are paid through proof-backed work receipts instead of platform gatekeeping." />
-          <FlowCard icon={Cloud} title="You can take full advantage" body="Leave your browser node running, cache packages, share resources when allowed, and inspect every proof in Trust Manager." />
+          <FlowCard icon={Cloud} title="Your node can earn" body="Leave your browser node running, set policy, and share only what you allow. Work must be admitted and proof-backed before payment." />
+          <FlowCard icon={Shield} title="Policy keeps control local" body="You decide who can message you, what apps can access, and what your node may contribute. Trust Manager shows the evidence." />
         </section>
       </div>
     </div>
