@@ -11,6 +11,7 @@ import { DevToolsStrip } from "./dev-tools-strip"
 import { ProfileMenu } from "./profile-menu"
 import { ProjectChecklist } from "./project-checklist"
 import { CapabilityGatePrompt } from "@/components/capability-gate-prompt"
+import { NodeNetworkBuilder } from "@/components/node-network-builder"
 import { useAuth } from "@/hooks/use-auth"
 import { FloatingDock, type FloatingDockContext, type FloatingDockItem } from "@/components/ui/floating-dock"
 import { appSurfaceOrderStore, appSurfacesStore, focusedAppSurfaceStore, focusAppSurface, pendingGateStore } from "@/stores/desktop-store"
@@ -151,6 +152,9 @@ export function Desktop() {
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-black">
+      <div className="absolute inset-x-3 bottom-24 top-3 z-10 overflow-hidden rounded-2xl border border-white/10 bg-background shadow-2xl md:inset-x-6 md:top-6">
+        <NodeNetworkBuilder />
+      </div>
       <div className="fixed bottom-2 left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-1">
         <FloatingDock
           items={dockItems}
