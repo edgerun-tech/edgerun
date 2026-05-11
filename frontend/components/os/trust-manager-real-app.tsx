@@ -20,13 +20,21 @@ import { cn } from "@/lib/utils"
 import { AppEmptyState, AppHeader, AppToolbar } from "@/components/os/app-chrome"
 import { useAuth } from "@/hooks/use-auth"
 import { browserAppInstallStore } from "@/platform/runtime/browser-app-install-store"
-import { runtimeEventLogStore } from "@/platform/runtime/runtime-event-log"
+import { runtimeEventLog, runtimeEventLogStore } from "@/platform/runtime/runtime-event-log"
 import { buildTrustProjection, type TrustProjectionItem, type TrustProjectionTab } from "@/platform/trust/trust-manager-projection"
-import { localCapabilityGrantsStore } from "@/stores/local-capability-grants-store"
+import { uninstallCatalogApp } from "@/platform/registries/app-catalog-registry"
+import { listBuiltinApps } from "@/platform/registries/builtin-app-registry"
+import { uninstallApp } from "@/stores/installed-apps-store"
+import { localCapabilityGrantsStore, revokeLocalCapabilityGrant } from "@/stores/local-capability-grants-store"
+import type { AppDefinition } from "@/platform/types/app-definition"
 
 type Tab = TrustProjectionTab
 
 type Filter = "all" | "review" | "danger" | "packages" | "capabilities"
+
+interface TrustManagerSurfaceProps {
+  onLaunchApp?: (app: AppDefinition) => void
+}
 
 const tabs: { id: Tab; label: string; icon: LucideIcon }[] = [
   { id: "overview", label: "Overview", icon: Activity },
@@ -73,6 +81,24 @@ function matchesFilter(item: TrustProjectionItem, filter: Filter) {
   return true
 }
 
+function builtinApp(appId: string): AppDefinition | undefined {
+  return listBuiltinApps().find((app) => app.appId === appId)
+}
+
+function capabilityFromAuthorityRef(authorityRef: string): { appId: string; capabilityId: string } | null {
+  const prefix = "capability:"
+  if (!authorityRef.startsWith(prefix)) return null
+  const rest = authorityRef.slice(prefix.length)
+  const index = rest.indexOf(":")
+  if (index <= 0) return null
+  return { appId: rest.slice(0, index), capabilityId: rest.slice(index + 1) }
+}
+
+function appIdFromPackageItem(item: TrustProjectionItem): string | null {
+  const prefix = "package-"
+  return item.id.startsWith(prefix) ? item.id.slice(prefix.length) : null
+}
+
 function Badge({ value }: { value?: TrustProjectionItem["status"] | TrustProjectionItem["risk"] }) {
   if (!value) return null
   return <span className={cn("rounded-md border px-1.5 py-0.5 text-[10px] font-semibold uppercase", statusClass(value))}>{value}</span>
@@ -109,7 +135,7 @@ function TrustRow({ item, selected, onSelect }: { item: TrustProjectionItem; sel
   )
 }
 
-function Inspector({ item }: { item: TrustProjectionItem | undefined }) {
+function Inspector({ item, onAction }: { item: TrustProjectionItem | undefined; onAction: (item: TrustProjectionItem, action: string) => void }) {
   if (!item) {
     return (
       <aside className="flex w-80 shrink-0 items-center justify-center border-l border-border bg-[var(--window-header)]/25 p-4 text-sm text-muted-foreground">
@@ -154,6 +180,7 @@ function Inspector({ item }: { item: TrustProjectionItem | undefined }) {
           {(item.actions ?? ["Inspect"]).map((action, index) => (
             <button
               key={action}
+              onClick={() => onAction(item, action)}
               className={cn(
                 "rounded-md px-2 py-1.5 text-xs font-medium transition-colors",
                 index === 0 ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-secondary text-secondary-foreground hover:bg-secondary/80",
@@ -182,7 +209,7 @@ function EvidenceRow({ label, value }: { label: string; value: string }) {
   )
 }
 
-export function TrustManagerSurface() {
+export function TrustManagerSurface({ onLaunchApp }: TrustManagerSurfaceProps) {
   const auth = useAuth()
   const appState = useStore(browserAppInstallStore)
   const capabilityGrants = useStore(localCapabilityGrantsStore)
@@ -220,6 +247,49 @@ export function TrustManagerSurface() {
     setSelectedId(null)
     setQuery("")
     setFilter("all")
+  }
+
+  async function handleAction(item: TrustProjectionItem, action: string) {
+    const normalized = action.toLowerCase()
+    if (normalized.includes("identity") || normalized.includes("passkey") || normalized.includes("export")) {
+      const app = builtinApp("identity")
+      if (app) onLaunchApp?.(app)
+      return
+    }
+    if (normalized.includes("app store") || normalized.includes("package")) {
+      const app = builtinApp("app-store")
+      if (app) onLaunchApp?.(app)
+      return
+    }
+    if (normalized.includes("revoke")) {
+      const grant = capabilityFromAuthorityRef(item.authorityRef)
+      if (grant) {
+        revokeLocalCapabilityGrant(grant.appId, grant.capabilityId)
+        runtimeEventLog.append({
+          kind: "capability_grant_denied",
+          actor: grant.appId,
+          capabilityId: grant.capabilityId,
+          reason: "revoked from Trust Manager",
+        })
+      }
+      return
+    }
+    if (normalized.includes("remove cache")) {
+      const appId = appIdFromPackageItem(item)
+      if (appId) {
+        await uninstallCatalogApp(appId).catch(() => undefined)
+        uninstallApp(appId)
+        runtimeEventLog.append({
+          kind: "app_stopped",
+          actor: appId,
+          reason: "local cache removed from Trust Manager",
+        })
+      }
+      return
+    }
+    if (normalized.includes("copy")) {
+      await navigator.clipboard?.writeText(item.proofRef)
+    }
   }
 
   return (
@@ -301,7 +371,7 @@ export function TrustManagerSurface() {
               <TrustRow key={item.id} item={item} selected={selected?.id === item.id} onSelect={() => setSelectedId(item.id)} />
             )) : <AppEmptyState>No trust records in this view</AppEmptyState>}
           </section>
-          <Inspector item={selected} />
+          <Inspector item={selected} onAction={(item, action) => void handleAction(item, action)} />
         </div>
       </main>
     </div>
