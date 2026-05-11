@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo } from "react"
 import type React from "react"
 import { useStore } from "@nanostores/react"
-import { Bot, IdCard, Settings, Store } from "lucide-react"
+import { Bot, IdCard, Network, Settings, Store } from "lucide-react"
 import { AuthOverlay } from "./auth-overlay"
 import { AppOverlayHost } from "./app-overlay-host"
 import { AgentUiBridge } from "./agent-ui-bridge"
@@ -35,7 +35,7 @@ function focusCodexDockInput() {
   focusDockInput("~")
 }
 
-const PINNED_DOCK_APP_IDS = new Set(["identity", "app-store", "settings"])
+const PINNED_DOCK_APP_IDS = new Set(["identity", "compute-node", "app-store", "settings"])
 
 export function Desktop() {
   const auth = useAuth()
@@ -100,6 +100,13 @@ export function Desktop() {
         kind: "trigger",
         onClick: openIdentity,
       },
+      {
+        title: "Network",
+        subtitle: "nodes",
+        icon: <DockIcon><Network className="h-5 w-5" /></DockIcon>,
+        kind: "trigger",
+        onClick: () => openSurfaceById("compute-node"),
+      },
       ...installedItems,
       {
         title: "App Store",
@@ -117,7 +124,7 @@ export function Desktop() {
   }, [catalogAppList, installedAppIds, openIdentity, openSurfaceById])
 
   const dockContext = useMemo<FloatingDockContext>(() => ({ mode: "apps" }), [])
-  const showDesktopChrome = false
+  const showDesktopChrome = true
 
   const handleDockCommand = useCallback(async (command: string) => {
     return executeUiCommand(command, "dock")
