@@ -6,6 +6,7 @@ pub mod memory_channel;
 pub mod protocol;
 pub mod request_auth;
 pub mod roles;
+pub mod route_auth;
 
 #[cfg(feature = "std")]
 pub mod std_runtime;
@@ -16,6 +17,7 @@ pub use memory_channel::*;
 pub use protocol::*;
 pub use request_auth::*;
 pub use roles::*;
+pub use route_auth::*;
 
 #[cfg(feature = "std")]
 pub use std_runtime::*;
