@@ -75,6 +75,39 @@ Would you like to cache verified bytes locally to avoid repeated retrieval payme
 
 Use “run” as the primary user action. “Install” is the wrong mental model. Local state is a verified cache, not ownership of a copied app from a centralized store.
 
+## Node instance model
+
+The same protocol node should compile to browser/WASM and native.
+
+Browser/WASM nodes:
+
+- run inside the browser as local node instances;
+- rely on browser-provided transport, storage, and permission adapters;
+- can run admission, relay, compute, app runtime, and other role instances when the role is WASM-capable;
+- are good for user control, policy enforcement, local app execution, lightweight relay/admission, and proof/audit work.
+
+Native nodes:
+
+- run on localhost, VPS, home server, NAS, or other machines;
+- have access to native ports, filesystem/storage, sockets, services, and long-running process features;
+- are the right choice for durable storage nodes, public relays, publishing endpoints, boot/provisioning endpoints, and high-availability service roles.
+
+Users can run multiple instances of the same role with different identities, policies, budgets, and scopes. Example:
+
+```text
+admission:family
+admission:business
+admission:app-store
+relay:private-devices
+relay:public-paid
+storage:home-nas
+storage:vps-cache
+compute:browser-local
+compute:native-gpu
+```
+
+Do not model “the node” as one global singleton. Model nodes as role instances: identity + role + policy + budget + route scope + runtime target.
+
 ## Admission model
 
 All workloads enter the network through an admission node.
@@ -109,11 +142,24 @@ A user-owned admission node lets the user or organization enforce their own poli
 - which budgets and challenge windows apply;
 - which routes are available, draining, or blocked.
 
+Admission nodes can receive policy from other admission nodes. This lets policy enforcement become decentralized and composable:
+
+```text
+personal admission
+→ family admission policy
+→ organization admission policy
+→ DAO admission policy
+```
+
+Each admission node still signs its own admissions and must commit to the policy hash it enforced. Do not hide policy inheritance: Trust Manager should show the policy source chain when available.
+
 Do not model browser nodes as directly dispatching authoritative work to storage/compute nodes. The browser signs intent and sends it to an admission node. The admission node returns a signed `WorkAdmission` telling the browser/node where and how the workload may enter the relay network.
 
 ## Users as publishers
 
 A user-owned node can be more than a browser runtime. EdgeRun nodes already aim to include identity routing and common internet protocol capability such as HTTP, TLS, ACME, SSH, iPXE, TFTP, and related service/provisioning protocols.
+
+Compatibility protocols are migration bridges. They let existing clients and infrastructure reach EdgeRun nodes while authority moves to identity routing, content hashes, policies, and proofs.
 
 That means a user can become their own publisher:
 
@@ -290,13 +336,17 @@ Admission node:
 - owns/enforces the route table and node policy for work entry;
 - tells the sender which relay/channel/path to use;
 - admits or rejects work before it enters the network;
-- may be the default EdgeRun DAO admission node or a user-owned admission node.
+- may be the default EdgeRun DAO admission node or a user-owned admission node;
+- may run in browser/WASM for local or scoped policy enforcement;
+- may run natively for durable/public admission service.
 
 Relay node:
 
 - moves ordered encrypted messages/work packets;
 - should not need to understand payload content;
-- earns only from admitted, ordered, proof-backed delivery.
+- earns only from admitted, ordered, proof-backed delivery;
+- may run in browser/WASM for scoped/private relay paths;
+- may run natively for public or durable relay service.
 
 Storage/CDN node:
 
@@ -427,6 +477,7 @@ Prefer:
 - “Import/sync source” instead of treating Google/GitHub/mail providers as long-term homes.
 - “Publish from your node” or “identity-routed publishing” for user-hosted services.
 - “Admission policy” for the user-owned policy gate that decides what work enters the network.
+- “Node instance” for a role-specific WASM/native node with identity, policy, budget, and route scope.
 
 Internal names may still use `install`/`installed` temporarily for compatibility, but new UX and refactors should move toward cache/run terminology.
 
@@ -458,6 +509,7 @@ The token/settlement rail exists to clear value between users, publishers, and i
 - Make old services feel like import bridges into EdgeRun, not final destinations.
 - Make publishing feel like a natural next step for any user node, not only professional developers.
 - Make user-owned admission visible: the user can use EdgeRun DAO admission or run their own admission node to enforce their own policy.
+- Make node instances visible: users can run multiple admission/relay/compute/storage instances with different scopes, budgets, and rules.
 
 ## Test expectations
 
@@ -503,6 +555,7 @@ Good next tasks:
 9. Add user publishing UX: publish site/app/API/file from identity-routed node policy.
 10. Add data-source sync UX: Gmail/Drive/GitHub/local imports into EdgeRun storage and personal timeline.
 11. Add user-owned admission UX: choose EdgeRun DAO admission or personal admission node; show admitted routes, relays, workers, and policy hash.
+12. Add node-instance UX: create admission/relay/storage/compute instances with role, runtime target, policy hash, budget, and owner.
 
 Avoid:
 
@@ -516,7 +569,8 @@ Avoid:
 - moving std-only functionality into core protocol modules;
 - silently changing protocol hashes without updating golden hash tests;
 - presenting users as only consumers when the architecture makes them publishers;
-- bypassing admission by sending authoritative user work directly to worker nodes.
+- bypassing admission by sending authoritative user work directly to worker nodes;
+- treating admission/relay as fixed backend services rather than user-runnable role instances.
 
 ## Review checklist for new protocol/economic objects
 
