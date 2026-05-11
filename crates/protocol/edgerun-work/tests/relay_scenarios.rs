@@ -15,6 +15,7 @@ fn signed_relay_admission(
     assigned_route_hash: Hash,
     assigned_channel: ChannelEndpoint,
     admitted_budget: u64,
+    policy_hash: Hash,
 ) -> WorkAdmission {
     sign_work_admission(
         &admission.key,
@@ -28,7 +29,7 @@ fn signed_relay_admission(
             assigned_route_hash,
             assigned_channel,
             admitted_budget,
-            policy_hash: [0u8; 32],
+            policy_hash,
             sequence: 1,
             valid_until_unix_ms: u64::MAX,
             signature: empty_signature(),
@@ -50,6 +51,9 @@ fn relay_forwards_ordered_message_to_final_node_and_gets_paid_with_delivery_proo
     let receiver_route = receiver.advertise_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_MESSAGE]);
     let relay_route_hash = channel.add_route(relay_route.clone()).expect("relay route");
     let receiver_route_hash = channel.add_route(receiver_route).expect("receiver route");
+    let mut recipient_policy = open_recipient_message_policy(receiver.identity.clone(), 1, 1_000);
+    recipient_policy.allowed_relays.push(relay.identity.node_id);
+    recipient_policy = sign_recipient_message_policy(&receiver.key, recipient_policy);
 
     let request_hash = blake3_hash(b"relay-paid-request");
     let admission_doc = signed_relay_admission(
@@ -59,6 +63,7 @@ fn relay_forwards_ordered_message_to_final_node_and_gets_paid_with_delivery_proo
         relay_route_hash,
         relay_route.endpoint.clone(),
         10,
+        recipient_message_policy_hash(&recipient_policy),
     );
     let admission_hash = work_admission_hash(&admission_doc).expect("admission hash");
 
@@ -95,6 +100,11 @@ fn relay_forwards_ordered_message_to_final_node_and_gets_paid_with_delivery_proo
         sequence: 1,
         previous_message_hash: [0u8; 32],
     };
+    let WorkPacket::NetworkMessage(message) = &forwarded.envelope.packet else {
+        panic!("expected forwarded network message");
+    };
+    recipient_message_policy_allows(&recipient_policy, message, 999)
+        .expect("recipient policy allows forwarded message");
     receiver
         .accept_ordered(&forwarded, receiver_route_hash)
         .expect("receiver accepts relay forwarded message");
@@ -113,8 +123,10 @@ fn relay_forwards_ordered_message_to_final_node_and_gets_paid_with_delivery_proo
         relay_input: &to_relay,
         recipient_delivery: &forwarded,
         recipient: &receiver.identity,
+        recipient_policy: &recipient_policy,
         recipient_proof: &recipient_proof,
         previous_transit_hash: [0u8; 32],
+        now_unix_ms: 999,
     };
 
     let mut ledger = SettlementLedger::new();
