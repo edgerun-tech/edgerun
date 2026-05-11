@@ -38,6 +38,7 @@ pub enum RecipientPolicyError {
     DepartmentNotAllowed,
     WorkTypeNotAllowed,
     PayloadTooLarge,
+    PolicyHashMismatch,
 }
 
 pub fn recipient_message_policy_preimage(value: &RecipientMessagePolicy) -> Vec<u8> {
@@ -56,7 +57,6 @@ pub fn recipient_message_policy_preimage(value: &RecipientMessagePolicy) -> Vec<
     encode_u16_list(&mut out, &value.allowed_departments);
     encode_u16_list(&mut out, &value.allowed_work_types);
     out.extend_from_slice(&value.max_payload_bytes.to_be_bytes());
-    out.extend_from_slice(&value.policy_hash);
     out
 }
 
@@ -64,6 +64,7 @@ pub fn sign_recipient_message_policy(
     key: &Ed25519SigningKey,
     mut value: RecipientMessagePolicy,
 ) -> RecipientMessagePolicy {
+    value.policy_hash = recipient_message_policy_content_hash(&value);
     value.signature = sign_ed25519(key, &recipient_message_policy_preimage(&value));
     value
 }
@@ -71,6 +72,7 @@ pub fn sign_recipient_message_policy(
 pub fn verify_recipient_message_policy(value: &RecipientMessagePolicy) -> bool {
     value.abi_version == WORK_WIRE_ABI_VERSION
         && value.recipient.role == NODE_ROLE_MESSAGE
+        && value.policy_hash == recipient_message_policy_content_hash(value)
         && verify_signature(
             &value.recipient,
             &value.signature,
@@ -79,6 +81,10 @@ pub fn verify_recipient_message_policy(value: &RecipientMessagePolicy) -> bool {
 }
 
 pub fn recipient_message_policy_hash(value: &RecipientMessagePolicy) -> Hash {
+    recipient_message_policy_content_hash(value)
+}
+
+pub fn recipient_message_policy_content_hash(value: &RecipientMessagePolicy) -> Hash {
     blake3_hash(&recipient_message_policy_preimage(value))
 }
 
@@ -87,6 +93,9 @@ pub fn recipient_message_policy_allows(
     message: &NetworkMessage,
     now_unix_ms: u64,
 ) -> Result<(), RecipientPolicyError> {
+    if policy.policy_hash != recipient_message_policy_content_hash(policy) {
+        return Err(RecipientPolicyError::PolicyHashMismatch);
+    }
     if !verify_recipient_message_policy(policy) {
         return Err(RecipientPolicyError::InvalidPolicy);
     }
