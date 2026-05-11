@@ -100,7 +100,7 @@ fn tcp_runtime_stores_erasure_shards_and_settles_receipts() {
         user,
         manifest.job_id,
         route_hash,
-        route.endpoint,
+        route.endpoint.clone(),
         30,
     );
     let admission_hash = work_admission_hash(&admission_doc).expect("admission hash");
