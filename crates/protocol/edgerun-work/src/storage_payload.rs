@@ -4,7 +4,7 @@ use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::codec::blake3_hash;
 use crate::erasure_storage::{ErasureManifest, ErasureShard};
-use crate::protocol::{Hash, WorkPacket, WorkProtocolError};
+use crate::protocol::{Hash, WorkProtocolError};
 
 pub const STORAGE_PAYLOAD_KIND_STORE_REQUEST: u16 = 1;
 pub const STORAGE_PAYLOAD_KIND_RETRIEVE_REQUEST: u16 = 2;
@@ -123,12 +123,6 @@ pub fn verify_retrieve_response(response: &ObjectRetrieveResponse) -> bool {
 }
 
 pub fn storage_payload_bytes(payload: &StoragePayload) -> Result<Vec<u8>, WorkProtocolError> {
-    let packet = WorkPacket::Ack(crate::protocol::WorkAck {
-        ok: true,
-        code: 0,
-        text: alloc::string::String::new(),
-    });
-    let _ = packet;
     edgerun_wire::to_bytes::<edgerun_wire::WireError>(payload)
         .map(|bytes| bytes.to_vec())
         .map_err(|_| WorkProtocolError::InvalidPacket)
