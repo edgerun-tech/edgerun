@@ -4,11 +4,11 @@ use std::net::{TcpListener, TcpStream, ToSocketAddrs};
 use std::thread;
 
 use crate::channel::{ChannelEnvelope, RouteAdvertisement};
-use crate::codec::{blake3_hash, packet_bytes};
+use crate::codec::encode_work_packet_once;
 use crate::memory_channel::route_hash;
 use crate::protocol::{Hash, NodeId, WorkPacket, WORK_WIRE_ABI_VERSION};
 use crate::route_auth::verify_route_advertisement;
-use crate::std_runtime::framing::{read_work_packet, write_work_packet};
+use crate::std_runtime::framing::{read_work_packet, write_encoded_work_packet, write_work_packet};
 use crate::work_channel::{WorkChannel, WorkChannelError};
 
 #[derive(Clone, Debug, Default)]
@@ -37,6 +37,11 @@ impl TcpWorkChannel {
     pub fn send_packet_to_addr<A: ToSocketAddrs>(addr: A, packet: &WorkPacket) -> io::Result<()> {
         let mut stream = TcpStream::connect(addr)?;
         write_work_packet(&mut stream, packet)
+    }
+
+    pub fn send_encoded_packet_to_addr<A: ToSocketAddrs>(addr: A, bytes: &[u8]) -> io::Result<()> {
+        let mut stream = TcpStream::connect(addr)?;
+        write_encoded_work_packet(&mut stream, bytes)
     }
 
     fn route_addr(route: &RouteAdvertisement) -> Option<String> {
@@ -73,17 +78,15 @@ impl WorkChannel for TcpWorkChannel {
     ) -> Result<ChannelEnvelope, WorkChannelError> {
         let route = self.routes.get(&to).ok_or(WorkChannelError::RouteMissing)?;
         let addr = Self::route_addr(route).ok_or(WorkChannelError::RouteMissing)?;
-        let packet_hash = packet_bytes(&packet)
-            .map(|bytes| blake3_hash(&bytes))
-            .map_err(|_| WorkChannelError::PacketHashFailed)?;
-        Self::send_packet_to_addr(addr, &packet).map_err(|_| WorkChannelError::DeliveryFailed)?;
+        let encoded = encode_work_packet_once(&packet).map_err(|_| WorkChannelError::PacketHashFailed)?;
+        Self::send_encoded_packet_to_addr(addr, &encoded.bytes).map_err(|_| WorkChannelError::DeliveryFailed)?;
         let envelope = ChannelEnvelope {
             abi_version: WORK_WIRE_ABI_VERSION,
             channel_id: route.endpoint.channel_id,
             from,
             to,
             route_hash: route_hash(route),
-            packet_hash,
+            packet_hash: encoded.hash,
             packet,
         };
         self.inboxes.entry(to).or_default().push(envelope.clone());
