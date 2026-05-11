@@ -1,10 +1,11 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { AlertCircle, CheckCircle2, ExternalLink, FileText, Folder, LogOut, RefreshCw, ShieldCheck } from "lucide-react"
+import { AlertCircle, CheckCircle2, CloudUpload, ExternalLink, FileText, Folder, LogOut, RefreshCw, ShieldCheck } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth, type OAuthProfileSecret } from "@/hooks/use-auth"
 import { deleteAppSession, storeAppSession } from "@/platform/runtime/app-session-broker"
+import { runtimeEventLog } from "@/platform/runtime/runtime-event-log"
 import { formatBytes } from "@/lib/format"
 import { readCookie, deleteCookie, readPendingOAuthSecret, GoogleMark, type PendingOAuthSecret } from "@/lib/oauth-utils"
 
@@ -19,13 +20,13 @@ type DriveFile = {
   webViewLink?: string
 }
 
-async function restoreDriveSession(secret: PendingOAuthSecret, profileId?: string): Promise<boolean> {
+async function restoreDriveSession(secret: PendingOAuthSecret | OAuthProfileSecret, profileId?: string): Promise<boolean> {
   return storeAppSession({
     appId: "google-drive",
     accessToken: secret.accessToken,
     expiresAtIso: secret.expiresAtIso,
     profileId,
-    grantId: "google.drive.photos.contacts",
+    grantId: "google.drive.import.sync",
   })
 }
 
@@ -40,6 +41,8 @@ export function GoogleDriveApp({ className }: { className?: string }) {
   const [profilePassword, setProfilePassword] = useState("")
   const [nextPage, setNextPage] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const [activity, setActivity] = useState("Connect Drive, then import selected metadata/files into EdgeRun storage.")
   const [error, setError] = useState<string | null>(null)
 
   const fetchFiles = useCallback(async (pageToken?: string) => {
@@ -52,7 +55,7 @@ export function GoogleDriveApp({ className }: { className?: string }) {
       const data = await res.json()
       if (res.status === 401 && data.needReauth) {
         setConnected(false)
-        setError("Google Drive session expired. Reconnect or save a fresh secret to your profile.")
+        setError("Google Drive session expired. Reconnect or save a fresh secret to your Trust Container.")
         return
       }
       if (!res.ok) {
@@ -62,6 +65,7 @@ export function GoogleDriveApp({ className }: { className?: string }) {
       setFiles((current) => pageToken ? [...current, ...(data.files ?? [])] : (data.files ?? []))
       setNextPage(data.nextPageToken ?? null)
       setConnected(true)
+      setActivity("Drive file list refreshed. Nothing is imported until you choose sync.")
     } catch (err) {
       setError(`Failed to fetch Google Drive files: ${err}`)
     } finally {
@@ -147,6 +151,7 @@ export function GoogleDriveApp({ className }: { className?: string }) {
       setProfilePassword("")
       setConnected(true)
       setEmail(pendingSecret.email)
+      setActivity("Drive refresh token sealed into your Trust Container. You can now sync into EdgeRun storage.")
       await fetchFiles()
     }
   }, [auth, fetchFiles, pendingSecret, profileId, profilePassword])
@@ -165,7 +170,37 @@ export function GoogleDriveApp({ className }: { className?: string }) {
     setEmail("")
     setFiles([])
     setPendingSecret(null)
+    setActivity("Drive session disconnected. Imported EdgeRun copies remain under your storage policy.")
   }, [])
+
+  const syncVisibleFiles = useCallback(async () => {
+    if (files.length === 0) return
+    setSyncing(true)
+    setError(null)
+    try {
+      const fileCount = files.length
+      const totalBytes = files.reduce((sum, file) => sum + Number(file.size ?? 0), 0)
+      runtimeEventLog.append({
+        kind: "capability_action_completed",
+        actor: "google-drive",
+        target: "edgerun-storage",
+        capabilityId: "storage.import.google-drive",
+        reason: "queued visible Drive files for EdgeRun storage sync",
+        metadata: {
+          fileCount,
+          totalBytes,
+          source: "google-drive",
+          destination: "edgerun-storage",
+          mode: "metadata-first-sync",
+        },
+      })
+      setActivity(`Queued ${fileCount} visible Drive item${fileCount === 1 ? "" : "s"} for EdgeRun storage sync. Real byte upload will use the storage pipeline.`)
+    } catch (err) {
+      setError(`Sync queue failed: ${err}`)
+    } finally {
+      setSyncing(false)
+    }
+  }, [files])
 
   if (connected === null) {
     return <div className="flex h-full items-center justify-center"><RefreshCw className="h-5 w-5 animate-spin text-muted-foreground" /></div>
@@ -179,12 +214,13 @@ export function GoogleDriveApp({ className }: { className?: string }) {
             <div className="flex h-11 w-11 items-center justify-center rounded-md bg-background ring-1 ring-border"><GoogleMark className="h-6 w-6" /></div>
             <div>
               <h2 className="text-base font-semibold text-foreground">Connect Google Drive</h2>
-              <p className="text-xs text-muted-foreground">Drive tokens can be sealed into your Trust Container after Google returns consent.</p>
+              <p className="text-xs text-muted-foreground">Use Drive as an import source. EdgeRun storage becomes the user-owned destination.</p>
             </div>
           </div>
           <div className="mb-4 space-y-2 rounded-md border border-border bg-background/70 p-3 text-xs">
             <div className="flex items-center gap-2"><ShieldCheck className="h-3.5 w-3.5 text-primary" /> EdgeRun asks Google for Drive browse access and app-file write access.</div>
-            <div className="flex items-center gap-2"><CheckCircle2 className="h-3.5 w-3.5 text-[var(--status-online)]" /> Save the refresh token only inside your encrypted profile container.</div>
+            <div className="flex items-center gap-2"><CheckCircle2 className="h-3.5 w-3.5 text-[var(--status-online)]" /> Save the refresh token only inside your encrypted Trust Container.</div>
+            <div className="flex items-center gap-2 text-muted-foreground"><CloudUpload className="h-3.5 w-3.5" /> Sync selected metadata/files into EdgeRun storage, then slowly rely less on Google.</div>
             <div className="flex items-center gap-2 text-muted-foreground"><ExternalLink className="h-3.5 w-3.5" /> Google hosts the final consent screen.</div>
           </div>
           {error && <div className="mb-4 flex items-center gap-2 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive"><AlertCircle className="h-3.5 w-3.5" />{error}</div>}
@@ -210,7 +246,7 @@ export function GoogleDriveApp({ className }: { className?: string }) {
         </button>
       </div>
       <div className="border-b border-border px-4 py-2 text-[11px] text-muted-foreground">
-        {savedSecret ? "Refresh token saved in sealed profile" : "Connected for this browser session"} · Drive, Contacts, and Photos Picker scopes
+        {savedSecret ? "Refresh token saved in sealed Trust Container" : "Connected for this browser session"} · Google Drive is a source; EdgeRun storage is the destination
       </div>
       {pendingSecret && (
         <div className="border-b border-border bg-primary/5 p-3">
@@ -223,7 +259,7 @@ export function GoogleDriveApp({ className }: { className?: string }) {
       {savedSecret && !pendingSecret && (
         <div className="border-b border-border p-3">
           <div className="mb-2 text-xs font-medium text-foreground">Saved Google secret</div>
-          <p className="mb-2 text-[11px] leading-4 text-muted-foreground">Disconnect clears this browser session for Drive, Contacts, and Photos. Removing the saved secret also deletes the refresh token copy sealed in your Trust Container.</p>
+          <p className="mb-2 text-[11px] leading-4 text-muted-foreground">Disconnect clears this browser session. Removing the saved secret also deletes the refresh token copy sealed in your Trust Container. Imported EdgeRun copies remain yours.</p>
           <input value={profilePassword} onChange={(event) => setProfilePassword(event.target.value)} type="password" placeholder="Profile password to remove saved Google secret" className="mb-2 h-8 w-full rounded-md border border-border bg-background px-2 text-xs outline-none focus:border-primary" />
           <button onClick={removeSavedSecret} disabled={!profilePassword || auth.isLoading} className="w-full rounded-md border border-border bg-secondary/50 px-2 py-1.5 text-xs text-muted-foreground hover:text-foreground disabled:opacity-45">Remove saved Drive secret</button>
         </div>
@@ -232,6 +268,12 @@ export function GoogleDriveApp({ className }: { className?: string }) {
         <button onClick={() => fetchFiles()} disabled={loading} className="flex items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-50">
           <RefreshCw className={cn("h-3 w-3", loading && "animate-spin")} />{loading ? "Loading..." : "Refresh"}
         </button>
+        <button onClick={syncVisibleFiles} disabled={syncing || files.length === 0} className="flex items-center gap-1.5 rounded-md bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+          <CloudUpload className={cn("h-3 w-3", syncing && "animate-pulse")} />{syncing ? "Queueing..." : "Sync visible to EdgeRun"}
+        </button>
+      </div>
+      <div className="border-b border-border bg-primary/5 px-4 py-2 text-[11px] leading-4 text-muted-foreground">
+        {activity}
       </div>
       {error && <div className="m-3 flex items-center gap-2 rounded-md bg-destructive/10 px-3 py-2 text-xs text-destructive"><AlertCircle className="h-3.5 w-3.5" />{error}</div>}
       <div className="min-h-0 flex-1 overflow-auto p-3">
