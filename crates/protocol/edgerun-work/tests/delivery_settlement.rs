@@ -87,7 +87,7 @@ fn fixture() -> DeliveryFixture {
     )
     .expect("sender to relay delivery");
 
-    let result = relay
+    let mut result = relay
         .forward_ordered(&mut channel, &relay_input, request_hash, admission_hash)
         .expect("relay forwards");
 
@@ -109,6 +109,7 @@ fn fixture() -> DeliveryFixture {
         &recipient_delivery,
     )
     .expect("recipient proof");
+    result.receipt = relay.finalized_delivery_receipt(&result, channel_proof_hash(&recipient_proof));
 
     DeliveryFixture {
         admission,
@@ -137,6 +138,14 @@ fn settle_delivery_requires_recipient_proof_and_transit_hash() {
     assert_eq!(
         verify_delivery_evidence(&evidence).expect("delivery evidence verifies"),
         fixture.result.transit_hash,
+    );
+    assert_eq!(
+        fixture.result.receipt.output_hash,
+        relay_delivery_output_hash(
+            fixture.result.transit_hash,
+            fixture.result.forwarded_packet_hash,
+            channel_proof_hash(&fixture.recipient_proof),
+        ),
     );
 
     let mut ledger = SettlementLedger::new();
