@@ -12,6 +12,7 @@ rust-version = "1.95"
 default = []
 std = []
 fontdue-text = ["std", "dep:fontdue"]
+tabler-icons = []
 
 [dependencies]
 fontdue = { version = "0.9", default-features = false, optional = true }
