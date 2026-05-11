@@ -26,6 +26,17 @@ fn signed_request(key: &Ed25519SigningKey, user_sequence: u64, request_id: Hash)
     )
 }
 
+fn signed_expiring_request(
+    key: &Ed25519SigningKey,
+    user_sequence: u64,
+    request_id: Hash,
+    valid_until_unix_ms: u64,
+) -> WorkRequest {
+    let mut request = signed_request(key, user_sequence, request_id);
+    request.valid_until_unix_ms = valid_until_unix_ms;
+    sign_work_request(key, request)
+}
+
 fn controller() -> InMemoryAdmissionController {
     InMemoryAdmissionController::new(
         Ed25519SigningKey::from_bytes(&[40u8; 32]),
@@ -92,11 +103,16 @@ fn assert_ack(packet: WorkPacket, code: u16, text: &str) {
     assert_eq!(ack.text, text);
 }
 
-fn assert_admission(packet: WorkPacket) {
+fn unwrap_admission(packet: WorkPacket) -> WorkAdmission {
     let WorkPacket::WorkAdmission(admission) = packet else {
         panic!("expected work admission, got {packet:?}");
     };
     assert!(verify_work_admission(&admission));
+    admission
+}
+
+fn assert_admission(packet: WorkPacket) {
+    let _ = unwrap_admission(packet);
 }
 
 #[test]
@@ -114,6 +130,29 @@ fn admission_replay_state_rejects_duplicate_request_id() {
     );
     assert_eq!(replay.seen_request_count(), 1);
     assert_eq!(replay.highest_sequence_for(&first.user), Some(1));
+}
+
+#[test]
+fn admission_replay_state_prunes_expired_request_ids_without_resetting_user_sequence() {
+    let key = Ed25519SigningKey::from_bytes(&[51u8; 32]);
+    let expired = signed_expiring_request(&key, 1, [51u8; 32], 100);
+    let fresh = signed_expiring_request(&key, 2, [52u8; 32], 1_000);
+    let stale_after_prune = signed_expiring_request(&key, 1, [53u8; 32], 1_000);
+    let mut replay = AdmissionReplayState::new();
+
+    replay.record_checked(&expired).expect("expired request initially recorded");
+    replay.record_checked(&fresh).expect("fresh request initially recorded");
+
+    assert_eq!(replay.prune_expired(101), 1);
+    assert_eq!(replay.seen_request_count(), 1);
+    assert_eq!(replay.highest_sequence_for(&fresh.user), Some(2));
+    assert_eq!(
+        replay.record_checked(&stale_after_prune),
+        Err(AdmissionReplayError::NonIncreasingUserSequence {
+            last_seen: 2,
+            received: 1,
+        })
+    );
 }
 
 #[test]
@@ -183,6 +222,35 @@ fn admission_controller_rejects_duplicate_request_id_after_admission() {
         409,
         "duplicate request id",
     );
+
+    drop(relay_client);
+    relay_thread.join().expect("relay admission thread joined");
+}
+
+#[test]
+fn admission_controller_generates_distinct_admission_ids_for_same_request_on_new_sequence() {
+    let controller = controller();
+    let (relay_client, relay_thread) = admit_relay(&controller, 52);
+    let user_key = Ed25519SigningKey::from_bytes(&[53u8; 32]);
+    let user = user_public_key(&user_key);
+    controller.set_user_balance(user, 100);
+
+    let first = signed_request(&user_key, 1, [54u8; 32]);
+    let second = signed_request(&user_key, 2, [55u8; 32]);
+    let first_admission = unwrap_admission(
+        controller
+            .handle_packet(WorkPacket::WorkRequest(first), None)
+            .expect("first request handled"),
+    );
+    let second_admission = unwrap_admission(
+        controller
+            .handle_packet(WorkPacket::WorkRequest(second), None)
+            .expect("second request handled"),
+    );
+
+    assert_ne!(first_admission.admission_id, first_admission.request_hash);
+    assert_ne!(second_admission.admission_id, second_admission.request_hash);
+    assert_ne!(first_admission.admission_id, second_admission.admission_id);
 
     drop(relay_client);
     relay_thread.join().expect("relay admission thread joined");
