@@ -234,6 +234,7 @@ impl InMemoryAdmissionController {
             abi_version: WORK_WIRE_ABI_VERSION,
             admission_id: blake3_hash(&request_hash),
             dao_id: self.dao_id,
+            user: request.user,
             admission_node: self.admission_identity.clone(),
             request_hash,
             assigned_route_hash,
