@@ -9,6 +9,7 @@
 
 pub mod components;
 pub mod icons;
+pub mod tabler_generated;
 pub mod visual;
 #[cfg(feature = "fontdue-text")]
 pub mod font;
