@@ -3,12 +3,22 @@ use alloc::vec::Vec;
 
 use crate::channel::{ChannelEnvelope, RouteAdvertisement, CHANNEL_KIND_WEBSOCKET};
 use crate::channel_order::{ChannelOrderBook, OrderedChannelEnvelope};
-use crate::codec::{blake3_hash, packet_bytes};
+use crate::codec::encode_work_packet_once;
 use crate::frame_codec::channel_envelope_bytes;
-use crate::memory_channel::route_hash;
+use crate::memory_channel::{route_hash, route_is_available};
 use crate::protocol::{Hash, NodeId, WorkPacket, WORK_WIRE_ABI_VERSION};
 use crate::route_auth::verify_route_advertisement;
 use crate::work_channel::{WorkChannel, WorkChannelError};
+
+#[cfg(feature = "std")]
+fn current_unix_ms() -> u64 {
+    crate::std_runtime::unix_ms()
+}
+
+#[cfg(not(feature = "std"))]
+fn current_unix_ms() -> u64 {
+    0
+}
 
 #[derive(Clone, Debug, Default)]
 pub struct WsWorkChannel {
@@ -69,7 +79,10 @@ impl WsWorkChannel {
 
 impl WorkChannel for WsWorkChannel {
     fn add_route(&mut self, route: RouteAdvertisement) -> Result<Hash, WorkChannelError> {
-        if !verify_route_advertisement(&route) || route.endpoint.kind != CHANNEL_KIND_WEBSOCKET {
+        if !verify_route_advertisement(&route)
+            || route.endpoint.kind != CHANNEL_KIND_WEBSOCKET
+            || !route_is_available(&route, current_unix_ms())
+        {
             return Err(WorkChannelError::RouteInvalid);
         }
         let node_id = route.node.node_id;
@@ -85,7 +98,8 @@ impl WorkChannel for WsWorkChannel {
     }
 
     fn route_hash_for(&self, node_id: &NodeId) -> Option<Hash> {
-        self.routes.get(node_id).map(route_hash)
+        let route = self.routes.get(node_id)?;
+        route_is_available(route, current_unix_ms()).then(|| route_hash(route))
     }
 
     fn send_unordered(
@@ -94,16 +108,20 @@ impl WorkChannel for WsWorkChannel {
         to: NodeId,
         packet: WorkPacket,
     ) -> Result<ChannelEnvelope, WorkChannelError> {
+        let now = current_unix_ms();
+        if self.routes.get(&to).is_some_and(|route| !route_is_available(route, now)) {
+            self.routes.remove(&to);
+            return Err(WorkChannelError::RouteMissing);
+        }
         let route = self.routes.get(&to).ok_or(WorkChannelError::RouteMissing)?;
-        let packet_bytes = packet_bytes(&packet).map_err(|_| WorkChannelError::PacketHashFailed)?;
-        let packet_hash = blake3_hash(&packet_bytes);
+        let encoded = encode_work_packet_once(&packet).map_err(|_| WorkChannelError::PacketHashFailed)?;
         let envelope = ChannelEnvelope {
             abi_version: WORK_WIRE_ABI_VERSION,
             channel_id: route.endpoint.channel_id,
             from,
             to,
             route_hash: route_hash(route),
-            packet_hash,
+            packet_hash: encoded.hash,
             packet,
         };
         let envelope_bytes = channel_envelope_bytes(&envelope)
@@ -111,8 +129,8 @@ impl WorkChannel for WsWorkChannel {
         self.outbound_frames.push(WsFrame {
             to,
             route_hash: envelope.route_hash,
-            packet_hash,
-            packet_bytes,
+            packet_hash: encoded.hash,
+            packet_bytes: encoded.bytes,
             envelope_bytes,
         });
         self.inboxes.entry(to).or_default().push(envelope.clone());
