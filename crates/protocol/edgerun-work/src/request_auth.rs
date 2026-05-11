@@ -2,8 +2,8 @@ use alloc::vec::Vec;
 
 use edgerun_crypto::Ed25519SigningKey;
 
-use crate::codec::{sign_ed25519, verify_solana_ed25519};
 use crate::protocol::*;
+use crate::signing::{sign_ed25519, verify_solana_ed25519};
 
 const WORK_REQUEST_DOMAIN: &[u8] = b"edgerun:v1:work:request";
 
