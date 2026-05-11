@@ -5,7 +5,7 @@ use std::time::Duration;
 use edgerun_crypto::Ed25519SigningKey;
 use edgerun_work::*;
 
-fn store_request(bytes: &[u8]) -> ObjectStoreRequest {
+fn make_store(bytes: &[u8]) -> ObjectStoreRequest {
     let job_id = [9u8; 32];
     let shard_index = 0;
     ObjectStoreRequest {
@@ -18,43 +18,31 @@ fn store_request(bytes: &[u8]) -> ObjectStoreRequest {
     }
 }
 
-fn retrieve_request(object: &ObjectStoreRequest) -> ObjectRetrieveRequest {
-    ObjectRetrieveRequest {
-        manifest_hash: object.manifest_hash,
-        job_id: object.job_id,
-        shard_index: object.shard_index,
-        shard_hash: object.shard_hash,
-    }
-}
-
-fn signed_storage_message(
+fn make_message(
     key: &Ed25519SigningKey,
     from: NodeId,
     to: NodeId,
     via_relay: NodeId,
-    sequence: u64,
     payload: Vec<u8>,
 ) -> NetworkMessage {
     let payload_hash = blake3_hash(&payload);
-    let message_id = HashBuilder::domain(b"edgerun:test:storage-message")
-        .node_id(&from)
-        .node_id(&to)
-        .node_id(&via_relay)
-        .u64(sequence)
-        .hash(&payload_hash)
-        .finish();
     sign_network_message(
         key,
         NetworkMessage {
             abi_version: WORK_WIRE_ABI_VERSION,
-            message_id,
+            message_id: HashBuilder::domain(b"edgerun:test:storage-message")
+                .node_id(&from)
+                .node_id(&to)
+                .node_id(&via_relay)
+                .hash(&payload_hash)
+                .finish(),
             prev_hash: [0u8; 32],
             from,
             to,
             via_relay,
             department: DEPARTMENT_STORAGE,
             work_type: WORK_TYPE_OBJECT_STORE,
-            sequence,
+            sequence: 1,
             payload_hash,
             payload,
             signature: empty_signature(),
@@ -70,8 +58,8 @@ fn admission_assigns_relay_and_relay_forwards_storage_work() {
     let storage_key = Ed25519SigningKey::from_bytes(&[43u8; 32]);
 
     let client = node_identity_from_key(&client_key, NODE_ROLE_MESSAGE);
-    let relay_identity = node_identity_from_key(&relay_key, NODE_ROLE_RELAY);
-    let storage_identity = node_identity_from_key(&storage_key, NODE_ROLE_STORAGE);
+    let relay_id = node_identity_from_key(&relay_key, NODE_ROLE_RELAY);
+    let storage_id = node_identity_from_key(&storage_key, NODE_ROLE_STORAGE);
 
     let admission = InMemoryAdmissionController::new(
         admission_key,
@@ -81,48 +69,53 @@ fn admission_assigns_relay_and_relay_forwards_storage_work() {
             heartbeat_grace_secs: 30,
         },
     );
-    let admission_listener = TcpListener::bind("127.0.0.1:0").expect("admission listener");
-    let admission_addr = admission_listener.local_addr().expect("admission addr");
+    let listener = TcpListener::bind("127.0.0.1:0").expect("admission listener");
+    let admission_addr = listener.local_addr().expect("admission addr");
     let admission_thread = thread::spawn(move || {
+        let mut handlers = Vec::new();
         for _ in 0..2 {
-            let (stream, _) = admission_listener.accept().expect("admission accept");
-            admission.handle_connection(stream).expect("admission connection");
+            let (stream, _) = listener.accept().expect("admission accept");
+            let controller = admission.clone();
+            handlers.push(thread::spawn(move || {
+                controller.handle_connection(stream).expect("admission connection");
+            }));
         }
+        handlers
     });
 
-    let mut client_runtime = TcpNodeRuntime::bind(client.node_id, "127.0.0.1:0").expect("client tcp");
-    let mut relay_runtime = TcpNodeRuntime::bind(relay_identity.node_id, "127.0.0.1:0").expect("relay tcp");
-    let storage_runtime = TcpNodeRuntime::bind(storage_identity.node_id, "127.0.0.1:0").expect("storage tcp");
+    let mut client_tcp = TcpNodeRuntime::bind(client.node_id, "127.0.0.1:0").expect("client tcp");
+    let mut relay_tcp = TcpNodeRuntime::bind(relay_id.node_id, "127.0.0.1:0").expect("relay tcp");
+    let storage_tcp = TcpNodeRuntime::bind(storage_id.node_id, "127.0.0.1:0").expect("storage tcp");
 
-    let (_relay_client, relay_response) = WorkClient::connect(
+    let (relay_admission, relay_response) = WorkClient::connect(
         admission_addr,
         relay_key.clone(),
         NODE_ROLE_RELAY,
-        relay_runtime.listen_addr().ip().to_string(),
-        relay_runtime.listen_addr().port(),
+        relay_tcp.listen_addr().ip().to_string(),
+        relay_tcp.listen_addr().port(),
     )
-    .expect("relay registers with admission");
+    .expect("relay registration");
     assert!(matches!(relay_response, WorkPacket::RelayPeerList(_)));
 
-    let (_storage_client, storage_response) = WorkClient::connect(
+    let (storage_admission, storage_response) = WorkClient::connect(
         admission_addr,
         storage_key.clone(),
         NODE_ROLE_STORAGE,
-        storage_runtime.listen_addr().ip().to_string(),
-        storage_runtime.listen_addr().port(),
+        storage_tcp.listen_addr().ip().to_string(),
+        storage_tcp.listen_addr().port(),
     )
-    .expect("storage asks admission for relay");
+    .expect("storage relay assignment");
     let WorkPacket::RelayAssignment(assignment) = storage_response else {
-        panic!("storage must receive relay assignment");
+        panic!("expected relay assignment");
     };
     assert!(verify_relay_assignment(&assignment));
-    assert_eq!(assignment.node_id, storage_identity.node_id);
-    assert_eq!(assignment.relay.relay_node_id, relay_identity.node_id);
+    assert_eq!(assignment.node_id, storage_id.node_id);
+    assert_eq!(assignment.relay.relay_node_id, relay_id.node_id);
 
     let relay_route = RouteAdvertisementBuilder::new(
         &relay_key,
         NODE_ROLE_RELAY,
-        tcp_endpoint("relay", relay_runtime.listen_addr().to_string()),
+        tcp_endpoint("relay", relay_tcp.listen_addr().to_string()),
     )
     .departments(vec![DEPARTMENT_RELAY])
     .valid_until_unix_ms(unix_ms().saturating_add(60_000))
@@ -130,34 +123,32 @@ fn admission_assigns_relay_and_relay_forwards_storage_work() {
     let storage_route = RouteAdvertisementBuilder::new(
         &storage_key,
         NODE_ROLE_STORAGE,
-        tcp_endpoint("storage", storage_runtime.listen_addr().to_string()),
+        tcp_endpoint("storage", storage_tcp.listen_addr().to_string()),
     )
     .relay_node_id(assignment.relay.relay_node_id)
     .departments(vec![DEPARTMENT_STORAGE, DEPARTMENT_RETRIEVAL])
     .valid_until_unix_ms(assignment.valid_until_unix_ms)
     .build(&storage_key);
 
-    let relay_route_hash = client_runtime.add_route(relay_route.clone()).expect("client has relay route");
-    relay_runtime.add_route(storage_route).expect("relay has assigned storage route");
+    let relay_route_hash = client_tcp.add_route(relay_route.clone()).expect("client route");
+    relay_tcp.add_route(storage_route).expect("storage route");
 
-    let object = store_request(b"stored through assigned relay");
-    let retrieve = retrieve_request(&object);
-    let payload = storage_payload_bytes(&StoragePayload::StoreRequest(object)).expect("payload bytes");
-    let message = signed_storage_message(
-        &client_key,
-        client.node_id,
-        storage_identity.node_id,
-        relay_identity.node_id,
-        1,
-        payload,
-    );
-    client_runtime
-        .send_unordered(client.node_id, relay_identity.node_id, WorkPacket::NetworkMessage(message))
-        .expect("client sends storage work to relay");
+    let object = make_store(b"stored through assigned relay");
+    let retrieve = ObjectRetrieveRequest {
+        manifest_hash: object.manifest_hash,
+        job_id: object.job_id,
+        shard_index: object.shard_index,
+        shard_hash: object.shard_hash,
+    };
+    let payload = storage_payload_bytes(&StoragePayload::StoreRequest(object)).expect("payload");
+    let message = make_message(&client_key, client.node_id, storage_id.node_id, relay_id.node_id, payload);
+    client_tcp
+        .send_unordered(client.node_id, relay_id.node_id, WorkPacket::NetworkMessage(message))
+        .expect("send to relay");
 
     thread::sleep(Duration::from_millis(50));
     let mut order = ChannelOrderBook::new();
-    let ordered = relay_runtime.drain_ordered(
+    let ordered = relay_tcp.drain_ordered(
         client.node_id,
         &mut order,
         relay_route_hash,
@@ -165,41 +156,35 @@ fn admission_assigns_relay_and_relay_forwards_storage_work() {
     );
     assert_eq!(ordered.len(), 1);
 
-    let mut relay_role = RelayRole::from_key(relay_key, 0);
-    relay_role
-        .forward_ordered_on(&mut relay_runtime, &ordered[0], [0u8; 32], [0u8; 32])
-        .expect("relay forwards to storage");
+    RelayRole::from_key(relay_key, 0)
+        .forward_ordered_on(&mut relay_tcp, &ordered[0], [0u8; 32], [0u8; 32])
+        .expect("relay forward");
 
     thread::sleep(Duration::from_millis(50));
     let mut storage_role = TypedObjectStoreRole::memory_with_capacity(4096);
-    let outputs = storage_runtime
-        .drain_packets()
-        .into_iter()
-        .map(|packet| {
-            storage_role.handle(
-                &RoleContext {
-                    now_unix_ms: unix_ms(),
-                    local_node: storage_identity.clone(),
-                    policy_hash: [2u8; 32],
-                },
-                RoleInput {
-                    packet,
-                    previous_hash: [0u8; 32],
-                    channel_hash: [0u8; 32],
-                },
-            )
-        })
-        .collect::<Vec<_>>();
-    assert_eq!(outputs.len(), 1);
-    assert_eq!(outputs[0].status, ROLE_STATUS_ACCEPTED);
-    assert_eq!(storage_role.object_count(), 1);
-    assert_eq!(
-        storage_role.retrieve(&retrieve).expect("stored object").bytes,
-        b"stored through assigned relay"
+    let packets = storage_tcp.drain_packets();
+    assert_eq!(packets.len(), 1);
+    let output = storage_role.handle(
+        &RoleContext {
+            now_unix_ms: unix_ms(),
+            local_node: storage_id,
+            policy_hash: [2u8; 32],
+        },
+        RoleInput {
+            packet: packets.into_iter().next().expect("packet"),
+            previous_hash: [0u8; 32],
+            channel_hash: [0u8; 32],
+        },
     );
+    assert_eq!(output.status, ROLE_STATUS_ACCEPTED);
+    assert_eq!(storage_role.retrieve(&retrieve).expect("stored").bytes, b"stored through assigned relay");
 
-    client_runtime.shutdown().expect("client shutdown");
-    relay_runtime.shutdown().expect("relay shutdown");
-    storage_runtime.shutdown().expect("storage shutdown");
-    admission_thread.join().expect("admission thread");
+    drop(storage_admission);
+    drop(relay_admission);
+    client_tcp.shutdown().expect("client shutdown");
+    relay_tcp.shutdown().expect("relay shutdown");
+    storage_tcp.shutdown().expect("storage shutdown");
+    for handler in admission_thread.join().expect("admission thread") {
+        handler.join().expect("admission handler");
+    }
 }
