@@ -5,7 +5,11 @@ use edgerun_crypto::Ed25519SigningKey;
 use crate::channel::ChannelProof;
 use crate::channel_order::{ordered_message_hash, OrderedChannelEnvelope};
 use crate::codec::blake3_hash;
-use crate::protocol::{Hash, NodeId, NodeIdentity, WorkProtocolError, WORK_WIRE_ABI_VERSION};
+use crate::protocol::{Hash, NodeId, NodeIdentity, WorkPacket, WorkProtocolError, WORK_WIRE_ABI_VERSION};
+use crate::recipient_policy::{
+    recipient_message_policy_allows, recipient_message_policy_hash, RecipientMessagePolicy,
+    RecipientPolicyError,
+};
 use crate::signing::{empty_signature, sign_ed25519, verify_signature};
 
 const CHANNEL_PROOF_DOMAIN: &[u8] = b"edgerun:v1:work:channel-proof";
@@ -18,6 +22,13 @@ pub enum ChannelProofError {
     WrongRelay,
     WrongMessage,
     InvalidSignature,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum PolicyBoundChannelProofError {
+    NotNetworkMessage,
+    PolicyRejected(RecipientPolicyError),
+    Proof(WorkProtocolError),
 }
 
 pub fn channel_proof_preimage(value: &ChannelProof) -> Vec<u8> {
@@ -101,6 +112,29 @@ pub fn channel_proof_for_ordered_with_policy(
             signature: empty_signature(),
         },
     ))
+}
+
+pub fn channel_proof_for_allowed_ordered_message(
+    recipient_key: &Ed25519SigningKey,
+    recipient: &NodeIdentity,
+    relay_node_id: NodeId,
+    ordered: &OrderedChannelEnvelope,
+    policy: &RecipientMessagePolicy,
+    now_unix_ms: u64,
+) -> Result<ChannelProof, PolicyBoundChannelProofError> {
+    let WorkPacket::NetworkMessage(message) = &ordered.envelope.packet else {
+        return Err(PolicyBoundChannelProofError::NotNetworkMessage);
+    };
+    recipient_message_policy_allows(policy, message, now_unix_ms)
+        .map_err(PolicyBoundChannelProofError::PolicyRejected)?;
+    channel_proof_for_ordered_with_policy(
+        recipient_key,
+        recipient,
+        relay_node_id,
+        ordered,
+        recipient_message_policy_hash(policy),
+    )
+    .map_err(PolicyBoundChannelProofError::Proof)
 }
 
 pub fn verify_channel_proof_for_ordered(
