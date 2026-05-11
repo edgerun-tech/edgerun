@@ -4,7 +4,9 @@ use alloc::vec::Vec;
 use crate::channel::ChannelProof;
 use crate::channel_order::OrderedChannelEnvelope;
 use crate::codec::{blake3_hash, packet_bytes, verify_work_admission, verify_work_receipt};
-use crate::delivery_proof::{channel_proof_hash, verify_channel_proof_for_ordered};
+use crate::delivery_proof::{
+    channel_proof_hash, verify_channel_proof_for_ordered_with_policy,
+};
 use crate::protocol::*;
 use crate::recipient_policy::{
     recipient_message_policy_allows, recipient_message_policy_hash, RecipientMessagePolicy,
@@ -269,11 +271,12 @@ pub fn verify_delivery_evidence(
     if message.to != evidence.recipient.node_id {
         return Err(SettlementError::WrongRecipient);
     }
-    if verify_channel_proof_for_ordered(
+    if verify_channel_proof_for_ordered_with_policy(
         evidence.recipient_proof,
         evidence.recipient,
         receipt.worker.node_id,
         evidence.recipient_delivery,
+        evidence.admission.policy_hash,
     )
     .is_err()
     {
