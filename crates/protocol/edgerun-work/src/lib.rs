@@ -3,6 +3,7 @@
 extern crate alloc;
 
 pub mod channel;
+pub mod channel_order;
 pub mod codec;
 pub mod memory_channel;
 pub mod protocol;
@@ -15,6 +16,7 @@ pub mod route_builder;
 pub mod std_runtime;
 
 pub use channel::*;
+pub use channel_order::*;
 pub use codec::*;
 pub use memory_channel::*;
 pub use protocol::*;
