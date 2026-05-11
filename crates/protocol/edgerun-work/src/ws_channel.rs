@@ -130,7 +130,7 @@ impl WorkChannel for WsWorkChannel {
             to,
             route_hash: envelope.route_hash,
             packet_hash: encoded.hash,
-            packet_bytes: encoded.bytes,
+            packet_bytes: encoded.as_bytes().to_vec(),
             envelope_bytes,
         });
         self.inboxes.entry(to).or_default().push(envelope.clone());
