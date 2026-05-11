@@ -14,6 +14,9 @@ use crate::route_auth::verify_route_advertisement;
 use crate::std_runtime::framing::{read_work_packet, unix_ms, write_work_packet};
 use crate::work_channel::{OrderedWorkChannel, WorkChannel, WorkChannelError};
 
+const ACCEPT_POLL_MS: u64 = 10;
+const CONNECTION_READ_TIMEOUT_MS: u64 = 250;
+
 #[derive(Debug)]
 pub struct TcpNodeRuntime {
     node_id: NodeId,
@@ -22,6 +25,7 @@ pub struct TcpNodeRuntime {
     inbox: Arc<Mutex<Vec<WorkPacket>>>,
     shutdown: Arc<AtomicBool>,
     accept_thread: Arc<Mutex<Option<JoinHandle<()>>>>,
+    worker_threads: Arc<Mutex<Vec<JoinHandle<()>>>>,
 }
 
 impl Clone for TcpNodeRuntime {
@@ -33,6 +37,7 @@ impl Clone for TcpNodeRuntime {
             inbox: Arc::clone(&self.inbox),
             shutdown: Arc::clone(&self.shutdown),
             accept_thread: Arc::clone(&self.accept_thread),
+            worker_threads: Arc::clone(&self.worker_threads),
         }
     }
 }
@@ -44,19 +49,27 @@ impl TcpNodeRuntime {
         let listen_addr = listener.local_addr()?;
         let inbox = Arc::new(Mutex::new(Vec::new()));
         let shutdown = Arc::new(AtomicBool::new(false));
+        let worker_threads = Arc::new(Mutex::new(Vec::new()));
         let inbox_for_thread = Arc::clone(&inbox);
         let shutdown_for_thread = Arc::clone(&shutdown);
+        let workers_for_thread = Arc::clone(&worker_threads);
         let accept_thread = thread::spawn(move || {
             while !shutdown_for_thread.load(Ordering::Acquire) {
                 match listener.accept() {
                     Ok((stream, _peer)) => {
+                        let _ = stream.set_read_timeout(Some(Duration::from_millis(CONNECTION_READ_TIMEOUT_MS)));
                         let inbox = Arc::clone(&inbox_for_thread);
-                        thread::spawn(move || {
-                            let _ = read_stream_into_inbox(stream, inbox);
+                        let shutdown = Arc::clone(&shutdown_for_thread);
+                        let handle = thread::spawn(move || {
+                            let _ = read_stream_into_inbox(stream, inbox, shutdown);
                         });
+                        workers_for_thread
+                            .lock()
+                            .expect("tcp worker thread list poisoned")
+                            .push(handle);
                     }
                     Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
-                        thread::sleep(Duration::from_millis(10));
+                        thread::sleep(Duration::from_millis(ACCEPT_POLL_MS));
                     }
                     Err(_) => break,
                 }
@@ -69,6 +82,7 @@ impl TcpNodeRuntime {
             inbox,
             shutdown,
             accept_thread: Arc::new(Mutex::new(Some(accept_thread))),
+            worker_threads,
         })
     }
 
@@ -85,6 +99,12 @@ impl TcpNodeRuntime {
         let _ = TcpStream::connect(self.listen_addr);
         if let Some(handle) = self.accept_thread.lock().expect("tcp accept thread poisoned").take() {
             handle.join().map_err(|_| io::Error::new(io::ErrorKind::Other, "tcp accept thread panicked"))?;
+        }
+        let mut workers = self.worker_threads.lock().expect("tcp worker thread list poisoned");
+        let handles = workers.drain(..).collect::<Vec<_>>();
+        drop(workers);
+        for handle in handles {
+            handle.join().map_err(|_| io::Error::new(io::ErrorKind::Other, "tcp worker thread panicked"))?;
         }
         Ok(())
     }
@@ -132,6 +152,14 @@ impl TcpNodeRuntime {
 
     fn route_available(route: &RouteAdvertisement, now_unix_ms: u64) -> bool {
         route.status == ROUTE_STATUS_AVAILABLE && route.valid_until_unix_ms >= now_unix_ms
+    }
+}
+
+impl Drop for TcpNodeRuntime {
+    fn drop(&mut self) {
+        if Arc::strong_count(&self.accept_thread) == 1 {
+            let _ = self.shutdown();
+        }
     }
 }
 
@@ -206,8 +234,17 @@ impl WorkChannel for TcpNodeRuntime {
     }
 }
 
-fn read_stream_into_inbox(mut stream: TcpStream, inbox: Arc<Mutex<Vec<WorkPacket>>>) -> io::Result<()> {
+fn read_stream_into_inbox(
+    mut stream: TcpStream,
+    inbox: Arc<Mutex<Vec<WorkPacket>>>,
+    shutdown: Arc<AtomicBool>,
+) -> io::Result<()> {
+    if shutdown.load(Ordering::Acquire) {
+        return Ok(());
+    }
     let packet = read_work_packet(&mut stream)?;
-    inbox.lock().expect("tcp node inbox poisoned").push(packet);
+    if !shutdown.load(Ordering::Acquire) {
+        inbox.lock().expect("tcp node inbox poisoned").push(packet);
+    }
     Ok(())
 }
