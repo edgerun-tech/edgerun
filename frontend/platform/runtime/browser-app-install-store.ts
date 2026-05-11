@@ -1,7 +1,6 @@
 "use client"
 
 import { atom, computed } from "nanostores"
-import { computedMapToList } from "@/platform/utils/computed"
 import { runtimeEventLog } from "./runtime-event-log"
 import { sha256Hex } from "./browser-capability-types"
 import { decodeAppStoreCatalogWithEdgerunNode, installEappWithEdgerunNode } from "./edgerun-node"
@@ -48,7 +47,7 @@ export interface BrowserAppCatalog {
   apps: BrowserCatalogApp[]
 }
 
-export interface InstalledBrowserApp {
+export interface CachedBrowserApp {
   appId: string
   slug: string
   name: string
@@ -64,12 +63,23 @@ export interface InstalledBrowserApp {
   runtimeAppId: string
   releaseId: string
   developerId: string
-  installedAt: string
+  cachedAt: string
   manifest: unknown
   eappBytes: ArrayBuffer
   verifiedAssets: BrowserCatalogAsset[]
 }
 
+/** @deprecated Use CachedBrowserApp. */
+export type InstalledBrowserApp = CachedBrowserApp & { installedAt?: string }
+
+export interface BrowserAppCacheState {
+  catalog: BrowserAppCatalog | null
+  cached: Map<string, CachedBrowserApp>
+  isLoading: boolean
+  error: string | null
+}
+
+/** @deprecated Use BrowserAppCacheState. */
 export interface BrowserAppInstallState {
   catalog: BrowserAppCatalog | null
   installed: Map<string, InstalledBrowserApp>
@@ -77,13 +87,26 @@ export interface BrowserAppInstallState {
   error: string | null
 }
 
-export const browserAppInstallStore = atom<BrowserAppInstallState>({
+export const browserAppCacheStore = atom<BrowserAppCacheState>({
   catalog: null,
-  installed: new Map(),
+  cached: new Map(),
   isLoading: false,
   error: null,
 })
 
+export const cachedBrowserApps = computed(browserAppCacheStore, (state) =>
+  Array.from(state.cached.values()),
+)
+
+/** @deprecated Use browserAppCacheStore. */
+export const browserAppInstallStore = computed(browserAppCacheStore, (state): BrowserAppInstallState => ({
+  catalog: state.catalog,
+  installed: new Map(Array.from(state.cached.entries()).map(([id, app]) => [id, { ...app, installedAt: app.cachedAt }])),
+  isLoading: state.isLoading,
+  error: state.error,
+}))
+
+/** @deprecated Use cachedBrowserApps. */
 export const installedBrowserApps = computed(browserAppInstallStore, (state) =>
   Array.from(state.installed.values()),
 )
@@ -108,6 +131,13 @@ function bytesToArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   const copy = new Uint8Array(bytes.byteLength)
   copy.set(bytes)
   return copy.buffer
+}
+
+function normalizeCachedApp(app: CachedBrowserApp | InstalledBrowserApp): CachedBrowserApp {
+  return {
+    ...app,
+    cachedAt: app.cachedAt || app.installedAt || new Date().toISOString(),
+  }
 }
 
 async function fetchBytes(url: string): Promise<Uint8Array> {
@@ -143,18 +173,18 @@ async function openDb(): Promise<IDBDatabase> {
   })
 }
 
-async function idbGetAll(): Promise<InstalledBrowserApp[]> {
+async function idbGetAll(): Promise<CachedBrowserApp[]> {
   const db = await openDb()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readonly")
     const request = tx.objectStore(STORE_NAME).getAll()
     request.onerror = () => reject(request.error)
-    request.onsuccess = () => resolve(request.result as InstalledBrowserApp[])
+    request.onsuccess = () => resolve((request.result as Array<CachedBrowserApp | InstalledBrowserApp>).map(normalizeCachedApp))
     tx.oncomplete = () => db.close()
   })
 }
 
-async function idbPut(app: InstalledBrowserApp): Promise<void> {
+async function idbPut(app: CachedBrowserApp): Promise<void> {
   const db = await openDb()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, "readwrite")
@@ -181,18 +211,18 @@ async function idbDelete(appId: string): Promise<void> {
 }
 
 export async function loadBrowserAppCatalog(): Promise<void> {
-  browserAppInstallStore.set({ ...browserAppInstallStore.get(), isLoading: true, error: null })
+  browserAppCacheStore.set({ ...browserAppCacheStore.get(), isLoading: true, error: null })
   try {
-    const [catalog, installed] = await Promise.all([loadCatalogThroughNode(), idbGetAll()])
-    browserAppInstallStore.set({
+    const [catalog, cached] = await Promise.all([loadCatalogThroughNode(), idbGetAll()])
+    browserAppCacheStore.set({
       catalog,
-      installed: new Map(installed.map((app) => [app.appId, app])),
+      cached: new Map(cached.map((app) => [app.appId, app])),
       isLoading: false,
       error: null,
     })
   } catch (error) {
-    browserAppInstallStore.set({
-      ...browserAppInstallStore.get(),
+    browserAppCacheStore.set({
+      ...browserAppCacheStore.get(),
       isLoading: false,
       error: error instanceof Error ? error.message : String(error),
     })
@@ -214,7 +244,7 @@ async function loadCatalogThroughNode(): Promise<BrowserAppCatalog> {
   return decoded
 }
 
-export async function installBrowserCatalogApp(app: BrowserCatalogApp): Promise<InstalledBrowserApp> {
+export async function cacheBrowserCatalogApp(app: BrowserCatalogApp): Promise<CachedBrowserApp> {
   const [eappBytes] = await Promise.all([
     expectHash(app.packageUrl, app.eappSha256),
     expectHash(app.manifestUrl, app.manifestSha256),
@@ -228,7 +258,7 @@ export async function installBrowserCatalogApp(app: BrowserCatalogApp): Promise<
     verifiedAssets.push(asset)
   }
 
-  const installed: InstalledBrowserApp = {
+  const cached: CachedBrowserApp = {
     appId: app.appId,
     slug: app.slug,
     name: app.name,
@@ -244,33 +274,37 @@ export async function installBrowserCatalogApp(app: BrowserCatalogApp): Promise<
     runtimeAppId: app.runtimeAppId || "",
     releaseId: app.releaseId || "",
     developerId: app.developerId || "",
-    installedAt: new Date().toISOString(),
+    cachedAt: new Date().toISOString(),
     manifest,
     eappBytes: bytesToArrayBuffer(eappBytes),
     verifiedAssets,
   }
 
-  await idbPut(installed)
-  const state = browserAppInstallStore.get()
-  const installedMap = new Map(state.installed)
-  installedMap.set(installed.appId, installed)
-  browserAppInstallStore.set({ ...state, installed: installedMap })
+  await idbPut(cached)
+  const state = browserAppCacheStore.get()
+  const cachedMap = new Map(state.cached)
+  cachedMap.set(cached.appId, cached)
+  browserAppCacheStore.set({ ...state, cached: cachedMap })
   runtimeEventLog.append({
     kind: "app_package_verified",
-    actor: installed.appId,
-    reason: "wasm node installed rkyv eapp package",
-    inputHash: installed.eappSha256,
+    actor: cached.appId,
+    reason: "browser node verified and cached rkyv eapp package",
+    inputHash: cached.eappSha256,
     metadata: {
-      packageUrl: installed.packageUrl,
-      manifestSha256: installed.manifestSha256,
-      packageBytes: installed.packageBytes,
-      runtimeAppId: installed.runtimeAppId,
-      releaseId: installed.releaseId,
-      verifiedAssets: installed.verifiedAssets.length,
+      packageUrl: cached.packageUrl,
+      manifestSha256: cached.manifestSha256,
+      packageBytes: cached.packageBytes,
+      runtimeAppId: cached.runtimeAppId,
+      releaseId: cached.releaseId,
+      verifiedAssets: cached.verifiedAssets.length,
+      cacheState: "cached",
     },
   })
-  return installed
+  return cached
 }
+
+/** @deprecated Use cacheBrowserCatalogApp. */
+export const installBrowserCatalogApp = cacheBrowserCatalogApp
 
 function catalogManifestMetadata(app: BrowserCatalogApp): Record<string, unknown> & { name: string; version: string } {
   return {
@@ -284,15 +318,18 @@ function catalogManifestMetadata(app: BrowserCatalogApp): Record<string, unknown
   }
 }
 
-export async function uninstallBrowserApp(appId: string): Promise<void> {
+export async function removeCachedBrowserApp(appId: string): Promise<void> {
   await idbDelete(appId)
-  const state = browserAppInstallStore.get()
-  const installed = new Map(state.installed)
-  installed.delete(appId)
-  browserAppInstallStore.set({ ...state, installed })
+  const state = browserAppCacheStore.get()
+  const cached = new Map(state.cached)
+  cached.delete(appId)
+  browserAppCacheStore.set({ ...state, cached })
   runtimeEventLog.append({
     kind: "app_stopped",
     actor: appId,
-    reason: "wasm node uninstalled app package",
+    reason: "browser node removed cached app package",
   })
 }
+
+/** @deprecated Use removeCachedBrowserApp. */
+export const uninstallBrowserApp = removeCachedBrowserApp
