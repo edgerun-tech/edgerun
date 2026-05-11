@@ -101,22 +101,18 @@ fn relay_forwards_ordered_message_to_final_node_and_gets_paid_with_delivery_proo
         sequence: 1,
         previous_message_hash: [0u8; 32],
     };
-    let WorkPacket::NetworkMessage(message) = &forwarded.envelope.packet else {
-        panic!("expected forwarded network message");
-    };
-    recipient_message_policy_allows(&recipient_policy, message, 999)
-        .expect("recipient policy allows forwarded message");
     receiver
         .accept_ordered(&forwarded, receiver_route_hash)
         .expect("receiver accepts relay forwarded message");
-    let recipient_proof = channel_proof_for_ordered_with_policy(
+    let recipient_proof = channel_proof_for_allowed_ordered_message(
         &receiver.key,
         &receiver.identity,
         relay.identity.node_id,
         &forwarded,
-        policy_hash,
+        &recipient_policy,
+        999,
     )
-    .expect("receiver signs policy-bound delivery proof");
+    .expect("receiver signs policy-gated delivery proof");
     let payable_receipt = relay.finalized_delivery_receipt(&result, channel_proof_hash(&recipient_proof));
 
     let evidence = DeliverySettlementEvidence {
