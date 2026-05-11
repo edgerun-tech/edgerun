@@ -65,7 +65,6 @@ fn fixture() -> DeliveryFixture {
     let mut recipient_policy = open_recipient_message_policy(recipient.identity.clone(), 1, 1_000);
     recipient_policy.allowed_relays.push(relay.identity.node_id);
     recipient_policy = sign_recipient_message_policy(&recipient.key, recipient_policy);
-    let policy_hash = recipient_message_policy_hash(&recipient_policy);
 
     let request_hash = blake3_hash(b"delivery-settlement-request");
     let admission = signed_relay_admission(
@@ -75,7 +74,7 @@ fn fixture() -> DeliveryFixture {
         relay_route_hash,
         relay_route.endpoint.clone(),
         10,
-        policy_hash,
+        recipient_message_policy_hash(&recipient_policy),
     );
     let admission_hash = work_admission_hash(&admission).expect("admission hash");
 
@@ -106,22 +105,19 @@ fn fixture() -> DeliveryFixture {
         sequence: 1,
         previous_message_hash: [0u8; 32],
     };
-    let WorkPacket::NetworkMessage(message) = &recipient_delivery.envelope.packet else {
-        panic!("expected forwarded network message");
-    };
-    recipient_message_policy_allows(&recipient_policy, message, 999).expect("recipient policy allows message");
     let mut recipient_order = ChannelOrderBook::new();
     recipient_order
         .accept(&recipient_delivery, recipient_route_hash)
         .expect("recipient accepts delivery");
-    let recipient_proof = channel_proof_for_ordered_with_policy(
+    let recipient_proof = channel_proof_for_allowed_ordered_message(
         &recipient.key,
         &recipient.identity,
         relay.identity.node_id,
         &recipient_delivery,
-        policy_hash,
+        &recipient_policy,
+        999,
     )
-    .expect("policy-bound recipient proof");
+    .expect("policy-gated recipient proof");
     let payable_receipt = relay.finalized_delivery_receipt(&result, channel_proof_hash(&recipient_proof));
 
     DeliveryFixture {
@@ -178,6 +174,28 @@ fn settle_delivery_requires_policy_bound_recipient_proof_and_transit_hash() {
     assert_eq!(settled.amount, 3);
     assert_eq!(ledger.user_balance(&fixture.user), 7);
     assert_eq!(ledger.worker_balance(&fixture.payable_receipt.worker.node_id), 3);
+}
+
+#[test]
+fn receiver_helper_refuses_to_sign_disallowed_message() {
+    let mut fixture = fixture();
+    fixture.recipient_policy.blocked_senders.push(fixture.relay_input.envelope.from);
+    let recipient_key = Ed25519SigningKey::from_bytes(&[184u8; 32]);
+    fixture.recipient_policy = sign_recipient_message_policy(&recipient_key, fixture.recipient_policy.clone());
+
+    assert!(matches!(
+        channel_proof_for_allowed_ordered_message(
+            &fixture.recipient.key,
+            &fixture.recipient.identity,
+            fixture.payable_receipt.worker.node_id,
+            &fixture.recipient_delivery,
+            &fixture.recipient_policy,
+            999,
+        ),
+        Err(PolicyBoundChannelProofError::PolicyRejected(
+            RecipientPolicyError::SenderBlocked
+        ))
+    ));
 }
 
 #[test]
