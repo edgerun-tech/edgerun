@@ -2,13 +2,16 @@ use alloc::vec::Vec;
 
 use rkyv::{Archive, Deserialize, Serialize};
 
-use crate::codec::blake3_hash;
 use crate::erasure_storage::{ErasureManifest, ErasureShard};
+use crate::preimage::HashBuilder;
 use crate::protocol::{Hash, WorkProtocolError};
 
 pub const STORAGE_PAYLOAD_KIND_STORE_REQUEST: u16 = 1;
 pub const STORAGE_PAYLOAD_KIND_RETRIEVE_REQUEST: u16 = 2;
 pub const STORAGE_PAYLOAD_KIND_RETRIEVE_RESPONSE: u16 = 3;
+
+const ERASURE_MANIFEST_HASH_DOMAIN: &[u8] = b"edgerun:v1:work:erasure-manifest";
+const TYPED_SHARD_HASH_DOMAIN: &[u8] = b"edgerun:v1:work:typed-shard";
 
 #[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[rkyv(crate = rkyv)]
@@ -49,20 +52,22 @@ pub enum StoragePayload {
 }
 
 pub fn manifest_hash(manifest: &ErasureManifest) -> Hash {
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(&manifest.job_id);
-    bytes.extend_from_slice(&manifest.original_hash);
-    bytes.extend_from_slice(&manifest.original_len.to_be_bytes());
-    bytes.extend_from_slice(&manifest.data_shards.to_be_bytes());
-    bytes.extend_from_slice(&manifest.parity_shards.to_be_bytes());
-    bytes.extend_from_slice(&manifest.shard_len.to_be_bytes());
+    let mut builder = HashBuilder::domain(ERASURE_MANIFEST_HASH_DOMAIN)
+        .hash(&manifest.job_id)
+        .hash(&manifest.original_hash)
+        .u64(manifest.original_len)
+        .u16(manifest.data_shards)
+        .u16(manifest.parity_shards)
+        .u64(manifest.shard_len)
+        .u64(manifest.shard_hashes.len() as u64);
     for hash in &manifest.shard_hashes {
-        bytes.extend_from_slice(hash);
+        builder = builder.hash(hash);
     }
+    builder = builder.u64(manifest.assigned_nodes.len() as u64);
     for node_id in &manifest.assigned_nodes {
-        bytes.extend_from_slice(node_id);
+        builder = builder.node_id(node_id);
     }
-    blake3_hash(&bytes)
+    builder.finish()
 }
 
 pub fn store_request_from_shard(
@@ -146,11 +151,10 @@ fn storage_payload_from_aligned_bytes(bytes: &[u8]) -> Result<StoragePayload, Wo
 }
 
 pub fn typed_shard_hash(job_id: Hash, index: u16, is_parity: bool, bytes: &[u8]) -> Hash {
-    let mut input = Vec::new();
-    input.extend_from_slice(&job_id);
-    input.extend_from_slice(&index.to_be_bytes());
-    input.push(is_parity as u8);
-    input.extend_from_slice(&(bytes.len() as u64).to_be_bytes());
-    input.extend_from_slice(bytes);
-    blake3_hash(&input)
+    HashBuilder::domain(TYPED_SHARD_HASH_DOMAIN)
+        .hash(&job_id)
+        .u16(index)
+        .raw(&[is_parity as u8])
+        .bytes(bytes)
+        .finish()
 }
