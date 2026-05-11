@@ -1,14 +1,26 @@
+use std::io::Read;
+use std::net::TcpListener;
+use std::thread;
 use edgerun_work::*;
 
 #[test]
 fn tcp_work_channel_uses_same_ordered_channel_trait() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+    let addr = listener.local_addr().expect("local addr");
+    thread::spawn(move || {
+        if let Ok((mut stream, _)) = listener.accept() {
+            let mut buf = [0u8; 4096];
+            let _ = stream.read(&mut buf);
+        }
+    });
+
     let mut sender = SimNode::from_seed(241, NODE_ROLE_MESSAGE);
     let mut receiver = SimNode::from_seed(242, NODE_ROLE_MESSAGE);
     let mut channel = TcpWorkChannel::new();
 
     let mut route = receiver.advertise_memory_route(receiver.identity.node_id, vec![DEPARTMENT_MESSAGE]);
     route.endpoint.kind = CHANNEL_KIND_TCP;
-    route.endpoint.address = b"127.0.0.1:9".to_vec();
+    route.endpoint.address = format!("127.0.0.1:{}", addr.port()).into_bytes();
     route.endpoint.label = "tcp-test".into();
     route = sign_route_advertisement(&receiver.key, route);
     let route_hash = channel.add_route(route).expect("tcp route");
