@@ -82,3 +82,51 @@ impl PreimageBuilder {
         self.bytes
     }
 }
+
+pub struct HashBuilder {
+    hasher: blake3::Hasher,
+}
+
+impl HashBuilder {
+    pub fn domain(domain: &[u8]) -> Self {
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(domain);
+        hasher.update(&[0]);
+        Self { hasher }
+    }
+
+    pub fn raw(mut self, value: &[u8]) -> Self {
+        self.hasher.update(value);
+        self
+    }
+
+    pub fn bytes(mut self, value: &[u8]) -> Self {
+        self.hasher.update(&(value.len() as u64).to_be_bytes());
+        self.hasher.update(value);
+        self
+    }
+
+    pub fn hash(mut self, value: &Hash) -> Self {
+        self.hasher.update(value);
+        self
+    }
+
+    pub fn node_id(mut self, value: &Hash) -> Self {
+        self.hasher.update(value);
+        self
+    }
+
+    pub fn u16(mut self, value: u16) -> Self {
+        self.hasher.update(&value.to_be_bytes());
+        self
+    }
+
+    pub fn u64(mut self, value: u64) -> Self {
+        self.hasher.update(&value.to_be_bytes());
+        self
+    }
+
+    pub fn finish(self) -> Hash {
+        *self.hasher.finalize().as_bytes()
+    }
+}
