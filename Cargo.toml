@@ -23,6 +23,7 @@ exclude = [
 ]
 
 members = [
+  "crates/utility/edgerun-ui-core",
   "crates/utility/edgerun-async-channel",
   "crates/utility/edgerun-async-trait",
   "crates/utility/edgerun-bytes",
