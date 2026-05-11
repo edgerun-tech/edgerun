@@ -7,7 +7,7 @@ use crate::codec::{blake3_hash, packet_bytes};
 use crate::memory_channel::route_hash;
 use crate::protocol::{Hash, NodeId, WorkPacket, WORK_WIRE_ABI_VERSION};
 use crate::route_auth::verify_route_advertisement;
-use crate::work_channel::{OrderedWorkChannel, WorkChannel, WorkChannelError};
+use crate::work_channel::{WorkChannel, WorkChannelError};
 
 #[derive(Clone, Debug, Default)]
 pub struct WsWorkChannel {
@@ -111,5 +111,3 @@ impl WorkChannel for WsWorkChannel {
         self.inboxes.entry(node_id).or_default().drain(..).collect()
     }
 }
-
-impl OrderedWorkChannel for WsWorkChannel {}
