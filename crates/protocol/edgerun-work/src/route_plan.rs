@@ -4,10 +4,13 @@ use crate::channel::{
     RouteAdvertisement, RouteSnapshot, CHANNEL_KIND_MEMORY, CHANNEL_KIND_QUIC, CHANNEL_KIND_TCP,
     CHANNEL_KIND_WASM_HOST, CHANNEL_KIND_WEBSOCKET, CHANNEL_KIND_WEBTRANSPORT,
 };
-use crate::codec::blake3_hash;
 use crate::memory_channel::route_is_available;
+use crate::preimage::HashBuilder;
 use crate::protocol::{Hash, NodeId};
 use crate::route_auth::{route_advertisement_preimage, verify_route_advertisement, verify_route_snapshot};
+
+const ROUTE_COMMITMENT_DOMAIN: &[u8] = b"edgerun:v1:work:route-commitment";
+const ROUTE_ROOT_DOMAIN: &[u8] = b"edgerun:v1:work:route-root";
 
 #[cfg(feature = "std")]
 fn current_unix_ms() -> u64 {
@@ -245,13 +248,15 @@ impl VerifiedRoutePlan {
 }
 
 pub fn route_commitment(route: &RouteAdvertisement) -> Hash {
-    blake3_hash(&route_advertisement_preimage(route))
+    HashBuilder::domain(ROUTE_COMMITMENT_DOMAIN)
+        .bytes(&route_advertisement_preimage(route))
+        .finish()
 }
 
 pub fn route_root_hash(routes: &[RouteAdvertisement]) -> Hash {
-    let mut bytes = Vec::new();
+    let mut builder = HashBuilder::domain(ROUTE_ROOT_DOMAIN).u64(routes.len() as u64);
     for route in routes {
-        bytes.extend_from_slice(&route_commitment(route));
+        builder = builder.hash(&route_commitment(route));
     }
-    blake3_hash(&bytes)
+    builder.finish()
 }
