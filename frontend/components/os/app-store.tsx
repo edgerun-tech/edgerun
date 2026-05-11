@@ -43,7 +43,7 @@ interface AppStoreProps {
   onLaunchApp?: (app: AppDefinition) => void
 }
 
-type StoreFilter = "all" | "catalog" | "installed" | "builtin"
+type StoreFilter = "all" | "catalog" | "installed" | "builtin" | "publish"
 
 async function uninstallAndClose(appId: string) {
   const normalizedAppId = normalizeAppId(appId)
@@ -126,6 +126,7 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
   const installedIdSet = useMemo(() => new Set(normalizedInstalledIds), [normalizedInstalledIds])
 
   const filteredApps = useMemo(() => {
+    if (filter === "publish") return []
     const term = query.trim().toLowerCase()
     return apps.filter((app) => {
       const normalizedAppId = normalizeAppId(app.appId)
@@ -152,6 +153,7 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
     ? selectedApp.requiredCapabilityIds.filter((id) => !hasLocalCapabilityGrant(selectedNormalizedId, id)).length
     : 0
   const runtime = selectedApp ? metadataString(selectedApp, "runtime") : undefined
+  const sourceOfTruth = selectedApp ? metadataString(selectedApp, "sourceOfTruth") : undefined
   const packageUrl = selectedApp ? metadataString(selectedApp, "packageUrl") : undefined
   const manifestUrl = selectedApp ? metadataString(selectedApp, "manifestUrl") : undefined
   const launchUrl = selectedApp ? metadataString(selectedApp, "launchUrl") : undefined
@@ -160,6 +162,11 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
   const packageBytes = selectedApp ? metadataNumber(selectedApp, "packageBytes") : undefined
   const releaseId = selectedApp ? metadataString(selectedApp, "releaseId") : undefined
   const runtimeAppId = selectedApp ? metadataString(selectedApp, "runtimeAppId") : undefined
+  const developerId = selectedApp ? metadataString(selectedApp, "developerId") ?? selectedApp.signature?.developerId : undefined
+  const developerName = selectedApp ? metadataString(selectedApp, "developerName") ?? selectedApp.signature?.developerName : undefined
+  const authorityRef = selectedApp ? metadataString(selectedApp, "authorityRef") ?? selectedApp.signature?.authorityRef : undefined
+  const proofRef = selectedApp ? metadataString(selectedApp, "proofRef") ?? selectedApp.signature?.proofRef : undefined
+  const installEventKind = selectedApp ? metadataString(selectedApp, "installEventKind") : undefined
   const verifiedAssets = selectedApp ? metadataNumber(selectedApp, "verifiedAssets") : undefined
   const catalogCount = apps.filter((app) => app.source === "catalog").length
   const builtinCount = apps.filter((app) => app.source === "builtin").length
@@ -206,7 +213,7 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
         icon={<Package className="h-4 w-4" />}
         aside={(
           <div className="w-fit rounded-md border border-border bg-background/45 px-3 py-1.5 text-[11px] font-medium text-muted-foreground">
-            Verified packages, sealed credentials, local permissions
+            Signed SDK packages, content hashes, local install proof
           </div>
         )}
       >
@@ -238,12 +245,12 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
                       {selectedApp.signature?.verified ? (
                         <span className="inline-flex h-6 items-center gap-1 rounded border border-[var(--status-online)]/20 bg-[var(--status-online)]/10 px-2 text-[11px] font-medium text-[var(--status-online)]">
                           <BadgeCheck className="h-3 w-3" />
-                          Verified
+                          Verified package
                         </span>
                       ) : selectedApp.signature ? (
                         <span className="inline-flex h-6 items-center gap-1 rounded border border-primary/20 bg-primary/10 px-2 text-[11px] font-medium text-primary">
                           <BadgeCheck className="h-3 w-3" />
-                          Signed
+                          Signed package
                         </span>
                       ) : null}
                     </div>
@@ -271,7 +278,7 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
                     className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-wait disabled:opacity-70"
                   >
                     {busyAppId === selectedNormalizedId ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
-                    {busyAppId === selectedNormalizedId ? "Installing" : "Install"}
+                    {busyAppId === selectedNormalizedId ? "Verifying" : selectedApp.source === "catalog" ? "Verify & install" : "Install"}
                   </button>
                 )}
                 <button
@@ -309,9 +316,22 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
               <InfoCell label="Assets" value={typeof verifiedAssets === "number" ? `${verifiedAssets} verified` : "on install"} />
             </div>
 
+            <SectionTitle>SDK Package</SectionTitle>
+            <div className="rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs leading-5 text-muted-foreground">
+              {sourceOfTruth === "sdk-signed-content-addressed-package"
+                ? "This app is projected from SDK package artifacts. The catalog is only discovery; install verifies package bytes, manifest bytes, developer signature, and asset hashes through the browser node."
+                : "Builtin platform app. Package proof applies to catalog apps built with the Edgerun SDK."}
+            </div>
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              <ProofRow label="developer" value={developerName || shortHash(developerId)} raw={developerId} />
+              <ProofRow label="authority" value={authorityRef || "unknown"} raw={authorityRef} />
+              <ProofRow label="proof" value={proofRef || "unknown"} raw={proofRef} />
+              <ProofRow label="install event" value={installEventKind || "pending"} raw={installEventKind} />
+            </div>
+
             <SectionTitle>Permissions</SectionTitle>
             <div className="mb-2 rounded-md border border-border bg-secondary/25 px-3 py-2 text-xs leading-5 text-muted-foreground">
-              Install records stay in this browser. OAuth keys for Google apps are saved only after you unlock and reseal your Trust Container; packaged catalog apps are hash-checked through edgerun-node before launch.
+              Install records stay in this browser. Packaged apps are hash-checked through edgerun-node before launch; capabilities are granted separately through Trust Manager.
             </div>
             <div className="flex flex-wrap gap-2">
               {selectedApp.requiredCapabilityIds.length > 0 ? capabilityChips(selectedApp, selectedInstalled) : (
@@ -361,7 +381,7 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
               </div>
               <div className="flex items-center gap-1 overflow-x-auto pb-0.5">
                 <Filter className="mr-1 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                {(["all", "catalog", "installed", "builtin"] as StoreFilter[]).map((item) => (
+                {(["all", "catalog", "installed", "builtin", "publish"] as StoreFilter[]).map((item) => (
                   <button
                     key={item}
                     onClick={() => setFilter(item)}
@@ -379,7 +399,9 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
               </div>
             </AppToolbar>
 
-            {filteredApps.length > 0 ? (
+            {filter === "publish" ? (
+              <PublishPanel />
+            ) : filteredApps.length > 0 ? (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 {filteredApps.map((app) => {
                   const normalizedAppId = normalizeAppId(app.appId)
@@ -401,7 +423,7 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
                             installed ? "bg-[var(--status-online)]/15 text-[var(--status-online)]" : "bg-secondary text-muted-foreground",
                           )}
                         >
-                          {installed ? "Installed" : app.source}
+                          {installed ? "Installed" : app.source === "catalog" ? "Signed" : app.source}
                         </span>
                       </div>
                       <div className="mt-3 flex min-w-0 items-center gap-2">
@@ -429,6 +451,47 @@ export function AppStore({ onLaunchApp }: AppStoreProps) {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+function PublishPanel() {
+  return (
+    <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+      <div className="rounded-xl border border-border bg-card/55 p-4">
+        <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <Package className="h-4 w-4 text-primary" />
+          Publish an SDK package
+        </div>
+        <p className="mt-2 text-xs leading-5 text-muted-foreground">
+          Build with edgerun-sdk, then publish the signed package artifacts. The app store indexes the release; users install by verifying hashes and developer signatures through their browser node.
+        </p>
+        <div className="mt-4 grid gap-2">
+          <PublishStep index={1} title="Package" body="Run the SDK packager and produce app.edapp, app.eapp, and developer.esig." />
+          <PublishStep index={2} title="Store" body="Upload the package objects to content-addressed storage/CDN so retrieval can be verified by hash." />
+          <PublishStep index={3} title="Sell" body="Attach a content-addressed policy for price, capabilities, and distribution terms. Payments settle from usage and installs." />
+        </div>
+      </div>
+      <div className="rounded-xl border border-border bg-secondary/20 p-4">
+        <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">SDK artifacts</div>
+        <div className="mt-3 grid gap-2">
+          <InfoCell label="Manifest" value="app.edapp" />
+          <InfoCell label="Package graph" value="app.eapp" />
+          <InfoCell label="Developer signature" value="developer.esig" />
+        </div>
+        <div className="mt-4 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-xs leading-5 text-muted-foreground">
+          Next wiring target: drag these files here, verify them in-browser, then create a catalog submission backed by Edgerun storage and payment policy.
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function PublishStep({ index, title, body }: { index: number; title: string; body: string }) {
+  return (
+    <div className="rounded-md border border-border bg-secondary/25 px-3 py-2">
+      <div className="text-xs font-semibold text-foreground">{index}. {title}</div>
+      <div className="mt-1 text-xs leading-5 text-muted-foreground">{body}</div>
     </div>
   )
 }
