@@ -26,7 +26,7 @@ struct SDL_Renderer(c_void);
 struct SDL_Texture(c_void);
 
 #[link(name = "SDL2")]
-extern "C" {
+unsafe extern "C" {
     fn SDL_Init(flags: u32) -> c_int;
     fn SDL_Quit();
     fn SDL_GetError() -> *const c_char;
