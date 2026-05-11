@@ -15,7 +15,7 @@ std = ["edgerun-wire/std"]
 edgerun-crypto = { workspace = true, default-features = false, features = ["ed25519"] }
 edgerun-wire = { workspace = true, default-features = false }
 rkyv = { workspace = true, default-features = false, features = ["alloc", "bytecheck"] }
-blake3 = { workspace = true, default-features = false }
+blake3 = { version = "1", default-features = false }
 
 [lints]
 workspace = true
