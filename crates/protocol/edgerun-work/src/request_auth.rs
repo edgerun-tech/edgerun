@@ -2,26 +2,25 @@ use alloc::vec::Vec;
 
 use edgerun_crypto::Ed25519SigningKey;
 
+use crate::preimage::PreimageBuilder;
 use crate::protocol::*;
 use crate::signing::{sign_ed25519, verify_solana_ed25519};
 
 const WORK_REQUEST_DOMAIN: &[u8] = b"edgerun:v1:work:request";
 
 pub fn work_request_preimage(value: &WorkRequest) -> Vec<u8> {
-    let mut out = Vec::new();
-    out.extend_from_slice(WORK_REQUEST_DOMAIN);
-    out.push(0);
-    out.extend_from_slice(&value.request_id);
-    out.extend_from_slice(&value.user);
-    out.extend_from_slice(&value.user_sequence.to_be_bytes());
-    out.extend_from_slice(&value.recipient);
-    out.extend_from_slice(&value.work_type.to_be_bytes());
-    out.extend_from_slice(&value.department.to_be_bytes());
-    out.extend_from_slice(&value.payload_hash);
-    out.extend_from_slice(&value.input_root);
-    out.extend_from_slice(&value.max_total_cost.to_be_bytes());
-    out.extend_from_slice(&value.valid_until_unix_ms.to_be_bytes());
-    out
+    PreimageBuilder::domain(WORK_REQUEST_DOMAIN)
+        .hash(&value.request_id)
+        .hash(&value.user)
+        .u64(value.user_sequence)
+        .node_id(&value.recipient)
+        .u16(value.work_type)
+        .u16(value.department)
+        .hash(&value.payload_hash)
+        .hash(&value.input_root)
+        .u64(value.max_total_cost)
+        .u64(value.valid_until_unix_ms)
+        .finish()
 }
 
 pub fn sign_work_request(key: &Ed25519SigningKey, mut value: WorkRequest) -> WorkRequest {
