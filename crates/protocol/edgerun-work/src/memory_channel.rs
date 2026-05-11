@@ -6,6 +6,16 @@ use crate::codec::{blake3_hash, packet_bytes};
 use crate::protocol::{Hash, NodeId, WorkPacket, WORK_WIRE_ABI_VERSION};
 use crate::route_auth::verify_route_advertisement;
 
+#[cfg(feature = "std")]
+fn current_unix_ms() -> u64 {
+    crate::std_runtime::unix_ms()
+}
+
+#[cfg(not(feature = "std"))]
+fn current_unix_ms() -> u64 {
+    0
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MemoryChannelError {
     RouteMissing,
@@ -26,7 +36,7 @@ impl MemoryChannelEngine {
     }
 
     pub fn add_route(&mut self, route: RouteAdvertisement) -> Result<Hash, MemoryChannelError> {
-        if !verify_route_advertisement(&route) {
+        if !verify_route_advertisement(&route) || !route_is_available(&route, current_unix_ms()) {
             return Err(MemoryChannelError::RouteInvalid);
         }
         let node_id = route.node.node_id;
@@ -50,7 +60,8 @@ impl MemoryChannelEngine {
     }
 
     pub fn route_for(&self, node_id: &NodeId) -> Option<&RouteAdvertisement> {
-        self.routes.get(node_id)
+        let route = self.routes.get(node_id)?;
+        route_is_available(route, current_unix_ms()).then_some(route)
     }
 
     pub fn deliver(
@@ -59,6 +70,11 @@ impl MemoryChannelEngine {
         to: NodeId,
         packet: WorkPacket,
     ) -> Result<ChannelEnvelope, MemoryChannelError> {
+        let now = current_unix_ms();
+        if self.routes.get(&to).is_some_and(|route| !route_is_available(route, now)) {
+            self.remove_route(to);
+            return Err(MemoryChannelError::RouteMissing);
+        }
         let route = self.routes.get(&to).ok_or(MemoryChannelError::RouteMissing)?;
         let packet_hash = packet_bytes(&packet)
             .map(|bytes| blake3_hash(&bytes))
@@ -86,6 +102,10 @@ impl MemoryChannelEngine {
     pub fn route_count(&self) -> usize {
         self.routes.len()
     }
+}
+
+pub fn route_is_available(route: &RouteAdvertisement, now_unix_ms: u64) -> bool {
+    route.status == ROUTE_STATUS_AVAILABLE && route.valid_until_unix_ms >= now_unix_ms
 }
 
 pub fn route_hash(route: &RouteAdvertisement) -> Hash {
