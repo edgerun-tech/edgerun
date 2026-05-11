@@ -5,16 +5,14 @@ import type React from "react"
 import { useStore } from "@nanostores/react"
 import { Bot, IdCard, Network, Settings, Store } from "lucide-react"
 import { AuthOverlay } from "./auth-overlay"
-import { AppOverlayHost } from "./app-overlay-host"
 import { AgentUiBridge } from "./agent-ui-bridge"
 import { DevToolsStrip } from "./dev-tools-strip"
-import { ProfileMenu } from "./profile-menu"
-import { ProjectChecklist } from "./project-checklist"
 import { CapabilityGatePrompt } from "@/components/capability-gate-prompt"
+import { NodePolicyGraph } from "@/components/node-policy-graph"
 import { useAuth } from "@/hooks/use-auth"
 import { FloatingDock, type FloatingDockContext, type FloatingDockItem } from "@/components/ui/floating-dock"
-import { appSurfaceOrderStore, appSurfacesStore, focusedAppSurfaceStore, focusAppSurface, pendingGateStore } from "@/stores/desktop-store"
-import { getAppIcon, handleCloseAppSurface, launchApp, launchAppById } from "@/stores/app-launcher"
+import { pendingGateStore } from "@/stores/desktop-store"
+import { getAppIcon, launchApp, launchAppById } from "@/stores/app-launcher"
 import { listBuiltinApps } from "@/platform/registries/builtin-app-registry"
 import { isRemovedAppId } from "@/platform/registries/app-id-policy"
 import { catalogApps } from "@/platform/registries/app-catalog-registry"
@@ -38,9 +36,6 @@ const PINNED_DOCK_APP_IDS = new Set(["identity", "compute-node", "app-store", "s
 
 export function Desktop() {
   const auth = useAuth()
-  const appSurfaces = useStore(appSurfacesStore)
-  const appSurfaceOrder = useStore(appSurfaceOrderStore)
-  const focusedAppSurfaceId = useStore(focusedAppSurfaceStore)
   const pendingGate = useStore(pendingGateStore)
   const installedAppIds = useStore(installedAppIdsStore)
   const catalogAppList = useStore(catalogApps)
@@ -52,10 +47,6 @@ export function Desktop() {
       return "Locked browser session"
     })
   }, [auth])
-
-  const openIdentity = useCallback(() => {
-    return launchAppById("identity")
-  }, [])
 
   const openSurfaceById = useCallback((appId: string) => {
     return launchAppById(appId)
@@ -80,7 +71,7 @@ export function Desktop() {
       .sort((a, b) => a.name.localeCompare(b.name))
       .map<FloatingDockItem>((app) => ({
         title: app.name,
-        subtitle: "Installed",
+        subtitle: "Run",
         icon: <DockIcon>{getAppIcon(app.appId)}</DockIcon>,
         kind: "app",
         onClick: () => openSurfaceById(app.appId),
@@ -97,11 +88,11 @@ export function Desktop() {
         title: "Identity",
         icon: <DockIcon><IdCard className="h-5 w-5" /></DockIcon>,
         kind: "trigger",
-        onClick: openIdentity,
+        onClick: () => openSurfaceById("identity"),
       },
       {
         title: "Network",
-        subtitle: "nodes",
+        subtitle: "canvas",
         icon: <DockIcon><Network className="h-5 w-5" /></DockIcon>,
         kind: "trigger",
         onClick: () => openSurfaceById("compute-node"),
@@ -120,10 +111,9 @@ export function Desktop() {
         onClick: () => openSurfaceById("settings"),
       },
     ]
-  }, [catalogAppList, installedAppIds, openIdentity, openSurfaceById])
+  }, [catalogAppList, installedAppIds, openSurfaceById])
 
   const dockContext = useMemo<FloatingDockContext>(() => ({ mode: "apps" }), [])
-  const showDesktopChrome = true
 
   const handleDockCommand = useCallback(async (command: string) => {
     return executeUiCommand(command, "dock")
@@ -158,6 +148,9 @@ export function Desktop() {
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-black">
+      <div className="absolute inset-0 z-0">
+        <NodePolicyGraph />
+      </div>
       <div className="fixed bottom-2 left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-1">
         <FloatingDock
           items={dockItems}
@@ -169,17 +162,6 @@ export function Desktop() {
         <DevToolsStrip />
       </div>
       <AgentUiBridge />
-      {showDesktopChrome ? <ProjectChecklist /> : null}
-      {showDesktopChrome ? <ProfileMenu /> : null}
-      {showDesktopChrome ? (
-        <AppOverlayHost
-          surfaces={appSurfaces}
-          surfaceOrder={appSurfaceOrder}
-          focusedSurfaceId={focusedAppSurfaceId}
-          onFocus={focusAppSurface}
-          onClose={handleCloseAppSurface}
-        />
-      ) : null}
       {pendingGate ? (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
           <div className="h-[min(620px,calc(100vh-2rem))] w-[min(460px,calc(100vw-2rem))] overflow-hidden rounded-xl border border-border bg-background shadow-2xl">
