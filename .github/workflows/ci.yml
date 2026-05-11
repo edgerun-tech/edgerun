@@ -112,6 +112,28 @@ jobs:
       - name: Docker build check
         run: docker build --target builder --file Dockerfile .
 
+  edgerun-work-protocol:
+    needs: repository-hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: edgerun-work std tests
+        run: cargo test -p edgerun-work
+
+      - name: edgerun-work no-std tests
+        run: cargo test -p edgerun-work --no-default-features
+
+      - name: edgerun-work wasm build
+        run: cargo build -p edgerun-work --target wasm32-unknown-unknown --release --no-default-features
+
   quality:
     needs: repository-hygiene
     runs-on: ubuntu-latest
