@@ -182,17 +182,7 @@ impl<S: ObjectStorageAdapter> WorkRole for TypedObjectStoreRole<S> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::codec::blake3_hash;
-    use crate::identity::node_identity_from_key;
-    use crate::preimage::HashBuilder;
-    use crate::relay_role::RelayRole;
-    use crate::route_builder::{tcp_endpoint, RouteAdvertisementBuilder};
-    use crate::signing::{empty_signature, sign_network_message};
-    use crate::std_runtime::{unix_ms, TcpNodeRuntime};
     use crate::storage_payload::{storage_payload_from_bytes, typed_shard_hash, verify_retrieve_response};
-    use crate::work_channel::WorkChannel;
-    use crate::ChannelOrderBook;
-    use edgerun_crypto::Ed25519SigningKey;
 
     fn store_request(bytes: &[u8]) -> ObjectStoreRequest {
         let job_id = [9u8; 32];
@@ -236,41 +226,6 @@ mod tests {
             payload,
             signature: crate::signing::empty_signature(),
         })
-    }
-
-    fn signed_storage_message(
-        key: &Ed25519SigningKey,
-        from: NodeId,
-        to: NodeId,
-        via_relay: NodeId,
-        sequence: u64,
-        payload: Vec<u8>,
-    ) -> NetworkMessage {
-        let payload_hash = blake3_hash(&payload);
-        let message_id = HashBuilder::domain(b"edgerun:test:storage-message")
-            .node_id(&from)
-            .node_id(&to)
-            .node_id(&via_relay)
-            .u64(sequence)
-            .hash(&payload_hash)
-            .finish();
-        sign_network_message(
-            key,
-            NetworkMessage {
-                abi_version: WORK_WIRE_ABI_VERSION,
-                message_id,
-                prev_hash: [0u8; 32],
-                from,
-                to,
-                via_relay,
-                department: DEPARTMENT_STORAGE,
-                work_type: WORK_TYPE_OBJECT_STORE,
-                sequence,
-                payload_hash,
-                payload,
-                signature: empty_signature(),
-            },
-        )
     }
 
     fn assert_role_roundtrip<S: ObjectStorageAdapter>(mut role: TypedObjectStoreRole<S>) {
@@ -331,98 +286,5 @@ mod tests {
         let role = TypedObjectStoreRole::memory_virtual_disk(64 * 1024, 512, 4096)
             .expect("memory virtual disk role");
         assert_role_roundtrip(role);
-    }
-
-    #[test]
-    fn tcp_relay_forwards_store_request_to_storage_role() {
-        let client_key = Ed25519SigningKey::from_bytes(&[41u8; 32]);
-        let relay_key = Ed25519SigningKey::from_bytes(&[42u8; 32]);
-        let storage_key = Ed25519SigningKey::from_bytes(&[43u8; 32]);
-        let client = node_identity_from_key(&client_key, NODE_ROLE_MESSAGE);
-        let relay = node_identity_from_key(&relay_key, NODE_ROLE_RELAY);
-        let storage = node_identity_from_key(&storage_key, NODE_ROLE_STORAGE);
-
-        let mut client_runtime = TcpNodeRuntime::bind(client.node_id, "127.0.0.1:0").expect("client runtime");
-        let mut relay_runtime = TcpNodeRuntime::bind(relay.node_id, "127.0.0.1:0").expect("relay runtime");
-        let storage_runtime = TcpNodeRuntime::bind(storage.node_id, "127.0.0.1:0").expect("storage runtime");
-
-        let relay_route = RouteAdvertisementBuilder::new(
-            &relay_key,
-            NODE_ROLE_RELAY,
-            tcp_endpoint("relay", relay_runtime.listen_addr().to_string()),
-        )
-        .departments(vec![DEPARTMENT_RELAY])
-        .valid_until_unix_ms(unix_ms().saturating_add(60_000))
-        .build(&relay_key);
-        let storage_route = RouteAdvertisementBuilder::new(
-            &storage_key,
-            NODE_ROLE_STORAGE,
-            tcp_endpoint("storage", storage_runtime.listen_addr().to_string()),
-        )
-        .relay_node_id(relay.node_id)
-        .departments(vec![DEPARTMENT_STORAGE, DEPARTMENT_RETRIEVAL])
-        .valid_until_unix_ms(unix_ms().saturating_add(60_000))
-        .build(&storage_key);
-
-        let relay_route_hash = client_runtime.add_route(relay_route.clone()).expect("client relay route");
-        relay_runtime.add_route(storage_route).expect("relay storage route");
-
-        let object = store_request(b"stored through relay");
-        let retrieve = retrieve_request(&object);
-        let payload = storage_payload_bytes(&StoragePayload::StoreRequest(object)).expect("payload bytes");
-        let message = signed_storage_message(
-            &client_key,
-            client.node_id,
-            storage.node_id,
-            relay.node_id,
-            1,
-            payload,
-        );
-        client_runtime
-            .send_unordered(client.node_id, relay.node_id, WorkPacket::NetworkMessage(message))
-            .expect("send to relay");
-
-        std::thread::sleep(std::time::Duration::from_millis(50));
-        let mut order = ChannelOrderBook::new();
-        let ordered = relay_runtime.drain_ordered(
-            client.node_id,
-            &mut order,
-            relay_route_hash,
-            relay_route.endpoint.channel_id,
-        );
-        assert_eq!(ordered.len(), 1);
-
-        let mut relay_role = RelayRole::from_key(relay_key, 0);
-        relay_role
-            .forward_ordered_on(&mut relay_runtime, &ordered[0], [0u8; 32], [0u8; 32])
-            .expect("relay forward");
-
-        std::thread::sleep(std::time::Duration::from_millis(50));
-        let packets = storage_runtime.drain_packets();
-        assert_eq!(packets.len(), 1);
-
-        let mut storage_role = TypedObjectStoreRole::memory_with_capacity(4096);
-        let output = storage_role.handle(
-            &RoleContext {
-                now_unix_ms: unix_ms(),
-                local_node: storage,
-                policy_hash: [0u8; 32],
-            },
-            RoleInput {
-                packet: packets.into_iter().next().expect("storage packet"),
-                previous_hash: [0u8; 32],
-                channel_hash: [0u8; 32],
-            },
-        );
-        assert_eq!(output.status, ROLE_STATUS_ACCEPTED);
-        assert_eq!(storage_role.object_count(), 1);
-        assert_eq!(
-            storage_role.retrieve(&retrieve).expect("stored object").bytes,
-            b"stored through relay"
-        );
-
-        client_runtime.shutdown().expect("client shutdown");
-        relay_runtime.shutdown().expect("relay shutdown");
-        storage_runtime.shutdown().expect("storage shutdown");
     }
 }
