@@ -4,9 +4,10 @@ use edgerun_crypto::Ed25519SigningKey;
 
 use crate::channel_order::OrderedChannelEnvelope;
 use crate::codec::{blake3_hash, empty_signature, node_identity_from_key, sign_work_receipt};
-use crate::memory_channel::{route_hash, MemoryChannelEngine, MemoryChannelError};
+use crate::memory_channel::{MemoryChannelEngine, MemoryChannelError};
 use crate::protocol::*;
 use crate::settlement::receipt_id_for_claim;
+use crate::work_channel::{MemoryWorkChannel, WorkChannel, WorkChannelError};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RelayRoleError {
@@ -14,7 +15,8 @@ pub enum RelayRoleError {
     WrongRelay,
     NotNetworkMessage,
     DestinationRouteMissing,
-    Delivery(MemoryChannelError),
+    DeliveryFailed,
+    LegacyMemoryDelivery(MemoryChannelError),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -44,9 +46,9 @@ impl RelayRole {
         Self { key, identity, sequence: 0, price_per_message }
     }
 
-    pub fn forward_ordered(
+    pub fn forward_ordered_on<C: WorkChannel>(
         &mut self,
-        channel: &mut MemoryChannelEngine,
+        channel: &mut C,
         ordered: &OrderedChannelEnvelope,
         request_hash: Hash,
         admission_hash: Hash,
@@ -61,14 +63,45 @@ impl RelayRole {
             return Err(RelayRoleError::WrongRelay);
         }
         let destination_route_hash = channel
-            .route_for(&message.to)
-            .map(route_hash)
+            .route_hash_for(&message.to)
             .ok_or(RelayRoleError::DestinationRouteMissing)?;
         let forwarded_packet = ordered.envelope.packet.clone();
         let forwarded_packet_hash = blake3_hash(&crate::codec::packet_bytes(&forwarded_packet).unwrap_or_default());
         channel
-            .deliver(self.identity.node_id, message.to, forwarded_packet)
-            .map_err(RelayRoleError::Delivery)?;
+            .send_unordered(self.identity.node_id, message.to, forwarded_packet)
+            .map_err(|_| RelayRoleError::DeliveryFailed)?;
+        Ok(self.finish_delivery_receipt(
+            message.to,
+            destination_route_hash,
+            forwarded_packet_hash,
+            ordered,
+            request_hash,
+            admission_hash,
+        ))
+    }
+
+    pub fn forward_ordered(
+        &mut self,
+        channel: &mut MemoryChannelEngine,
+        ordered: &OrderedChannelEnvelope,
+        request_hash: Hash,
+        admission_hash: Hash,
+    ) -> Result<RelayDeliveryResult, RelayRoleError> {
+        let mut adapter = MemoryWorkChannel::from_engine(channel.clone());
+        let result = self.forward_ordered_on(&mut adapter, ordered, request_hash, admission_hash)?;
+        *channel = adapter.into_engine();
+        Ok(result)
+    }
+
+    fn finish_delivery_receipt(
+        &mut self,
+        delivered_to: NodeId,
+        destination_route_hash: Hash,
+        forwarded_packet_hash: Hash,
+        ordered: &OrderedChannelEnvelope,
+        request_hash: Hash,
+        admission_hash: Hash,
+    ) -> RelayDeliveryResult {
         self.sequence = self.sequence.saturating_add(1);
         let receipt_id = receipt_id_for_claim(
             request_hash,
@@ -95,12 +128,18 @@ impl RelayRole {
                 signature: empty_signature(),
             },
         );
-        Ok(RelayDeliveryResult {
-            delivered_to: message.to,
+        RelayDeliveryResult {
+            delivered_to,
             destination_route_hash,
             forwarded_packet_hash,
             receipt,
-        })
+        }
+    }
+}
+
+impl From<WorkChannelError> for RelayRoleError {
+    fn from(_value: WorkChannelError) -> Self {
+        RelayRoleError::DeliveryFailed
     }
 }
 
