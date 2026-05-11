@@ -1,6 +1,6 @@
-use edgerun_work::*;
-use edgerun_work::channel::{ChannelEndpoint, CHANNEL_KIND_MEMORY};
 use edgerun_crypto::Ed25519SigningKey;
+use edgerun_work::channel::{ChannelEndpoint, CHANNEL_KIND_MEMORY};
+use edgerun_work::*;
 
 fn signed_storage_admission(
     admission: &SimNode,
@@ -19,7 +19,8 @@ fn signed_storage_admission(
         WorkAdmission {
             abi_version: WORK_WIRE_ABI_VERSION,
             admission_id: blake3_hash(&request_hash),
-            dao_id: user,
+            dao_id: admission.identity.public_key,
+            user,
             admission_node: admission.identity.clone(),
             request_hash,
             assigned_route_hash: blake3_hash(b"settlement-route"),
@@ -105,9 +106,10 @@ fn erasure_storage_receipts_debit_user_and_pay_storage_nodes() {
             index as u64 + 1,
         );
         let result = ledger
-            .settle_receipt(user, &admission_doc, &receipt)
+            .settle_receipt(&admission_doc, &receipt)
             .expect("settle shard receipt");
         assert_eq!(result.amount, 10);
+        assert_eq!(result.user, user);
     }
 
     assert_eq!(ledger.user_balance(&user), 70);
@@ -142,17 +144,45 @@ fn settlement_rejects_duplicate_and_over_budget_receipts() {
 
     let receipt = signed_storage_receipt(&storage0, request_hash, admission_hash, &shards[0], 10, 1);
     ledger
-        .settle_receipt(user, &admission_doc, &receipt)
+        .settle_receipt(&admission_doc, &receipt)
         .expect("first settlement");
 
     assert!(matches!(
-        ledger.settle_receipt(user, &admission_doc, &receipt),
+        ledger.settle_receipt(&admission_doc, &receipt),
         Err(SettlementError::DuplicateReceipt)
     ));
 
     let receipt2 = signed_storage_receipt(&storage1, request_hash, admission_hash, &shards[1], 10, 2);
     assert!(matches!(
-        ledger.settle_receipt(user, &admission_doc, &receipt2),
+        ledger.settle_receipt(&admission_doc, &receipt2),
         Err(SettlementError::ClaimExceedsAdmissionBudget)
     ));
+}
+
+#[test]
+fn settlement_charges_only_user_committed_in_admission() {
+    let admission = SimNode::from_seed(131, NODE_ROLE_ADMISSION);
+    let real_user_key = Ed25519SigningKey::from_bytes(&[132u8; 32]);
+    let fake_user_key = Ed25519SigningKey::from_bytes(&[133u8; 32]);
+    let mut real_user = [0u8; 32];
+    let mut fake_user = [0u8; 32];
+    real_user.copy_from_slice(real_user_key.verifying_key().as_bytes());
+    fake_user.copy_from_slice(fake_user_key.verifying_key().as_bytes());
+    let storage = SimNode::from_seed(134, NODE_ROLE_STORAGE);
+    let nodes = [storage.identity.node_id, storage.identity.node_id, storage.identity.node_id];
+
+    let (manifest, shards) = encode_xor_2_1(b"charge bound user", nodes).expect("encode");
+    let admission_doc = signed_storage_admission(&admission, real_user, manifest.job_id, 10);
+    let admission_hash = work_admission_hash(&admission_doc).expect("admission hash");
+    let receipt = signed_storage_receipt(&storage, manifest.job_id, admission_hash, &shards[0], 10, 1);
+
+    let mut ledger = SettlementLedger::new();
+    ledger.deposit_user_credit(real_user, 100);
+    ledger.deposit_user_credit(fake_user, 1000);
+    ledger
+        .settle_receipt(&admission_doc, &receipt)
+        .expect("settlement debits real user");
+
+    assert_eq!(ledger.user_balance(&real_user), 90);
+    assert_eq!(ledger.user_balance(&fake_user), 1000);
 }
