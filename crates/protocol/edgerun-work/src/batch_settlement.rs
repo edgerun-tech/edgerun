@@ -33,7 +33,7 @@ pub struct BatchSettlementResult {
 }
 
 impl SettlementLedger {
-    pub fn settle_receipt_batch(
+    pub fn settle_receipt_batch_unchecked_evidence(
         &mut self,
         admission: &WorkAdmission,
         receipts: &[WorkReceipt],
@@ -42,7 +42,7 @@ impl SettlementLedger {
         let mut committed = self.clone();
         for receipt in receipts {
             committed
-                .settle_receipt(admission, receipt)
+                .settle_receipt_unchecked_evidence(admission, receipt)
                 .map_err(|error| match error {
                     SettlementError::DuplicateReceipt => BatchSettlementError::DuplicateAlreadyPaid,
                     other => BatchSettlementError::Settlement(other),
