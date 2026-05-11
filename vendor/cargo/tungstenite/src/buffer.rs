@@ -6,8 +6,6 @@
 
 use std::io::{Cursor, Read, Result as IoResult};
 
-use bytes::Buf;
-
 /// A FIFO buffer for reading packets from the network.
 #[derive(Debug)]
 pub struct ReadBuffer<const CHUNK_SIZE: usize> {
@@ -41,6 +39,22 @@ impl<const CHUNK_SIZE: usize> ReadBuffer<CHUNK_SIZE> {
         &mut self.storage
     }
 
+    pub fn remaining(&self) -> usize {
+        self.storage.get_ref().len().saturating_sub(self.storage.position() as usize)
+    }
+
+    pub fn chunk(&self) -> &[u8] {
+        let position = self.storage.position() as usize;
+        &self.storage.get_ref()[position..]
+    }
+
+    pub fn advance(&mut self, cnt: usize) {
+        let mut position = self.storage.position();
+        position = position.saturating_add(cnt as u64);
+        let max = self.storage.get_ref().len() as u64;
+        self.storage.set_position(position.min(max));
+    }
+
     /// Consume the `ReadBuffer` and get the internal storage.
     pub fn into_vec(mut self) -> Vec<u8> {
         // Current implementation of `tungstenite-rs` expects that the `into_vec()` drains
@@ -64,20 +78,6 @@ impl<const CHUNK_SIZE: usize> ReadBuffer<CHUNK_SIZE> {
         let pos = self.storage.position() as usize;
         self.storage.get_mut().drain(0..pos).count();
         self.storage.set_position(0);
-    }
-}
-
-impl<const CHUNK_SIZE: usize> Buf for ReadBuffer<CHUNK_SIZE> {
-    fn remaining(&self) -> usize {
-        Buf::remaining(self.as_cursor())
-    }
-
-    fn chunk(&self) -> &[u8] {
-        Buf::chunk(self.as_cursor())
-    }
-
-    fn advance(&mut self, cnt: usize) {
-        Buf::advance(self.as_cursor_mut(), cnt);
     }
 }
 

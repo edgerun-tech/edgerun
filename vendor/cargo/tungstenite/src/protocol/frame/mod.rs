@@ -172,7 +172,7 @@ impl FrameCodec {
                 let mut cursor = Cursor::new(&mut self.in_buffer);
                 self.header = FrameHeader::parse(&mut cursor)?;
                 let advanced = cursor.position();
-                bytes::Buf::advance(&mut self.in_buffer, advanced as _);
+                self.in_buffer.advance(advanced as _);
 
                 if let Some((_, len)) = &self.header {
                     let len = *len as usize;

@@ -1,6 +1,5 @@
 //! WebSocket handshake machine.
 
-use bytes::Buf;
 use log::*;
 use std::io::{Cursor, Read, Write};
 
@@ -9,6 +8,22 @@ use crate::{
     util::NonBlockingResult,
     ReadBuffer,
 };
+
+fn cursor_chunk(cursor: &Cursor<Vec<u8>>) -> &[u8] {
+    let position = cursor.position() as usize;
+    &cursor.get_ref()[position..]
+}
+
+fn cursor_has_remaining(cursor: &Cursor<Vec<u8>>) -> bool {
+    cursor.position() < cursor.get_ref().len() as u64
+}
+
+fn cursor_advance(cursor: &mut Cursor<Vec<u8>>, size: usize) {
+    let mut position = cursor.position();
+    position = position.saturating_add(size as u64);
+    let max = cursor.get_ref().len() as u64;
+    cursor.set_position(position.min(max));
+}
 
 /// A generic handshake state machine.
 #[derive(Debug)]
@@ -50,7 +65,7 @@ impl<Stream: Read + Write> HandshakeMachine<Stream> {
                         // TODO: this is slow for big headers with too many small packets.
                         // The parser has to be reworked in order to work on streams instead
                         // of buffers.
-                        Ok(if let Some((size, obj)) = Obj::try_parse(Buf::chunk(&buf))? {
+                        Ok(if let Some((size, obj)) = Obj::try_parse(cursor_chunk(&buf))? {
                             buf.advance(size);
                             RoundResult::StageFinished(StageResult::DoneReading {
                                 result: obj,
@@ -71,11 +86,11 @@ impl<Stream: Read + Write> HandshakeMachine<Stream> {
                 }
             }
             HandshakeState::Writing(mut buf) => {
-                assert!(buf.has_remaining());
-                if let Some(size) = self.stream.write(Buf::chunk(&buf)).no_block()? {
+                assert!(cursor_has_remaining(&buf));
+                if let Some(size) = self.stream.write(cursor_chunk(&buf)).no_block()? {
                     assert!(size > 0);
-                    buf.advance(size);
-                    Ok(if buf.has_remaining() {
+                    cursor_advance(&mut buf, size);
+                    Ok(if cursor_has_remaining(&buf) {
                         RoundResult::Incomplete(HandshakeMachine {
                             state: HandshakeState::Writing(buf),
                             ..self
