@@ -20,7 +20,7 @@ virtual-disk = [
 ]
 
 [dependencies]
-edgerun-crypto = { workspace = true, default-features = false, features = ["ed25519"] }
+edgerun-crypto = { workspace = true, default-features = false, features = ["ed25519", "x25519", "aead", "hmac"] }
 edgerun-protocols = { workspace = true, default-features = false, optional = true }
 edgerun-virtual-disk = { workspace = true, default-features = false, features = ["std"], optional = true }
 edgerun-wire = { workspace = true, default-features = false }
