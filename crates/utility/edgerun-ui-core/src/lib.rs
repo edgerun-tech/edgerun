@@ -7,6 +7,9 @@
 //! pixel buffer so compositor, terminal, framebuffer, browser canvas, and
 //! remote renderers can share one visual language.
 
+pub mod icons;
+pub mod visual;
+
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Color {
     pub b: u8,
