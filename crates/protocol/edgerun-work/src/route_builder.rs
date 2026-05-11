@@ -9,6 +9,8 @@ use crate::codec::{blake3_hash, empty_signature, node_identity_from_key};
 use crate::protocol::*;
 use crate::route_auth::sign_route_advertisement;
 
+const CHANNEL_ENDPOINT_ID_DOMAIN: &[u8] = b"edgerun:v1:work:channel-endpoint";
+
 pub struct RouteAdvertisementBuilder {
     node: NodeIdentity,
     relay_node_id: NodeId,
@@ -88,7 +90,7 @@ impl RouteAdvertisementBuilder {
 }
 
 pub fn memory_endpoint(label: impl Into<String>, seed: &[u8]) -> ChannelEndpoint {
-    ChannelEndpoint::new(blake3_hash(seed), CHANNEL_KIND_MEMORY, Vec::new(), label.into())
+    ChannelEndpoint::new(endpoint_channel_id(CHANNEL_KIND_MEMORY, seed), CHANNEL_KIND_MEMORY, Vec::new(), label.into())
 }
 
 pub fn quic_endpoint(label: impl Into<String>, address: impl AsRef<[u8]>) -> ChannelEndpoint {
@@ -103,11 +105,21 @@ pub fn websocket_endpoint(label: impl Into<String>, url: impl AsRef<[u8]>) -> Ch
     endpoint_from_address(CHANNEL_KIND_WEBSOCKET, label, url)
 }
 
+pub fn endpoint_channel_id(kind: u16, address_or_seed: &[u8]) -> ChannelId {
+    let mut input = Vec::new();
+    input.extend_from_slice(CHANNEL_ENDPOINT_ID_DOMAIN);
+    input.push(0);
+    input.extend_from_slice(&kind.to_be_bytes());
+    input.extend_from_slice(&(address_or_seed.len() as u64).to_be_bytes());
+    input.extend_from_slice(address_or_seed);
+    blake3_hash(&input)
+}
+
 fn endpoint_from_address(
     kind: u16,
     label: impl Into<String>,
     address: impl AsRef<[u8]>,
 ) -> ChannelEndpoint {
     let address = address.as_ref().to_vec();
-    ChannelEndpoint::new(blake3_hash(&address), kind, address, label.into())
+    ChannelEndpoint::new(endpoint_channel_id(kind, &address), kind, address, label.into())
 }
