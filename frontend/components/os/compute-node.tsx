@@ -1,7 +1,7 @@
 "use client"
 
-import { AdmissionNetworkMinimal } from "@/components/admission-network-minimal"
+import { AdmissionNetworkEditor } from "@/components/admission-network-editor"
 
 export function ComputeNode() {
-  return <AdmissionNetworkMinimal />
+  return <AdmissionNetworkEditor />
 }
