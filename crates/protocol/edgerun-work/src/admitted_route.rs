@@ -23,7 +23,8 @@ pub struct AdmittedCapabilityRoute {
     pub role: u16,
     pub department: u16,
     pub work_type: u16,
-    pub route_hash: Hash,
+    pub admission_relay_route_hash: Hash,
+    pub worker_route_hash: Hash,
     pub policy_hash: Hash,
     pub admitted_budget: u64,
     pub valid_until_unix_ms: u64,
@@ -40,7 +41,8 @@ pub fn admitted_capability_route_id(value: &AdmittedCapabilityRoute) -> Hash {
         .u16(value.role)
         .u16(value.department)
         .u16(value.work_type)
-        .hash(&value.route_hash)
+        .hash(&value.admission_relay_route_hash)
+        .hash(&value.worker_route_hash)
         .hash(&value.policy_hash)
         .u64(value.admitted_budget)
         .u64(value.valid_until_unix_ms)
@@ -50,13 +52,13 @@ pub fn admitted_capability_route_id(value: &AdmittedCapabilityRoute) -> Hash {
 pub fn admitted_capability_route_from_parts(
     request: &WorkRequest,
     admission: &WorkAdmission,
-    route: &RouteAdvertisement,
+    worker_route: &RouteAdvertisement,
     source_node_id: NodeId,
 ) -> Result<AdmittedCapabilityRoute, WorkProtocolError> {
     if request.abi_version != WORK_WIRE_ABI_VERSION || admission.abi_version != WORK_WIRE_ABI_VERSION {
         return Err(WorkProtocolError::InvalidShape);
     }
-    if !verify_work_admission(admission) || !verify_available_route_advertisement(route) {
+    if !verify_work_admission(admission) || !verify_available_route_advertisement(worker_route) {
         return Err(WorkProtocolError::InvalidSignature);
     }
     let request_hash = packet_hash(&WorkPacket::WorkRequest(request.clone()))?;
@@ -66,20 +68,19 @@ pub fn admitted_capability_route_from_parts(
     if admission.user != request.user {
         return Err(WorkProtocolError::InvalidShape);
     }
-    if request.recipient != route.node.node_id {
+    if request.recipient != worker_route.node.node_id {
         return Err(WorkProtocolError::UnknownNode);
     }
-    if !route.roles.contains(&route.node.role) || !route.departments.contains(&request.department) {
+    if !worker_route.roles.contains(&worker_route.node.role)
+        || !worker_route.departments.contains(&request.department)
+    {
         return Err(WorkProtocolError::Unsupported);
     }
-    if route.valid_until_unix_ms < admission.valid_until_unix_ms {
+    if worker_route.valid_until_unix_ms < admission.valid_until_unix_ms {
         return Err(WorkProtocolError::Expired);
     }
-    if route.relay_node_id == route.node.node_id {
+    if worker_route.relay_node_id == worker_route.node.node_id {
         return Err(WorkProtocolError::WrongRelay);
-    }
-    if admission.assigned_route_hash != crate::memory_channel::route_hash(route) {
-        return Err(WorkProtocolError::HashMismatch);
     }
 
     let admission_hash = packet_hash(&WorkPacket::WorkAdmission(admission.clone()))?;
@@ -90,12 +91,13 @@ pub fn admitted_capability_route_from_parts(
         admission_hash,
         user: request.user,
         source_node_id,
-        target_node_id: route.node.node_id,
-        relay_node_id: route.relay_node_id,
-        role: route.node.role,
+        target_node_id: worker_route.node.node_id,
+        relay_node_id: worker_route.relay_node_id,
+        role: worker_route.node.role,
         department: request.department,
         work_type: request.work_type,
-        route_hash: admission.assigned_route_hash,
+        admission_relay_route_hash: admission.assigned_route_hash,
+        worker_route_hash: crate::memory_channel::route_hash(worker_route),
         policy_hash: admission.policy_hash,
         admitted_budget: admission.admitted_budget,
         valid_until_unix_ms: admission.valid_until_unix_ms,
@@ -108,9 +110,9 @@ pub fn verify_admitted_capability_route(
     value: &AdmittedCapabilityRoute,
     request: &WorkRequest,
     admission: &WorkAdmission,
-    route: &RouteAdvertisement,
+    worker_route: &RouteAdvertisement,
 ) -> Result<(), WorkProtocolError> {
-    let expected = admitted_capability_route_from_parts(request, admission, route, value.source_node_id)?;
+    let expected = admitted_capability_route_from_parts(request, admission, worker_route, value.source_node_id)?;
     if &expected != value {
         return Err(WorkProtocolError::HashMismatch);
     }
