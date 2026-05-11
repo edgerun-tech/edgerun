@@ -84,6 +84,9 @@ fn relay_forwards_ordered_message_to_final_node_and_gets_paid() {
     assert_eq!(result.delivered_to, receiver.identity.node_id);
     assert_eq!(result.destination_route_hash, receiver_route_hash);
     assert_eq!(result.receipt.total_claim, 3);
+    assert_eq!(result.receipt.output_hash, result.transit_hash);
+    assert_eq!(relay.last_transit_hash, result.transit_hash);
+    assert_ne!(result.transit_hash, result.forwarded_packet_hash);
 
     let mut inbox = channel.drain_inbox(receiver.identity.node_id);
     assert_eq!(inbox.len(), 1);
@@ -104,6 +107,66 @@ fn relay_forwards_ordered_message_to_final_node_and_gets_paid() {
     assert_eq!(settle.amount, 3);
     assert_eq!(ledger.user_balance(&user), 7);
     assert_eq!(ledger.worker_balance(&relay.identity.node_id), 3);
+}
+
+#[test]
+fn relay_transit_hashes_chain_across_forwarded_packets() {
+    let mut sender = SimNode::from_seed(146, NODE_ROLE_MESSAGE);
+    let receiver = SimNode::from_seed(147, NODE_ROLE_MESSAGE);
+    let relay_node = SimNode::from_seed(148, NODE_ROLE_RELAY);
+    let mut relay = RelayRole::from_seed(148, 1);
+    let mut channel = MemoryChannelEngine::new();
+    channel
+        .add_route(relay_node.advertise_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_RELAY]))
+        .expect("relay route");
+    channel
+        .add_route(receiver.advertise_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_MESSAGE]))
+        .expect("receiver route");
+
+    let first = sender.message_to(
+        receiver.identity.node_id,
+        relay_node.identity.node_id,
+        DEPARTMENT_MESSAGE,
+        WORK_TYPE_MESSAGE_DELIVER,
+        b"first".to_vec(),
+    );
+    let first_to_relay = deliver_ordered(
+        &mut channel,
+        &mut sender.order,
+        sender.identity.node_id,
+        relay_node.identity.node_id,
+        first,
+    )
+    .expect("first ordered");
+    let first_result = relay
+        .forward_ordered(&mut channel, &first_to_relay, [1u8; 32], [2u8; 32])
+        .expect("first forwarded");
+
+    let second = sender.message_to(
+        receiver.identity.node_id,
+        relay_node.identity.node_id,
+        DEPARTMENT_MESSAGE,
+        WORK_TYPE_MESSAGE_DELIVER,
+        b"second".to_vec(),
+    );
+    let second_to_relay = deliver_ordered(
+        &mut channel,
+        &mut sender.order,
+        sender.identity.node_id,
+        relay_node.identity.node_id,
+        second,
+    )
+    .expect("second ordered");
+    let second_result = relay
+        .forward_ordered(&mut channel, &second_to_relay, [1u8; 32], [2u8; 32])
+        .expect("second forwarded");
+
+    assert_ne!(first_result.transit_hash, second_result.transit_hash);
+    assert_eq!(relay.last_transit_hash, second_result.transit_hash);
+    assert_eq!(first_result.receipt.output_hash, first_result.transit_hash);
+    assert_eq!(second_result.receipt.output_hash, second_result.transit_hash);
+    assert_eq!(first_result.receipt.sequence, 1);
+    assert_eq!(second_result.receipt.sequence, 2);
 }
 
 #[test]
