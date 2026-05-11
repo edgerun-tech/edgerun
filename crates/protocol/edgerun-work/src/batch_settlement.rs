@@ -10,6 +10,7 @@ pub enum BatchSettlementError {
     EmptyBatch,
     Settlement(SettlementError),
     DuplicateInBatch,
+    DuplicateAlreadyPaid,
     ReceiptHashFailed,
     InvalidBatchRoot,
 }
@@ -38,6 +39,24 @@ impl SettlementLedger {
         receipts: &[WorkReceipt],
     ) -> Result<BatchSettlementResult, BatchSettlementError> {
         let batch = build_receipt_batch(admission, receipts)?;
+        if self.user_balance(&admission.user) < batch.total_claim {
+            return Err(BatchSettlementError::Settlement(SettlementError::InsufficientBalance));
+        }
+        let already_spent = self.admission_spent(&batch.admission_hash);
+        if already_spent.saturating_add(batch.total_claim) > admission.admitted_budget {
+            return Err(BatchSettlementError::Settlement(
+                SettlementError::ClaimExceedsAdmissionBudget,
+            ));
+        }
+        for receipt_hash in &batch.receipt_hashes {
+            if self.is_receipt_paid(receipt_hash) {
+                return Err(BatchSettlementError::DuplicateAlreadyPaid);
+            }
+        }
+        for receipt in receipts {
+            self.can_settle_receipt(admission, receipt)
+                .map_err(BatchSettlementError::Settlement)?;
+        }
         for receipt in receipts {
             self.settle_receipt(admission, receipt)
                 .map_err(BatchSettlementError::Settlement)?;
