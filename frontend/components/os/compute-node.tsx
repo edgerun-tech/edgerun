@@ -1,7 +1,7 @@
 "use client"
 
-import { NodeNetworkBuilder } from "@/components/node-network-builder"
+import { NodePolicyGraph } from "@/components/node-policy-graph"
 
 export function ComputeNode() {
-  return <NodeNetworkBuilder />
+  return <NodePolicyGraph />
 }
