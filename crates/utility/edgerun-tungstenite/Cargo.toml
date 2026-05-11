@@ -21,7 +21,7 @@ edgerun-encoding = { workspace = true, default-features = false }
 edgerun-random = { workspace = true }
 http = { package = "edgerun-http", version = "0.1", path = "../edgerun-http" }
 rustls = { package = "edgerun-rusttls", path = "../edgerun-rusttls", default-features = false, optional = true }
-tungstenite = { path = "../../vendor/cargo/tungstenite", default-features = false }
+tungstenite = { path = "../../../vendor/cargo/tungstenite", default-features = false }
 
 [lints]
 workspace = true

@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "Edgerun shim for tree-sitter"
 
 [dependencies]
-tree-sitter = { path = "../../vendor/cargo/tree-sitter" }
+tree-sitter = { path = "../../../vendor/cargo/tree-sitter" }
 
 [lints]
 workspace = true

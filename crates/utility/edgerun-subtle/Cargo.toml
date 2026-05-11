@@ -8,8 +8,6 @@ repository = "https://github.com/Sylchi/edgerun_reference_core"
 homepage = "https://github.com/Sylchi/edgerun_reference_core"
 description = "Edgerun-owned no_std constant-time choice and comparison primitives"
 
-[workspace]
-
 [features]
 default = []
 std = []

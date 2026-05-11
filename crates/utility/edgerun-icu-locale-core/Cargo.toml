@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "Edgerun shim for icu_locale_core"
 
 [dependencies]
-icu_locale_core = { path = "../../vendor/cargo/icu_locale_core" }
+icu_locale_core = { path = "../../../vendor/cargo/icu_locale_core" }
 
 [lints]
 workspace = true

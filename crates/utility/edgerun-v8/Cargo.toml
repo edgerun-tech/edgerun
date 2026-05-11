@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "Edgerun shim for v8"
 
 [dependencies]
-v8 = { path = "../../vendor/cargo/v8" }
+v8 = { path = "../../../vendor/cargo/v8" }
 
 [features]
 default = []

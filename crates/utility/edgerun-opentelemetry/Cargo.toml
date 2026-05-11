@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "Edgerun shim for opentelemetry"
 
 [dependencies]
-opentelemetry = { path = "../../vendor/cargo/opentelemetry" }
+opentelemetry = { path = "../../../vendor/cargo/opentelemetry" }
 
 [lints]
 workspace = true

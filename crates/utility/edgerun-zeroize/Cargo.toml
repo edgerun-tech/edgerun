@@ -8,8 +8,6 @@ repository = "https://github.com/Sylchi/edgerun_reference_core"
 homepage = "https://github.com/Sylchi/edgerun_reference_core"
 description = "Edgerun-owned no_std memory zeroization primitives"
 
-[workspace]
-
 [features]
 default = ["alloc"]
 alloc = []

@@ -12,13 +12,13 @@ description = "Edgerun shim for rustls-native-certs"
 pki_types = { package = "edgerun-rustls-pki-types", path = "../edgerun-rustls-pki-types", default-features = false, features = ["alloc"] }
 
 [target.'cfg(all(unix, not(target_os = "macos")))'.dependencies]
-openssl-probe = { package = "openssl-probe", path = "../../vendor/cargo/openssl-probe" }
+openssl-probe = { package = "openssl-probe", path = "../../../vendor/cargo/openssl-probe" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-security-framework = { package = "security-framework", path = "../../vendor/cargo/security-framework" }
+security-framework = { package = "security-framework", path = "../../../vendor/cargo/security-framework" }
 
 [target.'cfg(windows)'.dependencies]
-schannel = { package = "schannel", path = "../../vendor/cargo/schannel" }
+schannel = { package = "schannel", path = "../../../vendor/cargo/schannel" }
 
 [lints]
 workspace = true
