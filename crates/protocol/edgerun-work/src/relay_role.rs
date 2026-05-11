@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 use edgerun_crypto::Ed25519SigningKey;
 
 use crate::channel_order::OrderedChannelEnvelope;
-use crate::codec::{blake3_hash, empty_signature, node_identity_from_key, sign_work_receipt};
+use crate::codec::{blake3_hash, empty_signature, node_identity_from_key, packet_bytes, sign_work_receipt};
 use crate::memory_channel::{MemoryChannelEngine, MemoryChannelError};
 use crate::protocol::*;
 use crate::settlement::receipt_id_for_claim;
@@ -15,6 +15,7 @@ pub enum RelayRoleError {
     WrongRelay,
     NotNetworkMessage,
     DestinationRouteMissing,
+    PacketSerializationFailed,
     DeliveryFailed,
     LegacyMemoryDelivery(MemoryChannelError),
 }
@@ -66,7 +67,9 @@ impl RelayRole {
             .route_hash_for(&message.to)
             .ok_or(RelayRoleError::DestinationRouteMissing)?;
         let forwarded_packet = ordered.envelope.packet.clone();
-        let forwarded_packet_hash = blake3_hash(&crate::codec::packet_bytes(&forwarded_packet).unwrap_or_default());
+        let forwarded_packet_hash = packet_bytes(&forwarded_packet)
+            .map(|bytes| blake3_hash(&bytes))
+            .map_err(|_| RelayRoleError::PacketSerializationFailed)?;
         channel
             .send_unordered(self.identity.node_id, message.to, forwarded_packet)
             .map_err(|_| RelayRoleError::DeliveryFailed)?;
