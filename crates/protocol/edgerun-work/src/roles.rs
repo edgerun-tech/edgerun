@@ -1,6 +1,7 @@
 use alloc::vec::Vec;
 
 use crate::protocol::*;
+use crate::types::{department_for_work_type_typed, role_for_department_typed, Department, NodeRole, WorkType};
 
 pub const ROLE_STATUS_ACCEPTED: u16 = 1;
 pub const ROLE_STATUS_REJECTED: u16 = 2;
@@ -49,23 +50,13 @@ pub trait WorkRole {
 }
 
 pub fn department_for_work_type(work_type: u16) -> Option<u16> {
-    match work_type {
-        WORK_TYPE_MESSAGE_DELIVER => Some(DEPARTMENT_MESSAGE),
-        WORK_TYPE_OBJECT_STORE | WORK_TYPE_OBJECT_PIN => Some(DEPARTMENT_STORAGE),
-        WORK_TYPE_OBJECT_RETRIEVE => Some(DEPARTMENT_RETRIEVAL),
-        WORK_TYPE_COMPUTE_RUN => Some(DEPARTMENT_COMPUTE),
-        _ => None,
-    }
+    WorkType::from_u16(work_type)
+        .and_then(department_for_work_type_typed)
+        .map(Department::as_u16)
 }
 
 pub fn role_for_department(department: u16) -> Option<u16> {
-    match department {
-        DEPARTMENT_RELAY => Some(NODE_ROLE_RELAY),
-        DEPARTMENT_MESSAGE => Some(NODE_ROLE_MESSAGE),
-        DEPARTMENT_STORAGE => Some(NODE_ROLE_STORAGE),
-        DEPARTMENT_RETRIEVAL => Some(NODE_ROLE_STORAGE),
-        DEPARTMENT_COMPUTE => Some(NODE_ROLE_COMPUTE),
-        DEPARTMENT_ADMISSION => Some(NODE_ROLE_ADMISSION),
-        _ => None,
-    }
+    Department::from_u16(department)
+        .and_then(role_for_department_typed)
+        .map(NodeRole::as_u16)
 }
