@@ -1,8 +1,8 @@
 # EdgeRun Work Protocol Invariants
 
-This crate is not only a message-passing layer. It is a set of verifiable state transitions for admitted work, routed execution, receipts, and settlement.
+This crate is not only a message-passing layer. It is a set of verifiable state transitions for admitted work, routed execution, receipts, proofs, and settlement.
 
-The transport medium is deliberately not part of the protocol guarantee. Memory, TCP, WebSocket, browser worker `postMessage`, email import, QR import, USB, Bluetooth, or future transports may move the same bytes. Protocol validity is decided by signatures, hashes, route commitments, ordered-channel rules, typed payload verification, receipts, and settlement checks.
+The transport medium is deliberately not part of the protocol guarantee. Memory, TCP, WebSocket, browser worker `postMessage`, email import, QR import, USB, Bluetooth, QUIC, WebTransport, or future transports may move the same bytes. Protocol validity is decided by signatures, hashes, route commitments, ordered-channel rules, typed payload verification, proofs, receipts, and settlement checks.
 
 ## Layer ownership
 
@@ -14,10 +14,10 @@ The transport medium is deliberately not part of the protocol guarantee. Memory,
 | `route_auth` / `route_plan` | Signed route ads and route snapshots | Packet ordering, settlement |
 | `channel_order` | Ordered stream acceptance | Business validity |
 | `work_channel` / transport adapters | Moving `ChannelEnvelope`s | Declaring work valid |
-| `relay_role` | Relay forwarding and relay receipts | Admission, user balance, final settlement |
+| `relay_role` | Relay forwarding, packet transit hashes, and final relay receipts once receiver proof exists | Admission, user balance, final settlement |
+| `delivery_proof` / `transit_proof` | Recipient proofs and per-node packet-transit evidence | Pricing policy |
 | `storage_payload` / `typed_storage_role` | Typed object store/retrieve payload verification | Admission, settlement |
 | `settlement` / `batch_settlement` | Local model of receipt payment | Transport, route selection |
-| `delivery_proof` / `transit_proof` | Proof objects for delivery/transit claims | Pricing policy |
 | `std_runtime` | std-only sockets, threads, synchronized wrappers | Core protocol invariants |
 
 ## Identity invariant
@@ -148,30 +148,30 @@ Canonical helper:
 ChannelOrderBook::accept(ordered, expected_route_hash)
 ```
 
-## Relay invariant
+## Relay transit invariant
 
-A relay is paid only for an admitted, ordered forwarding action.
+A relay proves packet work by hashing the packet it handled and committing that hash into a relay-local transit hash chain.
 
-A relay receipt must be based on:
+Transit evidence commits to:
 
-- `request_hash`
-- `admission_hash`
-- relay `worker` identity
-- `relay_node_id`
-- ordered input message hash
+- relay `node_id`
+- original sender
+- final recipient
+- channel id
+- route hash
 - forwarded packet hash
-- claim amount
-- relay receipt sequence
+- relay sequence
+- previous relay transit hash
 
-Relay forwarding must fail closed. If packet serialization fails, no receipt may be created and no fallback hash such as `blake3("")` may be used.
-
-Current helper:
+Canonical helpers:
 
 ```rust
-RelayRole::forward_ordered_on(channel, ordered, request_hash, admission_hash)
+packet_transit_hash(input)
+packet_transit_chain_hash(hashes)
+RelayRole::forward_ordered_on(...)
 ```
 
-Production target: relay payment should require receiver delivery proof, not only a forwarded packet hash.
+Relay forwarding must fail closed. If packet serialization fails, no receipt may be created and no fallback hash such as `blake3("")` may be used.
 
 ## Delivery proof invariant
 
@@ -192,9 +192,29 @@ Canonical helpers:
 ```rust
 channel_proof_for_ordered(...)
 verify_channel_proof_for_ordered(...)
+channel_proof_hash(proof)
 ```
 
-Relay settlement should eventually require a valid `ChannelProof` hash in the relay receipt path.
+## Relay payment invariant
+
+A relay is paid only after forwarding an admitted ordered message and obtaining recipient delivery proof.
+
+The payable relay receipt output hash must commit to:
+
+- relay transit hash
+- forwarded packet hash
+- receiver `ChannelProof` hash
+
+Canonical helpers:
+
+```rust
+relay_delivery_output_hash(transit_hash, forwarded_packet_hash, receiver_channel_proof_hash)
+RelayRole::finalized_delivery_receipt(delivery, receiver_channel_proof_hash)
+SettlementLedger::settle_delivery(evidence)
+verify_delivery_evidence(evidence)
+```
+
+Generic unchecked receipt settlement must not be used for relay payments. Relay receipts require typed delivery evidence.
 
 ## Storage invariant
 
@@ -238,7 +258,7 @@ The interface should survive future replacement with a stronger k+n coding schem
 
 Settlement pays receipts, not promises.
 
-A receipt can settle only if:
+Common receipt settlement checks:
 
 - `verify_work_admission(admission)`
 - `verify_work_receipt(receipt)`
@@ -248,6 +268,20 @@ A receipt can settle only if:
 - cumulative admission spend plus claim is at most `admitted_budget`
 - `admission.user` has enough balance
 
+Typed settlement paths must add proof-specific checks. For relay delivery, `settle_delivery` must verify recipient proof, transit hash, forwarded packet hash, admission route binding, and receipt output hash.
+
+Canonical helpers:
+
+```rust
+SettlementLedger::settle_delivery(evidence)
+SettlementLedger::can_settle_delivery(evidence)
+SettlementLedger::settle_receipt_unchecked_evidence(admission, receipt)
+SettlementLedger::settle_receipt_batch_unchecked_evidence(admission, receipts)
+build_receipt_batch(...)
+```
+
+The `*_unchecked_evidence` APIs are low-level/test/legacy helpers. They reject relay receipts and must not be used for relay payment.
+
 Batch settlement must be atomic:
 
 - build and verify the batch
@@ -255,15 +289,6 @@ Batch settlement must be atomic:
 - reject already-paid receipts
 - reject over-budget batches
 - only mutate ledger after preflight succeeds
-
-Canonical helpers:
-
-```rust
-SettlementLedger::can_settle_receipt(...)
-SettlementLedger::settle_receipt(...)
-SettlementLedger::settle_receipt_batch(...)
-build_receipt_batch(...)
-```
 
 ## Pruning/finalization invariant
 
