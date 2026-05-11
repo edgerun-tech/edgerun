@@ -4,8 +4,6 @@ use alloc::vec::Vec;
 use rkyv::{Archive, Deserialize, Serialize};
 
 pub const WORK_WIRE_ABI_VERSION: u16 = 1;
-pub const DEFAULT_ADMISSION_HOST: &str = "nodes.edgerun.tech";
-pub const DEFAULT_ADMISSION_PORT: u16 = 50_000;
 pub const DEFAULT_HEARTBEAT_SECS: u64 = 10;
 pub const MAX_WORK_FRAME_LEN: usize = 1024 * 1024;
 
