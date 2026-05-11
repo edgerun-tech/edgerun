@@ -2,7 +2,10 @@ use std::sync::{Arc, Mutex};
 
 use crate::batch_settlement::{BatchSettlementError, BatchSettlementResult};
 use crate::protocol::{Hash, NodeId, PublicKey, WorkAdmission, WorkReceipt};
-use crate::settlement::{SettlementError, SettlementLedger, SettlementPruneResult, SettlementResult};
+use crate::settlement::{
+    DeliverySettlementEvidence, SettlementError, SettlementLedger, SettlementPruneResult,
+    SettlementResult,
+};
 
 #[derive(Clone, Debug, Default)]
 pub struct ThreadSafeSettlementLedger {
@@ -41,7 +44,7 @@ impl ThreadSafeSettlementLedger {
             .worker_balance(worker)
     }
 
-    pub fn settle_receipt(
+    pub fn settle_receipt_unchecked_evidence(
         &self,
         admission: &WorkAdmission,
         receipt: &WorkReceipt,
@@ -49,10 +52,20 @@ impl ThreadSafeSettlementLedger {
         self.inner
             .lock()
             .expect("settlement ledger poisoned")
-            .settle_receipt(admission, receipt)
+            .settle_receipt_unchecked_evidence(admission, receipt)
     }
 
-    pub fn settle_receipt_batch(
+    pub fn settle_delivery(
+        &self,
+        evidence: &DeliverySettlementEvidence<'_>,
+    ) -> Result<SettlementResult, SettlementError> {
+        self.inner
+            .lock()
+            .expect("settlement ledger poisoned")
+            .settle_delivery(evidence)
+    }
+
+    pub fn settle_receipt_batch_unchecked_evidence(
         &self,
         admission: &WorkAdmission,
         receipts: &[WorkReceipt],
@@ -60,7 +73,7 @@ impl ThreadSafeSettlementLedger {
         self.inner
             .lock()
             .expect("settlement ledger poisoned")
-            .settle_receipt_batch(admission, receipts)
+            .settle_receipt_batch_unchecked_evidence(admission, receipts)
     }
 
     pub fn prune_finalized_admission(&self, admission_hash: &Hash) -> SettlementPruneResult {
