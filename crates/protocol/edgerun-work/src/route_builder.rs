@@ -93,6 +93,10 @@ pub fn memory_endpoint(label: impl Into<String>, seed: &[u8]) -> ChannelEndpoint
     ChannelEndpoint::new(endpoint_channel_id(CHANNEL_KIND_MEMORY, seed), CHANNEL_KIND_MEMORY, Vec::new(), label.into())
 }
 
+pub fn tcp_endpoint(label: impl Into<String>, address: impl AsRef<[u8]>) -> ChannelEndpoint {
+    endpoint_from_address(CHANNEL_KIND_TCP, label, address)
+}
+
 pub fn quic_endpoint(label: impl Into<String>, address: impl AsRef<[u8]>) -> ChannelEndpoint {
     endpoint_from_address(CHANNEL_KIND_QUIC, label, address)
 }
