@@ -4,6 +4,8 @@
 //! modern: antialiased rounded rectangles, soft shadows, and polished widgets.
 
 use crate::{icons::Icon, Color, Painter, Rect, TextSize, Theme};
+#[cfg(feature = "tabler-icons")]
+use crate::tabler::TablerIconName;
 
 const AA_SAMPLES: [(f32, f32); 4] = [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)];
 
@@ -125,12 +127,14 @@ impl<'a> Painter<'a> {
         }
     }
 
-    pub fn icon_bubble(&mut self, rect: Rect, icon: Icon, color: Color, theme: Theme) {
-        let radius = (rect.w.min(rect.h) / 2).max(8);
-        self.rounded_rect(rect, radius, color.with_alpha(36));
-        self.rounded_border(rect, radius, 1, color.with_alpha(140));
-        self.icon(icon, rect.inset(9), color.with_alpha(235));
-        self.rounded_rect(Rect::new(rect.x + 5, rect.y + 4, rect.w.saturating_sub(10), 4), 3, theme.text.with_alpha(26));
+    /// Bare icon: no background, no border, no bubble.
+    pub fn bare_icon(&mut self, rect: Rect, icon: Icon, color: Color) {
+        self.icon(icon, rect, color.with_alpha(235));
+    }
+
+    #[cfg(feature = "tabler-icons")]
+    pub fn bare_tabler_icon(&mut self, rect: Rect, icon: TablerIconName, color: Color) {
+        self.tabler_icon(icon, rect, color.with_alpha(235));
     }
 
     fn rounded_rect_inner(&mut self, rect: Rect, radius: u32, color: Color, _border_only: bool, _thickness: u32) {
@@ -184,7 +188,7 @@ pub fn demo_dashboard_polished(p: &mut Painter<'_>, state: crate::DashboardState
     let margin = 28;
     let hero = Rect::new(margin, margin, p.width.saturating_sub((margin * 2) as u32), 188);
     p.glass_card(hero, theme);
-    p.icon_bubble(Rect::new(hero.x + 26, hero.y + 25, 54, 54), Icon::Spark, theme.accent, theme);
+    draw_hero_icon(p, Rect::new(hero.x + 28, hero.y + 30, 44, 44), theme.accent);
     p.text(hero.x + 94, hero.y + 24, state.title, theme.text, TextSize::Hero);
     p.text(hero.x + 96, hero.y + 76, state.subtitle, theme.muted, TextSize::Body);
 
@@ -202,23 +206,43 @@ pub fn demo_dashboard_polished(p: &mut Painter<'_>, state: crate::DashboardState
     let r3 = Rect::new(margin + (stat_w as i32 + gap) * 2, stats_y, stat_w, 134);
 
     p.glass_card(r1, theme);
-    p.icon_bubble(Rect::new(r1.x + 18, r1.y + 18, 38, 38), Icon::Cpu, theme.accent, theme);
+    draw_cpu_icon(p, Rect::new(r1.x + 22, r1.y + 24, 30, 30), theme.accent);
     p.text(r1.x + 68, r1.y + 22, "CPU", theme.muted, TextSize::Body);
     draw_permille_polished(p, r1.x + 20, r1.y + 64, state.cpu_permille, theme.text);
     p.rounded_progress(Rect::new(r1.x + 20, r1.y + 106, r1.w.saturating_sub(40), 14), state.cpu_permille, theme);
 
     p.glass_card(r2, theme);
-    p.icon_bubble(Rect::new(r2.x + 18, r2.y + 18, 38, 38), Icon::Memory, Color::rgb(0x8b, 0xe9, 0xfd), theme);
+    draw_memory_icon(p, Rect::new(r2.x + 22, r2.y + 24, 30, 30), Color::rgb(0x8b, 0xe9, 0xfd));
     p.text(r2.x + 68, r2.y + 22, "RAM", theme.muted, TextSize::Body);
     draw_u32_suffix_polished(p, r2.x + 20, r2.y + 64, state.memory_mb, " MB", theme.text);
     p.rounded_progress(Rect::new(r2.x + 20, r2.y + 106, r2.w.saturating_sub(40), 14), 420, theme);
 
     p.glass_card(r3, theme);
-    p.icon_bubble(Rect::new(r3.x + 18, r3.y + 18, 38, 38), Icon::Network, Color::rgb(0x50, 0xfa, 0x7b), theme);
+    draw_network_icon(p, Rect::new(r3.x + 22, r3.y + 24, 30, 30), Color::rgb(0x50, 0xfa, 0x7b));
     p.text(r3.x + 68, r3.y + 22, "NET", theme.muted, TextSize::Body);
     p.text(r3.x + 20, r3.y + 68, state.network_status, theme.text, TextSize::Title);
     p.pill_badge(Rect::new(r3.x + 20, r3.y + 104, 92, 24), "private", Color::rgb(0x50, 0xfa, 0x7b), theme);
 }
+
+#[cfg(feature = "tabler-icons")]
+fn draw_hero_icon(p: &mut Painter<'_>, rect: Rect, color: Color) { p.bare_tabler_icon(rect, TablerIconName::Sparkles, color); }
+#[cfg(not(feature = "tabler-icons"))]
+fn draw_hero_icon(p: &mut Painter<'_>, rect: Rect, color: Color) { p.bare_icon(rect, Icon::Spark, color); }
+
+#[cfg(feature = "tabler-icons")]
+fn draw_cpu_icon(p: &mut Painter<'_>, rect: Rect, color: Color) { p.bare_tabler_icon(rect, TablerIconName::Cpu, color); }
+#[cfg(not(feature = "tabler-icons"))]
+fn draw_cpu_icon(p: &mut Painter<'_>, rect: Rect, color: Color) { p.bare_icon(rect, Icon::Cpu, color); }
+
+#[cfg(feature = "tabler-icons")]
+fn draw_memory_icon(p: &mut Painter<'_>, rect: Rect, color: Color) { p.bare_tabler_icon(rect, TablerIconName::Database, color); }
+#[cfg(not(feature = "tabler-icons"))]
+fn draw_memory_icon(p: &mut Painter<'_>, rect: Rect, color: Color) { p.bare_icon(rect, Icon::Memory, color); }
+
+#[cfg(feature = "tabler-icons")]
+fn draw_network_icon(p: &mut Painter<'_>, rect: Rect, color: Color) { p.bare_tabler_icon(rect, TablerIconName::Network, color); }
+#[cfg(not(feature = "tabler-icons"))]
+fn draw_network_icon(p: &mut Painter<'_>, rect: Rect, color: Color) { p.bare_icon(rect, Icon::Network, color); }
 
 fn rounded_coverage(x: u32, y: u32, rect: Rect, radius: u32) -> u8 {
     if radius == 0 {
