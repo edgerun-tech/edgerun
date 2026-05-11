@@ -5,9 +5,11 @@ use alloc::vec::Vec;
 use edgerun_crypto::Ed25519SigningKey;
 
 use crate::channel::*;
-use crate::codec::{blake3_hash, node_identity_from_key};
+use crate::codec::blake3_hash;
+use crate::identity::node_identity_from_key;
 use crate::protocol::*;
 use crate::route_auth::sign_route_advertisement;
+use crate::signing::empty_signature;
 
 const CHANNEL_ENDPOINT_ID_DOMAIN: &[u8] = b"edgerun:v1:work:channel-endpoint";
 
@@ -83,11 +85,7 @@ impl RouteAdvertisementBuilder {
                 sequence: self.sequence,
                 valid_until_unix_ms: self.valid_until_unix_ms,
                 previous_route_hash: self.previous_route_hash,
-                signature: WorkSignature {
-                    algorithm: 0,
-                    public_key: Vec::new(),
-                    signature: Vec::new(),
-                },
+                signature: empty_signature(),
             },
         )
     }
