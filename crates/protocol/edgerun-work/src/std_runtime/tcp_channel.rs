@@ -163,7 +163,7 @@ impl WorkChannel for TcpWorkChannel {
         let route = self.routes.get(&to).ok_or(WorkChannelError::RouteMissing)?;
         let addr = Self::route_addr(route).ok_or(WorkChannelError::RouteMissing)?;
         let encoded = encode_work_packet_once(&packet).map_err(|_| WorkChannelError::PacketHashFailed)?;
-        Self::send_encoded_packet_to_addr(addr, &encoded.bytes).map_err(|_| WorkChannelError::DeliveryFailed)?;
+        Self::send_encoded_packet_to_addr(addr, encoded.as_bytes()).map_err(|_| WorkChannelError::DeliveryFailed)?;
         let envelope = ChannelEnvelope {
             abi_version: WORK_WIRE_ABI_VERSION,
             channel_id: route.endpoint.channel_id,
