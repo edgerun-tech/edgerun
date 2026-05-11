@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::io;
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::{Arc, Mutex};
@@ -12,6 +12,8 @@ use crate::codec::*;
 use crate::protocol::*;
 use crate::request_auth::verify_work_request;
 use crate::std_runtime::framing::{ack, read_work_packet, unix_ms, write_work_packet};
+
+const ADMISSION_ID_DOMAIN: &[u8] = b"edgerun:v1:work:admission-id";
 
 #[derive(Clone)]
 pub struct InMemoryAdmissionController {
@@ -32,7 +34,7 @@ pub struct AdmissionConfig {
 
 #[derive(Clone, Debug, Default)]
 pub struct AdmissionReplayState {
-    seen_request_ids: HashSet<Hash>,
+    seen_request_ids: HashMap<Hash, u64>,
     highest_user_sequence: HashMap<PublicKey, u64>,
 }
 
@@ -48,7 +50,7 @@ impl AdmissionReplayState {
     }
 
     pub fn validate(&self, request: &WorkRequest) -> Result<(), AdmissionReplayError> {
-        if self.seen_request_ids.contains(&request.request_id) {
+        if self.seen_request_ids.contains_key(&request.request_id) {
             return Err(AdmissionReplayError::DuplicateRequestId);
         }
         if let Some(last_seen) = self.highest_user_sequence.get(&request.user) {
@@ -64,9 +66,18 @@ impl AdmissionReplayState {
 
     pub fn record_checked(&mut self, request: &WorkRequest) -> Result<(), AdmissionReplayError> {
         self.validate(request)?;
-        self.seen_request_ids.insert(request.request_id);
-        self.highest_user_sequence.insert(request.user, request.user_sequence);
+        self.seen_request_ids
+            .insert(request.request_id, request.valid_until_unix_ms);
+        self.highest_user_sequence
+            .insert(request.user, request.user_sequence);
         Ok(())
+    }
+
+    pub fn prune_expired(&mut self, now_unix_ms: u64) -> usize {
+        let before = self.seen_request_ids.len();
+        self.seen_request_ids
+            .retain(|_, valid_until_unix_ms| *valid_until_unix_ms >= now_unix_ms);
+        before.saturating_sub(self.seen_request_ids.len())
     }
 
     pub fn seen_request_count(&self) -> usize {
@@ -124,7 +135,11 @@ impl InMemoryAdmissionController {
     }
 
     pub fn set_user_balance(&self, user: PublicKey, balance: u64) {
-        self.inner.lock().expect("admission state poisoned").balances.insert(user, balance);
+        self.inner
+            .lock()
+            .expect("admission state poisoned")
+            .balances
+            .insert(user, balance);
     }
 
     pub fn serve<A: ToSocketAddrs>(&self, addr: A) -> io::Result<()> {
@@ -159,7 +174,13 @@ impl InMemoryAdmissionController {
         Ok(())
     }
 
-    fn accept_first(&self, stream: &mut TcpStream, packet: WorkPacket, connection_hash: Hash, peer: Option<SocketAddr>) -> io::Result<Option<NodeId>> {
+    fn accept_first(
+        &self,
+        stream: &mut TcpStream,
+        packet: WorkPacket,
+        connection_hash: Hash,
+        peer: Option<SocketAddr>,
+    ) -> io::Result<Option<NodeId>> {
         let WorkPacket::NodeAvailable(available) = packet else {
             write_work_packet(stream, &ack(false, 400, "first packet must be NodeAvailable"))?;
             return Ok(None);
@@ -175,16 +196,29 @@ impl InMemoryAdmissionController {
         match packet {
             WorkPacket::NodeHeartbeat(h) => {
                 let ok = self.handle_heartbeat(h, on_connection);
-                Ok(ack(ok, if ok { 200 } else { 401 }, if ok { "heartbeat" } else { "invalid heartbeat" }))
+                Ok(ack(
+                    ok,
+                    if ok { 200 } else { 401 },
+                    if ok { "heartbeat" } else { "invalid heartbeat" },
+                ))
             }
             WorkPacket::NetworkMessage(m) => self.handle_network_message(m, on_connection),
             WorkPacket::WorkRequest(r) => self.handle_work_request(r),
-            WorkPacket::WorkReceipt(r) => Ok(if verify_work_receipt(&r) { ack(true, 202, "receipt accepted") } else { ack(false, 401, "invalid receipt") }),
+            WorkPacket::WorkReceipt(r) => Ok(if verify_work_receipt(&r) {
+                ack(true, 202, "receipt accepted")
+            } else {
+                ack(false, 401, "invalid receipt")
+            }),
             _ => Ok(ack(false, 400, "unsupported packet")),
         }
     }
 
-    fn handle_node_available(&self, available: NodeAvailable, connection_hash: Hash, peer: Option<SocketAddr>) -> io::Result<WorkPacket> {
+    fn handle_node_available(
+        &self,
+        available: NodeAvailable,
+        connection_hash: Hash,
+        peer: Option<SocketAddr>,
+    ) -> io::Result<WorkPacket> {
         if !verify_node_available(&available) {
             return Ok(ack(false, 401, "invalid availability signature"));
         }
@@ -195,29 +229,66 @@ impl InMemoryAdmissionController {
         }
     }
 
-    fn admit_relay(&self, available: NodeAvailable, connection_hash: Hash, peer: Option<SocketAddr>) -> io::Result<WorkPacket> {
-        let host = if available.listen_host.is_empty() { peer.map(|p| p.ip().to_string()).unwrap_or_default() } else { available.listen_host.clone() };
-        let endpoint = RelayEndpoint { relay_node_id: available.node.node_id, host, port: available.listen_port };
+    fn admit_relay(
+        &self,
+        available: NodeAvailable,
+        connection_hash: Hash,
+        peer: Option<SocketAddr>,
+    ) -> io::Result<WorkPacket> {
+        let host = if available.listen_host.is_empty() {
+            peer.map(|p| p.ip().to_string()).unwrap_or_default()
+        } else {
+            available.listen_host.clone()
+        };
+        let endpoint = RelayEndpoint {
+            relay_node_id: available.node.node_id,
+            host,
+            port: available.listen_port,
+        };
         let mut state = self.inner.lock().expect("admission state poisoned");
-        state.relays.insert(available.node.node_id, RelayRecord { endpoint: endpoint.clone(), last_ms: available.unix_ms, connection_hash });
+        state.relays.insert(
+            available.node.node_id,
+            RelayRecord {
+                endpoint: endpoint.clone(),
+                last_ms: available.unix_ms,
+                connection_hash,
+            },
+        );
         let relays = state.relays.values().map(|r| r.endpoint.clone()).collect();
-        Ok(WorkPacket::RelayPeerList(RelayPeerList { abi_version: WORK_WIRE_ABI_VERSION, assigned_to: available.node.node_id, relays }))
+        Ok(WorkPacket::RelayPeerList(RelayPeerList {
+            abi_version: WORK_WIRE_ABI_VERSION,
+            assigned_to: available.node.node_id,
+            relays,
+        }))
     }
 
     fn assign_relay(&self, available: NodeAvailable) -> io::Result<WorkPacket> {
         let mut state = self.inner.lock().expect("admission state poisoned");
-        let Some(relay) = state.relays.values().next().cloned() else { return Ok(ack(false, 503, "no relay available")); };
+        let Some(relay) = state.relays.values().next().cloned() else {
+            return Ok(ack(false, 503, "no relay available"));
+        };
         state.seq += 1;
-        let assignment = sign_relay_assignment(&self.admission_key, RelayAssignment {
-            abi_version: WORK_WIRE_ABI_VERSION,
-            node_id: available.node.node_id,
-            relay: relay.endpoint.clone(),
-            assigned_by: self.admission_identity.clone(),
-            sequence: state.seq,
-            valid_until_unix_ms: unix_ms().saturating_add(60_000),
-            signature: empty_signature(),
-        });
-        state.nodes.insert(available.node.node_id, NodeRecord { node: available.node, relay: relay.endpoint, admitted: false, last_ms: unix_ms() });
+        let assignment = sign_relay_assignment(
+            &self.admission_key,
+            RelayAssignment {
+                abi_version: WORK_WIRE_ABI_VERSION,
+                node_id: available.node.node_id,
+                relay: relay.endpoint.clone(),
+                assigned_by: self.admission_identity.clone(),
+                sequence: state.seq,
+                valid_until_unix_ms: unix_ms().saturating_add(60_000),
+                signature: empty_signature(),
+            },
+        );
+        state.nodes.insert(
+            available.node.node_id,
+            NodeRecord {
+                node: available.node,
+                relay: relay.endpoint,
+                admitted: false,
+                last_ms: unix_ms(),
+            },
+        );
         Ok(WorkPacket::RelayAssignment(assignment))
     }
 
@@ -238,12 +309,18 @@ impl InMemoryAdmissionController {
         false
     }
 
-    fn handle_network_message(&self, message: NetworkMessage, on_connection: Option<NodeId>) -> io::Result<WorkPacket> {
+    fn handle_network_message(
+        &self,
+        message: NetworkMessage,
+        on_connection: Option<NodeId>,
+    ) -> io::Result<WorkPacket> {
         if on_connection != Some(message.via_relay) {
             return Ok(ack(false, 403, "message not received on claimed relay connection"));
         }
         let state = self.inner.lock().expect("admission state poisoned");
-        let Some(node) = state.nodes.get(&message.from) else { return Ok(ack(false, 404, "unknown node")); };
+        let Some(node) = state.nodes.get(&message.from) else {
+            return Ok(ack(false, 404, "unknown node"));
+        };
         if message.via_relay != node.relay.relay_node_id {
             return Ok(ack(false, 403, "wrong relay"));
         }
@@ -254,7 +331,13 @@ impl InMemoryAdmissionController {
             return Ok(ack(false, 401, "invalid message signature"));
         }
         drop(state);
-        if let Some(node) = self.inner.lock().expect("admission state poisoned").nodes.get_mut(&message.from) {
+        if let Some(node) = self
+            .inner
+            .lock()
+            .expect("admission state poisoned")
+            .nodes
+            .get_mut(&message.from)
+        {
             node.admitted = true;
         }
         Ok(ack(true, 200, "node admitted"))
@@ -264,30 +347,35 @@ impl InMemoryAdmissionController {
         if !verify_work_request(&request) {
             return Ok(ack(false, 401, "invalid user work request signature"));
         }
-        if request.valid_until_unix_ms < unix_ms() {
+        let now = unix_ms();
+        if request.valid_until_unix_ms < now {
             return Ok(ack(false, 408, "expired request"));
         }
-        let request_hash = match packet_bytes(&WorkPacket::WorkRequest(request.clone())) {
-            Ok(bytes) => blake3_hash(&bytes),
+        let request_hash = match packet_hash(&WorkPacket::WorkRequest(request.clone())) {
+            Ok(hash) => hash,
             Err(_) => return Ok(ack(false, 400, "invalid request packet")),
         };
         let mut state = self.inner.lock().expect("admission state poisoned");
+        state.replay.prune_expired(now);
         if let Err(error) = state.replay.validate(&request) {
             return Ok(admission_replay_ack(error));
         }
         if *state.balances.get(&request.user).unwrap_or(&0) < request.max_total_cost {
             return Ok(ack(false, 402, "insufficient work credit"));
         }
-        let Some(relay) = state.relays.values().next().cloned() else { return Ok(ack(false, 503, "no relay available")); };
+        let Some(relay) = state.relays.values().next().cloned() else {
+            return Ok(ack(false, 503, "no relay available"));
+        };
         state
             .replay
             .record_checked(&request)
             .expect("validated request replay state changed while locked");
         state.seq += 1;
+        let sequence = state.seq;
         let (assigned_route_hash, assigned_channel) = relay_channel_commitment(&relay.endpoint);
         let admission = WorkAdmission {
             abi_version: WORK_WIRE_ABI_VERSION,
-            admission_id: blake3_hash(&request_hash),
+            admission_id: admission_id_for_request(self.admission_identity.node_id, request_hash, sequence),
             dao_id: self.dao_id,
             user: request.user,
             admission_node: self.admission_identity.clone(),
@@ -296,7 +384,7 @@ impl InMemoryAdmissionController {
             assigned_channel,
             admitted_budget: request.max_total_cost,
             policy_hash: self.policy_hash,
-            sequence: state.seq,
+            sequence,
             valid_until_unix_ms: request.valid_until_unix_ms,
             signature: empty_signature(),
         };
@@ -305,15 +393,44 @@ impl InMemoryAdmissionController {
 
     fn drop_connection(&self, node_id: NodeId, connection_hash: Hash) {
         let mut state = self.inner.lock().expect("admission state poisoned");
-        if state.relays.get(&node_id).is_some_and(|r| r.connection_hash == connection_hash) { state.relays.remove(&node_id); }
+        if state
+            .relays
+            .get(&node_id)
+            .is_some_and(|r| r.connection_hash == connection_hash)
+        {
+            state.relays.remove(&node_id);
+        } else {
+            state.nodes.remove(&node_id);
+        }
     }
 
     pub fn prune_dead_relays(&self) -> Vec<NodeId> {
         let now = unix_ms();
         let max_gap = self.heartbeat_grace.as_millis() as u64;
         let mut state = self.inner.lock().expect("admission state poisoned");
-        let dead = state.relays.iter().filter_map(|(id, r)| (now.saturating_sub(r.last_ms) > max_gap).then_some(*id)).collect::<Vec<_>>();
-        for id in &dead { state.relays.remove(id); }
+        let dead = state
+            .relays
+            .iter()
+            .filter_map(|(id, r)| (now.saturating_sub(r.last_ms) > max_gap).then_some(*id))
+            .collect::<Vec<_>>();
+        for id in &dead {
+            state.relays.remove(id);
+        }
+        dead
+    }
+
+    pub fn prune_dead_nodes(&self) -> Vec<NodeId> {
+        let now = unix_ms();
+        let max_gap = self.heartbeat_grace.as_millis() as u64;
+        let mut state = self.inner.lock().expect("admission state poisoned");
+        let dead = state
+            .nodes
+            .iter()
+            .filter_map(|(id, node)| (now.saturating_sub(node.last_ms) > max_gap).then_some(*id))
+            .collect::<Vec<_>>();
+        for id in &dead {
+            state.nodes.remove(id);
+        }
         dead
     }
 }
@@ -325,11 +442,21 @@ fn admission_replay_ack(error: AdmissionReplayError) -> WorkPacket {
     }
 }
 
+fn admission_id_for_request(admission_node_id: NodeId, request_hash: Hash, sequence: u64) -> Hash {
+    let mut bytes = Vec::new();
+    bytes.extend_from_slice(ADMISSION_ID_DOMAIN);
+    bytes.push(0);
+    bytes.extend_from_slice(&admission_node_id);
+    bytes.extend_from_slice(&sequence.to_be_bytes());
+    bytes.extend_from_slice(&request_hash);
+    blake3_hash(&bytes)
+}
+
 fn relay_channel_commitment(relay: &RelayEndpoint) -> (Hash, ChannelEndpoint) {
     let mut address = Vec::new();
     address.extend_from_slice(relay.host.as_bytes());
     address.push(b':');
-    address.extend_from_slice(&relay.port.to_string().as_bytes());
+    address.extend_from_slice(relay.port.to_string().as_bytes());
     let channel_id = blake3_hash(&address);
     let channel = ChannelEndpoint::new(channel_id, CHANNEL_KIND_TCP, address.clone(), relay.host.clone());
     let mut route = Vec::new();
@@ -341,7 +468,9 @@ fn relay_channel_commitment(relay: &RelayEndpoint) -> (Hash, ChannelEndpoint) {
 
 fn connection_hash(peer: Option<SocketAddr>, now: u64) -> Hash {
     let mut bytes = Vec::new();
-    if let Some(peer) = peer { bytes.extend_from_slice(peer.to_string().as_bytes()); }
+    if let Some(peer) = peer {
+        bytes.extend_from_slice(peer.to_string().as_bytes());
+    }
     bytes.extend_from_slice(&now.to_be_bytes());
     blake3_hash(&bytes)
 }
