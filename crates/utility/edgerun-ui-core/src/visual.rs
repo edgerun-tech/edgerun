@@ -71,7 +71,7 @@ impl<'a> Painter<'a> {
         // Draw far-to-near so closer passes accumulate naturally.
         for i in (1..=spread).rev() {
             let t = i as i32;
-            let alpha = ((color.a as u32 * (spread + 1 - i)) / (spread * 3 + 1)).min(120) as u8;
+            let alpha = ((color.a as u32 * (spread + 1 - i)) / (spread * 7 + 1)).min(44) as u8;
             let r = Rect::new(
                 rect.x + offset_x - t,
                 rect.y + offset_y - t,
@@ -84,7 +84,7 @@ impl<'a> Painter<'a> {
 
     /// Draw a modern card: soft shadow, rounded fill, subtle border and top glow.
     pub fn glass_card(&mut self, rect: Rect, theme: Theme) {
-        self.soft_shadow(rect, 18, theme.shadow.with_alpha(130), 18, 0, 10);
+        self.soft_shadow(rect, 18, theme.shadow.with_alpha(42), 7, 0, 3);
         self.rounded_rect(rect, 18, theme.panel.with_alpha(242));
         self.rounded_border(rect, 18, 1, theme.border.with_alpha(220));
         self.rounded_rect(Rect::new(rect.x + 2, rect.y + 2, rect.w.saturating_sub(4), 24), 16, theme.panel_2.with_alpha(72));
@@ -97,7 +97,7 @@ impl<'a> Painter<'a> {
         let radius = (rect.h / 2).max(8);
 
         if active {
-            self.soft_shadow(rect, radius, theme.accent.with_alpha(90), 10, 0, 4);
+            self.soft_shadow(rect, radius, theme.accent.with_alpha(32), 5, 0, 2);
         }
         self.rounded_rect(rect, radius, fill.with_alpha(if active { 255 } else { 225 }));
         self.rounded_border(rect, radius, 1, if active { theme.accent.with_alpha(255) } else { theme.border.with_alpha(220) });
@@ -227,22 +227,22 @@ pub fn demo_dashboard_polished(p: &mut Painter<'_>, state: crate::DashboardState
 #[cfg(feature = "tabler-icons")]
 fn draw_hero_icon(p: &mut Painter<'_>, rect: Rect, color: Color) { p.bare_tabler_icon(rect, TablerIconName::Sparkles, color); }
 #[cfg(not(feature = "tabler-icons"))]
-fn draw_hero_icon(p: &mut Painter<'_>, rect: Rect, color: Color) { p.bare_icon(rect, Icon::Spark, color); }
+fn draw_hero_icon(_p: &mut Painter<'_>, _rect: Rect, _color: Color) {}
 
 #[cfg(feature = "tabler-icons")]
-fn draw_cpu_icon(p: &mut Painter<'_>, rect: Rect, color: Color) { p.bare_tabler_icon(rect, TablerIconName::Cpu, color); }
+fn draw_cpu_icon(p: &mut Painter<'_>, rect: Rect, color: Color) { p.bare_tabler_icon(rect, TablerIconName::Activity, color); }
 #[cfg(not(feature = "tabler-icons"))]
-fn draw_cpu_icon(p: &mut Painter<'_>, rect: Rect, color: Color) { p.bare_icon(rect, Icon::Cpu, color); }
+fn draw_cpu_icon(_p: &mut Painter<'_>, _rect: Rect, _color: Color) {}
 
 #[cfg(feature = "tabler-icons")]
 fn draw_memory_icon(p: &mut Painter<'_>, rect: Rect, color: Color) { p.bare_tabler_icon(rect, TablerIconName::Database, color); }
 #[cfg(not(feature = "tabler-icons"))]
-fn draw_memory_icon(p: &mut Painter<'_>, rect: Rect, color: Color) { p.bare_icon(rect, Icon::Memory, color); }
+fn draw_memory_icon(_p: &mut Painter<'_>, _rect: Rect, _color: Color) {}
 
 #[cfg(feature = "tabler-icons")]
 fn draw_network_icon(p: &mut Painter<'_>, rect: Rect, color: Color) { p.bare_tabler_icon(rect, TablerIconName::Network, color); }
 #[cfg(not(feature = "tabler-icons"))]
-fn draw_network_icon(p: &mut Painter<'_>, rect: Rect, color: Color) { p.bare_icon(rect, Icon::Network, color); }
+fn draw_network_icon(_p: &mut Painter<'_>, _rect: Rect, _color: Color) {}
 
 fn rounded_coverage(x: u32, y: u32, rect: Rect, radius: u32) -> u8 {
     if radius == 0 {

@@ -11,6 +11,7 @@ use crate::{tabler_generated::TABLER_ICONS, Color, Painter, Rect};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TablerIconName {
+    Activity,
     BrandTabler,
     Cpu,
     Server,
@@ -29,6 +30,7 @@ pub enum TablerIconName {
 impl TablerIconName {
     pub const fn as_str(self) -> &'static str {
         match self {
+            Self::Activity => "activity",
             Self::BrandTabler => "brand-tabler",
             Self::Cpu => "cpu",
             Self::Server => "server",

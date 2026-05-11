@@ -23,7 +23,7 @@ impl FontFace {
 
     pub fn load_best_ui_font() -> Result<Self, String> {
         let path = find_best_ui_font().ok_or_else(|| {
-            "no usable UI font found; install ttf-inter or set EDGE_UI_FONT=/path/to/font.ttf".to_string()
+            "no usable UI font found; install inter-font or set EDGE_UI_FONT=/path/to/font.ttf".to_string()
         })?;
         let bytes = fs::read(&path).map_err(|e| format!("failed to read {}: {e}", path.display()))?;
         Self::from_bytes(bytes).map_err(|e| format!("failed to load {}: {e}", path.display()))
@@ -135,9 +135,13 @@ pub fn find_best_ui_font() -> Option<PathBuf> {
 
     let candidates = [
         // Arch/CachyOS common paths.
-        "/usr/share/fonts/TTF/Inter-Regular.ttf",
+        "/usr/share/fonts/Inter/Inter.ttc",
+        "/usr/share/fonts/Inter/Inter-Regular.otf",
+        "/usr/share/fonts/inter/Inter-Regular.otf",
         "/usr/share/fonts/inter/Inter-Regular.ttf",
+        "/usr/share/fonts/TTF/Inter-Regular.ttf",
         "/usr/share/fonts/TTF/InterVariable.ttf",
+        "/usr/share/fonts/OTF/Inter-Regular.otf",
         "/usr/share/fonts/TTF/JetBrainsMono-Regular.ttf",
         "/usr/share/fonts/TTF/JetBrainsMonoNerdFont-Regular.ttf",
         "/usr/share/fonts/TTF/JetBrainsMonoNLNerdFont-Regular.ttf",

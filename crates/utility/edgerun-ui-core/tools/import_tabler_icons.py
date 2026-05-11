@@ -25,6 +25,7 @@ import sys
 from pathlib import Path
 
 ICONS = [
+    "activity",
     "brand-tabler",
     "cpu",
     "server",

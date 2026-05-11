@@ -12,6 +12,8 @@ pub mod icons;
 pub mod visual;
 #[cfg(feature = "fontdue-text")]
 pub mod font;
+#[cfg(feature = "fontdue-text")]
+pub mod tabler_font_generated;
 #[cfg(feature = "tabler-icons")]
 pub mod tabler_generated;
 #[cfg(feature = "tabler-icons")]
@@ -85,16 +87,16 @@ pub struct Theme {
 }
 
 pub const EDGERUN_DARK: Theme = Theme {
-    bg: Color::rgb(0x08, 0x0a, 0x0f),
-    panel: Color::rgb(0x12, 0x16, 0x20),
-    panel_2: Color::rgb(0x18, 0x1f, 0x2d),
-    text: Color::rgb(0xea, 0xf0, 0xf8),
-    muted: Color::rgb(0x93, 0x9c, 0xad),
-    border: Color::rgb(0x25, 0x32, 0x46),
-    accent: Color::rgb(0x46, 0xb3, 0xff),
-    accent_text: Color::rgb(0x03, 0x08, 0x10),
-    danger: Color::rgb(0xff, 0x5f, 0x56),
-    shadow: Color::rgba(0x00, 0x00, 0x00, 80),
+    bg: Color::rgb(0x02, 0x06, 0x17),          // slate-950
+    panel: Color::rgb(0x0f, 0x17, 0x2a),       // slate-900
+    panel_2: Color::rgb(0x1e, 0x29, 0x3b),     // slate-800
+    text: Color::rgb(0xf8, 0xfa, 0xfc),        // slate-50
+    muted: Color::rgb(0x94, 0xa3, 0xb8),       // slate-400
+    border: Color::rgb(0x33, 0x41, 0x55),      // slate-700
+    accent: Color::rgb(0x0e, 0x9f, 0xd1),      // cyan/sky
+    accent_text: Color::rgb(0xf0, 0xf9, 0xff), // sky-50
+    danger: Color::rgb(0xe1, 0x1d, 0x48),      // rose-600
+    shadow: Color::rgba(0x00, 0x00, 0x00, 34),
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
