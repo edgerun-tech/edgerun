@@ -44,6 +44,7 @@ struct DeliveryFixture {
     recipient: SimNode,
     recipient_proof: ChannelProof,
     result: RelayDeliveryResult,
+    payable_receipt: WorkReceipt,
 }
 
 fn fixture() -> DeliveryFixture {
@@ -87,7 +88,7 @@ fn fixture() -> DeliveryFixture {
     )
     .expect("sender to relay delivery");
 
-    let mut result = relay
+    let result = relay
         .forward_ordered(&mut channel, &relay_input, request_hash, admission_hash)
         .expect("relay forwards");
 
@@ -109,7 +110,7 @@ fn fixture() -> DeliveryFixture {
         &recipient_delivery,
     )
     .expect("recipient proof");
-    result.receipt = relay.finalized_delivery_receipt(&result, channel_proof_hash(&recipient_proof));
+    let payable_receipt = relay.finalized_delivery_receipt(&result, channel_proof_hash(&recipient_proof));
 
     DeliveryFixture {
         admission,
@@ -119,6 +120,7 @@ fn fixture() -> DeliveryFixture {
         recipient,
         recipient_proof,
         result,
+        payable_receipt,
     }
 }
 
@@ -127,7 +129,7 @@ fn settle_delivery_requires_recipient_proof_and_transit_hash() {
     let fixture = fixture();
     let evidence = DeliverySettlementEvidence {
         admission: &fixture.admission,
-        receipt: &fixture.result.receipt,
+        receipt: &fixture.payable_receipt,
         relay_input: &fixture.relay_input,
         recipient_delivery: &fixture.recipient_delivery,
         recipient: &fixture.recipient.identity,
@@ -140,7 +142,7 @@ fn settle_delivery_requires_recipient_proof_and_transit_hash() {
         fixture.result.transit_hash,
     );
     assert_eq!(
-        fixture.result.receipt.output_hash,
+        fixture.payable_receipt.output_hash,
         relay_delivery_output_hash(
             fixture.result.transit_hash,
             fixture.result.forwarded_packet_hash,
@@ -156,7 +158,7 @@ fn settle_delivery_requires_recipient_proof_and_transit_hash() {
 
     assert_eq!(settled.amount, 3);
     assert_eq!(ledger.user_balance(&fixture.user), 7);
-    assert_eq!(ledger.worker_balance(&fixture.result.receipt.worker.node_id), 3);
+    assert_eq!(ledger.worker_balance(&fixture.payable_receipt.worker.node_id), 3);
 }
 
 #[test]
@@ -167,7 +169,7 @@ fn settle_delivery_rejects_admission_route_mismatch() {
     fixture.admission = sign_work_admission(&admission_key, fixture.admission.clone());
     let evidence = DeliverySettlementEvidence {
         admission: &fixture.admission,
-        receipt: &fixture.result.receipt,
+        receipt: &fixture.payable_receipt,
         relay_input: &fixture.relay_input,
         recipient_delivery: &fixture.recipient_delivery,
         recipient: &fixture.recipient.identity,
@@ -186,7 +188,7 @@ fn settle_delivery_rejects_wrong_previous_transit_hash() {
     let fixture = fixture();
     let evidence = DeliverySettlementEvidence {
         admission: &fixture.admission,
-        receipt: &fixture.result.receipt,
+        receipt: &fixture.payable_receipt,
         relay_input: &fixture.relay_input,
         recipient_delivery: &fixture.recipient_delivery,
         recipient: &fixture.recipient.identity,
@@ -206,7 +208,7 @@ fn settle_delivery_rejects_tampered_recipient_proof() {
     fixture.recipient_proof.sequence = fixture.recipient_proof.sequence.saturating_add(1);
     let evidence = DeliverySettlementEvidence {
         admission: &fixture.admission,
-        receipt: &fixture.result.receipt,
+        receipt: &fixture.payable_receipt,
         relay_input: &fixture.relay_input,
         recipient_delivery: &fixture.recipient_delivery,
         recipient: &fixture.recipient.identity,
@@ -226,7 +228,7 @@ fn settle_delivery_rejects_wrong_recipient_delivery_packet_hash() {
     fixture.recipient_delivery.envelope.packet_hash = [8u8; 32];
     let evidence = DeliverySettlementEvidence {
         admission: &fixture.admission,
-        receipt: &fixture.result.receipt,
+        receipt: &fixture.payable_receipt,
         relay_input: &fixture.relay_input,
         recipient_delivery: &fixture.recipient_delivery,
         recipient: &fixture.recipient.identity,
@@ -244,11 +246,11 @@ fn settle_delivery_rejects_wrong_recipient_delivery_packet_hash() {
 fn settle_delivery_rejects_receipt_with_wrong_input_hash() {
     let mut fixture = fixture();
     let relay_key = Ed25519SigningKey::from_bytes(&[185u8; 32]);
-    fixture.result.receipt.input_hash = [6u8; 32];
-    fixture.result.receipt = sign_work_receipt(&relay_key, fixture.result.receipt.clone());
+    fixture.payable_receipt.input_hash = [6u8; 32];
+    fixture.payable_receipt = sign_work_receipt(&relay_key, fixture.payable_receipt.clone());
     let evidence = DeliverySettlementEvidence {
         admission: &fixture.admission,
-        receipt: &fixture.result.receipt,
+        receipt: &fixture.payable_receipt,
         relay_input: &fixture.relay_input,
         recipient_delivery: &fixture.recipient_delivery,
         recipient: &fixture.recipient.identity,
@@ -266,11 +268,11 @@ fn settle_delivery_rejects_receipt_with_wrong_input_hash() {
 fn settle_delivery_rejects_receipt_with_wrong_output_hash() {
     let mut fixture = fixture();
     let relay_key = Ed25519SigningKey::from_bytes(&[185u8; 32]);
-    fixture.result.receipt.output_hash = [7u8; 32];
-    fixture.result.receipt = sign_work_receipt(&relay_key, fixture.result.receipt.clone());
+    fixture.payable_receipt.output_hash = [7u8; 32];
+    fixture.payable_receipt = sign_work_receipt(&relay_key, fixture.payable_receipt.clone());
     let evidence = DeliverySettlementEvidence {
         admission: &fixture.admission,
-        receipt: &fixture.result.receipt,
+        receipt: &fixture.payable_receipt,
         relay_input: &fixture.relay_input,
         recipient_delivery: &fixture.recipient_delivery,
         recipient: &fixture.recipient.identity,
