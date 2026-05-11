@@ -48,6 +48,22 @@ impl PreimageBuilder {
         self
     }
 
+    pub fn u16_list(mut self, values: &[u16]) -> Self {
+        self.bytes.extend_from_slice(&(values.len() as u64).to_be_bytes());
+        for value in values {
+            self.bytes.extend_from_slice(&value.to_be_bytes());
+        }
+        self
+    }
+
+    pub fn hash_list(mut self, values: &[Hash]) -> Self {
+        self.bytes.extend_from_slice(&(values.len() as u64).to_be_bytes());
+        for value in values {
+            self.bytes.extend_from_slice(value);
+        }
+        self
+    }
+
     pub fn u64(mut self, value: u64) -> Self {
         self.bytes.extend_from_slice(&value.to_be_bytes());
         self
@@ -118,6 +134,22 @@ impl HashBuilder {
 
     pub fn u16(mut self, value: u16) -> Self {
         self.hasher.update(&value.to_be_bytes());
+        self
+    }
+
+    pub fn u16_list(mut self, values: &[u16]) -> Self {
+        self.hasher.update(&(values.len() as u64).to_be_bytes());
+        for value in values {
+            self.hasher.update(&value.to_be_bytes());
+        }
+        self
+    }
+
+    pub fn hash_list(mut self, values: &[Hash]) -> Self {
+        self.hasher.update(&(values.len() as u64).to_be_bytes());
+        for value in values {
+            self.hasher.update(value);
+        }
         self
     }
 
