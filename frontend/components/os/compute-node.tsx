@@ -1,7 +1,7 @@
 "use client"
 
-import { NodePolicyGraph } from "@/components/node-policy-graph"
+import { AdmissionNetworkMinimal } from "@/components/admission-network-minimal"
 
 export function ComputeNode() {
-  return <NodePolicyGraph />
+  return <AdmissionNetworkMinimal />
 }
