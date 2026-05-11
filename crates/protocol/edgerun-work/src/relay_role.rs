@@ -7,7 +7,7 @@ use crate::codec::{blake3_hash, empty_signature, encode_work_packet_once, node_i
 use crate::memory_channel::{MemoryChannelEngine, MemoryChannelError};
 use crate::protocol::*;
 use crate::settlement::receipt_id_for_claim;
-use crate::transit_proof::{packet_transit_hash, PacketTransitHashInput};
+use crate::transit_proof::{packet_transit_hash, relay_delivery_output_hash, PacketTransitHashInput};
 use crate::work_channel::{WorkChannel, WorkChannelError};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -106,6 +106,44 @@ impl RelayRole {
         admission_hash: Hash,
     ) -> Result<RelayDeliveryResult, RelayRoleError> {
         self.forward_ordered_on(channel, ordered, request_hash, admission_hash)
+    }
+
+    pub fn finalized_delivery_receipt(
+        &self,
+        delivery: &RelayDeliveryResult,
+        receiver_channel_proof_hash: Hash,
+    ) -> WorkReceipt {
+        let input_hash = delivery.receipt.input_hash;
+        let output_hash = relay_delivery_output_hash(
+            delivery.transit_hash,
+            delivery.forwarded_packet_hash,
+            receiver_channel_proof_hash,
+        );
+        let receipt_id = receipt_id_for_claim(
+            delivery.receipt.request_hash,
+            delivery.receipt.admission_hash,
+            self.identity.node_id,
+            input_hash,
+            output_hash,
+            delivery.receipt.sequence,
+        );
+        sign_work_receipt(
+            &self.key,
+            WorkReceipt {
+                abi_version: WORK_WIRE_ABI_VERSION,
+                receipt_id,
+                request_hash: delivery.receipt.request_hash,
+                admission_hash: delivery.receipt.admission_hash,
+                worker: self.identity.clone(),
+                relay_node_id: self.identity.node_id,
+                input_hash,
+                output_hash,
+                units_used: delivery.receipt.units_used,
+                total_claim: delivery.receipt.total_claim,
+                sequence: delivery.receipt.sequence,
+                signature: empty_signature(),
+            },
+        )
     }
 
     fn finish_delivery_receipt(
