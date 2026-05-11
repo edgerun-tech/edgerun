@@ -3,6 +3,7 @@ mod chatgpt_cloudflare_cookies;
 #[cfg(feature = "native-transport")]
 mod chatgpt_hosts;
 #[cfg(feature = "native-transport")]
+#[path = "custom_ca_edgerun_tls.rs"]
 mod custom_ca;
 #[cfg(feature = "native-transport")]
 mod default_client;
@@ -31,6 +32,8 @@ pub use crate::custom_ca::BuildCustomCaTransportError;
 pub use crate::custom_ca::build_reqwest_client_for_subprocess_tests;
 #[cfg(feature = "native-transport")]
 pub use crate::custom_ca::build_reqwest_client_with_custom_ca;
+#[cfg(feature = "native-transport")]
+pub use crate::custom_ca::maybe_build_edgerun_tls_client_config_with_custom_ca;
 #[cfg(feature = "native-transport")]
 pub use crate::custom_ca::maybe_build_rustls_client_config_with_custom_ca;
 #[cfg(feature = "native-transport")]
