@@ -206,7 +206,7 @@ impl WorkChannel for TcpNodeRuntime {
         let encoded = encode_work_packet_once(&packet).map_err(|_| WorkChannelError::PacketHashFailed)?;
         let addr = Self::route_addr(route).ok_or(WorkChannelError::RouteMissing)?;
         let mut stream = TcpStream::connect(addr).map_err(|_| WorkChannelError::DeliveryFailed)?;
-        write_encoded_work_packet(&mut stream, &encoded.bytes).map_err(|_| WorkChannelError::DeliveryFailed)?;
+        write_encoded_work_packet(&mut stream, encoded.as_bytes()).map_err(|_| WorkChannelError::DeliveryFailed)?;
         Ok(ChannelEnvelope {
             abi_version: WORK_WIRE_ABI_VERSION,
             channel_id: route.endpoint.channel_id,
