@@ -25,7 +25,6 @@ import { cn } from "@/lib/utils"
 import { AppHeader } from "@/components/os/app-chrome"
 import { useAuth } from "@/hooks/use-auth"
 import { browserAppInstallStore } from "@/platform/runtime/browser-app-install-store"
-import { localCapabilityGrantsStore } from "@/stores/local-capability-grants-store"
 
 type NodeCard = {
   id: string
@@ -110,7 +109,7 @@ function statusClass(status: NodeCard["status"]) {
 export function OnboardingApp() {
   const auth = useAuth()
   const appState = useStore(browserAppInstallStore)
-  const capabilityGrants = useStore(localCapabilityGrantsStore)
+  const capabilityGrants = useStore(browserAppInstallStore)
   const profile = auth.unlockedProfile
   const contactCount = Math.max((profile?.contacts.length ?? 0) - 1, 0)
   const capabilityGrantCount = useMemo(

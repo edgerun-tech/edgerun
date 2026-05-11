@@ -48,14 +48,14 @@ import { AgentAudioVisualizerAura } from "@/components/agents-ui/agent-audio-vis
 import { AgentAudioVisualizerBar } from "@/components/agents-ui/agent-audio-visualizer-bar"
 import { AgentAudioVisualizerWave } from "@/components/agents-ui/agent-audio-visualizer-wave"
 import { ReactShaderToy } from "@/components/agents-ui/react-shader-toy"
-import { AlertCenter } from "@/components/alerts/AlertCenter"
-import { CapabilityList } from "@/components/capabilities/CapabilityList"
+import { AlertCenter } from "@/components/AlertCenter"
+import { CapabilityList } from "@/components/CapabilityList"
 import { CapabilityGatePrompt } from "@/components/capability-gate-prompt"
 import {
   DependencyGraph,
   updateDependencyGraph,
-} from "@/components/dependencies/DependencyGraph"
-import { PipelineProgress } from "@/components/pipelines/PipelineProgress"
+} from "@/components/DependencyGraph"
+import { PipelineProgress } from "@/components/PipelineProgress"
 import { CodelyzerCodeWidget, CodelyzerNetworkPanel, NetworkConnectionsWidget } from "@/components/sections/codelyzer-network"
 import { FinancesOverviewWidget } from "@/components/sections/finance-overviews"
 import { TestStatusPanel } from "@/components/tests/TestStatusPanel"

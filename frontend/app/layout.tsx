@@ -1,7 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
 import './globals.css'
-import { PlatformProvider } from '@/platform/ui/PlatformProvider'
 import { TooltipProvider } from '@radix-ui/react-tooltip'
 
 const geist = Geist({ subsets: ["latin"], variable: "--font-geist-sans" });
@@ -43,9 +42,7 @@ export default function RootLayout({
     <html lang="en" className="bg-background">
       <body className={`${geist.variable} ${geistMono.variable} font-sans antialiased overflow-hidden`}>
         <TooltipProvider>
-          <PlatformProvider>
             {children}
-          </PlatformProvider>
         </TooltipProvider>
       </body>
     </html>
