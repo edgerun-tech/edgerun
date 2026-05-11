@@ -27,7 +27,7 @@ pub struct RelayDeliveryResult {
     pub destination_route_hash: Hash,
     pub forwarded_packet_hash: Hash,
     pub transit_hash: Hash,
-    pub receipt: WorkReceipt,
+    pub transit_receipt: WorkReceipt,
 }
 
 pub struct RelayRole {
@@ -113,34 +113,34 @@ impl RelayRole {
         delivery: &RelayDeliveryResult,
         receiver_channel_proof_hash: Hash,
     ) -> WorkReceipt {
-        let input_hash = delivery.receipt.input_hash;
+        let input_hash = delivery.transit_receipt.input_hash;
         let output_hash = relay_delivery_output_hash(
             delivery.transit_hash,
             delivery.forwarded_packet_hash,
             receiver_channel_proof_hash,
         );
         let receipt_id = receipt_id_for_claim(
-            delivery.receipt.request_hash,
-            delivery.receipt.admission_hash,
+            delivery.transit_receipt.request_hash,
+            delivery.transit_receipt.admission_hash,
             self.identity.node_id,
             input_hash,
             output_hash,
-            delivery.receipt.sequence,
+            delivery.transit_receipt.sequence,
         );
         sign_work_receipt(
             &self.key,
             WorkReceipt {
                 abi_version: WORK_WIRE_ABI_VERSION,
                 receipt_id,
-                request_hash: delivery.receipt.request_hash,
-                admission_hash: delivery.receipt.admission_hash,
+                request_hash: delivery.transit_receipt.request_hash,
+                admission_hash: delivery.transit_receipt.admission_hash,
                 worker: self.identity.clone(),
                 relay_node_id: self.identity.node_id,
                 input_hash,
                 output_hash,
-                units_used: delivery.receipt.units_used,
-                total_claim: delivery.receipt.total_claim,
-                sequence: delivery.receipt.sequence,
+                units_used: delivery.transit_receipt.units_used,
+                total_claim: delivery.transit_receipt.total_claim,
+                sequence: delivery.transit_receipt.sequence,
                 signature: empty_signature(),
             },
         )
@@ -176,7 +176,7 @@ impl RelayRole {
             transit_hash,
             self.sequence,
         );
-        let receipt = sign_work_receipt(
+        let transit_receipt = sign_work_receipt(
             &self.key,
             WorkReceipt {
                 abi_version: WORK_WIRE_ABI_VERSION,
@@ -198,7 +198,7 @@ impl RelayRole {
             destination_route_hash,
             forwarded_packet_hash,
             transit_hash,
-            receipt,
+            transit_receipt,
         }
     }
 }
