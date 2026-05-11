@@ -18,6 +18,8 @@ pub mod tabler_font_generated;
 pub mod tabler_generated;
 #[cfg(feature = "tabler-icons")]
 pub mod tabler;
+#[cfg(feature = "tabler-svg-atlas")]
+pub mod tabler_svg_atlas_generated;
 
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

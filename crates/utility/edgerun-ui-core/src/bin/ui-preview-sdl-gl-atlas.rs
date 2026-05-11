@@ -14,6 +14,8 @@ use std::time::{Duration, Instant};
 use edgerun_ui_core::font::FontFace;
 #[cfg(feature = "fontdue-text")]
 use edgerun_ui_core::tabler_font_generated::{tabler_icon, TABLER_ICON_FONT_HINT};
+#[cfg(feature = "tabler-svg-atlas")]
+use edgerun_ui_core::tabler_svg_atlas_generated::{TABLER_SVG_ATLAS_ALPHA, TABLER_SVG_ATLAS_H, TABLER_SVG_ATLAS_W, TABLER_SVG_ICONS};
 
 const SDL_INIT_VIDEO: u32 = 0x0000_0020;
 const SDL_WINDOWPOS_CENTERED: c_int = 0x2fff_0000u32 as c_int;
@@ -333,6 +335,97 @@ impl TextRenderer {
 #[cfg(feature = "fontdue-text")]
 impl Drop for TextRenderer { fn drop(&mut self){ unsafe{ glDeleteBuffers(1,&self.vbo); glDeleteVertexArrays(1,&self.vao); glDeleteProgram(self.program); } } }
 
+#[cfg(feature="tabler-svg-atlas")]
+struct SvgAtlas {
+    tex: u32,
+    w: u32,
+    h: u32,
+}
+
+#[cfg(feature="tabler-svg-atlas")]
+impl SvgAtlas {
+    fn new() -> Self {
+        let mut tex = 0;
+        unsafe {
+            glGenTextures(1, &mut tex);
+            glBindTexture(GL_TEXTURE_2D, tex);
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                GL_R8 as i32,
+                TABLER_SVG_ATLAS_W as i32,
+                TABLER_SVG_ATLAS_H as i32,
+                0,
+                GL_RED,
+                GL_UNSIGNED_BYTE,
+                TABLER_SVG_ATLAS_ALPHA.as_ptr() as *const c_void,
+            );
+        }
+        Self { tex, w: TABLER_SVG_ATLAS_W, h: TABLER_SVG_ATLAS_H }
+    }
+
+    fn rect(&self, name: &str) -> Option<[f32; 4]> {
+        let r = TABLER_SVG_ICONS.iter().find(|r| r.name == name)?;
+        Some([
+            r.x as f32 / self.w as f32,
+            r.y as f32 / self.h as f32,
+            (r.x + r.w) as f32 / self.w as f32,
+            (r.y + r.h) as f32 / self.h as f32,
+        ])
+    }
+}
+
+#[cfg(feature="tabler-svg-atlas")]
+impl Drop for SvgAtlas {
+    fn drop(&mut self) {
+        unsafe { glDeleteTextures(1, &self.tex); }
+    }
+}
+
+#[cfg(feature="tabler-svg-atlas")]
+fn draw_svg_icon(
+    text: &TextRenderer,
+    atlas: &SvgAtlas,
+    width: i32,
+    height: i32,
+    name: &str,
+    x: f32,
+    y: f32,
+    size: f32,
+    color: Color4,
+) {
+    let Some(uv) = atlas.rect(name) else { return; };
+    unsafe {
+        glUseProgram(text.program);
+        glBindVertexArray(text.vao);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, atlas.tex);
+        glUniform1i(text.u_tex, 0);
+        glUniform2f(text.u_screen, width as f32, height as f32);
+        glUniform4f(text.u_color, color.0[0], color.0[1], color.0[2], color.0[3]);
+    }
+
+    let verts: [f32; 24] = [
+        x,        y,        uv[0], uv[1],
+        x + size, y,        uv[2], uv[1],
+        x + size, y + size, uv[2], uv[3],
+        x,        y,        uv[0], uv[1],
+        x + size, y + size, uv[2], uv[3],
+        x,        y + size, uv[0], uv[3],
+    ];
+
+    unsafe {
+        glBindBuffer(GL_ARRAY_BUFFER, text.vbo);
+        glBufferData(GL_ARRAY_BUFFER, (verts.len() * 4) as isize, verts.as_ptr() as *const c_void, GL_DYNAMIC_DRAW);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+    }
+}
+
 struct State { accent: usize }
 
 fn main(){ if let Err(err)=run(){ eprintln!("ui-preview-sdl-gl-atlas: {err}"); std::process::exit(1); } }
@@ -352,22 +445,31 @@ fn run()->Result<(),String>{
     let ui_atlas=ui_font.as_ref().map(|f| Atlas::build(f,&ascii_chars(),38.0));
     #[cfg(feature="fontdue-text")]
     let icon_atlas=icon_font.as_ref().map(|f| Atlas::build(f,&icon_chars(),34.0));
+    #[cfg(feature="tabler-svg-atlas")]
+    let svg_atlas=SvgAtlas::new();
     let started=Instant::now(); let mut running=true; let mut state=State{accent:0};
     while running { let mut event=SdlEvent{data:[0;56]}; while unsafe{SDL_PollEvent(&mut event)}!=0{ match event.event_type(){ SDL_QUIT=>running=false, SDL_WINDOWEVENT if event.window_event()==SDL_WINDOWEVENT_RESIZED=>{width=event.data1().max(320);height=event.data2().max(240);}, SDL_MOUSEBUTTONDOWN=>pick_accent(&mut state,event.mouse_x(),event.mouse_y()), SDL_KEYDOWN=>{ let k=event.key_sym(); if (49..=55).contains(&k){state.accent=(k-49) as usize;} }, _=>{} }}
-        render_frame(width,height,started.elapsed().as_secs_f32(),state.accent,&shapes,#[cfg(feature="fontdue-text")] &text,#[cfg(feature="fontdue-text")] ui_atlas.as_ref(),#[cfg(feature="fontdue-text")] icon_atlas.as_ref());
+        render_frame(width,height,started.elapsed().as_secs_f32(),state.accent,&shapes,#[cfg(feature="fontdue-text")] &text,#[cfg(feature="fontdue-text")] ui_atlas.as_ref(),#[cfg(feature="fontdue-text")] icon_atlas.as_ref(),#[cfg(all(feature="fontdue-text", feature="tabler-svg-atlas"))] &svg_atlas);
         unsafe{SDL_GL_SwapWindow(window.0);SDL_Delay(1);} std::thread::sleep(Duration::from_millis(1)); }
     Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
-fn render_frame(width:i32,height:i32,elapsed:f32,accent_i:usize,shapes:&ShapeRenderer,#[cfg(feature="fontdue-text")] text:&TextRenderer,#[cfg(feature="fontdue-text")] ui_atlas:Option<&Atlas>,#[cfg(feature="fontdue-text")] icon_atlas:Option<&Atlas>){
+fn render_frame(width:i32,height:i32,elapsed:f32,accent_i:usize,shapes:&ShapeRenderer,#[cfg(feature="fontdue-text")] text:&TextRenderer,#[cfg(feature="fontdue-text")] ui_atlas:Option<&Atlas>,#[cfg(feature="fontdue-text")] icon_atlas:Option<&Atlas>,#[cfg(all(feature="fontdue-text", feature="tabler-svg-atlas"))] svg_atlas:&SvgAtlas){
     let accent=PALETTE[accent_i.min(PALETTE.len()-1)]; unsafe{glViewport(0,0,width,height);glClearColor(BG.0[0],BG.0[1],BG.0[2],1.0);glClear(GL_COLOR_BUFFER_BIT);} shapes.begin(width,height);
     let cpu=0.12+(elapsed*1.8).sin().abs()*0.55; let ram=0.42; let margin=28.0; let hero_w=(width as f32-margin*2.0).min(920.0); let hero=Rect{x:margin,y:margin,w:hero_w,h:188.0}; shapes.card(hero); shapes.button(Rect{x:margin+26.0,y:margin+128.0,w:170.0,h:40.0},accent,true); shapes.button(Rect{x:margin+210.0,y:margin+128.0,w:172.0,h:40.0},accent,false);
     let stats_y=margin+210.0; let gap=16.0; let stat_w=(hero_w-gap*2.0)/3.0; let r1=Rect{x:margin,y:stats_y,w:stat_w,h:134.0}; let r2=Rect{x:margin+stat_w+gap,y:stats_y,w:stat_w,h:134.0}; let r3=Rect{x:margin+(stat_w+gap)*2.0,y:stats_y,w:stat_w,h:134.0}; shapes.card(r1); shapes.card(r2); shapes.card(r3); shapes.progress(Rect{x:margin+20.0,y:stats_y+106.0,w:stat_w-40.0,h:14.0},cpu,accent); shapes.progress(Rect{x:margin+stat_w+gap+20.0,y:stats_y+106.0,w:stat_w-40.0,h:14.0},ram,accent);
     for (i,c) in PALETTE.iter().enumerate(){ shapes.swatch(Rect{x:margin+i as f32*34.0,y:height as f32-54.0,w:24.0,h:24.0},*c,i==accent_i); }
     #[cfg(feature="fontdue-text")]
     if let Some(a)=ui_atlas{ text.draw_text(a,width,height,122.0,52.0,"EdgeRun",TEXT,38.0); text.draw_text(a,width,height,124.0,98.0,"GPU atlas text / Tabler icons / accent picker",MUTED,38.0); text.draw_text(a,width,height,96.0,276.0,"CPU",MUTED,38.0); text.draw_text(a,width,height,374.0,276.0,"RAM",MUTED,38.0); text.draw_text(a,width,height,652.0,276.0,"NET",MUTED,38.0); text.draw_text(a,width,height,28.0,height as f32-74.0,"accent",MUTED,38.0); }
-    #[cfg(feature="fontdue-text")]
+    #[cfg(all(feature="fontdue-text", feature="tabler-svg-atlas"))]
+    {
+        draw_svg_icon(text, svg_atlas, width, height, "sparkles", 40.0, 52.0, 34.0, accent);
+        draw_svg_icon(text, svg_atlas, width, height, "activity", 50.0, 270.0, 30.0, accent);
+        draw_svg_icon(text, svg_atlas, width, height, "server", 328.0, 270.0, 30.0, CYAN);
+        draw_svg_icon(text, svg_atlas, width, height, "network", 606.0, 270.0, 30.0, EMERALD);
+    }
+    #[cfg(all(feature="fontdue-text", not(feature="tabler-svg-atlas")))]
     if let Some(a)=icon_atlas{ draw_icon(text,a,width,height,"sparkles",40.0,52.0,accent); draw_icon(text,a,width,height,"activity",50.0,270.0,accent); draw_icon(text,a,width,height,"server",328.0,270.0,CYAN); draw_icon(text,a,width,height,"network",606.0,270.0,EMERALD); }
 }
 fn pick_accent(state:&mut State,x:i32,y:i32){ if y < 486 {return;} let start=28; for i in 0..PALETTE.len(){ let sx=start+i as i32*34; if x>=sx && x<=sx+24 { state.accent=i; } } }
