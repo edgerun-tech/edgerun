@@ -7,7 +7,7 @@ use crate::codec::{blake3_hash, empty_signature, node_identity_from_key, packet_
 use crate::memory_channel::{MemoryChannelEngine, MemoryChannelError};
 use crate::protocol::*;
 use crate::settlement::receipt_id_for_claim;
-use crate::work_channel::{MemoryWorkChannel, WorkChannel, WorkChannelError};
+use crate::work_channel::{WorkChannel, WorkChannelError};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RelayRoleError {
@@ -90,10 +90,7 @@ impl RelayRole {
         request_hash: Hash,
         admission_hash: Hash,
     ) -> Result<RelayDeliveryResult, RelayRoleError> {
-        let mut adapter = MemoryWorkChannel::from_engine(channel.clone());
-        let result = self.forward_ordered_on(&mut adapter, ordered, request_hash, admission_hash)?;
-        *channel = adapter.into_engine();
-        Ok(result)
+        self.forward_ordered_on(channel, ordered, request_hash, admission_hash)
     }
 
     fn finish_delivery_receipt(
