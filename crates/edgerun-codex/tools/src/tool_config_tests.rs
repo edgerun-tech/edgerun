@@ -15,7 +15,7 @@ use pretty_assertions::assert_eq;
 use std::path::PathBuf;
 
 fn model_info() -> ModelInfo {
-    edgerun_json::from_serde_value(json!({
+    edgerun_json::from_json_value(json!({
         "slug": "test-model",
         "display_name": "Test Model",
         "description": null,

@@ -7,7 +7,7 @@ use edgerun_json::json;
 use pretty_assertions::assert_eq;
 
 fn model_info() -> ModelInfo {
-    edgerun_json::from_serde_value(json!({
+    edgerun_json::from_json_value(json!({
         "slug": "test-model",
         "display_name": "Test Model",
         "description": null,
