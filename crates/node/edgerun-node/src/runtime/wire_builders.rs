@@ -5,10 +5,13 @@ use edgerun_protocols::wire::{
     RUNTIME_PROTOCOL_ACME, RUNTIME_PROTOCOL_DNS_TCP, RUNTIME_PROTOCOL_DNS_UDP,
     RUNTIME_PROTOCOL_HTTP, RUNTIME_PROTOCOL_HTTPS, RUNTIME_PROTOCOL_IMAP, RUNTIME_PROTOCOL_IMAPS,
     RUNTIME_PROTOCOL_LMTP, RUNTIME_PROTOCOL_PROXY, RUNTIME_PROTOCOL_SMTP,
-    RUNTIME_PROTOCOL_SUBMISSION, RUNTIME_PROTOCOL_TFTP, RuntimeAppInstall, RuntimeAppMessage,
-    RuntimeCapabilityDeclaration, RuntimeDeploymentConfig, RuntimeDomainConfig, RuntimeHttpRequest,
-    RuntimeHttpRoute, RuntimeIdentityRoute, RuntimeProtocolBinding, SDK_WIRE_ABI_VERSION,
-    SigningCapabilityInputRecord, SigningResponsePayloadRecord, StorageWriteReceiptRecord,
+    RUNTIME_PROTOCOL_SUBMISSION, RUNTIME_PROTOCOL_TFTP, RUNTIME_SESSION_STATUS_OPEN,
+    RuntimeAppInstall, RuntimeAppMessage, RuntimeCapabilityDeclaration, RuntimeCapabilityGrant,
+    RuntimeCapabilitySession, RuntimeDeploymentConfig, RuntimeDomainConfig, RuntimeHttpRequest,
+    RuntimeHttpRoute, RuntimeIdentityRoute, RuntimeNetworkBinding, RuntimeProtocolBinding,
+    RuntimeStorageBinding, SDK_WIRE_ABI_VERSION, SigningCapabilityInputRecord,
+    SigningResponsePayloadRecord, StorageWriteReceiptRecord, runtime_capability_grant_id,
+    runtime_capability_session_id, runtime_network_binding_id, runtime_storage_binding_id,
 };
 
 pub fn runtime_app_install(
@@ -78,6 +81,152 @@ pub fn runtime_capability_declaration(
         scope_sha256,
         label: label.into(),
         context: context.into(),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn runtime_capability_grant(
+    profile_id: [u8; 32],
+    user_id: [u8; 32],
+    app_id: [u8; 32],
+    release_id: [u8; 32],
+    capability_kind: u16,
+    operation: u16,
+    min_assurance: u16,
+    scope_sha256: [u8; 32],
+    constraints_sha256: [u8; 32],
+    valid_from: u64,
+    valid_until: u64,
+    user_signature: Vec<u8>,
+) -> RuntimeCapabilityGrant {
+    let grant_id = runtime_capability_grant_id(
+        profile_id,
+        user_id,
+        app_id,
+        release_id,
+        capability_kind,
+        operation,
+        scope_sha256,
+        constraints_sha256,
+        valid_from,
+        valid_until,
+    );
+    RuntimeCapabilityGrant {
+        abi_version: SDK_WIRE_ABI_VERSION,
+        flags: 1,
+        grant_id,
+        profile_id,
+        user_id,
+        app_id,
+        release_id,
+        capability_kind,
+        operation,
+        min_assurance,
+        scope_sha256,
+        constraints_sha256,
+        valid_from,
+        valid_until,
+        user_signature,
+    }
+}
+
+pub fn runtime_storage_binding(
+    grant: &RuntimeCapabilityGrant,
+    namespace: impl Into<Vec<u8>>,
+    provider_id: [u8; 32],
+    capability_id: [u8; 32],
+    backing_kind: u16,
+) -> RuntimeStorageBinding {
+    let namespace = namespace.into();
+    let binding_id =
+        runtime_storage_binding_id(grant.grant_id, &namespace, provider_id, capability_id);
+    RuntimeStorageBinding {
+        abi_version: SDK_WIRE_ABI_VERSION,
+        flags: 1,
+        binding_id,
+        grant_id: grant.grant_id,
+        profile_id: grant.profile_id,
+        app_id: grant.app_id,
+        release_id: grant.release_id,
+        namespace,
+        provider_id,
+        capability_id,
+        backing_kind,
+        scope_sha256: grant.scope_sha256,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn runtime_network_binding(
+    grant: &RuntimeCapabilityGrant,
+    provider_id: [u8; 32],
+    capability_id: [u8; 32],
+    binding_kind: u16,
+    protocol: u16,
+    port: u16,
+    origin: impl Into<Vec<u8>>,
+    methods_sha256: [u8; 32],
+) -> RuntimeNetworkBinding {
+    let origin = origin.into();
+    let binding_id = runtime_network_binding_id(
+        grant.grant_id,
+        provider_id,
+        capability_id,
+        binding_kind,
+        protocol,
+        port,
+        &origin,
+        methods_sha256,
+    );
+    RuntimeNetworkBinding {
+        abi_version: SDK_WIRE_ABI_VERSION,
+        flags: 1,
+        binding_id,
+        grant_id: grant.grant_id,
+        profile_id: grant.profile_id,
+        app_id: grant.app_id,
+        release_id: grant.release_id,
+        provider_id,
+        capability_id,
+        binding_kind,
+        protocol,
+        port,
+        origin,
+        methods_sha256,
+        scope_sha256: grant.scope_sha256,
+    }
+}
+
+pub fn runtime_capability_session(
+    grant: &RuntimeCapabilityGrant,
+    capability_id: [u8; 32],
+    provider_node_id: [u8; 32],
+    admission_hash: [u8; 32],
+    route_commitment: [u8; 32],
+    valid_until: u64,
+) -> RuntimeCapabilitySession {
+    let session_id = runtime_capability_session_id(
+        grant.grant_id,
+        grant.app_id,
+        grant.release_id,
+        capability_id,
+        provider_node_id,
+        admission_hash,
+        route_commitment,
+    );
+    RuntimeCapabilitySession {
+        abi_version: SDK_WIRE_ABI_VERSION,
+        flags: 1,
+        session_id,
+        grant_id: grant.grant_id,
+        app_id: grant.app_id,
+        release_id: grant.release_id,
+        capability_id,
+        provider_node_id,
+        admission_hash,
+        route_commitment,
+        valid_until,
+        status: RUNTIME_SESSION_STATUS_OPEN,
     }
 }
 

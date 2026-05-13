@@ -5562,16 +5562,23 @@ unsafe fn tftp_parse(message_ptr: i32, message_len: i32, out_ptr: i32) -> i32 {
             app_id: sha256(b"app"),
             release_id: sha256(b"release"),
             scope_sha256: sha256(b"user/state"),
+            constraints_sha256: [0; 32],
             capability_kind: CAPABILITY_KIND_SEALING,
             operation: CAPABILITY_OPERATION_UNSEAL,
             min_assurance: 2,
             flags: 0,
             valid_from: 10,
             valid_until: 20,
+            user_signature: Vec::new(),
         };
         let owner_seed = [0x31; 32];
-        let body =
-            user_profile_body_with_owner_seed_bytes(&profile_id, &owner_seed, 7, 2, &[grant]);
+        let body = user_profile_body_with_owner_seed_bytes(
+            &profile_id,
+            &owner_seed,
+            7,
+            2,
+            core::slice::from_ref(&grant),
+        );
         let profile_file = user_profile_file_bytes(&body, &seal_key).expect("profile");
         let wire_profile =
             match edgerun_wire::from_bytes::<SdkWireRecord, edgerun_wire::WireError>(&profile_file)
@@ -5588,6 +5595,21 @@ unsafe fn tftp_parse(message_ptr: i32, message_len: i32, out_ptr: i32) -> i32 {
 
         let wire_body = opened;
         assert_eq!(wire_body.grants.len(), 1);
+        assert_eq!(
+            wire_body.grants[0].grant_id,
+            edgerun_wire::runtime_capability_grant_id(
+                profile_id,
+                owner.verifying_key().to_bytes(),
+                grant.app_id,
+                grant.release_id,
+                grant.capability_kind,
+                grant.operation,
+                grant.scope_sha256,
+                grant.constraints_sha256,
+                grant.valid_from,
+                grant.valid_until,
+            )
+        );
         assert_eq!(
             wire_body.owner_key_algorithm,
             edgerun_wire::USER_PROFILE_OWNER_KEY_ED25519
@@ -5638,12 +5660,14 @@ unsafe fn tftp_parse(message_ptr: i32, message_len: i32, out_ptr: i32) -> i32 {
             app_id,
             release_id,
             scope_sha256: sha256(context),
+            constraints_sha256: [0; 32],
             capability_kind: CAPABILITY_KIND_STORAGE,
             operation: CAPABILITY_OPERATION_READ,
             min_assurance: 2,
             flags: 0,
             valid_from: 10,
             valid_until: 20,
+            user_signature: Vec::new(),
         };
         let body = wire_user_profile_body_bytes(&profile_id, &owner, 8, 1, &[grant]);
         let parsed_body =
@@ -5858,12 +5882,14 @@ unsafe fn tftp_parse(message_ptr: i32, message_len: i32, out_ptr: i32) -> i32 {
             app_id,
             release_id,
             scope_sha256: sha256(context),
+            constraints_sha256: [0; 32],
             capability_kind: CAPABILITY_KIND_SEALING,
             operation: CAPABILITY_OPERATION_UNSEAL,
             min_assurance: 2,
             flags: 0,
             valid_from: 10,
             valid_until: 20,
+            user_signature: Vec::new(),
         };
         let body = user_profile_body_bytes(&profile_id, &owner, 7, 1, &[grant]);
         let file = user_profile_file_bytes(&body, &seal_key).expect("profile");

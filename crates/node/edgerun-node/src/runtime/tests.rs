@@ -3,10 +3,14 @@ use crate::storage::MemoryRuntimeStorage;
 use crate::storage::{RuntimeStorageDecision, RuntimeStorageSurface};
 use alloc::vec;
 use edgerun_protocols::wire::{
-    CAPABILITY_KIND_SIGNING, CAPABILITY_KIND_STORAGE, CAPABILITY_OPERATION_READ,
-    CAPABILITY_OPERATION_SIGN, CAPABILITY_OPERATION_WRITE, CapabilityRequest, HTTP_METHOD_GET,
-    ROUTE_SCHEME_HTTPS, RUNTIME_EVENT_CAPABILITY_EXECUTED, RUNTIME_PROTOCOL_DNS_UDP,
-    RUNTIME_PROTOCOL_HTTPS, RUNTIME_PROTOCOL_SMTP, RuntimeDomainConfig, RuntimeMailbox, from_bytes,
+    CAPABILITY_KIND_NETWORK, CAPABILITY_KIND_SIGNING, CAPABILITY_KIND_STORAGE,
+    CAPABILITY_OPERATION_READ, CAPABILITY_OPERATION_RECEIVE, CAPABILITY_OPERATION_SIGN,
+    CAPABILITY_OPERATION_WRITE, CapabilityRequest, HTTP_METHOD_GET, ROUTE_SCHEME_HTTPS,
+    RUNTIME_EVENT_CAPABILITY_DENIED, RUNTIME_EVENT_CAPABILITY_EXECUTED,
+    RUNTIME_EVENT_CAPABILITY_GRANTED, RUNTIME_EVENT_CAPABILITY_SESSION_OPENED,
+    RUNTIME_EVENT_STORAGE_BOUND, RUNTIME_NETWORK_BINDING_FETCH, RUNTIME_PROTOCOL_DNS_UDP,
+    RUNTIME_PROTOCOL_HTTPS, RUNTIME_PROTOCOL_SMTP, RUNTIME_STORAGE_BACKING_BROWSER,
+    RUNTIME_STORAGE_BACKING_MEMORY, RuntimeDomainConfig, RuntimeMailbox, from_bytes,
 };
 
 #[derive(Default)]
@@ -40,6 +44,49 @@ impl RuntimeAppSigner for TestAppSigner {
     }
 }
 
+fn grant_network_route<S>(
+    runtime: &mut RuntimeKernel<S>,
+    app_id: [u8; 32],
+    release_id: [u8; 32],
+    host: &[u8],
+    time: u64,
+) where
+    S: crate::storage::RuntimeStorage,
+{
+    let grant = runtime_capability_grant(
+        sha256(b"profile"),
+        sha256(b"user"),
+        app_id,
+        release_id,
+        CAPABILITY_KIND_NETWORK,
+        CAPABILITY_OPERATION_RECEIVE,
+        2,
+        sha256(host),
+        sha256(b"https-route"),
+        time,
+        100,
+        b"user-signature-network".to_vec(),
+    );
+    runtime
+        .grant_runtime_capability(grant.clone(), time)
+        .expect("network grant");
+    runtime
+        .bind_network_provider(
+            runtime_network_binding(
+                &grant,
+                sha256(b"https-provider"),
+                sha256(b"https-listener"),
+                RUNTIME_NETWORK_BINDING_FETCH,
+                RUNTIME_PROTOCOL_HTTPS,
+                443,
+                host.to_vec(),
+                sha256(b"GET"),
+            ),
+            time,
+        )
+        .expect("network binding");
+}
+
 #[test]
 fn runtime_installs_routes_dispatches_and_brokers_storage() {
     let app_id = sha256(b"app");
@@ -62,7 +109,8 @@ fn runtime_installs_routes_dispatches_and_brokers_storage() {
     );
     let mut runtime = RuntimeKernel::new(MemoryRuntimeStorage::default(), sha256(b"runtime"));
     runtime.install_app(install, 1).expect("install");
-    runtime.grant_http_route(route, 2).expect("route");
+    grant_network_route(&mut runtime, app_id, release_id, b"example.com", 2);
+    runtime.install_http_route(route, 2).expect("route");
     let dispatch = runtime
         .dispatch_http(
             runtime_http_request(
@@ -77,6 +125,66 @@ fn runtime_installs_routes_dispatches_and_brokers_storage() {
         )
         .expect("dispatch");
     assert_eq!(dispatch.app_id, app_id);
+
+    let write_grant = runtime_capability_grant(
+        sha256(b"profile"),
+        sha256(b"user"),
+        app_id,
+        release_id,
+        CAPABILITY_KIND_STORAGE,
+        CAPABILITY_OPERATION_WRITE,
+        2,
+        sha256(b"private"),
+        sha256(b"memory-storage"),
+        4,
+        100,
+        b"user-signature-write".to_vec(),
+    );
+    runtime
+        .grant_runtime_capability(write_grant.clone(), 4)
+        .expect("write grant");
+    runtime
+        .bind_storage_provider(
+            runtime_storage_binding(
+                &write_grant,
+                b"private".to_vec(),
+                sha256(b"memory-provider"),
+                sha256(b"private-object-store"),
+                RUNTIME_STORAGE_BACKING_MEMORY,
+            ),
+            4,
+        )
+        .expect("write storage binding");
+
+    let read_grant = runtime_capability_grant(
+        sha256(b"profile"),
+        sha256(b"user"),
+        app_id,
+        release_id,
+        CAPABILITY_KIND_STORAGE,
+        CAPABILITY_OPERATION_READ,
+        2,
+        sha256(b"private"),
+        sha256(b"memory-storage"),
+        5,
+        100,
+        b"user-signature-read".to_vec(),
+    );
+    runtime
+        .grant_runtime_capability(read_grant.clone(), 5)
+        .expect("read grant");
+    runtime
+        .bind_storage_provider(
+            runtime_storage_binding(
+                &read_grant,
+                b"private".to_vec(),
+                sha256(b"memory-provider"),
+                sha256(b"private-object-store"),
+                RUNTIME_STORAGE_BACKING_MEMORY,
+            ),
+            5,
+        )
+        .expect("read storage binding");
 
     let value = b"app private value".to_vec();
     let write_request = CapabilityRequest::new(
@@ -151,7 +259,7 @@ fn runtime_installs_routes_dispatches_and_brokers_storage() {
         .expect("app message");
     assert_eq!(accepted, message);
 
-    assert_eq!(runtime.events().len(), 7);
+    assert_eq!(runtime.events().len(), 13);
     for (seq, entry) in runtime.events().iter().enumerate() {
         assert_eq!(entry.event.seq, seq as u64);
         if seq == 0 {
@@ -212,8 +320,9 @@ fn runtime_installs_app_graph_with_bound_install_record() {
         RUNTIME_EVENT_APP_INSTALLED
     );
 
+    grant_network_route(&mut runtime, app_id, release_id, b"dash.edgerun.tech", 2);
     runtime
-        .grant_http_route(route, 2)
+        .install_http_route(route, 2)
         .expect("grant declared route");
     let dispatch = runtime
         .dispatch_http(
@@ -287,13 +396,13 @@ fn runtime_routes_unknown_local_recipient_to_mesh_identity_route() {
         )
         .expect("install");
     runtime
-        .grant_identity_route(
+        .install_identity_route(
             runtime_identity_route(
                 remote_app_id,
                 remote_runtime_id,
                 remote_node_id,
                 2,
-                0,
+                u64::MAX,
                 b"mesh".to_vec(),
             ),
             2,
@@ -323,6 +432,49 @@ fn runtime_routes_unknown_local_recipient_to_mesh_identity_route() {
         runtime.events()[2].event.status,
         APP_MESSAGE_STATUS_FORWARDED
     );
+}
+
+#[test]
+fn runtime_rejects_expired_identity_route() {
+    let app_id = sha256(b"app");
+    let release_id = sha256(b"release");
+    let remote_app_id = sha256(b"remote-app");
+    let mut runtime = RuntimeKernel::new(MemoryRuntimeStorage::default(), sha256(b"runtime"));
+    runtime
+        .install_app(
+            runtime_app_install(
+                app_id,
+                release_id,
+                sha256(b"code"),
+                sha256(b"developer"),
+                sha256(b"manifest"),
+                Vec::new(),
+                Vec::new(),
+            ),
+            1,
+        )
+        .expect("install");
+    runtime
+        .install_identity_route(
+            runtime_identity_route(
+                remote_app_id,
+                sha256(b"remote-runtime"),
+                [9u8; 64],
+                2,
+                3,
+                b"mesh".to_vec(),
+            ),
+            2,
+        )
+        .expect("route");
+
+    let message = runtime_app_message(app_id, remote_app_id, 42, b"late".to_vec());
+    assert_eq!(
+        runtime.route_app_message(message, 4),
+        Err(RuntimeError::IdentityRouteNotFound)
+    );
+    assert_eq!(runtime.events().len(), 3);
+    assert_eq!(runtime.events()[2].event.status, APP_MESSAGE_STATUS_DENIED);
 }
 
 #[test]
@@ -377,6 +529,55 @@ fn runtime_identity_routing_still_delivers_local_recipient_locally() {
 }
 
 #[test]
+fn runtime_rechecks_http_route_grant_at_dispatch() {
+    let app_id = sha256(b"app");
+    let release_id = sha256(b"release");
+    let route = runtime_http_route(
+        app_id,
+        release_id,
+        ROUTE_SCHEME_HTTPS,
+        b"example.com".to_vec(),
+        b"/app/".to_vec(),
+    );
+    let mut runtime = RuntimeKernel::new(MemoryRuntimeStorage::default(), sha256(b"runtime"));
+    runtime
+        .install_app(
+            runtime_app_install(
+                app_id,
+                release_id,
+                sha256(b"code"),
+                sha256(b"developer"),
+                sha256(b"manifest"),
+                vec![route.clone()],
+                Vec::new(),
+            ),
+            1,
+        )
+        .expect("install");
+    grant_network_route(&mut runtime, app_id, release_id, b"example.com", 2);
+    runtime.install_http_route(route, 2).expect("route");
+
+    assert_eq!(
+        runtime.dispatch_http(
+            runtime_http_request(
+                HTTP_METHOD_GET,
+                ROUTE_SCHEME_HTTPS,
+                b"example.com".to_vec(),
+                b"/app/index".to_vec(),
+                [0; 32],
+                Vec::new(),
+            ),
+            101,
+        ),
+        Err(RuntimeError::RouteDenied)
+    );
+    assert_eq!(
+        runtime.events().last().unwrap().event.status,
+        CAPABILITY_STATUS_POLICY_DENIED
+    );
+}
+
+#[test]
 fn runtime_denies_storage_namespace_crossing() {
     let app_id = sha256(b"app");
     let release_id = sha256(b"release");
@@ -422,6 +623,421 @@ fn runtime_denies_storage_namespace_crossing() {
 }
 
 #[test]
+fn runtime_records_user_choice_storage_binding_and_session() {
+    let app_id = sha256(b"app");
+    let release_id = sha256(b"release");
+    let profile_id = sha256(b"profile");
+    let user_id = sha256(b"user");
+    let scope = sha256(b"chat-storage");
+    let constraints = sha256(b"allow-while-open");
+    let provider_id = sha256(b"browser-indexeddb-provider");
+    let capability_id = sha256(b"object-store/chat");
+    let provider_node_id = sha256(b"provider-node");
+    let admission_hash = sha256(b"admission");
+    let route_commitment = sha256(b"route");
+
+    let mut runtime = RuntimeKernel::new(MemoryRuntimeStorage::default(), sha256(b"runtime"));
+    runtime
+        .install_app(
+            runtime_app_install(
+                app_id,
+                release_id,
+                sha256(b"code"),
+                sha256(b"developer"),
+                sha256(b"manifest"),
+                Vec::new(),
+                vec![b"chat".to_vec()],
+            ),
+            1,
+        )
+        .expect("install");
+
+    let grant = runtime_capability_grant(
+        profile_id,
+        user_id,
+        app_id,
+        release_id,
+        CAPABILITY_KIND_STORAGE,
+        CAPABILITY_OPERATION_WRITE,
+        2,
+        scope,
+        constraints,
+        2,
+        100,
+        b"user-signature".to_vec(),
+    );
+    runtime
+        .grant_runtime_capability(grant.clone(), 2)
+        .expect("grant");
+
+    let binding = runtime_storage_binding(
+        &grant,
+        b"chat".to_vec(),
+        provider_id,
+        capability_id,
+        RUNTIME_STORAGE_BACKING_BROWSER,
+    );
+    runtime
+        .bind_storage_provider(binding.clone(), 3)
+        .expect("storage binding");
+
+    let session = runtime_capability_session(
+        &grant,
+        capability_id,
+        provider_node_id,
+        admission_hash,
+        route_commitment,
+        99,
+    );
+    runtime
+        .open_capability_session(session.clone(), 4)
+        .expect("session");
+
+    assert_eq!(
+        runtime.capability_grants().get(&grant.grant_id),
+        Some(&grant)
+    );
+    assert_eq!(
+        runtime.storage_bindings().get(&binding.binding_id),
+        Some(&binding)
+    );
+    assert_eq!(
+        runtime.capability_sessions().get(&session.session_id),
+        Some(&session)
+    );
+    assert_eq!(
+        runtime.events()[1].event.event_kind,
+        RUNTIME_EVENT_CAPABILITY_GRANTED
+    );
+    assert_eq!(
+        runtime.events()[2].event.event_kind,
+        RUNTIME_EVENT_STORAGE_BOUND
+    );
+    assert_eq!(
+        runtime.events()[3].event.event_kind,
+        RUNTIME_EVENT_CAPABILITY_SESSION_OPENED
+    );
+}
+
+#[test]
+fn runtime_rejects_binding_before_grant_is_live() {
+    let app_id = sha256(b"app");
+    let release_id = sha256(b"release");
+    let mut runtime = RuntimeKernel::new(MemoryRuntimeStorage::default(), sha256(b"runtime"));
+    runtime
+        .install_app(
+            runtime_app_install(
+                app_id,
+                release_id,
+                sha256(b"code"),
+                sha256(b"developer"),
+                sha256(b"manifest"),
+                Vec::new(),
+                vec![b"chat".to_vec()],
+            ),
+            1,
+        )
+        .expect("install");
+
+    let grant = runtime_capability_grant(
+        sha256(b"profile"),
+        sha256(b"user"),
+        app_id,
+        release_id,
+        CAPABILITY_KIND_STORAGE,
+        CAPABILITY_OPERATION_WRITE,
+        2,
+        sha256(b"chat-storage"),
+        sha256(b"constraints"),
+        10,
+        20,
+        b"user-signature".to_vec(),
+    );
+    runtime
+        .grant_runtime_capability(grant.clone(), 2)
+        .expect("grant");
+    let binding = runtime_storage_binding(
+        &grant,
+        b"chat".to_vec(),
+        sha256(b"provider"),
+        sha256(b"capability"),
+        RUNTIME_STORAGE_BACKING_BROWSER,
+    );
+
+    assert_eq!(
+        runtime.bind_storage_provider(binding, 9),
+        Err(RuntimeError::CapabilityDenied)
+    );
+    assert_eq!(
+        runtime.events().last().unwrap().event.status,
+        CAPABILITY_STATUS_POLICY_DENIED
+    );
+}
+
+#[test]
+fn runtime_rejects_tampered_runtime_record_ids() {
+    let app_id = sha256(b"app");
+    let release_id = sha256(b"release");
+    let mut runtime = RuntimeKernel::new(MemoryRuntimeStorage::default(), sha256(b"runtime"));
+    runtime
+        .install_app(
+            runtime_app_install(
+                app_id,
+                release_id,
+                sha256(b"code"),
+                sha256(b"developer"),
+                sha256(b"manifest"),
+                Vec::new(),
+                vec![b"chat".to_vec()],
+            ),
+            1,
+        )
+        .expect("install");
+
+    let mut grant = runtime_capability_grant(
+        sha256(b"profile"),
+        sha256(b"user"),
+        app_id,
+        release_id,
+        CAPABILITY_KIND_STORAGE,
+        CAPABILITY_OPERATION_WRITE,
+        2,
+        sha256(b"chat-storage"),
+        sha256(b"constraints"),
+        2,
+        20,
+        b"user-signature".to_vec(),
+    );
+    grant.grant_id = sha256(b"tampered-grant-id");
+    assert_eq!(
+        runtime.grant_runtime_capability(grant, 2),
+        Err(RuntimeError::CapabilityDenied)
+    );
+
+    let grant = runtime_capability_grant(
+        sha256(b"profile"),
+        sha256(b"user"),
+        app_id,
+        release_id,
+        CAPABILITY_KIND_STORAGE,
+        CAPABILITY_OPERATION_WRITE,
+        2,
+        sha256(b"chat-storage"),
+        sha256(b"constraints"),
+        2,
+        20,
+        b"user-signature".to_vec(),
+    );
+    runtime
+        .grant_runtime_capability(grant.clone(), 2)
+        .expect("grant");
+
+    let mut binding = runtime_storage_binding(
+        &grant,
+        b"chat".to_vec(),
+        sha256(b"provider"),
+        sha256(b"capability"),
+        RUNTIME_STORAGE_BACKING_BROWSER,
+    );
+    let valid_binding = binding.clone();
+    binding.binding_id = sha256(b"tampered-binding-id");
+    assert_eq!(
+        runtime.bind_storage_provider(binding, 3),
+        Err(RuntimeError::CapabilityDenied)
+    );
+    runtime
+        .bind_storage_provider(valid_binding, 3)
+        .expect("binding");
+
+    let mut session = runtime_capability_session(
+        &grant,
+        sha256(b"capability"),
+        sha256(b"provider-node"),
+        sha256(b"admission"),
+        sha256(b"route"),
+        20,
+    );
+    session.session_id = sha256(b"tampered-session-id");
+    assert_eq!(
+        runtime.open_capability_session(session, 4),
+        Err(RuntimeError::CapabilityDenied)
+    );
+}
+
+#[test]
+fn runtime_rejects_storage_binding_backed_by_network_grant() {
+    let app_id = sha256(b"app");
+    let release_id = sha256(b"release");
+    let mut runtime = RuntimeKernel::new(MemoryRuntimeStorage::default(), sha256(b"runtime"));
+    runtime
+        .install_app(
+            runtime_app_install(
+                app_id,
+                release_id,
+                sha256(b"code"),
+                sha256(b"developer"),
+                sha256(b"manifest"),
+                Vec::new(),
+                vec![b"chat".to_vec()],
+            ),
+            1,
+        )
+        .expect("install");
+
+    let grant = runtime_capability_grant(
+        sha256(b"profile"),
+        sha256(b"user"),
+        app_id,
+        release_id,
+        CAPABILITY_KIND_NETWORK,
+        CAPABILITY_OPERATION_RECEIVE,
+        2,
+        sha256(b"chat-storage"),
+        sha256(b"constraints"),
+        2,
+        20,
+        b"user-signature".to_vec(),
+    );
+    runtime
+        .grant_runtime_capability(grant.clone(), 2)
+        .expect("grant");
+    let binding = runtime_storage_binding(
+        &grant,
+        b"chat".to_vec(),
+        sha256(b"provider"),
+        sha256(b"capability"),
+        RUNTIME_STORAGE_BACKING_BROWSER,
+    );
+
+    assert_eq!(
+        runtime.bind_storage_provider(binding, 3),
+        Err(RuntimeError::CapabilityDenied)
+    );
+    assert_eq!(
+        runtime.events().last().unwrap().event.status,
+        CAPABILITY_STATUS_POLICY_DENIED
+    );
+}
+
+#[test]
+fn runtime_rejects_session_outside_grant_window() {
+    let app_id = sha256(b"app");
+    let release_id = sha256(b"release");
+    let mut runtime = RuntimeKernel::new(MemoryRuntimeStorage::default(), sha256(b"runtime"));
+    runtime
+        .install_app(
+            runtime_app_install(
+                app_id,
+                release_id,
+                sha256(b"code"),
+                sha256(b"developer"),
+                sha256(b"manifest"),
+                Vec::new(),
+                Vec::new(),
+            ),
+            1,
+        )
+        .expect("install");
+
+    let grant = runtime_capability_grant(
+        sha256(b"profile"),
+        sha256(b"user"),
+        app_id,
+        release_id,
+        CAPABILITY_KIND_STORAGE,
+        CAPABILITY_OPERATION_WRITE,
+        2,
+        sha256(b"scope"),
+        sha256(b"constraints"),
+        10,
+        20,
+        b"user-signature".to_vec(),
+    );
+    runtime
+        .grant_runtime_capability(grant.clone(), 2)
+        .expect("grant");
+    let session = runtime_capability_session(
+        &grant,
+        sha256(b"capability"),
+        sha256(b"provider-node"),
+        sha256(b"admission"),
+        sha256(b"route"),
+        20,
+    );
+
+    assert_eq!(
+        runtime.open_capability_session(session.clone(), 9),
+        Err(RuntimeError::CapabilityDenied)
+    );
+    assert_eq!(
+        runtime.open_capability_session(session, 21),
+        Err(RuntimeError::CapabilityDenied)
+    );
+}
+
+#[test]
+fn runtime_rejects_session_without_matching_provider_binding() {
+    let app_id = sha256(b"app");
+    let release_id = sha256(b"release");
+    let mut runtime = RuntimeKernel::new(MemoryRuntimeStorage::default(), sha256(b"runtime"));
+    runtime
+        .install_app(
+            runtime_app_install(
+                app_id,
+                release_id,
+                sha256(b"code"),
+                sha256(b"developer"),
+                sha256(b"manifest"),
+                Vec::new(),
+                vec![b"chat".to_vec()],
+            ),
+            1,
+        )
+        .expect("install");
+
+    let grant = runtime_capability_grant(
+        sha256(b"profile"),
+        sha256(b"user"),
+        app_id,
+        release_id,
+        CAPABILITY_KIND_STORAGE,
+        CAPABILITY_OPERATION_WRITE,
+        2,
+        sha256(b"chat-storage"),
+        sha256(b"constraints"),
+        2,
+        20,
+        b"user-signature".to_vec(),
+    );
+    runtime
+        .grant_runtime_capability(grant.clone(), 2)
+        .expect("grant");
+    let binding = runtime_storage_binding(
+        &grant,
+        b"chat".to_vec(),
+        sha256(b"provider"),
+        sha256(b"bound-capability"),
+        RUNTIME_STORAGE_BACKING_BROWSER,
+    );
+    runtime
+        .bind_storage_provider(binding, 3)
+        .expect("storage binding");
+    let session = runtime_capability_session(
+        &grant,
+        sha256(b"other-capability"),
+        sha256(b"provider-node"),
+        sha256(b"admission"),
+        sha256(b"route"),
+        20,
+    );
+
+    assert_eq!(
+        runtime.open_capability_session(session, 4),
+        Err(RuntimeError::CapabilityDenied)
+    );
+}
+
+#[test]
 fn runtime_brokers_app_signing_without_exposing_private_key() {
     let app_id = sha256(b"app");
     let release_id = sha256(b"release");
@@ -446,6 +1062,23 @@ fn runtime_brokers_app_signing_without_exposing_private_key() {
             1,
         )
         .expect("install");
+    let grant = runtime_capability_grant(
+        sha256(b"profile"),
+        sha256(b"user"),
+        app_id,
+        release_id,
+        CAPABILITY_KIND_SIGNING,
+        CAPABILITY_OPERATION_SIGN,
+        2,
+        sha256(b"app-signing"),
+        sha256(b"signing-policy"),
+        2,
+        100,
+        b"user-signature-signing".to_vec(),
+    );
+    runtime
+        .grant_runtime_capability(grant, 2)
+        .expect("signing grant");
     let payload = b"message to sign".to_vec();
     let request = CapabilityRequest::new(
         CAPABILITY_KIND_SIGNING,
@@ -481,15 +1114,15 @@ fn runtime_brokers_app_signing_without_exposing_private_key() {
             signature
         })
     );
-    assert_eq!(runtime.events().len(), 2);
+    assert_eq!(runtime.events().len(), 3);
     assert_eq!(
-        runtime.events()[1].event.event_kind,
+        runtime.events()[2].event.event_kind,
         RUNTIME_EVENT_CAPABILITY_EXECUTED
     );
 }
 
 #[test]
-fn runtime_denies_signing_for_wrong_release_or_missing_key() {
+fn runtime_denies_signing_without_matching_grant() {
     let app_id = sha256(b"app");
     let release_id = sha256(b"release");
     let mut runtime = RuntimeKernel::new(MemoryRuntimeStorage::default(), sha256(b"runtime"));
@@ -513,7 +1146,7 @@ fn runtime_denies_signing_for_wrong_release_or_missing_key() {
         CAPABILITY_OPERATION_SIGN,
         2,
         app_id,
-        sha256(b"wrong-release"),
+        release_id,
         sha256(b"message-id"),
         sha256(&payload),
         b"app-signing".to_vec(),
@@ -536,6 +1169,74 @@ fn runtime_denies_signing_for_wrong_release_or_missing_key() {
         runtime.events()[1].event.event_kind,
         RUNTIME_EVENT_CAPABILITY_DENIED
     );
+}
+
+#[test]
+fn runtime_denies_signing_when_assurance_is_too_low() {
+    let app_id = sha256(b"app");
+    let release_id = sha256(b"release");
+    let mut app_signer = TestAppSigner::default();
+    app_signer.insert(app_id, b"app-public-key".to_vec());
+    let mut runtime = RuntimeKernel::with_signer_and_app_signer(
+        MemoryRuntimeStorage::default(),
+        UnsignedRuntimeSigner::new(sha256(b"runtime")),
+        app_signer,
+    );
+    runtime
+        .install_app(
+            runtime_app_install(
+                app_id,
+                release_id,
+                sha256(b"code"),
+                sha256(b"developer"),
+                sha256(b"manifest"),
+                Vec::new(),
+                Vec::new(),
+            ),
+            1,
+        )
+        .expect("install");
+    let grant = runtime_capability_grant(
+        sha256(b"profile"),
+        sha256(b"user"),
+        app_id,
+        release_id,
+        CAPABILITY_KIND_SIGNING,
+        CAPABILITY_OPERATION_SIGN,
+        3,
+        sha256(b"app-signing"),
+        sha256(b"signing-policy"),
+        2,
+        100,
+        b"user-signature-signing".to_vec(),
+    );
+    runtime
+        .grant_runtime_capability(grant, 2)
+        .expect("signing grant");
+    let payload = b"message to sign".to_vec();
+    let request = CapabilityRequest::new(
+        CAPABILITY_KIND_SIGNING,
+        CAPABILITY_OPERATION_SIGN,
+        2,
+        app_id,
+        release_id,
+        sha256(b"message-id"),
+        sha256(&payload),
+        b"app-signing".to_vec(),
+        payload,
+        b"nonce".to_vec(),
+    );
+    let request_bytes = sdk_wire_bytes(&SdkWireRecord::CapabilityRequest(request));
+    let response_bytes = runtime
+        .invoke_signing_wire(&request_bytes, b"runtime-app-signer", 2)
+        .expect("denied response");
+    let response = from_bytes::<SdkWireRecord, edgerun_protocols::wire::WireError>(&response_bytes)
+        .expect("wire response");
+    let response = match response {
+        SdkWireRecord::CapabilityResponse(response) => response,
+        _ => panic!("unexpected response"),
+    };
+    assert_eq!(response.status, CAPABILITY_STATUS_POLICY_DENIED);
 }
 
 #[test]

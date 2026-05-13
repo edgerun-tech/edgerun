@@ -3,6 +3,7 @@ use std::net::{TcpStream, ToSocketAddrs};
 
 use edgerun_crypto::Ed25519SigningKey;
 
+use crate::channel::ChannelEndpoint;
 use crate::codec::blake3_hash;
 use crate::identity::node_identity_from_key;
 use crate::preimage::HashBuilder;
@@ -29,6 +30,15 @@ impl WorkClient {
         key: Ed25519SigningKey,
         role: u16,
     ) -> io::Result<(Self, WorkPacket)> {
+        Self::connect_with_relay_endpoint(addr, key, role, None)
+    }
+
+    pub fn connect_with_relay_endpoint<A: ToSocketAddrs>(
+        addr: A,
+        key: Ed25519SigningKey,
+        role: u16,
+        relay_endpoint: Option<ChannelEndpoint>,
+    ) -> io::Result<(Self, WorkPacket)> {
         let mut stream = TcpStream::connect(addr)?;
         let identity = node_identity_from_key(&key, role);
         let available = sign_node_available(
@@ -36,6 +46,7 @@ impl WorkClient {
             NodeAvailable {
                 abi_version: WORK_WIRE_ABI_VERSION,
                 node: identity.clone(),
+                relay_endpoint,
                 sequence: 1,
                 unix_ms: unix_ms(),
                 heartbeat_secs: DEFAULT_HEARTBEAT_SECS,

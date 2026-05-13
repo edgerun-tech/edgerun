@@ -2498,26 +2498,30 @@ pub(crate) struct OwnedUserGrant {
     pub(crate) app_id: [u8; 32],
     pub(crate) release_id: [u8; 32],
     pub(crate) scope_sha256: [u8; 32],
+    pub(crate) constraints_sha256: [u8; 32],
     pub(crate) capability_kind: u16,
     pub(crate) operation: u16,
     pub(crate) min_assurance: u16,
     pub(crate) flags: u16,
     pub(crate) valid_from: u64,
     pub(crate) valid_until: u64,
+    pub(crate) user_signature: Vec<u8>,
 }
 
-impl From<&edgerun_wire::UserCapabilityGrant> for OwnedUserGrant {
-    fn from(grant: &edgerun_wire::UserCapabilityGrant) -> Self {
+impl From<&edgerun_wire::RuntimeCapabilityGrant> for OwnedUserGrant {
+    fn from(grant: &edgerun_wire::RuntimeCapabilityGrant) -> Self {
         Self {
             app_id: grant.app_id,
             release_id: grant.release_id,
             scope_sha256: grant.scope_sha256,
+            constraints_sha256: grant.constraints_sha256,
             capability_kind: grant.capability_kind,
             operation: grant.operation,
             min_assurance: grant.min_assurance,
-            flags: grant.flags,
+            flags: grant.flags as u16,
             valid_from: grant.valid_from,
             valid_until: grant.valid_until,
+            user_signature: grant.user_signature.clone(),
         }
     }
 }
@@ -2636,18 +2640,38 @@ pub(crate) fn wire_capability_response_binding_ok(
 }
 
 pub(crate) fn wire_user_grant_from_owned(
+    profile_id: &[u8; 32],
+    owner_id: &[u8; 32],
     grant: &OwnedUserGrant,
-) -> edgerun_wire::UserCapabilityGrant {
-    edgerun_wire::UserCapabilityGrant {
+) -> edgerun_wire::RuntimeCapabilityGrant {
+    let grant_id = edgerun_wire::runtime_capability_grant_id(
+        *profile_id,
+        *owner_id,
+        grant.app_id,
+        grant.release_id,
+        grant.capability_kind,
+        grant.operation,
+        grant.scope_sha256,
+        grant.constraints_sha256,
+        grant.valid_from,
+        grant.valid_until,
+    );
+    edgerun_wire::RuntimeCapabilityGrant {
+        abi_version: edgerun_wire::SDK_WIRE_ABI_VERSION,
+        flags: grant.flags as u32,
+        grant_id,
+        profile_id: *profile_id,
+        user_id: *owner_id,
+        app_id: grant.app_id,
+        release_id: grant.release_id,
         capability_kind: grant.capability_kind,
         operation: grant.operation,
         min_assurance: grant.min_assurance,
-        flags: grant.flags,
+        scope_sha256: grant.scope_sha256,
+        constraints_sha256: grant.constraints_sha256,
         valid_from: grant.valid_from,
         valid_until: grant.valid_until,
-        app_id: grant.app_id,
-        release_id: grant.release_id,
-        scope_sha256: grant.scope_sha256,
+        user_signature: grant.user_signature.clone(),
     }
 }
 
@@ -2684,20 +2708,24 @@ pub(crate) fn wire_user_profile_body_with_owner_seed_bytes(
     monotonic_version: u64,
     grants: &[OwnedUserGrant],
 ) -> Vec<u8> {
+    let owner_id = *owner_key.verifying_key().as_bytes();
     let mut body = edgerun_wire::UserProfileBody {
         abi_version: edgerun_wire::SDK_WIRE_ABI_VERSION,
         flags: 1,
         epoch,
         monotonic_version,
         profile_id: *profile_id,
-        owner_id: *owner_key.verifying_key().as_bytes(),
+        owner_id,
         owner_key_algorithm: if owner_seed.is_some() {
             edgerun_wire::USER_PROFILE_OWNER_KEY_ED25519
         } else {
             0
         },
         owner_private_key: owner_seed.map_or_else(Vec::new, |seed| seed.to_vec()),
-        grants: grants.iter().map(wire_user_grant_from_owned).collect(),
+        grants: grants
+            .iter()
+            .map(|grant| wire_user_grant_from_owned(profile_id, &owner_id, grant))
+            .collect(),
         signature: Vec::new(),
     };
     let unsigned = wire_user_profile_body_unsigned_bytes(&body);
@@ -4378,12 +4406,14 @@ pub(crate) fn cmd_grant_profile_capability(args: Vec<String>) -> i32 {
         app_id,
         release_id,
         scope_sha256,
+        constraints_sha256: [0; 32],
         capability_kind,
         operation,
         min_assurance,
         flags: 0,
         valid_from,
         valid_until,
+        user_signature: Vec::new(),
     });
     let profile_id = existing.profile_id;
     let new_body = user_profile_body_with_owner_seed_bytes(

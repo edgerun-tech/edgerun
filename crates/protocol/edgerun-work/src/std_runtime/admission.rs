@@ -150,24 +150,6 @@ impl InMemoryAdmissionController {
             .insert(user, balance);
     }
 
-    pub fn set_relay_endpoint(&self, relay_node_id: NodeId, channel: ChannelEndpoint) {
-        self.inner
-            .lock()
-            .expect("admission state poisoned")
-            .relays
-            .insert(
-                relay_node_id,
-                RelayRecord {
-                    endpoint: RelayEndpoint {
-                        relay_node_id,
-                        channel,
-                    },
-                    last_ms: 0,
-                    connection_hash: [0u8; 32],
-                },
-            );
-    }
-
     pub fn relay_count(&self) -> usize {
         self.inner
             .lock()
@@ -280,13 +262,26 @@ impl InMemoryAdmissionController {
         connection_hash: Hash,
     ) -> io::Result<WorkPacket> {
         let mut state = self.inner.lock().expect("admission state poisoned");
-        let Some(relay) = state.relays.values().next().cloned() else {
-            return Ok(ack(false, 503, "no relay available"));
+        let relay = if available.node.role == NODE_ROLE_RELAY {
+            let Some(channel) = available.relay_endpoint.clone() else {
+                return Ok(ack(false, 400, "relay availability missing endpoint"));
+            };
+            let relay = RelayRecord {
+                endpoint: RelayEndpoint {
+                    relay_node_id: available.node.node_id,
+                    channel,
+                },
+                last_ms: available.unix_ms,
+                connection_hash,
+            };
+            state.relays.insert(available.node.node_id, relay.clone());
+            relay
+        } else {
+            let Some(relay) = state.relays.values().next().cloned() else {
+                return Ok(ack(false, 503, "no relay available"));
+            };
+            relay
         };
-        if let Some(connected_relay) = state.relays.get_mut(&available.node.node_id) {
-            connected_relay.last_ms = available.unix_ms;
-            connected_relay.connection_hash = connection_hash;
-        }
         state.seq += 1;
         let assignment = sign_relay_assignment(
             &self.admission_key,
@@ -426,10 +421,7 @@ impl InMemoryAdmissionController {
             .get(&node_id)
             .is_some_and(|r| r.connection_hash == connection_hash)
         {
-            state.relays.remove(&node_id);
-            state
-                .nodes
-                .retain(|_, node| node.relay.relay_node_id != node_id);
+            remove_relay_branch(&mut state, node_id);
         } else {
             state.nodes.remove(&node_id);
         }
@@ -445,7 +437,7 @@ impl InMemoryAdmissionController {
             .filter_map(|(id, r)| (now.saturating_sub(r.last_ms) > max_gap).then_some(*id))
             .collect::<Vec<_>>();
         for id in &dead {
-            state.relays.remove(id);
+            remove_relay_branch(&mut state, *id);
         }
         dead
     }
@@ -464,6 +456,13 @@ impl InMemoryAdmissionController {
         }
         dead
     }
+}
+
+fn remove_relay_branch(state: &mut AdmissionState, relay_node_id: NodeId) {
+    state.relays.remove(&relay_node_id);
+    state
+        .nodes
+        .retain(|_, node| node.relay.relay_node_id != relay_node_id);
 }
 
 fn admission_replay_ack(error: AdmissionReplayError) -> WorkPacket {

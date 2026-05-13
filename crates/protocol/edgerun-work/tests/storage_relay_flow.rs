@@ -88,14 +88,13 @@ fn admission_assigns_relay_and_relay_forwards_storage_work() {
     let mut relay_tcp = TcpNodeRuntime::bind(relay_id.node_id, "127.0.0.1:0").expect("relay tcp");
     let storage_tcp = TcpNodeRuntime::bind(storage_id.node_id, "127.0.0.1:0").expect("storage tcp");
 
-    admission.set_relay_endpoint(
-        relay_id.node_id,
-        tcp_endpoint("relay", relay_tcp.listen_addr().to_string()),
-    );
-
-    let (relay_admission, relay_response) =
-        WorkClient::connect(admission_addr, relay_key.clone(), NODE_ROLE_RELAY)
-            .expect("relay registration");
+    let (relay_admission, relay_response) = WorkClient::connect_with_relay_endpoint(
+        admission_addr,
+        relay_key.clone(),
+        NODE_ROLE_RELAY,
+        Some(tcp_endpoint("relay", relay_tcp.listen_addr().to_string())),
+    )
+    .expect("relay registration");
     assert!(matches!(relay_response, WorkPacket::RelayAssignment(_)));
 
     let (storage_admission, storage_response) =

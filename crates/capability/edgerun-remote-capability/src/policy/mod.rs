@@ -233,10 +233,6 @@ where
             .map(Some)
     }
 
-    fn handle_grant(&mut self, grant: &CapabilityGrant) -> Result<(), CapabilityError> {
-        self.policy.import_grant(grant.clone())
-    }
-
     fn handle_revocation(
         &mut self,
         revocation: &CapabilityRevocation,

@@ -3,6 +3,8 @@
 //! These are not font glyphs. They are immediate-mode line icons drawn into the
 //! same XRGB8888/ARGB8888 pixel buffer as the rest of the UI, which keeps the
 //! core renderer independent from icon fonts, SVG, XML, CSS, and font shaping.
+//! The GPU path uses canonical `UiIconName` values; this enum is the legacy
+//! software renderer adapter until both paths share one icon registry.
 
 use crate::{Color, Painter, Rect};
 
@@ -54,7 +56,16 @@ impl<'a> Painter<'a> {
                 self.icon_line(p(11, 15), p(17, 9), 2, color);
             }
             Icon::Mesh => {
-                for &(a, b) in &[(0, 1), (1, 2), (2, 3), (3, 0), (0, 4), (1, 4), (2, 4), (3, 4)] {
+                for &(a, b) in &[
+                    (0, 1),
+                    (1, 2),
+                    (2, 3),
+                    (3, 0),
+                    (0, 4),
+                    (1, 4),
+                    (2, 4),
+                    (3, 4),
+                ] {
                     let pts = [p(5, 6), p(19, 6), p(19, 18), p(5, 18), p(12, 12)];
                     self.icon_line(pts[a], pts[b], 1, color);
                 }
@@ -63,7 +74,15 @@ impl<'a> Painter<'a> {
                 }
             }
             Icon::Cpu => {
-                self.icon_rect(Rect::new(ox + s * 6 / 24, oy + s * 6 / 24, (s * 12 / 24) as u32, (s * 12 / 24) as u32), color);
+                self.icon_rect(
+                    Rect::new(
+                        ox + s * 6 / 24,
+                        oy + s * 6 / 24,
+                        (s * 12 / 24) as u32,
+                        (s * 12 / 24) as u32,
+                    ),
+                    color,
+                );
                 for i in [4, 8, 12, 16, 20] {
                     self.icon_line(p(i, 3), p(i, 6), 1, color);
                     self.icon_line(p(i, 18), p(i, 21), 1, color);
@@ -72,7 +91,15 @@ impl<'a> Painter<'a> {
                 }
             }
             Icon::Memory => {
-                self.icon_rect(Rect::new(ox + s * 4 / 24, oy + s * 7 / 24, (s * 16 / 24) as u32, (s * 10 / 24) as u32), color);
+                self.icon_rect(
+                    Rect::new(
+                        ox + s * 4 / 24,
+                        oy + s * 7 / 24,
+                        (s * 16 / 24) as u32,
+                        (s * 10 / 24) as u32,
+                    ),
+                    color,
+                );
                 for i in 0..5 {
                     let x = 6 + i * 3;
                     self.icon_line(p(x, 17), p(x, 21), 1, color);
@@ -92,7 +119,15 @@ impl<'a> Painter<'a> {
                 self.icon_line(p(4, 12), p(20, 12), 1, color.with_alpha(140));
             }
             Icon::Lock => {
-                self.icon_rect(Rect::new(ox + s * 5 / 24, oy + s * 10 / 24, (s * 14 / 24) as u32, (s * 10 / 24) as u32), color);
+                self.icon_rect(
+                    Rect::new(
+                        ox + s * 5 / 24,
+                        oy + s * 10 / 24,
+                        (s * 14 / 24) as u32,
+                        (s * 10 / 24) as u32,
+                    ),
+                    color,
+                );
                 self.icon_arc_top(p(12, 11), s * 6 / 24, s * 7 / 24, color);
             }
             Icon::Key => {
@@ -102,14 +137,38 @@ impl<'a> Painter<'a> {
                 self.icon_line(p(18, 20), p(21, 17), 2, color);
             }
             Icon::Terminal => {
-                self.icon_rect(Rect::new(ox + s * 3 / 24, oy + s * 5 / 24, (s * 18 / 24) as u32, (s * 14 / 24) as u32), color);
+                self.icon_rect(
+                    Rect::new(
+                        ox + s * 3 / 24,
+                        oy + s * 5 / 24,
+                        (s * 18 / 24) as u32,
+                        (s * 14 / 24) as u32,
+                    ),
+                    color,
+                );
                 self.icon_line(p(7, 9), p(10, 12), 2, color);
                 self.icon_line(p(10, 12), p(7, 15), 2, color);
                 self.icon_line(p(12, 16), p(17, 16), 2, color);
             }
             Icon::Wallet => {
-                self.icon_rect(Rect::new(ox + s * 3 / 24, oy + s * 7 / 24, (s * 18 / 24) as u32, (s * 11 / 24) as u32), color);
-                self.icon_rect(Rect::new(ox + s * 13 / 24, oy + s * 10 / 24, (s * 7 / 24) as u32, (s * 5 / 24) as u32), color);
+                self.icon_rect(
+                    Rect::new(
+                        ox + s * 3 / 24,
+                        oy + s * 7 / 24,
+                        (s * 18 / 24) as u32,
+                        (s * 11 / 24) as u32,
+                    ),
+                    color,
+                );
+                self.icon_rect(
+                    Rect::new(
+                        ox + s * 13 / 24,
+                        oy + s * 10 / 24,
+                        (s * 7 / 24) as u32,
+                        (s * 5 / 24) as u32,
+                    ),
+                    color,
+                );
                 self.icon_circle(p(16, 12), s / 20, color);
             }
             Icon::Check => {
@@ -137,7 +196,16 @@ impl<'a> Painter<'a> {
     }
 
     fn icon_circle(&mut self, center: (i32, i32), radius: i32, color: Color) {
-        self.rounded_rect(Rect::new(center.0 - radius, center.1 - radius, (radius * 2) as u32, (radius * 2) as u32), radius as u32, color);
+        self.rounded_rect(
+            Rect::new(
+                center.0 - radius,
+                center.1 - radius,
+                (radius * 2) as u32,
+                (radius * 2) as u32,
+            ),
+            radius as u32,
+            color,
+        );
     }
 
     fn icon_line(&mut self, a: (i32, i32), b: (i32, i32), thickness: i32, color: Color) {
@@ -148,7 +216,11 @@ impl<'a> Painter<'a> {
         for i in 0..=steps {
             let x = a.0 + dx * i / steps;
             let y = a.1 + dy * i / steps;
-            self.rounded_rect(Rect::new(x - r / 2, y - r / 2, r as u32, r as u32), r as u32, color);
+            self.rounded_rect(
+                Rect::new(x - r / 2, y - r / 2, r as u32, r as u32),
+                r as u32,
+                color,
+            );
         }
     }
 

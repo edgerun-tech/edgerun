@@ -9,7 +9,7 @@ homepage = "https://github.com/Sylchi/edgerun_reference_core"
 rust-version = "1.95"
 
 [features]
-default = []
+default = ["tabler-icons"]
 std = []
 gpu-gl = ["std"]
 fontdue-text = ["std", "dep:fontdue"]

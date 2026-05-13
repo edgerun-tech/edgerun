@@ -71,7 +71,10 @@ pub fn serve_one<P: RemoteCapabilityProvider, T: RemoteCapabilityTransport>(
             }
         }
         Some(capability_remote_envelope::Message::Grant(grant)) => {
-            provider.handle_grant(&grant)?;
+            let _ = grant;
+            return Err(CapabilityError::PermissionDenied(
+                "standalone remote capability grants are not accepted; open a policy-backed session",
+            ));
         }
         Some(capability_remote_envelope::Message::Revocation(revocation)) => {
             provider.handle_revocation(&revocation)?;

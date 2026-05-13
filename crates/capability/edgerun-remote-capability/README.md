@@ -31,3 +31,7 @@ The policy-wrapped session path is:
 6. `ResultFrame`
 
 The session transport path is aligned with the proto request/grant model.
+Standalone inbound `Grant` envelopes are rejected: a remote peer cannot import
+authority into a provider. Grants are created by the provider policy as part of
+`SessionOpen`/`CapabilityRequest` admission, and invocations must be bound to an
+accepted session.

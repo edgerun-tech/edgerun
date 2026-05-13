@@ -1324,7 +1324,7 @@ fn dedupe_constraints_preserves_order() {
 // -- External grant import and revocation --
 
 #[test]
-fn imports_external_grant_and_applies_revocation() {
+fn issued_grant_applies_revocation() {
     let descriptor = test_descriptor();
     let request = request_for(&descriptor);
     let mut engine = SimplePolicyEngine::default();
@@ -1342,10 +1342,7 @@ fn imports_external_grant_and_applies_revocation() {
         PolicyDecision::Allow { grant } => *grant,
         other => panic!("unexpected decision: {other:?}"),
     };
-
-    let mut imported = SimplePolicyEngine::default();
-    imported.import_grant(grant.clone()).unwrap();
-    assert!(imported.grant_record(&grant.grant_id).is_some());
+    assert!(engine.grant_record(&grant.grant_id).is_some());
 
     let revocation = CapabilityRevocation {
         revocation_version: 1,
@@ -1357,34 +1354,8 @@ fn imports_external_grant_and_applies_revocation() {
         replacement_constraints: Vec::new(),
         signature: None,
     };
-    imported.apply_revocation(revocation).unwrap();
-    assert!(imported.grant_record(&grant.grant_id).unwrap().is_revoked());
-}
-
-#[test]
-fn import_grant_validates_grant() {
-    let mut engine = SimplePolicyEngine::default();
-    let bad_grant = CapabilityGrant {
-        grant_version: 1,
-        grant_id: vec![1],
-        issuer: None,
-        grantee: None,
-        grantee_node: None,
-        selector: None,
-        granted_operations: vec![0],
-        enforced_constraints: Vec::new(),
-        access_class: 0,
-        issued_at: None,
-        expires_at: None,
-        correlation_id: Vec::new(),
-        supersedes_revocation: None,
-        signature: None,
-    };
-    let err = engine.import_grant(bad_grant).unwrap_err();
-    assert_eq!(
-        err,
-        CapabilityError::InvalidRequest("capability grant must name a grantee")
-    );
+    engine.apply_revocation(revocation).unwrap();
+    assert!(engine.grant_record(&grant.grant_id).unwrap().is_revoked());
 }
 
 #[test]
@@ -1405,52 +1376,6 @@ fn apply_revocation_unknown_grant_errors() {
         err,
         CapabilityError::InvalidRequest("cannot revoke an unknown capability grant")
     );
-}
-
-#[test]
-fn import_grant_with_expiry() {
-    let now = SystemTime::now();
-    let issued = now - Duration::from_secs(60);
-    let expires = now + Duration::from_secs(60);
-    let grant = CapabilityGrant {
-        grant_version: 1,
-        grant_id: b"imported-grant".to_vec(),
-        issuer: Some(IdentityRef {
-            identity_id: b"issuer".to_vec(),
-            identity_kind: None,
-            key_hint: None,
-        }),
-        grantee: Some(IdentityRef {
-            identity_id: b"grantee".to_vec(),
-            identity_kind: None,
-            key_hint: None,
-        }),
-        grantee_node: None,
-        selector: Some(CapabilitySelector {
-            capability_id: Vec::new(),
-            role: CapabilityRole::Input as i32,
-            modalities: vec![CapabilityModality::Visual as i32],
-            event_kinds: vec![CapabilityEventKind::Visual as i32],
-            operations: vec![CapabilityOperation::Query as i32],
-            access_class: CapabilityAccessClass::Derived as i32,
-            provider_identity: None,
-            provider_node: None,
-            provider_instance_id: "test-provider".to_string(),
-        }),
-        granted_operations: vec![CapabilityOperation::Query as i32],
-        enforced_constraints: Vec::new(),
-        access_class: CapabilityAccessClass::Derived as i32,
-        issued_at: Some(timestamp_from_system_time(issued)),
-        expires_at: Some(timestamp_from_system_time(expires)),
-        correlation_id: Vec::new(),
-        supersedes_revocation: None,
-        signature: None,
-    };
-    let mut engine = SimplePolicyEngine::default();
-    engine.import_grant(grant.clone()).unwrap();
-    let record = engine.grant_record(&grant.grant_id).unwrap();
-    assert_eq!(record.grant.grant_id, grant.grant_id);
-    assert!(record.expires_at.is_some());
 }
 
 // -- Error types and display --
@@ -1588,7 +1513,7 @@ fn combined_constraints_all_must_pass() {
 }
 
 #[test]
-fn expired_grant_from_import_is_unusable() {
+fn expired_stored_grant_is_unusable() {
     let past = UNIX_EPOCH + Duration::from_secs(120);
     let grant = CapabilityGrant {
         grant_version: 1,
@@ -1621,7 +1546,7 @@ fn expired_grant_from_import_is_unusable() {
         signature: None,
     };
     let mut engine = SimplePolicyEngine::default();
-    engine.import_grant(grant.clone()).unwrap();
+    engine.store_grant(grant.clone(), past, Some(past + Duration::from_secs(60)));
     let ctx = PolicyContext {
         now: UNIX_EPOCH + Duration::from_secs(181),
         ..PolicyContext::default()

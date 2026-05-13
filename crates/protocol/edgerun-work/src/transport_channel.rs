@@ -5,10 +5,7 @@ use crate::codec::{ArchivedWorkPacketFrame, encode_channel_envelope_for_route};
 use crate::protocol::{Hash, NodeId, WorkPacket};
 use crate::route_binding::current_unix_ms;
 use crate::route_policy::{RouteRuntimeProfile, RouteSelectionPolicy};
-use crate::route_table::{
-    RouteInboxMap, RouteMap, drain_inbox, insert_live_route_with_inbox, live_route_hash_for,
-    remove_route_with_inbox, route_for_send,
-};
+use crate::route_table::RouteState;
 use crate::work_channel::{WorkChannel, WorkChannelError};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -64,8 +61,7 @@ impl<T: WorkPacketTransport + ?Sized> RelayPacketTransport for T {}
 pub struct RelayWorkChannel<T> {
     transport: T,
     policy: RouteSelectionPolicy,
-    routes: RouteMap,
-    inboxes: RouteInboxMap,
+    routes: RouteState,
 }
 
 pub type TransportWorkChannel<T> = RelayWorkChannel<T>;
@@ -75,8 +71,7 @@ impl<T> RelayWorkChannel<T> {
         Self {
             transport,
             policy,
-            routes: RouteMap::new(),
-            inboxes: RouteInboxMap::new(),
+            routes: RouteState::new(),
         }
     }
 
@@ -141,12 +136,12 @@ impl<T> RelayWorkChannel<T> {
             packet_hash,
             packet,
         );
-        self.inboxes.entry(envelope.to).or_default().push(envelope);
+        self.routes.push_inbox(envelope);
         Ok(())
     }
 
     pub fn route_count(&self) -> usize {
-        self.routes.len()
+        self.routes.route_count()
     }
 }
 
@@ -155,22 +150,19 @@ impl<T: RelayPacketTransport> WorkChannel for RelayWorkChannel<T> {
         if !self.policy.allows(&route) {
             return Err(WorkChannelError::RouteInvalid);
         }
-        let hash = insert_live_route_with_inbox(
-            &mut self.routes,
-            &mut self.inboxes,
-            route,
-            current_unix_ms(),
-        )
-        .ok_or(WorkChannelError::RouteInvalid)?;
+        let hash = self
+            .routes
+            .insert_live_route(route, current_unix_ms())
+            .ok_or(WorkChannelError::RouteInvalid)?;
         Ok(hash)
     }
 
     fn remove_route(&mut self, node_id: NodeId) -> Option<RouteBinding> {
-        remove_route_with_inbox(&mut self.routes, &mut self.inboxes, node_id)
+        self.routes.remove_route(node_id)
     }
 
     fn route_hash_for(&self, node_id: &NodeId) -> Option<Hash> {
-        live_route_hash_for(&self.routes, node_id, current_unix_ms())
+        self.routes.route_hash_for(node_id, current_unix_ms())
     }
 
     fn send_unordered(
@@ -179,7 +171,9 @@ impl<T: RelayPacketTransport> WorkChannel for RelayWorkChannel<T> {
         to: NodeId,
         packet: WorkPacket,
     ) -> Result<ChannelEnvelope, WorkChannelError> {
-        let route = route_for_send(&mut self.routes, &to, current_unix_ms())
+        let route = self
+            .routes
+            .route_for_send(&to, current_unix_ms())
             .ok_or(WorkChannelError::RouteMissing)?;
         if !self.policy.allows(route) {
             return Err(WorkChannelError::RouteInvalid);
@@ -194,6 +188,6 @@ impl<T: RelayPacketTransport> WorkChannel for RelayWorkChannel<T> {
 
     fn recv_all(&mut self, node_id: NodeId) -> Vec<ChannelEnvelope> {
         let _ = self.poll_recv();
-        drain_inbox(&mut self.inboxes, node_id)
+        self.routes.drain_inbox(node_id)
     }
 }

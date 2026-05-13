@@ -64,7 +64,14 @@ unsafe extern "C" {
     fn SDL_Quit();
     fn SDL_GetError() -> *const c_char;
     fn SDL_GL_SetAttribute(attr: c_int, value: c_int) -> c_int;
-    fn SDL_CreateWindow(title: *const c_char, x: c_int, y: c_int, w: c_int, h: c_int, flags: u32) -> *mut SDL_Window;
+    fn SDL_CreateWindow(
+        title: *const c_char,
+        x: c_int,
+        y: c_int,
+        w: c_int,
+        h: c_int,
+        flags: u32,
+    ) -> *mut SDL_Window;
     fn SDL_DestroyWindow(window: *mut SDL_Window);
     fn SDL_GL_CreateContext(window: *mut SDL_Window) -> SDL_GLContext;
     fn SDL_GL_DeleteContext(context: SDL_GLContext);
@@ -82,7 +89,12 @@ unsafe extern "C" {
     fn glEnable(cap: u32);
     fn glBlendFunc(sfactor: u32, dfactor: u32);
     fn glCreateShader(shader_type: u32) -> u32;
-    fn glShaderSource(shader: u32, count: c_int, string: *const *const c_char, length: *const c_int);
+    fn glShaderSource(
+        shader: u32,
+        count: c_int,
+        string: *const *const c_char,
+        length: *const c_int,
+    );
     fn glCompileShader(shader: u32);
     fn glGetShaderiv(shader: u32, pname: u32, params: *mut c_int);
     fn glGetShaderInfoLog(shader: u32, buf_size: c_int, length: *mut c_int, info_log: *mut c_char);
@@ -91,7 +103,12 @@ unsafe extern "C" {
     fn glAttachShader(program: u32, shader: u32);
     fn glLinkProgram(program: u32);
     fn glGetProgramiv(program: u32, pname: u32, params: *mut c_int);
-    fn glGetProgramInfoLog(program: u32, buf_size: c_int, length: *mut c_int, info_log: *mut c_char);
+    fn glGetProgramInfoLog(
+        program: u32,
+        buf_size: c_int,
+        length: *mut c_int,
+        info_log: *mut c_char,
+    );
     fn glUseProgram(program: u32);
     fn glGetUniformLocation(program: u32, name: *const c_char) -> c_int;
     fn glUniform2f(location: c_int, v0: f32, v1: f32);
@@ -104,7 +121,14 @@ unsafe extern "C" {
     fn glBindBuffer(target: u32, buffer: u32);
     fn glBufferData(target: u32, size: isize, data: *const c_void, usage: u32);
     fn glEnableVertexAttribArray(index: u32);
-    fn glVertexAttribPointer(index: u32, size: c_int, ty: u32, normalized: u8, stride: c_int, pointer: *const c_void);
+    fn glVertexAttribPointer(
+        index: u32,
+        size: c_int,
+        ty: u32,
+        normalized: u8,
+        stride: c_int,
+        pointer: *const c_void,
+    );
     fn glDrawArrays(mode: u32, first: c_int, count: c_int);
     fn glDeleteBuffers(n: c_int, buffers: *const u32);
     fn glDeleteVertexArrays(n: c_int, arrays: *const u32);
@@ -207,7 +231,12 @@ impl GpuUi {
             glBindVertexArray(vao);
             glGenBuffers(1, &mut vbo);
             glBindBuffer(GL_ARRAY_BUFFER, vbo);
-            glBufferData(GL_ARRAY_BUFFER, (verts.len() * 4) as isize, verts.as_ptr() as *const c_void, GL_DYNAMIC_DRAW);
+            glBufferData(
+                GL_ARRAY_BUFFER,
+                (verts.len() * 4) as isize,
+                verts.as_ptr() as *const c_void,
+                GL_DYNAMIC_DRAW,
+            );
             glEnableVertexAttribArray(0);
             glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * 4, ptr::null());
         }
@@ -243,8 +272,20 @@ impl GpuUi {
         let hero_w = (width as f32 - margin * 2.0).min(920.0);
         let hero = GpuRect::card(margin, margin, hero_w, 188.0);
         self.draw_card(hero);
-        self.draw_button(GpuRect::button(margin + 26.0, margin + 128.0, 170.0, 40.0, true));
-        self.draw_button(GpuRect::button(margin + 210.0, margin + 128.0, 172.0, 40.0, false));
+        self.draw_button(GpuRect::button(
+            margin + 26.0,
+            margin + 128.0,
+            170.0,
+            40.0,
+            true,
+        ));
+        self.draw_button(GpuRect::button(
+            margin + 210.0,
+            margin + 128.0,
+            172.0,
+            40.0,
+            false,
+        ));
 
         let stats_y = margin + 210.0;
         let gap = 16.0;
@@ -256,22 +297,68 @@ impl GpuUi {
         self.draw_card(r2);
         self.draw_card(r3);
 
-        self.draw_rect(GpuRect::bar(margin + 20.0, stats_y + 106.0, stat_w - 40.0, 14.0, 0.0));
-        self.draw_rect(GpuRect::bar(margin + 20.0, stats_y + 106.0, (stat_w - 40.0) * cpu, 14.0, 1.0));
-        self.draw_rect(GpuRect::bar(margin + stat_w + gap + 20.0, stats_y + 106.0, stat_w - 40.0, 14.0, 0.0));
-        self.draw_rect(GpuRect::bar(margin + stat_w + gap + 20.0, stats_y + 106.0, (stat_w - 40.0) * ram, 14.0, 1.0));
+        self.draw_rect(GpuRect::bar(
+            margin + 20.0,
+            stats_y + 106.0,
+            stat_w - 40.0,
+            14.0,
+            0.0,
+        ));
+        self.draw_rect(GpuRect::bar(
+            margin + 20.0,
+            stats_y + 106.0,
+            (stat_w - 40.0) * cpu,
+            14.0,
+            1.0,
+        ));
+        self.draw_rect(GpuRect::bar(
+            margin + stat_w + gap + 20.0,
+            stats_y + 106.0,
+            stat_w - 40.0,
+            14.0,
+            0.0,
+        ));
+        self.draw_rect(GpuRect::bar(
+            margin + stat_w + gap + 20.0,
+            stats_y + 106.0,
+            (stat_w - 40.0) * ram,
+            14.0,
+            1.0,
+        ));
     }
 
     fn draw_card(&self, rect: GpuRect) {
-        let shadow = GpuRect { x: rect.x, y: rect.y + 4.0, w: rect.w, h: rect.h, radius: rect.radius, color: [0.0, 0.0, 0.0, 0.22], mode: 1, shadow: 10.0 };
+        let shadow = GpuRect {
+            x: rect.x,
+            y: rect.y + 4.0,
+            w: rect.w,
+            h: rect.h,
+            radius: rect.radius,
+            color: [0.0, 0.0, 0.0, 0.22],
+            mode: 1,
+            shadow: 10.0,
+        };
         self.draw_rect(shadow);
         self.draw_rect(rect);
-        self.draw_rect(GpuRect { color: [0.20, 0.26, 0.35, 0.62], mode: 2, ..rect });
+        self.draw_rect(GpuRect {
+            color: [0.20, 0.26, 0.35, 0.62],
+            mode: 2,
+            ..rect
+        });
     }
 
     fn draw_button(&self, rect: GpuRect) {
         if rect.color[0] > 0.03 {
-            let shadow = GpuRect { x: rect.x, y: rect.y + 2.0, w: rect.w, h: rect.h, radius: rect.radius, color: [0.0, 0.60, 0.80, 0.20], mode: 1, shadow: 7.0 };
+            let shadow = GpuRect {
+                x: rect.x,
+                y: rect.y + 2.0,
+                w: rect.w,
+                h: rect.h,
+                radius: rect.radius,
+                color: [0.0, 0.60, 0.80, 0.20],
+                mode: 1,
+                shadow: 7.0,
+            };
             self.draw_rect(shadow);
         }
         self.draw_rect(rect);
@@ -301,17 +388,52 @@ impl Drop for GpuUi {
 
 impl GpuRect {
     fn card(x: f32, y: f32, w: f32, h: f32) -> Self {
-        Self { x, y, w, h, radius: 18.0, color: [0.059, 0.090, 0.165, 0.94], mode: 0, shadow: 0.0 }
+        Self {
+            x,
+            y,
+            w,
+            h,
+            radius: 18.0,
+            color: [0.059, 0.090, 0.165, 0.94],
+            mode: 0,
+            shadow: 0.0,
+        }
     }
 
     fn button(x: f32, y: f32, w: f32, h: f32, active: bool) -> Self {
-        let color = if active { [0.055, 0.624, 0.820, 1.0] } else { [0.118, 0.161, 0.231, 0.88] };
-        Self { x, y, w, h, radius: h * 0.5, color, mode: 0, shadow: 0.0 }
+        let color = if active {
+            [0.055, 0.624, 0.820, 1.0]
+        } else {
+            [0.118, 0.161, 0.231, 0.88]
+        };
+        Self {
+            x,
+            y,
+            w,
+            h,
+            radius: h * 0.5,
+            color,
+            mode: 0,
+            shadow: 0.0,
+        }
     }
 
     fn bar(x: f32, y: f32, w: f32, h: f32, active: f32) -> Self {
-        let color = if active > 0.5 { [0.055, 0.624, 0.820, 1.0] } else { [0.118, 0.161, 0.231, 0.92] };
-        Self { x, y, w, h, radius: h * 0.5, color, mode: 0, shadow: 0.0 }
+        let color = if active > 0.5 {
+            [0.055, 0.624, 0.820, 1.0]
+        } else {
+            [0.118, 0.161, 0.231, 0.92]
+        };
+        Self {
+            x,
+            y,
+            w,
+            h,
+            radius: h * 0.5,
+            color,
+            mode: 0,
+            shadow: 0.0,
+        }
     }
 }
 
@@ -335,13 +457,26 @@ fn run() -> Result<(), String> {
     let mut height = 540;
     let title = CString::new("EdgeRun GPU UI Preview").unwrap();
     let window = Window(unsafe {
-        SDL_CreateWindow(title.as_ptr(), SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE)
+        SDL_CreateWindow(
+            title.as_ptr(),
+            SDL_WINDOWPOS_CENTERED,
+            SDL_WINDOWPOS_CENTERED,
+            width,
+            height,
+            SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE,
+        )
     });
-    if window.0.is_null() { return Err(format!("SDL_CreateWindow failed: {}", sdl_error())); }
+    if window.0.is_null() {
+        return Err(format!("SDL_CreateWindow failed: {}", sdl_error()));
+    }
 
     let gl_ctx = GlContext(unsafe { SDL_GL_CreateContext(window.0) });
-    if gl_ctx.0.is_null() { return Err(format!("SDL_GL_CreateContext failed: {}", sdl_error())); }
-    unsafe { SDL_GL_SetSwapInterval(1); }
+    if gl_ctx.0.is_null() {
+        return Err(format!("SDL_GL_CreateContext failed: {}", sdl_error()));
+    }
+    unsafe {
+        SDL_GL_SetSwapInterval(1);
+    }
 
     let gpu = GpuUi::new()?;
     let started = Instant::now();
@@ -375,13 +510,29 @@ impl Sdl {
         if rc != 0 { Err(sdl_error()) } else { Ok(Self) }
     }
 }
-impl Drop for Sdl { fn drop(&mut self) { unsafe { SDL_Quit() }; } }
+impl Drop for Sdl {
+    fn drop(&mut self) {
+        unsafe { SDL_Quit() };
+    }
+}
 
 struct Window(*mut SDL_Window);
-impl Drop for Window { fn drop(&mut self) { if !self.0.is_null() { unsafe { SDL_DestroyWindow(self.0) }; } } }
+impl Drop for Window {
+    fn drop(&mut self) {
+        if !self.0.is_null() {
+            unsafe { SDL_DestroyWindow(self.0) };
+        }
+    }
+}
 
 struct GlContext(SDL_GLContext);
-impl Drop for GlContext { fn drop(&mut self) { if !self.0.is_null() { unsafe { SDL_GL_DeleteContext(self.0) }; } } }
+impl Drop for GlContext {
+    fn drop(&mut self) {
+        if !self.0.is_null() {
+            unsafe { SDL_GL_DeleteContext(self.0) };
+        }
+    }
+}
 
 fn compile_shader(kind: u32, source: &str) -> Result<u32, String> {
     let shader = unsafe { glCreateShader(kind) };
@@ -392,32 +543,52 @@ fn compile_shader(kind: u32, source: &str) -> Result<u32, String> {
         glCompileShader(shader);
     }
     let mut ok = 0;
-    unsafe { glGetShaderiv(shader, GL_COMPILE_STATUS, &mut ok); }
+    unsafe {
+        glGetShaderiv(shader, GL_COMPILE_STATUS, &mut ok);
+    }
     if ok == 0 {
         let log = shader_log(shader);
-        unsafe { glDeleteShader(shader); }
+        unsafe {
+            glDeleteShader(shader);
+        }
         Err(log)
-    } else { Ok(shader) }
+    } else {
+        Ok(shader)
+    }
 }
 
 fn check_program(program: u32) -> Result<(), String> {
     let mut ok = 0;
-    unsafe { glGetProgramiv(program, GL_LINK_STATUS, &mut ok); }
-    if ok == 0 { Err(program_log(program)) } else { Ok(()) }
+    unsafe {
+        glGetProgramiv(program, GL_LINK_STATUS, &mut ok);
+    }
+    if ok == 0 {
+        Err(program_log(program))
+    } else {
+        Ok(())
+    }
 }
 
 fn shader_log(shader: u32) -> String {
     let mut buf = vec![0i8; 2048];
     let mut len = 0;
-    unsafe { glGetShaderInfoLog(shader, buf.len() as i32, &mut len, buf.as_mut_ptr()); }
-    unsafe { CStr::from_ptr(buf.as_ptr()) }.to_string_lossy().into_owned()
+    unsafe {
+        glGetShaderInfoLog(shader, buf.len() as i32, &mut len, buf.as_mut_ptr());
+    }
+    unsafe { CStr::from_ptr(buf.as_ptr()) }
+        .to_string_lossy()
+        .into_owned()
 }
 
 fn program_log(program: u32) -> String {
     let mut buf = vec![0i8; 2048];
     let mut len = 0;
-    unsafe { glGetProgramInfoLog(program, buf.len() as i32, &mut len, buf.as_mut_ptr()); }
-    unsafe { CStr::from_ptr(buf.as_ptr()) }.to_string_lossy().into_owned()
+    unsafe {
+        glGetProgramInfoLog(program, buf.len() as i32, &mut len, buf.as_mut_ptr());
+    }
+    unsafe { CStr::from_ptr(buf.as_ptr()) }
+        .to_string_lossy()
+        .into_owned()
 }
 
 fn uniform(program: u32, name: &str) -> i32 {
@@ -427,5 +598,11 @@ fn uniform(program: u32, name: &str) -> i32 {
 
 fn sdl_error() -> String {
     let ptr = unsafe { SDL_GetError() };
-    if ptr.is_null() { "unknown SDL error".to_string() } else { unsafe { CStr::from_ptr(ptr) }.to_string_lossy().into_owned() }
+    if ptr.is_null() {
+        "unknown SDL error".to_string()
+    } else {
+        unsafe { CStr::from_ptr(ptr) }
+            .to_string_lossy()
+            .into_owned()
+    }
 }

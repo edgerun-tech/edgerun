@@ -13,9 +13,11 @@ use std::time::{Duration, Instant};
 #[cfg(feature = "fontdue-text")]
 use edgerun_ui_core::font::FontFace;
 #[cfg(feature = "fontdue-text")]
-use edgerun_ui_core::tabler_font_generated::{tabler_icon, TABLER_ICON_FONT_HINT};
+use edgerun_ui_core::tabler_font_generated::{TABLER_ICON_FONT_HINT, tabler_icon};
 #[cfg(feature = "tabler-svg-atlas")]
-use edgerun_ui_core::tabler_svg_atlas_generated::{TABLER_SVG_ATLAS_ALPHA, TABLER_SVG_ATLAS_H, TABLER_SVG_ATLAS_W, TABLER_SVG_ICONS};
+use edgerun_ui_core::tabler_svg_atlas_generated::{
+    TABLER_SVG_ATLAS_ALPHA, TABLER_SVG_ATLAS_H, TABLER_SVG_ATLAS_W, TABLER_SVG_ICONS,
+};
 
 const SDL_INIT_VIDEO: u32 = 0x0000_0020;
 const SDL_WINDOWPOS_CENTERED: c_int = 0x2fff_0000u32 as c_int;
@@ -69,13 +71,27 @@ struct SdlEvent {
 }
 
 impl SdlEvent {
-    fn event_type(&self) -> u32 { u32::from_ne_bytes([self.data[0], self.data[1], self.data[2], self.data[3]]) }
-    fn window_event(&self) -> u8 { self.data[8] }
-    fn data1(&self) -> i32 { i32::from_ne_bytes([self.data[16], self.data[17], self.data[18], self.data[19]]) }
-    fn data2(&self) -> i32 { i32::from_ne_bytes([self.data[20], self.data[21], self.data[22], self.data[23]]) }
-    fn mouse_x(&self) -> i32 { i32::from_ne_bytes([self.data[20], self.data[21], self.data[22], self.data[23]]) }
-    fn mouse_y(&self) -> i32 { i32::from_ne_bytes([self.data[24], self.data[25], self.data[26], self.data[27]]) }
-    fn key_sym(&self) -> i32 { i32::from_ne_bytes([self.data[20], self.data[21], self.data[22], self.data[23]]) }
+    fn event_type(&self) -> u32 {
+        u32::from_ne_bytes([self.data[0], self.data[1], self.data[2], self.data[3]])
+    }
+    fn window_event(&self) -> u8 {
+        self.data[8]
+    }
+    fn data1(&self) -> i32 {
+        i32::from_ne_bytes([self.data[16], self.data[17], self.data[18], self.data[19]])
+    }
+    fn data2(&self) -> i32 {
+        i32::from_ne_bytes([self.data[20], self.data[21], self.data[22], self.data[23]])
+    }
+    fn mouse_x(&self) -> i32 {
+        i32::from_ne_bytes([self.data[20], self.data[21], self.data[22], self.data[23]])
+    }
+    fn mouse_y(&self) -> i32 {
+        i32::from_ne_bytes([self.data[24], self.data[25], self.data[26], self.data[27]])
+    }
+    fn key_sym(&self) -> i32 {
+        i32::from_ne_bytes([self.data[20], self.data[21], self.data[22], self.data[23]])
+    }
 }
 
 #[link(name = "SDL2")]
@@ -84,7 +100,14 @@ unsafe extern "C" {
     fn SDL_Quit();
     fn SDL_GetError() -> *const c_char;
     fn SDL_GL_SetAttribute(attr: c_int, value: c_int) -> c_int;
-    fn SDL_CreateWindow(title: *const c_char, x: c_int, y: c_int, w: c_int, h: c_int, flags: u32) -> *mut SDL_Window;
+    fn SDL_CreateWindow(
+        title: *const c_char,
+        x: c_int,
+        y: c_int,
+        w: c_int,
+        h: c_int,
+        flags: u32,
+    ) -> *mut SDL_Window;
     fn SDL_DestroyWindow(window: *mut SDL_Window);
     fn SDL_GL_CreateContext(window: *mut SDL_Window) -> SDL_GLContext;
     fn SDL_GL_DeleteContext(context: SDL_GLContext);
@@ -102,7 +125,12 @@ unsafe extern "C" {
     fn glEnable(cap: u32);
     fn glBlendFunc(sfactor: u32, dfactor: u32);
     fn glCreateShader(shader_type: u32) -> u32;
-    fn glShaderSource(shader: u32, count: c_int, string: *const *const c_char, length: *const c_int);
+    fn glShaderSource(
+        shader: u32,
+        count: c_int,
+        string: *const *const c_char,
+        length: *const c_int,
+    );
     fn glCompileShader(shader: u32);
     fn glGetShaderiv(shader: u32, pname: u32, params: *mut c_int);
     fn glGetShaderInfoLog(shader: u32, buf_size: c_int, length: *mut c_int, info_log: *mut c_char);
@@ -111,7 +139,12 @@ unsafe extern "C" {
     fn glAttachShader(program: u32, shader: u32);
     fn glLinkProgram(program: u32);
     fn glGetProgramiv(program: u32, pname: u32, params: *mut c_int);
-    fn glGetProgramInfoLog(program: u32, buf_size: c_int, length: *mut c_int, info_log: *mut c_char);
+    fn glGetProgramInfoLog(
+        program: u32,
+        buf_size: c_int,
+        length: *mut c_int,
+        info_log: *mut c_char,
+    );
     fn glUseProgram(program: u32);
     fn glGetUniformLocation(program: u32, name: *const c_char) -> c_int;
     fn glUniform2f(location: c_int, v0: f32, v1: f32);
@@ -124,7 +157,14 @@ unsafe extern "C" {
     fn glBindBuffer(target: u32, buffer: u32);
     fn glBufferData(target: u32, size: isize, data: *const c_void, usage: u32);
     fn glEnableVertexAttribArray(index: u32);
-    fn glVertexAttribPointer(index: u32, size: c_int, ty: u32, normalized: u8, stride: c_int, pointer: *const c_void);
+    fn glVertexAttribPointer(
+        index: u32,
+        size: c_int,
+        ty: u32,
+        normalized: u8,
+        stride: c_int,
+        pointer: *const c_void,
+    );
     fn glDrawArrays(mode: u32, first: c_int, count: c_int);
     fn glDeleteBuffers(n: c_int, buffers: *const u32);
     fn glDeleteVertexArrays(n: c_int, arrays: *const u32);
@@ -132,7 +172,17 @@ unsafe extern "C" {
     fn glGenTextures(n: c_int, textures: *mut u32);
     fn glBindTexture(target: u32, texture: u32);
     fn glTexParameteri(target: u32, pname: u32, param: c_int);
-    fn glTexImage2D(target: u32, level: c_int, internalformat: c_int, width: c_int, height: c_int, border: c_int, format: u32, ty: u32, pixels: *const c_void);
+    fn glTexImage2D(
+        target: u32,
+        level: c_int,
+        internalformat: c_int,
+        width: c_int,
+        height: c_int,
+        border: c_int,
+        format: u32,
+        ty: u32,
+        pixels: *const c_void,
+    );
     fn glActiveTexture(texture: u32);
     fn glPixelStorei(pname: u32, param: c_int);
     fn glDeleteTextures(n: c_int, textures: *const u32);
@@ -230,19 +280,42 @@ const PALETTE: [Color4; 7] = [
 ];
 
 #[derive(Clone, Copy)]
-struct Rect { x: f32, y: f32, w: f32, h: f32 }
+struct Rect {
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+}
 
 #[derive(Clone, Copy)]
-struct Shape { rect: Rect, radius: f32, color: Color4, mode: i32, shadow: f32 }
+struct Shape {
+    rect: Rect,
+    radius: f32,
+    color: Color4,
+    mode: i32,
+    shadow: f32,
+}
 
-struct ShapeRenderer { program: u32, vao: u32, vbo: u32, u_screen: c_int, u_rect: c_int, u_color: c_int, u_radius: c_int, u_mode: c_int, u_shadow: c_int }
+struct ShapeRenderer {
+    program: u32,
+    vao: u32,
+    vbo: u32,
+    u_screen: c_int,
+    u_rect: c_int,
+    u_color: c_int,
+    u_radius: c_int,
+    u_mode: c_int,
+    u_shadow: c_int,
+}
 
 impl ShapeRenderer {
     fn new() -> Result<Self, String> {
         let program = link_program(SHAPE_VERT, SHAPE_FRAG)?;
         let (vao, vbo) = unit_quad_vao(2)?;
         Ok(Self {
-            program, vao, vbo,
+            program,
+            vao,
+            vbo,
             u_screen: uniform(program, "u_screen"),
             u_rect: uniform(program, "u_rect"),
             u_color: uniform(program, "u_color"),
@@ -251,11 +324,23 @@ impl ShapeRenderer {
             u_shadow: uniform(program, "u_shadow"),
         })
     }
-    fn begin(&self, width: i32, height: i32) { unsafe { glUseProgram(self.program); glBindVertexArray(self.vao); glUniform2f(self.u_screen, width as f32, height as f32); } }
+    fn begin(&self, width: i32, height: i32) {
+        unsafe {
+            glUseProgram(self.program);
+            glBindVertexArray(self.vao);
+            glUniform2f(self.u_screen, width as f32, height as f32);
+        }
+    }
     fn draw(&self, s: Shape) {
         unsafe {
             glUniform4f(self.u_rect, s.rect.x, s.rect.y, s.rect.w, s.rect.h);
-            glUniform4f(self.u_color, s.color.0[0], s.color.0[1], s.color.0[2], s.color.0[3]);
+            glUniform4f(
+                self.u_color,
+                s.color.0[0],
+                s.color.0[1],
+                s.color.0[2],
+                s.color.0[3],
+            );
             glUniform1f(self.u_radius, s.radius);
             glUniform1i(self.u_mode, s.mode);
             glUniform1f(self.u_shadow, s.shadow);
@@ -263,86 +348,338 @@ impl ShapeRenderer {
         }
     }
     fn card(&self, rect: Rect) {
-        self.draw(Shape { rect: Rect { y: rect.y + 3.0, ..rect }, radius: 18.0, color: Color4([0.0,0.0,0.0,0.18]), mode: 1, shadow: 8.0 });
-        self.draw(Shape { rect, radius: 18.0, color: PANEL, mode: 0, shadow: 0.0 });
-        self.draw(Shape { rect, radius: 18.0, color: BORDER, mode: 2, shadow: 0.0 });
+        self.draw(Shape {
+            rect: Rect {
+                y: rect.y + 3.0,
+                ..rect
+            },
+            radius: 18.0,
+            color: Color4([0.0, 0.0, 0.0, 0.18]),
+            mode: 1,
+            shadow: 8.0,
+        });
+        self.draw(Shape {
+            rect,
+            radius: 18.0,
+            color: PANEL,
+            mode: 0,
+            shadow: 0.0,
+        });
+        self.draw(Shape {
+            rect,
+            radius: 18.0,
+            color: BORDER,
+            mode: 2,
+            shadow: 0.0,
+        });
     }
     fn button(&self, rect: Rect, accent: Color4, active: bool) {
         let radius = 11.0; // reduced from pill radius
-        if active { self.draw(Shape { rect: Rect { y: rect.y + 2.0, ..rect }, radius, color: Color4([accent.0[0], accent.0[1], accent.0[2], 0.16]), mode: 1, shadow: 5.0 }); }
-        self.draw(Shape { rect, radius, color: if active { accent } else { PANEL_2 }, mode: 0, shadow: 0.0 });
-        self.draw(Shape { rect, radius, color: if active { Color4([accent.0[0], accent.0[1], accent.0[2], 0.9]) } else { BORDER }, mode: 2, shadow: 0.0 });
+        if active {
+            self.draw(Shape {
+                rect: Rect {
+                    y: rect.y + 2.0,
+                    ..rect
+                },
+                radius,
+                color: Color4([accent.0[0], accent.0[1], accent.0[2], 0.16]),
+                mode: 1,
+                shadow: 5.0,
+            });
+        }
+        self.draw(Shape {
+            rect,
+            radius,
+            color: if active { accent } else { PANEL_2 },
+            mode: 0,
+            shadow: 0.0,
+        });
+        self.draw(Shape {
+            rect,
+            radius,
+            color: if active {
+                Color4([accent.0[0], accent.0[1], accent.0[2], 0.9])
+            } else {
+                BORDER
+            },
+            mode: 2,
+            shadow: 0.0,
+        });
     }
     fn swatch(&self, rect: Rect, color: Color4, selected: bool) {
-        self.draw(Shape { rect, radius: 9.0, color, mode: 0, shadow: 0.0 });
-        if selected { self.draw(Shape { rect: Rect { x: rect.x - 2.0, y: rect.y - 2.0, w: rect.w + 4.0, h: rect.h + 4.0 }, radius: 11.0, color: TEXT, mode: 2, shadow: 0.0 }); }
+        self.draw(Shape {
+            rect,
+            radius: 9.0,
+            color,
+            mode: 0,
+            shadow: 0.0,
+        });
+        if selected {
+            self.draw(Shape {
+                rect: Rect {
+                    x: rect.x - 2.0,
+                    y: rect.y - 2.0,
+                    w: rect.w + 4.0,
+                    h: rect.h + 4.0,
+                },
+                radius: 11.0,
+                color: TEXT,
+                mode: 2,
+                shadow: 0.0,
+            });
+        }
     }
     fn progress(&self, rect: Rect, value: f32, accent: Color4) {
-        self.draw(Shape { rect, radius: rect.h * 0.5, color: PANEL_2, mode: 0, shadow: 0.0 });
-        self.draw(Shape { rect: Rect { w: rect.w * value.clamp(0.0, 1.0), ..rect }, radius: rect.h * 0.5, color: accent, mode: 0, shadow: 0.0 });
+        self.draw(Shape {
+            rect,
+            radius: rect.h * 0.5,
+            color: PANEL_2,
+            mode: 0,
+            shadow: 0.0,
+        });
+        self.draw(Shape {
+            rect: Rect {
+                w: rect.w * value.clamp(0.0, 1.0),
+                ..rect
+            },
+            radius: rect.h * 0.5,
+            color: accent,
+            mode: 0,
+            shadow: 0.0,
+        });
     }
 }
 
-impl Drop for ShapeRenderer { fn drop(&mut self) { unsafe { glDeleteBuffers(1, &self.vbo); glDeleteVertexArrays(1, &self.vao); glDeleteProgram(self.program); } } }
+impl Drop for ShapeRenderer {
+    fn drop(&mut self) {
+        unsafe {
+            glDeleteBuffers(1, &self.vbo);
+            glDeleteVertexArrays(1, &self.vao);
+            glDeleteProgram(self.program);
+        }
+    }
+}
 
 #[cfg(feature = "fontdue-text")]
 #[derive(Clone, Copy)]
-struct Glyph { uv: [f32; 4], size: [f32; 2], bearing: [f32; 2], advance: f32 }
+struct Glyph {
+    uv: [f32; 4],
+    size: [f32; 2],
+    bearing: [f32; 2],
+    advance: f32,
+}
 
 #[cfg(feature = "fontdue-text")]
-struct Atlas { tex: u32, glyphs: HashMap<char, Glyph>, w: u32, h: u32 }
+struct Atlas {
+    tex: u32,
+    glyphs: HashMap<char, Glyph>,
+    w: u32,
+    h: u32,
+}
 
 #[cfg(feature = "fontdue-text")]
 impl Atlas {
     fn build(font: &FontFace, chars: &[char], px: f32) -> Self {
         let w = 1024u32;
         let h = 1024u32;
-        let mut bitmap = vec![0u8; (w*h) as usize];
+        let mut bitmap = vec![0u8; (w * h) as usize];
         let mut glyphs = HashMap::new();
         let mut x = 2u32;
         let mut y = 2u32;
         let mut row_h = 0u32;
         for &ch in chars {
             let (m, data) = font.rasterize(ch, px);
-            if m.width == 0 || m.height == 0 { glyphs.insert(ch, Glyph { uv:[0.0;4], size:[0.0,0.0], bearing:[m.xmin as f32, m.ymin as f32], advance:m.advance_width }); continue; }
-            if x + m.width as u32 + 2 >= w { x = 2; y += row_h + 2; row_h = 0; }
-            if y + m.height as u32 + 2 >= h { break; }
-            for gy in 0..m.height as u32 { for gx in 0..m.width as u32 { bitmap[((y+gy)*w + x+gx) as usize] = data[(gy*m.width as u32 + gx) as usize]; } }
-            glyphs.insert(ch, Glyph { uv:[x as f32/w as f32, y as f32/h as f32, (x+m.width as u32) as f32/w as f32, (y+m.height as u32) as f32/h as f32], size:[m.width as f32, m.height as f32], bearing:[m.xmin as f32, m.ymin as f32], advance:m.advance_width });
+            if m.width == 0 || m.height == 0 {
+                glyphs.insert(
+                    ch,
+                    Glyph {
+                        uv: [0.0; 4],
+                        size: [0.0, 0.0],
+                        bearing: [m.xmin as f32, m.ymin as f32],
+                        advance: m.advance_width,
+                    },
+                );
+                continue;
+            }
+            if x + m.width as u32 + 2 >= w {
+                x = 2;
+                y += row_h + 2;
+                row_h = 0;
+            }
+            if y + m.height as u32 + 2 >= h {
+                break;
+            }
+            for gy in 0..m.height as u32 {
+                for gx in 0..m.width as u32 {
+                    bitmap[((y + gy) * w + x + gx) as usize] =
+                        data[(gy * m.width as u32 + gx) as usize];
+                }
+            }
+            glyphs.insert(
+                ch,
+                Glyph {
+                    uv: [
+                        x as f32 / w as f32,
+                        y as f32 / h as f32,
+                        (x + m.width as u32) as f32 / w as f32,
+                        (y + m.height as u32) as f32 / h as f32,
+                    ],
+                    size: [m.width as f32, m.height as f32],
+                    bearing: [m.xmin as f32, m.ymin as f32],
+                    advance: m.advance_width,
+                },
+            );
             x += m.width as u32 + 2;
             row_h = row_h.max(m.height as u32);
         }
         let mut tex = 0;
-        unsafe { glGenTextures(1, &mut tex); glBindTexture(GL_TEXTURE_2D, tex); glPixelStorei(GL_UNPACK_ALIGNMENT, 1); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE); glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE); glTexImage2D(GL_TEXTURE_2D, 0, GL_R8 as i32, w as i32, h as i32, 0, GL_RED, GL_UNSIGNED_BYTE, bitmap.as_ptr() as *const c_void); }
+        unsafe {
+            glGenTextures(1, &mut tex);
+            glBindTexture(GL_TEXTURE_2D, tex);
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                GL_R8 as i32,
+                w as i32,
+                h as i32,
+                0,
+                GL_RED,
+                GL_UNSIGNED_BYTE,
+                bitmap.as_ptr() as *const c_void,
+            );
+        }
         Self { tex, glyphs, w, h }
     }
 }
 #[cfg(feature = "fontdue-text")]
-impl Drop for Atlas { fn drop(&mut self) { unsafe { glDeleteTextures(1, &self.tex); } } }
+impl Drop for Atlas {
+    fn drop(&mut self) {
+        unsafe {
+            glDeleteTextures(1, &self.tex);
+        }
+    }
+}
 
 #[cfg(feature = "fontdue-text")]
-struct TextRenderer { program: u32, vao: u32, vbo: u32, u_screen: c_int, u_color: c_int, u_tex: c_int }
-#[cfg(feature = "fontdue-text")]
-impl TextRenderer {
-    fn new() -> Result<Self, String> { let program = link_program(TEXT_VERT, TEXT_FRAG)?; let (vao, vbo) = unit_quad_vao(4)?; Ok(Self{program,vao,vbo,u_screen:uniform(program,"u_screen"),u_color:uniform(program,"u_color"),u_tex:uniform(program,"u_tex")}) }
-    fn draw_text(&self, atlas: &Atlas, width:i32, height:i32, mut x:f32, y:f32, text:&str, color:Color4, px:f32) {
-        unsafe { glUseProgram(self.program); glBindVertexArray(self.vao); glActiveTexture(GL_TEXTURE0); glBindTexture(GL_TEXTURE_2D, atlas.tex); glUniform1i(self.u_tex,0); glUniform2f(self.u_screen,width as f32,height as f32); glUniform4f(self.u_color,color.0[0],color.0[1],color.0[2],color.0[3]); }
-        let baseline = y + px * 0.84;
-        for ch in text.chars() { if let Some(g)=atlas.glyphs.get(&ch) { if g.size[0]>0.0 { let gx=x+g.bearing[0]; let gy=baseline-g.bearing[1]-g.size[1]; self.draw_glyph(gx,gy,g); } x += g.advance.max(px*0.32); } }
-    }
-    fn draw_glyph(&self, x:f32, y:f32, g:&Glyph) { let (u0,v0,u1,v1)=(g.uv[0],g.uv[1],g.uv[2],g.uv[3]); let (w,h)=(g.size[0],g.size[1]); let verts:[f32;24]=[x,y,u0,v0, x+w,y,u1,v0, x+w,y+h,u1,v1, x,y,u0,v0, x+w,y+h,u1,v1, x,y+h,u0,v1]; unsafe { glBindBuffer(GL_ARRAY_BUFFER,self.vbo); glBufferData(GL_ARRAY_BUFFER,(verts.len()*4) as isize,verts.as_ptr() as *const c_void,GL_DYNAMIC_DRAW); glDrawArrays(GL_TRIANGLES,0,6); } }
+struct TextRenderer {
+    program: u32,
+    vao: u32,
+    vbo: u32,
+    u_screen: c_int,
+    u_color: c_int,
+    u_tex: c_int,
 }
 #[cfg(feature = "fontdue-text")]
-impl Drop for TextRenderer { fn drop(&mut self){ unsafe{ glDeleteBuffers(1,&self.vbo); glDeleteVertexArrays(1,&self.vao); glDeleteProgram(self.program); } } }
+impl TextRenderer {
+    fn new() -> Result<Self, String> {
+        let program = link_program(TEXT_VERT, TEXT_FRAG)?;
+        let (vao, vbo) = unit_quad_vao(4)?;
+        Ok(Self {
+            program,
+            vao,
+            vbo,
+            u_screen: uniform(program, "u_screen"),
+            u_color: uniform(program, "u_color"),
+            u_tex: uniform(program, "u_tex"),
+        })
+    }
+    fn draw_text(
+        &self,
+        atlas: &Atlas,
+        width: i32,
+        height: i32,
+        mut x: f32,
+        y: f32,
+        text: &str,
+        color: Color4,
+        px: f32,
+    ) {
+        unsafe {
+            glUseProgram(self.program);
+            glBindVertexArray(self.vao);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, atlas.tex);
+            glUniform1i(self.u_tex, 0);
+            glUniform2f(self.u_screen, width as f32, height as f32);
+            glUniform4f(self.u_color, color.0[0], color.0[1], color.0[2], color.0[3]);
+        }
+        let baseline = y + px * 0.84;
+        for ch in text.chars() {
+            if let Some(g) = atlas.glyphs.get(&ch) {
+                if g.size[0] > 0.0 {
+                    let gx = x + g.bearing[0];
+                    let gy = baseline - g.bearing[1] - g.size[1];
+                    self.draw_glyph(gx, gy, g);
+                }
+                x += g.advance.max(px * 0.32);
+            }
+        }
+    }
+    fn draw_glyph(&self, x: f32, y: f32, g: &Glyph) {
+        let (u0, v0, u1, v1) = (g.uv[0], g.uv[1], g.uv[2], g.uv[3]);
+        let (w, h) = (g.size[0], g.size[1]);
+        let verts: [f32; 24] = [
+            x,
+            y,
+            u0,
+            v0,
+            x + w,
+            y,
+            u1,
+            v0,
+            x + w,
+            y + h,
+            u1,
+            v1,
+            x,
+            y,
+            u0,
+            v0,
+            x + w,
+            y + h,
+            u1,
+            v1,
+            x,
+            y + h,
+            u0,
+            v1,
+        ];
+        unsafe {
+            glBindBuffer(GL_ARRAY_BUFFER, self.vbo);
+            glBufferData(
+                GL_ARRAY_BUFFER,
+                (verts.len() * 4) as isize,
+                verts.as_ptr() as *const c_void,
+                GL_DYNAMIC_DRAW,
+            );
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+        }
+    }
+}
+#[cfg(feature = "fontdue-text")]
+impl Drop for TextRenderer {
+    fn drop(&mut self) {
+        unsafe {
+            glDeleteBuffers(1, &self.vbo);
+            glDeleteVertexArrays(1, &self.vao);
+            glDeleteProgram(self.program);
+        }
+    }
+}
 
-#[cfg(feature="tabler-svg-atlas")]
+#[cfg(feature = "tabler-svg-atlas")]
 struct SvgAtlas {
     tex: u32,
     w: u32,
     h: u32,
 }
 
-#[cfg(feature="tabler-svg-atlas")]
+#[cfg(feature = "tabler-svg-atlas")]
 impl SvgAtlas {
     fn new() -> Self {
         let mut tex = 0;
@@ -366,7 +703,11 @@ impl SvgAtlas {
                 TABLER_SVG_ATLAS_ALPHA.as_ptr() as *const c_void,
             );
         }
-        Self { tex, w: TABLER_SVG_ATLAS_W, h: TABLER_SVG_ATLAS_H }
+        Self {
+            tex,
+            w: TABLER_SVG_ATLAS_W,
+            h: TABLER_SVG_ATLAS_H,
+        }
     }
 
     fn rect(&self, name: &str) -> Option<[f32; 4]> {
@@ -380,14 +721,16 @@ impl SvgAtlas {
     }
 }
 
-#[cfg(feature="tabler-svg-atlas")]
+#[cfg(feature = "tabler-svg-atlas")]
 impl Drop for SvgAtlas {
     fn drop(&mut self) {
-        unsafe { glDeleteTextures(1, &self.tex); }
+        unsafe {
+            glDeleteTextures(1, &self.tex);
+        }
     }
 }
 
-#[cfg(feature="tabler-svg-atlas")]
+#[cfg(feature = "tabler-svg-atlas")]
 fn draw_svg_icon(
     text: &TextRenderer,
     atlas: &SvgAtlas,
@@ -399,7 +742,9 @@ fn draw_svg_icon(
     size: f32,
     color: Color4,
 ) {
-    let Some(uv) = atlas.rect(name) else { return; };
+    let Some(uv) = atlas.rect(name) else {
+        return;
+    };
     unsafe {
         glUseProgram(text.program);
         glBindVertexArray(text.vao);
@@ -411,86 +756,491 @@ fn draw_svg_icon(
     }
 
     let verts: [f32; 24] = [
-        x,        y,        uv[0], uv[1],
-        x + size, y,        uv[2], uv[1],
-        x + size, y + size, uv[2], uv[3],
-        x,        y,        uv[0], uv[1],
-        x + size, y + size, uv[2], uv[3],
-        x,        y + size, uv[0], uv[3],
+        x,
+        y,
+        uv[0],
+        uv[1],
+        x + size,
+        y,
+        uv[2],
+        uv[1],
+        x + size,
+        y + size,
+        uv[2],
+        uv[3],
+        x,
+        y,
+        uv[0],
+        uv[1],
+        x + size,
+        y + size,
+        uv[2],
+        uv[3],
+        x,
+        y + size,
+        uv[0],
+        uv[3],
     ];
 
     unsafe {
         glBindBuffer(GL_ARRAY_BUFFER, text.vbo);
-        glBufferData(GL_ARRAY_BUFFER, (verts.len() * 4) as isize, verts.as_ptr() as *const c_void, GL_DYNAMIC_DRAW);
+        glBufferData(
+            GL_ARRAY_BUFFER,
+            (verts.len() * 4) as isize,
+            verts.as_ptr() as *const c_void,
+            GL_DYNAMIC_DRAW,
+        );
         glDrawArrays(GL_TRIANGLES, 0, 6);
     }
 }
 
-struct State { accent: usize }
+struct State {
+    accent: usize,
+}
 
-fn main(){ if let Err(err)=run(){ eprintln!("ui-preview-sdl-gl-atlas: {err}"); std::process::exit(1); } }
-fn run()->Result<(),String>{
-    let _sdl=Sdl::init()?; unsafe{ SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION,3); SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION,3); SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,SDL_GL_CONTEXT_PROFILE_CORE); SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER,1); }
-    let mut width=960; let mut height=540; let title=CString::new("EdgeRun GPU Atlas UI Preview").unwrap();
-    let window=Window(unsafe{SDL_CreateWindow(title.as_ptr(),SDL_WINDOWPOS_CENTERED,SDL_WINDOWPOS_CENTERED,width,height,SDL_WINDOW_OPENGL|SDL_WINDOW_SHOWN|SDL_WINDOW_RESIZABLE)}); if window.0.is_null(){return Err(format!("SDL_CreateWindow failed: {}",sdl_error()));}
-    let ctx=GlContext(unsafe{SDL_GL_CreateContext(window.0)}); if ctx.0.is_null(){return Err(format!("SDL_GL_CreateContext failed: {}",sdl_error()));} unsafe{SDL_GL_SetSwapInterval(1); glEnable(GL_BLEND); glBlendFunc(GL_SRC_ALPHA,GL_ONE_MINUS_SRC_ALPHA);}
-    let shapes=ShapeRenderer::new()?;
-    #[cfg(feature="fontdue-text")]
-    let text=TextRenderer::new()?;
-    #[cfg(feature="fontdue-text")]
-    let ui_font=FontFace::load_best_ui_font().ok();
-    #[cfg(feature="fontdue-text")]
-    let icon_font=load_icon_font();
-    #[cfg(feature="fontdue-text")]
-    let ui_atlas=ui_font.as_ref().map(|f| Atlas::build(f,&ascii_chars(),38.0));
-    #[cfg(feature="fontdue-text")]
-    let icon_atlas=icon_font.as_ref().map(|f| Atlas::build(f,&icon_chars(),34.0));
-    #[cfg(feature="tabler-svg-atlas")]
-    let svg_atlas=SvgAtlas::new();
-    let started=Instant::now(); let mut running=true; let mut state=State{accent:0};
-    while running { let mut event=SdlEvent{data:[0;56]}; while unsafe{SDL_PollEvent(&mut event)}!=0{ match event.event_type(){ SDL_QUIT=>running=false, SDL_WINDOWEVENT if event.window_event()==SDL_WINDOWEVENT_RESIZED=>{width=event.data1().max(320);height=event.data2().max(240);}, SDL_MOUSEBUTTONDOWN=>pick_accent(&mut state,event.mouse_x(),event.mouse_y()), SDL_KEYDOWN=>{ let k=event.key_sym(); if (49..=55).contains(&k){state.accent=(k-49) as usize;} }, _=>{} }}
-        render_frame(width,height,started.elapsed().as_secs_f32(),state.accent,&shapes,#[cfg(feature="fontdue-text")] &text,#[cfg(feature="fontdue-text")] ui_atlas.as_ref(),#[cfg(feature="fontdue-text")] icon_atlas.as_ref(),#[cfg(all(feature="fontdue-text", feature="tabler-svg-atlas"))] &svg_atlas);
-        unsafe{SDL_GL_SwapWindow(window.0);SDL_Delay(1);} std::thread::sleep(Duration::from_millis(1)); }
+fn main() {
+    if let Err(err) = run() {
+        eprintln!("ui-preview-sdl-gl-atlas: {err}");
+        std::process::exit(1);
+    }
+}
+fn run() -> Result<(), String> {
+    let _sdl = Sdl::init()?;
+    unsafe {
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+        SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    }
+    let mut width = 960;
+    let mut height = 540;
+    let title = CString::new("EdgeRun GPU Atlas UI Preview").unwrap();
+    let window = Window(unsafe {
+        SDL_CreateWindow(
+            title.as_ptr(),
+            SDL_WINDOWPOS_CENTERED,
+            SDL_WINDOWPOS_CENTERED,
+            width,
+            height,
+            SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE,
+        )
+    });
+    if window.0.is_null() {
+        return Err(format!("SDL_CreateWindow failed: {}", sdl_error()));
+    }
+    let ctx = GlContext(unsafe { SDL_GL_CreateContext(window.0) });
+    if ctx.0.is_null() {
+        return Err(format!("SDL_GL_CreateContext failed: {}", sdl_error()));
+    }
+    unsafe {
+        SDL_GL_SetSwapInterval(1);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    }
+    let shapes = ShapeRenderer::new()?;
+    #[cfg(feature = "fontdue-text")]
+    let text = TextRenderer::new()?;
+    #[cfg(feature = "fontdue-text")]
+    let ui_font = FontFace::load_best_ui_font().ok();
+    #[cfg(feature = "fontdue-text")]
+    let icon_font = load_icon_font();
+    #[cfg(feature = "fontdue-text")]
+    let ui_atlas = ui_font
+        .as_ref()
+        .map(|f| Atlas::build(f, &ascii_chars(), 38.0));
+    #[cfg(feature = "fontdue-text")]
+    let icon_atlas = icon_font
+        .as_ref()
+        .map(|f| Atlas::build(f, &icon_chars(), 34.0));
+    #[cfg(feature = "tabler-svg-atlas")]
+    let svg_atlas = SvgAtlas::new();
+    let started = Instant::now();
+    let mut running = true;
+    let mut state = State { accent: 0 };
+    while running {
+        let mut event = SdlEvent { data: [0; 56] };
+        while unsafe { SDL_PollEvent(&mut event) } != 0 {
+            match event.event_type() {
+                SDL_QUIT => running = false,
+                SDL_WINDOWEVENT if event.window_event() == SDL_WINDOWEVENT_RESIZED => {
+                    width = event.data1().max(320);
+                    height = event.data2().max(240);
+                }
+                SDL_MOUSEBUTTONDOWN => pick_accent(&mut state, event.mouse_x(), event.mouse_y()),
+                SDL_KEYDOWN => {
+                    let k = event.key_sym();
+                    if (49..=55).contains(&k) {
+                        state.accent = (k - 49) as usize;
+                    }
+                }
+                _ => {}
+            }
+        }
+        render_frame(
+            width,
+            height,
+            started.elapsed().as_secs_f32(),
+            state.accent,
+            &shapes,
+            #[cfg(feature = "fontdue-text")]
+            &text,
+            #[cfg(feature = "fontdue-text")]
+            ui_atlas.as_ref(),
+            #[cfg(feature = "fontdue-text")]
+            icon_atlas.as_ref(),
+            #[cfg(all(feature = "fontdue-text", feature = "tabler-svg-atlas"))]
+            &svg_atlas,
+        );
+        unsafe {
+            SDL_GL_SwapWindow(window.0);
+            SDL_Delay(1);
+        }
+        std::thread::sleep(Duration::from_millis(1));
+    }
     Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
-fn render_frame(width:i32,height:i32,elapsed:f32,accent_i:usize,shapes:&ShapeRenderer,#[cfg(feature="fontdue-text")] text:&TextRenderer,#[cfg(feature="fontdue-text")] ui_atlas:Option<&Atlas>,#[cfg(feature="fontdue-text")] icon_atlas:Option<&Atlas>,#[cfg(all(feature="fontdue-text", feature="tabler-svg-atlas"))] svg_atlas:&SvgAtlas){
-    let accent=PALETTE[accent_i.min(PALETTE.len()-1)]; unsafe{glViewport(0,0,width,height);glClearColor(BG.0[0],BG.0[1],BG.0[2],1.0);glClear(GL_COLOR_BUFFER_BIT);} shapes.begin(width,height);
-    let cpu=0.12+(elapsed*1.8).sin().abs()*0.55; let ram=0.42; let margin=28.0; let hero_w=(width as f32-margin*2.0).min(920.0); let hero=Rect{x:margin,y:margin,w:hero_w,h:188.0}; shapes.card(hero); shapes.button(Rect{x:margin+26.0,y:margin+128.0,w:170.0,h:40.0},accent,true); shapes.button(Rect{x:margin+210.0,y:margin+128.0,w:172.0,h:40.0},accent,false);
-    let stats_y=margin+210.0; let gap=16.0; let stat_w=(hero_w-gap*2.0)/3.0; let r1=Rect{x:margin,y:stats_y,w:stat_w,h:134.0}; let r2=Rect{x:margin+stat_w+gap,y:stats_y,w:stat_w,h:134.0}; let r3=Rect{x:margin+(stat_w+gap)*2.0,y:stats_y,w:stat_w,h:134.0}; shapes.card(r1); shapes.card(r2); shapes.card(r3); shapes.progress(Rect{x:margin+20.0,y:stats_y+106.0,w:stat_w-40.0,h:14.0},cpu,accent); shapes.progress(Rect{x:margin+stat_w+gap+20.0,y:stats_y+106.0,w:stat_w-40.0,h:14.0},ram,accent);
-    for (i,c) in PALETTE.iter().enumerate(){ shapes.swatch(Rect{x:margin+i as f32*34.0,y:height as f32-54.0,w:24.0,h:24.0},*c,i==accent_i); }
-    #[cfg(feature="fontdue-text")]
-    if let Some(a)=ui_atlas{ text.draw_text(a,width,height,122.0,52.0,"EdgeRun",TEXT,38.0); text.draw_text(a,width,height,124.0,98.0,"GPU atlas text / Tabler icons / accent picker",MUTED,38.0); text.draw_text(a,width,height,96.0,276.0,"CPU",MUTED,38.0); text.draw_text(a,width,height,374.0,276.0,"RAM",MUTED,38.0); text.draw_text(a,width,height,652.0,276.0,"NET",MUTED,38.0); text.draw_text(a,width,height,28.0,height as f32-74.0,"accent",MUTED,38.0); }
-    #[cfg(all(feature="fontdue-text", feature="tabler-svg-atlas"))]
-    {
-        draw_svg_icon(text, svg_atlas, width, height, "sparkles", 40.0, 52.0, 34.0, accent);
-        draw_svg_icon(text, svg_atlas, width, height, "activity", 50.0, 270.0, 30.0, accent);
-        draw_svg_icon(text, svg_atlas, width, height, "server", 328.0, 270.0, 30.0, CYAN);
-        draw_svg_icon(text, svg_atlas, width, height, "network", 606.0, 270.0, 30.0, EMERALD);
+fn render_frame(
+    width: i32,
+    height: i32,
+    elapsed: f32,
+    accent_i: usize,
+    shapes: &ShapeRenderer,
+    #[cfg(feature = "fontdue-text")] text: &TextRenderer,
+    #[cfg(feature = "fontdue-text")] ui_atlas: Option<&Atlas>,
+    #[cfg(feature = "fontdue-text")] icon_atlas: Option<&Atlas>,
+    #[cfg(all(feature = "fontdue-text", feature = "tabler-svg-atlas"))] svg_atlas: &SvgAtlas,
+) {
+    let accent = PALETTE[accent_i.min(PALETTE.len() - 1)];
+    unsafe {
+        glViewport(0, 0, width, height);
+        glClearColor(BG.0[0], BG.0[1], BG.0[2], 1.0);
+        glClear(GL_COLOR_BUFFER_BIT);
     }
-    #[cfg(all(feature="fontdue-text", not(feature="tabler-svg-atlas")))]
-    if let Some(a)=icon_atlas{ draw_icon(text,a,width,height,"sparkles",40.0,52.0,accent); draw_icon(text,a,width,height,"activity",50.0,270.0,accent); draw_icon(text,a,width,height,"server",328.0,270.0,CYAN); draw_icon(text,a,width,height,"network",606.0,270.0,EMERALD); }
+    shapes.begin(width, height);
+    let cpu = 0.12 + (elapsed * 1.8).sin().abs() * 0.55;
+    let ram = 0.42;
+    let margin = 28.0;
+    let hero_w = (width as f32 - margin * 2.0).min(920.0);
+    let hero = Rect {
+        x: margin,
+        y: margin,
+        w: hero_w,
+        h: 188.0,
+    };
+    shapes.card(hero);
+    shapes.button(
+        Rect {
+            x: margin + 26.0,
+            y: margin + 128.0,
+            w: 170.0,
+            h: 40.0,
+        },
+        accent,
+        true,
+    );
+    shapes.button(
+        Rect {
+            x: margin + 210.0,
+            y: margin + 128.0,
+            w: 172.0,
+            h: 40.0,
+        },
+        accent,
+        false,
+    );
+    let stats_y = margin + 210.0;
+    let gap = 16.0;
+    let stat_w = (hero_w - gap * 2.0) / 3.0;
+    let r1 = Rect {
+        x: margin,
+        y: stats_y,
+        w: stat_w,
+        h: 134.0,
+    };
+    let r2 = Rect {
+        x: margin + stat_w + gap,
+        y: stats_y,
+        w: stat_w,
+        h: 134.0,
+    };
+    let r3 = Rect {
+        x: margin + (stat_w + gap) * 2.0,
+        y: stats_y,
+        w: stat_w,
+        h: 134.0,
+    };
+    shapes.card(r1);
+    shapes.card(r2);
+    shapes.card(r3);
+    shapes.progress(
+        Rect {
+            x: margin + 20.0,
+            y: stats_y + 106.0,
+            w: stat_w - 40.0,
+            h: 14.0,
+        },
+        cpu,
+        accent,
+    );
+    shapes.progress(
+        Rect {
+            x: margin + stat_w + gap + 20.0,
+            y: stats_y + 106.0,
+            w: stat_w - 40.0,
+            h: 14.0,
+        },
+        ram,
+        accent,
+    );
+    for (i, c) in PALETTE.iter().enumerate() {
+        shapes.swatch(
+            Rect {
+                x: margin + i as f32 * 34.0,
+                y: height as f32 - 54.0,
+                w: 24.0,
+                h: 24.0,
+            },
+            *c,
+            i == accent_i,
+        );
+    }
+    #[cfg(feature = "fontdue-text")]
+    if let Some(a) = ui_atlas {
+        text.draw_text(a, width, height, 122.0, 52.0, "EdgeRun", TEXT, 38.0);
+        text.draw_text(
+            a,
+            width,
+            height,
+            124.0,
+            98.0,
+            "GPU atlas text / Tabler icons / accent picker",
+            MUTED,
+            38.0,
+        );
+        text.draw_text(a, width, height, 96.0, 276.0, "CPU", MUTED, 38.0);
+        text.draw_text(a, width, height, 374.0, 276.0, "RAM", MUTED, 38.0);
+        text.draw_text(a, width, height, 652.0, 276.0, "NET", MUTED, 38.0);
+        text.draw_text(
+            a,
+            width,
+            height,
+            28.0,
+            height as f32 - 74.0,
+            "accent",
+            MUTED,
+            38.0,
+        );
+    }
+    #[cfg(all(feature = "fontdue-text", feature = "tabler-svg-atlas"))]
+    {
+        draw_svg_icon(
+            text, svg_atlas, width, height, "sparkles", 40.0, 52.0, 34.0, accent,
+        );
+        draw_svg_icon(
+            text, svg_atlas, width, height, "activity", 50.0, 270.0, 30.0, accent,
+        );
+        draw_svg_icon(
+            text, svg_atlas, width, height, "server", 328.0, 270.0, 30.0, CYAN,
+        );
+        draw_svg_icon(
+            text, svg_atlas, width, height, "network", 606.0, 270.0, 30.0, EMERALD,
+        );
+    }
+    #[cfg(all(feature = "fontdue-text", not(feature = "tabler-svg-atlas")))]
+    if let Some(a) = icon_atlas {
+        draw_icon(text, a, width, height, "sparkles", 40.0, 52.0, accent);
+        draw_icon(text, a, width, height, "activity", 50.0, 270.0, accent);
+        draw_icon(text, a, width, height, "server", 328.0, 270.0, CYAN);
+        draw_icon(text, a, width, height, "network", 606.0, 270.0, EMERALD);
+    }
 }
-fn pick_accent(state:&mut State,x:i32,y:i32){ if y < 486 {return;} let start=28; for i in 0..PALETTE.len(){ let sx=start+i as i32*34; if x>=sx && x<=sx+24 { state.accent=i; } } }
+fn pick_accent(state: &mut State, x: i32, y: i32) {
+    if y < 486 {
+        return;
+    }
+    let start = 28;
+    for i in 0..PALETTE.len() {
+        let sx = start + i as i32 * 34;
+        if x >= sx && x <= sx + 24 {
+            state.accent = i;
+        }
+    }
+}
 
-#[cfg(feature="fontdue-text")]
-fn ascii_chars()->Vec<char>{ (32u8..=126).map(char::from).collect() }
-#[cfg(feature="fontdue-text")]
-fn icon_chars()->Vec<char>{ ["sparkles","activity","server","network","check","shield-check","wallet","key","lock"].into_iter().filter_map(tabler_icon).collect() }
-#[cfg(feature="fontdue-text")]
-fn load_icon_font()->Option<FontFace>{ let path=std::env::var("EDGE_TABLER_FONT").unwrap_or_else(|_|TABLER_ICON_FONT_HINT.to_string()); FontFace::from_bytes(std::fs::read(path).ok()?).ok() }
-#[cfg(feature="fontdue-text")]
-fn draw_icon(text:&TextRenderer,atlas:&Atlas,width:i32,height:i32,name:&str,x:f32,y:f32,color:Color4){ if let Some(ch)=tabler_icon(name){ let mut b=[0u8;4]; let s=ch.encode_utf8(&mut b); text.draw_text(atlas,width,height,x,y,s,color,34.0); } }
+#[cfg(feature = "fontdue-text")]
+fn ascii_chars() -> Vec<char> {
+    (32u8..=126).map(char::from).collect()
+}
+#[cfg(feature = "fontdue-text")]
+fn icon_chars() -> Vec<char> {
+    [
+        "sparkles",
+        "activity",
+        "server",
+        "network",
+        "check",
+        "shield-check",
+        "wallet",
+        "key",
+        "lock",
+    ]
+    .into_iter()
+    .filter_map(tabler_icon)
+    .collect()
+}
+#[cfg(feature = "fontdue-text")]
+fn load_icon_font() -> Option<FontFace> {
+    let path =
+        std::env::var("EDGE_TABLER_FONT").unwrap_or_else(|_| TABLER_ICON_FONT_HINT.to_string());
+    FontFace::from_bytes(std::fs::read(path).ok()?).ok()
+}
+#[cfg(feature = "fontdue-text")]
+fn draw_icon(
+    text: &TextRenderer,
+    atlas: &Atlas,
+    width: i32,
+    height: i32,
+    name: &str,
+    x: f32,
+    y: f32,
+    color: Color4,
+) {
+    if let Some(ch) = tabler_icon(name) {
+        let mut b = [0u8; 4];
+        let s = ch.encode_utf8(&mut b);
+        text.draw_text(atlas, width, height, x, y, s, color, 34.0);
+    }
+}
 
-fn unit_quad_vao(stride_floats: i32)->Result<(u32,u32),String>{ let mut vao=0; let mut vbo=0; let verts:[f32;24]=[0.0,0.0,0.0,0.0, 1.0,0.0,1.0,0.0, 1.0,1.0,1.0,1.0, 0.0,0.0,0.0,0.0, 1.0,1.0,1.0,1.0, 0.0,1.0,0.0,1.0]; let count=if stride_floats==2{12}else{24}; unsafe{glGenVertexArrays(1,&mut vao);glBindVertexArray(vao);glGenBuffers(1,&mut vbo);glBindBuffer(GL_ARRAY_BUFFER,vbo);glBufferData(GL_ARRAY_BUFFER,(count*4) as isize,verts.as_ptr() as *const c_void,GL_DYNAMIC_DRAW);glEnableVertexAttribArray(0);glVertexAttribPointer(0,stride_floats,GL_FLOAT,GL_FALSE,stride_floats*4,ptr::null());} Ok((vao,vbo)) }
-fn link_program(v:&str,f:&str)->Result<u32,String>{ let p=unsafe{glCreateProgram()}; let vs=compile_shader(GL_VERTEX_SHADER,v)?; let fs=compile_shader(GL_FRAGMENT_SHADER,f)?; unsafe{glAttachShader(p,vs);glAttachShader(p,fs);glLinkProgram(p);glDeleteShader(vs);glDeleteShader(fs);} check_program(p)?; Ok(p) }
-fn compile_shader(kind:u32,source:&str)->Result<u32,String>{ let sh=unsafe{glCreateShader(kind)}; let c=CString::new(source).unwrap(); let ptr=c.as_ptr(); unsafe{glShaderSource(sh,1,&ptr,ptr::null());glCompileShader(sh);} let mut ok=0; unsafe{glGetShaderiv(sh,GL_COMPILE_STATUS,&mut ok);} if ok==0{let log=shader_log(sh);unsafe{glDeleteShader(sh);}Err(log)}else{Ok(sh)} }
-fn check_program(p:u32)->Result<(),String>{ let mut ok=0; unsafe{glGetProgramiv(p,GL_LINK_STATUS,&mut ok);} if ok==0{Err(program_log(p))}else{Ok(())} }
-fn shader_log(s:u32)->String{ let mut b=vec![0i8;2048]; let mut l=0; unsafe{glGetShaderInfoLog(s,b.len() as i32,&mut l,b.as_mut_ptr()); CStr::from_ptr(b.as_ptr()).to_string_lossy().into_owned()} }
-fn program_log(p:u32)->String{ let mut b=vec![0i8;2048]; let mut l=0; unsafe{glGetProgramInfoLog(p,b.len() as i32,&mut l,b.as_mut_ptr()); CStr::from_ptr(b.as_ptr()).to_string_lossy().into_owned()} }
-fn uniform(p:u32,n:&str)->i32{ let c=CString::new(n).unwrap(); unsafe{glGetUniformLocation(p,c.as_ptr())} }
-struct Sdl; impl Sdl{fn init()->Result<Self,String>{let rc=unsafe{SDL_Init(SDL_INIT_VIDEO)}; if rc!=0{Err(sdl_error())}else{Ok(Self)}}} impl Drop for Sdl{fn drop(&mut self){unsafe{SDL_Quit()};}}
-struct Window(*mut SDL_Window); impl Drop for Window{fn drop(&mut self){if !self.0.is_null(){unsafe{SDL_DestroyWindow(self.0)};}}}
-struct GlContext(SDL_GLContext); impl Drop for GlContext{fn drop(&mut self){if !self.0.is_null(){unsafe{SDL_GL_DeleteContext(self.0)};}}}
-fn sdl_error()->String{let p=unsafe{SDL_GetError()}; if p.is_null(){"unknown SDL error".into()}else{unsafe{CStr::from_ptr(p)}.to_string_lossy().into_owned()}}
+fn unit_quad_vao(stride_floats: i32) -> Result<(u32, u32), String> {
+    let mut vao = 0;
+    let mut vbo = 0;
+    let verts: [f32; 24] = [
+        0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 1.0,
+        1.0, 1.0, 0.0, 1.0, 0.0, 1.0,
+    ];
+    let count = if stride_floats == 2 { 12 } else { 24 };
+    unsafe {
+        glGenVertexArrays(1, &mut vao);
+        glBindVertexArray(vao);
+        glGenBuffers(1, &mut vbo);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo);
+        glBufferData(
+            GL_ARRAY_BUFFER,
+            (count * 4) as isize,
+            verts.as_ptr() as *const c_void,
+            GL_DYNAMIC_DRAW,
+        );
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(
+            0,
+            stride_floats,
+            GL_FLOAT,
+            GL_FALSE,
+            stride_floats * 4,
+            ptr::null(),
+        );
+    }
+    Ok((vao, vbo))
+}
+fn link_program(v: &str, f: &str) -> Result<u32, String> {
+    let p = unsafe { glCreateProgram() };
+    let vs = compile_shader(GL_VERTEX_SHADER, v)?;
+    let fs = compile_shader(GL_FRAGMENT_SHADER, f)?;
+    unsafe {
+        glAttachShader(p, vs);
+        glAttachShader(p, fs);
+        glLinkProgram(p);
+        glDeleteShader(vs);
+        glDeleteShader(fs);
+    }
+    check_program(p)?;
+    Ok(p)
+}
+fn compile_shader(kind: u32, source: &str) -> Result<u32, String> {
+    let sh = unsafe { glCreateShader(kind) };
+    let c = CString::new(source).unwrap();
+    let ptr = c.as_ptr();
+    unsafe {
+        glShaderSource(sh, 1, &ptr, ptr::null());
+        glCompileShader(sh);
+    }
+    let mut ok = 0;
+    unsafe {
+        glGetShaderiv(sh, GL_COMPILE_STATUS, &mut ok);
+    }
+    if ok == 0 {
+        let log = shader_log(sh);
+        unsafe {
+            glDeleteShader(sh);
+        }
+        Err(log)
+    } else {
+        Ok(sh)
+    }
+}
+fn check_program(p: u32) -> Result<(), String> {
+    let mut ok = 0;
+    unsafe {
+        glGetProgramiv(p, GL_LINK_STATUS, &mut ok);
+    }
+    if ok == 0 { Err(program_log(p)) } else { Ok(()) }
+}
+fn shader_log(s: u32) -> String {
+    let mut b = vec![0i8; 2048];
+    let mut l = 0;
+    unsafe {
+        glGetShaderInfoLog(s, b.len() as i32, &mut l, b.as_mut_ptr());
+        CStr::from_ptr(b.as_ptr()).to_string_lossy().into_owned()
+    }
+}
+fn program_log(p: u32) -> String {
+    let mut b = vec![0i8; 2048];
+    let mut l = 0;
+    unsafe {
+        glGetProgramInfoLog(p, b.len() as i32, &mut l, b.as_mut_ptr());
+        CStr::from_ptr(b.as_ptr()).to_string_lossy().into_owned()
+    }
+}
+fn uniform(p: u32, n: &str) -> i32 {
+    let c = CString::new(n).unwrap();
+    unsafe { glGetUniformLocation(p, c.as_ptr()) }
+}
+struct Sdl;
+impl Sdl {
+    fn init() -> Result<Self, String> {
+        let rc = unsafe { SDL_Init(SDL_INIT_VIDEO) };
+        if rc != 0 { Err(sdl_error()) } else { Ok(Self) }
+    }
+}
+impl Drop for Sdl {
+    fn drop(&mut self) {
+        unsafe { SDL_Quit() };
+    }
+}
+struct Window(*mut SDL_Window);
+impl Drop for Window {
+    fn drop(&mut self) {
+        if !self.0.is_null() {
+            unsafe { SDL_DestroyWindow(self.0) };
+        }
+    }
+}
+struct GlContext(SDL_GLContext);
+impl Drop for GlContext {
+    fn drop(&mut self) {
+        if !self.0.is_null() {
+            unsafe { SDL_GL_DeleteContext(self.0) };
+        }
+    }
+}
+fn sdl_error() -> String {
+    let p = unsafe { SDL_GetError() };
+    if p.is_null() {
+        "unknown SDL error".into()
+    } else {
+        unsafe { CStr::from_ptr(p) }.to_string_lossy().into_owned()
+    }
+}

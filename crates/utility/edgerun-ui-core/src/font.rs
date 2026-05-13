@@ -23,9 +23,11 @@ impl FontFace {
 
     pub fn load_best_ui_font() -> Result<Self, String> {
         let path = find_best_ui_font().ok_or_else(|| {
-            "no usable UI font found; install inter-font or set EDGE_UI_FONT=/path/to/font.ttf".to_string()
+            "no usable UI font found; install inter-font or set EDGE_UI_FONT=/path/to/font.ttf"
+                .to_string()
         })?;
-        let bytes = fs::read(&path).map_err(|e| format!("failed to read {}: {e}", path.display()))?;
+        let bytes =
+            fs::read(&path).map_err(|e| format!("failed to read {}: {e}", path.display()))?;
         Self::from_bytes(bytes).map_err(|e| format!("failed to load {}: {e}", path.display()))
     }
 
@@ -109,7 +111,11 @@ impl<'a> Painter<'a> {
     }
 
     fn blend_text_pixel(&mut self, x: u32, y: u32, color: Color) {
-        if color.a == 0 || x >= self.width || y >= self.height || self.pitch < self.width.saturating_mul(4) {
+        if color.a == 0
+            || x >= self.width
+            || y >= self.height
+            || self.pitch < self.width.saturating_mul(4)
+        {
             return;
         }
         let off = y as usize * self.pitch as usize + x as usize * 4;

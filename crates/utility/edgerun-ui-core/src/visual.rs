@@ -2,10 +2,12 @@
 //!
 //! These helpers keep the core renderer small while making the system UI feel
 //! modern: antialiased rounded rectangles, soft shadows, and polished widgets.
+//! They are retained for compatibility with the software preview path; new
+//! shell and app UI should target the shared GPU scene/component model.
 
-use crate::{icons::Icon, Color, Painter, Rect, TextSize, Theme};
 #[cfg(feature = "tabler-icons")]
 use crate::tabler::TablerIconName;
+use crate::{Color, Painter, Rect, TextSize, Theme, icons::Icon};
 
 const AA_SAMPLES: [(f32, f32); 4] = [(0.25, 0.25), (0.75, 0.25), (0.25, 0.75), (0.75, 0.75)];
 
@@ -63,7 +65,15 @@ impl<'a> Painter<'a> {
     }
 
     /// Draw a soft shadow with multiple rounded translucent passes.
-    pub fn soft_shadow(&mut self, rect: Rect, radius: u32, color: Color, spread: u32, offset_x: i32, offset_y: i32) {
+    pub fn soft_shadow(
+        &mut self,
+        rect: Rect,
+        radius: u32,
+        color: Color,
+        spread: u32,
+        offset_x: i32,
+        offset_y: i32,
+    ) {
         if color.a == 0 || spread == 0 {
             return;
         }
@@ -87,20 +97,41 @@ impl<'a> Painter<'a> {
         self.soft_shadow(rect, 18, theme.shadow.with_alpha(42), 7, 0, 3);
         self.rounded_rect(rect, 18, theme.panel.with_alpha(242));
         self.rounded_border(rect, 18, 1, theme.border.with_alpha(220));
-        self.rounded_rect(Rect::new(rect.x + 2, rect.y + 2, rect.w.saturating_sub(4), 24), 16, theme.panel_2.with_alpha(72));
+        self.rounded_rect(
+            Rect::new(rect.x + 2, rect.y + 2, rect.w.saturating_sub(4), 24),
+            16,
+            theme.panel_2.with_alpha(72),
+        );
     }
 
     /// Draw a polished pill/button.
     pub fn pill_button(&mut self, rect: Rect, label: &str, theme: Theme, active: bool) {
         let fill = if active { theme.accent } else { theme.panel_2 };
-        let fg = if active { theme.accent_text } else { theme.text };
+        let fg = if active {
+            theme.accent_text
+        } else {
+            theme.text
+        };
         let radius = (rect.h / 2).max(8);
 
         if active {
             self.soft_shadow(rect, radius, theme.accent.with_alpha(32), 5, 0, 2);
         }
-        self.rounded_rect(rect, radius, fill.with_alpha(if active { 255 } else { 225 }));
-        self.rounded_border(rect, radius, 1, if active { theme.accent.with_alpha(255) } else { theme.border.with_alpha(220) });
+        self.rounded_rect(
+            rect,
+            radius,
+            fill.with_alpha(if active { 255 } else { 225 }),
+        );
+        self.rounded_border(
+            rect,
+            radius,
+            1,
+            if active {
+                theme.accent.with_alpha(255)
+            } else {
+                theme.border.with_alpha(220)
+            },
+        );
 
         let scale = TextSize::Body.scale() as i32;
         let tw = crate::text_width(label, TextSize::Body) as i32;
@@ -123,7 +154,11 @@ impl<'a> Painter<'a> {
         let inner = rect.inset(2);
         let fill_w = inner.w.saturating_mul(value_permille.min(1000) as u32) / 1000;
         if fill_w > 0 {
-            self.rounded_rect(Rect::new(inner.x, inner.y, fill_w, inner.h), radius.saturating_sub(2), theme.accent);
+            self.rounded_rect(
+                Rect::new(inner.x, inner.y, fill_w, inner.h),
+                radius.saturating_sub(2),
+                theme.accent,
+            );
         }
     }
 
@@ -137,7 +172,14 @@ impl<'a> Painter<'a> {
         self.tabler_icon(icon, rect, color.with_alpha(235));
     }
 
-    fn rounded_rect_inner(&mut self, rect: Rect, radius: u32, color: Color, _border_only: bool, _thickness: u32) {
+    fn rounded_rect_inner(
+        &mut self,
+        rect: Rect,
+        radius: u32,
+        color: Color,
+        _border_only: bool,
+        _thickness: u32,
+    ) {
         if rect.w == 0 || rect.h == 0 || color.a == 0 {
             return;
         }
@@ -161,7 +203,11 @@ impl<'a> Painter<'a> {
     }
 
     fn blend_pixel_public(&mut self, x: u32, y: u32, color: Color) {
-        if color.a == 0 || x >= self.width || y >= self.height || self.pitch < self.width.saturating_mul(4) {
+        if color.a == 0
+            || x >= self.width
+            || y >= self.height
+            || self.pitch < self.width.saturating_mul(4)
+        {
             return;
         }
         let off = y as usize * self.pitch as usize + x as usize * 4;
@@ -178,25 +224,64 @@ impl<'a> Painter<'a> {
     }
 }
 
-pub fn demo_dashboard_polished(p: &mut Painter<'_>, state: crate::DashboardState<'_>, theme: Theme) {
+pub fn demo_dashboard_polished(
+    p: &mut Painter<'_>,
+    state: crate::DashboardState<'_>,
+    theme: Theme,
+) {
     p.clear(theme.bg);
 
     // subtle background glows
-    p.rounded_rect(Rect::new(-120, -100, 420, 260), 130, theme.accent.with_alpha(20));
-    p.rounded_rect(Rect::new(p.width as i32 - 360, p.height as i32 - 260, 460, 320), 150, Color::rgb(0x50, 0xfa, 0x7b).with_alpha(12));
+    p.rounded_rect(
+        Rect::new(-120, -100, 420, 260),
+        130,
+        theme.accent.with_alpha(20),
+    );
+    p.rounded_rect(
+        Rect::new(p.width as i32 - 360, p.height as i32 - 260, 460, 320),
+        150,
+        Color::rgb(0x50, 0xfa, 0x7b).with_alpha(12),
+    );
 
     let margin = 28;
-    let hero = Rect::new(margin, margin, p.width.saturating_sub((margin * 2) as u32), 188);
+    let hero = Rect::new(
+        margin,
+        margin,
+        p.width.saturating_sub((margin * 2) as u32),
+        188,
+    );
     p.glass_card(hero, theme);
     draw_hero_icon(p, Rect::new(hero.x + 28, hero.y + 30, 44, 44), theme.accent);
-    p.text(hero.x + 94, hero.y + 24, state.title, theme.text, TextSize::Hero);
-    p.text(hero.x + 96, hero.y + 76, state.subtitle, theme.muted, TextSize::Body);
+    p.text(
+        hero.x + 94,
+        hero.y + 24,
+        state.title,
+        theme.text,
+        TextSize::Hero,
+    );
+    p.text(
+        hero.x + 96,
+        hero.y + 76,
+        state.subtitle,
+        theme.muted,
+        TextSize::Body,
+    );
 
     let badge = Rect::new(hero.x + hero.w as i32 - 126, hero.y + 24, 96, 28);
     p.pill_badge(badge, state.node_status, theme.accent, theme);
 
-    p.pill_button(Rect::new(hero.x + 26, hero.y + 128, 170, 40), "Open node", theme, true);
-    p.pill_button(Rect::new(hero.x + 210, hero.y + 128, 172, 40), "Trust root", theme, false);
+    p.pill_button(
+        Rect::new(hero.x + 26, hero.y + 128, 170, 40),
+        "Open node",
+        theme,
+        true,
+    );
+    p.pill_button(
+        Rect::new(hero.x + 210, hero.y + 128, 172, 40),
+        "Trust root",
+        theme,
+        false,
+    );
 
     let stats_y = hero.y + hero.h as i32 + 22;
     let gap = 16;
@@ -209,38 +294,73 @@ pub fn demo_dashboard_polished(p: &mut Painter<'_>, state: crate::DashboardState
     draw_cpu_icon(p, Rect::new(r1.x + 22, r1.y + 24, 30, 30), theme.accent);
     p.text(r1.x + 68, r1.y + 22, "CPU", theme.muted, TextSize::Body);
     draw_permille_polished(p, r1.x + 20, r1.y + 64, state.cpu_permille, theme.text);
-    p.rounded_progress(Rect::new(r1.x + 20, r1.y + 106, r1.w.saturating_sub(40), 14), state.cpu_permille, theme);
+    p.rounded_progress(
+        Rect::new(r1.x + 20, r1.y + 106, r1.w.saturating_sub(40), 14),
+        state.cpu_permille,
+        theme,
+    );
 
     p.glass_card(r2, theme);
-    draw_memory_icon(p, Rect::new(r2.x + 22, r2.y + 24, 30, 30), Color::rgb(0x8b, 0xe9, 0xfd));
+    draw_memory_icon(
+        p,
+        Rect::new(r2.x + 22, r2.y + 24, 30, 30),
+        Color::rgb(0x8b, 0xe9, 0xfd),
+    );
     p.text(r2.x + 68, r2.y + 22, "RAM", theme.muted, TextSize::Body);
     draw_u32_suffix_polished(p, r2.x + 20, r2.y + 64, state.memory_mb, " MB", theme.text);
-    p.rounded_progress(Rect::new(r2.x + 20, r2.y + 106, r2.w.saturating_sub(40), 14), 420, theme);
+    p.rounded_progress(
+        Rect::new(r2.x + 20, r2.y + 106, r2.w.saturating_sub(40), 14),
+        420,
+        theme,
+    );
 
     p.glass_card(r3, theme);
-    draw_network_icon(p, Rect::new(r3.x + 22, r3.y + 24, 30, 30), Color::rgb(0x50, 0xfa, 0x7b));
+    draw_network_icon(
+        p,
+        Rect::new(r3.x + 22, r3.y + 24, 30, 30),
+        Color::rgb(0x50, 0xfa, 0x7b),
+    );
     p.text(r3.x + 68, r3.y + 22, "NET", theme.muted, TextSize::Body);
-    p.text(r3.x + 20, r3.y + 68, state.network_status, theme.text, TextSize::Title);
-    p.pill_badge(Rect::new(r3.x + 20, r3.y + 104, 92, 24), "private", Color::rgb(0x50, 0xfa, 0x7b), theme);
+    p.text(
+        r3.x + 20,
+        r3.y + 68,
+        state.network_status,
+        theme.text,
+        TextSize::Title,
+    );
+    p.pill_badge(
+        Rect::new(r3.x + 20, r3.y + 104, 92, 24),
+        "private",
+        Color::rgb(0x50, 0xfa, 0x7b),
+        theme,
+    );
 }
 
 #[cfg(feature = "tabler-icons")]
-fn draw_hero_icon(p: &mut Painter<'_>, rect: Rect, color: Color) { p.bare_tabler_icon(rect, TablerIconName::Sparkles, color); }
+fn draw_hero_icon(p: &mut Painter<'_>, rect: Rect, color: Color) {
+    p.bare_tabler_icon(rect, TablerIconName::Sparkles, color);
+}
 #[cfg(not(feature = "tabler-icons"))]
 fn draw_hero_icon(_p: &mut Painter<'_>, _rect: Rect, _color: Color) {}
 
 #[cfg(feature = "tabler-icons")]
-fn draw_cpu_icon(p: &mut Painter<'_>, rect: Rect, color: Color) { p.bare_tabler_icon(rect, TablerIconName::Activity, color); }
+fn draw_cpu_icon(p: &mut Painter<'_>, rect: Rect, color: Color) {
+    p.bare_tabler_icon(rect, TablerIconName::Activity, color);
+}
 #[cfg(not(feature = "tabler-icons"))]
 fn draw_cpu_icon(_p: &mut Painter<'_>, _rect: Rect, _color: Color) {}
 
 #[cfg(feature = "tabler-icons")]
-fn draw_memory_icon(p: &mut Painter<'_>, rect: Rect, color: Color) { p.bare_tabler_icon(rect, TablerIconName::Database, color); }
+fn draw_memory_icon(p: &mut Painter<'_>, rect: Rect, color: Color) {
+    p.bare_tabler_icon(rect, TablerIconName::Database, color);
+}
 #[cfg(not(feature = "tabler-icons"))]
 fn draw_memory_icon(_p: &mut Painter<'_>, _rect: Rect, _color: Color) {}
 
 #[cfg(feature = "tabler-icons")]
-fn draw_network_icon(p: &mut Painter<'_>, rect: Rect, color: Color) { p.bare_tabler_icon(rect, TablerIconName::Network, color); }
+fn draw_network_icon(p: &mut Painter<'_>, rect: Rect, color: Color) {
+    p.bare_tabler_icon(rect, TablerIconName::Network, color);
+}
 #[cfg(not(feature = "tabler-icons"))]
 fn draw_network_icon(_p: &mut Painter<'_>, _rect: Rect, _color: Color) {}
 
@@ -268,8 +388,20 @@ fn point_in_rounded_rect(px: f32, py: f32, rect: Rect, radius: f32) -> bool {
     }
 
     let r = radius.min(rect.w as f32 * 0.5).min(rect.h as f32 * 0.5);
-    let cx = if px < x0 + r { x0 + r } else if px > x1 - r { x1 - r } else { px };
-    let cy = if py < y0 + r { y0 + r } else if py > y1 - r { y1 - r } else { py };
+    let cx = if px < x0 + r {
+        x0 + r
+    } else if px > x1 - r {
+        x1 - r
+    } else {
+        px
+    };
+    let cy = if py < y0 + r {
+        y0 + r
+    } else if py > y1 - r {
+        y1 - r
+    } else {
+        py
+    };
     let dx = px - cx;
     let dy = py - cy;
     dx * dx + dy * dy <= r * r
@@ -284,7 +416,14 @@ fn draw_permille_polished(p: &mut Painter<'_>, x: i32, y: i32, value: u16, color
     draw_u32_suffix_polished(p, x, y, pct, "%", color);
 }
 
-fn draw_u32_suffix_polished(p: &mut Painter<'_>, x: i32, y: i32, mut value: u32, suffix: &str, color: Color) {
+fn draw_u32_suffix_polished(
+    p: &mut Painter<'_>,
+    x: i32,
+    y: i32,
+    mut value: u32,
+    suffix: &str,
+    color: Color,
+) {
     let mut buf = [0u8; 10];
     let mut n = 0usize;
     if value == 0 {

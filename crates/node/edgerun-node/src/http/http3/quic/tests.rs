@@ -76,6 +76,7 @@ fn test_initial_packet_handshake_timeout() {
             stream_send_offset: alloc::collections::BTreeMap::new(),
             active_path: None,
             pending_path_challenges: alloc::collections::BTreeMap::new(),
+            runtime_last_activity: crate::http::runtime::time::Instant::now(),
             sent_packets_buffer: Vec::new(),
         };
 

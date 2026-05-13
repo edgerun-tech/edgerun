@@ -2,16 +2,22 @@ use std::cell::RefCell;
 
 use edgerun_ui_core::gpu::{
     FontAtlas, GpuHit, GpuRect, GpuScene, HitKind, RectMode, TextQuad, UiAction, UiAppSurface,
-    UiColorScheme, UiEvent, UiKey, UiTileAxis, UiTileNode, UiWorkspace, UiWorkspaceAction,
-    UnifiedChatState, build_edgerun_workspace_shell_with_font, palette,
+    UiColorScheme, UiEvent, UiKey, UiShellAction, UiShellState, UiWorkspace, UiWorkspaceAction,
+    UnifiedChatState, build_edgerun_shell_overlay_with_font,
+    build_edgerun_workspace_shell_with_font, palette,
 };
 
 thread_local! {
     static SCENE: RefCell<GpuScene> = RefCell::new(GpuScene::new(palette::BG));
+    static SHELL_SCENE: RefCell<GpuScene> = RefCell::new(GpuScene::new(edgerun_ui_core::gpu::Color4::rgba(0.0, 0.0, 0.0, 0.0)));
     static WORKSPACE: RefCell<UiWorkspace> = RefCell::new(default_workspace());
+    static SHELL: RefCell<UiShellState> = RefCell::new(UiShellState::default());
     static PACKED_RECTS: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
     static PACKED_TEXT_VERTICES: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
     static PACKED_HITS: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
+    static SHELL_PACKED_RECTS: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
+    static SHELL_PACKED_TEXT_VERTICES: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
+    static SHELL_PACKED_HITS: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
     static INPUT_BYTES: RefCell<Vec<u8>> = RefCell::new(vec![0; 4096]);
     static SELECTED_CONTACT: RefCell<usize> = const { RefCell::new(0) };
     static COLOR_SCHEME: RefCell<UiColorScheme> = const { RefCell::new(UiColorScheme::Dark) };
@@ -20,25 +26,15 @@ thread_local! {
 }
 
 fn default_workspace() -> UiWorkspace {
-    UiWorkspace {
-        apps: vec![
-            UiAppSurface::new(1, "EdgeRun Chat"),
-            UiAppSurface::new(2, "Trust Manager"),
-            UiAppSurface::new(3, "Storage"),
-        ],
-        root: UiTileNode::Split {
-            axis: UiTileAxis::Horizontal,
-            ratio_percent: 56,
-            first: Box::new(UiTileNode::Leaf { app_id: 1 }),
-            second: Box::new(UiTileNode::Split {
-                axis: UiTileAxis::Vertical,
-                ratio_percent: 52,
-                first: Box::new(UiTileNode::Leaf { app_id: 2 }),
-                second: Box::new(UiTileNode::Leaf { app_id: 3 }),
-            }),
-        },
-        focused_app: Some(1),
-    }
+    UiWorkspace::edgerun_default()
+}
+
+fn lock_workspace() -> UiWorkspace {
+    UiWorkspace::full_screen(UiAppSurface::lock_screen(10))
+}
+
+fn capability_request_workspace() -> UiWorkspace {
+    UiWorkspace::full_screen(UiAppSurface::capability_request(11))
 }
 
 #[unsafe(no_mangle)]
@@ -59,6 +55,21 @@ pub extern "C" fn codex_gl_set_color_scheme(code: u32) {
 #[unsafe(no_mangle)]
 pub extern "C" fn codex_gl_color_scheme() -> u32 {
     COLOR_SCHEME.with_borrow(|scheme| scheme.code())
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_show_workspace() {
+    WORKSPACE.with_borrow_mut(|workspace| *workspace = default_workspace());
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_show_lock_screen() {
+    WORKSPACE.with_borrow_mut(|workspace| *workspace = lock_workspace());
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_show_capability_request() {
+    WORKSPACE.with_borrow_mut(|workspace| *workspace = capability_request_workspace());
 }
 
 #[unsafe(no_mangle)]
@@ -93,6 +104,19 @@ fn build_scene(width: f32, height: f32, active: bool) -> u32 {
     })
 }
 
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_build_shell_frame(width: f32, height: f32, _time_ms: f64) -> u32 {
+    FONT.with(|font| {
+        SHELL_SCENE.with_borrow_mut(|scene| {
+            SHELL.with_borrow_mut(|shell| {
+                build_edgerun_shell_overlay_with_font(scene, font, width, height, shell);
+            });
+            pack_shell_scene(scene);
+            scene.rects().len() as u32
+        })
+    })
+}
+
 fn pack_scene(scene: &GpuScene) {
     PACKED_RECTS.with_borrow_mut(|packed| {
         packed.clear();
@@ -111,6 +135,39 @@ fn pack_scene(scene: &GpuScene) {
     });
 
     PACKED_HITS.with_borrow_mut(|packed| {
+        packed.clear();
+        packed.reserve(scene.hits().len() * 6);
+        for hit in scene.hits() {
+            packed.extend_from_slice(&[
+                hit_kind_code(hit.kind) as f32,
+                (hit.id & 0x00ff_ffff) as f32,
+                hit.x,
+                hit.y,
+                hit.w,
+                hit.h,
+            ]);
+        }
+    });
+}
+
+fn pack_shell_scene(scene: &GpuScene) {
+    SHELL_PACKED_RECTS.with_borrow_mut(|packed| {
+        packed.clear();
+        packed.reserve(scene.rects().len() * 11);
+        for rect in scene.rects() {
+            push_packed_rect(packed, rect);
+        }
+    });
+
+    SHELL_PACKED_TEXT_VERTICES.with_borrow_mut(|packed| {
+        packed.clear();
+        packed.reserve(scene.text_quads().len() * 48);
+        for quad in scene.text_quads() {
+            push_packed_text_quad(packed, quad);
+        }
+    });
+
+    SHELL_PACKED_HITS.with_borrow_mut(|packed| {
         packed.clear();
         packed.reserve(scene.hits().len() * 6);
         for hit in scene.hits() {
@@ -257,6 +314,61 @@ fn handle_ui_event(event: UiEvent) -> u32 {
     })
 }
 
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_handle_shell_pointer_down(x: f32, y: f32) -> u32 {
+    handle_shell_event(UiEvent::PointerDown { x, y })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_handle_shell_pointer_move(x: f32, y: f32) -> u32 {
+    handle_shell_event(UiEvent::PointerMove { x, y })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_handle_shell_pointer_up(x: f32, y: f32) -> u32 {
+    handle_shell_event(UiEvent::PointerUp { x, y })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_handle_shell_key(code: u32) -> u32 {
+    handle_shell_event(UiEvent::KeyDown {
+        key: key_from_code(code),
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_shell_hit_test(x: f32, y: f32) -> u32 {
+    SHELL_SCENE.with_borrow(|scene| {
+        scene
+            .hit_test(x, y)
+            .map(|hit| (hit_kind_code(hit.kind) << 24) | (hit.id & 0x00ff_ffff))
+            .unwrap_or(u32::MAX)
+    })
+}
+
+fn handle_shell_event(event: UiEvent) -> u32 {
+    SHELL_SCENE.with_borrow(|scene| {
+        SHELL.with_borrow_mut(|shell| {
+            let action = shell.handle_event(scene, event);
+            shell_action_dirty(action)
+        })
+    })
+}
+
+fn shell_action_dirty(action: UiShellAction) -> u32 {
+    match action {
+        UiShellAction::None => 0,
+        UiShellAction::ToggledLauncher(_) => 1,
+        UiShellAction::Runtime(action) => ui_action_dirty(action),
+        UiShellAction::OpenApp { kind, .. } => {
+            WORKSPACE.with_borrow_mut(|workspace| {
+                workspace.open_or_focus(kind);
+            });
+            1
+        }
+    }
+}
+
 fn workspace_action_dirty(action: UiWorkspaceAction) -> u32 {
     match action {
         UiWorkspaceAction::None => 0,
@@ -341,6 +453,36 @@ pub extern "C" fn codex_gl_hit_buffer_ptr() -> *const f32 {
     PACKED_HITS.with_borrow(|packed| packed.as_ptr())
 }
 
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_shell_rect_buffer_len() -> u32 {
+    SHELL_PACKED_RECTS.with_borrow(|packed| packed.len() as u32)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_shell_rect_buffer_ptr() -> *const f32 {
+    SHELL_PACKED_RECTS.with_borrow(|packed| packed.as_ptr())
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_shell_text_vertex_buffer_len() -> u32 {
+    SHELL_PACKED_TEXT_VERTICES.with_borrow(|packed| packed.len() as u32)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_shell_text_vertex_buffer_ptr() -> *const f32 {
+    SHELL_PACKED_TEXT_VERTICES.with_borrow(|packed| packed.as_ptr())
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_shell_hit_buffer_len() -> u32 {
+    SHELL_PACKED_HITS.with_borrow(|packed| packed.len() as u32)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_shell_hit_buffer_ptr() -> *const f32 {
+    SHELL_PACKED_HITS.with_borrow(|packed| packed.as_ptr())
+}
+
 fn hit_kind_code(kind: HitKind) -> u32 {
     match kind {
         HitKind::Contact => 1,
@@ -359,6 +501,13 @@ fn hit_kind_code(kind: HitKind) -> u32 {
         HitKind::WorkspaceTab => 14,
         HitKind::WorkspaceClose => 15,
         HitKind::WorkspaceSplit => 16,
+        HitKind::Checkbox => 17,
+        HitKind::Radio => 18,
+        HitKind::Select => 19,
+        HitKind::Breadcrumb => 20,
+        HitKind::TreeItem => 21,
+        HitKind::AppLauncherItem => 22,
+        HitKind::ShellLauncher => 23,
     }
 }
 

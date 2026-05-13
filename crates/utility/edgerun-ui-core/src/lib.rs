@@ -8,21 +8,20 @@
 //! remote renderers can share one visual language.
 
 pub mod components;
+#[cfg(feature = "fontdue-text")]
+pub mod font;
 #[cfg(feature = "std")]
 pub mod gpu;
 pub mod icons;
-pub mod visual;
-#[cfg(feature = "fontdue-text")]
-pub mod font;
+#[cfg(feature = "tabler-icons")]
+pub mod tabler;
 #[cfg(feature = "fontdue-text")]
 pub mod tabler_font_generated;
 #[cfg(feature = "tabler-icons")]
 pub mod tabler_generated;
-#[cfg(feature = "tabler-icons")]
-pub mod tabler;
 #[cfg(feature = "tabler-svg-atlas")]
 pub mod tabler_svg_atlas_generated;
-
+pub mod visual;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Color {
@@ -60,7 +59,11 @@ impl Rect {
     }
 
     pub const fn inset(self, amount: i32) -> Self {
-        let shrink = if amount <= 0 { 0 } else { (amount as u32).saturating_mul(2) };
+        let shrink = if amount <= 0 {
+            0
+        } else {
+            (amount as u32).saturating_mul(2)
+        };
         Self {
             x: self.x + amount,
             y: self.y + amount,
@@ -223,21 +226,37 @@ impl<'a> Painter<'a> {
             return;
         }
         self.rect(Rect::new(rect.x, rect.y, rect.w, 1), color);
-        self.rect(Rect::new(rect.x, rect.y + rect.h as i32 - 1, rect.w, 1), color);
+        self.rect(
+            Rect::new(rect.x, rect.y + rect.h as i32 - 1, rect.w, 1),
+            color,
+        );
         self.rect(Rect::new(rect.x, rect.y, 1, rect.h), color);
-        self.rect(Rect::new(rect.x + rect.w as i32 - 1, rect.y, 1, rect.h), color);
+        self.rect(
+            Rect::new(rect.x + rect.w as i32 - 1, rect.y, 1, rect.h),
+            color,
+        );
     }
 
     pub fn shadow_card(&mut self, rect: Rect, theme: Theme) {
-        self.rect_alpha(Rect::new(rect.x + 5, rect.y + 6, rect.w, rect.h), theme.shadow);
+        self.rect_alpha(
+            Rect::new(rect.x + 5, rect.y + 6, rect.w, rect.h),
+            theme.shadow,
+        );
         self.rect(rect, theme.panel);
         self.border(rect, theme.border);
-        self.rect(Rect::new(rect.x + 1, rect.y + 1, rect.w.saturating_sub(2), 1), theme.panel_2);
+        self.rect(
+            Rect::new(rect.x + 1, rect.y + 1, rect.w.saturating_sub(2), 1),
+            theme.panel_2,
+        );
     }
 
     pub fn button(&mut self, rect: Rect, label: &str, theme: Theme, active: bool) {
         let fill = if active { theme.accent } else { theme.panel_2 };
-        let fg = if active { theme.accent_text } else { theme.text };
+        let fg = if active {
+            theme.accent_text
+        } else {
+            theme.text
+        };
         self.rect(rect, fill);
         self.border(rect, if active { theme.accent } else { theme.border });
         let scale = TextSize::Body.scale() as i32;
@@ -288,7 +307,11 @@ impl<'a> Painter<'a> {
         let y1 = rect.y.saturating_add(rect.h as i32).max(0) as u32;
         let x1 = x1.min(self.width);
         let y1 = y1.min(self.height);
-        if x0 >= x1 || y0 >= y1 { None } else { Some((x0, y0, x1, y1)) }
+        if x0 >= x1 || y0 >= y1 {
+            None
+        } else {
+            Some((x0, y0, x1, y1))
+        }
     }
 
     fn put_pixel(&mut self, x: u32, y: u32, color: Color) {
@@ -296,7 +319,9 @@ impl<'a> Painter<'a> {
             return;
         }
         let off = y as usize * self.pitch as usize + x as usize * 4;
-        let Some(px) = self.pixels.get_mut(off..off + 4) else { return; };
+        let Some(px) = self.pixels.get_mut(off..off + 4) else {
+            return;
+        };
         px[0] = color.b;
         px[1] = color.g;
         px[2] = color.r;
@@ -308,7 +333,9 @@ impl<'a> Painter<'a> {
             return;
         }
         let off = y as usize * self.pitch as usize + x as usize * 4;
-        let Some(px) = self.pixels.get_mut(off..off + 4) else { return; };
+        let Some(px) = self.pixels.get_mut(off..off + 4) else {
+            return;
+        };
         let a = color.a as u32;
         let inv = 255 - a;
         px[0] = ((color.b as u32 * a + px[0] as u32 * inv) / 255) as u8;
@@ -321,7 +348,9 @@ impl<'a> Painter<'a> {
         let glyph = glyph5x7(byte);
         for (row, bits) in glyph.iter().copied().enumerate() {
             for col in 0..5 {
-                if ((bits >> (4 - col)) & 1) == 0 { continue; }
+                if ((bits >> (4 - col)) & 1) == 0 {
+                    continue;
+                }
                 for sy in 0..scale {
                     for sx in 0..scale {
                         let px = x + col as i32 * scale + sx;
@@ -366,14 +395,41 @@ impl<'a> Default for DashboardState<'a> {
 pub fn demo_dashboard(p: &mut Painter<'_>, state: DashboardState<'_>, theme: Theme) {
     p.clear(theme.bg);
     let margin = 24;
-    let hero = Rect::new(margin, margin, p.width.saturating_sub((margin * 2) as u32), 178);
+    let hero = Rect::new(
+        margin,
+        margin,
+        p.width.saturating_sub((margin * 2) as u32),
+        178,
+    );
     p.shadow_card(hero, theme);
-    p.text(hero.x + 22, hero.y + 22, state.title, theme.text, TextSize::Hero);
-    p.text(hero.x + 24, hero.y + 70, state.subtitle, theme.muted, TextSize::Body);
+    p.text(
+        hero.x + 22,
+        hero.y + 22,
+        state.title,
+        theme.text,
+        TextSize::Hero,
+    );
+    p.text(
+        hero.x + 24,
+        hero.y + 70,
+        state.subtitle,
+        theme.muted,
+        TextSize::Body,
+    );
     let badge = Rect::new(hero.x + hero.w as i32 - 116, hero.y + 22, 88, 24);
     p.badge(badge, state.node_status, theme.accent, theme);
-    p.button(Rect::new(hero.x + 24, hero.y + 120, 168, 38), "Open node", theme, true);
-    p.button(Rect::new(hero.x + 204, hero.y + 120, 168, 38), "Trust root", theme, false);
+    p.button(
+        Rect::new(hero.x + 24, hero.y + 120, 168, 38),
+        "Open node",
+        theme,
+        true,
+    );
+    p.button(
+        Rect::new(hero.x + 204, hero.y + 120, 168, 38),
+        "Trust root",
+        theme,
+        false,
+    );
 
     let stats_y = hero.y + hero.h as i32 + 18;
     let gap = 14;
@@ -385,7 +441,11 @@ pub fn demo_dashboard(p: &mut Painter<'_>, state: DashboardState<'_>, theme: The
     p.shadow_card(r1, theme);
     p.text(r1.x + 18, r1.y + 18, "CPU", theme.muted, TextSize::Body);
     draw_permille(p, r1.x + 18, r1.y + 52, state.cpu_permille, theme.text);
-    p.progress(Rect::new(r1.x + 18, r1.y + 96, r1.w.saturating_sub(36), 12), state.cpu_permille, theme);
+    p.progress(
+        Rect::new(r1.x + 18, r1.y + 96, r1.w.saturating_sub(36), 12),
+        state.cpu_permille,
+        theme,
+    );
 
     p.shadow_card(r2, theme);
     p.text(r2.x + 18, r2.y + 18, "RAM", theme.muted, TextSize::Body);
@@ -393,7 +453,13 @@ pub fn demo_dashboard(p: &mut Painter<'_>, state: DashboardState<'_>, theme: The
 
     p.shadow_card(r3, theme);
     p.text(r3.x + 18, r3.y + 18, "NET", theme.muted, TextSize::Body);
-    p.text(r3.x + 18, r3.y + 56, state.network_status, theme.text, TextSize::Title);
+    p.text(
+        r3.x + 18,
+        r3.y + 56,
+        state.network_status,
+        theme.text,
+        TextSize::Title,
+    );
 }
 
 fn draw_permille(p: &mut Painter<'_>, x: i32, y: i32, value: u16, color: Color) {
@@ -401,23 +467,43 @@ fn draw_permille(p: &mut Painter<'_>, x: i32, y: i32, value: u16, color: Color) 
     draw_u32_suffix(p, x, y, pct, "%", color);
 }
 
-fn draw_u32_suffix(p: &mut Painter<'_>, x: i32, y: i32, mut value: u32, suffix: &str, color: Color) {
+fn draw_u32_suffix(
+    p: &mut Painter<'_>,
+    x: i32,
+    y: i32,
+    mut value: u32,
+    suffix: &str,
+    color: Color,
+) {
     let mut buf = [0u8; 10];
     let mut n = 0usize;
-    if value == 0 { buf[0] = b'0'; n = 1; } else {
-        while value > 0 && n < buf.len() { buf[n] = b'0' + (value % 10) as u8; value /= 10; n += 1; }
+    if value == 0 {
+        buf[0] = b'0';
+        n = 1;
+    } else {
+        while value > 0 && n < buf.len() {
+            buf[n] = b'0' + (value % 10) as u8;
+            value /= 10;
+            n += 1;
+        }
     }
     let mut cx = x;
     for i in (0..n).rev() {
         let ch = [buf[i]];
-        if let Ok(s) = core::str::from_utf8(&ch) { p.text(cx, y, s, color, TextSize::Title); }
+        if let Ok(s) = core::str::from_utf8(&ch) {
+            p.text(cx, y, s, color, TextSize::Title);
+        }
         cx += 6 * TextSize::Title.scale() as i32;
     }
     p.text(cx, y + 6, suffix, color, TextSize::Body);
 }
 
 fn glyph5x7(byte: u8) -> [u8; 7] {
-    let c = if byte.is_ascii_lowercase() { byte - 32 } else { byte };
+    let c = if byte.is_ascii_lowercase() {
+        byte - 32
+    } else {
+        byte
+    };
     match c {
         b' ' => [0, 0, 0, 0, 0, 0, 0],
         b'!' => [0b00100, 0b00100, 0b00100, 0b00100, 0, 0b00100, 0],
@@ -425,44 +511,118 @@ fn glyph5x7(byte: u8) -> [u8; 7] {
         b'-' => [0, 0, 0, 0b11111, 0, 0, 0],
         b'.' => [0, 0, 0, 0, 0, 0b00100, 0],
         b'/' => [0b00001, 0b00010, 0b00100, 0b01000, 0b10000, 0, 0],
-        b'0' => [0b01110, 0b10001, 0b10011, 0b10101, 0b11001, 0b10001, 0b01110],
-        b'1' => [0b00100, 0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110],
-        b'2' => [0b01110, 0b10001, 0b00001, 0b00110, 0b01000, 0b10000, 0b11111],
-        b'3' => [0b11110, 0b00001, 0b00001, 0b01110, 0b00001, 0b00001, 0b11110],
-        b'4' => [0b00010, 0b00110, 0b01010, 0b10010, 0b11111, 0b00010, 0b00010],
-        b'5' => [0b11111, 0b10000, 0b10000, 0b11110, 0b00001, 0b00001, 0b11110],
-        b'6' => [0b00110, 0b01000, 0b10000, 0b11110, 0b10001, 0b10001, 0b01110],
-        b'7' => [0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b01000, 0b01000],
-        b'8' => [0b01110, 0b10001, 0b10001, 0b01110, 0b10001, 0b10001, 0b01110],
-        b'9' => [0b01110, 0b10001, 0b10001, 0b01111, 0b00001, 0b00010, 0b01100],
+        b'0' => [
+            0b01110, 0b10001, 0b10011, 0b10101, 0b11001, 0b10001, 0b01110,
+        ],
+        b'1' => [
+            0b00100, 0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110,
+        ],
+        b'2' => [
+            0b01110, 0b10001, 0b00001, 0b00110, 0b01000, 0b10000, 0b11111,
+        ],
+        b'3' => [
+            0b11110, 0b00001, 0b00001, 0b01110, 0b00001, 0b00001, 0b11110,
+        ],
+        b'4' => [
+            0b00010, 0b00110, 0b01010, 0b10010, 0b11111, 0b00010, 0b00010,
+        ],
+        b'5' => [
+            0b11111, 0b10000, 0b10000, 0b11110, 0b00001, 0b00001, 0b11110,
+        ],
+        b'6' => [
+            0b00110, 0b01000, 0b10000, 0b11110, 0b10001, 0b10001, 0b01110,
+        ],
+        b'7' => [
+            0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b01000, 0b01000,
+        ],
+        b'8' => [
+            0b01110, 0b10001, 0b10001, 0b01110, 0b10001, 0b10001, 0b01110,
+        ],
+        b'9' => [
+            0b01110, 0b10001, 0b10001, 0b01111, 0b00001, 0b00010, 0b01100,
+        ],
         b':' => [0, 0b00100, 0, 0, 0b00100, 0, 0],
-        b'A' => [0b01110, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001],
-        b'B' => [0b11110, 0b10001, 0b10001, 0b11110, 0b10001, 0b10001, 0b11110],
-        b'C' => [0b01110, 0b10001, 0b10000, 0b10000, 0b10000, 0b10001, 0b01110],
-        b'D' => [0b11110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b11110],
-        b'E' => [0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b11111],
-        b'F' => [0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b10000],
-        b'G' => [0b01110, 0b10001, 0b10000, 0b10111, 0b10001, 0b10001, 0b01110],
-        b'H' => [0b10001, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001],
-        b'I' => [0b01110, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110],
-        b'J' => [0b00111, 0b00010, 0b00010, 0b00010, 0b10010, 0b10010, 0b01100],
-        b'K' => [0b10001, 0b10010, 0b10100, 0b11000, 0b10100, 0b10010, 0b10001],
-        b'L' => [0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b11111],
-        b'M' => [0b10001, 0b11011, 0b10101, 0b10101, 0b10001, 0b10001, 0b10001],
-        b'N' => [0b10001, 0b11001, 0b10101, 0b10011, 0b10001, 0b10001, 0b10001],
-        b'O' => [0b01110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01110],
-        b'P' => [0b11110, 0b10001, 0b10001, 0b11110, 0b10000, 0b10000, 0b10000],
-        b'Q' => [0b01110, 0b10001, 0b10001, 0b10001, 0b10101, 0b10010, 0b01101],
-        b'R' => [0b11110, 0b10001, 0b10001, 0b11110, 0b10100, 0b10010, 0b10001],
-        b'S' => [0b01111, 0b10000, 0b10000, 0b01110, 0b00001, 0b00001, 0b11110],
-        b'T' => [0b11111, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100],
-        b'U' => [0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01110],
-        b'V' => [0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01010, 0b00100],
-        b'W' => [0b10001, 0b10001, 0b10001, 0b10101, 0b10101, 0b10101, 0b01010],
-        b'X' => [0b10001, 0b10001, 0b01010, 0b00100, 0b01010, 0b10001, 0b10001],
-        b'Y' => [0b10001, 0b10001, 0b01010, 0b00100, 0b00100, 0b00100, 0b00100],
-        b'Z' => [0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b10000, 0b11111],
+        b'A' => [
+            0b01110, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001,
+        ],
+        b'B' => [
+            0b11110, 0b10001, 0b10001, 0b11110, 0b10001, 0b10001, 0b11110,
+        ],
+        b'C' => [
+            0b01110, 0b10001, 0b10000, 0b10000, 0b10000, 0b10001, 0b01110,
+        ],
+        b'D' => [
+            0b11110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b11110,
+        ],
+        b'E' => [
+            0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b11111,
+        ],
+        b'F' => [
+            0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b10000,
+        ],
+        b'G' => [
+            0b01110, 0b10001, 0b10000, 0b10111, 0b10001, 0b10001, 0b01110,
+        ],
+        b'H' => [
+            0b10001, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001,
+        ],
+        b'I' => [
+            0b01110, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110,
+        ],
+        b'J' => [
+            0b00111, 0b00010, 0b00010, 0b00010, 0b10010, 0b10010, 0b01100,
+        ],
+        b'K' => [
+            0b10001, 0b10010, 0b10100, 0b11000, 0b10100, 0b10010, 0b10001,
+        ],
+        b'L' => [
+            0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b11111,
+        ],
+        b'M' => [
+            0b10001, 0b11011, 0b10101, 0b10101, 0b10001, 0b10001, 0b10001,
+        ],
+        b'N' => [
+            0b10001, 0b11001, 0b10101, 0b10011, 0b10001, 0b10001, 0b10001,
+        ],
+        b'O' => [
+            0b01110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01110,
+        ],
+        b'P' => [
+            0b11110, 0b10001, 0b10001, 0b11110, 0b10000, 0b10000, 0b10000,
+        ],
+        b'Q' => [
+            0b01110, 0b10001, 0b10001, 0b10001, 0b10101, 0b10010, 0b01101,
+        ],
+        b'R' => [
+            0b11110, 0b10001, 0b10001, 0b11110, 0b10100, 0b10010, 0b10001,
+        ],
+        b'S' => [
+            0b01111, 0b10000, 0b10000, 0b01110, 0b00001, 0b00001, 0b11110,
+        ],
+        b'T' => [
+            0b11111, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100,
+        ],
+        b'U' => [
+            0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01110,
+        ],
+        b'V' => [
+            0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01010, 0b00100,
+        ],
+        b'W' => [
+            0b10001, 0b10001, 0b10001, 0b10101, 0b10101, 0b10101, 0b01010,
+        ],
+        b'X' => [
+            0b10001, 0b10001, 0b01010, 0b00100, 0b01010, 0b10001, 0b10001,
+        ],
+        b'Y' => [
+            0b10001, 0b10001, 0b01010, 0b00100, 0b00100, 0b00100, 0b00100,
+        ],
+        b'Z' => [
+            0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b10000, 0b11111,
+        ],
         b'_' => [0, 0, 0, 0, 0, 0, 0b11111],
-        _ => [0b11111, 0b10001, 0b00101, 0b01001, 0b10001, 0b10001, 0b11111],
+        _ => [
+            0b11111, 0b10001, 0b00101, 0b01001, 0b10001, 0b10001, 0b11111,
+        ],
     }
 }

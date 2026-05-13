@@ -5,7 +5,7 @@ use crate::channel::{ChannelEnvelope, RouteBinding};
 use crate::channel_order::{ChannelOrderBook, OrderedChannelEnvelope};
 use crate::codec::ArchivedWorkPacketFrame;
 use crate::protocol::{Hash, NodeId, WorkPacket};
-use crate::route_table::{RouteMap, insert_live_route, live_route_hash_for, route_for_send};
+use crate::route_table::RouteState;
 use crate::std_runtime::framing::unix_ms;
 use crate::std_runtime::tcp_server::{TcpPacketServer, send_unordered_to_route};
 use crate::work_channel::{WorkChannel, WorkChannelError};
@@ -14,7 +14,7 @@ use crate::work_channel::{WorkChannel, WorkChannelError};
 pub struct TcpNodeRuntime {
     node_id: NodeId,
     server: TcpPacketServer,
-    routes: RouteMap,
+    routes: RouteState,
 }
 
 impl Clone for TcpNodeRuntime {
@@ -32,7 +32,7 @@ impl TcpNodeRuntime {
         Ok(Self {
             node_id,
             server: TcpPacketServer::bind(addr, "tcp node inbox poisoned")?,
-            routes: RouteMap::new(),
+            routes: RouteState::new(),
         })
     }
 
@@ -92,15 +92,17 @@ impl TcpNodeRuntime {
 
 impl WorkChannel for TcpNodeRuntime {
     fn add_route(&mut self, route: RouteBinding) -> Result<Hash, WorkChannelError> {
-        insert_live_route(&mut self.routes, route, unix_ms()).ok_or(WorkChannelError::RouteInvalid)
+        self.routes
+            .insert_live_route(route, unix_ms())
+            .ok_or(WorkChannelError::RouteInvalid)
     }
 
     fn remove_route(&mut self, node_id: NodeId) -> Option<RouteBinding> {
-        self.routes.remove(&node_id)
+        self.routes.remove_route(node_id)
     }
 
     fn route_hash_for(&self, node_id: &NodeId) -> Option<Hash> {
-        live_route_hash_for(&self.routes, node_id, unix_ms())
+        self.routes.route_hash_for(node_id, unix_ms())
     }
 
     fn send_unordered(
@@ -109,7 +111,9 @@ impl WorkChannel for TcpNodeRuntime {
         to: NodeId,
         packet: WorkPacket,
     ) -> Result<ChannelEnvelope, WorkChannelError> {
-        let route = route_for_send(&mut self.routes, &to, unix_ms())
+        let route = self
+            .routes
+            .route_for_send(&to, unix_ms())
             .ok_or(WorkChannelError::RouteMissing)?;
         send_unordered_to_route(route, from, to, packet)
     }

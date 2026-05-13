@@ -4,10 +4,7 @@ use std::net::{SocketAddr, ToSocketAddrs};
 use crate::channel::{ChannelEnvelope, RouteBinding};
 use crate::codec::ArchivedWorkPacketFrame;
 use crate::protocol::{Hash, NodeId, WorkPacket};
-use crate::route_table::{
-    RouteInboxMap, RouteMap, drain_inbox, insert_live_route_with_inbox, live_route_hash_for,
-    remove_route_with_inbox, route_for_send,
-};
+use crate::route_table::RouteState;
 use crate::std_runtime::framing::unix_ms;
 use crate::std_runtime::tcp_server::{
     TcpPacketServer, send_encoded_packet_to_addr, send_packet_to_addr, send_unordered_to_route,
@@ -45,8 +42,7 @@ impl TcpIncomingServer {
 
 #[derive(Clone, Debug, Default)]
 pub struct TcpWorkChannel {
-    routes: RouteMap,
-    inboxes: RouteInboxMap,
+    routes: RouteState,
 }
 
 impl TcpWorkChannel {
@@ -69,18 +65,19 @@ impl TcpWorkChannel {
 
 impl WorkChannel for TcpWorkChannel {
     fn add_route(&mut self, route: RouteBinding) -> Result<Hash, WorkChannelError> {
-        let hash =
-            insert_live_route_with_inbox(&mut self.routes, &mut self.inboxes, route, unix_ms())
-                .ok_or(WorkChannelError::RouteInvalid)?;
+        let hash = self
+            .routes
+            .insert_live_route(route, unix_ms())
+            .ok_or(WorkChannelError::RouteInvalid)?;
         Ok(hash)
     }
 
     fn remove_route(&mut self, node_id: NodeId) -> Option<RouteBinding> {
-        remove_route_with_inbox(&mut self.routes, &mut self.inboxes, node_id)
+        self.routes.remove_route(node_id)
     }
 
     fn route_hash_for(&self, node_id: &NodeId) -> Option<Hash> {
-        live_route_hash_for(&self.routes, node_id, unix_ms())
+        self.routes.route_hash_for(node_id, unix_ms())
     }
 
     fn send_unordered(
@@ -89,14 +86,16 @@ impl WorkChannel for TcpWorkChannel {
         to: NodeId,
         packet: WorkPacket,
     ) -> Result<ChannelEnvelope, WorkChannelError> {
-        let route = route_for_send(&mut self.routes, &to, unix_ms())
+        let route = self
+            .routes
+            .route_for_send(&to, unix_ms())
             .ok_or(WorkChannelError::RouteMissing)?;
         let envelope = send_unordered_to_route(route, from, to, packet)?;
-        self.inboxes.entry(to).or_default().push(envelope.clone());
+        self.routes.push_inbox(envelope.clone());
         Ok(envelope)
     }
 
     fn recv_all(&mut self, node_id: NodeId) -> Vec<ChannelEnvelope> {
-        drain_inbox(&mut self.inboxes, node_id)
+        self.routes.drain_inbox(node_id)
     }
 }

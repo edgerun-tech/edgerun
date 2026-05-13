@@ -5,8 +5,9 @@ use std::time::Duration;
 
 use edgerun_ui_core::gpu::gl::GlRenderer;
 use edgerun_ui_core::gpu::{
-    FontAtlas, GpuScene, UiAppSurface, UiColorScheme, UiEvent, UiKey, UiTileAxis, UiTileNode,
-    UiWorkspace, UnifiedChatState, build_edgerun_workspace_shell_with_font, palette,
+    FontAtlas, GpuHit, GpuScene, HitKind, UiAppSurface, UiColorScheme, UiEvent, UiKey,
+    UiShellAction, UiShellState, UiWorkspace, UnifiedChatState,
+    build_edgerun_workspace_with_shell_with_font, palette,
 };
 
 const SDL_INIT_VIDEO: u32 = 0x0000_0020;
@@ -108,11 +109,13 @@ fn run() -> Result<(), String> {
     if args.dump_scene {
         let mut scene = GpuScene::new(palette::BG);
         let atlas = FontAtlas::load_inter(18.0)?;
-        let mut workspace = default_workspace();
+        let mut workspace = args.surface.workspace();
+        let mut shell = UiShellState::default();
         build_surface(
             &mut scene,
             &atlas,
             &mut workspace,
+            &mut shell,
             1120.0,
             720.0,
             args.scheme,
@@ -161,7 +164,8 @@ fn run() -> Result<(), String> {
     let atlas = FontAtlas::load_inter(18.0)?;
     let renderer = unsafe { GlRenderer::new_current_context_with_font(&atlas)? };
     let mut scene = GpuScene::new(palette::BG);
-    let mut workspace = default_workspace();
+    let mut workspace = args.surface.workspace();
+    let mut shell = UiShellState::default();
     let mut running = true;
     let mut frames = 0u32;
     let mut scene_dirty = true;
@@ -175,7 +179,10 @@ fn run() -> Result<(), String> {
                     let _ = workspace.handle_event(&scene, UiEvent::KeyDown { key: UiKey::Escape });
                 }
                 SDL_KEYDOWN => {
-                    workspace.handle_event(
+                    handle_shell_then_workspace(
+                        &scene,
+                        &mut shell,
+                        &mut workspace,
                         &scene,
                         UiEvent::KeyDown {
                             key: sdl_key(event.key_sym()),
@@ -184,33 +191,27 @@ fn run() -> Result<(), String> {
                     scene_dirty = true;
                 }
                 SDL_MOUSEBUTTONDOWN => {
-                    workspace.handle_event(
-                        &scene,
-                        UiEvent::PointerDown {
-                            x: event.mouse_x(),
-                            y: event.mouse_y(),
-                        },
-                    );
+                    let event = UiEvent::PointerDown {
+                        x: event.mouse_x(),
+                        y: event.mouse_y(),
+                    };
+                    handle_shell_then_workspace(&scene, &mut shell, &mut workspace, &scene, event);
                     scene_dirty = true;
                 }
                 SDL_MOUSEMOTION => {
-                    workspace.handle_event(
-                        &scene,
-                        UiEvent::PointerMove {
-                            x: event.mouse_x(),
-                            y: event.mouse_y(),
-                        },
-                    );
+                    let event = UiEvent::PointerMove {
+                        x: event.mouse_x(),
+                        y: event.mouse_y(),
+                    };
+                    handle_shell_then_workspace(&scene, &mut shell, &mut workspace, &scene, event);
                     scene_dirty = true;
                 }
                 SDL_MOUSEBUTTONUP => {
-                    workspace.handle_event(
-                        &scene,
-                        UiEvent::PointerUp {
-                            x: event.mouse_x(),
-                            y: event.mouse_y(),
-                        },
-                    );
+                    let event = UiEvent::PointerUp {
+                        x: event.mouse_x(),
+                        y: event.mouse_y(),
+                    };
+                    handle_shell_then_workspace(&scene, &mut shell, &mut workspace, &scene, event);
                     scene_dirty = true;
                 }
                 SDL_MOUSEWHEEL => {
@@ -242,6 +243,7 @@ fn run() -> Result<(), String> {
                 &mut scene,
                 &atlas,
                 &mut workspace,
+                &mut shell,
                 width as f32,
                 height as f32,
                 args.scheme,
@@ -284,35 +286,54 @@ fn build_surface(
     scene: &mut GpuScene,
     atlas: &FontAtlas,
     workspace: &mut UiWorkspace,
+    shell: &mut UiShellState,
     width: f32,
     height: f32,
     scheme: UiColorScheme,
 ) {
     let state = UnifiedChatState::empty();
-    build_edgerun_workspace_shell_with_font(scene, atlas, width, height, workspace, &state);
+    build_edgerun_workspace_with_shell_with_font(
+        scene, atlas, width, height, workspace, shell, &state,
+    );
     scene.apply_color_scheme(scheme);
 }
 
-fn default_workspace() -> UiWorkspace {
-    UiWorkspace {
-        apps: vec![
-            UiAppSurface::new(1, "EdgeRun Chat"),
-            UiAppSurface::new(2, "Trust Manager"),
-            UiAppSurface::new(3, "Storage"),
-        ],
-        root: UiTileNode::Split {
-            axis: UiTileAxis::Horizontal,
-            ratio_percent: 56,
-            first: Box::new(UiTileNode::Leaf { app_id: 1 }),
-            second: Box::new(UiTileNode::Split {
-                axis: UiTileAxis::Vertical,
-                ratio_percent: 52,
-                first: Box::new(UiTileNode::Leaf { app_id: 2 }),
-                second: Box::new(UiTileNode::Leaf { app_id: 3 }),
-            }),
-        },
-        focused_app: Some(1),
+fn handle_shell_then_workspace(
+    combined_scene: &GpuScene,
+    shell: &mut UiShellState,
+    workspace: &mut UiWorkspace,
+    workspace_scene: &GpuScene,
+    event: UiEvent,
+) {
+    let shell_target = match event {
+        UiEvent::PointerDown { x, y }
+        | UiEvent::PointerMove { x, y }
+        | UiEvent::PointerUp { x, y }
+        | UiEvent::Wheel { x, y, .. } => combined_scene
+            .hit_test(x, y)
+            .is_some_and(|hit| is_shell_hit(hit)),
+        UiEvent::KeyDown { .. } => shell.runtime.focused().is_some(),
+        UiEvent::TextInput(_) | UiEvent::Blur => false,
+    };
+    if shell_target {
+        match shell.handle_event(combined_scene, event) {
+            UiShellAction::OpenApp { kind, .. } => {
+                workspace.open_or_focus(kind);
+            }
+            UiShellAction::None | UiShellAction::ToggledLauncher(_) | UiShellAction::Runtime(_) => {
+            }
+        }
+    } else {
+        workspace.handle_event(workspace_scene, event);
     }
+}
+
+fn is_shell_hit(hit: GpuHit) -> bool {
+    matches!(hit.kind, HitKind::ShellLauncher | HitKind::AppLauncherItem)
+}
+
+fn default_workspace() -> UiWorkspace {
+    UiWorkspace::edgerun_default()
 }
 
 #[derive(Default)]
@@ -320,6 +341,27 @@ struct Args {
     frames: Option<u32>,
     dump_scene: bool,
     scheme: UiColorScheme,
+    surface: PreviewSurface,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum PreviewSurface {
+    #[default]
+    Workspace,
+    Lock,
+    Capability,
+    Gallery,
+}
+
+impl PreviewSurface {
+    fn workspace(self) -> UiWorkspace {
+        match self {
+            Self::Workspace => default_workspace(),
+            Self::Lock => UiWorkspace::full_screen(UiAppSurface::lock_screen(10)),
+            Self::Capability => UiWorkspace::full_screen(UiAppSurface::capability_request(11)),
+            Self::Gallery => UiWorkspace::single(UiAppSurface::component_gallery(5)),
+        }
+    }
 }
 
 impl Args {
@@ -343,9 +385,15 @@ impl Args {
                         .ok_or("--scheme requires dark, light, or terminal")?;
                     parsed.scheme = parse_scheme(&value)?;
                 }
+                "--surface" => {
+                    let value = args
+                        .next()
+                        .ok_or("--surface requires workspace, lock, capability, or gallery")?;
+                    parsed.surface = parse_surface(&value)?;
+                }
                 "--help" | "-h" => {
                     println!(
-                        "Usage: codex-gl-ui [--frames N] [--dump-scene] [--scheme dark|light|terminal]"
+                        "Usage: codex-gl-ui [--frames N] [--dump-scene] [--scheme dark|light|terminal] [--surface workspace|lock|capability|gallery]"
                     );
                     std::process::exit(0);
                 }
@@ -353,6 +401,16 @@ impl Args {
             }
         }
         Ok(parsed)
+    }
+}
+
+fn parse_surface(value: &str) -> Result<PreviewSurface, String> {
+    match value {
+        "workspace" => Ok(PreviewSurface::Workspace),
+        "lock" => Ok(PreviewSurface::Lock),
+        "capability" => Ok(PreviewSurface::Capability),
+        "gallery" => Ok(PreviewSurface::Gallery),
+        _ => Err(format!("invalid --surface value: {value}")),
     }
 }
 

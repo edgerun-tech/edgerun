@@ -7,1317 +7,52 @@
 use std::string::String;
 use std::vec::Vec;
 
-#[cfg(feature = "fontdue-text")]
-use std::collections::HashMap;
+#[cfg(not(feature = "fontdue-text"))]
+use core::marker::PhantomData;
 
+mod app_registry;
+mod bitmap_font;
 pub mod components;
+#[cfg(all(feature = "gpu-gl", not(target_arch = "wasm32")))]
+pub mod gl;
+mod icons;
+pub mod palette;
+mod runtime;
+mod scene;
+mod shell;
 pub mod style;
-pub use components::{
-    bar_chart, control_row, field, menu_item, metric_card, panel_header, slider, text_area,
-    transaction_row, BarChart, ControlAccessory, ControlRow, Field, MenuItem, MetricCard,
-    PanelHeader, Slider, TextArea, TransactionRow, UiGrid, UiStack,
+#[cfg(feature = "fontdue-text")]
+mod text;
+pub mod webgl2;
+mod workspace;
+pub use app_registry::{
+    CAPABILITY_REQUEST_APP_ID, CHAT_APP_ID, COMPONENT_GALLERY_APP_ID, EDGERUN_APP_REGISTRY,
+    LAUNCH_CAPABILITY_REQUEST_ITEM_ID, LAUNCH_CHAT_ITEM_ID, LAUNCH_COMPONENT_GALLERY_ITEM_ID,
+    LAUNCH_LOCK_SCREEN_ITEM_ID, LAUNCH_STORAGE_ITEM_ID, LAUNCH_TRUST_MANAGER_ITEM_ID,
+    LOCK_SCREEN_APP_ID, SHELL_LAUNCHER_BUTTON_ID, STORAGE_APP_ID, TRUST_MANAGER_APP_ID,
+    UiAppPlacement, UiAppSpec, app_spec, app_spec_for_launch_id,
 };
+pub use components::{
+    BarChart, ControlAccessory, ControlRow, Field, MenuItem, MetricCard, PanelHeader, Slider,
+    TextArea, TransactionRow, UiGrid, UiStack, bar_chart, control_row, field, menu_item,
+    metric_card, panel_header, slider, text_area, transaction_row,
+};
+pub use icons::{UiIcon, UiIconAtlasRect, UiIconSet};
+#[cfg(feature = "tabler-svg-atlas")]
+pub use icons::{UiIconAtlas, tabler_svg_icon_atlas};
+use icons::{draw_canonical_icon, icon_circle, icon_line};
+pub use runtime::{GpuHit, HitKind, UiAction, UiEvent, UiKey, UiRuntimeState};
+pub use scene::{Color4, GpuClip, GpuRect, GpuScene, RectMode, UiColorScheme};
+use shell::render_edgerun_shell_overlay;
+pub use shell::{UiShellAction, UiShellState};
 pub use style::{AlignItems, Axis, JustifyContent, UiStyle};
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct Color4 {
-    pub r: f32,
-    pub g: f32,
-    pub b: f32,
-    pub a: f32,
-}
-
-impl Color4 {
-    pub const fn rgba(r: f32, g: f32, b: f32, a: f32) -> Self {
-        Self { r, g, b, a }
-    }
-
-    pub const fn from_color(color: crate::Color) -> Self {
-        Self::rgba(
-            color.r as f32 / 255.0,
-            color.g as f32 / 255.0,
-            color.b as f32 / 255.0,
-            color.a as f32 / 255.0,
-        )
-    }
-
-    pub const fn from_color_alpha(color: crate::Color, a: f32) -> Self {
-        Self::rgba(
-            color.r as f32 / 255.0,
-            color.g as f32 / 255.0,
-            color.b as f32 / 255.0,
-            a,
-        )
-    }
-
-    pub const fn with_alpha(self, a: f32) -> Self {
-        Self { a, ..self }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum RectMode {
-    Fill,
-    Shadow,
-    Border,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct GpuRect {
-    pub x: f32,
-    pub y: f32,
-    pub w: f32,
-    pub h: f32,
-    pub radius: f32,
-    pub color: Color4,
-    pub mode: RectMode,
-    pub shadow: f32,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct GpuClip {
-    pub x: f32,
-    pub y: f32,
-    pub w: f32,
-    pub h: f32,
-}
-
-impl GpuClip {
-    pub const fn new(x: f32, y: f32, w: f32, h: f32) -> Self {
-        Self { x, y, w, h }
-    }
-
-    pub fn intersect(self, other: Self) -> Option<Self> {
-        let x0 = self.x.max(other.x);
-        let y0 = self.y.max(other.y);
-        let x1 = (self.x + self.w).min(other.x + other.w);
-        let y1 = (self.y + self.h).min(other.y + other.h);
-        let w = x1 - x0;
-        let h = y1 - y0;
-        (w > 0.0 && h > 0.0).then_some(Self::new(x0, y0, w, h))
-    }
-}
-
-impl GpuRect {
-    pub const fn fill(x: f32, y: f32, w: f32, h: f32, radius: f32, color: Color4) -> Self {
-        Self {
-            x,
-            y,
-            w,
-            h,
-            radius,
-            color,
-            mode: RectMode::Fill,
-            shadow: 0.0,
-        }
-    }
-
-    pub const fn shadow(
-        x: f32,
-        y: f32,
-        w: f32,
-        h: f32,
-        radius: f32,
-        color: Color4,
-        shadow: f32,
-    ) -> Self {
-        Self {
-            x,
-            y,
-            w,
-            h,
-            radius,
-            color,
-            mode: RectMode::Shadow,
-            shadow,
-        }
-    }
-
-    pub const fn border(x: f32, y: f32, w: f32, h: f32, radius: f32, color: Color4) -> Self {
-        Self {
-            x,
-            y,
-            w,
-            h,
-            radius,
-            color,
-            mode: RectMode::Border,
-            shadow: 0.0,
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct GpuScene {
-    pub clear: Color4,
-    rects: Vec<GpuRect>,
-    hits: Vec<GpuHit>,
-    clip_stack: Vec<GpuClip>,
-    #[cfg(feature = "fontdue-text")]
-    text_quads: Vec<TextQuad>,
-}
-
-impl GpuScene {
-    pub fn new(clear: Color4) -> Self {
-        Self {
-            clear,
-            rects: Vec::new(),
-            hits: Vec::new(),
-            clip_stack: Vec::new(),
-            #[cfg(feature = "fontdue-text")]
-            text_quads: Vec::new(),
-        }
-    }
-
-    pub fn clear_rects(&mut self) {
-        self.rects.clear();
-        self.hits.clear();
-        self.clip_stack.clear();
-        #[cfg(feature = "fontdue-text")]
-        self.text_quads.clear();
-    }
-
-    pub fn push_rect(&mut self, rect: GpuRect) {
-        if let Some(rect) = self.clip_rect(rect) {
-            self.rects.push(rect);
-        }
-    }
-
-    pub fn push_hit(&mut self, hit: GpuHit) {
-        if let Some(hit) = self.clip_hit(hit) {
-            self.hits.push(hit);
-        }
-    }
-
-    pub fn push_clip(&mut self, clip: GpuClip) -> bool {
-        let next = if let Some(current) = self.current_clip() {
-            current.intersect(clip)
-        } else if clip.w > 0.0 && clip.h > 0.0 {
-            Some(clip)
-        } else {
-            None
-        };
-        if let Some(next) = next {
-            self.clip_stack.push(next);
-            true
-        } else {
-            false
-        }
-    }
-
-    pub fn pop_clip(&mut self) {
-        self.clip_stack.pop();
-    }
-
-    pub fn current_clip(&self) -> Option<GpuClip> {
-        self.clip_stack.last().copied()
-    }
-
-    fn clip_rect(&self, mut rect: GpuRect) -> Option<GpuRect> {
-        let Some(clip) = self.current_clip() else {
-            return (rect.w > 0.0 && rect.h > 0.0).then_some(rect);
-        };
-        let clipped = GpuClip::new(rect.x, rect.y, rect.w, rect.h).intersect(clip)?;
-        rect.x = clipped.x;
-        rect.y = clipped.y;
-        rect.w = clipped.w;
-        rect.h = clipped.h;
-        rect.radius = rect.radius.min(rect.w * 0.5).min(rect.h * 0.5);
-        Some(rect)
-    }
-
-    fn clip_hit(&self, mut hit: GpuHit) -> Option<GpuHit> {
-        let Some(clip) = self.current_clip() else {
-            return (hit.w > 0.0 && hit.h > 0.0).then_some(hit);
-        };
-        let clipped = GpuClip::new(hit.x, hit.y, hit.w, hit.h).intersect(clip)?;
-        hit.x = clipped.x;
-        hit.y = clipped.y;
-        hit.w = clipped.w;
-        hit.h = clipped.h;
-        Some(hit)
-    }
-
-    pub fn push_text(&mut self, mut x: f32, y: f32, text: &str, scale: f32, color: Color4) {
-        let cell = scale.max(1.0);
-        let step = cell * 6.0;
-        let start_x = x;
-        for ch in text.chars() {
-            match ch {
-                '\n' => {
-                    x = start_x;
-                }
-                '\r' => {}
-                ' ' => x += step,
-                _ => {
-                    let glyph = glyph5x7(ch);
-                    for (row, bits) in glyph.iter().copied().enumerate() {
-                        for col in 0..5 {
-                            if ((bits >> (4 - col)) & 1) == 0 {
-                                continue;
-                            }
-                            self.push_rect(GpuRect::fill(
-                                x + col as f32 * cell,
-                                y + row as f32 * cell,
-                                cell,
-                                cell,
-                                0.0,
-                                color,
-                            ));
-                        }
-                    }
-                    x += step;
-                }
-            }
-        }
-    }
-
-    pub fn rects(&self) -> &[GpuRect] {
-        &self.rects
-    }
-
-    pub fn hits(&self) -> &[GpuHit] {
-        &self.hits
-    }
-
-    pub fn hit_test(&self, x: f32, y: f32) -> Option<GpuHit> {
-        self.hits
-            .iter()
-            .rev()
-            .copied()
-            .find(|hit| hit.contains(x, y))
-    }
-
-    pub fn apply_color_scheme(&mut self, scheme: UiColorScheme) {
-        if scheme == UiColorScheme::Dark {
-            return;
-        }
-        let from = SchemePalette::dark();
-        let to = scheme.palette();
-        self.clear = remap_scheme_color(self.clear, from, to);
-        for rect in &mut self.rects {
-            rect.color = remap_scheme_color(rect.color, from, to);
-        }
-        #[cfg(feature = "fontdue-text")]
-        for quad in &mut self.text_quads {
-            quad.color = remap_scheme_color(quad.color, from, to);
-        }
-    }
-
-    #[cfg(feature = "fontdue-text")]
-    pub fn push_font_text(&mut self, atlas: &FontAtlas, x: f32, y: f32, text: &str, color: Color4) {
-        atlas.layout_text(self, x, y, text, color);
-    }
-
-    #[cfg(feature = "fontdue-text")]
-    fn push_text_quad(&mut self, quad: TextQuad) {
-        if let Some(quad) = self.clip_text_quad(quad) {
-            self.text_quads.push(quad);
-        }
-    }
-
-    #[cfg(feature = "fontdue-text")]
-    fn clip_text_quad(&self, mut quad: TextQuad) -> Option<TextQuad> {
-        let Some(clip) = self.current_clip() else {
-            return (quad.w > 0.0 && quad.h > 0.0).then_some(quad);
-        };
-        let x0 = quad.x;
-        let y0 = quad.y;
-        let x1 = quad.x + quad.w;
-        let y1 = quad.y + quad.h;
-        let clipped = GpuClip::new(quad.x, quad.y, quad.w, quad.h).intersect(clip)?;
-        let u_span = quad.u1 - quad.u0;
-        let v_span = quad.v1 - quad.v0;
-        let left = ((clipped.x - x0) / (x1 - x0)).clamp(0.0, 1.0);
-        let top = ((clipped.y - y0) / (y1 - y0)).clamp(0.0, 1.0);
-        let right = ((clipped.x + clipped.w - x0) / (x1 - x0)).clamp(0.0, 1.0);
-        let bottom = ((clipped.y + clipped.h - y0) / (y1 - y0)).clamp(0.0, 1.0);
-        quad.x = clipped.x;
-        quad.y = clipped.y;
-        quad.w = clipped.w;
-        quad.h = clipped.h;
-        quad.u1 = quad.u0 + u_span * right;
-        quad.v1 = quad.v0 + v_span * bottom;
-        quad.u0 += u_span * left;
-        quad.v0 += v_span * top;
-        Some(quad)
-    }
-
-    #[cfg(feature = "fontdue-text")]
-    pub fn text_quads(&self) -> &[TextQuad] {
-        &self.text_quads
-    }
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum UiColorScheme {
-    #[default]
-    Dark,
-    Light,
-    Terminal,
-}
-
-impl UiColorScheme {
-    pub const fn from_code(code: u32) -> Self {
-        match code {
-            1 => Self::Light,
-            2 => Self::Terminal,
-            _ => Self::Dark,
-        }
-    }
-
-    pub const fn code(self) -> u32 {
-        match self {
-            Self::Dark => 0,
-            Self::Light => 1,
-            Self::Terminal => 2,
-        }
-    }
-
-    fn palette(self) -> SchemePalette {
-        match self {
-            Self::Dark => SchemePalette::dark(),
-            Self::Light => SchemePalette::light(),
-            Self::Terminal => SchemePalette::terminal(),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum HitKind {
-    Contact,
-    Composer,
-    Send,
-    Button,
-    Tab,
-    Toggle,
-    ListRow,
-    Input,
-    TextArea,
-    Slider,
-    MenuItem,
-    TransactionRow,
-    Scrollbar,
-    WorkspaceTab,
-    WorkspaceClose,
-    WorkspaceSplit,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct GpuHit {
-    pub kind: HitKind,
-    pub id: u32,
-    pub x: f32,
-    pub y: f32,
-    pub w: f32,
-    pub h: f32,
-}
-
-impl GpuHit {
-    pub const fn new(kind: HitKind, id: u32, x: f32, y: f32, w: f32, h: f32) -> Self {
-        Self {
-            kind,
-            id,
-            x,
-            y,
-            w,
-            h,
-        }
-    }
-
-    pub fn contains(&self, x: f32, y: f32) -> bool {
-        x >= self.x && y >= self.y && x <= self.x + self.w && y <= self.y + self.h
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum UiKey {
-    Backspace,
-    Enter,
-    Escape,
-    Tab,
-    ArrowLeft,
-    ArrowRight,
-    ArrowUp,
-    ArrowDown,
-    Other(u32),
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum UiEvent {
-    PointerDown { x: f32, y: f32 },
-    PointerMove { x: f32, y: f32 },
-    PointerUp { x: f32, y: f32 },
-    Wheel { x: f32, y: f32, delta_y: f32 },
-    KeyDown { key: UiKey },
-    TextInput(String),
-    Blur,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum UiAction {
-    None,
-    Hovered(Option<GpuHit>),
-    Focused(Option<GpuHit>),
-    Activated(GpuHit),
-    Toggled { id: u32, on: bool },
-    TabSelected { id: u32 },
-    SliderChanged { id: u32, value: f32 },
-    ScrollChanged { id: u32, offset: f32 },
-    TextChanged { id: u32, value: String },
-    Submitted { id: u32 },
-    Cancelled,
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct UiRuntimeState {
-    hovered: Option<GpuHit>,
-    active: Option<GpuHit>,
-    focused: Option<GpuHit>,
-    scroll_offsets: Vec<(u32, f32)>,
-    toggle_values: Vec<(u32, bool)>,
-    slider_values: Vec<(u32, f32)>,
-    text_values: Vec<(u32, String)>,
-}
-
-impl UiRuntimeState {
-    pub fn hovered(&self) -> Option<GpuHit> {
-        self.hovered
-    }
-
-    pub fn active(&self) -> Option<GpuHit> {
-        self.active
-    }
-
-    pub fn focused(&self) -> Option<GpuHit> {
-        self.focused
-    }
-
-    pub fn scroll_offset(&self, id: u32) -> f32 {
-        self.scroll_offsets
-            .iter()
-            .find_map(|(stored_id, value)| (*stored_id == id).then_some(*value))
-            .unwrap_or(0.0)
-    }
-
-    pub fn toggle_value(&self, id: u32, fallback: bool) -> bool {
-        self.toggle_values
-            .iter()
-            .find_map(|(stored_id, value)| (*stored_id == id).then_some(*value))
-            .unwrap_or(fallback)
-    }
-
-    pub fn slider_value(&self, id: u32, fallback: f32) -> f32 {
-        self.slider_values
-            .iter()
-            .find_map(|(stored_id, value)| (*stored_id == id).then_some(*value))
-            .unwrap_or(fallback)
-            .clamp(0.0, 1.0)
-    }
-
-    pub fn text_value<'a>(&'a self, id: u32, fallback: &'a str) -> &'a str {
-        self.text_values
-            .iter()
-            .find_map(|(stored_id, value)| (*stored_id == id).then_some(value.as_str()))
-            .unwrap_or(fallback)
-    }
-
-    pub fn set_scroll_offset(&mut self, id: u32, offset: f32) {
-        set_pair_f32(&mut self.scroll_offsets, id, offset.clamp(0.0, 1.0));
-    }
-
-    pub fn handle_event(&mut self, scene: &GpuScene, event: UiEvent) -> UiAction {
-        match event {
-            UiEvent::PointerDown { x, y } => {
-                let hit = scene.hit_test(x, y);
-                self.active = hit;
-                if let Some(hit) = hit.filter(|hit| is_focusable_hit(*hit)) {
-                    self.focused = Some(hit);
-                    UiAction::Focused(Some(hit))
-                } else {
-                    self.focused = None;
-                    hit.map(UiAction::Activated)
-                        .unwrap_or(UiAction::Focused(None))
-                }
-            }
-            UiEvent::PointerMove { x, y } => {
-                let hovered = scene.hit_test(x, y);
-                if hovered != self.hovered {
-                    self.hovered = hovered;
-                    if let Some(action) = self.drag_action(x, y) {
-                        return action;
-                    }
-                    UiAction::Hovered(hovered)
-                } else {
-                    self.drag_action(x, y).unwrap_or(UiAction::None)
-                }
-            }
-            UiEvent::PointerUp { x, y } => {
-                let active = self.active.take();
-                let released = scene.hit_test(x, y);
-                let Some(active) = active else {
-                    return UiAction::None;
-                };
-                if !released.is_some_and(|hit| hit.kind == active.kind && hit.id == active.id) {
-                    return UiAction::None;
-                }
-                self.activate_hit(active, x)
-            }
-            UiEvent::Wheel { x, y, delta_y } => {
-                let Some(hit) = scene
-                    .hit_test(x, y)
-                    .or_else(|| self.hovered)
-                    .filter(|hit| hit.kind == HitKind::Scrollbar)
-                else {
-                    return UiAction::None;
-                };
-                let current = self.scroll_offset(hit.id);
-                let next = (current + delta_y / 900.0).clamp(0.0, 1.0);
-                self.set_scroll_offset(hit.id, next);
-                UiAction::ScrollChanged {
-                    id: hit.id,
-                    offset: next,
-                }
-            }
-            UiEvent::KeyDown { key } => self.handle_key(key),
-            UiEvent::TextInput(value) => self.handle_text_input(&value),
-            UiEvent::Blur => {
-                self.hovered = None;
-                self.active = None;
-                self.focused = None;
-                UiAction::Focused(None)
-            }
-        }
-    }
-
-    fn activate_hit(&mut self, hit: GpuHit, x: f32) -> UiAction {
-        match hit.kind {
-            HitKind::Toggle => {
-                let next = !self.toggle_value(hit.id, false);
-                set_pair_bool(&mut self.toggle_values, hit.id, next);
-                UiAction::Toggled {
-                    id: hit.id,
-                    on: next,
-                }
-            }
-            HitKind::Tab => UiAction::TabSelected { id: hit.id },
-            HitKind::Slider => self.set_slider_from_pointer(hit, x),
-            HitKind::Input | HitKind::TextArea | HitKind::Composer => {
-                self.focused = Some(hit);
-                UiAction::Focused(Some(hit))
-            }
-            _ => UiAction::Activated(hit),
-        }
-    }
-
-    fn drag_action(&mut self, x: f32, y: f32) -> Option<UiAction> {
-        match self.active {
-            Some(hit) if hit.kind == HitKind::Slider => Some(self.set_slider_from_pointer(hit, x)),
-            Some(hit) if hit.kind == HitKind::Scrollbar => {
-                let value = ((y - hit.y) / hit.h.max(1.0)).clamp(0.0, 1.0);
-                self.set_scroll_offset(hit.id, value);
-                Some(UiAction::ScrollChanged {
-                    id: hit.id,
-                    offset: value,
-                })
-            }
-            _ => None,
-        }
-    }
-
-    fn set_slider_from_pointer(&mut self, hit: GpuHit, x: f32) -> UiAction {
-        let value = ((x - hit.x) / hit.w.max(1.0)).clamp(0.0, 1.0);
-        set_pair_f32(&mut self.slider_values, hit.id, value);
-        UiAction::SliderChanged { id: hit.id, value }
-    }
-
-    fn handle_key(&mut self, key: UiKey) -> UiAction {
-        let Some(hit) = self.focused else {
-            return UiAction::None;
-        };
-        match key {
-            UiKey::Backspace if is_text_hit(hit) => {
-                let value = text_value_mut(&mut self.text_values, hit.id);
-                value.pop();
-                UiAction::TextChanged {
-                    id: hit.id,
-                    value: value.clone(),
-                }
-            }
-            UiKey::Enter if hit.kind == HitKind::Composer || hit.kind == HitKind::TextArea => {
-                UiAction::Submitted { id: hit.id }
-            }
-            UiKey::Escape => {
-                self.focused = None;
-                UiAction::Cancelled
-            }
-            _ => UiAction::None,
-        }
-    }
-
-    fn handle_text_input(&mut self, input: &str) -> UiAction {
-        let Some(hit) = self.focused.filter(|hit| is_text_hit(*hit)) else {
-            return UiAction::None;
-        };
-        let value = text_value_mut(&mut self.text_values, hit.id);
-        for ch in input.chars().filter(|ch| !ch.is_control()) {
-            if value.len() >= 4096 {
-                break;
-            }
-            value.push(ch);
-        }
-        UiAction::TextChanged {
-            id: hit.id,
-            value: value.clone(),
-        }
-    }
-}
-
-fn is_focusable_hit(hit: GpuHit) -> bool {
-    matches!(
-        hit.kind,
-        HitKind::Input | HitKind::TextArea | HitKind::Composer
-    )
-}
-
-fn is_text_hit(hit: GpuHit) -> bool {
-    matches!(
-        hit.kind,
-        HitKind::Input | HitKind::TextArea | HitKind::Composer
-    )
-}
-
-fn set_pair_f32(values: &mut Vec<(u32, f32)>, id: u32, value: f32) {
-    if let Some((_, stored)) = values.iter_mut().find(|(stored_id, _)| *stored_id == id) {
-        *stored = value;
-    } else {
-        values.push((id, value));
-    }
-}
-
-fn set_pair_bool(values: &mut Vec<(u32, bool)>, id: u32, value: bool) {
-    if let Some((_, stored)) = values.iter_mut().find(|(stored_id, _)| *stored_id == id) {
-        *stored = value;
-    } else {
-        values.push((id, value));
-    }
-}
-
-fn text_value_mut(values: &mut Vec<(u32, String)>, id: u32) -> &mut String {
-    if let Some(index) = values.iter().position(|(stored_id, _)| *stored_id == id) {
-        &mut values[index].1
-    } else {
-        values.push((id, String::new()));
-        &mut values.last_mut().expect("inserted text value").1
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum UiTileAxis {
-    Horizontal,
-    Vertical,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum UiTileNode {
-    Leaf {
-        app_id: u32,
-    },
-    Split {
-        axis: UiTileAxis,
-        ratio_percent: u8,
-        first: Box<UiTileNode>,
-        second: Box<UiTileNode>,
-    },
-    Tabs {
-        app_ids: Vec<u32>,
-        selected: usize,
-    },
-}
-
-#[derive(Clone, Debug)]
-pub struct UiAppSurface {
-    pub id: u32,
-    pub title: String,
-    pub runtime: UiRuntimeState,
-    bounds: Option<UiRect>,
-}
-
-impl UiAppSurface {
-    pub fn new(id: u32, title: impl Into<String>) -> Self {
-        Self {
-            id,
-            title: title.into(),
-            runtime: UiRuntimeState::default(),
-            bounds: None,
-        }
-    }
-
-    pub fn bounds(&self) -> Option<UiRect> {
-        self.bounds
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct UiWorkspace {
-    pub apps: Vec<UiAppSurface>,
-    pub root: UiTileNode,
-    pub focused_app: Option<u32>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum UiWorkspaceAction {
-    None,
-    FocusedApp(u32),
-    ClosedApp(u32),
-    SplitRequested { app_id: u32, axis: UiTileAxis },
-    AppAction { app_id: u32, action: UiAction },
-}
-
-const WORKSPACE_CHROME_H: f32 = 34.0;
-const WORKSPACE_GAP: f32 = 6.0;
-
-impl UiWorkspace {
-    pub fn single(app: UiAppSurface) -> Self {
-        let focused_app = Some(app.id);
-        Self {
-            root: UiTileNode::Leaf { app_id: app.id },
-            apps: vec![app],
-            focused_app,
-        }
-    }
-
-    pub fn split(axis: UiTileAxis, first: UiAppSurface, second: UiAppSurface) -> Self {
-        let focused_app = Some(first.id);
-        Self {
-            root: UiTileNode::Split {
-                axis,
-                ratio_percent: 50,
-                first: Box::new(UiTileNode::Leaf { app_id: first.id }),
-                second: Box::new(UiTileNode::Leaf { app_id: second.id }),
-            },
-            apps: vec![first, second],
-            focused_app,
-        }
-    }
-
-    pub fn tabs(apps: Vec<UiAppSurface>, selected: usize) -> Self {
-        let selected = selected.min(apps.len().saturating_sub(1));
-        let focused_app = apps.get(selected).map(|app| app.id);
-        Self {
-            root: UiTileNode::Tabs {
-                app_ids: apps.iter().map(|app| app.id).collect(),
-                selected,
-            },
-            apps,
-            focused_app,
-        }
-    }
-
-    pub fn app(&self, id: u32) -> Option<&UiAppSurface> {
-        self.apps.iter().find(|app| app.id == id)
-    }
-
-    pub fn app_mut(&mut self, id: u32) -> Option<&mut UiAppSurface> {
-        self.apps.iter_mut().find(|app| app.id == id)
-    }
-
-    pub fn render(
-        &mut self,
-        ui: &mut UiPainter<'_, '_>,
-        bounds: UiRect,
-        mut render_app: impl FnMut(&mut UiPainter<'_, '_>, UiRect, &UiAppSurface),
-    ) {
-        for app in &mut self.apps {
-            app.bounds = None;
-        }
-        let root = self.root.clone();
-        self.render_tile(ui, bounds, &root, &mut render_app);
-    }
-
-    pub fn handle_event(&mut self, scene: &GpuScene, event: UiEvent) -> UiWorkspaceAction {
-        match event {
-            UiEvent::PointerDown { x, y } => {
-                if let Some(hit) = scene.hit_test(x, y) {
-                    match hit.kind {
-                        HitKind::WorkspaceTab => {
-                            self.focused_app = Some(hit.id);
-                            return UiWorkspaceAction::FocusedApp(hit.id);
-                        }
-                        HitKind::WorkspaceClose => return UiWorkspaceAction::ClosedApp(hit.id),
-                        HitKind::WorkspaceSplit => {
-                            return UiWorkspaceAction::SplitRequested {
-                                app_id: hit.id,
-                                axis: UiTileAxis::Horizontal,
-                            };
-                        }
-                        _ => {}
-                    }
-                }
-                let Some(app_id) = self.app_id_at(x, y) else {
-                    return UiWorkspaceAction::None;
-                };
-                self.focused_app = Some(app_id);
-                self.route_to_app(scene, app_id, UiEvent::PointerDown { x, y })
-            }
-            UiEvent::PointerMove { x, y } => {
-                let app_id = self.app_id_at(x, y).or(self.focused_app);
-                app_id
-                    .map(|app_id| self.route_to_app(scene, app_id, UiEvent::PointerMove { x, y }))
-                    .unwrap_or(UiWorkspaceAction::None)
-            }
-            UiEvent::PointerUp { x, y } => self
-                .focused_app
-                .map(|app_id| self.route_to_app(scene, app_id, UiEvent::PointerUp { x, y }))
-                .unwrap_or(UiWorkspaceAction::None),
-            UiEvent::Wheel { x, y, delta_y } => {
-                let app_id = self.app_id_at(x, y).or(self.focused_app);
-                app_id
-                    .map(|app_id| {
-                        self.route_to_app(scene, app_id, UiEvent::Wheel { x, y, delta_y })
-                    })
-                    .unwrap_or(UiWorkspaceAction::None)
-            }
-            UiEvent::KeyDown { key } => self
-                .focused_app
-                .map(|app_id| self.route_to_app(scene, app_id, UiEvent::KeyDown { key }))
-                .unwrap_or(UiWorkspaceAction::None),
-            UiEvent::TextInput(value) => self
-                .focused_app
-                .map(|app_id| self.route_to_app(scene, app_id, UiEvent::TextInput(value)))
-                .unwrap_or(UiWorkspaceAction::None),
-            UiEvent::Blur => {
-                let mut last = UiWorkspaceAction::None;
-                for app in &mut self.apps {
-                    let action = app.runtime.handle_event(scene, UiEvent::Blur);
-                    if action != UiAction::None {
-                        last = UiWorkspaceAction::AppAction {
-                            app_id: app.id,
-                            action,
-                        };
-                    }
-                }
-                last
-            }
-        }
-    }
-
-    fn route_to_app(&mut self, scene: &GpuScene, app_id: u32, event: UiEvent) -> UiWorkspaceAction {
-        let Some(app) = self.app_mut(app_id) else {
-            return UiWorkspaceAction::None;
-        };
-        let action = app.runtime.handle_event(scene, event);
-        if action == UiAction::None {
-            UiWorkspaceAction::None
-        } else {
-            UiWorkspaceAction::AppAction { app_id, action }
-        }
-    }
-
-    fn app_id_at(&self, x: f32, y: f32) -> Option<u32> {
-        self.apps
-            .iter()
-            .find(|app| app.bounds.is_some_and(|bounds| bounds.contains(x, y)))
-            .map(|app| app.id)
-    }
-
-    fn render_tile(
-        &mut self,
-        ui: &mut UiPainter<'_, '_>,
-        rect: UiRect,
-        tile: &UiTileNode,
-        render_app: &mut impl FnMut(&mut UiPainter<'_, '_>, UiRect, &UiAppSurface),
-    ) {
-        match tile {
-            UiTileNode::Leaf { app_id } => self.render_leaf(ui, rect, *app_id, render_app),
-            UiTileNode::Split {
-                axis,
-                ratio_percent,
-                first,
-                second,
-            } => {
-                let ratio = (*ratio_percent as f32 / 100.0).clamp(0.18, 0.82);
-                match axis {
-                    UiTileAxis::Horizontal => {
-                        let first_w = ((rect.w - WORKSPACE_GAP) * ratio).max(0.0);
-                        let second_w = (rect.w - WORKSPACE_GAP - first_w).max(0.0);
-                        self.render_tile(
-                            ui,
-                            UiRect::new(rect.x, rect.y, first_w, rect.h),
-                            first,
-                            render_app,
-                        );
-                        self.render_tile(
-                            ui,
-                            UiRect::new(rect.x + first_w + WORKSPACE_GAP, rect.y, second_w, rect.h),
-                            second,
-                            render_app,
-                        );
-                    }
-                    UiTileAxis::Vertical => {
-                        let first_h = ((rect.h - WORKSPACE_GAP) * ratio).max(0.0);
-                        let second_h = (rect.h - WORKSPACE_GAP - first_h).max(0.0);
-                        self.render_tile(
-                            ui,
-                            UiRect::new(rect.x, rect.y, rect.w, first_h),
-                            first,
-                            render_app,
-                        );
-                        self.render_tile(
-                            ui,
-                            UiRect::new(rect.x, rect.y + first_h + WORKSPACE_GAP, rect.w, second_h),
-                            second,
-                            render_app,
-                        );
-                    }
-                }
-            }
-            UiTileNode::Tabs { app_ids, selected } => {
-                self.render_tab_strip(ui, rect, app_ids, *selected);
-                if let Some(app_id) = app_ids.get(*selected) {
-                    self.render_app_body(
-                        ui,
-                        UiRect::new(
-                            rect.x,
-                            rect.y + WORKSPACE_CHROME_H,
-                            rect.w,
-                            (rect.h - WORKSPACE_CHROME_H).max(0.0),
-                        ),
-                        *app_id,
-                        render_app,
-                    );
-                }
-            }
-        }
-    }
-
-    fn render_leaf(
-        &mut self,
-        ui: &mut UiPainter<'_, '_>,
-        rect: UiRect,
-        app_id: u32,
-        render_app: &mut impl FnMut(&mut UiPainter<'_, '_>, UiRect, &UiAppSurface),
-    ) {
-        self.render_app_chrome(ui, rect, app_id);
-        self.render_app_body(
-            ui,
-            UiRect::new(
-                rect.x,
-                rect.y + WORKSPACE_CHROME_H,
-                rect.w,
-                (rect.h - WORKSPACE_CHROME_H).max(0.0),
-            ),
-            app_id,
-            render_app,
-        );
-    }
-
-    fn render_tab_strip(
-        &self,
-        ui: &mut UiPainter<'_, '_>,
-        rect: UiRect,
-        app_ids: &[u32],
-        selected: usize,
-    ) {
-        ui.fill_rect(
-            UiRect::new(rect.x, rect.y, rect.w, WORKSPACE_CHROME_H),
-            8.0,
-            palette::TOPBAR,
-        );
-        let mut x = rect.x + 8.0;
-        for (index, app_id) in app_ids.iter().copied().enumerate() {
-            let title = self
-                .app(app_id)
-                .map(|app| app.title.as_str())
-                .unwrap_or("App");
-            let w = (title.chars().count() as f32 * 8.0 + 42.0).clamp(82.0, 180.0);
-            let tab = UiRect::new(x, rect.y + 5.0, w, 24.0);
-            ui.hit(HitKind::WorkspaceTab, app_id, tab.x, tab.y, tab.w, tab.h);
-            ui.fill_rect(
-                tab,
-                8.0,
-                if index == selected {
-                    palette::ACTIVE_ROW
-                } else {
-                    palette::ROW
-                },
-            );
-            ui.bounded_label(
-                tab.x + 12.0,
-                tab.y + 6.0,
-                tab.w - 24.0,
-                title,
-                2.0,
-                if index == selected {
-                    palette::TEXT
-                } else {
-                    palette::MUTED
-                },
-            );
-            x += w + 6.0;
-        }
-    }
-
-    fn render_app_chrome(&self, ui: &mut UiPainter<'_, '_>, rect: UiRect, app_id: u32) {
-        let chrome = UiRect::new(rect.x, rect.y, rect.w, WORKSPACE_CHROME_H);
-        let focused = self.focused_app == Some(app_id);
-        ui.fill_rect(chrome, 8.0, palette::TOPBAR);
-        ui.border_rect(
-            rect,
-            8.0,
-            if focused {
-                palette::ACCENT.with_alpha(0.68)
-            } else {
-                palette::BORDER
-            },
-        );
-        let title = self
-            .app(app_id)
-            .map(|app| app.title.as_str())
-            .unwrap_or("App");
-        ui.hit(
-            HitKind::WorkspaceTab,
-            app_id,
-            chrome.x,
-            chrome.y,
-            chrome.w,
-            chrome.h,
-        );
-        ui.bounded_label(
-            chrome.x + 12.0,
-            chrome.y + 10.0,
-            (chrome.w - 98.0).max(0.0),
-            title,
-            2.0,
-            if focused {
-                palette::TEXT
-            } else {
-                palette::MUTED
-            },
-        );
-        if chrome.w > 110.0 {
-            ui.hit(
-                HitKind::WorkspaceSplit,
-                app_id,
-                chrome.x + chrome.w - 58.0,
-                chrome.y + 7.0,
-                20.0,
-                20.0,
-            );
-            ui.bounded_label(
-                chrome.x + chrome.w - 53.0,
-                chrome.y + 10.0,
-                12.0,
-                "|",
-                2.0,
-                palette::MUTED,
-            );
-            ui.hit(
-                HitKind::WorkspaceClose,
-                app_id,
-                chrome.x + chrome.w - 30.0,
-                chrome.y + 7.0,
-                20.0,
-                20.0,
-            );
-            ui.bounded_label(
-                chrome.x + chrome.w - 25.0,
-                chrome.y + 10.0,
-                12.0,
-                "x",
-                2.0,
-                palette::MUTED,
-            );
-        }
-    }
-
-    fn render_app_body(
-        &mut self,
-        ui: &mut UiPainter<'_, '_>,
-        rect: UiRect,
-        app_id: u32,
-        render_app: &mut impl FnMut(&mut UiPainter<'_, '_>, UiRect, &UiAppSurface),
-    ) {
-        if rect.w <= 0.0 || rect.h <= 0.0 {
-            return;
-        }
-        if let Some(app) = self.app_mut(app_id) {
-            app.bounds = Some(rect);
-        }
-        let clipped = ui
-            .scene
-            .push_clip(GpuClip::new(rect.x, rect.y, rect.w, rect.h));
-        if clipped {
-            if let Some(app) = self.app(app_id) {
-                render_app(ui, rect, app);
-            }
-            ui.scene.pop_clip();
-        }
-    }
-}
-
 #[cfg(feature = "fontdue-text")]
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct TextQuad {
-    pub x: f32,
-    pub y: f32,
-    pub w: f32,
-    pub h: f32,
-    pub u0: f32,
-    pub v0: f32,
-    pub u1: f32,
-    pub v1: f32,
-    pub color: Color4,
-}
-
-#[cfg(feature = "fontdue-text")]
-#[derive(Clone, Copy, Debug)]
-struct AtlasGlyph {
-    uv: [f32; 4],
-    size: [f32; 2],
-    bearing: [f32; 2],
-    advance: f32,
-}
-
-#[cfg(feature = "fontdue-text")]
-#[derive(Clone, Debug)]
-pub struct FontAtlas {
-    pub width: u32,
-    pub height: u32,
-    pub alpha: Vec<u8>,
-    glyphs: HashMap<char, AtlasGlyph>,
-    px: f32,
-}
-
-#[cfg(feature = "fontdue-text")]
-impl FontAtlas {
-    pub fn from_font_bytes(bytes: &[u8], px: f32) -> Result<Self, String> {
-        let font = fontdue::Font::from_bytes(bytes, fontdue::FontSettings::default())
-            .map_err(|_| "font parse failed".to_string())?;
-        Ok(Self::build(&font, &ascii_chars(), px))
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn load_inter(px: f32) -> Result<Self, String> {
-        let path = crate::font::find_best_ui_font().ok_or_else(|| {
-            "Inter font not found; set EDGE_UI_FONT=/path/to/Inter.ttf".to_string()
-        })?;
-        let bytes = std::fs::read(&path)
-            .map_err(|error| format!("failed to read {}: {error}", path.display()))?;
-        Self::from_font_bytes(&bytes, px)
-    }
-
-    fn build(font: &fontdue::Font, chars: &[char], px: f32) -> Self {
-        let width = 1024u32;
-        let height = 1024u32;
-        let mut alpha = vec![0u8; (width * height) as usize];
-        let mut glyphs = HashMap::new();
-        let mut x = 2u32;
-        let mut y = 2u32;
-        let mut row_h = 0u32;
-
-        for &ch in chars {
-            let (metrics, bitmap) = font.rasterize(ch, px);
-            if metrics.width == 0 || metrics.height == 0 {
-                glyphs.insert(
-                    ch,
-                    AtlasGlyph {
-                        uv: [0.0; 4],
-                        size: [0.0, 0.0],
-                        bearing: [metrics.xmin as f32, metrics.ymin as f32],
-                        advance: metrics.advance_width,
-                    },
-                );
-                continue;
-            }
-
-            let gw = metrics.width as u32;
-            let gh = metrics.height as u32;
-            if x + gw + 2 >= width {
-                x = 2;
-                y += row_h + 2;
-                row_h = 0;
-            }
-            if y + gh + 2 >= height {
-                break;
-            }
-
-            for gy in 0..gh {
-                for gx in 0..gw {
-                    alpha[((y + gy) * width + x + gx) as usize] = bitmap[(gy * gw + gx) as usize];
-                }
-            }
-
-            glyphs.insert(
-                ch,
-                AtlasGlyph {
-                    uv: [
-                        x as f32 / width as f32,
-                        y as f32 / height as f32,
-                        (x + gw) as f32 / width as f32,
-                        (y + gh) as f32 / height as f32,
-                    ],
-                    size: [gw as f32, gh as f32],
-                    bearing: [metrics.xmin as f32, metrics.ymin as f32],
-                    advance: metrics.advance_width,
-                },
-            );
-            x += gw + 2;
-            row_h = row_h.max(gh);
-        }
-
-        Self {
-            width,
-            height,
-            alpha,
-            glyphs,
-            px,
-        }
-    }
-
-    fn layout_text(&self, scene: &mut GpuScene, mut x: f32, y: f32, text: &str, color: Color4) {
-        let baseline = y + self.px * 0.82;
-        for ch in text.chars() {
-            if ch == '\n' {
-                continue;
-            }
-            let Some(glyph) = self
-                .glyphs
-                .get(&ch)
-                .or_else(|| self.glyphs.get(&ch.to_ascii_uppercase()))
-            else {
-                x += self.px * 0.32;
-                continue;
-            };
-            if glyph.size[0] > 0.0 && glyph.size[1] > 0.0 {
-                scene.push_text_quad(TextQuad {
-                    x: x + glyph.bearing[0],
-                    y: baseline - glyph.bearing[1] - glyph.size[1],
-                    w: glyph.size[0],
-                    h: glyph.size[1],
-                    u0: glyph.uv[0],
-                    v0: glyph.uv[1],
-                    u1: glyph.uv[2],
-                    v1: glyph.uv[3],
-                    color,
-                });
-            }
-            x += glyph.advance.max(self.px * 0.28);
-        }
-    }
-
-    pub fn text_width(&self, text: &str) -> f32 {
-        text.chars()
-            .map(|ch| {
-                self.glyphs
-                    .get(&ch)
-                    .or_else(|| self.glyphs.get(&ch.to_ascii_uppercase()))
-                    .map(|glyph| glyph.advance.max(self.px * 0.28))
-                    .unwrap_or(self.px * 0.32)
-            })
-            .sum()
-    }
-}
+pub use text::{FontAtlas, TextQuad};
+#[cfg(test)]
+use workspace::WORKSPACE_CHROME_H;
+pub use workspace::{
+    UiAppKind, UiAppSurface, UiTileAxis, UiTileNode, UiWorkspace, UiWorkspaceAction,
+};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ChatShellMetrics {
@@ -1342,6 +77,8 @@ pub struct UiPainter<'a, 'font> {
     scene: &'a mut GpuScene,
     #[cfg(feature = "fontdue-text")]
     atlas: Option<&'font FontAtlas>,
+    #[cfg(not(feature = "fontdue-text"))]
+    _font: PhantomData<&'font ()>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1439,9 +176,132 @@ pub enum UiNodeKind {
         style: ButtonStyle,
     },
     IconButton {
-        glyph: String,
+        icon: UiIcon,
         id: u32,
         active: bool,
+    },
+    Icon {
+        icon: UiIcon,
+        color: Color4,
+    },
+    Checkbox {
+        label: String,
+        checked: bool,
+        id: u32,
+    },
+    Radio {
+        label: String,
+        selected: bool,
+        id: u32,
+    },
+    Select {
+        label: String,
+        value: String,
+        id: u32,
+    },
+    Tooltip {
+        text: String,
+    },
+    Dialog {
+        title: String,
+        body: String,
+        icon: UiIcon,
+    },
+    Toast {
+        message: String,
+        icon: UiIcon,
+        accent: Color4,
+    },
+    EmptyState {
+        title: String,
+        body: String,
+        icon: UiIcon,
+    },
+    Skeleton,
+    ProgressRing {
+        value: f32,
+        color: Color4,
+    },
+    Table {
+        headers: Vec<String>,
+        rows: Vec<Vec<String>>,
+        id_base: u32,
+    },
+    Breadcrumb {
+        items: Vec<String>,
+        selected: usize,
+        base_id: u32,
+    },
+    CommandPalette {
+        placeholder: String,
+        id: u32,
+    },
+    TreeItem {
+        label: String,
+        detail: String,
+        depth: u8,
+        expanded: bool,
+        id: u32,
+    },
+    Section {
+        title: String,
+        detail: String,
+    },
+    IdentityCard {
+        name: String,
+        node: String,
+        policy: String,
+        id: u32,
+    },
+    ContactCard {
+        name: String,
+        detail: String,
+        id: u32,
+    },
+    ThreadRow {
+        title: String,
+        last_message: String,
+        unread: bool,
+        id: u32,
+    },
+    AttachmentPreview {
+        name: String,
+        kind: String,
+        id: u32,
+    },
+    CapabilityGrantRow {
+        app: String,
+        capability: String,
+        state: String,
+        id: u32,
+    },
+    ProofEventRow {
+        title: String,
+        hash: String,
+        status: String,
+        id: u32,
+    },
+    RoutePath {
+        label: String,
+        hops: Vec<String>,
+    },
+    PackageCard {
+        name: String,
+        policy: String,
+        hash: String,
+        id: u32,
+    },
+    ReceiptRow {
+        label: String,
+        amount: String,
+        status: String,
+        id: u32,
+    },
+    AppLauncherItem {
+        title: String,
+        detail: String,
+        icon: UiIcon,
+        id: u32,
     },
     Toggle {
         on: bool,
@@ -1642,12 +502,320 @@ impl UiNode {
         }
     }
 
-    pub fn icon_button(glyph: &str, id: u32) -> Self {
+    pub fn icon_button(icon: UiIcon, id: u32) -> Self {
         Self {
             kind: UiNodeKind::IconButton {
-                glyph: glyph.to_string(),
+                icon,
                 id,
                 active: true,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn icon(icon: UiIcon) -> Self {
+        Self {
+            kind: UiNodeKind::Icon {
+                icon,
+                color: palette::MUTED,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn checkbox(label: &str, checked: bool, id: u32) -> Self {
+        Self {
+            kind: UiNodeKind::Checkbox {
+                label: label.to_string(),
+                checked,
+                id,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn radio(label: &str, selected: bool, id: u32) -> Self {
+        Self {
+            kind: UiNodeKind::Radio {
+                label: label.to_string(),
+                selected,
+                id,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn select(label: &str, value: &str, id: u32) -> Self {
+        Self {
+            kind: UiNodeKind::Select {
+                label: label.to_string(),
+                value: value.to_string(),
+                id,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn tooltip(text: &str) -> Self {
+        Self {
+            kind: UiNodeKind::Tooltip {
+                text: text.to_string(),
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn dialog(title: &str, body: &str, icon: UiIcon) -> Self {
+        Self {
+            kind: UiNodeKind::Dialog {
+                title: title.to_string(),
+                body: body.to_string(),
+                icon,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn toast(message: &str, icon: UiIcon, accent: Color4) -> Self {
+        Self {
+            kind: UiNodeKind::Toast {
+                message: message.to_string(),
+                icon,
+                accent,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn empty_state(title: &str, body: &str, icon: UiIcon) -> Self {
+        Self {
+            kind: UiNodeKind::EmptyState {
+                title: title.to_string(),
+                body: body.to_string(),
+                icon,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn skeleton() -> Self {
+        Self {
+            kind: UiNodeKind::Skeleton,
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn progress_ring(value: f32, color: Color4) -> Self {
+        Self {
+            kind: UiNodeKind::ProgressRing { value, color },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn table(
+        headers: impl IntoIterator<Item = String>,
+        rows: impl IntoIterator<Item = Vec<String>>,
+        id_base: u32,
+    ) -> Self {
+        Self {
+            kind: UiNodeKind::Table {
+                headers: headers.into_iter().collect(),
+                rows: rows.into_iter().collect(),
+                id_base,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn table_labels(headers: &[&str], rows: &[&[&str]], id_base: u32) -> Self {
+        Self::table(
+            headers.iter().copied().map(str::to_string),
+            rows.iter()
+                .map(|row| row.iter().copied().map(str::to_string).collect()),
+            id_base,
+        )
+    }
+
+    pub fn breadcrumb(labels: &[&str], selected: usize, base_id: u32) -> Self {
+        Self {
+            kind: UiNodeKind::Breadcrumb {
+                items: labels.iter().copied().map(str::to_string).collect(),
+                selected,
+                base_id,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn command_palette(placeholder: &str, id: u32) -> Self {
+        Self {
+            kind: UiNodeKind::CommandPalette {
+                placeholder: placeholder.to_string(),
+                id,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn tree_item(label: &str, detail: &str, depth: u8, expanded: bool, id: u32) -> Self {
+        Self {
+            kind: UiNodeKind::TreeItem {
+                label: label.to_string(),
+                detail: detail.to_string(),
+                depth,
+                expanded,
+                id,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn section(title: &str, detail: &str) -> Self {
+        Self {
+            kind: UiNodeKind::Section {
+                title: title.to_string(),
+                detail: detail.to_string(),
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn identity_card(name: &str, node: &str, policy: &str, id: u32) -> Self {
+        Self {
+            kind: UiNodeKind::IdentityCard {
+                name: name.to_string(),
+                node: node.to_string(),
+                policy: policy.to_string(),
+                id,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn contact_card(name: &str, detail: &str, id: u32) -> Self {
+        Self {
+            kind: UiNodeKind::ContactCard {
+                name: name.to_string(),
+                detail: detail.to_string(),
+                id,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn thread_row(title: &str, last_message: &str, unread: bool, id: u32) -> Self {
+        Self {
+            kind: UiNodeKind::ThreadRow {
+                title: title.to_string(),
+                last_message: last_message.to_string(),
+                unread,
+                id,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn attachment_preview(name: &str, kind: &str, id: u32) -> Self {
+        Self {
+            kind: UiNodeKind::AttachmentPreview {
+                name: name.to_string(),
+                kind: kind.to_string(),
+                id,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn capability_grant_row(app: &str, capability: &str, state: &str, id: u32) -> Self {
+        Self {
+            kind: UiNodeKind::CapabilityGrantRow {
+                app: app.to_string(),
+                capability: capability.to_string(),
+                state: state.to_string(),
+                id,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn proof_event_row(title: &str, hash: &str, status: &str, id: u32) -> Self {
+        Self {
+            kind: UiNodeKind::ProofEventRow {
+                title: title.to_string(),
+                hash: hash.to_string(),
+                status: status.to_string(),
+                id,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn route_path(label: &str, hops: &[&str]) -> Self {
+        Self {
+            kind: UiNodeKind::RoutePath {
+                label: label.to_string(),
+                hops: hops.iter().copied().map(str::to_string).collect(),
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn package_card(name: &str, policy: &str, hash: &str, id: u32) -> Self {
+        Self {
+            kind: UiNodeKind::PackageCard {
+                name: name.to_string(),
+                policy: policy.to_string(),
+                hash: hash.to_string(),
+                id,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn receipt_row(label: &str, amount: &str, status: &str, id: u32) -> Self {
+        Self {
+            kind: UiNodeKind::ReceiptRow {
+                label: label.to_string(),
+                amount: amount.to_string(),
+                status: status.to_string(),
+                id,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn app_launcher_item(title: &str, detail: &str, icon: UiIcon, id: u32) -> Self {
+        Self {
+            kind: UiNodeKind::AppLauncherItem {
+                title: title.to_string(),
+                detail: detail.to_string(),
+                icon,
+                id,
             },
             style: UiStyle::default(),
             children: Vec::new(),
@@ -1882,6 +1050,16 @@ impl UiNode {
         self
     }
 
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.style.disabled = disabled;
+        self
+    }
+
+    pub fn loading(mut self, loading: bool) -> Self {
+        self.style.loading = loading;
+        self
+    }
+
     fn apply_parsed_style(&mut self, parsed: &mut UiStyle) {
         if matches!(self.kind, UiNodeKind::Row) {
             parsed.direction = Axis::Horizontal;
@@ -1930,11 +1108,7 @@ impl UiNode {
     }
 
     pub fn when(self, condition: bool, child: UiNode) -> Self {
-        if condition {
-            self.child(child)
-        } else {
-            self
-        }
+        if condition { self.child(child) } else { self }
     }
 
     pub fn detail(mut self, value: &str) -> Self {
@@ -2032,6 +1206,9 @@ impl UiNode {
                 ..
             } => *avatar_color = color,
             UiNodeKind::Badge {
+                color: badge_color, ..
+            }
+            | UiNodeKind::Icon {
                 color: badge_color, ..
             } => *badge_color = color,
             _ => {}
@@ -2164,6 +1341,7 @@ impl UiNode {
         state: Option<&UiRuntimeState>,
     ) {
         let rect = self.style.layout_rect(bounds);
+        let hit_start = ui.scene.hit_count();
         match &self.kind {
             UiNodeKind::Text(value) => {
                 ui.bounded_label(rect.x, rect.y, rect.w, value, 2.0, self.style.text);
@@ -2181,7 +1359,7 @@ impl UiNode {
                     true,
                 );
             }
-            UiNodeKind::IconButton { glyph, id, active } => {
+            UiNodeKind::IconButton { icon, id, active } => {
                 let size = self
                     .style
                     .width
@@ -2189,8 +1367,144 @@ impl UiNode {
                     .unwrap_or(34.0)
                     .min(rect.w)
                     .min(rect.h);
-                ui.icon_button(UiRect::new(rect.x, rect.y, size, size), glyph, *id, *active);
+                ui.icon_button(UiRect::new(rect.x, rect.y, size, size), *icon, *id, *active);
             }
+            UiNodeKind::Icon { icon, color } => {
+                let size = self
+                    .style
+                    .width
+                    .or(self.style.height)
+                    .unwrap_or(24.0)
+                    .min(rect.w)
+                    .min(rect.h);
+                ui.icon(UiRect::new(rect.x, rect.y, size, size), *icon, *color);
+            }
+            UiNodeKind::Checkbox { label, checked, id } => {
+                let checked = state
+                    .map(|state| state.toggle_value(*id, *checked))
+                    .unwrap_or(*checked);
+                ui.checkbox(rect, label, checked, *id);
+            }
+            UiNodeKind::Radio {
+                label,
+                selected,
+                id,
+            } => {
+                let selected = state
+                    .map(|state| state.toggle_value(*id, *selected))
+                    .unwrap_or(*selected);
+                ui.radio(rect, label, selected, *id);
+            }
+            UiNodeKind::Select { label, value, id } => {
+                ui.select_trigger(rect, label, value, *id);
+            }
+            UiNodeKind::Tooltip { text } => {
+                ui.tooltip(rect, text);
+            }
+            UiNodeKind::Dialog { title, body, icon } => {
+                ui.dialog(rect, title, body, *icon);
+                render_children(
+                    ui,
+                    rect.inset(18.0, 88.0),
+                    &self.style,
+                    &self.children,
+                    state,
+                );
+            }
+            UiNodeKind::Toast {
+                message,
+                icon,
+                accent,
+            } => {
+                ui.toast(rect, message, *icon, *accent);
+            }
+            UiNodeKind::EmptyState { title, body, icon } => {
+                ui.empty_state(rect, title, body, *icon);
+            }
+            UiNodeKind::Skeleton => {
+                ui.skeleton(rect);
+            }
+            UiNodeKind::ProgressRing { value, color } => {
+                ui.progress_ring(rect, *value, *color);
+            }
+            UiNodeKind::Table {
+                headers,
+                rows,
+                id_base,
+            } => {
+                ui.table(rect, headers, rows, *id_base);
+            }
+            UiNodeKind::Breadcrumb {
+                items,
+                selected,
+                base_id,
+            } => {
+                ui.breadcrumb(rect, items, *selected, *base_id);
+            }
+            UiNodeKind::CommandPalette { placeholder, id } => {
+                ui.command_palette(rect, placeholder, *id);
+            }
+            UiNodeKind::TreeItem {
+                label,
+                detail,
+                depth,
+                expanded,
+                id,
+            } => {
+                ui.tree_item(rect, label, detail, *depth, *expanded, *id);
+            }
+            UiNodeKind::Section { title, detail } => {
+                ui.section_header(rect, title, detail);
+            }
+            UiNodeKind::IdentityCard {
+                name,
+                node,
+                policy,
+                id,
+            } => ui.identity_card(rect, name, node, policy, *id),
+            UiNodeKind::ContactCard { name, detail, id } => {
+                ui.contact_card(rect, name, detail, *id)
+            }
+            UiNodeKind::ThreadRow {
+                title,
+                last_message,
+                unread,
+                id,
+            } => ui.thread_row(rect, title, last_message, *unread, *id),
+            UiNodeKind::AttachmentPreview { name, kind, id } => {
+                ui.attachment_preview(rect, name, kind, *id)
+            }
+            UiNodeKind::CapabilityGrantRow {
+                app,
+                capability,
+                state,
+                id,
+            } => ui.capability_grant_row(rect, app, capability, state, *id),
+            UiNodeKind::ProofEventRow {
+                title,
+                hash,
+                status,
+                id,
+            } => ui.proof_event_row(rect, title, hash, status, *id),
+            UiNodeKind::RoutePath { label, hops } => ui.route_path(rect, label, hops),
+            UiNodeKind::PackageCard {
+                name,
+                policy,
+                hash,
+                id,
+            } => ui.package_card(rect, name, policy, hash, *id),
+            UiNodeKind::ReceiptRow {
+                label,
+                amount,
+                status,
+                id,
+            } => ui.receipt_row(rect, label, amount, status, *id),
+            UiNodeKind::AppLauncherItem {
+                title,
+                detail,
+                icon,
+                id,
+            } => ui.app_launcher_item(rect, title, detail, *icon, *id),
             UiNodeKind::Toggle { on, id } => {
                 let y = rect.y + ((rect.h - 24.0).max(0.0) * 0.5);
                 let on = state
@@ -2510,6 +1824,42 @@ impl UiNode {
                 }
             }
         }
+        let added_hits = &ui.scene.hits()[hit_start..];
+        let focused_rect = state.and_then(|state| {
+            let focused = state.focused()?;
+            added_hits
+                .iter()
+                .copied()
+                .find(|hit| hit.kind == focused.kind && hit.id == focused.id)
+        });
+        if let Some(focused) = focused_rect {
+            ui.border_rect(
+                UiRect::new(focused.x, focused.y, focused.w, focused.h),
+                10.0,
+                palette::ACCENT.with_alpha(0.86),
+            );
+        }
+        if self.style.disabled || self.style.loading {
+            ui.scene.truncate_hits(hit_start);
+            ui.fill_rect(
+                rect,
+                self.style.radius.max(8.0),
+                palette::BG.with_alpha(0.34),
+            );
+        }
+        if self.style.loading {
+            let size = rect.w.min(rect.h).min(24.0);
+            ui.progress_ring(
+                UiRect::new(
+                    rect.x + (rect.w - size) * 0.5,
+                    rect.y + (rect.h - size) * 0.5,
+                    size,
+                    size,
+                ),
+                0.72,
+                palette::ACCENT,
+            );
+        }
     }
 }
 
@@ -2553,8 +1903,108 @@ pub fn button(label: &str, id: u32, style: ButtonStyle) -> UiNode {
     UiNode::button(label, id, style)
 }
 
-pub fn icon_button(glyph: &str, id: u32) -> UiNode {
-    UiNode::icon_button(glyph, id)
+pub fn icon(icon: UiIcon) -> UiNode {
+    UiNode::icon(icon)
+}
+
+pub fn icon_button(icon: UiIcon, id: u32) -> UiNode {
+    UiNode::icon_button(icon, id)
+}
+
+pub fn checkbox(label: &str, checked: bool, id: u32) -> UiNode {
+    UiNode::checkbox(label, checked, id)
+}
+
+pub fn radio(label: &str, selected: bool, id: u32) -> UiNode {
+    UiNode::radio(label, selected, id)
+}
+
+pub fn select_node(label: &str, value: &str, id: u32) -> UiNode {
+    UiNode::select(label, value, id)
+}
+
+pub fn tooltip(text: &str) -> UiNode {
+    UiNode::tooltip(text)
+}
+
+pub fn dialog(title: &str, body: &str, icon: UiIcon) -> UiNode {
+    UiNode::dialog(title, body, icon)
+}
+
+pub fn toast(message: &str, icon: UiIcon, accent: Color4) -> UiNode {
+    UiNode::toast(message, icon, accent)
+}
+
+pub fn empty_state(title: &str, body: &str, icon: UiIcon) -> UiNode {
+    UiNode::empty_state(title, body, icon)
+}
+
+pub fn skeleton() -> UiNode {
+    UiNode::skeleton()
+}
+
+pub fn progress_ring(value: f32, color: Color4) -> UiNode {
+    UiNode::progress_ring(value, color)
+}
+
+pub fn table_labels(headers: &[&str], rows: &[&[&str]], id_base: u32) -> UiNode {
+    UiNode::table_labels(headers, rows, id_base)
+}
+
+pub fn breadcrumb(labels: &[&str], selected: usize, base_id: u32) -> UiNode {
+    UiNode::breadcrumb(labels, selected, base_id)
+}
+
+pub fn command_palette(placeholder: &str, id: u32) -> UiNode {
+    UiNode::command_palette(placeholder, id)
+}
+
+pub fn tree_item(label: &str, detail: &str, depth: u8, expanded: bool, id: u32) -> UiNode {
+    UiNode::tree_item(label, detail, depth, expanded, id)
+}
+
+pub fn section(title: &str, detail: &str) -> UiNode {
+    UiNode::section(title, detail)
+}
+
+pub fn identity_card(name: &str, node: &str, policy: &str, id: u32) -> UiNode {
+    UiNode::identity_card(name, node, policy, id)
+}
+
+pub fn contact_card(name: &str, detail: &str, id: u32) -> UiNode {
+    UiNode::contact_card(name, detail, id)
+}
+
+pub fn thread_row(title: &str, last_message: &str, unread: bool, id: u32) -> UiNode {
+    UiNode::thread_row(title, last_message, unread, id)
+}
+
+pub fn attachment_preview(name: &str, kind: &str, id: u32) -> UiNode {
+    UiNode::attachment_preview(name, kind, id)
+}
+
+pub fn capability_grant_row(app: &str, capability: &str, state: &str, id: u32) -> UiNode {
+    UiNode::capability_grant_row(app, capability, state, id)
+}
+
+pub fn proof_event_row(title: &str, hash: &str, status: &str, id: u32) -> UiNode {
+    UiNode::proof_event_row(title, hash, status, id)
+}
+
+pub fn route_path(label: &str, hops: &[&str]) -> UiNode {
+    UiNode::route_path(label, hops)
+}
+
+pub fn package_card(name: &str, policy: &str, hash: &str, id: u32) -> UiNode {
+    UiNode::package_card(name, policy, hash, id)
+}
+
+pub fn receipt_row(label: &str, amount: &str, status: &str, id: u32) -> UiNode {
+    UiNode::receipt_row(label, amount, status, id)
+}
+
+pub fn app_launcher_item(title: &str, detail: &str, icon: UiIcon, id: u32) -> UiNode {
+    UiNode::app_launcher_item(title, detail, icon, id)
 }
 
 pub fn toggle_node(on: bool, id: u32) -> UiNode {
@@ -2657,6 +2107,8 @@ impl<'a, 'font> UiPainter<'a, 'font> {
             scene,
             #[cfg(feature = "fontdue-text")]
             atlas: None,
+            #[cfg(not(feature = "fontdue-text"))]
+            _font: PhantomData,
         }
     }
 
@@ -2858,8 +2310,730 @@ impl<'a, 'font> UiPainter<'a, 'font> {
         );
     }
 
-    pub fn icon_button(&mut self, rect: UiRect, glyph: &str, id: u32, active: bool) {
-        self.button(rect, glyph, ButtonStyle::Secondary, id, active);
+    pub fn icon_button(&mut self, rect: UiRect, icon: UiIcon, id: u32, active: bool) {
+        self.hit(HitKind::Button, id, rect.x, rect.y, rect.w, rect.h);
+        let fill = if active {
+            palette::ROW
+        } else {
+            palette::ROW.with_alpha(0.58)
+        };
+        self.fill_rect(rect, 10.0, fill);
+        self.border_rect(
+            rect,
+            10.0,
+            palette::BORDER.with_alpha(if active { 0.72 } else { 0.42 }),
+        );
+        let size = rect.w.min(rect.h).min(22.0);
+        self.icon(
+            UiRect::new(
+                rect.x + (rect.w - size) * 0.5,
+                rect.y + (rect.h - size) * 0.5,
+                size,
+                size,
+            ),
+            icon,
+            if active {
+                palette::TEXT
+            } else {
+                palette::MUTED
+            },
+        );
+    }
+
+    pub fn icon(&mut self, rect: UiRect, icon: UiIcon, color: Color4) {
+        draw_canonical_icon(self.scene, rect, icon, color);
+    }
+
+    pub fn checkbox(&mut self, rect: UiRect, label: &str, checked: bool, id: u32) {
+        self.hit(HitKind::Checkbox, id, rect.x, rect.y, rect.w, rect.h);
+        let box_rect = UiRect::new(rect.x, rect.y + (rect.h - 22.0) * 0.5, 22.0, 22.0);
+        self.fill_rect(box_rect, 6.0, palette::ROW);
+        self.border_rect(
+            box_rect,
+            6.0,
+            if checked {
+                palette::ACCENT
+            } else {
+                palette::BORDER
+            },
+        );
+        if checked {
+            self.icon(box_rect.inset(4.0, 4.0), UiIcon::Check, palette::ACCENT);
+        }
+        self.bounded_label(
+            rect.x + 32.0,
+            rect.y + (rect.h - 14.0) * 0.5,
+            (rect.w - 32.0).max(0.0),
+            label,
+            2.0,
+            palette::TEXT,
+        );
+    }
+
+    pub fn radio(&mut self, rect: UiRect, label: &str, selected: bool, id: u32) {
+        self.hit(HitKind::Radio, id, rect.x, rect.y, rect.w, rect.h);
+        let dot_rect = UiRect::new(rect.x, rect.y + (rect.h - 22.0) * 0.5, 22.0, 22.0);
+        self.fill_rect(dot_rect, 11.0, palette::ROW);
+        self.border_rect(
+            dot_rect,
+            11.0,
+            if selected {
+                palette::ACCENT
+            } else {
+                palette::BORDER
+            },
+        );
+        if selected {
+            self.fill_rect(dot_rect.inset(6.0, 6.0), 5.0, palette::ACCENT);
+        }
+        self.bounded_label(
+            rect.x + 32.0,
+            rect.y + (rect.h - 14.0) * 0.5,
+            (rect.w - 32.0).max(0.0),
+            label,
+            2.0,
+            palette::TEXT,
+        );
+    }
+
+    pub fn select_trigger(&mut self, rect: UiRect, label: &str, value: &str, id: u32) {
+        self.hit(HitKind::Select, id, rect.x, rect.y, rect.w, rect.h);
+        self.fill_rect(rect, 10.0, palette::COMPOSER);
+        self.border_rect(rect, 10.0, palette::BORDER);
+        self.bounded_label(
+            rect.x + 14.0,
+            rect.y + 8.0,
+            (rect.w - 48.0).max(0.0),
+            label,
+            2.0,
+            palette::MUTED,
+        );
+        self.bounded_label(
+            rect.x + 14.0,
+            rect.y + 29.0,
+            (rect.w - 48.0).max(0.0),
+            value,
+            2.0,
+            palette::TEXT,
+        );
+        self.icon(
+            UiRect::new(
+                rect.x + rect.w - 31.0,
+                rect.y + (rect.h - 18.0) * 0.5,
+                18.0,
+                18.0,
+            ),
+            UiIcon::ChevronRight,
+            palette::MUTED,
+        );
+    }
+
+    pub fn tooltip(&mut self, rect: UiRect, text: &str) {
+        self.fill_rect(rect, 8.0, palette::TOPBAR);
+        self.border_rect(rect, 8.0, palette::BORDER.with_alpha(0.72));
+        self.bounded_label(
+            rect.x + 10.0,
+            rect.y + (rect.h - 14.0) * 0.5,
+            (rect.w - 20.0).max(0.0),
+            text,
+            2.0,
+            palette::TEXT,
+        );
+    }
+
+    pub fn dialog(&mut self, rect: UiRect, title: &str, body: &str, icon: UiIcon) {
+        self.card(rect.x, rect.y, rect.w, rect.h, 12.0, palette::PANEL);
+        self.icon(
+            UiRect::new(rect.x + 18.0, rect.y + 18.0, 34.0, 34.0),
+            icon,
+            palette::ACCENT,
+        );
+        self.bounded_label(
+            rect.x + 64.0,
+            rect.y + 18.0,
+            rect.w - 84.0,
+            title,
+            2.0,
+            palette::TEXT,
+        );
+        self.bounded_label(
+            rect.x + 64.0,
+            rect.y + 42.0,
+            rect.w - 84.0,
+            body,
+            2.0,
+            palette::MUTED,
+        );
+        self.divider(
+            rect.x + 18.0,
+            rect.y + 74.0,
+            rect.w - 36.0,
+            Axis::Horizontal,
+        );
+    }
+
+    pub fn toast(&mut self, rect: UiRect, message: &str, icon: UiIcon, accent: Color4) {
+        self.fill_rect(rect, 10.0, palette::TOPBAR);
+        self.border_rect(rect, 10.0, accent.with_alpha(0.54));
+        self.icon(
+            UiRect::new(rect.x + 12.0, rect.y + (rect.h - 22.0) * 0.5, 22.0, 22.0),
+            icon,
+            accent,
+        );
+        self.bounded_label(
+            rect.x + 44.0,
+            rect.y + (rect.h - 14.0) * 0.5,
+            (rect.w - 56.0).max(0.0),
+            message,
+            2.0,
+            palette::TEXT,
+        );
+    }
+
+    pub fn empty_state(&mut self, rect: UiRect, title: &str, body: &str, icon: UiIcon) {
+        self.fill_rect(rect, 10.0, palette::PANEL);
+        self.border_rect(rect, 10.0, palette::BORDER.with_alpha(0.64));
+        let icon_size = rect.h.min(rect.w).min(54.0);
+        let icon_rect = UiRect::new(
+            rect.x + (rect.w - icon_size) * 0.5,
+            rect.y + 22.0,
+            icon_size,
+            icon_size,
+        );
+        self.icon(icon_rect, icon, palette::ACCENT);
+        self.bounded_label(
+            rect.x + 20.0,
+            icon_rect.y + icon_rect.h + 16.0,
+            rect.w - 40.0,
+            title,
+            2.0,
+            palette::TEXT,
+        );
+        self.bounded_label(
+            rect.x + 20.0,
+            icon_rect.y + icon_rect.h + 40.0,
+            rect.w - 40.0,
+            body,
+            2.0,
+            palette::MUTED,
+        );
+    }
+
+    pub fn skeleton(&mut self, rect: UiRect) {
+        self.fill_rect(rect, 8.0, palette::ROW.with_alpha(0.74));
+        let shine_w = (rect.w * 0.28).max(18.0).min(rect.w);
+        self.fill_rect(
+            UiRect::new(rect.x + rect.w * 0.18, rect.y, shine_w, rect.h),
+            8.0,
+            palette::BORDER.with_alpha(0.34),
+        );
+    }
+
+    pub fn progress_ring(&mut self, rect: UiRect, value: f32, color: Color4) {
+        let size = rect.w.min(rect.h);
+        let center = (rect.x + rect.w * 0.5, rect.y + rect.h * 0.5);
+        let radius = size * 0.38;
+        icon_circle(self.scene, center, radius, 2.0, palette::BORDER);
+        let steps = (32.0 * value.clamp(0.0, 1.0)).ceil().max(1.0) as u32;
+        let mut prev = None;
+        for i in 0..=steps {
+            let angle = -core::f32::consts::FRAC_PI_2 + (i as f32 / 32.0) * core::f32::consts::TAU;
+            let pt = (
+                center.0 + angle.cos() * radius,
+                center.1 + angle.sin() * radius,
+            );
+            if let Some(prev) = prev {
+                icon_line(self.scene, prev, pt, 3.0, color);
+            }
+            prev = Some(pt);
+        }
+    }
+
+    pub fn table(&mut self, rect: UiRect, headers: &[String], rows: &[Vec<String>], id_base: u32) {
+        self.fill_rect(rect, 8.0, palette::PANEL);
+        self.border_rect(rect, 8.0, palette::BORDER);
+        let cols = headers.len().max(1);
+        let col_w = (rect.w - 24.0).max(0.0) / cols as f32;
+        let mut y = rect.y + 12.0;
+        for (index, header) in headers.iter().enumerate() {
+            self.bounded_label(
+                rect.x + 12.0 + index as f32 * col_w,
+                y,
+                col_w - 10.0,
+                header,
+                2.0,
+                palette::MUTED,
+            );
+        }
+        y += 28.0;
+        self.divider(rect.x + 12.0, y - 8.0, rect.w - 24.0, Axis::Horizontal);
+        for (row_index, row) in rows.iter().enumerate() {
+            let row_rect = UiRect::new(rect.x + 6.0, y - 7.0, rect.w - 12.0, 34.0);
+            self.hit(
+                HitKind::ListRow,
+                id_base + row_index as u32,
+                row_rect.x,
+                row_rect.y,
+                row_rect.w,
+                row_rect.h,
+            );
+            if row_index % 2 == 1 {
+                self.fill_rect(row_rect, 6.0, palette::ROW.with_alpha(0.48));
+            }
+            for col in 0..cols {
+                let value = row.get(col).map(String::as_str).unwrap_or("");
+                self.bounded_label(
+                    rect.x + 12.0 + col as f32 * col_w,
+                    y,
+                    col_w - 10.0,
+                    value,
+                    2.0,
+                    palette::TEXT,
+                );
+            }
+            y += 34.0;
+            if y > rect.y + rect.h - 20.0 {
+                break;
+            }
+        }
+    }
+
+    pub fn breadcrumb(&mut self, rect: UiRect, items: &[String], selected: usize, base_id: u32) {
+        let mut x = rect.x;
+        for (index, item) in items.iter().enumerate() {
+            let w = (component_label_width(
+                item,
+                2.0,
+                #[cfg(feature = "fontdue-text")]
+                self.atlas,
+            ) + 24.0)
+                .clamp(46.0, 150.0);
+            let item_rect = UiRect::new(x, rect.y, w, rect.h.min(32.0));
+            self.hit(
+                HitKind::Breadcrumb,
+                base_id + index as u32,
+                item_rect.x,
+                item_rect.y,
+                item_rect.w,
+                item_rect.h,
+            );
+            self.fill_rect(
+                item_rect,
+                8.0,
+                if index == selected {
+                    palette::ACTIVE_ROW
+                } else {
+                    palette::ROW.with_alpha(0.38)
+                },
+            );
+            self.bounded_label(
+                item_rect.x + 10.0,
+                item_rect.y + 8.0,
+                item_rect.w - 20.0,
+                item,
+                2.0,
+                if index == selected {
+                    palette::TEXT
+                } else {
+                    palette::MUTED
+                },
+            );
+            x += w + 6.0;
+            if index + 1 < items.len() {
+                self.icon(
+                    UiRect::new(x, rect.y + 7.0, 16.0, 16.0),
+                    UiIcon::ChevronRight,
+                    palette::MUTED,
+                );
+                x += 22.0;
+            }
+        }
+    }
+
+    pub fn command_palette(&mut self, rect: UiRect, placeholder: &str, id: u32) {
+        self.hit(HitKind::Input, id, rect.x, rect.y, rect.w, rect.h);
+        self.fill_rect(rect, 12.0, palette::COMPOSER);
+        self.border_rect(rect, 12.0, palette::BORDER);
+        self.icon(
+            UiRect::new(rect.x + 14.0, rect.y + (rect.h - 20.0) * 0.5, 20.0, 20.0),
+            UiIcon::Search,
+            palette::MUTED,
+        );
+        self.bounded_label(
+            rect.x + 44.0,
+            rect.y + (rect.h - 14.0) * 0.5,
+            rect.w - 58.0,
+            placeholder,
+            2.0,
+            palette::MUTED,
+        );
+    }
+
+    pub fn tree_item(
+        &mut self,
+        rect: UiRect,
+        label: &str,
+        detail: &str,
+        depth: u8,
+        expanded: bool,
+        id: u32,
+    ) {
+        self.hit(HitKind::TreeItem, id, rect.x, rect.y, rect.w, rect.h);
+        self.fill_rect(rect, 6.0, palette::PANEL);
+        let indent = 12.0 + depth as f32 * 18.0;
+        self.icon(
+            UiRect::new(rect.x + indent, rect.y + (rect.h - 16.0) * 0.5, 16.0, 16.0),
+            if expanded {
+                UiIcon::ChevronRight
+            } else {
+                UiIcon::File
+            },
+            palette::MUTED,
+        );
+        self.bounded_label(
+            rect.x + indent + 24.0,
+            rect.y + 9.0,
+            rect.w * 0.48,
+            label,
+            2.0,
+            palette::TEXT,
+        );
+        self.bounded_label(
+            rect.x + rect.w * 0.58,
+            rect.y + 9.0,
+            rect.w * 0.36,
+            detail,
+            2.0,
+            palette::MUTED,
+        );
+    }
+
+    pub fn section_header(&mut self, rect: UiRect, title: &str, detail: &str) {
+        self.bounded_label(rect.x, rect.y, rect.w * 0.55, title, 2.0, palette::TEXT);
+        self.bounded_label(
+            rect.x + rect.w * 0.58,
+            rect.y,
+            rect.w * 0.42,
+            detail,
+            2.0,
+            palette::MUTED,
+        );
+        self.divider(rect.x, rect.y + rect.h - 1.0, rect.w, Axis::Horizontal);
+    }
+
+    pub fn identity_card(&mut self, rect: UiRect, name: &str, node: &str, policy: &str, id: u32) {
+        self.hit(HitKind::ListRow, id, rect.x, rect.y, rect.w, rect.h);
+        self.card(rect.x, rect.y, rect.w, rect.h, 10.0, palette::PANEL);
+        self.icon(
+            UiRect::new(rect.x + 16.0, rect.y + 18.0, 34.0, 34.0),
+            UiIcon::Trust,
+            palette::ACCENT,
+        );
+        self.bounded_label(
+            rect.x + 62.0,
+            rect.y + 16.0,
+            rect.w - 82.0,
+            name,
+            2.0,
+            palette::TEXT,
+        );
+        self.bounded_label(
+            rect.x + 62.0,
+            rect.y + 39.0,
+            rect.w - 82.0,
+            node,
+            2.0,
+            palette::MUTED,
+        );
+        self.badge(
+            rect.x + 16.0,
+            rect.y + rect.h - 34.0,
+            policy,
+            palette::ACCENT,
+        );
+    }
+
+    pub fn contact_card(&mut self, rect: UiRect, name: &str, detail: &str, id: u32) {
+        self.hit(HitKind::ListRow, id, rect.x, rect.y, rect.w, rect.h);
+        self.fill_rect(rect, 8.0, palette::PANEL);
+        self.border_rect(rect, 8.0, palette::BORDER);
+        self.avatar(
+            rect.x + 12.0,
+            rect.y + 12.0,
+            36.0,
+            name,
+            palette::ACCENT,
+            true,
+        );
+        self.bounded_label(
+            rect.x + 58.0,
+            rect.y + 13.0,
+            rect.w - 72.0,
+            name,
+            2.0,
+            palette::TEXT,
+        );
+        self.bounded_label(
+            rect.x + 58.0,
+            rect.y + 35.0,
+            rect.w - 72.0,
+            detail,
+            2.0,
+            palette::MUTED,
+        );
+    }
+
+    pub fn thread_row(
+        &mut self,
+        rect: UiRect,
+        title: &str,
+        last_message: &str,
+        unread: bool,
+        id: u32,
+    ) {
+        self.hit(HitKind::ListRow, id, rect.x, rect.y, rect.w, rect.h);
+        self.fill_rect(
+            rect,
+            6.0,
+            if unread {
+                palette::ACTIVE_ROW
+            } else {
+                palette::PANEL
+            },
+        );
+        self.icon(
+            UiRect::new(rect.x + 12.0, rect.y + 15.0, 24.0, 24.0),
+            UiIcon::Chat,
+            if unread {
+                palette::ACCENT
+            } else {
+                palette::MUTED
+            },
+        );
+        self.bounded_label(
+            rect.x + 48.0,
+            rect.y + 10.0,
+            rect.w - 62.0,
+            title,
+            2.0,
+            palette::TEXT,
+        );
+        self.bounded_label(
+            rect.x + 48.0,
+            rect.y + 32.0,
+            rect.w - 62.0,
+            last_message,
+            2.0,
+            palette::MUTED,
+        );
+    }
+
+    pub fn attachment_preview(&mut self, rect: UiRect, name: &str, kind: &str, id: u32) {
+        self.hit(HitKind::ListRow, id, rect.x, rect.y, rect.w, rect.h);
+        self.fill_rect(rect, 8.0, palette::ROW);
+        self.border_rect(rect, 8.0, palette::BORDER.with_alpha(0.68));
+        self.icon(
+            UiRect::new(rect.x + 12.0, rect.y + 12.0, 28.0, 28.0),
+            UiIcon::File,
+            palette::ACCENT,
+        );
+        self.bounded_label(
+            rect.x + 52.0,
+            rect.y + 11.0,
+            rect.w - 66.0,
+            name,
+            2.0,
+            palette::TEXT,
+        );
+        self.bounded_label(
+            rect.x + 52.0,
+            rect.y + 33.0,
+            rect.w - 66.0,
+            kind,
+            2.0,
+            palette::MUTED,
+        );
+    }
+
+    pub fn capability_grant_row(
+        &mut self,
+        rect: UiRect,
+        app: &str,
+        capability: &str,
+        state: &str,
+        id: u32,
+    ) {
+        self.hit(HitKind::ListRow, id, rect.x, rect.y, rect.w, rect.h);
+        self.fill_rect(rect, 0.0, palette::PANEL);
+        self.divider(rect.x, rect.y + rect.h - 1.0, rect.w, Axis::Horizontal);
+        self.icon(
+            UiRect::new(rect.x + 12.0, rect.y + 17.0, 24.0, 24.0),
+            UiIcon::Shield,
+            palette::VIOLET,
+        );
+        self.bounded_label(
+            rect.x + 48.0,
+            rect.y + 10.0,
+            rect.w * 0.34,
+            app,
+            2.0,
+            palette::TEXT,
+        );
+        self.bounded_label(
+            rect.x + 48.0,
+            rect.y + 32.0,
+            rect.w * 0.34,
+            capability,
+            2.0,
+            palette::MUTED,
+        );
+        self.badge(
+            rect.x + rect.w - 96.0,
+            rect.y + 18.0,
+            state,
+            palette::ACCENT,
+        );
+    }
+
+    pub fn proof_event_row(
+        &mut self,
+        rect: UiRect,
+        title: &str,
+        hash: &str,
+        status: &str,
+        id: u32,
+    ) {
+        self.hit(HitKind::ListRow, id, rect.x, rect.y, rect.w, rect.h);
+        self.fill_rect(rect, 0.0, palette::PANEL);
+        self.divider(rect.x, rect.y + rect.h - 1.0, rect.w, Axis::Horizontal);
+        self.icon(
+            UiRect::new(rect.x + 12.0, rect.y + 17.0, 24.0, 24.0),
+            UiIcon::Check,
+            palette::GREEN,
+        );
+        self.bounded_label(
+            rect.x + 48.0,
+            rect.y + 10.0,
+            rect.w * 0.36,
+            title,
+            2.0,
+            palette::TEXT,
+        );
+        self.bounded_label(
+            rect.x + 48.0,
+            rect.y + 32.0,
+            rect.w * 0.48,
+            hash,
+            2.0,
+            palette::MUTED,
+        );
+        self.badge(
+            rect.x + rect.w - 96.0,
+            rect.y + 18.0,
+            status,
+            palette::GREEN,
+        );
+    }
+
+    pub fn route_path(&mut self, rect: UiRect, label: &str, hops: &[String]) {
+        self.fill_rect(rect, 8.0, palette::PANEL);
+        self.border_rect(rect, 8.0, palette::BORDER);
+        self.bounded_label(
+            rect.x + 14.0,
+            rect.y + 10.0,
+            rect.w - 28.0,
+            label,
+            2.0,
+            palette::TEXT,
+        );
+        let mut x = rect.x + 16.0;
+        let y = rect.y + 45.0;
+        for (index, hop) in hops.iter().enumerate() {
+            self.icon(
+                UiRect::new(x, y, 22.0, 22.0),
+                UiIcon::Route,
+                palette::ACCENT,
+            );
+            self.bounded_label(x + 28.0, y + 4.0, 78.0, hop, 2.0, palette::MUTED);
+            x += 112.0;
+            if index + 1 < hops.len() {
+                self.icon(
+                    UiRect::new(x - 22.0, y + 3.0, 16.0, 16.0),
+                    UiIcon::ChevronRight,
+                    palette::MUTED,
+                );
+            }
+            if x > rect.x + rect.w - 80.0 {
+                break;
+            }
+        }
+    }
+
+    pub fn package_card(&mut self, rect: UiRect, name: &str, policy: &str, hash: &str, id: u32) {
+        self.hit(HitKind::ListRow, id, rect.x, rect.y, rect.w, rect.h);
+        self.card(rect.x, rect.y, rect.w, rect.h, 10.0, palette::PANEL);
+        self.icon(
+            UiRect::new(rect.x + 16.0, rect.y + 18.0, 30.0, 30.0),
+            UiIcon::App,
+            palette::ACCENT,
+        );
+        self.bounded_label(
+            rect.x + 58.0,
+            rect.y + 16.0,
+            rect.w - 76.0,
+            name,
+            2.0,
+            palette::TEXT,
+        );
+        self.bounded_label(
+            rect.x + 58.0,
+            rect.y + 39.0,
+            rect.w - 76.0,
+            hash,
+            2.0,
+            palette::MUTED,
+        );
+        self.badge(
+            rect.x + 16.0,
+            rect.y + rect.h - 34.0,
+            policy,
+            palette::VIOLET,
+        );
+    }
+
+    pub fn receipt_row(&mut self, rect: UiRect, label: &str, amount: &str, status: &str, id: u32) {
+        self.hit(HitKind::TransactionRow, id, rect.x, rect.y, rect.w, rect.h);
+        self.fill_rect(rect, 0.0, palette::PANEL);
+        self.divider(rect.x, rect.y + rect.h - 1.0, rect.w, Axis::Horizontal);
+        self.icon(
+            UiRect::new(rect.x + 12.0, rect.y + 17.0, 24.0, 24.0),
+            UiIcon::Wallet,
+            palette::GREEN,
+        );
+        self.bounded_label(
+            rect.x + 48.0,
+            rect.y + 18.0,
+            rect.w * 0.38,
+            label,
+            2.0,
+            palette::TEXT,
+        );
+        self.bounded_label(
+            rect.x + rect.w - 150.0,
+            rect.y + 18.0,
+            70.0,
+            status,
+            2.0,
+            palette::MUTED,
+        );
+        self.bounded_label(
+            rect.x + rect.w - 76.0,
+            rect.y + 18.0,
+            64.0,
+            amount,
+            2.0,
+            palette::GREEN,
+        );
     }
 
     pub fn input_field(&mut self, rect: UiRect, placeholder: &str, focused: bool) {
@@ -2889,6 +3063,45 @@ impl<'a, 'font> UiPainter<'a, 'font> {
             (rect.w - 32.0).max(0.0),
             placeholder,
             2.0,
+            palette::MUTED,
+        );
+    }
+
+    pub fn app_launcher_item(
+        &mut self,
+        rect: UiRect,
+        title: &str,
+        detail: &str,
+        icon: UiIcon,
+        id: u32,
+    ) {
+        self.hit(HitKind::AppLauncherItem, id, rect.x, rect.y, rect.w, rect.h);
+        self.fill_rect(rect, 8.0, palette::ROW.with_alpha(0.72));
+        self.border_rect(rect, 8.0, palette::BORDER.with_alpha(0.58));
+        self.icon(
+            UiRect::new(rect.x + 12.0, rect.y + 15.0, 26.0, 26.0),
+            icon,
+            palette::ACCENT,
+        );
+        self.bounded_label(
+            rect.x + 50.0,
+            rect.y + 10.0,
+            (rect.w - 84.0).max(0.0),
+            title,
+            2.0,
+            palette::TEXT,
+        );
+        self.bounded_label(
+            rect.x + 50.0,
+            rect.y + 32.0,
+            (rect.w - 84.0).max(0.0),
+            detail,
+            2.0,
+            palette::MUTED,
+        );
+        self.icon(
+            UiRect::new(rect.x + rect.w - 30.0, rect.y + 20.0, 16.0, 16.0),
+            UiIcon::ChevronRight,
             palette::MUTED,
         );
     }
@@ -3259,6 +3472,8 @@ pub fn build_edgerun_workspace_shell_with_font(
     let mut ui = UiPainter {
         scene,
         atlas: Some(atlas),
+        #[cfg(not(feature = "fontdue-text"))]
+        _font: PhantomData,
     };
     ui.fill_rect(
         UiRect::new(0.0, 0.0, width.max(360.0), height.max(320.0)),
@@ -3268,13 +3483,94 @@ pub fn build_edgerun_workspace_shell_with_font(
     workspace.render(
         &mut ui,
         UiRect::new(8.0, 8.0, (width - 16.0).max(0.0), (height - 16.0).max(0.0)),
-        |ui, bounds, app| match app.id {
-            1 => render_workspace_chat_app(ui, bounds, app, chat_state),
-            2 => render_trust_manager_app(ui, bounds, app),
-            3 => render_storage_app(ui, bounds, app),
-            _ => render_generic_workspace_app(ui, bounds, app),
+        |ui, bounds, app| match app.kind {
+            UiAppKind::Chat => render_workspace_chat_app(ui, bounds, app, chat_state),
+            UiAppKind::TrustManager => render_trust_manager_app(ui, bounds, app),
+            UiAppKind::Storage => render_storage_app(ui, bounds, app),
+            UiAppKind::LockScreen => render_lock_screen_app(ui, bounds, app),
+            UiAppKind::CapabilityRequest => render_capability_request_app(ui, bounds, app),
+            UiAppKind::ComponentGallery => render_component_gallery_app(ui, bounds, app),
+            UiAppKind::Generic => render_generic_workspace_app(ui, bounds, app),
         },
     );
+}
+
+#[cfg(feature = "fontdue-text")]
+pub fn build_edgerun_workspace_with_shell_with_font(
+    scene: &mut GpuScene,
+    atlas: &FontAtlas,
+    width: f32,
+    height: f32,
+    workspace: &mut UiWorkspace,
+    shell: &mut UiShellState,
+    chat_state: &UnifiedChatState<'_>,
+) {
+    build_edgerun_workspace_shell_with_font(scene, atlas, width, height, workspace, chat_state);
+    let mut ui = UiPainter {
+        scene,
+        atlas: Some(atlas),
+        #[cfg(not(feature = "fontdue-text"))]
+        _font: PhantomData,
+    };
+    render_edgerun_shell_overlay(&mut ui, UiRect::new(0.0, 0.0, width, height), shell);
+}
+
+#[cfg(feature = "fontdue-text")]
+pub fn build_edgerun_fullscreen_app_with_font(
+    scene: &mut GpuScene,
+    atlas: &FontAtlas,
+    width: f32,
+    height: f32,
+    app: &mut UiAppSurface,
+    chat_state: &UnifiedChatState<'_>,
+) {
+    scene.clear = palette::BG;
+    scene.clear_rects();
+    app.full_screen = true;
+    app.bounds = None;
+    let mut ui = UiPainter {
+        scene,
+        atlas: Some(atlas),
+        #[cfg(not(feature = "fontdue-text"))]
+        _font: PhantomData,
+    };
+    let bounds = UiRect::new(0.0, 0.0, width.max(360.0), height.max(320.0));
+    ui.fill_rect(bounds, 0.0, palette::BG);
+    let clipped = ui
+        .scene
+        .push_clip(GpuClip::new(bounds.x, bounds.y, bounds.w, bounds.h));
+    if clipped {
+        app.bounds = Some(bounds);
+        match app.kind {
+            UiAppKind::Chat => render_workspace_chat_app(&mut ui, bounds, app, chat_state),
+            UiAppKind::TrustManager => render_trust_manager_app(&mut ui, bounds, app),
+            UiAppKind::Storage => render_storage_app(&mut ui, bounds, app),
+            UiAppKind::LockScreen => render_lock_screen_app(&mut ui, bounds, app),
+            UiAppKind::CapabilityRequest => render_capability_request_app(&mut ui, bounds, app),
+            UiAppKind::ComponentGallery => render_component_gallery_app(&mut ui, bounds, app),
+            UiAppKind::Generic => render_generic_workspace_app(&mut ui, bounds, app),
+        }
+        ui.scene.pop_clip();
+    }
+}
+
+#[cfg(feature = "fontdue-text")]
+pub fn build_edgerun_shell_overlay_with_font(
+    scene: &mut GpuScene,
+    atlas: &FontAtlas,
+    width: f32,
+    height: f32,
+    shell: &mut UiShellState,
+) {
+    scene.clear = Color4::rgba(0.0, 0.0, 0.0, 0.0);
+    scene.clear_rects();
+    let mut ui = UiPainter {
+        scene,
+        atlas: Some(atlas),
+        #[cfg(not(feature = "fontdue-text"))]
+        _font: PhantomData,
+    };
+    render_edgerun_shell_overlay(&mut ui, UiRect::new(0.0, 0.0, width, height), shell);
 }
 
 fn build_unified_chat_shell_impl(
@@ -3291,6 +3587,8 @@ fn build_unified_chat_shell_impl(
         scene,
         #[cfg(feature = "fontdue-text")]
         atlas,
+        #[cfg(not(feature = "fontdue-text"))]
+        _font: PhantomData,
     };
     let m = ChatShellMetrics::default();
     let w = width.max(360.0);
@@ -3718,52 +4016,243 @@ fn render_workspace_chat_app(
 }
 
 fn render_trust_manager_app(ui: &mut UiPainter<'_, '_>, bounds: UiRect, app: &UiAppSurface) {
-    let rows = [
-        control_row_node("Identity")
-            .detail("sealed Trust Container")
-            .value_text("local"),
-        control_row_node("Admission")
-            .detail("policy gate")
-            .value_text("not connected"),
-        control_row_node("Relay route")
-            .detail("identity-routed websocket")
-            .value_text("pending"),
-        control_row_node("Runtime proofs")
-            .detail("events recorded locally")
-            .value_text("0"),
-        control_row_node("Capability grants")
-            .detail("app-scoped permissions")
-            .control_button("open", 220, ButtonStyle::Ghost),
-    ];
     column("bg-panel border rounded-md p-4 gap-3")
         .child(header("Trust Manager").detail("proof dashboard"))
-        .children(rows)
+        .child(identity_card(
+            "Local identity",
+            "browser node",
+            "sealed Trust Container",
+            221,
+        ))
+        .child(route_path(
+            "Current route",
+            &["app", "device", "admission", "relay"],
+        ))
+        .child(capability_grant_row(
+            "EdgeRun Chat",
+            "decrypt message",
+            "pending",
+            220,
+        ))
+        .child(proof_event_row(
+            "Runtime events",
+            "proof log empty",
+            "0",
+            222,
+        ))
         .render_with_state(ui, bounds.inset(14.0, 14.0), Some(&app.runtime));
 }
 
 fn render_storage_app(ui: &mut UiPainter<'_, '_>, bounds: UiRect, app: &UiAppSurface) {
     column("bg-panel border rounded-md p-4 gap-3")
         .child(header("Storage").detail("verified local cache"))
-        .child(
-            metric("Cached package bytes", "unknown")
-                .detail("waiting for package store")
-                .progress(0.0),
-        )
-        .child(list_row_node(
+        .child(package_card(
             "Network apps",
             "run by hash, cache by policy",
+            "cache pending",
             301,
         ))
-        .child(list_row_node(
+        .child(contact_card(
             "Contact book",
             "IndexedDB projection pending",
             302,
         ))
-        .child(list_row_node(
+        .child(attachment_preview(
             "Message payloads",
             "encrypted payload objects",
             303,
         ))
+        .child(receipt_row(
+            "Cached package bytes",
+            "unknown",
+            "waiting",
+            304,
+        ))
+        .render_with_state(ui, bounds.inset(14.0, 14.0), Some(&app.runtime));
+}
+
+pub const LOCK_UNLOCK_BUTTON_ID: u32 = 900;
+pub const LOCK_UNLOCK_FIELD_ID: u32 = 901;
+pub const CAPABILITY_ALLOW_BUTTON_ID: u32 = 920;
+pub const CAPABILITY_DENY_BUTTON_ID: u32 = 921;
+pub const CAPABILITY_DETAILS_BUTTON_ID: u32 = 922;
+
+fn render_lock_screen_app(ui: &mut UiPainter<'_, '_>, bounds: UiRect, app: &UiAppSurface) {
+    ui.fill_rect(bounds, 0.0, palette::BG);
+    let panel_w = bounds.w.clamp(320.0, 520.0);
+    let panel_h = 320.0_f32.min((bounds.h - 32.0).max(220.0));
+    let panel = UiRect::new(
+        bounds.x + (bounds.w - panel_w) * 0.5,
+        bounds.y + (bounds.h - panel_h) * 0.5,
+        panel_w,
+        panel_h,
+    );
+
+    column("bg-panel border rounded-md p-5 gap-4")
+        .child(
+            row("row gap-3 items-center")
+                .child(icon(UiIcon::Lock).accent(palette::ACCENT).class("size-10"))
+                .child(
+                    column("gap-1 flex-1")
+                        .child(text("Trust Container").class("text-text truncate"))
+                        .child(text("Unlock required").class("text-muted truncate")),
+                ),
+        )
+        .child(
+            text("Your identity, contacts, route policy, app secrets, and decrypt capability are sealed locally.")
+                .class("text-muted"),
+        )
+        .child(checkbox("Keep verified cache available after unlock", true, 902))
+        .child(
+            field_node("Unlock secret", "Password or passkey ceremony")
+                .hit_id(LOCK_UNLOCK_FIELD_ID)
+                .class("h-24"),
+        )
+        .child(
+            row("row gap-3")
+                .child(button("Unlock", LOCK_UNLOCK_BUTTON_ID, ButtonStyle::Primary).class("h-10 flex-1"))
+                .child(button("Offline", LOCK_UNLOCK_BUTTON_ID + 1, ButtonStyle::Ghost).class("h-10 w-28")),
+        )
+        .render_with_state(ui, panel, Some(&app.runtime));
+}
+
+fn render_capability_request_app(ui: &mut UiPainter<'_, '_>, bounds: UiRect, app: &UiAppSurface) {
+    ui.fill_rect(bounds, 0.0, palette::BG);
+    let panel_w = bounds.w.clamp(340.0, 720.0);
+    let panel_h = 430.0_f32.min((bounds.h - 32.0).max(300.0));
+    let panel = UiRect::new(
+        bounds.x + (bounds.w - panel_w) * 0.5,
+        bounds.y + (bounds.h - panel_h) * 0.5,
+        panel_w,
+        panel_h,
+    );
+
+    column("bg-panel border rounded-md p-5 gap-4")
+        .child(
+            row("row gap-3 items-center")
+                .child(
+                    icon(UiIcon::Shield)
+                        .accent(palette::VIOLET)
+                        .class("size-10"),
+                )
+                .child(
+                    column("gap-1 flex-1")
+                        .child(text("Capability request").class("text-text truncate"))
+                        .child(text("Review before signing").class("text-muted truncate")),
+                )
+                .child(badge("admission", palette::ACCENT)),
+        )
+        .child(
+            grid("grid grid-cols-2 gap-3", 2)
+                .child(
+                    metric("Requesting app", "EdgeRun Chat")
+                        .detail("session scoped")
+                        .class("h-28"),
+                )
+                .child(
+                    metric("Capability", "Decrypt message")
+                        .detail("Trust Container")
+                        .class("h-28"),
+                ),
+        )
+        .child(
+            column("bg-row border rounded-md p-3 gap-2")
+                .child(capability_grant_row(
+                    "EdgeRun Chat",
+                    "decrypt message",
+                    "single use",
+                    923,
+                ))
+                .child(route_path("Admission route", &["chat", "device", "trust"])),
+        )
+        .child(
+            row("row gap-3")
+                .child(
+                    button("Deny", CAPABILITY_DENY_BUTTON_ID, ButtonStyle::Danger)
+                        .class("h-10 w-28"),
+                )
+                .child(
+                    button(
+                        "Details",
+                        CAPABILITY_DETAILS_BUTTON_ID,
+                        ButtonStyle::Secondary,
+                    )
+                    .class("h-10 w-32"),
+                )
+                .child(
+                    button("Allow", CAPABILITY_ALLOW_BUTTON_ID, ButtonStyle::Primary)
+                        .class("h-10 flex-1"),
+                ),
+        )
+        .render_with_state(ui, panel, Some(&app.runtime));
+}
+
+fn render_component_gallery_app(ui: &mut UiPainter<'_, '_>, bounds: UiRect, app: &UiAppSurface) {
+    scroll_area("bg-panel border rounded-md p-4 gap-4", 0.0)
+        .scroll_id(760)
+        .children([
+            header("Component Gallery").detail("shared Rust GPU primitives"),
+            section("Foundation", "inputs, buttons, icons"),
+            row("gap-2 items-center")
+                .child(button("Run", 761, ButtonStyle::Primary).class("h-8 w-24"))
+                .child(
+                    button("Waiting", 762, ButtonStyle::Secondary)
+                        .class("h-8 w-28")
+                        .loading(true),
+                )
+                .child(icon_button(UiIcon::Settings, 763).class("size-8"))
+                .child(icon(UiIcon::Shield).accent(palette::VIOLET).class("size-8")),
+            row("gap-4 items-center")
+                .child(checkbox("Verify cache", true, 764).class("h-8 w-44"))
+                .child(radio("DAO admission", true, 765).class("h-8 w-44"))
+                .child(select_node("Route", "relay://nodes", 766).class("h-14 w-56")),
+            section("Feedback", "system surfaces"),
+            row("gap-3")
+                .child(
+                    toast("Package hash verified", UiIcon::Check, palette::GREEN)
+                        .class("h-11 flex-1"),
+                )
+                .child(progress_ring(0.64, palette::ACCENT).class("size-11")),
+            empty_state(
+                "No proofs yet",
+                "Runtime events will appear after signed work is admitted.",
+                UiIcon::Trust,
+            )
+            .class("h-40"),
+            section("Data", "tables and navigation"),
+            breadcrumb(&["Trust", "Routes", "Relay"], 2, 770).class("h-8"),
+            command_palette("Search contacts, packages, routes", 780).class("h-11"),
+            table_labels(
+                &["Object", "Policy", "State"],
+                &[
+                    &["chat.app", "policy:run", "cached"],
+                    &["relay path", "admission", "active"],
+                    &["receipt", "payable", "pending"],
+                ],
+                790,
+            )
+            .class("h-40"),
+            section("EdgeRun", "domain components"),
+            grid_auto("grid grid-cols-1 md:grid-cols-2 gap-3")
+                .child(identity_card(
+                    "Local identity",
+                    "browser node",
+                    "policy:personal",
+                    800,
+                ))
+                .child(package_card(
+                    "EdgeRun Chat",
+                    "run by hash",
+                    "b3:message-ui",
+                    801,
+                )),
+            contact_card("Codex Client", "local app identity", 802),
+            thread_row("Alice", "encrypted message available", true, 803),
+            capability_grant_row("Chat", "decrypt message", "single use", 804),
+            proof_event_row("Relay delivery", "b3:relay-proof", "accepted", 805),
+            route_path("Message route", &["app", "device", "admission", "relay"]),
+            receipt_row("Relay delivery", "$0.0004", "pending", 806),
+        ])
         .render_with_state(ui, bounds.inset(14.0, 14.0), Some(&app.runtime));
 }
 
@@ -4408,6 +4897,36 @@ fn intrinsic_width(child: &UiNode) -> f32 {
         }
         UiNodeKind::Button { label, .. } => (label.chars().count() as f32 * 8.0 + 28.0).max(44.0),
         UiNodeKind::IconButton { .. } => 34.0,
+        UiNodeKind::Icon { .. } => 24.0,
+        UiNodeKind::Checkbox { label, .. } | UiNodeKind::Radio { label, .. } => {
+            (label.chars().count() as f32 * 8.0 + 40.0).clamp(80.0, 260.0)
+        }
+        UiNodeKind::Select { .. } => child.style.width.unwrap_or(220.0),
+        UiNodeKind::Tooltip { text } => {
+            (text.chars().count() as f32 * 8.0 + 22.0).clamp(80.0, 260.0)
+        }
+        UiNodeKind::Dialog { .. } => child.style.width.unwrap_or(420.0),
+        UiNodeKind::Toast { message, .. } => {
+            (message.chars().count() as f32 * 8.0 + 62.0).clamp(180.0, 420.0)
+        }
+        UiNodeKind::EmptyState { .. } => child.style.width.unwrap_or(280.0),
+        UiNodeKind::Skeleton => child.style.width.unwrap_or(160.0),
+        UiNodeKind::ProgressRing { .. } => child.style.width.unwrap_or(48.0),
+        UiNodeKind::Table { .. } => child.style.width.unwrap_or(420.0),
+        UiNodeKind::Breadcrumb { .. } => child.style.width.unwrap_or(360.0),
+        UiNodeKind::CommandPalette { .. } => child.style.width.unwrap_or(320.0),
+        UiNodeKind::TreeItem { .. } => child.style.width.unwrap_or(260.0),
+        UiNodeKind::Section { .. } => child.style.width.unwrap_or(260.0),
+        UiNodeKind::IdentityCard { .. }
+        | UiNodeKind::PackageCard { .. }
+        | UiNodeKind::RoutePath { .. } => child.style.width.unwrap_or(280.0),
+        UiNodeKind::ContactCard { .. }
+        | UiNodeKind::ThreadRow { .. }
+        | UiNodeKind::AttachmentPreview { .. }
+        | UiNodeKind::CapabilityGrantRow { .. }
+        | UiNodeKind::ProofEventRow { .. }
+        | UiNodeKind::ReceiptRow { .. }
+        | UiNodeKind::AppLauncherItem { .. } => child.style.width.unwrap_or(320.0),
         UiNodeKind::Toggle { .. } => 46.0,
         UiNodeKind::Avatar { .. } => 36.0,
         UiNodeKind::ProgressBar { .. } => 120.0,
@@ -4430,11 +4949,38 @@ fn intrinsic_width(child: &UiNode) -> f32 {
 }
 
 fn intrinsic_height(child: &UiNode) -> f32 {
-    match child.kind {
+    match &child.kind {
         UiNodeKind::Text(_) => 20.0,
         UiNodeKind::Badge { .. } => 22.0,
         UiNodeKind::Button { .. } => 34.0,
         UiNodeKind::IconButton { .. } => 34.0,
+        UiNodeKind::Icon { .. } => 24.0,
+        UiNodeKind::Checkbox { .. } | UiNodeKind::Radio { .. } => 34.0,
+        UiNodeKind::Select { .. } => 58.0,
+        UiNodeKind::Tooltip { .. } => 34.0,
+        UiNodeKind::Dialog { .. } => child.style.height.unwrap_or(220.0),
+        UiNodeKind::Toast { .. } => 44.0,
+        UiNodeKind::EmptyState { .. } => child.style.height.unwrap_or(170.0),
+        UiNodeKind::Skeleton => child.style.height.unwrap_or(22.0),
+        UiNodeKind::ProgressRing { .. } => child.style.height.unwrap_or(48.0),
+        UiNodeKind::Table { rows, .. } => child
+            .style
+            .height
+            .unwrap_or(48.0 + rows.len() as f32 * 34.0),
+        UiNodeKind::Breadcrumb { .. } => 32.0,
+        UiNodeKind::CommandPalette { .. } => 46.0,
+        UiNodeKind::TreeItem { .. } => 36.0,
+        UiNodeKind::Section { .. } => 34.0,
+        UiNodeKind::IdentityCard { .. } | UiNodeKind::PackageCard { .. } => {
+            child.style.height.unwrap_or(112.0)
+        }
+        UiNodeKind::RoutePath { .. } => child.style.height.unwrap_or(86.0),
+        UiNodeKind::ContactCard { .. } | UiNodeKind::AttachmentPreview { .. } => 64.0,
+        UiNodeKind::ThreadRow { .. }
+        | UiNodeKind::CapabilityGrantRow { .. }
+        | UiNodeKind::ProofEventRow { .. }
+        | UiNodeKind::ReceiptRow { .. }
+        | UiNodeKind::AppLauncherItem { .. } => 58.0,
         UiNodeKind::Toggle { .. } => 24.0,
         UiNodeKind::Avatar { .. } => 36.0,
         UiNodeKind::ProgressBar { .. } => 8.0,
@@ -4495,22 +5041,30 @@ mod tests {
         }
 
         assert!(scene.rects().len() > 20);
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::Tab && hit.id == 81));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::ListRow && hit.id == 83));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::Toggle && hit.id == 84));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::ListRow && hit.id == 85));
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Tab && hit.id == 81)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::ListRow && hit.id == 83)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Toggle && hit.id == 84)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::ListRow && hit.id == 85)
+        );
     }
 
     #[test]
@@ -4556,7 +5110,7 @@ mod tests {
                             avatar_node("EdgeRun", palette::ACCENT).online(true),
                             text("Components").class("flex-1 text-text truncate"),
                             badge("rust", palette::ACCENT),
-                            icon_button(">", 69).class("size-8")
+                            icon_button(UiIcon::ChevronRight, 69).class("size-8")
                         ]
                     ),
                     metric("Storage", "128 MB").detail("verified cache"),
@@ -4569,18 +5123,85 @@ mod tests {
         }
 
         assert!(scene.rects().len() > 25);
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::Toggle && hit.id == 68));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::Button && hit.id == 69));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::Button && hit.id == 70));
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Toggle && hit.id == 68)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Button && hit.id == 69)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Button && hit.id == 70)
+        );
+    }
+
+    #[test]
+    fn disabled_and_loading_nodes_suppress_interaction_hits() {
+        let mut scene = GpuScene::new(palette::BG);
+        {
+            let mut ui = UiPainter::new(&mut scene);
+            column("gap-2")
+                .children([
+                    button("Disabled", 71, ButtonStyle::Secondary)
+                        .class("h-8")
+                        .disabled(true),
+                    button("Loading", 72, ButtonStyle::Primary)
+                        .class("h-8")
+                        .loading(true),
+                    button("Ready", 73, ButtonStyle::Primary).class("h-8"),
+                ])
+                .render(&mut ui, UiRect::new(0.0, 0.0, 240.0, 130.0));
+        }
+
+        assert!(!scene.hits().iter().any(|hit| hit.id == 71));
+        assert!(!scene.hits().iter().any(|hit| hit.id == 72));
+        assert!(scene.hits().iter().any(|hit| hit.id == 73));
+        assert!(scene.rects().len() > 10);
+    }
+
+    #[test]
+    fn keyboard_focus_cycles_and_activates_controls() {
+        let mut scene = GpuScene::new(palette::BG);
+        {
+            let mut ui = UiPainter::new(&mut scene);
+            column("gap-2")
+                .children([
+                    button("Run", 81, ButtonStyle::Primary).class("h-8"),
+                    checkbox("Cache verified bytes", false, 82).class("h-8"),
+                    field_node("Filter", "").hit_id(83).class("h-16"),
+                ])
+                .render(&mut ui, UiRect::new(0.0, 0.0, 260.0, 150.0));
+        }
+
+        let mut runtime = UiRuntimeState::default();
+        assert!(matches!(
+            runtime.focus_first(&scene),
+            UiAction::Focused(Some(hit)) if hit.kind == HitKind::Button && hit.id == 81
+        ));
+        assert!(matches!(
+            runtime.handle_event(&scene, UiEvent::KeyDown { key: UiKey::Enter }),
+            UiAction::Activated(hit) if hit.kind == HitKind::Button && hit.id == 81
+        ));
+        assert!(matches!(
+            runtime.handle_event(&scene, UiEvent::KeyDown { key: UiKey::Tab }),
+            UiAction::Focused(Some(hit)) if hit.kind == HitKind::Checkbox && hit.id == 82
+        ));
+        assert!(matches!(
+            runtime.handle_event(&scene, UiEvent::KeyDown { key: UiKey::Enter }),
+            UiAction::Toggled { id: 82, on: true }
+        ));
+        assert!(matches!(
+            runtime.handle_event(&scene, UiEvent::KeyDown { key: UiKey::Tab }),
+            UiAction::Focused(Some(hit)) if hit.kind == HitKind::Input && hit.id == 83
+        ));
     }
 
     #[test]
@@ -4608,23 +5229,31 @@ mod tests {
             .filter(|hit| hit.kind == HitKind::ListRow)
             .count();
         assert!((1..10).contains(&visible_rows));
-        assert!(!scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::ListRow && hit.id == 100));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::ListRow && hit.id == 109));
-        assert!(scene
-            .hits()
-            .iter()
-            .filter(|hit| hit.kind == HitKind::ListRow)
-            .all(|hit| hit.y >= 8.0 && hit.y + hit.h <= 152.0));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::Scrollbar && hit.id == 99));
+        assert!(
+            !scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::ListRow && hit.id == 100)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::ListRow && hit.id == 109)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .filter(|hit| hit.kind == HitKind::ListRow)
+                .all(|hit| hit.y >= 8.0 && hit.y + hit.h <= 152.0)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Scrollbar && hit.id == 99)
+        );
     }
 
     #[test]
@@ -4733,14 +5362,18 @@ mod tests {
                 .render_with_state(&mut ui, UiRect::new(0.0, 0.0, 320.0, 150.0), Some(&runtime));
         }
 
-        assert!(!scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::ListRow && hit.id == 130));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::ListRow && hit.id == 137));
+        assert!(
+            !scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::ListRow && hit.id == 130)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::ListRow && hit.id == 137)
+        );
     }
 
     #[test]
@@ -4782,19 +5415,25 @@ mod tests {
         let second = workspace.app(2).and_then(UiAppSurface::bounds).unwrap();
         assert!(first.x + first.w <= second.x);
         assert!(first.h <= 360.0 - WORKSPACE_CHROME_H);
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::WorkspaceTab && hit.id == 1));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::WorkspaceClose && hit.id == 2));
-        assert!(scene
-            .hits()
-            .iter()
-            .filter(|hit| hit.kind == HitKind::Button)
-            .all(|hit| hit.y >= WORKSPACE_CHROME_H));
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::WorkspaceTab && hit.id == 1)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::WorkspaceClose && hit.id == 2)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .filter(|hit| hit.kind == HitKind::Button)
+                .all(|hit| hit.y >= WORKSPACE_CHROME_H)
+        );
     }
 
     #[test]
@@ -4836,9 +5475,170 @@ mod tests {
                 action: UiAction::Toggled { id: 55, on: true }
             }
         );
-        assert!(workspace
-            .app(7)
-            .is_some_and(|app| app.runtime.toggle_value(55, false)));
+        assert!(
+            workspace
+                .app(7)
+                .is_some_and(|app| app.runtime.toggle_value(55, false))
+        );
+    }
+
+    #[test]
+    fn shell_overlay_toggles_launcher_and_opens_apps() {
+        let mut shell = UiShellState::default();
+        let mut scene = GpuScene::new(palette::BG);
+        {
+            let mut ui = UiPainter::new(&mut scene);
+            render_edgerun_shell_overlay(&mut ui, UiRect::new(0.0, 0.0, 900.0, 600.0), &mut shell);
+        }
+        let launcher_hit = scene
+            .hits()
+            .iter()
+            .find(|hit| hit.kind == HitKind::ShellLauncher)
+            .copied()
+            .expect("shell launcher hit");
+        let action = shell.handle_event(
+            &scene,
+            UiEvent::PointerDown {
+                x: launcher_hit.x + 4.0,
+                y: launcher_hit.y + 4.0,
+            },
+        );
+        assert_eq!(action, UiShellAction::ToggledLauncher(true));
+        assert!(shell.launcher_open);
+
+        scene.clear_rects();
+        {
+            let mut ui = UiPainter::new(&mut scene);
+            render_edgerun_shell_overlay(&mut ui, UiRect::new(0.0, 0.0, 900.0, 600.0), &mut shell);
+        }
+        let gallery_hit = scene
+            .hits()
+            .iter()
+            .find(|hit| hit.id == LAUNCH_COMPONENT_GALLERY_ITEM_ID)
+            .copied()
+            .expect("gallery hit");
+        let action = shell.handle_event(
+            &scene,
+            UiEvent::PointerDown {
+                x: gallery_hit.x + 4.0,
+                y: gallery_hit.y + 4.0,
+            },
+        );
+        assert_eq!(
+            action,
+            UiShellAction::OpenApp {
+                app_id: COMPONENT_GALLERY_APP_ID,
+                kind: UiAppKind::ComponentGallery,
+            }
+        );
+        assert!(!shell.launcher_open);
+    }
+
+    #[test]
+    fn full_screen_system_app_replaces_workspace_chrome() {
+        let mut workspace = UiWorkspace::full_screen(UiAppSurface::lock_screen(10));
+        let mut scene = GpuScene::new(palette::BG);
+        {
+            let mut ui = UiPainter::new(&mut scene);
+            workspace.render(
+                &mut ui,
+                UiRect::new(0.0, 0.0, 640.0, 360.0),
+                |ui, bounds, app| {
+                    ui.fill_rect(bounds, 0.0, palette::PANEL);
+                    ui.hit(
+                        HitKind::Button,
+                        app.id + 100,
+                        bounds.x,
+                        bounds.y,
+                        bounds.w,
+                        bounds.h,
+                    );
+                },
+            );
+        }
+
+        let bounds = workspace.app(10).and_then(UiAppSurface::bounds).unwrap();
+        assert_eq!(bounds, UiRect::new(0.0, 0.0, 640.0, 360.0));
+        assert!(
+            !scene
+                .hits()
+                .iter()
+                .any(|hit| matches!(hit.kind, HitKind::WorkspaceTab | HitKind::WorkspaceClose))
+        );
+    }
+
+    #[test]
+    fn lock_and_capability_apps_render_expected_actions() {
+        let mut scene = GpuScene::new(palette::BG);
+        {
+            let mut ui = UiPainter::new(&mut scene);
+            let app = UiAppSurface::lock_screen(10);
+            render_lock_screen_app(&mut ui, UiRect::new(0.0, 0.0, 800.0, 520.0), &app);
+        }
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Button && hit.id == LOCK_UNLOCK_BUTTON_ID)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Input && hit.id == LOCK_UNLOCK_FIELD_ID)
+        );
+
+        scene.clear_rects();
+        {
+            let mut ui = UiPainter::new(&mut scene);
+            let app = UiAppSurface::capability_request(11);
+            render_capability_request_app(&mut ui, UiRect::new(0.0, 0.0, 900.0, 620.0), &app);
+        }
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Button && hit.id == CAPABILITY_ALLOW_BUTTON_ID)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Button && hit.id == CAPABILITY_DENY_BUTTON_ID)
+        );
+    }
+
+    #[test]
+    fn component_gallery_renders_reusable_primitives() {
+        let mut scene = GpuScene::new(palette::BG);
+        let app = UiAppSurface::component_gallery(12);
+        {
+            let mut ui = UiPainter::new(&mut scene);
+            render_component_gallery_app(&mut ui, UiRect::new(0.0, 0.0, 900.0, 1100.0), &app);
+        }
+
+        assert!(scene.rects().len() > 80);
+        assert!(scene.hits().iter().any(|hit| hit.id == 761));
+        assert!(!scene.hits().iter().any(|hit| hit.id == 762));
+        assert!(scene.hits().iter().any(|hit| hit.id == 780));
+        assert!(scene.hits().iter().any(|hit| hit.id == 800));
+    }
+
+    #[cfg(feature = "tabler-svg-atlas")]
+    #[test]
+    fn canonical_icons_resolve_tabler_svg_atlas_rects() {
+        let atlas = tabler_svg_icon_atlas();
+        assert_eq!(
+            atlas.width,
+            crate::tabler_svg_atlas_generated::TABLER_SVG_ATLAS_W
+        );
+        assert_eq!(atlas.alpha.len(), (atlas.width * atlas.height) as usize);
+        let rect = UiIcon::Trust
+            .tabler_svg_atlas_rect()
+            .expect("trust icon atlas rect");
+        assert_eq!(rect.name, "shield-check");
+        assert!(rect.u0 >= 0.0 && rect.u1 <= 1.0 && rect.u0 < rect.u1);
+        assert!(rect.v0 >= 0.0 && rect.v1 <= 1.0 && rect.v0 < rect.v1);
     }
 
     #[test]
@@ -4957,11 +5757,218 @@ mod tests {
         hidden = hidden.child(text("second"));
         assert_eq!(hidden.children.len(), 2);
     }
-}
 
-#[cfg(feature = "fontdue-text")]
-fn ascii_chars() -> Vec<char> {
-    (32u8..=126u8).map(char::from).collect()
+    #[test]
+    fn canonical_icons_map_to_replaceable_provider_names() {
+        assert_eq!(UiIconSet::default(), UiIconSet::Tabler);
+        assert_eq!(UiIcon::Trust.name(), "trust");
+        assert_eq!(
+            UiIcon::Trust.provider_name(UiIconSet::Tabler),
+            "shield-check"
+        );
+        assert_eq!(
+            UiIcon::Trust.provider_name(UiIconSet::Lucide),
+            "shield-check"
+        );
+        assert_eq!(
+            UiIcon::Terminal.provider_name(UiIconSet::Tabler),
+            "terminal-2"
+        );
+        assert_eq!(
+            UiIcon::Terminal.provider_name(UiIconSet::Lucide),
+            "square-terminal"
+        );
+    }
+
+    #[test]
+    fn canonical_icon_node_renders_gpu_geometry() {
+        let mut scene = GpuScene::new(palette::BG);
+        {
+            let mut ui = UiPainter::new(&mut scene);
+            row("row gap-2 items-center")
+                .child(icon(UiIcon::Lock).accent(palette::ACCENT).class("size-8"))
+                .child(icon_button(UiIcon::X, 91).class("size-8"))
+                .render(&mut ui, UiRect::new(0.0, 0.0, 120.0, 48.0));
+        }
+
+        assert!(scene.rects().len() > 8);
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Button && hit.id == 91)
+        );
+    }
+
+    #[test]
+    fn foundation_form_controls_render_and_emit_state() {
+        let mut scene = GpuScene::new(palette::BG);
+        {
+            let mut ui = UiPainter::new(&mut scene);
+            column("bg-panel border rounded-md p-3 gap-2")
+                .child(checkbox("Cache verified bytes", false, 201))
+                .child(radio("Personal admission", false, 202))
+                .child(select_node("Relay endpoint", "assigned by admission", 203))
+                .child(tooltip("Only the Trust Container can decrypt."))
+                .render(&mut ui, UiRect::new(0.0, 0.0, 360.0, 190.0));
+        }
+
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Checkbox && hit.id == 201)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Radio && hit.id == 202)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Select && hit.id == 203)
+        );
+
+        let mut runtime = UiRuntimeState::default();
+        let down = runtime.handle_event(&scene, UiEvent::PointerDown { x: 18.0, y: 18.0 });
+        assert!(matches!(down, UiAction::Activated(hit) if hit.kind == HitKind::Checkbox));
+        assert_eq!(
+            runtime.handle_event(&scene, UiEvent::PointerUp { x: 18.0, y: 18.0 }),
+            UiAction::Toggled { id: 201, on: true }
+        );
+
+        let _ = runtime.handle_event(&scene, UiEvent::PointerDown { x: 18.0, y: 54.0 });
+        assert_eq!(
+            runtime.handle_event(&scene, UiEvent::PointerUp { x: 18.0, y: 54.0 }),
+            UiAction::Toggled { id: 202, on: true }
+        );
+    }
+
+    #[test]
+    fn feedback_components_render_without_custom_surfaces() {
+        let mut scene = GpuScene::new(palette::BG);
+        {
+            let mut ui = UiPainter::new(&mut scene);
+            grid("grid grid-cols-2 bg-bg p-3 gap-3", 2)
+                .child(
+                    dialog(
+                        "Capability request",
+                        "Review the admitted action before signing.",
+                        UiIcon::Shield,
+                    )
+                    .class("h-44"),
+                )
+                .child(empty_state(
+                    "No proofs yet",
+                    "Runtime events will appear here.",
+                    UiIcon::File,
+                ))
+                .child(toast("Route admitted", UiIcon::Check, palette::GREEN).span(2))
+                .child(skeleton().class("h-6"))
+                .child(progress_ring(0.64, palette::ACCENT).class("size-12"))
+                .render(&mut ui, UiRect::new(0.0, 0.0, 720.0, 420.0));
+        }
+
+        assert!(scene.rects().len() > 40);
+        assert!(scene.hits().is_empty());
+    }
+
+    #[test]
+    fn data_navigation_components_render_semantic_hits() {
+        let rows: &[&[&str]] = &[
+            &["admission", "policy", "ready"],
+            &["relay", "route", "pending"],
+        ];
+        let mut scene = GpuScene::new(palette::BG);
+        {
+            let mut ui = UiPainter::new(&mut scene);
+            column("bg-bg p-3 gap-3")
+                .child(breadcrumb(&["Trust", "Routes", "Relay"], 2, 300))
+                .child(command_palette("Search commands, apps, proofs...", 310))
+                .child(table_labels(&["Node", "Kind", "State"], rows, 320).class("h-32"))
+                .child(section("Node instances", "identity + role + policy"))
+                .child(tree_item(
+                    "admission:personal",
+                    "local policy",
+                    0,
+                    true,
+                    330,
+                ))
+                .child(tree_item("relay:nodes", "websocket", 1, false, 331))
+                .render(&mut ui, UiRect::new(0.0, 0.0, 640.0, 420.0));
+        }
+
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Breadcrumb && hit.id == 302)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Input && hit.id == 310)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::ListRow && hit.id == 320)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::TreeItem && hit.id == 331)
+        );
+    }
+
+    #[test]
+    fn edgerun_domain_components_render_semantic_rows() {
+        let mut scene = GpuScene::new(palette::BG);
+        {
+            let mut ui = UiPainter::new(&mut scene);
+            grid("grid grid-cols-2 bg-bg p-3 gap-3", 2)
+                .child(identity_card("Ken", "browser-node", "personal policy", 400))
+                .child(package_card("Chat", "free-run", "b3f2...a91", 401))
+                .child(route_path("Admitted route", &["app", "device", "relay", "user"]).span(2))
+                .child(contact_card("Codex client", "app contact", 402))
+                .child(thread_row("Alice", "Encrypted message", true, 403))
+                .child(attachment_preview("photo.jpg", "image payload", 404))
+                .child(capability_grant_row(
+                    "Chat",
+                    "decrypt message",
+                    "single use",
+                    405,
+                ))
+                .child(proof_event_row("Package verified", "hash:b3f2", "ok", 406))
+                .child(receipt_row("Relay delivery", "+$0.01", "settled", 407))
+                .render(&mut ui, UiRect::new(0.0, 0.0, 760.0, 620.0));
+        }
+
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::ListRow && hit.id == 400)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::ListRow && hit.id == 406)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::TransactionRow && hit.id == 407)
+        );
+    }
 }
 
 fn soft_card(scene: &mut GpuScene, x: f32, y: f32, w: f32, h: f32, radius: f32, color: Color4) {
@@ -4980,872 +5987,4 @@ fn soft_card(scene: &mut GpuScene, x: f32, y: f32, w: f32, h: f32, radius: f32, 
 fn panel(scene: &mut GpuScene, x: f32, y: f32, w: f32, h: f32, radius: f32, color: Color4) {
     scene.push_rect(GpuRect::fill(x, y, w, h, radius, color));
     scene.push_rect(GpuRect::border(x, y, w, h, radius, palette::BORDER));
-}
-
-pub mod palette {
-    use super::Color4;
-
-    pub const BG: Color4 = Color4::from_color(crate::EDGERUN_DARK.bg);
-    pub const SIDEBAR: Color4 = Color4::from_color_alpha(crate::EDGERUN_DARK.panel, 0.98);
-    pub const TOPBAR: Color4 = Color4::from_color_alpha(crate::EDGERUN_DARK.panel, 0.96);
-    pub const ROW: Color4 = Color4::from_color_alpha(crate::EDGERUN_DARK.panel_2, 0.74);
-    pub const ACTIVE_ROW: Color4 = Color4::from_color_alpha(crate::EDGERUN_DARK.accent, 0.42);
-    pub const PANEL: Color4 = Color4::from_color_alpha(crate::EDGERUN_DARK.panel, 0.94);
-    pub const ASSISTANT: Color4 = Color4::from_color_alpha(crate::EDGERUN_DARK.panel_2, 0.96);
-    pub const USER: Color4 = Color4::from_color_alpha(crate::EDGERUN_DARK.accent, 0.34);
-    pub const COMPOSER: Color4 = Color4::from_color_alpha(crate::EDGERUN_DARK.panel, 0.98);
-    pub const BORDER: Color4 = Color4::from_color_alpha(crate::EDGERUN_DARK.border, 0.48);
-    pub const ACCENT: Color4 = Color4::from_color(crate::EDGERUN_DARK.accent);
-    pub const GREEN: Color4 = Color4::from_color(crate::TAILWIND.emerald_500);
-    pub const VIOLET: Color4 = Color4::from_color(crate::TAILWIND.violet_500);
-    pub const AMBER: Color4 = Color4::from_color(crate::TAILWIND.amber_500);
-    pub const DANGER: Color4 = Color4::from_color(crate::EDGERUN_DARK.danger);
-    pub const ACCENT_TEXT: Color4 = Color4::from_color(crate::EDGERUN_DARK.accent_text);
-    pub const TEXT: Color4 = Color4::from_color(crate::EDGERUN_DARK.text);
-    pub const MUTED: Color4 = Color4::from_color(crate::EDGERUN_DARK.muted);
-}
-
-#[derive(Clone, Copy, Debug)]
-struct SchemePalette {
-    bg: Color4,
-    sidebar: Color4,
-    topbar: Color4,
-    row: Color4,
-    active_row: Color4,
-    panel: Color4,
-    assistant: Color4,
-    user: Color4,
-    composer: Color4,
-    border: Color4,
-    accent: Color4,
-    green: Color4,
-    violet: Color4,
-    amber: Color4,
-    danger: Color4,
-    accent_text: Color4,
-    text: Color4,
-    muted: Color4,
-}
-
-impl SchemePalette {
-    const fn dark() -> Self {
-        Self {
-            bg: palette::BG,
-            sidebar: palette::SIDEBAR,
-            topbar: palette::TOPBAR,
-            row: palette::ROW,
-            active_row: palette::ACTIVE_ROW,
-            panel: palette::PANEL,
-            assistant: palette::ASSISTANT,
-            user: palette::USER,
-            composer: palette::COMPOSER,
-            border: palette::BORDER,
-            accent: palette::ACCENT,
-            green: palette::GREEN,
-            violet: palette::VIOLET,
-            amber: palette::AMBER,
-            danger: palette::DANGER,
-            accent_text: palette::ACCENT_TEXT,
-            text: palette::TEXT,
-            muted: palette::MUTED,
-        }
-    }
-
-    const fn light() -> Self {
-        Self {
-            bg: Color4::rgba(0.972, 0.980, 0.988, 1.0),
-            sidebar: Color4::rgba(1.000, 1.000, 1.000, 0.98),
-            topbar: Color4::rgba(1.000, 1.000, 1.000, 0.96),
-            row: Color4::rgba(0.945, 0.960, 0.975, 0.90),
-            active_row: Color4::rgba(0.055, 0.455, 0.565, 0.16),
-            panel: Color4::rgba(1.000, 1.000, 1.000, 0.96),
-            assistant: Color4::rgba(0.945, 0.960, 0.975, 0.96),
-            user: Color4::rgba(0.055, 0.455, 0.565, 0.16),
-            composer: Color4::rgba(1.000, 1.000, 1.000, 0.98),
-            border: Color4::rgba(0.580, 0.640, 0.720, 0.42),
-            accent: Color4::rgba(0.035, 0.455, 0.565, 1.0),
-            green: Color4::rgba(0.020, 0.520, 0.370, 1.0),
-            violet: Color4::rgba(0.430, 0.250, 0.760, 1.0),
-            amber: Color4::rgba(0.710, 0.390, 0.000, 1.0),
-            danger: Color4::rgba(0.760, 0.070, 0.235, 1.0),
-            accent_text: Color4::rgba(0.960, 0.990, 1.000, 1.0),
-            text: Color4::rgba(0.060, 0.090, 0.160, 1.0),
-            muted: Color4::rgba(0.390, 0.455, 0.550, 1.0),
-        }
-    }
-
-    const fn terminal() -> Self {
-        Self {
-            bg: Color4::rgba(0.000, 0.050, 0.035, 1.0),
-            sidebar: Color4::rgba(0.000, 0.075, 0.055, 0.98),
-            topbar: Color4::rgba(0.000, 0.070, 0.050, 0.96),
-            row: Color4::rgba(0.000, 0.135, 0.095, 0.74),
-            active_row: Color4::rgba(0.160, 0.980, 0.620, 0.22),
-            panel: Color4::rgba(0.000, 0.095, 0.070, 0.94),
-            assistant: Color4::rgba(0.000, 0.120, 0.085, 0.96),
-            user: Color4::rgba(0.160, 0.980, 0.620, 0.18),
-            composer: Color4::rgba(0.000, 0.100, 0.075, 0.98),
-            border: Color4::rgba(0.160, 0.980, 0.620, 0.36),
-            accent: Color4::rgba(0.160, 0.980, 0.620, 1.0),
-            green: Color4::rgba(0.160, 0.980, 0.620, 1.0),
-            violet: Color4::rgba(0.500, 0.840, 1.000, 1.0),
-            amber: Color4::rgba(0.980, 0.780, 0.260, 1.0),
-            danger: Color4::rgba(1.000, 0.330, 0.430, 1.0),
-            accent_text: Color4::rgba(0.000, 0.050, 0.035, 1.0),
-            text: Color4::rgba(0.800, 1.000, 0.890, 1.0),
-            muted: Color4::rgba(0.430, 0.760, 0.600, 1.0),
-        }
-    }
-}
-
-fn remap_scheme_color(color: Color4, from: SchemePalette, to: SchemePalette) -> Color4 {
-    let pairs = [
-        (from.bg, to.bg),
-        (from.sidebar, to.sidebar),
-        (from.topbar, to.topbar),
-        (from.row, to.row),
-        (from.active_row, to.active_row),
-        (from.panel, to.panel),
-        (from.assistant, to.assistant),
-        (from.user, to.user),
-        (from.composer, to.composer),
-        (from.border, to.border),
-        (from.accent, to.accent),
-        (from.green, to.green),
-        (from.violet, to.violet),
-        (from.amber, to.amber),
-        (from.danger, to.danger),
-        (from.accent_text, to.accent_text),
-        (from.text, to.text),
-        (from.muted, to.muted),
-    ];
-    for (source, target) in pairs {
-        if same_color(color, source) {
-            return target.with_alpha(color.a);
-        }
-    }
-    for (source, target) in pairs {
-        if same_rgb(color, source) {
-            return target.with_alpha(color.a);
-        }
-    }
-    color
-}
-
-fn same_color(a: Color4, b: Color4) -> bool {
-    same_rgb(a, b) && close_f32(a.a, b.a)
-}
-
-fn same_rgb(a: Color4, b: Color4) -> bool {
-    close_f32(a.r, b.r) && close_f32(a.g, b.g) && close_f32(a.b, b.b)
-}
-
-fn close_f32(a: f32, b: f32) -> bool {
-    (a - b).abs() < 0.001
-}
-
-fn glyph5x7(ch: char) -> [u8; 7] {
-    match ch.to_ascii_uppercase() {
-        'A' => [
-            0b01110, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001,
-        ],
-        'B' => [
-            0b11110, 0b10001, 0b10001, 0b11110, 0b10001, 0b10001, 0b11110,
-        ],
-        'C' => [
-            0b01110, 0b10001, 0b10000, 0b10000, 0b10000, 0b10001, 0b01110,
-        ],
-        'D' => [
-            0b11110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b11110,
-        ],
-        'E' => [
-            0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b11111,
-        ],
-        'F' => [
-            0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b10000,
-        ],
-        'G' => [
-            0b01110, 0b10001, 0b10000, 0b10111, 0b10001, 0b10001, 0b01110,
-        ],
-        'H' => [
-            0b10001, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001,
-        ],
-        'I' => [
-            0b11111, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b11111,
-        ],
-        'J' => [
-            0b00111, 0b00010, 0b00010, 0b00010, 0b10010, 0b10010, 0b01100,
-        ],
-        'K' => [
-            0b10001, 0b10010, 0b10100, 0b11000, 0b10100, 0b10010, 0b10001,
-        ],
-        'L' => [
-            0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b11111,
-        ],
-        'M' => [
-            0b10001, 0b11011, 0b10101, 0b10101, 0b10001, 0b10001, 0b10001,
-        ],
-        'N' => [
-            0b10001, 0b11001, 0b10101, 0b10011, 0b10001, 0b10001, 0b10001,
-        ],
-        'O' => [
-            0b01110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01110,
-        ],
-        'P' => [
-            0b11110, 0b10001, 0b10001, 0b11110, 0b10000, 0b10000, 0b10000,
-        ],
-        'Q' => [
-            0b01110, 0b10001, 0b10001, 0b10001, 0b10101, 0b10010, 0b01101,
-        ],
-        'R' => [
-            0b11110, 0b10001, 0b10001, 0b11110, 0b10100, 0b10010, 0b10001,
-        ],
-        'S' => [
-            0b01111, 0b10000, 0b10000, 0b01110, 0b00001, 0b00001, 0b11110,
-        ],
-        'T' => [
-            0b11111, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100,
-        ],
-        'U' => [
-            0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01110,
-        ],
-        'V' => [
-            0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01010, 0b00100,
-        ],
-        'W' => [
-            0b10001, 0b10001, 0b10001, 0b10101, 0b10101, 0b10101, 0b01010,
-        ],
-        'X' => [
-            0b10001, 0b10001, 0b01010, 0b00100, 0b01010, 0b10001, 0b10001,
-        ],
-        'Y' => [
-            0b10001, 0b10001, 0b01010, 0b00100, 0b00100, 0b00100, 0b00100,
-        ],
-        'Z' => [
-            0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b10000, 0b11111,
-        ],
-        '0' => [
-            0b01110, 0b10001, 0b10011, 0b10101, 0b11001, 0b10001, 0b01110,
-        ],
-        '1' => [
-            0b00100, 0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110,
-        ],
-        '2' => [
-            0b01110, 0b10001, 0b00001, 0b00010, 0b00100, 0b01000, 0b11111,
-        ],
-        '3' => [
-            0b11110, 0b00001, 0b00001, 0b01110, 0b00001, 0b00001, 0b11110,
-        ],
-        '4' => [
-            0b00010, 0b00110, 0b01010, 0b10010, 0b11111, 0b00010, 0b00010,
-        ],
-        '5' => [
-            0b11111, 0b10000, 0b10000, 0b11110, 0b00001, 0b00001, 0b11110,
-        ],
-        '6' => [
-            0b01110, 0b10000, 0b10000, 0b11110, 0b10001, 0b10001, 0b01110,
-        ],
-        '7' => [
-            0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b01000, 0b01000,
-        ],
-        '8' => [
-            0b01110, 0b10001, 0b10001, 0b01110, 0b10001, 0b10001, 0b01110,
-        ],
-        '9' => [
-            0b01110, 0b10001, 0b10001, 0b01111, 0b00001, 0b00001, 0b01110,
-        ],
-        '.' => [
-            0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b01100, 0b01100,
-        ],
-        ':' => [
-            0b00000, 0b01100, 0b01100, 0b00000, 0b01100, 0b01100, 0b00000,
-        ],
-        '+' => [
-            0b00000, 0b00100, 0b00100, 0b11111, 0b00100, 0b00100, 0b00000,
-        ],
-        '-' => [
-            0b00000, 0b00000, 0b00000, 0b11111, 0b00000, 0b00000, 0b00000,
-        ],
-        '/' => [
-            0b00001, 0b00010, 0b00010, 0b00100, 0b01000, 0b01000, 0b10000,
-        ],
-        '>' => [
-            0b10000, 0b01000, 0b00100, 0b00010, 0b00100, 0b01000, 0b10000,
-        ],
-        _ => [
-            0b11111, 0b10001, 0b00010, 0b00100, 0b00100, 0b00000, 0b00100,
-        ],
-    }
-}
-
-pub mod webgl2 {
-    pub const VERT: &str = r#"#version 300 es
-layout(location = 0) in vec2 a_pos;
-uniform vec2 u_screen;
-uniform vec4 u_rect;
-out vec2 v_local;
-out vec2 v_size;
-void main() {
-    vec2 px = u_rect.xy + a_pos * u_rect.zw;
-    vec2 ndc = vec2(px.x / u_screen.x * 2.0 - 1.0, 1.0 - px.y / u_screen.y * 2.0);
-    gl_Position = vec4(ndc, 0.0, 1.0);
-    v_local = a_pos * u_rect.zw;
-    v_size = u_rect.zw;
-}
-"#;
-
-    pub const FRAG: &str = r#"#version 300 es
-precision highp float;
-in vec2 v_local;
-in vec2 v_size;
-out vec4 out_color;
-uniform vec4 u_color;
-uniform float u_radius;
-uniform float u_shadow;
-uniform int u_mode;
-float rounded_box(vec2 p, vec2 b, float r) {
-    vec2 q = abs(p) - b + vec2(r);
-    return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
-}
-void main() {
-    vec2 p = v_local - v_size * 0.5;
-    float d = rounded_box(p, v_size * 0.5, u_radius);
-    float aa = max(fwidth(d), 0.75);
-    float alpha = 1.0 - smoothstep(0.0, aa, d);
-    if (u_mode == 1) {
-        float sd = rounded_box(p - vec2(0.0, -u_shadow * 0.18), v_size * 0.5, u_radius + u_shadow * 0.35);
-        float blur = max(u_shadow, 1.0);
-        alpha = 1.0 - smoothstep(-blur, blur, sd);
-        out_color = vec4(u_color.rgb, u_color.a * alpha * 0.28);
-    } else if (u_mode == 2) {
-        float inner = rounded_box(p, v_size * 0.5 - vec2(1.25), max(u_radius - 1.25, 0.0));
-        float border = (1.0 - smoothstep(0.0, aa, d)) * smoothstep(0.0, aa, inner);
-        out_color = vec4(u_color.rgb, u_color.a * border);
-    } else {
-        out_color = vec4(u_color.rgb, u_color.a * alpha);
-    }
-}
-"#;
-}
-
-#[cfg(all(feature = "gpu-gl", not(target_arch = "wasm32")))]
-pub mod gl {
-    use super::{Color4, GpuRect, GpuScene, RectMode};
-    #[cfg(feature = "fontdue-text")]
-    use super::{FontAtlas, TextQuad};
-    use std::ffi::{CStr, CString};
-    use std::os::raw::{c_char, c_int, c_void};
-    use std::ptr;
-
-    const GL_COLOR_BUFFER_BIT: u32 = 0x0000_4000;
-    const GL_ARRAY_BUFFER: u32 = 0x8892;
-    const GL_DYNAMIC_DRAW: u32 = 0x88E8;
-    const GL_FLOAT: u32 = 0x1406;
-    const GL_FALSE: u8 = 0;
-    const GL_TRIANGLES: u32 = 0x0004;
-    const GL_VERTEX_SHADER: u32 = 0x8B31;
-    const GL_FRAGMENT_SHADER: u32 = 0x8B30;
-    const GL_COMPILE_STATUS: u32 = 0x8B81;
-    const GL_LINK_STATUS: u32 = 0x8B82;
-    const GL_BLEND: u32 = 0x0BE2;
-    const GL_SRC_ALPHA: u32 = 0x0302;
-    const GL_ONE_MINUS_SRC_ALPHA: u32 = 0x0303;
-    #[cfg(feature = "fontdue-text")]
-    const GL_TEXTURE_2D: u32 = 0x0DE1;
-    #[cfg(feature = "fontdue-text")]
-    const GL_TEXTURE0: u32 = 0x84C0;
-    #[cfg(feature = "fontdue-text")]
-    const GL_RED: u32 = 0x1903;
-    #[cfg(feature = "fontdue-text")]
-    const GL_R8: u32 = 0x8229;
-    #[cfg(feature = "fontdue-text")]
-    const GL_UNSIGNED_BYTE: u32 = 0x1401;
-    #[cfg(feature = "fontdue-text")]
-    const GL_TEXTURE_MIN_FILTER: u32 = 0x2801;
-    #[cfg(feature = "fontdue-text")]
-    const GL_TEXTURE_MAG_FILTER: u32 = 0x2800;
-    #[cfg(feature = "fontdue-text")]
-    const GL_TEXTURE_WRAP_S: u32 = 0x2802;
-    #[cfg(feature = "fontdue-text")]
-    const GL_TEXTURE_WRAP_T: u32 = 0x2803;
-    #[cfg(feature = "fontdue-text")]
-    const GL_LINEAR: i32 = 0x2601;
-    #[cfg(feature = "fontdue-text")]
-    const GL_CLAMP_TO_EDGE: i32 = 0x812F;
-    #[cfg(feature = "fontdue-text")]
-    const GL_UNPACK_ALIGNMENT: u32 = 0x0CF5;
-
-    #[link(name = "GL")]
-    unsafe extern "C" {
-        fn glViewport(x: c_int, y: c_int, width: c_int, height: c_int);
-        fn glClearColor(r: f32, g: f32, b: f32, a: f32);
-        fn glClear(mask: u32);
-        fn glEnable(cap: u32);
-        fn glBlendFunc(sfactor: u32, dfactor: u32);
-        fn glCreateShader(shader_type: u32) -> u32;
-        fn glShaderSource(
-            shader: u32,
-            count: c_int,
-            string: *const *const c_char,
-            length: *const c_int,
-        );
-        fn glCompileShader(shader: u32);
-        fn glGetShaderiv(shader: u32, pname: u32, params: *mut c_int);
-        fn glGetShaderInfoLog(
-            shader: u32,
-            buf_size: c_int,
-            length: *mut c_int,
-            info_log: *mut c_char,
-        );
-        fn glDeleteShader(shader: u32);
-        fn glCreateProgram() -> u32;
-        fn glAttachShader(program: u32, shader: u32);
-        fn glLinkProgram(program: u32);
-        fn glGetProgramiv(program: u32, pname: u32, params: *mut c_int);
-        fn glGetProgramInfoLog(
-            program: u32,
-            buf_size: c_int,
-            length: *mut c_int,
-            info_log: *mut c_char,
-        );
-        fn glUseProgram(program: u32);
-        fn glGetUniformLocation(program: u32, name: *const c_char) -> c_int;
-        fn glUniform2f(location: c_int, v0: f32, v1: f32);
-        fn glUniform4f(location: c_int, v0: f32, v1: f32, v2: f32, v3: f32);
-        fn glUniform1f(location: c_int, v0: f32);
-        fn glUniform1i(location: c_int, v0: c_int);
-        fn glGenVertexArrays(n: c_int, arrays: *mut u32);
-        fn glBindVertexArray(array: u32);
-        fn glGenBuffers(n: c_int, buffers: *mut u32);
-        fn glBindBuffer(target: u32, buffer: u32);
-        fn glBufferData(target: u32, size: isize, data: *const c_void, usage: u32);
-        fn glEnableVertexAttribArray(index: u32);
-        fn glVertexAttribPointer(
-            index: u32,
-            size: c_int,
-            ty: u32,
-            normalized: u8,
-            stride: c_int,
-            pointer: *const c_void,
-        );
-        fn glDrawArrays(mode: u32, first: c_int, count: c_int);
-        fn glDeleteBuffers(n: c_int, buffers: *const u32);
-        fn glDeleteVertexArrays(n: c_int, arrays: *const u32);
-        fn glDeleteProgram(program: u32);
-        #[cfg(feature = "fontdue-text")]
-        fn glGenTextures(n: c_int, textures: *mut u32);
-        #[cfg(feature = "fontdue-text")]
-        fn glBindTexture(target: u32, texture: u32);
-        #[cfg(feature = "fontdue-text")]
-        fn glTexParameteri(target: u32, pname: u32, param: c_int);
-        #[cfg(feature = "fontdue-text")]
-        fn glTexImage2D(
-            target: u32,
-            level: c_int,
-            internalformat: c_int,
-            width: c_int,
-            height: c_int,
-            border: c_int,
-            format: u32,
-            ty: u32,
-            pixels: *const c_void,
-        );
-        #[cfg(feature = "fontdue-text")]
-        fn glActiveTexture(texture: u32);
-        #[cfg(feature = "fontdue-text")]
-        fn glPixelStorei(pname: u32, param: c_int);
-        #[cfg(feature = "fontdue-text")]
-        fn glDeleteTextures(n: c_int, textures: *const u32);
-    }
-
-    const VERT: &str = r#"#version 330 core
-layout(location = 0) in vec2 a_pos;
-uniform vec2 u_screen;
-uniform vec4 u_rect;
-out vec2 v_local;
-out vec2 v_size;
-void main() {
-    vec2 px = u_rect.xy + a_pos * u_rect.zw;
-    vec2 ndc = vec2(px.x / u_screen.x * 2.0 - 1.0, 1.0 - px.y / u_screen.y * 2.0);
-    gl_Position = vec4(ndc, 0.0, 1.0);
-    v_local = a_pos * u_rect.zw;
-    v_size = u_rect.zw;
-}
-"#;
-
-    #[cfg(feature = "fontdue-text")]
-    const TEXT_VERT: &str = r#"#version 330 core
-layout(location = 0) in vec4 a_data;
-uniform vec2 u_screen;
-out vec2 v_uv;
-void main() {
-    vec2 px = a_data.xy;
-    vec2 ndc = vec2(px.x / u_screen.x * 2.0 - 1.0, 1.0 - px.y / u_screen.y * 2.0);
-    gl_Position = vec4(ndc, 0.0, 1.0);
-    v_uv = a_data.zw;
-}
-"#;
-
-    #[cfg(feature = "fontdue-text")]
-    const TEXT_FRAG: &str = r#"#version 330 core
-in vec2 v_uv;
-out vec4 out_color;
-uniform sampler2D u_tex;
-uniform vec4 u_color;
-void main() {
-    float a = texture(u_tex, v_uv).r;
-    out_color = vec4(u_color.rgb, u_color.a * a);
-}
-"#;
-
-    const FRAG: &str = r#"#version 330 core
-in vec2 v_local;
-in vec2 v_size;
-out vec4 out_color;
-uniform vec4 u_color;
-uniform float u_radius;
-uniform float u_shadow;
-uniform int u_mode;
-float rounded_box(vec2 p, vec2 b, float r) {
-    vec2 q = abs(p) - b + vec2(r);
-    return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
-}
-void main() {
-    vec2 p = v_local - v_size * 0.5;
-    float d = rounded_box(p, v_size * 0.5, u_radius);
-    float aa = max(fwidth(d), 0.75);
-    float alpha = 1.0 - smoothstep(0.0, aa, d);
-    if (u_mode == 1) {
-        float sd = rounded_box(p - vec2(0.0, -u_shadow * 0.18), v_size * 0.5, u_radius + u_shadow * 0.35);
-        float blur = max(u_shadow, 1.0);
-        alpha = 1.0 - smoothstep(-blur, blur, sd);
-        out_color = vec4(u_color.rgb, u_color.a * alpha * 0.28);
-    } else if (u_mode == 2) {
-        float inner = rounded_box(p, v_size * 0.5 - vec2(1.25), max(u_radius - 1.25, 0.0));
-        float border = (1.0 - smoothstep(0.0, aa, d)) * smoothstep(0.0, aa, inner);
-        out_color = vec4(u_color.rgb, u_color.a * border);
-    } else {
-        out_color = vec4(u_color.rgb, u_color.a * alpha);
-    }
-}
-"#;
-
-    pub struct GlRenderer {
-        program: u32,
-        vao: u32,
-        vbo: u32,
-        u_screen: c_int,
-        u_rect: c_int,
-        u_color: c_int,
-        u_radius: c_int,
-        u_mode: c_int,
-        u_shadow: c_int,
-        #[cfg(feature = "fontdue-text")]
-        text: Option<TextRenderer>,
-    }
-
-    impl GlRenderer {
-        /// Create a renderer for the current OpenGL context.
-        ///
-        /// The caller must create and make current the GL context before calling
-        /// this constructor.
-        pub unsafe fn new_current_context() -> Result<Self, String> {
-            let program = unsafe { glCreateProgram() };
-            let vs = compile_shader(GL_VERTEX_SHADER, VERT)?;
-            let fs = compile_shader(GL_FRAGMENT_SHADER, FRAG)?;
-            unsafe {
-                glAttachShader(program, vs);
-                glAttachShader(program, fs);
-                glLinkProgram(program);
-                glDeleteShader(vs);
-                glDeleteShader(fs);
-            }
-            check_program(program)?;
-
-            let mut vao = 0;
-            let mut vbo = 0;
-            let verts: [f32; 12] = [0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 1.0];
-            unsafe {
-                glGenVertexArrays(1, &mut vao);
-                glBindVertexArray(vao);
-                glGenBuffers(1, &mut vbo);
-                glBindBuffer(GL_ARRAY_BUFFER, vbo);
-                glBufferData(
-                    GL_ARRAY_BUFFER,
-                    (verts.len() * 4) as isize,
-                    verts.as_ptr().cast(),
-                    GL_DYNAMIC_DRAW,
-                );
-                glEnableVertexAttribArray(0);
-                glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * 4, ptr::null());
-            }
-
-            Ok(Self {
-                program,
-                vao,
-                vbo,
-                u_screen: uniform(program, "u_screen"),
-                u_rect: uniform(program, "u_rect"),
-                u_color: uniform(program, "u_color"),
-                u_radius: uniform(program, "u_radius"),
-                u_mode: uniform(program, "u_mode"),
-                u_shadow: uniform(program, "u_shadow"),
-                #[cfg(feature = "fontdue-text")]
-                text: None,
-            })
-        }
-
-        #[cfg(feature = "fontdue-text")]
-        pub unsafe fn new_current_context_with_font(atlas: &FontAtlas) -> Result<Self, String> {
-            let mut renderer = unsafe { Self::new_current_context()? };
-            renderer.text = Some(TextRenderer::new(atlas)?);
-            Ok(renderer)
-        }
-
-        pub fn render(&self, width: i32, height: i32, scene: &GpuScene) {
-            let clear = scene.clear;
-            unsafe {
-                glViewport(0, 0, width, height);
-                glClearColor(clear.r, clear.g, clear.b, clear.a);
-                glClear(GL_COLOR_BUFFER_BIT);
-                glEnable(GL_BLEND);
-                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-                glUseProgram(self.program);
-                glBindVertexArray(self.vao);
-                glUniform2f(self.u_screen, width as f32, height as f32);
-            }
-            for rect in scene.rects() {
-                self.draw_rect(*rect);
-            }
-            #[cfg(feature = "fontdue-text")]
-            if let Some(text) = &self.text {
-                text.render(width, height, scene.text_quads());
-            }
-        }
-
-        fn draw_rect(&self, rect: GpuRect) {
-            let mode = match rect.mode {
-                RectMode::Fill => 0,
-                RectMode::Shadow => 1,
-                RectMode::Border => 2,
-            };
-            let Color4 { r, g, b, a } = rect.color;
-            unsafe {
-                glUniform4f(self.u_rect, rect.x, rect.y, rect.w, rect.h);
-                glUniform4f(self.u_color, r, g, b, a);
-                glUniform1f(self.u_radius, rect.radius);
-                glUniform1i(self.u_mode, mode);
-                glUniform1f(self.u_shadow, rect.shadow);
-                glDrawArrays(GL_TRIANGLES, 0, 6);
-            }
-        }
-    }
-
-    #[cfg(feature = "fontdue-text")]
-    struct TextRenderer {
-        program: u32,
-        vao: u32,
-        vbo: u32,
-        texture: u32,
-        u_screen: c_int,
-        u_color: c_int,
-        u_tex: c_int,
-    }
-
-    #[cfg(feature = "fontdue-text")]
-    impl TextRenderer {
-        fn new(atlas: &FontAtlas) -> Result<Self, String> {
-            let program = unsafe { glCreateProgram() };
-            let vs = compile_shader(GL_VERTEX_SHADER, TEXT_VERT)?;
-            let fs = compile_shader(GL_FRAGMENT_SHADER, TEXT_FRAG)?;
-            unsafe {
-                glAttachShader(program, vs);
-                glAttachShader(program, fs);
-                glLinkProgram(program);
-                glDeleteShader(vs);
-                glDeleteShader(fs);
-            }
-            check_program(program)?;
-
-            let mut vao = 0;
-            let mut vbo = 0;
-            unsafe {
-                glGenVertexArrays(1, &mut vao);
-                glBindVertexArray(vao);
-                glGenBuffers(1, &mut vbo);
-                glBindBuffer(GL_ARRAY_BUFFER, vbo);
-                glEnableVertexAttribArray(0);
-                glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * 4, ptr::null());
-            }
-
-            let mut texture = 0;
-            unsafe {
-                glGenTextures(1, &mut texture);
-                glBindTexture(GL_TEXTURE_2D, texture);
-                glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-                glTexImage2D(
-                    GL_TEXTURE_2D,
-                    0,
-                    GL_R8 as i32,
-                    atlas.width as i32,
-                    atlas.height as i32,
-                    0,
-                    GL_RED,
-                    GL_UNSIGNED_BYTE,
-                    atlas.alpha.as_ptr().cast(),
-                );
-            }
-
-            Ok(Self {
-                program,
-                vao,
-                vbo,
-                texture,
-                u_screen: uniform(program, "u_screen"),
-                u_color: uniform(program, "u_color"),
-                u_tex: uniform(program, "u_tex"),
-            })
-        }
-
-        fn render(&self, width: i32, height: i32, quads: &[TextQuad]) {
-            unsafe {
-                glUseProgram(self.program);
-                glBindVertexArray(self.vao);
-                glActiveTexture(GL_TEXTURE0);
-                glBindTexture(GL_TEXTURE_2D, self.texture);
-                glUniform1i(self.u_tex, 0);
-                glUniform2f(self.u_screen, width as f32, height as f32);
-            }
-            for quad in quads {
-                self.draw_quad(*quad);
-            }
-        }
-
-        fn draw_quad(&self, q: TextQuad) {
-            let verts: [f32; 24] = [
-                q.x,
-                q.y,
-                q.u0,
-                q.v0,
-                q.x + q.w,
-                q.y,
-                q.u1,
-                q.v0,
-                q.x + q.w,
-                q.y + q.h,
-                q.u1,
-                q.v1,
-                q.x,
-                q.y,
-                q.u0,
-                q.v0,
-                q.x + q.w,
-                q.y + q.h,
-                q.u1,
-                q.v1,
-                q.x,
-                q.y + q.h,
-                q.u0,
-                q.v1,
-            ];
-            let Color4 { r, g, b, a } = q.color;
-            unsafe {
-                glUniform4f(self.u_color, r, g, b, a);
-                glBindBuffer(GL_ARRAY_BUFFER, self.vbo);
-                glBufferData(
-                    GL_ARRAY_BUFFER,
-                    (verts.len() * 4) as isize,
-                    verts.as_ptr().cast(),
-                    GL_DYNAMIC_DRAW,
-                );
-                glDrawArrays(GL_TRIANGLES, 0, 6);
-            }
-        }
-    }
-
-    #[cfg(feature = "fontdue-text")]
-    impl Drop for TextRenderer {
-        fn drop(&mut self) {
-            unsafe {
-                glDeleteTextures(1, &self.texture);
-                glDeleteBuffers(1, &self.vbo);
-                glDeleteVertexArrays(1, &self.vao);
-                glDeleteProgram(self.program);
-            }
-        }
-    }
-
-    impl Drop for GlRenderer {
-        fn drop(&mut self) {
-            unsafe {
-                glDeleteBuffers(1, &self.vbo);
-                glDeleteVertexArrays(1, &self.vao);
-                glDeleteProgram(self.program);
-            }
-        }
-    }
-
-    fn compile_shader(kind: u32, source: &str) -> Result<u32, String> {
-        let shader = unsafe { glCreateShader(kind) };
-        let c_src = CString::new(source).map_err(|error| error.to_string())?;
-        let ptr = c_src.as_ptr();
-        unsafe {
-            glShaderSource(shader, 1, &ptr, ptr::null());
-            glCompileShader(shader);
-        }
-        let mut ok = 0;
-        unsafe {
-            glGetShaderiv(shader, GL_COMPILE_STATUS, &mut ok);
-        }
-        if ok == 0 {
-            let log = shader_log(shader);
-            unsafe {
-                glDeleteShader(shader);
-            }
-            Err(log)
-        } else {
-            Ok(shader)
-        }
-    }
-
-    fn check_program(program: u32) -> Result<(), String> {
-        let mut ok = 0;
-        unsafe {
-            glGetProgramiv(program, GL_LINK_STATUS, &mut ok);
-        }
-        if ok == 0 {
-            Err(program_log(program))
-        } else {
-            Ok(())
-        }
-    }
-
-    fn shader_log(shader: u32) -> String {
-        let mut buf = vec![0i8; 2048];
-        let mut len = 0;
-        unsafe {
-            glGetShaderInfoLog(shader, buf.len() as i32, &mut len, buf.as_mut_ptr());
-            CStr::from_ptr(buf.as_ptr()).to_string_lossy().into_owned()
-        }
-    }
-
-    fn program_log(program: u32) -> String {
-        let mut buf = vec![0i8; 2048];
-        let mut len = 0;
-        unsafe {
-            glGetProgramInfoLog(program, buf.len() as i32, &mut len, buf.as_mut_ptr());
-            CStr::from_ptr(buf.as_ptr()).to_string_lossy().into_owned()
-        }
-    }
-
-    fn uniform(program: u32, name: &str) -> i32 {
-        let Ok(c) = CString::new(name) else {
-            return -1;
-        };
-        unsafe { glGetUniformLocation(program, c.as_ptr()) }
-    }
 }

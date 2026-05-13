@@ -18,6 +18,19 @@
       display: block;
     }
 
+    #shell {
+      position: fixed;
+      inset: 0;
+      z-index: 2;
+      background: transparent;
+    }
+
+    #codex {
+      position: fixed;
+      inset: 0;
+      z-index: 1;
+    }
+
     .status {
       position: fixed;
       left: 14px;
@@ -30,6 +43,7 @@
 </head>
 <body>
 <canvas id="codex"></canvas>
+<canvas id="shell"></canvas>
 <div class="status" id="status">loading wasm...</div>
 <script type="module">
 const vertexSource = `#version 300 es
@@ -116,18 +130,26 @@ void main() {
 
 const canvas = document.getElementById("codex");
 canvas.tabIndex = 0;
+const shellCanvas = document.getElementById("shell");
+shellCanvas.tabIndex = 0;
 const statusEl = document.getElementById("status");
 const gl = canvas.getContext("webgl2", { antialias: true, alpha: false });
 if (!gl) throw new Error("WebGL2 is required");
+const shellGl = shellCanvas.getContext("webgl2", { antialias: true, alpha: true });
+if (!shellGl) throw new Error("WebGL2 is required for shell");
 
-function shader(type, source) {
-  const s = gl.createShader(type);
-  gl.shaderSource(s, source);
-  gl.compileShader(s);
-  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
-    throw new Error(gl.getShaderInfoLog(s));
+function shaderFor(context, type, source) {
+  const s = context.createShader(type);
+  context.shaderSource(s, source);
+  context.compileShader(s);
+  if (!context.getShaderParameter(s, context.COMPILE_STATUS)) {
+    throw new Error(context.getShaderInfoLog(s));
   }
   return s;
+}
+
+function shader(type, source) {
+  return shaderFor(gl, type, source);
 }
 
 const program = gl.createProgram();
@@ -210,7 +232,103 @@ gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, atlasW, atlasH, 0, gl.RED, gl.UNSIGNED_BYTE, atlasBytes);
 
-statusEl.textContent = "unified chat wasm scene + WebGL2";
+function createOverlayRenderer(context) {
+  const shapeProgram = context.createProgram();
+  context.attachShader(shapeProgram, shaderFor(context, context.VERTEX_SHADER, vertexSource));
+  context.attachShader(shapeProgram, shaderFor(context, context.FRAGMENT_SHADER, fragmentSource));
+  context.linkProgram(shapeProgram);
+  if (!context.getProgramParameter(shapeProgram, context.LINK_STATUS)) {
+    throw new Error(context.getProgramInfoLog(shapeProgram));
+  }
+  const shapeVao = context.createVertexArray();
+  context.bindVertexArray(shapeVao);
+  const quadVbo = context.createBuffer();
+  context.bindBuffer(context.ARRAY_BUFFER, quadVbo);
+  context.bufferData(context.ARRAY_BUFFER, new Float32Array([
+    0, 0, 1, 0, 1, 1,
+    0, 0, 1, 1, 0, 1,
+  ]), context.STATIC_DRAW);
+  context.enableVertexAttribArray(0);
+  context.vertexAttribPointer(0, 2, context.FLOAT, false, 8, 0);
+  const instanceVbo = context.createBuffer();
+  context.bindBuffer(context.ARRAY_BUFFER, instanceVbo);
+  context.enableVertexAttribArray(1);
+  context.vertexAttribPointer(1, 4, context.FLOAT, false, 44, 0);
+  context.vertexAttribDivisor(1, 1);
+  context.enableVertexAttribArray(2);
+  context.vertexAttribPointer(2, 4, context.FLOAT, false, 44, 24);
+  context.vertexAttribDivisor(2, 1);
+  context.enableVertexAttribArray(3);
+  context.vertexAttribPointer(3, 2, context.FLOAT, false, 44, 16);
+  context.vertexAttribDivisor(3, 1);
+  context.enableVertexAttribArray(4);
+  context.vertexAttribPointer(4, 1, context.FLOAT, false, 44, 40);
+  context.vertexAttribDivisor(4, 1);
+
+  const overlayTextProgram = context.createProgram();
+  context.attachShader(overlayTextProgram, shaderFor(context, context.VERTEX_SHADER, textVertexSource));
+  context.attachShader(overlayTextProgram, shaderFor(context, context.FRAGMENT_SHADER, textFragmentSource));
+  context.linkProgram(overlayTextProgram);
+  if (!context.getProgramParameter(overlayTextProgram, context.LINK_STATUS)) {
+    throw new Error(context.getProgramInfoLog(overlayTextProgram));
+  }
+  const overlayTextVao = context.createVertexArray();
+  context.bindVertexArray(overlayTextVao);
+  const overlayTextVbo = context.createBuffer();
+  context.bindBuffer(context.ARRAY_BUFFER, overlayTextVbo);
+  context.enableVertexAttribArray(0);
+  context.vertexAttribPointer(0, 4, context.FLOAT, false, 32, 0);
+  context.enableVertexAttribArray(1);
+  context.vertexAttribPointer(1, 4, context.FLOAT, false, 32, 16);
+
+  const overlayTexture = context.createTexture();
+  context.bindTexture(context.TEXTURE_2D, overlayTexture);
+  context.pixelStorei(context.UNPACK_ALIGNMENT, 1);
+  context.texParameteri(context.TEXTURE_2D, context.TEXTURE_MIN_FILTER, context.LINEAR);
+  context.texParameteri(context.TEXTURE_2D, context.TEXTURE_MAG_FILTER, context.LINEAR);
+  context.texParameteri(context.TEXTURE_2D, context.TEXTURE_WRAP_S, context.CLAMP_TO_EDGE);
+  context.texParameteri(context.TEXTURE_2D, context.TEXTURE_WRAP_T, context.CLAMP_TO_EDGE);
+  context.texImage2D(context.TEXTURE_2D, 0, context.R8, atlasW, atlasH, 0, context.RED, context.UNSIGNED_BYTE, atlasBytes);
+
+  return {
+    draw(width, height) {
+      context.viewport(0, 0, width, height);
+      context.clearColor(0, 0, 0, 0);
+      context.clear(context.COLOR_BUFFER_BIT);
+      context.enable(context.BLEND);
+      context.blendFunc(context.SRC_ALPHA, context.ONE_MINUS_SRC_ALPHA);
+      context.useProgram(shapeProgram);
+      context.bindVertexArray(shapeVao);
+      context.uniform2f(context.getUniformLocation(shapeProgram, "u_screen"), width, height);
+      const rectBufferLen = api.codex_gl_shell_rect_buffer_len();
+      if (rectBufferLen > 0) {
+        const rectBufferPtr = api.codex_gl_shell_rect_buffer_ptr();
+        const rects = new Float32Array(api.memory.buffer, rectBufferPtr, rectBufferLen);
+        context.bindBuffer(context.ARRAY_BUFFER, instanceVbo);
+        context.bufferData(context.ARRAY_BUFFER, rects, context.DYNAMIC_DRAW);
+        context.drawArraysInstanced(context.TRIANGLES, 0, 6, rectBufferLen / rectStride);
+      }
+
+      context.useProgram(overlayTextProgram);
+      context.bindVertexArray(overlayTextVao);
+      context.activeTexture(context.TEXTURE0);
+      context.bindTexture(context.TEXTURE_2D, overlayTexture);
+      context.uniform1i(context.getUniformLocation(overlayTextProgram, "u_tex"), 0);
+      context.uniform2f(context.getUniformLocation(overlayTextProgram, "u_screen"), width, height);
+      const textVertexBufferLen = api.codex_gl_shell_text_vertex_buffer_len();
+      if (textVertexBufferLen > 0) {
+        const textVertexBufferPtr = api.codex_gl_shell_text_vertex_buffer_ptr();
+        const textVertices = new Float32Array(api.memory.buffer, textVertexBufferPtr, textVertexBufferLen);
+        context.bindBuffer(context.ARRAY_BUFFER, overlayTextVbo);
+        context.bufferData(context.ARRAY_BUFFER, textVertices, context.DYNAMIC_DRAW);
+        context.drawArrays(context.TRIANGLES, 0, textVertexBufferLen / textVertexStride);
+      }
+    }
+  };
+}
+
+const shellRenderer = createOverlayRenderer(shellGl);
+statusEl.textContent = "edgerun shell + workspace wasm scenes";
 let sceneDirty = true;
 let frameScheduled = false;
 let animationTimer = 0;
@@ -225,6 +343,8 @@ function resize() {
   if (canvas.width !== width || canvas.height !== height) {
     canvas.width = width;
     canvas.height = height;
+    shellCanvas.width = width;
+    shellCanvas.height = height;
     sceneDirty = true;
   }
   return { width, height };
@@ -269,11 +389,15 @@ const textEncoder = new TextEncoder();
 
 function canvasPoint(event) {
   const dpr = Math.max(1, window.devicePixelRatio || 1);
-  const rect = canvas.getBoundingClientRect();
+  const rect = shellCanvas.getBoundingClientRect();
   return {
     x: (event.clientX - rect.left) * dpr,
     y: (event.clientY - rect.top) * dpr,
   };
+}
+
+function shellHasHit(point) {
+  return api.codex_gl_shell_hit_test(point.x, point.y) !== 0xffffffff;
 }
 
 function markDirty(changed) {
@@ -283,31 +407,44 @@ function markDirty(changed) {
   }
 }
 
-canvas.addEventListener("pointerdown", (event) => {
-  canvas.focus();
-  canvas.setPointerCapture(event.pointerId);
+shellCanvas.addEventListener("pointerdown", (event) => {
+  shellCanvas.focus();
+  shellCanvas.setPointerCapture(event.pointerId);
   const point = canvasPoint(event);
-  markDirty(api.codex_gl_handle_pointer_down(point.x, point.y));
+  if (shellHasHit(point)) {
+    markDirty(api.codex_gl_handle_shell_pointer_down(point.x, point.y));
+  } else {
+    markDirty(api.codex_gl_handle_pointer_down(point.x, point.y));
+  }
 });
 
-canvas.addEventListener("pointermove", (event) => {
+shellCanvas.addEventListener("pointermove", (event) => {
   const point = canvasPoint(event);
-  markDirty(api.codex_gl_handle_pointer_move(point.x, point.y));
+  if (shellHasHit(point)) {
+    markDirty(api.codex_gl_handle_shell_pointer_move(point.x, point.y));
+  } else {
+    markDirty(api.codex_gl_handle_pointer_move(point.x, point.y));
+  }
 });
 
-canvas.addEventListener("pointerup", (event) => {
+shellCanvas.addEventListener("pointerup", (event) => {
   const point = canvasPoint(event);
-  markDirty(api.codex_gl_handle_pointer_up(point.x, point.y));
+  if (shellHasHit(point)) {
+    markDirty(api.codex_gl_handle_shell_pointer_up(point.x, point.y));
+  } else {
+    markDirty(api.codex_gl_handle_pointer_up(point.x, point.y));
+  }
 });
 
-canvas.addEventListener("wheel", (event) => {
+shellCanvas.addEventListener("wheel", (event) => {
   event.preventDefault();
   const point = canvasPoint(event);
   markDirty(api.codex_gl_handle_wheel(point.x, point.y, event.deltaY));
 }, { passive: false });
 
-canvas.addEventListener("keydown", (event) => {
-  markDirty(api.codex_gl_handle_key(event.keyCode));
+shellCanvas.addEventListener("keydown", (event) => {
+  const shellChanged = api.codex_gl_handle_shell_key(event.keyCode);
+  markDirty(shellChanged || api.codex_gl_handle_key(event.keyCode));
   if (event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey) {
     const bytes = textEncoder.encode(event.key);
     const cap = api.codex_gl_input_buffer_capacity();
@@ -318,7 +455,7 @@ canvas.addEventListener("keydown", (event) => {
   }
 });
 
-canvas.addEventListener("blur", () => {
+shellCanvas.addEventListener("blur", () => {
   markDirty(api.codex_gl_handle_blur());
 });
 
@@ -337,6 +474,7 @@ function draw(t) {
   }
 
   api.codex_gl_build_frame(width, height, t);
+  api.codex_gl_build_shell_frame(width, height, t);
   sceneDirty = false;
   lastWidth = width;
   lastHeight = height;
@@ -373,6 +511,7 @@ function draw(t) {
     gl.bufferData(gl.ARRAY_BUFFER, textVertices, gl.DYNAMIC_DRAW);
     gl.drawArrays(gl.TRIANGLES, 0, textVertexBufferLen / textVertexStride);
   }
+  shellRenderer.draw(width, height);
   scheduleAnimationPhase(t);
 }
 

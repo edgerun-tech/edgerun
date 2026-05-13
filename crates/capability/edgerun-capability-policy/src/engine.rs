@@ -8,10 +8,12 @@ use edgerun_capabilities::{
     CapabilityAccessClass, CapabilityConstraint, CapabilityConstraintKind, CapabilityDescriptor,
     CapabilityError, CapabilityGrant, CapabilityInvocation, CapabilityModality,
     CapabilityOperation, CapabilityRequest, CapabilityRevocation, CapabilityRole,
-    CapabilitySelector, validate_descriptor, validate_grant,
+    CapabilitySelector, validate_descriptor,
 };
 use edgerun_protocols::core_protocol::protocol::{Duration as ProtocolDuration, Timestamp};
 use edgerun_protocols::core_protocol::protocol::{IdentityRef, NodeRef};
+
+const CAPABILITY_GRANT_ID_DOMAIN: &[u8] = b"edgerun:v1:capability-policy:grant-id";
 
 #[derive(Debug, Clone)]
 pub struct SimplePolicyEngine {
@@ -61,16 +63,14 @@ impl SimplePolicyEngine {
     ) -> Vec<u8> {
         self.nonce = self.nonce.wrapping_add(1);
         let now = now.duration_since(UNIX_EPOCH).unwrap_or_default();
-        let seed = edgerun_protocols::wire::CapabilityGrantIdSeed {
-            request_id: request.request_id.clone(),
-            provider_name: descriptor.provider_name.as_bytes().to_vec(),
-            provider_instance_id: descriptor.provider_instance_id.as_bytes().to_vec(),
-            nonce: self.nonce,
-            unix_secs: now.as_secs(),
-            unix_nanos: now.subsec_nanos(),
-        };
-        let bytes = edgerun_protocols::wire::to_bytes::<edgerun_protocols::wire::WireError>(&seed)
-            .expect("grant id seed must serialize through rkyv");
+        let bytes = grant_id_preimage(
+            &request.request_id,
+            descriptor.provider_name.as_bytes(),
+            descriptor.provider_instance_id.as_bytes(),
+            self.nonce,
+            now.as_secs(),
+            now.subsec_nanos(),
+        );
         edgerun_crypto::sha256(&bytes).to_vec()
     }
 
@@ -256,21 +256,6 @@ impl SimplePolicyEngine {
         );
     }
 
-    pub fn import_grant(&mut self, grant: CapabilityGrant) -> Result<(), CapabilityError> {
-        validate_grant(&grant)?;
-        let issued_at = grant
-            .issued_at
-            .as_ref()
-            .and_then(system_time_from_timestamp)
-            .unwrap_or_else(SystemTime::now);
-        let expires_at = grant
-            .expires_at
-            .as_ref()
-            .and_then(system_time_from_timestamp);
-        self.store_grant(grant, issued_at, expires_at);
-        Ok(())
-    }
-
     pub fn apply_revocation(
         &mut self,
         revocation: CapabilityRevocation,
@@ -284,4 +269,28 @@ impl SimplePolicyEngine {
         record.revoked = Some(revocation);
         Ok(())
     }
+}
+
+fn grant_id_preimage(
+    request_id: &[u8],
+    provider_name: &[u8],
+    provider_instance_id: &[u8],
+    nonce: u64,
+    unix_secs: u64,
+    unix_nanos: u32,
+) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    push_bytes(&mut bytes, CAPABILITY_GRANT_ID_DOMAIN);
+    push_bytes(&mut bytes, request_id);
+    push_bytes(&mut bytes, provider_name);
+    push_bytes(&mut bytes, provider_instance_id);
+    bytes.extend_from_slice(&nonce.to_be_bytes());
+    bytes.extend_from_slice(&unix_secs.to_be_bytes());
+    bytes.extend_from_slice(&unix_nanos.to_be_bytes());
+    bytes
+}
+
+fn push_bytes(out: &mut Vec<u8>, bytes: &[u8]) {
+    out.extend_from_slice(&(bytes.len() as u64).to_be_bytes());
+    out.extend_from_slice(bytes);
 }

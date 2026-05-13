@@ -20,7 +20,6 @@ impl From<MemoryChannelError> for WorkChannelError {
             MemoryChannelError::RouteInvalid => Self::RouteInvalid,
             MemoryChannelError::RouteMissing => Self::RouteMissing,
             MemoryChannelError::PacketHashFailed => Self::PacketHashFailed,
-            MemoryChannelError::InboxMissing => Self::DeliveryFailed,
         }
     }
 }

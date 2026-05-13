@@ -62,8 +62,13 @@ pub fn verify_solana_ed25519(public_key: &PublicKey, preimage: &[u8], signature:
 }
 
 pub fn node_available_preimage(value: &NodeAvailable) -> Vec<u8> {
-    PreimageBuilder::domain(NODE_AVAILABLE_DOMAIN)
+    let mut builder = PreimageBuilder::domain(NODE_AVAILABLE_DOMAIN)
         .node(&value.node)
+        .u16(value.relay_endpoint.is_some() as u16);
+    if let Some(endpoint) = &value.relay_endpoint {
+        builder = builder.channel(endpoint);
+    }
+    builder
         .u64(value.sequence)
         .u64(value.unix_ms)
         .u64(value.heartbeat_secs)

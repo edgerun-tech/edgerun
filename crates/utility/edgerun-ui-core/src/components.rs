@@ -1,9 +1,11 @@
 //! Small reusable EdgeRun UI component kit.
 //!
 //! This layer is intentionally semantic and tiny. Components describe meaning
-//! and visual intent, not CSS. The same structs can later feed the GPU batcher;
-//! for now they render through the CPU `Painter` so the kit is immediately
-//! usable in the SDL preview, compositor overlay, and terminal chrome.
+//! and visual intent, not CSS.
+//!
+//! The canonical EdgeRun UI surface is the GPU scene builder in `gpu.rs`.
+//! This CPU painter path remains as a compatibility adapter for older previews
+//! while primitives migrate to the shared GPU component model.
 
 use crate::{Color, Painter, Rect, TextSize, Theme};
 
@@ -293,23 +295,56 @@ impl ComponentKit {
 
     pub fn draw_card(&self, p: &mut Painter<'_>, card: Card<'_>) {
         if card.elevated {
-            p.soft_shadow(card.rect, self.metrics.radius_card, self.theme.shadow.with_alpha(42), 7, 0, 3);
+            p.soft_shadow(
+                card.rect,
+                self.metrics.radius_card,
+                self.theme.shadow.with_alpha(42),
+                7,
+                0,
+                3,
+            );
         }
-        p.rounded_rect(card.rect, self.metrics.radius_card, self.theme.panel.with_alpha(242));
-        p.rounded_border(card.rect, self.metrics.radius_card, 1, self.theme.border.with_alpha(190));
         p.rounded_rect(
-            Rect::new(card.rect.x + 2, card.rect.y + 2, card.rect.w.saturating_sub(4), 22),
+            card.rect,
+            self.metrics.radius_card,
+            self.theme.panel.with_alpha(242),
+        );
+        p.rounded_border(
+            card.rect,
+            self.metrics.radius_card,
+            1,
+            self.theme.border.with_alpha(190),
+        );
+        p.rounded_rect(
+            Rect::new(
+                card.rect.x + 2,
+                card.rect.y + 2,
+                card.rect.w.saturating_sub(4),
+                22,
+            ),
             self.metrics.radius_card.saturating_sub(2),
             self.theme.panel_2.with_alpha(46),
         );
 
         let mut y = card.rect.y + self.metrics.pad;
         if let Some(title) = card.title {
-            p.text(card.rect.x + self.metrics.pad, y, title, self.theme.text, TextSize::Title);
+            p.text(
+                card.rect.x + self.metrics.pad,
+                y,
+                title,
+                self.theme.text,
+                TextSize::Title,
+            );
             y += TextSize::Title.line_height() as i32 + 2;
         }
         if let Some(subtitle) = card.subtitle {
-            p.text(card.rect.x + self.metrics.pad, y, subtitle, self.theme.muted, TextSize::Body);
+            p.text(
+                card.rect.x + self.metrics.pad,
+                y,
+                subtitle,
+                self.theme.muted,
+                TextSize::Body,
+            );
         }
     }
 
@@ -317,23 +352,45 @@ impl ComponentKit {
         let (fill, border, fg) = match button.kind {
             ButtonKind::Primary => (self.theme.accent, self.theme.accent, self.theme.accent_text),
             ButtonKind::Secondary => (self.theme.panel_2, self.theme.border, self.theme.text),
-            ButtonKind::Ghost => (Color::rgba(0, 0, 0, 0), self.theme.border.with_alpha(120), self.theme.text),
+            ButtonKind::Ghost => (
+                Color::rgba(0, 0, 0, 0),
+                self.theme.border.with_alpha(120),
+                self.theme.text,
+            ),
             ButtonKind::Danger => (self.theme.danger, self.theme.danger, self.theme.text),
         };
 
-        let alpha = if button.disabled { 92 } else if button.pressed { 220 } else { 255 };
+        let alpha = if button.disabled {
+            92
+        } else if button.pressed {
+            220
+        } else {
+            255
+        };
         let fill = fill.with_alpha(alpha);
         let fg = fg.with_alpha(if button.disabled { 130 } else { 255 });
         let radius = self.metrics.radius_control;
 
         if matches!(button.kind, ButtonKind::Primary) && !button.disabled {
-            p.soft_shadow(button.rect, radius, self.theme.accent.with_alpha(28), 4, 0, 2);
+            p.soft_shadow(
+                button.rect,
+                radius,
+                self.theme.accent.with_alpha(28),
+                4,
+                0,
+                2,
+            );
         }
 
         if button.kind != ButtonKind::Ghost {
             p.rounded_rect(button.rect, radius, fill);
         }
-        p.rounded_border(button.rect, radius, 1, border.with_alpha(if button.disabled { 90 } else { 210 }));
+        p.rounded_border(
+            button.rect,
+            radius,
+            1,
+            border.with_alpha(if button.disabled { 90 } else { 210 }),
+        );
 
         let tw = crate::text_width(button.label, TextSize::Body) as i32;
         let scale = TextSize::Body.scale() as i32;
@@ -343,9 +400,19 @@ impl ComponentKit {
     }
 
     pub fn draw_input(&self, p: &mut Painter<'_>, input: Input<'_>) {
-        let label_h = if input.label.is_some() { TextSize::Small.line_height() as i32 + 5 } else { 0 };
+        let label_h = if input.label.is_some() {
+            TextSize::Small.line_height() as i32 + 5
+        } else {
+            0
+        };
         if let Some(label) = input.label {
-            p.text(input.rect.x, input.rect.y, label, self.theme.muted, TextSize::Small);
+            p.text(
+                input.rect.x,
+                input.rect.y,
+                label,
+                self.theme.muted,
+                TextSize::Small,
+            );
         }
 
         let field = Rect::new(
@@ -361,16 +428,45 @@ impl ComponentKit {
             InputState::Error => self.theme.danger,
             InputState::Disabled => self.theme.border.with_alpha(90),
         };
-        let text = if input.value.is_empty() { input.placeholder } else { input.value };
+        let text = if input.value.is_empty() {
+            input.placeholder
+        } else {
+            input.value
+        };
         let text_color = if input.value.is_empty() || matches!(input.state, InputState::Disabled) {
             self.theme.muted
         } else {
             self.theme.text
         };
 
-        p.rounded_rect(field, self.metrics.radius_control, self.theme.panel_2.with_alpha(if matches!(input.state, InputState::Disabled) { 92 } else { 210 }));
-        p.rounded_border(field, self.metrics.radius_control, if matches!(input.state, InputState::Focused) { 2 } else { 1 }, border.with_alpha(220));
-        p.text(field.x + 13, field.y + ((field.h as i32 - TextSize::Body.line_height() as i32) / 2).max(6), text, text_color, TextSize::Body);
+        p.rounded_rect(
+            field,
+            self.metrics.radius_control,
+            self.theme
+                .panel_2
+                .with_alpha(if matches!(input.state, InputState::Disabled) {
+                    92
+                } else {
+                    210
+                }),
+        );
+        p.rounded_border(
+            field,
+            self.metrics.radius_control,
+            if matches!(input.state, InputState::Focused) {
+                2
+            } else {
+                1
+            },
+            border.with_alpha(220),
+        );
+        p.text(
+            field.x + 13,
+            field.y + ((field.h as i32 - TextSize::Body.line_height() as i32) / 2).max(6),
+            text,
+            text_color,
+            TextSize::Body,
+        );
     }
 
     pub fn draw_list(&self, p: &mut Painter<'_>, list: List<'_>) {
@@ -378,29 +474,72 @@ impl ComponentKit {
             ListDensity::Compact => 42,
             ListDensity::Comfortable => 58,
         };
-        p.rounded_rect(list.rect, self.metrics.radius_card, self.theme.panel.with_alpha(180));
-        p.rounded_border(list.rect, self.metrics.radius_card, 1, self.theme.border.with_alpha(150));
+        p.rounded_rect(
+            list.rect,
+            self.metrics.radius_card,
+            self.theme.panel.with_alpha(180),
+        );
+        p.rounded_border(
+            list.rect,
+            self.metrics.radius_card,
+            1,
+            self.theme.border.with_alpha(150),
+        );
 
         let mut y = list.rect.y + 8;
         for (idx, item) in list.items.iter().enumerate() {
             if y + row_h > list.rect.y + list.rect.h as i32 {
                 break;
             }
-            let row = Rect::new(list.rect.x + 8, y, list.rect.w.saturating_sub(16), row_h as u32);
+            let row = Rect::new(
+                list.rect.x + 8,
+                y,
+                list.rect.w.saturating_sub(16),
+                row_h as u32,
+            );
             if item.selected {
-                p.rounded_rect(row, self.metrics.radius_control, self.theme.accent.with_alpha(42));
-                p.rounded_border(row, self.metrics.radius_control, 1, self.theme.accent.with_alpha(130));
+                p.rounded_rect(
+                    row,
+                    self.metrics.radius_control,
+                    self.theme.accent.with_alpha(42),
+                );
+                p.rounded_border(
+                    row,
+                    self.metrics.radius_control,
+                    1,
+                    self.theme.accent.with_alpha(130),
+                );
             } else if idx > 0 {
-                p.rect_alpha(Rect::new(list.rect.x + 18, y - 1, list.rect.w.saturating_sub(36), 1), self.theme.border.with_alpha(80));
+                p.rect_alpha(
+                    Rect::new(list.rect.x + 18, y - 1, list.rect.w.saturating_sub(36), 1),
+                    self.theme.border.with_alpha(80),
+                );
             }
 
-            p.text(row.x + 12, row.y + 10, item.label, self.theme.text, TextSize::Body);
+            p.text(
+                row.x + 12,
+                row.y + 10,
+                item.label,
+                self.theme.text,
+                TextSize::Body,
+            );
             if let Some(detail) = item.detail {
-                p.text(row.x + 12, row.y + 30, detail, self.theme.muted, TextSize::Small);
+                p.text(
+                    row.x + 12,
+                    row.y + 30,
+                    detail,
+                    self.theme.muted,
+                    TextSize::Small,
+                );
             }
             if let Some(badge) = item.badge {
                 let badge_w = crate::text_width(badge, TextSize::Small).saturating_add(18);
-                let b = Rect::new(row.x + row.w as i32 - badge_w as i32 - 10, row.y + 12, badge_w, 22);
+                let b = Rect::new(
+                    row.x + row.w as i32 - badge_w as i32 - 10,
+                    row.y + 12,
+                    badge_w,
+                    22,
+                );
                 p.rounded_rect(b, 11, self.theme.panel_2.with_alpha(210));
                 p.rounded_border(b, 11, 1, self.theme.border.with_alpha(150));
                 p.text(b.x + 9, b.y + 6, badge, self.theme.muted, TextSize::Small);
@@ -411,19 +550,44 @@ impl ComponentKit {
 
     pub fn draw_topbar(&self, p: &mut Painter<'_>, bar: TopBar<'_>) {
         p.rect_alpha(bar.rect, self.theme.bg.with_alpha(235));
-        p.rect_alpha(Rect::new(bar.rect.x, bar.rect.y + bar.rect.h as i32 - 1, bar.rect.w, 1), self.theme.border.with_alpha(150));
+        p.rect_alpha(
+            Rect::new(
+                bar.rect.x,
+                bar.rect.y + bar.rect.h as i32 - 1,
+                bar.rect.w,
+                1,
+            ),
+            self.theme.border.with_alpha(150),
+        );
 
         let mut title_x = bar.rect.x + self.metrics.pad;
         if let Some(left) = bar.left {
             let left_w = crate::text_width(left, TextSize::Body).saturating_add(22);
-            let b = Rect::new(bar.rect.x + 12, bar.rect.y + 10, left_w, self.metrics.control_h);
+            let b = Rect::new(
+                bar.rect.x + 12,
+                bar.rect.y + 10,
+                left_w,
+                self.metrics.control_h,
+            );
             self.draw_button(p, Button::new(b, left).ghost());
             title_x = b.x + b.w as i32 + self.metrics.gap;
         }
 
-        p.text(title_x, bar.rect.y + 11, bar.title, self.theme.text, TextSize::Body);
+        p.text(
+            title_x,
+            bar.rect.y + 11,
+            bar.title,
+            self.theme.text,
+            TextSize::Body,
+        );
         if let Some(subtitle) = bar.subtitle {
-            p.text(title_x, bar.rect.y + 32, subtitle, self.theme.muted, TextSize::Small);
+            p.text(
+                title_x,
+                bar.rect.y + 32,
+                subtitle,
+                self.theme.muted,
+                TextSize::Small,
+            );
         }
 
         if let Some(right) = bar.right {
@@ -459,7 +623,10 @@ pub fn demo_component_kit(p: &mut Painter<'_>, theme: Theme) {
             .subtitle("Card, Button, Input, List and TopBar are now first-class UI primitives."),
     );
 
-    kit.draw_button(p, Button::new(Rect::new(48, y + 100, 128, 40), "Open").primary());
+    kit.draw_button(
+        p,
+        Button::new(Rect::new(48, y + 100, 128, 40), "Open").primary(),
+    );
     kit.draw_button(p, Button::new(Rect::new(190, y + 100, 128, 40), "Trust"));
 
     kit.draw_input(
@@ -471,9 +638,16 @@ pub fn demo_component_kit(p: &mut Painter<'_>, theme: Theme) {
     );
 
     let items = [
-        ListItem::new("Storage").detail("content-addressed local blobs").badge("ready").selected(true),
-        ListItem::new("Identity").detail("local keys and trust root").badge("sealed"),
-        ListItem::new("Network").detail("mesh relay / direct peer route").badge("online"),
+        ListItem::new("Storage")
+            .detail("content-addressed local blobs")
+            .badge("ready")
+            .selected(true),
+        ListItem::new("Identity")
+            .detail("local keys and trust root")
+            .badge("sealed"),
+        ListItem::new("Network")
+            .detail("mesh relay / direct peer route")
+            .badge("online"),
     ];
     kit.draw_list(p, List::new(Rect::new(470, y + 94, 360, 190), &items));
 }

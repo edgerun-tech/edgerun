@@ -61,12 +61,14 @@ where
             );
             return Ok(response);
         }
-        let allowed = self.apps.get(&request.app_id).is_some_and(|app| {
-            app.storage_namespaces
-                .iter()
-                .any(|namespace| namespace.as_slice() == request.context.as_slice())
-        });
-        if !allowed {
+        if !self.storage_request_is_bound(
+            request.app_id,
+            request.release_id,
+            &request.context,
+            request.operation,
+            request.assurance,
+            time,
+        ) {
             let response = self.denied_storage_response(request_bytes, request, provider);
             self.append_event(
                 time,
@@ -173,7 +175,15 @@ where
         let allowed = self.apps.get(&request.app_id).is_some_and(|app| {
             app.release_id == request.release_id
                 && request.payload_sha256 == sha256(&request.payload)
-        });
+        }) && self.capability_is_granted(
+            request.app_id,
+            request.release_id,
+            sha256(&request.context),
+            CAPABILITY_KIND_SIGNING,
+            CAPABILITY_OPERATION_SIGN,
+            request.assurance,
+            time,
+        );
         if !allowed {
             let response = self.denied_capability_response(request_bytes, request, provider);
             self.append_event(

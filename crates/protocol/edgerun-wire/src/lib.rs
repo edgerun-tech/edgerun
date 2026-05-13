@@ -58,6 +58,23 @@ pub const RUNTIME_EVENT_HTTP_DISPATCHED: u16 = 8;
 pub const RUNTIME_EVENT_APP_MESSAGE_DISPATCHED: u16 = 9;
 pub const RUNTIME_EVENT_IDENTITY_ROUTE_GRANTED: u16 = 10;
 pub const RUNTIME_EVENT_APP_MESSAGE_FORWARDED: u16 = 11;
+pub const RUNTIME_EVENT_CAPABILITY_GRANTED: u16 = 12;
+pub const RUNTIME_EVENT_STORAGE_BOUND: u16 = 13;
+pub const RUNTIME_EVENT_NETWORK_BOUND: u16 = 14;
+pub const RUNTIME_EVENT_CAPABILITY_SESSION_OPENED: u16 = 15;
+
+pub const RUNTIME_STORAGE_BACKING_MEMORY: u16 = 1;
+pub const RUNTIME_STORAGE_BACKING_NATIVE: u16 = 2;
+pub const RUNTIME_STORAGE_BACKING_BROWSER: u16 = 3;
+pub const RUNTIME_STORAGE_BACKING_REMOTE: u16 = 4;
+
+pub const RUNTIME_NETWORK_BINDING_FETCH: u16 = 1;
+pub const RUNTIME_NETWORK_BINDING_SOCKET: u16 = 2;
+pub const RUNTIME_NETWORK_BINDING_NODE_MESSAGE: u16 = 3;
+
+pub const RUNTIME_SESSION_STATUS_OPEN: u16 = 1;
+pub const RUNTIME_SESSION_STATUS_CLOSED: u16 = 2;
+pub const RUNTIME_SESSION_STATUS_REVOKED: u16 = 3;
 
 pub const HTTP_METHOD_GET: u16 = 1;
 
@@ -418,22 +435,172 @@ pub struct UserProfileBody {
     pub owner_id: [u8; 32],
     pub owner_key_algorithm: u16,
     pub owner_private_key: Vec<u8>,
-    pub grants: Vec<UserCapabilityGrant>,
+    pub grants: Vec<RuntimeCapabilityGrant>,
     pub signature: Vec<u8>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[rkyv(crate = rkyv)]
-pub struct UserCapabilityGrant {
+pub struct RuntimeCapabilityGrant {
+    pub abi_version: u16,
+    pub flags: u32,
+    pub grant_id: [u8; 32],
+    pub profile_id: [u8; 32],
+    pub user_id: [u8; 32],
+    pub app_id: [u8; 32],
+    pub release_id: [u8; 32],
     pub capability_kind: u16,
     pub operation: u16,
     pub min_assurance: u16,
-    pub flags: u16,
+    pub scope_sha256: [u8; 32],
+    pub constraints_sha256: [u8; 32],
     pub valid_from: u64,
     pub valid_until: u64,
+    pub user_signature: Vec<u8>,
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn runtime_capability_grant_id(
+    profile_id: [u8; 32],
+    user_id: [u8; 32],
+    app_id: [u8; 32],
+    release_id: [u8; 32],
+    capability_kind: u16,
+    operation: u16,
+    scope_sha256: [u8; 32],
+    constraints_sha256: [u8; 32],
+    valid_from: u64,
+    valid_until: u64,
+) -> [u8; 32] {
+    let mut bytes = b"edgerun-runtime.capability-grant.v1".to_vec();
+    bytes.push(0);
+    bytes.extend_from_slice(&profile_id);
+    bytes.extend_from_slice(&user_id);
+    bytes.extend_from_slice(&app_id);
+    bytes.extend_from_slice(&release_id);
+    bytes.extend_from_slice(&capability_kind.to_le_bytes());
+    bytes.extend_from_slice(&operation.to_le_bytes());
+    bytes.extend_from_slice(&scope_sha256);
+    bytes.extend_from_slice(&constraints_sha256);
+    bytes.extend_from_slice(&valid_from.to_le_bytes());
+    bytes.extend_from_slice(&valid_until.to_le_bytes());
+    edgerun_crypto::sha256(&bytes)
+}
+
+pub fn runtime_storage_binding_id(
+    grant_id: [u8; 32],
+    namespace: &[u8],
+    provider_id: [u8; 32],
+    capability_id: [u8; 32],
+) -> [u8; 32] {
+    let mut bytes = b"edgerun-runtime.storage-binding.v1".to_vec();
+    bytes.push(0);
+    bytes.extend_from_slice(&grant_id);
+    bytes.extend_from_slice(&(namespace.len() as u64).to_le_bytes());
+    bytes.extend_from_slice(namespace);
+    bytes.extend_from_slice(&provider_id);
+    bytes.extend_from_slice(&capability_id);
+    edgerun_crypto::sha256(&bytes)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn runtime_network_binding_id(
+    grant_id: [u8; 32],
+    provider_id: [u8; 32],
+    capability_id: [u8; 32],
+    binding_kind: u16,
+    protocol: u16,
+    port: u16,
+    origin: &[u8],
+    methods_sha256: [u8; 32],
+) -> [u8; 32] {
+    let mut bytes = b"edgerun-runtime.network-binding.v1".to_vec();
+    bytes.push(0);
+    bytes.extend_from_slice(&grant_id);
+    bytes.extend_from_slice(&provider_id);
+    bytes.extend_from_slice(&capability_id);
+    bytes.extend_from_slice(&binding_kind.to_le_bytes());
+    bytes.extend_from_slice(&protocol.to_le_bytes());
+    bytes.extend_from_slice(&port.to_le_bytes());
+    bytes.extend_from_slice(&(origin.len() as u64).to_le_bytes());
+    bytes.extend_from_slice(origin);
+    bytes.extend_from_slice(&methods_sha256);
+    edgerun_crypto::sha256(&bytes)
+}
+
+pub fn runtime_capability_session_id(
+    grant_id: [u8; 32],
+    app_id: [u8; 32],
+    release_id: [u8; 32],
+    capability_id: [u8; 32],
+    provider_node_id: [u8; 32],
+    admission_hash: [u8; 32],
+    route_commitment: [u8; 32],
+) -> [u8; 32] {
+    let mut bytes = b"edgerun-runtime.capability-session.v1".to_vec();
+    bytes.push(0);
+    bytes.extend_from_slice(&grant_id);
+    bytes.extend_from_slice(&app_id);
+    bytes.extend_from_slice(&release_id);
+    bytes.extend_from_slice(&capability_id);
+    bytes.extend_from_slice(&provider_node_id);
+    bytes.extend_from_slice(&admission_hash);
+    bytes.extend_from_slice(&route_commitment);
+    edgerun_crypto::sha256(&bytes)
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RuntimeStorageBinding {
+    pub abi_version: u16,
+    pub flags: u32,
+    pub binding_id: [u8; 32],
+    pub grant_id: [u8; 32],
+    pub profile_id: [u8; 32],
     pub app_id: [u8; 32],
     pub release_id: [u8; 32],
+    pub namespace: Vec<u8>,
+    pub provider_id: [u8; 32],
+    pub capability_id: [u8; 32],
+    pub backing_kind: u16,
     pub scope_sha256: [u8; 32],
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RuntimeNetworkBinding {
+    pub abi_version: u16,
+    pub flags: u32,
+    pub binding_id: [u8; 32],
+    pub grant_id: [u8; 32],
+    pub profile_id: [u8; 32],
+    pub app_id: [u8; 32],
+    pub release_id: [u8; 32],
+    pub provider_id: [u8; 32],
+    pub capability_id: [u8; 32],
+    pub binding_kind: u16,
+    pub protocol: u16,
+    pub port: u16,
+    pub origin: Vec<u8>,
+    pub methods_sha256: [u8; 32],
+    pub scope_sha256: [u8; 32],
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
+pub struct RuntimeCapabilitySession {
+    pub abi_version: u16,
+    pub flags: u32,
+    pub session_id: [u8; 32],
+    pub grant_id: [u8; 32],
+    pub app_id: [u8; 32],
+    pub release_id: [u8; 32],
+    pub capability_id: [u8; 32],
+    pub provider_node_id: [u8; 32],
+    pub admission_hash: [u8; 32],
+    pub route_commitment: [u8; 32],
+    pub valid_until: u64,
+    pub status: u16,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
@@ -1285,17 +1452,6 @@ pub struct RemoteBluetoothConnectionInfo {
     pub paired: Option<bool>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
-pub struct CapabilityGrantIdSeed {
-    pub request_id: Vec<u8>,
-    pub provider_name: Vec<u8>,
-    pub provider_instance_id: Vec<u8>,
-    pub nonce: u64,
-    pub unix_secs: u64,
-    pub unix_nanos: u32,
-}
-
 pub type RemoteBlockRequestId = u64;
 
 #[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
@@ -1430,7 +1586,10 @@ pub enum SdkWireRecord {
     CapabilityResponse(CapabilityResponse),
     UserProfile(UserProfile),
     UserProfileBody(UserProfileBody),
-    UserCapabilityGrant(UserCapabilityGrant),
+    RuntimeCapabilityGrant(RuntimeCapabilityGrant),
+    RuntimeStorageBinding(RuntimeStorageBinding),
+    RuntimeNetworkBinding(RuntimeNetworkBinding),
+    RuntimeCapabilitySession(RuntimeCapabilitySession),
     RuntimeEvent(RuntimeEvent),
     RuntimeAppInstall(RuntimeAppInstall),
     RuntimeCapabilityDeclaration(RuntimeCapabilityDeclaration),
@@ -1515,16 +1674,22 @@ mod tests {
             owner_id: [2; 32],
             owner_key_algorithm: USER_PROFILE_OWNER_KEY_ED25519,
             owner_private_key: vec![6; 32],
-            grants: vec![UserCapabilityGrant {
+            grants: vec![RuntimeCapabilityGrant {
+                abi_version: SDK_WIRE_ABI_VERSION,
+                flags: 1,
+                grant_id: [10; 32],
+                profile_id: [1; 32],
+                user_id: [2; 32],
+                app_id: [3; 32],
+                release_id: [4; 32],
                 capability_kind: CAPABILITY_KIND_SEALING,
                 operation: CAPABILITY_OPERATION_UNSEAL,
                 min_assurance: 2,
-                flags: 0,
+                scope_sha256: [5; 32],
+                constraints_sha256: [11; 32],
                 valid_from: 10,
                 valid_until: 20,
-                app_id: [3; 32],
-                release_id: [4; 32],
-                scope_sha256: [5; 32],
+                user_signature: vec![12; 64],
             }],
             signature: vec![9; 64],
         };
@@ -1546,6 +1711,76 @@ mod tests {
         );
         let bytes = sdk_wire_bytes(&SdkWireRecord::RuntimeEvent(event));
         assert!(!bytes.is_empty());
+    }
+
+    #[test]
+    fn runtime_choice_binding_and_session_records_archive() {
+        let grant = RuntimeCapabilityGrant {
+            abi_version: SDK_WIRE_ABI_VERSION,
+            flags: 1,
+            grant_id: [1; 32],
+            profile_id: [2; 32],
+            user_id: [3; 32],
+            app_id: [4; 32],
+            release_id: [5; 32],
+            capability_kind: CAPABILITY_KIND_STORAGE,
+            operation: CAPABILITY_OPERATION_WRITE,
+            min_assurance: 2,
+            scope_sha256: [6; 32],
+            constraints_sha256: [7; 32],
+            valid_from: 10,
+            valid_until: 20,
+            user_signature: vec![8; 64],
+        };
+        let storage = RuntimeStorageBinding {
+            abi_version: SDK_WIRE_ABI_VERSION,
+            flags: 1,
+            binding_id: [9; 32],
+            grant_id: grant.grant_id,
+            profile_id: grant.profile_id,
+            app_id: grant.app_id,
+            release_id: grant.release_id,
+            namespace: b"chat".to_vec(),
+            provider_id: [10; 32],
+            capability_id: [11; 32],
+            backing_kind: RUNTIME_STORAGE_BACKING_BROWSER,
+            scope_sha256: grant.scope_sha256,
+        };
+        let network = RuntimeNetworkBinding {
+            abi_version: SDK_WIRE_ABI_VERSION,
+            flags: 1,
+            binding_id: [12; 32],
+            grant_id: grant.grant_id,
+            profile_id: grant.profile_id,
+            app_id: grant.app_id,
+            release_id: grant.release_id,
+            provider_id: [13; 32],
+            capability_id: [14; 32],
+            binding_kind: RUNTIME_NETWORK_BINDING_FETCH,
+            protocol: RUNTIME_PROTOCOL_HTTPS,
+            port: 443,
+            origin: b"https://api.example.com".to_vec(),
+            methods_sha256: [15; 32],
+            scope_sha256: grant.scope_sha256,
+        };
+        let session = RuntimeCapabilitySession {
+            abi_version: SDK_WIRE_ABI_VERSION,
+            flags: 1,
+            session_id: [16; 32],
+            grant_id: grant.grant_id,
+            app_id: grant.app_id,
+            release_id: grant.release_id,
+            capability_id: [17; 32],
+            provider_node_id: [18; 32],
+            admission_hash: [19; 32],
+            route_commitment: [20; 32],
+            valid_until: 20,
+            status: RUNTIME_SESSION_STATUS_OPEN,
+        };
+        assert!(!sdk_wire_bytes(&SdkWireRecord::RuntimeCapabilityGrant(grant)).is_empty());
+        assert!(!sdk_wire_bytes(&SdkWireRecord::RuntimeStorageBinding(storage)).is_empty());
+        assert!(!sdk_wire_bytes(&SdkWireRecord::RuntimeNetworkBinding(network)).is_empty());
+        assert!(!sdk_wire_bytes(&SdkWireRecord::RuntimeCapabilitySession(session)).is_empty());
     }
 
     #[test]

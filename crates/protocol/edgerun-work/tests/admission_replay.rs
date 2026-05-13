@@ -2,6 +2,7 @@
 
 use std::net::{TcpListener, TcpStream};
 use std::thread::{self, JoinHandle};
+use std::time::Duration;
 
 use edgerun_crypto::Ed25519SigningKey;
 use edgerun_work::*;
@@ -62,6 +63,7 @@ fn signed_relay_available(key: &Ed25519SigningKey) -> NodeAvailable {
         NodeAvailable {
             abi_version: WORK_WIRE_ABI_VERSION,
             node: node_identity_from_key(key, NODE_ROLE_RELAY),
+            relay_endpoint: Some(tcp_endpoint("relay", "127.0.0.1:0")),
             sequence: 1,
             unix_ms: unix_ms(),
             heartbeat_secs: DEFAULT_HEARTBEAT_SECS,
@@ -76,7 +78,6 @@ fn admit_relay(controller: &InMemoryAdmissionController, seed: u8) -> (TcpStream
     let addr = listener.local_addr().expect("admission test listener addr");
     let relay_key = Ed25519SigningKey::from_bytes(&[seed; 32]);
     let relay_id = node_identity_from_key(&relay_key, NODE_ROLE_RELAY).node_id;
-    controller.set_relay_endpoint(relay_id, tcp_endpoint("relay", format!("127.0.0.1:{seed}")));
     let server_controller = controller.clone();
     let server = thread::spawn(move || {
         let (stream, _) = listener.accept().expect("accept admission test stream");
@@ -271,6 +272,40 @@ fn admission_removes_assigned_nodes_when_relay_connection_drops() {
 
     drop(storage_client);
     storage_thread.join().expect("storage connection joined");
+}
+
+#[test]
+fn admission_pruning_dead_relay_removes_assigned_branch() {
+    let controller = controller();
+    let (relay_client, relay_thread) = admit_relay(&controller, 59);
+    let relay =
+        node_identity_from_key(&Ed25519SigningKey::from_bytes(&[59u8; 32]), NODE_ROLE_RELAY);
+    assert_eq!(controller.relay_count(), 1);
+
+    let (mut storage_client, response, storage_thread) =
+        admit_node(&controller, 60, NODE_ROLE_STORAGE);
+    let WorkPacket::RelayAssignment(assignment) = response else {
+        panic!("expected relay assignment, got {response:?}");
+    };
+    assert_eq!(assignment.relay.relay_node_id, relay.node_id);
+    assert_eq!(controller.assigned_node_count(), 1);
+
+    thread::sleep(Duration::from_millis(1_100));
+    assert_eq!(controller.prune_dead_relays(), vec![relay.node_id]);
+    assert_eq!(controller.relay_count(), 0);
+    assert_eq!(controller.assigned_node_count(), 0);
+    assert_ack(
+        storage_client
+            .heartbeat()
+            .expect("pruned node heartbeat handled"),
+        401,
+        "invalid heartbeat",
+    );
+
+    drop(storage_client);
+    storage_thread.join().expect("storage connection joined");
+    drop(relay_client);
+    relay_thread.join().expect("relay connection joined");
 }
 
 #[test]

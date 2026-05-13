@@ -40,7 +40,6 @@ use core::module_path;
 
 use crate::command_dispatch::{ControllerSet, dispatch_command};
 use crate::{Node, NodeConfig};
-use edgerun_capabilities::CapabilityGrant;
 use edgerun_hardware_signing::{MeshSigner, NodeID};
 use edgerun_mesh::MeshRouter;
 use edgerun_mesh::{LocalNode, MeshFrame};
@@ -229,14 +228,6 @@ impl MeshNode {
     /// Returns whether durable storage is attached.
     pub fn storage_ready(&self) -> bool {
         self.store.is_some()
-    }
-
-    /// Installs a capability grant.
-    /// **WARNING**: This bypasses the event stream. Use
-    /// `capabilities::record_capability_grant_event()` in production.
-    #[cfg(test)]
-    pub fn install_grant(&mut self, grant: CapabilityGrant) {
-        self.node.install_grant(grant);
     }
 
     /// Decodes a mesh frame as a command envelope.

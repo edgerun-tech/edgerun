@@ -1,0 +1,20 @@
+use super::Color4;
+
+pub const BG: Color4 = Color4::from_color(crate::EDGERUN_DARK.bg);
+pub const SIDEBAR: Color4 = Color4::from_color_alpha(crate::EDGERUN_DARK.panel, 0.98);
+pub const TOPBAR: Color4 = Color4::from_color_alpha(crate::EDGERUN_DARK.panel, 0.96);
+pub const ROW: Color4 = Color4::from_color_alpha(crate::EDGERUN_DARK.panel_2, 0.74);
+pub const ACTIVE_ROW: Color4 = Color4::from_color_alpha(crate::EDGERUN_DARK.accent, 0.42);
+pub const PANEL: Color4 = Color4::from_color_alpha(crate::EDGERUN_DARK.panel, 0.94);
+pub const ASSISTANT: Color4 = Color4::from_color_alpha(crate::EDGERUN_DARK.panel_2, 0.96);
+pub const USER: Color4 = Color4::from_color_alpha(crate::EDGERUN_DARK.accent, 0.34);
+pub const COMPOSER: Color4 = Color4::from_color_alpha(crate::EDGERUN_DARK.panel, 0.98);
+pub const BORDER: Color4 = Color4::from_color_alpha(crate::EDGERUN_DARK.border, 0.48);
+pub const ACCENT: Color4 = Color4::from_color(crate::EDGERUN_DARK.accent);
+pub const GREEN: Color4 = Color4::from_color(crate::TAILWIND.emerald_500);
+pub const VIOLET: Color4 = Color4::from_color(crate::TAILWIND.violet_500);
+pub const AMBER: Color4 = Color4::from_color(crate::TAILWIND.amber_500);
+pub const DANGER: Color4 = Color4::from_color(crate::EDGERUN_DARK.danger);
+pub const ACCENT_TEXT: Color4 = Color4::from_color(crate::EDGERUN_DARK.accent_text);
+pub const TEXT: Color4 = Color4::from_color(crate::EDGERUN_DARK.text);
+pub const MUTED: Color4 = Color4::from_color(crate::EDGERUN_DARK.muted);

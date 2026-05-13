@@ -1,6 +1,7 @@
 //! Generated from @tabler/icons-webfont. Do not edit by hand.
 
-pub const TABLER_ICON_FONT_HINT: &str = "/tmp/edgerun-tabler-font/node_modules/@tabler/icons-webfont/dist/fonts/tabler-icons.ttf";
+pub const TABLER_ICON_FONT_HINT: &str =
+    "/tmp/edgerun-tabler-font/node_modules/@tabler/icons-webfont/dist/fonts/tabler-icons.ttf";
 
 pub fn tabler_icon(name: &str) -> Option<char> {
     match name {

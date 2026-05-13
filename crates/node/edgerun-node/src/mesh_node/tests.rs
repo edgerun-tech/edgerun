@@ -213,40 +213,6 @@ fn mesh_node_events_accessor() {
 }
 
 #[test]
-fn mesh_node_install_grant() {
-    let config = test_config();
-    let signer = Box::new(test_signer());
-    let mut node = MeshNode::from_config(config, signer).unwrap();
-
-    let grant = edgerun_capabilities::CapabilityGrant {
-        grant_version: 1,
-        grant_id: vec![1, 2, 3],
-        issuer: Some(proto_common::IdentityRef {
-            identity_id: vec![4, 5, 6],
-            identity_kind: Some(2),
-            key_hint: None,
-        }),
-        grantee: Some(proto_common::IdentityRef {
-            identity_id: vec![1, 2, 3],
-            identity_kind: Some(0),
-            key_hint: None,
-        }),
-        grantee_node: None,
-        selector: None,
-        granted_operations: vec![],
-        enforced_constraints: vec![],
-        access_class: 0,
-        issued_at: None,
-        expires_at: None,
-        correlation_id: vec![],
-        supersedes_revocation: None,
-        signature: None,
-    };
-
-    node.install_grant(grant);
-}
-
-#[test]
 fn mesh_node_multiple_ticks_are_idempotent() {
     let config = test_config();
     let signer = Box::new(test_signer());

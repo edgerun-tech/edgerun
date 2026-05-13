@@ -3,10 +3,10 @@ use std::os::raw::{c_char, c_int, c_void};
 use std::ptr;
 use std::time::{Duration, Instant};
 
-use edgerun_ui_core::visual::demo_dashboard_polished;
-use edgerun_ui_core::{DashboardState, Painter, EDGERUN_DARK};
 #[cfg(feature = "fontdue-text")]
 use edgerun_ui_core::font::{FontFace, TextStyle};
+use edgerun_ui_core::visual::demo_dashboard_polished;
+use edgerun_ui_core::{DashboardState, EDGERUN_DARK, Painter};
 
 const SDL_INIT_VIDEO: u32 = 0x0000_0020;
 const SDL_WINDOWPOS_CENTERED: c_int = 0x2fff_0000u32 as c_int;
@@ -92,11 +92,7 @@ struct Sdl;
 impl Sdl {
     fn init() -> Result<Self, String> {
         let rc = unsafe { SDL_Init(SDL_INIT_VIDEO) };
-        if rc != 0 {
-            Err(sdl_error())
-        } else {
-            Ok(Self)
-        }
+        if rc != 0 { Err(sdl_error()) } else { Ok(Self) }
     }
 }
 
@@ -227,11 +223,56 @@ fn run() -> Result<(), String> {
             #[cfg(feature = "fontdue-text")]
             if let Some(font) = &ui_font {
                 // real font overlay
-                painter.text_font(122, 52, "EdgeRun", TextStyle { font, px: 38.0, color: EDGERUN_DARK.text });
-                painter.text_font(124, 98, "rounded / antialiased / subtle-shadow CPU UI", TextStyle { font, px: 17.0, color: EDGERUN_DARK.muted });
-                painter.text_font(96, 276, "CPU", TextStyle { font, px: 17.0, color: EDGERUN_DARK.muted });
-                painter.text_font(374, 276, "RAM", TextStyle { font, px: 17.0, color: EDGERUN_DARK.muted });
-                painter.text_font(652, 276, "NET", TextStyle { font, px: 17.0, color: EDGERUN_DARK.muted });
+                painter.text_font(
+                    122,
+                    52,
+                    "EdgeRun",
+                    TextStyle {
+                        font,
+                        px: 38.0,
+                        color: EDGERUN_DARK.text,
+                    },
+                );
+                painter.text_font(
+                    124,
+                    98,
+                    "rounded / antialiased / subtle-shadow CPU UI",
+                    TextStyle {
+                        font,
+                        px: 17.0,
+                        color: EDGERUN_DARK.muted,
+                    },
+                );
+                painter.text_font(
+                    96,
+                    276,
+                    "CPU",
+                    TextStyle {
+                        font,
+                        px: 17.0,
+                        color: EDGERUN_DARK.muted,
+                    },
+                );
+                painter.text_font(
+                    374,
+                    276,
+                    "RAM",
+                    TextStyle {
+                        font,
+                        px: 17.0,
+                        color: EDGERUN_DARK.muted,
+                    },
+                );
+                painter.text_font(
+                    652,
+                    276,
+                    "NET",
+                    TextStyle {
+                        font,
+                        px: 17.0,
+                        color: EDGERUN_DARK.muted,
+                    },
+                );
             }
         }
 

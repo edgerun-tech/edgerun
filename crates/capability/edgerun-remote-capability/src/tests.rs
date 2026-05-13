@@ -64,7 +64,7 @@ use crate::capability_error_result;
 use crate::policy::{IntoPolicyWrappedProvider, PolicyWrappedProvider};
 use crate::protocol::{
     RemoteCapabilityProvider, RemoteCapabilityTransport, RemoteInvocationResult,
-    accept_session_open_unchecked, default_remote_requester,
+    accept_session_open_unchecked, default_remote_requester, session_open_as_request,
 };
 use crate::pump_one_event;
 use crate::serve_one;
@@ -774,7 +774,7 @@ fn end_to_end_session_revocation_denies_later_invocation() {
 }
 
 #[test]
-fn inbound_grant_and_revocation_are_applied() {
+fn request_grant_and_revocation_are_applied() {
     let mut provider = PolicyWrappedProvider::new(DummyProvider::default());
     let descriptor = provider.descriptor();
     let selector = CapabilitySelector {
@@ -805,7 +805,6 @@ fn inbound_grant_and_revocation_are_applied() {
         Some(grant) => grant,
         None => panic!("expected grant"),
     };
-    provider.handle_grant(&grant).unwrap();
     assert!(provider.policy().grant_record(&grant.grant_id).is_some());
 
     let revocation = CapabilityRevocation {
@@ -825,6 +824,40 @@ fn inbound_grant_and_revocation_are_applied() {
             .grant_record(&grant.grant_id)
             .unwrap()
             .is_revoked()
+    );
+}
+
+#[test]
+fn standalone_grant_envelope_is_rejected() {
+    let (mut client, mut server) = MemoryRemoteTransport::pair();
+    let mut provider = PolicyWrappedProvider::new(DummyProvider::default());
+    let descriptor = provider.descriptor();
+    let request = session_open_as_request(
+        &CapabilitySessionOpen {
+            version: 1,
+            session_id: b"sess".to_vec(),
+            selector: None,
+            mode: CapabilitySessionMode::Unary as i32,
+            requested_operations: vec![CapabilityOperation::Observe as i32],
+            requested_access_class: CapabilityAccessClass::Derived as i32,
+            requested_constraints: Vec::new(),
+            correlation_id: Vec::new(),
+        },
+        &descriptor,
+        Some(default_remote_requester()),
+        None,
+    );
+    let grant = provider.handle_request(&request).unwrap().unwrap();
+
+    client
+        .send(CapabilityRemoteEnvelope {
+            message: Some(capability_remote_envelope::Message::Grant(grant)),
+        })
+        .unwrap();
+    let err = serve_one(&mut provider, &mut server).unwrap_err();
+    assert!(
+        err.to_string()
+            .contains("standalone remote capability grants")
     );
 }
 

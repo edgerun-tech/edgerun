@@ -130,7 +130,6 @@ use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
-use edgerun_capabilities::CapabilityGrant;
 use edgerun_capability_policy::SimplePolicyEngine;
 use edgerun_hardware_signing::NodeID;
 use edgerun_protocols::core_protocol::command::{CommandValidationContext, validate_command};
@@ -348,16 +347,6 @@ impl<L: EventLog, S: ProtocolSigner> Node<L, S> {
                 Err(NodeError::CommandRejected(reason))
             }
         }
-    }
-
-    /// Installs a capability grant directly into the policy engine.
-    ///
-    /// **WARNING**: This bypasses the event stream. In production, use
-    /// `capabilities::record_capability_grant_event()` instead to ensure
-    /// the grant is recorded as a signed event.
-    #[cfg(test)]
-    pub fn install_grant(&mut self, grant: CapabilityGrant) {
-        let _ = self.policy.import_grant(grant);
     }
 
     /// Returns the node's identity.

@@ -13,6 +13,7 @@ default = []
 std = []
 
 [dependencies]
+edgerun-crypto = { version = "0.1", path = "../../utility/edgerun-crypto", default-features = false, features = ["sha2"] }
 rkyv = { version = "0.8.16", default-features = false, features = ["alloc", "bytecheck"] }
 
 [lints]

@@ -92,10 +92,7 @@ const PATHS_SPARKLES: &[&str] = &[
     "M16 18a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2m0 -12a2 2 0 0 1 2 2a2 2 0 0 1 2 -2a2 2 0 0 1 -2 -2a2 2 0 0 1 -2 2m-7 12a6 6 0 0 1 6 -6a6 6 0 0 1 -6 -6a6 6 0 0 1 -6 6a6 6 0 0 1 6 6",
 ];
 
-const PATHS_CHECK: &[&str] = &[
-    "M0 0h24v24H0z",
-    "M5 12l5 5l10 -10",
-];
+const PATHS_CHECK: &[&str] = &["M0 0h24v24H0z", "M5 12l5 5l10 -10"];
 
 const PATHS_ALERT_TRIANGLE: &[&str] = &[
     "M0 0h24v24H0z",
@@ -105,17 +102,56 @@ const PATHS_ALERT_TRIANGLE: &[&str] = &[
 ];
 
 pub const TABLER_ICONS: &[TablerIcon] = &[
-    TablerIcon { name: "brand-tabler", paths: PATHS_BRAND_TABLER },
-    TablerIcon { name: "cpu", paths: PATHS_CPU },
-    TablerIcon { name: "server", paths: PATHS_SERVER },
-    TablerIcon { name: "shield-check", paths: PATHS_SHIELD_CHECK },
-    TablerIcon { name: "network", paths: PATHS_NETWORK },
-    TablerIcon { name: "database", paths: PATHS_DATABASE },
-    TablerIcon { name: "terminal-2", paths: PATHS_TERMINAL_2 },
-    TablerIcon { name: "wallet", paths: PATHS_WALLET },
-    TablerIcon { name: "key", paths: PATHS_KEY },
-    TablerIcon { name: "lock", paths: PATHS_LOCK },
-    TablerIcon { name: "sparkles", paths: PATHS_SPARKLES },
-    TablerIcon { name: "check", paths: PATHS_CHECK },
-    TablerIcon { name: "alert-triangle", paths: PATHS_ALERT_TRIANGLE },
+    TablerIcon {
+        name: "brand-tabler",
+        paths: PATHS_BRAND_TABLER,
+    },
+    TablerIcon {
+        name: "cpu",
+        paths: PATHS_CPU,
+    },
+    TablerIcon {
+        name: "server",
+        paths: PATHS_SERVER,
+    },
+    TablerIcon {
+        name: "shield-check",
+        paths: PATHS_SHIELD_CHECK,
+    },
+    TablerIcon {
+        name: "network",
+        paths: PATHS_NETWORK,
+    },
+    TablerIcon {
+        name: "database",
+        paths: PATHS_DATABASE,
+    },
+    TablerIcon {
+        name: "terminal-2",
+        paths: PATHS_TERMINAL_2,
+    },
+    TablerIcon {
+        name: "wallet",
+        paths: PATHS_WALLET,
+    },
+    TablerIcon {
+        name: "key",
+        paths: PATHS_KEY,
+    },
+    TablerIcon {
+        name: "lock",
+        paths: PATHS_LOCK,
+    },
+    TablerIcon {
+        name: "sparkles",
+        paths: PATHS_SPARKLES,
+    },
+    TablerIcon {
+        name: "check",
+        paths: PATHS_CHECK,
+    },
+    TablerIcon {
+        name: "alert-triangle",
+        paths: PATHS_ALERT_TRIANGLE,
+    },
 ];

@@ -2,7 +2,7 @@ use alloc::collections::{BTreeMap, VecDeque};
 use alloc::vec::Vec;
 
 use edgerun_work::{
-    CHANNEL_KIND_QUIC, ChannelEnvelope, Hash, NodeId, RouteAdvertisement, TransportPacketFrame,
+    CHANNEL_KIND_QUIC, ChannelEnvelope, Hash, NodeId, RouteBinding, TransportPacketFrame,
     WorkPacketTransport, WorkTransportError, archived_packet_frame_from_bytes,
 };
 
@@ -204,7 +204,7 @@ impl QuicWorkTransport {
 impl WorkPacketTransport for QuicWorkTransport {
     fn send_packet_bytes(
         &mut self,
-        route: &RouteAdvertisement,
+        route: &RouteBinding,
         packet_bytes: &[u8],
     ) -> Result<(), WorkTransportError> {
         if route.endpoint.kind != CHANNEL_KIND_QUIC {
@@ -231,35 +231,14 @@ mod tests {
     use super::*;
     use edgerun_crypto::Ed25519SigningKey;
     use edgerun_work::{
-        ChannelEndpoint, DEPARTMENT_MESSAGE, NODE_ROLE_MESSAGE, NodeIdentity,
-        ROUTE_STATUS_AVAILABLE, RouteAdvertisement, SimNode, WORK_TYPE_MESSAGE_DELIVER,
-        WORK_WIRE_ABI_VERSION, WorkPacket, archived_packet_frame_from_bytes, empty_signature,
-        encode_work_packet_once, quic_endpoint, sign_route_advertisement, websocket_endpoint,
+        ChannelEndpoint, DEPARTMENT_MESSAGE, NODE_ROLE_MESSAGE, RouteBindingBuilder, SimNode,
+        WORK_TYPE_MESSAGE_DELIVER, WorkPacket, archived_packet_frame_from_bytes,
+        encode_work_packet_once, quic_endpoint, websocket_endpoint,
     };
 
-    fn route(endpoint: ChannelEndpoint) -> RouteAdvertisement {
+    fn route(endpoint: ChannelEndpoint) -> RouteBinding {
         let key = Ed25519SigningKey::from_bytes(&[90u8; 32]);
-        let identity = edgerun_work::node_identity_from_key(&key, NODE_ROLE_MESSAGE);
-        sign_route_advertisement(
-            &key,
-            RouteAdvertisement {
-                abi_version: WORK_WIRE_ABI_VERSION,
-                node: NodeIdentity {
-                    node_id: identity.node_id,
-                    role: identity.role,
-                    public_key: identity.public_key,
-                },
-                relay_node_id: identity.node_id,
-                endpoint,
-                roles: alloc::vec![NODE_ROLE_MESSAGE],
-                departments: alloc::vec![],
-                status: ROUTE_STATUS_AVAILABLE,
-                sequence: 1,
-                valid_until_unix_ms: u64::MAX,
-                previous_route_hash: [0u8; 32],
-                signature: empty_signature(),
-            },
-        )
+        RouteBindingBuilder::new(&key, NODE_ROLE_MESSAGE, endpoint).build()
     }
 
     #[test]

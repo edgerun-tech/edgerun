@@ -42,6 +42,7 @@ The canonical flow is:
 ```text
 capability keypair
   -> capability NodeId
+  -> relay connects to admission with signed NodeAvailable(relay endpoint)
   -> capability asks admission for relay assignment
   -> admission returns signed RelayAssignment with ChannelEndpoint
   -> capability connects to that admission-assigned endpoint

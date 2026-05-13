@@ -15,6 +15,7 @@ pub struct RelayEndpoint {
 pub struct NodeAvailable {
     pub abi_version: u16,
     pub node: NodeIdentity,
+    pub relay_endpoint: Option<ChannelEndpoint>,
     pub sequence: u64,
     pub unix_ms: u64,
     pub heartbeat_secs: u64,

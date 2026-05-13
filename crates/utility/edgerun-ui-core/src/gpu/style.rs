@@ -1,4 +1,4 @@
-use super::{palette, Color4, UiRect};
+use super::{Color4, UiRect, palette};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Axis {
@@ -42,6 +42,8 @@ pub struct UiStyle {
     pub border: bool,
     pub radius: f32,
     pub truncate: bool,
+    pub disabled: bool,
+    pub loading: bool,
 }
 
 impl Default for UiStyle {
@@ -62,6 +64,8 @@ impl Default for UiStyle {
             border: false,
             radius: 0.0,
             truncate: false,
+            disabled: false,
+            loading: false,
         }
     }
 }
@@ -103,6 +107,8 @@ impl UiStyle {
             "col" | "column" | "flex-col" => self.direction = Axis::Vertical,
             "flex-1" | "grow" => self.grow = true,
             "truncate" => self.truncate = true,
+            "disabled" => self.disabled = true,
+            "loading" => self.loading = true,
             "border" => self.border = true,
             "items-start" => self.align = AlignItems::Start,
             "items-center" => self.align = AlignItems::Center,

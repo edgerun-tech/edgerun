@@ -63,10 +63,6 @@ pub trait RemoteCapabilityProvider {
         Ok(None)
     }
 
-    fn handle_grant(&mut self, _grant: &CapabilityGrant) -> Result<(), CapabilityError> {
-        Ok(())
-    }
-
     fn handle_revocation(
         &mut self,
         _revocation: &CapabilityRevocation,

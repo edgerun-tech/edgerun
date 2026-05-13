@@ -61,14 +61,15 @@ admission
         <-> identity-bound capability leaves
 ```
 
-A capability asks admission for a relay assignment. Admission returns a signed
-`RelayAssignment` containing the relay `ChannelEndpoint`; the capability then
-connects to that endpoint and proves the path by sending signed protocol traffic
-over it. Capabilities do not advertise their own endpoints, publish their own
-availability, or select routes for other nodes. If the relay branch dies,
-admission removes the relay and every assigned capability behind it; each
-capability must ask admission for a new relay assignment before receiving new
-work.
+A relay connects to admission with a signed `NodeAvailable` that includes its
+relay `ChannelEndpoint`. A capability asks admission for a relay assignment.
+Admission returns a signed `RelayAssignment` containing the selected relay
+endpoint; the capability then connects to that endpoint and proves the path by
+sending signed protocol traffic over it. Capability leaves do not advertise
+their own endpoints, publish their own availability, or select routes for other
+nodes. If the relay branch dies, admission removes the relay and every assigned
+capability behind it; each capability must ask admission for a new relay
+assignment before receiving new work.
 
 Work routing is predefined by admission. A sender asks admission for access to a
 capability. Admission verifies policy and availability, then returns a signed
@@ -104,6 +105,73 @@ network interfaces. The app SDK should expose UI construction and capability
 requests, not machine topology. The host/device admission node decides whether a
 request routes through memory, WebSocket, TCP, a local file adapter, a network
 adapter, or a remote relay.
+
+## App Runtime UX Mapping
+
+User experience is modeled as a projection over runtime records, not as a
+separate permission system. A UI action such as "allow this app to use this
+storage location" becomes durable runtime state:
+
+```text
+UI intent
+  -> RuntimeCapabilityGrant
+  -> RuntimeStorageBinding / RuntimeNetworkBinding
+  -> WorkAdmission
+  -> RuntimeCapabilitySession
+  -> CapabilityEnvelope packets
+  -> RuntimeEvent audit log
+```
+
+The UI owns presentation and intent capture. It does not own storage, network,
+identity, or device authority. Apps request capabilities through the SDK using
+ordinary product concepts such as object storage, scoped fetch, camera input, or
+render output. The runtime converts those requests into records:
+
+| UX concept | Runtime record | Meaning |
+|---|---|---|
+| Install app | `RuntimeAppInstall` | Package identity, declared routes, namespaces, provided and required capabilities. |
+| User allows capability | `RuntimeCapabilityGrant` | User/profile/app/release scoped grant with capability kind, operation, scope, constraints, validity, and signature bytes. |
+| User chooses storage provider | `RuntimeStorageBinding` | App namespace bound to a provider identity, capability id, and backing kind such as native, browser, memory, or remote. |
+| User chooses network access | `RuntimeNetworkBinding` | App network scope bound to a provider identity, origin/protocol/port/method policy, and capability id. |
+| App starts using a grant | `RuntimeCapabilitySession` | Volatile live session bound to grant id, provider node id, admission hash, route commitment, and expiry. |
+| User audits/revokes | `RuntimeEvent` stream | Append-only record of grants, bindings, session opens, denials, executions, and dispatches. |
+
+This gives the UI a simple model:
+
+```text
+installed apps
+  -> available capability requests
+  -> granted choices
+  -> active sessions
+  -> audit history
+```
+
+It also keeps enforcement deterministic. React state, browser cookies, local
+configuration, and service worker memory are only caches. The runtime record and
+the admitted work chain are the authority.
+
+Storage is always a capability binding. `RuntimeAppInstall.storage_namespaces`
+declares which namespaces an app may request, but that declaration does not
+authorize reads or writes. Actual storage use requires a live
+`RuntimeStorageBinding` backed by a `RuntimeCapabilityGrant`. The same app
+namespace may be backed by native durable storage, browser IndexedDB/local
+storage, memory for tests, or a remote object provider such as Google Drive,
+GitHub, S3, or another Edgerun node. Apps see `object.get` and `object.put`;
+admission and provider binding decide where the objects live.
+
+Network access is also a capability binding. `RuntimeAppInstall.declared_routes`
+declares which HTTP routes an app can serve, but that declaration does not
+authorize network exposure. Installing a route requires a matching
+`RuntimeNetworkBinding` backed by a `RuntimeCapabilityGrant`. Apps request
+scoped fetch, socket, HTTP route, or node-message capability. The runtime binds
+that request to an origin, method set, protocol, provider identity, and eventual
+admission route. Raw network is not ambient app authority.
+
+Live sessions are intentionally separate from grants. A grant may survive app
+restart or profile unlock, but `RuntimeCapabilitySession` is short-lived and
+must be reopened through admission. Locking the Trust Container, switching
+profiles, revoking a grant, or losing a relay branch clears sessions without
+rewriting app install state.
 
 ## Runtime layers
 

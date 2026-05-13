@@ -325,41 +325,6 @@ fn node_process_command_replay_path_is_inert_without_storage_dispatch() {
     assert_eq!(node.head().unwrap().seq, 0);
 }
 
-#[test]
-fn node_install_grant() {
-    let config = test_config();
-    let signer = Arc::new(test_signer());
-    let mut node = Node::from_config(config, signer).unwrap();
-
-    // Install a grant — should not panic
-    let grant = edgerun_capabilities::CapabilityGrant {
-        grant_version: 1,
-        grant_id: vec![1, 2, 3],
-        issuer: Some(edgerun_protocols::core_protocol::protocol::IdentityRef {
-            identity_id: vec![4, 5, 6],
-            identity_kind: Some(2),
-            key_hint: None,
-        }),
-        grantee: Some(edgerun_protocols::core_protocol::protocol::IdentityRef {
-            identity_id: vec![1, 2, 3],
-            identity_kind: Some(0),
-            key_hint: None,
-        }),
-        grantee_node: None,
-        selector: None,
-        granted_operations: vec![],
-        enforced_constraints: vec![],
-        access_class: 0,
-        issued_at: None,
-        expires_at: None,
-        correlation_id: vec![],
-        supersedes_revocation: None,
-        signature: None,
-    };
-    node.install_grant(grant);
-    // No assertion needed — just verifying it doesn't panic
-}
-
 // -----------------------------------------------------------------------
 // Replay cache
 // -----------------------------------------------------------------------

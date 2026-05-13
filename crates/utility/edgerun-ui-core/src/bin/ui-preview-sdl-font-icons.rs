@@ -3,12 +3,12 @@ use std::os::raw::{c_char, c_int, c_void};
 use std::ptr;
 use std::time::{Duration, Instant};
 
-use edgerun_ui_core::visual::demo_dashboard_polished;
-use edgerun_ui_core::{DashboardState, Painter, EDGERUN_DARK};
 #[cfg(feature = "fontdue-text")]
 use edgerun_ui_core::font::{FontFace, TextStyle};
 #[cfg(feature = "fontdue-text")]
-use edgerun_ui_core::tabler_font_generated::{tabler_icon, TABLER_ICON_FONT_HINT};
+use edgerun_ui_core::tabler_font_generated::{TABLER_ICON_FONT_HINT, tabler_icon};
+use edgerun_ui_core::visual::demo_dashboard_polished;
+use edgerun_ui_core::{DashboardState, EDGERUN_DARK, Painter};
 #[cfg(feature = "fontdue-text")]
 
 const SDL_INIT_VIDEO: u32 = 0x0000_0020;
@@ -95,11 +95,7 @@ struct Sdl;
 impl Sdl {
     fn init() -> Result<Self, String> {
         let rc = unsafe { SDL_Init(SDL_INIT_VIDEO) };
-        if rc != 0 {
-            Err(sdl_error())
-        } else {
-            Ok(Self)
-        }
+        if rc != 0 { Err(sdl_error()) } else { Ok(Self) }
     }
 }
 
@@ -235,28 +231,150 @@ fn run() -> Result<(), String> {
             #[cfg(feature = "fontdue-text")]
             {
                 if let Some(font) = &ui_font {
-                    painter.text_font(122, 52, "EdgeRun", TextStyle { font, px: 38.0, color: EDGERUN_DARK.text });
-                    painter.text_font(124, 98, "rounded / antialiased / subtle-shadow CPU UI", TextStyle { font, px: 17.0, color: EDGERUN_DARK.muted });
-                    painter.text_font(96, 276, "CPU", TextStyle { font, px: 17.0, color: EDGERUN_DARK.muted });
-                    painter.text_font(374, 276, "RAM", TextStyle { font, px: 17.0, color: EDGERUN_DARK.muted });
-                    painter.text_font(652, 276, "NET", TextStyle { font, px: 17.0, color: EDGERUN_DARK.muted });
+                    painter.text_font(
+                        122,
+                        52,
+                        "EdgeRun",
+                        TextStyle {
+                            font,
+                            px: 38.0,
+                            color: EDGERUN_DARK.text,
+                        },
+                    );
+                    painter.text_font(
+                        124,
+                        98,
+                        "rounded / antialiased / subtle-shadow CPU UI",
+                        TextStyle {
+                            font,
+                            px: 17.0,
+                            color: EDGERUN_DARK.muted,
+                        },
+                    );
+                    painter.text_font(
+                        96,
+                        276,
+                        "CPU",
+                        TextStyle {
+                            font,
+                            px: 17.0,
+                            color: EDGERUN_DARK.muted,
+                        },
+                    );
+                    painter.text_font(
+                        374,
+                        276,
+                        "RAM",
+                        TextStyle {
+                            font,
+                            px: 17.0,
+                            color: EDGERUN_DARK.muted,
+                        },
+                    );
+                    painter.text_font(
+                        652,
+                        276,
+                        "NET",
+                        TextStyle {
+                            font,
+                            px: 17.0,
+                            color: EDGERUN_DARK.muted,
+                        },
+                    );
                 }
 
                 if let Some(icon_font) = &icon_font {
-                    draw_tabler_icon(&mut painter, icon_font, "sparkles", 40, 54, 34.0, EDGERUN_DARK.accent);
-                    draw_tabler_icon(&mut painter, icon_font, "activity", 50, 270, 30.0, EDGERUN_DARK.accent);
-                    draw_tabler_icon(&mut painter, icon_font, "server", 328, 270, 30.0, edgerun_ui_core::Color::rgb(0x8b, 0xe9, 0xfd));
-                    draw_tabler_icon(&mut painter, icon_font, "network", 606, 270, 30.0, edgerun_ui_core::Color::rgb(0x50, 0xfa, 0x7b));
+                    draw_tabler_icon(
+                        &mut painter,
+                        icon_font,
+                        "sparkles",
+                        40,
+                        54,
+                        34.0,
+                        EDGERUN_DARK.accent,
+                    );
+                    draw_tabler_icon(
+                        &mut painter,
+                        icon_font,
+                        "activity",
+                        50,
+                        270,
+                        30.0,
+                        EDGERUN_DARK.accent,
+                    );
+                    draw_tabler_icon(
+                        &mut painter,
+                        icon_font,
+                        "server",
+                        328,
+                        270,
+                        30.0,
+                        edgerun_ui_core::Color::rgb(0x8b, 0xe9, 0xfd),
+                    );
+                    draw_tabler_icon(
+                        &mut painter,
+                        icon_font,
+                        "network",
+                        606,
+                        270,
+                        30.0,
+                        edgerun_ui_core::Color::rgb(0x50, 0xfa, 0x7b),
+                    );
                 }
             }
             #[cfg(feature = "fontdue-text")]
             if let Some(font) = &ui_font {
                 // real font overlay
-                painter.text_font(122, 52, "EdgeRun", TextStyle { font, px: 38.0, color: EDGERUN_DARK.text });
-                painter.text_font(124, 98, "rounded / antialiased / subtle-shadow CPU UI", TextStyle { font, px: 17.0, color: EDGERUN_DARK.muted });
-                painter.text_font(96, 276, "CPU", TextStyle { font, px: 17.0, color: EDGERUN_DARK.muted });
-                painter.text_font(374, 276, "RAM", TextStyle { font, px: 17.0, color: EDGERUN_DARK.muted });
-                painter.text_font(652, 276, "NET", TextStyle { font, px: 17.0, color: EDGERUN_DARK.muted });
+                painter.text_font(
+                    122,
+                    52,
+                    "EdgeRun",
+                    TextStyle {
+                        font,
+                        px: 38.0,
+                        color: EDGERUN_DARK.text,
+                    },
+                );
+                painter.text_font(
+                    124,
+                    98,
+                    "rounded / antialiased / subtle-shadow CPU UI",
+                    TextStyle {
+                        font,
+                        px: 17.0,
+                        color: EDGERUN_DARK.muted,
+                    },
+                );
+                painter.text_font(
+                    96,
+                    276,
+                    "CPU",
+                    TextStyle {
+                        font,
+                        px: 17.0,
+                        color: EDGERUN_DARK.muted,
+                    },
+                );
+                painter.text_font(
+                    374,
+                    276,
+                    "RAM",
+                    TextStyle {
+                        font,
+                        px: 17.0,
+                        color: EDGERUN_DARK.muted,
+                    },
+                );
+                painter.text_font(
+                    652,
+                    276,
+                    "NET",
+                    TextStyle {
+                        font,
+                        px: 17.0,
+                        color: EDGERUN_DARK.muted,
+                    },
+                );
             }
         }
 
@@ -296,10 +414,10 @@ fn sdl_error() -> String {
         .into_owned()
 }
 
-
 #[cfg(feature = "fontdue-text")]
 fn load_tabler_icon_font() -> Option<FontFace> {
-    let path = std::env::var("EDGE_TABLER_FONT").unwrap_or_else(|_| TABLER_ICON_FONT_HINT.to_string());
+    let path =
+        std::env::var("EDGE_TABLER_FONT").unwrap_or_else(|_| TABLER_ICON_FONT_HINT.to_string());
     let bytes = std::fs::read(path).ok()?;
     FontFace::from_bytes(bytes).ok()
 }
