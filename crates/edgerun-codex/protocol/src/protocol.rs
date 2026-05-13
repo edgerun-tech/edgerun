@@ -49,6 +49,10 @@ use crate::request_permissions::RequestPermissionsEvent;
 use crate::request_permissions::RequestPermissionsResponse;
 use crate::request_user_input::RequestUserInputResponse;
 use crate::user_input::UserInput;
+use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
+use edgerun_json::Map;
+use edgerun_json::ToJson;
 use edgerun_json::Value;
 use edgerun_serde::Deserialize;
 use edgerun_serde::Serialize;
@@ -818,7 +822,7 @@ impl InterAgentCommunication {
         ResponseInputItem::Message {
             role: "assistant".to_string(),
             content: vec![ContentItem::OutputText {
-                text: edgerun_json::to_string(self).unwrap_or_default(),
+                text: edgerun_json::to_json_string(self).unwrap_or_default(),
             }],
             phase: Some(MessagePhase::Commentary),
         }
@@ -831,12 +835,37 @@ impl InterAgentCommunication {
     pub fn from_message_content(content: &[ContentItem]) -> Option<Self> {
         match content {
             [ContentItem::InputText { text }] | [ContentItem::OutputText { text }] => {
-                edgerun_json::from_str(text)
-                    .ok()
-                    .and_then(|value| edgerun_json::from_serde_value(value).ok())
+                edgerun_json::from_json_str(text).ok()
             }
             _ => None,
         }
+    }
+}
+
+impl ToJson for InterAgentCommunication {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        object.push_field("author", self.author.to_json());
+        object.push_field("recipient", self.recipient.to_json());
+        object.push_field("other_recipients", self.other_recipients.to_json());
+        object.push_field("content", self.content.clone());
+        object.push_field("trigger_turn", self.trigger_turn);
+        object.into()
+    }
+}
+
+impl FromJson for InterAgentCommunication {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("InterAgentCommunication")?;
+        Ok(Self {
+            author: object.take_required("author")?,
+            recipient: object.take_required("recipient")?,
+            other_recipients: object
+                .take_optional("other_recipients")?
+                .unwrap_or_default(),
+            content: object.take_required("content")?,
+            trigger_turn: object.take_required("trigger_turn")?,
+        })
     }
 }
 
@@ -982,6 +1011,18 @@ impl NetworkAccess {
     }
 }
 
+impl FromJson for NetworkAccess {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "restricted" => Ok(Self::Restricted),
+            "enabled" => Ok(Self::Enabled),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown network access `{other}`"
+            ))),
+        }
+    }
+}
+
 /// Determines execution restrictions for model shell commands.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Display, JsonSchema, TS)]
 #[strum(serialize_all = "kebab-case")]
@@ -1094,7 +1135,7 @@ impl FromStr for SandboxPolicy {
     type Err = edgerun_json::JsonError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        edgerun_json::from_serde_value(edgerun_json::from_str(s)?)
+        Ok(edgerun_json::from_json_str(s)?)
     }
 }
 
@@ -1102,7 +1143,7 @@ impl FromStr for FileSystemSandboxPolicy {
     type Err = edgerun_json::JsonError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        edgerun_json::from_serde_value(edgerun_json::from_str(s)?)
+        Ok(edgerun_json::from_json_str(s)?)
     }
 }
 
@@ -1110,7 +1151,36 @@ impl FromStr for NetworkSandboxPolicy {
     type Err = edgerun_json::JsonError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        edgerun_json::from_serde_value(edgerun_json::from_str(s)?)
+        Ok(edgerun_json::from_json_str(s)?)
+    }
+}
+
+impl FromJson for SandboxPolicy {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("SandboxPolicy")?;
+        let kind: String = object.take_required("type")?;
+        match kind.as_str() {
+            "danger-full-access" => Ok(Self::DangerFullAccess),
+            "read-only" => Ok(Self::ReadOnly {
+                network_access: object.take_optional("network_access")?.unwrap_or(false),
+            }),
+            "external-sandbox" => Ok(Self::ExternalSandbox {
+                network_access: object
+                    .take_optional("network_access")?
+                    .unwrap_or(NetworkAccess::Restricted),
+            }),
+            "workspace-write" => Ok(Self::WorkspaceWrite {
+                writable_roots: object.take_optional("writable_roots")?.unwrap_or_default(),
+                network_access: object.take_optional("network_access")?.unwrap_or(false),
+                exclude_tmpdir_env_var: object
+                    .take_optional("exclude_tmpdir_env_var")?
+                    .unwrap_or(false),
+                exclude_slash_tmp: object.take_optional("exclude_slash_tmp")?.unwrap_or(false),
+            }),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown sandbox policy `{other}`"
+            ))),
+        }
     }
 }
 

@@ -6,6 +6,9 @@ use std::path::PathBuf;
 
 use crate::compat::absolute_path::AbsolutePathBuf;
 use crate::compat::absolute_path::canonicalize_preserving_symlinks;
+use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
+use edgerun_json::Value;
 use edgerun_serde::Deserialize;
 use edgerun_serde::Serialize;
 use edgerun_strum_macros::Display;
@@ -204,6 +207,18 @@ impl NetworkSandboxPolicy {
     }
 }
 
+impl FromJson for NetworkSandboxPolicy {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "restricted" => Ok(Self::Restricted),
+            "enabled" => Ok(Self::Enabled),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown network sandbox policy `{other}`"
+            ))),
+        }
+    }
+}
+
 /// Access mode for a filesystem entry.
 ///
 /// When two equally specific entries target the same path, we compare these by
@@ -239,6 +254,19 @@ impl FileSystemAccessMode {
 
     pub fn can_write(self) -> bool {
         matches!(self, FileSystemAccessMode::Write)
+    }
+}
+
+impl FromJson for FileSystemAccessMode {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "read" => Ok(Self::Read),
+            "write" => Ok(Self::Write),
+            "none" => Ok(Self::None),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown filesystem access mode `{other}`"
+            ))),
+        }
     }
 }
 
@@ -285,6 +313,31 @@ impl FileSystemSpecialPath {
     }
 }
 
+impl FromJson for FileSystemSpecialPath {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("FileSystemSpecialPath")?;
+        let kind: String = object.take_required("kind")?;
+        let subpath = object
+            .take_optional::<String>("subpath")?
+            .map(PathBuf::from);
+        match kind.as_str() {
+            "root" => Ok(Self::Root),
+            "minimal" => Ok(Self::Minimal),
+            "project_roots" | "current_working_directory" => Ok(Self::ProjectRoots { subpath }),
+            "tmpdir" => Ok(Self::Tmpdir),
+            "slash_tmp" => Ok(Self::SlashTmp),
+            "unknown" => Ok(Self::Unknown {
+                path: object.take_required("path")?,
+                subpath,
+            }),
+            other => Ok(Self::Unknown {
+                path: other.to_string(),
+                subpath,
+            }),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, TS)]
 pub struct FileSystemSandboxEntry {
     pub path: FileSystemPath,
@@ -303,6 +356,19 @@ pub enum FileSystemSandboxKind {
     ExternalSandbox,
 }
 
+impl FromJson for FileSystemSandboxKind {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "restricted" => Ok(Self::Restricted),
+            "unrestricted" => Ok(Self::Unrestricted),
+            "external-sandbox" => Ok(Self::ExternalSandbox),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown filesystem sandbox kind `{other}`"
+            ))),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 pub struct FileSystemSandboxPolicy {
     pub kind: FileSystemSandboxKind,
@@ -311,6 +377,27 @@ pub struct FileSystemSandboxPolicy {
     pub glob_scan_max_depth: Option<usize>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub entries: Vec<FileSystemSandboxEntry>,
+}
+
+impl FromJson for FileSystemSandboxEntry {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("FileSystemSandboxEntry")?;
+        Ok(Self {
+            path: object.take_required("path")?,
+            access: object.take_required("access")?,
+        })
+    }
+}
+
+impl FromJson for FileSystemSandboxPolicy {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("FileSystemSandboxPolicy")?;
+        Ok(Self {
+            kind: object.take_required("kind")?,
+            glob_scan_max_depth: object.take_optional("glob_scan_max_depth")?,
+            entries: object.take_optional("entries")?.unwrap_or_default(),
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -434,6 +521,27 @@ pub enum FileSystemPath {
     Special {
         value: FileSystemSpecialPath,
     },
+}
+
+impl FromJson for FileSystemPath {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("FileSystemPath")?;
+        let kind: String = object.take_required("type")?;
+        match kind.as_str() {
+            "path" => Ok(Self::Path {
+                path: object.take_required("path")?,
+            }),
+            "glob_pattern" => Ok(Self::GlobPattern {
+                pattern: object.take_required("pattern")?,
+            }),
+            "special" => Ok(Self::Special {
+                value: object.take_required("value")?,
+            }),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown filesystem path `{other}`"
+            ))),
+        }
+    }
 }
 
 impl Default for FileSystemSandboxPolicy {

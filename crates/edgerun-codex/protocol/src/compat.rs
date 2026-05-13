@@ -5,6 +5,10 @@ pub mod absolute_path {
     use std::path::Path;
     use std::path::PathBuf;
 
+    use edgerun_json::FromJson;
+    use edgerun_json::JsonValueError;
+    use edgerun_json::ToJson;
+    use edgerun_json::Value;
     use edgerun_serde::Deserialize;
     use edgerun_serde::Deserializer;
     use edgerun_serde::Serialize;
@@ -131,6 +135,20 @@ pub mod absolute_path {
         {
             let path = PathBuf::deserialize(deserializer)?;
             Self::from_absolute_path(path).map_err(D::Error::custom)
+        }
+    }
+
+    impl ToJson for AbsolutePathBuf {
+        fn to_json(&self) -> Value {
+            self.to_string_lossy().into_owned().to_json()
+        }
+    }
+
+    impl FromJson for AbsolutePathBuf {
+        fn from_json(value: Value) -> Result<Self, JsonValueError> {
+            let path = String::from_json(value)?;
+            Self::from_absolute_path(PathBuf::from(path))
+                .map_err(|err| JsonValueError::WrongType(err.to_string()))
         }
     }
 
