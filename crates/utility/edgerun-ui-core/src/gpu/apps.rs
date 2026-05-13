@@ -278,94 +278,48 @@ fn render_workspace_chat_app(
     let pad = 14.0;
     let colors = ui.theme().colors;
     ui.fill_rect(bounds, 0.0, colors.bg);
-    row("row bg-topbar border rounded-md p-3 gap-3 items-center")
-        .child(text("Contacts").class("w-20 text-muted truncate"))
-        .child(text(chat_state.subtitle).class("flex-1 text-text truncate"))
-        .child(badge(
-            if chat_state.connected {
-                "relay"
-            } else {
-                "local"
-            },
-            if chat_state.connected {
-                colors.success
-            } else {
-                colors.warning
-            },
-        ))
-        .render_with_state(
-            ui,
-            UiRect::new(
-                bounds.x + pad,
-                bounds.y + pad,
-                (bounds.w - pad * 2.0).max(0.0),
-                46.0,
-            ),
-            Some(&app.runtime),
-        );
-
-    let composer_h = 76.0;
-    let content_top = bounds.y + 72.0;
-    let content_bottom = bounds.y + bounds.h - composer_h - pad;
-    let content_h = (content_bottom - content_top).max(0.0);
+    let content = bounds.inset(pad, pad);
+    let mut panel = shadcn_card("EdgeRun Chat", chat_state.subtitle)
+        .child(shadcn_tabs(&["Contacts", "Thread", "Proofs"], 0, 120))
+        .child(shadcn_badge(
+            if chat_state.connected { "relay" } else { "local" },
+            UiShadcnBadgeVariant::Secondary,
+        ));
     if chat_state.contacts.is_empty() {
-        card("bg-panel border rounded-md p-4 gap-3")
-            .child(text("No contacts yet").class("text-text truncate"))
-            .child(
-                text("Connect a contact book or receive an identity-routed contact.")
-                    .class("text-muted truncate"),
-            )
-            .render_with_state(
-                ui,
-                UiRect::new(
-                    bounds.x + pad,
-                    content_top,
-                    (bounds.w - pad * 2.0).max(0.0),
-                    112.0,
-                ),
-                Some(&app.runtime),
-            );
+        panel = panel.child(shadcn_empty(
+            "No contacts yet",
+            "Connect a contact book or receive an identity-routed contact.",
+            UiIcon::Search,
+        ));
     } else {
-        let rows = chat_state
-            .contacts
-            .iter()
-            .enumerate()
-            .map(|(index, contact)| {
-                list_row_node(contact.name, contact.detail, index as u32).accent(
-                    match contact.kind {
-                        UnifiedContactKind::Person => colors.accent,
-                        UnifiedContactKind::CodexClient => colors.info,
-                        UnifiedContactKind::Node => colors.success,
-                    },
+        for (index, contact) in chat_state.contacts.iter().enumerate() {
+            panel = panel.child(
+                shadcn_item(
+                    contact.name,
+                    contact.detail,
+                    index as u32,
+                    contact_accent(contact.kind),
                 )
-            });
-        scroll_area("bg-panel border rounded-md p-2 gap-2", 0.0)
-            .scroll_id(101)
-            .children(rows)
-            .render_with_state(
-                ui,
-                UiRect::new(
-                    bounds.x + pad,
-                    content_top,
-                    (bounds.w - pad * 2.0).max(0.0),
-                    content_h,
-                ),
-                Some(&app.runtime),
+                .selected(index == chat_state.selected_contact),
             );
+        }
     }
 
     let draft = app.runtime.text_value(0, chat_state.composer_placeholder);
-    ui.composer(
-        bounds.x + pad,
-        bounds.y + bounds.h - composer_h - pad,
-        (bounds.w - pad * 2.0).max(0.0),
-        composer_h,
-        draft,
-        app.runtime
-            .focused()
-            .is_some_and(|hit| hit.kind == HitKind::Composer),
-        &[("encrypted", colors.success), ("identity", colors.accent)],
-    );
+    panel
+        .child(shadcn_textarea("Message", draft).hit_id(0).class("h-24"))
+        .child(
+            row("row gap-2")
+                .child(shadcn_badge("encrypted", UiShadcnBadgeVariant::Secondary))
+                .child(shadcn_badge("identity", UiShadcnBadgeVariant::Secondary))
+                .child(shadcn_button(
+                    "Send",
+                    2,
+                    UiShadcnButtonVariant::Default,
+                    UiShadcnButtonSize::Default,
+                )),
+        )
+        .render_with_state(ui, content, Some(&app.runtime));
 }
 
 #[cfg(feature = "fontdue-text")]
@@ -383,51 +337,42 @@ fn render_trust_manager_app(
             &fallback
         }
     };
-    column("bg-panel border rounded-md p-4 gap-3")
-        .child(header("Trust Manager").detail("proof dashboard"))
-        .child(identity_card(
+    shadcn_card("Trust Manager", "proof dashboard")
+        .child(shadcn_item(
             "Local identity",
             &work.browser_node,
-            if work.request_verified {
-                "signed request verified"
-            } else {
-                "request pending verification"
-            },
             221,
+            ui.theme().colors.accent,
         ))
-        .child(route_path(
+        .child(shadcn_alert(
             "Admitted route",
-            &["browser", "admission", "relay", "storage"],
+            "browser -> admission -> relay -> storage",
+            UiIcon::Shield,
         ))
-        .child(capability_grant_row(
-            "Admission policy",
-            &work.policy_hash,
-            if work.admission_verified {
-                "verified"
-            } else {
-                "pending"
-            },
+        .child(shadcn_table(
+            &["Object", "Hash", "State"],
+            &[
+                &[
+                    "Admission policy",
+                    &work.policy_hash,
+                    if work.admission_verified {
+                        "verified"
+                    } else {
+                        "pending"
+                    },
+                ],
+                &[
+                    "WorkRequest",
+                    &work.request_hash,
+                    if work.request_verified { "ok" } else { "pending" },
+                ],
+                &[
+                    "WorkAdmission",
+                    &work.admission_hash,
+                    if work.admission_verified { "ok" } else { "pending" },
+                ],
+            ],
             220,
-        ))
-        .child(proof_event_row(
-            "WorkRequest",
-            &work.request_hash,
-            if work.request_verified {
-                "ok"
-            } else {
-                "pending"
-            },
-            222,
-        ))
-        .child(proof_event_row(
-            "WorkAdmission",
-            &work.admission_hash,
-            if work.admission_verified {
-                "ok"
-            } else {
-                "pending"
-            },
-            223,
         ))
         .render_with_state(ui, bounds.inset(14.0, 14.0), Some(&app.runtime));
 }
@@ -449,26 +394,33 @@ fn render_storage_app(
     };
     let budget = std::format!("{} units admitted", work.admitted_budget);
     let cost = std::format!("{} units deterministic", work.retrieval_cost);
-    column("bg-panel border rounded-md p-4 gap-3")
-        .child(header("Storage").detail("verified local cache"))
-        .child(package_card(
-            "Network apps",
+    shadcn_card("Storage", "verified local cache")
+        .child(shadcn_item(
+            "Network app payload",
             &work.storage_payload_hash,
+            301,
+            ui.theme().colors.accent,
+        ))
+        .child(shadcn_table(
+            &["Storage ref", "Value"],
+            &[
+                &["Admission path", &work.admission_node],
+                &["Manifest", &work.manifest_hash],
+                &["Budget", &budget],
+                &["Retrieval", &cost],
+                &["Relay", &work.relay_node],
+                &["Channel", &work.channel],
+            ],
+            302,
+        ))
+        .child(shadcn_alert(
+            "Payload verification",
             if work.storage_payload_verified {
                 "typed payload verified"
             } else {
                 "payload pending"
             },
-            301,
-        ))
-        .child(contact_card("Admission path", &work.admission_node, 302))
-        .child(attachment_preview("Manifest", &work.manifest_hash, 303))
-        .child(receipt_row("Budget / retrieval", &budget, &cost, 304))
-        .child(receipt_row(
-            "Relay / channel",
-            &work.relay_node,
-            &work.channel,
-            305,
+            UiIcon::Storage,
         ))
         .render_with_state(ui, bounds.inset(14.0, 14.0), Some(&app.runtime));
 }
@@ -496,30 +448,39 @@ pub(super) fn render_lock_screen_app(
         panel_h,
     );
 
-    column("bg-panel border rounded-md p-5 gap-4")
+    shadcn_card("Trust Container", "Unlock required")
+        .child(shadcn_alert(
+            "Local sealed root",
+            "Your identity, contacts, route policy, app secrets, and decrypt capability are sealed locally.",
+            UiIcon::Lock,
+        ))
+        .child(shadcn_checkbox(
+            "Keep verified cache available after unlock",
+            true,
+            902,
+        ))
         .child(
-            row("row gap-3 items-center")
-                .child(icon(UiIcon::Lock).accent(colors.accent).class("size-10"))
-                .child(
-                    column("gap-1 flex-1")
-                        .child(text("Trust Container").class("text-text truncate"))
-                        .child(text("Unlock required").class("text-muted truncate")),
-                ),
-        )
-        .child(
-            text("Your identity, contacts, route policy, app secrets, and decrypt capability are sealed locally.")
-                .class("text-muted"),
-        )
-        .child(checkbox("Keep verified cache available after unlock", true, 902))
-        .child(
-            field_node("Unlock secret", "Password or passkey ceremony")
+            shadcn_input("Unlock secret", "Password or passkey ceremony")
                 .hit_id(LOCK_UNLOCK_FIELD_ID)
                 .class("h-24"),
         )
         .child(
             row("row gap-3")
-                .child(button("Unlock", LOCK_UNLOCK_BUTTON_ID, ButtonStyle::Primary).class("h-10 flex-1"))
-                .child(button("Offline", LOCK_UNLOCK_BUTTON_ID + 1, ButtonStyle::Ghost).class("h-10 w-28")),
+                .child(
+                    shadcn_button(
+                        "Unlock",
+                        LOCK_UNLOCK_BUTTON_ID,
+                        UiShadcnButtonVariant::Default,
+                        UiShadcnButtonSize::Default,
+                    )
+                    .class("flex-1"),
+                )
+                .child(shadcn_button(
+                    "Offline",
+                    LOCK_UNLOCK_BUTTON_ID + 1,
+                    UiShadcnButtonVariant::Ghost,
+                    UiShadcnButtonSize::Default,
+                )),
         )
         .render_with_state(ui, panel, Some(&app.runtime));
 }
@@ -541,57 +502,45 @@ pub(super) fn render_capability_request_app(
         panel_h,
     );
 
-    column("bg-panel border rounded-md p-5 gap-4")
-        .child(
-            row("row gap-3 items-center")
-                .child(icon(UiIcon::Shield).accent(colors.info).class("size-10"))
-                .child(
-                    column("gap-1 flex-1")
-                        .child(text("Capability request").class("text-text truncate"))
-                        .child(text("Review before signing").class("text-muted truncate")),
-                )
-                .child(badge("admission", colors.accent)),
-        )
-        .child(
-            grid("grid grid-cols-2 gap-3", 2)
-                .child(
-                    metric("Requesting app", "EdgeRun Chat")
-                        .detail("session scoped")
-                        .class("h-28"),
-                )
-                .child(
-                    metric("Capability", "Decrypt message")
-                        .detail("Trust Container")
-                        .class("h-28"),
-                ),
-        )
-        .child(
-            column("bg-row border rounded-md p-3 gap-2")
-                .child(capability_grant_row(
-                    "EdgeRun Chat",
-                    "decrypt message",
-                    "single use",
-                    923,
-                ))
-                .child(route_path("Admission route", &["chat", "device", "trust"])),
-        )
+    shadcn_card("Capability request", "Review before signing")
+        .child(shadcn_badge("admission", UiShadcnBadgeVariant::Secondary))
+        .child(shadcn_table(
+            &["Field", "Value"],
+            &[
+                &["Requesting app", "EdgeRun Chat"],
+                &["Scope", "session scoped"],
+                &["Capability", "Decrypt message"],
+                &["Authority", "Trust Container"],
+            ],
+            923,
+        ))
+        .child(shadcn_alert(
+            "Admission route",
+            "chat -> device -> trust",
+            UiIcon::Shield,
+        ))
         .child(
             row("row gap-3")
-                .child(
-                    button("Deny", CAPABILITY_DENY_BUTTON_ID, ButtonStyle::Danger)
-                        .class("h-10 w-28"),
-                )
-                .child(
-                    button(
+                .child(shadcn_button(
+                    "Deny",
+                    CAPABILITY_DENY_BUTTON_ID,
+                    UiShadcnButtonVariant::Destructive,
+                    UiShadcnButtonSize::Default,
+                ))
+                .child(shadcn_button(
                         "Details",
                         CAPABILITY_DETAILS_BUTTON_ID,
-                        ButtonStyle::Secondary,
-                    )
-                    .class("h-10 w-32"),
-                )
+                    UiShadcnButtonVariant::Secondary,
+                    UiShadcnButtonSize::Default,
+                ))
                 .child(
-                    button("Allow", CAPABILITY_ALLOW_BUTTON_ID, ButtonStyle::Primary)
-                        .class("h-10 flex-1"),
+                    shadcn_button(
+                        "Allow",
+                        CAPABILITY_ALLOW_BUTTON_ID,
+                        UiShadcnButtonVariant::Default,
+                        UiShadcnButtonSize::Default,
+                    )
+                    .class("flex-1"),
                 ),
         )
         .render_with_state(ui, panel, Some(&app.runtime));
@@ -918,8 +867,18 @@ fn shadcn_component_wall(preview: UiComponentPreviewState, width: f32) -> UiNode
 
 #[cfg(feature = "fontdue-text")]
 fn render_generic_workspace_app(ui: &mut UiPainter<'_, '_>, bounds: UiRect, app: &UiAppSurface) {
-    card("bg-panel border rounded-md p-4 gap-3")
-        .child(text(&app.title).class("text-text truncate"))
-        .child(text("No app renderer registered.").class("text-muted truncate"))
+    shadcn_empty(
+        &app.title,
+        "No app renderer registered.",
+        UiIcon::App,
+    )
         .render_with_state(ui, bounds.inset(14.0, 14.0), Some(&app.runtime));
+}
+
+fn contact_accent(kind: UnifiedContactKind) -> Color4 {
+    match kind {
+        UnifiedContactKind::Person => palette::ACCENT,
+        UnifiedContactKind::CodexClient => palette::VIOLET,
+        UnifiedContactKind::Node => palette::GREEN,
+    }
 }
