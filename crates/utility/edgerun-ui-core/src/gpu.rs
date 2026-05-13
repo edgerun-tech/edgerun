@@ -766,6 +766,14 @@ impl UiNode {
         }
     }
 
+    pub fn bar_chart_labels(title: &str, labels: &[&str], values: &[f32]) -> Self {
+        Self::bar_chart(
+            title,
+            labels.iter().copied().map(str::to_string),
+            values.iter().copied(),
+        )
+    }
+
     pub fn transaction_row(title: &str, amount: &str, id: u32) -> Self {
         Self {
             kind: UiNodeKind::TransactionRow {
@@ -1209,6 +1217,10 @@ pub fn bar_chart_node(
     UiNode::bar_chart(title, labels, values)
 }
 
+pub fn bar_chart_labels(title: &str, labels: &[&str], values: &[f32]) -> UiNode {
+    UiNode::bar_chart_labels(title, labels, values)
+}
+
 pub fn transaction_node(title: &str, amount: &str, id: u32) -> UiNode {
     UiNode::transaction_row(title, amount, id)
 }
@@ -1223,6 +1235,20 @@ pub fn divider(classes: &str) -> UiNode {
 
 pub fn spacer(classes: &str) -> UiNode {
     UiNode::spacer(classes)
+}
+
+#[macro_export]
+macro_rules! gpu_ui {
+    ($node:expr) => {
+        $node
+    };
+    ($node:expr, [ $($child:expr),* $(,)? ]) => {{
+        let mut node = $node;
+        $(
+            node = node.child($child);
+        )*
+        node
+    }};
 }
 
 impl<'a, 'font> UiPainter<'a, 'font> {
@@ -2669,14 +2695,14 @@ mod tests {
         let mut scene = GpuScene::new(palette::BG);
         {
             let mut ui = UiPainter::new(&mut scene);
-            let months = ["Jan", "Feb", "Mar", "Apr"].into_iter().map(str::to_string);
+            let months = ["Jan", "Feb", "Mar", "Apr"];
             let values = [0.42, 0.72, 0.55, 0.91];
             column("bg-panel border rounded-md p-4 gap-3")
                 .children([
                     header("Contribution History")
                         .detail("Last 4 months")
                         .action("View", 50),
-                    bar_chart_node("Relay Receipts", months, values).class("h-44"),
+                    bar_chart_labels("Relay Receipts", &months, &values).class("h-44"),
                     slider_node("Payout threshold", 0.62, 51)
                         .range_labels("$50", "$10,000")
                         .accent(palette::GREEN),
@@ -2691,6 +2717,32 @@ mod tests {
 
         assert!(scene.rects().len() > 35);
         assert!(scene.hits().len() >= 3);
+    }
+
+    #[test]
+    fn gpu_ui_macro_composes_nested_trees() {
+        let mut scene = GpuScene::new(palette::BG);
+        {
+            let mut ui = UiPainter::new(&mut scene);
+            gpu_ui!(
+                column("bg-panel border rounded-md p-4 gap-3"),
+                [
+                    gpu_ui!(
+                        row("gap-2 h-10"),
+                        [
+                            text("Components").class("flex-1 text-text truncate"),
+                            badge("rust", palette::ACCENT)
+                        ]
+                    ),
+                    metric("Storage", "128 MB").detail("verified cache"),
+                    button("Run", 70, ButtonStyle::Primary).class("h-8")
+                ]
+            )
+            .render(&mut ui, UiRect::new(0.0, 0.0, 320.0, 260.0));
+        }
+
+        assert!(scene.rects().len() > 15);
+        assert_eq!(scene.hits().len(), 1);
     }
 
     #[test]
