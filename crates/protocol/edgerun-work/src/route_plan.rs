@@ -1,8 +1,8 @@
 use alloc::vec::Vec;
 
 use crate::channel::{
-    CHANNEL_KIND_MEMORY, CHANNEL_KIND_QUIC, CHANNEL_KIND_TCP, CHANNEL_KIND_WASM_HOST,
-    CHANNEL_KIND_WEBSOCKET, CHANNEL_KIND_WEBTRANSPORT, RouteAdvertisement, RouteSnapshot,
+    RouteAdvertisement, RouteSnapshot, CHANNEL_KIND_MEMORY, CHANNEL_KIND_QUIC, CHANNEL_KIND_TCP,
+    CHANNEL_KIND_WASM_HOST, CHANNEL_KIND_WEBSOCKET, CHANNEL_KIND_WEBTRANSPORT,
 };
 use crate::memory_channel::route_is_available;
 use crate::preimage::HashBuilder;

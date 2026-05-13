@@ -1,8 +1,9 @@
 use alloc::vec::Vec;
 
-use edgerun_wire::{WireError, access, deserialize, to_bytes, util};
+use edgerun_wire::{access, deserialize, to_bytes, WireError};
 
 use crate::channel::{ArchivedChannelEnvelope, ChannelEnvelope};
+use crate::codec::aligned_copy_if_needed_for;
 use crate::protocol::WorkProtocolError;
 
 pub const MAX_CHANNEL_FRAME_LEN: usize = 1024 * 1024;
@@ -22,13 +23,7 @@ pub fn channel_envelope_from_bytes(bytes: &[u8]) -> Result<ChannelEnvelope, Work
     if bytes.len() > MAX_CHANNEL_FRAME_LEN {
         return Err(WorkProtocolError::PacketTooLarge);
     }
-    if bytes
-        .as_ptr()
-        .align_offset(core::mem::align_of::<ArchivedChannelEnvelope>())
-        != 0
-    {
-        let mut aligned = util::AlignedVec::<16>::with_capacity(bytes.len());
-        aligned.extend_from_slice(bytes);
+    if let Some(aligned) = aligned_copy_if_needed_for::<ArchivedChannelEnvelope>(bytes) {
         return channel_envelope_from_aligned_bytes(aligned.as_slice());
     }
     channel_envelope_from_aligned_bytes(bytes)

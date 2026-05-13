@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 
 use crate::channel::{ChannelEnvelope, RouteAdvertisement};
 use crate::channel_order::{ChannelOrderBook, ChannelOrderError, OrderedChannelEnvelope};
-use crate::memory_channel::{MemoryChannelEngine, MemoryChannelError, route_hash};
+use crate::memory_channel::{route_hash, MemoryChannelEngine, MemoryChannelError};
 use crate::protocol::{Hash, NodeId, WorkPacket};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WorkChannelError {

@@ -4,7 +4,8 @@ use std::time::Instant;
 use edgerun_work::{
     DEPARTMENT_MESSAGE, NODE_ROLE_MESSAGE, NetworkMessage, SimNode, WORK_TYPE_MESSAGE_DELIVER,
     WORK_WIRE_ABI_VERSION, WorkPacket, blake3_hash, empty_signature, encode_work_packet_once,
-    packet_bytes, packet_hash, sign_network_message, verify_network_message,
+    packet_bytes, packet_hash, sign_network_message, simple_network_message_id,
+    verify_network_message,
 };
 
 fn bench(name: &str, payload_bytes: usize, iters: usize, mut f: impl FnMut()) {
@@ -28,15 +29,15 @@ fn unsigned_message_template(
     payload: Vec<u8>,
 ) -> NetworkMessage {
     let payload_hash = blake3_hash(&payload);
-    let mut id_input = Vec::new();
-    id_input.extend_from_slice(&sender.identity.node_id);
-    id_input.extend_from_slice(&receiver.identity.node_id);
-    id_input.extend_from_slice(&1u64.to_be_bytes());
-    id_input.extend_from_slice(&payload_hash);
 
     NetworkMessage {
         abi_version: WORK_WIRE_ABI_VERSION,
-        message_id: blake3_hash(&id_input),
+        message_id: simple_network_message_id(
+            &sender.identity.node_id,
+            &receiver.identity.node_id,
+            1,
+            &payload_hash,
+        ),
         prev_hash: [0u8; 32],
         from: sender.identity.node_id,
         to: receiver.identity.node_id,

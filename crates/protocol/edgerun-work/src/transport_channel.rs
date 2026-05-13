@@ -2,9 +2,9 @@ use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
 use crate::channel::{ChannelEnvelope, RouteAdvertisement};
-use crate::codec::{ArchivedWorkPacketFrame, encode_work_packet_once};
+use crate::codec::{encode_work_packet_once, ArchivedWorkPacketFrame};
 use crate::memory_channel::{route_hash, route_is_available};
-use crate::protocol::{Hash, NodeId, WORK_WIRE_ABI_VERSION, WorkPacket};
+use crate::protocol::{Hash, NodeId, WorkPacket, WORK_WIRE_ABI_VERSION};
 use crate::route_auth::verify_route_advertisement;
 use crate::route_plan::{RouteRuntimeProfile, RouteSelectionPolicy};
 use crate::work_channel::{WorkChannel, WorkChannelError};

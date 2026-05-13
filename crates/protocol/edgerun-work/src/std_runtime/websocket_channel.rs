@@ -2,21 +2,21 @@ use std::collections::BTreeMap;
 use std::io::{self, ErrorKind, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::{
-    Arc, Mutex,
     atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
 };
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use edgerun_protocols::websocket::{
-    WS_EXTENDED_64_LEN, WS_MASK_LEN, WebSocketError, WebSocketMessage, decode_client_message,
-    decode_frame_prefix, decode_handshake_request, decode_payload_len, encode_server_binary,
-    encode_server_control, encode_upgrade_response, handshake_complete,
+    decode_client_message, decode_frame_prefix, decode_handshake_request, decode_payload_len,
+    encode_server_binary, encode_server_control, encode_upgrade_response, handshake_complete,
+    WebSocketError, WebSocketMessage, WS_EXTENDED_64_LEN, WS_MASK_LEN,
 };
 
 use crate::channel::ChannelEnvelope;
 use crate::frame_codec::{channel_envelope_bytes, channel_envelope_from_bytes};
-use crate::protocol::{MAX_WORK_FRAME_LEN, NodeId};
+use crate::protocol::{NodeId, MAX_WORK_FRAME_LEN};
 
 const ACCEPT_POLL_MS: u64 = 10;
 const CONNECTION_READ_TIMEOUT_MS: u64 = 250;

@@ -3,13 +3,18 @@ use alloc::vec::Vec;
 use edgerun_crypto::ed25519_dalek::VerifyingKey;
 use edgerun_crypto::x25519::{PublicKey as X25519PublicKey, StaticSecret as X25519Secret};
 use edgerun_crypto::{Aes256GcmCipher, Ed25519SigningKey, Nonce, Tag};
-use edgerun_wire::{WireError, access, deserialize, to_bytes, util};
+use edgerun_wire::{access, deserialize, to_bytes, WireError};
 use rkyv::{Archive, Deserialize, Serialize};
 
-use crate::codec::blake3_hash;
+use crate::chat_index::{
+    chat_payload_hash, finalize_message_object, thread_id_for_participants, MessageObject,
+};
+use crate::codec::{aligned_copy_if_needed_for, blake3_hash};
 use crate::identity::verify_node_identity;
 use crate::preimage::PreimageBuilder;
-use crate::protocol::{Hash, NodeId, NodeIdentity, PublicKey, WORK_WIRE_ABI_VERSION};
+use crate::protocol::{
+    Hash, NetworkMessage, NodeId, NodeIdentity, PublicKey, WORK_WIRE_ABI_VERSION,
+};
 
 const MESSAGE_SEAL_DOMAIN: &[u8] = b"edgerun:v1:work:message-seal";
 const MESSAGE_SEAL_KDF_INFO: &[u8] = b"edgerun:v1:work:message-seal:key";
@@ -77,16 +82,36 @@ pub fn sealed_message_payload_from_bytes(
     if bytes.is_empty() {
         return Err(MessageSealError::InvalidEnvelope);
     }
-    if bytes
-        .as_ptr()
-        .align_offset(core::mem::align_of::<ArchivedSealedMessagePayload>())
-        != 0
-    {
-        let mut aligned = util::AlignedVec::<16>::with_capacity(bytes.len());
-        aligned.extend_from_slice(bytes);
+    if let Some(aligned) = aligned_copy_if_needed_for::<ArchivedSealedMessagePayload>(bytes) {
         return sealed_message_payload_from_aligned_bytes(aligned.as_slice());
     }
     sealed_message_payload_from_aligned_bytes(bytes)
+}
+
+pub fn sealed_message_object_from_network_message(
+    message: &NetworkMessage,
+    created_unix_ms: u64,
+    message_kind: u16,
+) -> Result<MessageObject, MessageSealError> {
+    let sealed = sealed_message_payload_from_bytes(&message.payload)?;
+    if sealed.from != message.from || sealed.to != message.to {
+        return Err(MessageSealError::InvalidEnvelope);
+    }
+    Ok(finalize_message_object(MessageObject {
+        abi_version: WORK_WIRE_ABI_VERSION,
+        message_id: [0u8; 32],
+        thread_id: thread_id_for_participants(message.from, message.to),
+        from: message.from,
+        to: message.to,
+        sequence: message.sequence,
+        created_unix_ms,
+        message_kind,
+        payload_hash: sealed.plaintext_hash,
+        payload_len: sealed.ciphertext.len() as u64,
+        sealed_payload_hash: chat_payload_hash(&message.payload),
+        storage_ref: Vec::new(),
+        previous_message_hash: message.prev_hash,
+    }))
 }
 
 fn sealed_message_payload_from_aligned_bytes(

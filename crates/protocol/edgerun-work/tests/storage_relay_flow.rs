@@ -28,27 +28,23 @@ fn make_message(
     payload: Vec<u8>,
 ) -> NetworkMessage {
     let payload_hash = blake3_hash(&payload);
-    sign_network_message(
+    let message_id = HashBuilder::domain(b"edgerun:test:storage-message")
+        .node_id(&from)
+        .node_id(&to)
+        .node_id(&via_relay)
+        .hash(&payload_hash)
+        .finish();
+    sign_network_message_payload(
         key,
-        NetworkMessage {
-            abi_version: WORK_WIRE_ABI_VERSION,
-            message_id: HashBuilder::domain(b"edgerun:test:storage-message")
-                .node_id(&from)
-                .node_id(&to)
-                .node_id(&via_relay)
-                .hash(&payload_hash)
-                .finish(),
-            prev_hash: [0u8; 32],
-            from,
-            to,
-            via_relay,
-            department: DEPARTMENT_STORAGE,
-            work_type: WORK_TYPE_OBJECT_STORE,
-            sequence: 1,
-            payload_hash,
-            payload,
-            signature: empty_signature(),
-        },
+        message_id,
+        [0u8; 32],
+        from,
+        to,
+        via_relay,
+        DEPARTMENT_STORAGE,
+        WORK_TYPE_OBJECT_STORE,
+        1,
+        payload,
     )
 }
 

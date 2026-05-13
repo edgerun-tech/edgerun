@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 
 use edgerun_crypto::Ed25519SigningKey;
 
-use crate::admitted_route::{AdmittedCapabilityRoute, verify_message_against_admitted_route};
+use crate::admitted_route::{verify_message_against_admitted_route, AdmittedCapabilityRoute};
 use crate::channel_order::OrderedChannelEnvelope;
 use crate::codec::{blake3_hash, encode_work_packet_once};
 use crate::identity::node_identity_from_key;
@@ -11,7 +11,7 @@ use crate::protocol::*;
 use crate::settlement::receipt_id_for_claim;
 use crate::signing::{empty_signature, sign_work_receipt};
 use crate::transit_proof::{
-    PacketTransitHashInput, packet_transit_hash, relay_delivery_output_hash,
+    packet_transit_hash, relay_delivery_output_hash, PacketTransitHashInput,
 };
 use crate::work_channel::{WorkChannel, WorkChannelError};
 

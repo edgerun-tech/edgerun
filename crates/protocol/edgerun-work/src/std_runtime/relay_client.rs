@@ -8,7 +8,7 @@ use crate::identity::node_identity_from_key;
 use crate::preimage::HashBuilder;
 use crate::protocol::*;
 use crate::signing::{
-    empty_signature, sign_network_message, sign_node_available, sign_node_heartbeat,
+    empty_signature, sign_network_message_payload, sign_node_available, sign_node_heartbeat,
 };
 use crate::std_runtime::framing::{read_work_packet, unix_ms, write_work_packet};
 
@@ -103,22 +103,17 @@ impl WorkClient {
             .u64(self.sequence)
             .hash(&payload_hash)
             .finish();
-        sign_network_message(
+        sign_network_message_payload(
             &self.key,
-            NetworkMessage {
-                abi_version: WORK_WIRE_ABI_VERSION,
-                message_id,
-                prev_hash: [0u8; 32],
-                from: self.identity.node_id,
-                to,
-                via_relay,
-                department,
-                work_type,
-                sequence: self.sequence,
-                payload_hash,
-                payload,
-                signature: empty_signature(),
-            },
+            message_id,
+            [0u8; 32],
+            self.identity.node_id,
+            to,
+            via_relay,
+            department,
+            work_type,
+            self.sequence,
+            payload,
         )
     }
 }

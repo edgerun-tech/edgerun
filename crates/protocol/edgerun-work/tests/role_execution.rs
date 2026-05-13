@@ -19,7 +19,14 @@ fn ordered_message_can_be_executed_by_message_role_library() {
         relay.identity.node_id,
         DEPARTMENT_MESSAGE,
         WORK_TYPE_MESSAGE_DELIVER,
-        b"hello role".to_vec(),
+        seal_message_for_recipient_with_ephemeral(
+            &sender.identity,
+            &receiver.identity,
+            b"hello role",
+            [77u8; 32],
+            [88u8; 12],
+        )
+        .expect("sealed message"),
     );
     let ordered = deliver_ordered(
         &mut channel,
@@ -51,6 +58,10 @@ fn ordered_message_can_be_executed_by_message_role_library() {
 
     assert_eq!(output.status, ROLE_STATUS_ACCEPTED);
     assert_eq!(role.delivered_len(), 1);
+    assert_eq!(
+        role.delivered()[0].payload_hash,
+        chat_payload_hash(b"hello role")
+    );
 }
 
 #[test]

@@ -1,9 +1,9 @@
 use alloc::vec::Vec;
 
-use edgerun_wire::{WireError, access, deserialize, to_bytes, util};
+use edgerun_wire::{access, deserialize, to_bytes, WireError};
 use rkyv::{Archive, Deserialize, Serialize};
 
-use crate::codec::blake3_hash;
+use crate::codec::{aligned_copy_if_needed_for, blake3_hash};
 use crate::preimage::HashBuilder;
 use crate::protocol::{Hash, NodeId, WORK_WIRE_ABI_VERSION};
 
@@ -345,13 +345,7 @@ pub fn message_object_from_bytes(bytes: &[u8]) -> Result<MessageObject, ChatInde
     if bytes.is_empty() {
         return Err(ChatIndexError::InvalidObject);
     }
-    if bytes
-        .as_ptr()
-        .align_offset(core::mem::align_of::<ArchivedMessageObject>())
-        != 0
-    {
-        let mut aligned = util::AlignedVec::<16>::with_capacity(bytes.len());
-        aligned.extend_from_slice(bytes);
+    if let Some(aligned) = aligned_copy_if_needed_for::<ArchivedMessageObject>(bytes) {
         return message_object_from_bytes(aligned.as_slice());
     }
     let archived = access::<ArchivedMessageObject, WireError>(bytes)
@@ -368,13 +362,7 @@ pub fn thread_object_from_bytes(bytes: &[u8]) -> Result<ThreadObject, ChatIndexE
     if bytes.is_empty() {
         return Err(ChatIndexError::InvalidObject);
     }
-    if bytes
-        .as_ptr()
-        .align_offset(core::mem::align_of::<ArchivedThreadObject>())
-        != 0
-    {
-        let mut aligned = util::AlignedVec::<16>::with_capacity(bytes.len());
-        aligned.extend_from_slice(bytes);
+    if let Some(aligned) = aligned_copy_if_needed_for::<ArchivedThreadObject>(bytes) {
         return thread_object_from_bytes(aligned.as_slice());
     }
     let archived = access::<ArchivedThreadObject, WireError>(bytes)
@@ -391,13 +379,7 @@ pub fn contact_book_from_bytes(bytes: &[u8]) -> Result<ContactBook, ChatIndexErr
     if bytes.is_empty() {
         return Err(ChatIndexError::InvalidObject);
     }
-    if bytes
-        .as_ptr()
-        .align_offset(core::mem::align_of::<ArchivedContactBook>())
-        != 0
-    {
-        let mut aligned = util::AlignedVec::<16>::with_capacity(bytes.len());
-        aligned.extend_from_slice(bytes);
+    if let Some(aligned) = aligned_copy_if_needed_for::<ArchivedContactBook>(bytes) {
         return contact_book_from_bytes(aligned.as_slice());
     }
     let archived = access::<ArchivedContactBook, WireError>(bytes)
@@ -406,7 +388,11 @@ pub fn contact_book_from_bytes(bytes: &[u8]) -> Result<ContactBook, ChatIndexErr
 }
 
 fn ordered_participants(a: NodeId, b: NodeId) -> (NodeId, NodeId) {
-    if a <= b { (a, b) } else { (b, a) }
+    if a <= b {
+        (a, b)
+    } else {
+        (b, a)
+    }
 }
 
 fn thread_has_participants(thread: &ThreadObject, from: NodeId, to: NodeId) -> bool {

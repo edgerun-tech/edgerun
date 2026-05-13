@@ -138,15 +138,9 @@ impl<S: ObjectStorageAdapter> WorkRole for TypedObjectStoreRole<S> {
     }
 
     fn handle(&mut self, context: &RoleContext, input: RoleInput) -> RoleOutput {
-        let WorkPacket::NetworkMessage(message) = input.packet else {
+        let Some(message) = network_message_for_role(self, context, input) else {
             return RoleOutput::ignored();
         };
-        if message.to != context.local_node.node_id
-            || !self.accepts_department(message.department)
-            || !self.accepts_work_type(message.work_type)
-        {
-            return RoleOutput::ignored();
-        }
         let Ok(payload) = storage_payload_from_bytes(&message.payload) else {
             return RoleOutput::rejected(b"invalid storage payload".to_vec());
         };
@@ -156,11 +150,7 @@ impl<S: ObjectStorageAdapter> WorkRole for TypedObjectStoreRole<S> {
                     return RoleOutput::rejected(b"invalid store request".to_vec());
                 }
                 match self.storage.store(request) {
-                    Ok(()) => RoleOutput::accepted(WorkPacket::Ack(WorkAck {
-                        ok: true,
-                        code: 200,
-                        text: "typed object stored".into(),
-                    })),
+                    Ok(()) => RoleOutput::accepted_ack(200, "typed object stored"),
                     Err(err) => RoleOutput::rejected(err.message().to_vec()),
                 }
             }

@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 
 use crate::channel::*;
 use crate::codec::{blake3_hash, encode_work_packet_once};
-use crate::protocol::{Hash, NodeId, WORK_WIRE_ABI_VERSION, WorkPacket};
+use crate::protocol::{Hash, NodeId, WorkPacket, WORK_WIRE_ABI_VERSION};
 use crate::route_auth::{route_advertisement_preimage, verify_route_advertisement};
 
 #[cfg(feature = "std")]

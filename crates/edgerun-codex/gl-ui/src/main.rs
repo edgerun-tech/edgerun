@@ -1,7 +1,7 @@
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int, c_void};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use edgerun_ui_core::gpu::gl::GlRenderer;
 use edgerun_ui_core::gpu::{
@@ -91,7 +91,7 @@ fn run() -> Result<(), String> {
     if args.dump_scene {
         let mut scene = GpuScene::new(palette::BG);
         let atlas = FontAtlas::load_inter(18.0)?;
-        build_surface(&mut scene, &atlas, 1120.0, 720.0, true);
+        build_surface(&mut scene, &atlas, 1120.0, 720.0);
         println!(
             "codex-gl-ui unified-chat scene rects={} text_quads={}",
             scene.rects().len(),
@@ -135,12 +135,10 @@ fn run() -> Result<(), String> {
 
     let atlas = FontAtlas::load_inter(18.0)?;
     let renderer = unsafe { GlRenderer::new_current_context_with_font(&atlas)? };
-    let started = Instant::now();
     let mut scene = GpuScene::new(palette::BG);
     let mut running = true;
     let mut frames = 0u32;
     let mut scene_dirty = true;
-    let mut last_thinking = false;
     while running {
         let mut event = SdlEvent { data: [0; 56] };
         while unsafe { SDL_PollEvent(&mut event) } != 0 {
@@ -156,25 +154,19 @@ fn run() -> Result<(), String> {
             }
         }
 
-        let thinking = (started.elapsed().as_millis() / 800).is_multiple_of(2);
-        if scene_dirty || thinking != last_thinking {
-            build_surface(
-                &mut scene,
-                &atlas,
-                width as f32,
-                height as f32,
-                thinking,
-            );
+        if scene_dirty {
+            build_surface(&mut scene, &atlas, width as f32, height as f32);
             renderer.render(width, height, &scene);
             unsafe {
                 SDL_GL_SwapWindow(window.0);
             }
             frames = frames.saturating_add(1);
             scene_dirty = false;
-            last_thinking = thinking;
         }
         if args.frames.is_some_and(|limit| frames >= limit) {
             running = false;
+        } else if args.frames.is_some() {
+            scene_dirty = true;
         }
         unsafe {
             SDL_Delay(4);
@@ -184,8 +176,8 @@ fn run() -> Result<(), String> {
     Ok(())
 }
 
-fn build_surface(scene: &mut GpuScene, atlas: &FontAtlas, width: f32, height: f32, active: bool) {
-    let state = UnifiedChatState::demo_selected(active, 1);
+fn build_surface(scene: &mut GpuScene, atlas: &FontAtlas, width: f32, height: f32) {
+    let state = UnifiedChatState::empty();
     build_unified_chat_shell_with_font(scene, atlas, width, height, &state);
 }
 

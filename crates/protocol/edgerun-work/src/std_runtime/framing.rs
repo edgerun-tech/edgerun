@@ -2,8 +2,8 @@ use std::io::{self, ErrorKind, Read, Write};
 use std::net::TcpStream;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::codec::{ArchivedWorkPacketFrame, archived_packet_frame_from_bytes, packet_bytes};
-use crate::protocol::{MAX_WORK_FRAME_LEN, WorkAck, WorkPacket};
+use crate::codec::{archived_packet_frame_from_bytes, packet_bytes, ArchivedWorkPacketFrame};
+use crate::protocol::{WorkAck, WorkPacket, MAX_WORK_FRAME_LEN};
 
 pub fn read_work_packet(stream: &mut TcpStream) -> io::Result<WorkPacket> {
     read_work_packet_frame(stream)?

@@ -1,13 +1,15 @@
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
+use crate::chat_index::{MessageObject, CHAT_MESSAGE_KIND_TEXT};
 use crate::codec::blake3_hash;
+use crate::message_seal::sealed_message_object_from_network_message;
 use crate::protocol::*;
 use crate::roles::*;
 
 #[derive(Default)]
 pub struct MessageRole {
-    delivered: Vec<NetworkMessage>,
+    delivered: Vec<MessageObject>,
 }
 
 impl MessageRole {
@@ -15,7 +17,7 @@ impl MessageRole {
         self.delivered.len()
     }
 
-    pub fn delivered(&self) -> &[NetworkMessage] {
+    pub fn delivered(&self) -> &[MessageObject] {
         &self.delivered
     }
 }
@@ -34,21 +36,18 @@ impl WorkRole for MessageRole {
     }
 
     fn handle(&mut self, context: &RoleContext, input: RoleInput) -> RoleOutput {
-        let WorkPacket::NetworkMessage(message) = input.packet else {
+        let Some(message) = network_message_for_role(self, context, input) else {
             return RoleOutput::ignored();
         };
-        if message.to != context.local_node.node_id
-            || !self.accepts_department(message.department)
-            || !self.accepts_work_type(message.work_type)
-        {
-            return RoleOutput::ignored();
-        }
-        self.delivered.push(message);
-        RoleOutput::accepted(WorkPacket::Ack(WorkAck {
-            ok: true,
-            code: 200,
-            text: "message delivered".into(),
-        }))
+        let Ok(message_object) = sealed_message_object_from_network_message(
+            &message,
+            context.now_unix_ms,
+            CHAT_MESSAGE_KIND_TEXT,
+        ) else {
+            return RoleOutput::rejected(b"invalid sealed message".to_vec());
+        };
+        self.delivered.push(message_object);
+        RoleOutput::accepted_ack(200, "message delivered")
     }
 }
 
@@ -81,21 +80,11 @@ impl WorkRole for ObjectStoreRole {
     }
 
     fn handle(&mut self, context: &RoleContext, input: RoleInput) -> RoleOutput {
-        let WorkPacket::NetworkMessage(message) = input.packet else {
+        let Some(message) = network_message_for_role(self, context, input) else {
             return RoleOutput::ignored();
         };
-        if message.to != context.local_node.node_id
-            || !self.accepts_department(message.department)
-            || !self.accepts_work_type(message.work_type)
-        {
-            return RoleOutput::ignored();
-        }
         let hash = blake3_hash(&message.payload);
         self.objects.insert(hash, message.payload);
-        RoleOutput::accepted(WorkPacket::Ack(WorkAck {
-            ok: true,
-            code: 200,
-            text: "object stored".into(),
-        }))
+        RoleOutput::accepted_ack(200, "object stored")
     }
 }

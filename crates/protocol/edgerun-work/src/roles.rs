@@ -1,8 +1,9 @@
+use alloc::string::String;
 use alloc::vec::Vec;
 
 use crate::protocol::*;
 use crate::types::{
-    Department, NodeRole, WorkType, department_for_work_type_typed, role_for_department_typed,
+    department_for_work_type_typed, role_for_department_typed, Department, NodeRole, WorkType,
 };
 
 pub const ROLE_STATUS_ACCEPTED: u16 = 1;
@@ -54,6 +55,14 @@ impl RoleOutput {
             bytes: reason,
         }
     }
+
+    pub fn accepted_ack(code: u16, text: impl Into<String>) -> Self {
+        Self::accepted(WorkPacket::Ack(WorkAck {
+            ok: true,
+            code,
+            text: text.into(),
+        }))
+    }
 }
 
 pub trait WorkRole {
@@ -61,6 +70,23 @@ pub trait WorkRole {
     fn accepts_department(&self, department: u16) -> bool;
     fn accepts_work_type(&self, work_type: u16) -> bool;
     fn handle(&mut self, context: &RoleContext, input: RoleInput) -> RoleOutput;
+}
+
+pub fn network_message_for_role<R: WorkRole + ?Sized>(
+    role: &R,
+    context: &RoleContext,
+    input: RoleInput,
+) -> Option<NetworkMessage> {
+    let WorkPacket::NetworkMessage(message) = input.packet else {
+        return None;
+    };
+    if message.to != context.local_node.node_id
+        || !role.accepts_department(message.department)
+        || !role.accepts_work_type(message.work_type)
+    {
+        return None;
+    }
+    Some(message)
 }
 
 pub fn department_for_work_type(work_type: u16) -> Option<u16> {

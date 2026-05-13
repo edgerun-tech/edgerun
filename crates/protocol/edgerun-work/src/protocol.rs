@@ -23,6 +23,11 @@ pub const WORK_TYPE_OBJECT_STORE: u16 = 2;
 pub const WORK_TYPE_OBJECT_RETRIEVE: u16 = 3;
 pub const WORK_TYPE_OBJECT_PIN: u16 = 4;
 pub const WORK_TYPE_COMPUTE_RUN: u16 = 5;
+pub const WORK_TYPE_PROGRAM_OPEN: u16 = 6;
+pub const WORK_TYPE_PROGRAM_STDIN: u16 = 7;
+pub const WORK_TYPE_PROGRAM_CLOSE: u16 = 8;
+pub const WORK_TYPE_PROGRAM_POLL: u16 = 9;
+pub const WORK_TYPE_PROGRAM_EVENT: u16 = 10;
 
 pub const DEPARTMENT_ADMISSION: u16 = 1;
 pub const DEPARTMENT_RELAY: u16 = 2;

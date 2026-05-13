@@ -4,10 +4,10 @@ use crate::channel::ChannelEnvelope;
 use crate::channel_order::{ChannelOrderBook, ChannelOrderError, OrderedChannelEnvelope};
 use crate::codec::{blake3_hash, packet_bytes};
 use crate::identity::node_identity_from_key;
-use crate::memory_channel::{MemoryChannelEngine, MemoryChannelError, route_hash};
+use crate::memory_channel::{route_hash, MemoryChannelEngine, MemoryChannelError};
 use crate::protocol::*;
-use crate::route_builder::{RouteAdvertisementBuilder, memory_endpoint};
-use crate::signing::{empty_signature, sign_network_message};
+use crate::route_builder::{memory_endpoint, RouteAdvertisementBuilder};
+use crate::signing::{sign_network_message_payload, simple_network_message_id};
 use edgerun_crypto::Ed25519SigningKey;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,27 +61,19 @@ impl SimNode {
     ) -> WorkPacket {
         self.sequence = self.sequence.saturating_add(1);
         let payload_hash = blake3_hash(&payload);
-        let mut id_input = Vec::new();
-        id_input.extend_from_slice(&self.identity.node_id);
-        id_input.extend_from_slice(&to);
-        id_input.extend_from_slice(&self.sequence.to_be_bytes());
-        id_input.extend_from_slice(&payload_hash);
-        WorkPacket::NetworkMessage(sign_network_message(
+        let message_id =
+            simple_network_message_id(&self.identity.node_id, &to, self.sequence, &payload_hash);
+        WorkPacket::NetworkMessage(sign_network_message_payload(
             &self.key,
-            NetworkMessage {
-                abi_version: WORK_WIRE_ABI_VERSION,
-                message_id: blake3_hash(&id_input),
-                prev_hash: [0u8; 32],
-                from: self.identity.node_id,
-                to,
-                via_relay,
-                department,
-                work_type,
-                sequence: self.sequence,
-                payload_hash,
-                payload,
-                signature: empty_signature(),
-            },
+            message_id,
+            [0u8; 32],
+            self.identity.node_id,
+            to,
+            via_relay,
+            department,
+            work_type,
+            self.sequence,
+            payload,
         ))
     }
 

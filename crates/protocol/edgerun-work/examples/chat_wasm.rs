@@ -2,13 +2,13 @@ use core::ptr::{addr_of, addr_of_mut};
 
 use edgerun_crypto::{Aes256GcmCipher, Ed25519SigningKey, Nonce, Tag};
 use edgerun_work::{
-    CHANNEL_KIND_WEBSOCKET, CHAT_MESSAGE_KIND_TEXT, ChannelEnvelope, ChannelId,
-    DEPARTMENT_MESSAGE, Hash, MessageObject, NetworkMessage, NODE_ROLE_MESSAGE, NodeIdentity,
-    PublicKey, WORK_TYPE_MESSAGE_DELIVER, WORK_WIRE_ABI_VERSION, WorkPacket, chat_payload_hash,
-    derive_node_id, empty_signature, encode_work_packet_once, finalize_message_object,
-    node_identity_from_key, seal_message_for_recipient, sealed_message_payload_from_bytes,
-    sign_ed25519, sign_network_message, thread_id_for_participants,
-    unseal_message_from_recipient_payload, verify_solana_ed25519,
+    derive_node_id, encode_work_packet_once, node_identity_from_key,
+    seal_message_for_recipient, sealed_message_object_from_network_message, sign_ed25519,
+    sign_network_message_payload, simple_network_message_id, thread_id_for_participants,
+    unseal_message_from_recipient_payload, verify_solana_ed25519, ChannelEnvelope, ChannelId, Hash,
+    MessageObject, NodeIdentity, PublicKey, WorkPacket, CHANNEL_KIND_WEBSOCKET,
+    CHAT_MESSAGE_KIND_TEXT, DEPARTMENT_MESSAGE, NODE_ROLE_MESSAGE, WORK_TYPE_MESSAGE_DELIVER,
+    WORK_WIRE_ABI_VERSION,
 };
 
 const BUFFER_LEN: usize = 1024 * 1024;
@@ -281,25 +281,32 @@ pub extern "C" fn edgerun_chat_seal_envelope(input_len: usize) -> usize {
     };
 
     let payload_hash = edgerun_work::blake3_hash(&sealed_payload);
-    let sealed_payload_hash = chat_payload_hash(&sealed_payload);
-    let message_id = message_id(&sender.node_id, &recipient.node_id, sequence, &payload_hash);
-    let packet = WorkPacket::NetworkMessage(sign_network_message(
+    let message_id = simple_network_message_id(
+        &sender.node_id,
+        &recipient.node_id,
+        sequence,
+        &payload_hash,
+    );
+    let message = sign_network_message_payload(
         &sender_key,
-        NetworkMessage {
-            abi_version: WORK_WIRE_ABI_VERSION,
-            message_id,
-            prev_hash: previous_message_hash,
-            from: sender.node_id,
-            to: recipient.node_id,
-            via_relay,
-            department: DEPARTMENT_MESSAGE,
-            work_type: WORK_TYPE_MESSAGE_DELIVER,
-            sequence,
-            payload_hash,
-            payload: sealed_payload,
-            signature: empty_signature(),
-        },
-    ));
+        message_id,
+        previous_message_hash,
+        sender.node_id,
+        recipient.node_id,
+        via_relay,
+        DEPARTMENT_MESSAGE,
+        WORK_TYPE_MESSAGE_DELIVER,
+        sequence,
+        sealed_payload,
+    );
+    let Ok(message_object) = sealed_message_object_from_network_message(
+        &message,
+        created_unix_ms,
+        CHAT_MESSAGE_KIND_TEXT,
+    ) else {
+        return fail(8);
+    };
+    let packet = WorkPacket::NetworkMessage(message);
     let Ok(encoded) = encode_work_packet_once(&packet) else {
         return fail(4);
     };
@@ -318,21 +325,6 @@ pub extern "C" fn edgerun_chat_seal_envelope(input_len: usize) -> usize {
     if bytes.len() > BUFFER_LEN {
         return fail(6);
     }
-    let message_object = finalize_message_object(MessageObject {
-        abi_version: WORK_WIRE_ABI_VERSION,
-        message_id: [0u8; 32],
-        thread_id: thread_id_for_participants(sender.node_id, recipient.node_id),
-        from: sender.node_id,
-        to: recipient.node_id,
-        sequence,
-        created_unix_ms,
-        message_kind: CHAT_MESSAGE_KIND_TEXT,
-        payload_hash: chat_payload_hash(plaintext),
-        payload_len: plaintext_len as u64,
-        sealed_payload_hash,
-        storage_ref: Vec::new(),
-        previous_message_hash,
-    });
     let frame_hash = edgerun_work::blake3_hash(&bytes);
     let total_len = SEALED_RECORD_HEADER_LEN + bytes.len();
     if total_len > BUFFER_LEN {
@@ -398,24 +390,11 @@ pub extern "C" fn edgerun_chat_index_envelope(input_len: usize) -> usize {
     let WorkPacket::NetworkMessage(message) = envelope.packet else {
         return fail(4);
     };
-    let Ok(sealed) = sealed_message_payload_from_bytes(&message.payload) else {
+    let Ok(message_object) =
+        sealed_message_object_from_network_message(&message, 0, CHAT_MESSAGE_KIND_TEXT)
+    else {
         return fail(5);
     };
-    let message_object = finalize_message_object(MessageObject {
-        abi_version: WORK_WIRE_ABI_VERSION,
-        message_id: [0u8; 32],
-        thread_id: thread_id_for_participants(message.from, message.to),
-        from: message.from,
-        to: message.to,
-        sequence: message.sequence,
-        created_unix_ms: 0,
-        message_kind: CHAT_MESSAGE_KIND_TEXT,
-        payload_hash: sealed.plaintext_hash,
-        payload_len: sealed.ciphertext.len() as u64,
-        sealed_payload_hash: chat_payload_hash(&message.payload),
-        storage_ref: Vec::new(),
-        previous_message_hash: message.prev_hash,
-    });
     let frame_hash = edgerun_work::blake3_hash(frame);
     let total_len = SEALED_RECORD_HEADER_LEN + frame.len();
     if total_len > BUFFER_LEN {
@@ -429,15 +408,6 @@ pub extern "C" fn edgerun_chat_index_envelope(input_len: usize) -> usize {
 #[unsafe(no_mangle)]
 pub extern "C" fn edgerun_chat_channel_kind_websocket() -> u16 {
     CHANNEL_KIND_WEBSOCKET
-}
-
-fn message_id(from: &[u8; 32], to: &[u8; 32], sequence: u64, payload_hash: &Hash) -> Hash {
-    let mut id_input = [0u8; 104];
-    id_input[..32].copy_from_slice(from);
-    id_input[32..64].copy_from_slice(to);
-    id_input[64..72].copy_from_slice(&sequence.to_be_bytes());
-    id_input[72..104].copy_from_slice(payload_hash);
-    edgerun_work::blake3_hash(&id_input)
 }
 
 fn contact_card_preimage(node_id: &[u8; 32], public_key: &[u8; 32]) -> Vec<u8> {

@@ -1170,186 +1170,21 @@ pub struct UnifiedChatState<'a> {
 }
 
 impl<'a> UnifiedChatState<'a> {
-    pub fn demo(codex_active: bool) -> Self {
-        Self::demo_selected(codex_active, 1)
-    }
-
-    pub fn demo_selected(codex_active: bool, selected_contact: usize) -> Self {
-        const ACTIVE_CONTACTS: &[UnifiedContact<'static>] = &[
-            UnifiedContact {
-                name: "Ken",
-                detail: "identity contact",
-                kind: UnifiedContactKind::Person,
-                unread: 0,
-                online: true,
-            },
-            UnifiedContact {
-                name: "Codex native",
-                detail: "local agent client",
-                kind: UnifiedContactKind::CodexClient,
-                unread: 2,
-                online: true,
-            },
-            UnifiedContact {
-                name: "Codex WebGL",
-                detail: "browser wasm client",
-                kind: UnifiedContactKind::CodexClient,
-                unread: 0,
-                online: true,
-            },
-            UnifiedContact {
-                name: "nodes.edgerun.tech",
-                detail: "admission and relay",
-                kind: UnifiedContactKind::Node,
-                unread: 0,
-                online: true,
-            },
-            UnifiedContact {
-                name: "Family admission",
-                detail: "policy source",
-                kind: UnifiedContactKind::Node,
-                unread: 0,
-                online: false,
-            },
-        ];
-        const IDLE_CONTACTS: &[UnifiedContact<'static>] = &[
-            UnifiedContact {
-                name: "Ken",
-                detail: "identity contact",
-                kind: UnifiedContactKind::Person,
-                unread: 0,
-                online: true,
-            },
-            UnifiedContact {
-                name: "Codex native",
-                detail: "local agent client",
-                kind: UnifiedContactKind::CodexClient,
-                unread: 2,
-                online: true,
-            },
-            UnifiedContact {
-                name: "Codex WebGL",
-                detail: "browser wasm client",
-                kind: UnifiedContactKind::CodexClient,
-                unread: 0,
-                online: false,
-            },
-            UnifiedContact {
-                name: "nodes.edgerun.tech",
-                detail: "admission and relay",
-                kind: UnifiedContactKind::Node,
-                unread: 0,
-                online: true,
-            },
-            UnifiedContact {
-                name: "Family admission",
-                detail: "policy source",
-                kind: UnifiedContactKind::Node,
-                unread: 0,
-                online: false,
-            },
-        ];
-        const MESSAGES: &[UnifiedMessage<'static>] = &[
-            UnifiedMessage {
-                author: "Ken",
-                body: "Codex clients should show up as contacts, not as a separate product surface.",
-                outgoing: true,
-                accent: palette::ACCENT,
-            },
-            UnifiedMessage {
-                author: "Codex native",
-                body: "I can live in the same contact book as people and node instances. The thread decides what capabilities I can use.",
-                outgoing: false,
-                accent: palette::VIOLET,
-            },
-            UnifiedMessage {
-                author: "nodes.edgerun.tech",
-                body: "Relay route is available. Messages remain recipient encrypted before they reach transport.",
-                outgoing: false,
-                accent: palette::GREEN,
-            },
-        ];
-        const KEN_MESSAGES: &[UnifiedMessage<'static>] = &[
-            UnifiedMessage {
-                author: "Ken",
-                body: "Personal contacts and agent contacts should feel the same, with different policy attached.",
-                outgoing: false,
-                accent: palette::ACCENT,
-            },
-            UnifiedMessage {
-                author: "You",
-                body: "Right. The contact book is the root. Threads and capabilities hang off identities.",
-                outgoing: true,
-                accent: palette::ACCENT,
-            },
-        ];
-        const WEBGL_MESSAGES: &[UnifiedMessage<'static>] = &[
-            UnifiedMessage {
-                author: "Codex WebGL",
-                body: "I am a browser hosted Codex client, rendered from the same Rust scene as native.",
-                outgoing: false,
-                accent: palette::VIOLET,
-            },
-            UnifiedMessage {
-                author: "You",
-                body: "Stay as a thin host. Rust owns layout, contact state, and byte-level bridges.",
-                outgoing: true,
-                accent: palette::ACCENT,
-            },
-        ];
-        const NODE_MESSAGES: &[UnifiedMessage<'static>] = &[
-            UnifiedMessage {
-                author: "nodes.edgerun.tech",
-                body: "Work WebSocket relay is live. Recipient encrypted envelopes can route by identity.",
-                outgoing: false,
-                accent: palette::GREEN,
-            },
-            UnifiedMessage {
-                author: "You",
-                body: "Keep transport dumb. Frontend owns encryption and decryption.",
-                outgoing: true,
-                accent: palette::ACCENT,
-            },
-        ];
-        const ADMISSION_MESSAGES: &[UnifiedMessage<'static>] = &[UnifiedMessage {
-            author: "Family admission",
-            body: "Policy source is currently offline. Local draft rules remain inspectable.",
-            outgoing: false,
-            accent: palette::AMBER,
-        }];
-
-        let contacts = if codex_active {
-            ACTIVE_CONTACTS
-        } else {
-            IDLE_CONTACTS
-        };
-        let selected_contact = selected_contact.min(contacts.len().saturating_sub(1));
+    pub const fn empty() -> Self {
         Self {
             title: "EdgeRun Chat",
-            subtitle: "contacts, Codex clients, and nodes",
-            contacts,
-            selected_contact,
-            messages: match selected_contact {
-                0 => KEN_MESSAGES,
-                1 => MESSAGES,
-                2 => WEBGL_MESSAGES,
-                3 => NODE_MESSAGES,
-                _ => ADMISSION_MESSAGES,
-            },
-            composer_placeholder: match selected_contact {
-                0 => "Message Ken...",
-                1 => "Message Codex native...",
-                2 => "Message Codex WebGL...",
-                3 => "Message nodes.edgerun.tech...",
-                _ => "Message Family admission...",
-            },
-            connected: codex_active,
+            subtitle: "contact book",
+            contacts: &[],
+            selected_contact: 0,
+            messages: &[],
+            composer_placeholder: "Select a contact to start a thread...",
+            connected: false,
         }
     }
 }
 
-pub fn build_unified_chat_shell(scene: &mut GpuScene, width: f32, height: f32, codex_active: bool) {
-    let state = UnifiedChatState::demo(codex_active);
+pub fn build_unified_chat_shell(scene: &mut GpuScene, width: f32, height: f32) {
+    let state = UnifiedChatState::empty();
     build_unified_chat_shell_impl(
         scene,
         width,
@@ -1510,6 +1345,46 @@ fn build_unified_chat_shell_impl(
     let transcript_top = m.topbar_h + m.pad;
     let transcript_x = main_x + m.pad;
     let transcript_w = main_w - m.pad * 2.0;
+    if state.contacts.is_empty() {
+        let empty_w = transcript_w.clamp(260.0, 520.0);
+        let empty_h = 126.0;
+        let empty_x = transcript_x + (transcript_w - empty_w) * 0.5;
+        let empty_y = transcript_top + 46.0;
+        ui.card(empty_x, empty_y, empty_w, empty_h, 12.0, palette::PANEL);
+        ui.bounded_label(
+            empty_x + 22.0,
+            empty_y + 24.0,
+            empty_w - 44.0,
+            "No contacts yet",
+            3.0,
+            palette::TEXT,
+        );
+        ui.bounded_label(
+            empty_x + 22.0,
+            empty_y + 62.0,
+            empty_w - 44.0,
+            "Connect a contact book or receive an identity-routed contact to show threads here.",
+            2.0,
+            palette::MUTED,
+        );
+        let composer = (
+            main_x + m.pad,
+            h - m.composer_h - m.pad,
+            main_w - m.pad * 2.0,
+            m.composer_h,
+        );
+        ui.composer(
+            composer.0,
+            composer.1,
+            composer.2,
+            composer.3,
+            state.composer_placeholder,
+            false,
+            &[],
+        );
+        return;
+    }
+
     let rail_w = if transcript_w > 820.0 { 220.0 } else { 0.0 };
     let message_area_w = transcript_w - if rail_w > 0.0 { rail_w + 18.0 } else { 0.0 };
     let message_w = (message_area_w * 0.82).clamp(220.0, 760.0);

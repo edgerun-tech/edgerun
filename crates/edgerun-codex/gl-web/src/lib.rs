@@ -9,7 +9,7 @@ thread_local! {
     static SCENE: RefCell<GpuScene> = RefCell::new(GpuScene::new(palette::BG));
     static PACKED_RECTS: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
     static PACKED_TEXT_VERTICES: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
-    static SELECTED_CONTACT: RefCell<usize> = const { RefCell::new(1) };
+    static SELECTED_CONTACT: RefCell<usize> = const { RefCell::new(0) };
     static FONT: FontAtlas = FontAtlas::from_font_bytes(include_bytes!(env!("CODEX_GL_INTER_FONT")), 18.0)
         .expect("embedded Inter font should parse");
 }
@@ -41,8 +41,8 @@ pub extern "C" fn codex_gl_build_unified_chat_scene(
 fn build_scene(width: f32, height: f32, active: bool) -> u32 {
     FONT.with(|font| {
         SCENE.with_borrow_mut(|scene| {
-            let selected = SELECTED_CONTACT.with_borrow(|selected| *selected);
-            let state = UnifiedChatState::demo_selected(active, selected);
+            let mut state = UnifiedChatState::empty();
+            state.connected = active;
             build_unified_chat_shell_with_font(scene, font, width, height, &state);
             pack_scene(scene);
             scene.rects().len() as u32

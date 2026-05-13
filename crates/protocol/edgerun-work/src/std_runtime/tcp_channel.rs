@@ -2,16 +2,16 @@ use std::collections::BTreeMap;
 use std::io;
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::{
-    Arc, Mutex,
     atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
 };
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use crate::channel::{ChannelEnvelope, RouteAdvertisement};
-use crate::codec::{ArchivedWorkPacketFrame, encode_work_packet_once};
+use crate::codec::{encode_work_packet_once, ArchivedWorkPacketFrame};
 use crate::memory_channel::{route_hash, route_is_available};
-use crate::protocol::{Hash, NodeId, WORK_WIRE_ABI_VERSION, WorkPacket};
+use crate::protocol::{Hash, NodeId, WorkPacket, WORK_WIRE_ABI_VERSION};
 use crate::route_auth::verify_route_advertisement;
 use crate::std_runtime::framing::{
     read_work_packet_frame, unix_ms, write_encoded_work_packet, write_work_packet,

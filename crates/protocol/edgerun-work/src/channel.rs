@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::protocol::{
-    Hash, NodeId, NodeIdentity, WORK_WIRE_ABI_VERSION, WorkPacket, WorkSignature,
+    Hash, NodeId, NodeIdentity, WorkPacket, WorkSignature, WORK_WIRE_ABI_VERSION,
 };
 
 pub const CHANNEL_KIND_MEMORY: u16 = 1;

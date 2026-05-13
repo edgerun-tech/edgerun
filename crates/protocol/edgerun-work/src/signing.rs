@@ -108,6 +108,20 @@ pub fn network_message_preimage(value: &NetworkMessage) -> Vec<u8> {
         .finish()
 }
 
+pub fn simple_network_message_id(
+    from: &NodeId,
+    to: &NodeId,
+    sequence: u64,
+    payload_hash: &Hash,
+) -> Hash {
+    let mut id_input = [0u8; 104];
+    id_input[..32].copy_from_slice(from);
+    id_input[32..64].copy_from_slice(to);
+    id_input[64..72].copy_from_slice(&sequence.to_be_bytes());
+    id_input[72..104].copy_from_slice(payload_hash);
+    blake3_hash(&id_input)
+}
+
 pub fn work_admission_preimage(value: &WorkAdmission) -> Vec<u8> {
     PreimageBuilder::domain(WORK_ADMISSION_DOMAIN)
         .hash(&value.admission_id)
@@ -159,8 +173,49 @@ pub fn sign_relay_assignment(
 
 pub fn sign_network_message(key: &Ed25519SigningKey, mut value: NetworkMessage) -> NetworkMessage {
     value.payload_hash = blake3_hash(&value.payload);
+    sign_network_message_with_payload_hash(key, value)
+}
+
+pub fn sign_network_message_with_payload_hash(
+    key: &Ed25519SigningKey,
+    mut value: NetworkMessage,
+) -> NetworkMessage {
+    debug_assert_eq!(value.payload_hash, blake3_hash(&value.payload));
     value.signature = sign_ed25519(key, &network_message_preimage(&value));
     value
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn sign_network_message_payload(
+    key: &Ed25519SigningKey,
+    message_id: Hash,
+    prev_hash: Hash,
+    from: NodeId,
+    to: NodeId,
+    via_relay: NodeId,
+    department: u16,
+    work_type: u16,
+    sequence: u64,
+    payload: Vec<u8>,
+) -> NetworkMessage {
+    let payload_hash = blake3_hash(&payload);
+    sign_network_message_with_payload_hash(
+        key,
+        NetworkMessage {
+            abi_version: WORK_WIRE_ABI_VERSION,
+            message_id,
+            prev_hash,
+            from,
+            to,
+            via_relay,
+            department,
+            work_type,
+            sequence,
+            payload_hash,
+            payload,
+            signature: empty_signature(),
+        },
+    )
 }
 
 pub fn sign_work_admission(key: &Ed25519SigningKey, mut value: WorkAdmission) -> WorkAdmission {

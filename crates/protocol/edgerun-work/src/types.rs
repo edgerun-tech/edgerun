@@ -42,6 +42,11 @@ impl WorkType {
     pub const OBJECT_RETRIEVE: Self = Self(WORK_TYPE_OBJECT_RETRIEVE);
     pub const OBJECT_PIN: Self = Self(WORK_TYPE_OBJECT_PIN);
     pub const COMPUTE_RUN: Self = Self(WORK_TYPE_COMPUTE_RUN);
+    pub const PROGRAM_OPEN: Self = Self(WORK_TYPE_PROGRAM_OPEN);
+    pub const PROGRAM_STDIN: Self = Self(WORK_TYPE_PROGRAM_STDIN);
+    pub const PROGRAM_CLOSE: Self = Self(WORK_TYPE_PROGRAM_CLOSE);
+    pub const PROGRAM_POLL: Self = Self(WORK_TYPE_PROGRAM_POLL);
+    pub const PROGRAM_EVENT: Self = Self(WORK_TYPE_PROGRAM_EVENT);
 
     pub const fn as_u16(self) -> u16 {
         self.0
@@ -53,7 +58,12 @@ impl WorkType {
             | WORK_TYPE_OBJECT_STORE
             | WORK_TYPE_OBJECT_RETRIEVE
             | WORK_TYPE_OBJECT_PIN
-            | WORK_TYPE_COMPUTE_RUN => Some(Self(value)),
+            | WORK_TYPE_COMPUTE_RUN
+            | WORK_TYPE_PROGRAM_OPEN
+            | WORK_TYPE_PROGRAM_STDIN
+            | WORK_TYPE_PROGRAM_CLOSE
+            | WORK_TYPE_PROGRAM_POLL
+            | WORK_TYPE_PROGRAM_EVENT => Some(Self(value)),
             _ => None,
         }
     }
@@ -108,7 +118,12 @@ pub fn department_for_work_type_typed(work_type: WorkType) -> Option<Department>
         WORK_TYPE_MESSAGE_DELIVER => Some(Department::MESSAGE),
         WORK_TYPE_OBJECT_STORE | WORK_TYPE_OBJECT_PIN => Some(Department::STORAGE),
         WORK_TYPE_OBJECT_RETRIEVE => Some(Department::RETRIEVAL),
-        WORK_TYPE_COMPUTE_RUN => Some(Department::COMPUTE),
+        WORK_TYPE_COMPUTE_RUN
+        | WORK_TYPE_PROGRAM_OPEN
+        | WORK_TYPE_PROGRAM_STDIN
+        | WORK_TYPE_PROGRAM_CLOSE
+        | WORK_TYPE_PROGRAM_POLL
+        | WORK_TYPE_PROGRAM_EVENT => Some(Department::COMPUTE),
         _ => None,
     }
 }
