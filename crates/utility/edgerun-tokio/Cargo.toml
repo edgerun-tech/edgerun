@@ -14,7 +14,7 @@ compat = []
 edgerun-runtime = ["dep:edgerun-runtime"]
 fs = []
 io-util = []
-macros = []
+macros = ["dep:edgerun-tokio-macros"]
 net = []
 process = []
 rt = []
@@ -26,6 +26,7 @@ time = []
 [dependencies]
 edgerun-futures = { version = "0.1", path = "../edgerun-futures" }
 edgerun-runtime = { version = "0.1", path = "../edgerun-runtime", default-features = false, features = ["std"], optional = true }
+edgerun-tokio-macros = { version = "0.1", path = "../edgerun-tokio-macros", optional = true }
 
 [lints]
 workspace = true

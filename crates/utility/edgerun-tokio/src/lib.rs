@@ -14,6 +14,9 @@ pub use edgerun_futures as futures;
 
 pub use task::spawn;
 
+#[cfg(feature = "macros")]
+pub use edgerun_tokio_macros::test;
+
 #[macro_export]
 macro_rules! pin {
     ($($x:ident),+ $(,)?) => {

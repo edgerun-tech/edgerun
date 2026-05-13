@@ -202,6 +202,13 @@ impl HeaderValue {
         Ok(Self(value.as_bytes().to_vec()))
     }
 
+    pub fn from_bytes(value: &[u8]) -> Result<Self> {
+        if value.iter().any(|byte| *byte < 0x20 && *byte != b'\t') {
+            return Err(Error::new("invalid header value"));
+        }
+        Ok(Self(value.to_vec()))
+    }
+
     pub fn to_str(&self) -> Result<&str> {
         std::str::from_utf8(&self.0).map_err(|_| Error::new("header value is not utf-8"))
     }
@@ -596,6 +603,10 @@ impl<T> Response<T> {
 
     pub fn headers(&self) -> &HeaderMap {
         &self.headers
+    }
+
+    pub fn body(&self) -> &T {
+        &self.body
     }
 
     pub fn extensions(&self) -> &Extensions {
