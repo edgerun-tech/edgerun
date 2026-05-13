@@ -1,12 +1,14 @@
 use std::cell::RefCell;
 
 use edgerun_ui_core::gpu::{
-    FontAtlas, GpuScene, HitKind, RectMode, UnifiedChatState, build_codex_chat_shell_with_font,
-    build_unified_chat_shell_with_font, palette,
+    FontAtlas, GpuRect, GpuScene, HitKind, RectMode, TextQuad, UnifiedChatState,
+    build_codex_chat_shell_with_font, build_unified_chat_shell_with_font, palette,
 };
 
 thread_local! {
     static SCENE: RefCell<GpuScene> = RefCell::new(GpuScene::new(palette::BG));
+    static PACKED_RECTS: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
+    static PACKED_TEXT_VERTICES: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
     static SELECTED_CONTACT: RefCell<usize> = const { RefCell::new(1) };
     static FONT: FontAtlas = FontAtlas::from_font_bytes(include_bytes!(env!("CODEX_GL_INTER_FONT")), 18.0)
         .expect("embedded Inter font should parse");
@@ -24,6 +26,7 @@ pub extern "C" fn codex_gl_build_scene(width: f32, height: f32, thinking: u32) -
                 thinking != 0,
                 Surface::UnifiedChat,
             );
+            pack_scene(scene);
             scene.rects().len() as u32
         })
     })
@@ -34,6 +37,7 @@ pub extern "C" fn codex_gl_build_codex_scene(width: f32, height: f32, thinking: 
     FONT.with(|font| {
         SCENE.with_borrow_mut(|scene| {
             build_scene(scene, font, width, height, thinking != 0, Surface::Codex);
+            pack_scene(scene);
             scene.rects().len() as u32
         })
     })
@@ -55,6 +59,7 @@ pub extern "C" fn codex_gl_build_unified_chat_scene(
                 connected != 0,
                 Surface::UnifiedChat,
             );
+            pack_scene(scene);
             scene.rects().len() as u32
         })
     })
@@ -82,6 +87,76 @@ fn build_scene(
             build_unified_chat_shell_with_font(scene, font, width, height, &state);
         }
     }
+}
+
+fn pack_scene(scene: &GpuScene) {
+    PACKED_RECTS.with_borrow_mut(|packed| {
+        packed.clear();
+        packed.reserve(scene.rects().len() * 11);
+        for rect in scene.rects() {
+            push_packed_rect(packed, rect);
+        }
+    });
+
+    PACKED_TEXT_VERTICES.with_borrow_mut(|packed| {
+        packed.clear();
+        packed.reserve(scene.text_quads().len() * 48);
+        for quad in scene.text_quads() {
+            push_packed_text_quad(packed, quad);
+        }
+    });
+}
+
+fn push_packed_rect(packed: &mut Vec<f32>, rect: &GpuRect) {
+    packed.extend_from_slice(&[
+        rect.x,
+        rect.y,
+        rect.w,
+        rect.h,
+        rect.radius,
+        rect.shadow,
+        rect.color.r,
+        rect.color.g,
+        rect.color.b,
+        rect.color.a,
+        rect_mode_code(rect.mode) as f32,
+    ]);
+}
+
+fn push_packed_text_quad(packed: &mut Vec<f32>, quad: &TextQuad) {
+    push_text_vertex(packed, quad.x, quad.y, quad.u0, quad.v0, quad);
+    push_text_vertex(packed, quad.x + quad.w, quad.y, quad.u1, quad.v0, quad);
+    push_text_vertex(
+        packed,
+        quad.x + quad.w,
+        quad.y + quad.h,
+        quad.u1,
+        quad.v1,
+        quad,
+    );
+    push_text_vertex(packed, quad.x, quad.y, quad.u0, quad.v0, quad);
+    push_text_vertex(
+        packed,
+        quad.x + quad.w,
+        quad.y + quad.h,
+        quad.u1,
+        quad.v1,
+        quad,
+    );
+    push_text_vertex(packed, quad.x, quad.y + quad.h, quad.u0, quad.v1, quad);
+}
+
+fn push_text_vertex(packed: &mut Vec<f32>, x: f32, y: f32, u: f32, v: f32, quad: &TextQuad) {
+    packed.extend_from_slice(&[
+        x,
+        y,
+        u,
+        v,
+        quad.color.r,
+        quad.color.g,
+        quad.color.b,
+        quad.color.a,
+    ]);
 }
 
 #[unsafe(no_mangle)]
@@ -124,6 +199,36 @@ fn hit_kind_code(kind: HitKind) -> u32 {
 #[unsafe(no_mangle)]
 pub extern "C" fn codex_gl_text_quad_count() -> u32 {
     SCENE.with_borrow(|scene| scene.text_quads().len() as u32)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_rect_float_stride() -> u32 {
+    11
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_rect_buffer_len() -> u32 {
+    PACKED_RECTS.with_borrow(|packed| packed.len() as u32)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_rect_buffer_ptr() -> *const f32 {
+    PACKED_RECTS.with_borrow(|packed| packed.as_ptr())
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_text_vertex_float_stride() -> u32 {
+    8
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_text_vertex_buffer_len() -> u32 {
+    PACKED_TEXT_VERTICES.with_borrow(|packed| packed.len() as u32)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_text_vertex_buffer_ptr() -> *const f32 {
+    PACKED_TEXT_VERTICES.with_borrow(|packed| packed.as_ptr())
 }
 
 #[unsafe(no_mangle)]
@@ -182,11 +287,7 @@ pub extern "C" fn codex_gl_rect_mode(index: u32) -> u32 {
         scene
             .rects()
             .get(index as usize)
-            .map(|rect| match rect.mode {
-                RectMode::Fill => 0,
-                RectMode::Shadow => 1,
-                RectMode::Border => 2,
-            })
+            .map(|rect| rect_mode_code(rect.mode))
             .unwrap_or(0)
     })
 }
@@ -298,4 +399,12 @@ fn text_field(index: u32, field: impl FnOnce(&edgerun_ui_core::gpu::TextQuad) ->
             .map(field)
             .unwrap_or(0.0)
     })
+}
+
+fn rect_mode_code(mode: RectMode) -> u32 {
+    match mode {
+        RectMode::Fill => 0,
+        RectMode::Shadow => 1,
+        RectMode::Border => 2,
+    }
 }

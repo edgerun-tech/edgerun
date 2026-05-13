@@ -80,24 +80,27 @@ void main() {
 
 const textVertexSource = `#version 300 es
 layout(location = 0) in vec4 a_data;
+layout(location = 1) in vec4 a_color;
 uniform vec2 u_screen;
 out vec2 v_uv;
+out vec4 v_color;
 void main() {
   vec2 px = a_data.xy;
   vec2 ndc = vec2(px.x / u_screen.x * 2.0 - 1.0, 1.0 - px.y / u_screen.y * 2.0);
   gl_Position = vec4(ndc, 0.0, 1.0);
   v_uv = a_data.zw;
+  v_color = a_color;
 }`;
 
 const textFragmentSource = `#version 300 es
 precision highp float;
 in vec2 v_uv;
+in vec4 v_color;
 out vec4 out_color;
 uniform sampler2D u_tex;
-uniform vec4 u_color;
 void main() {
   float a = texture(u_tex, v_uv).r;
-  out_color = vec4(u_color.rgb, u_color.a * a);
+  out_color = vec4(v_color.rgb, v_color.a * a);
 }`;
 
 const canvas = document.getElementById("codex");
@@ -145,6 +148,8 @@ const uniforms = {
 
 const wasm = await WebAssembly.instantiateStreaming(fetch("./codex_gl_web.wasm"), {});
 const api = wasm.instance.exports;
+const rectStride = api.codex_gl_rect_float_stride();
+const textVertexStride = api.codex_gl_text_vertex_float_stride();
 
 const textProgram = gl.createProgram();
 gl.attachShader(textProgram, shader(gl.VERTEX_SHADER, textVertexSource));
@@ -159,10 +164,11 @@ gl.bindVertexArray(textVao);
 const textVbo = gl.createBuffer();
 gl.bindBuffer(gl.ARRAY_BUFFER, textVbo);
 gl.enableVertexAttribArray(0);
-gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 16, 0);
+gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 32, 0);
+gl.enableVertexAttribArray(1);
+gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 32, 16);
 const textUniforms = {
   screen: gl.getUniformLocation(textProgram, "u_screen"),
-  color: gl.getUniformLocation(textProgram, "u_color"),
   tex: gl.getUniformLocation(textProgram, "u_tex"),
 };
 
@@ -267,7 +273,7 @@ function draw(t) {
     return;
   }
 
-  const count = surface === "codex"
+  surface === "codex"
     ? api.codex_gl_build_codex_scene(width, height, phase)
     : api.codex_gl_build_unified_chat_scene(width, height, phase);
   sceneDirty = false;
@@ -286,60 +292,43 @@ function draw(t) {
   gl.bindVertexArray(vao);
   gl.uniform2f(uniforms.screen, width, height);
 
-  for (let i = 0; i < count; i++) {
+  const rectBufferLen = api.codex_gl_rect_buffer_len();
+  const rectBufferPtr = api.codex_gl_rect_buffer_ptr();
+  const rects = new Float32Array(api.memory.buffer, rectBufferPtr, rectBufferLen);
+  for (let i = 0; i < rectBufferLen; i += rectStride) {
     gl.uniform4f(
       uniforms.rect,
-      api.codex_gl_rect_x(i),
-      api.codex_gl_rect_y(i),
-      api.codex_gl_rect_w(i),
-      api.codex_gl_rect_h(i),
+      rects[i],
+      rects[i + 1],
+      rects[i + 2],
+      rects[i + 3],
     );
     gl.uniform4f(
       uniforms.color,
-      api.codex_gl_rect_r(i),
-      api.codex_gl_rect_g(i),
-      api.codex_gl_rect_b(i),
-      api.codex_gl_rect_a(i),
+      rects[i + 6],
+      rects[i + 7],
+      rects[i + 8],
+      rects[i + 9],
     );
-    gl.uniform1f(uniforms.radius, api.codex_gl_rect_radius(i));
-    gl.uniform1i(uniforms.mode, api.codex_gl_rect_mode(i));
-    gl.uniform1f(uniforms.shadow, api.codex_gl_rect_shadow(i));
+    gl.uniform1f(uniforms.radius, rects[i + 4]);
+    gl.uniform1i(uniforms.mode, rects[i + 10] | 0);
+    gl.uniform1f(uniforms.shadow, rects[i + 5]);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
   }
 
-  const textCount = api.codex_gl_text_quad_count();
   gl.useProgram(textProgram);
   gl.bindVertexArray(textVao);
   gl.activeTexture(gl.TEXTURE0);
   gl.bindTexture(gl.TEXTURE_2D, textTexture);
   gl.uniform1i(textUniforms.tex, 0);
   gl.uniform2f(textUniforms.screen, width, height);
-  for (let i = 0; i < textCount; i++) {
-    const x = api.codex_gl_text_x(i);
-    const y = api.codex_gl_text_y(i);
-    const w = api.codex_gl_text_w(i);
-    const h = api.codex_gl_text_h(i);
-    const u0 = api.codex_gl_text_u0(i);
-    const v0 = api.codex_gl_text_v0(i);
-    const u1 = api.codex_gl_text_u1(i);
-    const v1 = api.codex_gl_text_v1(i);
-    gl.uniform4f(
-      textUniforms.color,
-      api.codex_gl_text_r(i),
-      api.codex_gl_text_g(i),
-      api.codex_gl_text_b(i),
-      api.codex_gl_text_a(i),
-    );
+  const textVertexBufferLen = api.codex_gl_text_vertex_buffer_len();
+  if (textVertexBufferLen > 0) {
+    const textVertexBufferPtr = api.codex_gl_text_vertex_buffer_ptr();
+    const textVertices = new Float32Array(api.memory.buffer, textVertexBufferPtr, textVertexBufferLen);
     gl.bindBuffer(gl.ARRAY_BUFFER, textVbo);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
-      x, y, u0, v0,
-      x + w, y, u1, v0,
-      x + w, y + h, u1, v1,
-      x, y, u0, v0,
-      x + w, y + h, u1, v1,
-      x, y + h, u0, v1,
-    ]), gl.DYNAMIC_DRAW);
-    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.bufferData(gl.ARRAY_BUFFER, textVertices, gl.DYNAMIC_DRAW);
+    gl.drawArrays(gl.TRIANGLES, 0, textVertexBufferLen / textVertexStride);
   }
   scheduleAnimationPhase(t);
 }
