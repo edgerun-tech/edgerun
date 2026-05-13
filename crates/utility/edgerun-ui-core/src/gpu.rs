@@ -503,6 +503,28 @@ impl<'a, 'font> UiPainter<'a, 'font> {
         );
     }
 
+    pub fn bounded_label(
+        &mut self,
+        x: f32,
+        y: f32,
+        max_w: f32,
+        text: &str,
+        scale: f32,
+        color: Color4,
+    ) {
+        push_bounded_label(
+            self.scene,
+            #[cfg(feature = "fontdue-text")]
+            self.atlas,
+            x,
+            y,
+            max_w,
+            text,
+            scale,
+            color,
+        );
+    }
+
     pub fn panel(&mut self, x: f32, y: f32, w: f32, h: f32, radius: f32, color: Color4) {
         panel(self.scene, x, y, w, h, radius, color);
     }
@@ -552,7 +574,7 @@ impl<'a, 'font> UiPainter<'a, 'font> {
             .push_rect(GpuRect::fill(x, y, w, 22.0, 11.0, color.with_alpha(0.16)));
         self.scene
             .push_rect(GpuRect::border(x, y, w, 22.0, 11.0, color.with_alpha(0.42)));
-        self.label(x + 9.0, y + 5.0, label, 2.0, color);
+        self.bounded_label(x + 9.0, y + 5.0, w - 18.0, label, 2.0, color);
         w
     }
 
@@ -574,9 +596,10 @@ impl<'a, 'font> UiPainter<'a, 'font> {
             radius,
             color.with_alpha(0.54),
         ));
-        self.label(
+        self.bounded_label(
             x + size * 0.34,
             y + size * 0.30,
+            size * 0.42,
             contact_initial(label),
             2.0,
             color,
@@ -636,9 +659,10 @@ impl<'a, 'font> UiPainter<'a, 'font> {
             #[cfg(feature = "fontdue-text")]
             self.atlas,
         );
-        self.label(
+        self.bounded_label(
             rect.x + ((rect.w - label_w) * 0.5).max(10.0),
             rect.y + (rect.h - 14.0) * 0.5,
+            (rect.w - 20.0).max(0.0),
             label,
             2.0,
             text,
@@ -670,9 +694,10 @@ impl<'a, 'font> UiPainter<'a, 'font> {
                 palette::BORDER
             },
         ));
-        self.label(
+        self.bounded_label(
             rect.x + 16.0,
             rect.y + 13.0,
+            (rect.w - 32.0).max(0.0),
             placeholder,
             2.0,
             palette::MUTED,
@@ -771,9 +796,10 @@ impl<'a, 'font> UiPainter<'a, 'font> {
                 #[cfg(feature = "fontdue-text")]
                 self.atlas,
             );
-            self.label(
+            self.bounded_label(
                 x + ((item_w - label_w) * 0.5).max(8.0),
                 rect.y + (rect.h - 14.0) * 0.5,
+                (item_w - 16.0).max(0.0),
                 label,
                 2.0,
                 if active {
@@ -790,8 +816,22 @@ impl<'a, 'font> UiPainter<'a, 'font> {
         self.card(rect.x, rect.y, rect.w, rect.h, 10.0, palette::ROW);
         self.scene
             .push_rect(GpuRect::fill(rect.x, rect.y, 3.0, rect.h, 2.0, accent));
-        self.label(rect.x + 16.0, rect.y + 10.0, title, 2.0, palette::TEXT);
-        self.label(rect.x + 16.0, rect.y + 31.0, detail, 2.0, palette::MUTED);
+        self.bounded_label(
+            rect.x + 16.0,
+            rect.y + 10.0,
+            (rect.w - 32.0).max(0.0),
+            title,
+            2.0,
+            palette::TEXT,
+        );
+        self.bounded_label(
+            rect.x + 16.0,
+            rect.y + 31.0,
+            (rect.w - 32.0).max(0.0),
+            detail,
+            2.0,
+            palette::MUTED,
+        );
     }
 
     pub fn scrollbar(&mut self, rect: UiRect, visible_fraction: f32, offset_fraction: f32) {
@@ -887,7 +927,14 @@ impl<'a, 'font> UiPainter<'a, 'font> {
                 palette::BORDER
             },
         ));
-        self.label(x + 22.0, y + 24.0, placeholder, 2.0, palette::MUTED);
+        self.bounded_label(
+            x + 22.0,
+            y + 24.0,
+            (w - 96.0).max(0.0),
+            placeholder,
+            2.0,
+            palette::MUTED,
+        );
 
         let mut chip_x = x + 20.0;
         for (label, color) in chips.iter().copied() {
@@ -913,7 +960,14 @@ impl<'a, 'font> UiPainter<'a, 'font> {
             12.0,
             palette::ACCENT,
         ));
-        self.label(x + w - 47.0, y + h - 45.0, ">", 3.0, palette::ACCENT_TEXT);
+        self.bounded_label(
+            x + w - 47.0,
+            y + h - 45.0,
+            24.0,
+            ">",
+            3.0,
+            palette::ACCENT_TEXT,
+        );
     }
 }
 
@@ -1185,8 +1239,22 @@ fn build_unified_chat_shell_impl(
             0.0,
             palette::ACCENT,
         ));
-        ui.label(24.0, 20.0, state.title, 3.0, palette::TEXT);
-        ui.label(24.0, 50.0, state.subtitle, 2.0, palette::MUTED);
+        ui.bounded_label(
+            24.0,
+            20.0,
+            (sidebar_w - 138.0).max(0.0),
+            state.title,
+            3.0,
+            palette::TEXT,
+        );
+        ui.bounded_label(
+            24.0,
+            50.0,
+            (sidebar_w - 48.0).max(0.0),
+            state.subtitle,
+            2.0,
+            palette::MUTED,
+        );
         ui.pill(
             sidebar_w - 104.0,
             22.0,
@@ -1223,8 +1291,27 @@ fn build_unified_chat_shell_impl(
     let active_detail = active
         .map(|contact| contact.detail)
         .unwrap_or("contact thread");
-    ui.label(main_x + 20.0, 14.0, active_name, 2.0, palette::TEXT);
-    ui.label(main_x + 20.0, 35.0, active_detail, 2.0, palette::MUTED);
+    let title_w = if main_w > 620.0 {
+        190.0
+    } else {
+        (main_w - 40.0).max(0.0)
+    };
+    ui.bounded_label(
+        main_x + 20.0,
+        14.0,
+        title_w,
+        active_name,
+        2.0,
+        palette::TEXT,
+    );
+    ui.bounded_label(
+        main_x + 20.0,
+        35.0,
+        title_w,
+        active_detail,
+        2.0,
+        palette::MUTED,
+    );
     let tabs_w = 226.0_f32.min((main_w - 390.0).max(0.0));
     if tabs_w > 160.0 {
         ui.segmented_tabs(
@@ -1302,9 +1389,10 @@ fn build_unified_chat_shell_impl(
     if rail_w > 0.0 {
         let rail_x = transcript_x + transcript_w - rail_w;
         ui.card(rail_x, transcript_top, rail_w, 220.0, 12.0, palette::PANEL);
-        ui.label(
+        ui.bounded_label(
             rail_x + 16.0,
             transcript_top + 18.0,
+            rail_w - 32.0,
             "Thread policy",
             2.0,
             palette::TEXT,
@@ -1336,9 +1424,10 @@ fn build_unified_chat_shell_impl(
             rail_w - 32.0,
             Axis::Horizontal,
         );
-        ui.label(
+        ui.bounded_label(
             rail_x + 16.0,
             transcript_top + 166.0,
+            rail_w - 88.0,
             "route health",
             2.0,
             palette::MUTED,
@@ -1821,6 +1910,38 @@ fn push_label(
     scene.push_text(x, y, text, scale, color);
 }
 
+fn push_bounded_label(
+    scene: &mut GpuScene,
+    #[cfg(feature = "fontdue-text")] atlas: Option<&FontAtlas>,
+    x: f32,
+    y: f32,
+    max_w: f32,
+    text: &str,
+    scale: f32,
+    color: Color4,
+) {
+    if max_w <= 0.0 {
+        return;
+    }
+    let label = truncate_label_to_width(
+        text,
+        max_w,
+        scale,
+        #[cfg(feature = "fontdue-text")]
+        atlas,
+    );
+    push_label(
+        scene,
+        #[cfg(feature = "fontdue-text")]
+        atlas,
+        x,
+        y,
+        &label,
+        scale,
+        color,
+    );
+}
+
 fn draw_pill(
     scene: &mut GpuScene,
     #[cfg(feature = "fontdue-text")] atlas: Option<&FontAtlas>,
@@ -1832,12 +1953,13 @@ fn draw_pill(
 ) {
     scene.push_rect(GpuRect::fill(x, y, w, 28.0, 14.0, color.with_alpha(0.14)));
     scene.push_rect(GpuRect::border(x, y, w, 28.0, 14.0, color.with_alpha(0.46)));
-    push_label(
+    push_bounded_label(
         scene,
         #[cfg(feature = "fontdue-text")]
         atlas,
         x + 12.0,
         y + 7.0,
+        (w - 24.0).max(0.0),
         label,
         2.0,
         color,
@@ -1879,12 +2001,13 @@ fn draw_contact_row(
         15.0,
         accent.with_alpha(0.22),
     ));
-    push_label(
+    push_bounded_label(
         scene,
         #[cfg(feature = "fontdue-text")]
         atlas,
         x + 23.0,
         y + 19.0,
+        10.0,
         contact_initial(contact.name),
         2.0,
         accent,
@@ -1901,12 +2024,15 @@ fn draw_contact_row(
             palette::MUTED
         },
     ));
-    push_label(
+    let unread_w = if contact.unread > 0 { 50.0 } else { 0.0 };
+    let text_w = (w - 72.0 - unread_w).max(0.0);
+    push_bounded_label(
         scene,
         #[cfg(feature = "fontdue-text")]
         atlas,
         x + 56.0,
         y + 11.0,
+        text_w,
         contact.name,
         2.0,
         if selected {
@@ -1915,12 +2041,13 @@ fn draw_contact_row(
             palette::MUTED
         },
     );
-    push_label(
+    push_bounded_label(
         scene,
         #[cfg(feature = "fontdue-text")]
         atlas,
         x + 56.0,
         y + 32.0,
+        text_w,
         contact.detail,
         2.0,
         accent,
@@ -1966,23 +2093,25 @@ fn draw_message(
     let h = 56.0 + lines.len() as f32 * 22.0;
     soft_card(scene, x, y, w, h, 14.0, fill);
     scene.push_rect(GpuRect::fill(x, y, 4.0, h, 2.0, accent));
-    push_label(
+    push_bounded_label(
         scene,
         #[cfg(feature = "fontdue-text")]
         atlas,
         x + 22.0,
         y + 16.0,
+        (w - 44.0).max(0.0),
         role,
         2.0,
         accent,
     );
     for (index, line) in lines.iter().enumerate() {
-        push_label(
+        push_bounded_label(
             scene,
             #[cfg(feature = "fontdue-text")]
             atlas,
             x + 22.0,
             y + 42.0 + index as f32 * 22.0,
+            body_w,
             line,
             2.0,
             palette::TEXT,
@@ -2086,6 +2215,52 @@ fn measure_label_width(
         return atlas.text_width(text);
     }
     text.chars().count() as f32 * scale.max(1.0) * 6.0
+}
+
+fn truncate_label_to_width(
+    text: &str,
+    max_width: f32,
+    scale: f32,
+    #[cfg(feature = "fontdue-text")] atlas: Option<&FontAtlas>,
+) -> String {
+    if measure_label_width(
+        text,
+        scale,
+        #[cfg(feature = "fontdue-text")]
+        atlas,
+    ) <= max_width
+    {
+        return text.to_string();
+    }
+
+    let ellipsis = "...";
+    let ellipsis_w = measure_label_width(
+        ellipsis,
+        scale,
+        #[cfg(feature = "fontdue-text")]
+        atlas,
+    );
+    if ellipsis_w > max_width {
+        return String::new();
+    }
+
+    let mut out = String::new();
+    for ch in text.chars() {
+        out.push(ch);
+        let candidate = format!("{out}{ellipsis}");
+        if measure_label_width(
+            &candidate,
+            scale,
+            #[cfg(feature = "fontdue-text")]
+            atlas,
+        ) > max_width
+        {
+            out.pop();
+            break;
+        }
+    }
+    out.push_str(ellipsis);
+    out
 }
 
 fn component_label_width(
