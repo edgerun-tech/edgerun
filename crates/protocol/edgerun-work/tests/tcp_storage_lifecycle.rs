@@ -30,8 +30,9 @@ fn signed_admission(
             user,
             admission_node: admission.identity.clone(),
             request_hash,
-            assigned_route_hash: route_hash,
+            assigned_route_commitment: route_hash,
             assigned_channel: channel,
+            assigned_relay_path: vec![[0u8; 32]],
             admitted_budget: budget,
             policy_hash: [0u8; 32],
             sequence: 1,
@@ -85,12 +86,10 @@ fn tcp_runtime_stores_erasure_shards_and_settles_receipts() {
     let mut runtime = TcpNodeRuntime::bind(storage.identity.node_id, "127.0.0.1:0")
         .expect("bind storage tcp runtime");
 
-    let mut route =
-        storage.advertise_memory_route(storage.identity.node_id, vec![DEPARTMENT_STORAGE]);
+    let mut route = storage.bind_memory_route(storage.identity.node_id, vec![DEPARTMENT_STORAGE]);
     route.endpoint.kind = CHANNEL_KIND_TCP;
     route.endpoint.address = runtime.listen_addr().to_string().into_bytes();
     route.endpoint.label = "tcp-storage-loopback".into();
-    route = sign_route_advertisement(&storage.key, route);
     let route_hash = runtime.add_route(route.clone()).expect("storage tcp route");
 
     let file = b"tcp runtime erasure storage lifecycle payload".to_vec();

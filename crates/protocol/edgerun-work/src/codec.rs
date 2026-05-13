@@ -7,13 +7,20 @@ use edgerun_wire::bytecheck::CheckBytes;
 use edgerun_wire::ser::allocator::ArenaHandle;
 use edgerun_wire::{Portable, Serialize, WireError, access, deserialize, to_bytes, util};
 
+use crate::channel::{ChannelEnvelope, ChannelId, RouteBinding};
 use crate::protocol::*;
+use crate::route_binding::route_hash;
 
 pub type AlignedWorkPacketBytes = util::AlignedVec<16>;
 
 pub struct EncodedWorkPacket {
     pub bytes: AlignedWorkPacketBytes,
     pub hash: Hash,
+}
+
+pub struct EncodedChannelEnvelope {
+    pub envelope: ChannelEnvelope,
+    pub packet: EncodedWorkPacket,
 }
 
 impl fmt::Debug for EncodedWorkPacket {
@@ -77,6 +84,36 @@ pub fn encode_work_packet_once(
     let bytes = packet_aligned_bytes(packet)?;
     let hash = blake3_hash(bytes.as_slice());
     Ok(EncodedWorkPacket { bytes, hash })
+}
+
+pub fn encode_channel_envelope_for_route(
+    route: &RouteBinding,
+    from: NodeId,
+    to: NodeId,
+    packet: WorkPacket,
+) -> Result<EncodedChannelEnvelope, WorkProtocolError> {
+    encode_channel_envelope(
+        route.endpoint.channel_id,
+        route_hash(route),
+        from,
+        to,
+        packet,
+    )
+}
+
+pub fn encode_channel_envelope(
+    channel_id: ChannelId,
+    route_hash: Hash,
+    from: NodeId,
+    to: NodeId,
+    packet: WorkPacket,
+) -> Result<EncodedChannelEnvelope, WorkProtocolError> {
+    let encoded = encode_work_packet_once(&packet)?;
+    let envelope = ChannelEnvelope::new(channel_id, from, to, route_hash, encoded.hash, packet);
+    Ok(EncodedChannelEnvelope {
+        envelope,
+        packet: encoded,
+    })
 }
 
 pub fn packet_aligned_bytes(

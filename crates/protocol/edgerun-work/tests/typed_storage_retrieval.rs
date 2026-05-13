@@ -25,8 +25,9 @@ fn signed_admission(
             user,
             admission_node: admission.identity.clone(),
             request_hash,
-            assigned_route_hash: route_hash,
+            assigned_route_commitment: route_hash,
             assigned_channel: channel,
+            assigned_relay_path: vec![[0u8; 32]],
             admitted_budget: budget,
             policy_hash: [0u8; 32],
             sequence: 1,
@@ -89,7 +90,7 @@ fn typed_storage_store_retrieve_and_reconstruct_over_work_channel() {
 
     let mut channel = MemoryWorkChannel::new();
     for storage in &storage_nodes {
-        let route = storage.advertise_memory_route(
+        let route = storage.bind_memory_route(
             storage.identity.node_id,
             vec![DEPARTMENT_STORAGE, DEPARTMENT_RETRIEVAL],
         );

@@ -5,7 +5,7 @@ use alloc::vec::Vec;
 use edgerun_crypto::Ed25519SigningKey;
 use rkyv::{Archive, Deserialize, Serialize};
 
-use crate::channel::{ChannelEndpoint, RouteAdvertisement};
+use crate::channel::{ChannelEndpoint, RouteBinding};
 use crate::codec::{blake3_hash, wire_bytes, wire_from_bytes};
 use crate::identity::node_identity_from_key;
 use crate::protocol::{
@@ -17,7 +17,7 @@ use crate::roles::{
     ROLE_STATUS_ACCEPTED, RoleContext, RoleInput, RoleOutput, WorkRole, WorkServiceResponse,
     execute_role_packet, network_message_for_role,
 };
-use crate::route_builder::signed_route_advertisement;
+use crate::route_builder::route_binding;
 use crate::signing::{sign_network_message_payload, simple_network_message_id};
 
 pub const PROGRAM_STREAM_STDIN: u16 = 0;
@@ -240,13 +240,13 @@ impl<A: ProgramIoAdapter> ProgramIoService<A> {
         self.role.adapter_mut()
     }
 
-    pub fn route_advertisement(
+    pub fn route_binding(
         &self,
         endpoint: ChannelEndpoint,
         relay_node_id: NodeId,
         valid_until_unix_ms: u64,
-    ) -> RouteAdvertisement {
-        signed_route_advertisement(
+    ) -> RouteBinding {
+        route_binding(
             &self.key,
             NODE_ROLE_COMPUTE,
             endpoint,

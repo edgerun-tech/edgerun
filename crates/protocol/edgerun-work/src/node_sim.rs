@@ -1,3 +1,4 @@
+use alloc::vec;
 use alloc::vec::Vec;
 
 use crate::channel::ChannelEnvelope;
@@ -6,8 +7,8 @@ use crate::codec::{blake3_hash, packet_bytes};
 use crate::identity::node_identity_from_key;
 use crate::memory_channel::{MemoryChannelEngine, MemoryChannelError};
 use crate::protocol::*;
-use crate::route_auth::route_hash;
-use crate::route_builder::{memory_endpoint, signed_route_advertisement};
+use crate::route_binding::route_hash;
+use crate::route_builder::{memory_endpoint, route_binding};
 use crate::signing::{sign_network_message_payload, simple_network_message_id};
 use edgerun_crypto::Ed25519SigningKey;
 
@@ -37,17 +38,28 @@ impl SimNode {
         }
     }
 
-    pub fn advertise_memory_route(
+    pub fn bind_memory_route(
         &self,
         relay_node_id: NodeId,
         departments: Vec<u16>,
-    ) -> crate::channel::RouteAdvertisement {
-        signed_route_advertisement(
+    ) -> crate::channel::RouteBinding {
+        route_binding(
             &self.key,
             self.identity.role,
             memory_endpoint("memory", &self.identity.node_id),
             relay_node_id,
             departments,
+            u64::MAX,
+        )
+    }
+
+    pub fn bind_memory_capability(&self, relay_node_id: NodeId) -> crate::channel::RouteBinding {
+        route_binding(
+            &self.key,
+            NODE_ROLE_CAPABILITY,
+            memory_endpoint("capability", &self.identity.node_id),
+            relay_node_id,
+            vec![DEPARTMENT_CAPABILITY],
             u64::MAX,
         )
     }

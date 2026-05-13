@@ -30,59 +30,55 @@ const EXPECTED_GOLDEN_HASHES: &[(&str, &str)] = &[
     ),
     (
         "work_admission_preimage",
-        "c0c694b8114de48d3f25cc8f6c4ac31de9add22c1a1e317c36358264f0d433e7",
+        "ef53f3226fb951072680ebf232780c70ccd23fbf0d3dec4458206eb69a5064f0",
     ),
     (
         "work_receipt_preimage",
-        "3d52783556bb036c0615328b6a7260aadb3668e10659a5ee010520aa3f84d687",
+        "e19ea6f98fdee22c1d3cc71f79e559d194cd024cfc097f1b9fe8ff91ebbcc7d6",
     ),
     (
-        "route_advertisement_preimage",
-        "48ae00b805bdbbccb16648f92f7b1f13d6805e3e6d0f25f9386758b2675c7c02",
+        "route_binding_preimage",
+        "8da7a2d16a2eb31c21daf7f2e3c88d6c4a524bbc2a957cf016c47a6c69f59ef4",
     ),
     (
         "route_root_hash",
-        "fd3071dd26cb11450356a8ab83ae54e70b1c213deb8d79d63e05330fbe970df6",
-    ),
-    (
-        "route_snapshot_preimage",
-        "139b72c43fb982ec6db9184bcd78b2c00aea2e326e6be5f873c5bcaff53ac325",
+        "5714767d2c57d802f3f9f6460f822769cd1de2726f405877d59efe3e0b68e0dc",
     ),
     (
         "ordered_message_hash",
-        "d8b0748cad6cd8c5ccb7c3f7a196dbcae11100ea4752cd5ed49385ac0077afc5",
+        "0c0689315064f8a43c84a1b8d00c259b474e5c5c958e0b9e7f96513898e08cd5",
     ),
     (
         "channel_proof_preimage",
-        "4673b102b568a310d525f52e48f8e011f695f231c92ac8bc1727495d6d69e3c7",
+        "cee915061064ffb1b443fe6b7fc9aa18b0f81a4eafe0c7d0fe98caf0e25f87f9",
     ),
     (
         "channel_proof_hash",
-        "dc1a7c176bd7f7b068bc458d837ca3bcefdbfbb16897cff3c244acf5904b1020",
+        "def1b91850b208b961b5d845580ea4110ddbea630a7668b1518cbf3396d90325",
     ),
     (
         "packet_transit_hash",
-        "6d59148dd523f65c1b008339b013715e9e9d5723ba4643ca258df8b2689305b9",
+        "65228e6ae18ddf6302d323b469258c5f1a7c9f5c09d827003a6cee6230d94d69",
     ),
     (
         "relay_delivery_output_hash",
-        "aa6ebd3baf1cbb54c264fbd59a21b7f2504367527466f9325ade231b9430b6a5",
+        "4b61c6c04bc8c28745c91bb870af6a3e56a0cce0eaa366119227527e0452585a",
     ),
     (
         "receipt_id_for_claim",
-        "79e7333fa02d8db7cd5936c7cc38c6b885bfeebdd5a9551c3a7f3c085c34d15b",
+        "af332cfd1eef1496f3aadca1d2bae74550cf9ca2a437dc48c2dbaa9189cb58f2",
     ),
     (
         "work_admission_hash",
-        "b0ebbf404d401ef29e27ec570e70799014963ea83622ac3e284eb8c71a4fe6e3",
+        "a30630801f3c29accdaf9ef3de50e96fd0b031f7c058c612c68d0d3be952f1f0",
     ),
     (
         "work_receipt_hash",
-        "3534261218366a4bbd9b1c0aa547385bf2ffd1650ca9c87471c67ffbbdb5766f",
+        "f402d1ca5da9b73a63167236ec8c37e369d50252dc4254ce9631702b620685df",
     ),
     (
         "receipt_batch_root",
-        "85c9a92d83297677db9489cf9f39d5c7aff635b1560065ce9cd183289686cb1c",
+        "102819e63792c8d6380100b854ae96c2592eaea22b3fd6e4ba14c3984a921f6e",
     ),
     (
         "erasure_job_id",
@@ -113,8 +109,7 @@ struct GoldenFixture {
     request: WorkRequest,
     admission: WorkAdmission,
     receipt: WorkReceipt,
-    route: RouteAdvertisement,
-    route_snapshot: RouteSnapshot,
+    route: RouteBinding,
     ordered: OrderedChannelEnvelope,
     channel_proof: ChannelProof,
     transit_input: PacketTransitHashInput,
@@ -155,21 +150,9 @@ fn fixture() -> GoldenFixture {
     let request_hash =
         packet_hash(&WorkPacket::WorkRequest(request.clone())).expect("request hash");
 
-    let route = relay.advertise_memory_route(
+    let route = relay.bind_memory_route(
         relay.identity.node_id,
         vec![DEPARTMENT_RELAY, DEPARTMENT_MESSAGE],
-    );
-    let route_root = route_root_hash(core::slice::from_ref(&route));
-    let route_snapshot = sign_route_snapshot(
-        &admission_node.key,
-        RouteSnapshot {
-            abi_version: WORK_WIRE_ABI_VERSION,
-            issued_by: admission_node.identity.clone(),
-            sequence: 11,
-            route_root,
-            routes: vec![route.clone()],
-            signature: empty_signature(),
-        },
     );
 
     let admission = sign_work_admission(
@@ -181,8 +164,9 @@ fn fixture() -> GoldenFixture {
             user,
             admission_node: admission_node.identity.clone(),
             request_hash,
-            assigned_route_hash: route_commitment(&route),
+            assigned_route_commitment: route_commitment(&route),
             assigned_channel: route.endpoint.clone(),
+            assigned_relay_path: vec![relay.identity.node_id],
             admitted_budget: 123,
             policy_hash: blake3_hash(b"golden-policy"),
             sequence: 12,
@@ -296,7 +280,6 @@ fn fixture() -> GoldenFixture {
         admission,
         receipt: receipt.clone(),
         route,
-        route_snapshot,
         ordered,
         channel_proof,
         transit_input,
@@ -331,16 +314,12 @@ fn golden_hashes() -> Vec<(&'static str, Hash)> {
             blake3_hash(&work_receipt_preimage(&fixture.receipt)),
         ),
         (
-            "route_advertisement_preimage",
-            blake3_hash(&route_advertisement_preimage(&fixture.route)),
+            "route_binding_preimage",
+            blake3_hash(&route_binding_preimage(&fixture.route)),
         ),
         (
             "route_root_hash",
             route_root_hash(core::slice::from_ref(&fixture.route)),
-        ),
-        (
-            "route_snapshot_preimage",
-            blake3_hash(&route_snapshot_preimage(&fixture.route_snapshot)),
         ),
         (
             "ordered_message_hash",

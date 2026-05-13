@@ -9,7 +9,7 @@ struct FakeTransport {
 impl WorkPacketTransport for FakeTransport {
     fn send_packet_bytes(
         &mut self,
-        route: &RouteAdvertisement,
+        route: &RouteBinding,
         packet_bytes: &[u8],
     ) -> Result<(), WorkTransportError> {
         self.sent.push((route.endpoint.kind, packet_bytes.to_vec()));
@@ -21,15 +21,10 @@ impl WorkPacketTransport for FakeTransport {
     }
 }
 
-fn route_for_endpoint(
-    node: &SimNode,
-    endpoint: ChannelEndpoint,
-    sequence: u64,
-) -> RouteAdvertisement {
-    RouteAdvertisementBuilder::new(&node.key, node.identity.role, endpoint)
+fn route_for_endpoint(node: &SimNode, endpoint: ChannelEndpoint, _sequence: u64) -> RouteBinding {
+    RouteBindingBuilder::new(&node.key, node.identity.role, endpoint)
         .departments(vec![DEPARTMENT_MESSAGE])
-        .sequence(sequence)
-        .build(&node.key)
+        .build()
 }
 
 #[test]

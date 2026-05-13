@@ -1,10 +1,10 @@
 use alloc::vec::Vec;
 
-use crate::channel::{ChannelEnvelope, RouteAdvertisement};
-use crate::codec::{ArchivedWorkPacketFrame, encode_work_packet_once};
+use crate::channel::{ChannelEnvelope, RouteBinding};
+use crate::codec::{ArchivedWorkPacketFrame, encode_channel_envelope_for_route};
 use crate::protocol::{Hash, NodeId, WorkPacket};
-use crate::route_auth::{current_unix_ms, route_hash};
-use crate::route_plan::{RouteRuntimeProfile, RouteSelectionPolicy};
+use crate::route_binding::current_unix_ms;
+use crate::route_policy::{RouteRuntimeProfile, RouteSelectionPolicy};
 use crate::route_table::{
     RouteInboxMap, RouteMap, drain_inbox, insert_live_route_with_inbox, live_route_hash_for,
     remove_route_with_inbox, route_for_send,
@@ -12,7 +12,7 @@ use crate::route_table::{
 use crate::work_channel::{WorkChannel, WorkChannelError};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum WorkTransportError {
+pub enum RelayTransportError {
     UnsupportedRoute,
     DeliveryFailed,
     Backpressure,
@@ -20,7 +20,9 @@ pub enum WorkTransportError {
     InvalidFrame,
 }
 
-pub struct TransportPacketFrame {
+pub type WorkTransportError = RelayTransportError;
+
+pub struct RelayPacketFrame {
     pub channel_id: Hash,
     pub from: NodeId,
     pub to: NodeId,
@@ -28,9 +30,11 @@ pub struct TransportPacketFrame {
     pub frame: ArchivedWorkPacketFrame,
 }
 
-impl core::fmt::Debug for TransportPacketFrame {
+pub type TransportPacketFrame = RelayPacketFrame;
+
+impl core::fmt::Debug for RelayPacketFrame {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.debug_struct("TransportPacketFrame")
+        f.debug_struct("RelayPacketFrame")
             .field("channel_id", &self.channel_id)
             .field("from", &self.from)
             .field("to", &self.to)
@@ -43,24 +47,30 @@ impl core::fmt::Debug for TransportPacketFrame {
 pub trait WorkPacketTransport {
     fn send_packet_bytes(
         &mut self,
-        route: &RouteAdvertisement,
+        route: &RouteBinding,
         packet_bytes: &[u8],
-    ) -> Result<(), WorkTransportError>;
+    ) -> Result<(), RelayTransportError>;
 
-    fn recv_packet_frame(&mut self) -> Result<Option<TransportPacketFrame>, WorkTransportError> {
+    fn recv_packet_frame(&mut self) -> Result<Option<RelayPacketFrame>, RelayTransportError> {
         Ok(None)
     }
 }
 
+pub trait RelayPacketTransport: WorkPacketTransport {}
+
+impl<T: WorkPacketTransport + ?Sized> RelayPacketTransport for T {}
+
 #[derive(Debug)]
-pub struct TransportWorkChannel<T> {
+pub struct RelayWorkChannel<T> {
     transport: T,
     policy: RouteSelectionPolicy,
     routes: RouteMap,
     inboxes: RouteInboxMap,
 }
 
-impl<T> TransportWorkChannel<T> {
+pub type TransportWorkChannel<T> = RelayWorkChannel<T>;
+
+impl<T> RelayWorkChannel<T> {
     pub fn new(transport: T, policy: RouteSelectionPolicy) -> Self {
         Self {
             transport,
@@ -104,7 +114,7 @@ impl<T> TransportWorkChannel<T> {
 
     pub fn poll_recv(&mut self) -> Result<usize, WorkTransportError>
     where
-        T: WorkPacketTransport,
+        T: RelayPacketTransport,
     {
         let mut accepted = 0usize;
         while let Some(frame) = self.transport.recv_packet_frame()? {
@@ -116,13 +126,13 @@ impl<T> TransportWorkChannel<T> {
 
     pub fn accept_transport_frame(
         &mut self,
-        frame: TransportPacketFrame,
-    ) -> Result<(), WorkTransportError> {
+        frame: RelayPacketFrame,
+    ) -> Result<(), RelayTransportError> {
         let packet_hash = frame.frame.hash;
         let packet = frame
             .frame
             .into_packet()
-            .map_err(|_| WorkTransportError::InvalidFrame)?;
+            .map_err(|_| RelayTransportError::InvalidFrame)?;
         let envelope = ChannelEnvelope::new(
             frame.channel_id,
             frame.from,
@@ -140,8 +150,8 @@ impl<T> TransportWorkChannel<T> {
     }
 }
 
-impl<T: WorkPacketTransport> WorkChannel for TransportWorkChannel<T> {
-    fn add_route(&mut self, route: RouteAdvertisement) -> Result<Hash, WorkChannelError> {
+impl<T: RelayPacketTransport> WorkChannel for RelayWorkChannel<T> {
+    fn add_route(&mut self, route: RouteBinding) -> Result<Hash, WorkChannelError> {
         if !self.policy.allows(&route) {
             return Err(WorkChannelError::RouteInvalid);
         }
@@ -155,7 +165,7 @@ impl<T: WorkPacketTransport> WorkChannel for TransportWorkChannel<T> {
         Ok(hash)
     }
 
-    fn remove_route(&mut self, node_id: NodeId) -> Option<RouteAdvertisement> {
+    fn remove_route(&mut self, node_id: NodeId) -> Option<RouteBinding> {
         remove_route_with_inbox(&mut self.routes, &mut self.inboxes, node_id)
     }
 
@@ -174,19 +184,12 @@ impl<T: WorkPacketTransport> WorkChannel for TransportWorkChannel<T> {
         if !self.policy.allows(route) {
             return Err(WorkChannelError::RouteInvalid);
         }
-        let encoded =
-            encode_work_packet_once(&packet).map_err(|_| WorkChannelError::PacketHashFailed)?;
+        let encoded = encode_channel_envelope_for_route(route, from, to, packet)
+            .map_err(|_| WorkChannelError::PacketHashFailed)?;
         self.transport
-            .send_packet_bytes(route, encoded.as_bytes())
+            .send_packet_bytes(route, encoded.packet.as_bytes())
             .map_err(|_| WorkChannelError::DeliveryFailed)?;
-        Ok(ChannelEnvelope::for_route(
-            route,
-            route_hash(route),
-            from,
-            to,
-            encoded.hash,
-            packet,
-        ))
+        Ok(encoded.envelope)
     }
 
     fn recv_all(&mut self, node_id: NodeId) -> Vec<ChannelEnvelope> {

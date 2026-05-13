@@ -12,7 +12,7 @@ fn signed_admission(
     admission: &SimNode,
     user: PublicKey,
     request_hash: Hash,
-    assigned_route_hash: Hash,
+    assigned_route_commitment: Hash,
     assigned_channel: ChannelEndpoint,
     admitted_budget: u64,
     sequence: u64,
@@ -26,8 +26,9 @@ fn signed_admission(
             user,
             admission_node: admission.identity.clone(),
             request_hash,
-            assigned_route_hash,
+            assigned_route_commitment,
             assigned_channel,
+            assigned_relay_path: vec![[0u8; 32]],
             admitted_budget,
             policy_hash: [0u8; 32],
             sequence,
@@ -94,11 +95,11 @@ fn scale_many_routes_messages_files_and_payments() {
         RelayRole::from_seed(174, 2),
         RelayRole::from_seed(175, 2),
     ];
-    let mut route_snapshot_routes = Vec::new();
+    let mut route_bindings = Vec::new();
     for relay in &relays {
-        let route = relay.advertise_memory_route(relay.identity.node_id, vec![DEPARTMENT_RELAY]);
+        let route = relay.bind_memory_route(relay.identity.node_id, vec![DEPARTMENT_RELAY]);
         channel.add_route(route.clone()).expect("relay route");
-        route_snapshot_routes.push(route);
+        route_bindings.push(route);
     }
 
     let mut senders = (0..MESSAGE_COUNT)
@@ -110,10 +111,9 @@ fn scale_many_routes_messages_files_and_payments() {
 
     for (i, receiver) in receivers.iter().enumerate() {
         let relay = &relays[i % RELAY_COUNT];
-        let route =
-            receiver.advertise_memory_route(relay.identity.node_id, vec![DEPARTMENT_MESSAGE]);
+        let route = receiver.bind_memory_route(relay.identity.node_id, vec![DEPARTMENT_MESSAGE]);
         channel.add_route(route.clone()).expect("receiver route");
-        route_snapshot_routes.push(route);
+        route_bindings.push(route);
     }
 
     let storage_nodes = [
@@ -126,30 +126,23 @@ fn scale_many_routes_messages_files_and_payments() {
     ];
     for (i, storage) in storage_nodes.iter().enumerate() {
         let relay = &relays[i % RELAY_COUNT];
-        let route =
-            storage.advertise_memory_route(relay.identity.node_id, vec![DEPARTMENT_STORAGE]);
+        let route = storage.bind_memory_route(relay.identity.node_id, vec![DEPARTMENT_STORAGE]);
         channel.add_route(route.clone()).expect("storage route");
-        route_snapshot_routes.push(route);
+        route_bindings.push(route);
     }
 
-    let snapshot = sign_route_snapshot(
-        &admission.key,
-        RouteSnapshot {
-            abi_version: WORK_WIRE_ABI_VERSION,
-            issued_by: admission.identity.clone(),
-            sequence: 1,
-            routes: route_snapshot_routes.clone(),
-            route_root: route_root_hash(&route_snapshot_routes),
-            signature: empty_signature(),
-        },
-    );
-    let plan = VerifiedRoutePlan::from_snapshot(snapshot).expect("verified route snapshot");
     assert_eq!(
-        plan.routes_for_department(DEPARTMENT_RELAY).len(),
+        route_bindings
+            .iter()
+            .filter(|route| route.departments.contains(&DEPARTMENT_RELAY))
+            .count(),
         RELAY_COUNT
     );
     assert_eq!(
-        plan.routes_for_department(DEPARTMENT_STORAGE).len(),
+        route_bindings
+            .iter()
+            .filter(|route| route.departments.contains(&DEPARTMENT_STORAGE))
+            .count(),
         storage_nodes.len()
     );
 
@@ -216,7 +209,10 @@ fn scale_many_routes_messages_files_and_payments() {
     assert_eq!(relay_balances.iter().sum::<u64>(), relay_paid_total);
 
     let mut shard_store = MemoryShardStore::new();
-    let storage_routes = plan.routes_for_department(DEPARTMENT_STORAGE);
+    let storage_routes = route_bindings
+        .iter()
+        .filter(|route| route.departments.contains(&DEPARTMENT_STORAGE))
+        .collect::<Vec<_>>();
     let mut storage_paid_total = 0u64;
     for file_index in 0..FILE_COUNT {
         let assigned_nodes = [
@@ -235,7 +231,10 @@ fn scale_many_routes_messages_files_and_payments() {
         let (manifest, shards) = encode_xor_2_1(&file, assigned_nodes).expect("encode file");
         verify_manifest(&manifest, &shards).expect("manifest verifies");
         let request_hash = manifest.job_id;
-        let storage_route = plan.route_for_node(assigned_nodes[0]).unwrap();
+        let storage_route = route_bindings
+            .iter()
+            .find(|route| route.node.node_id == assigned_nodes[0])
+            .unwrap();
         let admission_doc = signed_admission(
             &admission,
             user,

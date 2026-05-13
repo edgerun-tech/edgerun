@@ -20,12 +20,10 @@ fn tcp_work_channel_uses_same_ordered_channel_trait() {
     let mut receiver = SimNode::from_seed(242, NODE_ROLE_MESSAGE);
     let mut channel = TcpWorkChannel::new();
 
-    let mut route =
-        receiver.advertise_memory_route(receiver.identity.node_id, vec![DEPARTMENT_MESSAGE]);
+    let mut route = receiver.bind_memory_route(receiver.identity.node_id, vec![DEPARTMENT_MESSAGE]);
     route.endpoint.kind = CHANNEL_KIND_TCP;
     route.endpoint.address = format!("127.0.0.1:{}", addr.port()).into_bytes();
     route.endpoint.label = "tcp-test".into();
-    route = sign_route_advertisement(&receiver.key, route);
     let route_hash = channel.add_route(route).expect("tcp route");
 
     let packet = sender.message_to(

@@ -12,7 +12,7 @@ fn signed_relay_admission(
     admission: &SimNode,
     user: PublicKey,
     request_hash: Hash,
-    assigned_route_hash: Hash,
+    assigned_route_commitment: Hash,
     assigned_channel: ChannelEndpoint,
     admitted_budget: u64,
     policy_hash: Hash,
@@ -26,8 +26,9 @@ fn signed_relay_admission(
             user,
             admission_node: admission.identity.clone(),
             request_hash,
-            assigned_route_hash,
+            assigned_route_commitment,
             assigned_channel,
+            assigned_relay_path: vec![[0u8; 32]],
             admitted_budget,
             policy_hash,
             sequence: 1,
@@ -48,9 +49,9 @@ fn relay_forwards_ordered_message_to_final_node_and_gets_paid_with_delivery_proo
 
     let mut channel = MemoryChannelEngine::new();
     let relay_route =
-        relay_node.advertise_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_RELAY]);
+        relay_node.bind_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_RELAY]);
     let receiver_route =
-        receiver.advertise_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_MESSAGE]);
+        receiver.bind_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_MESSAGE]);
     let relay_route_hash = channel.add_route(relay_route.clone()).expect("relay route");
     let receiver_route_hash = channel.add_route(receiver_route).expect("receiver route");
     let mut recipient_policy = open_recipient_message_policy(receiver.identity.clone(), 1, 1_000);
@@ -149,12 +150,12 @@ fn relay_transit_hashes_chain_across_forwarded_packets() {
     let mut channel = MemoryChannelEngine::new();
     channel
         .add_route(
-            relay_node.advertise_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_RELAY]),
+            relay_node.bind_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_RELAY]),
         )
         .expect("relay route");
     channel
         .add_route(
-            receiver.advertise_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_MESSAGE]),
+            receiver.bind_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_MESSAGE]),
         )
         .expect("receiver route");
 
@@ -220,12 +221,10 @@ fn relay_rejects_message_for_wrong_relay() {
 
     let mut channel = MemoryChannelEngine::new();
     channel
-        .add_route(relay_b.advertise_memory_route(relay_b.identity.node_id, vec![DEPARTMENT_RELAY]))
+        .add_route(relay_b.bind_memory_route(relay_b.identity.node_id, vec![DEPARTMENT_RELAY]))
         .expect("relay b route");
     channel
-        .add_route(
-            receiver.advertise_memory_route(relay_b.identity.node_id, vec![DEPARTMENT_MESSAGE]),
-        )
+        .add_route(receiver.bind_memory_route(relay_b.identity.node_id, vec![DEPARTMENT_MESSAGE]))
         .expect("receiver route");
 
     let packet = sender.message_to(
@@ -265,7 +264,7 @@ fn relay_rejects_when_destination_route_is_missing() {
     let mut channel = MemoryChannelEngine::new();
     channel
         .add_route(
-            relay_node.advertise_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_RELAY]),
+            relay_node.bind_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_RELAY]),
         )
         .expect("relay route");
 

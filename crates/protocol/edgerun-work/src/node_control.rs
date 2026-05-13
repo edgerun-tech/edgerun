@@ -1,16 +1,13 @@
-use alloc::string::String;
-use alloc::vec::Vec;
-
 use rkyv::{Archive, Deserialize, Serialize};
 
+use crate::channel::ChannelEndpoint;
 use crate::protocol::{Hash, NodeId, NodeIdentity, WorkSignature};
 
 #[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[rkyv(crate = rkyv)]
 pub struct RelayEndpoint {
     pub relay_node_id: NodeId,
-    pub host: String,
-    pub port: u16,
+    pub channel: ChannelEndpoint,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
@@ -20,8 +17,6 @@ pub struct NodeAvailable {
     pub node: NodeIdentity,
     pub sequence: u64,
     pub unix_ms: u64,
-    pub listen_host: String,
-    pub listen_port: u16,
     pub heartbeat_secs: u64,
     pub log_head: Hash,
     pub signature: WorkSignature,
@@ -37,14 +32,6 @@ pub struct NodeHeartbeat {
     pub connection_hash: Hash,
     pub log_head: Hash,
     pub signature: WorkSignature,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
-pub struct RelayPeerList {
-    pub abi_version: u16,
-    pub assigned_to: NodeId,
-    pub relays: Vec<RelayEndpoint>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]

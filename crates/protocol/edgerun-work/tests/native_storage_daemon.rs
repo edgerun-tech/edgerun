@@ -69,12 +69,12 @@ fn object_storage_service_handles_objects_without_tcp() {
     let storage = node_identity_from_key(&storage_key, NODE_ROLE_STORAGE);
 
     assert_eq!(service.identity(), &storage);
-    let route = service.route_advertisement(
+    let route = service.route_binding(
         memory_endpoint("browser-local-object-store", &storage.node_id),
         storage.node_id,
         u64::MAX,
     );
-    assert!(verify_route_advertisement(&route));
+    assert!(verify_route_binding(&route));
     assert_eq!(route.endpoint.kind, CHANNEL_KIND_MEMORY);
 
     let object = make_store(b"transport independent object storage");
@@ -123,8 +123,8 @@ fn native_storage_daemon_binds_object_store_to_storage_identity() {
     let storage = node_identity_from_key(&storage_key, NODE_ROLE_STORAGE);
 
     assert_eq!(daemon.identity(), &storage);
-    let route = daemon.route_advertisement(storage.node_id, unix_ms().saturating_add(60_000));
-    assert!(verify_route_advertisement(&route));
+    let route = daemon.route_binding(storage.node_id, unix_ms().saturating_add(60_000));
+    assert!(verify_route_binding(&route));
     assert_eq!(route.node, storage);
     assert_eq!(
         route.departments,

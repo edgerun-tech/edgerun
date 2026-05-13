@@ -4,9 +4,7 @@ use alloc::vec::Vec;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::channel::ChannelEndpoint;
-pub use crate::node_control::{
-    NodeAvailable, NodeHeartbeat, RelayAssignment, RelayEndpoint, RelayPeerList,
-};
+pub use crate::node_control::{NodeAvailable, NodeHeartbeat, RelayAssignment, RelayEndpoint};
 
 pub const WORK_WIRE_ABI_VERSION: u16 = 1;
 pub const DEFAULT_HEARTBEAT_SECS: u64 = 10;
@@ -17,6 +15,7 @@ pub const NODE_ROLE_STORAGE: u16 = 2;
 pub const NODE_ROLE_COMPUTE: u16 = 3;
 pub const NODE_ROLE_ADMISSION: u16 = 4;
 pub const NODE_ROLE_MESSAGE: u16 = 5;
+pub const NODE_ROLE_CAPABILITY: u16 = 6;
 
 pub const WORK_TYPE_MESSAGE_DELIVER: u16 = 1;
 pub const WORK_TYPE_OBJECT_STORE: u16 = 2;
@@ -28,6 +27,10 @@ pub const WORK_TYPE_PROGRAM_STDIN: u16 = 7;
 pub const WORK_TYPE_PROGRAM_CLOSE: u16 = 8;
 pub const WORK_TYPE_PROGRAM_POLL: u16 = 9;
 pub const WORK_TYPE_PROGRAM_EVENT: u16 = 10;
+pub const WORK_TYPE_CAPABILITY_REQUEST: u16 = 11;
+pub const WORK_TYPE_CAPABILITY_INVOKE: u16 = 12;
+pub const WORK_TYPE_CAPABILITY_EVENT: u16 = 13;
+pub const WORK_TYPE_CAPABILITY_CLOSE: u16 = 14;
 
 pub const DEPARTMENT_ADMISSION: u16 = 1;
 pub const DEPARTMENT_RELAY: u16 = 2;
@@ -35,6 +38,7 @@ pub const DEPARTMENT_MESSAGE: u16 = 3;
 pub const DEPARTMENT_STORAGE: u16 = 4;
 pub const DEPARTMENT_RETRIEVAL: u16 = 5;
 pub const DEPARTMENT_COMPUTE: u16 = 6;
+pub const DEPARTMENT_CAPABILITY: u16 = 7;
 
 pub const SIGNATURE_ALGORITHM_SOLANA_ED25519: u16 = 101;
 
@@ -117,8 +121,9 @@ pub struct WorkAdmission {
     pub user: PublicKey,
     pub admission_node: NodeIdentity,
     pub request_hash: Hash,
-    pub assigned_route_hash: Hash,
+    pub assigned_route_commitment: Hash,
     pub assigned_channel: ChannelEndpoint,
+    pub assigned_relay_path: Vec<NodeId>,
     pub admitted_budget: u64,
     pub policy_hash: Hash,
     pub sequence: u64,
@@ -148,7 +153,6 @@ pub struct WorkReceipt {
 pub enum WorkPacket {
     NodeAvailable(NodeAvailable),
     NodeHeartbeat(NodeHeartbeat),
-    RelayPeerList(RelayPeerList),
     RelayAssignment(RelayAssignment),
     NetworkMessage(NetworkMessage),
     WorkRequest(WorkRequest),

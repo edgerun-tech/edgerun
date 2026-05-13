@@ -1,11 +1,11 @@
 use alloc::vec::Vec;
 
-use crate::channel::{CHANNEL_KIND_WEBSOCKET, ChannelEnvelope, RouteAdvertisement};
+use crate::channel::{CHANNEL_KIND_WEBSOCKET, ChannelEnvelope, RouteBinding};
 use crate::channel_order::{ChannelOrderBook, OrderedChannelEnvelope};
-use crate::codec::encode_work_packet_once;
+use crate::codec::encode_channel_envelope_for_route;
 use crate::frame_codec::channel_envelope_bytes;
 use crate::protocol::{Hash, NodeId, WorkPacket};
-use crate::route_auth::{current_unix_ms, route_hash};
+use crate::route_binding::current_unix_ms;
 use crate::route_table::{
     RouteInboxMap, RouteMap, drain_inbox, insert_live_route_with_inbox, live_route_hash_for,
     remove_route_with_inbox, route_for_send,
@@ -70,7 +70,7 @@ impl WsWorkChannel {
 }
 
 impl WorkChannel for WsWorkChannel {
-    fn add_route(&mut self, route: RouteAdvertisement) -> Result<Hash, WorkChannelError> {
+    fn add_route(&mut self, route: RouteBinding) -> Result<Hash, WorkChannelError> {
         if route.endpoint.kind != CHANNEL_KIND_WEBSOCKET {
             return Err(WorkChannelError::RouteInvalid);
         }
@@ -84,7 +84,7 @@ impl WorkChannel for WsWorkChannel {
         Ok(hash)
     }
 
-    fn remove_route(&mut self, node_id: NodeId) -> Option<RouteAdvertisement> {
+    fn remove_route(&mut self, node_id: NodeId) -> Option<RouteBinding> {
         remove_route_with_inbox(&mut self.routes, &mut self.inboxes, node_id)
     }
 
@@ -100,17 +100,16 @@ impl WorkChannel for WsWorkChannel {
     ) -> Result<ChannelEnvelope, WorkChannelError> {
         let route = route_for_send(&mut self.routes, &to, current_unix_ms())
             .ok_or(WorkChannelError::RouteMissing)?;
-        let encoded =
-            encode_work_packet_once(&packet).map_err(|_| WorkChannelError::PacketHashFailed)?;
-        let envelope =
-            ChannelEnvelope::for_route(route, route_hash(route), from, to, encoded.hash, packet);
+        let encoded = encode_channel_envelope_for_route(route, from, to, packet)
+            .map_err(|_| WorkChannelError::PacketHashFailed)?;
+        let envelope = encoded.envelope;
         let envelope_bytes =
             channel_envelope_bytes(&envelope).map_err(|_| WorkChannelError::PacketHashFailed)?;
         self.outbound_frames.push(WsFrame {
             to,
             route_hash: envelope.route_hash,
-            packet_hash: encoded.hash,
-            packet_bytes: encoded.as_bytes().to_vec(),
+            packet_hash: encoded.packet.hash,
+            packet_bytes: encoded.packet.as_bytes().to_vec(),
             envelope_bytes,
         });
         self.inboxes.entry(to).or_default().push(envelope.clone());

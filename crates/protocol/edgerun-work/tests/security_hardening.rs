@@ -29,8 +29,9 @@ fn admission_doc(
             user,
             admission_node: admission.identity.clone(),
             request_hash,
-            assigned_route_hash: blake3_hash(b"security-route"),
+            assigned_route_commitment: blake3_hash(b"security-route"),
             assigned_channel: channel,
+            assigned_relay_path: vec![[0u8; 32]],
             admitted_budget: budget,
             policy_hash: [0u8; 32],
             sequence: 1,
@@ -117,8 +118,7 @@ fn relay_assignment_rejects_forged_assigned_by_node_id() {
             node_id: relay.identity.node_id,
             relay: RelayEndpoint {
                 relay_node_id: relay.identity.node_id,
-                host: "relay.example".into(),
-                port: 1,
+                channel: tcp_endpoint("relay", "relay.example:1"),
             },
             assigned_by: admission.identity.clone(),
             sequence: 1,
@@ -130,34 +130,6 @@ fn relay_assignment_rejects_forged_assigned_by_node_id() {
     forged.assigned_by.node_id = blake3_hash(b"fake-assigned-by-node");
 
     assert!(!verify_relay_assignment(&forged));
-}
-
-#[test]
-fn route_signature_verifies_non_available_status_but_planner_filters_it() {
-    let admission = SimNode::from_seed(31, NODE_ROLE_ADMISSION);
-    let storage = SimNode::from_seed(32, NODE_ROLE_STORAGE);
-    let mut route =
-        storage.advertise_memory_route(storage.identity.node_id, vec![DEPARTMENT_STORAGE]);
-    route.status = ROUTE_STATUS_DRAINING;
-    route = sign_route_advertisement(&storage.key, route);
-
-    assert!(verify_route_advertisement(&route));
-    assert!(!verify_available_route_advertisement(&route));
-
-    let routes = vec![route];
-    let snapshot = sign_route_snapshot(
-        &admission.key,
-        RouteSnapshot {
-            abi_version: WORK_WIRE_ABI_VERSION,
-            issued_by: admission.identity.clone(),
-            sequence: 1,
-            route_root: route_root_hash(&routes),
-            routes,
-            signature: empty_signature(),
-        },
-    );
-    let plan = VerifiedRoutePlan::from_snapshot(snapshot).expect("snapshot verifies");
-    assert_eq!(plan.routes_for_department(DEPARTMENT_STORAGE).len(), 0);
 }
 
 #[test]

@@ -17,8 +17,93 @@ key material / hardware signer
 ```
 
 Only signed streams and immutable objects are authoritative. Indexes, query
-results, route hints, replay caches, dashboards, health endpoints, and local
+results, replay caches, dashboards, health endpoints, route bindings, and local
 materialized views are derived and must be rebuildable or rejectable.
+
+## Universal Capability Routing
+
+Edgerun treats every addressable capability as an identity-bound node. A node can
+be a machine, but it can also be a webcam, microphone, object store, process
+adapter, GPU worker, browser tab, database adapter, application UI, or any other
+local or remote capability. The `NodeId` is the Ed25519 public key for that
+capability. Roles, departments, and work types describe what that identity is
+allowed to accept.
+
+The shared work protocol now has a generic capability surface:
+`NODE_ROLE_CAPABILITY`, `DEPARTMENT_CAPABILITY`, and capability work types for
+request, invoke, event, and close. Device and service crates should describe
+what a resource is, then bind it to this surface through admission-defined work
+routing instead of creating their own authorization or routing path.
+
+The generic payload is `CapabilityEnvelope`: session id, invocation id,
+capability id, source/target node ids, packet kind, operation, content type,
+sequence, timestamp, payload hash, and bytes. The capability id is deterministic:
+`capability_id_from_descriptor(provider_node_id, descriptor)`. A descriptor is
+the stable local resource name or descriptor bytes chosen by the provider, such
+as `camera/front`, `object-store/main`, `program/shell`, or a richer binary
+descriptor. Session and invocation ids are also deterministic and are derived
+from the admitted route hash, source/target identities, capability id, sequence,
+operation, and payload hash. Timestamps are event metadata; they are not
+authority unless admission policy explicitly makes time part of the decision.
+
+Video frames, audio chunks, input events, render commands, object bytes, and
+control messages use the same routed shape. The packet kind maps to work type.
+The operation maps to the capability-local verb. The content type constrains the
+payload class. Adapters only encode/decode their domain payload; they do not
+create alternate authorization paths.
+
+Admission is the control plane. Relays are the packet data plane. Capability
+nodes are leaves attached to relays:
+
+```text
+admission
+  <-> relay mesh
+        <-> identity-bound capability leaves
+```
+
+A capability asks admission for a relay assignment. Admission returns a signed
+`RelayAssignment` containing the relay `ChannelEndpoint`; the capability then
+connects to that endpoint and proves the path by sending signed protocol traffic
+over it. Capabilities do not advertise their own endpoints, publish their own
+availability, or select routes for other nodes. If the relay branch dies,
+admission removes the relay and every assigned capability behind it; each
+capability must ask admission for a new relay assignment before receiving new
+work.
+
+Work routing is predefined by admission. A sender asks admission for access to a
+capability. Admission verifies policy and availability, then returns a signed
+`WorkAdmission` that commits to budget, validity, route commitment, channel, and
+an ordered relay path such as:
+
+```text
+sender -> relay_a -> relay_b -> capability
+```
+
+The sender feeds signed packets to its relay. Relays forward along the
+admission-defined path. The destination capability accepts only packets whose
+identity, role, department, work type, and route match the admitted work chain.
+Relays do not need to be trusted; they can drop or delay packets, but signatures,
+hashes, admitted routes, transit proofs, delivery proofs, and receipts prevent
+them from forging capability intent or valid work.
+
+For user-owned resources, the user is the admission authority. The admission
+node may be local to the user or delegated by user-signed policy, but capability
+access starts with a user signature and a user/admission-signed work order. A
+node cannot bind itself into availability, authorize access to itself, or
+choose the route that other nodes must accept.
+
+This makes local and remote capability access the same protocol operation. A
+local webcam can be gated as an identity-bound capability and routed to a local
+app through a local relay. The same capability can later be exposed over the
+network through relay policy without giving applications direct hardware access.
+
+Applications follow the same model. An app package can have its own node
+identity and local admission scope, while a device can use a TPM-backed
+admission identity to assign relays for apps, device adapters, storage, and
+network interfaces. The app SDK should expose UI construction and capability
+requests, not machine topology. The host/device admission node decides whether a
+request routes through memory, WebSocket, TCP, a local file adapter, a network
+adapter, or a remote relay.
 
 ## Runtime layers
 

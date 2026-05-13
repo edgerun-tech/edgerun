@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use edgerun_crypto::Ed25519SigningKey;
 
-use crate::channel::RouteAdvertisement;
+use crate::channel::RouteBinding;
 use crate::object_storage_service::ObjectStorageService;
 use crate::protocol::{Hash, NodeId, NodeIdentity, WorkPacket};
 use crate::roles::WorkServiceResponse;
@@ -156,15 +156,11 @@ impl<S: ObjectStorageAdapter + Send + 'static> TcpObjectStorageDaemon<S> {
             .used_bytes()
     }
 
-    pub fn route_advertisement(
-        &self,
-        relay_node_id: NodeId,
-        valid_until_unix_ms: u64,
-    ) -> RouteAdvertisement {
+    pub fn route_binding(&self, relay_node_id: NodeId, valid_until_unix_ms: u64) -> RouteBinding {
         self.service
             .lock()
             .expect("object storage daemon service poisoned")
-            .route_advertisement(
+            .route_binding(
                 tcp_endpoint("object-storage", self.listen_addr.to_string()),
                 relay_node_id,
                 valid_until_unix_ms,

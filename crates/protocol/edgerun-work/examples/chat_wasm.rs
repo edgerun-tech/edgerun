@@ -7,7 +7,7 @@ use edgerun_work::{
     WORK_WIRE_ABI_VERSION, WorkPacket, derive_node_id, encode_work_packet_once,
     node_identity_from_key, seal_message_for_recipient, sealed_message_object_from_network_message,
     sign_ed25519, sign_network_message_payload, simple_network_message_id,
-    thread_id_for_participants, unseal_message_from_recipient_payload, verify_solana_ed25519,
+    thread_id_for_participants, verify_solana_ed25519,
 };
 
 const BUFFER_LEN: usize = 1024 * 1024;
@@ -338,43 +338,6 @@ pub extern "C" fn edgerun_chat_seal_envelope(input_len: usize) -> usize {
     write_sealed_record_header(&message_object, &frame_hash, bytes.len() as u32);
     write_output(&bytes, SEALED_RECORD_HEADER_LEN);
     finish(total_len)
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn edgerun_chat_open_envelope(input_len: usize) -> usize {
-    reset_output();
-    if input_len < OPEN_FIXED_LEN || input_len > BUFFER_LEN {
-        return fail(1);
-    }
-    let input = input_slice(input_len);
-    if !owner_ready() {
-        return fail(8);
-    }
-    let envelope_len = u32::from_be_bytes(read_array::<4>(input, 0)) as usize;
-    if OPEN_FIXED_LEN.saturating_add(envelope_len) != input_len {
-        return fail(2);
-    }
-    let recipient_key = owner_key();
-    let recipient = node_identity_from_key(&recipient_key, NODE_ROLE_MESSAGE);
-    let Ok(envelope) = edgerun_work::channel_envelope_from_bytes(&input[OPEN_FIXED_LEN..]) else {
-        return fail(3);
-    };
-    if envelope.channel_id == [0u8; 32] || envelope.packet_hash == [0u8; 32] {
-        return fail(4);
-    }
-    let WorkPacket::NetworkMessage(message) = envelope.packet else {
-        return fail(5);
-    };
-    let Ok(plaintext) =
-        unseal_message_from_recipient_payload(&recipient_key, &recipient, &message.payload)
-    else {
-        return fail(6);
-    };
-    if plaintext.len() > BUFFER_LEN {
-        return fail(7);
-    }
-    write_output(&plaintext, 0);
-    finish(plaintext.len())
 }
 
 #[unsafe(no_mangle)]

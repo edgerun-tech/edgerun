@@ -25,8 +25,9 @@ fn signed_admission(
             user,
             admission_node: admission.identity.clone(),
             request_hash,
-            assigned_route_hash: route_hash,
+            assigned_route_commitment: route_hash,
             assigned_channel: channel,
+            assigned_relay_path: vec![[0u8; 32]],
             admitted_budget: budget,
             policy_hash: [0u8; 32],
             sequence: 1,
@@ -82,12 +83,11 @@ fn wasm_worker_node_processes_storage_work_over_ws_channel() {
         [0u8; 32],
     );
 
-    let mut route = wasm_storage
-        .advertise_memory_route(wasm_storage.identity.node_id, vec![DEPARTMENT_STORAGE]);
+    let mut route =
+        wasm_storage.bind_memory_route(wasm_storage.identity.node_id, vec![DEPARTMENT_STORAGE]);
     route.endpoint.kind = CHANNEL_KIND_WEBSOCKET;
     route.endpoint.address = b"ws://127.0.0.1:8080/edgerun".to_vec();
     route.endpoint.label = "browser-worker-ws".into();
-    route = sign_route_advertisement(&wasm_storage.key, route);
     let route_hash = worker.add_route(route.clone()).expect("ws route");
 
     let file = b"browser worker wasm websocket storage shard".to_vec();

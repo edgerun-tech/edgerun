@@ -64,8 +64,6 @@ fn signed_relay_available(key: &Ed25519SigningKey) -> NodeAvailable {
             node: node_identity_from_key(key, NODE_ROLE_RELAY),
             sequence: 1,
             unix_ms: unix_ms(),
-            listen_host: "127.0.0.1".to_owned(),
-            listen_port: 37001,
             heartbeat_secs: DEFAULT_HEARTBEAT_SECS,
             log_head: [0u8; 32],
             signature: empty_signature(),
@@ -76,26 +74,52 @@ fn signed_relay_available(key: &Ed25519SigningKey) -> NodeAvailable {
 fn admit_relay(controller: &InMemoryAdmissionController, seed: u8) -> (TcpStream, JoinHandle<()>) {
     let listener = TcpListener::bind("127.0.0.1:0").expect("bind admission test listener");
     let addr = listener.local_addr().expect("admission test listener addr");
-    let controller = controller.clone();
+    let relay_key = Ed25519SigningKey::from_bytes(&[seed; 32]);
+    let relay_id = node_identity_from_key(&relay_key, NODE_ROLE_RELAY).node_id;
+    controller.set_relay_endpoint(relay_id, tcp_endpoint("relay", format!("127.0.0.1:{seed}")));
+    let server_controller = controller.clone();
     let server = thread::spawn(move || {
         let (stream, _) = listener.accept().expect("accept admission test stream");
-        controller
+        server_controller
             .handle_connection(stream)
             .expect("handle relay admission connection");
     });
 
     let mut client = TcpStream::connect(addr).expect("connect relay admission client");
-    let relay_key = Ed25519SigningKey::from_bytes(&[seed; 32]);
     write_work_packet(
         &mut client,
         &WorkPacket::NodeAvailable(signed_relay_available(&relay_key)),
     )
     .expect("write relay availability");
     match read_work_packet(&mut client).expect("read relay admission response") {
-        WorkPacket::RelayPeerList(list) => assert_eq!(list.relays.len(), 1),
-        other => panic!("expected relay peer list, got {other:?}"),
+        WorkPacket::RelayAssignment(assignment) => {
+            assert_eq!(assignment.node_id, relay_id);
+            assert_eq!(assignment.relay.relay_node_id, relay_id);
+        }
+        other => panic!("expected relay assignment, got {other:?}"),
     }
     (client, server)
+}
+
+fn admit_node(
+    controller: &InMemoryAdmissionController,
+    seed: u8,
+    role: u16,
+) -> (WorkClient, WorkPacket, JoinHandle<()>) {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind admission node test listener");
+    let addr = listener.local_addr().expect("admission node test addr");
+    let controller = controller.clone();
+    let server = thread::spawn(move || {
+        let (stream, _) = listener.accept().expect("accept admission node stream");
+        controller
+            .handle_connection(stream)
+            .expect("handle node admission connection");
+    });
+
+    let key = Ed25519SigningKey::from_bytes(&[seed; 32]);
+    let (client, response) =
+        WorkClient::connect(addr, key, role).expect("connect node admission client");
+    (client, response, server)
 }
 
 fn assert_ack(packet: WorkPacket, code: u16, text: &str) {
@@ -214,6 +238,39 @@ fn admission_replay_state_does_not_mutate_on_failed_validate() {
 
     assert_eq!(replay.seen_request_count(), 1);
     assert_eq!(replay.highest_sequence_for(&first.user), Some(5));
+}
+
+#[test]
+fn admission_removes_assigned_nodes_when_relay_connection_drops() {
+    let controller = controller();
+    let (relay_client, relay_thread) = admit_relay(&controller, 57);
+    let relay =
+        node_identity_from_key(&Ed25519SigningKey::from_bytes(&[57u8; 32]), NODE_ROLE_RELAY);
+    assert_eq!(controller.relay_count(), 1);
+
+    let (mut storage_client, response, storage_thread) =
+        admit_node(&controller, 58, NODE_ROLE_STORAGE);
+    let WorkPacket::RelayAssignment(assignment) = response else {
+        panic!("expected relay assignment, got {response:?}");
+    };
+    assert_eq!(assignment.relay.relay_node_id, relay.node_id);
+    assert_eq!(controller.assigned_node_count(), 1);
+
+    drop(relay_client);
+    relay_thread.join().expect("relay connection joined");
+
+    assert_eq!(controller.relay_count(), 0);
+    assert_eq!(controller.assigned_node_count(), 0);
+    assert_ack(
+        storage_client
+            .heartbeat()
+            .expect("stale node heartbeat handled"),
+        401,
+        "invalid heartbeat",
+    );
+
+    drop(storage_client);
+    storage_thread.join().expect("storage connection joined");
 }
 
 #[test]

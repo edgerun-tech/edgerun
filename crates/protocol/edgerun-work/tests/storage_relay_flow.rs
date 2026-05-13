@@ -69,11 +69,12 @@ fn admission_assigns_relay_and_relay_forwards_storage_work() {
     );
     let listener = TcpListener::bind("127.0.0.1:0").expect("admission listener");
     let admission_addr = listener.local_addr().expect("admission addr");
+    let admission_server = admission.clone();
     let admission_thread = thread::spawn(move || {
         let mut handlers = Vec::new();
         for _ in 0..2 {
             let (stream, _) = listener.accept().expect("admission accept");
-            let controller = admission.clone();
+            let controller = admission_server.clone();
             handlers.push(thread::spawn(move || {
                 controller
                     .handle_connection(stream)
@@ -87,24 +88,19 @@ fn admission_assigns_relay_and_relay_forwards_storage_work() {
     let mut relay_tcp = TcpNodeRuntime::bind(relay_id.node_id, "127.0.0.1:0").expect("relay tcp");
     let storage_tcp = TcpNodeRuntime::bind(storage_id.node_id, "127.0.0.1:0").expect("storage tcp");
 
-    let (relay_admission, relay_response) = WorkClient::connect(
-        admission_addr,
-        relay_key.clone(),
-        NODE_ROLE_RELAY,
-        relay_tcp.listen_addr().ip().to_string(),
-        relay_tcp.listen_addr().port(),
-    )
-    .expect("relay registration");
-    assert!(matches!(relay_response, WorkPacket::RelayPeerList(_)));
+    admission.set_relay_endpoint(
+        relay_id.node_id,
+        tcp_endpoint("relay", relay_tcp.listen_addr().to_string()),
+    );
 
-    let (storage_admission, storage_response) = WorkClient::connect(
-        admission_addr,
-        storage_key.clone(),
-        NODE_ROLE_STORAGE,
-        storage_tcp.listen_addr().ip().to_string(),
-        storage_tcp.listen_addr().port(),
-    )
-    .expect("storage relay assignment");
+    let (relay_admission, relay_response) =
+        WorkClient::connect(admission_addr, relay_key.clone(), NODE_ROLE_RELAY)
+            .expect("relay registration");
+    assert!(matches!(relay_response, WorkPacket::RelayAssignment(_)));
+
+    let (storage_admission, storage_response) =
+        WorkClient::connect(admission_addr, storage_key.clone(), NODE_ROLE_STORAGE)
+            .expect("storage relay assignment");
     let WorkPacket::RelayAssignment(assignment) = storage_response else {
         panic!("expected relay assignment");
     };
@@ -112,15 +108,15 @@ fn admission_assigns_relay_and_relay_forwards_storage_work() {
     assert_eq!(assignment.node_id, storage_id.node_id);
     assert_eq!(assignment.relay.relay_node_id, relay_id.node_id);
 
-    let relay_route = RouteAdvertisementBuilder::new(
+    let relay_route = RouteBindingBuilder::new(
         &relay_key,
         NODE_ROLE_RELAY,
         tcp_endpoint("relay", relay_tcp.listen_addr().to_string()),
     )
     .departments(vec![DEPARTMENT_RELAY])
     .valid_until_unix_ms(unix_ms().saturating_add(60_000))
-    .build(&relay_key);
-    let storage_route = RouteAdvertisementBuilder::new(
+    .build();
+    let storage_route = RouteBindingBuilder::new(
         &storage_key,
         NODE_ROLE_STORAGE,
         tcp_endpoint("storage", storage_tcp.listen_addr().to_string()),
@@ -128,7 +124,7 @@ fn admission_assigns_relay_and_relay_forwards_storage_work() {
     .relay_node_id(assignment.relay.relay_node_id)
     .departments(vec![DEPARTMENT_STORAGE, DEPARTMENT_RETRIEVAL])
     .valid_until_unix_ms(assignment.valid_until_unix_ms)
-    .build(&storage_key);
+    .build();
 
     let relay_route_hash = client_tcp
         .add_route(relay_route.clone())

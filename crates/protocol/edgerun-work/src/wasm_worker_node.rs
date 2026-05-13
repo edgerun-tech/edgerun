@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use crate::channel::{ChannelEnvelope, RouteAdvertisement};
+use crate::channel::{ChannelEnvelope, RouteBinding};
 use crate::channel_order::{ChannelOrderBook, OrderedChannelEnvelope};
 use crate::frame_codec::channel_envelope_from_bytes;
 use crate::protocol::{Hash, NodeId, NodeIdentity, WorkPacket};
@@ -27,7 +27,7 @@ impl<R: WorkRole> WasmWorkerNode<R> {
         }
     }
 
-    pub fn add_route(&mut self, route: RouteAdvertisement) -> Result<Hash, WorkChannelError> {
+    pub fn add_route(&mut self, route: RouteBinding) -> Result<Hash, WorkChannelError> {
         self.channel.add_route(route)
     }
 

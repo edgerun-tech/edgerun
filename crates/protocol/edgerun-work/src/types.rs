@@ -9,6 +9,7 @@ impl NodeRole {
     pub const COMPUTE: Self = Self(NODE_ROLE_COMPUTE);
     pub const ADMISSION: Self = Self(NODE_ROLE_ADMISSION);
     pub const MESSAGE: Self = Self(NODE_ROLE_MESSAGE);
+    pub const CAPABILITY: Self = Self(NODE_ROLE_CAPABILITY);
 
     pub const fn as_u16(self) -> u16 {
         self.0
@@ -17,7 +18,7 @@ impl NodeRole {
     pub fn from_u16(value: u16) -> Option<Self> {
         match value {
             NODE_ROLE_RELAY | NODE_ROLE_STORAGE | NODE_ROLE_COMPUTE | NODE_ROLE_ADMISSION
-            | NODE_ROLE_MESSAGE => Some(Self(value)),
+            | NODE_ROLE_MESSAGE | NODE_ROLE_CAPABILITY => Some(Self(value)),
             _ => None,
         }
     }
@@ -47,6 +48,10 @@ impl WorkType {
     pub const PROGRAM_CLOSE: Self = Self(WORK_TYPE_PROGRAM_CLOSE);
     pub const PROGRAM_POLL: Self = Self(WORK_TYPE_PROGRAM_POLL);
     pub const PROGRAM_EVENT: Self = Self(WORK_TYPE_PROGRAM_EVENT);
+    pub const CAPABILITY_REQUEST: Self = Self(WORK_TYPE_CAPABILITY_REQUEST);
+    pub const CAPABILITY_INVOKE: Self = Self(WORK_TYPE_CAPABILITY_INVOKE);
+    pub const CAPABILITY_EVENT: Self = Self(WORK_TYPE_CAPABILITY_EVENT);
+    pub const CAPABILITY_CLOSE: Self = Self(WORK_TYPE_CAPABILITY_CLOSE);
 
     pub const fn as_u16(self) -> u16 {
         self.0
@@ -63,7 +68,11 @@ impl WorkType {
             | WORK_TYPE_PROGRAM_STDIN
             | WORK_TYPE_PROGRAM_CLOSE
             | WORK_TYPE_PROGRAM_POLL
-            | WORK_TYPE_PROGRAM_EVENT => Some(Self(value)),
+            | WORK_TYPE_PROGRAM_EVENT
+            | WORK_TYPE_CAPABILITY_REQUEST
+            | WORK_TYPE_CAPABILITY_INVOKE
+            | WORK_TYPE_CAPABILITY_EVENT
+            | WORK_TYPE_CAPABILITY_CLOSE => Some(Self(value)),
             _ => None,
         }
     }
@@ -89,6 +98,7 @@ impl Department {
     pub const STORAGE: Self = Self(DEPARTMENT_STORAGE);
     pub const RETRIEVAL: Self = Self(DEPARTMENT_RETRIEVAL);
     pub const COMPUTE: Self = Self(DEPARTMENT_COMPUTE);
+    pub const CAPABILITY: Self = Self(DEPARTMENT_CAPABILITY);
 
     pub const fn as_u16(self) -> u16 {
         self.0
@@ -96,8 +106,13 @@ impl Department {
 
     pub fn from_u16(value: u16) -> Option<Self> {
         match value {
-            DEPARTMENT_ADMISSION | DEPARTMENT_RELAY | DEPARTMENT_MESSAGE | DEPARTMENT_STORAGE
-            | DEPARTMENT_RETRIEVAL | DEPARTMENT_COMPUTE => Some(Self(value)),
+            DEPARTMENT_ADMISSION
+            | DEPARTMENT_RELAY
+            | DEPARTMENT_MESSAGE
+            | DEPARTMENT_STORAGE
+            | DEPARTMENT_RETRIEVAL
+            | DEPARTMENT_COMPUTE
+            | DEPARTMENT_CAPABILITY => Some(Self(value)),
             _ => None,
         }
     }
@@ -124,6 +139,10 @@ pub fn department_for_work_type_typed(work_type: WorkType) -> Option<Department>
         | WORK_TYPE_PROGRAM_CLOSE
         | WORK_TYPE_PROGRAM_POLL
         | WORK_TYPE_PROGRAM_EVENT => Some(Department::COMPUTE),
+        WORK_TYPE_CAPABILITY_REQUEST
+        | WORK_TYPE_CAPABILITY_INVOKE
+        | WORK_TYPE_CAPABILITY_EVENT
+        | WORK_TYPE_CAPABILITY_CLOSE => Some(Department::CAPABILITY),
         _ => None,
     }
 }
@@ -135,6 +154,7 @@ pub fn role_for_department_typed(department: Department) -> Option<NodeRole> {
         DEPARTMENT_STORAGE | DEPARTMENT_RETRIEVAL => Some(NodeRole::STORAGE),
         DEPARTMENT_COMPUTE => Some(NodeRole::COMPUTE),
         DEPARTMENT_ADMISSION => Some(NodeRole::ADMISSION),
+        DEPARTMENT_CAPABILITY => Some(NodeRole::CAPABILITY),
         _ => None,
     }
 }

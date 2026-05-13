@@ -129,12 +129,12 @@ fn program_io_service_binds_adapter_to_compute_identity() {
     let session_id = blake3_hash(b"program session");
 
     assert_eq!(service.identity(), &compute);
-    let route = service.route_advertisement(
+    let route = service.route_binding(
         memory_endpoint("program-worker", &compute.node_id),
         relay.identity.node_id,
         u64::MAX,
     );
-    assert!(verify_route_advertisement(&route));
+    assert!(verify_route_binding(&route));
     assert_eq!(route.node, compute);
     assert_eq!(route.departments, vec![DEPARTMENT_COMPUTE]);
 
@@ -234,11 +234,11 @@ fn program_io_messages_can_be_forwarded_through_relay() {
     let mut channel = MemoryChannelEngine::new();
     channel
         .add_route(
-            relay_node.advertise_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_RELAY]),
+            relay_node.bind_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_RELAY]),
         )
         .expect("relay route");
     channel
-        .add_route(service.route_advertisement(
+        .add_route(service.route_binding(
             memory_endpoint("compute-worker", &compute.node_id),
             relay_node.identity.node_id,
             u64::MAX,
@@ -247,7 +247,7 @@ fn program_io_messages_can_be_forwarded_through_relay() {
     channel
         .add_route(
             SimNode::from_seed(112, NODE_ROLE_MESSAGE)
-                .advertise_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_COMPUTE]),
+                .bind_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_COMPUTE]),
         )
         .expect("client return route");
 

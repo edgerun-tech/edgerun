@@ -24,7 +24,7 @@ fn signed_admission(
     admission: &SimNode,
     user: PublicKey,
     request_hash: Hash,
-    assigned_route_hash: Hash,
+    assigned_route_commitment: Hash,
     assigned_channel: ChannelEndpoint,
     admitted_budget: u64,
     sequence: u64,
@@ -38,8 +38,9 @@ fn signed_admission(
             user,
             admission_node: admission.identity.clone(),
             request_hash,
-            assigned_route_hash,
+            assigned_route_commitment,
             assigned_channel,
+            assigned_relay_path: vec![[0u8; 32]],
             admitted_budget,
             policy_hash: [0u8; 32],
             sequence,
@@ -107,26 +108,16 @@ fn scaled_storage_retrieval_and_relay_costs_match_settlement() {
 
     let mut routes = Vec::new();
     for relay in &relays {
-        routes.push(relay.advertise_memory_route(relay.identity.node_id, vec![DEPARTMENT_RELAY]));
+        routes.push(relay.bind_memory_route(relay.identity.node_id, vec![DEPARTMENT_RELAY]));
     }
     for (index, storage) in storage_nodes.iter().enumerate() {
         let relay = &relays[index % relays.len()];
-        routes
-            .push(storage.advertise_memory_route(relay.identity.node_id, vec![DEPARTMENT_STORAGE]));
+        routes.push(storage.bind_memory_route(relay.identity.node_id, vec![DEPARTMENT_STORAGE]));
     }
-    let snapshot = sign_route_snapshot(
-        &admission.key,
-        RouteSnapshot {
-            abi_version: WORK_WIRE_ABI_VERSION,
-            issued_by: admission.identity.clone(),
-            sequence: 1,
-            route_root: route_root_hash(&routes),
-            routes,
-            signature: empty_signature(),
-        },
-    );
-    let plan = VerifiedRoutePlan::from_snapshot(snapshot).expect("route plan verifies");
-    let storage_routes = plan.routes_for_department(DEPARTMENT_STORAGE);
+    let storage_routes = routes
+        .iter()
+        .filter(|route| route.departments.contains(&DEPARTMENT_STORAGE))
+        .collect::<Vec<_>>();
     assert_eq!(storage_routes.len(), storage_nodes.len());
 
     let prices = UnitPriceTable {
@@ -183,8 +174,9 @@ fn scaled_storage_retrieval_and_relay_costs_match_settlement() {
         );
         assert_ne!(estimate.estimate_hash, [0u8; 32]);
 
-        let first_route = plan
-            .route_for_node(assigned_nodes[0])
+        let first_route = routes
+            .iter()
+            .find(|route| route.node.node_id == assigned_nodes[0])
             .expect("assigned route");
         let admission_doc = signed_admission(
             &admission,

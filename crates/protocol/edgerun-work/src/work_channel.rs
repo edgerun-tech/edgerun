@@ -1,10 +1,10 @@
 use alloc::vec::Vec;
 
-use crate::channel::{ChannelEnvelope, RouteAdvertisement};
+use crate::channel::{ChannelEnvelope, RouteBinding};
 use crate::channel_order::{ChannelOrderBook, ChannelOrderError, OrderedChannelEnvelope};
 use crate::memory_channel::{MemoryChannelEngine, MemoryChannelError};
 use crate::protocol::{Hash, NodeId, WorkPacket};
-use crate::route_auth::route_hash;
+use crate::route_binding::route_hash;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WorkChannelError {
     RouteInvalid,
@@ -26,8 +26,8 @@ impl From<MemoryChannelError> for WorkChannelError {
 }
 
 pub trait WorkChannel {
-    fn add_route(&mut self, route: RouteAdvertisement) -> Result<Hash, WorkChannelError>;
-    fn remove_route(&mut self, node_id: NodeId) -> Option<RouteAdvertisement>;
+    fn add_route(&mut self, route: RouteBinding) -> Result<Hash, WorkChannelError>;
+    fn remove_route(&mut self, node_id: NodeId) -> Option<RouteBinding>;
     fn route_hash_for(&self, node_id: &NodeId) -> Option<Hash>;
     fn send_unordered(
         &mut self,
@@ -64,11 +64,11 @@ pub trait OrderedWorkChannel: WorkChannel {
 impl<T: WorkChannel> OrderedWorkChannel for T {}
 
 impl WorkChannel for MemoryChannelEngine {
-    fn add_route(&mut self, route: RouteAdvertisement) -> Result<Hash, WorkChannelError> {
+    fn add_route(&mut self, route: RouteBinding) -> Result<Hash, WorkChannelError> {
         MemoryChannelEngine::add_route(self, route).map_err(Into::into)
     }
 
-    fn remove_route(&mut self, node_id: NodeId) -> Option<RouteAdvertisement> {
+    fn remove_route(&mut self, node_id: NodeId) -> Option<RouteBinding> {
         MemoryChannelEngine::remove_route(self, node_id)
     }
 
@@ -118,11 +118,11 @@ impl MemoryWorkChannel {
 }
 
 impl WorkChannel for MemoryWorkChannel {
-    fn add_route(&mut self, route: RouteAdvertisement) -> Result<Hash, WorkChannelError> {
+    fn add_route(&mut self, route: RouteBinding) -> Result<Hash, WorkChannelError> {
         WorkChannel::add_route(&mut self.engine, route)
     }
 
-    fn remove_route(&mut self, node_id: NodeId) -> Option<RouteAdvertisement> {
+    fn remove_route(&mut self, node_id: NodeId) -> Option<RouteBinding> {
         WorkChannel::remove_route(&mut self.engine, node_id)
     }
 

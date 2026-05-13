@@ -1,8 +1,104 @@
 # EdgeRun Work Protocol Invariants
 
-This crate is not only a message-passing layer. It is a set of verifiable state transitions for admitted work, routed execution, receipts, proofs, and settlement.
+This crate is not only a message-passing layer. It is a set of verifiable state transitions for admitted work, routed execution, capability access, receipts, proofs, and settlement.
 
-The transport medium is deliberately not part of the protocol guarantee. Memory, TCP, WebSocket, browser worker `postMessage`, email import, QR import, USB, Bluetooth, QUIC, WebTransport, or future transports may move the same bytes. Protocol validity is decided by signatures, hashes, route commitments, ordered-channel rules, typed payload verification, proofs, receipts, and settlement checks.
+The transport medium is deliberately not part of the protocol guarantee. Memory, TCP, WebSocket, browser worker `postMessage`, email import, QR import, USB, Bluetooth, QUIC, WebTransport, or future transports may move the same bytes. Protocol validity is decided by identities, signatures, hashes, admission-defined routes, ordered-channel rules, typed payload verification, proofs, receipts, and settlement checks.
+
+## Universal capability model
+
+An Edgerun node is any addressable capability endpoint with an Ed25519 identity. A node may be a whole machine, but it may also be a single local or remote capability:
+
+- webcam
+- microphone
+- local object store
+- browser tab
+- code editor executor
+- shell/process adapter
+- GPU/NPU worker
+- sensor
+- database adapter
+- application UI
+
+The protocol treats these uniformly. A capability owns a keypair, has `node_id == Ed25519 public key`, exposes one or more roles/departments/work types, and only accepts packets admitted for that capability. Generic resource access uses `NODE_ROLE_CAPABILITY`, `DEPARTMENT_CAPABILITY`, and the capability work types (`CAPABILITY_REQUEST`, `CAPABILITY_INVOKE`, `CAPABILITY_EVENT`, `CAPABILITY_CLOSE`) so devices and services do not invent transport-specific control protocols.
+
+Generic capability messages carry a typed `CapabilityEnvelope` as the
+`NetworkMessage.payload`. The outer `NetworkMessage` owns routing, admission
+matching, sender signature, and packet ordering. The inner capability envelope
+owns capability session/id/kind/operation/content-type/sequence metadata and
+the payload hash for media, input, render, object, or control bytes.
+
+Capability ids are deterministic:
+`capability_id_from_descriptor(provider_node_id, descriptor)`. Sessions are
+deterministically derived from admission hash, source identity, target identity,
+capability id, and sequence. Invocations are deterministically derived from
+session id, operation, sequence, and payload hash. Timestamps are packet
+metadata, not authority, unless admission policy explicitly admits a
+time-dependent rule.
+
+The security goal is not to trust relays or transports. Relays are untrusted packet movers. They can drop, delay, or fail to forward packets, but they must not be able to forge capability identity, user intent, admissions, work outputs, receipts, or delivery proofs.
+
+The canonical flow is:
+
+```text
+capability keypair
+  -> capability NodeId
+  -> capability asks admission for relay assignment
+  -> admission returns signed RelayAssignment with ChannelEndpoint
+  -> capability connects to that admission-assigned endpoint
+  -> capability proves the assigned path by sending signed protocol traffic over it
+  -> sender asks admission for work/capability access
+  -> admission returns signed WorkAdmission with predefined relay path
+  -> sender signs NetworkMessage and feeds packets to its relay
+  -> relays forward along the admission-defined path
+  -> capability executes only admitted role/work inputs
+  -> receipts/proofs bind execution and delivery
+```
+
+Local hardware, application UIs, and remote services use the same rules. A
+webcam on the local machine, a storage daemon in a browser, an app-owned UI
+node, and a remote compute worker are all identity-bound capabilities routed
+through admission-assigned relays under policy. Developers build against the
+app SDK and UI/runtime bridge; they do not need to know whether the current
+endpoint is memory, WebSocket, TCP, a file adapter, a device adapter, or a
+network interface.
+
+Specialized roles such as storage, compute, and message delivery are optimized libraries on top of the same model. They do not create a separate routing authority.
+
+Capability payload verification must be deterministic:
+
+- `NetworkMessage.department == DEPARTMENT_CAPABILITY`
+- `NetworkMessage.work_type` matches `CapabilityEnvelope.kind`
+- `NetworkMessage.from == CapabilityEnvelope.source_node_id`
+- `NetworkMessage.to == CapabilityEnvelope.target_node_id`
+- `CapabilityEnvelope.operation` is valid for `CapabilityEnvelope.content_type`
+- `CapabilityEnvelope.payload_hash == hash(CapabilityEnvelope.payload)`
+- `NetworkMessage.payload_hash == hash(encoded CapabilityEnvelope)`
+
+## Trust Container Decryption Invariant
+
+Application UI nodes must not be decryption authorities for user data. A chat
+app may compose outgoing plaintext, seal payloads to a recipient, store sealed
+message metadata, and request plaintext for display, but the private user
+decryption key belongs to the portable Trust Container capability.
+
+Incoming chat plaintext is released only through an admitted capability invoke:
+
+```text
+chat app node
+  -> WorkRequest / WorkAdmission
+  -> CapabilityEnvelope {
+       capability_id = Trust Container,
+       operation = message decrypt,
+       payload = sealed message bytes
+     }
+  -> Trust Container role verifies recipient identity and opens only messages
+     encrypted to the unlocked user
+  -> plaintext response to that admitted app session
+```
+
+This keeps routing authority separate from decryption authority. Device
+admission, app admission, relays, network adapters, storage, and other apps may
+route or store sealed bytes, but they must not be able to decrypt every message.
 
 ## Layer ownership
 
@@ -11,7 +107,7 @@ The transport medium is deliberately not part of the protocol guarantee. Memory,
 | `protocol` | Durable wire/economic structs | Runtime behavior, storage policy, transport details |
 | `codec` | rkyv bytes, hashes, signatures, canonical preimages | Admission policy, settlement policy |
 | `request_auth` | User `WorkRequest` signature verification | User balance checks |
-| `route_auth` / `route_plan` | Signed route ads and route snapshots | Packet ordering, settlement |
+| `route_binding` / `route_policy` | Derived route bindings and transport policy | Packet ordering, settlement, admission-defined work authorization, node admission authority |
 | `channel_order` | Ordered stream acceptance | Business validity |
 | `work_channel` / transport adapters | Moving `ChannelEnvelope`s | Declaring work valid |
 | `relay_role` | Relay forwarding, packet transit hashes, and final relay receipts once receiver proof exists | Admission, user balance, final settlement |
@@ -25,10 +121,12 @@ The transport medium is deliberately not part of the protocol guarantee. Memory,
 Every signed node identity must satisfy:
 
 ```text
-node_id == derive_node_id(public_key, role)
+node_id == public_key
 ```
 
 This is mandatory for every path that accepts a `NodeIdentity` as authority or payment destination.
+
+Roles are capabilities of a node identity. They do not create a different node id. The same public key can be used with different role declarations only where policy explicitly allows that capability, and role execution must check the local identity role before accepting work.
 
 Applies to:
 
@@ -37,11 +135,9 @@ Applies to:
 - `RelayAssignment.assigned_by`
 - `NodeAvailable.node`
 - `NodeHeartbeat.node`
-- `RouteAdvertisement.node`
-- `RouteSnapshot.issued_by`
 - `ChannelProof` recipient verification
 
-A signature that verifies against a public key is not enough. The signed public key must also derive the claimed `node_id` for the claimed `role`.
+A signature that verifies against a public key is not enough. The signed public key must also equal the claimed `node_id`, and the claimed role must be accepted by the current protocol/policy context.
 
 Canonical helpers:
 
@@ -80,12 +176,18 @@ Canonical helper:
 verify_work_request(request)
 ```
 
-## Admission invariant
+## Admission And Route Invariant
+
+For user-owned resources, the user is the admission authority. A user may run the
+admission node locally or delegate admission through a user-signed policy, but
+work for that user's resources must originate from the user's signature. No
+capability node, relay, transport adapter, or derived route cache can create
+authority for user resources on its own.
 
 A `WorkAdmission` means a DAO-authorized admission node claims:
 
 ```text
-This signed user request passed admission policy and may enter the network with this budget, route, and validity window.
+This signed user request passed admission policy and may enter the network with this budget, predefined relay path, and validity window.
 ```
 
 Admission must commit to:
@@ -94,39 +196,76 @@ Admission must commit to:
 - `user`
 - `admission_node`
 - `request_hash`
-- `assigned_route_hash`
+- `assigned_route_commitment`
 - `assigned_channel`
+- `assigned_relay_path`
 - `admitted_budget`
 - `policy_hash`
 - `sequence`
 - `valid_until_unix_ms`
 
-Workers do not re-check user balances. Workers validate that work belongs to an admitted chain and then execute local role rules.
+The admission-defined route is the only canonical route for new work. It must be derived from the signed `WorkRequest`, signed `WorkAdmission`, source node id, target role, and admission-assigned relay path.
+
+`assigned_route_commitment` is an admission commitment to the selected route or
+channel state. It is not node-authored availability and it is not accepted
+unless it is inside a valid admission chain.
+
+Node route bindings are not protocol authority. A node cannot bind itself into availability, select its own relay path, authorize its own capability access, or cause another node to accept work. Availability comes from admission state, and work access comes from the user/admission signature chain.
+
+Workers do not re-check user balances. Workers validate that work belongs to an admitted chain, that the packet matches the admitted role/department/work type, and then execute local role rules.
 
 Canonical helper:
 
 ```rust
 verify_work_admission(admission)
+admitted_capability_route_from_admission(...)
+verify_admission_defined_route(...)
 ```
 
-## Route invariant
+## Relay Topology Invariant
 
-A `RouteAdvertisement` is a signed statement by a node about how it is reachable and which roles/departments it claims.
+Admission is the control plane. Relays are the data plane. Capability nodes are leaves.
 
-Route signatures are valid for these route states:
+```text
+admission
+  <-> relay mesh
+        <-> assigned capability leaves
+```
 
-- `AVAILABLE`
-- `DRAINING`
-- `UNAVAILABLE`
+Relays connect to admission and to each other. Every non-relay node connects to its assigned relay. A sender feeds packets to its relay. The destination receives packets from its relay. If the destination is behind another relay, the route is a predefined relay path signed into the work admission.
 
-Only `AVAILABLE` routes should be selected for new work. `DRAINING` and `UNAVAILABLE` are still valid signed state transitions and are useful for route snapshots, audits, and shutdown.
+Admission must be able to route through multiple relays:
+
+```text
+sender -> relay_a -> relay_b -> ... -> relay_n -> capability
+```
+
+The relay path is not discovered from the destination node at send time. It is chosen by admission from current availability and signed into `WorkAdmission.assigned_relay_path`.
+
+If a relay drops its admission connection, admission must remove the relay and every node assigned behind it. Those nodes must start over by asking admission for a new relay assignment. Stale assignments and stale node route state must not continue to authorize work.
+
+## Route Binding Invariant
+
+Node route bindings are not part of the canonical authorization model.
+They must not be used to authorize new work, bind availability, publish
+capability access, select relays, build work admissions, or validate packet
+delivery.
+
+`RouteBinding` is derived runtime state installed by admission/runtime code. It
+is not signed by a capability node and must not be accepted as a work authority
+without the user/admission chain.
+
+Runtime APIs may install a `RouteBinding` so bytes can move, but the caller must
+already be operating under admission/runtime authority. Installing a binding does
+not authorize work and does not prove that a capability is available.
 
 Canonical helpers:
 
 ```rust
-verify_route_advertisement(route)
-verify_available_route_advertisement(route)
-VerifiedRoutePlan::from_snapshot(snapshot)
+verify_work_request(request)
+verify_work_admission(admission)
+admitted_capability_route_from_admission(...)
+verify_admission_defined_route(...)
 ```
 
 ## Ordered-channel invariant
@@ -141,6 +280,8 @@ previous_message_hash == last accepted message hash for (channel_id, from, to)
 ```
 
 Transport adapters do not decide validity. They only move bytes or envelopes.
+The expected route hash must come from the admission-defined route for the work,
+not from a node-authored route binding.
 
 Canonical helper:
 
@@ -172,6 +313,13 @@ RelayRole::forward_ordered_on(...)
 ```
 
 Relay forwarding must fail closed. If packet serialization fails, no receipt may be created and no fallback hash such as `blake3("")` may be used.
+
+For admitted work, relay forwarding must also match the admission-defined route:
+
+- the packet `via_relay` must be the first relay in the assigned path
+- each relay hop must be one of the relays committed by admission
+- the final target must match the admitted capability node
+- the department and work type must match the admitted capability route
 
 ## Delivery proof invariant
 
@@ -280,7 +428,7 @@ SettlementLedger::settle_receipt_batch_unchecked_evidence(admission, receipts)
 build_receipt_batch(...)
 ```
 
-The `*_unchecked_evidence` APIs are low-level/test/legacy helpers. They reject relay receipts and must not be used for relay payment.
+The `*_unchecked_evidence` APIs are low-level test helpers. They reject relay receipts and must not be used for relay payment.
 
 Batch settlement must be atomic:
 

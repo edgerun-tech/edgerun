@@ -6,7 +6,7 @@ fn recipient_signed_channel_proof_verifies_for_ordered_delivery() {
     let receiver = SimNode::from_seed(152, NODE_ROLE_MESSAGE);
     let relay = RelayRole::from_seed(153, 1);
     let mut channel = MemoryChannelEngine::new();
-    let route = receiver.advertise_memory_route(relay.identity.node_id, vec![DEPARTMENT_MESSAGE]);
+    let route = receiver.bind_memory_route(relay.identity.node_id, vec![DEPARTMENT_MESSAGE]);
     let route_hash = channel.add_route(route).expect("receiver route");
     let packet = sender.message_to(
         receiver.identity.node_id,
@@ -50,7 +50,7 @@ fn channel_proof_rejects_wrong_relay_recipient_or_message() {
     let relay = RelayRole::from_seed(157, 1);
     let wrong_relay = RelayRole::from_seed(158, 1);
     let mut channel = MemoryChannelEngine::new();
-    let route = receiver.advertise_memory_route(relay.identity.node_id, vec![DEPARTMENT_MESSAGE]);
+    let route = receiver.bind_memory_route(relay.identity.node_id, vec![DEPARTMENT_MESSAGE]);
     let route_hash = channel.add_route(route).expect("receiver route");
     let packet = sender.message_to(
         receiver.identity.node_id,
@@ -118,7 +118,7 @@ fn channel_proof_rejects_signature_from_wrong_key() {
     let wrong_signer = SimNode::from_seed(161, NODE_ROLE_MESSAGE);
     let relay = RelayRole::from_seed(162, 1);
     let mut channel = MemoryChannelEngine::new();
-    let route = receiver.advertise_memory_route(relay.identity.node_id, vec![DEPARTMENT_MESSAGE]);
+    let route = receiver.bind_memory_route(relay.identity.node_id, vec![DEPARTMENT_MESSAGE]);
     let route_hash = channel.add_route(route).expect("receiver route");
     let packet = sender.message_to(
         receiver.identity.node_id,

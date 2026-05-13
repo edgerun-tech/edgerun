@@ -6,17 +6,13 @@ use std::time::Duration;
 
 use edgerun_work::*;
 
-fn signed_tcp_route(
-    node: &SimNode,
-    address: String,
-    valid_until_unix_ms: u64,
-) -> RouteAdvertisement {
-    let mut route = node.advertise_memory_route(node.identity.node_id, vec![DEPARTMENT_MESSAGE]);
+fn signed_tcp_route(node: &SimNode, address: String, valid_until_unix_ms: u64) -> RouteBinding {
+    let mut route = node.bind_memory_route(node.identity.node_id, vec![DEPARTMENT_MESSAGE]);
     route.endpoint.kind = CHANNEL_KIND_TCP;
     route.endpoint.address = address.into_bytes();
     route.endpoint.label = "tcp-test".into();
     route.valid_until_unix_ms = valid_until_unix_ms;
-    sign_route_advertisement(&node.key, route)
+    route
 }
 
 #[test]
@@ -84,7 +80,7 @@ fn tcp_node_runtime_reports_delivery_failed_for_dead_route() {
     let mut sender = SimNode::from_seed(253, NODE_ROLE_MESSAGE);
     let receiver = SimNode::from_seed(254, NODE_ROLE_MESSAGE);
     let dead_listener = TcpListener::bind("127.0.0.1:0").expect("reserve dead route");
-    let dead_addr = dead_listener.local_addr().expect("dead route addr");
+    let dead_addr = dead_listener.local_addr().expect("dead route bindingdr");
     drop(dead_listener);
 
     let mut runtime = TcpNodeRuntime::bind(sender.identity.node_id, "127.0.0.1:0")

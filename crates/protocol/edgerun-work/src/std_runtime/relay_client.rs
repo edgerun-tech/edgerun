@@ -28,8 +28,6 @@ impl WorkClient {
         addr: A,
         key: Ed25519SigningKey,
         role: u16,
-        listen_host: impl Into<String>,
-        listen_port: u16,
     ) -> io::Result<(Self, WorkPacket)> {
         let mut stream = TcpStream::connect(addr)?;
         let identity = node_identity_from_key(&key, role);
@@ -40,8 +38,6 @@ impl WorkClient {
                 node: identity.clone(),
                 sequence: 1,
                 unix_ms: unix_ms(),
-                listen_host: listen_host.into(),
-                listen_port,
                 heartbeat_secs: DEFAULT_HEARTBEAT_SECS,
                 log_head: [0u8; 32],
                 signature: empty_signature(),

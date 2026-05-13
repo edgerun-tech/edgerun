@@ -8,24 +8,20 @@ use crate::channel::*;
 use crate::codec::blake3_hash;
 use crate::identity::node_identity_from_key;
 use crate::protocol::*;
-use crate::route_auth::sign_route_advertisement;
-use crate::signing::{empty_signature, verify_relay_assignment};
+use crate::signing::verify_relay_assignment;
 
 const CHANNEL_ENDPOINT_ID_DOMAIN: &[u8] = b"edgerun:v1:work:channel-endpoint";
 
-pub struct RouteAdvertisementBuilder {
+pub struct RouteBindingBuilder {
     node: NodeIdentity,
     relay_node_id: NodeId,
     endpoint: ChannelEndpoint,
     roles: Vec<u16>,
     departments: Vec<u16>,
-    status: u16,
-    sequence: u64,
     valid_until_unix_ms: u64,
-    previous_route_hash: Hash,
 }
 
-impl RouteAdvertisementBuilder {
+impl RouteBindingBuilder {
     pub fn new(key: &Ed25519SigningKey, role: u16, endpoint: ChannelEndpoint) -> Self {
         let node = node_identity_from_key(key, role);
         Self {
@@ -34,10 +30,7 @@ impl RouteAdvertisementBuilder {
             endpoint,
             roles: vec![role],
             departments: Vec::new(),
-            status: ROUTE_STATUS_AVAILABLE,
-            sequence: 1,
             valid_until_unix_ms: u64::MAX,
-            previous_route_hash: [0u8; 32],
         }
     }
 
@@ -56,61 +49,44 @@ impl RouteAdvertisementBuilder {
         self
     }
 
-    pub fn sequence(mut self, sequence: u64) -> Self {
-        self.sequence = sequence;
-        self
-    }
-
     pub fn valid_until_unix_ms(mut self, valid_until_unix_ms: u64) -> Self {
         self.valid_until_unix_ms = valid_until_unix_ms;
         self
     }
 
-    pub fn previous_route_hash(mut self, previous_route_hash: Hash) -> Self {
-        self.previous_route_hash = previous_route_hash;
-        self
-    }
-
-    pub fn build(self, key: &Ed25519SigningKey) -> RouteAdvertisement {
-        sign_route_advertisement(
-            key,
-            RouteAdvertisement {
-                abi_version: WORK_WIRE_ABI_VERSION,
-                node: self.node,
-                relay_node_id: self.relay_node_id,
-                endpoint: self.endpoint,
-                roles: self.roles,
-                departments: self.departments,
-                status: self.status,
-                sequence: self.sequence,
-                valid_until_unix_ms: self.valid_until_unix_ms,
-                previous_route_hash: self.previous_route_hash,
-                signature: empty_signature(),
-            },
-        )
+    pub fn build(self) -> RouteBinding {
+        RouteBinding {
+            abi_version: WORK_WIRE_ABI_VERSION,
+            node: self.node,
+            relay_node_id: self.relay_node_id,
+            endpoint: self.endpoint,
+            roles: self.roles,
+            departments: self.departments,
+            valid_until_unix_ms: self.valid_until_unix_ms,
+        }
     }
 }
 
-pub fn signed_route_advertisement(
+pub fn route_binding(
     key: &Ed25519SigningKey,
     role: u16,
     endpoint: ChannelEndpoint,
     relay_node_id: NodeId,
     departments: Vec<u16>,
     valid_until_unix_ms: u64,
-) -> RouteAdvertisement {
-    RouteAdvertisementBuilder::new(key, role, endpoint)
+) -> RouteBinding {
+    RouteBindingBuilder::new(key, role, endpoint)
         .relay_node_id(relay_node_id)
         .departments(departments)
         .valid_until_unix_ms(valid_until_unix_ms)
-        .build(key)
+        .build()
 }
 
-pub fn storage_route_from_relay_assignment(
+pub fn storage_binding_from_relay_assignment(
     storage_key: &Ed25519SigningKey,
     assignment: &RelayAssignment,
     endpoint: ChannelEndpoint,
-) -> Result<RouteAdvertisement, WorkProtocolError> {
+) -> Result<RouteBinding, WorkProtocolError> {
     if !verify_relay_assignment(assignment) {
         return Err(WorkProtocolError::InvalidSignature);
     }
@@ -118,7 +94,7 @@ pub fn storage_route_from_relay_assignment(
     if assignment.node_id != storage.node_id {
         return Err(WorkProtocolError::WrongRelay);
     }
-    Ok(signed_route_advertisement(
+    Ok(route_binding(
         storage_key,
         NODE_ROLE_STORAGE,
         endpoint,
@@ -126,6 +102,22 @@ pub fn storage_route_from_relay_assignment(
         vec![DEPARTMENT_STORAGE, DEPARTMENT_RETRIEVAL],
         assignment.valid_until_unix_ms,
     ))
+}
+
+pub fn capability_binding(
+    capability_key: &Ed25519SigningKey,
+    endpoint: ChannelEndpoint,
+    relay_node_id: NodeId,
+    valid_until_unix_ms: u64,
+) -> RouteBinding {
+    route_binding(
+        capability_key,
+        NODE_ROLE_CAPABILITY,
+        endpoint,
+        relay_node_id,
+        vec![DEPARTMENT_CAPABILITY],
+        valid_until_unix_ms,
+    )
 }
 
 pub fn memory_endpoint(label: impl Into<String>, seed: &[u8]) -> ChannelEndpoint {
@@ -197,8 +189,7 @@ mod tests {
                 node_id: storage.node_id,
                 relay: RelayEndpoint {
                     relay_node_id: relay.node_id,
-                    host: "127.0.0.1".into(),
-                    port: 9000,
+                    channel: tcp_endpoint("relay", "127.0.0.1:9000"),
                 },
                 assigned_by: admission,
                 sequence: 1,
@@ -206,7 +197,7 @@ mod tests {
                 signature: empty_signature(),
             },
         );
-        let route = storage_route_from_relay_assignment(
+        let route = storage_binding_from_relay_assignment(
             &storage_key,
             &assignment,
             tcp_endpoint("storage", "127.0.0.1:9001"),
@@ -218,5 +209,26 @@ mod tests {
             route.departments,
             vec![DEPARTMENT_STORAGE, DEPARTMENT_RETRIEVAL]
         );
+    }
+
+    #[test]
+    fn capability_route_uses_generic_capability_department() {
+        let relay_key = Ed25519SigningKey::from_bytes(&[4u8; 32]);
+        let capability_key = Ed25519SigningKey::from_bytes(&[5u8; 32]);
+        let relay = node_identity_from_key(&relay_key, NODE_ROLE_RELAY);
+        let capability = node_identity_from_key(&capability_key, NODE_ROLE_CAPABILITY);
+
+        let route = capability_binding(
+            &capability_key,
+            memory_endpoint("camera", b"camera-0"),
+            relay.node_id,
+            123_456,
+        );
+
+        assert_eq!(route.node, capability);
+        assert_eq!(route.relay_node_id, relay.node_id);
+        assert_eq!(route.roles, vec![NODE_ROLE_CAPABILITY]);
+        assert_eq!(route.departments, vec![DEPARTMENT_CAPABILITY]);
+        assert_eq!(route.valid_until_unix_ms, 123_456);
     }
 }

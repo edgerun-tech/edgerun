@@ -86,7 +86,7 @@ impl RelayRole {
         let destination_route_hash = channel
             .route_hash_for(&message.to)
             .ok_or(RelayRoleError::DestinationRouteMissing)?;
-        if destination_route_hash != admitted_route.worker_route_hash {
+        if destination_route_hash != admitted_route.target_route_commitment {
             return Err(RelayRoleError::AdmittedRouteMismatch);
         }
         self.forward_ordered_on(

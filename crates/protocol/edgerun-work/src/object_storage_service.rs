@@ -2,14 +2,14 @@ use alloc::vec;
 
 use edgerun_crypto::Ed25519SigningKey;
 
-use crate::channel::{ChannelEndpoint, RouteAdvertisement};
+use crate::channel::{ChannelEndpoint, RouteBinding};
 use crate::identity::node_identity_from_key;
 use crate::protocol::{
     DEPARTMENT_RETRIEVAL, DEPARTMENT_STORAGE, Hash, NODE_ROLE_STORAGE, NodeId, NodeIdentity,
     WorkPacket,
 };
 use crate::roles::{WorkServiceResponse, execute_role_packet};
-use crate::route_builder::signed_route_advertisement;
+use crate::route_builder::route_binding;
 use crate::storage_adapter::{InMemoryObjectStorage, ObjectStorageAdapter};
 use crate::typed_storage_role::TypedObjectStoreRole;
 
@@ -87,13 +87,13 @@ impl<S: ObjectStorageAdapter> ObjectStorageService<S> {
         self.role.used_bytes()
     }
 
-    pub fn route_advertisement(
+    pub fn route_binding(
         &self,
         endpoint: ChannelEndpoint,
         relay_node_id: NodeId,
         valid_until_unix_ms: u64,
-    ) -> RouteAdvertisement {
-        signed_route_advertisement(
+    ) -> RouteBinding {
+        route_binding(
             &self.key,
             NODE_ROLE_STORAGE,
             endpoint,

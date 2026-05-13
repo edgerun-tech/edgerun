@@ -272,7 +272,7 @@ pub fn verify_delivery_evidence(
     if recipient_message_policy_hash(evidence.recipient_policy) != evidence.admission.policy_hash {
         return Err(SettlementError::PolicyHashMismatch);
     }
-    if evidence.admission.assigned_route_hash != evidence.relay_input.envelope.route_hash
+    if evidence.admission.assigned_route_commitment != evidence.relay_input.envelope.route_hash
         || evidence.admission.assigned_channel.channel_id
             != evidence.relay_input.envelope.channel_id
     {

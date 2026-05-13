@@ -12,7 +12,7 @@ fn signed_relay_admission(
     admission: &SimNode,
     user: PublicKey,
     request_hash: Hash,
-    assigned_route_hash: Hash,
+    assigned_route_commitment: Hash,
     assigned_channel: ChannelEndpoint,
     admitted_budget: u64,
     policy_hash: Hash,
@@ -26,8 +26,9 @@ fn signed_relay_admission(
             user,
             admission_node: admission.identity.clone(),
             request_hash,
-            assigned_route_hash,
+            assigned_route_commitment,
             assigned_channel,
+            assigned_relay_path: vec![[0u8; 32]],
             admitted_budget,
             policy_hash,
             sequence: 1,
@@ -59,9 +60,9 @@ fn fixture() -> DeliveryFixture {
     let mut channel = MemoryChannelEngine::new();
 
     let relay_route =
-        relay_node.advertise_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_RELAY]);
+        relay_node.bind_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_RELAY]);
     let recipient_route =
-        recipient.advertise_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_MESSAGE]);
+        recipient.bind_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_MESSAGE]);
     let relay_route_hash = channel.add_route(relay_route.clone()).expect("relay route");
     let recipient_route_hash = channel.add_route(recipient_route).expect("recipient route");
     let mut recipient_policy = open_recipient_message_policy(recipient.identity.clone(), 1, 1_000);
@@ -271,7 +272,7 @@ fn settle_delivery_rejects_message_disallowed_by_recipient_policy() {
 #[test]
 fn settle_delivery_rejects_admission_route_mismatch() {
     let mut fixture = fixture();
-    fixture.admission.assigned_route_hash = [5u8; 32];
+    fixture.admission.assigned_route_commitment = [5u8; 32];
     let admission_key = Ed25519SigningKey::from_bytes(&[181u8; 32]);
     fixture.admission = sign_work_admission(&admission_key, fixture.admission.clone());
 

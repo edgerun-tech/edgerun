@@ -81,11 +81,7 @@ impl PreimageBuilder {
 
     pub fn relay(mut self, value: &RelayEndpoint) -> Self {
         self.bytes.extend_from_slice(&value.relay_node_id);
-        self.bytes
-            .extend_from_slice(&(value.host.as_bytes().len() as u64).to_be_bytes());
-        self.bytes.extend_from_slice(value.host.as_bytes());
-        self.bytes.extend_from_slice(&value.port.to_be_bytes());
-        self
+        self.channel(&value.channel)
     }
 
     pub fn channel(mut self, value: &ChannelEndpoint) -> Self {

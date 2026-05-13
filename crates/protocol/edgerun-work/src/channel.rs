@@ -17,10 +17,6 @@ pub const CHANNEL_KIND_WASM_HOST: u16 = 7;
 pub const CHANNEL_KIND_QUIC: u16 = 8;
 pub const CHANNEL_KIND_WEBTRANSPORT: u16 = 9;
 
-pub const ROUTE_STATUS_AVAILABLE: u16 = 1;
-pub const ROUTE_STATUS_DRAINING: u16 = 2;
-pub const ROUTE_STATUS_UNAVAILABLE: u16 = 3;
-
 pub type ChannelId = [u8; 32];
 
 #[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
@@ -47,29 +43,18 @@ impl ChannelEndpoint {
 
 #[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
 #[rkyv(crate = rkyv)]
-pub struct RouteAdvertisement {
+/// Runtime route binding installed by admission/runtime state.
+///
+/// This is derived state, not a signed node claim. Work authority still comes
+/// from the signed `WorkRequest` and signed `WorkAdmission`.
+pub struct RouteBinding {
     pub abi_version: u16,
     pub node: NodeIdentity,
     pub relay_node_id: NodeId,
     pub endpoint: ChannelEndpoint,
     pub roles: Vec<u16>,
     pub departments: Vec<u16>,
-    pub status: u16,
-    pub sequence: u64,
     pub valid_until_unix_ms: u64,
-    pub previous_route_hash: Hash,
-    pub signature: WorkSignature,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
-pub struct RouteSnapshot {
-    pub abi_version: u16,
-    pub issued_by: NodeIdentity,
-    pub sequence: u64,
-    pub routes: Vec<RouteAdvertisement>,
-    pub route_root: Hash,
-    pub signature: WorkSignature,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
@@ -105,7 +90,7 @@ impl ChannelEnvelope {
     }
 
     pub fn for_route(
-        route: &RouteAdvertisement,
+        route: &RouteBinding,
         route_hash: Hash,
         from: NodeId,
         to: NodeId,
