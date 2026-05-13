@@ -183,6 +183,11 @@ const params = new URLSearchParams(location.search);
 const surface = params.get("surface") || "unified";
 statusEl.textContent = `${surface} wasm scene + WebGL2`;
 let sceneDirty = true;
+let frameScheduled = false;
+let animationTimer = 0;
+let lastWidth = 0;
+let lastHeight = 0;
+let lastPhase = -1;
 
 function resize() {
   const dpr = Math.max(1, window.devicePixelRatio || 1);
@@ -191,9 +196,45 @@ function resize() {
   if (canvas.width !== width || canvas.height !== height) {
     canvas.width = width;
     canvas.height = height;
+    sceneDirty = true;
   }
   return { width, height };
 }
+
+function scheduleFrame() {
+  if (frameScheduled) return;
+  frameScheduled = true;
+  requestAnimationFrame(draw);
+}
+
+function scheduleAnimationPhase(t) {
+  if (animationTimer) clearTimeout(animationTimer);
+  const phaseMs = 800;
+  const untilNextPhase = phaseMs - (Math.floor(t) % phaseMs);
+  animationTimer = setTimeout(() => {
+    sceneDirty = true;
+    scheduleFrame();
+  }, Math.max(16, untilNextPhase + 1));
+}
+
+if ("ResizeObserver" in window) {
+  new ResizeObserver(() => {
+    sceneDirty = true;
+    scheduleFrame();
+  }).observe(canvas);
+} else {
+  window.addEventListener("resize", () => {
+    sceneDirty = true;
+    scheduleFrame();
+  });
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    sceneDirty = true;
+    scheduleFrame();
+  }
+});
 
 canvas.addEventListener("click", (event) => {
   if (surface === "codex") return;
@@ -208,16 +249,31 @@ canvas.addEventListener("click", (event) => {
   if (kind === 1) {
     api.codex_gl_set_selected_contact(id);
     sceneDirty = true;
+    scheduleFrame();
   }
 });
 
 function draw(t) {
+  frameScheduled = false;
   const { width, height } = resize();
-  const thinking = Math.floor(t / 800) % 2;
+  const phase = Math.floor(t / 800) % 2;
+  if (
+    !sceneDirty &&
+    width === lastWidth &&
+    height === lastHeight &&
+    phase === lastPhase
+  ) {
+    scheduleAnimationPhase(t);
+    return;
+  }
+
   const count = surface === "codex"
-    ? api.codex_gl_build_codex_scene(width, height, thinking)
-    : api.codex_gl_build_unified_chat_scene(width, height, thinking);
+    ? api.codex_gl_build_codex_scene(width, height, phase)
+    : api.codex_gl_build_unified_chat_scene(width, height, phase);
   sceneDirty = false;
+  lastWidth = width;
+  lastHeight = height;
+  lastPhase = phase;
   if (surface !== "codex") {
     statusEl.textContent = `${surface} contact ${api.codex_gl_selected_contact()} + ${api.codex_gl_hit_count()} hits`;
   }
@@ -285,10 +341,10 @@ function draw(t) {
     ]), gl.DYNAMIC_DRAW);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
   }
-  requestAnimationFrame(draw);
+  scheduleAnimationPhase(t);
 }
 
-requestAnimationFrame(draw);
+scheduleFrame();
 </script>
 </body>
 </html>

@@ -145,6 +145,8 @@ fn run() -> Result<(), String> {
     let mut scene = GpuScene::new(palette::BG);
     let mut running = true;
     let mut frames = 0u32;
+    let mut scene_dirty = true;
+    let mut last_thinking = false;
     while running {
         let mut event = SdlEvent { data: [0; 56] };
         while unsafe { SDL_PollEvent(&mut event) } != 0 {
@@ -154,28 +156,35 @@ fn run() -> Result<(), String> {
                 SDL_WINDOWEVENT if event.window_event() == SDL_WINDOWEVENT_RESIZED => {
                     width = event.data1().max(360);
                     height = event.data2().max(320);
+                    scene_dirty = true;
                 }
                 _ => {}
             }
         }
 
         let thinking = (started.elapsed().as_millis() / 800).is_multiple_of(2);
-        build_surface(
-            &mut scene,
-            &atlas,
-            width as f32,
-            height as f32,
-            thinking,
-            args.surface,
-        );
-        renderer.render(width, height, &scene);
-        unsafe {
-            SDL_GL_SwapWindow(window.0);
-            SDL_Delay(1);
+        if scene_dirty || thinking != last_thinking {
+            build_surface(
+                &mut scene,
+                &atlas,
+                width as f32,
+                height as f32,
+                thinking,
+                args.surface,
+            );
+            renderer.render(width, height, &scene);
+            unsafe {
+                SDL_GL_SwapWindow(window.0);
+            }
+            frames = frames.saturating_add(1);
+            scene_dirty = false;
+            last_thinking = thinking;
         }
-        frames = frames.saturating_add(1);
         if args.frames.is_some_and(|limit| frames >= limit) {
             running = false;
+        }
+        unsafe {
+            SDL_Delay(4);
         }
         thread::sleep(Duration::from_millis(1));
     }
