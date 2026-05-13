@@ -114,6 +114,10 @@ fn hit_kind_code(kind: HitKind) -> u32 {
         HitKind::Contact => 1,
         HitKind::Composer => 2,
         HitKind::Send => 3,
+        HitKind::Button => 4,
+        HitKind::Tab => 5,
+        HitKind::Toggle => 6,
+        HitKind::ListRow => 7,
     }
 }
 

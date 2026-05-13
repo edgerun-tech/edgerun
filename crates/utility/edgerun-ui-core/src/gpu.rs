@@ -197,6 +197,10 @@ pub enum HitKind {
     Contact,
     Composer,
     Send,
+    Button,
+    Tab,
+    Toggle,
+    ListRow,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -414,6 +418,61 @@ pub struct UiPainter<'a, 'font> {
     atlas: Option<&'font FontAtlas>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct UiRect {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+}
+
+impl UiRect {
+    pub const fn new(x: f32, y: f32, w: f32, h: f32) -> Self {
+        Self { x, y, w, h }
+    }
+
+    pub fn inset(self, dx: f32, dy: f32) -> Self {
+        Self {
+            x: self.x + dx,
+            y: self.y + dy,
+            w: (self.w - dx * 2.0).max(0.0),
+            h: (self.h - dy * 2.0).max(0.0),
+        }
+    }
+
+    pub fn right(self, w: f32) -> Self {
+        Self {
+            x: self.x + self.w - w,
+            y: self.y,
+            w,
+            h: self.h,
+        }
+    }
+
+    pub fn bottom(self, h: f32) -> Self {
+        Self {
+            x: self.x,
+            y: self.y + self.h - h,
+            w: self.w,
+            h,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ButtonStyle {
+    Primary,
+    Secondary,
+    Ghost,
+    Danger,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Axis {
+    Horizontal,
+    Vertical,
+}
+
 impl<'a, 'font> UiPainter<'a, 'font> {
     pub fn new(scene: &'a mut GpuScene) -> Self {
         Self {
@@ -467,6 +526,295 @@ impl<'a, 'font> UiPainter<'a, 'font> {
 
     pub fn hit(&mut self, kind: HitKind, id: u32, x: f32, y: f32, w: f32, h: f32) {
         self.scene.push_hit(GpuHit::new(kind, id, x, y, w, h));
+    }
+
+    pub fn divider(&mut self, x: f32, y: f32, w: f32, axis: Axis) {
+        match axis {
+            Axis::Horizontal => {
+                self.scene
+                    .push_rect(GpuRect::fill(x, y, w, 1.0, 0.0, palette::BORDER));
+            }
+            Axis::Vertical => {
+                self.scene
+                    .push_rect(GpuRect::fill(x, y, 1.0, w, 0.0, palette::BORDER));
+            }
+        }
+    }
+
+    pub fn badge(&mut self, x: f32, y: f32, label: &str, color: Color4) -> f32 {
+        let w = component_label_width(
+            label,
+            2.0,
+            #[cfg(feature = "fontdue-text")]
+            self.atlas,
+        ) + 18.0;
+        self.scene
+            .push_rect(GpuRect::fill(x, y, w, 22.0, 11.0, color.with_alpha(0.16)));
+        self.scene
+            .push_rect(GpuRect::border(x, y, w, 22.0, 11.0, color.with_alpha(0.42)));
+        self.label(x + 9.0, y + 5.0, label, 2.0, color);
+        w
+    }
+
+    pub fn avatar(&mut self, x: f32, y: f32, size: f32, label: &str, color: Color4, online: bool) {
+        let radius = size * 0.5;
+        self.scene.push_rect(GpuRect::fill(
+            x,
+            y,
+            size,
+            size,
+            radius,
+            color.with_alpha(0.22),
+        ));
+        self.scene.push_rect(GpuRect::border(
+            x,
+            y,
+            size,
+            size,
+            radius,
+            color.with_alpha(0.54),
+        ));
+        self.label(
+            x + size * 0.34,
+            y + size * 0.30,
+            contact_initial(label),
+            2.0,
+            color,
+        );
+        self.status_dot(x + size - 8.0, y + size - 8.0, online);
+    }
+
+    pub fn status_dot(&mut self, x: f32, y: f32, online: bool) {
+        self.scene.push_rect(GpuRect::fill(
+            x,
+            y,
+            8.0,
+            8.0,
+            4.0,
+            if online {
+                palette::GREEN
+            } else {
+                palette::MUTED
+            },
+        ));
+    }
+
+    pub fn button(&mut self, rect: UiRect, label: &str, style: ButtonStyle, id: u32, active: bool) {
+        self.hit(HitKind::Button, id, rect.x, rect.y, rect.w, rect.h);
+        let (fill, border, text) = match style {
+            ButtonStyle::Primary => (palette::ACCENT, palette::ACCENT, palette::ACCENT_TEXT),
+            ButtonStyle::Secondary => (palette::ROW, palette::BORDER, palette::TEXT),
+            ButtonStyle::Ghost => (
+                palette::PANEL.with_alpha(0.0),
+                palette::BORDER,
+                palette::MUTED,
+            ),
+            ButtonStyle::Danger => (
+                palette::DANGER.with_alpha(0.18),
+                palette::DANGER,
+                palette::DANGER,
+            ),
+        };
+        let fill = if active {
+            fill
+        } else {
+            fill.with_alpha(fill.a * 0.74)
+        };
+        self.scene
+            .push_rect(GpuRect::fill(rect.x, rect.y, rect.w, rect.h, 10.0, fill));
+        self.scene.push_rect(GpuRect::border(
+            rect.x,
+            rect.y,
+            rect.w,
+            rect.h,
+            10.0,
+            border.with_alpha(if active { 0.72 } else { 0.42 }),
+        ));
+        let label_w = component_label_width(
+            label,
+            2.0,
+            #[cfg(feature = "fontdue-text")]
+            self.atlas,
+        );
+        self.label(
+            rect.x + ((rect.w - label_w) * 0.5).max(10.0),
+            rect.y + (rect.h - 14.0) * 0.5,
+            label,
+            2.0,
+            text,
+        );
+    }
+
+    pub fn icon_button(&mut self, rect: UiRect, glyph: &str, id: u32, active: bool) {
+        self.button(rect, glyph, ButtonStyle::Secondary, id, active);
+    }
+
+    pub fn input_field(&mut self, rect: UiRect, placeholder: &str, focused: bool) {
+        self.scene.push_rect(GpuRect::fill(
+            rect.x,
+            rect.y,
+            rect.w,
+            rect.h,
+            12.0,
+            palette::COMPOSER,
+        ));
+        self.scene.push_rect(GpuRect::border(
+            rect.x,
+            rect.y,
+            rect.w,
+            rect.h,
+            12.0,
+            if focused {
+                palette::ACCENT
+            } else {
+                palette::BORDER
+            },
+        ));
+        self.label(
+            rect.x + 16.0,
+            rect.y + 13.0,
+            placeholder,
+            2.0,
+            palette::MUTED,
+        );
+    }
+
+    pub fn toggle(&mut self, x: f32, y: f32, on: bool, id: u32) {
+        self.hit(HitKind::Toggle, id, x, y, 46.0, 24.0);
+        let color = if on { palette::GREEN } else { palette::MUTED };
+        self.scene.push_rect(GpuRect::fill(
+            x,
+            y,
+            46.0,
+            24.0,
+            12.0,
+            color.with_alpha(0.18),
+        ));
+        self.scene.push_rect(GpuRect::border(
+            x,
+            y,
+            46.0,
+            24.0,
+            12.0,
+            color.with_alpha(0.54),
+        ));
+        let knob_x = if on { x + 24.0 } else { x + 4.0 };
+        self.scene
+            .push_rect(GpuRect::fill(knob_x, y + 4.0, 16.0, 16.0, 8.0, color));
+    }
+
+    pub fn progress_bar(&mut self, rect: UiRect, fraction: f32, color: Color4) {
+        let value = fraction.clamp(0.0, 1.0);
+        self.scene.push_rect(GpuRect::fill(
+            rect.x,
+            rect.y,
+            rect.w,
+            rect.h,
+            rect.h * 0.5,
+            palette::ROW,
+        ));
+        self.scene.push_rect(GpuRect::fill(
+            rect.x,
+            rect.y,
+            rect.w * value,
+            rect.h,
+            rect.h * 0.5,
+            color,
+        ));
+    }
+
+    pub fn segmented_tabs(&mut self, rect: UiRect, labels: &[&str], selected: usize, base_id: u32) {
+        if labels.is_empty() {
+            return;
+        }
+        self.scene.push_rect(GpuRect::fill(
+            rect.x,
+            rect.y,
+            rect.w,
+            rect.h,
+            12.0,
+            palette::ROW,
+        ));
+        self.scene.push_rect(GpuRect::border(
+            rect.x,
+            rect.y,
+            rect.w,
+            rect.h,
+            12.0,
+            palette::BORDER,
+        ));
+        let item_w = rect.w / labels.len() as f32;
+        for (index, label) in labels.iter().enumerate() {
+            let x = rect.x + index as f32 * item_w;
+            let active = index == selected;
+            self.hit(
+                HitKind::Tab,
+                base_id + index as u32,
+                x,
+                rect.y,
+                item_w,
+                rect.h,
+            );
+            if active {
+                self.scene.push_rect(GpuRect::fill(
+                    x + 3.0,
+                    rect.y + 3.0,
+                    item_w - 6.0,
+                    rect.h - 6.0,
+                    9.0,
+                    palette::ACTIVE_ROW,
+                ));
+            }
+            let label_w = component_label_width(
+                label,
+                2.0,
+                #[cfg(feature = "fontdue-text")]
+                self.atlas,
+            );
+            self.label(
+                x + ((item_w - label_w) * 0.5).max(8.0),
+                rect.y + (rect.h - 14.0) * 0.5,
+                label,
+                2.0,
+                if active {
+                    palette::TEXT
+                } else {
+                    palette::MUTED
+                },
+            );
+        }
+    }
+
+    pub fn list_row(&mut self, rect: UiRect, title: &str, detail: &str, accent: Color4, id: u32) {
+        self.hit(HitKind::ListRow, id, rect.x, rect.y, rect.w, rect.h);
+        self.card(rect.x, rect.y, rect.w, rect.h, 10.0, palette::ROW);
+        self.scene
+            .push_rect(GpuRect::fill(rect.x, rect.y, 3.0, rect.h, 2.0, accent));
+        self.label(rect.x + 16.0, rect.y + 10.0, title, 2.0, palette::TEXT);
+        self.label(rect.x + 16.0, rect.y + 31.0, detail, 2.0, palette::MUTED);
+    }
+
+    pub fn scrollbar(&mut self, rect: UiRect, visible_fraction: f32, offset_fraction: f32) {
+        let visible = visible_fraction.clamp(0.08, 1.0);
+        let offset = offset_fraction.clamp(0.0, 1.0);
+        self.scene.push_rect(GpuRect::fill(
+            rect.x,
+            rect.y,
+            rect.w,
+            rect.h,
+            rect.w * 0.5,
+            palette::ROW.with_alpha(0.42),
+        ));
+        let thumb_h = rect.h * visible;
+        let thumb_y = rect.y + (rect.h - thumb_h) * offset;
+        self.scene.push_rect(GpuRect::fill(
+            rect.x,
+            thumb_y,
+            rect.w,
+            thumb_h,
+            rect.w * 0.5,
+            palette::MUTED.with_alpha(0.74),
+        ));
     }
 
     pub fn contact_row(
@@ -877,6 +1225,15 @@ fn build_unified_chat_shell_impl(
         .unwrap_or("contact thread");
     ui.label(main_x + 20.0, 14.0, active_name, 2.0, palette::TEXT);
     ui.label(main_x + 20.0, 35.0, active_detail, 2.0, palette::MUTED);
+    let tabs_w = 226.0_f32.min((main_w - 390.0).max(0.0));
+    if tabs_w > 160.0 {
+        ui.segmented_tabs(
+            UiRect::new(main_x + 220.0, 13.0, tabs_w, 32.0),
+            &["chat", "proofs", "files"],
+            0,
+            20,
+        );
+    }
     ui.pill(
         main_x + main_w - 322.0,
         15.0,
@@ -944,7 +1301,7 @@ fn build_unified_chat_shell_impl(
 
     if rail_w > 0.0 {
         let rail_x = transcript_x + transcript_w - rail_w;
-        ui.card(rail_x, transcript_top, rail_w, 170.0, 12.0, palette::PANEL);
+        ui.card(rail_x, transcript_top, rail_w, 220.0, 12.0, palette::PANEL);
         ui.label(
             rail_x + 16.0,
             transcript_top + 18.0,
@@ -972,6 +1329,46 @@ fn build_unified_chat_shell_impl(
             140.0,
             "relay admitted",
             palette::GREEN,
+        );
+        ui.divider(
+            rail_x + 16.0,
+            transcript_top + 152.0,
+            rail_w - 32.0,
+            Axis::Horizontal,
+        );
+        ui.label(
+            rail_x + 16.0,
+            transcript_top + 166.0,
+            "route health",
+            2.0,
+            palette::MUTED,
+        );
+        ui.progress_bar(
+            UiRect::new(rail_x + 16.0, transcript_top + 190.0, rail_w - 32.0, 8.0),
+            if state.connected { 0.86 } else { 0.38 },
+            if state.connected {
+                palette::GREEN
+            } else {
+                palette::AMBER
+            },
+        );
+        ui.toggle(
+            rail_x + rail_w - 66.0,
+            transcript_top + 162.0,
+            state.connected,
+            44,
+        );
+    }
+    if state.messages.len() > 2 {
+        ui.scrollbar(
+            UiRect::new(
+                transcript_x + message_area_w + 6.0,
+                transcript_top,
+                6.0,
+                (transcript_limit - transcript_top).max(80.0),
+            ),
+            0.72,
+            0.0,
         );
     }
 
@@ -1744,6 +2141,7 @@ pub mod palette {
     pub const GREEN: Color4 = Color4::rgba(0.180, 0.760, 0.500, 1.0);
     pub const VIOLET: Color4 = Color4::rgba(0.560, 0.500, 0.940, 1.0);
     pub const AMBER: Color4 = Color4::rgba(0.930, 0.650, 0.220, 1.0);
+    pub const DANGER: Color4 = Color4::rgba(0.940, 0.250, 0.310, 1.0);
     pub const ACCENT_TEXT: Color4 = Color4::rgba(0.940, 0.980, 1.000, 1.0);
     pub const TEXT: Color4 = Color4::rgba(0.930, 0.950, 0.970, 1.0);
     pub const MUTED: Color4 = Color4::rgba(0.560, 0.620, 0.700, 1.0);
