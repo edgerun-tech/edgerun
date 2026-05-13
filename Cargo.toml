@@ -116,6 +116,7 @@ members = [
   "crates/utility/edgerun-clap",
   "crates/utility/edgerun-deno-core-icudata",
   "crates/protocol/edgerun-wire",
+  "crates/protocol/edgerun-work",
   "crates/edgerun-event",
 ]
 

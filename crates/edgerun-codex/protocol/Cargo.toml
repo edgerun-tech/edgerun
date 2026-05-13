@@ -16,9 +16,11 @@ workspace = true
 edgerun-encoding = { workspace = true, features = ["text-encoding"] }
 edgerun-error = { workspace = true }
 edgerun-glob = { workspace = true }
+edgerun-http = { workspace = true }
 edgerun-json = { workspace = true, features = ["serde-compat"] }
 edgerun-locale = { workspace = true }
 edgerun-quick-xml = { workspace = true, features = ["serialize"] }
+edgerun-reqwest = { workspace = true }
 edgerun-time = { workspace = true }
 edgerun-uuid = { workspace = true }
 icu_decimal = { workspace = true }

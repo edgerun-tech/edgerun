@@ -1,3 +1,4 @@
+#[cfg(feature = "native-transport")]
 use crate::error::ApiError;
 use codex_client::Request;
 use codex_client::RequestTelemetry;
@@ -8,7 +9,9 @@ use codex_client::TransportError;
 use codex_client::run_with_retry;
 use edgerun_http::StatusCode;
 use edgerun_tokio::time::Instant;
+#[cfg(feature = "native-transport")]
 use edgerun_tokio_tungstenite::Error;
+#[cfg(feature = "native-transport")]
 use edgerun_tokio_tungstenite::Message;
 use std::future::Future;
 use std::sync::Arc;
@@ -32,6 +35,7 @@ pub trait SseTelemetry: Send + Sync {
 }
 
 /// Telemetry for Responses WebSocket transport.
+#[cfg(feature = "native-transport")]
 pub trait WebsocketTelemetry: Send + Sync {
     fn on_ws_request(&self, duration: Duration, error: Option<&ApiError>, connection_reused: bool);
 

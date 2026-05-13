@@ -1,5 +1,25 @@
 # codex-core
 
+In this lifted workspace, the compiled `codex-core` entrypoint is the portable
+facade in `src/stub_lib.rs`. It exposes a lightweight `ModelClient` for the
+main Responses turn path without pulling in the original product runtime.
+
+Native callers can construct it with `ModelClient::new_native(...)` when the
+`native-transport` feature is enabled. Browser/WASM callers should implement
+`codex_client::HttpTransport` over `fetch` and pass `Arc<dyn HttpTransport>` to
+`ModelClient::new(...)`.
+Callers that still want the lifted model-provider catalog/auth layer can enable
+the `model-provider` feature and use `ModelClient::from_model_provider(...)`.
+
+The facade preserves model streaming, tools, reasoning controls, verbosity,
+JSON schema output, compression, request metadata, provider auth, and retry
+policy. It deliberately excludes TUI state, SQLite logs, telemetry exporters,
+plugin scanning, local thread stores, hooks, and sandbox/runtime integration.
+
+The remainder of this file documents the original upstream `codex-core`
+platform assumptions. Those files are still present as reference material but
+are not the compiled library entrypoint in this workspace.
+
 This crate implements the business logic for Codex. It is designed to be used by the various Codex UIs written in Rust.
 
 ## Dependencies

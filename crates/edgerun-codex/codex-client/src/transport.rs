@@ -1,27 +1,27 @@
-#[cfg(feature = "native-transport")]
+#[cfg(feature = "reqwest-transport")]
 use crate::default_client::CodexHttpClient;
-#[cfg(feature = "native-transport")]
+#[cfg(feature = "reqwest-transport")]
 use crate::default_client::CodexRequestBuilder;
 use crate::error::TransportError;
 use crate::request::Request;
-#[cfg(feature = "native-transport")]
+#[cfg(feature = "reqwest-transport")]
 use crate::request::RequestBody;
 use crate::request::Response;
 use edgerun_async_trait::async_trait;
 use edgerun_bytes::Bytes;
-#[cfg(feature = "native-transport")]
+#[cfg(feature = "reqwest-transport")]
 use edgerun_futures::StreamExt;
 use edgerun_futures::stream::BoxStream;
 use edgerun_http::HeaderMap;
-#[cfg(feature = "native-transport")]
+#[cfg(feature = "reqwest-transport")]
 use edgerun_http::Method;
 use edgerun_http::StatusCode;
 use std::sync::Arc;
-#[cfg(feature = "native-transport")]
+#[cfg(feature = "reqwest-transport")]
 use tracing::Level;
-#[cfg(feature = "native-transport")]
+#[cfg(feature = "reqwest-transport")]
 use tracing::enabled;
-#[cfg(feature = "native-transport")]
+#[cfg(feature = "reqwest-transport")]
 use tracing::trace;
 
 pub type ByteStream = BoxStream<'static, Result<Bytes, TransportError>>;
@@ -52,13 +52,13 @@ where
     }
 }
 
-#[cfg(feature = "native-transport")]
+#[cfg(feature = "reqwest-transport")]
 #[derive(Clone, Debug)]
 pub struct ReqwestTransport {
     client: CodexHttpClient,
 }
 
-#[cfg(feature = "native-transport")]
+#[cfg(feature = "reqwest-transport")]
 impl ReqwestTransport {
     pub fn new(client: edgerun_reqwest::Client) -> Self {
         Self {
@@ -103,7 +103,7 @@ impl ReqwestTransport {
     }
 }
 
-#[cfg(feature = "native-transport")]
+#[cfg(feature = "reqwest-transport")]
 fn request_body_for_trace(req: &Request) -> String {
     match req.body.as_ref() {
         Some(RequestBody::Json(body)) => body.to_string(),
@@ -112,7 +112,7 @@ fn request_body_for_trace(req: &Request) -> String {
     }
 }
 
-#[cfg(feature = "native-transport")]
+#[cfg(feature = "reqwest-transport")]
 #[async_trait]
 impl HttpTransport for ReqwestTransport {
     async fn execute(&self, req: Request) -> Result<Response, TransportError> {

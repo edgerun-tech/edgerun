@@ -1,16 +1,19 @@
 [package]
+autobins = false
 edition.workspace = true
 license.workspace = true
 name = "codex-client"
 version.workspace = true
 
+[[bin]]
+name = "custom_ca_probe"
+path = "src/bin/custom_ca_probe.rs"
+required-features = ["native-transport"]
+
 [features]
 default = ["native-transport"]
-native-transport = [
+reqwest-transport = [
     "dep:edgerun-reqwest",
-    "dep:edgerun-rustls-native-certs",
-    "dep:edgerun-rustls-pki-types",
-    "dep:edgerun-rusttls",
     "dep:opentelemetry",
     "dep:tracing-opentelemetry",
     "edgerun-reqwest/cookies",
@@ -20,6 +23,12 @@ native-transport = [
     "edgerun-reqwest/native-root",
     "edgerun-reqwest/rustls-tls-native-roots",
     "edgerun-reqwest/stream",
+]
+native-transport = [
+    "reqwest-transport",
+    "dep:edgerun-rustls-native-certs",
+    "dep:edgerun-rustls-pki-types",
+    "dep:edgerun-rusttls",
 ]
 
 [dependencies]

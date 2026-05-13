@@ -7,12 +7,15 @@ members = [
     "codex-api",
     "codex-client",
     "core",
+    "gl-ui",
+    "gl-web",
     "model-provider",
     "model-provider-info",
     "models-manager",
     "protocol",
     "response-debug-context",
     "shell-command",
+    "tui",
     "tools",
 ]
 
@@ -87,6 +90,7 @@ edgerun-eventsource-stream = { path = "../utility/edgerun-eventsource-stream" }
 edgerun-futures = { path = "../utility/edgerun-futures" }
 edgerun-glob = { path = "../utility/edgerun-glob", default-features = false }
 edgerun-http = { path = "../utility/edgerun-http" }
+edgerun-ui-core = { path = "../utility/edgerun-ui-core" }
 edgerun-inventory = { path = "../utility/edgerun-inventory" }
 edgerun-json = { path = "../utility/edgerun-json", default-features = false, features = ["derive"] }
 edgerun-locale = { path = "../utility/edgerun-locale" }

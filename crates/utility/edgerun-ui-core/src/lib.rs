@@ -8,6 +8,8 @@
 //! remote renderers can share one visual language.
 
 pub mod components;
+#[cfg(feature = "std")]
+pub mod gpu;
 pub mod icons;
 pub mod visual;
 #[cfg(feature = "fontdue-text")]
