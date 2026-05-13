@@ -185,7 +185,9 @@ dependencies = [
 name = "codex-gl-web"
 version = "0.0.0"
 dependencies = [
+ "edgerun-crypto",
  "edgerun-ui-core",
+ "edgerun-work",
 ]
 
 [[package]]

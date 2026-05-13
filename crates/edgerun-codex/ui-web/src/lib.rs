@@ -1,10 +1,19 @@
 use std::cell::RefCell;
 
+use edgerun_crypto::Ed25519SigningKey;
 use edgerun_ui_core::gpu::{
     FontAtlas, GpuHit, GpuRect, GpuScene, HitKind, RectMode, TextQuad, UiAction, UiAppSurface,
-    UiColorScheme, UiEvent, UiKey, UiShellAction, UiShellState, UiWorkspace, UiWorkspaceAction,
-    UnifiedChatState, build_edgerun_shell_overlay_with_font,
-    build_edgerun_workspace_shell_with_font, palette,
+    UiColorScheme, UiEvent, UiKey, UiShellAction, UiShellState, UiWorkProjection, UiWorkspace,
+    UiWorkspaceAction, UnifiedChatState, build_edgerun_shell_overlay_with_font,
+    build_edgerun_workspace_shell_with_font_and_work, palette,
+};
+use edgerun_work::{
+    CHANNEL_KIND_WASM_HOST, ChannelEndpoint, DEPARTMENT_STORAGE, NODE_ROLE_ADMISSION,
+    NODE_ROLE_RELAY, NODE_ROLE_STORAGE, ObjectStoreRequest, StoragePayload, WORK_TYPE_OBJECT_STORE,
+    WORK_WIRE_ABI_VERSION, WorkAdmission, WorkPacket, WorkRequest, blake3_hash, empty_signature,
+    encode_xor_2_1, node_identity_from_key, packet_hash, sign_work_admission, sign_work_request,
+    storage_payload_bytes, verify_store_request, verify_work_admission, verify_work_request,
+    work_request_preimage,
 };
 
 thread_local! {
@@ -21,6 +30,7 @@ thread_local! {
     static INPUT_BYTES: RefCell<Vec<u8>> = RefCell::new(vec![0; 4096]);
     static SELECTED_CONTACT: RefCell<usize> = const { RefCell::new(0) };
     static COLOR_SCHEME: RefCell<UiColorScheme> = const { RefCell::new(UiColorScheme::Dark) };
+    static WORK_PROJECTION: RefCell<UiWorkProjection> = RefCell::new(build_protocol_projection());
     static FONT: FontAtlas = FontAtlas::from_font_bytes(include_bytes!(env!("CODEX_GL_INTER_FONT")), 18.0)
         .expect("embedded Inter font should parse");
 }
@@ -92,9 +102,17 @@ fn build_scene(width: f32, height: f32, active: bool) -> u32 {
             let mut state = UnifiedChatState::empty();
             state.connected = active;
             WORKSPACE.with_borrow_mut(|workspace| {
-                build_edgerun_workspace_shell_with_font(
-                    scene, font, width, height, workspace, &state,
-                );
+                WORK_PROJECTION.with_borrow(|work| {
+                    build_edgerun_workspace_shell_with_font_and_work(
+                        scene,
+                        font,
+                        width,
+                        height,
+                        workspace,
+                        &state,
+                        Some(&work),
+                    );
+                });
             });
             let scheme = COLOR_SCHEME.with_borrow(|scheme| *scheme);
             scene.apply_color_scheme(scheme);
@@ -102,6 +120,138 @@ fn build_scene(width: f32, height: f32, active: bool) -> u32 {
             scene.rects().len() as u32
         })
     })
+}
+
+fn build_protocol_projection() -> UiWorkProjection {
+    let user_key = Ed25519SigningKey::from_bytes(&[7u8; 32]);
+    let admission_key = Ed25519SigningKey::from_bytes(&[11u8; 32]);
+    let relay_key = Ed25519SigningKey::from_bytes(&[13u8; 32]);
+    let storage_key = Ed25519SigningKey::from_bytes(&[17u8; 32]);
+
+    let admission_node = node_identity_from_key(&admission_key, NODE_ROLE_ADMISSION);
+    let relay_node = node_identity_from_key(&relay_key, NODE_ROLE_RELAY);
+    let storage_node = node_identity_from_key(&storage_key, NODE_ROLE_STORAGE);
+    let user_public = public_key(&user_key);
+
+    let (manifest, shards) = encode_xor_2_1(
+        b"EdgeRun network app package bytes for UI protocol projection",
+        [
+            storage_node.node_id,
+            relay_node.node_id,
+            admission_node.node_id,
+        ],
+    )
+    .expect("deterministic erasure fixture should encode");
+    let store_request: ObjectStoreRequest =
+        edgerun_work::store_request_from_shard(&manifest, &shards[0]);
+    let storage_payload = StoragePayload::StoreRequest(store_request.clone());
+    let payload_bytes =
+        storage_payload_bytes(&storage_payload).expect("storage payload should encode");
+    let payload_hash = blake3_hash(&payload_bytes);
+    let input_root = edgerun_work::manifest_hash(&manifest);
+
+    let request = sign_work_request(
+        &user_key,
+        WorkRequest {
+            abi_version: WORK_WIRE_ABI_VERSION,
+            request_id: blake3_hash(b"edgerun-ui-web:storage-request:v1"),
+            user: user_public,
+            user_sequence: 1,
+            recipient: storage_node.node_id,
+            work_type: WORK_TYPE_OBJECT_STORE,
+            department: DEPARTMENT_STORAGE,
+            payload_hash,
+            input_root,
+            max_total_cost: 48,
+            valid_until_unix_ms: 1_893_456_000_000,
+            signature: empty_signature(),
+        },
+    );
+    let request_hash =
+        packet_hash(&WorkPacket::WorkRequest(request.clone())).expect("request should hash");
+
+    let route_commitment = blake3_hash(
+        &[
+            relay_node.node_id.as_slice(),
+            storage_node.node_id.as_slice(),
+            input_root.as_slice(),
+        ]
+        .concat(),
+    );
+    let assigned_channel = ChannelEndpoint::new(
+        blake3_hash(b"edgerun-ui-web:wasm-host-channel:v1"),
+        CHANNEL_KIND_WASM_HOST,
+        b"browser://edgerun-work/ui-web".to_vec(),
+        "browser wasm host".into(),
+    );
+    let policy_hash = blake3_hash(b"edgerun-ui-web:run-from-network-storage-policy:v1");
+    let admission = sign_work_admission(
+        &admission_key,
+        WorkAdmission {
+            abi_version: WORK_WIRE_ABI_VERSION,
+            admission_id: blake3_hash(
+                &[
+                    admission_node.node_id.as_slice(),
+                    request_hash.as_slice(),
+                    &[1],
+                ]
+                .concat(),
+            ),
+            dao_id: admission_node.public_key,
+            user: user_public,
+            admission_node: admission_node.clone(),
+            request_hash,
+            assigned_route_commitment: route_commitment,
+            assigned_channel: assigned_channel.clone(),
+            assigned_relay_path: vec![relay_node.node_id],
+            admitted_budget: 48,
+            policy_hash,
+            sequence: 1,
+            valid_until_unix_ms: 1_893_456_000_000,
+            signature: empty_signature(),
+        },
+    );
+    let admission_hash =
+        packet_hash(&WorkPacket::WorkAdmission(admission.clone())).expect("admission should hash");
+
+    UiWorkProjection {
+        browser_node: short_hash(&user_public),
+        admission_node: short_hash(&admission_node.node_id),
+        relay_node: short_hash(&relay_node.node_id),
+        channel: short_hash(&assigned_channel.channel_id),
+        policy_hash: short_hash(&policy_hash),
+        request_hash: short_hash(&request_hash),
+        admission_hash: short_hash(&admission_hash),
+        route_commitment: short_hash(&route_commitment),
+        storage_payload_hash: short_hash(&payload_hash),
+        manifest_hash: short_hash(&input_root),
+        admitted_budget: admission.admitted_budget,
+        retrieval_cost: payload_bytes.len() as u64,
+        request_verified: verify_work_request(&request)
+            && blake3_hash(&work_request_preimage(&request)) != [0u8; 32],
+        admission_verified: verify_work_admission(&admission),
+        storage_payload_verified: verify_store_request(&store_request),
+    }
+}
+
+fn public_key(key: &Ed25519SigningKey) -> [u8; 32] {
+    let mut out = [0u8; 32];
+    out.copy_from_slice(key.verifying_key().as_bytes());
+    out
+}
+
+fn short_hash(hash: &[u8; 32]) -> String {
+    let hex = hash_hex(hash);
+    format!("{}...{}", &hex[..10], &hex[hex.len() - 8..])
+}
+
+fn hash_hex(hash: &[u8; 32]) -> String {
+    let mut out = String::with_capacity(64);
+    for byte in hash {
+        use std::fmt::Write;
+        let _ = write!(&mut out, "{byte:02x}");
+    }
+    out
 }
 
 #[unsafe(no_mangle)]
@@ -386,6 +536,7 @@ fn ui_action_dirty(action: UiAction) -> u32 {
         UiAction::TabSelected { .. }
         | UiAction::Toggled { .. }
         | UiAction::SliderChanged { .. }
+        | UiAction::OpenChanged { .. }
         | UiAction::ScrollChanged { .. }
         | UiAction::TextChanged { .. }
         | UiAction::Focused(_)

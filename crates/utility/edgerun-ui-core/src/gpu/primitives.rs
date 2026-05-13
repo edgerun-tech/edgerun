@@ -122,3 +122,44 @@ impl<'a> UnifiedChatState<'a> {
         }
     }
 }
+
+#[derive(Clone, Debug)]
+pub struct UiWorkProjection {
+    pub browser_node: String,
+    pub admission_node: String,
+    pub relay_node: String,
+    pub channel: String,
+    pub policy_hash: String,
+    pub request_hash: String,
+    pub admission_hash: String,
+    pub route_commitment: String,
+    pub storage_payload_hash: String,
+    pub manifest_hash: String,
+    pub admitted_budget: u64,
+    pub retrieval_cost: u64,
+    pub request_verified: bool,
+    pub admission_verified: bool,
+    pub storage_payload_verified: bool,
+}
+
+impl UiWorkProjection {
+    pub fn preview() -> Self {
+        Self {
+            browser_node: "browser node pending".into(),
+            admission_node: "admission pending".into(),
+            relay_node: "relay pending".into(),
+            channel: "channel pending".into(),
+            policy_hash: "policy hash pending".into(),
+            request_hash: "request hash pending".into(),
+            admission_hash: "admission hash pending".into(),
+            route_commitment: "route pending".into(),
+            storage_payload_hash: "payload hash pending".into(),
+            manifest_hash: "manifest pending".into(),
+            admitted_budget: 0,
+            retrieval_cost: 0,
+            request_verified: false,
+            admission_verified: false,
+            storage_payload_verified: false,
+        }
+    }
+}

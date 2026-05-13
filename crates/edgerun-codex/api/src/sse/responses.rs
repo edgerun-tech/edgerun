@@ -377,7 +377,7 @@ pub fn process_responses_event(
     match event.kind.as_str() {
         "response.output_item.done" => {
             if let Some(item_val) = event.item {
-                if let Ok(item) = edgerun_json::from_serde_value::<ResponseItem>(item_val) {
+                if let Ok(item) = edgerun_json::from_json_value::<ResponseItem>(item_val) {
                     return Ok(Some(ResponseEvent::OutputItemDone(item)));
                 }
                 debug!("failed to parse ResponseItem from output_item.done");
@@ -486,7 +486,7 @@ pub fn process_responses_event(
         }
         "response.output_item.added" => {
             if let Some(item_val) = event.item {
-                if let Ok(item) = edgerun_json::from_serde_value::<ResponseItem>(item_val) {
+                if let Ok(item) = edgerun_json::from_json_value::<ResponseItem>(item_val) {
                     return Ok(Some(ResponseEvent::OutputItemAdded(item)));
                 }
                 debug!("failed to parse ResponseItem from output_item.added");

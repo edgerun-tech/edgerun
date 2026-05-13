@@ -5,6 +5,7 @@
 //! `schemars`) so they can be embedded in Codex's own protocol structures.
 use edgerun_serde::Deserialize;
 use edgerun_serde::Serialize;
+use edgerun_json::FromJson;
 use schemars::JsonSchema;
 use ts_rs::TS;
 
@@ -152,165 +153,34 @@ pub struct CallToolResult {
 
 // === Adapter helpers ===
 //
-// These types and conversions intentionally live in `codex-protocol` so other crates can convert
-// “wire-shaped” MCP JSON (typically coming from rmcp model structs serialized with serde) into our
-// TS/JsonSchema-friendly protocol types without depending on `mcp-types`.
+// These conversions intentionally live in `codex-protocol` so other crates can convert
+// “wire-shaped” MCP JSON into our TS/JsonSchema-friendly protocol types without depending on
+// `mcp-types` or a serde bridge.
 
-fn deserialize_lossy_opt_i64<'de, D>(deserializer: D) -> Result<Option<i64>, D::Error>
-where
-    D: edgerun_serde::Deserializer<'de>,
-{
-    match Option::<edgerun_json::Number>::deserialize(deserializer)? {
-        Some(number) => {
-            if let Some(v) = number.as_i64() {
-                Ok(Some(v))
-            } else if let Some(v) = number.as_u64() {
-                Ok(i64::try_from(v).ok())
-            } else {
-                Ok(None)
-            }
-        }
-        None => Ok(None),
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ToolSerde {
-    name: String,
-    #[serde(default)]
-    title: Option<String>,
-    #[serde(default)]
-    description: Option<String>,
-    #[serde(default, rename = "inputSchema", alias = "input_schema")]
-    input_schema: edgerun_json::Value,
-    #[serde(default, rename = "outputSchema", alias = "output_schema")]
-    output_schema: Option<edgerun_json::Value>,
-    #[serde(default)]
-    annotations: Option<edgerun_json::Value>,
-    #[serde(default)]
-    icons: Option<Vec<edgerun_json::Value>>,
-    #[serde(rename = "_meta", default)]
-    meta: Option<edgerun_json::Value>,
-}
-
-impl From<ToolSerde> for Tool {
-    fn from(value: ToolSerde) -> Self {
-        let ToolSerde {
-            name,
-            title,
-            description,
-            input_schema,
-            output_schema,
-            annotations,
-            icons,
-            meta,
-        } = value;
-        Self {
-            name,
-            title,
-            description,
-            input_schema,
-            output_schema,
-            annotations,
-            icons,
-            meta,
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ResourceSerde {
-    #[serde(default)]
-    annotations: Option<edgerun_json::Value>,
-    #[serde(default)]
-    description: Option<String>,
-    #[serde(rename = "mimeType", alias = "mime_type", default)]
-    mime_type: Option<String>,
-    name: String,
-    #[serde(default, deserialize_with = "deserialize_lossy_opt_i64")]
-    size: Option<i64>,
-    #[serde(default)]
-    title: Option<String>,
-    uri: String,
-    #[serde(default)]
-    icons: Option<Vec<edgerun_json::Value>>,
-    #[serde(rename = "_meta", default)]
-    meta: Option<edgerun_json::Value>,
-}
-
-impl From<ResourceSerde> for Resource {
-    fn from(value: ResourceSerde) -> Self {
-        let ResourceSerde {
-            annotations,
-            description,
-            mime_type,
-            name,
-            size,
-            title,
-            uri,
-            icons,
-            meta,
-        } = value;
-        Self {
-            annotations,
-            description,
-            mime_type,
-            name,
-            size,
-            title,
-            uri,
-            icons,
-            meta,
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ResourceTemplateSerde {
-    #[serde(default)]
-    annotations: Option<edgerun_json::Value>,
-    #[serde(rename = "uriTemplate", alias = "uri_template")]
-    uri_template: String,
-    name: String,
-    #[serde(default)]
-    title: Option<String>,
-    #[serde(default)]
-    description: Option<String>,
-    #[serde(rename = "mimeType", alias = "mime_type", default)]
-    mime_type: Option<String>,
-}
-
-impl From<ResourceTemplateSerde> for ResourceTemplate {
-    fn from(value: ResourceTemplateSerde) -> Self {
-        let ResourceTemplateSerde {
-            annotations,
-            uri_template,
-            name,
-            title,
-            description,
-            mime_type,
-        } = value;
-        Self {
-            annotations,
-            uri_template,
-            name,
-            title,
-            description,
-            mime_type,
-        }
-    }
+fn lossy_i64(value: edgerun_json::Value) -> Option<i64> {
+    let number = edgerun_json::JsonNumber::from_json(value).ok()?;
+    number
+        .as_i64()
+        .or_else(|| number.as_u64().and_then(|value| i64::try_from(value).ok()))
 }
 
 impl Tool {
     pub fn from_mcp_value(
         value: edgerun_json::Value,
     ) -> Result<Self, edgerun_json::JsonValueError> {
-        Ok(edgerun_json::from_serde_value::<ToolSerde>(value)
-            .map_err(|error| edgerun_json::JsonValueError::WrongType(error.to_string()))?
-            .into())
+        let mut object = value.into_object("Tool")?;
+        Ok(Self {
+            name: object.take_required("name")?,
+            title: object.take_optional("title")?,
+            description: object.take_optional("description")?,
+            input_schema: object
+                .take_optional_any(&["inputSchema", "input_schema"])?
+                .unwrap_or(edgerun_json::Value::Null),
+            output_schema: object.take_optional_any(&["outputSchema", "output_schema"])?,
+            annotations: object.take_optional("annotations")?,
+            icons: object.take_optional("icons")?,
+            meta: object.take_optional("_meta")?,
+        })
     }
 }
 
@@ -318,9 +188,21 @@ impl Resource {
     pub fn from_mcp_value(
         value: edgerun_json::Value,
     ) -> Result<Self, edgerun_json::JsonValueError> {
-        Ok(edgerun_json::from_serde_value::<ResourceSerde>(value)
-            .map_err(|error| edgerun_json::JsonValueError::WrongType(error.to_string()))?
-            .into())
+        let mut object = value.into_object("Resource")?;
+        let size = object
+            .remove("size")
+            .and_then(lossy_i64);
+        Ok(Self {
+            annotations: object.take_optional("annotations")?,
+            description: object.take_optional("description")?,
+            mime_type: object.take_optional_any(&["mimeType", "mime_type"])?,
+            name: object.take_required("name")?,
+            size,
+            title: object.take_optional("title")?,
+            uri: object.take_required("uri")?,
+            icons: object.take_optional("icons")?,
+            meta: object.take_optional("_meta")?,
+        })
     }
 }
 
@@ -328,11 +210,15 @@ impl ResourceTemplate {
     pub fn from_mcp_value(
         value: edgerun_json::Value,
     ) -> Result<Self, edgerun_json::JsonValueError> {
-        Ok(
-            edgerun_json::from_serde_value::<ResourceTemplateSerde>(value)
-                .map_err(|error| edgerun_json::JsonValueError::WrongType(error.to_string()))?
-                .into(),
-        )
+        let mut object = value.into_object("ResourceTemplate")?;
+        Ok(Self {
+            annotations: object.take_optional("annotations")?,
+            uri_template: object.take_required_any(&["uriTemplate", "uri_template"])?,
+            name: object.take_required("name")?,
+            title: object.take_optional("title")?,
+            description: object.take_optional("description")?,
+            mime_type: object.take_optional_any(&["mimeType", "mime_type"])?,
+        })
     }
 }
 

@@ -447,12 +447,7 @@ fn response_create_fields_json(
 }
 
 fn response_items_json(items: &[ResponseItem]) -> Value {
-    Value::Array(
-        items
-            .iter()
-            .map(|item| edgerun_json::to_serde_value(item).unwrap_or(Value::Null))
-            .collect(),
-    )
+    Value::Array(items.iter().map(ToJson::to_json).collect())
 }
 
 fn string_map_json(map: &HashMap<String, String>) -> Value {

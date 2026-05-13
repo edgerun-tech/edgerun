@@ -28,7 +28,7 @@ edgerun-encoding = { workspace = true }
 edgerun-error = { workspace = true }
 edgerun-eventsource-stream = { workspace = true }
 edgerun-http = { workspace = true }
-edgerun-json = { workspace = true, features = ["std", "serde"] }
+edgerun-json = { workspace = true, features = ["std"] }
 edgerun-tokio-tungstenite = { workspace = true, optional = true }
 edgerun-tungstenite = { workspace = true, optional = true }
 edgerun-time = { workspace = true }

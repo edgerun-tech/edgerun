@@ -45,6 +45,21 @@ pub fn build_edgerun_workspace_shell_with_font(
     workspace: &mut UiWorkspace,
     chat_state: &UnifiedChatState<'_>,
 ) {
+    build_edgerun_workspace_shell_with_font_and_work(
+        scene, atlas, width, height, workspace, chat_state, None,
+    );
+}
+
+#[cfg(feature = "fontdue-text")]
+pub fn build_edgerun_workspace_shell_with_font_and_work(
+    scene: &mut GpuScene,
+    atlas: &FontAtlas,
+    width: f32,
+    height: f32,
+    workspace: &mut UiWorkspace,
+    chat_state: &UnifiedChatState<'_>,
+    work: Option<&UiWorkProjection>,
+) {
     let theme = workspace.user_style.resolved_theme();
     scene.clear = theme.colors.bg;
     scene.clear_rects();
@@ -65,8 +80,8 @@ pub fn build_edgerun_workspace_shell_with_font(
         UiRect::new(8.0, 8.0, (width - 16.0).max(0.0), (height - 16.0).max(0.0)),
         |ui, bounds, app| match app.kind {
             UiAppKind::Chat => render_workspace_chat_app(ui, bounds, app, chat_state),
-            UiAppKind::TrustManager => render_trust_manager_app(ui, bounds, app),
-            UiAppKind::Storage => render_storage_app(ui, bounds, app),
+            UiAppKind::TrustManager => render_trust_manager_app(ui, bounds, app, work),
+            UiAppKind::Storage => render_storage_app(ui, bounds, app, work),
             UiAppKind::LockScreen => render_lock_screen_app(ui, bounds, app),
             UiAppKind::CapabilityRequest => render_capability_request_app(ui, bounds, app),
             UiAppKind::ComponentGallery => render_component_gallery_app(ui, bounds, app),
@@ -126,8 +141,8 @@ pub fn build_edgerun_fullscreen_app_with_font(
         app.bounds = Some(bounds);
         match app.kind {
             UiAppKind::Chat => render_workspace_chat_app(&mut ui, bounds, app, chat_state),
-            UiAppKind::TrustManager => render_trust_manager_app(&mut ui, bounds, app),
-            UiAppKind::Storage => render_storage_app(&mut ui, bounds, app),
+            UiAppKind::TrustManager => render_trust_manager_app(&mut ui, bounds, app, None),
+            UiAppKind::Storage => render_storage_app(&mut ui, bounds, app, None),
             UiAppKind::LockScreen => render_lock_screen_app(&mut ui, bounds, app),
             UiAppKind::CapabilityRequest => render_capability_request_app(&mut ui, bounds, app),
             UiAppKind::ComponentGallery => render_component_gallery_app(&mut ui, bounds, app),
@@ -603,59 +618,106 @@ fn render_workspace_chat_app(
 }
 
 #[cfg(feature = "fontdue-text")]
-fn render_trust_manager_app(ui: &mut UiPainter<'_, '_>, bounds: UiRect, app: &UiAppSurface) {
+fn render_trust_manager_app(
+    ui: &mut UiPainter<'_, '_>,
+    bounds: UiRect,
+    app: &UiAppSurface,
+    work: Option<&UiWorkProjection>,
+) {
+    let fallback;
+    let work = match work {
+        Some(work) => work,
+        None => {
+            fallback = UiWorkProjection::preview();
+            &fallback
+        }
+    };
     column("bg-panel border rounded-md p-4 gap-3")
         .child(header("Trust Manager").detail("proof dashboard"))
         .child(identity_card(
             "Local identity",
-            "browser node",
-            "sealed Trust Container",
+            &work.browser_node,
+            if work.request_verified {
+                "signed request verified"
+            } else {
+                "request pending verification"
+            },
             221,
         ))
         .child(route_path(
-            "Current route",
-            &["app", "device", "admission", "relay"],
+            "Admitted route",
+            &["browser", "admission", "relay", "storage"],
         ))
         .child(capability_grant_row(
-            "EdgeRun Chat",
-            "decrypt message",
-            "pending",
+            "Admission policy",
+            &work.policy_hash,
+            if work.admission_verified {
+                "verified"
+            } else {
+                "pending"
+            },
             220,
         ))
         .child(proof_event_row(
-            "Runtime events",
-            "proof log empty",
-            "0",
+            "WorkRequest",
+            &work.request_hash,
+            if work.request_verified {
+                "ok"
+            } else {
+                "pending"
+            },
             222,
+        ))
+        .child(proof_event_row(
+            "WorkAdmission",
+            &work.admission_hash,
+            if work.admission_verified {
+                "ok"
+            } else {
+                "pending"
+            },
+            223,
         ))
         .render_with_state(ui, bounds.inset(14.0, 14.0), Some(&app.runtime));
 }
 
 #[cfg(feature = "fontdue-text")]
-fn render_storage_app(ui: &mut UiPainter<'_, '_>, bounds: UiRect, app: &UiAppSurface) {
+fn render_storage_app(
+    ui: &mut UiPainter<'_, '_>,
+    bounds: UiRect,
+    app: &UiAppSurface,
+    work: Option<&UiWorkProjection>,
+) {
+    let fallback;
+    let work = match work {
+        Some(work) => work,
+        None => {
+            fallback = UiWorkProjection::preview();
+            &fallback
+        }
+    };
+    let budget = std::format!("{} units admitted", work.admitted_budget);
+    let cost = std::format!("{} units deterministic", work.retrieval_cost);
     column("bg-panel border rounded-md p-4 gap-3")
         .child(header("Storage").detail("verified local cache"))
         .child(package_card(
             "Network apps",
-            "run by hash, cache by policy",
-            "cache pending",
+            &work.storage_payload_hash,
+            if work.storage_payload_verified {
+                "typed payload verified"
+            } else {
+                "payload pending"
+            },
             301,
         ))
-        .child(contact_card(
-            "Contact book",
-            "IndexedDB projection pending",
-            302,
-        ))
-        .child(attachment_preview(
-            "Message payloads",
-            "encrypted payload objects",
-            303,
-        ))
+        .child(contact_card("Admission path", &work.admission_node, 302))
+        .child(attachment_preview("Manifest", &work.manifest_hash, 303))
+        .child(receipt_row("Budget / retrieval", &budget, &cost, 304))
         .child(receipt_row(
-            "Cached package bytes",
-            "unknown",
-            "waiting",
-            304,
+            "Relay / channel",
+            &work.relay_node,
+            &work.channel,
+            305,
         ))
         .render_with_state(ui, bounds.inset(14.0, 14.0), Some(&app.runtime));
 }

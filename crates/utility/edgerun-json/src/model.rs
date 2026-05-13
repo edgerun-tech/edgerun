@@ -1,6 +1,8 @@
 use crate::prelude::*;
 
 use alloc::collections::BTreeMap;
+#[cfg(feature = "std")]
+use std::collections::HashMap;
 
 use crate::{JsonNumber, JsonValue, JsonValueError, Map};
 
@@ -323,6 +325,34 @@ impl<T: ToJson> ToJson for BTreeMap<String, T> {
 }
 
 impl<T: FromJson> FromJson for BTreeMap<String, T> {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match value {
+            JsonValue::Object(object) => object
+                .into_vec()
+                .into_iter()
+                .map(|(key, value)| T::from_json(value).map(|value| (key, value)))
+                .collect(),
+            other => Err(JsonValueError::WrongType(format!(
+                "expected object, found {}",
+                other.variant_name()
+            ))),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl<T: ToJson> ToJson for HashMap<String, T> {
+    fn to_json(&self) -> JsonValue {
+        let mut object: Map = Map::with_capacity(self.len());
+        for (key, value) in self {
+            object.push_field(key.clone(), value.to_json());
+        }
+        object.into()
+    }
+}
+
+#[cfg(feature = "std")]
+impl<T: FromJson> FromJson for HashMap<String, T> {
     fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
         match value {
             JsonValue::Object(object) => object

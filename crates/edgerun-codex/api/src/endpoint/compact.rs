@@ -47,7 +47,7 @@ impl<T: HttpTransport> CompactClient<T> {
             .get("output")
             .cloned()
             .ok_or_else(|| ApiError::Stream("compact response missing output".to_string()))?;
-        edgerun_json::from_serde_value(output).map_err(|e| ApiError::Stream(e.to_string()))
+        edgerun_json::from_json_value(output).map_err(|e| ApiError::Stream(e.to_string()))
     }
 
     pub async fn compact_input(
