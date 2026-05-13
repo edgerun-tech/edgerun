@@ -548,6 +548,9 @@ pub enum ButtonStyle {
 pub enum UiNodeKind {
     Row,
     Column,
+    Grid {
+        columns: u16,
+    },
     Card,
     Text(String),
     Badge {
@@ -639,6 +642,16 @@ impl UiNode {
         Self {
             kind: UiNodeKind::Column,
             style,
+            children: Vec::new(),
+        }
+    }
+
+    pub fn grid(classes: &str, columns: u16) -> Self {
+        Self {
+            kind: UiNodeKind::Grid {
+                columns: columns.max(1),
+            },
+            style: UiStyle::parse(classes),
             children: Vec::new(),
         }
     }
@@ -825,7 +838,15 @@ impl UiNode {
         if matches!(self.kind, UiNodeKind::Row) {
             parsed.direction = Axis::Horizontal;
         }
+        if self.style.col_span > 1 && parsed.col_span == 1 {
+            parsed.col_span = self.style.col_span;
+        }
         self.style = parsed;
+        self
+    }
+
+    pub fn span(mut self, span: u16) -> Self {
+        self.style.col_span = span.max(1);
         self
     }
 
@@ -1134,7 +1155,7 @@ impl UiNode {
                 ui.divider(rect.x, rect.y, rect.w.max(rect.h), axis);
             }
             UiNodeKind::Spacer => {}
-            UiNodeKind::Row | UiNodeKind::Column | UiNodeKind::Card => {
+            UiNodeKind::Row | UiNodeKind::Column | UiNodeKind::Grid { .. } | UiNodeKind::Card => {
                 if let Some(bg) = self.style.bg {
                     if matches!(self.kind, UiNodeKind::Card) {
                         ui.card(rect.x, rect.y, rect.w, rect.h, self.style.radius, bg);
@@ -1159,7 +1180,11 @@ impl UiNode {
                         }
                     }
                 }
-                render_children(ui, rect, &self.style, &self.children);
+                if let UiNodeKind::Grid { columns } = &self.kind {
+                    render_grid_children(ui, rect, &self.style, *columns, &self.children);
+                } else {
+                    render_children(ui, rect, &self.style, &self.children);
+                }
             }
         }
     }
@@ -1171,6 +1196,10 @@ pub fn row(classes: &str) -> UiNode {
 
 pub fn column(classes: &str) -> UiNode {
     UiNode::column(classes)
+}
+
+pub fn grid(classes: &str, columns: u16) -> UiNode {
+    UiNode::grid(classes, columns)
 }
 
 pub fn card(classes: &str) -> UiNode {
@@ -2596,6 +2625,59 @@ fn render_children(ui: &mut UiPainter<'_, '_>, rect: UiRect, style: &UiStyle, ch
     }
 }
 
+fn render_grid_children(
+    ui: &mut UiPainter<'_, '_>,
+    rect: UiRect,
+    style: &UiStyle,
+    columns: u16,
+    children: &[UiNode],
+) {
+    if children.is_empty() {
+        return;
+    }
+    let content = UiRect {
+        x: rect.x + style.padding[3],
+        y: rect.y + style.padding[0],
+        w: (rect.w - style.padding[1] - style.padding[3]).max(0.0),
+        h: (rect.h - style.padding[0] - style.padding[2]).max(0.0),
+    };
+    let columns = columns.max(1) as usize;
+    let gap = style.gap;
+    let track_w = ((content.w - gap * columns.saturating_sub(1) as f32) / columns as f32).max(0.0);
+    let mut row_y = content.y;
+    let mut index = 0usize;
+
+    while index < children.len() && row_y < content.y + content.h {
+        let row_start = index;
+        let mut row_col = 0usize;
+        let mut row_h = 0.0_f32;
+        while index < children.len() {
+            let child = &children[index];
+            let span = child.style.col_span.max(1).min(columns as u16) as usize;
+            if row_col > 0 && row_col + span > columns {
+                break;
+            }
+            row_h = row_h.max(child_main_size(child, Axis::Vertical));
+            row_col += span;
+            index += 1;
+            if row_col >= columns {
+                break;
+            }
+        }
+
+        let mut col = 0usize;
+        for child in &children[row_start..index] {
+            let span = child.style.col_span.max(1).min(columns as u16) as usize;
+            let w = track_w * span as f32 + gap * span.saturating_sub(1) as f32;
+            let h = child_main_size(child, Axis::Vertical).min(content.y + content.h - row_y);
+            let x = content.x + col as f32 * (track_w + gap);
+            child.render(ui, UiRect::new(x, row_y, w, h));
+            col += span;
+        }
+        row_y += row_h + gap;
+    }
+}
+
 fn child_main_size(child: &UiNode, axis: Axis) -> f32 {
     match axis {
         Axis::Horizontal => child.style.width.unwrap_or_else(|| intrinsic_width(child)),
@@ -2743,6 +2825,33 @@ mod tests {
 
         assert!(scene.rects().len() > 15);
         assert_eq!(scene.hits().len(), 1);
+    }
+
+    #[test]
+    fn grid_node_places_spanned_dashboard_cards() {
+        let mut scene = GpuScene::new(palette::BG);
+        {
+            let mut ui = UiPainter::new(&mut scene);
+            let labels = ["A", "B", "C"];
+            let values = [0.25, 0.5, 0.75];
+            grid("bg-panel border rounded-md p-3 gap-3", 4)
+                .children([
+                    metric("Balance", "$42.00")
+                        .progress(0.4)
+                        .span(2)
+                        .class("h-32"),
+                    field_node("Relay", "nodes.edgerun.tech")
+                        .focused(true)
+                        .span(2),
+                    bar_chart_labels("Activity", &labels, &values)
+                        .span(4)
+                        .class("h-44"),
+                ])
+                .render(&mut ui, UiRect::new(0.0, 0.0, 640.0, 420.0));
+        }
+
+        assert!(scene.rects().len() > 30);
+        assert!(scene.hits().is_empty());
     }
 
     #[test]

@@ -17,6 +17,7 @@ pub struct UiStyle {
     pub width: Option<f32>,
     pub height: Option<f32>,
     pub grow: bool,
+    pub col_span: u16,
     pub bg: Option<Color4>,
     pub text: Color4,
     pub border: bool,
@@ -33,6 +34,7 @@ impl Default for UiStyle {
             width: None,
             height: None,
             grow: false,
+            col_span: 1,
             bg: None,
             text: palette::TEXT,
             border: false,
@@ -55,6 +57,7 @@ impl UiStyle {
         if self.apply_layout_class(class)
             || self.apply_radius_class(class)
             || self.apply_color_class(class)
+            || self.apply_grid_class(class)
             || self.apply_spacing_class(class)
             || self.apply_size_class(class)
         {
@@ -72,6 +75,17 @@ impl UiStyle {
             _ => return false,
         }
         true
+    }
+
+    fn apply_grid_class(&mut self, class: &str) -> bool {
+        if let Some(span) = class
+            .strip_prefix("col-span-")
+            .and_then(|value| value.parse::<u16>().ok())
+        {
+            self.col_span = span.max(1);
+            return true;
+        }
+        false
     }
 
     fn apply_radius_class(&mut self, class: &str) -> bool {
@@ -233,6 +247,14 @@ mod tests {
         assert_eq!(style.padding, [8.0, 16.0, 8.0, 16.0]);
         assert_eq!(style.width, Some(256.0));
         assert_eq!(style.height, Some(FILL_PARENT));
+        assert_eq!(style.col_span, 1);
+    }
+
+    #[test]
+    fn parses_grid_span_class() {
+        let style = UiStyle::parse("col-span-3");
+
+        assert_eq!(style.col_span, 3);
     }
 
     #[test]
