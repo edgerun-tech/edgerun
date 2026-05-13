@@ -408,6 +408,167 @@ impl Default for ChatShellMetrics {
     }
 }
 
+pub struct UiPainter<'a, 'font> {
+    scene: &'a mut GpuScene,
+    #[cfg(feature = "fontdue-text")]
+    atlas: Option<&'font FontAtlas>,
+}
+
+impl<'a, 'font> UiPainter<'a, 'font> {
+    pub fn new(scene: &'a mut GpuScene) -> Self {
+        Self {
+            scene,
+            #[cfg(feature = "fontdue-text")]
+            atlas: None,
+        }
+    }
+
+    #[cfg(feature = "fontdue-text")]
+    pub fn with_font(scene: &'a mut GpuScene, atlas: &'font FontAtlas) -> Self {
+        Self {
+            scene,
+            atlas: Some(atlas),
+        }
+    }
+
+    pub fn label(&mut self, x: f32, y: f32, text: &str, scale: f32, color: Color4) {
+        push_label(
+            self.scene,
+            #[cfg(feature = "fontdue-text")]
+            self.atlas,
+            x,
+            y,
+            text,
+            scale,
+            color,
+        );
+    }
+
+    pub fn panel(&mut self, x: f32, y: f32, w: f32, h: f32, radius: f32, color: Color4) {
+        panel(self.scene, x, y, w, h, radius, color);
+    }
+
+    pub fn card(&mut self, x: f32, y: f32, w: f32, h: f32, radius: f32, color: Color4) {
+        soft_card(self.scene, x, y, w, h, radius, color);
+    }
+
+    pub fn pill(&mut self, x: f32, y: f32, w: f32, label: &str, color: Color4) {
+        draw_pill(
+            self.scene,
+            #[cfg(feature = "fontdue-text")]
+            self.atlas,
+            x,
+            y,
+            w,
+            label,
+            color,
+        );
+    }
+
+    pub fn hit(&mut self, kind: HitKind, id: u32, x: f32, y: f32, w: f32, h: f32) {
+        self.scene.push_hit(GpuHit::new(kind, id, x, y, w, h));
+    }
+
+    pub fn contact_row(
+        &mut self,
+        x: f32,
+        y: f32,
+        w: f32,
+        contact: &UnifiedContact<'_>,
+        selected: bool,
+        id: u32,
+    ) {
+        self.hit(HitKind::Contact, id, x, y, w, 56.0);
+        draw_contact_row(
+            self.scene,
+            #[cfg(feature = "fontdue-text")]
+            self.atlas,
+            x,
+            y,
+            w,
+            contact,
+            selected,
+        );
+    }
+
+    pub fn message_bubble(
+        &mut self,
+        x: f32,
+        y: f32,
+        w: f32,
+        role: &str,
+        body: &str,
+        fill: Color4,
+        accent: Color4,
+    ) -> f32 {
+        draw_message(
+            self.scene,
+            #[cfg(feature = "fontdue-text")]
+            self.atlas,
+            x,
+            y,
+            w,
+            role,
+            body,
+            fill,
+            accent,
+        )
+    }
+
+    pub fn composer(
+        &mut self,
+        x: f32,
+        y: f32,
+        w: f32,
+        h: f32,
+        placeholder: &str,
+        active: bool,
+        chips: &[(&str, Color4)],
+    ) {
+        self.hit(HitKind::Composer, 0, x, y, w, h);
+        self.card(x, y, w, h, 16.0, palette::COMPOSER);
+        self.scene.push_rect(GpuRect::border(
+            x,
+            y,
+            w,
+            h,
+            16.0,
+            if active {
+                palette::ACCENT
+            } else {
+                palette::BORDER
+            },
+        ));
+        self.label(x + 22.0, y + 24.0, placeholder, 2.0, palette::MUTED);
+
+        let mut chip_x = x + 20.0;
+        for (label, color) in chips.iter().copied() {
+            let chip_w = component_label_width(
+                label,
+                2.0,
+                #[cfg(feature = "fontdue-text")]
+                self.atlas,
+            ) + 24.0;
+            if chip_x + chip_w > x + w - 78.0 {
+                break;
+            }
+            self.pill(chip_x, y + h - 34.0, chip_w, label, color);
+            chip_x += chip_w + 10.0;
+        }
+
+        self.hit(HitKind::Send, 0, x + w - 58.0, y + h - 56.0, 40.0, 38.0);
+        self.scene.push_rect(GpuRect::fill(
+            x + w - 58.0,
+            y + h - 56.0,
+            40.0,
+            38.0,
+            12.0,
+            palette::ACCENT,
+        ));
+        self.label(x + w - 47.0, y + h - 45.0, ">", 3.0, palette::ACCENT_TEXT);
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UnifiedContactKind {
     Person,
@@ -654,6 +815,11 @@ fn build_unified_chat_shell_impl(
 ) {
     scene.clear = palette::BG;
     scene.clear_rects();
+    let mut ui = UiPainter {
+        scene,
+        #[cfg(feature = "fontdue-text")]
+        atlas,
+    };
     let m = ChatShellMetrics::default();
     let w = width.max(360.0);
     let h = height.max(320.0);
@@ -662,8 +828,8 @@ fn build_unified_chat_shell_impl(
     let main_w = w - sidebar_w;
 
     if sidebar_w > 0.0 {
-        panel(scene, 0.0, 0.0, sidebar_w, h, 0.0, palette::SIDEBAR);
-        scene.push_rect(GpuRect::fill(
+        ui.panel(0.0, 0.0, sidebar_w, h, 0.0, palette::SIDEBAR);
+        ui.scene.push_rect(GpuRect::fill(
             0.0,
             0.0,
             sidebar_w,
@@ -671,30 +837,9 @@ fn build_unified_chat_shell_impl(
             0.0,
             palette::ACCENT,
         ));
-        push_label(
-            scene,
-            #[cfg(feature = "fontdue-text")]
-            atlas,
-            24.0,
-            20.0,
-            state.title,
-            3.0,
-            palette::TEXT,
-        );
-        push_label(
-            scene,
-            #[cfg(feature = "fontdue-text")]
-            atlas,
-            24.0,
-            50.0,
-            state.subtitle,
-            2.0,
-            palette::MUTED,
-        );
-        draw_pill(
-            scene,
-            #[cfg(feature = "fontdue-text")]
-            atlas,
+        ui.label(24.0, 20.0, state.title, 3.0, palette::TEXT);
+        ui.label(24.0, 50.0, state.subtitle, 2.0, palette::MUTED);
+        ui.pill(
             sidebar_w - 104.0,
             22.0,
             78.0,
@@ -705,7 +850,7 @@ fn build_unified_chat_shell_impl(
                 palette::AMBER
             },
         );
-        scene.push_rect(GpuRect::fill(
+        ui.scene.push_rect(GpuRect::fill(
             sidebar_w - 1.0,
             0.0,
             1.0,
@@ -717,28 +862,11 @@ fn build_unified_chat_shell_impl(
         for (index, contact) in state.contacts.iter().enumerate() {
             let y = 88.0 + index as f32 * 68.0;
             let selected = index == state.selected_contact;
-            scene.push_hit(GpuHit::new(
-                HitKind::Contact,
-                index as u32,
-                16.0,
-                y,
-                sidebar_w - 32.0,
-                56.0,
-            ));
-            draw_contact_row(
-                scene,
-                #[cfg(feature = "fontdue-text")]
-                atlas,
-                16.0,
-                y,
-                sidebar_w - 32.0,
-                contact,
-                selected,
-            );
+            ui.contact_row(16.0, y, sidebar_w - 32.0, contact, selected, index as u32);
         }
     }
 
-    panel(scene, main_x, 0.0, main_w, m.topbar_h, 0.0, palette::TOPBAR);
+    ui.panel(main_x, 0.0, main_w, m.topbar_h, 0.0, palette::TOPBAR);
     let active = state
         .contacts
         .get(state.selected_contact)
@@ -747,47 +875,23 @@ fn build_unified_chat_shell_impl(
     let active_detail = active
         .map(|contact| contact.detail)
         .unwrap_or("contact thread");
-    push_label(
-        scene,
-        #[cfg(feature = "fontdue-text")]
-        atlas,
-        main_x + 20.0,
-        14.0,
-        active_name,
-        2.0,
-        palette::TEXT,
-    );
-    push_label(
-        scene,
-        #[cfg(feature = "fontdue-text")]
-        atlas,
-        main_x + 20.0,
-        35.0,
-        active_detail,
-        2.0,
-        palette::MUTED,
-    );
-    draw_pill(
-        scene,
-        #[cfg(feature = "fontdue-text")]
-        atlas,
+    ui.label(main_x + 20.0, 14.0, active_name, 2.0, palette::TEXT);
+    ui.label(main_x + 20.0, 35.0, active_detail, 2.0, palette::MUTED);
+    ui.pill(
         main_x + main_w - 322.0,
         15.0,
         132.0,
         "recipient sealed",
         palette::GREEN,
     );
-    draw_pill(
-        scene,
-        #[cfg(feature = "fontdue-text")]
-        atlas,
+    ui.pill(
         main_x + main_w - 178.0,
         15.0,
         154.0,
         "identity routed",
         palette::ACCENT,
     );
-    scene.push_rect(GpuRect::fill(
+    ui.scene.push_rect(GpuRect::fill(
         main_x,
         m.topbar_h - 1.0,
         main_w,
@@ -821,15 +925,12 @@ fn build_unified_chat_shell_impl(
             (message_w - 42.0).max(120.0),
             4,
             #[cfg(feature = "fontdue-text")]
-            atlas,
+            ui.atlas,
         );
         if message_y + height > transcript_limit {
             break;
         }
-        let drawn = draw_message(
-            scene,
-            #[cfg(feature = "fontdue-text")]
-            atlas,
+        let drawn = ui.message_bubble(
             x,
             message_y,
             message_w,
@@ -843,49 +944,29 @@ fn build_unified_chat_shell_impl(
 
     if rail_w > 0.0 {
         let rail_x = transcript_x + transcript_w - rail_w;
-        soft_card(
-            scene,
-            rail_x,
-            transcript_top,
-            rail_w,
-            170.0,
-            12.0,
-            palette::PANEL,
-        );
-        push_label(
-            scene,
-            #[cfg(feature = "fontdue-text")]
-            atlas,
+        ui.card(rail_x, transcript_top, rail_w, 170.0, 12.0, palette::PANEL);
+        ui.label(
             rail_x + 16.0,
             transcript_top + 18.0,
             "Thread policy",
             2.0,
             palette::TEXT,
         );
-        draw_pill(
-            scene,
-            #[cfg(feature = "fontdue-text")]
-            atlas,
+        ui.pill(
             rail_x + 16.0,
             transcript_top + 50.0,
             132.0,
             "2 recipients",
             palette::ACCENT,
         );
-        draw_pill(
-            scene,
-            #[cfg(feature = "fontdue-text")]
-            atlas,
+        ui.pill(
             rail_x + 16.0,
             transcript_top + 84.0,
             158.0,
             "codex tools scoped",
             palette::VIOLET,
         );
-        draw_pill(
-            scene,
-            #[cfg(feature = "fontdue-text")]
-            atlas,
+        ui.pill(
             rail_x + 16.0,
             transcript_top + 118.0,
             140.0,
@@ -900,100 +981,18 @@ fn build_unified_chat_shell_impl(
         main_w - m.pad * 2.0,
         m.composer_h,
     );
-    scene.push_hit(GpuHit::new(
-        HitKind::Composer,
-        0,
+    ui.composer(
         composer.0,
         composer.1,
         composer.2,
         composer.3,
-    ));
-    soft_card(
-        scene,
-        composer.0,
-        composer.1,
-        composer.2,
-        composer.3,
-        16.0,
-        palette::COMPOSER,
-    );
-    scene.push_rect(GpuRect::border(
-        composer.0,
-        composer.1,
-        composer.2,
-        composer.3,
-        16.0,
-        if state.connected {
-            palette::ACCENT
-        } else {
-            palette::BORDER
-        },
-    ));
-    push_label(
-        scene,
-        #[cfg(feature = "fontdue-text")]
-        atlas,
-        composer.0 + 22.0,
-        composer.1 + 24.0,
         state.composer_placeholder,
-        2.0,
-        palette::MUTED,
-    );
-    draw_pill(
-        scene,
-        #[cfg(feature = "fontdue-text")]
-        atlas,
-        composer.0 + 20.0,
-        composer.1 + composer.3 - 34.0,
-        92.0,
-        "encrypted",
-        palette::GREEN,
-    );
-    draw_pill(
-        scene,
-        #[cfg(feature = "fontdue-text")]
-        atlas,
-        composer.0 + 122.0,
-        composer.1 + composer.3 - 34.0,
-        88.0,
-        "contact",
-        palette::ACCENT,
-    );
-    draw_pill(
-        scene,
-        #[cfg(feature = "fontdue-text")]
-        atlas,
-        composer.0 + 220.0,
-        composer.1 + composer.3 - 34.0,
-        112.0,
-        "codex tools",
-        palette::VIOLET,
-    );
-    scene.push_hit(GpuHit::new(
-        HitKind::Send,
-        0,
-        composer.0 + composer.2 - 58.0,
-        composer.1 + composer.3 - 56.0,
-        40.0,
-        38.0,
-    ));
-    scene.push_rect(GpuRect::fill(
-        composer.0 + composer.2 - 58.0,
-        composer.1 + composer.3 - 56.0,
-        40.0,
-        38.0,
-        12.0,
-        palette::ACCENT,
-    ));
-    push_label(
-        scene,
-        #[cfg(feature = "fontdue-text")]
-        atlas,
-        composer.0 + composer.2 - 47.0,
-        composer.1 + composer.3 - 45.0,
-        ">",
-        3.0,
-        palette::ACCENT_TEXT,
+        state.connected,
+        &[
+            ("encrypted", palette::GREEN),
+            ("contact", palette::ACCENT),
+            ("codex tools", palette::VIOLET),
+        ],
     );
 }
 
@@ -1690,6 +1689,19 @@ fn measure_label_width(
         return atlas.text_width(text);
     }
     text.chars().count() as f32 * scale.max(1.0) * 6.0
+}
+
+fn component_label_width(
+    text: &str,
+    scale: f32,
+    #[cfg(feature = "fontdue-text")] atlas: Option<&FontAtlas>,
+) -> f32 {
+    measure_label_width(
+        text,
+        scale,
+        #[cfg(feature = "fontdue-text")]
+        atlas,
+    )
 }
 
 #[cfg(feature = "fontdue-text")]
