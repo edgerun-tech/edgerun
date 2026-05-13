@@ -91,9 +91,9 @@ async fn write_rollout_with_user_event(dir: &Path, thread_id: ThreadId) -> io::R
         })),
     };
 
-    let meta_json = edgerun_json::serde_json::to_string(&meta_line)?;
+    let meta_json = edgerun_json::to_string(&meta_line)?;
     file.write_all(format!("{meta_json}\n").as_bytes()).await?;
-    let user_json = edgerun_json::serde_json::to_string(&user_event)?;
+    let user_json = edgerun_json::to_string(&user_event)?;
     file.write_all(format!("{user_json}\n").as_bytes()).await?;
     Ok(())
 }
@@ -128,7 +128,7 @@ async fn write_rollout_with_meta_only(dir: &Path, thread_id: ThreadId) -> io::Re
         item: RolloutItem::SessionMeta(session_meta),
     };
 
-    let meta_json = edgerun_json::serde_json::to_string(&meta_line)?;
+    let meta_json = edgerun_json::to_string(&meta_line)?;
     file.write_all(format!("{meta_json}\n").as_bytes()).await?;
     Ok(())
 }

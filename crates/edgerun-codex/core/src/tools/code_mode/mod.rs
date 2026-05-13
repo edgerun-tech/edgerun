@@ -13,7 +13,7 @@ use codex_code_mode::RuntimeResponse;
 use codex_protocol::models::FunctionCallOutputContentItem;
 use codex_protocol::models::FunctionCallOutputPayload;
 use codex_protocol::models::ResponseInputItem;
-use edgerun_json::serde_json::Value as JsonValue;
+use edgerun_json::Value as JsonValue;
 use edgerun_tokio_util::sync::CancellationToken;
 
 use crate::function_tool::FunctionCallError;
@@ -331,7 +331,7 @@ async fn call_nested_tool(
 
     let call = ToolCall {
         tool_name: tool_call_name,
-        call_id: format!("{PUBLIC_TOOL_NAME}-{}", edgerun_uuid::Uuid::new_v4()),
+        call_id: format!("{PUBLIC_TOOL_NAME}-{}", codex_protocol::local_uuid::Uuid::new_v4()),
         payload,
     };
     let result = tool_runtime
@@ -395,7 +395,7 @@ fn serialize_function_tool_arguments(
     match input {
         None => Ok("{}".to_string()),
         Some(JsonValue::Object(map)) => {
-            edgerun_json::serde_json::to_string(&JsonValue::Object(map))
+            edgerun_json::to_string(&JsonValue::Object(map))
                 .map_err(|err| format!("failed to serialize tool `{tool_name}` arguments: {err}"))
         }
         Some(_) => Err(format!(

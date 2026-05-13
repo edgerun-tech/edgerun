@@ -45,7 +45,7 @@ fn external_context_pollution_items_include_web_search_and_tool_search() {
             call_id: Some("search-1".to_string()),
             status: None,
             execution: "client".to_string(),
-            arguments: edgerun_json::serde_json::json!({"query": "calendar"}),
+            arguments: edgerun_json::json!({"query": "calendar"}),
         },
         ResponseItem::ToolSearchOutput {
             call_id: Some("search-1".to_string()),

@@ -16,6 +16,7 @@ use crate::tools::runtimes::shell::ShellRuntimeBackend;
 
 use super::RunExecLikeArgs;
 use super::run_exec_like;
+use super::shell_command_argv_from_arguments;
 use super::shell_function_post_tool_use_payload;
 use super::shell_function_pre_tool_use_payload;
 use super::shell_handler::ShellHandler;
@@ -42,8 +43,8 @@ impl ToolHandler for ContainerExecHandler {
             return true;
         };
 
-        edgerun_json::serde_json::from_str::<ShellToolCallParams>(arguments)
-            .map(|params| !is_known_safe_command(&params.command))
+        shell_command_argv_from_arguments(arguments)
+            .map(|command| !is_known_safe_command(&command))
             .unwrap_or(true)
     }
 

@@ -19,7 +19,7 @@ use edgerun_crypto::Ed25519SigningKey;
 use edgerun_http::HeaderMap;
 use edgerun_http::HeaderValue;
 use edgerun_http::header::AUTHORIZATION;
-use edgerun_json::serde_json::Value;
+use edgerun_json::Value;
 use edgerun_work::*;
 
 const CONTACT_CARD_MAGIC: &[u8] = b"EDGERUN-CHAT-CONTACT1";
@@ -347,7 +347,7 @@ fn codex_home() -> PathBuf {
 
 fn read_chatgpt_auth() -> Result<Arc<ChatGptAuth>, Box<dyn Error>> {
     let auth_path = codex_home().join("auth.json");
-    let auth: Value = edgerun_json::serde_json::from_slice(&std::fs::read(&auth_path)?)?;
+    let auth: Value = edgerun_json::from_serde_slice(&std::fs::read(&auth_path)?)?;
     let access_token = auth
         .get("tokens")
         .and_then(|tokens| tokens.get("access_token"))

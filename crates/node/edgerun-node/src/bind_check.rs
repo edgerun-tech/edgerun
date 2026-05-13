@@ -247,7 +247,7 @@ impl BindPorts {
     feature = "acme",
 ))]
 fn open_derived_db_probe(path: &PathBuf) -> Result<(), String> {
-    let mut db = edgerun_derived_db::open_file_database(path)
+    let mut db = edgerun_storage::derived_db::open_file_database(path)
         .map_err(|e| format!("derived db open: {e}"))?;
     db.put_meta(b"bind_check", b"ok", unix_now())
         .map_err(|e| format!("derived db initialize: {e}"))?;

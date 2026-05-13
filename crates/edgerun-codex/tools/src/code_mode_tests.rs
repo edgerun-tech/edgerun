@@ -7,7 +7,7 @@ use crate::JsonSchema;
 use crate::ResponsesApiTool;
 use crate::ToolName;
 use crate::ToolSpec;
-use edgerun_json::serde_json::json;
+use edgerun_json::json;
 use pretty_assertions::assert_eq;
 use std::collections::BTreeMap;
 

@@ -9,7 +9,7 @@ use codex_tools::ResponsesApiNamespaceTool;
 use codex_tools::ToolName;
 use codex_tools::ToolSpec;
 use pretty_assertions::assert_eq;
-use edgerun_json::serde_json::json;
+use edgerun_json::json;
 
 use super::ToolCall;
 use super::ToolRouter;

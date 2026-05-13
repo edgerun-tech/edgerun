@@ -1,3 +1,7 @@
+use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
+use edgerun_json::ToJson;
+use edgerun_json::Value;
 use edgerun_serde::Deserialize;
 use edgerun_serde::Serialize;
 use schemars::JsonSchema;
@@ -119,6 +123,19 @@ impl Deref for AgentPath {
 impl fmt::Display for AgentPath {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.as_str())
+    }
+}
+
+impl ToJson for AgentPath {
+    fn to_json(&self) -> Value {
+        self.as_str().to_json()
+    }
+}
+
+impl FromJson for AgentPath {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let path = String::from_json(value)?;
+        Self::from_string(path).map_err(JsonValueError::WrongType)
     }
 }
 

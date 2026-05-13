@@ -2,29 +2,14 @@
 
 Terminal emulator for the Edgerun display stack. The primary Linux build uses `/home/ken/edgerun/crates/edgerun-compositor` directly through its in-repo wire/protocol modules and presents an SHM buffer, avoiding the old `winit`/`pixels` X11/Wayland client path.
 
-## Run
+## Current Build Surface
 
-Start `edgerun-compositor` first, then run:
-
-```bash
-cargo run -p edgerun-term-compositor --bin edgerun-term-compositor
-```
-
-The compositor socket defaults to `/tmp/edgerun-wayland-0`. Override it with `EDGERUN_COMPOSITOR_SOCKET=/path/to/socket`.
-
-The legacy desktop backend remains available as:
-
-```bash
-cargo run -p edgerun-term-native --bin edgerun-term
-```
-
-## Install (overwrites existing `edgerun-term` in your `$PATH`)
-
-```bash
-make install          # builds edgerun-term-compositor, installs as ~/.local/bin/edgerun-term
-# or choose a prefix:
-PREFIX=/usr/local make install
-```
+The remaining Rust package is `edgerun-term-core`, which contains terminal
+state, rendering helpers, text handling, assets, examples, and tests. It remains
+outside the active workspace with the other terminal utility crates. The older
+`edgerun-term-compositor`, `edgerun-term-drm-probe`, and `edgerun-term-server`
+package shells were removed because their executable sources were no longer
+present.
 
 ## What it does
 

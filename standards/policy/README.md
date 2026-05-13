@@ -78,14 +78,11 @@ udp-datagram definition
 Run it with:
 
 ```bash
-./scripts/standards compile udp-tftp-must-program
-./scripts/standards run udp-tftp-must-program \
-  --wasm \
-  --hex "$(cat standards/corpus/udp-tftp/valid-ack.hex)"
+cargo test -p edgerun-sdk --features standards-seed standards_seed
 ```
 
-The compiler emits one WASM module per definition or clause under
-`standards/build/wasm/<program>/`, writes component manifests under
-`standards/components/manifests/`, and assembles the program in `program.json`.
-The Rust `no_std` core is the current compiler oracle: compiled artifacts must
-match the reviewed Rust semantics for the same IR and input.
+The checked-in `no_std` Rust core is the current compiler oracle: compiled
+artifacts must match the reviewed Rust semantics for the same IR and input.
+A future compiler should emit one WASM module per definition or clause under
+`standards/build/wasm/<program>/`, write component manifests under
+`standards/components/manifests/`, and assemble the program in `program.json`.

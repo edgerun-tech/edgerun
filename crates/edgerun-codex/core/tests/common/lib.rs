@@ -246,9 +246,9 @@ pub fn find_codex_linux_sandbox_exe() -> Result<PathBuf, CargoBinError> {
 /// makes it trivial to extend the fixtures as OpenAI adds new event kinds or
 /// fields.
 pub fn load_sse_fixture(path: impl AsRef<std::path::Path>) -> String {
-    let events: Vec<edgerun_json::serde_json::Value> =
-        edgerun_json::serde_json::from_reader(std::fs::File::open(path).expect("read fixture"))
-            .expect("parse JSON fixture");
+    let bytes = std::fs::read(path).expect("read fixture");
+    let events: Vec<edgerun_json::Value> =
+        edgerun_json::from_serde_slice(&bytes).expect("parse JSON fixture");
     events
         .into_iter()
         .map(|e| {
@@ -267,8 +267,8 @@ pub fn load_sse_fixture(path: impl AsRef<std::path::Path>) -> String {
 
 pub fn load_sse_fixture_with_id_from_str(raw: &str, id: &str) -> String {
     let replaced = raw.replace("__ID__", id);
-    let events: Vec<edgerun_json::serde_json::Value> =
-        edgerun_json::serde_json::from_str(&replaced).expect("parse JSON fixture");
+    let events: Vec<edgerun_json::Value> =
+        edgerun_json::from_serde_str(&replaced).expect("parse JSON fixture");
     events
         .into_iter()
         .map(|e| {

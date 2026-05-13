@@ -1,0 +1,773 @@
+//! Exact shadcn-compatible component builders.
+
+use super::*;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum UiShadcnButtonVariant {
+    #[default]
+    Default,
+    Destructive,
+    Outline,
+    Secondary,
+    Ghost,
+    Link,
+}
+
+impl UiShadcnButtonVariant {
+    pub const fn class_name(self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::Destructive => "destructive",
+            Self::Outline => "outline",
+            Self::Secondary => "secondary",
+            Self::Ghost => "ghost",
+            Self::Link => "link",
+        }
+    }
+
+    pub const fn button_style(self) -> ButtonStyle {
+        match self {
+            Self::Default => ButtonStyle::Primary,
+            Self::Destructive => ButtonStyle::Danger,
+            Self::Outline | Self::Secondary => ButtonStyle::Secondary,
+            Self::Ghost | Self::Link => ButtonStyle::Ghost,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum UiShadcnButtonSize {
+    #[default]
+    Default,
+    Sm,
+    Lg,
+    Icon,
+}
+
+impl UiShadcnButtonSize {
+    pub const fn class_name(self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::Sm => "sm",
+            Self::Lg => "lg",
+            Self::Icon => "icon",
+        }
+    }
+
+    pub const fn class_suffix(self) -> &'static str {
+        match self {
+            Self::Default => "h-9 px-4 py-2",
+            Self::Sm => "h-8 px-3",
+            Self::Lg => "h-10 px-6",
+            Self::Icon => "h-9 w-9 px-0",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum UiShadcnBadgeVariant {
+    #[default]
+    Default,
+    Secondary,
+    Destructive,
+    Outline,
+}
+
+impl UiShadcnBadgeVariant {
+    pub const fn class_name(self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::Secondary => "secondary",
+            Self::Destructive => "destructive",
+            Self::Outline => "outline",
+        }
+    }
+
+    pub const fn color(self) -> Color4 {
+        match self {
+            Self::Default => palette::ACCENT,
+            Self::Secondary => palette::MUTED,
+            Self::Destructive => palette::DANGER,
+            Self::Outline => palette::BORDER,
+        }
+    }
+}
+
+pub fn shadcn_button(
+    label: &str,
+    id: u32,
+    variant: UiShadcnButtonVariant,
+    size: UiShadcnButtonSize,
+) -> UiNode {
+    button(label, id, variant.button_style()).class(size.class_suffix())
+}
+
+pub fn shadcn_badge(label: &str, variant: UiShadcnBadgeVariant) -> UiNode {
+    badge(label, variant.color())
+}
+
+pub fn shadcn_alert(title: &str, body: &str, icon_kind: UiIcon) -> UiNode {
+    row("gap-3 items-start border rounded-lg p-3")
+        .child(icon(icon_kind).class("w-5 h-5"))
+        .child(column("gap-1 flex-1").child(text(title)).child(text(body)))
+}
+
+pub fn shadcn_accordion(items: &[(&str, &str)], base_id: u32) -> UiNode {
+    let mut node = card("bg-panel border rounded-lg p-2 gap-1");
+    for (index, (title, body)) in items.iter().enumerate() {
+        node = node
+            .child(
+                row("items-center justify-between h-10")
+                    .child(text(title))
+                    .child(icon_button(UiIcon::ChevronRight, base_id + index as u32)),
+            )
+            .child(text(body));
+        if index + 1 < items.len() {
+            node = node.child(divider(""));
+        }
+    }
+    node
+}
+
+pub fn shadcn_alert_dialog(title: &str, body: &str, icon: UiIcon) -> UiNode {
+    dialog(title, body, icon).class("h-52")
+}
+
+pub fn shadcn_aspect_ratio(label: &str, icon_kind: UiIcon) -> UiNode {
+    card("bg-panel border rounded-lg p-0 overflow-hidden").child(
+        column("aspect-video bg-muted items-center justify-center")
+            .child(icon(icon_kind).class("w-8 h-8"))
+            .child(text(label)),
+    )
+}
+
+pub fn shadcn_avatar(label: &str, color: Color4) -> UiNode {
+    avatar_node(label, color)
+}
+
+pub fn shadcn_breadcrumb(labels: &[&str], selected: usize, base_id: u32) -> UiNode {
+    breadcrumb(labels, selected, base_id)
+}
+
+pub fn shadcn_button_group(labels: &[&str], base_id: u32) -> UiNode {
+    let mut node = row("gap-0 items-center h-10");
+    for (index, label) in labels.iter().enumerate() {
+        let class = match (index, labels.len().saturating_sub(1)) {
+            (0, 0) => "h-9",
+            (0, _) => "h-9 rounded-r-none",
+            (i, last) if i == last => "h-9 rounded-l-none",
+            _ => "h-9 rounded-none",
+        };
+        node =
+            node.child(button(label, base_id + index as u32, ButtonStyle::Secondary).class(class));
+    }
+    node
+}
+
+pub fn shadcn_calendar(month: &str, days: &[&str], selected: usize, base_id: u32) -> UiNode {
+    let mut grid_node = grid("grid-cols-7 gap-1", 7)
+        .child(text("S"))
+        .child(text("M"))
+        .child(text("T"))
+        .child(text("W"))
+        .child(text("T"))
+        .child(text("F"))
+        .child(text("S"));
+    for (index, day) in days.iter().enumerate() {
+        let style = if index == selected {
+            ButtonStyle::Secondary
+        } else {
+            ButtonStyle::Ghost
+        };
+        grid_node = grid_node.child(button(day, base_id + 2 + index as u32, style));
+    }
+    card("bg-panel border rounded-lg p-3 gap-3")
+        .child(
+            row("items-center justify-between h-8")
+                .child(icon_button(UiIcon::ChevronRight, base_id).class("rotate-180"))
+                .child(text(month))
+                .child(icon_button(UiIcon::ChevronRight, base_id + 1)),
+        )
+        .child(grid_node)
+}
+
+pub fn shadcn_checkbox(label: &str, checked: bool, id: u32) -> UiNode {
+    checkbox(label, checked, id)
+}
+
+pub fn shadcn_carousel(items: &[&str], base_id: u32) -> UiNode {
+    let mut node = row("gap-3 items-center")
+        .child(icon_button(UiIcon::ChevronRight, base_id).class("rotate-180"));
+    for item in items {
+        node = node.child(
+            card("bg-panel border rounded-lg p-6 items-center justify-center").child(text(item)),
+        );
+    }
+    node.child(icon_button(UiIcon::ChevronRight, base_id + 1))
+}
+
+pub fn shadcn_chart(title: &str, labels: &[&str], values: &[f32]) -> UiNode {
+    bar_chart_labels(title, labels, values)
+}
+
+pub fn shadcn_collapsible(title: &str, rows: &[(&str, &str)], base_id: u32) -> UiNode {
+    let mut node = card("bg-panel border rounded-lg p-3 gap-2").child(
+        row("items-center justify-between h-9")
+            .child(text(title))
+            .child(icon_button(UiIcon::ChevronRight, base_id)),
+    );
+    for (index, (label, detail)) in rows.iter().enumerate() {
+        node = node.child(list_row_node(label, detail, base_id + 1 + index as u32));
+    }
+    node
+}
+
+pub fn shadcn_combobox(
+    label: &str,
+    value: &str,
+    placeholder: &str,
+    options: &[&str],
+    selected: usize,
+    base_id: u32,
+) -> UiNode {
+    let mut node = column("gap-2")
+        .child(select_node(label, value, base_id))
+        .child(command_palette(placeholder, base_id + 1));
+    for (index, option) in options.iter().enumerate() {
+        node = node
+            .child(menu_item_node(option, base_id + 2 + index as u32).selected(index == selected));
+    }
+    node
+}
+
+pub fn shadcn_card(title: &str, detail: &str) -> UiNode {
+    card("bg-panel border rounded-lg p-4 gap-3").child(header(title).detail(detail))
+}
+
+pub fn shadcn_command(placeholder: &str, id: u32) -> UiNode {
+    command_palette(placeholder, id)
+}
+
+pub fn shadcn_context_menu(
+    title: &str,
+    detail: &str,
+    items: &[(&str, &str, bool)],
+    base_id: u32,
+) -> UiNode {
+    let mut node = card("bg-panel border rounded-lg p-3 gap-2").child(header(title).detail(detail));
+    for (index, (label, shortcut, selected)) in items.iter().enumerate() {
+        let mut item = menu_item_node(label, base_id + index as u32).selected(*selected);
+        if !shortcut.is_empty() {
+            item = item.detail(shortcut);
+        }
+        node = node.child(item);
+    }
+    node
+}
+
+pub fn shadcn_data_table(headers: &[&str], rows: &[&[&str]], id_base: u32) -> UiNode {
+    table_labels(headers, rows, id_base)
+}
+
+pub fn shadcn_date_picker(
+    label: &str,
+    month: &str,
+    days: &[&str],
+    selected: usize,
+    base_id: u32,
+) -> UiNode {
+    let mut day_row = row("gap-1");
+    for (index, day) in days.iter().enumerate() {
+        let style = if index == selected {
+            ButtonStyle::Secondary
+        } else {
+            ButtonStyle::Ghost
+        };
+        day_row = day_row.child(button(day, base_id + 1 + index as u32, style));
+    }
+    column("gap-2")
+        .child(button(label, base_id, ButtonStyle::Secondary).class("h-9"))
+        .child(
+            card("bg-panel border rounded-lg p-3 gap-2")
+                .child(text(month))
+                .child(day_row),
+        )
+}
+
+pub fn shadcn_dialog(title: &str, body: &str, icon: UiIcon) -> UiNode {
+    dialog(title, body, icon)
+}
+
+pub fn shadcn_direction(ltr: &str, rtl: &str) -> UiNode {
+    column("gap-2")
+        .child(
+            row("gap-2 items-center")
+                .child(badge("LTR", palette::ACCENT))
+                .child(text(ltr)),
+        )
+        .child(
+            row("gap-2 items-center justify-end")
+                .child(text(rtl))
+                .child(badge("RTL", palette::MUTED)),
+        )
+}
+
+pub fn shadcn_drawer(
+    title: &str,
+    detail: &str,
+    slider_label: &str,
+    value: f32,
+    base_id: u32,
+) -> UiNode {
+    card("bg-panel border rounded-t-xl p-4 gap-3")
+        .child(header(title).detail(detail))
+        .child(slider_node(slider_label, value, base_id))
+        .child(row("gap-2").child(button("Submit", base_id + 1, ButtonStyle::Primary)))
+}
+
+pub fn shadcn_dropdown_menu(items: &[(&str, &str, bool)], base_id: u32) -> UiNode {
+    let mut node = column("gap-1");
+    for (index, (label, shortcut, selected)) in items.iter().enumerate() {
+        let mut item = menu_item_node(label, base_id + index as u32).selected(*selected);
+        if !shortcut.is_empty() {
+            item = item.detail(shortcut);
+        }
+        node = node.child(item);
+    }
+    node
+}
+
+pub fn shadcn_empty(title: &str, body: &str, icon: UiIcon) -> UiNode {
+    empty_state(title, body, icon)
+}
+
+pub fn shadcn_field(label: &str, value: &str) -> UiNode {
+    field_node(label, value)
+}
+
+pub fn shadcn_hover_card(label: &str, detail: &str, body: &str, color: Color4) -> UiNode {
+    column("gap-2")
+        .child(
+            row("gap-3 items-center")
+                .child(avatar_node(label, color))
+                .child(column("gap-1").child(text(label)).child(text(detail))),
+        )
+        .child(text(body))
+}
+
+pub fn shadcn_input(label: &str, value: &str) -> UiNode {
+    field_node(label, value)
+}
+
+pub fn shadcn_input_group(label: &str, value: &str, button_label: &str, id: u32) -> UiNode {
+    row("gap-2 h-12 items-center")
+        .child(field_node(label, value).class("flex-1"))
+        .child(button(button_label, id, ButtonStyle::Secondary).class("h-9 w-20"))
+}
+
+pub fn shadcn_input_otp(values: &[&str], focused_index: usize) -> UiNode {
+    let mut node = row("gap-2 items-center h-12");
+    for (index, value) in values.iter().enumerate() {
+        if *value == "-" {
+            node = node.child(text("-"));
+            continue;
+        }
+        node = node.child(
+            field_node("", value)
+                .class("w-10")
+                .focused(index == focused_index),
+        );
+    }
+    node
+}
+
+pub fn shadcn_item(title: &str, detail: &str, id: u32, accent: Color4) -> UiNode {
+    list_row_node(title, detail, id).accent(accent)
+}
+
+pub fn shadcn_kbd(keys: &[&str], label: &str) -> UiNode {
+    let mut node = row("gap-2 items-center h-10");
+    for key in keys {
+        node = node.child(badge(key, palette::MUTED));
+    }
+    node.child(text(label))
+}
+
+pub fn shadcn_label(value: &str) -> UiNode {
+    text(value)
+}
+
+pub fn shadcn_menubar(items: &[&str], selected: usize, base_id: u32) -> UiNode {
+    let mut node = row("gap-1 items-center border rounded-lg p-1");
+    for (index, item) in items.iter().enumerate() {
+        let style = if index == selected {
+            ButtonStyle::Secondary
+        } else {
+            ButtonStyle::Ghost
+        };
+        node = node.child(button(item, base_id + index as u32, style));
+    }
+    node
+}
+
+pub fn shadcn_native_select(label: &str, value: &str, id: u32) -> UiNode {
+    select_node(label, value, id)
+}
+
+pub fn shadcn_navigation_menu(
+    tabs: &[&str],
+    selected: usize,
+    title: &str,
+    detail: &str,
+    row_title: &str,
+    row_detail: &str,
+    base_id: u32,
+) -> UiNode {
+    let mut nav = row("gap-1 items-center");
+    for (index, tab) in tabs.iter().enumerate() {
+        let style = if index == selected {
+            ButtonStyle::Secondary
+        } else {
+            ButtonStyle::Ghost
+        };
+        nav = nav.child(button(tab, base_id + index as u32, style));
+    }
+    column("gap-2").child(nav).child(
+        card("bg-panel border rounded-lg p-3 gap-2")
+            .child(header(title).detail(detail))
+            .child(list_row_node(
+                row_title,
+                row_detail,
+                base_id + tabs.len() as u32,
+            )),
+    )
+}
+
+pub fn shadcn_pagination(pages: &[&str], selected: usize, base_id: u32) -> UiNode {
+    let mut node = row("gap-1 items-center h-10")
+        .child(button("Previous", base_id, ButtonStyle::Ghost).disabled(true));
+    for (index, page) in pages.iter().enumerate() {
+        let style = if index == selected {
+            ButtonStyle::Secondary
+        } else {
+            ButtonStyle::Ghost
+        };
+        node = node.child(button(page, base_id + 1 + index as u32, style));
+    }
+    node.child(button(
+        "Next",
+        base_id + 1 + pages.len() as u32,
+        ButtonStyle::Ghost,
+    ))
+}
+
+pub fn shadcn_popover(
+    button_label: &str,
+    title: &str,
+    detail: &str,
+    field_label: &str,
+    field_value: &str,
+    base_id: u32,
+) -> UiNode {
+    column("gap-2")
+        .child(button(button_label, base_id, ButtonStyle::Secondary).class("h-9"))
+        .child(
+            card("bg-panel border rounded-lg p-3 gap-2")
+                .child(header(title).detail(detail))
+                .child(field_node(field_label, field_value)),
+        )
+}
+
+pub fn shadcn_progress(value: f32) -> UiNode {
+    progress_bar_node(value, palette::ACCENT)
+}
+
+pub fn shadcn_radio_group(options: &[(&str, bool)], base_id: u32) -> UiNode {
+    let mut node = column("gap-2");
+    for (index, (label, selected)) in options.iter().enumerate() {
+        node = node.child(radio(label, *selected, base_id + index as u32));
+    }
+    node
+}
+
+pub fn shadcn_resizable(labels: &[&str]) -> UiNode {
+    let first = labels.first().copied().unwrap_or("One");
+    let second = labels.get(1).copied().unwrap_or("Two");
+    let third = labels.get(2).copied().unwrap_or("Three");
+    row("gap-1 h-28")
+        .child(card("bg-panel border rounded-lg p-3 flex-1").child(text(first)))
+        .child(divider("w-1"))
+        .child(
+            column("gap-1 flex-1")
+                .child(card("bg-panel border rounded-lg p-3 flex-1").child(text(second)))
+                .child(card("bg-panel border rounded-lg p-3 flex-1").child(text(third))),
+        )
+}
+
+pub fn shadcn_scroll_area(rows: &[(&str, &str)], base_id: u32) -> UiNode {
+    let mut node = scroll_area("h-32 border rounded-lg p-2", 0.0);
+    for (index, (title, detail)) in rows.iter().enumerate() {
+        node = node.child(list_row_node(title, detail, base_id + index as u32));
+    }
+    node
+}
+
+pub fn shadcn_select(label: &str, value: &str, id: u32) -> UiNode {
+    select_node(label, value, id)
+}
+
+pub fn shadcn_separator() -> UiNode {
+    divider("")
+}
+
+pub fn shadcn_skeleton() -> UiNode {
+    skeleton()
+}
+
+pub fn shadcn_sheet(
+    title: &str,
+    detail: &str,
+    field_label: &str,
+    field_value: &str,
+    button_label: &str,
+    base_id: u32,
+) -> UiNode {
+    card("bg-panel border rounded-lg p-4 gap-3")
+        .child(header(title).detail(detail))
+        .child(field_node(field_label, field_value))
+        .child(row("gap-2").child(button(button_label, base_id, ButtonStyle::Primary)))
+}
+
+pub fn shadcn_sidebar(
+    title: &str,
+    detail: &str,
+    items: &[&str],
+    selected: usize,
+    main_title: &str,
+    main_detail: &str,
+    base_id: u32,
+) -> UiNode {
+    let mut side =
+        card("bg-sidebar border rounded-lg p-2 gap-1 w-44").child(header(title).detail(detail));
+    for (index, item) in items.iter().enumerate() {
+        side = side.child(menu_item_node(item, base_id + index as u32).selected(index == selected));
+    }
+    row("gap-3 h-44").child(side).child(
+        card("bg-panel border rounded-lg p-4 flex-1").child(header(main_title).detail(main_detail)),
+    )
+}
+
+pub fn shadcn_slider(label: &str, value: f32, id: u32) -> UiNode {
+    slider_node(label, value, id)
+}
+
+pub fn shadcn_sonner(messages: &[(&str, UiIcon, Color4)]) -> UiNode {
+    let mut node = column("gap-2");
+    for (message, icon, accent) in messages {
+        node = node.child(toast(message, *icon, *accent));
+    }
+    node
+}
+
+pub fn shadcn_switch(checked: bool, id: u32) -> UiNode {
+    toggle_node(checked, id)
+}
+
+pub fn shadcn_table(headers: &[&str], rows: &[&[&str]], id_base: u32) -> UiNode {
+    table_labels(headers, rows, id_base)
+}
+
+pub fn shadcn_tabs(labels: &[&str], selected: usize, base_id: u32) -> UiNode {
+    tab_labels(labels, selected, base_id)
+}
+
+pub fn shadcn_textarea(label: &str, value: &str) -> UiNode {
+    text_area_node(label, value)
+}
+
+pub fn shadcn_toast(message: &str, icon: UiIcon, accent: Color4) -> UiNode {
+    toast(message, icon, accent)
+}
+
+pub fn shadcn_toggle(pressed: bool, id: u32) -> UiNode {
+    toggle_node(pressed, id)
+}
+
+pub fn shadcn_toggle_group(labels: &[&str], selected: usize, base_id: u32) -> UiNode {
+    let mut node = row("gap-1 items-center h-10");
+    for (index, label) in labels.iter().enumerate() {
+        let style = if index == selected {
+            ButtonStyle::Secondary
+        } else {
+            ButtonStyle::Ghost
+        };
+        node = node.child(button(label, base_id + index as u32, style));
+    }
+    node
+}
+
+pub fn shadcn_tooltip(text: &str) -> UiNode {
+    tooltip(text)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn exact_button_variants_map_to_native_button_styles() {
+        assert_eq!(
+            UiShadcnButtonVariant::Default.button_style(),
+            ButtonStyle::Primary
+        );
+        assert_eq!(
+            UiShadcnButtonVariant::Destructive.button_style(),
+            ButtonStyle::Danger
+        );
+        assert_eq!(
+            UiShadcnButtonVariant::Secondary.button_style(),
+            ButtonStyle::Secondary
+        );
+        assert_eq!(
+            UiShadcnButtonVariant::Ghost.button_style(),
+            ButtonStyle::Ghost
+        );
+    }
+
+    #[test]
+    fn exact_badge_variants_map_to_theme_tokens() {
+        assert_eq!(UiShadcnBadgeVariant::Default.color(), palette::ACCENT);
+        assert_eq!(UiShadcnBadgeVariant::Secondary.color(), palette::MUTED);
+        assert_eq!(UiShadcnBadgeVariant::Destructive.color(), palette::DANGER);
+        assert_eq!(UiShadcnBadgeVariant::Outline.color(), palette::BORDER);
+    }
+
+    #[test]
+    fn exact_builders_return_expected_node_kinds() {
+        assert!(matches!(
+            shadcn_button(
+                "Save",
+                7,
+                UiShadcnButtonVariant::Default,
+                UiShadcnButtonSize::Default
+            )
+            .kind,
+            UiNodeKind::Button { .. }
+        ));
+        assert!(matches!(
+            shadcn_badge("Active", UiShadcnBadgeVariant::Default).kind,
+            UiNodeKind::Badge { .. }
+        ));
+        assert!(matches!(
+            shadcn_alert("Heads up", "Body", UiIcon::Warning).kind,
+            UiNodeKind::Row
+        ));
+        assert!(matches!(
+            shadcn_alert_dialog("Confirm", "Body", UiIcon::Warning).kind,
+            UiNodeKind::Dialog { .. }
+        ));
+        assert!(matches!(
+            shadcn_aspect_ratio("16:9", UiIcon::Eye).kind,
+            UiNodeKind::Card
+        ));
+        assert!(matches!(
+            shadcn_avatar("ER", palette::ACCENT).kind,
+            UiNodeKind::Avatar { .. }
+        ));
+        assert!(matches!(
+            shadcn_breadcrumb(&["Docs", "Components"], 1, 1).kind,
+            UiNodeKind::Breadcrumb { .. }
+        ));
+        assert!(matches!(
+            shadcn_checkbox("Accept", true, 2).kind,
+            UiNodeKind::Checkbox { .. }
+        ));
+        assert!(matches!(
+            shadcn_card("Title", "Detail").kind,
+            UiNodeKind::Card
+        ));
+        assert!(matches!(
+            shadcn_command("Search...", 7).kind,
+            UiNodeKind::CommandPalette { .. }
+        ));
+        assert!(matches!(
+            shadcn_dialog("Edit", "Body", UiIcon::Settings).kind,
+            UiNodeKind::Dialog { .. }
+        ));
+        assert!(matches!(
+            shadcn_empty("Empty", "Nothing here", UiIcon::Search).kind,
+            UiNodeKind::EmptyState { .. }
+        ));
+        assert!(matches!(
+            shadcn_field("Email", "a@b.test").kind,
+            UiNodeKind::Field { .. }
+        ));
+        assert!(matches!(
+            shadcn_hover_card("ER", "UI", "Body", palette::ACCENT).kind,
+            UiNodeKind::Column
+        ));
+        assert!(matches!(
+            shadcn_input("Email", "a@b.test").kind,
+            UiNodeKind::Field { .. }
+        ));
+        assert!(matches!(
+            shadcn_input_group("URL", "https://example.com", "Copy", 6).kind,
+            UiNodeKind::Row
+        ));
+        assert!(matches!(
+            shadcn_input_otp(&["1", "2", "3", "-", "", ""], 4).kind,
+            UiNodeKind::Row
+        ));
+        assert!(matches!(shadcn_label("Email").kind, UiNodeKind::Text(_)));
+        assert!(matches!(
+            shadcn_progress(0.5).kind,
+            UiNodeKind::ProgressBar { .. }
+        ));
+        assert!(matches!(
+            shadcn_radio_group(&[("Default", true)], 3).kind,
+            UiNodeKind::Column
+        ));
+        assert!(matches!(
+            shadcn_select("Framework", "Next.js", 8).kind,
+            UiNodeKind::Select { .. }
+        ));
+        assert!(matches!(shadcn_separator().kind, UiNodeKind::Divider));
+        assert!(matches!(shadcn_skeleton().kind, UiNodeKind::Skeleton));
+        assert!(matches!(
+            shadcn_slider("Volume", 0.42, 9).kind,
+            UiNodeKind::Slider { .. }
+        ));
+        assert!(matches!(
+            shadcn_sonner(&[("Saved", UiIcon::Check, palette::GREEN)]).kind,
+            UiNodeKind::Column
+        ));
+        assert!(matches!(
+            shadcn_switch(true, 9).kind,
+            UiNodeKind::Toggle { .. }
+        ));
+        assert!(matches!(
+            shadcn_table(&["A"], &[&["B"]], 4).kind,
+            UiNodeKind::Table { .. }
+        ));
+        assert!(matches!(
+            shadcn_tabs(&["A", "B"], 0, 5).kind,
+            UiNodeKind::Tabs { .. }
+        ));
+        assert!(matches!(
+            shadcn_textarea("Message", "Hi").kind,
+            UiNodeKind::TextArea { .. }
+        ));
+        assert!(matches!(
+            shadcn_toast("Saved", UiIcon::Check, palette::GREEN).kind,
+            UiNodeKind::Toast { .. }
+        ));
+        assert!(matches!(
+            shadcn_toggle(true, 10).kind,
+            UiNodeKind::Toggle { .. }
+        ));
+        assert!(matches!(
+            shadcn_tooltip("Help").kind,
+            UiNodeKind::Tooltip { .. }
+        ));
+    }
+}

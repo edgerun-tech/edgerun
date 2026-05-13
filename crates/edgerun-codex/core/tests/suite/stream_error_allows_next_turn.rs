@@ -26,7 +26,7 @@ async fn continue_after_stream_error() {
     let fail = ResponseTemplate::new(500)
         .insert_header("content-type", "application/json")
         .set_body_string(
-            edgerun_json::serde_json::json!({
+            edgerun_json::json!({
                 "error": {"type": "bad_request", "message": "synthetic client error"}
             })
             .to_string(),

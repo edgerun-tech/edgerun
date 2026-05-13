@@ -5,7 +5,7 @@ extern crate alloc;
 use alloc::string::String;
 use alloc::vec::Vec;
 use edgerun_exchange::provider::ProviderStatus;
-use edgerun_json::{from_json_slice, from_slice, to_string, JsonValue, Map};
+use edgerun_json::{JsonValue, Map, TapeValue, to_string};
 use edgerun_node::http::{Request, Response, StatusCode};
 use edgerun_protocols::core_protocol::protocol::edgerun_wallet_v0::{
     PaymentRequest, Quote, QuoteRequest,
@@ -42,12 +42,19 @@ pub fn handle_quote(req: &Request) -> Response {
         return json_error(400, "missing request body");
     }
 
-    let json: JsonValue = match from_slice(body) {
-        Ok(j) => j,
+    let body = match core::str::from_utf8(body) {
+        Ok(body) => body,
         Err(e) => return json_error(400, &alloc::format!("invalid JSON: {}", e)),
     };
+    let tape = match edgerun_json::parse_json_tape(body) {
+        Ok(tape) => tape,
+        Err(e) => return json_error(400, &alloc::format!("invalid JSON: {}", e)),
+    };
+    let Some(json) = tape.root(body) else {
+        return json_error(400, "invalid JSON: missing root value");
+    };
 
-    let input = match QuoteInput::from_json_value(&json) {
+    let input = match QuoteInput::from_tape(json) {
         Ok(i) => i,
         Err(e) => return json_error(400, &e),
     };
@@ -79,12 +86,19 @@ pub fn handle_create_payment_request(req: &Request) -> Response {
         _ => return json_error(400, "missing request body"),
     };
 
-    let json: JsonValue = match from_slice(body) {
-        Ok(j) => j,
+    let body = match core::str::from_utf8(body) {
+        Ok(body) => body,
         Err(e) => return json_error(400, &alloc::format!("invalid JSON: {}", e)),
     };
+    let tape = match edgerun_json::parse_json_tape(body) {
+        Ok(tape) => tape,
+        Err(e) => return json_error(400, &alloc::format!("invalid JSON: {}", e)),
+    };
+    let Some(json) = tape.root(body) else {
+        return json_error(400, "invalid JSON: missing root value");
+    };
 
-    let input = match PaymentRequestInput::from_json_value(&json) {
+    let input = match PaymentRequestInput::from_tape(json) {
         Ok(input) => input,
         Err(e) => return json_error(400, &e),
     };
@@ -166,12 +180,19 @@ pub fn handle_payment_request_quote(req: &Request) -> Response {
         _ => return json_error(400, "missing request body"),
     };
 
-    let json: JsonValue = match from_slice(body) {
-        Ok(j) => j,
+    let body = match core::str::from_utf8(body) {
+        Ok(body) => body,
         Err(e) => return json_error(400, &alloc::format!("invalid JSON: {}", e)),
     };
+    let tape = match edgerun_json::parse_json_tape(body) {
+        Ok(tape) => tape,
+        Err(e) => return json_error(400, &alloc::format!("invalid JSON: {}", e)),
+    };
+    let Some(json) = tape.root(body) else {
+        return json_error(400, "invalid JSON: missing root value");
+    };
 
-    let input = match PaymentRequestQuoteInput::from_json_value(&json) {
+    let input = match PaymentRequestQuoteInput::from_tape(json) {
         Ok(input) => input,
         Err(e) => return json_error(400, &e),
     };
@@ -209,9 +230,21 @@ pub fn handle_order(req: &Request) -> Response {
         return json_error(400, "missing request body");
     }
 
-    let input = match from_json_slice::<OrderInput>(body) {
-        Ok(i) => i,
+    let body = match core::str::from_utf8(body) {
+        Ok(body) => body,
         Err(e) => return json_error(400, &alloc::format!("invalid JSON: {}", e)),
+    };
+    let tape = match edgerun_json::parse_json_tape(body) {
+        Ok(tape) => tape,
+        Err(e) => return json_error(400, &alloc::format!("invalid JSON: {}", e)),
+    };
+    let Some(json) = tape.root(body) else {
+        return json_error(400, "invalid JSON: missing root value");
+    };
+
+    let input = match OrderInput::from_tape(json) {
+        Ok(i) => i,
+        Err(e) => return json_error(400, &e),
     };
 
     let exchange_quote_id = match ExchangeQuoteId::from_existing(&input.quote_id) {
@@ -724,29 +757,28 @@ struct PaymentRequestInput {
 }
 
 impl PaymentRequestInput {
-    fn from_json_value(json: &JsonValue) -> Result<Self, String> {
-        let obj = json.as_object().ok_or("expected JSON object")?;
-        let settlement_asset_id = canonical_asset_from_object(obj, "settlement")?;
-        let settlement_amount = obj
+    fn from_tape(json: TapeValue<'_>) -> Result<Self, String> {
+        let settlement_asset_id = canonical_asset_from_tape(json, "settlement")?;
+        let settlement_amount = json
             .get("settlement_amount")
-            .or_else(|| obj.get("amount"))
+            .or_else(|| json.get("amount"))
             .and_then(|v| v.as_str())
             .ok_or("missing settlement_amount")?
             .to_string();
-        let expires_at_ms = obj
+        let expires_at_ms = json
             .get("expires_at_ms")
             .and_then(|v| v.as_u64())
             .ok_or("missing expires_at_ms")?;
-        let recipient_address = obj
+        let recipient_address = json
             .get("recipient_address")
             .and_then(|v| v.as_str())
             .map(String::from);
-        let description = obj
+        let description = json
             .get("description")
             .and_then(|v| v.as_str())
             .map(String::from);
-        let pay_asset_id = if obj.get("pay").is_some() {
-            Some(canonical_asset_from_object(obj, "pay")?)
+        let pay_asset_id = if json.get("pay").is_some() {
+            Some(canonical_asset_from_tape(json, "pay")?)
         } else {
             None
         };
@@ -770,19 +802,18 @@ struct PaymentRequestQuoteInput {
 }
 
 impl PaymentRequestQuoteInput {
-    fn from_json_value(json: &JsonValue) -> Result<Self, String> {
-        let obj = json.as_object().ok_or("expected JSON object")?;
-        let pay_asset_id = if obj.get("pay").is_some() {
-            Some(canonical_asset_from_object(obj, "pay")?)
+    fn from_tape(json: TapeValue<'_>) -> Result<Self, String> {
+        let pay_asset_id = if json.get("pay").is_some() {
+            Some(canonical_asset_from_tape(json, "pay")?)
         } else {
             None
         };
-        let mode = obj.get("mode").and_then(|v| v.as_str()).map(|s| match s {
+        let mode = json.get("mode").and_then(|v| v.as_str()).map(|s| match s {
             "instant" => 1,
             "floating" => 2,
             _ => 1,
         });
-        let refund_address = obj
+        let refund_address = json
             .get("refund_address")
             .and_then(|v| v.as_str())
             .map(String::from);
@@ -794,18 +825,15 @@ impl PaymentRequestQuoteInput {
     }
 }
 
-fn canonical_asset_from_object(obj: &Map, key: &str) -> Result<String, String> {
-    let asset = obj
+fn canonical_asset_from_tape(json: TapeValue<'_>, key: &str) -> Result<String, String> {
+    let asset = json
         .get(key)
         .ok_or_else(|| alloc::format!("missing '{key}'"))?;
-    let asset_obj = asset
-        .as_object()
-        .ok_or_else(|| alloc::format!("'{key}' must be object"))?;
-    let symbol = asset_obj
+    let symbol = asset
         .get("symbol")
         .and_then(|v| v.as_str())
         .ok_or_else(|| alloc::format!("missing {key}.symbol"))?;
-    let network = asset_obj
+    let network = asset
         .get("network")
         .and_then(|v| v.as_str())
         .ok_or_else(|| alloc::format!("missing {key}.network"))?;
@@ -818,39 +846,37 @@ fn canonical_asset_from_object(obj: &Map, key: &str) -> Result<String, String> {
 }
 
 impl QuoteInput {
-    fn from_json_value(json: &JsonValue) -> Result<Self, String> {
-        let obj = json.as_object().ok_or("expected JSON object")?;
-        let settlement = obj.get("settlement").ok_or("missing 'settlement'")?;
-        let settlement_obj = settlement
-            .as_object()
-            .ok_or("'settlement' must be object")?;
-        let settlement_symbol = settlement_obj
+    fn from_tape(json: TapeValue<'_>) -> Result<Self, String> {
+        let settlement = json.get("settlement").ok_or("missing 'settlement'")?;
+        let settlement_symbol = settlement
             .get("symbol")
             .and_then(|v| v.as_str())
             .ok_or("missing settlement.symbol")?;
-        let settlement_network = settlement_obj
+        let settlement_network = settlement
             .get("network")
             .and_then(|v| v.as_str())
             .ok_or("missing settlement.network")?;
 
-        let pay = obj.get("pay").ok_or("missing 'pay'")?;
-        let pay_obj = pay.as_object().ok_or("'pay' must be object")?;
-        let pay_symbol = pay_obj
+        let pay = json.get("pay").ok_or("missing 'pay'")?;
+        let pay_symbol = pay
             .get("symbol")
             .and_then(|v| v.as_str())
             .ok_or("missing pay.symbol")?;
-        let pay_network = pay_obj
+        let pay_network = pay
             .get("network")
             .and_then(|v| v.as_str())
             .ok_or("missing pay.network")?;
 
-        let amount = obj.get("amount").and_then(|v| v.as_str()).map(String::from);
-        let mode = obj.get("mode").and_then(|v| v.as_str()).map(|s| match s {
+        let amount = json
+            .get("amount")
+            .and_then(|v| v.as_str())
+            .map(String::from);
+        let mode = json.get("mode").and_then(|v| v.as_str()).map(|s| match s {
             "instant" => 1,
             "floating" => 2,
             _ => 1,
         });
-        let amount_side = obj
+        let amount_side = json
             .get("amount_side")
             .and_then(|v| v.as_str())
             .map(|s| match s {
@@ -858,11 +884,11 @@ impl QuoteInput {
                 "pay" => 2,
                 _ => 1,
             });
-        let refund_address = obj
+        let refund_address = json
             .get("refund_address")
             .and_then(|v| v.as_str())
             .map(String::from);
-        let recipient_address = obj
+        let recipient_address = json
             .get("recipient_address")
             .and_then(|v| v.as_str())
             .map(String::from);
@@ -896,27 +922,19 @@ struct OrderInput {
     refund_address: Option<String>,
 }
 
-impl edgerun_json::FromJson for OrderInput {
-    fn from_json(value: JsonValue) -> Result<Self, edgerun_json::JsonValueError> {
-        let obj = match value {
-            JsonValue::Object(o) => o,
-            _ => {
-                return Err(edgerun_json::JsonValueError::WrongType(
-                    "expected object".into(),
-                ))
-            }
-        };
-        let quote_id = obj
+impl OrderInput {
+    fn from_tape(json: TapeValue<'_>) -> Result<Self, String> {
+        let quote_id = json
             .get("quote_id")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| edgerun_json::JsonValueError::WrongType("missing quote_id".into()))?
+            .ok_or("missing quote_id")?
             .to_string();
-        let destination = obj
+        let destination = json
             .get("destination")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| edgerun_json::JsonValueError::WrongType("missing destination".into()))?
+            .ok_or("missing destination")?
             .to_string();
-        let refund_address = obj
+        let refund_address = json
             .get("refund_address")
             .and_then(|v| v.as_str())
             .map(String::from);

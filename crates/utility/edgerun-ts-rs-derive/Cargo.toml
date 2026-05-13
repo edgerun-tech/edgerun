@@ -1,0 +1,17 @@
+[package]
+name = "edgerun-ts-rs-derive"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Dependency-free derive macro for edgerun-ts-rs"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+
+[lints]
+workspace = true

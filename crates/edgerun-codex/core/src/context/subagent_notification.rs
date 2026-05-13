@@ -25,7 +25,7 @@ impl ContextualUserFragment for SubagentNotification {
     fn body(&self) -> String {
         format!(
             "\n{}\n",
-            edgerun_json::serde_json::json!({
+            edgerun_json::json!({
                 "agent_path": &self.agent_reference,
                 "status": &self.status,
             })

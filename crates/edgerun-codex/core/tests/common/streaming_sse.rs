@@ -107,7 +107,7 @@ pub async fn start_streaming_sse_server(
                                 let _ = write_http_response(&mut stream, /*status*/ 400, "bad request", "text/plain").await;
                                 return;
                             }
-                            let body = edgerun_json::serde_json::json!({
+                            let body = edgerun_json::json!({
                                 "data": [],
                                 "object": "list"
                             })
@@ -376,11 +376,11 @@ mod tests {
             header_value(headers, "content-type"),
             Some("application/json")
         );
-        let parsed: edgerun_json::serde_json::Value =
-            edgerun_json::serde_json::from_str(body).expect("parse json body");
+        let parsed: edgerun_json::Value =
+            edgerun_json::from_serde_str(body).expect("parse json body");
         assert_eq!(
             parsed,
-            edgerun_json::serde_json::json!({
+            edgerun_json::json!({
                 "data": [],
                 "object": "list"
             })
@@ -601,7 +601,7 @@ data: {"type":"response.completed","response":{"id":"resp-1"}}
         .await;
 
         let url = format!("{}/v1/responses", server.uri());
-        let payload = edgerun_json::serde_json::json!({
+        let payload = edgerun_json::json!({
             "model": "gpt-5.4",
             "instructions": "test",
             "input": [{"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hello"}]}],

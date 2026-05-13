@@ -30,6 +30,8 @@ pub mod quoted_printable;
 pub mod rfc2822;
 pub mod rfc3339;
 pub mod string_field;
+#[cfg(feature = "text-encoding")]
+pub mod text_encoding;
 pub mod tlv;
 pub mod varint;
 
@@ -44,6 +46,4 @@ pub use base64::{
 pub use crc32::{Crc32, crc32};
 
 #[cfg(feature = "text-encoding")]
-pub use chardetng;
-#[cfg(feature = "text-encoding")]
-pub use encoding_rs;
+pub use text_encoding::{chardetng, encoding_rs};

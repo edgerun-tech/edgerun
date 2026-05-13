@@ -1,4 +1,3 @@
-extern crate edgerun_serde_with as serde_with;
 extern crate edgerun_strum as strum;
 extern crate serde as edgerun_serde;
 
@@ -19,6 +18,7 @@ pub mod dynamic_tools;
 pub mod error;
 pub mod exec_output;
 pub mod items;
+pub mod local_uuid;
 pub mod mcp;
 pub mod mcp_approval_meta;
 pub mod memory_citation;

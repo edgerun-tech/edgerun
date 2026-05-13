@@ -7,10 +7,10 @@ use std::fs;
 use std::io;
 use std::path::PathBuf;
 
+use crate::clap::cli::Action;
+use crate::clap::{Arg, Command};
 use crate::cli::{invalid_input, parse_cli_args, required_positional};
 use crate::state::{load_state, save_state};
-use edgerun_clap::cli::Action;
-use edgerun_clap::{Arg, Command};
 
 pub fn cmd_checkpoint(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     crate::cli::apply_global_opts(opts)?;

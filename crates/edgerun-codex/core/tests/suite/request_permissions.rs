@@ -32,8 +32,8 @@ use core_test_support::skip_if_sandbox;
 use core_test_support::test_codex::TestCodex;
 use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
-use edgerun_json::serde_json::Value;
-use edgerun_json::serde_json::json;
+use edgerun_json::Value;
+use edgerun_json::json;
 use pretty_assertions::assert_eq;
 use regex_lite::Regex;
 use std::fs;
@@ -53,7 +53,7 @@ fn parse_result(item: &Value) -> CommandResult {
         .get("output")
         .and_then(Value::as_str)
         .expect("shell output payload");
-    match edgerun_json::serde_json::from_str::<Value>(output_str) {
+    match edgerun_json::from_serde_str::<Value>(output_str) {
         Ok(parsed) => {
             let exit_code = parsed["metadata"]["exit_code"].as_i64();
             let stdout = parsed["output"].as_str().unwrap_or_default().to_string();
@@ -98,7 +98,7 @@ fn shell_event_with_request_permissions<S: serde::Serialize>(
         "sandbox_permissions": SandboxPermissions::WithAdditionalPermissions,
         "additional_permissions": additional_permissions,
     });
-    let args_str = edgerun_json::serde_json::to_string(&args)?;
+    let args_str = edgerun_json::to_string(&args)?;
     Ok(ev_function_call(call_id, "shell_command", &args_str))
 }
 
@@ -111,7 +111,7 @@ fn request_permissions_tool_event(
         "reason": reason,
         "permissions": permissions,
     });
-    let args_str = edgerun_json::serde_json::to_string(&args)?;
+    let args_str = edgerun_json::to_string(&args)?;
     Ok(ev_function_call(call_id, "request_permissions", &args_str))
 }
 
@@ -120,7 +120,7 @@ fn shell_command_event(call_id: &str, command: &str) -> Result<Value> {
         "command": command,
         "timeout_ms": 1_000_u64,
     });
-    let args_str = edgerun_json::serde_json::to_string(&args)?;
+    let args_str = edgerun_json::to_string(&args)?;
     Ok(ev_function_call(call_id, "shell_command", &args_str))
 }
 
@@ -129,7 +129,7 @@ fn exec_command_event(call_id: &str, command: &str) -> Result<Value> {
         "cmd": command,
         "yield_time_ms": 1_000_u64,
     });
-    let args_str = edgerun_json::serde_json::to_string(&args)?;
+    let args_str = edgerun_json::to_string(&args)?;
     Ok(ev_function_call(call_id, "exec_command", &args_str))
 }
 
@@ -144,7 +144,7 @@ fn exec_command_event_with_request_permissions<S: serde::Serialize>(
         "sandbox_permissions": SandboxPermissions::WithAdditionalPermissions,
         "additional_permissions": additional_permissions,
     });
-    let args_str = edgerun_json::serde_json::to_string(&args)?;
+    let args_str = edgerun_json::to_string(&args)?;
     Ok(ev_function_call(call_id, "exec_command", &args_str))
 }
 
@@ -157,7 +157,7 @@ fn exec_command_event_with_missing_additional_permissions(
         "yield_time_ms": 1_000_u64,
         "sandbox_permissions": SandboxPermissions::WithAdditionalPermissions,
     });
-    let args_str = edgerun_json::serde_json::to_string(&args)?;
+    let args_str = edgerun_json::to_string(&args)?;
     Ok(ev_function_call(call_id, "exec_command", &args_str))
 }
 
@@ -174,7 +174,7 @@ fn shell_event_with_raw_request_permissions(
         "sandbox_permissions": SandboxPermissions::WithAdditionalPermissions,
         "additional_permissions": additional_permissions,
     });
-    let args_str = edgerun_json::serde_json::to_string(&args)?;
+    let args_str = edgerun_json::to_string(&args)?;
     Ok(ev_function_call(call_id, "shell_command", &args_str))
 }
 
@@ -481,7 +481,7 @@ async fn request_permissions_tool_is_auto_denied_when_granular_request_permissio
 
     let call_output = results.single_request().function_call_output(call_id);
     let result: RequestPermissionsResponse =
-        edgerun_json::serde_json::from_str(call_output["output"].as_str().unwrap_or_default())?;
+        edgerun_json::from_serde_str(call_output["output"].as_str().unwrap_or_default())?;
     assert_eq!(
         result,
         RequestPermissionsResponse {

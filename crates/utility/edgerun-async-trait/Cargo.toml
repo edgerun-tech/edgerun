@@ -8,8 +8,8 @@ repository.workspace = true
 homepage.workspace = true
 description = "Edgerun async-trait compatibility surface"
 
-[dependencies]
-async-trait = "0.1.89"
+[lib]
+proc-macro = true
 
 [lints]
 workspace = true

@@ -1,10 +1,15 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::io;
 use std::num::NonZeroUsize;
 use std::path::Path;
 
 use crate::compat::image::PromptImageMode;
 use crate::compat::image::load_for_prompt_bytes;
+use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
+use edgerun_json::Map;
+use edgerun_json::ToJson;
+use edgerun_json::Value;
 use edgerun_serde::Deserialize;
 use edgerun_serde::Deserializer;
 use edgerun_serde::Serialize;
@@ -690,7 +695,7 @@ pub enum ResponseInputItem {
         status: String,
         execution: String,
         #[ts(type = "unknown[]")]
-        tools: Vec<edgerun_json::serde_json::Value>,
+        tools: Vec<edgerun_json::Value>,
     },
 }
 
@@ -799,7 +804,7 @@ pub enum ResponseItem {
         status: Option<String>,
         execution: String,
         #[ts(type = "unknown")]
-        arguments: edgerun_json::serde_json::Value,
+        arguments: edgerun_json::Value,
     },
     // NOTE: The `output` field for `function_call_output` uses a dedicated payload type with
     // custom serialization. On the wire it is either:
@@ -841,7 +846,7 @@ pub enum ResponseItem {
         status: String,
         execution: String,
         #[ts(type = "unknown[]")]
-        tools: Vec<edgerun_json::serde_json::Value>,
+        tools: Vec<edgerun_json::Value>,
     },
     // Emitted by the Responses API when the agent triggers a web search.
     // Example payload (from SSE `response.output_item.done`):
@@ -888,6 +893,591 @@ pub enum ResponseItem {
     },
     #[serde(other)]
     Other,
+}
+
+fn json_wrong_type(message: impl Into<String>) -> JsonValueError {
+    JsonValueError::WrongType(message.into())
+}
+
+fn json_type(mut object: Map, context: &str) -> Result<(String, Map), JsonValueError> {
+    let kind: String = object.take_required("type")?;
+    if kind.is_empty() {
+        return Err(json_wrong_type(format!("{context} type must not be empty")));
+    }
+    Ok((kind, object))
+}
+
+impl ToJson for MessagePhase {
+    fn to_json(&self) -> Value {
+        match self {
+            Self::Commentary => "commentary",
+            Self::FinalAnswer => "final_answer",
+        }
+        .to_json()
+    }
+}
+
+impl FromJson for MessagePhase {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "commentary" => Ok(Self::Commentary),
+            "final_answer" => Ok(Self::FinalAnswer),
+            other => Err(json_wrong_type(format!("unknown message phase `{other}`"))),
+        }
+    }
+}
+
+impl ToJson for ImageDetail {
+    fn to_json(&self) -> Value {
+        match self {
+            Self::Auto => "auto",
+            Self::Low => "low",
+            Self::High => "high",
+            Self::Original => "original",
+        }
+        .to_json()
+    }
+}
+
+impl FromJson for ImageDetail {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "auto" => Ok(Self::Auto),
+            "low" => Ok(Self::Low),
+            "high" => Ok(Self::High),
+            "original" => Ok(Self::Original),
+            other => Err(json_wrong_type(format!("unknown image detail `{other}`"))),
+        }
+    }
+}
+
+impl ToJson for ContentItem {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        match self {
+            Self::InputText { text } => {
+                object.push_field("type", "input_text");
+                object.push_field("text", text.clone());
+            }
+            Self::InputImage { image_url, detail } => {
+                object.push_field("type", "input_image");
+                object.push_field("image_url", image_url.clone());
+                object.push_opt_field("detail", detail.as_ref().map(ToJson::to_json));
+            }
+            Self::OutputText { text } => {
+                object.push_field("type", "output_text");
+                object.push_field("text", text.clone());
+            }
+        }
+        object.into()
+    }
+}
+
+impl FromJson for ContentItem {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let (kind, mut object) = json_type(value.into_object("ContentItem")?, "ContentItem")?;
+        match kind.as_str() {
+            "input_text" => Ok(Self::InputText {
+                text: object.take_required("text")?,
+            }),
+            "input_image" => Ok(Self::InputImage {
+                image_url: object.take_required("image_url")?,
+                detail: object.take_optional("detail")?,
+            }),
+            "output_text" => Ok(Self::OutputText {
+                text: object.take_required("text")?,
+            }),
+            other => Err(json_wrong_type(format!("unknown content item `{other}`"))),
+        }
+    }
+}
+
+impl ToJson for LocalShellStatus {
+    fn to_json(&self) -> Value {
+        match self {
+            Self::Completed => "completed",
+            Self::InProgress => "in_progress",
+            Self::Incomplete => "incomplete",
+        }
+        .to_json()
+    }
+}
+
+impl FromJson for LocalShellStatus {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "completed" => Ok(Self::Completed),
+            "in_progress" => Ok(Self::InProgress),
+            "incomplete" => Ok(Self::Incomplete),
+            other => Err(json_wrong_type(format!(
+                "unknown local shell status `{other}`"
+            ))),
+        }
+    }
+}
+
+impl ToJson for LocalShellExecAction {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        object.push_field("command", self.command.to_json());
+        object.push_field("timeout_ms", self.timeout_ms.to_json());
+        object.push_field("working_directory", self.working_directory.to_json());
+        object.push_field("env", self.env.to_json());
+        object.push_field("user", self.user.to_json());
+        object.into()
+    }
+}
+
+impl FromJson for LocalShellExecAction {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("LocalShellExecAction")?;
+        Ok(Self {
+            command: object.take_required("command")?,
+            timeout_ms: object.take_optional("timeout_ms")?,
+            working_directory: object.take_optional("working_directory")?,
+            env: object.take_optional("env")?,
+            user: object.take_optional("user")?,
+        })
+    }
+}
+
+impl ToJson for LocalShellAction {
+    fn to_json(&self) -> Value {
+        match self {
+            Self::Exec(action) => {
+                let mut object = Map::new();
+                object.push_field("type", "exec");
+                object.push_field("command", action.command.to_json());
+                object.push_field("timeout_ms", action.timeout_ms.to_json());
+                object.push_field("working_directory", action.working_directory.to_json());
+                object.push_field("env", action.env.to_json());
+                object.push_field("user", action.user.to_json());
+                object.into()
+            }
+        }
+    }
+}
+
+impl FromJson for LocalShellAction {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let (kind, object) = json_type(value.into_object("LocalShellAction")?, "LocalShellAction")?;
+        match kind.as_str() {
+            "exec" => Ok(Self::Exec(LocalShellExecAction::from_json(object.into())?)),
+            other => Err(json_wrong_type(format!(
+                "unknown local shell action `{other}`"
+            ))),
+        }
+    }
+}
+
+impl ToJson for WebSearchAction {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        match self {
+            Self::Search { query, queries } => {
+                object.push_field("type", "search");
+                object.push_opt_field("query", query.clone());
+                object.push_opt_field("queries", queries.clone());
+            }
+            Self::OpenPage { url } => {
+                object.push_field("type", "open_page");
+                object.push_opt_field("url", url.clone());
+            }
+            Self::FindInPage { url, pattern } => {
+                object.push_field("type", "find_in_page");
+                object.push_opt_field("url", url.clone());
+                object.push_opt_field("pattern", pattern.clone());
+            }
+            Self::Other => {
+                object.push_field("type", "other");
+            }
+        }
+        object.into()
+    }
+}
+
+impl FromJson for WebSearchAction {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let (kind, mut object) =
+            json_type(value.into_object("WebSearchAction")?, "WebSearchAction")?;
+        match kind.as_str() {
+            "search" => Ok(Self::Search {
+                query: object.take_optional("query")?,
+                queries: object.take_optional("queries")?,
+            }),
+            "open_page" => Ok(Self::OpenPage {
+                url: object.take_optional("url")?,
+            }),
+            "find_in_page" => Ok(Self::FindInPage {
+                url: object.take_optional("url")?,
+                pattern: object.take_optional("pattern")?,
+            }),
+            _ => Ok(Self::Other),
+        }
+    }
+}
+
+impl ToJson for ReasoningItemReasoningSummary {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        match self {
+            Self::SummaryText { text } => {
+                object.push_field("type", "summary_text");
+                object.push_field("text", text.clone());
+            }
+        }
+        object.into()
+    }
+}
+
+impl FromJson for ReasoningItemReasoningSummary {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let (kind, mut object) = json_type(
+            value.into_object("ReasoningItemReasoningSummary")?,
+            "ReasoningItemReasoningSummary",
+        )?;
+        match kind.as_str() {
+            "summary_text" => Ok(Self::SummaryText {
+                text: object.take_required("text")?,
+            }),
+            other => Err(json_wrong_type(format!(
+                "unknown reasoning summary `{other}`"
+            ))),
+        }
+    }
+}
+
+impl ToJson for ReasoningItemContent {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        match self {
+            Self::ReasoningText { text } => {
+                object.push_field("type", "reasoning_text");
+                object.push_field("text", text.clone());
+            }
+            Self::Text { text } => {
+                object.push_field("type", "text");
+                object.push_field("text", text.clone());
+            }
+        }
+        object.into()
+    }
+}
+
+impl FromJson for ReasoningItemContent {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let (kind, mut object) = json_type(
+            value.into_object("ReasoningItemContent")?,
+            "ReasoningItemContent",
+        )?;
+        match kind.as_str() {
+            "reasoning_text" => Ok(Self::ReasoningText {
+                text: object.take_required("text")?,
+            }),
+            "text" => Ok(Self::Text {
+                text: object.take_required("text")?,
+            }),
+            other => Err(json_wrong_type(format!(
+                "unknown reasoning content `{other}`"
+            ))),
+        }
+    }
+}
+
+impl ToJson for FunctionCallOutputContentItem {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        match self {
+            Self::InputText { text } => {
+                object.push_field("type", "input_text");
+                object.push_field("text", text.clone());
+            }
+            Self::InputImage { image_url, detail } => {
+                object.push_field("type", "input_image");
+                object.push_field("image_url", image_url.clone());
+                object.push_opt_field("detail", detail.as_ref().map(ToJson::to_json));
+            }
+        }
+        object.into()
+    }
+}
+
+impl FromJson for FunctionCallOutputContentItem {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let (kind, mut object) = json_type(
+            value.into_object("FunctionCallOutputContentItem")?,
+            "FunctionCallOutputContentItem",
+        )?;
+        match kind.as_str() {
+            "input_text" => Ok(Self::InputText {
+                text: object.take_required("text")?,
+            }),
+            "input_image" => Ok(Self::InputImage {
+                image_url: object.take_required("image_url")?,
+                detail: object.take_optional("detail")?,
+            }),
+            other => Err(json_wrong_type(format!(
+                "unknown function output content item `{other}`"
+            ))),
+        }
+    }
+}
+
+impl ToJson for FunctionCallOutputBody {
+    fn to_json(&self) -> Value {
+        match self {
+            Self::Text(text) => text.to_json(),
+            Self::ContentItems(items) => items.to_json(),
+        }
+    }
+}
+
+impl FromJson for FunctionCallOutputBody {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        match value {
+            Value::String(text) => Ok(Self::Text(text)),
+            Value::Array(items) => items
+                .into_iter()
+                .map(FunctionCallOutputContentItem::from_json)
+                .collect::<Result<Vec<_>, _>>()
+                .map(Self::ContentItems),
+            other => Err(json_wrong_type(format!(
+                "expected string or content item array, found {}",
+                other.variant_name()
+            ))),
+        }
+    }
+}
+
+impl ToJson for FunctionCallOutputPayload {
+    fn to_json(&self) -> Value {
+        self.body.to_json()
+    }
+}
+
+impl FromJson for FunctionCallOutputPayload {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        Ok(Self {
+            body: FunctionCallOutputBody::from_json(value)?,
+            success: None,
+        })
+    }
+}
+
+impl ToJson for ResponseItem {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        match self {
+            Self::Message {
+                role,
+                content,
+                phase,
+                ..
+            } => {
+                object.push_field("type", "message");
+                object.push_field("role", role.clone());
+                object.push_field("content", content.to_json());
+                object.push_opt_field("phase", phase.as_ref().map(ToJson::to_json));
+            }
+            Self::Reasoning {
+                summary,
+                content,
+                encrypted_content,
+                ..
+            } => {
+                object.push_field("type", "reasoning");
+                object.push_field("summary", summary.to_json());
+                object.push_opt_field("content", content.as_ref().map(ToJson::to_json));
+                object.push_field("encrypted_content", encrypted_content.to_json());
+            }
+            Self::LocalShellCall {
+                call_id,
+                status,
+                action,
+                ..
+            } => {
+                object.push_field("type", "local_shell_call");
+                object.push_field("call_id", call_id.to_json());
+                object.push_field("status", status.to_json());
+                object.push_field("action", action.to_json());
+            }
+            Self::FunctionCall {
+                name,
+                namespace,
+                arguments,
+                call_id,
+                ..
+            } => {
+                object.push_field("type", "function_call");
+                object.push_field("name", name.clone());
+                object.push_opt_field("namespace", namespace.clone());
+                object.push_field("arguments", arguments.clone());
+                object.push_field("call_id", call_id.clone());
+            }
+            Self::ToolSearchCall {
+                call_id,
+                status,
+                execution,
+                arguments,
+                ..
+            } => {
+                object.push_field("type", "tool_search_call");
+                object.push_field("call_id", call_id.to_json());
+                object.push_opt_field("status", status.clone());
+                object.push_field("execution", execution.clone());
+                object.push_field("arguments", arguments.clone());
+            }
+            Self::FunctionCallOutput { call_id, output } => {
+                object.push_field("type", "function_call_output");
+                object.push_field("call_id", call_id.clone());
+                object.push_field("output", output.to_json());
+            }
+            Self::CustomToolCall {
+                status,
+                call_id,
+                name,
+                input,
+                ..
+            } => {
+                object.push_field("type", "custom_tool_call");
+                object.push_opt_field("status", status.clone());
+                object.push_field("call_id", call_id.clone());
+                object.push_field("name", name.clone());
+                object.push_field("input", input.clone());
+            }
+            Self::CustomToolCallOutput {
+                call_id,
+                name,
+                output,
+            } => {
+                object.push_field("type", "custom_tool_call_output");
+                object.push_field("call_id", call_id.clone());
+                object.push_opt_field("name", name.clone());
+                object.push_field("output", output.to_json());
+            }
+            Self::ToolSearchOutput {
+                call_id,
+                status,
+                execution,
+                tools,
+            } => {
+                object.push_field("type", "tool_search_output");
+                object.push_field("call_id", call_id.to_json());
+                object.push_field("status", status.clone());
+                object.push_field("execution", execution.clone());
+                object.push_field("tools", tools.to_json());
+            }
+            Self::WebSearchCall { status, action, .. } => {
+                object.push_field("type", "web_search_call");
+                object.push_opt_field("status", status.clone());
+                object.push_opt_field("action", action.as_ref().map(ToJson::to_json));
+            }
+            Self::ImageGenerationCall {
+                id,
+                status,
+                revised_prompt,
+                result,
+            } => {
+                object.push_field("type", "image_generation_call");
+                object.push_field("id", id.clone());
+                object.push_field("status", status.clone());
+                object.push_opt_field("revised_prompt", revised_prompt.clone());
+                object.push_field("result", result.clone());
+            }
+            Self::Compaction { encrypted_content } => {
+                object.push_field("type", "compaction");
+                object.push_field("encrypted_content", encrypted_content.clone());
+            }
+            Self::ContextCompaction { encrypted_content } => {
+                object.push_field("type", "context_compaction");
+                object.push_field("encrypted_content", encrypted_content.to_json());
+            }
+            Self::Other => {
+                object.push_field("type", "other");
+            }
+        }
+        object.into()
+    }
+}
+
+impl FromJson for ResponseItem {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let (kind, mut object) = json_type(value.into_object("ResponseItem")?, "ResponseItem")?;
+        match kind.as_str() {
+            "message" => Ok(Self::Message {
+                id: object.take_optional("id")?,
+                role: object.take_required("role")?,
+                content: object.take_required("content")?,
+                phase: object.take_optional("phase")?,
+            }),
+            "reasoning" => Ok(Self::Reasoning {
+                id: object.take_optional("id")?.unwrap_or_default(),
+                summary: object.take_optional("summary")?.unwrap_or_default(),
+                content: object.take_optional("content")?,
+                encrypted_content: object.take_optional("encrypted_content")?,
+            }),
+            "local_shell_call" => Ok(Self::LocalShellCall {
+                id: object.take_optional("id")?,
+                call_id: object.take_optional("call_id")?,
+                status: object.take_required("status")?,
+                action: object.take_required("action")?,
+            }),
+            "function_call" => Ok(Self::FunctionCall {
+                id: object.take_optional("id")?,
+                name: object.take_required("name")?,
+                namespace: object.take_optional("namespace")?,
+                arguments: object.take_required("arguments")?,
+                call_id: object.take_required("call_id")?,
+            }),
+            "tool_search_call" => Ok(Self::ToolSearchCall {
+                id: object.take_optional("id")?,
+                call_id: object.take_optional("call_id")?,
+                status: object.take_optional("status")?,
+                execution: object.take_required("execution")?,
+                arguments: object.take_required("arguments")?,
+            }),
+            "function_call_output" => Ok(Self::FunctionCallOutput {
+                call_id: object.take_required("call_id")?,
+                output: object.take_required("output")?,
+            }),
+            "custom_tool_call" => Ok(Self::CustomToolCall {
+                id: object.take_optional("id")?,
+                status: object.take_optional("status")?,
+                call_id: object.take_required("call_id")?,
+                name: object.take_required("name")?,
+                input: object.take_required("input")?,
+            }),
+            "custom_tool_call_output" => Ok(Self::CustomToolCallOutput {
+                call_id: object.take_required("call_id")?,
+                name: object.take_optional("name")?,
+                output: object.take_required("output")?,
+            }),
+            "tool_search_output" => Ok(Self::ToolSearchOutput {
+                call_id: object.take_optional("call_id")?,
+                status: object.take_required("status")?,
+                execution: object.take_required("execution")?,
+                tools: object.take_required("tools")?,
+            }),
+            "web_search_call" => Ok(Self::WebSearchCall {
+                id: object.take_optional("id")?,
+                status: object.take_optional("status")?,
+                action: object.take_optional("action")?,
+            }),
+            "image_generation_call" => Ok(Self::ImageGenerationCall {
+                id: object.take_required("id")?,
+                status: object.take_required("status")?,
+                revised_prompt: object.take_optional("revised_prompt")?,
+                result: object.take_required("result")?,
+            }),
+            "compaction" | "compaction_summary" => Ok(Self::Compaction {
+                encrypted_content: object.take_required("encrypted_content")?,
+            }),
+            "context_compaction" => Ok(Self::ContextCompaction {
+                encrypted_content: object.take_optional("encrypted_content")?,
+            }),
+            _ => Ok(Self::Other),
+        }
+    }
 }
 
 pub const BASE_INSTRUCTIONS_DEFAULT: &str = include_str!("prompts/base_instructions/default.md");
@@ -957,9 +1547,7 @@ fn prefix_combined_str_len(prefix: &[String]) -> usize {
 fn render_command_prefix(prefix: &[String]) -> String {
     let tokens = prefix
         .iter()
-        .map(|token| {
-            edgerun_json::serde_json::to_string(token).unwrap_or_else(|_| format!("{token:?}"))
-        })
+        .map(|token| edgerun_json::to_string(token).unwrap_or_else(|_| format!("{token:?}")))
         .collect::<Vec<_>>()
         .join(", ");
     format!("[{tokens}]")
@@ -1157,7 +1745,7 @@ pub struct LocalShellExecAction {
     pub command: Vec<String>,
     pub timeout_ms: Option<u64>,
     pub working_directory: Option<String>,
-    pub env: Option<HashMap<String, String>>,
+    pub env: Option<BTreeMap<String, String>>,
     pub user: Option<String>,
 }
 
@@ -1493,7 +2081,7 @@ impl CallToolResult {
 
     pub fn from_error_text(text: String) -> Self {
         Self {
-            content: vec![edgerun_json::serde_json::json!({
+            content: vec![edgerun_json::json!({
                 "type": "text",
                 "text": text,
             })],
@@ -1511,7 +2099,7 @@ impl CallToolResult {
         if let Some(structured_content) = &self.structured_content
             && !structured_content.is_null()
         {
-            match edgerun_json::serde_json::to_string(structured_content) {
+            match edgerun_json::to_string(structured_content) {
                 Ok(serialized_structured_content) => {
                     return FunctionCallOutputPayload {
                         body: FunctionCallOutputBody::Text(serialized_structured_content),
@@ -1527,7 +2115,7 @@ impl CallToolResult {
             }
         }
 
-        let serialized_content = match edgerun_json::serde_json::to_string(&self.content) {
+        let serialized_content = match edgerun_json::to_string(&self.content) {
             Ok(serialized_content) => serialized_content,
             Err(err) => {
                 return FunctionCallOutputPayload {
@@ -1556,39 +2144,35 @@ impl CallToolResult {
 }
 
 fn convert_mcp_content_to_items(
-    contents: &[edgerun_json::serde_json::Value],
+    contents: &[edgerun_json::Value],
 ) -> Option<Vec<FunctionCallOutputContentItem>> {
     const CODEX_IMAGE_DETAIL_META_KEY: &str = "codex/imageDetail";
-
-    #[derive(edgerun_serde::Deserialize)]
-    #[serde(tag = "type")]
-    enum McpContent {
-        #[serde(rename = "text")]
-        Text { text: String },
-        #[serde(rename = "image")]
-        Image {
-            data: String,
-            #[serde(rename = "mimeType", alias = "mime_type")]
-            mime_type: Option<String>,
-            #[serde(rename = "_meta", default)]
-            meta: Option<edgerun_json::serde_json::Value>,
-        },
-        #[serde(other)]
-        Unknown,
-    }
 
     let mut saw_image = false;
     let mut items = Vec::with_capacity(contents.len());
 
     for content in contents {
-        let item = match edgerun_json::serde_json::from_value::<McpContent>(content.clone()) {
-            Ok(McpContent::Text { text }) => FunctionCallOutputContentItem::InputText { text },
-            Ok(McpContent::Image {
-                data,
-                mime_type,
-                meta,
-            }) => {
+        let item = match content
+            .clone()
+            .into_object("McpContent")
+            .and_then(|mut object| {
+                let kind: String = object.take_required("type")?;
+                Ok((kind, object))
+            }) {
+            Ok((kind, mut object)) if kind == "text" => {
+                let text = object
+                    .take_required("text")
+                    .unwrap_or_else(|_| edgerun_json::to_string(content).unwrap_or_default());
+                FunctionCallOutputContentItem::InputText { text }
+            }
+            Ok((kind, mut object)) if kind == "image" => {
                 saw_image = true;
+                let data: String = object.take_required("data").unwrap_or_default();
+                let mime_type: Option<String> = object
+                    .take_optional_any(&["mimeType", "mime_type"])
+                    .unwrap_or(None);
+                let meta: Option<edgerun_json::Value> =
+                    object.take_optional("_meta").unwrap_or(None);
                 let image_url = if data.starts_with("data:") {
                     data
                 } else {
@@ -1599,9 +2183,9 @@ fn convert_mcp_content_to_items(
                     image_url,
                     detail: meta
                         .as_ref()
-                        .and_then(edgerun_json::serde_json::Value::as_object)
+                        .and_then(edgerun_json::Value::as_object)
                         .and_then(|meta| meta.get(CODEX_IMAGE_DETAIL_META_KEY))
-                        .and_then(edgerun_json::serde_json::Value::as_str)
+                        .and_then(edgerun_json::Value::as_str)
                         .and_then(|detail| match detail {
                             "auto" => Some(ImageDetail::Auto),
                             "low" => Some(ImageDetail::Low),
@@ -1612,9 +2196,8 @@ fn convert_mcp_content_to_items(
                         .or(Some(DEFAULT_IMAGE_DETAIL)),
                 }
             }
-            Ok(McpContent::Unknown) | Err(_) => FunctionCallOutputContentItem::InputText {
-                text: edgerun_json::serde_json::to_string(content)
-                    .unwrap_or_else(|_| "<content>".to_string()),
+            _ => FunctionCallOutputContentItem::InputText {
+                text: edgerun_json::to_string(content).unwrap_or_else(|_| "<content>".to_string()),
             },
         };
         items.push(item);
@@ -1632,7 +2215,7 @@ impl std::fmt::Display for FunctionCallOutputPayload {
         match &self.body {
             FunctionCallOutputBody::Text(content) => f.write_str(content),
             FunctionCallOutputBody::ContentItems(items) => {
-                let content = edgerun_json::serde_json::to_string(items).unwrap_or_default();
+                let content = edgerun_json::to_string(items).unwrap_or_default();
                 f.write_str(content.as_str())
             }
         }
@@ -1710,7 +2293,7 @@ mod tests {
 
     #[test]
     fn convert_mcp_content_to_items_preserves_data_urls() {
-        let contents = vec![edgerun_json::serde_json::json!({
+        let contents = vec![edgerun_json::json!({
             "type": "image",
             "data": "data:image/png;base64,Zm9v",
             "mimeType": "image/png",
@@ -1728,15 +2311,14 @@ mod tests {
 
     #[test]
     fn response_item_parses_image_generation_call() {
-        let item =
-            edgerun_json::serde_json::from_value::<ResponseItem>(edgerun_json::serde_json::json!({
-                "id": "ig_123",
-                "type": "image_generation_call",
-                "status": "completed",
-                "revised_prompt": "A small blue square",
-                "result": "Zm9v",
-            }))
-            .expect("image generation item should deserialize");
+        let item = edgerun_json::from_value::<ResponseItem>(edgerun_json::json!({
+            "id": "ig_123",
+            "type": "image_generation_call",
+            "status": "completed",
+            "revised_prompt": "A small blue square",
+            "result": "Zm9v",
+        }))
+        .expect("image generation item should deserialize");
 
         assert_eq!(
             item,
@@ -1751,14 +2333,13 @@ mod tests {
 
     #[test]
     fn response_item_parses_image_generation_call_without_revised_prompt() {
-        let item =
-            edgerun_json::serde_json::from_value::<ResponseItem>(edgerun_json::serde_json::json!({
-                "id": "ig_123",
-                "type": "image_generation_call",
-                "status": "completed",
-                "result": "Zm9v",
-            }))
-            .expect("image generation item should deserialize");
+        let item = edgerun_json::from_value::<ResponseItem>(edgerun_json::json!({
+            "id": "ig_123",
+            "type": "image_generation_call",
+            "status": "completed",
+            "result": "Zm9v",
+        }))
+        .expect("image generation item should deserialize");
 
         assert_eq!(
             item,
@@ -1809,7 +2390,7 @@ mod tests {
 
     #[test]
     fn permission_profile_deserializes_legacy_rollout_shape() -> Result<()> {
-        let legacy = edgerun_json::serde_json::json!({
+        let legacy = edgerun_json::json!({
             "network": {
                 "enabled": true,
             },
@@ -1827,7 +2408,7 @@ mod tests {
             },
         });
 
-        let permission_profile: PermissionProfile = edgerun_json::serde_json::from_value(legacy)?;
+        let permission_profile: PermissionProfile = edgerun_json::from_value(legacy)?;
 
         assert_eq!(
             permission_profile,
@@ -1985,17 +2566,17 @@ mod tests {
             glob_scan_max_depth: NonZeroUsize::new(2),
         };
 
-        let serialized = edgerun_json::serde_json::to_value(&file_system_permissions)?;
+        let serialized = edgerun_json::to_value(&file_system_permissions)?;
 
         assert_eq!(serialized.get("read"), None);
         assert_eq!(serialized.get("write"), None);
         assert_eq!(
             serialized.get("glob_scan_max_depth"),
-            Some(&edgerun_json::serde_json::json!(2))
+            Some(&edgerun_json::json!(2))
         );
         assert!(serialized.get("entries").is_some());
         assert_eq!(
-            edgerun_json::serde_json::from_value::<FileSystemPermissions>(serialized)?,
+            edgerun_json::from_value::<FileSystemPermissions>(serialized)?,
             file_system_permissions
         );
         Ok(())
@@ -2003,18 +2584,16 @@ mod tests {
 
     #[test]
     fn file_system_permissions_rejects_zero_glob_scan_depth() {
-        edgerun_json::serde_json::from_value::<FileSystemPermissions>(
-            edgerun_json::serde_json::json!({
-                "entries": [],
-                "glob_scan_max_depth": 0,
-            }),
-        )
+        edgerun_json::from_value::<FileSystemPermissions>(edgerun_json::json!({
+            "entries": [],
+            "glob_scan_max_depth": 0,
+        }))
         .expect_err("zero glob scan depth should fail deserialization");
     }
 
     #[test]
     fn convert_mcp_content_to_items_builds_data_urls_when_missing_prefix() {
-        let contents = vec![edgerun_json::serde_json::json!({
+        let contents = vec![edgerun_json::json!({
             "type": "image",
             "data": "Zm9v",
             "mimeType": "image/png",
@@ -2032,7 +2611,7 @@ mod tests {
 
     #[test]
     fn convert_mcp_content_to_items_returns_none_without_images() {
-        let contents = vec![edgerun_json::serde_json::json!({
+        let contents = vec![edgerun_json::json!({
             "type": "text",
             "text": "hello",
         })];
@@ -2100,15 +2679,14 @@ mod tests {
 
     #[test]
     fn function_call_deserializes_optional_namespace() {
-        let item: ResponseItem =
-            edgerun_json::serde_json::from_value(edgerun_json::serde_json::json!({
-                "type": "function_call",
-                "name": "mcp__codex_apps__gmail_get_recent_emails",
-                "namespace": "mcp__codex_apps__gmail",
-                "arguments": "{\"top_k\":5}",
-                "call_id": "call-1",
-            }))
-            .expect("function_call should deserialize");
+        let item: ResponseItem = edgerun_json::from_value(edgerun_json::json!({
+            "type": "function_call",
+            "name": "mcp__codex_apps__gmail_get_recent_emails",
+            "namespace": "mcp__codex_apps__gmail",
+            "arguments": "{\"top_k\":5}",
+            "call_id": "call-1",
+        }))
+        .expect("function_call should deserialize");
 
         assert_eq!(
             item,
@@ -2185,8 +2763,8 @@ mod tests {
             output: FunctionCallOutputPayload::from_text("ok".into()),
         };
 
-        let json = edgerun_json::serde_json::to_string(&item)?;
-        let v: edgerun_json::serde_json::Value = edgerun_json::serde_json::from_str(&json)?;
+        let json = edgerun_json::to_string(&item)?;
+        let v: edgerun_json::Value = edgerun_json::from_str(&json)?;
 
         // Success case -> output should be a plain string
         assert_eq!(v.get("output").unwrap().as_str().unwrap(), "ok");
@@ -2203,8 +2781,8 @@ mod tests {
             },
         };
 
-        let json = edgerun_json::serde_json::to_string(&item)?;
-        let v: edgerun_json::serde_json::Value = edgerun_json::serde_json::from_str(&json)?;
+        let json = edgerun_json::to_string(&item)?;
+        let v: edgerun_json::Value = edgerun_json::from_str(&json)?;
 
         assert_eq!(v.get("output").unwrap().as_str().unwrap(), "bad");
         Ok(())
@@ -2214,8 +2792,8 @@ mod tests {
     fn serializes_image_outputs_as_array() -> Result<()> {
         let call_tool_result = CallToolResult {
             content: vec![
-                edgerun_json::serde_json::json!({"type":"text","text":"caption"}),
-                edgerun_json::serde_json::json!({"type":"image","data":"BASE64","mimeType":"image/png"}),
+                edgerun_json::json!({"type":"text","text":"caption"}),
+                edgerun_json::json!({"type":"image","data":"BASE64","mimeType":"image/png"}),
             ],
             structured_content: None,
             is_error: Some(false),
@@ -2246,8 +2824,8 @@ mod tests {
             output: payload,
         };
 
-        let json = edgerun_json::serde_json::to_string(&item)?;
-        let v: edgerun_json::serde_json::Value = edgerun_json::serde_json::from_str(&json)?;
+        let json = edgerun_json::to_string(&item)?;
+        let v: edgerun_json::Value = edgerun_json::from_str(&json)?;
 
         let output = v.get("output").expect("output field");
         assert!(output.is_array(), "expected array output");
@@ -2268,8 +2846,8 @@ mod tests {
             ]),
         };
 
-        let json = edgerun_json::serde_json::to_string(&item)?;
-        let v: edgerun_json::serde_json::Value = edgerun_json::serde_json::from_str(&json)?;
+        let json = edgerun_json::to_string(&item)?;
+        let v: edgerun_json::Value = edgerun_json::from_str(&json)?;
 
         let output = v.get("output").expect("output field");
         assert!(output.is_array(), "expected array output");
@@ -2280,7 +2858,7 @@ mod tests {
     #[test]
     fn preserves_existing_image_data_urls() -> Result<()> {
         let call_tool_result = CallToolResult {
-            content: vec![edgerun_json::serde_json::json!({
+            content: vec![edgerun_json::json!({
                 "type": "image",
                 "data": "data:image/png;base64,BASE64",
                 "mimeType": "image/png"
@@ -2309,7 +2887,7 @@ mod tests {
     #[test]
     fn preserves_original_detail_metadata_on_mcp_images() -> Result<()> {
         let call_tool_result = CallToolResult {
-            content: vec![edgerun_json::serde_json::json!({
+            content: vec![edgerun_json::json!({
                 "type": "image",
                 "data": "BASE64",
                 "mimeType": "image/png",
@@ -2341,7 +2919,7 @@ mod tests {
     #[test]
     fn preserves_standard_detail_metadata_on_mcp_images() -> Result<()> {
         let call_tool_result = CallToolResult {
-            content: vec![edgerun_json::serde_json::json!({
+            content: vec![edgerun_json::json!({
                 "type": "image",
                 "data": "BASE64",
                 "mimeType": "image/png",
@@ -2377,7 +2955,7 @@ mod tests {
             {"type": "input_image", "image_url": "data:image/png;base64,XYZ"}
         ]"#;
 
-        let payload: FunctionCallOutputPayload = edgerun_json::serde_json::from_str(json)?;
+        let payload: FunctionCallOutputPayload = edgerun_json::from_str(json)?;
 
         assert_eq!(payload.success, None);
         let expected_items = vec![
@@ -2394,8 +2972,8 @@ mod tests {
             FunctionCallOutputBody::ContentItems(expected_items.clone())
         );
         assert_eq!(
-            edgerun_json::serde_json::to_string(&payload)?,
-            edgerun_json::serde_json::to_string(&expected_items)?
+            edgerun_json::to_string(&payload)?,
+            edgerun_json::to_string(&expected_items)?
         );
 
         Ok(())
@@ -2405,7 +2983,7 @@ mod tests {
     fn deserializes_compaction_alias() -> Result<()> {
         let json = r#"{"type":"compaction_summary","encrypted_content":"abc"}"#;
 
-        let item: ResponseItem = edgerun_json::serde_json::from_str(json)?;
+        let item: ResponseItem = edgerun_json::from_str(json)?;
 
         assert_eq!(
             item,
@@ -2420,7 +2998,7 @@ mod tests {
     fn deserializes_context_compaction() -> Result<()> {
         let json = r#"{"type":"context_compaction","encrypted_content":"abc"}"#;
 
-        let item: ResponseItem = edgerun_json::serde_json::from_str(json)?;
+        let item: ResponseItem = edgerun_json::from_str(json)?;
 
         assert_eq!(
             item,
@@ -2438,8 +3016,8 @@ mod tests {
         };
 
         assert_eq!(
-            edgerun_json::serde_json::to_value(item)?,
-            edgerun_json::serde_json::json!({
+            edgerun_json::to_value(item)?,
+            edgerun_json::json!({
                 "type": "context_compaction",
             })
         );
@@ -2458,7 +3036,7 @@ mod tests {
             }
         }"#;
 
-        let item: ResponseItem = edgerun_json::serde_json::from_str(json)?;
+        let item: ResponseItem = edgerun_json::from_str(json)?;
 
         assert_eq!(item, ResponseItem::Other);
         Ok(())
@@ -2534,7 +3112,7 @@ mod tests {
 
         for (json_literal, expected_id, expected_action, expected_status, expect_roundtrip) in cases
         {
-            let parsed: ResponseItem = edgerun_json::serde_json::from_str(json_literal)?;
+            let parsed: ResponseItem = edgerun_json::from_str(json_literal)?;
             let expected = ResponseItem::WebSearchCall {
                 id: expected_id.clone(),
                 status: expected_status.clone(),
@@ -2542,9 +3120,9 @@ mod tests {
             };
             assert_eq!(parsed, expected);
 
-            let serialized = edgerun_json::serde_json::to_value(&parsed)?;
-            let mut expected_serialized: edgerun_json::serde_json::Value =
-                edgerun_json::serde_json::from_str(json_literal)?;
+            let serialized = edgerun_json::to_value(&parsed)?;
+            let mut expected_serialized: edgerun_json::Value =
+                edgerun_json::from_str(json_literal)?;
             if !expect_roundtrip && let Some(obj) = expected_serialized.as_object_mut() {
                 obj.remove("id");
             }
@@ -2562,7 +3140,7 @@ mod tests {
             "timeout": 1000
         }"#;
 
-        let params: ShellToolCallParams = edgerun_json::serde_json::from_str(json)?;
+        let params: ShellToolCallParams = edgerun_json::from_str(json)?;
         assert_eq!(
             ShellToolCallParams {
                 command: vec!["ls".to_string(), "-l".to_string()],
@@ -2610,7 +3188,7 @@ mod tests {
 
     #[test]
     fn tool_search_call_roundtrips() -> Result<()> {
-        let parsed: ResponseItem = edgerun_json::serde_json::from_str(
+        let parsed: ResponseItem = edgerun_json::from_str(
             r#"{
                 "type": "tool_search_call",
                 "call_id": "search-1",
@@ -2629,7 +3207,7 @@ mod tests {
                 call_id: Some("search-1".to_string()),
                 status: None,
                 execution: "client".to_string(),
-                arguments: edgerun_json::serde_json::json!({
+                arguments: edgerun_json::json!({
                     "query": "calendar create",
                     "limit": 1,
                 }),
@@ -2637,8 +3215,8 @@ mod tests {
         );
 
         assert_eq!(
-            edgerun_json::serde_json::to_value(&parsed)?,
-            edgerun_json::serde_json::json!({
+            edgerun_json::to_value(&parsed)?,
+            edgerun_json::json!({
                 "type": "tool_search_call",
                 "call_id": "search-1",
                 "execution": "client",
@@ -2658,7 +3236,7 @@ mod tests {
             call_id: "search-1".to_string(),
             status: "completed".to_string(),
             execution: "client".to_string(),
-            tools: vec![edgerun_json::serde_json::json!({
+            tools: vec![edgerun_json::json!({
                 "type": "function",
                 "name": "mcp__codex_apps__calendar_create_event",
                 "description": "Create a calendar event.",
@@ -2679,7 +3257,7 @@ mod tests {
                 call_id: Some("search-1".to_string()),
                 status: "completed".to_string(),
                 execution: "client".to_string(),
-                tools: vec![edgerun_json::serde_json::json!({
+                tools: vec![edgerun_json::json!({
                     "type": "function",
                     "name": "mcp__codex_apps__calendar_create_event",
                     "description": "Create a calendar event.",
@@ -2697,8 +3275,8 @@ mod tests {
         );
 
         assert_eq!(
-            edgerun_json::serde_json::to_value(input)?,
-            edgerun_json::serde_json::json!({
+            edgerun_json::to_value(input)?,
+            edgerun_json::json!({
                 "type": "tool_search_output",
                 "call_id": "search-1",
                 "status": "completed",
@@ -2725,7 +3303,7 @@ mod tests {
 
     #[test]
     fn tool_search_server_items_allow_null_call_id() -> Result<()> {
-        let parsed_call: ResponseItem = edgerun_json::serde_json::from_str(
+        let parsed_call: ResponseItem = edgerun_json::from_str(
             r#"{
                 "type": "tool_search_call",
                 "execution": "server",
@@ -2743,13 +3321,13 @@ mod tests {
                 call_id: None,
                 status: Some("completed".to_string()),
                 execution: "server".to_string(),
-                arguments: edgerun_json::serde_json::json!({
+                arguments: edgerun_json::json!({
                     "paths": ["crm"],
                 }),
             }
         );
 
-        let parsed_output: ResponseItem = edgerun_json::serde_json::from_str(
+        let parsed_output: ResponseItem = edgerun_json::from_str(
             r#"{
                 "type": "tool_search_output",
                 "execution": "server",

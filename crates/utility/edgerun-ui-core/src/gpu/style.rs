@@ -1,4 +1,4 @@
-use super::{Color4, UiRect, palette};
+use super::{Color4, UiRect, UiResolvedTheme};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Axis {
@@ -22,6 +22,65 @@ pub enum JustifyContent {
     Between,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UiColorToken {
+    Bg,
+    Sidebar,
+    Topbar,
+    Panel,
+    Row,
+    Active,
+    Composer,
+    Text,
+    Muted,
+    Border,
+    Accent,
+    AccentText,
+    Success,
+    Warning,
+    Danger,
+    Info,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum UiStyleColor {
+    Semantic(UiColorToken),
+    Fixed(Color4),
+}
+
+impl UiStyleColor {
+    pub const fn fixed(color: Color4) -> Self {
+        Self::Fixed(color)
+    }
+
+    pub const fn semantic(token: UiColorToken) -> Self {
+        Self::Semantic(token)
+    }
+
+    pub const fn resolve(self, theme: UiResolvedTheme) -> Color4 {
+        let colors = theme.colors;
+        match self {
+            Self::Fixed(color) => color,
+            Self::Semantic(UiColorToken::Bg) => colors.bg,
+            Self::Semantic(UiColorToken::Sidebar) => colors.sidebar,
+            Self::Semantic(UiColorToken::Topbar) => colors.topbar,
+            Self::Semantic(UiColorToken::Panel) => colors.panel,
+            Self::Semantic(UiColorToken::Row) => colors.row,
+            Self::Semantic(UiColorToken::Active) => colors.active,
+            Self::Semantic(UiColorToken::Composer) => colors.composer,
+            Self::Semantic(UiColorToken::Text) => colors.text,
+            Self::Semantic(UiColorToken::Muted) => colors.muted,
+            Self::Semantic(UiColorToken::Border) => colors.border,
+            Self::Semantic(UiColorToken::Accent) => colors.accent,
+            Self::Semantic(UiColorToken::AccentText) => colors.accent_text,
+            Self::Semantic(UiColorToken::Success) => colors.success,
+            Self::Semantic(UiColorToken::Warning) => colors.warning,
+            Self::Semantic(UiColorToken::Danger) => colors.danger,
+            Self::Semantic(UiColorToken::Info) => colors.info,
+        }
+    }
+}
+
 const SPACING_UNIT: f32 = 4.0;
 const FILL_PARENT: f32 = -1.0;
 
@@ -37,8 +96,8 @@ pub struct UiStyle {
     pub col_span: u16,
     pub align: AlignItems,
     pub justify: JustifyContent,
-    pub bg: Option<Color4>,
-    pub text: Color4,
+    pub bg: Option<UiStyleColor>,
+    pub text: UiStyleColor,
     pub border: bool,
     pub radius: f32,
     pub truncate: bool,
@@ -60,7 +119,7 @@ impl Default for UiStyle {
             align: AlignItems::Stretch,
             justify: JustifyContent::Start,
             bg: None,
-            text: palette::TEXT,
+            text: UiStyleColor::semantic(UiColorToken::Text),
             border: false,
             radius: 0.0,
             truncate: false,
@@ -109,7 +168,8 @@ impl UiStyle {
             "truncate" => self.truncate = true,
             "disabled" => self.disabled = true,
             "loading" => self.loading = true,
-            "border" => self.border = true,
+            "border" | "border-border" | "border-input" | "border-dashed" | "ring" | "ring-1"
+            | "ring-foreground/10" => self.border = true,
             "items-start" => self.align = AlignItems::Start,
             "items-center" => self.align = AlignItems::Center,
             "items-end" => self.align = AlignItems::End,
@@ -151,6 +211,8 @@ impl UiStyle {
             "rounded-sm" => 4.0,
             "rounded-lg" => 12.0,
             "rounded-xl" => 16.0,
+            "rounded-2xl" => 20.0,
+            "rounded-4xl" => 999.0,
             "rounded-full" => 999.0,
             _ => return false,
         };
@@ -167,11 +229,11 @@ impl UiStyle {
             return true;
         }
         if let Some(color) = class.strip_prefix("bg-").and_then(tailwind_class_color) {
-            self.bg = Some(color);
+            self.bg = Some(UiStyleColor::fixed(color));
             return true;
         }
         if let Some(color) = class.strip_prefix("text-").and_then(tailwind_class_color) {
-            self.text = color;
+            self.text = UiStyleColor::fixed(color);
             return true;
         }
         false
@@ -257,29 +319,52 @@ fn size_value(value: &str) -> Option<f32> {
     }
 }
 
-fn semantic_bg_color(class: &str) -> Option<Color4> {
+fn semantic_bg_color(class: &str) -> Option<UiStyleColor> {
     match class {
-        "bg-bg" => Some(palette::BG),
-        "bg-sidebar" => Some(palette::SIDEBAR),
-        "bg-topbar" => Some(palette::TOPBAR),
-        "bg-panel" => Some(palette::PANEL),
-        "bg-row" => Some(palette::ROW),
-        "bg-active" => Some(palette::ACTIVE_ROW),
-        "bg-composer" => Some(palette::COMPOSER),
-        "bg-accent" => Some(palette::ACCENT),
+        "bg-bg" | "bg-background" => Some(UiStyleColor::semantic(UiColorToken::Bg)),
+        "bg-sidebar" => Some(UiStyleColor::semantic(UiColorToken::Sidebar)),
+        "bg-topbar" => Some(UiStyleColor::semantic(UiColorToken::Topbar)),
+        "bg-panel" | "bg-card" | "bg-popover" => Some(UiStyleColor::semantic(UiColorToken::Panel)),
+        "bg-row" | "bg-muted" | "bg-secondary" => Some(UiStyleColor::semantic(UiColorToken::Row)),
+        "bg-active" => Some(UiStyleColor::semantic(UiColorToken::Active)),
+        "bg-accent" => Some(UiStyleColor::semantic(UiColorToken::Accent)),
+        "bg-composer" | "bg-input" => Some(UiStyleColor::semantic(UiColorToken::Composer)),
+        "bg-primary" => Some(UiStyleColor::semantic(UiColorToken::Accent)),
+        "bg-chart-1" => Some(UiStyleColor::semantic(UiColorToken::Accent)),
+        "bg-chart-2" => Some(UiStyleColor::semantic(UiColorToken::Success)),
+        "bg-chart-3" => Some(UiStyleColor::semantic(UiColorToken::Warning)),
+        "bg-chart-4" => Some(UiStyleColor::semantic(UiColorToken::Info)),
+        "bg-chart-5" => Some(UiStyleColor::semantic(UiColorToken::Danger)),
         _ => None,
     }
 }
 
-fn semantic_text_color(class: &str) -> Option<Color4> {
+fn semantic_text_color(class: &str) -> Option<UiStyleColor> {
     match class {
-        "text-primary" | "text-text" => Some(palette::TEXT),
-        "text-muted" => Some(palette::MUTED),
-        "text-accent" => Some(palette::ACCENT),
-        "text-green" => Some(palette::GREEN),
-        "text-violet" => Some(palette::VIOLET),
-        "text-amber" => Some(palette::AMBER),
-        "text-danger" => Some(palette::DANGER),
+        "text-primary"
+        | "text-text"
+        | "text-foreground"
+        | "text-card-foreground"
+        | "text-popover-foreground" => Some(UiStyleColor::semantic(UiColorToken::Text)),
+        "text-muted" | "text-muted-foreground" | "text-secondary-foreground" => {
+            Some(UiStyleColor::semantic(UiColorToken::Muted))
+        }
+        "text-accent" => Some(UiStyleColor::semantic(UiColorToken::Accent)),
+        "text-primary-foreground" | "text-accent-foreground" => {
+            Some(UiStyleColor::semantic(UiColorToken::AccentText))
+        }
+        "text-background" => Some(UiStyleColor::semantic(UiColorToken::Bg)),
+        "text-green" => Some(UiStyleColor::semantic(UiColorToken::Success)),
+        "text-violet" => Some(UiStyleColor::semantic(UiColorToken::Info)),
+        "text-amber" => Some(UiStyleColor::semantic(UiColorToken::Warning)),
+        "text-chart-1" => Some(UiStyleColor::semantic(UiColorToken::Accent)),
+        "text-chart-2" => Some(UiStyleColor::semantic(UiColorToken::Success)),
+        "text-chart-3" => Some(UiStyleColor::semantic(UiColorToken::Warning)),
+        "text-chart-4" => Some(UiStyleColor::semantic(UiColorToken::Info)),
+        "text-chart-5" => Some(UiStyleColor::semantic(UiColorToken::Danger)),
+        "text-danger" | "text-destructive" | "text-destructive-foreground" => {
+            Some(UiStyleColor::semantic(UiColorToken::Danger))
+        }
         _ => None,
     }
 }
@@ -359,15 +444,74 @@ mod tests {
     #[test]
     fn resolves_semantic_and_tailwind_color_classes_from_shared_palette() {
         let semantic = UiStyle::parse("bg-panel text-muted");
-        assert_eq!(semantic.bg, Some(palette::PANEL));
-        assert_eq!(semantic.text, palette::MUTED);
+        assert_eq!(
+            semantic.bg,
+            Some(UiStyleColor::semantic(UiColorToken::Panel))
+        );
+        assert_eq!(semantic.text, UiStyleColor::semantic(UiColorToken::Muted));
+        assert_eq!(
+            semantic
+                .bg
+                .expect("semantic background")
+                .resolve(UiResolvedTheme::default()),
+            UiResolvedTheme::default().colors.panel
+        );
 
         let tailwind = UiStyle::parse("bg-slate-900 text-cyan-600");
         assert_eq!(
             tailwind.bg,
-            Some(Color4::from_color(crate::TAILWIND.slate_900))
+            Some(UiStyleColor::fixed(Color4::from_color(
+                crate::TAILWIND.slate_900
+            )))
         );
-        assert_eq!(tailwind.text, Color4::from_color(crate::TAILWIND.cyan_600));
+        assert_eq!(
+            tailwind.text,
+            UiStyleColor::fixed(Color4::from_color(crate::TAILWIND.cyan_600))
+        );
+    }
+
+    #[test]
+    fn parses_extracted_shadcn_aliases() {
+        let style = UiStyle::parse(
+            "rounded-2xl border-dashed ring-1 bg-card text-card-foreground text-muted-foreground",
+        );
+
+        assert!(style.border);
+        assert_eq!(style.radius, 20.0);
+        assert_eq!(style.bg, Some(UiStyleColor::semantic(UiColorToken::Panel)));
+        assert_eq!(style.text, UiStyleColor::semantic(UiColorToken::Muted));
+
+        let button = UiStyle::parse("bg-primary text-primary-foreground");
+        assert_eq!(
+            button.bg,
+            Some(UiStyleColor::semantic(UiColorToken::Accent))
+        );
+        assert_eq!(
+            button.text,
+            UiStyleColor::semantic(UiColorToken::AccentText)
+        );
+
+        let icon = UiStyle::parse("rounded-4xl bg-secondary text-background");
+        assert_eq!(icon.radius, 999.0);
+        assert_eq!(icon.bg, Some(UiStyleColor::semantic(UiColorToken::Row)));
+        assert_eq!(icon.text, UiStyleColor::semantic(UiColorToken::Bg));
+
+        let selected = UiStyle::parse("bg-accent text-accent-foreground");
+        assert_eq!(
+            selected.bg,
+            Some(UiStyleColor::semantic(UiColorToken::Accent))
+        );
+        assert_eq!(
+            selected.text,
+            UiStyleColor::semantic(UiColorToken::AccentText)
+        );
+
+        let chart = UiStyle::parse("bg-chart-2 text-chart-5");
+        assert_eq!(
+            chart.bg,
+            Some(UiStyleColor::semantic(UiColorToken::Success))
+        );
+        assert_eq!(chart.text, UiStyleColor::semantic(UiColorToken::Danger));
     }
 
     #[test]
@@ -375,7 +519,7 @@ mod tests {
         let style = UiStyle::parse("hover:bg-slate-900 made-up-class");
         assert_eq!(style.direction, Axis::Vertical);
         assert_eq!(style.bg, None);
-        assert_eq!(style.text, palette::TEXT);
+        assert_eq!(style.text, UiStyleColor::semantic(UiColorToken::Text));
         assert_eq!(style.width, None);
         assert_eq!(style.height, None);
     }

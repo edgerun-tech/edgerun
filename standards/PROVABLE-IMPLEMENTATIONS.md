@@ -36,9 +36,8 @@ Good proof targets already exist:
   no-default-feature tests.
 - `edgerun-http`: broader and more valuable, with existing conformance modules,
   but it needs requirement IDs, profile splits, and no_std test cleanup.
-- `edgerun-quic`, `edgerun-tls`, `edgerun-hpack`,
-  `edgerun-qpack`: useful later once the proof harness works on smaller
-  protocols.
+- `edgerun-quic`, `edgerun-tls`, `edgerun-hpack`, and the HTTP/3 QPACK module:
+  useful later once the proof harness works on smaller protocols.
 
 ## Required Refactor Pattern
 

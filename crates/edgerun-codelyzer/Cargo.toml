@@ -20,12 +20,11 @@ lang-python = []
 lang-go = []
 lang-java = []
 lang-javascript = []
-vfs = ["dep:edgerun-vfs"]
+mount = ["vfs"]
+vfs = []
 
 [dependencies]
 edgerun-crypto = { workspace = true, default-features = false, features = ["sha1"] }
-edgerun-glob.workspace = true
-edgerun-json = { workspace = true, features = ["std", "toml"] }
-edgerun-regex.workspace = true
-edgerun-vfs = { version = "0.1.1", path = "../authority/edgerun-vfs", optional = true }
+edgerun-json = { workspace = true, features = ["toml"] }
+edgerun-log.workspace = true
 rkyv.workspace = true

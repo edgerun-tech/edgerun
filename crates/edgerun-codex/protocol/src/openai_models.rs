@@ -809,37 +809,36 @@ mod tests {
 
     #[test]
     fn model_info_defaults_availability_nux_to_none_when_omitted() {
-        let model: ModelInfo =
-            edgerun_json::serde_json::from_value(edgerun_json::serde_json::json!({
-                "slug": "test-model",
-                "display_name": "Test Model",
-                "description": null,
-                "supported_reasoning_levels": [],
-                "shell_type": "shell_command",
-                "visibility": "list",
-                "supported_in_api": true,
-                "priority": 1,
-                "upgrade": null,
-                "base_instructions": "base",
-                "model_messages": null,
-                "supports_reasoning_summaries": false,
-                "default_reasoning_summary": "auto",
-                "support_verbosity": false,
-                "default_verbosity": null,
-                "apply_patch_tool_type": null,
-                "truncation_policy": {
-                    "mode": "bytes",
-                    "limit": 10000
-                },
-                "supports_parallel_tool_calls": false,
-                "supports_image_detail_original": false,
-                "context_window": null,
-                "auto_compact_token_limit": null,
-                "effective_context_window_percent": 95,
-                "experimental_supported_tools": [],
-                "input_modalities": ["text", "image"]
-            }))
-            .expect("deserialize model info");
+        let model: ModelInfo = edgerun_json::from_value(edgerun_json::json!({
+            "slug": "test-model",
+            "display_name": "Test Model",
+            "description": null,
+            "supported_reasoning_levels": [],
+            "shell_type": "shell_command",
+            "visibility": "list",
+            "supported_in_api": true,
+            "priority": 1,
+            "upgrade": null,
+            "base_instructions": "base",
+            "model_messages": null,
+            "supports_reasoning_summaries": false,
+            "default_reasoning_summary": "auto",
+            "support_verbosity": false,
+            "default_verbosity": null,
+            "apply_patch_tool_type": null,
+            "truncation_policy": {
+                "mode": "bytes",
+                "limit": 10000
+            },
+            "supports_parallel_tool_calls": false,
+            "supports_image_detail_original": false,
+            "context_window": null,
+            "auto_compact_token_limit": null,
+            "effective_context_window_percent": 95,
+            "experimental_supported_tools": [],
+            "input_modalities": ["text", "image"]
+        }))
+        .expect("deserialize model info");
 
         assert_eq!(model.availability_nux, None);
         assert!(!model.supports_image_detail_original);

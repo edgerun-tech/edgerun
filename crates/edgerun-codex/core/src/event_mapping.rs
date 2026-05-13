@@ -18,7 +18,7 @@ use codex_protocol::protocol::COLLABORATION_MODE_OPEN_TAG;
 use codex_protocol::protocol::REALTIME_CONVERSATION_OPEN_TAG;
 use codex_protocol::user_input::UserInput;
 use tracing::warn;
-use edgerun_uuid::Uuid;
+use codex_protocol::local_uuid::Uuid;
 
 use crate::context::is_contextual_user_fragment;
 use crate::context::parse_visible_hook_prompt_message;

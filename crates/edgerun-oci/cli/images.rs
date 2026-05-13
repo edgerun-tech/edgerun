@@ -5,10 +5,10 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use crate::clap::cli::Action;
+use crate::clap::{Arg, Command};
 use crate::cli::display::format_bytes;
 use crate::cli::{default_images_dir, invalid_input, parse_cli_args};
-use edgerun_clap::cli::Action;
-use edgerun_clap::{Arg, Command};
 
 pub fn cmd_images(_opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     let (images_dir, json) = parse_images_args(args)?;

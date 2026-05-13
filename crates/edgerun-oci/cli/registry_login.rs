@@ -4,8 +4,8 @@ use crate::prelude::*;
 use std::io;
 
 use crate::SecretClient;
+use crate::clap::{Arg, Command};
 use crate::cli::{GlobalOpts, invalid_input, parse_cli_args, required_positional};
-use edgerun_clap::{Arg, Command};
 
 pub fn cmd_login(_opts: &GlobalOpts, args: &[String]) -> io::Result<()> {
     const USAGE: &str = "Usage: ert registry login <registry> --token token";

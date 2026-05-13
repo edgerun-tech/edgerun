@@ -841,21 +841,13 @@ impl MailStore for MemoryStore {
                 "ARRIVAL" => {
                     matching.sort_by(|a, b| {
                         let ord = a.internal_date.cmp(&b.internal_date);
-                        if rev {
-                            ord.reverse()
-                        } else {
-                            ord
-                        }
+                        if rev { ord.reverse() } else { ord }
                     });
                 }
                 "DATE" | "SENT" => {
                     matching.sort_by(|a, b| {
                         let ord = a.internal_date.cmp(&b.internal_date);
-                        if rev {
-                            ord.reverse()
-                        } else {
-                            ord
-                        }
+                        if rev { ord.reverse() } else { ord }
                     });
                 }
                 "SUBJECT" => {
@@ -863,11 +855,7 @@ impl MailStore for MemoryStore {
                         let subj_a = a.envelope.subject.as_deref().unwrap_or("");
                         let subj_b = b.envelope.subject.as_deref().unwrap_or("");
                         let ord = subj_a.cmp(subj_b);
-                        if rev {
-                            ord.reverse()
-                        } else {
-                            ord
-                        }
+                        if rev { ord.reverse() } else { ord }
                     });
                 }
                 "FROM" => {
@@ -885,11 +873,7 @@ impl MailStore for MemoryStore {
                             .and_then(|addr| addr.name.as_deref())
                             .unwrap_or("");
                         let ord = from_a.cmp(from_b);
-                        if rev {
-                            ord.reverse()
-                        } else {
-                            ord
-                        }
+                        if rev { ord.reverse() } else { ord }
                     });
                 }
                 "TO" => {
@@ -907,11 +891,7 @@ impl MailStore for MemoryStore {
                             .and_then(|addr| addr.name.as_deref())
                             .unwrap_or("");
                         let ord = to_a.cmp(to_b);
-                        if rev {
-                            ord.reverse()
-                        } else {
-                            ord
-                        }
+                        if rev { ord.reverse() } else { ord }
                     });
                 }
                 "CC" => {
@@ -929,21 +909,13 @@ impl MailStore for MemoryStore {
                             .and_then(|addr| addr.name.as_deref())
                             .unwrap_or("");
                         let ord = cc_a.cmp(cc_b);
-                        if rev {
-                            ord.reverse()
-                        } else {
-                            ord
-                        }
+                        if rev { ord.reverse() } else { ord }
                     });
                 }
                 "SIZE" => {
                     matching.sort_by(|a, b| {
                         let ord = a.size.cmp(&b.size);
-                        if rev {
-                            ord.reverse()
-                        } else {
-                            ord
-                        }
+                        if rev { ord.reverse() } else { ord }
                     });
                 }
                 _ => {} // Unknown criterion, keep order
@@ -2268,7 +2240,7 @@ async fn dispatch_command(
                 return Ok(ImapResponse::no(tag, "No mailbox selected"));
             }
 
-            if let Some(ref mailbox) = current_mailbox {
+            if let Some(mailbox) = current_mailbox.as_ref() {
                 match store.fetch(mailbox, sequence, attributes) {
                     Ok(results) => {
                         for (uid, data) in &results {
@@ -2293,7 +2265,7 @@ async fn dispatch_command(
                 return Ok(ImapResponse::no(tag, "No mailbox selected"));
             }
 
-            if let Some(ref mailbox) = current_mailbox {
+            if let Some(mailbox) = current_mailbox.as_ref() {
                 match store.search(mailbox, keys) {
                     Ok(ids) => {
                         transport
@@ -2377,7 +2349,7 @@ async fn dispatch_command(
                 return Ok(ImapResponse::no(tag, "No mailbox selected"));
             }
 
-            if let Some(ref mailbox) = current_mailbox {
+            if let Some(mailbox) = current_mailbox.as_ref() {
                 let _ = store.close(mailbox);
                 *state = ImapState::Authenticated;
                 *current_mailbox = None;
@@ -2392,7 +2364,7 @@ async fn dispatch_command(
                 return Ok(ImapResponse::no(tag, "No mailbox selected"));
             }
 
-            if let Some(ref mailbox) = current_mailbox {
+            if let Some(mailbox) = current_mailbox.as_ref() {
                 match store.expunge(mailbox) {
                     Ok(removed) => {
                         for seq in &removed {
@@ -2420,7 +2392,7 @@ async fn dispatch_command(
                 return Ok(ImapResponse::no(tag, "No mailbox selected"));
             }
 
-            if let Some(ref mailbox) = current_mailbox {
+            if let Some(mailbox) = current_mailbox.as_ref() {
                 match store.store(mailbox, sequence, action, flags) {
                     Ok(updated) => {
                         for uid in &updated {
@@ -2505,7 +2477,7 @@ async fn dispatch_command(
                 return Ok(ImapResponse::no(tag, "No mailbox selected"));
             }
 
-            if let Some(ref src_mailbox) = current_mailbox {
+            if let Some(src_mailbox) = current_mailbox.as_ref() {
                 match store.copy_messages(src_mailbox, sequence, mailbox) {
                     Ok(uids) => {
                         edgerun_log::debug!(
@@ -2566,7 +2538,7 @@ async fn dispatch_command(
             if *state != ImapState::Selected {
                 return Ok(ImapResponse::no(tag, "No mailbox selected"));
             }
-            if let Some(ref mailbox) = current_mailbox {
+            if let Some(mailbox) = current_mailbox.as_ref() {
                 match store.check(mailbox) {
                     Ok(()) => Ok(ImapResponse::ok(tag, "CHECK completed")),
                     Err(e) => Ok(ImapResponse::no(tag, &format!("CHECK failed: {}", e))),
@@ -2618,7 +2590,7 @@ async fn dispatch_command(
 
                 if line.to_uppercase() == "DONE" {
                     // Send any pending EXISTS updates
-                    if let Some(ref mailbox) = current_mailbox {
+                    if let Some(mailbox) = current_mailbox.as_ref() {
                         let msg_count = store
                             .status(mailbox)
                             .ok()
@@ -2682,7 +2654,7 @@ async fn dispatch_command(
                 return Ok(ImapResponse::no(tag, "No mailbox selected"));
             }
 
-            if let Some(ref src_mailbox) = current_mailbox {
+            if let Some(src_mailbox) = current_mailbox.as_ref() {
                 // MOVE = COPY + STORE +FLAGS \Deleted + EXPUNGE
                 match store.copy_messages(src_mailbox, sequence, mailbox) {
                     Ok(uids) => {
@@ -2713,7 +2685,7 @@ async fn dispatch_command(
                 return Ok(ImapResponse::no(tag, "No mailbox selected"));
             }
 
-            if let Some(ref src_mailbox) = current_mailbox {
+            if let Some(src_mailbox) = current_mailbox.as_ref() {
                 match store.copy_messages(src_mailbox, sequence, mailbox) {
                     Ok(uids) => {
                         let _ = store.store(
@@ -2811,7 +2783,7 @@ async fn dispatch_command(
                 return Ok(ImapResponse::no(tag, "No mailbox selected"));
             }
 
-            if let Some(ref mailbox) = current_mailbox {
+            if let Some(mailbox) = current_mailbox.as_ref() {
                 let keys = parse_search_keys_simple(search_criteria);
                 // Parse sort criteria with optional REVERSE prefix
                 let parsed_criteria: Vec<(String, bool)> = sort_criteria
@@ -2855,7 +2827,7 @@ async fn dispatch_command(
                 return Ok(ImapResponse::no(tag, "No mailbox selected"));
             }
 
-            if let Some(ref mailbox) = current_mailbox {
+            if let Some(mailbox) = current_mailbox.as_ref() {
                 let keys = parse_search_keys_simple(search_criteria);
                 match store.search(mailbox, &keys) {
                     Ok(ids) => {

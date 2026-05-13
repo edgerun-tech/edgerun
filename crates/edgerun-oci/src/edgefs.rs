@@ -7,8 +7,7 @@ use crate::rootfs_access::{
 };
 use crate::tar_layer::{OciWhiteout, TarEntry, TarEntryKind, TarLayerSink};
 use crate::util::StringResultExt;
-use edgerun_edgefs::{DeviceId, EdgeFs, EntryKind, EntryRef, FileMeta};
-use edgerun_storage::BlockStorage;
+use edgerun_storage::{BlockStorage, DeviceId, EdgeFs, EdgeFsError, EntryKind, EntryRef, FileMeta};
 
 pub struct EdgeFsLayerSink<S: BlockStorage> {
     fs: EdgeFs<S>,
@@ -118,10 +117,10 @@ fn edgefs_entry(entry: EntryRef<'_>) -> OciRootfsEntry {
     }
 }
 
-fn edgefs_error(error: edgerun_edgefs::EdgeFsError) -> OciRootfsError {
+fn edgefs_error(error: EdgeFsError) -> OciRootfsError {
     match error {
-        edgerun_edgefs::EdgeFsError::InvalidPath(path) => OciRootfsError::InvalidPath(path),
-        edgerun_edgefs::EdgeFsError::HardlinkLoop(path) => OciRootfsError::LinkLoop(path),
+        EdgeFsError::InvalidPath(path) => OciRootfsError::InvalidPath(path),
+        EdgeFsError::HardlinkLoop(path) => OciRootfsError::LinkLoop(path),
         other => OciRootfsError::Backend(other.to_string()),
     }
 }

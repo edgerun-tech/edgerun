@@ -40,7 +40,7 @@ magic-header encoders or compatibility readers for the removed SDK byte formats.
 - `rfc2104-pad`: RFC 2104 HMAC key pad unit.
 - `hmac-sha256-rfc2104`: RFC 2104 HMAC-SHA256 unit.
 - `capability-policy-v1`: scalar authorization checks from
-  `edgerun-capability-policy`.
+  `edgerun-capabilities::policy`.
 - `capability-session-v1`: remote capability session checks from
   `edgerun-remote-capability`.
 - `capability-provider-v1`: provider invocation/result frame checks from

@@ -30,8 +30,8 @@ use core_test_support::test_codex::test_codex;
 use core_test_support::test_codex::turn_permission_fields;
 use core_test_support::wait_for_event;
 use core_test_support::wait_for_event_match;
-use edgerun_json::serde_json::json;
-use edgerun_uuid::Uuid;
+use edgerun_json::json;
+use codex_protocol::local_uuid::Uuid;
 use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::fs;
@@ -176,7 +176,7 @@ async fn backfill_scans_existing_rollouts() -> Result<()> {
             let jsonl = lines
                 .iter()
                 .map(|line| {
-                    edgerun_json::serde_json::to_string(line)
+                    edgerun_json::to_string(line)
                         .expect("rollout line should serialize")
                 })
                 .collect::<Vec<_>>()
@@ -546,7 +546,7 @@ async fn tool_call_logs_include_thread_id() -> Result<()> {
         "timeout_ms": 1_000,
         "login": false,
     });
-    let args_json = edgerun_json::serde_json::to_string(&args)?;
+    let args_json = edgerun_json::to_string(&args)?;
     mount_sse_sequence(
         &server,
         vec![

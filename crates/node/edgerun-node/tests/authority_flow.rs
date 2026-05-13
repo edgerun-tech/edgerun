@@ -126,7 +126,7 @@ fn append_genesis(store: &mut NodeStore, node: &edgerun_protocols::keygen::Ephem
         store,
         &node.node_id,
         &node.signer,
-        edgerun_stream::EventDraft {
+        edgerun_storage::EventDraft {
             event_type: EventType::NodeGenesis as i32,
             event_version: 1,
             recorded_at: Some(now_protocol_timestamp()),
@@ -140,7 +140,7 @@ fn append_genesis(store: &mut NodeStore, node: &edgerun_protocols::keygen::Ephem
     assert_eq!(genesis.event_type, EventType::NodeGenesis as i32);
     assert_eq!(genesis.payload_object, Some(payload_ref));
     assert!(genesis.signature.is_some());
-    edgerun_stream::verify_event(&genesis, &node.node_id).expect("verify genesis signature");
+    edgerun_storage::verify_event(&genesis, &node.node_id).expect("verify genesis signature");
 }
 
 #[test]
@@ -200,7 +200,7 @@ fn command_commit_flows_across_protocol_stream_storage_and_replay_projection() {
             .value,
         command_hash(&command).value
     );
-    edgerun_stream::verify_event(&committed, &node.node_id).expect("verify commit signature");
+    edgerun_storage::verify_event(&committed, &node.node_id).expect("verify commit signature");
 
     assert_eq!(
         store
@@ -258,7 +258,7 @@ fn rejected_and_duplicate_commands_are_recorded_as_decision_events() {
         .expect("read rejected event")
         .expect("rejected event present");
     assert_eq!(rejected_event.event_type, EventType::CommandRejected as i32);
-    edgerun_stream::verify_event(&rejected_event, &node.node_id)
+    edgerun_storage::verify_event(&rejected_event, &node.node_id)
         .expect("verify rejected event signature");
 
     let duplicate = dispatch_command_with_protocol_signer(
@@ -379,7 +379,7 @@ fn sdk_authored_app_installs_in_runtime_and_is_archived_to_node_stream() {
         &store,
         &node.node_id,
         &node.signer,
-        edgerun_stream::EventDraft {
+        edgerun_storage::EventDraft {
             event_type: EventType::ActionCompleted as i32,
             event_version: 1,
             recorded_at: Some(now_protocol_timestamp()),
@@ -393,7 +393,7 @@ fn sdk_authored_app_installs_in_runtime_and_is_archived_to_node_stream() {
     assert_eq!(stream_event.seq, 1);
     assert_eq!(stream_event.event_type, EventType::ActionCompleted as i32);
     assert_eq!(stream_event.payload_object, Some(runtime_event_ref.clone()));
-    edgerun_stream::verify_event(&stream_event, &node.node_id)
+    edgerun_storage::verify_event(&stream_event, &node.node_id)
         .expect("verify sdk app stream event signature");
 
     let stored_runtime_event = store

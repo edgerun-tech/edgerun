@@ -8,12 +8,18 @@ repository.workspace = true
 homepage.workspace = true
 description = "Hardware-backed signing abstraction and provider dispatch for Edgerun"
 
+[[example]]
+name = "sign_bench"
+path = "examples/sign_bench.rs"
+required-features = ["tpm-std"]
+
 [features]
 default = []
 tpm = ["dep:edgerun-tpm"]
-android-keystore = ["dep:edgerun-android-keystore"]
+tpm-std = ["tpm", "edgerun-tpm/std"]
+android-keystore = []
 # Real JNI-backed Android implementation (requires NDK toolchain)
-android-real = ["android-keystore", "edgerun-android-keystore/android-real"]
+android-real = ["android-keystore", "dep:jni", "dep:ndk-context"]
 yubikey = ["dep:edgerun-yubikey"]
 # All backends
 all-hardware = ["tpm", "android-keystore", "yubikey"]
@@ -22,8 +28,14 @@ all-hardware = ["tpm", "android-keystore", "yubikey"]
 edgerun-devices.workspace = true
 edgerun-protocols = { workspace = true, default-features = false, features = ["sign", "core"] }
 edgerun-tpm = { version = "0.1", path = "../edgerun-tpm", optional = true }
-edgerun-android-keystore = { version = "0.1", path = "../edgerun-android-keystore", optional = true }
 edgerun-yubikey = { version = "0.1", path = "../edgerun-yubikey", optional = true }
+
+[dev-dependencies]
+edgerun-crypto = { workspace = true, default-features = false, features = ["p256"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = { version = "0.22", optional = true }
+ndk-context = { version = "0.1", optional = true }
 
 [lints]
 workspace = true

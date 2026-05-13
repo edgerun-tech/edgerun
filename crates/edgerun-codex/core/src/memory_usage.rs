@@ -3,8 +3,6 @@ use crate::tools::context::ToolPayload;
 use crate::tools::handlers::unified_exec::ExecCommandArgs;
 use codex_memories_read::usage::MEMORIES_USAGE_METRIC;
 use codex_memories_read::usage::memories_usage_kinds_from_command;
-use codex_protocol::models::ShellCommandToolCallParams;
-use codex_protocol::models::ShellToolCallParams;
 use std::path::PathBuf;
 
 pub(crate) async fn emit_metric_for_tool_read(invocation: &ToolInvocation, success: bool) {
@@ -40,36 +38,27 @@ fn shell_command_for_invocation(invocation: &ToolInvocation) -> Option<(Vec<Stri
         invocation.tool_name.namespace.as_deref(),
         invocation.tool_name.name.as_str(),
     ) {
-        (None, "shell") => edgerun_json::serde_json::from_str::<ShellToolCallParams>(arguments)
-            .ok()
-            .map(|params| {
-                (
-                    params.command,
-                    invocation.turn.resolve_path(params.workdir).to_path_buf(),
-                )
-            }),
-        (None, "shell_command") => edgerun_json::serde_json::from_str::<ShellCommandToolCallParams>(arguments)
-            .ok()
-            .map(|params| {
-                if !invocation.turn.tools_config.allow_login_shell && params.login == Some(true) {
+        (None, "shell") => shell_command_argv_and_workdir(arguments).map(|(command, workdir)| {
+            (command, invocation.turn.resolve_path(workdir).to_path_buf())
+        }),
+        (None, "shell_command") => {
+            shell_command_text_login_and_workdir(arguments).map(|(command_text, login, workdir)| {
+                if !invocation.turn.tools_config.allow_login_shell && login == Some(true) {
                     return (
                         Vec::new(),
-                        invocation.turn.resolve_path(params.workdir).to_path_buf(),
+                        invocation.turn.resolve_path(workdir).to_path_buf(),
                     );
                 }
-                let use_login_shell = params
-                    .login
-                    .unwrap_or(invocation.turn.tools_config.allow_login_shell);
+                let use_login_shell =
+                    login.unwrap_or(invocation.turn.tools_config.allow_login_shell);
                 let command = invocation
                     .session
                     .user_shell()
-                    .derive_exec_args(&params.command, use_login_shell);
-                (
-                    command,
-                    invocation.turn.resolve_path(params.workdir).to_path_buf(),
-                )
-            }),
-        (None, "exec_command") => edgerun_json::serde_json::from_str::<ExecCommandArgs>(arguments)
+                    .derive_exec_args(&command_text, use_login_shell);
+                (command, invocation.turn.resolve_path(workdir).to_path_buf())
+            })
+        }
+        (None, "exec_command") => edgerun_json::from_serde_str::<ExecCommandArgs>(arguments)
             .ok()
             .and_then(|params| {
                 let command = crate::tools::handlers::unified_exec::get_command(
@@ -86,4 +75,33 @@ fn shell_command_for_invocation(invocation: &ToolInvocation) -> Option<(Vec<Stri
             }),
         (Some(_), _) | (None, _) => None,
     }
+}
+
+fn shell_command_argv_and_workdir(arguments: &str) -> Option<(Vec<String>, Option<String>)> {
+    let tape = edgerun_json::parse_json_tape(arguments).ok()?;
+    let root = tape.root(arguments)?;
+    let command = root
+        .get_array("command")?
+        .into_iter()
+        .map(|item| item.as_str().map(str::to_string))
+        .collect::<Option<Vec<_>>>()?;
+    let workdir = root
+        .get("workdir")
+        .and_then(|value| value.as_str())
+        .map(str::to_string);
+    Some((command, workdir))
+}
+
+fn shell_command_text_login_and_workdir(
+    arguments: &str,
+) -> Option<(String, Option<bool>, Option<String>)> {
+    let tape = edgerun_json::parse_json_tape(arguments).ok()?;
+    let root = tape.root(arguments)?;
+    let command = root.get("command")?.as_str()?.to_string();
+    let login = root.get("login").and_then(|value| value.as_bool());
+    let workdir = root
+        .get("workdir")
+        .and_then(|value| value.as_str())
+        .map(str::to_string);
+    Some((command, login, workdir))
 }

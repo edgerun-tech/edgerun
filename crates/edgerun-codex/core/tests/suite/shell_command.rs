@@ -13,7 +13,7 @@ use core_test_support::skip_if_windows;
 use core_test_support::test_codex::TestCodexBuilder;
 use core_test_support::test_codex::TestCodexHarness;
 use core_test_support::test_codex::test_codex;
-use edgerun_json::serde_json::json;
+use edgerun_json::json;
 use test_case::test_case;
 
 #[cfg(windows)]
@@ -40,7 +40,7 @@ fn shell_responses_with_timeout(
 
     #[allow(clippy::expect_used)]
     let arguments =
-        edgerun_json::serde_json::to_string(&args).expect("serialize shell command arguments");
+        edgerun_json::to_string(&args).expect("serialize shell command arguments");
 
     vec![
         sse(vec![

@@ -18,6 +18,8 @@ pub mod tungstenite {
     pub use edgerun_tungstenite::*;
 }
 
+#[cfg(feature = "handshake")]
+pub use edgerun_tungstenite::http;
 pub use edgerun_tungstenite::Error;
 pub use edgerun_tungstenite::Message;
 
@@ -223,6 +225,7 @@ where
     }
 }
 
+#[cfg(feature = "connect")]
 fn request_addr(request: &http::Request<()>) -> Result<String, Error> {
     let uri = request.uri();
     let host = uri
@@ -238,6 +241,7 @@ fn request_addr(request: &http::Request<()>) -> Result<String, Error> {
     Ok(format!("{host}:{port}"))
 }
 
+#[cfg(all(feature = "connect", feature = "rustls-tls-native-roots"))]
 fn is_tls_request(request: &http::Request<()>) -> bool {
     request.uri().scheme_str() == Some("wss")
 }

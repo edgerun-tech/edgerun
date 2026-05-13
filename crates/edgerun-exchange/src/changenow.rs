@@ -9,7 +9,7 @@ use crate::provider::*;
 use crate::provider_mapping::map_provider_status;
 use alloc::string::String;
 use core::result::Result;
-use edgerun_json::{from_str, to_string, JsonValue, Map, ToJson};
+use edgerun_json::{to_string, JsonValue, Map, ToJson};
 use edgerun_node::http::client_middleware::Chain;
 use edgerun_node::http::{HttpClient, Method};
 use edgerun_node::rt::block_on;
@@ -102,7 +102,11 @@ impl ChangeNOWAdapter {
 
         let body_str =
             core::str::from_utf8(body).map_err(|e| WalletError::Serialization(e.to_string()))?;
-        from_str(body_str).map_err(|e| WalletError::Serialization(e.to_string()))
+        let tape = edgerun_json::parse_json_tape(body_str)
+            .map_err(|e| WalletError::Serialization(e.to_string()))?;
+        tape.root(body_str)
+            .and_then(|value| value.to_json_value())
+            .ok_or_else(|| WalletError::Serialization("missing JSON root value".into()))
     }
 }
 

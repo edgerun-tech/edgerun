@@ -189,9 +189,6 @@ fn run() -> Result<(), String> {
 
     #[cfg(feature = "fontdue-text")]
     let ui_font = FontFace::load_best_ui_font().ok();
-
-    #[cfg(feature = "fontdue-text")]
-    let ui_font = FontFace::load_best_ui_font().ok();
     #[cfg(feature = "fontdue-text")]
     let icon_font = load_tabler_icon_font();
 

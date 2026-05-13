@@ -12,18 +12,7 @@ build = "build.rs"
 [features]
 default = []
 html-ui = []
-relay-wss-smoke = ["dep:edgerun-relay"]
-relay-virtio-runtime = [
-  "dep:edgerun-relay",
-  "dep:edgerun-virtio",
-  "dep:edgerun-network-driver",
-  "dep:edgerun-protocols",
-  "edgerun-protocols/ethernet-ipv4",
-  "edgerun-relay/fast-public-relay",
-  "edgerun-relay/p256-message",
-  "edgerun-relay/virtio",
-]
-relay-virtio-smoke = ["relay-virtio-runtime"]
+event-virtio = ["dep:edgerun-virtio"]
 runtime = [
   "dep:edgerun-devices",
   "dep:edgerun-node",
@@ -31,7 +20,6 @@ runtime = [
   "dep:edgerun-encoding",
   "dep:edgerun-tpm",
   "dep:edgerun-oci",
-  "dep:edgerun-edgefs",
   "dep:edgerun-storage",
   "dep:edgerun-capabilities",
   "edgerun-protocols/dhcp",
@@ -39,7 +27,7 @@ runtime = [
   "edgerun-protocols/tftp",
   "edgerun-protocols/wifi",
 ]
-x86-runtime = ["runtime", "dep:edgerun-virtio", "dep:edgerun-rtl8125", "dep:edgerun-event"]
+x86-runtime = ["runtime", "event-virtio"]
 esp32s3-ble = ["edgerun-platform/esp32s3-ble"]
 esp32s3-ble-blob = ["edgerun-platform/esp32s3-ble-blob", "esp32s3-ble"]
 esp32s3-ble-stub = ["edgerun-platform/esp32s3-ble-stub", "esp32s3-ble"]
@@ -53,31 +41,17 @@ esp32s3-wifi-ram-phy-patch = ["esp32s3-wifi-blob", "edgerun-platform/esp32s3-wif
 edgerun-devices = { version = "0.1", path = "../device-types/edgerun-devices", optional = true }
 edgerun-platform = { version = "0.1", path = "../edgerun-platform" }
 edgerun-node = { version = "0.1", path = "../node/edgerun-node", default-features = false, features = ["http"], optional = true }
-edgerun-relay = { version = "0.1", path = "../relay/edgerun-relay", default-features = false, features = ["wss"], optional = true }
 edgerun-protocols = { version = "0.1", path = "../protocol/edgerun-protocols", default-features = false, optional = true }
 edgerun-encoding = { version = "0.1", path = "../utility/edgerun-encoding", default-features = false, optional = true }
 edgerun-tpm = { version = "0.1", path = "../identity/edgerun-tpm", default-features = false, optional = true }
 edgerun-crypto = { version = "0.1", path = "../utility/edgerun-crypto", default-features = false }
 edgerun-oci = { version = "0.1", path = "../edgerun-oci", default-features = false, features = ["registry-client", "edgefs"], optional = true }
-edgerun-edgefs = { version = "0.1", path = "../authority/edgerun-edgefs", optional = true }
 edgerun-storage = { version = "0.1", path = "../authority/edgerun-storage", optional = true }
 edgerun-capabilities = { version = "0.1", path = "../capability/edgerun-capabilities", optional = true }
 edgerun-network-driver = { version = "0.1", path = "../edgerun-network-driver", default-features = false, features = ["virtio"], optional = true }
 
-[[bin]]
-name = "edgerun-unikernel-relay-wss-smoke"
-path = "src/bin/relay_wss_smoke.rs"
-required-features = ["relay-wss-smoke"]
-
-[[bin]]
-name = "edgerun-unikernel-relay-virtio"
-path = "src/bin/relay_virtio.rs"
-required-features = ["relay-virtio-runtime"]
-
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 edgerun-virtio = { version = "0.1", path = "../edgerun-virtio", optional = true }
-edgerun-rtl8125 = { version = "0.1", path = "../edgerun-rtl8125", optional = true }
-edgerun-event = { version = "0.1", path = "../edgerun-event", features = ["virtio"], optional = true }
 
 [target.'cfg(target_arch = "xtensa")'.dependencies]
 

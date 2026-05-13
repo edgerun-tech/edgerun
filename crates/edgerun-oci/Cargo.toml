@@ -10,10 +10,8 @@ description = "OCI container runtime and registry client — pull, push, login, 
 
 [dependencies]
 edgerun-json = { version = "0.1", path = "../utility/edgerun-json", default-features = false }
-edgerun-clap = { version = "0.1", path = "../utility/edgerun-clap", default-features = false }
-edgerun-crypto = { workspace = true, default-features = false }
+edgerun-crypto = { workspace = true, default-features = false, features = ["digest"] }
 edgerun-node = { version = "0.1", path = "../node/edgerun-node", default-features = false, features = ["https"], optional = true }
-edgerun-edgefs = { workspace = true, optional = true }
 edgerun-storage = { workspace = true, optional = true }
 edgerun-secret-service = { version = "0.1", path = "../apps/edgerun-secret-service", optional = true }
 edgerun-protocols = { workspace = true, default-features = false, features = ["oci"] }
@@ -23,7 +21,7 @@ miniz_oxide = { version = "0.8.9", default-features = false, features = ["with-a
 [features]
 default = []
 registry-client = ["dep:edgerun-node", "edgerun-protocols/http"]
-edgefs = ["dep:edgerun-edgefs", "dep:edgerun-storage"]
+edgefs = ["dep:edgerun-storage"]
 gzip = ["dep:miniz_oxide"]
 std = [
     "registry-client",

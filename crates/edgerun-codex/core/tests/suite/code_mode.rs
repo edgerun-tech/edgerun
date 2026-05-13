@@ -32,7 +32,7 @@ use core_test_support::test_codex::turn_permission_fields;
 use core_test_support::wait_for_event;
 use core_test_support::wait_for_event_match;
 use edgerun_encoding::base64::standard_decode;
-use edgerun_json::serde_json::Value;
+use edgerun_json::Value;
 use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -46,7 +46,7 @@ fn custom_tool_output_items(req: &ResponsesRequest, call_id: &str) -> Vec<Value>
     match req.custom_tool_call_output(call_id).get("output") {
         Some(Value::Array(items)) => items.clone(),
         Some(Value::String(text)) => {
-            vec![edgerun_json::serde_json::json!({ "type": "input_text", "text": text })]
+            vec![edgerun_json::json!({ "type": "input_text", "text": text })]
         }
         _ => panic!("custom tool output should be serialized as text or content items"),
     }
@@ -73,7 +73,7 @@ fn function_tool_output_items(req: &ResponsesRequest, call_id: &str) -> Vec<Valu
     match req.function_call_output(call_id).get("output") {
         Some(Value::Array(items)) => items.clone(),
         Some(Value::String(text)) => {
-            vec![edgerun_json::serde_json::json!({ "type": "input_text", "text": text })]
+            vec![edgerun_json::json!({ "type": "input_text", "text": text })]
         }
         _ => panic!("function tool output should be serialized as text or content items"),
     }
@@ -303,7 +303,7 @@ text(JSON.stringify(await tools.exec_command({ cmd: "printf code_mode_exec_marke
         ),
         text_item(&items, /*index*/ 0),
     );
-    let parsed: Value = edgerun_json::serde_json::from_str(text_item(&items, /*index*/ 1))?;
+    let parsed: Value = edgerun_json::from_serde_str(text_item(&items, /*index*/ 1))?;
     assert!(
         parsed
             .get("chunk_id")
@@ -462,10 +462,10 @@ if (!tool) {
         Some(false),
         "code_mode_only deferred app tool call failed unexpectedly: {output}"
     );
-    let parsed: Value = edgerun_json::serde_json::from_str(&output)?;
+    let parsed: Value = edgerun_json::from_serde_str(&output)?;
     assert_eq!(
         parsed,
-        edgerun_json::serde_json::json!({
+        edgerun_json::json!({
             "found": true,
             "isError": false,
             "text": "called calendar_timezone_option_99 for  at  with ",
@@ -551,8 +551,8 @@ text(JSON.stringify(result));
         "exec update_plan call failed unexpectedly: {output}"
     );
 
-    let parsed: Value = edgerun_json::serde_json::from_str(&output)?;
-    assert_eq!(parsed, edgerun_json::serde_json::json!({}));
+    let parsed: Value = edgerun_json::from_serde_str(&output)?;
+    assert_eq!(parsed, edgerun_json::json!({}));
 
     Ok(())
 }
@@ -839,7 +839,7 @@ text("phase 3");
             responses::ev_function_call(
                 "call-2",
                 "wait",
-                &edgerun_json::serde_json::to_string(&edgerun_json::serde_json::json!({
+                &edgerun_json::to_string(&edgerun_json::json!({
                     "cell_id": cell_id.clone(),
                     "yield_time_ms": 1_000,
                 }))?,
@@ -883,7 +883,7 @@ text("phase 3");
             responses::ev_function_call(
                 "call-3",
                 "wait",
-                &edgerun_json::serde_json::to_string(&edgerun_json::serde_json::json!({
+                &edgerun_json::to_string(&edgerun_json::json!({
                     "cell_id": cell_id.clone(),
                     "yield_time_ms": 1_000,
                 }))?,
@@ -979,7 +979,7 @@ while (true) {}
             responses::ev_function_call(
                 "call-2",
                 "wait",
-                &edgerun_json::serde_json::to_string(&edgerun_json::serde_json::json!({
+                &edgerun_json::to_string(&edgerun_json::json!({
                     "cell_id": cell_id.clone(),
                     "terminate": true,
                 }))?,
@@ -1106,7 +1106,7 @@ text("session b done");
             responses::ev_function_call(
                 "call-3",
                 "wait",
-                &edgerun_json::serde_json::to_string(&edgerun_json::serde_json::json!({
+                &edgerun_json::to_string(&edgerun_json::json!({
                     "cell_id": session_a_id.clone(),
                     "yield_time_ms": 1_000,
                 }))?,
@@ -1146,7 +1146,7 @@ text("session b done");
             responses::ev_function_call(
                 "call-4",
                 "wait",
-                &edgerun_json::serde_json::to_string(&edgerun_json::serde_json::json!({
+                &edgerun_json::to_string(&edgerun_json::json!({
                     "cell_id": session_b_id.clone(),
                     "yield_time_ms": 1_000,
                 }))?,
@@ -1236,7 +1236,7 @@ text("phase 2");
             responses::ev_function_call(
                 "call-2",
                 "wait",
-                &edgerun_json::serde_json::to_string(&edgerun_json::serde_json::json!({
+                &edgerun_json::to_string(&edgerun_json::json!({
                     "cell_id": cell_id.clone(),
                     "terminate": true,
                 }))?,
@@ -1325,7 +1325,7 @@ async fn code_mode_wait_returns_error_for_unknown_session() -> Result<()> {
             responses::ev_function_call(
                 "call-1",
                 "wait",
-                &edgerun_json::serde_json::to_string(&edgerun_json::serde_json::json!({
+                &edgerun_json::to_string(&edgerun_json::json!({
                     "cell_id": "999999",
                     "yield_time_ms": 1_000,
                 }))?,
@@ -1466,7 +1466,7 @@ text("session b done");
             responses::ev_function_call(
                 "call-3",
                 "wait",
-                &edgerun_json::serde_json::to_string(&edgerun_json::serde_json::json!({
+                &edgerun_json::to_string(&edgerun_json::json!({
                     "cell_id": session_b_id.clone(),
                     "yield_time_ms": 1_000,
                 }))?,
@@ -1516,7 +1516,7 @@ text("session b done");
             responses::ev_function_call(
                 "call-4",
                 "wait",
-                &edgerun_json::serde_json::to_string(&edgerun_json::serde_json::json!({
+                &edgerun_json::to_string(&edgerun_json::json!({
                     "cell_id": session_a_id.clone(),
                     "terminate": true,
                 }))?,
@@ -1627,7 +1627,7 @@ text("after yield");
             responses::ev_function_call(
                 "call-2",
                 "exec_command",
-                &edgerun_json::serde_json::to_string(&edgerun_json::serde_json::json!({
+                &edgerun_json::to_string(&edgerun_json::json!({
                     "cmd": wait_for_file_command,
                 }))?,
             ),
@@ -1713,7 +1713,7 @@ text("token one token two token three token four token five token six token seve
             responses::ev_function_call(
                 "call-2",
                 "wait",
-                &edgerun_json::serde_json::to_string(&edgerun_json::serde_json::json!({
+                &edgerun_json::to_string(&edgerun_json::json!({
                     "cell_id": cell_id.clone(),
                     "yield_time_ms": 1_000,
                     "max_tokens": 6,
@@ -1838,15 +1838,15 @@ text("done");
         .iter()
         .any(|item| {
             item.get("call_id")
-                .and_then(edgerun_json::serde_json::Value::as_str)
+                .and_then(edgerun_json::Value::as_str)
                 == Some("call-1")
                 && item
                     .get("output")
-                    .and_then(edgerun_json::serde_json::Value::as_str)
+                    .and_then(edgerun_json::Value::as_str)
                     .is_some_and(|text| text.contains("code_mode_notify_marker"))
                 && item
                     .get("name")
-                    .and_then(edgerun_json::serde_json::Value::as_str)
+                    .and_then(edgerun_json::Value::as_str)
                     == Some("exec")
         });
     assert!(
@@ -1972,7 +1972,7 @@ image("data:image/png;base64,AAA");
     );
     assert_eq!(
         items[1],
-        edgerun_json::serde_json::json!({
+        edgerun_json::json!({
             "type": "input_image",
             "image_url": "https://example.com/image.jpg",
             "detail": "high"
@@ -1980,7 +1980,7 @@ image("data:image/png;base64,AAA");
     );
     assert_eq!(
         items[2],
-        edgerun_json::serde_json::json!({
+        edgerun_json::json!({
             "type": "input_image",
             "image_url": "data:image/png;base64,AAA",
             "detail": "high"
@@ -2010,7 +2010,7 @@ async fn code_mode_can_use_view_image_result_with_image_helper() -> Result<()> {
     fs::write(&image_path, image_bytes)?;
 
     let image_path_json =
-        edgerun_json::serde_json::to_string(&image_path.to_string_lossy().to_string())?;
+        edgerun_json::to_string(&image_path.to_string_lossy().to_string())?;
     let code = format!(
         r#"
 const out = await tools.view_image({{ path: {image_path_json}, detail: "original" }});
@@ -2309,10 +2309,10 @@ text(JSON.stringify({
         "exec global tools inspection failed unexpectedly: {output}"
     );
 
-    let parsed: Value = edgerun_json::serde_json::from_str(&output)?;
+    let parsed: Value = edgerun_json::from_serde_str(&output)?;
     assert_eq!(
         parsed,
-        edgerun_json::serde_json::json!({
+        edgerun_json::json!({
             "hasExecCommand": !cfg!(windows),
             "hasNamespacedEcho": true,
         })
@@ -2369,7 +2369,7 @@ text(JSON.stringify(Object.getOwnPropertyNames(globalThis).sort()));
         Some(false),
         "exec global scope inspection failed unexpectedly: {output}"
     );
-    let globals = edgerun_json::serde_json::from_str::<Vec<String>>(&output)?;
+    let globals = edgerun_json::from_serde_str::<Vec<String>>(&output)?;
     let globals = globals.into_iter().collect::<HashSet<_>>();
     let expected = [
         "AggregateError",
@@ -2486,13 +2486,13 @@ text(JSON.stringify(tool));
         "exec ALL_TOOLS lookup failed unexpectedly: {output}"
     );
 
-    let parsed: Value = edgerun_json::serde_json::from_str(
+    let parsed: Value = edgerun_json::from_serde_str(
         &custom_tool_output_last_non_empty_text(&req, "call-1")
             .expect("exec ALL_TOOLS lookup should emit JSON"),
     )?;
     assert_eq!(
         parsed,
-        edgerun_json::serde_json::json!({
+        edgerun_json::json!({
             "name": "view_image",
             "description": "View a local image from the filesystem (only use if given a full filepath by the user, and the image isn't already attached to the thread context within <image ...> tags).\n\nexec tool declaration:\n```ts\ndeclare const tools: { view_image(args: {\n  // Local filesystem path to an image file\n  path: string;\n}): Promise<{\n  // Image detail hint returned by view_image. Returns `original` when original resolution is preserved, otherwise `null`.\n  detail: string | null;\n  // Data URL for the loaded image.\n  image_url: string;\n}>; };\n```",
         })
@@ -2524,13 +2524,13 @@ text(JSON.stringify(tool));
         "exec ALL_TOOLS MCP lookup failed unexpectedly: {output}"
     );
 
-    let parsed: Value = edgerun_json::serde_json::from_str(
+    let parsed: Value = edgerun_json::from_serde_str(
         &custom_tool_output_last_non_empty_text(&req, "call-1")
             .expect("exec ALL_TOOLS MCP lookup should emit JSON"),
     )?;
     assert_eq!(
         parsed,
-        edgerun_json::serde_json::json!({
+        edgerun_json::json!({
             "name": "mcp__rmcp__echo",
             "description": concat!(
                 "Echo back the provided message and include environment data.\n\n",
@@ -2563,7 +2563,7 @@ async fn code_mode_can_call_hidden_dynamic_tools() -> Result<()> {
                 namespace: Some("codex_app".to_string()),
                 name: "hidden_dynamic_tool".to_string(),
                 description: "A hidden dynamic tool.".to_string(),
-                input_schema: edgerun_json::serde_json::json!({
+                input_schema: edgerun_json::json!({
                         "type": "object",
                         "properties": {
                             "city": { "type": "string" }
@@ -2651,7 +2651,7 @@ text(
     assert_eq!(request.tool, "hidden_dynamic_tool");
     assert_eq!(
         request.arguments,
-        edgerun_json::serde_json::json!({ "city": "Paris" })
+        edgerun_json::json!({ "city": "Paris" })
     );
     test.codex
         .submit(Op::DynamicToolResponse {
@@ -2678,7 +2678,7 @@ text(
         "exec hidden dynamic tool call failed unexpectedly: {output}"
     );
 
-    let parsed: Value = edgerun_json::serde_json::from_str(
+    let parsed: Value = edgerun_json::from_serde_str(
         &custom_tool_output_last_non_empty_text(&req, "call-1")
             .expect("exec hidden dynamic tool lookup should emit JSON"),
     )?;
@@ -2867,13 +2867,13 @@ text(JSON.stringify(load("nb")));
         Some(false),
         "exec load call failed unexpectedly: {second_output}"
     );
-    let loaded: Value = edgerun_json::serde_json::from_str(
+    let loaded: Value = edgerun_json::from_serde_str(
         &custom_tool_output_last_non_empty_text(&second_request, "call-2")
             .expect("exec load call should emit JSON"),
     )?;
     assert_eq!(
         loaded,
-        edgerun_json::serde_json::json!({ "title": "Notebook", "items": [1, true, null] })
+        edgerun_json::json!({ "title": "Notebook", "items": [1, true, null] })
     );
 
     Ok(())
@@ -2910,7 +2910,7 @@ text(JSON.stringify({
         Some(false),
         "exec compare time call failed unexpectedly: {second_output}"
     );
-    let compared: Value = edgerun_json::serde_json::from_str(
+    let compared: Value = edgerun_json::from_serde_str(
         &custom_tool_output_last_non_empty_text(&second_request, "call-1")
             .expect("exec compare time call should emit JSON"),
     )?;

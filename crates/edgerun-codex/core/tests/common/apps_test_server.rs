@@ -1,6 +1,6 @@
 use edgerun_error::Result;
-use edgerun_json::serde_json::Value;
-use edgerun_json::serde_json::json;
+use edgerun_json::Value;
+use edgerun_json::json;
 use wiremock::Mock;
 use wiremock::MockServer;
 use wiremock::Request;
@@ -139,7 +139,7 @@ struct CodexAppsJsonRpcResponder {
 
 impl Respond for CodexAppsJsonRpcResponder {
     fn respond(&self, request: &Request) -> ResponseTemplate {
-        let body: Value = match edgerun_json::serde_json::from_slice(&request.body) {
+        let body: Value = match edgerun_json::from_serde_slice(&request.body) {
             Ok(body) => body,
             Err(error) => {
                 return ResponseTemplate::new(400).set_body_json(json!({

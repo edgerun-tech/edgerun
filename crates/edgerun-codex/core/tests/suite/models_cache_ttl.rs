@@ -294,18 +294,18 @@ async fn rewrite_cache_timestamp(path: &Path, fetched_at: DateTime) -> Result<()
 
 async fn read_cache(path: &Path) -> Result<ModelsCache> {
     let contents = edgerun_tokio::fs::read(path).await?;
-    let cache = edgerun_json::serde_json::from_slice(&contents)?;
+    let cache = edgerun_json::from_serde_slice(&contents)?;
     Ok(cache)
 }
 
 async fn write_cache(path: &Path, cache: &ModelsCache) -> Result<()> {
-    let contents = edgerun_json::serde_json::to_vec_pretty(cache)?;
+    let contents = edgerun_json::to_vec_pretty(cache)?;
     edgerun_tokio::fs::write(path, contents).await?;
     Ok(())
 }
 
 fn write_cache_sync(path: &Path, cache: &ModelsCache) -> Result<()> {
-    let contents = edgerun_json::serde_json::to_vec_pretty(cache)?;
+    let contents = edgerun_json::to_vec_pretty(cache)?;
     std::fs::write(path, contents)?;
     Ok(())
 }

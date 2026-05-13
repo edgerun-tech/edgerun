@@ -7,13 +7,13 @@ use std::io;
 use std::io::Write;
 use std::os::unix::io::AsRawFd;
 
+use crate::clap::cli::Action;
+use crate::clap::{Arg, Command};
 use crate::cli::exec::container_namespace_pid;
 use crate::cli::exec::{enter_container_root, join_container_namespaces, open_exec_root};
 use crate::cli::process_tree;
 use crate::cli::{invalid_input, parse_cli_args};
 use crate::state::{ContainerState, load_state, save_state, state_root_dir};
-use edgerun_clap::cli::Action;
-use edgerun_clap::{Arg, Command};
 
 pub fn cmd_ps(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     crate::cli::apply_global_opts(opts)?;

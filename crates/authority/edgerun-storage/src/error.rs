@@ -47,8 +47,8 @@ impl From<std::io::Error> for StorageError {
     }
 }
 
-impl From<edgerun_stream::StreamError> for StorageError {
-    fn from(e: edgerun_stream::StreamError) -> Self {
+impl From<crate::stream::StreamError> for StorageError {
+    fn from(e: crate::stream::StreamError) -> Self {
         Self::Stream(e.to_string())
     }
 }

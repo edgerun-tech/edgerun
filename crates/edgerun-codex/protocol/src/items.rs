@@ -24,8 +24,6 @@ use crate::protocol::WebSearchEndEvent;
 use crate::user_input::ByteRange;
 use crate::user_input::TextElement;
 use crate::user_input::UserInput;
-use edgerun_quick_xml::de::from_str as from_xml_str;
-use edgerun_quick_xml::se::to_string as to_xml_string;
 use edgerun_serde::Deserialize;
 use edgerun_serde::Serialize;
 use schemars::JsonSchema;
@@ -70,15 +68,6 @@ pub struct HookPromptItem {
 pub struct HookPromptFragment {
     pub text: String,
     pub hook_run_id: String,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-#[serde(rename = "hook_prompt")]
-struct HookPromptXml {
-    #[serde(rename = "@hook_run_id")]
-    hook_run_id: String,
-    #[serde(rename = "$text")]
-    text: String,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, TS, JsonSchema)]
@@ -174,7 +163,7 @@ pub struct McpToolCallItem {
     pub id: String,
     pub server: String,
     pub tool: String,
-    pub arguments: edgerun_json::serde_json::Value,
+    pub arguments: edgerun_json::Value,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub mcp_app_resource_uri: Option<String>,
@@ -214,7 +203,7 @@ pub struct ContextCompactionItem {
 impl ContextCompactionItem {
     pub fn new() -> Self {
         Self {
-            id: edgerun_uuid::Uuid::new_v4().to_string(),
+            id: crate::local_uuid::Uuid::new_v4().to_string(),
         }
     }
 
@@ -232,7 +221,7 @@ impl Default for ContextCompactionItem {
 impl UserMessageItem {
     pub fn new(content: &[UserInput]) -> Self {
         Self {
-            id: edgerun_uuid::Uuid::new_v4().to_string(),
+            id: crate::local_uuid::Uuid::new_v4().to_string(),
             content: content.to_vec(),
         }
     }
@@ -312,7 +301,7 @@ impl HookPromptItem {
         Self {
             id: id
                 .cloned()
-                .unwrap_or_else(|| edgerun_uuid::Uuid::new_v4().to_string()),
+                .unwrap_or_else(|| crate::local_uuid::Uuid::new_v4().to_string()),
             fragments,
         }
     }
@@ -342,7 +331,7 @@ pub fn build_hook_prompt_message(fragments: &[HookPromptFragment]) -> Option<Res
     }
 
     Some(ResponseItem::Message {
-        id: Some(edgerun_uuid::Uuid::new_v4().to_string()),
+        id: Some(crate::local_uuid::Uuid::new_v4().to_string()),
         role: "user".to_string(),
         content,
         phase: None,
@@ -372,7 +361,7 @@ pub fn parse_hook_prompt_message(
 
 pub fn parse_hook_prompt_fragment(text: &str) -> Option<HookPromptFragment> {
     let trimmed = text.trim();
-    let HookPromptXml { text, hook_run_id } = from_xml_str::<HookPromptXml>(trimmed).ok()?;
+    let (text, hook_run_id) = parse_hook_prompt_xml(trimmed)?;
     if hook_run_id.trim().is_empty() {
         return None;
     }
@@ -384,17 +373,77 @@ fn serialize_hook_prompt_fragment(text: &str, hook_run_id: &str) -> Option<Strin
     if hook_run_id.trim().is_empty() {
         return None;
     }
-    to_xml_string(&HookPromptXml {
-        text: text.to_string(),
-        hook_run_id: hook_run_id.to_string(),
-    })
-    .ok()
+    Some(format!(
+        r#"<hook_prompt hook_run_id="{}">{}</hook_prompt>"#,
+        escape_xml_attr(hook_run_id),
+        escape_xml_text(text)
+    ))
+}
+
+fn parse_hook_prompt_xml(input: &str) -> Option<(String, String)> {
+    const OPEN: &str = "<hook_prompt";
+    const CLOSE: &str = "</hook_prompt>";
+
+    let rest = input.strip_prefix(OPEN)?;
+    let tag_end = rest.find('>')?;
+    let attrs = &rest[..tag_end];
+    let body = &rest[tag_end + 1..];
+    let body = body.strip_suffix(CLOSE)?;
+    let hook_run_id = parse_xml_attr(attrs, "hook_run_id")?;
+    Some((unescape_xml(body)?, unescape_xml(&hook_run_id)?))
+}
+
+fn parse_xml_attr(attrs: &str, name: &str) -> Option<String> {
+    let key = format!("{name}=");
+    let start = attrs.find(&key)? + key.len();
+    let quote = attrs[start..].chars().next()?;
+    if quote != '"' && quote != '\'' {
+        return None;
+    }
+    let value_start = start + quote.len_utf8();
+    let value_end = attrs[value_start..].find(quote)? + value_start;
+    Some(attrs[value_start..value_end].to_string())
+}
+
+fn escape_xml_text(value: &str) -> String {
+    value
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+}
+
+fn escape_xml_attr(value: &str) -> String {
+    escape_xml_text(value)
+        .replace('"', "&quot;")
+        .replace('\'', "&apos;")
+}
+
+fn unescape_xml(value: &str) -> Option<String> {
+    let mut out = String::with_capacity(value.len());
+    let mut rest = value;
+    while let Some(index) = rest.find('&') {
+        out.push_str(&rest[..index]);
+        rest = &rest[index + 1..];
+        let semi = rest.find(';')?;
+        let entity = &rest[..semi];
+        match entity {
+            "amp" => out.push('&'),
+            "lt" => out.push('<'),
+            "gt" => out.push('>'),
+            "quot" => out.push('"'),
+            "apos" => out.push('\''),
+            _ => return None,
+        }
+        rest = &rest[semi + 1..];
+    }
+    out.push_str(rest);
+    Some(out)
 }
 
 impl AgentMessageItem {
     pub fn new(content: &[AgentMessageContent]) -> Self {
         Self {
-            id: edgerun_uuid::Uuid::new_v4().to_string(),
+            id: crate::local_uuid::Uuid::new_v4().to_string(),
             content: content.to_vec(),
             phase: None,
             memory_citation: None,

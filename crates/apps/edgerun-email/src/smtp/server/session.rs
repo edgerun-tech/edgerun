@@ -439,7 +439,7 @@ impl SmtpServer {
         });
 
         // Spawn delivery worker if queue + relay configured
-        if let (Some(ref q), Some(relay)) = (&queue, relay) {
+        if let (Some(q), Some(relay)) = (&queue, relay) {
             let mut worker_config = DeliveryWorkerConfig::default();
             worker_config.bounce_config = BounceConfig {
                 domain: self.config.domain.clone(),
@@ -1230,7 +1230,7 @@ async fn handle_command(
             // since we store raw bytes in envelope.data.
             for (key, value) in &parameters {
                 if key.eq_ignore_ascii_case("BODY") {
-                    if let Some(ref body_type) = value {
+                    if let Some(body_type) = value {
                         let body_lower = body_type.to_lowercase();
                         if body_lower != "7bit"
                             && body_lower != "8bitmime"

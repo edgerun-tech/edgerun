@@ -11,10 +11,9 @@ description = "Small UTC timestamp helpers for the edgerun workspace"
 [features]
 default = []
 std = []
-chrono = ["dep:chrono", "chrono/clock"]
+chrono = ["std"]
 
 [dependencies]
-chrono = { version = "0.4.43", default-features = false, optional = true }
 edgerun-encoding = { version = "0.1", path = "../edgerun-encoding", default-features = false }
 
 [lints]

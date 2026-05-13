@@ -44,9 +44,9 @@ impl CommandMiddleware<crate::smtp::SmtpCommand, crate::smtp::SmtpResponse> for 
         next: NextCommand<crate::smtp::SmtpCommand, crate::smtp::SmtpResponse>,
     ) -> Pin<Box<dyn Future<Output = io::Result<ControlFlow<crate::smtp::SmtpResponse>>> + Send + '_>>
     {
-        use crate::smtp::server::session::SmtpAuth;
         use crate::smtp::SmtpCommand;
         use crate::smtp::SmtpResponse;
+        use crate::smtp::server::session::SmtpAuth;
 
         Box::pin(async move {
             let needs_auth = matches!(&cmd, SmtpCommand::MailFrom { .. });

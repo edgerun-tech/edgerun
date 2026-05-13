@@ -6,7 +6,7 @@ use std::future::Future;
 
 #[cfg(feature = "edgerun-runtime")]
 pub mod edgerun {
-    pub use edgerun_node::rt::*;
+    pub use edgerun_runtime::rt::*;
 }
 
 #[doc(hidden)]
@@ -280,25 +280,25 @@ macro_rules! select {
 pub mod runtime {
     use super::*;
 
-    pub type Runtime = edgerun_node::rt::Runtime;
+    pub type Runtime = edgerun_runtime::rt::Runtime;
 
     #[derive(Clone, Copy)]
-    pub struct Handle(edgerun_node::rt::RuntimeHandle);
+    pub struct Handle(edgerun_runtime::rt::RuntimeHandle);
 
     pub struct Builder {
-        inner: edgerun_node::rt::Builder,
+        inner: edgerun_runtime::rt::Builder,
     }
 
     impl Builder {
         pub fn new_current_thread() -> Self {
             Self {
-                inner: edgerun_node::rt::Builder::new_multi_thread(),
+                inner: edgerun_runtime::rt::Builder::new_multi_thread(),
             }
         }
 
         pub fn new_multi_thread() -> Self {
             Self {
-                inner: edgerun_node::rt::Builder::new_multi_thread(),
+                inner: edgerun_runtime::rt::Builder::new_multi_thread(),
             }
         }
 
@@ -317,17 +317,17 @@ pub mod runtime {
             self
         }
 
-        pub fn build(&self) -> Result<Runtime, edgerun_node::rt::Error> {
+        pub fn build(&self) -> Result<Runtime, edgerun_runtime::rt::Error> {
             self.inner.build()
         }
     }
 
     impl Handle {
         pub fn current() -> Self {
-            Self(edgerun_node::rt::RuntimeHandle)
+            Self(edgerun_runtime::rt::RuntimeHandle)
         }
 
-        pub fn spawn<F>(&self, future: F) -> edgerun_node::rt::JoinHandle<F::Output>
+        pub fn spawn<F>(&self, future: F) -> edgerun_runtime::rt::JoinHandle<F::Output>
         where
             F: Future + Send + 'static,
             F::Output: Send + 'static,
@@ -335,7 +335,7 @@ pub mod runtime {
             self.0.spawn(future)
         }
 
-        pub fn spawn_blocking<F, R>(&self, f: F) -> edgerun_node::rt::JoinHandle<R>
+        pub fn spawn_blocking<F, R>(&self, f: F) -> edgerun_runtime::rt::JoinHandle<R>
         where
             F: FnOnce() -> R + Send + 'static,
             R: Send + 'static,
@@ -348,16 +348,16 @@ pub mod runtime {
 pub mod task {
     use super::*;
 
-    pub type JoinError = edgerun_node::rt::JoinError;
-    pub type JoinHandle<T> = edgerun_node::rt::JoinHandle<T>;
-    pub type JoinSet<T> = edgerun_node::rt::JoinSet<T>;
+    pub type JoinError = edgerun_runtime::rt::JoinError;
+    pub type JoinHandle<T> = edgerun_runtime::rt::JoinHandle<T>;
+    pub type JoinSet<T> = edgerun_runtime::rt::JoinSet<T>;
 
     pub fn spawn<F>(future: F) -> JoinHandle<F::Output>
     where
         F: Future + Send + 'static,
         F::Output: Send + 'static,
     {
-        edgerun_node::rt::spawn(future)
+        edgerun_runtime::rt::spawn(future)
     }
 
     pub fn spawn_blocking<F, R>(f: F) -> JoinHandle<R>
@@ -365,16 +365,16 @@ pub mod task {
         F: FnOnce() -> R + Send + 'static,
         R: Send + 'static,
     {
-        edgerun_node::rt::spawn_blocking(f)
+        edgerun_runtime::rt::spawn_blocking(f)
     }
 
     pub async fn yield_now() {
-        edgerun_node::rt::yieldnow().await;
+        edgerun_runtime::rt::yieldnow().await;
     }
 }
 
 pub mod time {
-    pub use edgerun_node::rt::{
+    pub use edgerun_runtime::rt::{
         Duration, Elapsed, Instant, Sleep, SleepUntil, Timeout, TimeoutAt, sleep_until, timeout,
         timeout_at,
     };
@@ -384,14 +384,14 @@ pub mod time {
     }
 
     pub mod error {
-        pub type Elapsed = edgerun_node::rt::Elapsed;
+        pub type Elapsed = edgerun_runtime::rt::Elapsed;
     }
 }
 
 pub mod io {
     pub use std::io::{Error, ErrorKind, Result};
 
-    pub use edgerun_node::rt::{
+    pub use edgerun_runtime::rt::{
         AsyncBufRead, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader, Cursor,
         IoError, copy, copy_bidirectional,
     };
@@ -403,7 +403,7 @@ pub mod fs {
     use std::pin::Pin;
     use std::task::{Context, Poll};
 
-    use edgerun_node::rt::io::{AsyncRead, AsyncWrite, IoError, Result as IoResult};
+    use edgerun_runtime::rt::io::{AsyncRead, AsyncWrite, IoError, Result as IoResult};
 
     fn map_io_error(error: std::io::Error) -> IoError {
         match error.kind() {
@@ -573,83 +573,83 @@ pub mod net {
     use std::sync::Arc;
     use std::task::{Context, Poll};
 
-    use edgerun_node::rt::{AsyncRead, AsyncWrite};
+    use edgerun_runtime::rt::{AsyncRead, AsyncWrite};
 
     pub struct TcpStream {
-        inner: Arc<edgerun_node::rt::AsyncTcpStream>,
+        inner: Arc<edgerun_runtime::rt::AsyncTcpStream>,
     }
 
     impl TcpStream {
-        pub async fn connect<A: ToString>(addr: A) -> edgerun_node::rt::io::Result<Self> {
-            edgerun_node::rt::ConnectFuture::new(addr)
+        pub async fn connect<A: ToString>(addr: A) -> edgerun_runtime::rt::io::Result<Self> {
+            edgerun_runtime::rt::ConnectFuture::new(addr)
                 .await
                 .map(|inner| Self { inner })
         }
 
-        pub fn local_addr(&self) -> edgerun_node::rt::io::Result<SocketAddr> {
+        pub fn local_addr(&self) -> edgerun_runtime::rt::io::Result<SocketAddr> {
             self.inner.local_addr()
         }
 
-        pub fn peer_addr(&self) -> edgerun_node::rt::io::Result<SocketAddr> {
+        pub fn peer_addr(&self) -> edgerun_runtime::rt::io::Result<SocketAddr> {
             self.inner.peer_addr()
         }
     }
 
-    impl edgerun_node::rt::AsyncRead for TcpStream {
+    impl edgerun_runtime::rt::AsyncRead for TcpStream {
         fn poll_read(
             mut self: Pin<&mut Self>,
             cx: &mut Context<'_>,
             buf: &mut [u8],
-        ) -> Poll<edgerun_node::rt::io::Result<usize>> {
+        ) -> Poll<edgerun_runtime::rt::io::Result<usize>> {
             Pin::new(&mut self.inner).poll_read(cx, buf)
         }
     }
 
-    impl edgerun_node::rt::AsyncWrite for TcpStream {
+    impl edgerun_runtime::rt::AsyncWrite for TcpStream {
         fn poll_write(
             mut self: Pin<&mut Self>,
             cx: &mut Context<'_>,
             buf: &[u8],
-        ) -> Poll<edgerun_node::rt::io::Result<usize>> {
+        ) -> Poll<edgerun_runtime::rt::io::Result<usize>> {
             Pin::new(&mut self.inner).poll_write(cx, buf)
         }
 
         fn poll_flush(
             mut self: Pin<&mut Self>,
             cx: &mut Context<'_>,
-        ) -> Poll<edgerun_node::rt::io::Result<()>> {
+        ) -> Poll<edgerun_runtime::rt::io::Result<()>> {
             Pin::new(&mut self.inner).poll_flush(cx)
         }
 
         fn poll_shutdown(
             mut self: Pin<&mut Self>,
             cx: &mut Context<'_>,
-        ) -> Poll<edgerun_node::rt::io::Result<()>> {
+        ) -> Poll<edgerun_runtime::rt::io::Result<()>> {
             Pin::new(&mut self.inner).poll_shutdown(cx)
         }
     }
 
-    fn map_edgerun_io(error: edgerun_node::rt::IoError) -> std::io::Error {
+    fn map_edgerun_io(error: edgerun_runtime::rt::IoError) -> std::io::Error {
         match error {
-            edgerun_node::rt::IoError::UnexpectedEof => {
+            edgerun_runtime::rt::IoError::UnexpectedEof => {
                 std::io::Error::from(std::io::ErrorKind::UnexpectedEof)
             }
-            edgerun_node::rt::IoError::WriteZero => {
+            edgerun_runtime::rt::IoError::WriteZero => {
                 std::io::Error::from(std::io::ErrorKind::WriteZero)
             }
-            edgerun_node::rt::IoError::Other(message) => std::io::Error::other(message),
+            edgerun_runtime::rt::IoError::Other(message) => std::io::Error::other(message),
         }
     }
 
     impl Read for TcpStream {
         fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-            let waker = edgerun_node::rt::noop_waker();
+            let waker = edgerun_runtime::rt::noop_waker();
             let mut cx = Context::from_waker(&waker);
             loop {
                 match Pin::new(&mut *self).poll_read(&mut cx, buf) {
                     Poll::Ready(result) => return result.map_err(map_edgerun_io),
                     Poll::Pending => {
-                        edgerun_node::rt::run_queue();
+                        edgerun_runtime::rt::run_queue();
                         std::thread::yield_now();
                     }
                 }
@@ -659,13 +659,13 @@ pub mod net {
 
     impl Write for TcpStream {
         fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-            let waker = edgerun_node::rt::noop_waker();
+            let waker = edgerun_runtime::rt::noop_waker();
             let mut cx = Context::from_waker(&waker);
             loop {
                 match Pin::new(&mut *self).poll_write(&mut cx, buf) {
                     Poll::Ready(result) => return result.map_err(map_edgerun_io),
                     Poll::Pending => {
-                        edgerun_node::rt::run_queue();
+                        edgerun_runtime::rt::run_queue();
                         std::thread::yield_now();
                     }
                 }
@@ -673,13 +673,13 @@ pub mod net {
         }
 
         fn flush(&mut self) -> std::io::Result<()> {
-            let waker = edgerun_node::rt::noop_waker();
+            let waker = edgerun_runtime::rt::noop_waker();
             let mut cx = Context::from_waker(&waker);
             loop {
                 match Pin::new(&mut *self).poll_flush(&mut cx) {
                     Poll::Ready(result) => return result.map_err(map_edgerun_io),
                     Poll::Pending => {
-                        edgerun_node::rt::run_queue();
+                        edgerun_runtime::rt::run_queue();
                         std::thread::yield_now();
                     }
                 }
@@ -688,19 +688,19 @@ pub mod net {
     }
 
     pub struct TcpListener {
-        inner: edgerun_node::rt::AsyncTcpListener,
+        inner: edgerun_runtime::rt::AsyncTcpListener,
     }
 
     impl TcpListener {
-        pub async fn bind<A: ToSocketAddrs>(addr: A) -> edgerun_node::rt::io::Result<Self> {
-            edgerun_node::rt::AsyncTcpListener::bind(addr).map(|inner| Self { inner })
+        pub async fn bind<A: ToSocketAddrs>(addr: A) -> edgerun_runtime::rt::io::Result<Self> {
+            edgerun_runtime::rt::AsyncTcpListener::bind(addr).map(|inner| Self { inner })
         }
 
-        pub fn local_addr(&self) -> edgerun_node::rt::io::Result<SocketAddr> {
+        pub fn local_addr(&self) -> edgerun_runtime::rt::io::Result<SocketAddr> {
             self.inner.local_addr()
         }
 
-        pub async fn accept(&self) -> edgerun_node::rt::io::Result<(TcpStream, SocketAddr)> {
+        pub async fn accept(&self) -> edgerun_runtime::rt::io::Result<(TcpStream, SocketAddr)> {
             self.inner
                 .accept()
                 .await
@@ -715,13 +715,13 @@ pub mod sync {
     use std::sync::{Arc, Mutex as StdMutex};
     use std::task::{Context, Poll, Waker};
 
-    pub use edgerun_node::rt::{Notify, Semaphore};
-    pub type SemaphorePermit<'a> = edgerun_node::rt::SemaphoreGuard<'a>;
+    pub use edgerun_runtime::rt::{Notify, Semaphore};
+    pub type SemaphorePermit<'a> = edgerun_runtime::rt::SemaphoreGuard<'a>;
 
     pub type TryLockError = ();
 
     pub struct Mutex<T> {
-        inner: edgerun_node::rt::AsyncMutex<T>,
+        inner: edgerun_runtime::rt::AsyncMutex<T>,
     }
 
     impl<T: Default> Default for Mutex<T> {
@@ -739,17 +739,17 @@ pub mod sync {
     impl<T> Mutex<T> {
         pub fn new(value: T) -> Self {
             Self {
-                inner: edgerun_node::rt::AsyncMutex::new(value),
+                inner: edgerun_runtime::rt::AsyncMutex::new(value),
             }
         }
 
-        pub fn lock(&self) -> edgerun_node::rt::AsyncMutexLock<'_, T> {
+        pub fn lock(&self) -> edgerun_runtime::rt::AsyncMutexLock<'_, T> {
             self.inner.lock()
         }
     }
 
     pub struct RwLock<T> {
-        inner: edgerun_node::rt::RwLock<T>,
+        inner: edgerun_runtime::rt::RwLock<T>,
     }
 
     impl<T: Default> Default for RwLock<T> {
@@ -767,25 +767,27 @@ pub mod sync {
     impl<T> RwLock<T> {
         pub fn new(value: T) -> Self {
             Self {
-                inner: edgerun_node::rt::RwLock::new(value),
+                inner: edgerun_runtime::rt::RwLock::new(value),
             }
         }
 
-        pub async fn read(&self) -> edgerun_node::rt::RwLockReadGuard<'_, T> {
+        pub async fn read(&self) -> edgerun_runtime::rt::RwLockReadGuard<'_, T> {
             self.inner.read()
         }
 
-        pub async fn write(&self) -> edgerun_node::rt::RwLockWriteGuard<'_, T> {
+        pub async fn write(&self) -> edgerun_runtime::rt::RwLockWriteGuard<'_, T> {
             self.inner.write()
         }
 
-        pub fn try_read(&self) -> Result<edgerun_node::rt::RwLockReadGuard<'_, T>, TryLockError> {
+        pub fn try_read(
+            &self,
+        ) -> Result<edgerun_runtime::rt::RwLockReadGuard<'_, T>, TryLockError> {
             self.inner.try_read().ok_or(())
         }
 
         pub fn try_write(
             &self,
-        ) -> Result<edgerun_node::rt::RwLockWriteGuard<'_, T>, TryLockError> {
+        ) -> Result<edgerun_runtime::rt::RwLockWriteGuard<'_, T>, TryLockError> {
             self.inner.try_write().ok_or(())
         }
     }
@@ -795,10 +797,10 @@ pub mod sync {
         use std::pin::Pin;
         use std::task::{Context, Poll};
 
-        pub use edgerun_node::rt::mpsc::{SendError, TryRecvError, TrySendError};
+        pub use edgerun_runtime::rt::mpsc::{SendError, TryRecvError, TrySendError};
 
         pub struct Sender<T> {
-            inner: edgerun_node::rt::mpsc::Sender<T>,
+            inner: edgerun_runtime::rt::mpsc::Sender<T>,
         }
 
         impl<T> Clone for Sender<T> {
@@ -810,11 +812,11 @@ pub mod sync {
         }
 
         pub struct Receiver<T> {
-            inner: edgerun_node::rt::mpsc::Receiver<T>,
+            inner: edgerun_runtime::rt::mpsc::Receiver<T>,
         }
 
         impl<T> Sender<T> {
-            pub fn send(&self, value: T) -> edgerun_node::rt::mpsc::Send<T> {
+            pub fn send(&self, value: T) -> edgerun_runtime::rt::mpsc::Send<T> {
                 self.inner.send(value)
             }
 
@@ -828,7 +830,7 @@ pub mod sync {
         }
 
         impl<T> Receiver<T> {
-            pub fn recv(&mut self) -> edgerun_node::rt::mpsc::Recv<'_, T> {
+            pub fn recv(&mut self) -> edgerun_runtime::rt::mpsc::Recv<'_, T> {
                 self.inner.recv()
             }
 
@@ -846,7 +848,7 @@ pub mod sync {
         }
 
         pub struct UnboundedSender<T> {
-            inner: edgerun_node::rt::mpsc::Sender<T>,
+            inner: edgerun_runtime::rt::mpsc::Sender<T>,
         }
 
         impl<T> Clone for UnboundedSender<T> {
@@ -858,7 +860,7 @@ pub mod sync {
         }
 
         pub struct UnboundedReceiver<T> {
-            inner: edgerun_node::rt::mpsc::Receiver<T>,
+            inner: edgerun_runtime::rt::mpsc::Receiver<T>,
         }
 
         impl<T> UnboundedSender<T> {
@@ -872,7 +874,7 @@ pub mod sync {
         }
 
         impl<T> UnboundedReceiver<T> {
-            pub fn recv(&mut self) -> edgerun_node::rt::mpsc::Recv<'_, T> {
+            pub fn recv(&mut self) -> edgerun_runtime::rt::mpsc::Recv<'_, T> {
                 self.inner.recv()
             }
 
@@ -890,12 +892,12 @@ pub mod sync {
         }
 
         pub fn channel<T>(cap: usize) -> (Sender<T>, Receiver<T>) {
-            let (tx, rx) = edgerun_node::rt::mpsc::channel(cap);
+            let (tx, rx) = edgerun_runtime::rt::mpsc::channel(cap);
             (Sender { inner: tx }, Receiver { inner: rx })
         }
 
         pub fn unbounded_channel<T>() -> (UnboundedSender<T>, UnboundedReceiver<T>) {
-            let (tx, rx) = edgerun_node::rt::mpsc::channel(0);
+            let (tx, rx) = edgerun_runtime::rt::mpsc::channel(0);
             (
                 UnboundedSender { inner: tx },
                 UnboundedReceiver { inner: rx },
@@ -1013,10 +1015,10 @@ pub mod sync {
     }
 
     pub mod watch {
-        pub use edgerun_node::rt::watch::{Receiver, Sender};
+        pub use edgerun_runtime::rt::watch::{Receiver, Sender};
 
         pub fn channel<T: Clone>(value: T) -> (Sender<T>, Receiver<T>) {
-            edgerun_node::rt::watch::watch(value)
+            edgerun_runtime::rt::watch::watch(value)
         }
     }
 
@@ -1030,19 +1032,16 @@ pub mod sync {
         }
 
         pub struct Sender<T: Clone + 'static> {
-            inner: edgerun_node::rt::broadcast::Publisher<T>,
+            inner: edgerun_runtime::rt::broadcast::Publisher<T>,
         }
 
         pub struct Receiver<T: Clone + 'static> {
-            inner: edgerun_node::rt::broadcast::Subscriber<T>,
+            inner: edgerun_runtime::rt::broadcast::Subscriber<T>,
         }
 
         pub fn channel<T: Clone + 'static>(cap: usize) -> (Sender<T>, Receiver<T>) {
-            let (publisher, subscriber) = edgerun_node::rt::broadcast::broadcast(cap);
-            (
-                Sender { inner: publisher },
-                Receiver { inner: subscriber },
-            )
+            let (publisher, subscriber) = edgerun_runtime::rt::broadcast::broadcast(cap);
+            (Sender { inner: publisher }, Receiver { inner: subscriber })
         }
 
         impl<T: Clone + 'static> Sender<T> {
@@ -1123,5 +1122,5 @@ pub mod sync {
         }
     }
 
-    pub type OnceCell<T> = edgerun_node::rt::OnceCell<T>;
+    pub type OnceCell<T> = edgerun_runtime::rt::OnceCell<T>;
 }

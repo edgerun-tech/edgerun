@@ -23,4 +23,4 @@ pub use edgerun_protocols::imap::types::{
 #[cfg(not(target_os = "none"))]
 pub use maildir_store::MaildirImapStore;
 #[cfg(not(target_os = "none"))]
-pub use server::{base64_decode, ImapServer, ImapServerConfig, MailStore, MemoryStore};
+pub use server::{ImapServer, ImapServerConfig, MailStore, MemoryStore, base64_decode};

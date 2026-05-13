@@ -213,7 +213,7 @@ mod tests {
             namespace: Some("codex_app".to_string()),
             name: "automation_update".to_string(),
             description: "Create, update, view, or delete recurring automations.".to_string(),
-            input_schema: edgerun_json::serde_json::json!({
+            input_schema: edgerun_json::json!({
                 "type": "object",
                 "properties": {
                     "mode": { "type": "string" },
@@ -406,7 +406,7 @@ mod tests {
                 name: tool_name.to_string().into(),
                 title: None,
                 description: Some(format!("{description_prefix} desktop tool").into()),
-                input_schema: Arc::new(rmcp::model::object(edgerun_json::serde_json::json!({
+                input_schema: Arc::new(rmcp::model::object(edgerun_json::json!({
                     "type": "object",
                     "properties": {},
                     "additionalProperties": false,

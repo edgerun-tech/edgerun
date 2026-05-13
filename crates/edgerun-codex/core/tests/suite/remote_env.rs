@@ -29,8 +29,8 @@ use core_test_support::skip_if_no_network;
 use core_test_support::test_codex::TestCodex;
 use core_test_support::test_codex::test_codex;
 use core_test_support::test_codex::test_env;
-use edgerun_json::serde_json::Value;
-use edgerun_json::serde_json::json;
+use edgerun_json::Value;
+use edgerun_json::json;
 use pretty_assertions::assert_eq;
 use std::fs;
 use std::path::PathBuf;
@@ -165,7 +165,7 @@ async fn exec_command_routing_output(
                 ev_function_call(
                     call_id,
                     "exec_command",
-                    &edgerun_json::serde_json::to_string(&arguments)?,
+                    &edgerun_json::to_string(&arguments)?,
                 ),
                 ev_completed("resp-1"),
             ]),

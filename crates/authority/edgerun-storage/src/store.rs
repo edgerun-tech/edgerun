@@ -126,7 +126,7 @@ pub struct NodeStoreConfig {
 
 /// Durable node storage.
 ///
-/// Stream events are produced by `edgerun-stream`. Storage appends those
+/// Stream events are produced by `edgerun-storage::stream`. Storage appends those
 /// already-signed events and maintains rebuildable projections.
 pub struct NodeStore {
     config: NodeStoreConfig,
@@ -545,7 +545,7 @@ impl NodeStore {
                 writer.try_into().map_err(|_| {
                     StorageError::Stream("stream writer key must be 64 bytes".into())
                 })?;
-            edgerun_stream::validate_stream(&events, writer)?;
+            crate::stream::validate_stream(&events, writer)?;
         }
 
         Ok(events.len() as u64)
@@ -1647,7 +1647,7 @@ mod tests {
         let mut store = make_store(tmp_data_root());
         let signer = TestSigner::new();
         let mut genesis = event(b"stream-1", 0, None);
-        edgerun_stream::sign_event(&mut genesis, &signer).expect("sign genesis");
+        crate::stream::sign_event(&mut genesis, &signer).expect("sign genesis");
         store
             .append_event_blocking(genesis)
             .expect("append genesis");
@@ -1675,7 +1675,7 @@ mod tests {
         let mut store = make_store(tmp_data_root());
         let signer = TestSigner::new();
         let mut genesis = event(b"stream-1", 0, None);
-        edgerun_stream::sign_event(&mut genesis, &signer).expect("sign genesis");
+        crate::stream::sign_event(&mut genesis, &signer).expect("sign genesis");
         store
             .append_event_blocking(genesis)
             .expect("append genesis");
@@ -1821,12 +1821,12 @@ mod tests {
         let stream_id = b"signed-stream";
 
         let mut event = event(stream_id, 0, None);
-        edgerun_stream::sign_event(&mut event, &signer).unwrap();
+        crate::stream::sign_event(&mut event, &signer).unwrap();
         let _offset = store.append_event_blocking(event).unwrap();
 
         let stored = store.get_event(stream_id, 0).unwrap().unwrap();
         assert!(stored.signature.is_some());
-        assert!(edgerun_stream::verify_event(&stored, &signer.node_id()).is_ok());
+        assert!(crate::stream::verify_event(&stored, &signer.node_id()).is_ok());
         assert_eq!(store.get_head(stream_id).unwrap().unwrap().0, 0);
 
         let _ = std::fs::remove_dir_all(data_root);
@@ -1840,13 +1840,13 @@ mod tests {
         let stream_id = signer.node_id();
 
         let mut first = event(&stream_id, 0, None);
-        edgerun_stream::sign_event(&mut first, &signer).unwrap();
+        crate::stream::sign_event(&mut first, &signer).unwrap();
         store.append_event_blocking(first).unwrap();
         let first = store.get_event(&stream_id, 0).unwrap().unwrap();
         let first_hash = crate::core::canonical_event_hash(&first).value;
 
         let mut second = event(&stream_id, 1, Some(first_hash));
-        edgerun_stream::sign_event(&mut second, &signer).unwrap();
+        crate::stream::sign_event(&mut second, &signer).unwrap();
         store.append_event_blocking(second).unwrap();
 
         assert_eq!(store.validate_stream_chain(&stream_id).unwrap(), 2);
@@ -1869,7 +1869,7 @@ mod tests {
         let stream_id = signer.node_id();
 
         let mut event = event(&stream_id, 0, None);
-        edgerun_stream::sign_event(&mut event, &signer).unwrap();
+        crate::stream::sign_event(&mut event, &signer).unwrap();
         store.append_event_blocking(event).unwrap();
 
         let err = store

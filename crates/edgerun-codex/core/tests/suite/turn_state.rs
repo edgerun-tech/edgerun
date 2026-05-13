@@ -14,7 +14,7 @@ use core_test_support::responses::start_mock_server;
 use core_test_support::responses::start_websocket_server_with_headers;
 use core_test_support::skip_if_no_network;
 use core_test_support::test_codex::test_codex;
-use edgerun_json::serde_json::Value;
+use edgerun_json::Value;
 use pretty_assertions::assert_eq;
 
 const TURN_STATE_HEADER: &str = "x-codex-turn-state";
@@ -67,7 +67,7 @@ async fn responses_turn_state_persists_within_turn_and_resets_after() -> Result<
 
     let parse_turn_id = |header: Option<String>| {
         let value = header?;
-        let parsed: Value = edgerun_json::serde_json::from_str(&value).ok()?;
+        let parsed: Value = edgerun_json::from_serde_str(&value).ok()?;
         parsed
             .get("turn_id")
             .and_then(Value::as_str)

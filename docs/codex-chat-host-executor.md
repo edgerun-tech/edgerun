@@ -75,8 +75,8 @@ into the existing chat model:
 
 | Codex item | EdgeRun projection |
 |---|---|
-| User prompt | `MessageObject` with `CHAT_MESSAGE_KIND_TEXT` from browser node to Codex agent node |
-| Assistant output | `MessageObject` with `CHAT_MESSAGE_KIND_TEXT` from Codex agent node to browser node |
+| User prompt | `MessageObject` with `CHAT_MESSAGE_KIND_TEXT` from the active UI/app node instance to the Codex agent node |
+| Assistant output | `MessageObject` with `CHAT_MESSAGE_KIND_TEXT` from the Codex agent node to the active UI/app node instance |
 | Model status | `CHAT_MESSAGE_KIND_SYSTEM` when it is user-visible state |
 | Tool call begin/end | system/tool-status payload stored as content-addressed bytes |
 | Command stdout/stderr | program event payloads referenced from a system/tool message, not raw ambient UI state |

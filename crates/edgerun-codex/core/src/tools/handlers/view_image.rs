@@ -241,8 +241,8 @@ impl ToolOutput for ViewImageOutput {
         }
     }
 
-    fn code_mode_result(&self, _payload: &ToolPayload) -> edgerun_json::serde_json::Value {
-        edgerun_json::serde_json::json!({
+    fn code_mode_result(&self, _payload: &ToolPayload) -> edgerun_json::Value {
+        edgerun_json::json!({
             "image_url": self.image_url,
             "detail": self.image_detail
         })
@@ -253,7 +253,7 @@ impl ToolOutput for ViewImageOutput {
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
-    use edgerun_json::serde_json::json;
+    use edgerun_json::json;
 
     #[test]
     fn code_mode_result_returns_image_url_object() {

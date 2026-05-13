@@ -10,7 +10,7 @@ use edgerun_encoding::string_field::{
     StringFieldError, decode_bytes_u32_be_borrowed, encode_bytes_u32_be,
 };
 
-pub const CLIENT_IDENTIFICATION: &str = "SSH-2.0-edgerun-ssh_0.1";
+pub const CLIENT_IDENTIFICATION: &str = "SSH-2.0-edgerun-sdk_0.1";
 pub const SSH_MSG_IGNORE: u8 = 2;
 pub const SSH_MSG_DEBUG: u8 = 4;
 pub const SSH_MSG_SERVICE_REQUEST: u8 = 5;

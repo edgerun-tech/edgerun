@@ -132,10 +132,10 @@ fn parse_create_args(args: &[String]) -> io::Result<(String, Option<PathBuf>, Op
     let (prefix, id, remaining) =
         split_cli_prefix(args, &["--pid-file", "--bundle", "--console-socket", "-b"]);
     let matches = parse_cli_args(
-        edgerun_clap::Command::new("create")
-            .arg(edgerun_clap::Arg::new("pid-file").long("pid-file"))
-            .arg(edgerun_clap::Arg::new("bundle").short('b').long("bundle"))
-            .arg(edgerun_clap::Arg::new("console-socket").long("console-socket")),
+        crate::clap::Command::new("create")
+            .arg(crate::clap::Arg::new("pid-file").long("pid-file"))
+            .arg(crate::clap::Arg::new("bundle").short('b').long("bundle"))
+            .arg(crate::clap::Arg::new("console-socket").long("console-socket")),
         &prefix,
         USAGE,
     )?;

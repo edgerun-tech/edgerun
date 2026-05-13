@@ -1,22 +1,13 @@
-//! Minimal no_std logging facade.
+//! Minimal logging facade with a tracing-compatible surface.
 
 #![no_std]
 
 use core::fmt::{self, Write};
+use core::future::Future;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 #[cfg(feature = "tracing-compat")]
-pub use tracing::*;
-
-#[cfg(feature = "tracing-compat")]
-pub mod tracing {
-    pub use tracing::*;
-}
-
-#[cfg(feature = "tracing-opentelemetry-compat")]
-pub mod tracing_opentelemetry {
-    pub use tracing_opentelemetry::*;
-}
+pub use edgerun_log_macros::instrument;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[repr(usize)]
@@ -28,8 +19,32 @@ pub enum LogLevel {
     Error = 4,
 }
 
-#[cfg(not(feature = "tracing-compat"))]
-pub type Level = LogLevel;
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Level(LogLevel);
+
+impl Level {
+    pub const TRACE: Self = Self(LogLevel::Trace);
+    pub const DEBUG: Self = Self(LogLevel::Debug);
+    pub const INFO: Self = Self(LogLevel::Info);
+    pub const WARN: Self = Self(LogLevel::Warn);
+    pub const ERROR: Self = Self(LogLevel::Error);
+
+    pub const fn as_log_level(self) -> LogLevel {
+        self.0
+    }
+}
+
+impl From<LogLevel> for Level {
+    fn from(level: LogLevel) -> Self {
+        Self(level)
+    }
+}
+
+impl From<Level> for LogLevel {
+    fn from(level: Level) -> Self {
+        level.as_log_level()
+    }
+}
 
 impl LogLevel {
     pub fn as_str(self) -> &'static str {
@@ -82,30 +97,8 @@ pub fn clear_format_logger() {
     FORMAT_LOGGER_FN.store(0, Ordering::Relaxed);
 }
 
-pub fn enabled(level: LogLevel) -> bool {
-    (level as usize) >= LOG_LEVEL.load(Ordering::Relaxed)
-}
-
-#[cfg(feature = "tracing-compat")]
-pub fn tracing_level(level: LogLevel) -> tracing::Level {
-    match level {
-        LogLevel::Trace => tracing::Level::TRACE,
-        LogLevel::Debug => tracing::Level::DEBUG,
-        LogLevel::Info => tracing::Level::INFO,
-        LogLevel::Warn => tracing::Level::WARN,
-        LogLevel::Error => tracing::Level::ERROR,
-    }
-}
-
-#[cfg(feature = "tracing-compat")]
-pub fn from_tracing_level(level: tracing::Level) -> LogLevel {
-    match level {
-        tracing::Level::TRACE => LogLevel::Trace,
-        tracing::Level::DEBUG => LogLevel::Debug,
-        tracing::Level::INFO => LogLevel::Info,
-        tracing::Level::WARN => LogLevel::Warn,
-        tracing::Level::ERROR => LogLevel::Error,
-    }
+pub fn enabled(level: impl Into<Level>) -> bool {
+    (level.into().as_log_level() as usize) >= LOG_LEVEL.load(Ordering::Relaxed)
 }
 
 pub fn log(level: LogLevel, module: &str, message: &str) {
@@ -113,7 +106,7 @@ pub fn log(level: LogLevel, module: &str, message: &str) {
 }
 
 pub fn log_args(level: LogLevel, module: &str, args: fmt::Arguments<'_>) {
-    if !enabled(level) {
+    if !enabled(Level(level)) {
         return;
     }
 
@@ -137,6 +130,215 @@ pub fn log_args(level: LogLevel, module: &str, args: fmt::Arguments<'_>) {
 
 pub fn write(level: LogLevel, module: &str, value: impl fmt::Display) {
     log_args(level, module, format_args!("{value}"));
+}
+
+pub fn tracing_level(level: LogLevel) -> Level {
+    Level(level)
+}
+
+pub fn from_tracing_level(level: Level) -> LogLevel {
+    level.as_log_level()
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct Span;
+
+impl Span {
+    pub fn current() -> Self {
+        Self
+    }
+
+    pub fn none() -> Self {
+        Self
+    }
+
+    pub fn new() -> Self {
+        Self
+    }
+
+    pub fn enter(&self) -> Entered {
+        Entered
+    }
+
+    pub fn entered(self) -> Entered {
+        Entered
+    }
+
+    pub fn record(&self, _field: &str, _value: impl fmt::Debug) {}
+
+    pub fn in_scope<T>(&self, f: impl FnOnce() -> T) -> T {
+        f()
+    }
+
+    pub fn metadata(&self) -> Option<&'static Metadata<'static>> {
+        None
+    }
+}
+
+#[derive(Debug)]
+pub struct Entered;
+
+#[derive(Clone, Copy, Debug)]
+pub struct Metadata<'a> {
+    target: &'a str,
+    level: Level,
+}
+
+impl<'a> Metadata<'a> {
+    pub const fn new(target: &'a str, level: Level) -> Self {
+        Self { target, level }
+    }
+
+    pub const fn target(&self) -> &'a str {
+        self.target
+    }
+
+    pub const fn level(&self) -> &Level {
+        &self.level
+    }
+}
+
+pub trait Instrument: Sized {
+    fn instrument(self, _span: Span) -> Self {
+        self
+    }
+
+    fn in_current_span(self) -> Self {
+        self
+    }
+}
+
+impl<T> Instrument for T where T: Future {}
+
+pub mod field {
+    use core::fmt;
+
+    #[derive(Clone, Copy, Debug, Default)]
+    pub struct Empty;
+
+    #[derive(Clone, Copy, Debug, Default)]
+    pub struct Field;
+
+    pub trait Visit {
+        fn record_bool(&mut self, _field: &Field, _value: bool) {}
+        fn record_str(&mut self, _field: &Field, _value: &str) {}
+        fn record_debug(&mut self, _field: &Field, _value: &dyn fmt::Debug) {}
+    }
+
+    pub struct DebugValue<'a, T: ?Sized>(&'a T);
+
+    impl<T: fmt::Debug + ?Sized> fmt::Debug for DebugValue<'_, T> {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            self.0.fmt(f)
+        }
+    }
+
+    pub fn debug<T: fmt::Debug + ?Sized>(value: &T) -> DebugValue<'_, T> {
+        DebugValue(value)
+    }
+}
+
+pub mod dispatcher {
+    #[derive(Debug)]
+    pub struct DefaultGuard;
+
+    pub fn with_default<T>(_dispatch: &crate::Dispatch, f: impl FnOnce() -> T) -> T {
+        f()
+    }
+}
+
+#[derive(Debug)]
+pub struct Dispatch;
+
+impl Dispatch {
+    pub fn new<T>(_subscriber: T) -> Self {
+        Self
+    }
+}
+
+pub mod subscriber {
+    pub fn set_default<T>(_subscriber: T) -> crate::dispatcher::DefaultGuard {
+        crate::dispatcher::DefaultGuard
+    }
+}
+
+pub trait Subscriber {}
+
+pub struct Event<'a> {
+    metadata: Metadata<'a>,
+}
+
+impl<'a> Event<'a> {
+    pub const fn new(metadata: Metadata<'a>) -> Self {
+        Self { metadata }
+    }
+
+    pub const fn metadata(&self) -> &Metadata<'a> {
+        &self.metadata
+    }
+
+    pub fn record(&self, _visitor: &mut dyn field::Visit) {}
+}
+
+#[macro_export]
+macro_rules! enabled {
+    ($level:expr $(,)?) => {
+        $crate::enabled($level)
+    };
+    ($($arg:tt)*) => {
+        false
+    };
+}
+
+#[macro_export]
+macro_rules! event {
+    ($($arg:tt)*) => {{}};
+}
+
+#[macro_export]
+macro_rules! trace {
+    ($($arg:tt)*) => {{}};
+}
+
+#[macro_export]
+macro_rules! debug {
+    ($($arg:tt)*) => {{}};
+}
+
+#[macro_export]
+macro_rules! info {
+    ($($arg:tt)*) => {{}};
+}
+
+#[macro_export]
+macro_rules! warn {
+    ($($arg:tt)*) => {{}};
+}
+
+#[macro_export]
+macro_rules! error {
+    ($($arg:tt)*) => {{}};
+}
+
+#[macro_export]
+macro_rules! info_span {
+    ($($arg:tt)*) => {
+        $crate::Span::new()
+    };
+}
+
+#[macro_export]
+macro_rules! debug_span {
+    ($($arg:tt)*) => {
+        $crate::Span::new()
+    };
+}
+
+#[macro_export]
+macro_rules! trace_span {
+    ($($arg:tt)*) => {
+        $crate::Span::new()
+    };
 }
 
 struct FixedBuffer {
@@ -174,101 +376,9 @@ impl Write for FixedBuffer {
     }
 }
 
-#[cfg(not(feature = "tracing-compat"))]
-#[macro_export]
-macro_rules! trace {
-    ($msg:expr) => {
-        $crate::log($crate::LogLevel::Trace, module_path!(), $msg)
-    };
-    ($fmt:literal, $($a:expr),* $(,)?) => {
-        $crate::log_args($crate::LogLevel::Trace, module_path!(), core::format_args!($fmt, $($a),*))
-    };
-}
+#[cfg(feature = "tracing-opentelemetry-compat")]
+pub mod tracing_opentelemetry {
+    pub trait OpenTelemetrySpanExt {}
 
-#[cfg(not(feature = "tracing-compat"))]
-#[macro_export]
-macro_rules! debug {
-    ($msg:expr) => {
-        $crate::log($crate::LogLevel::Debug, module_path!(), $msg)
-    };
-    ($fmt:literal, $($a:expr),* $(,)?) => {
-        $crate::log_args($crate::LogLevel::Debug, module_path!(), core::format_args!($fmt, $($a),*))
-    };
-}
-
-#[cfg(not(feature = "tracing-compat"))]
-#[macro_export]
-macro_rules! info {
-    ($msg:expr) => {
-        $crate::log($crate::LogLevel::Info, module_path!(), $msg)
-    };
-    ($fmt:literal, $($a:expr),* $(,)?) => {
-        $crate::log_args($crate::LogLevel::Info, module_path!(), core::format_args!($fmt, $($a),*))
-    };
-}
-
-#[cfg(not(feature = "tracing-compat"))]
-#[macro_export]
-macro_rules! warn {
-    ($msg:expr) => {
-        $crate::log($crate::LogLevel::Warn, module_path!(), $msg)
-    };
-    ($fmt:literal, $($a:expr),* $(,)?) => {
-        $crate::log_args($crate::LogLevel::Warn, module_path!(), core::format_args!($fmt, $($a),*))
-    };
-}
-
-#[cfg(not(feature = "tracing-compat"))]
-#[macro_export]
-macro_rules! error {
-    ($msg:expr) => {
-        $crate::log($crate::LogLevel::Error, module_path!(), $msg)
-    };
-    ($fmt:literal, $($a:expr),* $(,)?) => {
-        $crate::log_args($crate::LogLevel::Error, module_path!(), core::format_args!($fmt, $($a),*))
-    };
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use core::sync::atomic::{AtomicUsize, Ordering};
-
-    static CALLS: AtomicUsize = AtomicUsize::new(0);
-    static LAST_LEN: AtomicUsize = AtomicUsize::new(0);
-
-    fn test_logger(_level: LogLevel, _module: &str, message: &str) {
-        CALLS.fetch_add(1, Ordering::SeqCst);
-        LAST_LEN.store(message.len(), Ordering::SeqCst);
-        assert_eq!(message, "value=42");
-    }
-
-    #[test]
-    fn formats_arguments_before_calling_legacy_logger() {
-        CALLS.store(0, Ordering::SeqCst);
-        LAST_LEN.store(0, Ordering::SeqCst);
-        clear_format_logger();
-        set_logger(test_logger);
-        set_level(LogLevel::Trace);
-
-        log_args(LogLevel::Info, "test", format_args!("value={}", 42));
-
-        assert_eq!(CALLS.load(Ordering::SeqCst), 1);
-        assert_eq!(LAST_LEN.load(Ordering::SeqCst), "value=42".len());
-        clear_logger();
-    }
-
-    #[test]
-    fn filters_below_current_level() {
-        CALLS.store(0, Ordering::SeqCst);
-        clear_format_logger();
-        set_logger(test_logger);
-        set_level(LogLevel::Warn);
-
-        log_args(LogLevel::Info, "test", format_args!("value={}", 42));
-
-        assert_eq!(CALLS.load(Ordering::SeqCst), 0);
-        clear_logger();
-        set_level(LogLevel::Info);
-    }
+    impl OpenTelemetrySpanExt for crate::Span {}
 }

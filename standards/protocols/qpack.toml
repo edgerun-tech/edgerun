@@ -4,7 +4,7 @@ summary = "Header compression format for HTTP/3 over QUIC."
 layer = "presentation"
 runs_over = ["HTTP/3", "QUIC"]
 depends_on = ["HTTP/3", "QUIC"]
-implementation_crates = ["crates/utility/edgerun-qpack"]
+implementation_crates = ["crates/protocol/edgerun-protocols/src/http/http3/qpack"]
 profiles = ["encoder", "decoder", "no_std-candidate"]
 standards_bodies = ["IETF"]
 
@@ -34,13 +34,12 @@ role = "base"
 id = "qpack-integer-codec"
 kind = "codec"
 standards = ["RFC9204"]
-implementation = ["crates/utility/edgerun-qpack"]
+implementation = ["crates/protocol/edgerun-protocols/src/http/http3/qpack"]
 status = "unknown"
 
 [[behavior]]
 id = "qpack-blocking"
 kind = "state-machine"
 standards = ["RFC9204"]
-implementation = ["crates/utility/edgerun-qpack"]
+implementation = ["crates/protocol/edgerun-protocols/src/http/http3/qpack"]
 status = "unknown"
-

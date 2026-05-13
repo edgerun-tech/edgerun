@@ -262,7 +262,8 @@ pub const SECCOMP_FILTER_FLAG_NEW_LISTENER: c_uint = 8;
 ///
 /// `args` must be a valid pointer (or null) for the seccomp operation.
 pub unsafe fn do_seccomp(operation: c_uint, flags: c_uint, args: *const c_void) -> c_int {
-    syscall(SECCOMP_SYSCALL_NR, operation, flags, args) as c_int
+    // SAFETY: the caller upholds the seccomp argument pointer contract.
+    unsafe { syscall(SECCOMP_SYSCALL_NR, operation, flags, args) as c_int }
 }
 
 pub fn do_unshare(flags: c_int) -> io::Result<()> {

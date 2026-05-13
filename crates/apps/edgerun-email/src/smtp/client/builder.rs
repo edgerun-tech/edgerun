@@ -3,5 +3,5 @@
 //! The transport-free formatter lives in `edgerun-protocols`.
 
 pub use edgerun_protocols::smtp::message_builder::{
-    encode_base64, encode_quoted_printable, EmailBuilder, MimePart,
+    EmailBuilder, MimePart, encode_base64, encode_quoted_printable,
 };

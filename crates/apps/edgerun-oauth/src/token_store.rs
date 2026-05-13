@@ -2,7 +2,7 @@
 
 use crate::prelude::*;
 use crate::types::Credentials;
-use edgerun_json::{from_str, to_string, JsonValue, Map};
+use edgerun_json::{to_string, JsonValue, Map};
 use edgerun_secret_service::Backend;
 #[cfg(not(target_os = "none"))]
 use std::eprintln;
@@ -114,7 +114,10 @@ fn credentials_to_json(creds: &Credentials) -> String {
 }
 
 fn credentials_from_json(s: &str) -> Result<Credentials, String> {
-    let value: JsonValue = from_str(s).map_err(|e| format!("JSON parse: {e}"))?;
+    let tape = edgerun_json::parse_json_tape(s).map_err(|e| format!("JSON parse: {e}"))?;
+    let value = tape
+        .root(s)
+        .ok_or_else(|| "JSON parse: missing root value".to_string())?;
 
     let access_token = value
         .get("access_token")

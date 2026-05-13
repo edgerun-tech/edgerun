@@ -6,7 +6,9 @@ use std::path::PathBuf;
 
 use crate::compat::absolute_path::AbsolutePathBuf;
 use crate::compat::absolute_path::canonicalize_preserving_symlinks;
-use edgerun_glob::glob_match_with_separator;
+use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
+use edgerun_json::Value;
 use edgerun_serde::Deserialize;
 use edgerun_serde::Serialize;
 use edgerun_strum_macros::Display;
@@ -28,6 +30,120 @@ pub const PROTECTED_METADATA_PATH_NAMES: &[&str] = &[
     PROTECTED_METADATA_AGENTS_PATH_NAME,
     PROTECTED_METADATA_CODEX_PATH_NAME,
 ];
+
+fn glob_match_with_separator(pattern: &str, path: &str, sep: char) -> bool {
+    let pattern: Vec<char> = pattern.chars().collect();
+    let path: Vec<char> = path.chars().collect();
+    glob_match_from(&pattern, 0, &path, 0, sep)
+}
+
+fn glob_match_from(pattern: &[char], pi: usize, path: &[char], ti: usize, sep: char) -> bool {
+    let mut pi = pi;
+    let mut ti = ti;
+
+    while pi < pattern.len() {
+        match pattern[pi] {
+            '*' if pattern.get(pi + 1) == Some(&'*') => {
+                pi += 2;
+                if pattern.get(pi) == Some(&sep) {
+                    pi += 1;
+                }
+                if pi == pattern.len() {
+                    return true;
+                }
+                let mut scan = ti;
+                loop {
+                    if glob_match_from(pattern, pi, path, scan, sep) {
+                        return true;
+                    }
+                    if scan == path.len() {
+                        return false;
+                    }
+                    scan += 1;
+                }
+            }
+            '*' => {
+                pi += 1;
+                if pi == pattern.len() {
+                    return !path[ti..].contains(&sep);
+                }
+                let mut scan = ti;
+                loop {
+                    if glob_match_from(pattern, pi, path, scan, sep) {
+                        return true;
+                    }
+                    if scan == path.len() || path[scan] == sep {
+                        return false;
+                    }
+                    scan += 1;
+                }
+            }
+            '?' => {
+                if ti == path.len() || path[ti] == sep {
+                    return false;
+                }
+                pi += 1;
+                ti += 1;
+            }
+            '[' => {
+                if ti == path.len() || path[ti] == sep {
+                    return false;
+                }
+                let Some((next_pi, matched)) = glob_match_class(pattern, pi, path[ti]) else {
+                    if path.get(ti) != Some(&pattern[pi]) {
+                        return false;
+                    }
+                    pi += 1;
+                    ti += 1;
+                    continue;
+                };
+                if !matched {
+                    return false;
+                }
+                pi = next_pi;
+                ti += 1;
+            }
+            literal => {
+                if path.get(ti) != Some(&literal) {
+                    return false;
+                }
+                pi += 1;
+                ti += 1;
+            }
+        }
+    }
+
+    ti == path.len()
+}
+
+fn glob_match_class(pattern: &[char], start: usize, ch: char) -> Option<(usize, bool)> {
+    let mut end = start + 1;
+    while end < pattern.len() && pattern[end] != ']' {
+        end += 1;
+    }
+    if end == pattern.len() {
+        return None;
+    }
+
+    let mut i = start + 1;
+    let negated = matches!(pattern.get(i), Some('!' | '^'));
+    if negated {
+        i += 1;
+    }
+
+    let mut matched = false;
+    while i < end {
+        if i + 2 < end && pattern[i + 1] == '-' {
+            matched |= pattern[i] <= ch && ch <= pattern[i + 2];
+            i += 3;
+        } else {
+            matched |= pattern[i] == ch;
+            i += 1;
+        }
+    }
+
+    Some((end + 1, if negated { !matched } else { matched }))
+}
 
 /// Returns true when a path basename is one of the protected workspace metadata names.
 pub fn is_protected_metadata_name(name: &OsStr) -> bool {
@@ -91,6 +207,18 @@ impl NetworkSandboxPolicy {
     }
 }
 
+impl FromJson for NetworkSandboxPolicy {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "restricted" => Ok(Self::Restricted),
+            "enabled" => Ok(Self::Enabled),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown network sandbox policy `{other}`"
+            ))),
+        }
+    }
+}
+
 /// Access mode for a filesystem entry.
 ///
 /// When two equally specific entries target the same path, we compare these by
@@ -126,6 +254,19 @@ impl FileSystemAccessMode {
 
     pub fn can_write(self) -> bool {
         matches!(self, FileSystemAccessMode::Write)
+    }
+}
+
+impl FromJson for FileSystemAccessMode {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "read" => Ok(Self::Read),
+            "write" => Ok(Self::Write),
+            "none" => Ok(Self::None),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown filesystem access mode `{other}`"
+            ))),
+        }
     }
 }
 
@@ -172,6 +313,31 @@ impl FileSystemSpecialPath {
     }
 }
 
+impl FromJson for FileSystemSpecialPath {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("FileSystemSpecialPath")?;
+        let kind: String = object.take_required("kind")?;
+        let subpath = object
+            .take_optional::<String>("subpath")?
+            .map(PathBuf::from);
+        match kind.as_str() {
+            "root" => Ok(Self::Root),
+            "minimal" => Ok(Self::Minimal),
+            "project_roots" | "current_working_directory" => Ok(Self::ProjectRoots { subpath }),
+            "tmpdir" => Ok(Self::Tmpdir),
+            "slash_tmp" => Ok(Self::SlashTmp),
+            "unknown" => Ok(Self::Unknown {
+                path: object.take_required("path")?,
+                subpath,
+            }),
+            other => Ok(Self::Unknown {
+                path: other.to_string(),
+                subpath,
+            }),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, TS)]
 pub struct FileSystemSandboxEntry {
     pub path: FileSystemPath,
@@ -190,6 +356,19 @@ pub enum FileSystemSandboxKind {
     ExternalSandbox,
 }
 
+impl FromJson for FileSystemSandboxKind {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "restricted" => Ok(Self::Restricted),
+            "unrestricted" => Ok(Self::Unrestricted),
+            "external-sandbox" => Ok(Self::ExternalSandbox),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown filesystem sandbox kind `{other}`"
+            ))),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 pub struct FileSystemSandboxPolicy {
     pub kind: FileSystemSandboxKind,
@@ -198,6 +377,27 @@ pub struct FileSystemSandboxPolicy {
     pub glob_scan_max_depth: Option<usize>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub entries: Vec<FileSystemSandboxEntry>,
+}
+
+impl FromJson for FileSystemSandboxEntry {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("FileSystemSandboxEntry")?;
+        Ok(Self {
+            path: object.take_required("path")?,
+            access: object.take_required("access")?,
+        })
+    }
+}
+
+impl FromJson for FileSystemSandboxPolicy {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("FileSystemSandboxPolicy")?;
+        Ok(Self {
+            kind: object.take_required("kind")?,
+            glob_scan_max_depth: object.take_optional("glob_scan_max_depth")?,
+            entries: object.take_optional("entries")?.unwrap_or_default(),
+        })
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -321,6 +521,27 @@ pub enum FileSystemPath {
     Special {
         value: FileSystemSpecialPath,
     },
+}
+
+impl FromJson for FileSystemPath {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("FileSystemPath")?;
+        let kind: String = object.take_required("type")?;
+        match kind.as_str() {
+            "path" => Ok(Self::Path {
+                path: object.take_required("path")?,
+            }),
+            "glob_pattern" => Ok(Self::GlobPattern {
+                pattern: object.take_required("pattern")?,
+            }),
+            "special" => Ok(Self::Special {
+                value: object.take_required("value")?,
+            }),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown filesystem path `{other}`"
+            ))),
+        }
+    }
 }
 
 impl Default for FileSystemSandboxPolicy {
@@ -1857,19 +2078,19 @@ mod tests {
 
     #[test]
     fn legacy_current_working_directory_special_path_deserializes_as_project_roots()
-    -> edgerun_json::serde_json::Result<()> {
-        let value = edgerun_json::serde_json::json!({
+    -> edgerun_json::Result<()> {
+        let value = edgerun_json::json!({
             "kind": "current_working_directory",
         });
 
-        let special_path = edgerun_json::serde_json::from_value::<FileSystemSpecialPath>(value)?;
+        let special_path = edgerun_json::from_value::<FileSystemSpecialPath>(value)?;
         assert_eq!(
             special_path,
             FileSystemSpecialPath::project_roots(/*subpath*/ None)
         );
         assert_eq!(
-            edgerun_json::serde_json::to_value(&special_path)?,
-            edgerun_json::serde_json::json!({
+            edgerun_json::to_value(&special_path)?,
+            edgerun_json::json!({
                 "kind": "project_roots",
             })
         );

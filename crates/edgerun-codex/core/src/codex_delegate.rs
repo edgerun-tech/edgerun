@@ -24,7 +24,7 @@ use codex_protocol::request_user_input::RequestUserInputResponse;
 use codex_protocol::user_input::UserInput;
 use edgerun_async_channel::Receiver;
 use edgerun_async_channel::Sender;
-use edgerun_json::serde_json::Value;
+use edgerun_json::Value;
 use std::time::Duration;
 use edgerun_tokio::sync::Mutex;
 use edgerun_tokio::time::timeout;

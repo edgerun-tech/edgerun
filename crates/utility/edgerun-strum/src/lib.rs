@@ -1,1 +1,5 @@
-pub use strum::*;
+pub trait IntoEnumIterator: Sized {
+    type Iterator: Iterator<Item = Self>;
+
+    fn iter() -> Self::Iterator;
+}

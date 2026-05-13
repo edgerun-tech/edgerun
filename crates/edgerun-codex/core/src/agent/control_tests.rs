@@ -167,7 +167,7 @@ fn history_contains_assistant_inter_agent_communication(
         }
         content.iter().any(|content_item| match content_item {
             ContentItem::OutputText { text } => {
-                edgerun_json::serde_json::from_str::<InterAgentCommunication>(text)
+                edgerun_json::from_serde_str::<InterAgentCommunication>(text)
                     .ok()
                     .as_ref()
                     == Some(expected)
@@ -2377,7 +2377,7 @@ async fn resume_agent_from_rollout_uses_edge_data_when_descendant_metadata_sourc
         .expect("grandchild metadata query should succeed")
         .expect("grandchild metadata should exist");
     stale_metadata.source =
-        edgerun_json::serde_json::to_string(&SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
+        edgerun_json::to_string(&SessionSource::SubAgent(SubAgentSource::ThreadSpawn {
             parent_thread_id: ThreadId::new(),
             depth: 99,
             agent_path: None,

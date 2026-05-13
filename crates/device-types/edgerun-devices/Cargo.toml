@@ -10,8 +10,7 @@ description = "Consolidated no_std device capability abstractions for Edgerun"
 
 [dependencies]
 edgerun-capabilities = { workspace = true }
-edgerun-protocols = { workspace = true, default-features = false, features = ["cec", "ndef", "wifi"] }
-edgerun-quectel-ec200a = { version = "0.1", path = "../../edgerun-quectel-ec200a" }
+edgerun-protocols = { workspace = true, default-features = false, features = ["cec", "ndef", "quectel-ec200a", "wifi"] }
 
 [lints]
 workspace = true

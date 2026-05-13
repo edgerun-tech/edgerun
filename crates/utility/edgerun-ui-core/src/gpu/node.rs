@@ -958,7 +958,11 @@ impl UiNode {
     }
 
     pub fn when(self, condition: bool, child: UiNode) -> Self {
-        if condition { self.child(child) } else { self }
+        if condition {
+            self.child(child)
+        } else {
+            self
+        }
     }
 
     pub fn detail(mut self, value: &str) -> Self {
@@ -1194,7 +1198,14 @@ impl UiNode {
         let hit_start = ui.scene.hit_count();
         match &self.kind {
             UiNodeKind::Text(value) => {
-                ui.bounded_label(rect.x, rect.y, rect.w, value, 2.0, self.style.text);
+                ui.bounded_label(
+                    rect.x,
+                    rect.y,
+                    rect.w,
+                    value,
+                    2.0,
+                    self.style.text.resolve(ui.theme()),
+                );
             }
             UiNodeKind::Badge { label, color } => {
                 ui.badge(rect.x, rect.y, label, *color);
@@ -1388,10 +1399,13 @@ impl UiNode {
             } => {
                 let label_refs = labels.iter().map(String::as_str).collect::<Vec<_>>();
                 let h = self.style.height.unwrap_or(34.0).min(rect.h);
+                let selected = state
+                    .map(|state| state.selected_tab_index(*base_id, labels.len(), *selected))
+                    .unwrap_or(*selected);
                 ui.segmented_tabs(
                     UiRect::new(rect.x, rect.y, rect.w, h),
                     &label_refs,
-                    *selected,
+                    selected,
                     *base_id,
                 );
             }
@@ -1630,7 +1644,7 @@ impl UiNode {
             | UiNodeKind::Grid { .. }
             | UiNodeKind::Card
             | UiNodeKind::ScrollArea { .. } => {
-                if let Some(bg) = self.style.bg {
+                if let Some(bg) = self.style.bg.map(|color| color.resolve(ui.theme())) {
                     if matches!(self.kind, UiNodeKind::Card) {
                         ui.card(rect.x, rect.y, rect.w, rect.h, self.style.radius, bg);
                     } else {
@@ -1649,7 +1663,7 @@ impl UiNode {
                                 rect.w,
                                 rect.h,
                                 self.style.radius,
-                                palette::BORDER,
+                                ui.theme().colors.border,
                             ));
                         }
                     }
@@ -1685,16 +1699,16 @@ impl UiNode {
         if let Some(focused) = focused_rect {
             ui.border_rect(
                 UiRect::new(focused.x, focused.y, focused.w, focused.h),
-                10.0,
-                palette::ACCENT.with_alpha(0.86),
+                ui.theme().radius.control,
+                ui.theme().colors.accent.with_alpha(0.86),
             );
         }
         if self.style.disabled || self.style.loading {
             ui.scene.truncate_hits(hit_start);
             ui.fill_rect(
                 rect,
-                self.style.radius.max(8.0),
-                palette::BG.with_alpha(0.34),
+                self.style.radius.max(ui.theme().radius.card),
+                ui.theme().colors.bg.with_alpha(0.34),
             );
         }
         if self.style.loading {
@@ -1707,7 +1721,7 @@ impl UiNode {
                     size,
                 ),
                 0.72,
-                palette::ACCENT,
+                ui.theme().colors.accent,
             );
         }
     }

@@ -49,10 +49,13 @@ use crate::request_permissions::RequestPermissionsEvent;
 use crate::request_permissions::RequestPermissionsResponse;
 use crate::request_user_input::RequestUserInputResponse;
 use crate::user_input::UserInput;
-use edgerun_json::serde_json::Value;
+use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
+use edgerun_json::Map;
+use edgerun_json::ToJson;
+use edgerun_json::Value;
 use edgerun_serde::Deserialize;
 use edgerun_serde::Serialize;
-use edgerun_serde_with::serde_as;
 use edgerun_strum_macros::Display;
 use schemars::JsonSchema;
 use tracing::error;
@@ -184,14 +187,16 @@ pub enum RealtimeOutputModality {
 }
 
 mod conversation_start_prompt_serde {
+    use edgerun_serde::Deserialize;
     use edgerun_serde::Deserializer;
+    use edgerun_serde::Serialize;
     use edgerun_serde::Serializer;
 
     pub(crate) fn deserialize<'de, D>(deserializer: D) -> Result<Option<Option<String>>, D::Error>
     where
         D: Deserializer<'de>,
     {
-        edgerun_serde_with::rust::double_option::deserialize(deserializer)
+        Option::<String>::deserialize(deserializer).map(Some)
     }
 
     pub(crate) fn serialize<S>(
@@ -201,7 +206,10 @@ mod conversation_start_prompt_serde {
     where
         S: Serializer,
     {
-        edgerun_serde_with::rust::double_option::serialize(value, serializer)
+        match value {
+            Some(inner) => inner.serialize(serializer),
+            None => serializer.serialize_none(),
+        }
     }
 }
 
@@ -814,7 +822,7 @@ impl InterAgentCommunication {
         ResponseInputItem::Message {
             role: "assistant".to_string(),
             content: vec![ContentItem::OutputText {
-                text: edgerun_json::serde_json::to_string(self).unwrap_or_default(),
+                text: edgerun_json::to_json_string(self).unwrap_or_default(),
             }],
             phase: Some(MessagePhase::Commentary),
         }
@@ -827,10 +835,37 @@ impl InterAgentCommunication {
     pub fn from_message_content(content: &[ContentItem]) -> Option<Self> {
         match content {
             [ContentItem::InputText { text }] | [ContentItem::OutputText { text }] => {
-                edgerun_json::serde_json::from_str(text).ok()
+                edgerun_json::from_json_str(text).ok()
             }
             _ => None,
         }
+    }
+}
+
+impl ToJson for InterAgentCommunication {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        object.push_field("author", self.author.to_json());
+        object.push_field("recipient", self.recipient.to_json());
+        object.push_field("other_recipients", self.other_recipients.to_json());
+        object.push_field("content", self.content.clone());
+        object.push_field("trigger_turn", self.trigger_turn);
+        object.into()
+    }
+}
+
+impl FromJson for InterAgentCommunication {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("InterAgentCommunication")?;
+        Ok(Self {
+            author: object.take_required("author")?,
+            recipient: object.take_required("recipient")?,
+            other_recipients: object
+                .take_optional("other_recipients")?
+                .unwrap_or_default(),
+            content: object.take_required("content")?,
+            trigger_turn: object.take_required("trigger_turn")?,
+        })
     }
 }
 
@@ -976,6 +1011,18 @@ impl NetworkAccess {
     }
 }
 
+impl FromJson for NetworkAccess {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "restricted" => Ok(Self::Restricted),
+            "enabled" => Ok(Self::Enabled),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown network access `{other}`"
+            ))),
+        }
+    }
+}
+
 /// Determines execution restrictions for model shell commands.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Display, JsonSchema, TS)]
 #[strum(serialize_all = "kebab-case")]
@@ -1085,26 +1132,55 @@ impl WritableRoot {
 }
 
 impl FromStr for SandboxPolicy {
-    type Err = edgerun_json::serde_json::Error;
+    type Err = edgerun_json::JsonError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        edgerun_json::serde_json::from_str(s)
+        Ok(edgerun_json::from_json_str(s)?)
     }
 }
 
 impl FromStr for FileSystemSandboxPolicy {
-    type Err = edgerun_json::serde_json::Error;
+    type Err = edgerun_json::JsonError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        edgerun_json::serde_json::from_str(s)
+        Ok(edgerun_json::from_json_str(s)?)
     }
 }
 
 impl FromStr for NetworkSandboxPolicy {
-    type Err = edgerun_json::serde_json::Error;
+    type Err = edgerun_json::JsonError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        edgerun_json::serde_json::from_str(s)
+        Ok(edgerun_json::from_json_str(s)?)
+    }
+}
+
+impl FromJson for SandboxPolicy {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("SandboxPolicy")?;
+        let kind: String = object.take_required("type")?;
+        match kind.as_str() {
+            "danger-full-access" => Ok(Self::DangerFullAccess),
+            "read-only" => Ok(Self::ReadOnly {
+                network_access: object.take_optional("network_access")?.unwrap_or(false),
+            }),
+            "external-sandbox" => Ok(Self::ExternalSandbox {
+                network_access: object
+                    .take_optional("network_access")?
+                    .unwrap_or(NetworkAccess::Restricted),
+            }),
+            "workspace-write" => Ok(Self::WorkspaceWrite {
+                writable_roots: object.take_optional("writable_roots")?.unwrap_or_default(),
+                network_access: object.take_optional("network_access")?.unwrap_or(false),
+                exclude_tmpdir_env_var: object
+                    .take_optional("exclude_tmpdir_env_var")?
+                    .unwrap_or(false),
+                exclude_slash_tmp: object.take_optional("exclude_slash_tmp")?.unwrap_or(false),
+            }),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown sandbox policy `{other}`"
+            ))),
+        }
     }
 }
 
@@ -2262,7 +2338,7 @@ pub struct McpInvocation {
     /// Name of the tool as given by the MCP server.
     pub tool: String,
     /// Arguments to the tool call.
-    pub arguments: Option<edgerun_json::serde_json::Value>,
+    pub arguments: Option<edgerun_json::Value>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS, PartialEq)]
@@ -2303,7 +2379,7 @@ pub struct DynamicToolCallResponseEvent {
     /// Dynamic tool name.
     pub tool: String,
     /// Dynamic tool call arguments.
-    pub arguments: edgerun_json::serde_json::Value,
+    pub arguments: edgerun_json::Value,
     /// Dynamic tool response content items.
     pub content_items: Vec<DynamicToolCallOutputContentItem>,
     /// Whether the tool call succeeded.
@@ -3125,7 +3201,6 @@ pub enum ExecOutputStream {
     Stderr,
 }
 
-#[serde_as]
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
 pub struct ExecCommandOutputDeltaEvent {
     /// Identifier for the ExecCommandBegin that produced this chunk.
@@ -3133,13 +3208,15 @@ pub struct ExecCommandOutputDeltaEvent {
     /// Which stream produced this chunk.
     pub stream: ExecOutputStream,
     /// Raw bytes from the stream (may not be valid UTF-8).
-    #[serde_as(as = "edgerun_serde_with::base64::Base64")]
+    #[serde(
+        deserialize_with = "exec_output_chunk_serde::deserialize",
+        serialize_with = "exec_output_chunk_serde::serialize"
+    )]
     #[schemars(with = "String")]
     #[ts(type = "string")]
     pub chunk: Vec<u8>,
 }
 
-#[serde_as]
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
 pub struct TerminalInteractionEvent {
     /// Identifier for the ExecCommandBegin that produced this chunk.
@@ -3148,6 +3225,30 @@ pub struct TerminalInteractionEvent {
     pub process_id: String,
     /// Stdin sent to the running session.
     pub stdin: String,
+}
+
+mod exec_output_chunk_serde {
+    use edgerun_encoding::base64::standard_decode;
+    use edgerun_encoding::base64::standard_encode;
+    use edgerun_serde::Deserialize;
+    use edgerun_serde::Deserializer;
+    use edgerun_serde::Serializer;
+    use edgerun_serde::de::Error as _;
+
+    pub(crate) fn deserialize<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let encoded = String::deserialize(deserializer)?;
+        standard_decode(&encoded).map_err(D::Error::custom)
+    }
+
+    pub(crate) fn serialize<S>(value: &[u8], serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&standard_encode(value))
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
@@ -3925,7 +4026,7 @@ mod tests {
     use crate::permissions::FileSystemSpecialPath;
     use crate::permissions::NetworkSandboxPolicy;
     use anyhow::Result;
-    use edgerun_json::serde_json::json;
+    use edgerun_json::json;
     use pretty_assertions::assert_eq;
     use std::path::PathBuf;
     use tempfile::NamedTempFile;
@@ -3990,8 +4091,7 @@ mod tests {
             ResponseInputItem::Message {
                 role: "assistant".to_string(),
                 content: vec![ContentItem::OutputText {
-                    text: edgerun_json::serde_json::to_string(&communication)
-                        .expect("serialize communication"),
+                    text: edgerun_json::to_string(&communication).expect("serialize communication"),
                 }],
                 phase: Some(MessagePhase::Commentary),
             }
@@ -4238,13 +4338,11 @@ mod tests {
 
     #[test]
     fn granular_approval_config_defaults_missing_optional_flags_to_false() {
-        let decoded = edgerun_json::serde_json::from_value::<GranularApprovalConfig>(
-            edgerun_json::serde_json::json!({
-                "sandbox_approval": true,
-                "rules": false,
-                "mcp_elicitations": true,
-            }),
-        )
+        let decoded = edgerun_json::from_value::<GranularApprovalConfig>(edgerun_json::json!({
+            "sandbox_approval": true,
+            "rules": false,
+            "mcp_elicitations": true,
+        }))
         .expect("granular approval config should deserialize");
 
         assert_eq!(
@@ -4772,7 +4870,7 @@ mod tests {
 
     #[test]
     fn item_started_event_requires_started_at_ms() {
-        let mut value = edgerun_json::serde_json::to_value(ItemStartedEvent {
+        let mut value = edgerun_json::to_value(ItemStartedEvent {
             thread_id: ThreadId::new(),
             turn_id: "turn-1".into(),
             item: TurnItem::UserMessage(UserMessageItem::new(&[])),
@@ -4781,12 +4879,12 @@ mod tests {
         .unwrap();
         value.as_object_mut().unwrap().remove("started_at_ms");
 
-        assert!(edgerun_json::serde_json::from_value::<ItemStartedEvent>(value).is_err());
+        assert!(edgerun_json::from_value::<ItemStartedEvent>(value).is_err());
     }
 
     #[test]
     fn item_completed_event_defaults_missing_completed_at_ms() {
-        let mut value = edgerun_json::serde_json::to_value(ItemCompletedEvent {
+        let mut value = edgerun_json::to_value(ItemCompletedEvent {
             thread_id: ThreadId::new(),
             turn_id: "turn-1".into(),
             item: TurnItem::UserMessage(UserMessageItem::new(&[])),
@@ -4795,7 +4893,7 @@ mod tests {
         .unwrap();
         value.as_object_mut().unwrap().remove("completed_at_ms");
 
-        let event = edgerun_json::serde_json::from_value::<ItemCompletedEvent>(value).unwrap();
+        let event = edgerun_json::from_value::<ItemCompletedEvent>(value).unwrap();
         assert_eq!(event.completed_at_ms, 0);
     }
     #[test]
@@ -4875,7 +4973,7 @@ mod tests {
         let list_voices = Op::RealtimeConversationListVoices;
 
         assert_eq!(
-            edgerun_json::serde_json::to_value(&start).unwrap(),
+            edgerun_json::to_value(&start).unwrap(),
             json!({
                 "type": "realtime_conversation_start",
                 "output_modality": "audio",
@@ -4884,14 +4982,14 @@ mod tests {
             })
         );
         assert_eq!(
-            edgerun_json::serde_json::to_value(&default_prompt_start).unwrap(),
+            edgerun_json::to_value(&default_prompt_start).unwrap(),
             json!({
                 "type": "realtime_conversation_start",
                 "output_modality": "audio"
             })
         );
         assert_eq!(
-            edgerun_json::serde_json::to_value(&null_prompt_start).unwrap(),
+            edgerun_json::to_value(&null_prompt_start).unwrap(),
             json!({
                 "type": "realtime_conversation_start",
                 "output_modality": "audio",
@@ -4899,7 +4997,7 @@ mod tests {
             })
         );
         assert_eq!(
-            edgerun_json::serde_json::from_value::<Op>(json!({
+            edgerun_json::from_value::<Op>(json!({
                 "type": "realtime_conversation_start",
                 "output_modality": "audio"
             }))
@@ -4907,7 +5005,7 @@ mod tests {
             default_prompt_start
         );
         assert_eq!(
-            edgerun_json::serde_json::from_value::<Op>(json!({
+            edgerun_json::from_value::<Op>(json!({
                 "type": "realtime_conversation_start",
                 "output_modality": "audio",
                 "prompt": null
@@ -4916,7 +5014,7 @@ mod tests {
             null_prompt_start
         );
         assert_eq!(
-            edgerun_json::serde_json::to_value(&audio).unwrap(),
+            edgerun_json::to_value(&audio).unwrap(),
             json!({
                 "type": "realtime_conversation_audio",
                 "frame": {
@@ -4928,40 +5026,31 @@ mod tests {
             })
         );
         assert_eq!(
-            edgerun_json::serde_json::from_value::<Op>(
-                edgerun_json::serde_json::to_value(&text).unwrap()
-            )
-            .unwrap(),
+            edgerun_json::from_value::<Op>(edgerun_json::to_value(&text).unwrap()).unwrap(),
             text
         );
         assert_eq!(
-            edgerun_json::serde_json::to_value(&close).unwrap(),
+            edgerun_json::to_value(&close).unwrap(),
             json!({
                 "type": "realtime_conversation_close"
             })
         );
         assert_eq!(
-            edgerun_json::serde_json::from_value::<Op>(
-                edgerun_json::serde_json::to_value(&close).unwrap()
-            )
-            .unwrap(),
+            edgerun_json::from_value::<Op>(edgerun_json::to_value(&close).unwrap()).unwrap(),
             close
         );
         assert_eq!(
-            edgerun_json::serde_json::to_value(&list_voices).unwrap(),
+            edgerun_json::to_value(&list_voices).unwrap(),
             json!({
                 "type": "realtime_conversation_list_voices"
             })
         );
         assert_eq!(
-            edgerun_json::serde_json::from_value::<Op>(
-                edgerun_json::serde_json::to_value(&list_voices).unwrap()
-            )
-            .unwrap(),
+            edgerun_json::from_value::<Op>(edgerun_json::to_value(&list_voices).unwrap()).unwrap(),
             list_voices
         );
         assert_eq!(
-            edgerun_json::serde_json::to_value(&webrtc_start).unwrap(),
+            edgerun_json::to_value(&webrtc_start).unwrap(),
             json!({
                 "type": "realtime_conversation_start",
                 "output_modality": "audio",
@@ -4984,7 +5073,7 @@ mod tests {
         };
 
         assert_eq!(
-            edgerun_json::serde_json::to_value(&event).unwrap(),
+            edgerun_json::to_value(&event).unwrap(),
             json!({
                 "realtime_session_id": "conv_1",
                 "version": "v2"
@@ -5035,7 +5124,7 @@ mod tests {
             responsesapi_client_metadata: None,
         };
 
-        let json_op = edgerun_json::serde_json::to_value(op)?;
+        let json_op = edgerun_json::to_value(op)?;
         assert_eq!(json_op, json!({ "type": "user_input", "items": [] }));
 
         Ok(())
@@ -5043,8 +5132,7 @@ mod tests {
 
     #[test]
     fn user_input_deserializes_without_final_output_json_schema_field() -> Result<()> {
-        let op: Op =
-            edgerun_json::serde_json::from_value(json!({ "type": "user_input", "items": [] }))?;
+        let op: Op = edgerun_json::from_value(json!({ "type": "user_input", "items": [] }))?;
 
         assert_eq!(
             op,
@@ -5076,7 +5164,7 @@ mod tests {
             responsesapi_client_metadata: None,
         };
 
-        let json_op = edgerun_json::serde_json::to_value(op)?;
+        let json_op = edgerun_json::to_value(op)?;
         assert_eq!(
             json_op,
             json!({
@@ -5101,7 +5189,7 @@ mod tests {
             )])),
         };
 
-        let json_op = edgerun_json::serde_json::to_value(&op)?;
+        let json_op = edgerun_json::to_value(&op)?;
         assert_eq!(
             json_op,
             json!({
@@ -5112,7 +5200,7 @@ mod tests {
                 }
             })
         );
-        assert_eq!(edgerun_json::serde_json::from_value::<Op>(json_op)?, op);
+        assert_eq!(edgerun_json::from_value::<Op>(json_op)?, op);
 
         Ok(())
     }
@@ -5124,7 +5212,7 @@ mod tests {
             text_elements: Vec::new(),
         };
 
-        let json_input = edgerun_json::serde_json::to_value(input)?;
+        let json_input = edgerun_json::to_value(input)?;
         assert_eq!(
             json_input,
             json!({
@@ -5146,7 +5234,7 @@ mod tests {
             text_elements: Vec::new(),
         };
 
-        let json_event = edgerun_json::serde_json::to_value(event)?;
+        let json_event = edgerun_json::to_value(event)?;
         assert_eq!(
             json_event,
             json!({
@@ -5161,7 +5249,7 @@ mod tests {
 
     #[test]
     fn turn_aborted_event_deserializes_without_turn_id() -> Result<()> {
-        let event: EventMsg = edgerun_json::serde_json::from_value(json!({
+        let event: EventMsg = edgerun_json::from_value(json!({
             "type": "turn_aborted",
             "reason": "interrupted",
         }))?;
@@ -5181,7 +5269,7 @@ mod tests {
 
     #[test]
     fn turn_context_item_deserializes_without_network() -> Result<()> {
-        let item: TurnContextItem = edgerun_json::serde_json::from_value(json!({
+        let item: TurnContextItem = edgerun_json::from_value(json!({
             "cwd": test_path_buf("/tmp"),
             "approval_policy": "never",
             "sandbox_policy": { "type": "danger-full-access" },
@@ -5230,7 +5318,7 @@ mod tests {
             truncation_policy: None,
         };
 
-        let value = edgerun_json::serde_json::to_value(item)?;
+        let value = edgerun_json::to_value(item)?;
         assert_eq!(
             value["network"],
             json!({
@@ -5301,7 +5389,7 @@ mod tests {
                 "rollout_path": format!("{}", rollout_file.path().display()),
             }
         });
-        assert_eq!(expected, edgerun_json::serde_json::to_value(&event)?);
+        assert_eq!(expected, edgerun_json::to_value(&event)?);
         Ok(())
     }
 
@@ -5320,7 +5408,7 @@ mod tests {
             "cwd": cwd,
         });
 
-        let event: SessionConfiguredEvent = edgerun_json::serde_json::from_value(value)?;
+        let event: SessionConfiguredEvent = edgerun_json::from_value(value)?;
         assert_eq!(event.permission_profile, PermissionProfile::read_only());
         Ok(())
     }
@@ -5332,14 +5420,13 @@ mod tests {
             stream: ExecOutputStream::Stdout,
             chunk: vec![1, 2, 3, 4, 5],
         };
-        let serialized = edgerun_json::serde_json::to_string(&event)?;
+        let serialized = edgerun_json::to_string(&event)?;
         assert_eq!(
             r#"{"call_id":"call21","stream":"stdout","chunk":"AQIDBAU="}"#,
             serialized,
         );
 
-        let deserialized: ExecCommandOutputDeltaEvent =
-            edgerun_json::serde_json::from_str(&serialized)?;
+        let deserialized: ExecCommandOutputDeltaEvent = edgerun_json::from_str(&serialized)?;
         assert_eq!(deserialized, event);
         Ok(())
     }
@@ -5356,7 +5443,7 @@ mod tests {
             }),
         };
 
-        let value = edgerun_json::serde_json::to_value(&event)?;
+        let value = edgerun_json::to_value(&event)?;
         assert_eq!(value["msg"]["type"], "mcp_startup_update");
         assert_eq!(value["msg"]["server"], "srv");
         assert_eq!(value["msg"]["status"]["state"], "failed");
@@ -5378,7 +5465,7 @@ mod tests {
             }),
         };
 
-        let value = edgerun_json::serde_json::to_value(&event)?;
+        let value = edgerun_json::to_value(&event)?;
         assert_eq!(value["msg"]["type"], "mcp_startup_complete");
         assert_eq!(value["msg"]["ready"][0], "a");
         assert_eq!(value["msg"]["failed"][0]["server"], "b");

@@ -1,0 +1,26 @@
+[package]
+name = "edgerun-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun-owned async runtime primitives shared by node, HTTP, and compatibility facades"
+
+[features]
+default = ["std"]
+std = []
+node-core = [
+    "dep:edgerun-protocols",
+    "edgerun-protocols/ethernet-ipv4",
+    "edgerun-protocols/serial-mux",
+]
+
+[dependencies]
+edgerun-log = { version = "0.1", path = "../edgerun-log" }
+edgerun-platform = { version = "0.1", path = "../../edgerun-platform" }
+edgerun-protocols = { workspace = true, optional = true }
+
+[lints]
+workspace = true

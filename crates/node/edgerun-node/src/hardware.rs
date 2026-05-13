@@ -15,7 +15,35 @@ use edgerun_capabilities::CapabilityDescriptor;
 #[cfg(feature = "all-hardware")]
 use edgerun_capabilities::{CapabilityDescriptor, CapabilityProvider};
 
+#[cfg(feature = "all-hardware")]
+mod alsa_microphone;
+#[cfg(feature = "all-hardware")]
+mod alsa_speaker;
+#[cfg(feature = "all-hardware")]
+mod amd_xdna;
+#[cfg(feature = "all-hardware")]
+mod audio_calibration;
+#[cfg(feature = "all-hardware")]
+mod audio_liveliness;
+#[cfg(feature = "all-hardware")]
+mod drm_display;
+#[cfg(feature = "all-hardware")]
+mod goodix_fingerprint;
 mod inventory;
+#[cfg(feature = "all-hardware")]
+mod linux_cec;
+#[cfg(feature = "all-hardware")]
+mod linux_gpu;
+#[cfg(feature = "all-hardware")]
+mod linux_nfc;
+#[cfg(feature = "all-hardware")]
+mod linux_npu;
+#[cfg(feature = "all-hardware")]
+mod linux_power;
+#[cfg(feature = "all-hardware")]
+mod mgmt_bluetooth;
+#[cfg(feature = "all-hardware")]
+mod v4l2_camera;
 pub use inventory::HardwareInventory;
 
 const SYS_BUS_PCI_DEVICES: &str = "/sys/bus/pci/devices";
@@ -29,8 +57,8 @@ const PROC_ACPI: &str = "/proc/acpi";
 // ===========================================================================
 
 #[cfg(feature = "all-hardware")]
-pub fn discover_gpus() -> Vec<edgerun_linux_gpu::LinuxGpuDevice> {
-    match edgerun_linux_gpu::discover_gpus() {
+pub fn discover_gpus() -> Vec<linux_gpu::LinuxGpuDevice> {
+    match linux_gpu::discover_gpus() {
         Ok(backends) => backends,
         Err(e) => {
             crate::node_warn!("edged: warning: GPU discovery failed: {}", e);
@@ -40,8 +68,8 @@ pub fn discover_gpus() -> Vec<edgerun_linux_gpu::LinuxGpuDevice> {
 }
 
 #[cfg(feature = "all-hardware")]
-pub fn discover_displays() -> Vec<edgerun_drm_display::DrmConnectorInfo> {
-    match edgerun_drm_display::discover_drm_connectors() {
+pub fn discover_displays() -> Vec<drm_display::DrmConnectorInfo> {
+    match drm_display::discover_drm_connectors() {
         Ok(connectors) => connectors,
         Err(e) => {
             crate::node_warn!("edged: warning: display discovery failed: {}", e);
@@ -59,7 +87,7 @@ pub fn discover_fingerprint_readers() -> Vec<String> {
     let mut readers = Vec::new();
 
     // Try Goodix USB fingerprint readers
-    match edgerun_goodix_fingerprint::discover_supported_devices() {
+    match goodix_fingerprint::discover_supported_devices() {
         Ok(devices) => {
             for device in devices {
                 readers.push(format!(
@@ -83,7 +111,7 @@ pub fn discover_bluetooth_controllers() -> Vec<String> {
     let mut controllers = Vec::new();
 
     // Bluetooth controller enumeration via mgmt socket
-    match edgerun_mgmt_bluetooth::discover_controllers() {
+    match mgmt_bluetooth::discover_controllers() {
         Ok(ctrls) => {
             for ctrl in ctrls {
                 controllers.push(format!(
@@ -151,7 +179,7 @@ pub fn discover_pci_devices() -> Vec<edgerun_linux_pci::LinuxPciDevice> {
 pub fn discover_nfc_adapters() -> Vec<String> {
     let mut adapters = Vec::new();
 
-    match edgerun_linux_nfc::discover_nfc_adapters() {
+    match linux_nfc::discover_nfc_adapters() {
         Ok(found) => {
             for adapter in found {
                 adapters.push(format!("NFC adapter: {}", adapter.name));
@@ -172,7 +200,7 @@ pub fn discover_npu_devices() -> Vec<String> {
     let mut devices = Vec::new();
 
     // Generic Linux NPU (sysfs-based)
-    match edgerun_linux_npu::discover_linux_npus() {
+    match linux_npu::discover_linux_npus() {
         Ok(npus) => {
             for npu in npus {
                 devices.push(format!("Linux NPU: {:?}", npu));
@@ -182,7 +210,7 @@ pub fn discover_npu_devices() -> Vec<String> {
     }
 
     // AMD xDNA NPU
-    match edgerun_amd_xdna::discover_amd_xdna_devices() {
+    match amd_xdna::discover_amd_xdna_devices() {
         Ok(xdnas) => {
             for xdna in xdnas {
                 devices.push(format!("AMD xDNA NPU: {:?}", xdna));
@@ -202,7 +230,7 @@ pub fn discover_npu_devices() -> Vec<String> {
 pub fn discover_power_supplies() -> Vec<String> {
     let mut supplies = Vec::new();
 
-    match edgerun_linux_power::discover_power_supplies() {
+    match linux_power::discover_power_supplies() {
         Ok(psus) => {
             for psu in psus {
                 supplies.push(format!(
@@ -215,7 +243,7 @@ pub fn discover_power_supplies() -> Vec<String> {
     }
 
     // System-level power info (battery, AC, etc.)
-    match edgerun_linux_power::discover_power_system() {
+    match linux_power::discover_power_system() {
         Ok(sys) => {
             if let Some(pct) = sys.battery_percent {
                 supplies.push(format!("Battery: {}%", pct));
@@ -245,7 +273,7 @@ pub fn discover_power_supplies() -> Vec<String> {
 pub fn discover_cec_adapters() -> Vec<String> {
     let mut adapters = Vec::new();
 
-    match edgerun_linux_cec::discover_cec_adapters() {
+    match linux_cec::discover_cec_adapters() {
         Ok(found) => {
             for adapter in found {
                 adapters.push(format!("CEC adapter: {}", adapter.adapter_name));
@@ -284,7 +312,7 @@ pub fn discover_input_devices() -> Vec<String> {
 
 #[cfg(feature = "all-hardware")]
 pub fn discover_audio_input() -> Vec<String> {
-    match edgerun_alsa_microphone::discover_alsa_pcms() {
+    match alsa_microphone::discover_alsa_pcms() {
         Ok(pcms) => pcms
             .into_iter()
             .filter(|p| p.capture)
@@ -303,7 +331,7 @@ pub fn discover_audio_input() -> Vec<String> {
 
 #[cfg(feature = "all-hardware")]
 pub fn discover_audio_output() -> Vec<String> {
-    match edgerun_alsa_speaker::discover_speakers() {
+    match alsa_speaker::discover_speakers() {
         Ok(speakers) => speakers
             .into_iter()
             .map(|s| {
@@ -326,7 +354,7 @@ pub fn discover_audio_output() -> Vec<String> {
 
 #[cfg(feature = "all-hardware")]
 pub fn discover_cameras() -> Vec<String> {
-    match edgerun_v4l2_camera::discover_camera_devices() {
+    match v4l2_camera::discover_camera_devices() {
         Ok(cameras) => cameras
             .into_iter()
             .map(|c| {
@@ -366,8 +394,8 @@ pub fn run_audio_calibration(
     speaker_device: u32,
     mic_card: u32,
     mic_device: u32,
-) -> Result<Vec<edgerun_audio_calibration::AudioSweepStepResult>, String> {
-    use edgerun_audio_calibration::{AudioSweepConfig, run_speaker_mic_sweep};
+) -> Result<Vec<audio_calibration::AudioSweepStepResult>, String> {
+    use audio_calibration::{AudioSweepConfig, run_speaker_mic_sweep};
 
     let config = AudioSweepConfig {
         speaker_card,
@@ -415,7 +443,7 @@ impl HardwareInventory {
         let mut capability_descriptors = Vec::new();
         let gpus = discover_gpus();
         capability_descriptors.push(
-            edgerun_linux_gpu::LinuxGpuBackend {
+            linux_gpu::LinuxGpuBackend {
                 pci_root: SYS_BUS_PCI_DEVICES.into(),
                 drm_root: SYS_CLASS_DRM.into(),
             }
@@ -426,7 +454,7 @@ impl HardwareInventory {
             .iter()
             .map(|c| {
                 capability_descriptors.push(
-                    edgerun_drm_display::DrmDisplayBackend {
+                    drm_display::DrmDisplayBackend {
                         sysfs_root: SYS_CLASS_DRM.into(),
                         connector: c.clone(),
                     }
@@ -439,7 +467,7 @@ impl HardwareInventory {
             })
             .collect();
 
-        let fingerprint_devices = match edgerun_goodix_fingerprint::discover_supported_devices() {
+        let fingerprint_devices = match goodix_fingerprint::discover_supported_devices() {
             Ok(devices) => devices,
             Err(e) => {
                 crate::node_warn!("edged: warning: Goodix fingerprint discovery failed: {}", e);
@@ -453,15 +481,14 @@ impl HardwareInventory {
                     "Goodix USB: bus={}, dev={}, {:04x}:{:04x}",
                     device.bus_number, device.device_number, device.vendor_id, device.product_id
                 );
-                if let Ok(reader) = edgerun_goodix_fingerprint::GoodixFingerprintReader::new(device)
-                {
+                if let Ok(reader) = goodix_fingerprint::GoodixFingerprintReader::new(device) {
                     capability_descriptors.push(reader.descriptor());
                 }
                 summary
             })
             .collect();
 
-        let bluetooth_raw = match edgerun_mgmt_bluetooth::discover_controllers() {
+        let bluetooth_raw = match mgmt_bluetooth::discover_controllers() {
             Ok(ctrls) => ctrls,
             Err(e) => {
                 crate::node_warn!("edged: warning: BT controller discovery failed: {}", e);
@@ -472,7 +499,7 @@ impl HardwareInventory {
             .into_iter()
             .map(|ctrl| {
                 capability_descriptors.push(
-                    edgerun_mgmt_bluetooth::MgmtBluetoothBackend {
+                    mgmt_bluetooth::MgmtBluetoothBackend {
                         controller: ctrl.clone(),
                     }
                     .descriptor(),
@@ -546,12 +573,12 @@ impl HardwareInventory {
                 )
             })
             .collect();
-        let nfc_adapters: Vec<String> = match edgerun_linux_nfc::discover_nfc_adapters() {
+        let nfc_adapters: Vec<String> = match linux_nfc::discover_nfc_adapters() {
             Ok(found) => found
                 .into_iter()
                 .map(|adapter| {
                     capability_descriptors.push(
-                        edgerun_linux_nfc::LinuxNfcBackend {
+                        linux_nfc::LinuxNfcBackend {
                             adapter: adapter.clone(),
                         }
                         .descriptor(),
@@ -566,22 +593,21 @@ impl HardwareInventory {
         };
 
         let mut npu_devices = Vec::new();
-        match edgerun_linux_npu::discover_linux_npus() {
+        match linux_npu::discover_linux_npus() {
             Ok(npus) => {
                 for npu in npus {
-                    capability_descriptors.push(
-                        edgerun_linux_npu::LinuxNpuBackend { info: npu.clone() }.descriptor(),
-                    );
+                    capability_descriptors
+                        .push(linux_npu::LinuxNpuBackend { info: npu.clone() }.descriptor());
                     npu_devices.push(format!("Linux NPU: {:?}", npu));
                 }
             }
             Err(e) => crate::node_warn!("edged: warning: Linux NPU discovery failed: {}", e),
         }
-        match edgerun_amd_xdna::discover_amd_xdna_devices() {
+        match amd_xdna::discover_amd_xdna_devices() {
             Ok(xdnas) => {
                 for xdna in xdnas {
                     capability_descriptors
-                        .push(edgerun_amd_xdna::AmdXdnaBackend { info: xdna.clone() }.descriptor());
+                        .push(amd_xdna::AmdXdnaBackend { info: xdna.clone() }.descriptor());
                     npu_devices.push(format!("AMD xDNA NPU: {:?}", xdna));
                 }
             }
@@ -589,14 +615,14 @@ impl HardwareInventory {
         }
 
         capability_descriptors.push(
-            edgerun_linux_power::LinuxPowerBackend {
+            linux_power::LinuxPowerBackend {
                 power_supply_root: SYS_CLASS_POWER_SUPPLY.into(),
                 proc_acpi_root: PROC_ACPI.into(),
             }
             .descriptor(),
         );
         let mut power_supplies = Vec::new();
-        match edgerun_linux_power::discover_power_supplies() {
+        match linux_power::discover_power_supplies() {
             Ok(psus) => {
                 for psu in psus {
                     power_supplies.push(format!(
@@ -607,7 +633,7 @@ impl HardwareInventory {
             }
             Err(e) => crate::node_warn!("edged: warning: power supply discovery failed: {}", e),
         }
-        match edgerun_linux_power::discover_power_system() {
+        match linux_power::discover_power_system() {
             Ok(sys) => {
                 if let Some(pct) = sys.battery_percent {
                     power_supplies.push(format!("Battery: {}%", pct));
@@ -626,7 +652,7 @@ impl HardwareInventory {
             Err(e) => crate::node_warn!("edged: warning: power system discovery failed: {}", e),
         }
 
-        let cec_adapters: Vec<String> = match edgerun_linux_cec::discover_cec_adapters() {
+        let cec_adapters: Vec<String> = match linux_cec::discover_cec_adapters() {
             Ok(found) => found
                 .into_iter()
                 .map(|adapter| {
@@ -661,13 +687,13 @@ impl HardwareInventory {
             }
         };
 
-        let audio_input: Vec<String> = match edgerun_alsa_microphone::discover_alsa_pcms() {
+        let audio_input: Vec<String> = match alsa_microphone::discover_alsa_pcms() {
             Ok(pcms) => pcms
                 .into_iter()
                 .filter(|p| p.capture)
                 .map(|p| {
                     capability_descriptors.push(
-                        edgerun_alsa_microphone::AlsaMicrophoneBackend {
+                        alsa_microphone::AlsaMicrophoneBackend {
                             device_path: format!(
                                 "/dev/snd/pcmC{}D{}c",
                                 p.card_index, p.device_index
@@ -684,7 +710,7 @@ impl HardwareInventory {
                 Vec::new()
             }
         };
-        let audio_output: Vec<String> = match edgerun_alsa_speaker::discover_speakers() {
+        let audio_output: Vec<String> = match alsa_speaker::discover_speakers() {
             Ok(speakers) => speakers
                 .into_iter()
                 .map(|s| {
@@ -704,13 +730,12 @@ impl HardwareInventory {
                 Vec::new()
             }
         };
-        let camera: Vec<String> = match edgerun_v4l2_camera::discover_camera_devices() {
+        let camera: Vec<String> = match v4l2_camera::discover_camera_devices() {
             Ok(cameras) => cameras
                 .into_iter()
                 .map(|c| {
-                    capability_descriptors.push(
-                        edgerun_v4l2_camera::V4l2CameraBiometricReader::new(c.clone()).descriptor(),
-                    );
+                    capability_descriptors
+                        .push(v4l2_camera::V4l2CameraBiometricReader::new(c.clone()).descriptor());
                     let caps = match c.query_info() {
                         Ok(info) => {
                             let mut parts = Vec::new();

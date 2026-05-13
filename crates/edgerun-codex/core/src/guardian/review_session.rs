@@ -21,7 +21,7 @@ use codex_protocol::protocol::RolloutItem;
 use codex_protocol::protocol::SandboxPolicy;
 use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::protocol::TokenUsage;
-use edgerun_json::serde_json::Value;
+use edgerun_json::Value;
 use edgerun_tokio::sync::Mutex;
 use edgerun_tokio::sync::Semaphore;
 use edgerun_tokio_util::sync::CancellationToken;

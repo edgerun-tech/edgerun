@@ -230,23 +230,6 @@ pub(super) fn draw_message(
     h
 }
 
-pub(super) fn estimate_message_height(
-    text: &str,
-    max_width: f32,
-    max_lines: usize,
-    #[cfg(feature = "fontdue-text")] atlas: Option<&FontAtlas>,
-) -> f32 {
-    56.0 + wrap_lines(
-        text,
-        max_width,
-        max_lines,
-        #[cfg(feature = "fontdue-text")]
-        atlas,
-    )
-    .len() as f32
-        * 22.0
-}
-
 pub(super) fn wrap_lines(
     text: &str,
     max_width: f32,

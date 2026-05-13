@@ -1,8 +1,10 @@
 # Standards WASM Compiler
 
-`scripts/standards` is the current compiler entrypoint. It launches the Rust
-`edgerun-standards` crate; the standards semantics live in a dependency-free
-`no_std` library and the CLI uses `std` only for filesystem and process I/O.
+There is no checked-in compiler entrypoint at the moment. The reviewed
+standards semantics live in the SDK's dependency-free `no_std`
+`standards_seed` module, enabled with the `standards-seed` feature. A future
+`std` runner can use that module for filesystem, WAT-to-WASM, and JSON output
+without reintroducing a standalone seed crate.
 
 The compiler takes reviewed RFC IR and emits one WASM module per executable
 statement:
@@ -26,25 +28,18 @@ from:
 
 The compiled component graph separately records emitted WASM module hashes.
 
-## Current Commands
+## Current Check
 
 ```bash
-./scripts/standards validate
-./scripts/standards compile udp-tftp-must-program
-./scripts/standards components udp-tftp-must-program
-./scripts/standards definitions udp-tftp-must-program
-./scripts/standards clauses udp-tftp-must-program
-./scripts/standards units udp-tftp-must-program
-./scripts/standards graph udp-tftp-must-program
-./scripts/standards check udp-tftp-must-program
-./scripts/standards run udp-tftp-must-program --wasm --hex <hex-bytes>
+cargo test -p edgerun-sdk --features standards-seed standards_seed
 ```
 
-`check` is the high-level command. It validates the catalog, compiles the
-program, validates the WASM modules, runs the corpus through the Rust core, and
-compares requirement/severity signatures against explicit corpus expectations.
-Corpus expectations live in `standards/corpus/<program>/cases.toml`; checks do
-not infer pass/fail from filenames.
+The test target validates the reviewed Rust core semantics. A future `check`
+command should validate the catalog, compile the program, validate the WASM
+modules, run the corpus through the Rust core, and compare
+requirement/severity signatures against explicit corpus expectations. Corpus
+expectations live in `standards/corpus/<program>/cases.toml`; checks should not
+infer pass/fail from filenames.
 
 ## Current Scope
 
@@ -68,10 +63,10 @@ and a `program.json` component graph.
 ## Runtime Boundary
 
 There is no JavaScript or Python runtime in the standards path. The boundary is
-now `edgerun-standards/src/lib.rs`: a `no_std` Rust core that parses external
+now `edgerun-sdk::standards_seed`: a `no_std` Rust core that parses external
 standard wire bytes, evaluates reviewed clauses, and can be compiled for bare
-targets. The `std` CLI is only an adapter for files, WAT-to-WASM tool execution,
-and JSON output.
+targets. Any future `std` CLI should only adapt files, WAT-to-WASM tool
+execution, and JSON output.
 
 ## Clause Expression Language
 

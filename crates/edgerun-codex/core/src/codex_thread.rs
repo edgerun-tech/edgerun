@@ -345,7 +345,7 @@ impl CodexThread {
     /// can consume that pending input through the normal turn pipeline.
     #[cfg(test)]
     pub(crate) async fn append_message(&self, message: ResponseItem) -> CodexResult<String> {
-        let submission_id = edgerun_uuid::Uuid::new_v4().to_string();
+        let submission_id = codex_protocol::local_uuid::Uuid::new_v4().to_string();
         let pending_item = pending_message_input_item(&message)?;
         if let Err(items) = self
             .codex
@@ -475,7 +475,7 @@ impl CodexThread {
         &self,
         server: &str,
         uri: &str,
-    ) -> anyhow::Result<edgerun_json::serde_json::Value> {
+    ) -> anyhow::Result<edgerun_json::Value> {
         let result = self
             .codex
             .session
@@ -488,15 +488,15 @@ impl CodexThread {
             )
             .await?;
 
-        Ok(edgerun_json::serde_json::to_value(result)?)
+        Ok(edgerun_json::to_serde_value(result)?)
     }
 
     pub async fn call_mcp_tool(
         &self,
         server: &str,
         tool: &str,
-        arguments: Option<edgerun_json::serde_json::Value>,
-        meta: Option<edgerun_json::serde_json::Value>,
+        arguments: Option<edgerun_json::Value>,
+        meta: Option<edgerun_json::Value>,
     ) -> anyhow::Result<CallToolResult> {
         self.codex
             .session

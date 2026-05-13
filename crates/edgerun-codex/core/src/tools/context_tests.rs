@@ -2,7 +2,7 @@ use super::*;
 use codex_protocol::models::DEFAULT_IMAGE_DETAIL;
 use core_test_support::assert_regex_match;
 use pretty_assertions::assert_eq;
-use edgerun_json::serde_json::json;
+use edgerun_json::json;
 
 #[test]
 fn custom_tool_calls_should_roundtrip_as_custom_outputs() {
@@ -47,16 +47,16 @@ fn function_payloads_remain_function_outputs() {
 #[test]
 fn mcp_code_mode_result_serializes_full_call_tool_result() {
     let output = CallToolResult {
-        content: vec![edgerun_json::serde_json::json!({
+        content: vec![edgerun_json::json!({
             "type": "text",
             "text": "ignored",
         })],
-        structured_content: Some(edgerun_json::serde_json::json!({
+        structured_content: Some(edgerun_json::json!({
             "threadId": "thread_123",
             "content": "done",
         })),
         is_error: Some(false),
-        meta: Some(edgerun_json::serde_json::json!({
+        meta: Some(edgerun_json::json!({
             "source": "mcp",
         })),
     };
@@ -69,7 +69,7 @@ fn mcp_code_mode_result_serializes_full_call_tool_result() {
 
     assert_eq!(
         result,
-        edgerun_json::serde_json::json!({
+        edgerun_json::json!({
             "content": [{
                 "type": "text",
                 "text": "ignored",
@@ -90,7 +90,7 @@ fn mcp_code_mode_result_serializes_full_call_tool_result() {
 fn mcp_tool_output_response_item_includes_wall_time() {
     let output = McpToolOutput {
         result: CallToolResult {
-            content: vec![edgerun_json::serde_json::json!({
+            content: vec![edgerun_json::json!({
                 "type": "text",
                 "text": "done",
             })],
@@ -123,7 +123,7 @@ fn mcp_tool_output_response_item_includes_wall_time() {
             let Some(payload) = text.strip_prefix("Wall time: 1.2500 seconds\nOutput:\n") else {
                 panic!("MCP output should include wall-time header: {text}");
             };
-            let parsed: edgerun_json::serde_json::Value = edgerun_json::serde_json::from_str(payload).unwrap_or_else(|err| {
+            let parsed: edgerun_json::Value = edgerun_json::from_serde_str(payload).unwrap_or_else(|err| {
                 panic!("MCP output should serialize JSON content: {err}");
             });
             assert_eq!(
@@ -142,11 +142,11 @@ fn mcp_tool_output_response_item_includes_wall_time() {
 fn mcp_tool_output_response_item_truncates_large_structured_content() {
     let output = McpToolOutput {
         result: CallToolResult {
-            content: vec![edgerun_json::serde_json::json!({
+            content: vec![edgerun_json::json!({
                 "type": "text",
                 "text": "ignored when structured content is present",
             })],
-            structured_content: Some(edgerun_json::serde_json::json!({
+            structured_content: Some(edgerun_json::json!({
                 "items": "large structured value ".repeat(1_000),
             })),
             is_error: Some(false),
@@ -188,7 +188,7 @@ fn mcp_tool_output_response_item_preserves_content_items() {
     let image_url = "data:image/png;base64,AAA";
     let output = McpToolOutput {
         result: CallToolResult {
-            content: vec![edgerun_json::serde_json::json!({
+            content: vec![edgerun_json::json!({
                 "type": "image",
                 "mimeType": "image/png",
                 "data": "AAA",
@@ -243,11 +243,11 @@ fn mcp_tool_output_code_mode_result_stays_raw_call_tool_result() {
     let large_content = "large structured value ".repeat(1_000);
     let output = McpToolOutput {
         result: CallToolResult {
-            content: vec![edgerun_json::serde_json::json!({
+            content: vec![edgerun_json::json!({
                 "type": "text",
                 "text": "ignored",
             })],
-            structured_content: Some(edgerun_json::serde_json::json!({
+            structured_content: Some(edgerun_json::json!({
                 "content": large_content,
             })),
             is_error: Some(false),
@@ -267,7 +267,7 @@ fn mcp_tool_output_code_mode_result_stays_raw_call_tool_result() {
 
     assert_eq!(
         result,
-        edgerun_json::serde_json::json!({
+        edgerun_json::json!({
             "content": [{
                 "type": "text",
                 "text": "ignored",

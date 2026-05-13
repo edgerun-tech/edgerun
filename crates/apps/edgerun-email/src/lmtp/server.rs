@@ -21,8 +21,8 @@ use crate::command_middleware::{
 use crate::lmtp::session_core::{
     LmtpCommand, LmtpSessionAction, LmtpSessionConfig, LmtpSessionCore, LmtpSessionPolicy,
 };
-use crate::server::read_line;
 use crate::server::ConnectionInterceptor;
+use crate::server::read_line;
 use crate::smtp::server::{MailHandler, MemoryMailStore};
 use crate::smtp::types::{
     EnhancedStatusCode, MailEnvelope, ServerLimits, SmtpCommand, SmtpResponse, SmtpResponseCode,

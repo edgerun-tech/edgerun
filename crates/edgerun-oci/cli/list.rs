@@ -4,9 +4,9 @@ use crate::prelude::*;
 use std::fs;
 use std::io;
 
+use crate::clap::cli::Action;
+use crate::clap::{Arg, Command};
 use crate::cli::{invalid_input, parse_cli_args};
-use edgerun_clap::cli::Action;
-use edgerun_clap::{Arg, Command};
 
 enum ListFormat {
     Table,

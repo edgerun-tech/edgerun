@@ -6,16 +6,15 @@ license.workspace = true
 publish.workspace = true
 repository.workspace = true
 homepage.workspace = true
-description = "Minimal structured logging — replaces tracing + tracing-subscriber"
+description = "Minimal structured logging and tracing-compatible facade"
 
 [dependencies]
-tracing = { version = "0.1.44", optional = true }
-tracing-opentelemetry = { version = "0.32.0", optional = true }
+edgerun-log-macros = { path = "../edgerun-log-macros", optional = true }
 
 [features]
 default = []
-tracing-compat = ["dep:tracing"]
-tracing-opentelemetry-compat = ["tracing-compat", "dep:tracing-opentelemetry"]
+tracing-compat = ["dep:edgerun-log-macros"]
+tracing-opentelemetry-compat = ["tracing-compat"]
 
 [lints]
 workspace = true

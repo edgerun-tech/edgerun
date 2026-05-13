@@ -53,7 +53,7 @@ use codex_protocol::user_input::UserInput;
 use core_test_support::TempDirExt;
 use pretty_assertions::assert_eq;
 use serde::Deserialize;
-use edgerun_json::serde_json::json;
+use edgerun_json::json;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -80,7 +80,7 @@ fn invocation(
     }
 }
 
-fn function_payload(args: edgerun_json::serde_json::Value) -> ToolPayload {
+fn function_payload(args: edgerun_json::Value) -> ToolPayload {
     ToolPayload::Function {
         arguments: args.to_string(),
     }
@@ -165,7 +165,7 @@ struct ListAgentsResult {
 #[derive(Debug, Deserialize)]
 struct ListedAgentResult {
     agent_name: String,
-    agent_status: edgerun_json::serde_json::Value,
+    agent_status: edgerun_json::Value,
     last_task_message: Option<String>,
 }
 
@@ -274,7 +274,7 @@ async fn spawn_agent_uses_explorer_role_and_preserves_approval_policy() {
         .expect("spawn_agent should succeed");
     let (content, _) = expect_text_output(output);
     let result: SpawnAgentResult =
-        edgerun_json::serde_json::from_str(&content).expect("spawn_agent result should be json");
+        edgerun_json::from_serde_str(&content).expect("spawn_agent result should be json");
     let agent_id = parse_agent_id(&result.agent_id);
     assert!(
         result
@@ -479,8 +479,8 @@ async fn multi_agent_v2_spawn_partial_fork_turns_allows_agent_type_override() {
         .await
         .expect("partial fork should allow agent_type overrides");
     let (content, _) = expect_text_output(output);
-    let result: edgerun_json::serde_json::Value =
-        edgerun_json::serde_json::from_str(&content).expect("spawn_agent result should be json");
+    let result: edgerun_json::Value =
+        edgerun_json::from_serde_str(&content).expect("spawn_agent result should be json");
     assert_eq!(result["task_name"], "/root/partial_fork");
     let agent_id = manager
         .captured_ops()
@@ -518,8 +518,8 @@ async fn spawn_agent_returns_agent_id_without_task_name() {
         .await
         .expect("spawn_agent should succeed");
     let (content, success) = expect_text_output(output);
-    let result: edgerun_json::serde_json::Value =
-        edgerun_json::serde_json::from_str(&content).expect("spawn_agent result should be json");
+    let result: edgerun_json::Value =
+        edgerun_json::from_serde_str(&content).expect("spawn_agent result should be json");
 
     assert!(result["agent_id"].is_string());
     assert!(result.get("task_name").is_none());
@@ -654,7 +654,7 @@ async fn multi_agent_v2_spawn_returns_path_and_send_message_accepts_relative_pat
         .expect("spawn_agent should succeed");
     let (content, _) = expect_text_output(spawn_output);
     let spawn_result: SpawnAgentResult =
-        edgerun_json::serde_json::from_str(&content).expect("spawn result should parse");
+        edgerun_json::from_serde_str(&content).expect("spawn result should parse");
     assert_eq!(spawn_result.task_name, "/root/test_process");
     assert!(spawn_result.nickname.is_some());
 
@@ -1059,7 +1059,7 @@ async fn multi_agent_v2_list_agents_returns_completed_status_and_last_task_messa
         .expect("list_agents should succeed");
     let (content, success) = expect_text_output(output);
     let result: ListAgentsResult =
-        edgerun_json::serde_json::from_str(&content).expect("list_agents result should be json");
+        edgerun_json::from_serde_str(&content).expect("list_agents result should be json");
 
     let agent_names = result
         .agents
@@ -1166,7 +1166,7 @@ async fn multi_agent_v2_list_agents_filters_by_relative_path_prefix() {
         .expect("list_agents should succeed");
     let (content, _) = expect_text_output(output);
     let result: ListAgentsResult =
-        edgerun_json::serde_json::from_str(&content).expect("list_agents result should be json");
+        edgerun_json::from_serde_str(&content).expect("list_agents result should be json");
 
     assert_eq!(result.agents.len(), 1);
     assert_eq!(result.agents[0].agent_name, worker_path.as_str());
@@ -1227,7 +1227,7 @@ async fn multi_agent_v2_list_agents_omits_closed_agents() {
         .expect("list_agents should succeed");
     let (content, _) = expect_text_output(output);
     let result: ListAgentsResult =
-        edgerun_json::serde_json::from_str(&content).expect("list_agents result should be json");
+        edgerun_json::from_serde_str(&content).expect("list_agents result should be json");
 
     assert_eq!(result.agents.len(), 1);
     assert_eq!(result.agents[0].agent_name, "/root");
@@ -1661,8 +1661,8 @@ async fn multi_agent_v2_spawn_omits_agent_id_when_named() {
         .await
         .expect("spawn_agent should succeed");
     let (content, success) = expect_text_output(output);
-    let result: edgerun_json::serde_json::Value =
-        edgerun_json::serde_json::from_str(&content).expect("spawn_agent result should be json");
+    let result: edgerun_json::Value =
+        edgerun_json::from_serde_str(&content).expect("spawn_agent result should be json");
 
     assert!(result.get("agent_id").is_none());
     assert_eq!(result["task_name"], "/root/test_process");
@@ -1760,7 +1760,7 @@ async fn spawn_agent_reapplies_runtime_sandbox_after_role_config() {
         .expect("spawn_agent should succeed");
     let (content, _) = expect_text_output(output);
     let result: SpawnAgentResult =
-        edgerun_json::serde_json::from_str(&content).expect("spawn_agent result should be json");
+        edgerun_json::from_serde_str(&content).expect("spawn_agent result should be json");
     let agent_id = parse_agent_id(&result.agent_id);
     assert!(
         result
@@ -1861,7 +1861,7 @@ async fn spawn_agent_allows_depth_up_to_configured_max_depth() {
         .expect("spawn should succeed within configured depth");
     let (content, success) = expect_text_output(output);
     let result: SpawnAgentResult =
-        edgerun_json::serde_json::from_str(&content).expect("spawn_agent result should be json");
+        edgerun_json::from_serde_str(&content).expect("spawn_agent result should be json");
     assert!(!result.agent_id.is_empty());
     assert!(
         result
@@ -1920,7 +1920,7 @@ async fn multi_agent_v2_spawn_agent_ignores_configured_max_depth() {
         .expect("multi-agent v2 spawn should ignore max depth");
     let (content, success) = expect_text_output(output);
     let result: SpawnAgentResult =
-        edgerun_json::serde_json::from_str(&content).expect("spawn_agent result should be json");
+        edgerun_json::from_serde_str(&content).expect("spawn_agent result should be json");
     assert_eq!(result.task_name, "/root/parent/child");
     assert!(result.nickname.is_some());
     assert_eq!(success, Some(true));
@@ -2169,7 +2169,7 @@ async fn resume_agent_noops_for_active_agent() {
         .expect("resume_agent should succeed");
     let (content, success) = expect_text_output(output);
     let result: resume_agent::ResumeAgentResult =
-        edgerun_json::serde_json::from_str(&content).expect("resume_agent result should be json");
+        edgerun_json::from_serde_str(&content).expect("resume_agent result should be json");
     assert_eq!(result.status, status_before);
     assert_eq!(success, Some(true));
 
@@ -2231,7 +2231,7 @@ async fn resume_agent_restores_closed_agent_and_accepts_send_input() {
         .expect("resume_agent should succeed");
     let (content, success) = expect_text_output(output);
     let result: resume_agent::ResumeAgentResult =
-        edgerun_json::serde_json::from_str(&content).expect("resume_agent result should be json");
+        edgerun_json::from_serde_str(&content).expect("resume_agent result should be json");
     assert_ne!(result.status, AgentStatus::NotFound);
     assert_eq!(success, Some(true));
 
@@ -2246,8 +2246,8 @@ async fn resume_agent_restores_closed_agent_and_accepts_send_input() {
         .await
         .expect("send_input should succeed after resume");
     let (content, success) = expect_text_output(output);
-    let result: edgerun_json::serde_json::Value =
-        edgerun_json::serde_json::from_str(&content).expect("send_input result should be json");
+    let result: edgerun_json::Value =
+        edgerun_json::from_serde_str(&content).expect("send_input result should be json");
     let submission_id = result
         .get("submission_id")
         .and_then(|value| value.as_str())
@@ -2426,7 +2426,7 @@ async fn multi_agent_v2_wait_agent_accepts_timeout_only_argument() {
         .expect("timeout-only args should be accepted in v2 mode");
     let (content, success) = expect_text_output(output);
     let result: crate::tools::handlers::multi_agents_v2::wait::WaitAgentResult =
-        edgerun_json::serde_json::from_str(&content).expect("wait_agent result should be json");
+        edgerun_json::from_serde_str(&content).expect("wait_agent result should be json");
     assert_eq!(
         result,
         crate::tools::handlers::multi_agents_v2::wait::WaitAgentResult {
@@ -2479,7 +2479,7 @@ async fn multi_agent_v2_wait_agent_uses_configured_min_timeout() {
     .expect("wait_agent should succeed");
     let (content, success) = expect_text_output(output);
     let result: crate::tools::handlers::multi_agents_v2::wait::WaitAgentResult =
-        edgerun_json::serde_json::from_str(&content).expect("wait_agent result should be json");
+        edgerun_json::from_serde_str(&content).expect("wait_agent result should be json");
     assert_eq!(
         result,
         crate::tools::handlers::multi_agents_v2::wait::WaitAgentResult {
@@ -2512,7 +2512,7 @@ async fn wait_agent_returns_not_found_for_missing_agents() {
         .expect("wait_agent should succeed");
     let (content, success) = expect_text_output(output);
     let result: wait::WaitAgentResult =
-        edgerun_json::serde_json::from_str(&content).expect("wait_agent result should be json");
+        edgerun_json::from_serde_str(&content).expect("wait_agent result should be json");
     assert_eq!(
         result,
         wait::WaitAgentResult {
@@ -2552,7 +2552,7 @@ async fn wait_agent_times_out_when_status_is_not_final() {
         .expect("wait_agent should succeed");
     let (content, success) = expect_text_output(output);
     let result: wait::WaitAgentResult =
-        edgerun_json::serde_json::from_str(&content).expect("wait_agent result should be json");
+        edgerun_json::from_serde_str(&content).expect("wait_agent result should be json");
     assert_eq!(
         result,
         wait::WaitAgentResult {
@@ -2648,7 +2648,7 @@ async fn wait_agent_returns_final_status_without_timeout() {
         .expect("wait_agent should succeed");
     let (content, success) = expect_text_output(output);
     let result: wait::WaitAgentResult =
-        edgerun_json::serde_json::from_str(&content).expect("wait_agent result should be json");
+        edgerun_json::from_serde_str(&content).expect("wait_agent result should be json");
     assert_eq!(
         result,
         wait::WaitAgentResult {
@@ -2739,7 +2739,7 @@ async fn multi_agent_v2_wait_agent_returns_summary_for_mailbox_activity() {
         .expect("wait_agent should succeed");
     let (content, success) = expect_text_output(wait_output);
     let result: crate::tools::handlers::multi_agents_v2::wait::WaitAgentResult =
-        edgerun_json::serde_json::from_str(&content).expect("wait_agent result should be json");
+        edgerun_json::from_serde_str(&content).expect("wait_agent result should be json");
     assert_eq!(
         result,
         crate::tools::handlers::multi_agents_v2::wait::WaitAgentResult {
@@ -2817,7 +2817,7 @@ async fn multi_agent_v2_wait_agent_returns_for_already_queued_mail() {
     .expect("wait_agent should succeed");
     let (content, success) = expect_text_output(output);
     let result: crate::tools::handlers::multi_agents_v2::wait::WaitAgentResult =
-        edgerun_json::serde_json::from_str(&content).expect("wait_agent result should be json");
+        edgerun_json::from_serde_str(&content).expect("wait_agent result should be json");
     assert_eq!(
         result,
         crate::tools::handlers::multi_agents_v2::wait::WaitAgentResult {
@@ -2905,7 +2905,7 @@ async fn multi_agent_v2_wait_agent_wakes_on_any_mailbox_notification() {
         .expect("wait_agent should succeed");
     let (content, success) = expect_text_output(output);
     let result: crate::tools::handlers::multi_agents_v2::wait::WaitAgentResult =
-        edgerun_json::serde_json::from_str(&content).expect("wait_agent result should be json");
+        edgerun_json::from_serde_str(&content).expect("wait_agent result should be json");
     assert_eq!(
         result,
         crate::tools::handlers::multi_agents_v2::wait::WaitAgentResult {
@@ -2990,7 +2990,7 @@ async fn multi_agent_v2_wait_agent_does_not_return_completed_content() {
         .expect("wait_agent should succeed");
     let (content, success) = expect_text_output(output);
     let result: crate::tools::handlers::multi_agents_v2::wait::WaitAgentResult =
-        edgerun_json::serde_json::from_str(&content).expect("wait_agent result should be json");
+        edgerun_json::from_serde_str(&content).expect("wait_agent result should be json");
     assert_eq!(
         result,
         crate::tools::handlers::multi_agents_v2::wait::WaitAgentResult {
@@ -3052,7 +3052,7 @@ async fn multi_agent_v2_close_agent_accepts_task_name_target() {
         .expect("close_agent should succeed for v2 task names");
     let (content, success) = expect_text_output(output);
     let result: close_agent::CloseAgentResult =
-        edgerun_json::serde_json::from_str(&content).expect("close_agent result should be json");
+        edgerun_json::from_serde_str(&content).expect("close_agent result should be json");
     assert_ne!(result.previous_status, AgentStatus::NotFound);
     assert_eq!(success, Some(true));
     assert_eq!(
@@ -3134,7 +3134,7 @@ async fn close_agent_submits_shutdown_and_returns_previous_status() {
         .expect("close_agent should succeed");
     let (content, success) = expect_text_output(output);
     let result: close_agent::CloseAgentResult =
-        edgerun_json::serde_json::from_str(&content).expect("close_agent result should be json");
+        edgerun_json::from_serde_str(&content).expect("close_agent result should be json");
     assert_eq!(result.previous_status, status_before);
     assert_eq!(success, Some(true));
 
@@ -3186,12 +3186,12 @@ async fn tool_handlers_cascade_close_and_resume_and_keep_explicitly_closed_subtr
         .await
         .expect("child spawn should succeed");
     let (child_content, child_success) = expect_text_output(child_spawn_output);
-    let child_result: edgerun_json::serde_json::Value =
-        edgerun_json::serde_json::from_str(&child_content).expect("child spawn result should be json");
+    let child_result: edgerun_json::Value =
+        edgerun_json::from_serde_str(&child_content).expect("child spawn result should be json");
     let child_thread_id = parse_agent_id(
         child_result
             .get("agent_id")
-            .and_then(edgerun_json::serde_json::Value::as_str)
+            .and_then(edgerun_json::Value::as_str)
             .expect("child spawn result should include agent_id"),
     );
     assert_eq!(child_success, Some(true));
@@ -3211,12 +3211,12 @@ async fn tool_handlers_cascade_close_and_resume_and_keep_explicitly_closed_subtr
         .await
         .expect("grandchild spawn should succeed");
     let (grandchild_content, grandchild_success) = expect_text_output(grandchild_spawn_output);
-    let grandchild_result: edgerun_json::serde_json::Value =
-        edgerun_json::serde_json::from_str(&grandchild_content).expect("grandchild spawn result should be json");
+    let grandchild_result: edgerun_json::Value =
+        edgerun_json::from_serde_str(&grandchild_content).expect("grandchild spawn result should be json");
     let grandchild_thread_id = parse_agent_id(
         grandchild_result
             .get("agent_id")
-            .and_then(edgerun_json::serde_json::Value::as_str)
+            .and_then(edgerun_json::Value::as_str)
             .expect("grandchild spawn result should include agent_id"),
     );
     assert_eq!(grandchild_success, Some(true));
@@ -3232,7 +3232,7 @@ async fn tool_handlers_cascade_close_and_resume_and_keep_explicitly_closed_subtr
         .expect("close_agent should close the child subtree");
     let (close_content, close_success) = expect_text_output(close_output);
     let close_result: close_agent::CloseAgentResult =
-        edgerun_json::serde_json::from_str(&close_content).expect("close_agent result should be json");
+        edgerun_json::from_serde_str(&close_content).expect("close_agent result should be json");
     assert_ne!(close_result.previous_status, AgentStatus::NotFound);
     assert_eq!(close_success, Some(true));
     assert_eq!(
@@ -3258,7 +3258,7 @@ async fn tool_handlers_cascade_close_and_resume_and_keep_explicitly_closed_subtr
         .expect("resume_agent should reopen the child subtree");
     let (child_resume_content, child_resume_success) = expect_text_output(child_resume_output);
     let child_resume_result: resume_agent::ResumeAgentResult =
-        edgerun_json::serde_json::from_str(&child_resume_content).expect("resume result should be json");
+        edgerun_json::from_serde_str(&child_resume_content).expect("resume result should be json");
     assert_ne!(child_resume_result.status, AgentStatus::NotFound);
     assert_eq!(child_resume_success, Some(true));
     assert_ne!(
@@ -3284,7 +3284,7 @@ async fn tool_handlers_cascade_close_and_resume_and_keep_explicitly_closed_subtr
         .expect("close_agent should be repeatable for the child subtree");
     let (close_again_content, close_again_success) = expect_text_output(close_again_output);
     let close_again_result: close_agent::CloseAgentResult =
-        edgerun_json::serde_json::from_str(&close_again_content)
+        edgerun_json::from_serde_str(&close_again_content)
             .expect("second close_agent result should be json");
     assert_ne!(close_again_result.previous_status, AgentStatus::NotFound);
     assert_eq!(close_again_success, Some(true));
@@ -3326,7 +3326,7 @@ async fn tool_handlers_cascade_close_and_resume_and_keep_explicitly_closed_subtr
         .expect("resume_agent should reopen the parent thread");
     let (parent_resume_content, parent_resume_success) = expect_text_output(parent_resume_output);
     let parent_resume_result: resume_agent::ResumeAgentResult =
-        edgerun_json::serde_json::from_str(&parent_resume_content).expect("parent resume result should be json");
+        edgerun_json::from_serde_str(&parent_resume_content).expect("parent resume result should be json");
     assert_ne!(parent_resume_result.status, AgentStatus::NotFound);
     assert_eq!(parent_resume_success, Some(true));
     assert_ne!(

@@ -27,8 +27,8 @@ use core_test_support::test_codex::TestCodex;
 use core_test_support::test_codex::test_codex;
 use core_test_support::test_codex::turn_permission_fields;
 use core_test_support::wait_for_event;
-use edgerun_json::serde_json::Value;
-use edgerun_json::serde_json::json;
+use edgerun_json::Value;
+use edgerun_json::json;
 fn call_output(req: &ResponsesRequest, call_id: &str) -> (String, Option<bool>) {
     let raw = req.function_call_output(call_id);
     assert_eq!(
@@ -107,7 +107,7 @@ async fn shell_tool_executes_command_and_streams_output() -> anyhow::Result<()> 
 
     let req = second_mock.single_request();
     let (output_text, _) = call_output(&req, call_id);
-    let exec_output: Value = edgerun_json::serde_json::from_str(&output_text)?;
+    let exec_output: Value = edgerun_json::from_serde_str(&output_text)?;
     assert_eq!(exec_output["metadata"]["exit_code"], 0);
     let stdout = exec_output["output"].as_str().expect("stdout field");
     assert_regex_match(r"(?s)^tool harness\n?$", stdout);

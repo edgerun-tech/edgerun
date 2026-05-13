@@ -51,12 +51,12 @@ pub use crate::server::ConnectionInterceptor;
 #[cfg(not(target_os = "none"))]
 pub use client::{EmailBuilder, MimePart, SmtpClient};
 pub use edgerun_protocols::smtp::session_core::{
-    extract_domain_from_address, AllowAllSmtpPolicy, SmtpPeerContext, SmtpSessionAction,
-    SmtpSessionAuth, SmtpSessionConfig, SmtpSessionCore, SmtpSessionPolicy, SmtpSessionStep,
+    AllowAllSmtpPolicy, SmtpPeerContext, SmtpSessionAction, SmtpSessionAuth, SmtpSessionConfig,
+    SmtpSessionCore, SmtpSessionPolicy, SmtpSessionStep, extract_domain_from_address,
 };
 pub use edgerun_protocols::smtp::types::{
-    get_date, get_from_address, get_subject, parse_headers, DsnNotify, DsnRet, EnhancedStatusCode,
-    MailEnvelope, ServerLimits, SmtpCommand, SmtpResponse, SmtpResponseCode, SmtpState,
+    DsnNotify, DsnRet, EnhancedStatusCode, MailEnvelope, ServerLimits, SmtpCommand, SmtpResponse,
+    SmtpResponseCode, SmtpState, get_date, get_from_address, get_subject, parse_headers,
 };
 #[cfg(not(target_os = "none"))]
 pub use relay::{DeliveryWorker, DeliveryWorkerConfig, MailIndex, OutboundRelay};

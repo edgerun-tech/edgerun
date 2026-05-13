@@ -25,7 +25,7 @@ use codex_protocol::user_input::UserInput;
 use codex_tools::ToolName;
 use serde::Deserialize;
 use serde::Serialize;
-use edgerun_json::serde_json::Value as JsonValue;
+use edgerun_json::Value as JsonValue;
 
 pub(crate) use close_agent::Handler as CloseAgentHandler;
 pub(crate) use followup_task::Handler as FollowupTaskHandler;

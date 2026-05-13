@@ -21,8 +21,8 @@ use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
 use core_test_support::stdio_server_bin;
 use core_test_support::test_codex::test_codex;
-use edgerun_json::serde_json::Value;
-use edgerun_json::serde_json::json;
+use edgerun_json::Value;
+use edgerun_json::json;
 use pretty_assertions::assert_eq;
 
 const RMCP_SERVER: &str = "rmcp";
@@ -35,7 +35,7 @@ fn write_pre_tool_use_hook(home: &Path, reason: &str) -> Result<()> {
     let script_path = home.join("pre_tool_use_hook.py");
     let log_path = home.join("pre_tool_use_hook_log.jsonl");
     let reason_json =
-        edgerun_json::serde_json::to_string(reason).context("serialize pre tool use reason")?;
+        edgerun_json::to_string(reason).context("serialize pre tool use reason")?;
     let script = format!(
         r#"import json
 from pathlib import Path
@@ -57,7 +57,7 @@ print(json.dumps({{
         log_path = log_path.display(),
         reason_json = reason_json,
     );
-    let hooks = edgerun_json::serde_json::json!({
+    let hooks = edgerun_json::json!({
         "hooks": {
             "PreToolUse": [{
                 "matcher": RMCP_HOOK_MATCHER,
@@ -78,7 +78,7 @@ print(json.dumps({{
 fn write_post_tool_use_hook(home: &Path, additional_context: &str) -> Result<()> {
     let script_path = home.join("post_tool_use_hook.py");
     let log_path = home.join("post_tool_use_hook_log.jsonl");
-    let additional_context_json = edgerun_json::serde_json::to_string(additional_context)
+    let additional_context_json = edgerun_json::to_string(additional_context)
         .context("serialize post tool use context")?;
     let script = format!(
         r#"import json
@@ -100,7 +100,7 @@ print(json.dumps({{
         log_path = log_path.display(),
         additional_context_json = additional_context_json,
     );
-    let hooks = edgerun_json::serde_json::json!({
+    let hooks = edgerun_json::json!({
         "hooks": {
             "PostToolUse": [{
                 "matcher": RMCP_HOOK_MATCHER,
@@ -124,7 +124,7 @@ fn read_hook_inputs(home: &Path, log_name: &str) -> Result<Vec<Value>> {
         .lines()
         .filter(|line| !line.trim().is_empty())
         .map(|line| {
-            edgerun_json::serde_json::from_str(line)
+            edgerun_json::from_serde_str(line)
                 .with_context(|| format!("parse {log_name} line"))
         })
         .collect()

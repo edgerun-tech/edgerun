@@ -24,7 +24,6 @@ model-provider = [
 ]
 native-transport = [
     "codex-client/reqwest-transport",
-    "dep:edgerun-reqwest",
 ]
 
 [lints]
@@ -40,8 +39,7 @@ codex-models-manager = { workspace = true, optional = true }
 codex-protocol = { workspace = true }
 codex-shell-command = { workspace = true }
 codex-tools = { path = "../tools", default-features = false }
-edgerun-json = { workspace = true, features = ["serde-compat"] }
-edgerun-reqwest = { workspace = true, default-features = false, optional = true }
+edgerun-json = { workspace = true }
 
 [dev-dependencies]
 edgerun-async-trait = { workspace = true }

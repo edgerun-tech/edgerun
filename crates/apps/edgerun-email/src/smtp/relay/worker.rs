@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use crate::rt::CancellationToken;
 
-use crate::smtp::relay::bounce::{send_bounce, BounceConfig};
+use crate::smtp::relay::bounce::{BounceConfig, send_bounce};
 use crate::smtp::relay::queue::MailIndex;
 use crate::smtp::relay::relay::OutboundRelay;
 use crate::smtp::types::MailEnvelope;

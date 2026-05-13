@@ -71,7 +71,7 @@ impl ToolHandler for RequestPermissionsHandler {
                 )
             })?;
 
-        let content = edgerun_json::serde_json::to_string(&response).map_err(|err| {
+        let content = edgerun_json::to_string(&response).map_err(|err| {
             FunctionCallError::Fatal(format!(
                 "failed to serialize request_permissions response: {err}"
             ))

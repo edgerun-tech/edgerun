@@ -146,7 +146,7 @@ pub enum CodexErr {
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error(transparent)]
-    Json(#[from] edgerun_json::serde_json::Error),
+    Json(#[from] edgerun_json::JsonError),
     #[cfg(target_os = "linux")]
     #[error(transparent)]
     LandlockRuleset(#[from] landlock::RulesetError),
@@ -257,8 +257,8 @@ impl CodexErr {
         let http_status_code = match self {
             CodexErr::RetryLimit(err) => Some(err.status),
             CodexErr::UnexpectedStatus(err) => Some(err.status),
-            CodexErr::ConnectionFailed(err) => err.source.status(),
-            CodexErr::ResponseStreamFailed(err) => err.source.status(),
+            CodexErr::ConnectionFailed(err) => err.source.status,
+            CodexErr::ResponseStreamFailed(err) => err.source.status,
             _ => None,
         };
         http_status_code.as_ref().map(StatusCode::as_u16)
@@ -266,8 +266,20 @@ impl CodexErr {
 }
 
 #[derive(Debug)]
+pub struct HttpTransportError {
+    pub message: String,
+    pub status: Option<StatusCode>,
+}
+
+impl std::fmt::Display for HttpTransportError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.message)
+    }
+}
+
+#[derive(Debug)]
 pub struct ConnectionFailedError {
-    pub source: edgerun_reqwest::Error,
+    pub source: HttpTransportError,
 }
 
 impl std::fmt::Display for ConnectionFailedError {
@@ -278,7 +290,7 @@ impl std::fmt::Display for ConnectionFailedError {
 
 #[derive(Debug)]
 pub struct ResponseStreamFailed {
-    pub source: edgerun_reqwest::Error,
+    pub source: HttpTransportError,
     pub request_id: Option<String>,
 }
 
@@ -326,13 +338,12 @@ impl UnexpectedResponseError {
     }
 
     fn extract_error_message(&self) -> Option<String> {
-        let json =
-            edgerun_json::serde_json::from_str::<edgerun_json::serde_json::Value>(&self.body)
-                .ok()?;
-        let message = json
+        let tape = edgerun_json::parse_json_tape(&self.body).ok()?;
+        let message = tape
+            .root(&self.body)?
             .get("error")
             .and_then(|error| error.get("message"))
-            .and_then(edgerun_json::serde_json::Value::as_str)?;
+            .and_then(|message| message.as_str())?;
         let message = message.trim();
         if message.is_empty() {
             None

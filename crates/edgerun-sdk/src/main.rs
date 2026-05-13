@@ -1,5 +1,6 @@
 #![cfg(feature = "std")]
 
+use crate::ssh_support::SshTarget;
 use edgerun_crypto::ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use edgerun_crypto::{Ed25519SigningKey as SigningKey, Signer, fill_random};
 use edgerun_protocols::seal::{SealKey, seal_with_key, unseal_with_key};
@@ -12,7 +13,6 @@ use edgerun_sdk::{
     ApiFunction, ChainManifest, CompositionComponent, CompositionManifest, Determinism,
     SDK_ABI_NAME, SegmentManifest, UnitManifest, sha256, sha256_hex, str_eq,
 };
-use edgerun_ssh::SshTarget;
 use formats::{
     bytes_to_hex, parse_api, parse_chain, parse_composition, parse_report, parse_segment,
     parse_segment_report,
@@ -29,9 +29,11 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 mod formats;
 
 mod deploy;
+mod deploy_support;
 mod marketplace;
 mod package;
 mod runtime;
+mod ssh_support;
 
 pub(crate) use deploy::*;
 pub(crate) use marketplace::*;

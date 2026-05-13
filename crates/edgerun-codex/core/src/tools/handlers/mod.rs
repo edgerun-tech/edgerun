@@ -35,7 +35,7 @@ use codex_sandboxing::policy_transforms::merge_permission_profiles;
 use codex_sandboxing::policy_transforms::normalize_additional_permissions;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_absolute_path::AbsolutePathBufGuard;
-use edgerun_json::serde_json::Value;
+use edgerun_json::Value;
 use serde::Deserialize;
 use std::path::Path;
 
@@ -79,7 +79,7 @@ fn parse_arguments<T>(arguments: &str) -> Result<T, FunctionCallError>
 where
     T: for<'de> Deserialize<'de>,
 {
-    edgerun_json::serde_json::from_str(arguments).map_err(|err| {
+    edgerun_json::from_serde_str(arguments).map_err(|err| {
         FunctionCallError::RespondToModel(format!("failed to parse function arguments: {err}"))
     })
 }

@@ -1,4 +1,4 @@
-use edgerun_glob::glob_match;
+use crate::glob::glob_match;
 use std::fs;
 use std::path::{Path, PathBuf};
 

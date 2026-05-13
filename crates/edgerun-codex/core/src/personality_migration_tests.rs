@@ -75,9 +75,9 @@ async fn write_rollout_with_user_event(dir: &Path, thread_id: ThreadId) -> io::R
         })),
     };
 
-    file.write_all(format!("{}\n", edgerun_json::serde_json::to_string(&meta_line)?).as_bytes())
+    file.write_all(format!("{}\n", edgerun_json::to_string(&meta_line)?).as_bytes())
         .await?;
-    file.write_all(format!("{}\n", edgerun_json::serde_json::to_string(&user_event)?).as_bytes())
+    file.write_all(format!("{}\n", edgerun_json::to_string(&user_event)?).as_bytes())
         .await?;
     Ok(())
 }

@@ -6,8 +6,8 @@ use core::task::{Context, Poll};
 use std::io;
 
 pub use edgerun_node::rt::{
-    sleep, spawn, spawn_blocking, timeout, AsyncTcpListener, AsyncTcpStream, CancellationToken,
-    ConnectFuture, Duration, Instant, JoinError, JoinHandle,
+    AsyncTcpListener, AsyncTcpStream, CancellationToken, ConnectFuture, Duration, Instant,
+    JoinError, JoinHandle, sleep, spawn, spawn_blocking, timeout,
 };
 
 pub(crate) fn bare_io(error: edgerun_node::rt::IoError) -> io::Error {

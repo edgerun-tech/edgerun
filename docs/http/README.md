@@ -120,7 +120,7 @@ crates/edgerun-http/src/http3/
 │   ├── settings.rs     # HTTP/3 settings + MAX_STREAMS helpers
 │   └── stream.rs       # HTTP/3 stream state machine
 ├── qpack/
-│   ├── encoder.rs      # QPACK encoder with full dynamic table (vendored edgerun-qpack)
+│   ├── encoder.rs      # QPACK encoder with full dynamic table
 │   ├── decoder.rs      # QPACK decoder with dynamic table support
 │   ├── huffman.rs      # Huffman encode/decode
 │   ├── static_table.rs # 99-entry QPACK static table
@@ -154,7 +154,7 @@ crates/edgerun-http/src/http1/
 ├── buf_reader.rs       # Buffered reader for HTTP parsing
 └── mod.rs              # Module exports
 
-crates/utility/edgerun-qpack/     # Vendored qpack 0.1.0 (crates.io), all modules public
+crates/protocol/edgerun-protocols/src/http/http3/qpack/
 ```
 
 ## Usage

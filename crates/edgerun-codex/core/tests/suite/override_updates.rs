@@ -57,7 +57,7 @@ fn rollout_developer_texts(text: &str) -> Vec<String> {
         if trimmed.is_empty() {
             continue;
         }
-        let rollout: RolloutLine = match edgerun_json::serde_json::from_str(trimmed) {
+        let rollout: RolloutLine = match edgerun_json::from_serde_str(trimmed) {
             Ok(rollout) => rollout,
             Err(_) => continue,
         };
@@ -82,7 +82,7 @@ fn rollout_environment_texts(text: &str) -> Vec<String> {
         if trimmed.is_empty() {
             continue;
         }
-        let rollout: RolloutLine = match edgerun_json::serde_json::from_str(trimmed) {
+        let rollout: RolloutLine = match edgerun_json::from_serde_str(trimmed) {
             Ok(rollout) => rollout,
             Err(_) => continue,
         };

@@ -13,7 +13,7 @@
 use crate::errors::{OAuthError, OAuthResult};
 use crate::prelude::*;
 use edgerun_encoding::base64::base64url_decode;
-use edgerun_json::{from_str, JsonValue, Map};
+use edgerun_json::{JsonValue, Map};
 
 // ---------------------------------------------------------------------------
 // JWT Header
@@ -33,8 +33,11 @@ impl JwtHeader {
             .map_err(|e| OAuthError::JwtError(format!("header base64url decode: {e}")))?;
         let text = String::from_utf8(bytes)
             .map_err(|e| OAuthError::JwtError(format!("header UTF-8: {e}")))?;
-        let value: JsonValue =
-            from_str(&text).map_err(|e| OAuthError::JwtError(format!("header JSON: {e}")))?;
+        let tape = edgerun_json::parse_json_tape(&text)
+            .map_err(|e| OAuthError::JwtError(format!("header JSON: {e}")))?;
+        let value = tape
+            .root(&text)
+            .ok_or_else(|| OAuthError::JwtError("header JSON: missing root value".into()))?;
         let alg = value
             .get("alg")
             .and_then(|v| v.as_str())
@@ -86,8 +89,11 @@ impl JwtPayload {
             .map_err(|e| OAuthError::JwtError(format!("payload base64url decode: {e}")))?;
         let text = String::from_utf8(bytes)
             .map_err(|e| OAuthError::JwtError(format!("payload UTF-8: {e}")))?;
-        let value: JsonValue =
-            from_str(&text).map_err(|e| OAuthError::JwtError(format!("payload JSON: {e}")))?;
+        let tape = edgerun_json::parse_json_tape(&text)
+            .map_err(|e| OAuthError::JwtError(format!("payload JSON: {e}")))?;
+        let value = tape
+            .root(&text)
+            .ok_or_else(|| OAuthError::JwtError("payload JSON: missing root value".into()))?;
 
         let iss = value
             .get("iss")
@@ -102,12 +108,15 @@ impl JwtPayload {
 
         // aud can be string or array
         let aud = match value.get("aud") {
-            Some(v) if v.is_string() => vec![v.as_str().unwrap().to_string()],
-            Some(v) if v.is_array() => v
-                .as_array()
-                .iter()
-                .flat_map(|arr| arr.iter().filter_map(|x| x.as_str()).map(|s| s.to_string()))
-                .collect(),
+            Some(v) if v.as_str().is_some() => vec![v.as_str().unwrap().to_string()],
+            Some(v) => v
+                .array_items()
+                .map(|arr| {
+                    arr.into_iter()
+                        .filter_map(|x| x.as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default(),
             _ => vec![],
         };
 
@@ -139,8 +148,8 @@ impl JwtPayload {
             .get("acr")
             .and_then(|v| v.as_str())
             .map(|s| s.to_string());
-        let amr = value.get("amr").and_then(|v| v.as_array()).map(|arr| {
-            arr.iter()
+        let amr = value.get("amr").and_then(|v| v.array_items()).map(|arr| {
+            arr.into_iter()
                 .filter_map(|x| x.as_str())
                 .map(|s| s.to_string())
                 .collect()
@@ -174,10 +183,10 @@ impl JwtPayload {
             "at_hash",
         ];
         let mut extra = Map::new();
-        if let Some(obj) = value.as_object() {
-            for (k, v) in obj.iter() {
-                if !known_keys.contains(&k.as_str()) {
-                    extra.insert(k.clone(), v.clone());
+        if let Some(obj) = value.object_fields() {
+            for (k, v) in obj {
+                if !known_keys.contains(&k) {
+                    extra.insert(k.to_string(), v.to_json_value().unwrap_or(JsonValue::Null));
                 }
             }
         }

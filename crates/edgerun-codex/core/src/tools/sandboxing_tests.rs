@@ -4,7 +4,7 @@ use crate::tools::hook_names::HookToolName;
 use codex_protocol::protocol::GranularApprovalConfig;
 use codex_protocol::protocol::NetworkAccess;
 use pretty_assertions::assert_eq;
-use edgerun_json::serde_json::json;
+use edgerun_json::json;
 
 #[test]
 fn bash_permission_request_payload_omits_missing_description() {

@@ -111,18 +111,26 @@ pub use error::Error;
 pub mod signal;
 pub use signal::{CtrlC, Signal, SignalHandler, SignalKind, alarm, ctrl_c, usr1, usr2};
 
+#[cfg(feature = "node-core")]
 pub mod serial_mux;
 
+#[cfg(feature = "node-core")]
 pub mod udp;
+#[cfg(feature = "node-core")]
 pub use udp::{SocketAddr, UdpError, UdpSocket};
+#[cfg(feature = "node-core")]
 pub type UdpAddr = SocketAddr;
 
+#[cfg(feature = "node-core")]
 pub mod tcp;
+#[cfg(feature = "node-core")]
 pub use tcp::{TcpError, TcpListener, TcpSocket, TcpState};
 
+#[cfg(feature = "node-core")]
 pub mod bare_async_net;
-#[cfg(target_os = "none")]
+#[cfg(all(target_os = "none", feature = "node-core"))]
 pub use bare_async_net::{AsyncTcpListener, AsyncTcpStream, AsyncUdpSocket, ConnectFuture};
+#[cfg(feature = "node-core")]
 pub use bare_async_net::{BareNetDriver, install_bare_net_driver};
 #[cfg(not(target_os = "none"))]
 pub mod host_async_net;

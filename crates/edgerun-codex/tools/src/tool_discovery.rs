@@ -5,8 +5,7 @@ use crate::ToolName;
 use crate::default_namespace_description;
 use crate::mcp_tool_to_deferred_responses_api_tool;
 use codex_app_server_protocol::AppInfo;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
+use edgerun_json::{FromJson, JsonValueError, ToJson, Value};
 
 const TUI_CLIENT_NAME: &str = "codex-tui";
 pub const TOOL_SEARCH_TOOL_NAME: &str = "tool_search";
@@ -36,18 +35,66 @@ pub struct ToolSearchResultSource<'a> {
     pub description: Option<&'a str>,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DiscoverableToolType {
     Connector,
     Plugin,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
+impl ToJson for DiscoverableToolType {
+    fn to_json(&self) -> Value {
+        Value::String(
+            match self {
+                Self::Connector => "connector",
+                Self::Plugin => "plugin",
+            }
+            .to_string(),
+        )
+    }
+}
+
+impl FromJson for DiscoverableToolType {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let value = String::from_json(value)?;
+        match value.as_str() {
+            "connector" => Ok(Self::Connector),
+            "plugin" => Ok(Self::Plugin),
+            _ => Err(JsonValueError::WrongType(format!(
+                "unknown discoverable tool type `{value}`"
+            ))),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DiscoverableToolAction {
     Install,
     Enable,
+}
+
+impl ToJson for DiscoverableToolAction {
+    fn to_json(&self) -> Value {
+        Value::String(
+            match self {
+                Self::Install => "install",
+                Self::Enable => "enable",
+            }
+            .to_string(),
+        )
+    }
+}
+
+impl FromJson for DiscoverableToolAction {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let value = String::from_json(value)?;
+        match value.as_str() {
+            "install" => Ok(Self::Install),
+            "enable" => Ok(Self::Enable),
+            _ => Err(JsonValueError::WrongType(format!(
+                "unknown discoverable tool action `{value}`"
+            ))),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -135,7 +182,7 @@ pub struct RequestPluginInstallEntry {
 
 pub fn tool_search_result_source_to_loadable_tool_spec(
     source: ToolSearchResultSource<'_>,
-) -> Result<LoadableToolSpec, edgerun_json::serde_json::Error> {
+) -> Result<LoadableToolSpec, edgerun_json::Error> {
     Ok(LoadableToolSpec::Namespace(ResponsesApiNamespace {
         name: source.tool_namespace.to_string(),
         description: tool_search_result_source_namespace_description(source),
@@ -161,7 +208,7 @@ fn tool_search_result_source_namespace_description(source: ToolSearchResultSourc
 
 fn tool_search_result_source_to_namespace_tool(
     source: ToolSearchResultSource<'_>,
-) -> Result<ResponsesApiNamespaceTool, edgerun_json::serde_json::Error> {
+) -> Result<ResponsesApiNamespaceTool, edgerun_json::Error> {
     let tool_name = ToolName::namespaced(source.tool_namespace, source.tool_name);
     mcp_tool_to_deferred_responses_api_tool(&tool_name, source.tool)
         .map(ResponsesApiNamespaceTool::Function)

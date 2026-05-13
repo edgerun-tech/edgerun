@@ -24,7 +24,7 @@ use crate::turn_diff_tracker::TurnDiffTracker;
 use codex_shell_command::is_safe_command::is_known_safe_command;
 use codex_shell_command::powershell::try_find_powershell_executable_blocking;
 use codex_shell_command::powershell::try_find_pwsh_executable_blocking;
-use edgerun_json::serde_json::json;
+use edgerun_json::json;
 use edgerun_tokio::sync::Mutex;
 use edgerun_tokio::sync::watch;
 

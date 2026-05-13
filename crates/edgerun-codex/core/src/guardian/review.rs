@@ -57,7 +57,7 @@ const GUARDIAN_TIMEOUT_INSTRUCTIONS: &str = concat!(
 );
 
 pub(crate) fn new_guardian_review_id() -> String {
-    edgerun_uuid::Uuid::new_v4().to_string()
+    codex_protocol::local_uuid::Uuid::new_v4().to_string()
 }
 
 pub(crate) async fn guardian_rejection_message(session: &Session, review_id: &str) -> String {
@@ -624,7 +624,7 @@ pub(super) async fn run_guardian_review_session(
     turn: Arc<TurnContext>,
     request: GuardianApprovalRequest,
     retry_reason: Option<String>,
-    schema: edgerun_json::serde_json::Value,
+    schema: edgerun_json::Value,
     external_cancel: Option<CancellationToken>,
 ) -> (GuardianReviewOutcome, GuardianReviewAnalyticsResult) {
     let live_network_config = match session.services.network_proxy.as_ref() {

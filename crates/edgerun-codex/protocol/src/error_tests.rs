@@ -1,11 +1,7 @@
 use super::*;
 use crate::exec_output::StreamOutput;
 use crate::protocol::RateLimitWindow;
-use edgerun_http::Response as HttpResponse;
-use edgerun_reqwest::Response;
-use edgerun_reqwest::ResponseBuilderExt;
-use edgerun_reqwest::StatusCode;
-use edgerun_reqwest::Url;
+use edgerun_http::StatusCode;
 use edgerun_time::chrono::ChronoDuration;
 use edgerun_time::chrono::ChronoTimeZone;
 use edgerun_time::chrono::ChronoUtc as Utc;
@@ -125,14 +121,13 @@ fn sandbox_denied_reports_stdout_when_no_stderr() {
 
 #[test]
 fn to_error_event_handles_response_stream_failed() {
-    let response = HttpResponse::builder()
-        .status(StatusCode::TOO_MANY_REQUESTS)
-        .url(Url::parse("http://example.com").unwrap())
-        .body("")
-        .unwrap();
-    let source = Response::from(response).error_for_status_ref().unwrap_err();
     let err = CodexErr::ResponseStreamFailed(ResponseStreamFailed {
-        source,
+        source: HttpTransportError {
+            message:
+                "HTTP status client error (429 Too Many Requests) for url (http://example.com/)"
+                    .to_string(),
+            status: Some(StatusCode::TOO_MANY_REQUESTS),
+        },
         request_id: Some("req-123".to_string()),
     });
 

@@ -14,6 +14,7 @@
 //! assert!(matches!(result, Err(JsonParseError::UnexpectedCharacter { .. })));
 //! ```
 
+use crate::prelude::*;
 use core::fmt;
 
 /// Errors that can occur during JSON serialization.
@@ -31,6 +32,8 @@ pub enum JsonError {
     NonFiniteNumber,
     /// An I/O error occurred during serialization.
     Io,
+    /// A model serialization or deserialization error occurred.
+    Message(String),
 }
 
 /// Errors that can occur during JSON parsing.
@@ -115,6 +118,7 @@ impl fmt::Display for JsonError {
                 f.write_str("cannot serialize non-finite floating-point value")
             }
             Self::Io => f.write_str("i/o error while serializing JSON"),
+            Self::Message(message) => f.write_str(message),
         }
     }
 }
@@ -150,14 +154,36 @@ impl fmt::Display for JsonParseError {
     }
 }
 
-#[cfg(all(feature = "std", not(target_os = "none")))]
-impl std::error::Error for JsonError {}
-#[cfg(all(feature = "std", not(target_os = "none")))]
-impl std::error::Error for JsonParseError {}
+impl core::error::Error for JsonError {}
+impl core::error::Error for JsonParseError {}
+
+impl From<JsonParseError> for JsonError {
+    fn from(error: JsonParseError) -> Self {
+        Self::Message(error.to_string())
+    }
+}
+
+impl From<crate::JsonValueError> for JsonError {
+    fn from(error: crate::JsonValueError) -> Self {
+        Self::Message(error.to_string())
+    }
+}
 
 impl JsonError {
     #[cfg(all(feature = "std", not(target_os = "none")))]
     pub fn io(_error: std::io::Error) -> Self {
         Self::Io
+    }
+}
+
+impl serde::ser::Error for JsonError {
+    fn custom<T: fmt::Display>(msg: T) -> Self {
+        Self::Message(msg.to_string())
+    }
+}
+
+impl serde::de::Error for JsonError {
+    fn custom<T: fmt::Display>(msg: T) -> Self {
+        Self::Message(msg.to_string())
     }
 }

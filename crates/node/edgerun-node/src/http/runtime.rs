@@ -80,7 +80,7 @@ pub fn wrap_udp_socket(socket: net::UdpSocket) -> io::Result<AsyncUdpSocket> {
     AsyncUdpSocket::from_std(socket).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
 }
 
-#[cfg(not(feature = "std"))]
+#[cfg(all(not(feature = "std"), feature = "node-core"))]
 pub fn wrap_udp_socket(_socket: net::UdpSocket) -> io::Result<AsyncUdpSocket> {
     Err(io::Error::new(
         io::ErrorKind::Other,

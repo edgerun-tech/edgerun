@@ -2,7 +2,7 @@
 
 use crate::oauth_client::percent_encode;
 use crate::prelude::*;
-use edgerun_json::{from_str, to_string, JsonValue};
+use edgerun_json::{to_string, JsonValue};
 pub use edgerun_protocols::oauth::types::{GrantType, Scope};
 
 // ---------------------------------------------------------------------------
@@ -175,7 +175,11 @@ pub struct TokenResponse {
 impl TokenResponse {
     /// Parse from a JSON string.
     pub fn from_json(json_str: &str) -> Result<Self, String> {
-        let value: JsonValue = from_str(json_str).map_err(|e| format!("JSON parse error: {e}"))?;
+        let tape =
+            edgerun_json::parse_json_tape(json_str).map_err(|e| format!("JSON parse error: {e}"))?;
+        let value = tape
+            .root(json_str)
+            .ok_or_else(|| "JSON parse error: missing root value".to_string())?;
         Ok(Self {
             access_token: value
                 .get("access_token")
@@ -293,7 +297,11 @@ pub struct DeviceAuthorizationResponse {
 impl DeviceAuthorizationResponse {
     /// Parse from JSON string.
     pub fn from_json(json_str: &str) -> Result<Self, String> {
-        let value: JsonValue = from_str(json_str).map_err(|e| format!("JSON parse error: {e}"))?;
+        let tape =
+            edgerun_json::parse_json_tape(json_str).map_err(|e| format!("JSON parse error: {e}"))?;
+        let value = tape
+            .root(json_str)
+            .ok_or_else(|| "JSON parse error: missing root value".to_string())?;
         let device_code = value
             .get("device_code")
             .and_then(|v| v.as_str())

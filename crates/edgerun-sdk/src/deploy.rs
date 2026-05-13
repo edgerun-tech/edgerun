@@ -2,7 +2,7 @@ use super::*;
 
 pub(crate) fn cmd_deploy_inventory(args: Vec<String>) -> i32 {
     if args.is_empty() || args.first().map(String::as_str) == Some("--local") {
-        let report = edgerun_deploy::host::capability_report_local();
+        let report = crate::deploy_support::host::capability_report_local();
         println!("target=local");
         print!(
             "{}",
@@ -47,7 +47,7 @@ pub(crate) fn cmd_deploy_ssh_inventory(target: &str) -> i32 {
             return 1;
         }
     };
-    match edgerun_ssh::host::exec_with_ed25519_key_file_and_input(
+    match crate::ssh_support::host::exec_with_ed25519_key_file_and_input(
         &target,
         &key_path,
         &remote_machine_report_inventory_sh(&target.host),
@@ -94,7 +94,7 @@ pub(crate) fn cmd_deploy_ssh_probe(args: Vec<String>) -> i32 {
             return 1;
         }
     };
-    match edgerun_ssh::host::probe_server(&target, Duration::from_secs(5)) {
+    match crate::ssh_support::host::probe_server(&target, Duration::from_secs(5)) {
         Ok(probe) => {
             println!("target={}@{}:{}", target.user, target.host, target.port);
             println!("transport=ssh");
@@ -172,7 +172,7 @@ pub(crate) fn cmd_deploy_ssh_exec(args: Vec<String>) -> i32 {
     };
     let command = args[1..].join(" ");
     let key_path = default_ssh_key_path();
-    match edgerun_ssh::host::exec_with_ed25519_key_file(
+    match crate::ssh_support::host::exec_with_ed25519_key_file(
         &target,
         &key_path,
         &command,
@@ -217,7 +217,7 @@ pub(crate) fn cmd_deploy_server(args: Vec<String>) -> i32 {
             return 1;
         }
     };
-    match edgerun_ssh::host::exec_with_ed25519_key_file_and_input(
+    match crate::ssh_support::host::exec_with_ed25519_key_file_and_input(
         &target,
         &key_path,
         REMOTE_DEPLOY_SERVER_SH,

@@ -386,7 +386,7 @@ pub fn record_command_sent_event_with_protocol_signer(
         store,
         stream_id,
         signer,
-        edgerun_stream::EventDraft {
+        edgerun_storage::EventDraft {
             event_type: EventType::CommandSent as i32,
             event_version: 1,
             related_commands: vec![crate::command_dispatch_result::command_ref_from(command)],

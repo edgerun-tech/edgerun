@@ -11,14 +11,14 @@ description = "Edgerun-owned Reqwest-compatible HTTP client facade"
 [features]
 default = ["cookies", "native", "http1", "http2", "http3", "rustls-tls-native-roots"]
 cookies = []
-http1 = ["native", "edgerun-node/http1"]
-http2 = ["native", "edgerun-node/http2"]
-http3 = ["native", "edgerun-node/http3"]
+http1 = ["native", "edgerun-http-client/http1"]
+http2 = ["native", "edgerun-http-client/http2"]
+http3 = ["native", "edgerun-http-client/http3"]
 full = ["cookies", "json", "stream", "http1", "http2", "http3", "rustls-tls-native-roots"]
-json = ["dep:serde"]
-native = ["dep:edgerun-node"]
+json = ["edgerun-json/serde"]
+native = ["dep:edgerun-http-client", "edgerun-http-client/std"]
 native-root = ["native"]
-rustls-tls-native-roots = ["native", "edgerun-node/tls"]
+rustls-tls-native-roots = ["native", "edgerun-http-client/tls"]
 stream = []
 
 [dependencies]
@@ -26,9 +26,8 @@ edgerun-bytes = { version = "0.1", path = "../edgerun-bytes" }
 edgerun-encoding = { version = "0.1", path = "../edgerun-encoding", default-features = false }
 edgerun-futures = { version = "0.1", path = "../edgerun-futures" }
 edgerun-http = { version = "0.1", path = "../edgerun-http" }
-edgerun-json = { version = "0.1", path = "../edgerun-json", default-features = false, features = ["serde-compat"] }
-edgerun-node = { version = "0.1", path = "../../node/edgerun-node", default-features = false, features = ["client"], optional = true }
-serde = { package = "edgerun-serde", version = "0.1", path = "../edgerun-serde", optional = true }
+edgerun-json = { version = "0.1", path = "../edgerun-json", default-features = false }
+edgerun-http-client = { version = "0.1", path = "../edgerun-http-client", default-features = false, features = ["client", "std"], optional = true }
 edgerun-url = { version = "0.1", path = "../edgerun-url", default-features = false }
 
 [lints]

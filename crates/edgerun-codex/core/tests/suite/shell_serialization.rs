@@ -17,8 +17,8 @@ use core_test_support::test_codex::ApplyPatchModelOutput;
 use core_test_support::test_codex::ShellModelOutput;
 use core_test_support::test_codex::TestCodexBuilder;
 use core_test_support::test_codex::test_codex;
-use edgerun_json::serde_json::Value;
-use edgerun_json::serde_json::json;
+use edgerun_json::Value;
+use edgerun_json::json;
 use pretty_assertions::assert_eq;
 use regex_lite::Regex;
 use std::fs;
@@ -57,7 +57,7 @@ fn shell_responses(
                     ev_function_call(
                         call_id,
                         "shell_command",
-                        &edgerun_json::serde_json::to_string(&parameters)?,
+                        &edgerun_json::to_string(&parameters)?,
                     ),
                     ev_completed("resp-1"),
                 ]),
@@ -78,7 +78,7 @@ fn shell_responses(
                     ev_function_call(
                         call_id,
                         "shell",
-                        &edgerun_json::serde_json::to_string(&parameters)?,
+                        &edgerun_json::to_string(&parameters)?,
                     ),
                     ev_completed("resp-1"),
                 ]),
@@ -153,7 +153,7 @@ async fn shell_output_stays_json_without_freeform_apply_patch(
         .and_then(Value::as_str)
         .expect("shell output string");
 
-    let mut parsed: Value = edgerun_json::serde_json::from_str(output)?;
+    let mut parsed: Value = edgerun_json::from_serde_str(output)?;
     if let Some(metadata) = parsed.get_mut("metadata").and_then(Value::as_object_mut) {
         let _ = metadata.remove("duration_seconds");
     }
@@ -212,7 +212,7 @@ async fn shell_output_is_structured_with_freeform_apply_patch(
         .expect("structured output string");
 
     assert!(
-        edgerun_json::serde_json::from_str::<Value>(output).is_err(),
+        edgerun_json::from_serde_str::<Value>(output).is_err(),
         "expected structured shell output to be plain text",
     );
     let expected_pattern = r"(?s)^Exit code: 0
@@ -266,7 +266,7 @@ async fn shell_output_preserves_fixture_json_without_serialization(
         .and_then(Value::as_str)
         .expect("shell output string");
 
-    let mut parsed: Value = edgerun_json::serde_json::from_str(output)?;
+    let mut parsed: Value = edgerun_json::from_serde_str(output)?;
     if let Some(metadata) = parsed.get_mut("metadata").and_then(Value::as_object_mut) {
         let _ = metadata.remove("duration_seconds");
     }
@@ -337,7 +337,7 @@ async fn shell_output_structures_fixture_with_serialization(
         .expect("structured output string");
 
     assert!(
-        edgerun_json::serde_json::from_str::<Value>(output).is_err(),
+        edgerun_json::from_serde_str::<Value>(output).is_err(),
         "expected structured output to be plain text"
     );
     let (header, body) = output
@@ -449,7 +449,7 @@ async fn shell_output_reserializes_truncated_content(output_type: ShellModelOutp
         .expect("truncated output string");
 
     assert!(
-        edgerun_json::serde_json::from_str::<Value>(output).is_err(),
+        edgerun_json::from_serde_str::<Value>(output).is_err(),
         "expected truncated shell output to be plain text",
     );
     let truncated_pattern = r#"(?s)^Exit code: 0
@@ -775,7 +775,7 @@ async fn shell_command_output_is_freeform() -> Result<()> {
             ev_function_call(
                 call_id,
                 "shell_command",
-                &edgerun_json::serde_json::to_string(&args)?,
+                &edgerun_json::to_string(&args)?,
             ),
             ev_completed("resp-1"),
         ]),
@@ -831,7 +831,7 @@ async fn shell_command_output_is_not_truncated_under_10k_bytes() -> Result<()> {
             ev_function_call(
                 call_id,
                 "shell_command",
-                &edgerun_json::serde_json::to_string(&args)?,
+                &edgerun_json::to_string(&args)?,
             ),
             ev_completed("resp-1"),
         ]),
@@ -886,7 +886,7 @@ async fn shell_command_output_is_not_truncated_over_10k_bytes() -> Result<()> {
             ev_function_call(
                 call_id,
                 "shell_command",
-                &edgerun_json::serde_json::to_string(&args)?,
+                &edgerun_json::to_string(&args)?,
             ),
             ev_completed("resp-1"),
         ]),

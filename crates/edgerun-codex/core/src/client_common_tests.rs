@@ -11,7 +11,7 @@ use super::*;
 #[test]
 fn serializes_text_verbosity_when_set() {
     let input: Vec<ResponseItem> = vec![];
-    let tools: Vec<edgerun_json::serde_json::Value> = vec![];
+    let tools: Vec<edgerun_json::Value> = vec![];
     let req = ResponsesApiRequest {
         model: "gpt-5.4".to_string(),
         instructions: "i".to_string(),
@@ -32,7 +32,7 @@ fn serializes_text_verbosity_when_set() {
         client_metadata: None,
     };
 
-    let v = edgerun_json::serde_json::to_value(&req).expect("json");
+    let v = edgerun_json::to_serde_value(&req).expect("json");
     assert_eq!(
         v.get("text")
             .and_then(|t| t.get("verbosity"))
@@ -44,8 +44,8 @@ fn serializes_text_verbosity_when_set() {
 #[test]
 fn serializes_text_schema_with_strict_format() {
     let input: Vec<ResponseItem> = vec![];
-    let tools: Vec<edgerun_json::serde_json::Value> = vec![];
-    let schema = edgerun_json::serde_json::json!({
+    let tools: Vec<edgerun_json::Value> = vec![];
+    let schema = edgerun_json::json!({
         "type": "object",
         "properties": {
             "answer": {"type": "string"}
@@ -76,26 +76,33 @@ fn serializes_text_schema_with_strict_format() {
         client_metadata: None,
     };
 
-    let v = edgerun_json::serde_json::to_value(&req).expect("json");
+    let v = edgerun_json::to_serde_value(&req).expect("json");
     let text = v.get("text").expect("text field");
     assert!(text.get("verbosity").is_none());
     let format = text.get("format").expect("format field");
 
     assert_eq!(
         format.get("name"),
-        Some(&edgerun_json::serde_json::Value::String("codex_output_schema".into()))
+        Some(&edgerun_json::Value::String(
+            "codex_output_schema".into()
+        ))
     );
     assert_eq!(
         format.get("type"),
-        Some(&edgerun_json::serde_json::Value::String("json_schema".into()))
+        Some(&edgerun_json::Value::String(
+            "json_schema".into()
+        ))
     );
-    assert_eq!(format.get("strict"), Some(&edgerun_json::serde_json::Value::Bool(true)));
+    assert_eq!(
+        format.get("strict"),
+        Some(&edgerun_json::Value::Bool(true))
+    );
     assert_eq!(format.get("schema"), Some(&schema));
 }
 
 #[test]
 fn serializes_text_schema_with_non_strict_format() {
-    let schema = edgerun_json::serde_json::json!({
+    let schema = edgerun_json::json!({
         "type": "object",
         "properties": {
             "answer": {"type": "string"},
@@ -119,7 +126,7 @@ fn serializes_text_schema_with_non_strict_format() {
 #[test]
 fn omits_text_when_not_set() {
     let input: Vec<ResponseItem> = vec![];
-    let tools: Vec<edgerun_json::serde_json::Value> = vec![];
+    let tools: Vec<edgerun_json::Value> = vec![];
     let req = ResponsesApiRequest {
         model: "gpt-5.4".to_string(),
         instructions: "i".to_string(),
@@ -137,7 +144,7 @@ fn omits_text_when_not_set() {
         client_metadata: None,
     };
 
-    let v = edgerun_json::serde_json::to_value(&req).expect("json");
+    let v = edgerun_json::to_serde_value(&req).expect("json");
     assert!(v.get("text").is_none());
 }
 
@@ -160,7 +167,7 @@ fn serializes_flex_service_tier_when_set() {
         client_metadata: None,
     };
 
-    let v = edgerun_json::serde_json::to_value(&req).expect("json");
+    let v = edgerun_json::to_serde_value(&req).expect("json");
     assert_eq!(
         v.get("service_tier").and_then(|tier| tier.as_str()),
         Some("flex")

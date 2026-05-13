@@ -1,9 +1,0 @@
-[package]
-name = "edgerun-term-server"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-edgerun-crypto = { workspace = true, default-features = false, features = ["sha1"] }
-edgerun-encoding = { workspace = true, default-features = false }
-edgerun-pty.workspace = true

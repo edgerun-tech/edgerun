@@ -248,7 +248,44 @@ pub fn control_request_bytes(
 pub fn parse_response_bytes(bytes: &[u8]) -> Result<TuyaResponse, JsonValueError> {
     let text = str::from_utf8(bytes)
         .map_err(|_| JsonValueError::WrongType(format!("tuya response is not utf-8")))?;
-    edgerun_json::from_json_str(text)
+    let tape = edgerun_json::parse_json_tape(text)
+        .map_err(|error| JsonValueError::WrongType(error.to_string()))?;
+    let root = tape
+        .root(text)
+        .ok_or_else(|| JsonValueError::WrongType(format!("missing tuya response root")))?;
+    let action = root
+        .required_str("action")
+        .map_err(|_| JsonValueError::WrongType(format!("missing field `action`")))?;
+    match action {
+        "discovery" => Ok(TuyaResponse::Discovery {
+            msg_id: root
+                .required_string("msg_id")
+                .map_err(|_| JsonValueError::WrongType(format!("missing field `msg_id`")))?,
+            devId: root
+                .required_string("devId")
+                .map_err(|_| JsonValueError::WrongType(format!("missing field `devId`")))?,
+            product_type: root
+                .required_string("product_type")
+                .map_err(|_| JsonValueError::WrongType(format!("missing field `product_type`")))?,
+            version: root
+                .required_string("version")
+                .map_err(|_| JsonValueError::WrongType(format!("missing field `version`")))?,
+            ability: root.get("ability").and_then(|value| value.to_json_value()),
+        }),
+        "control" => Ok(TuyaResponse::Control {
+            devId: root
+                .required_string("devId")
+                .map_err(|_| JsonValueError::WrongType(format!("missing field `devId`")))?,
+            dps: root
+                .required("dps")
+                .map_err(|_| JsonValueError::WrongType(format!("missing field `dps`")))?
+                .to_json_value()
+                .ok_or_else(|| JsonValueError::WrongType(format!("invalid field `dps`")))?,
+        }),
+        other => Err(JsonValueError::WrongType(format!(
+            "unknown tuya response action `{other}`"
+        ))),
+    }
 }
 
 pub fn pack_55aa(seq: u32, cmd: u32, payload: &[u8]) -> Vec<u8> {

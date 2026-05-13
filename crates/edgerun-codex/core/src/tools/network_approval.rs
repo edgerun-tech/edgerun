@@ -37,7 +37,7 @@ use edgerun_tokio::sync::OnceCell;
 use edgerun_tokio::sync::RwLock;
 use edgerun_tokio_util::sync::CancellationToken;
 use tracing::warn;
-use edgerun_uuid::Uuid;
+use codex_protocol::local_uuid::Uuid;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum NetworkApprovalMode {

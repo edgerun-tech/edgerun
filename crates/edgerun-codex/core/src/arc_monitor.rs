@@ -1,8 +1,7 @@
 use std::env;
 use std::time::Duration;
 
-use serde::Deserialize;
-use serde::Serialize;
+use edgerun_json::ToJson;
 use tracing::warn;
 
 use crate::compact::content_items_to_text;
@@ -24,70 +23,109 @@ pub(crate) enum ArcMonitorOutcome {
     AskUser(String),
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, PartialEq)]
 struct ArcMonitorRequest {
     metadata: ArcMonitorMetadata,
-    #[serde(skip_serializing_if = "Option::is_none")]
     messages: Option<Vec<ArcMonitorChatMessage>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     input: Option<Vec<ResponseItem>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     policies: Option<ArcMonitorPolicies>,
-    action: edgerun_json::serde_json::Map<String, edgerun_json::serde_json::Value>,
+    action: edgerun_json::Map<String, edgerun_json::Value>,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
+impl ToJson for ArcMonitorRequest {
+    fn to_json(&self) -> edgerun_json::Value {
+        let mut object = edgerun_json::Map::new();
+        object.push_field("metadata", self.metadata.to_json());
+        if let Some(messages) = &self.messages {
+            object.push_field("messages", messages.to_json());
+        }
+        if let Some(input) = &self.input {
+            object.push_field(
+                "input",
+                edgerun_json::Value::array_from_iter(input.iter().map(|item| {
+                    edgerun_json::to_serde_value(item).unwrap_or(edgerun_json::Value::Null)
+                })),
+            );
+        }
+        if let Some(policies) = &self.policies {
+            object.push_field("policies", policies.to_json());
+        }
+        object.push_field("action", self.action.to_json());
+        edgerun_json::Value::Object(object)
+    }
+}
+
+#[derive(Debug)]
 struct ArcMonitorResult {
     outcome: ArcMonitorResultOutcome,
     short_reason: String,
     rationale: String,
     risk_score: u8,
     risk_level: ArcMonitorRiskLevel,
-    evidence: Vec<ArcMonitorEvidence>,
+    evidence_count: usize,
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+#[derive(Debug, PartialEq)]
 struct ArcMonitorChatMessage {
     role: String,
-    content: edgerun_json::serde_json::Value,
+    content: edgerun_json::Value,
 }
 
-#[derive(Debug, Serialize, PartialEq)]
+impl ToJson for ArcMonitorChatMessage {
+    fn to_json(&self) -> edgerun_json::Value {
+        edgerun_json::Value::object(vec![
+            ("role", self.role.to_json()),
+            ("content", self.content.to_json()),
+        ])
+    }
+}
+
+#[derive(Debug, PartialEq)]
 struct ArcMonitorPolicies {
     user: Option<String>,
     developer: Option<String>,
 }
 
-#[derive(Debug, Serialize, PartialEq)]
-#[serde(deny_unknown_fields)]
+impl ToJson for ArcMonitorPolicies {
+    fn to_json(&self) -> edgerun_json::Value {
+        let mut object = edgerun_json::Map::new();
+        object.push_field("user", self.user.to_json());
+        object.push_field("developer", self.developer.to_json());
+        edgerun_json::Value::Object(object)
+    }
+}
+
+#[derive(Debug, PartialEq)]
 struct ArcMonitorMetadata {
     codex_thread_id: String,
     codex_turn_id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
     conversation_id: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     protection_client_callsite: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-#[allow(dead_code)]
-struct ArcMonitorEvidence {
-    message: String,
-    why: String,
+impl ToJson for ArcMonitorMetadata {
+    fn to_json(&self) -> edgerun_json::Value {
+        let mut object = edgerun_json::Map::new();
+        object.push_field("codex_thread_id", self.codex_thread_id.to_json());
+        object.push_field("codex_turn_id", self.codex_turn_id.to_json());
+        if let Some(conversation_id) = &self.conversation_id {
+            object.push_field("conversation_id", conversation_id.to_json());
+        }
+        if let Some(callsite) = &self.protection_client_callsite {
+            object.push_field("protection_client_callsite", callsite.to_json());
+        }
+        edgerun_json::Value::Object(object)
+    }
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "kebab-case")]
+#[derive(Debug)]
 enum ArcMonitorResultOutcome {
     Ok,
     SteerModel,
     AskUser,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug)]
 enum ArcMonitorRiskLevel {
     Low,
     Medium,
@@ -98,7 +136,7 @@ enum ArcMonitorRiskLevel {
 pub(crate) async fn monitor_action(
     sess: &Session,
     turn_context: &TurnContext,
-    action: edgerun_json::serde_json::Value,
+    action: edgerun_json::Value,
     protection_client_callsite: &'static str,
 ) -> ArcMonitorOutcome {
     let auth = match turn_context.auth_manager.as_ref() {
@@ -120,7 +158,7 @@ pub(crate) async fn monitor_action(
         )
     });
     let action = match action {
-        edgerun_json::serde_json::Value::Object(action) => action,
+        edgerun_json::Value::Object(action) => action,
         _ => {
             warn!("skipping safety monitor because action payload is not an object");
             return ArcMonitorOutcome::Ok;
@@ -156,7 +194,14 @@ pub(crate) async fn monitor_action(
         return ArcMonitorOutcome::Ok;
     }
 
-    let response = match response.json::<ArcMonitorResult>().await {
+    let response_text = match response.text().await {
+        Ok(response_text) => response_text,
+        Err(err) => {
+            warn!(error = %err, %url, "failed to read safety monitor response");
+            return ArcMonitorOutcome::Ok;
+        }
+    };
+    let response = match parse_arc_monitor_response(&response_text) {
         Ok(response) => response,
         Err(err) => {
             warn!(error = %err, %url, "failed to parse safety monitor response");
@@ -166,7 +211,7 @@ pub(crate) async fn monitor_action(
     tracing::debug!(
         risk_score = response.risk_score,
         risk_level = ?response.risk_level,
-        evidence_count = response.evidence.len(),
+        evidence_count = response.evidence_count,
         "safety monitor completed"
     );
 
@@ -200,6 +245,46 @@ pub(crate) async fn monitor_action(
     }
 }
 
+fn parse_arc_monitor_response(
+    payload: &str,
+) -> Result<ArcMonitorResult, edgerun_json::JsonValueError> {
+    let value: edgerun_json::Value = edgerun_json::from_str(payload)
+        .map_err(|err| edgerun_json::JsonValueError::WrongType(err.to_string()))?;
+    let outcome = match value.required_str("outcome")? {
+        "ok" => ArcMonitorResultOutcome::Ok,
+        "steer-model" => ArcMonitorResultOutcome::SteerModel,
+        "ask-user" => ArcMonitorResultOutcome::AskUser,
+        other => {
+            return Err(edgerun_json::JsonValueError::WrongType(format!(
+                "unknown ARC outcome `{other}`"
+            )));
+        }
+    };
+    let risk_level = match value.required_str("risk_level")? {
+        "low" => ArcMonitorRiskLevel::Low,
+        "medium" => ArcMonitorRiskLevel::Medium,
+        "high" => ArcMonitorRiskLevel::High,
+        "critical" => ArcMonitorRiskLevel::Critical,
+        other => {
+            return Err(edgerun_json::JsonValueError::WrongType(format!(
+                "unknown ARC risk level `{other}`"
+            )));
+        }
+    };
+    let risk_score = value.required_u64("risk_score")?;
+    let risk_score = u8::try_from(risk_score).map_err(|_| {
+        edgerun_json::JsonValueError::WrongType("ARC risk_score exceeds u8 range".to_string())
+    })?;
+    Ok(ArcMonitorResult {
+        outcome,
+        short_reason: value.required_str("short_reason")?.to_string(),
+        rationale: value.required_str("rationale")?.to_string(),
+        risk_score,
+        risk_level,
+        evidence_count: value.required_array("evidence")?.len(),
+    })
+}
+
 fn read_non_empty_env_var(key: &str) -> Option<String> {
     match env::var(key) {
         Ok(value) => {
@@ -220,7 +305,7 @@ fn read_non_empty_env_var(key: &str) -> Option<String> {
 async fn build_arc_monitor_request(
     sess: &Session,
     turn_context: &TurnContext,
-    action: edgerun_json::serde_json::Map<String, edgerun_json::serde_json::Value>,
+    action: edgerun_json::Map<String, edgerun_json::Value>,
     protection_client_callsite: &'static str,
 ) -> ArcMonitorRequest {
     let history = sess.clone_history().await;
@@ -228,7 +313,7 @@ async fn build_arc_monitor_request(
     if messages.is_empty() {
         messages.push(build_arc_monitor_message(
             "user",
-            edgerun_json::serde_json::Value::String(
+            edgerun_json::Value::String(
                 "No prior conversation history is available for this ARC evaluation.".to_string(),
             ),
         ));
@@ -327,7 +412,7 @@ fn build_arc_monitor_message_item(
         {
             Some(build_arc_monitor_message(
                 "assistant",
-                edgerun_json::serde_json::json!([{
+                edgerun_json::json!([{
                     "type": "encrypted_reasoning",
                     "encrypted_content": encrypted_content,
                 }]),
@@ -337,7 +422,7 @@ fn build_arc_monitor_message_item(
         ResponseItem::LocalShellCall { action, .. } if Some(index) == last_tool_call_index => {
             Some(build_arc_monitor_message(
                 "assistant",
-                edgerun_json::serde_json::json!([{
+                edgerun_json::json!([{
                     "type": "tool_call",
                     "tool_name": "shell",
                     "action": action,
@@ -348,7 +433,7 @@ fn build_arc_monitor_message_item(
             name, arguments, ..
         } if Some(index) == last_tool_call_index => Some(build_arc_monitor_message(
             "assistant",
-            edgerun_json::serde_json::json!([{
+            edgerun_json::json!([{
                 "type": "tool_call",
                 "tool_name": name,
                 "arguments": arguments,
@@ -357,7 +442,7 @@ fn build_arc_monitor_message_item(
         ResponseItem::CustomToolCall { name, input, .. } if Some(index) == last_tool_call_index => {
             Some(build_arc_monitor_message(
                 "assistant",
-                edgerun_json::serde_json::json!([{
+                edgerun_json::json!([{
                     "type": "tool_call",
                     "tool_name": name,
                     "input": input,
@@ -367,7 +452,7 @@ fn build_arc_monitor_message_item(
         ResponseItem::WebSearchCall { action, .. } if Some(index) == last_tool_call_index => {
             Some(build_arc_monitor_message(
                 "assistant",
-                edgerun_json::serde_json::json!([{
+                edgerun_json::json!([{
                     "type": "tool_call",
                     "tool_name": "web_search",
                     "action": action,
@@ -396,14 +481,14 @@ fn build_arc_monitor_text_message(
 ) -> ArcMonitorChatMessage {
     build_arc_monitor_message(
         role,
-        edgerun_json::serde_json::json!([{
+        edgerun_json::json!([{
             "type": part_type,
             "text": text,
         }]),
     )
 }
 
-fn build_arc_monitor_message(role: &str, content: edgerun_json::serde_json::Value) -> ArcMonitorChatMessage {
+fn build_arc_monitor_message(role: &str, content: edgerun_json::Value) -> ArcMonitorChatMessage {
     ArcMonitorChatMessage {
         role: role.to_string(),
         content,

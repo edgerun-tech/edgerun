@@ -179,16 +179,16 @@ async fn wait_for_sample_mcp_ready(codex: &codex_core::CodexThread) -> Result<()
     Ok(())
 }
 
-fn tool_names(body: &edgerun_json::serde_json::Value) -> Vec<String> {
+fn tool_names(body: &edgerun_json::Value) -> Vec<String> {
     body.get("tools")
-        .and_then(edgerun_json::serde_json::Value::as_array)
+        .and_then(edgerun_json::Value::as_array)
         .map(|tools| {
             tools
                 .iter()
                 .filter_map(|tool| {
                     tool.get("name")
                         .or_else(|| tool.get("type"))
-                        .and_then(edgerun_json::serde_json::Value::as_str)
+                        .and_then(edgerun_json::Value::as_str)
                         .map(str::to_string)
                 })
                 .collect()
@@ -342,7 +342,7 @@ async fn explicit_plugin_mentions_inject_plugin_guidance() -> Result<()> {
         .expect("plugin MCP tool should be present");
     let echo_description = echo_tool
         .get("description")
-        .and_then(edgerun_json::serde_json::Value::as_str)
+        .and_then(edgerun_json::Value::as_str)
         .expect("plugin MCP tool description should be present");
     assert!(
         echo_description.contains("This tool is part of plugin `sample`."),
@@ -353,7 +353,7 @@ async fn explicit_plugin_mentions_inject_plugin_guidance() -> Result<()> {
         .expect("plugin app tool should be present");
     let calendar_description = calendar_tool
         .get("description")
-        .and_then(edgerun_json::serde_json::Value::as_str)
+        .and_then(edgerun_json::Value::as_str)
         .expect("plugin app tool description should be present");
     assert!(
         calendar_description.contains("This tool is part of plugin `sample`."),
@@ -397,8 +397,8 @@ async fn explicit_plugin_mentions_track_plugin_used_analytics() -> Result<()> {
             .into_iter()
             .filter(|request| request.url.path() == "/codex/analytics-events/events")
             .find_map(|request| {
-                let payload: edgerun_json::serde_json::Value =
-                    edgerun_json::serde_json::from_slice(&request.body).ok()?;
+                let payload: edgerun_json::Value =
+                    edgerun_json::from_serde_slice(&request.body).ok()?;
                 payload["events"].as_array().and_then(|events| {
                     events
                         .iter()
@@ -423,11 +423,11 @@ async fn explicit_plugin_mentions_track_plugin_used_analytics() -> Result<()> {
     assert_eq!(event["event_params"]["mcp_server_count"], 0);
     assert_eq!(
         event["event_params"]["connector_ids"],
-        edgerun_json::serde_json::json!([])
+        edgerun_json::json!([])
     );
     assert_eq!(
         event["event_params"]["product_client_id"],
-        edgerun_json::serde_json::json!(codex_login::default_client::originator().value)
+        edgerun_json::json!(codex_login::default_client::originator().value)
     );
     assert_eq!(event["event_params"]["model_slug"], "gpt-5.2");
     assert!(event["event_params"]["thread_id"].as_str().is_some());

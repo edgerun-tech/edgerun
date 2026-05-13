@@ -193,9 +193,10 @@ capabilities.
 6. Sales receipts and payout references are visible to publisher without
    exposing provider internals to public buyers.
 
-## First Crate Boundary
+## First SDK Boundary
 
-Add a narrow `edgerun-marketplace` crate before building UI:
+Keep the first marketplace domain model inside `edgerun-sdk` as
+`marketplace_domain` before building UI:
 
 - marketplace domain types
 - listing validation
@@ -204,9 +205,9 @@ Add a narrow `edgerun-marketplace` crate before building UI:
 - receipt-to-install eligibility checks
 - rkyv archive helpers for marketplace objects
 
-Keep HTTP/browser API as ingress only. The crate should not own stream authority
-or custody money. Node/store integration should append marketplace events and
-derive projections from committed streams.
+Keep HTTP/browser API as ingress only. The SDK module should not own stream
+authority or custody money. Node/store integration should append marketplace
+events and derive projections from committed streams.
 
 ## Minimal Events
 
@@ -222,13 +223,13 @@ MarketplacePackageInstalled
 ```
 
 These events should eventually live in protocol-generated native records. For
-the first crate, keep them as concrete rkyv marketplace types and archive them
-through `edgerun-wire`.
+the first SDK boundary, keep them as concrete rkyv marketplace types and archive
+them through `edgerun-wire`.
 
 ## Release Plan
 
-1. `edgerun-marketplace` domain crate with listing, package, checkout, commission
-   policy, and projection tests.
+1. `edgerun-sdk::marketplace_domain` with listing, package, checkout,
+   commission policy, and projection tests.
 2. Connect checkout to `edgerun-exchange` settlement intents and receipt
    verification.
 3. Add package install eligibility: paid receipt plus package signature plus

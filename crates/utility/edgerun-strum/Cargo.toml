@@ -8,8 +8,5 @@ repository.workspace = true
 homepage.workspace = true
 description = "Edgerun strum compatibility surface"
 
-[dependencies]
-strum = "0.27.2"
-
 [lints]
 workspace = true

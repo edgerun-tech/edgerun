@@ -179,16 +179,16 @@ rewriting app install state.
 |---|---|---|
 | Wire boundary | `edgerun-wire` | rkyv-only archive/access API. No compatibility schemas. |
 | Protocol records and validation | `edgerun-core`, `edgerun-verify`, `edgerun-sign`, `edgerun-sign-p256` | Native records, domain-separated hashes, canonical signing input, signature verification, and protocol validators. |
-| Stream construction | `edgerun-stream` | Single-writer stream IDs, genesis creation, contiguous append, prev-hash linkage, signing, and stream verification. |
-| Durable authority | `edgerun-storage`, `edgerun-edgefs` | Event logs and objects are stored durably; indexes and snapshots are derived from those logs. |
+| Stream construction | `edgerun-storage::stream` | Single-writer stream IDs, genesis creation, contiguous append, prev-hash linkage, signing, and stream verification. |
+| Durable authority | `edgerun-storage` | Event logs, objects, and EdgeFS block filesystem state are stored durably; indexes and snapshots are derived from those logs. |
 | Node runtime | `edgerun-node`, `edgerun-node-bootstrap`, `edgerun-keygen` | Node identity creation, bootstrap, command dispatch, status, provisioning listener, and stream append integration. |
-| Capabilities and policy | `edgerun-capabilities`, `edgerun-capability-policy`, `edgerun-remote-capability`, `edgerun-mesh-capability` | Capability descriptors, grants, policy decisions, remote invocation envelopes, and mesh-carried capability messages. |
-| Mesh and sessions | `edgerun-mesh`, `edgerun-mesh-link`, `edgerun-mesh-session` | Identity-addressed routing, signed mesh frames, peer/session state, and ECDH session setup. |
-| Hardware identity | `edgerun-hardware-signing`, `edgerun-tpm`, `edgerun-yubikey`, `edgerun-android-keystore` | Hardware-backed P-256 `NodeID` signing adapters. |
+| Capabilities and policy | `edgerun-capabilities`, `edgerun-remote-capability` | Capability descriptors, grants, policy decisions, remote invocation envelopes, and mesh-carried capability messages. |
+| Mesh and sessions | `edgerun-mesh` | Identity-addressed routing, signed mesh frames, peer/session state, and ECDH session setup. |
+| Hardware identity | `edgerun-hardware-signing`, `edgerun-tpm`, `edgerun-yubikey` | Hardware-backed P-256 `NodeID` signing adapters, including the Android Keystore provider under `edgerun-hardware-signing`. |
 | Services | `edgerun-node`, protocol modules in `edgerun-protocols`, and node-owned service adapters | The node owns service orchestration, resource binding, ACME challenge handling, routing, and transport decisions. Transport-independent protocol pieces live in `edgerun-protocols`. |
-| Device abstractions | `edgerun-*-capability`, `edgerun-linux-*`, `edgerun-alsa-*`, `edgerun-drm-display`, `edgerun-evdev-input`, `edgerun-v4l2-camera`, `edgerun-goodix-fingerprint` | Small platform-neutral type crates plus Linux or device-specific adapters. |
-| Bare target | `edgerun-rt`, `edgerun-platform`, `edgerun-unikernel`, `edgerun-virtio`, `edgerun-rtl8125` | no_std-first runtime and hardware boot/device path; boot protocol codecs and PXE/iPXE ABI data live in `edgerun-protocols`. |
-| Local utilities | `edgerun-json`, `edgerun-encoding`, `edgerun-hpack`, `edgerun-qpack`, `edgerun-crypto`, `edgerun-log`, `edgerun-clap`, `edgerun-url`, `edgerun-glob`, `edgerun-regex` | Utility crates may parse external formats but must not define Edgerun protocol authority. |
+| Device abstractions | `edgerun-*-capability`, `edgerun-linux-*`, `edgerun-evdev-input` | Small platform-neutral type crates plus Linux or device-specific adapters. |
+| Bare target | `edgerun-rt`, `edgerun-platform`, `edgerun-unikernel`, `edgerun-virtio`, `edgerun-network-driver` | no_std-first runtime and hardware boot/device path; boot protocol codecs and PXE/iPXE ABI data live in `edgerun-protocols`. |
+| Local utilities | `edgerun-json`, `edgerun-encoding`, `edgerun-hpack`, `edgerun-crypto`, `edgerun-log`, `edgerun-url` | Utility crates may parse external formats but must not define Edgerun protocol authority. |
 
 ## Consolidation rules
 
@@ -197,8 +197,9 @@ rewriting app install state.
 2. Keep signing and verification in `edgerun-sign`, `edgerun-sign-p256`, and
    `edgerun-verify`; do not duplicate signer-specific verification in storage,
    node, mesh, or service crates.
-3. Keep stream sequencing in `edgerun-stream`; storage should persist and index
-   events, not reimplement stream rules.
+3. Keep stream sequencing in `edgerun-storage::stream`; storage should persist
+   and index events without duplicating stream rules outside the storage
+   authority crate.
 4. Keep durable authority in event logs and objects. Derived state must be
    explicitly marked as derived and rebuildable.
 5. Platform-neutral device crates should remain type/interface crates. Linux,
@@ -217,12 +218,12 @@ rewriting app install state.
 | Area | Current shape | Consolidation direction |
 |---|---|---|
 | Signing adapters | `edgerun-stream` signs through `ProtocolSigner`; storage and node adapt hardware signers. | Keep the adapter at the edge. Avoid exposing adapter types from storage APIs. |
-| Stream validation | Storage can validate chain integrity and optionally call `edgerun-stream::validate_stream`. | Move any remaining sequence/hash/signature rule duplication out of storage and into `edgerun-stream`. |
+| Stream validation | Storage can validate chain integrity and call `edgerun-storage::stream::validate_stream`. | Keep sequence/hash/signature rules centralized in the storage stream module. |
 | Command outcomes | Command status appears in core validators, node dispatch, storage replay, and exchange projections. | Keep command semantics in `edgerun-core`; keep service-specific projections as derived views. |
 | Capability transport | `edgerun-remote-capability` and `edgerun-mesh-capability` both carry invocation/session semantics. | Share envelope/domain helpers through core capability types; keep transport-specific queue/session code separate. |
 | Device capability crates | Many type crates pair with one Linux/device adapter crate. | Merge only when a type crate has no reusable platform-neutral boundary. Otherwise keep neutral crate + adapter crate. |
 | Linux-only adapters | `edgerun-linux-*`, ALSA, DRM, evdev, V4L2, TPM/YubiKey paths are host-specific. | Keep target gates strict and prevent these crates from leaking into bare-target or non-Linux default paths. |
-| Encoding helpers | `edgerun-encoding`, `edgerun-hpack`, `edgerun-qpack`, and local string field helpers overlap at byte/string parsing edges. | Move generic byte/string helpers into `edgerun-encoding`; keep HPACK/QPACK table and instruction logic in their own crates. |
+| Encoding helpers | `edgerun-encoding`, `edgerun-hpack`, and local string field helpers overlap at byte/string parsing edges. | Move generic byte/string helpers into `edgerun-encoding`; keep protocol table and instruction logic with the owning protocol modules. |
 | Service deployment config | `deploy/server` is active deployment state consumed by `edgerun-server`. | Keep deployment docs/config together; avoid separate roadmap docs for server surfaces. |
 
 ## What should not be consolidated
@@ -268,10 +269,7 @@ crates/
     edgerun-keygen
     edgerun-node-bootstrap
   authority/
-    edgerun-stream
     edgerun-storage
-    edgerun-edgefs
-    edgerun-vfs
     edgerun-virtual-disk
   node/
     edgerun-node
@@ -290,7 +288,6 @@ crates/
     edgerun-hardware-signing
     edgerun-tpm
     edgerun-yubikey
-    edgerun-android-keystore
   service/
     edgerun-http
     edgerun-tls
@@ -331,53 +328,32 @@ crates/
     edgerun-usb
     edgerun-wifi
   linux-adapters/
-    edgerun-alsa-microphone
-    edgerun-alsa-speaker
-    edgerun-amd-xdna
     edgerun-bluetooth-gatt
-    edgerun-drm-display
     edgerun-evdev-input
-    edgerun-goodix-fingerprint
-    edgerun-linux-cec
-    edgerun-linux-gpu
     edgerun-linux-netif
-    edgerun-linux-nfc
-    edgerun-linux-npu
     edgerun-linux-pci
-    edgerun-linux-power
     edgerun-linux-sysfs
     edgerun-linux-usb
     edgerun-linux-wifi
-    edgerun-mgmt-bluetooth
-    edgerun-v4l2-camera
   bare-target/
     edgerun-rt
     edgerun-platform
     edgerun-unikernel
     edgerun-virtio
-    edgerun-rtl8125
+    edgerun-network-driver
     edgerun-protocols::pxe
     edgerun-protocols::tftp
-    edgerun-event
   appliance/
     edgerun-tcl-ac
-    edgerun-tcl-ac-cli
     edgerun-tuya
-    edgerun-quectel-ec200a
   utility/
     edgerun-crypto
     edgerun-encoding
     edgerun-json
     edgerun-log
-    edgerun-clap
-    edgerun-clap-derive
     edgerun-url
-    edgerun-glob
-    edgerun-regex
     edgerun-error
     edgerun-hpack
-    edgerun-qpack
-    edgerun-bench
 ```
 
 ### Migration order for domain folders

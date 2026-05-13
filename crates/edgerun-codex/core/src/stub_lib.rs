@@ -87,8 +87,7 @@ impl Default for Prompt {
 #[derive(Debug)]
 pub enum ModelClientError {
     Api(codex_api::ApiError),
-    ToolSerialization(edgerun_json::serde_json::Error),
-    OutputSchema(edgerun_json::serde_json::Error),
+    ToolSerialization(edgerun_json::Error),
 }
 
 impl std::fmt::Display for ModelClientError {
@@ -98,7 +97,6 @@ impl std::fmt::Display for ModelClientError {
             Self::ToolSerialization(error) => {
                 write!(f, "failed to serialize Responses API tools: {error}")
             }
-            Self::OutputSchema(error) => write!(f, "failed to convert output schema: {error}"),
         }
     }
 }
@@ -211,7 +209,7 @@ impl ModelClient {
             model,
             provider,
             auth,
-            Arc::new(ReqwestTransport::new(edgerun_reqwest::Client::new())),
+            Arc::new(ReqwestTransport::new_default()),
         )
     }
 
@@ -312,12 +310,6 @@ impl ModelClient {
 
         let tools = codex_tools::create_tools_json_for_responses_api(&tools)
             .map_err(ModelClientError::ToolSerialization)?;
-        let output_schema = output_schema
-            .map(|schema| {
-                edgerun_json::serde_json::from_str(&schema.to_string())
-                    .map_err(ModelClientError::OutputSchema)
-            })
-            .transpose()?;
         let text = codex_api::create_text_param_for_request(
             verbosity,
             &output_schema,
@@ -431,8 +423,8 @@ mod tests {
     use edgerun_bytes::Bytes;
     use edgerun_http::HeaderMap;
     use edgerun_http::StatusCode;
-    use edgerun_json::serde_json::Value;
-    use edgerun_json::serde_json::json;
+    use edgerun_json::Value;
+    use edgerun_json::json;
     use std::sync::Mutex;
     use std::time::Duration;
 
@@ -613,8 +605,7 @@ mod tests {
             Some(codex_client::RequestBody::Json(body)) => body,
             other => panic!("expected json request body, got {other:?}"),
         };
-        let request_json: Value =
-            edgerun_json::serde_json::from_str(&request_body.to_string()).expect("request json");
+        let request_json: Value = edgerun_json::from_str(&request_body.to_string()).expect("request json");
 
         assert_eq!(request_json["model"], "gpt-test");
         assert_eq!(request_json["instructions"], "Use concise answers.");

@@ -368,11 +368,8 @@ fn cleanup_dead_run_states(root: &mut std::path::PathBuf) {
 }
 
 fn extract_json_pid(data: &str) -> Option<i32> {
-    edgerun_json::parse_json(data)
-        .ok()?
-        .as_object()?
-        .get("pid")?
-        .as_i32()
+    let tape = edgerun_json::parse_json_tape(data).ok()?;
+    tape.root(data)?.get("pid")?.as_i32()
 }
 
 fn pid_alive(pid: i32) -> bool {

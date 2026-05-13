@@ -6,7 +6,7 @@ use std::sync::RwLock;
 
 use codex_utils_string::to_ascii_json_string;
 use serde::Serialize;
-use edgerun_json::serde_json::Value;
+use edgerun_json::Value;
 use edgerun_tokio::task::JoinHandle;
 
 use crate::sandbox_tags::permission_profile_sandbox_tag;
@@ -95,7 +95,7 @@ fn merge_turn_metadata(
         return None;
     }
 
-    let mut metadata = edgerun_json::serde_json::from_str::<edgerun_json::serde_json::Map<String, Value>>(header).ok()?;
+    let mut metadata = edgerun_json::from_str(header).ok()?.into_object("turn metadata").ok()?;
     if let Some(turn_started_at_unix_ms) = turn_started_at_unix_ms {
         metadata.insert(
             TURN_STARTED_AT_UNIX_MS_KEY.to_string(),
@@ -267,9 +267,9 @@ impl TurnMetadataState {
     pub(crate) fn current_meta_value_for_mcp_request(
         &self,
         context: McpTurnMetadataContext<'_>,
-    ) -> Option<edgerun_json::serde_json::Value> {
+    ) -> Option<edgerun_json::Value> {
         let header = self.current_header_value()?;
-        let mut metadata = edgerun_json::serde_json::from_str::<edgerun_json::serde_json::Map<String, Value>>(&header).ok()?;
+        let mut metadata = edgerun_json::from_str(&header).ok()?.into_object("turn metadata").ok()?;
         metadata.insert(
             MODEL_KEY.to_string(),
             Value::String(context.model.to_string()),

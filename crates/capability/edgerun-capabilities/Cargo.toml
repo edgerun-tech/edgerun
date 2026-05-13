@@ -9,6 +9,7 @@ homepage.workspace = true
 description = "Capability and delegation data structures for Edgerun"
 
 [dependencies]
+edgerun-crypto = { workspace = true, default-features = false }
 edgerun-protocols = { workspace = true, default-features = false, features = ["core"] }
 
 [lints]

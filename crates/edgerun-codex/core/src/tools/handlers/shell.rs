@@ -1,7 +1,7 @@
 use codex_features::Feature;
 use codex_protocol::models::ShellCommandToolCallParams;
 use codex_protocol::models::ShellToolCallParams;
-use edgerun_json::serde_json::Value as JsonValue;
+use edgerun_json::Value as JsonValue;
 use std::sync::Arc;
 
 use crate::exec::ExecParams;
@@ -46,9 +46,8 @@ fn shell_function_payload_command(payload: &ToolPayload) -> Option<String> {
         return None;
     };
 
-    parse_arguments::<ShellToolCallParams>(arguments)
-        .ok()
-        .map(|params| codex_shell_command::parse_command::shlex_join(&params.command))
+    shell_command_argv_from_arguments(arguments)
+        .map(|command| codex_shell_command::parse_command::shlex_join(&command))
 }
 
 fn local_shell_payload_command(payload: &ToolPayload) -> Option<String> {
@@ -66,9 +65,24 @@ fn shell_command_payload_command(payload: &ToolPayload) -> Option<String> {
         return None;
     };
 
-    parse_arguments::<ShellCommandToolCallParams>(arguments)
-        .ok()
-        .map(|params| params.command)
+    shell_command_string_from_arguments(arguments)
+}
+
+fn shell_command_string_from_arguments(arguments: &str) -> Option<String> {
+    let tape = edgerun_json::parse_json_tape(arguments).ok()?;
+    tape.root(arguments)?
+        .get("command")
+        .and_then(|command| command.as_str())
+        .map(str::to_string)
+}
+
+fn shell_command_argv_from_arguments(arguments: &str) -> Option<Vec<String>> {
+    let tape = edgerun_json::parse_json_tape(arguments).ok()?;
+    let command = tape.root(arguments)?.get_array("command")?;
+    command
+        .into_iter()
+        .map(|item| item.as_str().map(str::to_string))
+        .collect()
 }
 
 struct RunExecLikeArgs {
@@ -88,7 +102,7 @@ struct RunExecLikeArgs {
 fn shell_function_pre_tool_use_payload(invocation: &ToolInvocation) -> Option<PreToolUsePayload> {
     shell_function_payload_command(&invocation.payload).map(|command| PreToolUsePayload {
         tool_name: HookToolName::bash(),
-        tool_input: edgerun_json::serde_json::json!({ "command": command }),
+        tool_input: edgerun_json::json!({ "command": command }),
     })
 }
 
@@ -101,7 +115,7 @@ fn shell_function_post_tool_use_payload(
     Some(PostToolUsePayload {
         tool_name: HookToolName::bash(),
         tool_use_id: invocation.call_id.clone(),
-        tool_input: edgerun_json::serde_json::json!({ "command": command }),
+        tool_input: edgerun_json::json!({ "command": command }),
         tool_response,
     })
 }

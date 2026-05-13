@@ -161,7 +161,7 @@ macro_rules! impl_try_from_json_number_cast {
 
 impl JsonValue {
     /// Returns the name of this JSON value's variant (for error messages).
-    pub(crate) fn variant_name(&self) -> &'static str {
+    pub fn variant_name(&self) -> &'static str {
         match self {
             JsonValue::Null => "null",
             JsonValue::Bool(_) => "boolean",
@@ -836,12 +836,12 @@ impl TryFrom<JsonValue> for Vec<JsonValue> {
     }
 }
 
-impl TryFrom<JsonValue> for Map {
+impl<K, V> TryFrom<JsonValue> for Map<K, V> {
     type Error = JsonValueError;
 
     fn try_from(value: JsonValue) -> Result<Self, Self::Error> {
         match value {
-            JsonValue::Object(entries) => Ok(entries),
+            JsonValue::Object(entries) => Ok(entries.into_vec().into()),
             other => Err(JsonValueError::WrongType(format!(
                 "expected object, found {}",
                 other.variant_name()
@@ -1003,9 +1003,9 @@ where
     }
 }
 
-impl From<Map> for JsonValue {
-    fn from(value: Map) -> Self {
-        Self::Object(value)
+impl<K, V> From<Map<K, V>> for JsonValue {
+    fn from(value: Map<K, V>) -> Self {
+        Self::Object(value.into_vec().into())
     }
 }
 

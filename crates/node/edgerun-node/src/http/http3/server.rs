@@ -59,7 +59,7 @@ use super::quic::packet::{self, PacketType, QuicPacket, QuicPacketHeader};
 use super::quic::server_handshake::CertificateAndKey as QuicCertificateAndKey;
 use crate::http::http3::settings::Http3Settings;
 use crate::http::runtime::sync::Mutex;
-use edgerun_qpack::{QpackDecoder, QpackEncoder};
+use edgerun_protocols::http::http3::{QpackDecoder, QpackEncoder};
 
 /// Per-client address validation state (RFC 9000 §8.1).
 ///

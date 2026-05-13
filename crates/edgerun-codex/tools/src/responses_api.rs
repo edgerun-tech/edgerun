@@ -6,25 +6,44 @@ use crate::parse_dynamic_tool;
 #[cfg(feature = "mcp")]
 use crate::parse_mcp_tool;
 use codex_protocol::dynamic_tools::DynamicToolSpec;
-use edgerun_json::serde_json::Value;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
+use edgerun_json::{Map, ToJson, Value};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct FreeformTool {
     pub name: String,
     pub description: String,
     pub format: FreeformToolFormat,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+impl ToJson for FreeformTool {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        object.push_field("type", "custom");
+        object.push_field("name", self.name.as_str());
+        object.push_field("description", self.description.as_str());
+        object.push_field("format", self.format.to_json());
+        object.into()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct FreeformToolFormat {
     pub r#type: String,
     pub syntax: String,
     pub definition: String,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+impl ToJson for FreeformToolFormat {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        object.push_field("type", self.r#type.as_str());
+        object.push_field("syntax", self.syntax.as_str());
+        object.push_field("definition", self.definition.as_str());
+        object.into()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct ResponsesApiTool {
     pub name: String,
     pub description: String,
@@ -32,45 +51,83 @@ pub struct ResponsesApiTool {
     /// `required` and `additional_properties` must be present. All fields in
     /// `properties` must be present in `required`.
     pub strict: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub defer_loading: Option<bool>,
     pub parameters: JsonSchema,
-    #[serde(skip)]
     pub output_schema: Option<Value>,
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
-#[serde(tag = "type")]
+impl ToJson for ResponsesApiTool {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        object.push_field("type", "function");
+        object.push_field("name", self.name.as_str());
+        object.push_field("description", self.description.as_str());
+        object.push_field("strict", self.strict);
+        object.push_opt_field("defer_loading", self.defer_loading);
+        object.push_field("parameters", self.parameters.to_json());
+        object.push_opt_field(
+            "output_schema",
+            self.output_schema.as_ref().map(ToJson::to_json),
+        );
+        object.into()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 #[allow(clippy::large_enum_variant)]
 pub enum LoadableToolSpec {
     #[allow(dead_code)]
-    #[serde(rename = "function")]
     Function(ResponsesApiTool),
-    #[serde(rename = "namespace")]
     Namespace(ResponsesApiNamespace),
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+impl ToJson for LoadableToolSpec {
+    fn to_json(&self) -> Value {
+        match self {
+            Self::Function(tool) => tool.to_json(),
+            Self::Namespace(namespace) => namespace.to_json(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct ResponsesApiNamespace {
     pub name: String,
     pub description: String,
     pub tools: Vec<ResponsesApiNamespaceTool>,
 }
 
+impl ToJson for ResponsesApiNamespace {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        object.push_field("type", "namespace");
+        object.push_field("name", self.name.as_str());
+        object.push_field("description", self.description.as_str());
+        object.push_field("tools", self.tools.to_json());
+        object.into()
+    }
+}
+
 pub fn default_namespace_description(namespace_name: &str) -> String {
     format!("Tools in the {namespace_name} namespace.")
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
-#[serde(tag = "type")]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ResponsesApiNamespaceTool {
-    #[serde(rename = "function")]
     Function(ResponsesApiTool),
+}
+
+impl ToJson for ResponsesApiNamespaceTool {
+    fn to_json(&self) -> Value {
+        match self {
+            Self::Function(tool) => tool.to_json(),
+        }
+    }
 }
 
 pub fn dynamic_tool_to_responses_api_tool(
     tool: &DynamicToolSpec,
-) -> Result<ResponsesApiTool, edgerun_json::serde_json::Error> {
+) -> Result<ResponsesApiTool, edgerun_json::Error> {
     Ok(tool_definition_to_responses_api_tool(parse_dynamic_tool(
         tool,
     )?))
@@ -78,7 +135,7 @@ pub fn dynamic_tool_to_responses_api_tool(
 
 pub fn dynamic_tool_to_loadable_tool_spec(
     tool: &DynamicToolSpec,
-) -> Result<LoadableToolSpec, edgerun_json::serde_json::Error> {
+) -> Result<LoadableToolSpec, edgerun_json::Error> {
     let output_tool = dynamic_tool_to_responses_api_tool(tool)?;
     Ok(match tool.namespace.as_ref() {
         Some(namespace) => LoadableToolSpec::Namespace(ResponsesApiNamespace {
@@ -125,7 +182,7 @@ pub fn coalesce_loadable_tool_specs(
 pub fn mcp_tool_to_responses_api_tool(
     tool_name: &ToolName,
     tool: &rmcp::model::Tool,
-) -> Result<ResponsesApiTool, edgerun_json::serde_json::Error> {
+) -> Result<ResponsesApiTool, edgerun_json::Error> {
     Ok(tool_definition_to_responses_api_tool(
         parse_mcp_tool(tool)?.renamed(tool_name.name.clone()),
     ))
@@ -135,7 +192,7 @@ pub fn mcp_tool_to_responses_api_tool(
 pub fn mcp_tool_to_deferred_responses_api_tool(
     tool_name: &ToolName,
     tool: &rmcp::model::Tool,
-) -> Result<ResponsesApiTool, edgerun_json::serde_json::Error> {
+) -> Result<ResponsesApiTool, edgerun_json::Error> {
     Ok(tool_definition_to_responses_api_tool(
         parse_mcp_tool(tool)?
             .renamed(tool_name.name.clone())

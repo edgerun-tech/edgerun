@@ -1,48 +1,42 @@
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::error::Error;
 use std::io;
+use std::io::Write;
 use std::path::PathBuf;
+use std::process::Command;
+use std::process::Stdio;
 use std::sync::Arc;
-use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
+use std::time::Instant;
 
 use codex_core::Prompt;
 use codex_core::Provider;
-use codex_core::ResponseEvent;
 use codex_core::TurnRequest;
 use codex_core::api::AuthProvider;
 use codex_core::api::RetryConfig;
+use codex_core::apply_patch;
 use codex_core::protocol::models::ContentItem;
+use codex_core::protocol::models::FunctionCallOutputPayload;
+use codex_core::protocol::models::LocalShellAction;
+use codex_core::protocol::models::LocalShellStatus;
 use codex_core::protocol::models::ResponseItem;
-use crossterm::event;
-use crossterm::event::Event;
-use crossterm::event::KeyCode;
-use crossterm::event::KeyEventKind;
-use crossterm::event::KeyModifiers;
-use crossterm::execute;
-use crossterm::terminal;
+use codex_core::tools::AdditionalProperties;
+use codex_core::tools::FreeformTool;
+use codex_core::tools::FreeformToolFormat;
+use codex_core::tools::JsonSchema;
+use codex_core::tools::ResponsesApiTool;
+use codex_core::tools::ToolSpec;
 use edgerun_http::HeaderMap;
 use edgerun_http::HeaderValue;
 use edgerun_http::header::AUTHORIZATION;
-use edgerun_json::serde_json::Value;
-use ratatui::Frame;
-use ratatui::Terminal;
-use ratatui::backend::CrosstermBackend;
-use ratatui::layout::Constraint;
-use ratatui::layout::Direction;
-use ratatui::layout::Layout;
-use ratatui::layout::Position;
-use ratatui::style::Color;
-use ratatui::style::Modifier;
-use ratatui::style::Style;
-use ratatui::text::Line;
-use ratatui::text::Span;
-use ratatui::text::Text;
-use ratatui::widgets::Block;
-use ratatui::widgets::Borders;
-use ratatui::widgets::Paragraph;
-use ratatui::widgets::Wrap;
+use edgerun_json::Value;
+
+const APPLY_PATCH_LARK_GRAMMAR: &str =
+    include_str!("../../core/src/tools/handlers/apply_patch.lark");
+const MAX_TOOL_ROUNDS: usize = 16;
+const MAX_TOOL_OUTPUT_BYTES: usize = 24 * 1024;
 
 #[derive(Debug)]
 struct ChatGptAuth {
@@ -64,121 +58,97 @@ impl AuthProvider for ChatGptAuth {
     }
 }
 
-#[derive(Clone, Debug)]
-enum Role {
-    User,
-    Assistant,
-    System,
-}
-
-#[derive(Clone, Debug)]
-struct Message {
-    role: Role,
-    text: String,
-}
-
 #[derive(Debug)]
-struct App {
-    model: String,
-    input: String,
-    messages: Vec<Message>,
-    busy: bool,
-    scroll: u16,
-    tx: mpsc::Sender<WorkerRequest>,
-    rx: mpsc::Receiver<WorkerEvent>,
+enum AgentEvent {
+    AssistantText(String),
+    ToolStarted(String),
+    ToolCompleted(String),
 }
 
-#[derive(Debug)]
-struct WorkerRequest {
-    input: Vec<ResponseItem>,
+#[derive(Debug, Clone)]
+enum ToolCall {
+    Function {
+        name: String,
+        arguments: String,
+        call_id: String,
+    },
+    Custom {
+        name: String,
+        input: String,
+        call_id: String,
+    },
+    LocalShell {
+        command: Vec<String>,
+        workdir: Option<String>,
+        timeout_ms: Option<u64>,
+        call_id: String,
+    },
 }
 
-#[derive(Debug)]
-enum WorkerEvent {
-    Started,
-    Delta(String),
-    Completed { response_id: Option<String> },
-    Failed(String),
+impl ToolCall {
+    fn display_name(&self) -> String {
+        match self {
+            ToolCall::Function { name, .. } | ToolCall::Custom { name, .. } => name.clone(),
+            ToolCall::LocalShell { command, .. } => format!("local_shell {}", command.join(" ")),
+        }
+    }
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
     let auth = read_chatgpt_auth()?;
     let model = std::env::var("CODEX_TUI_MODEL").unwrap_or_else(|_| "gpt-5.5".to_string());
+    let client = codex_core::ModelClient::new_native(model, provider(), auth);
+    let runtime = edgerun_tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
 
     if let Some(prompt) = prompt_arg()? {
-        return run_prompt_mode(model, auth, prompt);
+        runtime.block_on(run_prompt(&client, vec![user_item(prompt)]))?;
+        return Ok(());
     }
 
-    let (request_tx, request_rx) = mpsc::channel();
-    let (event_tx, event_rx) = mpsc::channel();
-    spawn_worker(model.clone(), auth, request_rx, event_tx);
-
-    let mut app = App {
-        model,
-        input: String::new(),
-        messages: vec![Message {
-            role: Role::System,
-            text: "Native Codex TUI. Enter sends, Ctrl-C quits.".to_string(),
-        }],
-        busy: false,
-        scroll: 0,
-        tx: request_tx,
-        rx: event_rx,
-    };
-
-    run_tui(&mut app)
-}
-
-fn run_tui(app: &mut App) -> Result<(), Box<dyn Error>> {
-    terminal::enable_raw_mode()?;
-    let mut stdout = io::stdout();
-    execute!(stdout, terminal::EnterAlternateScreen)?;
-    let backend = CrosstermBackend::new(stdout);
-    let mut terminal = Terminal::new(backend)?;
-    let result = run_event_loop(app, &mut terminal);
-    terminal::disable_raw_mode()?;
-    execute!(terminal.backend_mut(), terminal::LeaveAlternateScreen)?;
-    terminal.show_cursor()?;
-    result
-}
-
-fn run_event_loop(
-    app: &mut App,
-    terminal: &mut Terminal<CrosstermBackend<io::Stdout>>,
-) -> Result<(), Box<dyn Error>> {
+    println!("Native EdgeRun Codex. Tools enabled: shell_command, shell, apply_patch.");
+    println!("Enter a prompt, or Ctrl-D to quit.");
+    let mut history = Vec::new();
+    let stdin = io::stdin();
     loop {
-        drain_worker_events(app);
-        terminal.draw(|frame| draw(app, frame))?;
+        print!("edgerun-codex> ");
+        io::stdout().flush()?;
 
-        if !event::poll(Duration::from_millis(50))? {
+        let mut input = String::new();
+        if stdin.read_line(&mut input)? == 0 {
+            break;
+        }
+        let input = input.trim();
+        if input.is_empty() {
             continue;
         }
 
-        let Event::Key(key) = event::read()? else {
-            continue;
-        };
-        if key.kind != KeyEventKind::Press {
-            continue;
-        }
-
-        match key.code {
-            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => break,
-            KeyCode::Char('u') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                app.input.clear();
-            }
-            KeyCode::Char(ch) if !app.busy => app.input.push(ch),
-            KeyCode::Backspace if !app.busy => {
-                app.input.pop();
-            }
-            KeyCode::Enter if !app.busy => submit(app),
-            KeyCode::Up => app.scroll = app.scroll.saturating_add(1),
-            KeyCode::Down => app.scroll = app.scroll.saturating_sub(1),
-            KeyCode::PageUp => app.scroll = app.scroll.saturating_add(10),
-            KeyCode::PageDown => app.scroll = app.scroll.saturating_sub(10),
-            _ => {}
-        }
+        history.push(user_item(input.to_string()));
+        history = runtime.block_on(run_prompt(&client, history))?;
     }
     Ok(())
+}
+
+async fn run_prompt(
+    client: &codex_core::ModelClient,
+    input: Vec<ResponseItem>,
+) -> Result<Vec<ResponseItem>, Box<dyn Error>> {
+    let mut printer = |event: AgentEvent| match event {
+        AgentEvent::AssistantText(text) => {
+            print!("{text}");
+            let _ = io::stdout().flush();
+        }
+        AgentEvent::ToolStarted(name) => {
+            println!("\n[tool] {name}");
+        }
+        AgentEvent::ToolCompleted(summary) => {
+            println!("[tool result] {summary}");
+        }
+    };
+    let (_, history) = run_agent_loop(client, input, Some(&mut printer)).await?;
+    println!();
+    Ok(history)
 }
 
 fn prompt_arg() -> Result<Option<String>, Box<dyn Error>> {
@@ -193,7 +163,15 @@ fn prompt_arg() -> Result<Option<String>, Box<dyn Error>> {
                 prompt = Some(value);
             }
             "--help" | "-h" => {
-                println!("Usage: codex-tui [--prompt TEXT]");
+                let program = std::env::args()
+                    .next()
+                    .and_then(|path| {
+                        PathBuf::from(path)
+                            .file_name()
+                            .map(|name| name.to_string_lossy().into_owned())
+                    })
+                    .unwrap_or_else(|| "edgerun-codex".to_string());
+                println!("Usage: {program} [--prompt TEXT]");
                 std::process::exit(0);
             }
             other => return Err(format!("unknown argument: {other}").into()),
@@ -202,213 +180,15 @@ fn prompt_arg() -> Result<Option<String>, Box<dyn Error>> {
     Ok(prompt)
 }
 
-fn run_prompt_mode(
-    model: String,
-    auth: Arc<ChatGptAuth>,
-    prompt: String,
-) -> Result<(), Box<dyn Error>> {
-    let runtime = edgerun_tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()?;
-    let client = codex_core::ModelClient::new_native(model, provider(), auth);
-    runtime.block_on(async {
-        let input = vec![user_item(prompt)];
-        let mut stream = client.stream_turn(turn_request(input)).await?;
-        while let Some(event) = stream.rx_event.recv().await {
-            if let ResponseEvent::OutputTextDelta(delta) = event? {
-                print!("{delta}");
-            }
-        }
-        println!();
-        Ok::<(), Box<dyn Error>>(())
-    })
-}
-
-fn draw(app: &App, frame: &mut Frame<'_>) {
-    let area = frame.area();
-    let rows = Layout::default()
-        .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Min(3),
-            Constraint::Length(1),
-            Constraint::Length(3),
-        ])
-        .split(area);
-
-    let transcript = Paragraph::new(transcript_text(app))
-        .block(Block::default().borders(Borders::ALL).title(" Codex "))
-        .wrap(Wrap { trim: false })
-        .scroll((app.scroll, 0));
-    frame.render_widget(transcript, rows[0]);
-
-    let status = if app.busy {
-        format!(" {} thinking...  ↑/↓ scroll", app.model)
-    } else {
-        format!(
-            " {} ready  Enter send  Ctrl-U clear  Ctrl-C quit",
-            app.model
-        )
-    };
-    frame.render_widget(
-        Paragraph::new(status).style(Style::default().fg(Color::DarkGray)),
-        rows[1],
-    );
-
-    let input_title = if app.busy {
-        " Prompt locked "
-    } else {
-        " Prompt "
-    };
-    let input = Paragraph::new(app.input.as_str())
-        .block(Block::default().borders(Borders::ALL).title(input_title))
-        .wrap(Wrap { trim: false });
-    frame.render_widget(input, rows[2]);
-    if !app.busy {
-        let max_x = rows[2].width.saturating_sub(2);
-        let input_x = app.input.chars().count().min(max_x as usize) as u16;
-        frame.set_cursor_position(Position::new(rows[2].x + 1 + input_x, rows[2].y + 1));
-    }
-}
-
-fn transcript_text(app: &App) -> Text<'static> {
-    let mut lines = Vec::new();
-    for message in &app.messages {
-        let (label, color) = match message.role {
-            Role::User => ("› you", Color::Cyan),
-            Role::Assistant => ("• codex", Color::Green),
-            Role::System => ("status", Color::DarkGray),
-        };
-        lines.push(Line::from(vec![Span::styled(
-            label,
-            Style::default().fg(color).add_modifier(Modifier::BOLD),
-        )]));
-        for line in message.text.lines() {
-            lines.push(Line::from(line.to_string()));
-        }
-        lines.push(Line::from(""));
-    }
-    Text::from(lines)
-}
-
-fn submit(app: &mut App) {
-    let input = app.input.trim().to_string();
-    if input.is_empty() {
-        return;
-    }
-    app.input.clear();
-    app.scroll = 0;
-    app.messages.push(Message {
-        role: Role::User,
-        text: input.clone(),
-    });
-    let prompt_input = prompt_input(&app.messages);
-    app.messages.push(Message {
-        role: Role::Assistant,
-        text: String::new(),
-    });
-    app.busy = true;
-    if let Err(error) = app.tx.send(WorkerRequest {
-        input: prompt_input,
-    }) {
-        app.busy = false;
-        app.messages.push(Message {
-            role: Role::System,
-            text: format!("worker unavailable: {error}"),
-        });
-    }
-}
-
-fn drain_worker_events(app: &mut App) {
-    while let Ok(event) = app.rx.try_recv() {
-        match event {
-            WorkerEvent::Started => {
-                app.busy = true;
-            }
-            WorkerEvent::Delta(delta) => {
-                if let Some(message) = app
-                    .messages
-                    .iter_mut()
-                    .rev()
-                    .find(|message| matches!(message.role, Role::Assistant))
-                {
-                    message.text.push_str(&delta);
-                }
-            }
-            WorkerEvent::Completed { response_id } => {
-                app.busy = false;
-                if let Some(response_id) = response_id {
-                    app.messages.push(Message {
-                        role: Role::System,
-                        text: format!("response {response_id}"),
-                    });
-                }
-            }
-            WorkerEvent::Failed(error) => {
-                app.busy = false;
-                app.messages.push(Message {
-                    role: Role::System,
-                    text: error,
-                });
-            }
-        }
-    }
-}
-
-fn spawn_worker(
-    model: String,
-    auth: Arc<ChatGptAuth>,
-    rx: mpsc::Receiver<WorkerRequest>,
-    tx: mpsc::Sender<WorkerEvent>,
-) {
-    thread::spawn(move || {
-        let runtime = match edgerun_tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-        {
-            Ok(runtime) => runtime,
-            Err(error) => {
-                let _ = tx.send(WorkerEvent::Failed(format!("runtime error: {error}")));
-                return;
-            }
-        };
-        let client = codex_core::ModelClient::new_native(model, provider(), auth);
-        while let Ok(request) = rx.recv() {
-            let _ = tx.send(WorkerEvent::Started);
-            let result = runtime.block_on(run_turn(&client, request.input, tx.clone()));
-            if let Err(error) = result {
-                let _ = tx.send(WorkerEvent::Failed(error.to_string()));
-            }
-        }
-    });
-}
-
-async fn run_turn(
-    client: &codex_core::ModelClient,
-    input: Vec<ResponseItem>,
-    tx: mpsc::Sender<WorkerEvent>,
-) -> Result<(), Box<dyn Error>> {
-    let request = turn_request(input);
-    let mut stream = client.stream_turn(request).await?;
-    let mut response_id = None;
-    while let Some(event) = stream.rx_event.recv().await {
-        match event? {
-            ResponseEvent::OutputTextDelta(delta) => {
-                let _ = tx.send(WorkerEvent::Delta(delta));
-            }
-            ResponseEvent::Completed {
-                response_id: id, ..
-            } => response_id = Some(id),
-            _ => {}
-        }
-    }
-    let _ = tx.send(WorkerEvent::Completed { response_id });
-    Ok(())
-}
-
 fn turn_request(input: Vec<ResponseItem>) -> TurnRequest {
     TurnRequest {
         prompt: Prompt {
             input,
+            tools: native_agent_tools(),
+            parallel_tool_calls: true,
+            base_instructions: codex_core::protocol::models::BaseInstructions {
+                text: include_str!("../../core/gpt_5_codex_prompt.md").to_string(),
+            },
             ..Prompt::default()
         },
         store: false,
@@ -416,16 +196,38 @@ fn turn_request(input: Vec<ResponseItem>) -> TurnRequest {
     }
 }
 
-fn prompt_input(messages: &[Message]) -> Vec<ResponseItem> {
-    messages.iter().filter_map(message_item).collect()
-}
+async fn run_agent_loop(
+    client: &codex_core::ModelClient,
+    mut history: Vec<ResponseItem>,
+    mut emit: Option<&mut dyn FnMut(AgentEvent)>,
+) -> Result<(Option<String>, Vec<ResponseItem>), Box<dyn Error>> {
+    for _ in 0..MAX_TOOL_ROUNDS {
+        let output = client.collect_turn(turn_request(history.clone())).await?;
+        let last_response_id = output.response_id.clone();
+        if !output.output_text.is_empty()
+            && let Some(emit) = emit.as_deref_mut()
+        {
+            emit(AgentEvent::AssistantText(output.output_text.clone()));
+        }
 
-fn message_item(message: &Message) -> Option<ResponseItem> {
-    match message.role {
-        Role::User => Some(user_item(message.text.clone())),
-        Role::Assistant if !message.text.is_empty() => Some(assistant_item(message.text.clone())),
-        Role::Assistant | Role::System => None,
+        let tool_calls = collect_tool_calls(&output.output_items);
+        history.extend(output.output_items);
+        if tool_calls.is_empty() {
+            return Ok((last_response_id, history));
+        }
+
+        for call in tool_calls {
+            if let Some(emit) = emit.as_deref_mut() {
+                emit(AgentEvent::ToolStarted(call.display_name()));
+            }
+            let output = execute_tool_call(&call).await;
+            if let Some(emit) = emit.as_deref_mut() {
+                emit(AgentEvent::ToolCompleted(tool_summary(&call, &output)));
+            }
+            history.push(tool_output_item(call, output));
+        }
     }
+    Err(format!("model exceeded {MAX_TOOL_ROUNDS} tool rounds").into())
 }
 
 fn user_item(text: String) -> ResponseItem {
@@ -437,13 +239,385 @@ fn user_item(text: String) -> ResponseItem {
     }
 }
 
-fn assistant_item(text: String) -> ResponseItem {
-    ResponseItem::Message {
-        id: None,
-        role: "assistant".to_string(),
-        content: vec![ContentItem::OutputText { text }],
-        phase: None,
+fn collect_tool_calls(items: &[ResponseItem]) -> Vec<ToolCall> {
+    items
+        .iter()
+        .filter_map(|item| match item {
+            ResponseItem::FunctionCall {
+                name,
+                arguments,
+                call_id,
+                ..
+            } => Some(ToolCall::Function {
+                name: name.clone(),
+                arguments: arguments.clone(),
+                call_id: call_id.clone(),
+            }),
+            ResponseItem::CustomToolCall {
+                name,
+                input,
+                call_id,
+                ..
+            } => Some(ToolCall::Custom {
+                name: name.clone(),
+                input: input.clone(),
+                call_id: call_id.clone(),
+            }),
+            ResponseItem::LocalShellCall {
+                call_id: Some(call_id),
+                status: LocalShellStatus::Completed | LocalShellStatus::InProgress,
+                action: LocalShellAction::Exec(action),
+                ..
+            } => Some(ToolCall::LocalShell {
+                command: action.command.clone(),
+                workdir: action.working_directory.clone(),
+                timeout_ms: action.timeout_ms,
+                call_id: call_id.clone(),
+            }),
+            _ => None,
+        })
+        .collect()
+}
+
+async fn execute_tool_call(call: &ToolCall) -> FunctionCallOutputPayload {
+    let result = match call {
+        ToolCall::Function {
+            name, arguments, ..
+        } if name == "shell_command" => execute_shell_command(arguments).await,
+        ToolCall::Function {
+            name, arguments, ..
+        } if name == "shell" || name == "container.exec" => execute_shell(arguments).await,
+        ToolCall::Function {
+            name, arguments, ..
+        } if name == "apply_patch" => execute_apply_patch_json(arguments).await,
+        ToolCall::Custom { name, input, .. } if name == "apply_patch" => {
+            execute_apply_patch(input).await
+        }
+        ToolCall::LocalShell {
+            command,
+            workdir,
+            timeout_ms,
+            ..
+        } => execute_process(command.clone(), workdir.clone(), *timeout_ms).await,
+        ToolCall::Function { name, .. } | ToolCall::Custom { name, .. } => {
+            Err(format!("unsupported tool call: {name}"))
+        }
+    };
+
+    let success = result.is_ok();
+    let mut payload = FunctionCallOutputPayload::from_text(match result {
+        Ok(text) => truncate_tool_output(text),
+        Err(error) => truncate_tool_output(format!("tool error: {error}")),
+    });
+    payload.success = Some(success);
+    payload
+}
+
+async fn execute_shell_command(arguments: &str) -> Result<String, String> {
+    let params = edgerun_json::from_str(arguments).map_err(|error| error.to_string())?;
+    let command = json_required_string(&params, "command")?.to_string();
+    let workdir = json_optional_string(&params, "workdir").map(ToString::to_string);
+    let timeout_ms =
+        json_optional_u64(&params, "timeout_ms").or_else(|| json_optional_u64(&params, "timeout"));
+    let login = json_optional_bool(&params, "login").unwrap_or(false);
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+    let shell_flag = if login { "-lc" } else { "-c" };
+    execute_process(vec![shell, shell_flag.to_string(), command], workdir, timeout_ms).await
+}
+
+async fn execute_shell(arguments: &str) -> Result<String, String> {
+    let params = edgerun_json::from_str(arguments).map_err(|error| error.to_string())?;
+    let command = json_required_string_array(&params, "command")?;
+    let workdir = json_optional_string(&params, "workdir").map(ToString::to_string);
+    let timeout_ms =
+        json_optional_u64(&params, "timeout_ms").or_else(|| json_optional_u64(&params, "timeout"));
+    execute_process(command, workdir, timeout_ms).await
+}
+
+async fn execute_process(
+    command: Vec<String>,
+    workdir: Option<String>,
+    timeout_ms: Option<u64>,
+) -> Result<String, String> {
+    if command.is_empty() {
+        return Err("command must not be empty".to_string());
     }
+
+    let mut cmd = Command::new(&command[0]);
+    cmd.args(&command[1..]);
+    if let Some(workdir) = workdir {
+        cmd.current_dir(workdir);
+    }
+    let timeout = Duration::from_millis(timeout_ms.unwrap_or(60_000));
+    let mut child = cmd
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|error| error.to_string())?;
+    let started = Instant::now();
+
+    loop {
+        if child
+            .try_wait()
+            .map_err(|error| error.to_string())?
+            .is_some()
+        {
+            break;
+        }
+        if started.elapsed() >= timeout {
+            let _ = child.kill();
+            let output = child
+                .wait_with_output()
+                .map_err(|error| error.to_string())?;
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!(
+                "command timed out after {}ms\nstdout:\n{}\nstderr:\n{}",
+                timeout.as_millis(),
+                stdout,
+                stderr
+            ));
+        }
+        thread::sleep(Duration::from_millis(25));
+    }
+
+    let output = child
+        .wait_with_output()
+        .map_err(|error| error.to_string())?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let text = format!(
+        "exit_code: {}\nstdout:\n{}\nstderr:\n{}",
+        output.status.code().unwrap_or(-1),
+        stdout,
+        stderr
+    );
+    if output.status.success() {
+        Ok(text)
+    } else {
+        Err(text)
+    }
+}
+
+async fn execute_apply_patch_json(arguments: &str) -> Result<String, String> {
+    let args = edgerun_json::from_str(arguments).map_err(|error| error.to_string())?;
+    let input = json_required_string(&args, "input")?;
+    execute_apply_patch(input).await
+}
+
+fn json_required_string<'a>(value: &'a Value, key: &str) -> Result<&'a str, String> {
+    value
+        .get(key)
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("{key} must be a string"))
+}
+
+fn json_optional_string<'a>(value: &'a Value, key: &str) -> Option<&'a str> {
+    value.get(key).and_then(Value::as_str)
+}
+
+fn json_optional_bool(value: &Value, key: &str) -> Option<bool> {
+    value.get(key).and_then(Value::as_bool)
+}
+
+fn json_optional_u64(value: &Value, key: &str) -> Option<u64> {
+    value.get(key).and_then(Value::as_u64)
+}
+
+fn json_required_string_array(value: &Value, key: &str) -> Result<Vec<String>, String> {
+    let array = value
+        .get(key)
+        .and_then(Value::as_array)
+        .ok_or_else(|| format!("{key} must be an array of strings"))?;
+    array
+        .iter()
+        .map(|item| {
+            item.as_str()
+                .map(ToString::to_string)
+                .ok_or_else(|| format!("{key} must be an array of strings"))
+        })
+        .collect()
+}
+
+async fn execute_apply_patch(input: &str) -> Result<String, String> {
+    let cwd = std::env::current_dir().map_err(|error| error.to_string())?;
+    let cwd =
+        apply_patch::AbsolutePathBuf::from_absolute_path(cwd).map_err(|error| error.to_string())?;
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+    match apply_patch::apply_patch(
+        input,
+        &cwd,
+        &mut stdout,
+        &mut stderr,
+        apply_patch::LOCAL_FS.as_ref(),
+        None,
+    )
+    .await
+    {
+        Ok(_) => Ok(format!(
+            "{}{}",
+            String::from_utf8_lossy(&stdout),
+            String::from_utf8_lossy(&stderr)
+        )),
+        Err(error) => {
+            let (error, _) = error.into_parts();
+            Err(format!(
+                "{}{}",
+                String::from_utf8_lossy(&stderr),
+                error
+            ))
+        }
+    }
+}
+
+fn tool_output_item(call: ToolCall, output: FunctionCallOutputPayload) -> ResponseItem {
+    match call {
+        ToolCall::Custom { call_id, name, .. } => ResponseItem::CustomToolCallOutput {
+            call_id,
+            name: Some(name),
+            output,
+        },
+        ToolCall::Function { call_id, .. } | ToolCall::LocalShell { call_id, .. } => {
+            ResponseItem::FunctionCallOutput { call_id, output }
+        }
+    }
+}
+
+fn tool_summary(call: &ToolCall, output: &FunctionCallOutputPayload) -> String {
+    let text = output.to_string();
+    let first_line = text.lines().next().unwrap_or("");
+    format!("{} -> {}", call.display_name(), first_line)
+}
+
+fn truncate_tool_output(mut text: String) -> String {
+    if text.len() <= MAX_TOOL_OUTPUT_BYTES {
+        return text;
+    }
+    text.truncate(MAX_TOOL_OUTPUT_BYTES);
+    text.push_str("\n[output truncated]");
+    text
+}
+
+fn native_agent_tools() -> Vec<ToolSpec> {
+    vec![
+        shell_command_tool(),
+        shell_tool(),
+        apply_patch_freeform_tool(),
+        apply_patch_json_tool(),
+    ]
+}
+
+fn shell_command_tool() -> ToolSpec {
+    let properties = BTreeMap::from([
+        (
+            "command".to_string(),
+            JsonSchema::string(Some(
+                "The shell script to execute in the user's default shell".to_string(),
+            )),
+        ),
+        (
+            "workdir".to_string(),
+            JsonSchema::string(Some(
+                "The working directory to execute the command in".to_string(),
+            )),
+        ),
+        (
+            "timeout_ms".to_string(),
+            JsonSchema::number(Some(
+                "The timeout for the command in milliseconds".to_string(),
+            )),
+        ),
+        (
+            "login".to_string(),
+            JsonSchema::boolean(Some(
+                "Whether to run the shell with login shell semantics".to_string(),
+            )),
+        ),
+    ]);
+    ToolSpec::Function(ResponsesApiTool {
+        name: "shell_command".to_string(),
+        description: "Runs a shell command and returns exit code, stdout, and stderr. Always set workdir.".to_string(),
+        strict: false,
+        defer_loading: None,
+        parameters: JsonSchema::object(
+            properties,
+            Some(vec!["command".to_string()]),
+            Some(AdditionalProperties::Boolean(false)),
+        ),
+        output_schema: None,
+    })
+}
+
+fn shell_tool() -> ToolSpec {
+    let properties = BTreeMap::from([
+        (
+            "command".to_string(),
+            JsonSchema::array(
+                JsonSchema::string(Some("Command argument".to_string())),
+                Some("Program and arguments to execute".to_string()),
+            ),
+        ),
+        (
+            "workdir".to_string(),
+            JsonSchema::string(Some(
+                "The working directory to execute the command in".to_string(),
+            )),
+        ),
+        (
+            "timeout_ms".to_string(),
+            JsonSchema::number(Some(
+                "The timeout for the command in milliseconds".to_string(),
+            )),
+        ),
+    ]);
+    ToolSpec::Function(ResponsesApiTool {
+        name: "shell".to_string(),
+        description: "Runs a process directly. Most terminal commands should be [\"bash\", \"-lc\", \"...\"] and include workdir.".to_string(),
+        strict: false,
+        defer_loading: None,
+        parameters: JsonSchema::object(
+            properties,
+            Some(vec!["command".to_string()]),
+            Some(AdditionalProperties::Boolean(false)),
+        ),
+        output_schema: None,
+    })
+}
+
+fn apply_patch_freeform_tool() -> ToolSpec {
+    ToolSpec::Freeform(FreeformTool {
+        name: "apply_patch".to_string(),
+        description:
+            "Use the apply_patch tool to edit files. This is a freeform tool; do not wrap the patch in JSON."
+                .to_string(),
+        format: FreeformToolFormat {
+            r#type: "grammar".to_string(),
+            syntax: "lark".to_string(),
+            definition: APPLY_PATCH_LARK_GRAMMAR.to_string(),
+        },
+    })
+}
+
+fn apply_patch_json_tool() -> ToolSpec {
+    let properties = BTreeMap::from([(
+        "input".to_string(),
+        JsonSchema::string(Some(
+            "The entire contents of the apply_patch command".to_string(),
+        )),
+    )]);
+    ToolSpec::Function(ResponsesApiTool {
+        name: "apply_patch".to_string(),
+        description: "Use apply_patch to edit files. Pass the complete patch as input.".to_string(),
+        strict: false,
+        defer_loading: None,
+        parameters: JsonSchema::object(
+            properties,
+            Some(vec!["input".to_string()]),
+            Some(AdditionalProperties::Boolean(false)),
+        ),
+        output_schema: None,
+    })
 }
 
 fn provider() -> Provider {
@@ -477,7 +651,7 @@ fn codex_home() -> PathBuf {
 
 fn read_chatgpt_auth() -> Result<Arc<ChatGptAuth>, Box<dyn Error>> {
     let auth_path = codex_home().join("auth.json");
-    let auth: Value = edgerun_json::serde_json::from_slice(&std::fs::read(&auth_path)?)?;
+    let auth = edgerun_json::from_slice(&std::fs::read(&auth_path)?)?;
     let access_token = auth
         .get("tokens")
         .and_then(|tokens| tokens.get("access_token"))

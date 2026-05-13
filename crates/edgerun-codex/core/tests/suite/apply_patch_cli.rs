@@ -38,7 +38,7 @@ use core_test_support::test_codex::TestCodexHarness;
 use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
 use core_test_support::wait_for_event_with_timeout;
-use edgerun_json::serde_json::json;
+use edgerun_json::json;
 use test_case::test_case;
 use wiremock::Mock;
 use wiremock::Respond;
@@ -839,23 +839,23 @@ async fn apply_patch_cli_can_use_shell_command_output_as_patch_input() -> Result
             .to_string()
     }
 
-    fn function_call_output_text(body: &edgerun_json::serde_json::Value, call_id: &str) -> String {
+    fn function_call_output_text(body: &edgerun_json::Value, call_id: &str) -> String {
         body.get("input")
-            .and_then(edgerun_json::serde_json::Value::as_array)
+            .and_then(edgerun_json::Value::as_array)
             .and_then(|items| {
                 items.iter().find(|item| {
                     item.get("type")
-                        .and_then(edgerun_json::serde_json::Value::as_str)
+                        .and_then(edgerun_json::Value::as_str)
                         == Some("function_call_output")
                         && item
                             .get("call_id")
-                            .and_then(edgerun_json::serde_json::Value::as_str)
+                            .and_then(edgerun_json::Value::as_str)
                             == Some(call_id)
                 })
             })
             .and_then(|item| {
                 item.get("output")
-                    .and_then(edgerun_json::serde_json::Value::as_str)
+                    .and_then(edgerun_json::Value::as_str)
             })
             .expect("function_call_output output string")
             .to_string()
@@ -903,7 +903,7 @@ async fn apply_patch_cli_can_use_shell_command_output_as_patch_input() -> Result
                         .set_body_string(body)
                 }
                 1 => {
-                    let body_json: edgerun_json::serde_json::Value =
+                    let body_json: edgerun_json::Value =
                         request.body_json().expect("request body should be json");
                     let read_output = function_call_output_text(&body_json, &self.read_call_id);
                     let stdout = stdout_from_shell_output(&read_output);
@@ -1085,7 +1085,7 @@ async fn apply_patch_shell_command_heredoc_with_cd_emits_turn_diff() -> Result<(
             ev_function_call(
                 call_id,
                 "shell_command",
-                &edgerun_json::serde_json::to_string(&args)?,
+                &edgerun_json::to_string(&args)?,
             ),
             ev_completed("resp-1"),
         ]),
@@ -1229,7 +1229,7 @@ async fn apply_patch_shell_command_failure_propagates_error_and_skips_diff() -> 
             ev_function_call(
                 call_id,
                 "shell_command",
-                &edgerun_json::serde_json::to_string(&args)?,
+                &edgerun_json::to_string(&args)?,
             ),
             ev_completed("resp-1"),
         ]),
