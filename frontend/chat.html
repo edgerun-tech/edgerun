@@ -388,9 +388,25 @@
           <label for="relayUrl">WebSocket URL</label>
           <input id="relayUrl" value="ws://127.0.0.1:7999/work">
         </div>
+        <div class="field">
+          <label for="relayNode">Relay node id</label>
+          <input id="relayNode">
+        </div>
+        <div class="field">
+          <label for="channelId">Channel id</label>
+          <input id="channelId">
+        </div>
+        <div class="field">
+          <label for="routeHash">Route hash</label>
+          <input id="routeHash">
+        </div>
         <div class="row">
           <button id="connectBtn">Connect</button>
           <button id="disconnectBtn" disabled>Disconnect</button>
+        </div>
+        <div class="row">
+          <button id="saveRouteBtn">Save route</button>
+          <button id="newChannelBtn">New channel</button>
         </div>
       </section>
 
@@ -454,9 +470,8 @@
     const DB_NAME = "edgerun-chat-v1";
     const DB_VERSION = 2;
     const ZERO_HASH = "0".repeat(64);
-    const RELAY_NODE = ZERO_HASH;
-    const CHANNEL_ID = "03".repeat(32);
-    const ROUTE_HASH = "04".repeat(32);
+    const DEFAULT_CHANNEL_ID = "03".repeat(32);
+    const DEFAULT_ROUTE_HASH = "04".repeat(32);
     const SEALED_RECORD_HEADER_LEN = 292;
     const stores = ["contacts", "threads", "messages", "payloads", "settings", "outbox", "inbox"];
     const enc = new TextEncoder();
@@ -470,7 +485,12 @@
       ws: null,
       connected: false,
       wasm: null,
-      ownerPublicKey: ""
+      ownerPublicKey: "",
+      route: {
+        relayNode: ZERO_HASH,
+        channelId: DEFAULT_CHANNEL_ID,
+        routeHash: DEFAULT_ROUTE_HASH
+      }
     };
 
     const $ = id => document.getElementById(id);
@@ -563,6 +583,52 @@
 
     async function setSetting(key, value) {
       await put("settings", { key, value });
+    }
+
+    async function loadRouteSettings() {
+      state.route = {
+        relayNode: await getSetting("relay_node_id") || ZERO_HASH,
+        channelId: await getSetting("channel_id") || DEFAULT_CHANNEL_ID,
+        routeHash: await getSetting("route_hash") || DEFAULT_ROUTE_HASH
+      };
+      $("relayUrl").value = await getSetting("relay_url") || $("relayUrl").value;
+      $("relayNode").value = state.route.relayNode;
+      $("channelId").value = state.route.channelId;
+      $("routeHash").value = state.route.routeHash;
+    }
+
+    async function saveRouteSettings() {
+      const route = readRouteInputs();
+      state.route = route;
+      await setSetting("relay_url", $("relayUrl").value.trim());
+      await setSetting("relay_node_id", route.relayNode);
+      await setSetting("channel_id", route.channelId);
+      await setSetting("route_hash", route.routeHash);
+      $("relayState").textContent = "route saved";
+    }
+
+    function readRouteInputs() {
+      const route = {
+        relayNode: $("relayNode").value.trim() || ZERO_HASH,
+        channelId: $("channelId").value.trim() || DEFAULT_CHANNEL_ID,
+        routeHash: $("routeHash").value.trim() || DEFAULT_ROUTE_HASH
+      };
+      if (!isHashHex(route.relayNode)) throw new Error("relay node id must be 32-byte hex");
+      if (!isHashHex(route.channelId)) throw new Error("channel id must be 32-byte hex");
+      if (!isHashHex(route.routeHash)) throw new Error("route hash must be 32-byte hex");
+      return route;
+    }
+
+    async function newChannel() {
+      if (!state.wasm) return;
+      const seed = concatBytes([
+        enc.encode("edgerun-chat-channel"),
+        hexToBytes(state.owner || ZERO_HASH),
+        enc.encode(String(Date.now())),
+        crypto.getRandomValues(new Uint8Array(32))
+      ]);
+      $("channelId").value = wasmHashHex(seed);
+      await saveRouteSettings();
     }
 
     async function loadChatWasm() {
@@ -880,7 +946,13 @@
       const sequence = thread.message_count + 1;
       const plaintext = enc.encode(text.trim());
       const createdUnixMs = Date.now();
-      const sealed = await wireEncodeEnvelope(contact, thread, sequence, createdUnixMs, plaintext);
+      let sealed;
+      try {
+        sealed = await wireEncodeEnvelope(contact, thread, sequence, createdUnixMs, plaintext);
+      } catch (error) {
+        $("threadMeta").textContent = error.message;
+        return;
+      }
       const frame = sealed.frame;
       const frameHash = sealed.frameHash;
       await put("payloads", { hash: frameHash, frame: Array.from(frame), created_unix_ms: Date.now() });
@@ -978,12 +1050,14 @@
     async function wireEncodeEnvelope(contact, thread, sequence, createdUnixMs, plaintext) {
       if (!state.wasm) throw new Error("chat wasm unavailable");
       if (!contact?.public_key) throw new Error("recipient public key missing");
+      const route = readRouteInputs();
+      state.route = route;
       const record = callChatWasm("edgerun_chat_seal_envelope", concatBytes([
         hexToBytes(contact.primary_node_id),
         hexToBytes(contact.public_key),
-        hexToBytes(RELAY_NODE),
-        hexToBytes(CHANNEL_ID),
-        hexToBytes(ROUTE_HASH),
+        hexToBytes(route.relayNode),
+        hexToBytes(route.channelId),
+        hexToBytes(route.routeHash),
         hexToBytes(thread.head_message_hash || ZERO_HASH),
         u64be(sequence),
         u64be(createdUnixMs),
@@ -1096,13 +1170,19 @@
       $("disconnectBtn").disabled = kind !== "on";
     }
 
-    function connectRelay() {
+    async function connectRelay() {
       if (!state.wasm) {
         setRelayState("bad", "WASM required");
         return;
       }
       const url = $("relayUrl").value.trim();
       if (!url) return;
+      try {
+        await saveRouteSettings();
+      } catch (error) {
+        setRelayState("bad", error.message);
+        return;
+      }
       const ws = new WebSocket(url, "edgerun-work-v1");
       ws.binaryType = "arraybuffer";
       ws.onopen = async () => {
@@ -1145,6 +1225,8 @@
     $("importCardBtn").onclick = importContactCard;
     $("connectBtn").onclick = connectRelay;
     $("disconnectBtn").onclick = disconnectRelay;
+    $("saveRouteBtn").onclick = saveRouteSettings;
+    $("newChannelBtn").onclick = newChannel;
     $("searchInput").oninput = renderContacts;
     $("composer").onsubmit = async event => {
       event.preventDefault();
@@ -1156,6 +1238,7 @@
 
     (async function init() {
       await openDb();
+      await loadRouteSettings();
       const wasmReady = await loadChatWasm();
       await ensureIdentity();
       await refreshContacts();
@@ -1167,6 +1250,8 @@
         $("refreshCardBtn").disabled = true;
         $("copyCardBtn").disabled = true;
         $("connectBtn").disabled = true;
+        $("saveRouteBtn").disabled = true;
+        $("newChannelBtn").disabled = true;
         return;
       }
       if (!state.contacts.length) await createContact("New contact");
