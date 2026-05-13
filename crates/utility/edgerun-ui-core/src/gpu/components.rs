@@ -291,6 +291,71 @@ impl<'a> MenuItem<'a> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+pub enum ControlAccessory<'a> {
+    None,
+    Value(&'a str),
+    Badge(&'a str, Color4),
+    Toggle {
+        on: bool,
+        id: u32,
+    },
+    Button {
+        label: &'a str,
+        id: u32,
+        style: ButtonStyle,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ControlRow<'a> {
+    pub label: &'a str,
+    pub detail: &'a str,
+    pub accessory: ControlAccessory<'a>,
+    pub id: Option<u32>,
+}
+
+impl<'a> ControlRow<'a> {
+    pub const fn new(label: &'a str) -> Self {
+        Self {
+            label,
+            detail: "",
+            accessory: ControlAccessory::None,
+            id: None,
+        }
+    }
+
+    pub const fn detail(mut self, detail: &'a str) -> Self {
+        self.detail = detail;
+        self
+    }
+
+    pub const fn id(mut self, id: u32) -> Self {
+        self.id = Some(id);
+        self
+    }
+
+    pub const fn value(mut self, value: &'a str) -> Self {
+        self.accessory = ControlAccessory::Value(value);
+        self
+    }
+
+    pub const fn badge(mut self, label: &'a str, color: Color4) -> Self {
+        self.accessory = ControlAccessory::Badge(label, color);
+        self
+    }
+
+    pub const fn toggle(mut self, on: bool, id: u32) -> Self {
+        self.accessory = ControlAccessory::Toggle { on, id };
+        self
+    }
+
+    pub const fn button(mut self, label: &'a str, id: u32, style: ButtonStyle) -> Self {
+        self.accessory = ControlAccessory::Button { label, id, style };
+        self
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct UiGrid {
     pub rect: UiRect,
     pub columns: u16,
@@ -677,6 +742,75 @@ pub fn menu_item(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: MenuItem<'_>) {
     }
 }
 
+pub fn control_row(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: ControlRow<'_>) {
+    if let Some(id) = spec.id {
+        ui.hit(HitKind::ListRow, id, rect.x, rect.y, rect.w, rect.h);
+    }
+    ui.fill_rect(rect, 0.0, palette::PANEL);
+    ui.divider(rect.x, rect.y + rect.h - 1.0, rect.w, Axis::Horizontal);
+
+    let accessory_w = match spec.accessory {
+        ControlAccessory::None => 0.0,
+        ControlAccessory::Value(value) => {
+            (value.chars().count() as f32 * 8.0 + 8.0).clamp(48.0, 150.0)
+        }
+        ControlAccessory::Badge(label, _) => {
+            (label.chars().count() as f32 * 9.0 + 18.0).clamp(34.0, 96.0)
+        }
+        ControlAccessory::Toggle { .. } => 54.0,
+        ControlAccessory::Button { label, .. } => {
+            (label.chars().count() as f32 * 9.0 + 26.0).clamp(72.0, 136.0)
+        }
+    };
+    let text_w = (rect.w - accessory_w - 38.0).max(0.0);
+    ui.bounded_label(
+        rect.x + 14.0,
+        rect.y + 10.0,
+        text_w,
+        spec.label,
+        2.0,
+        palette::TEXT,
+    );
+    if !spec.detail.is_empty() {
+        ui.bounded_label(
+            rect.x + 14.0,
+            rect.y + 31.0,
+            text_w,
+            spec.detail,
+            2.0,
+            palette::MUTED,
+        );
+    }
+
+    let right = rect.x + rect.w - 14.0;
+    match spec.accessory {
+        ControlAccessory::None => {}
+        ControlAccessory::Value(value) => ui.bounded_label(
+            right - accessory_w,
+            rect.y + 21.0,
+            accessory_w,
+            value,
+            2.0,
+            palette::MUTED,
+        ),
+        ControlAccessory::Badge(label, color) => {
+            ui.badge(right - accessory_w, rect.y + 18.0, label, color);
+        }
+        ControlAccessory::Toggle { on, id } => {
+            ui.toggle(right - 46.0, rect.y + (rect.h - 24.0) * 0.5, on, id);
+        }
+        ControlAccessory::Button { label, id, style } => {
+            ui.button(
+                UiRect::new(right - accessory_w, rect.y + 13.0, accessory_w, 32.0),
+                label,
+                style,
+                id,
+                true,
+            );
+        }
+    }
+}
+
 fn action_reserved_width(rect: UiRect, action: Option<(&str, u32)>) -> f32 {
     if action.is_some() {
         (rect.w - 156.0).max(0.0)
@@ -761,6 +895,14 @@ mod tests {
                     .badge("new")
                     .selected(true),
             );
+            control_row(
+                &mut ui,
+                UiRect::new(620.0, 92.0, 300.0, 58.0),
+                ControlRow::new("Admission policy")
+                    .detail("personal relay budget")
+                    .toggle(true, 10)
+                    .id(11),
+            );
         }
 
         assert!(scene.rects().len() > 20);
@@ -780,5 +922,13 @@ mod tests {
             .hits()
             .iter()
             .any(|hit| hit.kind == HitKind::MenuItem && hit.id == 9));
+        assert!(scene
+            .hits()
+            .iter()
+            .any(|hit| hit.kind == HitKind::Toggle && hit.id == 10));
+        assert!(scene
+            .hits()
+            .iter()
+            .any(|hit| hit.kind == HitKind::ListRow && hit.id == 11));
     }
 }

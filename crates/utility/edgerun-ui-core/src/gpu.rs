@@ -13,9 +13,9 @@ use std::collections::HashMap;
 pub mod components;
 pub mod style;
 pub use components::{
-    bar_chart, field, menu_item, metric_card, panel_header, slider, text_area, transaction_row,
-    BarChart, Field, MenuItem, MetricCard, PanelHeader, Slider, TextArea, TransactionRow, UiGrid,
-    UiStack,
+    bar_chart, control_row, field, menu_item, metric_card, panel_header, slider, text_area,
+    transaction_row, BarChart, ControlAccessory, ControlRow, Field, MenuItem, MetricCard,
+    PanelHeader, Slider, TextArea, TransactionRow, UiGrid, UiStack,
 };
 pub use style::{AlignItems, Axis, JustifyContent, UiStyle};
 
@@ -551,6 +551,25 @@ pub enum ButtonStyle {
 }
 
 #[derive(Clone, Debug)]
+pub enum UiControlAccessory {
+    None,
+    Value(String),
+    Badge {
+        label: String,
+        color: Color4,
+    },
+    Toggle {
+        on: bool,
+        id: u32,
+    },
+    Button {
+        label: String,
+        id: u32,
+        style: ButtonStyle,
+    },
+}
+
+#[derive(Clone, Debug)]
 pub enum UiNodeKind {
     Row,
     Column,
@@ -656,6 +675,12 @@ pub enum UiNodeKind {
         detail: String,
         accent: Color4,
         id: u32,
+    },
+    ControlRow {
+        label: String,
+        detail: String,
+        accessory: UiControlAccessory,
+        id: Option<u32>,
     },
     Divider,
     Spacer,
@@ -967,6 +992,19 @@ impl UiNode {
         }
     }
 
+    pub fn control_row(label: &str) -> Self {
+        Self {
+            kind: UiNodeKind::ControlRow {
+                label: label.to_string(),
+                detail: String::new(),
+                accessory: UiControlAccessory::None,
+                id: None,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
     pub fn divider(classes: &str) -> Self {
         Self {
             kind: UiNodeKind::Divider,
@@ -1057,7 +1095,9 @@ impl UiNode {
             UiNodeKind::MetricCard { detail, .. } | UiNodeKind::MenuItem { detail, .. } => {
                 *detail = value.to_string()
             }
-            UiNodeKind::ListRow { detail, .. } => *detail = value.to_string(),
+            UiNodeKind::ListRow { detail, .. } | UiNodeKind::ControlRow { detail, .. } => {
+                *detail = value.to_string()
+            }
             UiNodeKind::Field { helper, .. } => *helper = value.to_string(),
             UiNodeKind::TextArea { value: text, .. } => *text = value.to_string(),
             UiNodeKind::TransactionRow { subtitle, .. }
@@ -1080,14 +1120,29 @@ impl UiNode {
             UiNodeKind::Field { id: field_id, .. } | UiNodeKind::TextArea { id: field_id, .. } => {
                 *field_id = Some(id)
             }
+            UiNodeKind::ControlRow { id: row_id, .. } => *row_id = Some(id),
             _ => {}
         }
         self
     }
 
     pub fn badge_text(mut self, value: &str) -> Self {
-        if let UiNodeKind::MenuItem { badge, .. } = &mut self.kind {
-            *badge = value.to_string();
+        match &mut self.kind {
+            UiNodeKind::MenuItem { badge, .. } => *badge = value.to_string(),
+            UiNodeKind::ControlRow { accessory, .. } => {
+                *accessory = UiControlAccessory::Badge {
+                    label: value.to_string(),
+                    color: palette::ACCENT,
+                }
+            }
+            _ => {}
+        }
+        self
+    }
+
+    pub fn value_text(mut self, value: &str) -> Self {
+        if let UiNodeKind::ControlRow { accessory, .. } = &mut self.kind {
+            *accessory = UiControlAccessory::Value(value.to_string());
         }
         self
     }
@@ -1113,6 +1168,14 @@ impl UiNode {
             UiNodeKind::ListRow {
                 accent: row_accent, ..
             } => *row_accent = color,
+            UiNodeKind::ControlRow { accessory, .. } => {
+                if let UiControlAccessory::Badge {
+                    color: badge_color, ..
+                } = accessory
+                {
+                    *badge_color = color;
+                }
+            }
             UiNodeKind::Avatar {
                 color: avatar_color,
                 ..
@@ -1203,6 +1266,31 @@ impl UiNode {
     pub fn on(mut self, on: bool) -> Self {
         if let UiNodeKind::Toggle { on: node_on, .. } = &mut self.kind {
             *node_on = on;
+        } else if let UiNodeKind::ControlRow { accessory, .. } = &mut self.kind {
+            if let UiControlAccessory::Toggle {
+                on: accessory_on, ..
+            } = accessory
+            {
+                *accessory_on = on;
+            }
+        }
+        self
+    }
+
+    pub fn control_toggle(mut self, on: bool, id: u32) -> Self {
+        if let UiNodeKind::ControlRow { accessory, .. } = &mut self.kind {
+            *accessory = UiControlAccessory::Toggle { on, id };
+        }
+        self
+    }
+
+    pub fn control_button(mut self, label: &str, id: u32, style: ButtonStyle) -> Self {
+        if let UiNodeKind::ControlRow { accessory, .. } = &mut self.kind {
+            *accessory = UiControlAccessory::Button {
+                label: label.to_string(),
+                id,
+                style,
+            };
         }
         self
     }
@@ -1445,6 +1533,42 @@ impl UiNode {
             } => {
                 ui.list_row(rect, title, detail, *accent, *id);
             }
+            UiNodeKind::ControlRow {
+                label,
+                detail,
+                accessory,
+                id,
+            } => {
+                let accessory = match accessory {
+                    UiControlAccessory::None => self::components::ControlAccessory::None,
+                    UiControlAccessory::Value(value) => {
+                        self::components::ControlAccessory::Value(value)
+                    }
+                    UiControlAccessory::Badge { label, color } => {
+                        self::components::ControlAccessory::Badge(label, *color)
+                    }
+                    UiControlAccessory::Toggle { on, id } => {
+                        self::components::ControlAccessory::Toggle { on: *on, id: *id }
+                    }
+                    UiControlAccessory::Button { label, id, style } => {
+                        self::components::ControlAccessory::Button {
+                            label,
+                            id: *id,
+                            style: *style,
+                        }
+                    }
+                };
+                self::components::control_row(
+                    ui,
+                    rect,
+                    self::components::ControlRow {
+                        label,
+                        detail,
+                        accessory,
+                        id: *id,
+                    },
+                );
+            }
             UiNodeKind::Divider => {
                 let axis = if rect.w >= rect.h {
                     Axis::Horizontal
@@ -1605,6 +1729,10 @@ pub fn menu_item_node(label: &str, id: u32) -> UiNode {
 
 pub fn list_row_node(title: &str, detail: &str, id: u32) -> UiNode {
     UiNode::list_row(title, detail, id)
+}
+
+pub fn control_row_node(label: &str) -> UiNode {
+    UiNode::control_row(label)
 }
 
 pub fn divider(classes: &str) -> UiNode {
@@ -3173,6 +3301,7 @@ fn intrinsic_width(child: &UiNode) -> f32 {
         UiNodeKind::TransactionRow { .. } => 320.0,
         UiNodeKind::MenuItem { .. } => 220.0,
         UiNodeKind::ListRow { .. } => 220.0,
+        UiNodeKind::ControlRow { .. } => 260.0,
         UiNodeKind::Divider => 1.0,
         UiNodeKind::Spacer => child.style.width.unwrap_or(12.0),
         UiNodeKind::ScrollArea { .. } => child.style.width.unwrap_or(240.0),
@@ -3199,6 +3328,7 @@ fn intrinsic_height(child: &UiNode) -> f32 {
         UiNodeKind::TransactionRow { .. } => 58.0,
         UiNodeKind::MenuItem { .. } => 58.0,
         UiNodeKind::ListRow { .. } => 58.0,
+        UiNodeKind::ControlRow { .. } => 58.0,
         UiNodeKind::Divider => 1.0,
         UiNodeKind::Spacer => child.style.height.unwrap_or(12.0),
         UiNodeKind::ScrollArea { .. } => child.style.height.unwrap_or(180.0),
@@ -3231,6 +3361,10 @@ mod tests {
                         .focused(true),
                     list_row_node("Admission route", "policy-bound relay", 83)
                         .accent(palette::GREEN),
+                    control_row_node("Relay enabled")
+                        .detail("use admitted identity route")
+                        .control_toggle(true, 84)
+                        .hit_id(85),
                     menu_item_node("Payments", 42)
                         .detail("proof-backed receipts")
                         .badge_text("new")
@@ -3249,6 +3383,14 @@ mod tests {
             .hits()
             .iter()
             .any(|hit| hit.kind == HitKind::ListRow && hit.id == 83));
+        assert!(scene
+            .hits()
+            .iter()
+            .any(|hit| hit.kind == HitKind::Toggle && hit.id == 84));
+        assert!(scene
+            .hits()
+            .iter()
+            .any(|hit| hit.kind == HitKind::ListRow && hit.id == 85));
     }
 
     #[test]
