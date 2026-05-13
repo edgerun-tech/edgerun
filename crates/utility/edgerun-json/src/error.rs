@@ -157,20 +157,6 @@ impl fmt::Display for JsonParseError {
 impl core::error::Error for JsonError {}
 impl core::error::Error for JsonParseError {}
 
-#[cfg(feature = "std")]
-impl From<JsonError> for edgerun_error::Error {
-    fn from(value: JsonError) -> Self {
-        edgerun_error::Error::from_boxed(Box::new(value))
-    }
-}
-
-#[cfg(feature = "std")]
-impl From<JsonParseError> for edgerun_error::Error {
-    fn from(value: JsonParseError) -> Self {
-        edgerun_error::Error::from_boxed(Box::new(value))
-    }
-}
-
 impl From<JsonParseError> for JsonError {
     fn from(error: JsonParseError) -> Self {
         Self::Message(error.to_string())
