@@ -102,12 +102,12 @@ impl PreimageBuilder {
 }
 
 pub struct HashBuilder {
-    hasher: blake3::Hasher,
+    hasher: crate::blake3::Hasher,
 }
 
 impl HashBuilder {
     pub fn domain(domain: &[u8]) -> Self {
-        let mut hasher = blake3::Hasher::new();
+        let mut hasher = crate::blake3::Hasher::new();
         hasher.update(domain);
         hasher.update(&[0]);
         Self { hasher }

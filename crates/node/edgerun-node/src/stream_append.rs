@@ -1,6 +1,6 @@
 //! Node helpers for appending signed stream events.
 //!
-//! These helpers load the prior durable head, ask `edgerun-stream` to build the
+//! These helpers load the prior durable head, ask `edgerun-storage::stream` to build the
 //! next signed event, then append that exact envelope to storage.
 
 use alloc::format;
@@ -28,7 +28,7 @@ pub fn append_command_stream_event(
         store,
         stream_id,
         signer,
-        edgerun_stream::EventDraft {
+        edgerun_storage::EventDraft {
             event_type: event_type as i32,
             event_version,
             recorded_at: Some(edgerun_protocols::core_protocol::util::now_protocol_timestamp()),
@@ -51,7 +51,7 @@ pub fn append_signed_stream_event_blocking(
     store: &NodeStore,
     stream_id: &[u8],
     signer: &dyn MeshSigner,
-    draft: edgerun_stream::EventDraft,
+    draft: edgerun_storage::EventDraft,
 ) -> Result<edgerun_protocols::core_protocol::protocol::EventEnvelope, String> {
     append_signed_stream_event_blocking_with_protocol_signer(
         store,
@@ -65,11 +65,11 @@ pub fn append_signed_stream_event_blocking_with_protocol_signer(
     store: &NodeStore,
     stream_id: &[u8],
     signer: &(impl ProtocolSigner + ?Sized),
-    draft: edgerun_stream::EventDraft,
+    draft: edgerun_storage::EventDraft,
 ) -> Result<edgerun_protocols::core_protocol::protocol::EventEnvelope, String> {
     let previous = load_stream_head_event(store, stream_id)?;
     let stream_id = stream_id_array(stream_id)?;
-    let event = edgerun_stream::build_signed_event(&stream_id, previous.as_ref(), draft, signer)
+    let event = edgerun_storage::build_signed_event(&stream_id, previous.as_ref(), draft, signer)
         .map_err(|e| format!("stream_event_build_failed: {e}"))?;
     store
         .append_event_blocking(event.clone())
@@ -81,7 +81,7 @@ pub async fn append_signed_stream_event(
     store: &NodeStore,
     stream_id: &[u8],
     signer: &dyn MeshSigner,
-    draft: edgerun_stream::EventDraft,
+    draft: edgerun_storage::EventDraft,
 ) -> Result<edgerun_protocols::core_protocol::protocol::EventEnvelope, String> {
     append_signed_stream_event_with_protocol_signer(
         store,
@@ -96,11 +96,11 @@ pub async fn append_signed_stream_event_with_protocol_signer(
     store: &NodeStore,
     stream_id: &[u8],
     signer: &(impl ProtocolSigner + ?Sized),
-    draft: edgerun_stream::EventDraft,
+    draft: edgerun_storage::EventDraft,
 ) -> Result<edgerun_protocols::core_protocol::protocol::EventEnvelope, String> {
     let previous = load_stream_head_event(store, stream_id)?;
     let stream_id = stream_id_array(stream_id)?;
-    let event = edgerun_stream::build_signed_event(&stream_id, previous.as_ref(), draft, signer)
+    let event = edgerun_storage::build_signed_event(&stream_id, previous.as_ref(), draft, signer)
         .map_err(|e| format!("stream_event_build_failed: {e}"))?;
     store
         .append_event(event.clone())
@@ -129,15 +129,15 @@ fn load_stream_head_event(
         .map(Some)
 }
 
-fn stream_id_array(stream_id: &[u8]) -> Result<edgerun_stream::StreamId, String> {
-    if stream_id.len() != core::mem::size_of::<edgerun_stream::StreamId>() {
+fn stream_id_array(stream_id: &[u8]) -> Result<edgerun_storage::StreamId, String> {
+    if stream_id.len() != core::mem::size_of::<edgerun_storage::StreamId>() {
         return Err(format!(
             "stream_id_invalid_len: expected={}, actual={}",
-            core::mem::size_of::<edgerun_stream::StreamId>(),
+            core::mem::size_of::<edgerun_storage::StreamId>(),
             stream_id.len()
         ));
     }
-    let mut out = [0u8; core::mem::size_of::<edgerun_stream::StreamId>()];
+    let mut out = [0u8; core::mem::size_of::<edgerun_storage::StreamId>()];
     out.copy_from_slice(stream_id);
     Ok(out)
 }

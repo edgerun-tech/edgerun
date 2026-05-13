@@ -14,15 +14,25 @@ rust-version.workspace = true
 
 [features]
 default = []
-std = []
+std = ["dep:edgerun-error"]
 yaml = []
 toml = []
 derive = ["dep:edgerun-json-derive"]
-serde-compat = ["dep:serde_json"]
+serde = ["dep:serde"]
+schemars = ["dep:schemars"]
+ts-rs = ["dep:ts_rs"]
 
 [dependencies]
+edgerun-error = { version = "0.1", path = "../edgerun-error", optional = true, default-features = false, features = ["std"] }
 edgerun-json-derive = { version = "0.1", path = "../edgerun-json-derive", optional = true }
-serde_json = { version = "1", optional = true }
+serde = { package = "edgerun-serde", version = "0.1", path = "../edgerun-serde", optional = true, default-features = false, features = ["alloc"] }
+schemars = { package = "edgerun-schemars", version = "0.1", path = "../edgerun-schemars", optional = true }
+ts_rs = { package = "edgerun-ts-rs", version = "0.1", path = "../edgerun-ts-rs", optional = true }
+
+[[test]]
+name = "derive"
+path = "tests/derive.rs"
+required-features = ["derive"]
 
 [lints]
 workspace = true

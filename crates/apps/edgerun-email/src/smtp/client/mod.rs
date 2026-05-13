@@ -17,7 +17,7 @@ use crate::rt::{
 };
 
 use crate::server::read_line;
-use crate::smtp::types::{parse_response_line, parse_response_lines, SmtpResponse};
+use crate::smtp::types::{SmtpResponse, parse_response_line, parse_response_lines};
 use edgerun_protocols::smtp::dot_stuffed_data;
 
 #[cfg(feature = "tls")]

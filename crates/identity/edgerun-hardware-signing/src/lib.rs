@@ -25,6 +25,9 @@ use edgerun_protocols::sign::{ProtocolSignError, ProtocolSigner, SignableProtoco
 pub mod tpm;
 
 #[cfg(feature = "android-keystore")]
+pub mod android_keystore_provider;
+
+#[cfg(feature = "android-keystore")]
 pub mod android_keystore;
 
 #[cfg(all(feature = "yubikey", target_os = "linux"))]
@@ -36,6 +39,13 @@ pub use tpm::{TpmHardwareKeyAdapter, sign_record_with_tpm_provider};
 #[cfg(feature = "android-keystore")]
 pub use android_keystore::{
     AndroidKeystoreHardwareKeyAdapter, sign_record_with_android_keystore_provider,
+};
+
+#[cfg(feature = "android-keystore")]
+pub use android_keystore_provider::{
+    AndroidKeystoreAssuranceLevel, AndroidKeystoreError, AndroidKeystoreKeyInfo,
+    AndroidKeystoreSignatureAlgorithm, AndroidKeystoreSigningKey, sign_record_with_keystore,
+    sign_record_with_keystore_checked,
 };
 
 #[cfg(all(feature = "yubikey", target_os = "linux"))]
@@ -222,7 +232,7 @@ pub enum HardwareSigningError {
     #[cfg(feature = "tpm")]
     Tpm(edgerun_tpm::TpmError),
     #[cfg(feature = "android-keystore")]
-    AndroidKeystore(edgerun_android_keystore::AndroidKeystoreError),
+    AndroidKeystore(AndroidKeystoreError),
     #[cfg(all(feature = "yubikey", target_os = "linux"))]
     YubiKey(edgerun_yubikey::YubiKeyError),
     UnsupportedAlgorithm(HardwareSignatureAlgorithm),
@@ -258,8 +268,8 @@ impl From<edgerun_tpm::TpmError> for HardwareSigningError {
 }
 
 #[cfg(feature = "android-keystore")]
-impl From<edgerun_android_keystore::AndroidKeystoreError> for HardwareSigningError {
-    fn from(value: edgerun_android_keystore::AndroidKeystoreError) -> Self {
+impl From<AndroidKeystoreError> for HardwareSigningError {
+    fn from(value: AndroidKeystoreError) -> Self {
         Self::AndroidKeystore(value)
     }
 }

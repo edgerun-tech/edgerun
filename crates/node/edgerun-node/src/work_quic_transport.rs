@@ -2,8 +2,8 @@ use alloc::collections::{BTreeMap, VecDeque};
 use alloc::vec::Vec;
 
 use edgerun_work::{
-    CHANNEL_KIND_QUIC, ChannelEnvelope, Hash, NodeId, RouteBinding, TransportPacketFrame,
-    WorkPacketTransport, WorkTransportError, archived_packet_frame_from_bytes,
+    CHANNEL_KIND_QUIC, ChannelEnvelope, Hash, NodeId, RelayPacketFrame, RelayTransportError,
+    RouteBinding, WorkPacketTransport, archived_packet_frame_from_bytes,
 };
 
 use crate::http::http3::quic::QuicConnection;
@@ -40,7 +40,7 @@ impl QuicInboundStreamContext {
 #[derive(Debug)]
 pub struct QuicWorkTransport {
     pending: VecDeque<PendingQuicWorkPacket>,
-    received: VecDeque<TransportPacketFrame>,
+    received: VecDeque<RelayPacketFrame>,
     inbound_streams: BTreeMap<u64, QuicInboundStreamContext>,
     default_inbound: Option<QuicInboundStreamContext>,
     next_stream_id: u64,
@@ -122,7 +122,7 @@ impl QuicWorkTransport {
     pub async fn flush(
         &mut self,
         connection: &mut QuicConnection,
-    ) -> Result<usize, WorkTransportError> {
+    ) -> Result<usize, RelayTransportError> {
         let mut sent = 0usize;
         while let Some(packet) = self.pending.pop_front() {
             if let Err(_error) = connection
@@ -130,7 +130,7 @@ impl QuicWorkTransport {
                 .await
             {
                 self.pending.push_front(packet);
-                return Err(WorkTransportError::DeliveryFailed);
+                return Err(RelayTransportError::DeliveryFailed);
             }
             sent = sent.saturating_add(1);
         }
@@ -140,13 +140,13 @@ impl QuicWorkTransport {
     pub async fn poll_recv_quic(
         &mut self,
         connection: &mut QuicConnection,
-    ) -> Result<usize, WorkTransportError> {
+    ) -> Result<usize, RelayTransportError> {
         let mut accepted = 0usize;
         loop {
             let Some((stream_id, bytes, fin)) = connection
                 .recv_stream_data()
                 .await
-                .map_err(|_| WorkTransportError::DeliveryFailed)?
+                .map_err(|_| RelayTransportError::DeliveryFailed)?
             else {
                 break;
             };
@@ -167,19 +167,19 @@ impl QuicWorkTransport {
         stream_id: u64,
         bytes: &[u8],
         fin: bool,
-    ) -> Result<(), WorkTransportError> {
+    ) -> Result<(), RelayTransportError> {
         if self.received.len() >= self.max_received_packets {
-            return Err(WorkTransportError::Backpressure);
+            return Err(RelayTransportError::Backpressure);
         }
         let context = self
             .inbound_streams
             .get(&stream_id)
             .copied()
             .or(self.default_inbound)
-            .ok_or(WorkTransportError::UnsupportedRoute)?;
+            .ok_or(RelayTransportError::UnsupportedRoute)?;
         let frame = archived_packet_frame_from_bytes(bytes)
-            .map_err(|_| WorkTransportError::InvalidFrame)?;
-        self.received.push_back(TransportPacketFrame {
+            .map_err(|_| RelayTransportError::InvalidFrame)?;
+        self.received.push_back(RelayPacketFrame {
             channel_id: context.channel_id,
             from: context.from,
             to: context.to,
@@ -206,12 +206,12 @@ impl WorkPacketTransport for QuicWorkTransport {
         &mut self,
         route: &RouteBinding,
         packet_bytes: &[u8],
-    ) -> Result<(), WorkTransportError> {
+    ) -> Result<(), RelayTransportError> {
         if route.endpoint.kind != CHANNEL_KIND_QUIC {
-            return Err(WorkTransportError::UnsupportedRoute);
+            return Err(RelayTransportError::UnsupportedRoute);
         }
         if self.pending.len() >= self.max_pending_packets {
-            return Err(WorkTransportError::Backpressure);
+            return Err(RelayTransportError::Backpressure);
         }
         let stream_id = self.allocate_stream_id();
         self.pending.push_back(PendingQuicWorkPacket {
@@ -221,7 +221,7 @@ impl WorkPacketTransport for QuicWorkTransport {
         Ok(())
     }
 
-    fn recv_packet_frame(&mut self) -> Result<Option<TransportPacketFrame>, WorkTransportError> {
+    fn recv_packet_frame(&mut self) -> Result<Option<RelayPacketFrame>, RelayTransportError> {
         Ok(self.received.pop_front())
     }
 }
@@ -264,7 +264,7 @@ mod tests {
 
         assert_eq!(
             transport.send_packet_bytes(&route, b"packet"),
-            Err(WorkTransportError::UnsupportedRoute)
+            Err(RelayTransportError::UnsupportedRoute)
         );
     }
 
@@ -278,7 +278,7 @@ mod tests {
             .expect("first packet accepted");
         assert_eq!(
             transport.send_packet_bytes(&route, b"second"),
-            Err(WorkTransportError::Backpressure)
+            Err(RelayTransportError::Backpressure)
         );
     }
 
@@ -358,7 +358,7 @@ mod tests {
         let mut transport = QuicWorkTransport::new();
         assert_eq!(
             transport.accept_quic_stream_data(0, b"not routed", true),
-            Err(WorkTransportError::UnsupportedRoute)
+            Err(RelayTransportError::UnsupportedRoute)
         );
     }
 
@@ -373,7 +373,7 @@ mod tests {
         });
         assert_eq!(
             transport.accept_quic_stream_data(0, b"not a work packet", true),
-            Err(WorkTransportError::InvalidFrame)
+            Err(RelayTransportError::InvalidFrame)
         );
     }
 }

@@ -4,7 +4,7 @@
 //! and native hosts only consume the resulting `GpuScene`, keeping application
 //! layout and state out of JavaScript, SDL, and OpenGL glue.
 
-use super::{Axis, ButtonStyle, Color4, HitKind, UiPainter, UiRect, palette};
+use super::{palette, Axis, ButtonStyle, Color4, HitKind, UiPainter, UiRect};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PanelHeader<'a> {
@@ -445,13 +445,14 @@ impl UiStack {
 }
 
 pub fn panel_header(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: PanelHeader<'_>) {
+    let colors = ui.theme().colors;
     ui.bounded_label(
         rect.x,
         rect.y,
         action_reserved_width(rect, spec.action),
         spec.title,
         2.0,
-        palette::TEXT,
+        colors.text,
     );
     if !spec.subtitle.is_empty() {
         ui.bounded_label(
@@ -460,7 +461,7 @@ pub fn panel_header(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: PanelHeader<
             action_reserved_width(rect, spec.action),
             spec.subtitle,
             2.0,
-            palette::MUTED,
+            colors.muted,
         );
     }
     if let Some((label, id)) = spec.action {
@@ -476,14 +477,23 @@ pub fn panel_header(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: PanelHeader<
 }
 
 pub fn metric_card(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: MetricCard<'_>) {
-    ui.card(rect.x, rect.y, rect.w, rect.h, 8.0, palette::PANEL);
+    let theme = ui.theme();
+    let colors = theme.colors;
+    ui.card(
+        rect.x,
+        rect.y,
+        rect.w,
+        rect.h,
+        theme.radius.card,
+        colors.panel,
+    );
     ui.bounded_label(
         rect.x + 16.0,
         rect.y + 15.0,
         rect.w - 32.0,
         spec.title,
         2.0,
-        palette::MUTED,
+        colors.muted,
     );
     ui.bounded_label(
         rect.x + 16.0,
@@ -491,7 +501,7 @@ pub fn metric_card(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: MetricCard<'_
         rect.w - 32.0,
         spec.value,
         4.0,
-        palette::TEXT,
+        colors.text,
     );
     if !spec.detail.is_empty() {
         ui.bounded_label(
@@ -500,20 +510,21 @@ pub fn metric_card(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: MetricCard<'_
             rect.w - 32.0,
             spec.detail,
             2.0,
-            palette::MUTED,
+            colors.muted,
         );
     }
     if let Some(progress) = spec.progress {
         ui.progress_bar(
             UiRect::new(rect.x + 16.0, rect.y + rect.h - 47.0, rect.w - 32.0, 6.0),
             progress,
-            spec.accent,
+            resolve_component_accent(ui, spec.accent),
         );
     }
 }
 
 pub fn field(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: Field<'_>) {
-    ui.bounded_label(rect.x, rect.y, rect.w, spec.label, 2.0, palette::MUTED);
+    let colors = ui.theme().colors;
+    ui.bounded_label(rect.x, rect.y, rect.w, spec.label, 2.0, colors.muted);
     let field_rect = UiRect::new(rect.x, rect.y + 25.0, rect.w, 40.0);
     if let Some(id) = spec.id {
         ui.hit(
@@ -533,13 +544,15 @@ pub fn field(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: Field<'_>) {
             rect.w,
             spec.helper,
             2.0,
-            palette::MUTED,
+            colors.muted,
         );
     }
 }
 
 pub fn text_area(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: TextArea<'_>) {
-    ui.bounded_label(rect.x, rect.y, rect.w, spec.label, 2.0, palette::MUTED);
+    let theme = ui.theme();
+    let colors = theme.colors;
+    ui.bounded_label(rect.x, rect.y, rect.w, spec.label, 2.0, colors.muted);
     let field_rect = UiRect::new(rect.x, rect.y + 25.0, rect.w, rect.h - 25.0);
     if let Some(id) = spec.id {
         ui.hit(
@@ -551,14 +564,14 @@ pub fn text_area(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: TextArea<'_>) {
             field_rect.h,
         );
     }
-    ui.fill_rect(field_rect, 8.0, palette::COMPOSER);
+    ui.fill_rect(field_rect, theme.radius.card, colors.composer);
     ui.border_rect(
         field_rect,
-        8.0,
+        theme.radius.card,
         if spec.focused {
-            palette::ACCENT
+            colors.accent
         } else {
-            palette::BORDER
+            colors.border
         },
     );
     ui.bounded_label(
@@ -568,23 +581,24 @@ pub fn text_area(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: TextArea<'_>) {
         spec.value,
         2.0,
         if spec.value.is_empty() {
-            palette::MUTED
+            colors.muted
         } else {
-            palette::TEXT
+            colors.text
         },
     );
 }
 
 pub fn slider(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: Slider<'_>) {
+    let colors = ui.theme().colors;
     ui.hit(HitKind::Slider, spec.id, rect.x, rect.y, rect.w, rect.h);
-    ui.bounded_label(rect.x, rect.y, rect.w, spec.label, 2.0, palette::TEXT);
+    ui.bounded_label(rect.x, rect.y, rect.w, spec.label, 2.0, colors.text);
     let track = UiRect::new(rect.x, rect.y + 34.0, rect.w, 6.0);
-    ui.progress_bar(track, spec.value, spec.accent);
+    ui.progress_bar(track, spec.value, resolve_component_accent(ui, spec.accent));
     let x = track.x + track.w * spec.value.clamp(0.0, 1.0);
     ui.fill_rect(
         UiRect::new(x - 7.0, track.y - 6.0, 14.0, 18.0),
         4.0,
-        palette::TEXT,
+        colors.text,
     );
     if !spec.min_label.is_empty() {
         ui.bounded_label(
@@ -593,7 +607,7 @@ pub fn slider(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: Slider<'_>) {
             rect.w * 0.5,
             spec.min_label,
             2.0,
-            palette::MUTED,
+            colors.muted,
         );
     }
     if !spec.max_label.is_empty() {
@@ -603,13 +617,22 @@ pub fn slider(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: Slider<'_>) {
             rect.w * 0.5,
             spec.max_label,
             2.0,
-            palette::MUTED,
+            colors.muted,
         );
     }
 }
 
 pub fn bar_chart(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: BarChart<'_>) {
-    ui.card(rect.x, rect.y, rect.w, rect.h, 8.0, palette::PANEL);
+    let theme = ui.theme();
+    let colors = theme.colors;
+    ui.card(
+        rect.x,
+        rect.y,
+        rect.w,
+        rect.h,
+        theme.radius.card,
+        colors.panel,
+    );
     panel_header(
         ui,
         UiRect::new(rect.x + 16.0, rect.y + 15.0, rect.w - 32.0, 44.0),
@@ -633,19 +656,24 @@ pub fn bar_chart(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: BarChart<'_>) {
         let bar_h = (chart.h * (value / max)).clamp(3.0, chart.h);
         let x = chart.x + index as f32 * (bar_w + gap);
         let y = chart.y + chart.h - bar_h;
-        ui.fill_rect(UiRect::new(x, y, bar_w, bar_h), 3.0, spec.accent);
+        ui.fill_rect(
+            UiRect::new(x, y, bar_w, bar_h),
+            3.0,
+            resolve_component_accent(ui, spec.accent),
+        );
         ui.bounded_label(
             x,
             chart.y + chart.h + 11.0,
             bar_w + gap,
             spec.labels[index],
             2.0,
-            palette::MUTED,
+            colors.muted,
         );
     }
 }
 
 pub fn transaction_row(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: TransactionRow<'_>) {
+    let colors = ui.theme().colors;
     ui.hit(
         HitKind::TransactionRow,
         spec.id,
@@ -654,23 +682,23 @@ pub fn transaction_row(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: Transacti
         rect.w,
         rect.h,
     );
-    ui.fill_rect(rect, 0.0, palette::PANEL);
+    ui.fill_rect(rect, 0.0, colors.panel);
     ui.divider(rect.x, rect.y + rect.h - 1.0, rect.w, Axis::Horizontal);
     let icon = UiRect::new(rect.x + 12.0, rect.y + 12.0, 34.0, 34.0);
     let amount_color = if spec.positive {
-        palette::GREEN
+        colors.success
     } else {
-        palette::TEXT
+        colors.text
     };
-    ui.fill_rect(icon, 4.0, palette::ROW);
-    ui.border_rect(icon, 4.0, palette::BORDER.with_alpha(0.68));
+    ui.fill_rect(icon, 4.0, colors.row);
+    ui.border_rect(icon, 4.0, colors.border.with_alpha(0.68));
     ui.bounded_label(
         rect.x + 58.0,
         rect.y + 12.0,
         rect.w * 0.36,
         spec.title,
         2.0,
-        palette::TEXT,
+        colors.text,
     );
     ui.bounded_label(
         rect.x + 58.0,
@@ -678,7 +706,7 @@ pub fn transaction_row(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: Transacti
         rect.w * 0.36,
         spec.subtitle,
         2.0,
-        palette::MUTED,
+        colors.muted,
     );
     ui.bounded_label(
         rect.x + rect.w * 0.54,
@@ -686,7 +714,7 @@ pub fn transaction_row(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: Transacti
         rect.w * 0.22,
         spec.date,
         2.0,
-        palette::MUTED,
+        colors.muted,
     );
     ui.bounded_label(
         rect.x + rect.w - 146.0,
@@ -699,14 +727,17 @@ pub fn transaction_row(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: Transacti
 }
 
 pub fn menu_item(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: MenuItem<'_>) {
+    let theme = ui.theme();
+    let colors = theme.colors;
     ui.hit(HitKind::MenuItem, spec.id, rect.x, rect.y, rect.w, rect.h);
     if spec.selected {
-        ui.fill_rect(rect, 8.0, palette::ACTIVE_ROW);
-        ui.border_rect(rect, 8.0, spec.accent.with_alpha(0.42));
+        ui.fill_rect(rect, theme.radius.card, colors.active);
+        let accent = resolve_component_accent(ui, spec.accent);
+        ui.border_rect(rect, theme.radius.card, accent.with_alpha(0.42));
         ui.fill_rect(
             UiRect::new(rect.x, rect.y + 10.0, 3.0, rect.h - 20.0),
             2.0,
-            spec.accent,
+            accent,
         );
     }
     ui.bounded_label(
@@ -716,9 +747,9 @@ pub fn menu_item(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: MenuItem<'_>) {
         spec.label,
         2.0,
         if spec.selected {
-            palette::TEXT
+            colors.text
         } else {
-            palette::MUTED
+            colors.muted
         },
     );
     if !spec.detail.is_empty() {
@@ -728,7 +759,7 @@ pub fn menu_item(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: MenuItem<'_>) {
             rect.w - 28.0,
             spec.detail,
             2.0,
-            palette::MUTED,
+            colors.muted,
         );
     }
     if !spec.badge.is_empty() {
@@ -737,16 +768,17 @@ pub fn menu_item(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: MenuItem<'_>) {
             rect.x + rect.w - badge_w - 10.0,
             rect.y + 11.0,
             spec.badge,
-            spec.accent,
+            resolve_component_accent(ui, spec.accent),
         );
     }
 }
 
 pub fn control_row(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: ControlRow<'_>) {
+    let colors = ui.theme().colors;
     if let Some(id) = spec.id {
         ui.hit(HitKind::ListRow, id, rect.x, rect.y, rect.w, rect.h);
     }
-    ui.fill_rect(rect, 0.0, palette::PANEL);
+    ui.fill_rect(rect, 0.0, colors.panel);
     ui.divider(rect.x, rect.y + rect.h - 1.0, rect.w, Axis::Horizontal);
 
     let accessory_w = match spec.accessory {
@@ -769,7 +801,7 @@ pub fn control_row(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: ControlRow<'_
         text_w,
         spec.label,
         2.0,
-        palette::TEXT,
+        colors.text,
     );
     if !spec.detail.is_empty() {
         ui.bounded_label(
@@ -778,7 +810,7 @@ pub fn control_row(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: ControlRow<'_
             text_w,
             spec.detail,
             2.0,
-            palette::MUTED,
+            colors.muted,
         );
     }
 
@@ -791,7 +823,7 @@ pub fn control_row(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: ControlRow<'_
             accessory_w,
             value,
             2.0,
-            palette::MUTED,
+            colors.muted,
         ),
         ControlAccessory::Badge(label, color) => {
             ui.badge(right - accessory_w, rect.y + 18.0, label, color);
@@ -819,10 +851,18 @@ fn action_reserved_width(rect: UiRect, action: Option<(&str, u32)>) -> f32 {
     }
 }
 
+fn resolve_component_accent(ui: &UiPainter<'_, '_>, accent: Color4) -> Color4 {
+    if accent == palette::ACCENT {
+        ui.theme().colors.accent
+    } else {
+        accent
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::gpu::{GpuScene, palette};
+    use crate::gpu::{palette, GpuScene};
 
     #[test]
     fn stack_lays_out_vertical_children() {
@@ -906,41 +946,29 @@ mod tests {
         }
 
         assert!(scene.rects().len() > 20);
-        assert!(
-            scene
-                .hits()
-                .iter()
-                .any(|hit| hit.kind == HitKind::Input && hit.id == 6)
-        );
-        assert!(
-            scene
-                .hits()
-                .iter()
-                .any(|hit| hit.kind == HitKind::Slider && hit.id == 7)
-        );
-        assert!(
-            scene
-                .hits()
-                .iter()
-                .any(|hit| hit.kind == HitKind::TransactionRow && hit.id == 8)
-        );
-        assert!(
-            scene
-                .hits()
-                .iter()
-                .any(|hit| hit.kind == HitKind::MenuItem && hit.id == 9)
-        );
-        assert!(
-            scene
-                .hits()
-                .iter()
-                .any(|hit| hit.kind == HitKind::Toggle && hit.id == 10)
-        );
-        assert!(
-            scene
-                .hits()
-                .iter()
-                .any(|hit| hit.kind == HitKind::ListRow && hit.id == 11)
-        );
+        assert!(scene
+            .hits()
+            .iter()
+            .any(|hit| hit.kind == HitKind::Input && hit.id == 6));
+        assert!(scene
+            .hits()
+            .iter()
+            .any(|hit| hit.kind == HitKind::Slider && hit.id == 7));
+        assert!(scene
+            .hits()
+            .iter()
+            .any(|hit| hit.kind == HitKind::TransactionRow && hit.id == 8));
+        assert!(scene
+            .hits()
+            .iter()
+            .any(|hit| hit.kind == HitKind::MenuItem && hit.id == 9));
+        assert!(scene
+            .hits()
+            .iter()
+            .any(|hit| hit.kind == HitKind::Toggle && hit.id == 10));
+        assert!(scene
+            .hits()
+            .iter()
+            .any(|hit| hit.kind == HitKind::ListRow && hit.id == 11));
     }
 }

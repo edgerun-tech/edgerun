@@ -27,7 +27,6 @@ edgerun-protocols = { workspace = true, default-features = false, optional = tru
 edgerun-virtual-disk = { workspace = true, default-features = false, features = ["std"], optional = true }
 edgerun-wire = { workspace = true, default-features = false }
 rkyv = { version = "0.8.16", default-features = false, features = ["alloc", "bytecheck"] }
-blake3 = { version = "1", default-features = false }
 
 [[example]]
 name = "blake3_1024_wasm"

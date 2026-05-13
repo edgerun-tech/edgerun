@@ -5,11 +5,16 @@ extern crate alloc;
 use alloc::string::String;
 use alloc::vec::Vec;
 
+pub mod policy;
+
 pub use edgerun_protocols::core_protocol::protocol::capability::{
     CapabilityAccessClass, CapabilityConstraint, CapabilityConstraintKind, CapabilityDescriptor,
     CapabilityEventKind, CapabilityGrant, CapabilityInvocation, CapabilityModality,
     CapabilityOperation, CapabilityRequest, CapabilityResult, CapabilityRevocation, CapabilityRole,
     CapabilitySelector,
+};
+pub use policy::{
+    GrantRecord, PolicyContext, PolicyDecision, PolicyEngine, RevocationReason, SimplePolicyEngine,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]

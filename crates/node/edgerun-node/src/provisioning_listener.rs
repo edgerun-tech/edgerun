@@ -2,7 +2,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use edgerun_hardware_signing::NodeID;
-use edgerun_json::{Value as JsonValue, escape_json_string};
+use edgerun_json::{TapeValue, escape_json_string};
 use edgerun_node::network::{HostSocketTransport, TransportAddress};
 use edgerun_node::rt::{AsyncReadExt, AsyncWriteExt};
 use edgerun_node::rt::{CancellationToken, timeout};
@@ -75,9 +75,9 @@ pub(crate) async fn run_provisioning_listener(
     }
 }
 
-fn json_text(value: Option<&JsonValue>, _key: &str) -> Option<String> {
+fn json_text(value: Option<TapeValue<'_>>, _key: &str) -> Option<String> {
     value
-        .and_then(JsonValue::as_str)
+        .and_then(|value| value.as_str())
         .map(str::trim)
         .filter(|raw| !raw.is_empty())
         .map(str::to_string)
@@ -112,8 +112,8 @@ pub(crate) async fn handle_provisioning_connection(
     let request = String::from_utf8_lossy(&buf[..n]).to_string();
     crate::node_debug!("Provisioning request received: {} bytes", n);
 
-    let payload: JsonValue = match edgerun_json::from_json_slice(request.as_bytes()) {
-        Ok(payload) => payload,
+    let tape = match edgerun_json::parse_json_tape(&request) {
+        Ok(tape) => tape,
         Err(error) => {
             let body = response_err(&format!("invalid JSON: {error}"));
             stream
@@ -122,6 +122,14 @@ pub(crate) async fn handle_provisioning_connection(
                 .map_err(|error| error.to_string())?;
             return Err("invalid JSON payload".into());
         }
+    };
+    let Some(payload) = tape.root(&request) else {
+        let body = response_err("invalid JSON: missing root value");
+        stream
+            .write_all(body.as_bytes())
+            .await
+            .map_err(|error| error.to_string())?;
+        return Err("invalid JSON payload".into());
     };
 
     let msg_type = json_text(payload.get("type"), "type").unwrap_or_default();

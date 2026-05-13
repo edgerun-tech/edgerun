@@ -32,7 +32,7 @@ pub mod varint {
 }
 
 pub use connection::Http3Connection;
-pub use edgerun_qpack::{QpackDecoder, QpackEncoder};
+pub use edgerun_protocols::http::http3::{QpackDecoder, QpackEncoder};
 pub use frame::Http3Frame;
 pub use quic::QuicConnection;
 pub use server::Http3Server;

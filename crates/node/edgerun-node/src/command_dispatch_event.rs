@@ -65,7 +65,7 @@ pub fn append_command_result_event_with_protocol_signer(
         store,
         stream_id,
         signer,
-        edgerun_stream::EventDraft {
+        edgerun_storage::EventDraft {
             event_type: event_type as i32,
             event_version: 1,
             recorded_at: Some(now_protocol_timestamp()),

@@ -13,7 +13,7 @@ but those are not Edgerun internal wire protocols.
 - `edgerun-wire`: rkyv-only internal wire boundary.
 - `edgerun-core`: native protocol records, domain-separated hashes/signatures,
   and validators.
-- `edgerun-stream`: single-writer signed event streams.
+- `edgerun-storage::stream`: single-writer signed event streams.
 - `edgerun-storage`: event log, encrypted blobs, file/block/memory stores,
   indexes, snapshots, replay cache, rebuild/integrity logic.
 - `edgerun-node`: the runtime/node boundary and resource authority. Apps and

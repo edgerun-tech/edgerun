@@ -8,8 +8,8 @@ repository.workspace = true
 homepage.workspace = true
 description = "Edgerun strum_macros compatibility surface"
 
-[dependencies]
-strum_macros = "0.28.0"
+[lib]
+proc-macro = true
 
 [lints]
 workspace = true

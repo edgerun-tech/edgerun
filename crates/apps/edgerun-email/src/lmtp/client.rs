@@ -22,7 +22,7 @@ use std::io;
 
 use crate::rt::{AsyncReadExt, AsyncTcpStream, AsyncWriteExt, ConnectFuture};
 
-use crate::smtp::types::{parse_response_line, parse_response_lines, SmtpResponse};
+use crate::smtp::types::{SmtpResponse, parse_response_line, parse_response_lines};
 
 /// Async LMTP client.
 pub struct LmtpClient {

@@ -9,19 +9,16 @@ homepage.workspace = true
 description = "Edgerun compatibility surface for tokio-tungstenite-style APIs"
 
 [features]
-default = ["connect", "handshake", "proxy", "rustls-tls-native-roots", "stream"]
+default = ["connect", "handshake", "proxy", "stream"]
 connect = ["stream", "handshake"]
 handshake = ["edgerun-tungstenite/handshake"]
 proxy = ["edgerun-tungstenite/proxy"]
-rustls-tls-native-roots = ["stream", "edgerun-tungstenite/rustls-tls-native-roots", "dep:rustls"]
 stream = []
 
 [dependencies]
 edgerun-tungstenite = { version = "0.1", path = "../edgerun-tungstenite", features = ["deflate"] }
 edgerun-futures = { version = "0.1", path = "../edgerun-futures" }
 edgerun-tokio = { version = "0.1", path = "../edgerun-tokio", default-features = false, features = ["edgerun-runtime", "net"] }
-http = { package = "edgerun-http", version = "0.1", path = "../edgerun-http" }
-rustls = { package = "edgerun-rusttls", path = "../edgerun-rusttls", default-features = false, optional = true }
 
 [lints]
 workspace = true

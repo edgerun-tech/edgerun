@@ -67,7 +67,7 @@ impl ArchivedWorkPacketFrame {
 }
 
 pub fn blake3_hash(bytes: &[u8]) -> Hash {
-    *blake3::hash(bytes).as_bytes()
+    *crate::blake3::hash(bytes).as_bytes()
 }
 
 pub fn sha256_hash(bytes: &[u8]) -> Hash {

@@ -12,6 +12,8 @@ use std::io;
 use std::os::unix::io::AsRawFd;
 use std::path::PathBuf;
 
+use crate::clap::cli::Action;
+use crate::clap::{Arg, Command};
 use crate::cli::env::{parse_env_pair, upsert_env};
 use crate::cli::user::{resolve_user, validate_user_spec};
 use crate::cli::{EXEC_VALUE_OPTIONS, parse_cli_args, split_cli_prefix};
@@ -19,8 +21,6 @@ use crate::process_exec::exec_with_env_and_cwd;
 use crate::syscalls::{do_mount, do_setns, ms, ns};
 use crate::terminal::{recv_fd, relay_pty_until_exit, send_fd, setup_pty_stdio};
 use crate::userns::{do_setgid, do_setuid};
-use edgerun_clap::cli::Action;
-use edgerun_clap::{Arg, Command};
 
 pub fn cmd_exec(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     crate::cli::apply_global_opts(opts)?;

@@ -3,7 +3,7 @@
 use crate::errors::OAuthError;
 use crate::prelude::*;
 use crate::types::Scope;
-use edgerun_json::{from_str, JsonValue};
+use edgerun_json::JsonValue;
 
 /// OIDC Discovery document (`.well-known/openid-configuration`).
 #[derive(Debug, Clone)]
@@ -28,14 +28,17 @@ pub struct OidcDiscoveryDocument {
 impl OidcDiscoveryDocument {
     /// Parse from JSON string.
     pub fn from_json(json_str: &str) -> Result<Self, String> {
-        let v: JsonValue = from_str(json_str).map_err(|e| format!("JSON parse: {e}"))?;
+        let tape = edgerun_json::parse_json_tape(json_str).map_err(|e| format!("JSON parse: {e}"))?;
+        let root = tape
+            .root(json_str)
+            .ok_or_else(|| "JSON parse: missing root value".to_string())?;
 
-        let str_field = |key: &str| v.get(key).and_then(|x| x.as_str()).map(|s| s.to_string());
+        let str_field = |key: &str| root.get(key).and_then(|x| x.as_str()).map(|s| s.to_string());
         let str_array = |key: &str| -> Vec<String> {
-            v.get(key)
-                .and_then(|x| x.as_array())
+            root.get(key)
+                .and_then(|x| x.array_items())
                 .map(|arr| {
-                    arr.iter()
+                    arr.into_iter()
                         .filter_map(|x| x.as_str())
                         .map(|s| s.to_string())
                         .collect()
@@ -192,12 +195,11 @@ pub struct Jwk {
 impl JwksDocument {
     /// Parse from JSON string.
     pub fn from_json(json_str: &str) -> Result<Self, String> {
-        let v: JsonValue = from_str(json_str).map_err(|e| format!("JSON parse: {e}"))?;
-        let keys_array = v
-            .get("keys")
-            .and_then(|x| x.as_array())
-            .cloned()
-            .unwrap_or_default();
+        let tape = edgerun_json::parse_json_tape(json_str).map_err(|e| format!("JSON parse: {e}"))?;
+        let root = tape
+            .root(json_str)
+            .ok_or_else(|| "JSON parse: missing root value".to_string())?;
+        let keys_array = root.get_array("keys").unwrap_or_default();
         let mut keys = Vec::new();
 
         for key_json in keys_array {
@@ -219,7 +221,7 @@ impl JwksDocument {
                 n: str_field("n"),
                 e: str_field("e"),
                 k: str_field("k"),
-                raw: key_json,
+                raw: key_json.to_json_value().unwrap_or(JsonValue::Null),
             });
         }
 

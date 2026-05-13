@@ -6,7 +6,6 @@
 
 use crate::libc;
 use crate::prelude::*;
-use crate::util::StringResultExt;
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -157,7 +156,36 @@ pub fn load_state(id: &str) -> io::Result<ContainerState> {
 }
 
 pub fn load_state_from_str(data: &str) -> Result<ContainerState, String> {
-    edgerun_json::from_json_str(data).string_err()
+    let tape = edgerun_json::parse_json_tape(data).map_err(|error| error.to_string())?;
+    let root = tape
+        .root(data)
+        .ok_or_else(|| "container state missing JSON root".to_string())?;
+    let annotations = root.get_object_fields("annotations").map(|fields| {
+        fields
+            .into_iter()
+            .filter_map(|(key, value)| {
+                value
+                    .as_str()
+                    .map(|value| (key.to_string(), value.to_string()))
+            })
+            .collect()
+    });
+    Ok(ContainerState {
+        oci_version: root
+            .required_string("ociVersion")
+            .map_err(|_| "missing field `ociVersion`".to_string())?,
+        id: root
+            .required_string("id")
+            .map_err(|_| "missing field `id`".to_string())?,
+        status: root
+            .required_string("status")
+            .map_err(|_| "missing field `status`".to_string())?,
+        pid: root.get_u32("pid"),
+        bundle: root
+            .required_string("bundle")
+            .map_err(|_| "missing field `bundle`".to_string())?,
+        annotations,
+    })
 }
 
 edgerun_json::impl_json_struct! {

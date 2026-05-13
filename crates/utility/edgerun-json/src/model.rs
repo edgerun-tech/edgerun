@@ -16,6 +16,10 @@ pub fn to_json_value<T: ToJson + ?Sized>(value: &T) -> JsonValue {
     value.to_json()
 }
 
+pub fn to_value<T: ToJson + ?Sized>(value: &T) -> JsonValue {
+    to_json_value(value)
+}
+
 pub fn to_json_string<T: ToJson + ?Sized>(value: &T) -> Result<String, crate::JsonError> {
     value.to_json().to_json_string()
 }
@@ -29,6 +33,10 @@ pub fn to_json_vec<T: ToJson + ?Sized>(value: &T) -> Result<Vec<u8>, crate::Json
 
 pub fn from_json_value<T: FromJson>(value: JsonValue) -> Result<T, JsonValueError> {
     T::from_json(value)
+}
+
+pub fn from_value<T: FromJson>(value: JsonValue) -> Result<T, JsonValueError> {
+    from_json_value(value)
 }
 
 pub fn from_json_str<T: FromJson>(input: &str) -> Result<T, JsonValueError> {
@@ -294,7 +302,7 @@ impl<T: FromJson> FromJson for Vec<T> {
 
 impl<T: ToJson> ToJson for BTreeMap<String, T> {
     fn to_json(&self) -> JsonValue {
-        let mut object = Map::with_capacity(self.len());
+        let mut object: Map = Map::with_capacity(self.len());
         for (key, value) in self {
             object.push_field(key.clone(), value.to_json());
         }
@@ -318,13 +326,17 @@ impl<T: FromJson> FromJson for BTreeMap<String, T> {
     }
 }
 
-impl ToJson for Map {
+impl<K, V> ToJson for Map<K, V> {
     fn to_json(&self) -> JsonValue {
-        JsonValue::Object(self.clone())
+        JsonValue::Object(
+            self.fields()
+                .map(|(key, value)| (key.to_owned(), value.clone()))
+                .collect(),
+        )
     }
 }
 
-impl FromJson for Map {
+impl<K, V> FromJson for Map<K, V> {
     fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
         Self::try_from(value)
     }

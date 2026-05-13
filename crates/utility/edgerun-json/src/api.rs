@@ -152,6 +152,40 @@ where
     T::try_from(value).map_err(|error| JsonValueError::WrongType(error.to_string()))
 }
 
+/// Converts an owned [`JsonValue`] into a serde-deserializable type.
+#[cfg(feature = "serde")]
+pub fn from_serde_value<T>(value: JsonValue) -> Result<T, JsonError>
+where
+    T: serde::de::DeserializeOwned,
+{
+    crate::interop::from_json_value_with_serde(value)
+}
+
+/// Parses JSON and converts it into a serde-deserializable type.
+#[cfg(feature = "serde")]
+pub fn from_serde_str<T>(input: &str) -> Result<T, JsonError>
+where
+    T: serde::de::DeserializeOwned,
+{
+    from_serde_value(parse_json(input)?)
+}
+
+/// Parses UTF-8 JSON bytes and converts them into a serde-deserializable type.
+#[cfg(feature = "serde")]
+pub fn from_serde_slice<T>(input: &[u8]) -> Result<T, JsonError>
+where
+    T: serde::de::DeserializeOwned,
+{
+    let input = core::str::from_utf8(input).map_err(|_| JsonParseError::InvalidUtf8)?;
+    from_serde_str(input)
+}
+
+/// Converts a serde-serializable model into an owned [`JsonValue`].
+#[cfg(feature = "serde")]
+pub fn to_serde_value<T: serde::Serialize>(value: T) -> Result<JsonValue, JsonError> {
+    crate::interop::to_json_value_from_serde(&value)
+}
+
 /// Parses JSON and converts the owned value into a caller-defined type.
 pub fn from_str_as<T, E>(input: &str) -> Result<T, JsonValueError>
 where
@@ -219,14 +253,31 @@ pub fn from_reader<R: Read>(mut reader: R) -> Result<JsonValue, JsonParseError> 
 /// let value = json!({"name": "Alice", "age": 30});
 /// assert_eq!(to_string(&value).unwrap(), r#"{"name":"Alice","age":30}"#);
 /// ```
+#[cfg(not(feature = "serde"))]
 pub fn to_string(value: &JsonValue) -> Result<String, JsonError> {
     value.to_json_string()
 }
 
+/// Serializes a serde model to a compact JSON string through EdgeRun's native JSON value.
+#[cfg(feature = "serde")]
+pub fn to_string<T: serde::Serialize + ?Sized>(value: &T) -> Result<String, JsonError> {
+    crate::interop::to_json_value_from_serde(value)?.to_json_string()
+}
+
 /// Serializes a value to a JSON byte vector.
+#[cfg(not(feature = "serde"))]
 pub fn to_vec(value: &JsonValue) -> Result<Vec<u8>, JsonError> {
     let mut out = Vec::with_capacity(util::initial_json_capacity(value));
     util::write_json_value(&mut out, value)?;
+    Ok(out)
+}
+
+/// Serializes a serde model to compact JSON bytes through EdgeRun's native JSON value.
+#[cfg(feature = "serde")]
+pub fn to_vec<T: serde::Serialize + ?Sized>(value: &T) -> Result<Vec<u8>, JsonError> {
+    let value = crate::interop::to_json_value_from_serde(value)?;
+    let mut out = Vec::with_capacity(util::initial_json_capacity(&value));
+    util::write_json_value(&mut out, &value)?;
     Ok(out)
 }
 
@@ -247,16 +298,36 @@ pub fn to_writer<W: Write>(mut writer: W, value: &JsonValue) -> Result<(), JsonE
 /// let pretty = to_string_pretty(&value).unwrap();
 /// assert!(pretty.contains("\n"));
 /// ```
+#[cfg(not(feature = "serde"))]
 pub fn to_string_pretty(value: &JsonValue) -> Result<String, JsonError> {
     let mut out = Vec::with_capacity(util::initial_json_capacity(value) + 16);
     util::write_json_value_pretty(&mut out, value, 0)?;
     Ok(String::from_utf8(out).expect("JSON serialization produced invalid UTF-8"))
 }
 
+/// Serializes a serde model to a pretty-printed JSON string.
+#[cfg(feature = "serde")]
+pub fn to_string_pretty<T: serde::Serialize + ?Sized>(value: &T) -> Result<String, JsonError> {
+    let value = crate::interop::to_json_value_from_serde(value)?;
+    let mut out = Vec::with_capacity(util::initial_json_capacity(&value) + 16);
+    util::write_json_value_pretty(&mut out, &value, 0)?;
+    Ok(String::from_utf8(out).expect("JSON serialization produced invalid UTF-8"))
+}
+
 /// Serializes a value to a pretty-printed JSON byte vector.
+#[cfg(not(feature = "serde"))]
 pub fn to_vec_pretty(value: &JsonValue) -> Result<Vec<u8>, JsonError> {
     let mut out = Vec::with_capacity(util::initial_json_capacity(value) + 16);
     util::write_json_value_pretty(&mut out, value, 0)?;
+    Ok(out)
+}
+
+/// Serializes a serde model to pretty-printed JSON bytes.
+#[cfg(feature = "serde")]
+pub fn to_vec_pretty<T: serde::Serialize + ?Sized>(value: &T) -> Result<Vec<u8>, JsonError> {
+    let value = crate::interop::to_json_value_from_serde(value)?;
+    let mut out = Vec::with_capacity(util::initial_json_capacity(&value) + 16);
+    util::write_json_value_pretty(&mut out, &value, 0)?;
     Ok(out)
 }
 

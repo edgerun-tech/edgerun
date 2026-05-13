@@ -19,13 +19,19 @@ use std::string::FromUtf8Error;
 #[cfg(feature = "rustls-tls-native-roots")]
 use std::sync::Arc;
 
+#[cfg(feature = "handshake")]
+pub mod http {
+    pub use crate::backend::http::*;
+}
+
 pub mod client {
     use crate::Error;
     use crate::Result;
+    use crate::backend::http;
+    use crate::backend::http::Request as HttpRequest;
+    use crate::backend::http::Uri;
     use edgerun_encoding::base64::standard_encode;
     use http::HeaderName;
-    use http::Request as HttpRequest;
-    use http::Uri;
 
     pub type ClientRequest = HttpRequest<()>;
     pub type Request = ClientRequest;
@@ -383,6 +389,7 @@ pub use stream::Mode;
 
 pub mod handshake {
     pub mod client {
+        use crate::backend::http;
         pub use crate::client::generate_key;
 
         pub type Request = http::Request<()>;
@@ -390,6 +397,8 @@ pub mod handshake {
     }
 
     pub mod server {
+        use crate::backend::http;
+
         pub type ErrorResponse = http::Response<Option<String>>;
         pub type Request = http::Request<()>;
         pub type Response = http::Response<()>;
@@ -1051,19 +1060,23 @@ pub struct Frame {
 impl Frame {
     pub fn message(data: impl Into<Bytes>, opcode: OpCode, is_final: bool) -> Self {
         Self {
-            inner: crate::backend::Frame::message(data, opcode.into(), is_final),
+            inner: crate::backend::Frame::message(
+                Vec::<u8>::from(data.into()),
+                opcode.into(),
+                is_final,
+            ),
         }
     }
 
     pub fn pong(data: impl Into<Bytes>) -> Self {
         Self {
-            inner: crate::backend::Frame::pong(data),
+            inner: crate::backend::Frame::pong(Vec::<u8>::from(data.into())),
         }
     }
 
     pub fn ping(data: impl Into<Bytes>) -> Self {
         Self {
-            inner: crate::backend::Frame::ping(data),
+            inner: crate::backend::Frame::ping(Vec::<u8>::from(data.into())),
         }
     }
 
@@ -1075,7 +1088,10 @@ impl Frame {
 
     pub fn from_payload(header: FrameHeader, payload: Bytes) -> Self {
         Self {
-            inner: crate::backend::Frame::from_payload(header.into(), payload),
+            inner: crate::backend::Frame::from_payload(
+                header.into(),
+                Vec::<u8>::from(payload).into(),
+            ),
         }
     }
 
@@ -1100,7 +1116,7 @@ impl Frame {
     }
 
     pub fn into_payload(self) -> Bytes {
-        self.inner.into_payload()
+        self.inner.into_payload().to_vec().into()
     }
 
     pub fn into_text(self) -> Result<Utf8Bytes> {
@@ -1245,9 +1261,11 @@ impl From<Message> for crate::backend::Message {
     fn from(value: Message) -> Self {
         match value {
             Message::Text(text) => crate::backend::Message::Text(String::from(text).into()),
-            Message::Binary(bytes) => crate::backend::Message::Binary(bytes),
-            Message::Ping(bytes) => crate::backend::Message::Ping(bytes),
-            Message::Pong(bytes) => crate::backend::Message::Pong(bytes),
+            Message::Binary(bytes) => {
+                crate::backend::Message::Binary(Vec::<u8>::from(bytes).into())
+            }
+            Message::Ping(bytes) => crate::backend::Message::Ping(Vec::<u8>::from(bytes).into()),
+            Message::Pong(bytes) => crate::backend::Message::Pong(Vec::<u8>::from(bytes).into()),
             Message::Close(frame) => crate::backend::Message::Close(frame.map(Into::into)),
             Message::Frame(frame) => crate::backend::Message::Frame(frame.inner),
         }
@@ -1258,9 +1276,9 @@ impl From<crate::backend::Message> for Message {
     fn from(value: crate::backend::Message) -> Self {
         match value {
             crate::backend::Message::Text(text) => Message::Text(text.to_string().into()),
-            crate::backend::Message::Binary(bytes) => Message::Binary(bytes),
-            crate::backend::Message::Ping(bytes) => Message::Ping(bytes),
-            crate::backend::Message::Pong(bytes) => Message::Pong(bytes),
+            crate::backend::Message::Binary(bytes) => Message::Binary(bytes.to_vec().into()),
+            crate::backend::Message::Ping(bytes) => Message::Ping(bytes.to_vec().into()),
+            crate::backend::Message::Pong(bytes) => Message::Pong(bytes.to_vec().into()),
             crate::backend::Message::Close(frame) => Message::Close(frame.map(Into::into)),
             crate::backend::Message::Frame(frame) => Message::Frame(Frame { inner: frame }),
         }
@@ -1279,7 +1297,7 @@ pub enum Error {
     Utf8(String),
     AttackAttempt,
     Url(String),
-    Http(Box<http::Response<Option<Vec<u8>>>>),
+    Http(Box<crate::backend::http::Response<Option<Vec<u8>>>>),
     HttpFormat(String),
     Other(String),
 }
@@ -1641,6 +1659,8 @@ mod backend {
     pub use tungstenite::extensions;
     #[cfg(feature = "handshake")]
     pub use tungstenite::handshake;
+    #[cfg(feature = "handshake")]
+    pub use tungstenite::http;
     pub use tungstenite::protocol;
     pub use tungstenite::protocol::CloseFrame;
     pub use tungstenite::protocol::WebSocketConfig;
@@ -1709,7 +1729,7 @@ mod tests {
 
     #[test]
     fn client_module_exposes_upstream_compatibility_items() {
-        let uri: http::Uri = "wss://example.com/socket".parse().expect("uri");
+        let uri: super::http::Uri = "wss://example.com/socket".parse().expect("uri");
         let request: super::client::Request = uri.into_client_request().expect("request");
         let mode = super::client::uri_mode(request.uri()).expect("mode");
         let key = super::handshake::client::generate_key();

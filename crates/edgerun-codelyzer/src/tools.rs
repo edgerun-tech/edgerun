@@ -5,8 +5,8 @@
 
 use std::collections::HashMap;
 
-use edgerun_glob::glob_match;
-use edgerun_regex::Regex;
+use crate::glob::glob_match;
+use crate::regex::Regex;
 
 use crate::diagnostics;
 
@@ -238,7 +238,7 @@ fn search_codebase(query: &str) -> String {
         "c", "h", "rs", "ts", "tsx", "js", "jsx", "mjs", "py", "go", "java",
     ];
 
-    // Walk directory tree manually since we're using edgerun-glob for matching
+    // Walk directory tree manually so matching stays on the local glob helper.
     let mut dirs_to_visit = vec![std::path::PathBuf::from(&root_dir)];
     let skip_dirs: &[&str] = &["target", "node_modules", ".git", "__pycache__", ".venv"];
 

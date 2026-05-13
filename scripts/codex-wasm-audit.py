@@ -60,21 +60,21 @@ NATIVE_PATTERNS = [
 ]
 
 LIKELY_WASM_FIRST = [
-    "app-server-protocol",
+    "app-protocol",
     "protocol",
     "tools",
-    "shell-command",
-    "code-mode",
-    "model-provider-info",
-    "models-manager",
-    "response-debug-context",
+    "shell",
+    "code",
+    "info",
+    "catalog",
+    "debug-context",
 ]
 
 LIKELY_NATIVE_SPLIT = [
-    "codex-api",
-    "codex-client",
-    "model-provider",
-    "apply-patch",
+    "api",
+    "client",
+    "provider",
+    "patch",
     "core",
 ]
 
@@ -85,7 +85,7 @@ def run(cmd: list[str]) -> str:
 
 
 def manifests() -> list[Path]:
-    return sorted(CODEX.glob("*/Cargo.toml"))
+    return sorted(CODEX.glob("**/Cargo.toml"))
 
 
 def package_name(manifest: Path) -> str:

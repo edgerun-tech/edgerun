@@ -707,41 +707,25 @@ impl MailStore for MaildirImapStore {
                 "ARRIVAL" | "DATE" | "SENT" => {
                     entries.sort_by(|a, b| {
                         let ord = a.date.cmp(&b.date);
-                        if rev {
-                            ord.reverse()
-                        } else {
-                            ord
-                        }
+                        if rev { ord.reverse() } else { ord }
                     });
                 }
                 "SUBJECT" => {
                     entries.sort_by(|a, b| {
                         let ord = a.subject.cmp(&b.subject);
-                        if rev {
-                            ord.reverse()
-                        } else {
-                            ord
-                        }
+                        if rev { ord.reverse() } else { ord }
                     });
                 }
                 "FROM" => {
                     entries.sort_by(|a, b| {
                         let ord = a.from.cmp(&b.from);
-                        if rev {
-                            ord.reverse()
-                        } else {
-                            ord
-                        }
+                        if rev { ord.reverse() } else { ord }
                     });
                 }
                 "TO" => {
                     entries.sort_by(|a, b| {
                         let ord = a.to.cmp(&b.to);
-                        if rev {
-                            ord.reverse()
-                        } else {
-                            ord
-                        }
+                        if rev { ord.reverse() } else { ord }
                     });
                 }
                 "CC" => {
@@ -750,11 +734,7 @@ impl MailStore for MaildirImapStore {
                 "SIZE" => {
                     entries.sort_by(|a, b| {
                         let ord = a.size.cmp(&b.size);
-                        if rev {
-                            ord.reverse()
-                        } else {
-                            ord
-                        }
+                        if rev { ord.reverse() } else { ord }
                     });
                 }
                 _ => {} // Unknown criterion, keep order

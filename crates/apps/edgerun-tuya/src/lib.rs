@@ -155,7 +155,11 @@ impl TuyaController {
         let (size, _) = socket.recv_from(&mut buf).await.map_err(rt_error)?;
 
         let response = str::from_utf8(&buf[..size]).unwrap();
-        let parsed = edgerun_json::parse_json(response).unwrap();
+        let tape = edgerun_json::parse_json_tape(response).unwrap();
+        let parsed = tape
+            .root(response)
+            .and_then(|value| value.to_json_value())
+            .unwrap_or(edgerun_json::Value::Null);
 
         Ok(parsed)
     }

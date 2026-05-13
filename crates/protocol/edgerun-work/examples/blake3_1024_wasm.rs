@@ -2,6 +2,10 @@
 
 use core::ptr::{addr_of, addr_of_mut, copy_nonoverlapping};
 
+#[path = "../src/blake3.rs"]
+#[allow(dead_code)]
+mod blake3;
+
 const INPUT_LEN: usize = 1024;
 const OUTPUT_LEN: usize = 32;
 

@@ -36,8 +36,6 @@
 #![no_std]
 
 extern crate alloc;
-#[cfg(feature = "serde-compat")]
-extern crate serde_json as serde_json_compat_crate;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 extern crate std;
 #[cfg(all(test, not(feature = "std")))]
@@ -69,6 +67,7 @@ mod api;
 mod borrowed_value;
 mod error;
 mod index;
+mod interop;
 pub mod io;
 mod json_macro;
 mod map;
@@ -86,13 +85,17 @@ pub use api::{
     to_vec_pretty,
 };
 pub use api::{from_reader, to_writer, to_writer_pretty};
+#[cfg(feature = "serde")]
+pub use api::{from_serde_slice, from_serde_str, from_serde_value, to_serde_value};
 pub use borrowed_value::BorrowedJsonValue;
 pub use error::{JsonError, JsonParseError};
+pub type Error = JsonError;
+pub type Result<T> = core::result::Result<T, JsonError>;
 pub use index::ValueIndex;
 pub use map::Map;
 pub use model::{
-    FromJson, ToJson, from_json_slice, from_json_str, from_json_value, to_json_string,
-    to_json_value, to_json_vec,
+    FromJson, ToJson, from_json_slice, from_json_str, from_json_value, from_value, to_json_string,
+    to_json_value, to_json_vec, to_value,
 };
 pub use number::JsonNumber;
 pub use tape::{
@@ -103,12 +106,6 @@ pub use value::{JsonValue, JsonValueError, Number, Value};
 
 #[cfg(feature = "derive")]
 pub use edgerun_json_derive::{FromJson, ToJson};
-
-/// Compatibility surface for crates migrating away from a direct `serde_json` dependency.
-#[cfg(feature = "serde-compat")]
-pub mod serde_json {
-    pub use crate::serde_json_compat_crate::*;
-}
 
 #[cfg(feature = "toml")]
 pub use toml::{
@@ -153,7 +150,7 @@ macro_rules! impl_json_struct {
     ) => {
         impl $crate::ToJson for $ty {
             fn to_json(&self) -> $crate::JsonValue {
-                let mut object = $crate::Map::new();
+                let mut object: $crate::Map = $crate::Map::new();
                 $(
                     object.push_field(
                         $crate::impl_json_struct!(@canonical_key $required_key),
@@ -208,7 +205,7 @@ macro_rules! impl_json_struct {
     ) => {
         impl $crate::ToJson for $ty {
             fn to_json(&self) -> $crate::JsonValue {
-                let mut object = $crate::Map::new();
+                let mut object: $crate::Map = $crate::Map::new();
                 $(
                     object.push_field($json_key, $crate::ToJson::to_json(&self.$field));
                 )*
@@ -394,7 +391,7 @@ mod tests {
         impl TryFrom<JsonValue> for Node {
             type Error = JsonValueError;
 
-            fn try_from(value: JsonValue) -> Result<Self, Self::Error> {
+            fn try_from(value: JsonValue) -> core::result::Result<Self, Self::Error> {
                 Ok(Self {
                     name: value.required_str("name")?.to_owned(),
                     online: value.required_bool("online")?,

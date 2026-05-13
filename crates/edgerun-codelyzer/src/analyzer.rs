@@ -213,7 +213,7 @@ fn build_program(
 /// Reads files from VFS memory instead of disk.
 #[cfg(feature = "vfs")]
 fn build_program_vfs(
-    vfs: &edgerun_vfs::SharedVFS,
+    vfs: &crate::vfs::SharedVFS,
     root_dir: &str,
     commit_map: &HashMap<String, String>,
 ) -> (Program, ChangeSet) {

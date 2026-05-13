@@ -92,19 +92,24 @@ fn workspace_member_manifests(workspace_root: &Path) -> Result<Vec<PathBuf>, Str
         ));
     }
 
-    let metadata = edgerun_json::from_slice(&output.stdout)
+    let metadata = std::str::from_utf8(&output.stdout)
+        .map_err(|err| format!("cargo metadata output was not utf-8: {err}"))?;
+    let tape = edgerun_json::parse_json_tape(metadata)
         .map_err(|err| format!("parse cargo metadata failed: {err}"))?;
-    let workspace_members = metadata
+    let root = tape
+        .root(metadata)
+        .ok_or_else(|| "cargo metadata missing root JSON value".to_string())?;
+    let workspace_members = root
         .get("workspace_members")
-        .and_then(|value| value.as_array())
+        .and_then(|value| value.array_items())
         .ok_or_else(|| "cargo metadata missing workspace_members".to_string())?
-        .iter()
+        .into_iter()
         .filter_map(|member| member.as_str())
         .collect::<BTreeSet<_>>();
 
-    let packages = metadata
+    let packages = root
         .get("packages")
-        .and_then(|value| value.as_array())
+        .and_then(|value| value.array_items())
         .ok_or_else(|| "cargo metadata missing packages".to_string())?;
     let mut manifests = Vec::new();
     for package in packages {

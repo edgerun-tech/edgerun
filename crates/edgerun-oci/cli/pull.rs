@@ -4,14 +4,14 @@ use crate::prelude::*;
 use std::path::PathBuf;
 
 use crate::ImageRef;
+use crate::clap::cli::Action;
+use crate::clap::{Arg, Command};
 use crate::cli::display::format_bytes;
 use crate::cli::{
     GlobalOpts, default_images_dir, default_store_dir, invalid_input, parse_cli_args,
     required_positional, resolve_registry_auth,
 };
 use crate::{ImageTrustPolicy, PullProgress, RegistryClient};
-use edgerun_clap::cli::Action;
-use edgerun_clap::{Arg, Command};
 
 pub fn cmd_pull(_opts: &GlobalOpts, args: &[String]) -> std::io::Result<()> {
     let (image_ref, images_dir, store_path, trust_policy) = parse_pull_args(args)?;

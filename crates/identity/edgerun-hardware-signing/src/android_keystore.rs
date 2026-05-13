@@ -4,7 +4,7 @@
 
 use alloc::{vec, vec::Vec};
 
-use edgerun_android_keystore::{
+use crate::android_keystore_provider::{
     AndroidKeystoreAssuranceLevel, AndroidKeystoreSignatureAlgorithm, AndroidKeystoreSigningKey,
     sign_record_with_keystore_checked,
 };
@@ -151,12 +151,12 @@ fn map_hardware_to_keystore_algorithm(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{HardwareAssuranceStrength, MESH_PUBLIC_KEY_LENGTH};
-    use alloc::vec;
-    use edgerun_android_keystore::{
+    use crate::android_keystore_provider::{
         AndroidKeystoreAssuranceLevel, AndroidKeystoreError, AndroidKeystoreKeyInfo,
         AndroidKeystoreSignatureAlgorithm,
     };
+    use crate::{HardwareAssuranceStrength, MESH_PUBLIC_KEY_LENGTH};
+    use alloc::vec;
 
     // -----------------------------------------------------------------------
     // Fake keystore keys for testing

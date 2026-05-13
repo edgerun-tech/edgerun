@@ -48,10 +48,12 @@ pub use core::{iter, result};
 #[cfg(not(target_os = "none"))]
 pub mod benchmark;
 pub mod discovery;
+pub mod link;
 pub mod mesh_payload;
 pub mod router;
 #[cfg(not(target_os = "none"))]
 pub mod router_benchmark;
+pub mod session;
 
 mod frame;
 mod frame_types;
@@ -68,9 +70,13 @@ pub use frame::{
     MeshFrameReject, inspect_mesh_frame_wire, inspect_mesh_frame_wire_for,
 };
 pub use frame_types::FrameType;
+pub use link::{IpTunnel, MeshLink, MulticastSocket, RawEthernetSocket, UdpBroadcastSocket};
 pub use node::{DiscoveryPayload, LocalNode, MeshPeer, sign_frame};
 pub use router::MeshRouter;
 pub use routing::{MeshRoute, MeshRoutingTable};
+pub use session::{
+    EphemeralSecret, HandshakeAccept, HandshakeInit, MeshSession, SessionError, SessionManager,
+};
 
 #[cfg(test)]
 mod tests;

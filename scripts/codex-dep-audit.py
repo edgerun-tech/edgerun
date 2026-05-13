@@ -13,16 +13,13 @@ CODEX = ROOT / "crates" / "edgerun-codex"
 CODEX_MANIFEST = CODEX / "Cargo.toml"
 UTILITY = ROOT / "crates" / "utility"
 
-ALIASES = {
-    "rustls": "edgerun-rusttls",
-}
+ALIASES = {}
 
 EXISTING_HOME = {
     "anyhow": "edgerun-error exists, but it is a derive crate today; use a compatibility wrapper first unless error call sites are being rewritten.",
     "icu_decimal": "edgerun-locale exists, but Codex uses ICU APIs directly; wrap first.",
     "icu_locale_core": "edgerun-locale exists, but Codex uses ICU APIs directly; wrap first.",
     "icu_provider": "edgerun-locale exists, but Codex uses ICU APIs directly; wrap first.",
-    "rustls": "edgerun-rusttls exists but is not API-complete for Codex client tests/custom CA; either extend it or use a temporary compatibility wrapper.",
     "tracing": "edgerun-log exists, but Codex uses tracing spans/macros/instrumentation directly; wrap first.",
     "tracing-opentelemetry": "edgerun-log exists, but OpenTelemetry span propagation still uses upstream APIs; wrap first.",
 }
@@ -38,8 +35,6 @@ LANES = {
     "opentelemetry": "telemetry wrapper",
     "reqwest": "http client wrapper",
     "rmcp": "protocol wrapper",
-    "rustls": "extend existing/wrapper",
-    "rustls-native-certs": "tls wrapper",
     "rustls-pki-types": "tls wrapper",
     "schemars": "derive/schema wrapper",
     "seccompiler": "platform wrapper",

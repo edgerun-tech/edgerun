@@ -3,6 +3,9 @@
 #[cfg(feature = "alloc")]
 extern crate alloc;
 
+#[cfg(feature = "rtl8125")]
+pub mod rtl8125;
+
 pub const ETHERNET_HEADER_LEN: usize = 14;
 pub const ETHERNET_MTU: u16 = 1500;
 pub const ETHERNET_FRAME_LEN: usize = ETHERNET_HEADER_LEN + ETHERNET_MTU as usize;
@@ -329,7 +332,7 @@ fn virtio_error(error: edgerun_virtio::VirtioError) -> FrameDriverError {
 }
 
 #[cfg(feature = "rtl8125")]
-impl FrameDevice for edgerun_rtl8125::Rtl8125 {
+impl FrameDevice for rtl8125::Rtl8125 {
     fn mac(&self) -> [u8; 6] {
         self.get_mac()
     }

@@ -7,8 +7,7 @@ use crate::BareImagePlan;
 use crate::image_apply::{
     BareImageApplyReport, apply_bare_image_layer_blob_sha256, validate_bare_image_layer_set,
 };
-use edgerun_edgefs::EdgeFs;
-use edgerun_storage::BlockStorage;
+use edgerun_storage::{BlockStorage, EdgeFs};
 
 #[derive(Debug, Clone)]
 pub struct EdgeFsImagePullReport {

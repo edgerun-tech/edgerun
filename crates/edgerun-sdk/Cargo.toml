@@ -21,16 +21,18 @@ required-features = ["browser-authoring"]
 [features]
 default = ["std"]
 browser-authoring = ["dep:edgerun-crypto", "dep:edgerun-wire"]
+marketplace-domain = ["runtime-api", "dep:edgerun-wire"]
 runtime-api = ["dep:edgerun-protocols"]
-std = ["dep:edgerun-crypto", "dep:edgerun-deploy", "dep:edgerun-json", "dep:edgerun-machine-report", "runtime-api", "dep:edgerun-ssh"]
+standards-seed = []
+wallet-app = ["runtime-api", "dep:edgerun-wire"]
+std = ["dep:edgerun-crypto", "dep:edgerun-encoding", "dep:edgerun-json", "dep:edgerun-machine-report", "runtime-api"]
 
 [dependencies]
-edgerun-crypto = { workspace = true, features = ["ed25519"], optional = true }
-edgerun-deploy = { workspace = true, features = ["std"], optional = true }
+edgerun-crypto = { workspace = true, features = ["aes", "ed25519", "hmac", "x25519"], optional = true }
+edgerun-encoding = { workspace = true, optional = true }
 edgerun-machine-report = { version = "0.1", path = "../node/edgerun-machine-report", optional = true }
-edgerun-protocols = { workspace = true, default-features = false, features = ["seal", "wire"], optional = true }
+edgerun-protocols = { workspace = true, default-features = false, features = ["ed25519", "seal", "sign", "ssh", "verify", "wire"], optional = true }
 edgerun-wire = { workspace = true, optional = true }
-edgerun-ssh = { workspace = true, features = ["std"], optional = true }
 edgerun-json = { workspace = true, features = ["std"], optional = true }
 
 [lints]

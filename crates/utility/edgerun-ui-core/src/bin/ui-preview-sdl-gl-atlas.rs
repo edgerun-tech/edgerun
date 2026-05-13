@@ -4,6 +4,7 @@
 //! rendering is OpenGL: rounded rects are shader SDFs, text/icons are atlas
 //! texture quads.
 
+#[cfg(feature = "fontdue-text")]
 use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int, c_void};
@@ -12,7 +13,7 @@ use std::time::{Duration, Instant};
 
 #[cfg(feature = "fontdue-text")]
 use edgerun_ui_core::font::FontFace;
-#[cfg(feature = "fontdue-text")]
+#[cfg(all(feature = "fontdue-text", not(feature = "tabler-svg-atlas")))]
 use edgerun_ui_core::tabler_font_generated::{TABLER_ICON_FONT_HINT, tabler_icon};
 #[cfg(feature = "tabler-svg-atlas")]
 use edgerun_ui_core::tabler_svg_atlas_generated::{
@@ -48,22 +49,34 @@ const GL_LINK_STATUS: u32 = 0x8B82;
 const GL_BLEND: u32 = 0x0BE2;
 const GL_SRC_ALPHA: u32 = 0x0302;
 const GL_ONE_MINUS_SRC_ALPHA: u32 = 0x0303;
+#[cfg(feature = "fontdue-text")]
 const GL_TEXTURE_2D: u32 = 0x0DE1;
+#[cfg(feature = "fontdue-text")]
 const GL_TEXTURE0: u32 = 0x84C0;
+#[cfg(feature = "fontdue-text")]
 const GL_RED: u32 = 0x1903;
+#[cfg(feature = "fontdue-text")]
 const GL_R8: u32 = 0x8229;
+#[cfg(feature = "fontdue-text")]
 const GL_UNSIGNED_BYTE: u32 = 0x1401;
+#[cfg(feature = "fontdue-text")]
 const GL_TEXTURE_MIN_FILTER: u32 = 0x2801;
+#[cfg(feature = "fontdue-text")]
 const GL_TEXTURE_MAG_FILTER: u32 = 0x2800;
+#[cfg(feature = "fontdue-text")]
 const GL_TEXTURE_WRAP_S: u32 = 0x2802;
+#[cfg(feature = "fontdue-text")]
 const GL_TEXTURE_WRAP_T: u32 = 0x2803;
+#[cfg(feature = "fontdue-text")]
 const GL_LINEAR: i32 = 0x2601;
+#[cfg(feature = "fontdue-text")]
 const GL_CLAMP_TO_EDGE: i32 = 0x812F;
+#[cfg(feature = "fontdue-text")]
 const GL_UNPACK_ALIGNMENT: u32 = 0x0CF5;
 
 #[repr(C)]
 struct SDL_Window(c_void);
-type SDL_GLContext = *mut c_void;
+type SdlGlContext = *mut c_void;
 
 #[repr(C)]
 struct SdlEvent {
@@ -109,8 +122,8 @@ unsafe extern "C" {
         flags: u32,
     ) -> *mut SDL_Window;
     fn SDL_DestroyWindow(window: *mut SDL_Window);
-    fn SDL_GL_CreateContext(window: *mut SDL_Window) -> SDL_GLContext;
-    fn SDL_GL_DeleteContext(context: SDL_GLContext);
+    fn SDL_GL_CreateContext(window: *mut SDL_Window) -> SdlGlContext;
+    fn SDL_GL_DeleteContext(context: SdlGlContext);
     fn SDL_GL_SetSwapInterval(interval: c_int) -> c_int;
     fn SDL_GL_SwapWindow(window: *mut SDL_Window);
     fn SDL_PollEvent(event: *mut SdlEvent) -> c_int;
@@ -169,9 +182,13 @@ unsafe extern "C" {
     fn glDeleteBuffers(n: c_int, buffers: *const u32);
     fn glDeleteVertexArrays(n: c_int, arrays: *const u32);
     fn glDeleteProgram(program: u32);
+    #[cfg(feature = "fontdue-text")]
     fn glGenTextures(n: c_int, textures: *mut u32);
+    #[cfg(feature = "fontdue-text")]
     fn glBindTexture(target: u32, texture: u32);
+    #[cfg(feature = "fontdue-text")]
     fn glTexParameteri(target: u32, pname: u32, param: c_int);
+    #[cfg(feature = "fontdue-text")]
     fn glTexImage2D(
         target: u32,
         level: c_int,
@@ -183,8 +200,11 @@ unsafe extern "C" {
         ty: u32,
         pixels: *const c_void,
     );
+    #[cfg(feature = "fontdue-text")]
     fn glActiveTexture(texture: u32);
+    #[cfg(feature = "fontdue-text")]
     fn glPixelStorei(pname: u32, param: c_int);
+    #[cfg(feature = "fontdue-text")]
     fn glDeleteTextures(n: c_int, textures: *const u32);
 }
 
@@ -235,6 +255,7 @@ void main() {
 }
 "#;
 
+#[cfg(feature = "fontdue-text")]
 const TEXT_VERT: &str = r#"#version 330 core
 layout(location = 0) in vec4 a_data; // x,y,u,v
 uniform vec2 u_screen;
@@ -247,6 +268,7 @@ void main() {
 }
 "#;
 
+#[cfg(feature = "fontdue-text")]
 const TEXT_FRAG: &str = r#"#version 330 core
 in vec2 v_uv;
 out vec4 out_color;
@@ -266,8 +288,11 @@ const PANEL: Color4 = Color4([0.059, 0.090, 0.165, 0.94]);
 const PANEL_2: Color4 = Color4([0.118, 0.161, 0.231, 0.90]);
 const BORDER: Color4 = Color4([0.200, 0.255, 0.333, 0.58]);
 const TEXT: Color4 = Color4([0.973, 0.980, 0.988, 1.0]);
+#[cfg(feature = "fontdue-text")]
 const MUTED: Color4 = Color4([0.580, 0.640, 0.720, 1.0]);
+#[cfg(feature = "fontdue-text")]
 const EMERALD: Color4 = Color4([0.314, 0.980, 0.482, 1.0]);
+#[cfg(feature = "fontdue-text")]
 const CYAN: Color4 = Color4([0.545, 0.914, 0.992, 1.0]);
 const PALETTE: [Color4; 7] = [
     Color4([0.055, 0.624, 0.820, 1.0]), // sky/cyan
@@ -473,8 +498,6 @@ struct Glyph {
 struct Atlas {
     tex: u32,
     glyphs: HashMap<char, Glyph>,
-    w: u32,
-    h: u32,
 }
 
 #[cfg(feature = "fontdue-text")]
@@ -553,7 +576,7 @@ impl Atlas {
                 bitmap.as_ptr() as *const c_void,
             );
         }
-        Self { tex, glyphs, w, h }
+        Self { tex, glyphs }
     }
 }
 #[cfg(feature = "fontdue-text")]
@@ -842,13 +865,13 @@ fn run() -> Result<(), String> {
     let text = TextRenderer::new()?;
     #[cfg(feature = "fontdue-text")]
     let ui_font = FontFace::load_best_ui_font().ok();
-    #[cfg(feature = "fontdue-text")]
+    #[cfg(all(feature = "fontdue-text", not(feature = "tabler-svg-atlas")))]
     let icon_font = load_icon_font();
     #[cfg(feature = "fontdue-text")]
     let ui_atlas = ui_font
         .as_ref()
         .map(|f| Atlas::build(f, &ascii_chars(), 38.0));
-    #[cfg(feature = "fontdue-text")]
+    #[cfg(all(feature = "fontdue-text", not(feature = "tabler-svg-atlas")))]
     let icon_atlas = icon_font
         .as_ref()
         .map(|f| Atlas::build(f, &icon_chars(), 34.0));
@@ -886,7 +909,7 @@ fn run() -> Result<(), String> {
             &text,
             #[cfg(feature = "fontdue-text")]
             ui_atlas.as_ref(),
-            #[cfg(feature = "fontdue-text")]
+            #[cfg(all(feature = "fontdue-text", not(feature = "tabler-svg-atlas")))]
             icon_atlas.as_ref(),
             #[cfg(all(feature = "fontdue-text", feature = "tabler-svg-atlas"))]
             &svg_atlas,
@@ -909,7 +932,9 @@ fn render_frame(
     shapes: &ShapeRenderer,
     #[cfg(feature = "fontdue-text")] text: &TextRenderer,
     #[cfg(feature = "fontdue-text")] ui_atlas: Option<&Atlas>,
-    #[cfg(feature = "fontdue-text")] icon_atlas: Option<&Atlas>,
+    #[cfg(all(feature = "fontdue-text", not(feature = "tabler-svg-atlas")))] icon_atlas: Option<
+        &Atlas,
+    >,
     #[cfg(all(feature = "fontdue-text", feature = "tabler-svg-atlas"))] svg_atlas: &SvgAtlas,
 ) {
     let accent = PALETTE[accent_i.min(PALETTE.len() - 1)];
@@ -1073,7 +1098,7 @@ fn pick_accent(state: &mut State, x: i32, y: i32) {
 fn ascii_chars() -> Vec<char> {
     (32u8..=126).map(char::from).collect()
 }
-#[cfg(feature = "fontdue-text")]
+#[cfg(all(feature = "fontdue-text", not(feature = "tabler-svg-atlas")))]
 fn icon_chars() -> Vec<char> {
     [
         "sparkles",
@@ -1090,13 +1115,13 @@ fn icon_chars() -> Vec<char> {
     .filter_map(tabler_icon)
     .collect()
 }
-#[cfg(feature = "fontdue-text")]
+#[cfg(all(feature = "fontdue-text", not(feature = "tabler-svg-atlas")))]
 fn load_icon_font() -> Option<FontFace> {
     let path =
         std::env::var("EDGE_TABLER_FONT").unwrap_or_else(|_| TABLER_ICON_FONT_HINT.to_string());
     FontFace::from_bytes(std::fs::read(path).ok()?).ok()
 }
-#[cfg(feature = "fontdue-text")]
+#[cfg(all(feature = "fontdue-text", not(feature = "tabler-svg-atlas")))]
 fn draw_icon(
     text: &TextRenderer,
     atlas: &Atlas,
@@ -1228,7 +1253,7 @@ impl Drop for Window {
         }
     }
 }
-struct GlContext(SDL_GLContext);
+struct GlContext(SdlGlContext);
 impl Drop for GlContext {
     fn drop(&mut self) {
         if !self.0.is_null() {

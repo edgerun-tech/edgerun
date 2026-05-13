@@ -130,7 +130,7 @@ use alloc::string::{String, ToString};
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 
-use edgerun_capability_policy::SimplePolicyEngine;
+use edgerun_capabilities::SimplePolicyEngine;
 use edgerun_hardware_signing::NodeID;
 use edgerun_protocols::core_protocol::command::{CommandValidationContext, validate_command};
 use edgerun_protocols::core_protocol::protocol::{CommandEnvelope, EventEnvelope, EventType};

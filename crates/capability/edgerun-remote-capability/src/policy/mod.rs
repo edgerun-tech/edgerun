@@ -3,9 +3,9 @@
 use crate::collections::HashMap;
 use crate::prelude::v1::*;
 
-use edgerun_capabilities::{CapabilityDescriptor, CapabilityError};
-use edgerun_capability_policy::{
-    PolicyContext, PolicyDecision, PolicyEngine, RevocationReason, SimplePolicyEngine,
+use edgerun_capabilities::{
+    CapabilityDescriptor, CapabilityError, PolicyContext, PolicyDecision, PolicyEngine,
+    RevocationReason, SimplePolicyEngine,
 };
 use edgerun_protocols::core_protocol::protocol::capability::{
     CapabilityGrant, CapabilityRequest, CapabilityRevocation,

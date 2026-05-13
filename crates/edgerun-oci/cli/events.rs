@@ -4,9 +4,9 @@ use crate::prelude::*;
 use std::fs;
 use std::io::{self, Write};
 
+use crate::clap::{Arg, Command};
 use crate::cli::{invalid_input, parse_cli_args, required_positional};
 use crate::state::load_state;
-use edgerun_clap::{Arg, Command};
 use edgerun_json::{JsonValue, Map};
 
 pub fn cmd_events(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {

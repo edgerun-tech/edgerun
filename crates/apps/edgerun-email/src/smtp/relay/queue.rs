@@ -11,11 +11,11 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicI64, Ordering};
 
 use super::now_secs;
-use crate::rt::{spawn_blocking, RwLock};
+use crate::rt::{RwLock, spawn_blocking};
 use edgerun_encoding::byteorder::{read_i32_le, read_i64_le};
 use edgerun_encoding::string_field::{
-    decode_bytes_u64, decode_string_field_u64, encode_bytes_u64, encode_string_field_u64,
-    StringFieldError,
+    StringFieldError, decode_bytes_u64, decode_string_field_u64, encode_bytes_u64,
+    encode_string_field_u64,
 };
 
 // ===========================================================================

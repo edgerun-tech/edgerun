@@ -49,8 +49,6 @@ The crate models deterministic "standard modules" as standalone wasm units with 
   - `edgerun-crypto`
   - `edgerun-protocols`
   - `edgerun-wire`
-  - `edgerun-deploy`
-  - `edgerun-ssh`
   - `edgerun-json`
 
 ## Library API

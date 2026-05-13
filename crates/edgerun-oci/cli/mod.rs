@@ -202,10 +202,10 @@ pub(crate) fn invalid_input(message: impl Into<String>) -> io::Error {
 }
 
 pub(crate) fn parse_cli_args(
-    command: edgerun_clap::Command,
+    command: crate::clap::Command,
     args: &[String],
     usage: &str,
-) -> io::Result<edgerun_clap::ArgMatches> {
+) -> io::Result<crate::clap::ArgMatches> {
     let matches = command.get_matches_from_iter(args.iter().map(String::as_str));
     if let Some(arg) = matches.unknown_args().first() {
         return Err(invalid_input(format!("{usage}: unknown option {arg}")));
@@ -254,7 +254,7 @@ pub(crate) const EXEC_VALUE_OPTIONS: &[&str] = &[
 ];
 
 pub(crate) fn required_positional<'a>(
-    matches: &'a edgerun_clap::ArgMatches,
+    matches: &'a crate::clap::ArgMatches,
     index: usize,
     usage: &str,
 ) -> io::Result<&'a str> {
@@ -535,7 +535,7 @@ pub fn print_usage() {
 /// Extract a signal string from command args (for kill command).
 pub fn parse_kill_args(args: &[String]) -> io::Result<(Option<String>, String)> {
     const USAGE: &str = "Usage: ert kill <container-id> [signal]";
-    let matches = parse_cli_args(edgerun_clap::Command::new("kill"), args, USAGE)?;
+    let matches = parse_cli_args(crate::clap::Command::new("kill"), args, USAGE)?;
     if matches.positional_count() > 2 {
         return Err(invalid_input(USAGE));
     }
@@ -549,11 +549,11 @@ pub fn parse_kill_args(args: &[String]) -> io::Result<(Option<String>, String)> 
 pub fn parse_delete_args(args: &[String]) -> io::Result<(bool, Option<String>)> {
     const USAGE: &str = "Usage: ert delete [--force] <container-id>";
     let matches = parse_cli_args(
-        edgerun_clap::Command::new("delete").arg(
-            edgerun_clap::Arg::new("force")
+        crate::clap::Command::new("delete").arg(
+            crate::clap::Arg::new("force")
                 .short('f')
                 .long("force")
-                .action(edgerun_clap::cli::Action::StoreTrue),
+                .action(crate::clap::cli::Action::StoreTrue),
         ),
         args,
         USAGE,
@@ -581,7 +581,7 @@ pub fn is_process_alive(pid: u32) -> bool {
 /// Extract container ID from command args, returning an error if missing.
 pub fn parse_container_id_args(args: &[String], command: &'static str) -> io::Result<String> {
     let usage = format!("Usage: ert {command} <container-id>");
-    let matches = parse_cli_args(edgerun_clap::Command::new(command), args, &usage)?;
+    let matches = parse_cli_args(crate::clap::Command::new(command), args, &usage)?;
     if matches.positional_count() > 1 {
         return Err(invalid_input(usage.clone()));
     }

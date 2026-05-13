@@ -7,10 +7,10 @@ use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::time::Duration;
 
+use crate::clap::cli::Action;
+use crate::clap::{Arg, Command};
 use crate::cli::{invalid_input, parse_cli_args, required_positional};
 use crate::state::{container_state_dir, load_state};
-use edgerun_clap::cli::Action;
-use edgerun_clap::{Arg, Command};
 
 pub fn cmd_logs(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     crate::cli::apply_global_opts(opts)?;

@@ -9,10 +9,11 @@ homepage.workspace = true
 description = "Edgerun shim for schemars"
 
 [dependencies]
-schemars = "0.8.22"
+edgerun-schemars-derive = { path = "../edgerun-schemars-derive" }
+serde = { package = "edgerun-serde", path = "../edgerun-serde", features = ["derive", "std"] }
 
 [features]
-chrono04 = ["schemars/chrono"]
+chrono04 = []
 
 [lints]
 workspace = true

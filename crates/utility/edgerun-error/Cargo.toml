@@ -12,10 +12,9 @@ description = "Edgerun error handling facade and derive"
 default = ["std", "derive"]
 std = []
 derive = ["dep:edgerun-error-derive"]
-anyhow-compat = ["std", "dep:anyhow"]
+anyhow-compat = ["std"]
 
 [dependencies]
-anyhow = { version = "1", optional = true }
 edgerun-error-derive = { version = "0.1", path = "../edgerun-error-derive", optional = true }
 
 [lints]

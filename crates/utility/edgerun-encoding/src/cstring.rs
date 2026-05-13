@@ -1,8 +1,8 @@
 //! C-string (null-terminated string) utilities.
 //!
 //! Consolidated from identical implementations in:
-//! - `edgerun-linux-cec/src/lib.rs`
-//! - `edgerun-mgmt-bluetooth/src/lib.rs`
+//! - `edgerun-node/src/hardware/linux_cec.rs`
+//! - `edgerun-node/src/hardware/mgmt_bluetooth.rs`
 //!
 //! Provides safe conversion between null-terminated byte slices and Rust strings.
 
@@ -18,8 +18,8 @@ use core::str;
 /// before the null terminator are not valid UTF-8.
 ///
 /// This consolidates the duplicate implementations in:
-/// - `edgerun-linux-cec/src/lib.rs`
-/// - `edgerun-mgmt-bluetooth/src/lib.rs`
+/// - `edgerun-node/src/hardware/linux_cec.rs`
+/// - `edgerun-node/src/hardware/mgmt_bluetooth.rs`
 ///
 /// # Examples
 /// ```
@@ -104,7 +104,7 @@ pub fn decode_c_strings(bytes: &[u8]) -> Result<Vec<String>, core::str::Utf8Erro
 
 /// Decode a null-terminated C string and trim whitespace.
 ///
-/// This variant is for callers like `edgerun-linux-cec` that need trimming.
+/// This variant is for callers like `edgerun-node::hardware::linux_cec` that need trimming.
 ///
 /// # Examples
 /// ```

@@ -889,9 +889,11 @@ mod tests {
 
         let messages = store.list_messages("ken").unwrap();
         assert_eq!(messages.len(), 2);
-        assert!(messages
-            .iter()
-            .all(|m| matches!(m.state, MaildirState::New)));
+        assert!(
+            messages
+                .iter()
+                .all(|m| matches!(m.state, MaildirState::New))
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }

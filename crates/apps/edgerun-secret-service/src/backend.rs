@@ -64,24 +64,22 @@ impl CredentialMeta {
     }
 
     pub fn from_json(s: &str) -> Option<Self> {
-        let v: edgerun_json::JsonValue = edgerun_json::from_str(s).ok()?;
-        let label = v
+        let tape = edgerun_json::parse_json_tape(s).ok()?;
+        let root = tape.root(s)?;
+        let label = root
             .get("label")
-            .and_then(edgerun_json::JsonValue::as_str)
+            .and_then(|value| value.as_str())
             .unwrap_or("")
             .to_string();
-        let created_us = v
+        let created_us = root
             .get("created_us")
-            .and_then(edgerun_json::JsonValue::as_u64)
+            .and_then(|value| value.as_u64())
             .unwrap_or(0);
         let mut attributes = HashMap::new();
-        if let Some(attrs) = v
-            .get("attributes")
-            .and_then(edgerun_json::JsonValue::as_object)
-        {
-            for (k, val) in attrs.iter() {
+        if let Some(attrs) = root.get_object_fields("attributes") {
+            for (k, val) in attrs {
                 if let Some(vs) = val.as_str() {
-                    attributes.insert(k.clone(), vs.to_string());
+                    attributes.insert(k.to_string(), vs.to_string());
                 }
             }
         }

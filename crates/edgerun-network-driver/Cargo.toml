@@ -11,13 +11,12 @@ description = "Frame-oriented network driver abstraction for Edgerun runtimes"
 [features]
 default = []
 alloc = []
-rtl8125 = ["dep:edgerun-rtl8125"]
+rtl8125 = []
 std = []
 tap = ["std", "dep:libc"]
 virtio = ["dep:edgerun-virtio"]
 
 [dependencies]
-edgerun-rtl8125 = { workspace = true, optional = true }
 edgerun-virtio = { workspace = true, optional = true }
 libc = { workspace = true, optional = true }
 

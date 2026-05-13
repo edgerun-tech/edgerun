@@ -168,8 +168,8 @@ pub fn rolling_hash(bytes: &[u8]) -> u64 {
 }
 
 #[cfg(feature = "vfs")]
-pub fn load_vfs(root_dir: &str) -> Result<edgerun_vfs::SharedVFS, String> {
-    let vfs = edgerun_vfs::VirtualFileSystem::load_excluding(root_dir, IGNORED_DIRS)?;
+pub fn load_vfs(root_dir: &str) -> Result<crate::vfs::SharedVFS, String> {
+    let vfs = crate::vfs::VirtualFileSystem::load_excluding(root_dir, IGNORED_DIRS)?;
     Ok(std::sync::Arc::new(std::sync::RwLock::new(vfs)))
 }
 

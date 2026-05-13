@@ -11,8 +11,5 @@ description = "Edgerun diff compatibility utilities"
 [features]
 default = []
 
-[dependencies]
-similar = "2.7.0"
-
 [lints]
 workspace = true

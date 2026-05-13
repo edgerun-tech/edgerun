@@ -6,7 +6,7 @@ runs_over = []
 depends_on = []
 implementation_crates = [
   "crates/device-types/edgerun-network-interface",
-  "crates/edgerun-rtl8125",
+  "crates/edgerun-network-driver",
 ]
 profiles = ["ethernet-ii-frame-parser", "bare-metal-candidate"]
 standards_bodies = ["IEEE"]
@@ -43,7 +43,7 @@ kind = "frame-format"
 standards = ["IEEE 802.3"]
 implementation = [
   "crates/device-types/edgerun-network-interface",
-  "crates/edgerun-rtl8125",
+  "crates/edgerun-network-driver",
 ]
 status = "unknown"
 
@@ -52,4 +52,3 @@ accepts = ["nic-rx-bytes"]
 emits = ["ethernet-frame"]
 lower = []
 upper = ["arp", "ipv4", "ipv6"]
-

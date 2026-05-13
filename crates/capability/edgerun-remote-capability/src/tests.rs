@@ -69,7 +69,7 @@ use crate::protocol::{
 use crate::pump_one_event;
 use crate::serve_one;
 use crate::transport::MemoryRemoteTransport;
-use edgerun_capability_policy::PolicyEngine;
+use edgerun_capabilities::PolicyEngine;
 use edgerun_devices::biometrics::{BiometricModality, BiometricState};
 
 // ============================================================================

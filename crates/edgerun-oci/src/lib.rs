@@ -50,7 +50,13 @@ mod registry {
     pub mod config;
     #[cfg(all(feature = "std", not(target_os = "none")))]
     pub(crate) mod dbus_client;
-    #[cfg(feature = "edgefs")]
+    #[cfg(all(
+        feature = "edgefs",
+        any(
+            feature = "registry-client",
+            all(feature = "std", not(target_os = "none"))
+        )
+    ))]
     pub(crate) mod edgefs_pull;
     pub mod errors;
     pub(crate) mod image_ref;
@@ -76,6 +82,7 @@ pub mod bare_syscall;
 pub mod bundle;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub mod cgroups;
+pub mod clap;
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub mod config_builder;
 #[cfg(all(feature = "std", not(target_os = "none")))]
@@ -261,7 +268,13 @@ pub use registry::config::{
 };
 #[cfg(all(feature = "std", not(target_os = "none")))]
 pub use registry::dbus_client::SecretClient;
-#[cfg(feature = "edgefs")]
+#[cfg(all(
+    feature = "edgefs",
+    any(
+        feature = "registry-client",
+        all(feature = "std", not(target_os = "none"))
+    )
+))]
 pub use registry::edgefs_pull::EdgeFsImagePullReport;
 pub use registry::errors::RegistryError;
 #[cfg(any(

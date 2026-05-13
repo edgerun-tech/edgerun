@@ -748,7 +748,7 @@ impl RequestBuilder {
 
     #[cfg(feature = "json")]
     pub fn json<T: serde::Serialize + ?Sized>(self, value: &T) -> Self {
-        match edgerun_json::serde_json::to_vec(value) {
+        match edgerun_json::to_vec(value) {
             Ok(body) => self
                 .header(header::CONTENT_TYPE, "application/json")
                 .body(body),
@@ -835,8 +835,7 @@ impl Response {
 
     #[cfg(feature = "json")]
     pub async fn json<T: serde::de::DeserializeOwned>(self) -> Result<T, Error> {
-        edgerun_json::serde_json::from_slice(&self.body)
-            .map_err(|error| Error::decode(error.to_string()))
+        edgerun_json::from_serde_slice(&self.body).map_err(|error| Error::decode(error.to_string()))
     }
 
     pub fn error_for_status(self) -> Result<Self, Error> {

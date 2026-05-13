@@ -185,9 +185,12 @@ fn node_relay_update_response(request: &str) -> String {
     let Some(body) = request.split("\r\n\r\n").nth(1) else {
         return json_error("400 Bad Request", "missing request body");
     };
-    let envelope = match edgerun_json::from_str(body) {
+    let envelope_tape = match edgerun_json::parse_json_tape(body) {
         Ok(value) => value,
         Err(_) => return json_error("400 Bad Request", "invalid JSON envelope"),
+    };
+    let Some(envelope) = envelope_tape.root(body) else {
+        return json_error("400 Bad Request", "invalid JSON envelope");
     };
     let signed_payload = match envelope.required_str("signedPayload") {
         Ok(value) => value,
@@ -197,11 +200,14 @@ fn node_relay_update_response(request: &str) -> String {
         Ok(value) => value,
         Err(_) => return json_error("400 Bad Request", "missing signatureBase64"),
     };
-    let payload = match edgerun_json::from_str(signed_payload) {
+    let payload_tape = match edgerun_json::parse_json_tape(signed_payload) {
         Ok(value) => value,
         Err(_) => return json_error("400 Bad Request", "invalid signedPayload JSON"),
     };
-    let record = match relay_record_from_payload(&payload, signature_base64) {
+    let Some(payload) = payload_tape.root(signed_payload) else {
+        return json_error("400 Bad Request", "invalid signedPayload JSON");
+    };
+    let record = match relay_record_from_payload(payload, signature_base64) {
         Ok(record) => record,
         Err(error) => return json_error("400 Bad Request", error),
     };
@@ -264,7 +270,7 @@ fn node_relay_lookup_response(path: &str) -> String {
 
 #[cfg(not(target_os = "none"))]
 fn relay_record_from_payload(
-    payload: &edgerun_json::Value,
+    payload: edgerun_json::TapeValue<'_>,
     signature_base64: &str,
 ) -> Result<NodeRelayRecord, &'static str> {
     let version = payload
@@ -305,6 +311,7 @@ fn relay_record_from_payload(
         .to_string();
     let protocols_json = payload
         .get("protocols")
+        .and_then(|value| value.to_json_value())
         .and_then(|value| value.to_json_string().ok())
         .unwrap_or_else(|| "[]".to_string());
     Ok(NodeRelayRecord {
@@ -353,10 +360,13 @@ fn load_relay_directory() -> BTreeMap<String, NodeRelayRecord> {
         return records;
     };
     for line in contents.lines() {
-        let Ok(value) = edgerun_json::from_str(line) else {
+        let Ok(tape) = edgerun_json::parse_json_tape(line) else {
             continue;
         };
-        let Ok(record) = persisted_relay_record(&value) else {
+        let Some(value) = tape.root(line) else {
+            continue;
+        };
+        let Ok(record) = persisted_relay_record(value) else {
             continue;
         };
         records.insert(record.node_id.clone(), record);
@@ -365,7 +375,7 @@ fn load_relay_directory() -> BTreeMap<String, NodeRelayRecord> {
 }
 
 #[cfg(not(target_os = "none"))]
-fn persisted_relay_record(value: &edgerun_json::Value) -> Result<NodeRelayRecord, ()> {
+fn persisted_relay_record(value: edgerun_json::TapeValue<'_>) -> Result<NodeRelayRecord, ()> {
     Ok(NodeRelayRecord {
         node_id: value.required_str("nodeId").map_err(|_| ())?.to_string(),
         public_key_raw_base64: value
@@ -386,6 +396,7 @@ fn persisted_relay_record(value: &edgerun_json::Value) -> Result<NodeRelayRecord
             .to_string(),
         protocols_json: value
             .get("protocols")
+            .and_then(|value| value.to_json_value())
             .and_then(|value| value.to_json_string().ok())
             .unwrap_or_else(|| "[]".to_string()),
         nonce: value.required_str("nonce").map_err(|_| ())?.to_string(),

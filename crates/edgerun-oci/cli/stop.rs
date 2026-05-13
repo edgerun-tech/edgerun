@@ -6,10 +6,10 @@ use std::io;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crate::clap::{Arg, Command};
 use crate::cli::process_tree::{signal_tree, wait_tree_dead};
 use crate::cli::{invalid_input, is_process_alive, parse_cli_args, required_positional};
 use crate::state::{load_state, save_state};
-use edgerun_clap::{Arg, Command};
 
 pub fn cmd_stop(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     crate::cli::apply_global_opts(opts)?;

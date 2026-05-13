@@ -56,6 +56,7 @@ pub use alloc::format;
 pub use core::{cmp, convert, fmt, option, result, slice, str};
 
 pub mod adapters;
+pub mod mesh;
 pub mod policy;
 pub mod protocol;
 pub mod transport;
@@ -66,6 +67,7 @@ pub use adapters::{
     DisplayRemoteAdapter, InputRemoteAdapter, MicrophoneRemoteAdapter, PairedCameraRemoteAdapter,
     SpeakerRemoteAdapter, WifiControlRemoteAdapter, WifiRemoteAdapter,
 };
+pub use mesh::{EnvelopeInbox, OutboundQueue};
 pub use policy::{IntoPolicyWrappedProvider, PolicyWrappedProvider, SessionGrantBinding};
 pub use protocol::{
     CapabilityInvocationFrame, CapabilityRemoteEnvelope, CapabilityResultFrame,

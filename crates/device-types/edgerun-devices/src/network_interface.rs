@@ -11,11 +11,11 @@ mod prelude {
     }
 }
 
+use crate::quectel_ec200a::DtaNetwork;
 use edgerun_capabilities::{
     CapabilityDescriptor, CapabilityError, CapabilityEventKind, CapabilityModality,
     CapabilityOperation, CapabilityProvider, CapabilityRole, capability_descriptor,
 };
-use edgerun_quectel_ec200a::DtaNetwork;
 use prelude::v1::*;
 
 /// Network interface supported by Quectel DTA modem

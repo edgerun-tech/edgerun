@@ -39,7 +39,6 @@ http3 = [
     "tls",
     "edgerun-protocols/http3",
     "edgerun-protocols/quic",
-    "dep:edgerun-qpack",
 ]
 runtime = []
 server = ["http1", "http2", "runtime"]
@@ -84,7 +83,7 @@ full = [
     "protocols",
     "service-suite",
 ]
-display = ["dep:edgerun-drm-display"]
+display = ["dep:edgerun-linux-sysfs"]
 http = ["edgerun-protocols/http"]
 https = ["http", "tls"]
 dns = ["edgerun-protocols/dns"]
@@ -94,47 +93,32 @@ imap = ["edgerun-protocols/imap"]
 lmtp = ["edgerun-protocols/lmtp", "edgerun-protocols/smtp"]
 proxy = ["edgerun-protocols/proxy"]
 virtual-disk = ["dep:edgerun-virtual-disk", "edgerun-protocols/block"]
-derived-db = ["http", "dep:edgerun-derived-db"]
-android-keystore = ["dep:edgerun-android-keystore"]
+derived-db = ["http", "edgerun-storage/std"]
+android-keystore = ["edgerun-hardware-signing/android-keystore"]
 oci = []
 hardware = [
     "dep:edgerun-evdev-input",
-    "dep:edgerun-alsa-speaker",
-    "dep:edgerun-alsa-microphone",
-    "dep:edgerun-v4l2-camera",
-    "dep:edgerun-audio-liveliness",
 ]
 all-hardware = [
     "hardware",
-    "dep:edgerun-linux-gpu",
-    "dep:edgerun-drm-display",
-    "dep:edgerun-goodix-fingerprint",
-    "dep:edgerun-audio-calibration",
-    "dep:edgerun-mgmt-bluetooth",
     "dep:edgerun-linux-wifi",
     "dep:edgerun-linux-usb",
     "dep:edgerun-linux-pci",
-    "dep:edgerun-linux-nfc",
-    "dep:edgerun-linux-npu",
-    "dep:edgerun-linux-power",
-    "dep:edgerun-linux-cec",
-    "dep:edgerun-amd-xdna",
+    "dep:edgerun-linux-sysfs",
     "virtual-disk",
     "dep:edgerun-machine-report",
+    "edgerun-protocols/goodix-fingerprint",
+    "edgerun-protocols/bluetooth-mgmt",
+    "edgerun-protocols/usb",
 ]
 
 [dependencies]
 edgerun-devices.workspace = true
 edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding" }
 edgerun-capabilities = { version = "0.1", path = "../../capability/edgerun-capabilities" }
-edgerun-capability-policy = { version = "0.1", path = "../../capability/edgerun-capability-policy" }
-edgerun-stream = { version = "0.1", path = "../../authority/edgerun-stream" }
 edgerun-storage = { version = "0.1", path = "../../authority/edgerun-storage" }
 edgerun-remote-capability = { version = "0.1", path = "../../capability/edgerun-remote-capability" }
 edgerun-mesh = { version = "0.1", path = "../../mesh/edgerun-mesh" }
-edgerun-mesh-link = { version = "0.1", path = "../../mesh/edgerun-mesh-link" }
-edgerun-mesh-capability = { version = "0.1", path = "../../capability/edgerun-mesh-capability" }
-edgerun-mesh-session = { version = "0.1", path = "../../mesh/edgerun-mesh-session" }
 edgerun-crypto = { workspace = true, default-features = false, features = ["ed25519", "p256"] }
 edgerun-log = { version = "0.1", path = "../../utility/edgerun-log" }
 edgerun-platform = { version = "0.1", path = "../../edgerun-platform" }
@@ -146,8 +130,6 @@ edgerun-work = { version = "0.1", path = "../../protocol/edgerun-work", default-
 edgerun-codelyzer = { version = "0.1", path = "../../edgerun-codelyzer", default-features = false, optional = true }
 rkyv.workspace = true
 edgerun-hpack = { version = "0.1", path = "../../utility/edgerun-hpack", optional = true }
-edgerun-qpack = { version = "0.1", path = "../../utility/edgerun-qpack", optional = true }
-edgerun-derived-db = { workspace = true, features = ["std"], optional = true }
 edgerun-machine-report = { version = "0.1", path = "../edgerun-machine-report", features = ["std"], optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -156,29 +138,14 @@ edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-har
 edgerun-tpm = { version = "0.1", path = "../../identity/edgerun-tpm" }
 edgerun-yubikey = { version = "0.1", path = "../../identity/edgerun-yubikey" }
 edgerun-evdev-input = { version = "0.1", path = "../../linux-adapters/edgerun-evdev-input", optional = true }
-edgerun-alsa-speaker = { version = "0.1", path = "../../linux-adapters/edgerun-alsa-speaker", optional = true }
-edgerun-alsa-microphone = { version = "0.1", path = "../../linux-adapters/edgerun-alsa-microphone", optional = true }
-edgerun-v4l2-camera = { version = "0.1", path = "../../linux-adapters/edgerun-v4l2-camera", optional = true }
-edgerun-audio-liveliness = { version = "0.1", path = "../../linux-adapters/edgerun-audio-liveliness", optional = true }
-edgerun-linux-gpu = { version = "0.1", path = "../../linux-adapters/edgerun-linux-gpu", optional = true }
-edgerun-drm-display = { version = "0.1", path = "../../linux-adapters/edgerun-drm-display", optional = true }
-edgerun-goodix-fingerprint = { version = "0.1", path = "../../linux-adapters/edgerun-goodix-fingerprint", optional = true }
-edgerun-audio-calibration = { version = "0.1", path = "../../linux-adapters/edgerun-audio-calibration", optional = true }
-edgerun-mgmt-bluetooth = { version = "0.1", path = "../../linux-adapters/edgerun-mgmt-bluetooth", optional = true }
 edgerun-linux-wifi = { version = "0.1", path = "../../linux-adapters/edgerun-linux-wifi", optional = true }
 edgerun-linux-usb = { version = "0.1", path = "../../linux-adapters/edgerun-linux-usb", optional = true }
 edgerun-linux-pci = { version = "0.1", path = "../../linux-adapters/edgerun-linux-pci", optional = true }
-edgerun-linux-nfc = { version = "0.1", path = "../../linux-adapters/edgerun-linux-nfc", optional = true }
-edgerun-linux-npu = { version = "0.1", path = "../../linux-adapters/edgerun-linux-npu", optional = true }
-edgerun-linux-power = { version = "0.1", path = "../../linux-adapters/edgerun-linux-power", optional = true }
-edgerun-linux-cec = { version = "0.1", path = "../../linux-adapters/edgerun-linux-cec", optional = true }
-edgerun-amd-xdna = { version = "0.1", path = "../../linux-adapters/edgerun-amd-xdna", optional = true }
+edgerun-linux-sysfs = { version = "0.1", path = "../../linux-adapters/edgerun-linux-sysfs", optional = true }
 edgerun-virtual-disk = { version = "0.1", path = "../../authority/edgerun-virtual-disk", optional = true }
-edgerun-android-keystore = { version = "0.1", path = "../../identity/edgerun-android-keystore", optional = true }
 
 [dev-dependencies]
 edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-hardware-signing" }
-edgerun-alsa-microphone = { version = "0.1", path = "../../linux-adapters/edgerun-alsa-microphone" }
 edgerun-sdk = { version = "0.1", path = "../../edgerun-sdk", default-features = false, features = ["browser-authoring"] }
 
 [lints]

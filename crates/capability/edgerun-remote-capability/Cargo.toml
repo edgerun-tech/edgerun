@@ -10,7 +10,6 @@ description = "Remote capability request and response protocol for Edgerun"
 
 [dependencies]
 edgerun-devices.workspace = true
-edgerun-capability-policy = { version = "0.1", path = "../edgerun-capability-policy" }
 edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
 
 edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-hardware-signing" }

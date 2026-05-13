@@ -14,7 +14,7 @@ pub enum NodeError {
     MissingField(String),
     CommandRejected(String),
     CommandDeferred(String),
-    Stream(edgerun_stream::StreamError),
+    Stream(edgerun_storage::StreamError),
     Storage(String),
     Runtime(String),
     Service {
@@ -74,8 +74,8 @@ impl fmt::Display for NodeError {
 
 impl core::error::Error for NodeError {}
 
-impl From<edgerun_stream::StreamError> for NodeError {
-    fn from(error: edgerun_stream::StreamError) -> Self {
+impl From<edgerun_storage::StreamError> for NodeError {
+    fn from(error: edgerun_storage::StreamError) -> Self {
         NodeError::Stream(error)
     }
 }

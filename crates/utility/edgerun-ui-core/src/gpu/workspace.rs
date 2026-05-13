@@ -1,9 +1,9 @@
 use super::app_registry::{
-    CHAT_APP_ID, STORAGE_APP_ID, TRUST_MANAGER_APP_ID, app_id_for_kind, app_surface_for_kind,
+    app_id_for_kind, app_surface_for_kind, CHAT_APP_ID, STORAGE_APP_ID, TRUST_MANAGER_APP_ID,
 };
 use super::{
-    GpuClip, GpuScene, HitKind, UiAction, UiEvent, UiIcon, UiPainter, UiRect, UiRuntimeState,
-    palette,
+    GpuClip, GpuScene, HitKind, UiAction, UiComponentPreviewState, UiEvent, UiIcon, UiPainter,
+    UiRect, UiRuntimeState, UiStyleAuthority,
 };
 use std::string::String;
 use std::vec::Vec;
@@ -38,6 +38,7 @@ pub struct UiAppSurface {
     pub kind: UiAppKind,
     pub full_screen: bool,
     pub runtime: UiRuntimeState,
+    pub style_preview: UiComponentPreviewState,
     pub(super) bounds: Option<UiRect>,
 }
 
@@ -61,6 +62,7 @@ impl UiAppSurface {
             kind: UiAppKind::Generic,
             full_screen: false,
             runtime: UiRuntimeState::default(),
+            style_preview: UiComponentPreviewState::default(),
             bounds: None,
         }
     }
@@ -106,6 +108,25 @@ impl UiAppSurface {
     pub fn bounds(&self) -> Option<UiRect> {
         self.bounds
     }
+
+    pub fn apply_action(&mut self, action: &UiAction, commit: bool) {
+        if self.kind != UiAppKind::ComponentGallery {
+            return;
+        }
+        if !commit {
+            return;
+        }
+        if let UiAction::Activated(hit) = action {
+            match hit.id {
+                762 => self.style_preview.authority = UiStyleAuthority::AuthorVision,
+                763 => self.style_preview.authority = UiStyleAuthority::User,
+                766 => self.style_preview.cycle_user_scheme(),
+                767 => self.style_preview.cycle_user_accent(),
+                768 => self.style_preview.cycle_user_radius(),
+                _ => {}
+            }
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -113,6 +134,7 @@ pub struct UiWorkspace {
     pub apps: Vec<UiAppSurface>,
     pub root: UiTileNode,
     pub focused_app: Option<u32>,
+    pub user_style: UiComponentPreviewState,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -154,6 +176,7 @@ impl UiWorkspace {
                 }),
             },
             focused_app: Some(CHAT_APP_ID),
+            user_style: UiComponentPreviewState::default(),
         }
     }
 
@@ -163,6 +186,7 @@ impl UiWorkspace {
             root: UiTileNode::Leaf { app_id: app.id },
             apps: vec![app],
             focused_app,
+            user_style: UiComponentPreviewState::default(),
         }
     }
 
@@ -177,6 +201,7 @@ impl UiWorkspace {
             },
             apps: vec![first, second],
             focused_app,
+            user_style: UiComponentPreviewState::default(),
         }
     }
 
@@ -190,6 +215,7 @@ impl UiWorkspace {
             },
             apps,
             focused_app,
+            user_style: UiComponentPreviewState::default(),
         }
     }
 
@@ -200,7 +226,13 @@ impl UiWorkspace {
             root: UiTileNode::Leaf { app_id: app.id },
             apps: vec![app],
             focused_app,
+            user_style: UiComponentPreviewState::default(),
         }
+    }
+
+    pub fn user_style(mut self, user_style: UiComponentPreviewState) -> Self {
+        self.user_style = user_style;
+        self
     }
 
     pub fn app(&self, id: u32) -> Option<&UiAppSurface> {
@@ -217,11 +249,14 @@ impl UiWorkspace {
         bounds: UiRect,
         mut render_app: impl FnMut(&mut UiPainter<'_, '_>, UiRect, &UiAppSurface),
     ) {
+        let previous_theme = ui.theme();
+        ui.set_theme(self.user_style.resolved_theme());
         for app in &mut self.apps {
             app.bounds = None;
         }
         let root = self.root.clone();
         self.render_tile(ui, bounds, &root, &mut render_app);
+        ui.set_theme(previous_theme);
     }
 
     pub fn handle_event(&mut self, scene: &GpuScene, event: UiEvent) -> UiWorkspaceAction {
@@ -295,10 +330,15 @@ impl UiWorkspace {
         let Some(app) = self.app_mut(app_id) else {
             return UiWorkspaceAction::None;
         };
+        let commit = matches!(
+            event,
+            UiEvent::PointerUp { .. } | UiEvent::KeyDown { .. } | UiEvent::TextInput(_)
+        );
         let action = app.runtime.handle_event(scene, event);
         if action == UiAction::None {
             UiWorkspaceAction::None
         } else {
+            app.apply_action(&action, commit);
             UiWorkspaceAction::AppAction { app_id, action }
         }
     }
@@ -436,10 +476,11 @@ impl UiWorkspace {
         app_ids: &[u32],
         selected: usize,
     ) {
+        let colors = ui.theme().colors;
         ui.fill_rect(
             UiRect::new(rect.x, rect.y, rect.w, WORKSPACE_CHROME_H),
-            8.0,
-            palette::TOPBAR,
+            ui.theme().radius.card,
+            colors.topbar,
         );
         let mut x = rect.x + 8.0;
         for (index, app_id) in app_ids.iter().copied().enumerate() {
@@ -452,11 +493,11 @@ impl UiWorkspace {
             ui.hit(HitKind::WorkspaceTab, app_id, tab.x, tab.y, tab.w, tab.h);
             ui.fill_rect(
                 tab,
-                8.0,
+                ui.theme().radius.card,
                 if index == selected {
-                    palette::ACTIVE_ROW
+                    colors.active
                 } else {
-                    palette::ROW
+                    colors.row
                 },
             );
             ui.bounded_label(
@@ -466,9 +507,9 @@ impl UiWorkspace {
                 title,
                 2.0,
                 if index == selected {
-                    palette::TEXT
+                    colors.text
                 } else {
-                    palette::MUTED
+                    colors.muted
                 },
             );
             x += w + 6.0;
@@ -476,16 +517,17 @@ impl UiWorkspace {
     }
 
     fn render_app_chrome(&self, ui: &mut UiPainter<'_, '_>, rect: UiRect, app_id: u32) {
+        let colors = ui.theme().colors;
         let chrome = UiRect::new(rect.x, rect.y, rect.w, WORKSPACE_CHROME_H);
         let focused = self.focused_app == Some(app_id);
-        ui.fill_rect(chrome, 8.0, palette::TOPBAR);
+        ui.fill_rect(chrome, ui.theme().radius.card, colors.topbar);
         ui.border_rect(
             rect,
-            8.0,
+            ui.theme().radius.card,
             if focused {
-                palette::ACCENT.with_alpha(0.68)
+                colors.accent.with_alpha(0.68)
             } else {
-                palette::BORDER
+                colors.border
             },
         );
         let title = self
@@ -506,11 +548,7 @@ impl UiWorkspace {
             (chrome.w - 98.0).max(0.0),
             title,
             2.0,
-            if focused {
-                palette::TEXT
-            } else {
-                palette::MUTED
-            },
+            if focused { colors.text } else { colors.muted },
         );
         if chrome.w > 110.0 {
             let split_rect = UiRect::new(chrome.x + chrome.w - 60.0, chrome.y + 6.0, 22.0, 22.0);
@@ -522,7 +560,7 @@ impl UiWorkspace {
                 split_rect.w,
                 split_rect.h,
             );
-            ui.icon(split_rect.inset(3.0, 3.0), UiIcon::Route, palette::MUTED);
+            ui.icon(split_rect.inset(3.0, 3.0), UiIcon::Route, colors.muted);
             let close_rect = UiRect::new(chrome.x + chrome.w - 31.0, chrome.y + 6.0, 22.0, 22.0);
             ui.hit(
                 HitKind::WorkspaceClose,
@@ -532,7 +570,7 @@ impl UiWorkspace {
                 close_rect.w,
                 close_rect.h,
             );
-            ui.icon(close_rect.inset(3.0, 3.0), UiIcon::X, palette::MUTED);
+            ui.icon(close_rect.inset(3.0, 3.0), UiIcon::X, colors.muted);
         }
     }
 

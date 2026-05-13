@@ -1,6 +1,6 @@
 //! EdgeRun Wallet — core types and logic.
 //!
-//! Uses existing edgerun-stream and edgerun-storage for durable event records.
+//! Uses existing edgerun-storage::stream and edgerun-storage for durable event records.
 //! Implements DecimalAmount (no floats, no external decimal crates),
 //! asset model, status machine, and exchange types.
 

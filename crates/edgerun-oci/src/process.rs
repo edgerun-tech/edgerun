@@ -502,7 +502,9 @@ fn fork_into_pid_namespace() -> io::Result<()> {
         unsafe { libc::_exit(code) };
     }
 
-    std::env::set_var("_ERT_PIDNS_READY", "1");
+    // SAFETY: this runs in the freshly forked child before returning to the
+    // container setup path, so no other Rust threads can observe env mutation.
+    unsafe { std::env::set_var("_ERT_PIDNS_READY", "1") };
     Ok(())
 }
 

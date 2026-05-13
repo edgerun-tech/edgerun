@@ -3,8 +3,7 @@
 The SDK capability units mirror the existing Edgerun capability crates:
 
 - `edgerun-capabilities` defines descriptors, selectors, requests, grants,
-  invocations, results, and revocations.
-- `edgerun-capability-policy` defines policy authorization.
+  invocations, results, revocations, and policy authorization.
 - `edgerun-remote-capability` defines session open, invocation, result frames,
   events, close, and request/grant/revocation transport envelopes.
 

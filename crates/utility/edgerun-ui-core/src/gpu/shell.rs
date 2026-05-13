@@ -1,14 +1,19 @@
 use super::app_registry::app_id_for_kind;
+#[cfg(any(feature = "fontdue-text", test))]
 use super::{
-    EDGERUN_APP_REGISTRY, GpuHit, GpuScene, HitKind, SHELL_LAUNCHER_BUTTON_ID, UiAction, UiAppKind,
-    UiEvent, UiIcon, UiPainter, UiRect, UiRuntimeState, app_launcher_item, app_spec_for_launch_id,
-    column, header, palette,
+    app_launcher_item, column, header, UiIcon, UiPainter, UiRect, EDGERUN_APP_REGISTRY,
+    SHELL_LAUNCHER_BUTTON_ID,
+};
+use super::{
+    app_spec_for_launch_id, GpuHit, GpuScene, HitKind, UiAction, UiAppKind,
+    UiComponentPreviewState, UiEvent, UiRuntimeState,
 };
 
 #[derive(Clone, Debug, Default)]
 pub struct UiShellState {
     pub launcher_open: bool,
     pub runtime: UiRuntimeState,
+    pub user_style: UiComponentPreviewState,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -20,6 +25,11 @@ pub enum UiShellAction {
 }
 
 impl UiShellState {
+    pub fn user_style(mut self, user_style: UiComponentPreviewState) -> Self {
+        self.user_style = user_style;
+        self
+    }
+
     pub fn handle_event(&mut self, scene: &GpuScene, event: UiEvent) -> UiShellAction {
         let action = self.runtime.handle_event(scene, event);
         match action {
@@ -44,14 +54,20 @@ impl UiShellState {
     }
 }
 
+#[cfg(any(feature = "fontdue-text", test))]
 pub(super) fn render_edgerun_shell_overlay(
     ui: &mut UiPainter<'_, '_>,
     bounds: UiRect,
     shell: &mut UiShellState,
 ) {
+    let previous_theme = ui.theme();
+    ui.set_theme(shell.user_style.resolved_theme());
+    let theme = ui.theme();
+    let colors = theme.colors;
+    let radius = theme.radius;
     let bar = UiRect::new(10.0, 10.0, (bounds.w - 20.0).max(0.0), 42.0);
-    ui.fill_rect(bar, 12.0, palette::TOPBAR.with_alpha(0.92));
-    ui.border_rect(bar, 12.0, palette::BORDER.with_alpha(0.72));
+    ui.fill_rect(bar, radius.card, colors.topbar.with_alpha(0.92));
+    ui.border_rect(bar, radius.card, colors.border.with_alpha(0.72));
     let launcher = UiRect::new(bar.x + 8.0, bar.y + 6.0, 112.0, 30.0);
     ui.hit(
         HitKind::ShellLauncher,
@@ -63,17 +79,17 @@ pub(super) fn render_edgerun_shell_overlay(
     );
     ui.fill_rect(
         launcher,
-        9.0,
+        radius.control,
         if shell.launcher_open {
-            palette::ACTIVE_ROW
+            colors.active
         } else {
-            palette::ROW
+            colors.row
         },
     );
     ui.icon(
         UiRect::new(launcher.x + 9.0, launcher.y + 7.0, 16.0, 16.0),
         UiIcon::App,
-        palette::ACCENT,
+        colors.accent,
     );
     ui.bounded_label(
         launcher.x + 32.0,
@@ -81,7 +97,7 @@ pub(super) fn render_edgerun_shell_overlay(
         launcher.w - 42.0,
         "EdgeRun",
         2.0,
-        palette::TEXT,
+        colors.text,
     );
     ui.bounded_label(
         bar.x + 138.0,
@@ -89,9 +105,9 @@ pub(super) fn render_edgerun_shell_overlay(
         (bar.w - 280.0).max(0.0),
         "identity-routed local shell",
         2.0,
-        palette::MUTED,
+        colors.muted,
     );
-    ui.badge(bar.x + bar.w - 108.0, bar.y + 10.0, "local", palette::GREEN);
+    ui.badge(bar.x + bar.w - 108.0, bar.y + 10.0, "local", colors.success);
 
     if shell.launcher_open {
         let panel = UiRect::new(
@@ -112,6 +128,7 @@ pub(super) fn render_edgerun_shell_overlay(
         }
         launcher.render_with_state(ui, panel, Some(&shell.runtime));
     }
+    ui.set_theme(previous_theme);
 }
 
 fn launcher_item_kind(hit: GpuHit) -> Option<UiAppKind> {

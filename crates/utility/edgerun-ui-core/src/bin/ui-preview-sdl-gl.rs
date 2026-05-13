@@ -33,7 +33,7 @@ const GL_ONE_MINUS_SRC_ALPHA: u32 = 0x0303;
 
 #[repr(C)]
 struct SDL_Window(c_void);
-type SDL_GLContext = *mut c_void;
+type SdlGlContext = *mut c_void;
 
 #[repr(C)]
 struct SdlEvent {
@@ -73,8 +73,8 @@ unsafe extern "C" {
         flags: u32,
     ) -> *mut SDL_Window;
     fn SDL_DestroyWindow(window: *mut SDL_Window);
-    fn SDL_GL_CreateContext(window: *mut SDL_Window) -> SDL_GLContext;
-    fn SDL_GL_DeleteContext(context: SDL_GLContext);
+    fn SDL_GL_CreateContext(window: *mut SDL_Window) -> SdlGlContext;
+    fn SDL_GL_DeleteContext(context: SdlGlContext);
     fn SDL_GL_SetSwapInterval(interval: c_int) -> c_int;
     fn SDL_GL_SwapWindow(window: *mut SDL_Window);
     fn SDL_PollEvent(event: *mut SdlEvent) -> c_int;
@@ -525,7 +525,7 @@ impl Drop for Window {
     }
 }
 
-struct GlContext(SDL_GLContext);
+struct GlContext(SdlGlContext);
 impl Drop for GlContext {
     fn drop(&mut self) {
         if !self.0.is_null() {

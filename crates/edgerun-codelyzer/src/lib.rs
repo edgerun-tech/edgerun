@@ -1,3 +1,5 @@
+extern crate alloc;
+
 // Re-export modules for use by other crates
 #[cfg(not(target_arch = "wasm32"))]
 pub mod analyzer;
@@ -14,6 +16,7 @@ pub mod filesystem;
 #[cfg(not(target_arch = "wasm32"))]
 #[allow(dead_code)]
 pub mod git;
+pub mod glob;
 #[cfg(not(target_arch = "wasm32"))]
 #[allow(dead_code)]
 pub mod mcp_permission;
@@ -22,6 +25,7 @@ pub mod mcp_permission;
 pub mod mcp_rust_ast;
 #[allow(dead_code)]
 pub mod parser;
+pub mod regex;
 #[cfg(not(target_arch = "wasm32"))]
 #[allow(dead_code)]
 pub mod rust_edit;
@@ -31,6 +35,9 @@ pub mod tools;
 pub mod uir;
 
 pub mod source_analysis;
+#[cfg(all(feature = "vfs", not(target_arch = "wasm32")))]
+#[allow(dead_code, unused_imports, unused_variables)]
+pub mod vfs;
 #[cfg(target_arch = "wasm32")]
 pub mod wasm;
 

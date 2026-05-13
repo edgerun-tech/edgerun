@@ -59,6 +59,8 @@ defaults should use this registry instead of duplicating ids or titles.
   and node rendering dispatch.
 - `src/gpu/paint.rs`: shared text measurement/truncation, labels, pills,
   message bubbles, and panel/card drawing helpers.
+- `src/gpu/painter.rs`: `UiPainter`, the ergonomic drawing facade used by
+  nodes, apps, shell, workspace, and component renderers.
 - `src/gpu/apps.rs`: public scene-build entry points and built-in app surface
   renderers for chat, Trust Manager, Storage, lock, capability, and gallery.
 - `src/gpu/app_registry.rs`: canonical app ids, launcher ids, app metadata, and
@@ -80,6 +82,8 @@ defaults should use this registry instead of duplicating ids or titles.
   the shared GPU UI node model.
 - `src/gpu/style.rs`: Tailwind-like class parser and shared color/style
   resolution.
+- `src/gpu/theme.rs`: user-owned style authority, author vision presets, and
+  component preview styling state.
 
 ## Scene ABI
 

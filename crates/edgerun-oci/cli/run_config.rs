@@ -4,14 +4,14 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use crate::ImageTrustPolicy;
+use crate::clap::cli::Action;
+use crate::clap::{Arg, Command};
 use crate::cli::env::{parse_env_assignment, read_env_file};
 use crate::cli::user::{resolve_user, validate_user_spec};
 use crate::cli::{
     RUN_VALUE_OPTIONS, default_images_dir, default_store_dir, parse_cli_args, split_cli_prefix,
 };
 use crate::spec::{OciMount, OciSpec};
-use edgerun_clap::cli::Action;
-use edgerun_clap::{Arg, Command};
 
 pub(super) struct RunOpts {
     pub rm: bool,

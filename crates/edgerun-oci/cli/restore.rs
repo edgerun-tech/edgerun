@@ -7,9 +7,9 @@ use std::fs;
 use std::io;
 use std::path::PathBuf;
 
+use crate::clap::{Arg, Command};
 use crate::cli::{invalid_input, parse_cli_args, required_positional};
 use crate::state::{ContainerState as StateContainerState, load_state, save_state};
-use edgerun_clap::{Arg, Command};
 
 pub fn cmd_restore(opts: &crate::cli::GlobalOpts, args: &[String]) -> io::Result<()> {
     crate::cli::apply_global_opts(opts)?;

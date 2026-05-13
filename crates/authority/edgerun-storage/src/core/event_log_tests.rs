@@ -31,7 +31,7 @@ fn canonical_event_hash_matches_stream_hash() {
 
     assert_eq!(
         canonical_event_hash(&event),
-        edgerun_stream::compute_event_hash(&event)
+        crate::stream::compute_event_hash(&event)
     );
 }
 

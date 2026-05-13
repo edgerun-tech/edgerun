@@ -19,7 +19,7 @@ use crate::http::http3::error_codes;
 use crate::http::method::Method;
 use crate::http::status::StatusCode;
 use crate::http::uri::Uri;
-use edgerun_qpack::{QpackDecoder, QpackEncoder};
+use edgerun_protocols::http::http3::{QpackDecoder, QpackEncoder};
 
 /// HTTP/3 connection
 pub struct Http3Connection {

@@ -104,31 +104,20 @@ clauses into hash-addressed programs.
 
 ## Runnable Seed
 
-The current executable seed is `udp-tftp-must-program`. The entrypoint is
-`scripts/standards`, a thin launcher for the Rust `edgerun-standards` crate.
-The crate has a dependency-free `no_std` core and a `std` CLI that compiles
-definition and clause IR into WASM modules, assembles them into `program.json`,
-and runs input bytes through the same Rust core semantics.
+The current standards seed is `udp-tftp-must-program`. Its dependency-free
+`no_std` Rust semantics now live in
+`crates/edgerun-sdk/src/standards_seed.rs` behind the SDK
+`standards-seed` feature. There is no checked-in `scripts/standards` launcher
+or `std` compiler CLI at the moment, so the seed should be exercised through
+the SDK module until a new runner is wired.
 
 ```bash
-./scripts/standards validate
-./scripts/standards hash udp-tftp-must-program
-./scripts/standards compile udp-tftp-must-program
-./scripts/standards components udp-tftp-must-program
-./scripts/standards definitions udp-tftp-must-program
-./scripts/standards clauses udp-tftp-must-program
-./scripts/standards units udp-tftp-must-program
-./scripts/standards graph udp-tftp-must-program
-./scripts/standards check udp-tftp-must-program
-./scripts/standards run udp-tftp-must-program \
-  --wasm \
-  --hex "$(cat standards/corpus/udp-tftp/valid-ack.hex)"
+cargo test -p edgerun-sdk --features standards-seed standards_seed
 ```
 
-`--wasm` is accepted for workflow compatibility, but there is no JavaScript or
-Python runtime in the standards path now. The Rust core owns the UDP/TFTP
-definition extraction and clause evaluation; the CLI also emits the
-hash-addressed WASM statement modules for the component graph.
+The Rust core owns the UDP/TFTP definition extraction and clause evaluation.
+The embedded WAT strings remain the reviewed statement-module seed for a future
+compiler/runner path.
 
 `compile` also writes content-addressed contract units to
 `standards/build/units/<sha256>.json` and the composed graph to
@@ -151,17 +140,15 @@ The current corpus covers:
 
 Corpus expectations are explicit in `standards/corpus/udp-tftp/cases.toml`.
 
-Try the rejection path:
+The rejection path is covered by the SDK standards-seed tests:
 
 ```bash
-./scripts/standards run udp-tftp-must-program \
-  --wasm \
-  --hex "$(cat standards/corpus/udp-tftp/invalid-length.hex)"
+cargo test -p edgerun-sdk --features standards-seed standards_seed::tests::invalid_ack_length_rejects
 ```
 
-`check` is the preferred smoke test: it compiles the program, validates the WASM
-modules, runs the corpus with the Rust core, and verifies that the explicit
-requirement/severity signatures match.
+When a `check` runner is reintroduced, it should compile the program, validate
+the WASM modules, run the corpus with the Rust core, and verify that the
+explicit requirement/severity signatures match.
 
 ## Requirement Status
 

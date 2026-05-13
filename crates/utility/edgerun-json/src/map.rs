@@ -11,22 +11,69 @@ use alloc::vec::Vec;
 use crate::FromJson;
 use crate::JsonValue;
 use crate::value::JsonValueError;
+use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Map(pub(crate) Vec<(String, JsonValue)>);
+pub struct Map<K = String, V = JsonValue>(pub(crate) Vec<(String, JsonValue)>, PhantomData<(K, V)>);
+
+pub enum Entry<'a, K = String, V = JsonValue> {
+    Occupied(OccupiedEntry<'a, K, V>),
+    Vacant(VacantEntry<'a, K, V>),
+}
+
+pub struct OccupiedEntry<'a, K = String, V = JsonValue> {
+    map: &'a mut Map<K, V>,
+    index: usize,
+}
+
+pub struct VacantEntry<'a, K = String, V = JsonValue> {
+    map: &'a mut Map<K, V>,
+    key: String,
+}
+
+impl<'a, K, V> Entry<'a, K, V> {
+    pub fn or_insert_with<F>(self, default: F) -> &'a mut JsonValue
+    where
+        F: FnOnce() -> JsonValue,
+    {
+        match self {
+            Self::Occupied(entry) => entry.into_mut(),
+            Self::Vacant(entry) => entry.insert(default()),
+        }
+    }
+
+    pub fn or_insert(self, default: JsonValue) -> &'a mut JsonValue {
+        self.or_insert_with(|| default)
+    }
+}
+
+impl<'a, K, V> OccupiedEntry<'a, K, V> {
+    pub fn into_mut(self) -> &'a mut JsonValue {
+        &mut self.map.0[self.index].1
+    }
+}
+
+impl<'a, K, V> VacantEntry<'a, K, V> {
+    pub fn insert(self, value: JsonValue) -> &'a mut JsonValue {
+        self.map.0.push((self.key, value));
+        &mut self.map.0.last_mut().expect("inserted vacant entry").1
+    }
+}
 
 impl Map {
     #[must_use]
     pub fn new() -> Self {
-        Self(Vec::new())
+        Self(Vec::new(), PhantomData)
     }
 
     #[must_use]
     pub fn with_capacity(capacity: usize) -> Self {
-        Self(Vec::with_capacity(capacity))
+        Self(Vec::with_capacity(capacity), PhantomData)
     }
+}
 
+impl<K, V> Map<K, V> {
     #[must_use]
     pub fn keys(&self) -> impl ExactSizeIterator<Item = &String> {
         self.0.iter().map(|(key, _)| key)
@@ -188,6 +235,14 @@ impl Map {
         None
     }
 
+    pub fn entry(&mut self, key: String) -> Entry<'_, K, V> {
+        if let Some(index) = self.0.iter().position(|(candidate, _)| candidate == &key) {
+            Entry::Occupied(OccupiedEntry { map: self, index })
+        } else {
+            Entry::Vacant(VacantEntry { map: self, key })
+        }
+    }
+
     pub fn push_field(&mut self, key: impl Into<String>, value: impl Into<JsonValue>) {
         self.0.push((key.into(), value.into()));
     }
@@ -305,38 +360,39 @@ impl Map {
     }
 }
 
-impl Default for Map {
+impl<K, V> Default for Map<K, V> {
     fn default() -> Self {
-        Self::new()
+        Self(Vec::new(), PhantomData)
     }
 }
 
-impl From<Vec<(String, JsonValue)>> for Map {
+impl<K, V> From<Vec<(String, JsonValue)>> for Map<K, V> {
     fn from(value: Vec<(String, JsonValue)>) -> Self {
-        Self(value)
+        Self(value, PhantomData)
     }
 }
 
-impl<K, V> FromIterator<(K, V)> for Map
+impl<K, V, MK, MV> FromIterator<(MK, MV)> for Map<K, V>
 where
-    K: Into<String>,
-    V: Into<JsonValue>,
+    MK: Into<String>,
+    MV: Into<JsonValue>,
 {
-    fn from_iter<T: IntoIterator<Item = (K, V)>>(iter: T) -> Self {
+    fn from_iter<T: IntoIterator<Item = (MK, MV)>>(iter: T) -> Self {
         Self(
             iter.into_iter()
                 .map(|(key, value)| (key.into(), value.into()))
                 .collect(),
+            PhantomData,
         )
     }
 }
 
-impl<K, V> Extend<(K, V)> for Map
+impl<K, V, MK, MV> Extend<(MK, MV)> for Map<K, V>
 where
-    K: Into<String>,
-    V: Into<JsonValue>,
+    MK: Into<String>,
+    MV: Into<JsonValue>,
 {
-    fn extend<T: IntoIterator<Item = (K, V)>>(&mut self, iter: T) {
+    fn extend<T: IntoIterator<Item = (MK, MV)>>(&mut self, iter: T) {
         self.0.extend(
             iter.into_iter()
                 .map(|(key, value)| (key.into(), value.into())),
@@ -344,7 +400,25 @@ where
     }
 }
 
-impl Deref for Map {
+impl<K, V> IntoIterator for Map<K, V> {
+    type Item = (String, JsonValue);
+    type IntoIter = alloc::vec::IntoIter<(String, JsonValue)>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+impl<'a, K, V> IntoIterator for &'a Map<K, V> {
+    type Item = &'a (String, JsonValue);
+    type IntoIter = core::slice::Iter<'a, (String, JsonValue)>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
+impl<K, V> Deref for Map<K, V> {
     type Target = Vec<(String, JsonValue)>;
 
     fn deref(&self) -> &Self::Target {
@@ -352,7 +426,7 @@ impl Deref for Map {
     }
 }
 
-impl DerefMut for Map {
+impl<K, V> DerefMut for Map<K, V> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }

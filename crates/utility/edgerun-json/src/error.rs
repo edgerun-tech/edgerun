@@ -14,6 +14,7 @@
 //! assert!(matches!(result, Err(JsonParseError::UnexpectedCharacter { .. })));
 //! ```
 
+use crate::prelude::*;
 use core::fmt;
 
 /// Errors that can occur during JSON serialization.
@@ -31,6 +32,8 @@ pub enum JsonError {
     NonFiniteNumber,
     /// An I/O error occurred during serialization.
     Io,
+    /// A model serialization or deserialization error occurred.
+    Message(String),
 }
 
 /// Errors that can occur during JSON parsing.
@@ -115,6 +118,7 @@ impl fmt::Display for JsonError {
                 f.write_str("cannot serialize non-finite floating-point value")
             }
             Self::Io => f.write_str("i/o error while serializing JSON"),
+            Self::Message(message) => f.write_str(message),
         }
     }
 }
@@ -150,14 +154,46 @@ impl fmt::Display for JsonParseError {
     }
 }
 
-#[cfg(all(feature = "std", not(target_os = "none")))]
-impl std::error::Error for JsonError {}
-#[cfg(all(feature = "std", not(target_os = "none")))]
-impl std::error::Error for JsonParseError {}
+impl core::error::Error for JsonError {}
+impl core::error::Error for JsonParseError {}
+
+#[cfg(feature = "std")]
+impl From<JsonError> for edgerun_error::Error {
+    fn from(value: JsonError) -> Self {
+        edgerun_error::Error::from_boxed(Box::new(value))
+    }
+}
+
+#[cfg(feature = "std")]
+impl From<JsonParseError> for edgerun_error::Error {
+    fn from(value: JsonParseError) -> Self {
+        edgerun_error::Error::from_boxed(Box::new(value))
+    }
+}
+
+impl From<JsonParseError> for JsonError {
+    fn from(error: JsonParseError) -> Self {
+        Self::Message(error.to_string())
+    }
+}
 
 impl JsonError {
     #[cfg(all(feature = "std", not(target_os = "none")))]
     pub fn io(_error: std::io::Error) -> Self {
         Self::Io
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::ser::Error for JsonError {
+    fn custom<T: fmt::Display>(msg: T) -> Self {
+        Self::Message(msg.to_string())
+    }
+}
+
+#[cfg(feature = "serde")]
+impl serde::de::Error for JsonError {
+    fn custom<T: fmt::Display>(msg: T) -> Self {
+        Self::Message(msg.to_string())
     }
 }

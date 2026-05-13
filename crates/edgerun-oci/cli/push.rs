@@ -5,11 +5,11 @@ use std::path::PathBuf;
 
 use crate::ImageRef;
 use crate::RegistryClient;
+use crate::clap::{Arg, Command};
 use crate::cli::{
     GlobalOpts, default_images_dir, invalid_input, parse_cli_args, required_positional,
     resolve_registry_auth,
 };
-use edgerun_clap::{Arg, Command};
 
 pub fn cmd_push(_opts: &GlobalOpts, args: &[String]) -> std::io::Result<()> {
     let (image_ref, images_dir) = parse_push_args(args)?;

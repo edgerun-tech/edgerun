@@ -8,6 +8,15 @@ pub mod browser_authoring;
 #[cfg(feature = "runtime-api")]
 pub mod runtime_api;
 
+#[cfg(feature = "standards-seed")]
+pub mod standards_seed;
+
+#[cfg(feature = "wallet-app")]
+pub mod wallet_app;
+
+#[cfg(feature = "marketplace-domain")]
+pub mod marketplace_domain;
+
 pub const SDK_ABI_NAME: &str = "standard-module-v1";
 pub const SDK_ABI_VERSION: u32 = 2;
 
