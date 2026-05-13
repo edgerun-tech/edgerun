@@ -795,6 +795,7 @@ dependencies = [
  "edgerun-url",
  "edgerun-v4l2-camera",
  "edgerun-virtual-disk",
+ "edgerun-work",
  "edgerun-yubikey",
  "rkyv",
 ]

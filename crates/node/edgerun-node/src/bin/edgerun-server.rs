@@ -2,11 +2,27 @@ use std::env;
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, TcpStream, UdpSocket};
 use std::path::PathBuf;
+#[cfg(feature = "tls")]
+use std::sync::mpsc::{self, SyncSender};
+#[cfg(feature = "tls")]
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
-use edgerun_node::rt::{self, CancellationToken};
+use edgerun_node::rt::{
+    self, AsyncRead, AsyncReadExt, AsyncTcpStream, AsyncWrite, AsyncWriteExt, CancellationToken,
+};
 use edgerun_node::services::{DnsConfig, ImapConfig, NodeRuntime, SmtpConfig};
+#[cfg(feature = "tls")]
+use edgerun_node::tls::{AsyncTlsServerStream, CertificateAndKey};
 use edgerun_protocols::dns::DnsZone;
+#[cfg(feature = "tls")]
+use edgerun_protocols::websocket::{
+    WS_EXTENDED_64_LEN, WS_MASK_LEN, WebSocketError, WebSocketMessage, decode_client_message,
+    decode_frame_prefix, decode_handshake_request, decode_payload_len, encode_server_binary,
+    encode_server_control, encode_upgrade_response, handshake_complete,
+};
+#[cfg(feature = "tls")]
+use edgerun_work::{MAX_WORK_FRAME_LEN, NodeId, channel_envelope_from_bytes};
 
 const NODE_LABEL: &str = "edgerun-tech-main-server";
 const ORIGIN: &str = "edgerun.tech";
@@ -16,13 +32,26 @@ const NODE_ID: &str = "4de436f31887836ceb40d4bfc34952909c284f11f36c57877e489893f
 const MAILDIR_ROOT: &str = "/var/lib/edgerun/mail/maildirs";
 const QUEUE_ROOT: &str = "/var/lib/edgerun/mail/queue";
 const DKIM_KEY_PATH: &str = "/etc/edgerun/server/dkim-mail.private.pem";
-const TLS_CERT_PATH: &str = "/etc/edgerun/server/tls/fullchain.pem";
-const TLS_KEY_PATH: &str = "/etc/edgerun/server/tls/privkey.pem";
+const TLS_CERT_PATH: &str = "/etc/edgerun/server/tls/cloudflare-origin.pem";
+const TLS_KEY_PATH: &str = "/etc/edgerun/server/tls/cloudflare-origin.key";
 const ACME_ACCOUNT_PATH: &str = "/etc/edgerun/server/acme-account.pem";
 const RUNTIME_ROOT: &str = "/var/lib/edgerun/.edgerun";
 const DERIVED_DB_PATH: &str = "/var/lib/edgerun/.edgerun/runtime.edb";
 const CONTROLLER_ZERO: &str = "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+#[cfg(feature = "tls")]
+const HTTPS_BIND_ADDR: &str = "0.0.0.0:443";
+#[cfg(feature = "tls")]
+const EDGERUN_WORK_WS_PROTOCOL: &str = "edgerun-work-v1";
+#[cfg(feature = "tls")]
+const EDGERUN_WORK_WS_READ_POLL_MS: u64 = 100;
+#[cfg(feature = "tls")]
+const EDGERUN_WORK_WS_MAX_QUEUE: usize = 256;
+
+#[cfg(feature = "tls")]
+static EDGERUN_WORK_WSS_PEERS: OnceLock<
+    Mutex<std::collections::BTreeMap<NodeId, SyncSender<Vec<u8>>>>,
+> = OnceLock::new();
 
 #[derive(Default)]
 struct Args {
@@ -106,6 +135,8 @@ fn run_server(args: Args) -> std::io::Result<()> {
         println!(
             "[INFO] edgerun_server: TLS certs not found at {TLS_CERT_PATH} / {TLS_KEY_PATH}, running without TLS"
         );
+    } else {
+        println!("[INFO] edgerun_server: Cloudflare origin TLS cert loaded from {TLS_CERT_PATH}");
     }
     println!("[INFO] edgerun_server: DNS zone built for {ORIGIN}");
     println!("[INFO] edgerun_server: derived database ready at {DERIVED_DB_PATH}");
@@ -143,7 +174,289 @@ fn run_server(args: Args) -> std::io::Result<()> {
 
     println!("[INFO] edgerun_server: All services started. Press Ctrl-C to stop.");
     let shutdown = CancellationToken::new();
+    #[cfg(feature = "tls")]
+    start_cloudflare_origin_tls();
     rt::block_on(async move { runtime.run(shutdown).await })
+}
+
+#[cfg(feature = "tls")]
+fn start_cloudflare_origin_tls() {
+    let Ok(cert_pem) = std::fs::read_to_string(TLS_CERT_PATH) else {
+        return;
+    };
+    let Ok(key_pem) = std::fs::read_to_string(TLS_KEY_PATH) else {
+        return;
+    };
+    let cert = match CertificateAndKey::from_pem(&format!("{cert_pem}\n{key_pem}")) {
+        Ok(cert) => Arc::new(cert),
+        Err(error) => {
+            eprintln!("[WARN] edgerun_server: failed to parse Cloudflare origin cert/key: {error}");
+            return;
+        }
+    };
+    rt::spawn(async move {
+        if let Err(error) = run_cloudflare_origin_tls(cert).await {
+            eprintln!("[WARN] edgerun_server: Cloudflare origin TLS listener stopped: {error}");
+        }
+    });
+}
+
+#[cfg(feature = "tls")]
+async fn run_cloudflare_origin_tls(cert: Arc<CertificateAndKey>) -> std::io::Result<()> {
+    let listener = rt::AsyncTcpListener::bind(HTTPS_BIND_ADDR).map_err(node_io_error)?;
+    println!("[INFO] edgerun_server: Cloudflare origin TLS listening on {HTTPS_BIND_ADDR}");
+    loop {
+        let (stream, peer) = listener.accept().await.map_err(node_io_error)?;
+        let cert = Arc::clone(&cert);
+        rt::spawn(async move {
+            if let Err(error) = handle_cloudflare_origin_tls(stream, cert).await {
+                eprintln!("[WARN] edgerun_server: Cloudflare origin TLS client {peer}: {error}");
+            }
+        });
+    }
+}
+
+#[cfg(feature = "tls")]
+async fn handle_cloudflare_origin_tls(
+    stream: Arc<AsyncTcpStream>,
+    cert: Arc<CertificateAndKey>,
+) -> std::io::Result<()> {
+    let mut stream = AsyncTlsServerStream::accept(stream, cert.as_ref())
+        .await
+        .map_err(|error| io_error(format!("TLS handshake failed: {error}")))?;
+    let request = read_http_request(&mut stream).await?;
+    let request_text = core::str::from_utf8(&request).unwrap_or("");
+    match (request_method(request_text), request_path(request_text)) {
+        (Some("GET"), Some("/work")) if is_websocket_upgrade(request_text) => {
+            serve_tls_work_websocket(stream, request).await
+        }
+        (_, Some("/health")) => write_tls_response(
+            &mut stream,
+            "200 OK",
+            "application/json",
+            "{\"status\":\"ok\",\"service\":\"edgerun-server\",\"tls\":\"cloudflare-origin\"}\n",
+        )
+        .await,
+        (_, Some("/")) => {
+            write_tls_response(
+                &mut stream,
+                "200 OK",
+                "text/plain; charset=utf-8",
+                "EdgeRun node online\n",
+            )
+            .await
+        }
+        _ => {
+            write_tls_response(
+                &mut stream,
+                "404 Not Found",
+                "text/plain; charset=utf-8",
+                "not found\n",
+            )
+            .await
+        }
+    }
+}
+
+#[cfg(feature = "tls")]
+async fn serve_tls_work_websocket(
+    mut stream: AsyncTlsServerStream<Arc<AsyncTcpStream>>,
+    request: Vec<u8>,
+) -> std::io::Result<()> {
+    let request = decode_handshake_request(request).map_err(invalid_ws_data)?;
+    let response =
+        encode_upgrade_response(&request, EDGERUN_WORK_WS_PROTOCOL).map_err(invalid_ws_data)?;
+    stream
+        .write_all(response.as_bytes())
+        .await
+        .map_err(node_io_error)?;
+    stream.flush().await.map_err(node_io_error)?;
+
+    let peers =
+        EDGERUN_WORK_WSS_PEERS.get_or_init(|| Mutex::new(std::collections::BTreeMap::new()));
+    let (tx, rx) = mpsc::sync_channel::<Vec<u8>>(EDGERUN_WORK_WS_MAX_QUEUE);
+    let mut registered_node = None;
+
+    loop {
+        let mut queued = Vec::new();
+        while let Ok(frame) = rx.try_recv() {
+            queued.push(frame);
+        }
+        for frame in queued {
+            stream.write_all(&frame).await.map_err(node_io_error)?;
+        }
+        stream.flush().await.map_err(node_io_error)?;
+        match rt::timeout(
+            rt::Duration::from_millis(EDGERUN_WORK_WS_READ_POLL_MS),
+            read_tls_work_ws_message(&mut stream),
+        )
+        .await
+        {
+            Ok(Ok(WebSocketMessage::Binary(bytes))) => {
+                let envelope = channel_envelope_from_bytes(&bytes).map_err(invalid_ws_data)?;
+                register_tls_work_peer(peers, &mut registered_node, envelope.from, tx.clone());
+                forward_tls_work_envelope(peers, envelope.to, &bytes);
+            }
+            Ok(Ok(WebSocketMessage::Ping(payload))) => {
+                let frame = encode_server_control(0xA, &payload).map_err(invalid_ws_data)?;
+                stream.write_all(&frame).await.map_err(node_io_error)?;
+                stream.flush().await.map_err(node_io_error)?;
+            }
+            Ok(Ok(WebSocketMessage::Pong)) => {}
+            Ok(Ok(WebSocketMessage::Close)) => break,
+            Ok(Err(error)) if error.kind() == std::io::ErrorKind::UnexpectedEof => break,
+            Ok(Err(error)) => return Err(error),
+            Err(_) => {}
+        }
+    }
+
+    if let Some(node_id) = registered_node {
+        peers
+            .lock()
+            .expect("work websocket peer map poisoned")
+            .remove(&node_id);
+    }
+    Ok(())
+}
+
+#[cfg(feature = "tls")]
+fn register_tls_work_peer(
+    peers: &Mutex<std::collections::BTreeMap<NodeId, SyncSender<Vec<u8>>>>,
+    registered_node: &mut Option<NodeId>,
+    node_id: NodeId,
+    tx: SyncSender<Vec<u8>>,
+) {
+    if registered_node.as_ref() == Some(&node_id) {
+        return;
+    }
+    if let Some(previous) = registered_node.replace(node_id) {
+        peers
+            .lock()
+            .expect("work websocket peer map poisoned")
+            .remove(&previous);
+    }
+    peers
+        .lock()
+        .expect("work websocket peer map poisoned")
+        .insert(node_id, tx);
+}
+
+#[cfg(feature = "tls")]
+fn forward_tls_work_envelope(
+    peers: &Mutex<std::collections::BTreeMap<NodeId, SyncSender<Vec<u8>>>>,
+    node_id: NodeId,
+    payload: &[u8],
+) {
+    let Ok(frame) = encode_server_binary(payload).map_err(invalid_ws_data) else {
+        return;
+    };
+    let mut peers = peers.lock().expect("work websocket peer map poisoned");
+    let Some(tx) = peers.get(&node_id) else {
+        return;
+    };
+    if tx.try_send(frame).is_err() {
+        peers.remove(&node_id);
+    }
+}
+
+#[cfg(feature = "tls")]
+async fn read_tls_work_ws_message(
+    stream: &mut AsyncTlsServerStream<Arc<AsyncTcpStream>>,
+) -> std::io::Result<WebSocketMessage> {
+    let mut header = [0u8; 2];
+    stream
+        .read_exact(&mut header)
+        .await
+        .map_err(node_io_error)?;
+    let prefix = decode_frame_prefix(&header)
+        .and_then(|prefix| prefix.require_client_mask())
+        .map_err(invalid_ws_data)?;
+    let mut extended = [0u8; WS_EXTENDED_64_LEN];
+    let extended_len = prefix.extended_len_bytes();
+    if extended_len != 0 {
+        stream
+            .read_exact(&mut extended[..extended_len])
+            .await
+            .map_err(node_io_error)?;
+    }
+    let payload_len = decode_payload_len(prefix, &extended[..extended_len], MAX_WORK_FRAME_LEN)
+        .map_err(invalid_ws_data)?;
+    let mut mask = [0u8; WS_MASK_LEN];
+    stream.read_exact(&mut mask).await.map_err(node_io_error)?;
+    let mut payload = vec![0u8; payload_len];
+    stream
+        .read_exact(&mut payload)
+        .await
+        .map_err(node_io_error)?;
+    decode_client_message(prefix.fin, prefix.opcode, mask, payload).map_err(invalid_ws_data)
+}
+
+#[cfg(feature = "tls")]
+async fn read_http_request<S: AsyncRead + AsyncWrite + Unpin>(
+    stream: &mut S,
+) -> std::io::Result<Vec<u8>> {
+    let mut request = Vec::new();
+    let mut byte = [0u8; 1];
+    while request.len() <= edgerun_protocols::websocket::WS_MAX_HANDSHAKE_LEN {
+        stream.read_exact(&mut byte).await.map_err(node_io_error)?;
+        request.push(byte[0]);
+        if handshake_complete(&request) {
+            return Ok(request);
+        }
+    }
+    Err(invalid_ws_data(WebSocketError::HandshakeTooLarge))
+}
+
+#[cfg(feature = "tls")]
+async fn write_tls_response<S: AsyncRead + AsyncWrite + Unpin>(
+    stream: &mut S,
+    status: &str,
+    content_type: &str,
+    body: &str,
+) -> std::io::Result<()> {
+    let response = format!(
+        "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+        body.as_bytes().len()
+    );
+    stream
+        .write_all(response.as_bytes())
+        .await
+        .map_err(node_io_error)?;
+    stream.flush().await.map_err(node_io_error)
+}
+
+#[cfg(feature = "tls")]
+fn request_path(request: &str) -> Option<&str> {
+    let mut parts = request.lines().next()?.split_whitespace();
+    let _method = parts.next()?;
+    parts.next()
+}
+
+#[cfg(feature = "tls")]
+fn request_method(request: &str) -> Option<&str> {
+    request.lines().next()?.split_whitespace().next()
+}
+
+#[cfg(feature = "tls")]
+fn is_websocket_upgrade(request: &str) -> bool {
+    request
+        .lines()
+        .any(|line| line.eq_ignore_ascii_case("upgrade: websocket"))
+}
+
+#[cfg(feature = "tls")]
+fn invalid_ws_data(error: impl core::fmt::Debug) -> std::io::Error {
+    io_error(format!("invalid websocket data: {error:?}"))
+}
+
+#[cfg(feature = "tls")]
+fn node_io_error(error: rt::IoError) -> std::io::Error {
+    io_error(error.to_string())
+}
+
+#[cfg(feature = "tls")]
+fn io_error(message: impl Into<String>) -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::Other, message.into())
 }
 
 fn build_dns_zone() -> DnsZone {
