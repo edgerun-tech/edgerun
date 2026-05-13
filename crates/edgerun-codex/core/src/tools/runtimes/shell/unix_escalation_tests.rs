@@ -35,7 +35,7 @@ use codex_shell_escalation::EscalationPermissions;
 use codex_shell_escalation::ExecResult;
 use codex_shell_escalation::ResolvedPermissionProfile;
 use codex_utils_absolute_path::AbsolutePathBuf;
-use edgerun_json::serde_json::Value;
+use edgerun_json::Value;
 use pretty_assertions::assert_eq;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -358,7 +358,7 @@ async fn execve_permission_request_hook_short_circuits_prompt() -> anyhow::Resul
     }
     std::fs::write(
         turn_context.config.codex_home.join("hooks.json"),
-        edgerun_json::serde_json::json!({
+        edgerun_json::json!({
             "hooks": {
                 "PermissionRequest": [{
                     "hooks": [{
@@ -383,7 +383,7 @@ async fn execve_permission_request_hook_short_circuits_prompt() -> anyhow::Resul
     assert_eq!(hook_list.hooks.len(), 1);
     let trusted_config_layer_stack = turn_context.config.config_layer_stack.with_user_config(
         &config_toml_path,
-        edgerun_json::serde_json::from_value(edgerun_json::serde_json::json!({
+        edgerun_json::from_serde_value(edgerun_json::json!({
             "hooks": {
                 "state": {
                     hook_list.hooks[0].key.clone(): {
@@ -462,8 +462,8 @@ async fn execve_permission_request_hook_short_circuits_prompt() -> anyhow::Resul
     let hook_inputs: Vec<Value> = std::fs::read_to_string(&log_path)
         .with_context(|| format!("read hook log at {}", log_path.display()))?
         .lines()
-        .map(edgerun_json::serde_json::from_str)
-        .collect::<edgerun_json::serde_json::Result<_>>()
+        .map(edgerun_json::from_serde_str)
+        .collect::<edgerun_json::Result<_>>()
         .context("parse hook log")?;
     assert_eq!(hook_inputs.len(), 1);
     assert_eq!(
@@ -472,7 +472,7 @@ async fn execve_permission_request_hook_short_circuits_prompt() -> anyhow::Resul
     );
     assert_eq!(
         hook_inputs[0]["tool_input"]["description"],
-        edgerun_json::serde_json::Value::Null
+        edgerun_json::Value::Null
     );
 
     Ok(())

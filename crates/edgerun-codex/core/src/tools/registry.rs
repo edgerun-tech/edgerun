@@ -34,7 +34,7 @@ use codex_tools::ToolSpec;
 use codex_utils_readiness::Readiness;
 use edgerun_time::chrono::ChronoUtc as Utc;
 use edgerun_futures::future::BoxFuture;
-use edgerun_json::serde_json::Value;
+use edgerun_json::Value;
 use tracing::warn;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -135,7 +135,7 @@ impl AnyToolResult {
         result.to_response_item(&call_id, &payload)
     }
 
-    pub(crate) fn code_mode_result(self) -> edgerun_json::serde_json::Value {
+    pub(crate) fn code_mode_result(self) -> edgerun_json::Value {
         let Self {
             payload, result, ..
         } = self;
@@ -590,7 +590,7 @@ impl From<&ToolPayload> for HookToolInput {
                 arguments: arguments.clone(),
             },
             ToolPayload::ToolSearch { arguments } => HookToolInput::Function {
-                arguments: edgerun_json::serde_json::json!({
+                arguments: edgerun_json::json!({
                     "query": arguments.query,
                     "limit": arguments.limit,
                 })

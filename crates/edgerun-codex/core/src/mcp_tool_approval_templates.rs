@@ -1,10 +1,11 @@
 use std::collections::HashSet;
 use std::sync::LazyLock;
 
-use serde::Deserialize;
 use serde::Serialize;
-use edgerun_json::serde_json::Map;
-use edgerun_json::serde_json::Value;
+use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
+use edgerun_json::Map;
+use edgerun_json::Value;
 use tracing::warn;
 
 const CONSEQUENTIAL_TOOL_MESSAGE_TEMPLATES_SCHEMA_VERSION: u8 = 4;
@@ -29,13 +30,23 @@ pub(crate) struct RenderedMcpToolApprovalParam {
     pub(crate) display_name: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug)]
 struct ConsequentialToolMessageTemplatesFile {
     schema_version: u8,
     templates: Vec<ConsequentialToolMessageTemplate>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+impl FromJson for ConsequentialToolMessageTemplatesFile {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ConsequentialToolMessageTemplatesFile")?;
+        Ok(Self {
+            schema_version: object.take_required("schema_version")?,
+            templates: object.take_required("templates")?,
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct ConsequentialToolMessageTemplate {
     connector_id: String,
     server_name: String,
@@ -44,10 +55,33 @@ struct ConsequentialToolMessageTemplate {
     template_params: Vec<ConsequentialToolTemplateParam>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+impl FromJson for ConsequentialToolMessageTemplate {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ConsequentialToolMessageTemplate")?;
+        Ok(Self {
+            connector_id: object.take_required("connector_id")?,
+            server_name: object.take_required("server_name")?,
+            tool_title: object.take_required("tool_title")?,
+            template: object.take_required("template")?,
+            template_params: object.take_required("template_params")?,
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct ConsequentialToolTemplateParam {
     name: String,
     label: String,
+}
+
+impl FromJson for ConsequentialToolTemplateParam {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ConsequentialToolTemplateParam")?;
+        Ok(Self {
+            name: object.take_required("name")?,
+            label: object.take_required("label")?,
+        })
+    }
 }
 
 pub(crate) fn render_mcp_tool_approval_template(
@@ -69,7 +103,7 @@ pub(crate) fn render_mcp_tool_approval_template(
 }
 
 fn load_consequential_tool_message_templates() -> Option<Vec<ConsequentialToolMessageTemplate>> {
-    let templates = match edgerun_json::serde_json::from_str::<ConsequentialToolMessageTemplatesFile>(
+    let templates = match edgerun_json::from_json_str::<ConsequentialToolMessageTemplatesFile>(
         include_str!("consequential_tool_message_templates.json"),
     ) {
         Ok(templates) => templates,
@@ -192,7 +226,7 @@ fn render_tool_params(
 #[cfg(test)]
 mod tests {
     use pretty_assertions::assert_eq;
-    use edgerun_json::serde_json::json;
+    use edgerun_json::json;
 
     use super::*;
 

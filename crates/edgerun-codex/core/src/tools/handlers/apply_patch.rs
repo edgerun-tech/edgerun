@@ -348,7 +348,7 @@ impl ToolHandler for ApplyPatchHandler {
     fn pre_tool_use_payload(&self, invocation: &ToolInvocation) -> Option<PreToolUsePayload> {
         apply_patch_payload_command(&invocation.payload).map(|command| PreToolUsePayload {
             tool_name: HookToolName::apply_patch(),
-            tool_input: edgerun_json::serde_json::json!({ "command": command }),
+            tool_input: edgerun_json::json!({ "command": command }),
         })
     }
 
@@ -362,7 +362,7 @@ impl ToolHandler for ApplyPatchHandler {
         Some(PostToolUsePayload {
             tool_name: HookToolName::apply_patch(),
             tool_use_id: invocation.call_id.clone(),
-            tool_input: edgerun_json::serde_json::json!({
+            tool_input: edgerun_json::json!({
                 "command": apply_patch_payload_command(&invocation.payload)?,
             }),
             tool_response,

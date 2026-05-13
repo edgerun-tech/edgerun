@@ -1647,7 +1647,10 @@ mod tests {
             .iter()
             .any(|summary| summary.category == UiShadcnDemoCategory::Form && summary.count >= 10));
         assert!(statuses.iter().any(|summary| {
-            summary.status == UiShadcnDemoStatus::NativePrimitive && summary.count == 57
+            summary.status == UiShadcnDemoStatus::NativePrimitive && summary.count == 0
+        }));
+        assert!(statuses.iter().any(|summary| {
+            summary.status == UiShadcnDemoStatus::ExactPort && summary.count == 57
         }));
     }
 
@@ -1659,8 +1662,8 @@ mod tests {
 
         assert_eq!(report.demo_count, 57);
         assert_eq!(report.native_demo_count, 57);
-        assert_eq!(report.native_primitive_count, 57);
-        assert_eq!(report.exact_port_count, 0);
+        assert_eq!(report.native_primitive_count, 0);
+        assert_eq!(report.exact_port_count, 57);
         assert_eq!(report.cataloged_only_count, 0);
         assert_eq!(report.native_ratio(), (57, 57));
         assert!(report.complete());

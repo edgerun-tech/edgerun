@@ -1,5 +1,4 @@
 pub use edgerun_schemars_derive::JsonSchema;
-use serde::Serialize;
 
 pub trait JsonSchema {
     fn is_referenceable() -> bool {
@@ -86,10 +85,142 @@ pub mod r#gen {
 pub mod schema {
     use std::collections::BTreeMap;
 
-    use serde::Serialize;
+    #[derive(Debug, Clone, PartialEq)]
+    pub enum EdgeJsonValue {
+        Null,
+        Bool(bool),
+        Number(f64),
+        String(String),
+        Array(Vec<EdgeJsonValue>),
+        Object(Vec<(String, EdgeJsonValue)>),
+    }
 
-    #[derive(Debug, Clone, PartialEq, Serialize)]
-    #[serde(untagged)]
+    impl EdgeJsonValue {
+        pub fn empty_object() -> Self {
+            Self::Object(Vec::new())
+        }
+
+        pub fn array(values: Vec<EdgeJsonValue>) -> Self {
+            Self::Array(values)
+        }
+
+        pub fn object_from_iter<K, V, I>(entries: I) -> Self
+        where
+            K: Into<String>,
+            V: Into<EdgeJsonValue>,
+            I: IntoIterator<Item = (K, V)>,
+        {
+            Self::Object(
+                entries
+                    .into_iter()
+                    .map(|(key, value)| (key.into(), value.into()))
+                    .collect(),
+            )
+        }
+
+        pub fn array_from_iter<V, I>(values: I) -> Self
+        where
+            V: Into<EdgeJsonValue>,
+            I: IntoIterator<Item = V>,
+        {
+            Self::Array(values.into_iter().map(Into::into).collect())
+        }
+
+        pub fn push_field(&mut self, key: impl Into<String>, value: impl Into<EdgeJsonValue>) {
+            match self {
+                Self::Object(entries) => entries.push((key.into(), value.into())),
+                _ => panic!("push_field called on non-object schema JSON value"),
+            }
+        }
+
+        pub fn to_json_string(&self) -> String {
+            let mut out = String::new();
+            self.write_json(&mut out);
+            out
+        }
+
+        fn write_json(&self, out: &mut String) {
+            match self {
+                Self::Null => out.push_str("null"),
+                Self::Bool(value) => out.push_str(if *value { "true" } else { "false" }),
+                Self::Number(value) => out.push_str(&value.to_string()),
+                Self::String(value) => write_string(out, value),
+                Self::Array(values) => {
+                    out.push('[');
+                    for (index, value) in values.iter().enumerate() {
+                        if index > 0 {
+                            out.push(',');
+                        }
+                        value.write_json(out);
+                    }
+                    out.push(']');
+                }
+                Self::Object(entries) => {
+                    out.push('{');
+                    for (index, (key, value)) in entries.iter().enumerate() {
+                        if index > 0 {
+                            out.push(',');
+                        }
+                        write_string(out, key);
+                        out.push(':');
+                        value.write_json(out);
+                    }
+                    out.push('}');
+                }
+            }
+        }
+    }
+
+    impl From<bool> for EdgeJsonValue {
+        fn from(value: bool) -> Self {
+            Self::Bool(value)
+        }
+    }
+
+    impl From<f64> for EdgeJsonValue {
+        fn from(value: f64) -> Self {
+            Self::Number(value)
+        }
+    }
+
+    impl From<String> for EdgeJsonValue {
+        fn from(value: String) -> Self {
+            Self::String(value)
+        }
+    }
+
+    impl From<&str> for EdgeJsonValue {
+        fn from(value: &str) -> Self {
+            Self::String(value.to_string())
+        }
+    }
+
+    fn write_string(out: &mut String, value: &str) {
+        out.push('"');
+        for ch in value.chars() {
+            match ch {
+                '"' => out.push_str("\\\""),
+                '\\' => out.push_str("\\\\"),
+                '\n' => out.push_str("\\n"),
+                '\r' => out.push_str("\\r"),
+                '\t' => out.push_str("\\t"),
+                '\u{08}' => out.push_str("\\b"),
+                '\u{0c}' => out.push_str("\\f"),
+                ch if ch < ' ' => {
+                    use std::fmt::Write as _;
+                    let _ = write!(out, "\\u{:04x}", ch as u32);
+                }
+                ch => out.push(ch),
+            }
+        }
+        out.push('"');
+    }
+
+    pub trait ToJsonSchemaValue {
+        fn to_json_schema_value(&self) -> EdgeJsonValue;
+    }
+
+    #[derive(Debug, Clone, PartialEq)]
     pub enum Schema {
         Bool(bool),
         Object(SchemaObject),
@@ -101,8 +232,16 @@ pub mod schema {
         }
     }
 
-    #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-    #[serde(rename_all = "lowercase")]
+    impl ToJsonSchemaValue for Schema {
+        fn to_json_schema_value(&self) -> EdgeJsonValue {
+            match self {
+                Self::Bool(value) => EdgeJsonValue::Bool(*value),
+                Self::Object(value) => value.to_json_schema_value(),
+            }
+        }
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum InstanceType {
         Null,
         Boolean,
@@ -113,8 +252,27 @@ pub mod schema {
         Integer,
     }
 
-    #[derive(Debug, Clone, PartialEq, Serialize)]
-    #[serde(untagged)]
+    impl InstanceType {
+        fn as_json_name(self) -> &'static str {
+            match self {
+                Self::Null => "null",
+                Self::Boolean => "boolean",
+                Self::Object => "object",
+                Self::Array => "array",
+                Self::Number => "number",
+                Self::String => "string",
+                Self::Integer => "integer",
+            }
+        }
+    }
+
+    impl ToJsonSchemaValue for InstanceType {
+        fn to_json_schema_value(&self) -> EdgeJsonValue {
+            EdgeJsonValue::String(self.as_json_name().to_string())
+        }
+    }
+
+    #[derive(Debug, Clone, PartialEq)]
     pub enum SingleOrVec<T> {
         Single(Box<T>),
         Vec(Vec<T>),
@@ -132,60 +290,164 @@ pub mod schema {
         }
     }
 
-    #[derive(Debug, Clone, Default, PartialEq, Serialize)]
+    impl<T: ToJsonSchemaValue> ToJsonSchemaValue for SingleOrVec<T> {
+        fn to_json_schema_value(&self) -> EdgeJsonValue {
+            match self {
+                Self::Single(value) => value.to_json_schema_value(),
+                Self::Vec(values) => EdgeJsonValue::array(
+                    values
+                        .iter()
+                        .map(ToJsonSchemaValue::to_json_schema_value)
+                        .collect(),
+                ),
+            }
+        }
+    }
+
+    #[derive(Debug, Clone, Default, PartialEq)]
     pub struct Metadata {
-        #[serde(skip_serializing_if = "Option::is_none")]
         pub title: Option<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
         pub description: Option<String>,
     }
 
-    #[derive(Debug, Clone, Default, PartialEq, Serialize)]
-    #[serde(rename_all = "camelCase")]
+    impl Metadata {
+        fn append_json_fields(&self, object: &mut EdgeJsonValue) {
+            if let Some(title) = &self.title {
+                object.push_field("title", title.as_str());
+            }
+            if let Some(description) = &self.description {
+                object.push_field("description", description.as_str());
+            }
+        }
+    }
+
+    impl ToJsonSchemaValue for Metadata {
+        fn to_json_schema_value(&self) -> EdgeJsonValue {
+            let mut object = EdgeJsonValue::empty_object();
+            self.append_json_fields(&mut object);
+            object
+        }
+    }
+
+    #[derive(Debug, Clone, Default, PartialEq)]
     pub struct SubschemaValidation {
-        #[serde(rename = "oneOf", skip_serializing_if = "Option::is_none")]
         pub one_of: Option<Vec<Schema>>,
-        #[serde(rename = "anyOf", skip_serializing_if = "Option::is_none")]
         pub any_of: Option<Vec<Schema>>,
-        #[serde(rename = "allOf", skip_serializing_if = "Option::is_none")]
         pub all_of: Option<Vec<Schema>>,
     }
 
-    #[derive(Debug, Clone, Default, PartialEq, Serialize)]
+    impl SubschemaValidation {
+        fn append_json_fields(&self, object: &mut EdgeJsonValue) {
+            if let Some(one_of) = &self.one_of {
+                object.push_field("oneOf", schema_array(one_of));
+            }
+            if let Some(any_of) = &self.any_of {
+                object.push_field("anyOf", schema_array(any_of));
+            }
+            if let Some(all_of) = &self.all_of {
+                object.push_field("allOf", schema_array(all_of));
+            }
+        }
+    }
+
+    impl ToJsonSchemaValue for SubschemaValidation {
+        fn to_json_schema_value(&self) -> EdgeJsonValue {
+            let mut object = EdgeJsonValue::empty_object();
+            self.append_json_fields(&mut object);
+            object
+        }
+    }
+
+    #[derive(Debug, Clone, Default, PartialEq)]
     pub struct SchemaObject {
-        #[serde(rename = "$ref", skip_serializing_if = "Option::is_none")]
         pub reference: Option<String>,
-        #[serde(flatten, skip_serializing_if = "Option::is_none")]
         pub metadata: Option<Box<Metadata>>,
-        #[serde(rename = "type", skip_serializing_if = "Option::is_none")]
         pub instance_type: Option<SingleOrVec<InstanceType>>,
-        #[serde(rename = "const", skip_serializing_if = "Option::is_none")]
         pub const_value: Option<JsonValue>,
-        #[serde(rename = "enum", skip_serializing_if = "Option::is_none")]
         pub enum_values: Option<Vec<JsonValue>>,
-        #[serde(flatten, skip_serializing_if = "Option::is_none")]
         pub subschemas: Option<Box<SubschemaValidation>>,
-        #[serde(rename = "properties", skip_serializing_if = "BTreeMap::is_empty")]
         pub properties: BTreeMap<String, Schema>,
-        #[serde(skip_serializing_if = "Vec::is_empty")]
         pub required: Vec<String>,
-        #[serde(skip_serializing_if = "Option::is_none")]
         pub items: Option<Box<Schema>>,
-        #[serde(
-            rename = "additionalProperties",
-            skip_serializing_if = "Option::is_none"
-        )]
         pub additional_properties: Option<AdditionalProperties>,
     }
 
-    #[derive(Debug, Clone, PartialEq, Serialize)]
-    #[serde(untagged)]
+    impl ToJsonSchemaValue for SchemaObject {
+        fn to_json_schema_value(&self) -> EdgeJsonValue {
+            let mut object = EdgeJsonValue::empty_object();
+            if let Some(reference) = &self.reference {
+                object.push_field("$ref", reference.as_str());
+            }
+            if let Some(metadata) = &self.metadata {
+                metadata.append_json_fields(&mut object);
+            }
+            if let Some(instance_type) = &self.instance_type {
+                object.push_field("type", instance_type.to_json_schema_value());
+            }
+            if let Some(value) = &self.const_value {
+                object.push_field("const", value.to_json_schema_value());
+            }
+            if let Some(values) = &self.enum_values {
+                object.push_field(
+                    "enum",
+                    EdgeJsonValue::array(
+                        values
+                            .iter()
+                            .map(ToJsonSchemaValue::to_json_schema_value)
+                            .collect(),
+                    ),
+                );
+            }
+            if let Some(subschemas) = &self.subschemas {
+                subschemas.append_json_fields(&mut object);
+            }
+            if !self.properties.is_empty() {
+                object.push_field(
+                    "properties",
+                    EdgeJsonValue::object_from_iter(
+                        self.properties
+                            .iter()
+                            .map(|(key, value)| (key.clone(), value.to_json_schema_value())),
+                    ),
+                );
+            }
+            if !self.required.is_empty() {
+                object.push_field(
+                    "required",
+                    EdgeJsonValue::array_from_iter(
+                        self.required.iter().map(|value| value.as_str()),
+                    ),
+                );
+            }
+            if let Some(items) = &self.items {
+                object.push_field("items", items.to_json_schema_value());
+            }
+            if let Some(additional_properties) = &self.additional_properties {
+                object.push_field(
+                    "additionalProperties",
+                    additional_properties.to_json_schema_value(),
+                );
+            }
+            object
+        }
+    }
+
+    #[derive(Debug, Clone, PartialEq)]
     pub enum AdditionalProperties {
         Bool(bool),
         Schema(Box<Schema>),
     }
-    #[derive(Debug, Clone, PartialEq, Serialize)]
-    #[serde(untagged)]
+
+    impl ToJsonSchemaValue for AdditionalProperties {
+        fn to_json_schema_value(&self) -> EdgeJsonValue {
+            match self {
+                Self::Bool(value) => EdgeJsonValue::Bool(*value),
+                Self::Schema(value) => value.to_json_schema_value(),
+            }
+        }
+    }
+
+    #[derive(Debug, Clone, PartialEq)]
     pub enum JsonValue {
         Null,
         Bool(bool),
@@ -194,18 +456,71 @@ pub mod schema {
         Array(Vec<JsonValue>),
         Object(BTreeMap<String, JsonValue>),
     }
+
+    impl ToJsonSchemaValue for JsonValue {
+        fn to_json_schema_value(&self) -> EdgeJsonValue {
+            match self {
+                Self::Null => EdgeJsonValue::Null,
+                Self::Bool(value) => EdgeJsonValue::Bool(*value),
+                Self::Number(value) => EdgeJsonValue::from(*value),
+                Self::String(value) => EdgeJsonValue::String(value.clone()),
+                Self::Array(values) => EdgeJsonValue::array(
+                    values
+                        .iter()
+                        .map(ToJsonSchemaValue::to_json_schema_value)
+                        .collect(),
+                ),
+                Self::Object(values) => EdgeJsonValue::object_from_iter(
+                    values
+                        .iter()
+                        .map(|(key, value)| (key.clone(), value.to_json_schema_value())),
+                ),
+            }
+        }
+    }
+
+    fn schema_array(values: &[Schema]) -> EdgeJsonValue {
+        EdgeJsonValue::array(
+            values
+                .iter()
+                .map(ToJsonSchemaValue::to_json_schema_value)
+                .collect(),
+        )
+    }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RootSchema {
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub meta_schema: Option<String>,
-    #[serde(flatten)]
     pub schema: schema::Schema,
-    #[serde(skip)]
     pub option_nullable: bool,
-    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
     pub definitions: std::collections::BTreeMap<String, schema::Schema>,
+}
+
+impl RootSchema {
+    pub fn to_json_value(&self) -> schema::EdgeJsonValue {
+        use schema::ToJsonSchemaValue;
+
+        let mut value = self.schema.to_json_schema_value();
+        if let Some(meta_schema) = &self.meta_schema {
+            value.push_field("$schema", meta_schema.as_str());
+        }
+        if !self.definitions.is_empty() {
+            value.push_field(
+                "definitions",
+                schema::EdgeJsonValue::object_from_iter(
+                    self.definitions
+                        .iter()
+                        .map(|(key, value)| (key.clone(), value.to_json_schema_value())),
+                ),
+            );
+        }
+        value
+    }
+
+    pub fn to_json_string(&self) -> String {
+        self.to_json_value().to_json_string()
+    }
 }
 
 #[macro_export]

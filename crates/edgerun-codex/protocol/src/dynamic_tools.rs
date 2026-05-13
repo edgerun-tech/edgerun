@@ -1,4 +1,4 @@
-use edgerun_json::serde_json::Value as JsonValue;
+use edgerun_json::Value as JsonValue;
 use edgerun_serde::Deserialize;
 use edgerun_serde::Deserializer;
 use edgerun_serde::Serialize;
@@ -86,7 +86,7 @@ impl<'de> Deserialize<'de> for DynamicToolSpec {
 #[cfg(test)]
 mod tests {
     use super::DynamicToolSpec;
-    use edgerun_json::serde_json::json;
+    use edgerun_json::json;
     use pretty_assertions::assert_eq;
 
     #[test]
@@ -103,8 +103,7 @@ mod tests {
             "deferLoading": true,
         });
 
-        let actual: DynamicToolSpec =
-            edgerun_json::serde_json::from_value(value).expect("deserialize");
+        let actual: DynamicToolSpec = edgerun_json::from_value(value).expect("deserialize");
 
         assert_eq!(
             actual,
@@ -135,8 +134,7 @@ mod tests {
             "exposeToContext": false,
         });
 
-        let actual: DynamicToolSpec =
-            edgerun_json::serde_json::from_value(value).expect("deserialize");
+        let actual: DynamicToolSpec = edgerun_json::from_value(value).expect("deserialize");
 
         assert!(actual.defer_loading);
     }

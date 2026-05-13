@@ -36,8 +36,8 @@ use core_test_support::stdio_server_bin;
 use core_test_support::test_codex::TestCodexBuilder;
 use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
-use edgerun_json::serde_json::Value;
-use edgerun_json::serde_json::json;
+use edgerun_json::Value;
+use edgerun_json::json;
 use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -481,7 +481,7 @@ async fn tool_search_returns_deferred_tools_without_follow_up_tool_injection() -
                         "call_id": "calendar-call-1",
                         "name": SEARCH_CALENDAR_CREATE_TOOL,
                         "namespace": SEARCH_CALENDAR_NAMESPACE,
-                        "arguments": edgerun_json::serde_json::to_string(&json!({
+                        "arguments": edgerun_json::to_string(&json!({
                             "title": "Lunch",
                             "starts_at": "2026-03-10T12:00:00Z"
                         })).expect("serialize calendar args")
@@ -578,7 +578,7 @@ async fn tool_search_returns_deferred_tools_without_follow_up_tool_injection() -
         .unwrap_or_default()
         .into_iter()
         .find_map(|request| {
-            let body: Value = edgerun_json::serde_json::from_slice(&request.body).ok()?;
+            let body: Value = edgerun_json::from_serde_slice(&request.body).ok()?;
             (request.url.path() == "/api/codex/apps"
                 && body.get("method").and_then(Value::as_str) == Some("tools/call"))
             .then_some(body)
@@ -634,7 +634,7 @@ async fn tool_search_returns_deferred_tools_without_follow_up_tool_injection() -
         "apps tools/call should include a positive turn_started_at_unix_ms: {apps_tool_call:?}"
     );
 
-    let first_request_turn_metadata: Value = edgerun_json::serde_json::from_str(
+    let first_request_turn_metadata: Value = edgerun_json::from_serde_str(
         &requests[0]
             .header("x-codex-turn-metadata")
             .expect("first response request should include turn metadata"),
@@ -753,7 +753,7 @@ async fn tool_search_returns_deferred_dynamic_tool_and_routes_follow_up_call() -
     let tool_name = "automation_update";
     let tool_description = "Create, update, view, or delete recurring automations.";
     let tool_args = json!({ "mode": "create" });
-    let tool_call_arguments = edgerun_json::serde_json::to_string(&tool_args)?;
+    let tool_call_arguments = edgerun_json::to_string(&tool_args)?;
     let mock = mount_sse_sequence(
         &server,
         vec![
@@ -908,7 +908,7 @@ async fn tool_search_returns_deferred_dynamic_tool_and_routes_follow_up_call() -
         .get("output")
         .cloned()
         .expect("dynamic tool output should be present");
-    let payload: FunctionCallOutputPayload = edgerun_json::serde_json::from_value(output)?;
+    let payload: FunctionCallOutputPayload = edgerun_json::from_serde_value(output)?;
     assert_eq!(
         payload,
         FunctionCallOutputPayload::from_text("dynamic-search-ok".to_string())

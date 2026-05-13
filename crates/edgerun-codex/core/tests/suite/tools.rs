@@ -35,8 +35,8 @@ use core_test_support::skip_if_no_network;
 use core_test_support::skip_if_sandbox;
 use core_test_support::stdio_server_bin;
 use core_test_support::test_codex::test_codex;
-use edgerun_json::serde_json::Value;
-use edgerun_json::serde_json::json;
+use edgerun_json::Value;
+use edgerun_json::json;
 use regex_lite::Regex;
 use serial_test::serial;
 use tempfile::TempDir;
@@ -378,7 +378,7 @@ async fn shell_escalated_permissions_rejected_then_ok() -> Result<()> {
             ev_function_call(
                 call_id_blocked,
                 "shell",
-                &edgerun_json::serde_json::to_string(&first_args)?,
+                &edgerun_json::to_string(&first_args)?,
             ),
             ev_completed("resp-1"),
         ]),
@@ -391,7 +391,7 @@ async fn shell_escalated_permissions_rejected_then_ok() -> Result<()> {
             ev_function_call(
                 call_id_success,
                 "shell",
-                &edgerun_json::serde_json::to_string(&second_args)?,
+                &edgerun_json::to_string(&second_args)?,
             ),
             ev_completed("resp-2"),
         ]),
@@ -433,7 +433,7 @@ async fn shell_escalated_permissions_rejected_then_ok() -> Result<()> {
         .function_call_output_content_and_success(call_id_success)
         .and_then(|(content, _)| content)
         .expect("success output string");
-    let output_json: Value = edgerun_json::serde_json::from_str(&success_output)?;
+    let output_json: Value = edgerun_json::from_serde_str(&success_output)?;
     assert_eq!(
         output_json["metadata"]["exit_code"].as_i64(),
         Some(0),
@@ -478,7 +478,7 @@ async fn sandbox_denied_shell_returns_original_output() -> Result<()> {
             ev_function_call(
                 call_id,
                 "shell",
-                &edgerun_json::serde_json::to_string(&args)?,
+                &edgerun_json::to_string(&args)?,
             ),
             ev_completed("resp-1"),
         ]),
@@ -600,7 +600,7 @@ async fn shell_enforces_glob_deny_read_policy() -> Result<()> {
             ev_function_call(
                 call_id,
                 "shell",
-                &edgerun_json::serde_json::to_string(&args)?,
+                &edgerun_json::to_string(&args)?,
             ),
             ev_completed("resp-1"),
         ]),
@@ -739,7 +739,7 @@ async fn shell_timeout_includes_timeout_prefix_and_metadata() -> Result<()> {
             ev_function_call(
                 call_id,
                 "shell",
-                &edgerun_json::serde_json::to_string(&args)?,
+                &edgerun_json::to_string(&args)?,
             ),
             ev_completed("resp-1"),
         ]),
@@ -771,7 +771,7 @@ async fn shell_timeout_includes_timeout_prefix_and_metadata() -> Result<()> {
     // The exec path can report a timeout in two ways depending on timing:
     // 1) Structured JSON with exit_code 124 and a timeout prefix (preferred), or
     // 2) A plain error string if the child is observed as killed by a signal first.
-    if let Ok(output_json) = edgerun_json::serde_json::from_str::<Value>(output_str) {
+    if let Ok(output_json) = edgerun_json::from_serde_str::<Value>(output_str) {
         assert_eq!(
             output_json["metadata"]["exit_code"].as_i64(),
             Some(124),
@@ -833,7 +833,7 @@ time.sleep(60)
             ev_function_call(
                 call_id,
                 "shell",
-                &edgerun_json::serde_json::to_string(&args)?,
+                &edgerun_json::to_string(&args)?,
             ),
             ev_completed("resp-1"),
         ]),
@@ -867,7 +867,7 @@ time.sleep(60)
     .context("exec call should not hang waiting for grandchild pipes to close")??;
     let elapsed = start.elapsed();
 
-    if let Ok(output_json) = edgerun_json::serde_json::from_str::<Value>(&output_str) {
+    if let Ok(output_json) = edgerun_json::from_serde_str::<Value>(&output_str) {
         assert_eq!(
             output_json["metadata"]["exit_code"].as_i64(),
             Some(124),
@@ -925,7 +925,7 @@ async fn shell_spawn_failure_truncates_exec_error() -> Result<()> {
             ev_function_call(
                 call_id,
                 "shell",
-                &edgerun_json::serde_json::to_string(&args)?,
+                &edgerun_json::to_string(&args)?,
             ),
             ev_completed("resp-1"),
         ]),

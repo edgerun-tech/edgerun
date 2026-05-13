@@ -38,8 +38,8 @@ use core_test_support::wait_for_event_with_timeout;
 use core_test_support::zsh_fork::build_zsh_fork_test;
 use core_test_support::zsh_fork::restrictive_workspace_write_profile;
 use core_test_support::zsh_fork::zsh_fork_runtime;
-use edgerun_json::serde_json::Value;
-use edgerun_json::serde_json::json;
+use edgerun_json::Value;
+use edgerun_json::json;
 use pretty_assertions::assert_eq;
 use regex_lite::Regex;
 use std::env;
@@ -332,7 +332,7 @@ fn shell_event_with_prefix_rule(
     if let Some(prefix_rule) = prefix_rule {
         args["prefix_rule"] = json!(prefix_rule);
     }
-    let args_str = edgerun_json::serde_json::to_string(&args)?;
+    let args_str = edgerun_json::to_string(&args)?;
     Ok(ev_function_call(call_id, "shell_command", &args_str))
 }
 
@@ -354,7 +354,7 @@ fn exec_command_event(
         let reason = justification.unwrap_or(DEFAULT_UNIFIED_EXEC_JUSTIFICATION);
         args["justification"] = json!(reason);
     }
-    let args_str = edgerun_json::serde_json::to_string(&args)?;
+    let args_str = edgerun_json::to_string(&args)?;
     Ok(ev_function_call(call_id, "exec_command", &args_str))
 }
 
@@ -672,7 +672,7 @@ fn parse_result(item: &Value) -> CommandResult {
         .get("output")
         .and_then(Value::as_str)
         .expect("shell output payload");
-    match edgerun_json::serde_json::from_str::<Value>(output_str) {
+    match edgerun_json::from_serde_str::<Value>(output_str) {
         Ok(parsed) => {
             let exit_code = parsed["metadata"]["exit_code"].as_i64();
             let stdout = parsed["output"].as_str().unwrap_or_default().to_string();
@@ -2314,7 +2314,7 @@ async fn spawned_subagent_execpolicy_amendment_propagates_to_parent_session() ->
     let child_file = test.cwd.path().join("subagent-allow-prefix.txt");
     let _ = fs::remove_file(&child_file);
 
-    let spawn_args = edgerun_json::serde_json::to_string(&json!({
+    let spawn_args = edgerun_json::to_string(&json!({
         "message": CHILD_PROMPT,
     }))?;
     mount_sse_once_match(
@@ -2328,7 +2328,7 @@ async fn spawned_subagent_execpolicy_amendment_propagates_to_parent_session() ->
     )
     .await;
 
-    let child_cmd_args = edgerun_json::serde_json::to_string(&json!({
+    let child_cmd_args = edgerun_json::to_string(&json!({
         "command": "touch subagent-allow-prefix.txt",
         "timeout_ms": 1_000,
         "prefix_rule": ["touch", "subagent-allow-prefix.txt"],

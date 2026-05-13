@@ -8,8 +8,5 @@ repository.workspace = true
 homepage.workspace = true
 description = "Edgerun shim for landlock"
 
-[dependencies]
-landlock = "0.4.4"
-
 [lints]
 workspace = true

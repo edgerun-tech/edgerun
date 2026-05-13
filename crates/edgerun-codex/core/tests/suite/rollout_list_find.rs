@@ -17,7 +17,7 @@ use codex_rollout::StateDbHandle;
 use codex_state::StateRuntime;
 use codex_state::ThreadMetadataBuilder;
 use edgerun_time::chrono::ChronoUtc as Utc;
-use edgerun_uuid::Uuid;
+use codex_protocol::local_uuid::Uuid;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 
@@ -39,7 +39,7 @@ fn write_minimal_rollout_with_id_at_path(file: &Path, id: Uuid) {
     writeln!(
         f,
         "{}",
-        edgerun_json::serde_json::json!({
+        edgerun_json::json!({
             "timestamp": "2024-01-01T00:00:00.000Z",
             "type": "session_meta",
             "payload": {
@@ -203,7 +203,7 @@ async fn find_locates_rollout_file_written_by_recorder() -> std::io::Result<()> 
         &index_path,
         format!(
             "{}\n",
-            edgerun_json::serde_json::json!({
+            edgerun_json::json!({
                 "id": thread_id,
                 "thread_name": thread_name,
                 "updated_at": "2024-01-01T00:00:00Z"

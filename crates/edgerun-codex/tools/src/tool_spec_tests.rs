@@ -14,7 +14,8 @@ use codex_protocol::config_types::WebSearchContextSize;
 use codex_protocol::config_types::WebSearchFilters as ConfigWebSearchFilters;
 use codex_protocol::config_types::WebSearchUserLocation as ConfigWebSearchUserLocation;
 use codex_protocol::config_types::WebSearchUserLocationType;
-use edgerun_json::serde_json::json;
+use edgerun_json::ToJson;
+use edgerun_json::json;
 use pretty_assertions::assert_eq;
 use std::collections::BTreeMap;
 
@@ -177,7 +178,7 @@ fn create_tools_json_for_responses_api_includes_top_level_name() {
 #[test]
 fn namespace_tool_spec_serializes_expected_wire_shape() {
     assert_eq!(
-        edgerun_json::serde_json::to_value(ToolSpec::Namespace(ResponsesApiNamespace {
+        ToolSpec::Namespace(ResponsesApiNamespace {
             name: "mcp__demo__".to_string(),
             description: "Demo tools".to_string(),
             tools: vec![ResponsesApiNamespaceTool::Function(ResponsesApiTool {
@@ -195,8 +196,8 @@ fn namespace_tool_spec_serializes_expected_wire_shape() {
                 ),
                 output_schema: None,
             })],
-        }))
-        .expect("serialize namespace tool"),
+        })
+        .to_json(),
         json!({
             "type": "namespace",
             "name": "mcp__demo__",
@@ -222,7 +223,7 @@ fn namespace_tool_spec_serializes_expected_wire_shape() {
 #[test]
 fn web_search_tool_spec_serializes_expected_wire_shape() {
     assert_eq!(
-        edgerun_json::serde_json::to_value(ToolSpec::WebSearch {
+        ToolSpec::WebSearch {
             external_web_access: Some(true),
             filters: Some(ResponsesApiWebSearchFilters {
                 allowed_domains: Some(vec!["example.com".to_string()]),
@@ -236,8 +237,8 @@ fn web_search_tool_spec_serializes_expected_wire_shape() {
             }),
             search_context_size: Some(WebSearchContextSize::High),
             search_content_types: Some(vec!["text".to_string(), "image".to_string()]),
-        })
-        .expect("serialize web_search"),
+        }
+        .to_json(),
         json!({
             "type": "web_search",
             "external_web_access": true,
@@ -260,7 +261,7 @@ fn web_search_tool_spec_serializes_expected_wire_shape() {
 #[test]
 fn tool_search_tool_spec_serializes_expected_wire_shape() {
     assert_eq!(
-        edgerun_json::serde_json::to_value(ToolSpec::ToolSearch {
+        ToolSpec::ToolSearch {
             execution: "sync".to_string(),
             description: "Search app tools".to_string(),
             parameters: JsonSchema::object(
@@ -271,8 +272,8 @@ fn tool_search_tool_spec_serializes_expected_wire_shape() {
                 Some(vec!["query".to_string()]),
                 Some(AdditionalProperties::Boolean(false))
             ),
-        })
-        .expect("serialize tool_search"),
+        }
+        .to_json(),
         json!({
             "type": "tool_search",
             "execution": "sync",

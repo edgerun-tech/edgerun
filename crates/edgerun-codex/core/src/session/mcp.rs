@@ -18,7 +18,7 @@ use codex_protocol::mcp_approval_meta::TOOL_TITLE_KEY as MCP_ELICITATION_TOOL_TI
 use rmcp::model::CreateElicitationRequestParams;
 use rmcp::model::ElicitationAction;
 use rmcp::model::Meta;
-use edgerun_json::serde_json::Map;
+use edgerun_json::Map;
 
 const MCP_ELICITATION_DECLINE_MESSAGE_KEY: &str = "message";
 
@@ -80,7 +80,7 @@ impl Session {
         {
             return Some(ElicitationResponse {
                 action: codex_rmcp_client::ElicitationAction::Accept,
-                content: Some(edgerun_json::serde_json::json!({})),
+                content: Some(edgerun_json::json!({})),
                 meta: None,
             });
         }
@@ -92,7 +92,7 @@ impl Session {
                 message,
                 requested_schema,
             } => {
-                let requested_schema = match edgerun_json::serde_json::to_value(requested_schema) {
+                let requested_schema = match edgerun_json::to_serde_value(requested_schema) {
                     Ok(requested_schema) => requested_schema,
                     Err(err) => {
                         warn!(
@@ -252,8 +252,8 @@ impl Session {
         &self,
         server: &str,
         tool: &str,
-        arguments: Option<edgerun_json::serde_json::Value>,
-        meta: Option<edgerun_json::serde_json::Value>,
+        arguments: Option<edgerun_json::Value>,
+        meta: Option<edgerun_json::Value>,
     ) -> anyhow::Result<CallToolResult> {
         self.services
             .mcp_connection_manager
@@ -369,14 +369,14 @@ impl Session {
         } = refresh_config;
 
         let mcp_servers =
-            match edgerun_json::serde_json::from_value::<HashMap<String, McpServerConfig>>(mcp_servers) {
+            match edgerun_json::from_serde_value::<HashMap<String, McpServerConfig>>(mcp_servers) {
                 Ok(servers) => servers,
                 Err(err) => {
                     warn!("failed to parse MCP server refresh config: {err}");
                     return;
                 }
             };
-        let store_mode = match edgerun_json::serde_json::from_value::<OAuthCredentialsStoreMode>(
+        let store_mode = match edgerun_json::from_serde_value::<OAuthCredentialsStoreMode>(
             mcp_oauth_credentials_store_mode,
         ) {
             Ok(mode) => mode,
@@ -589,7 +589,7 @@ fn mcp_elicitation_response_from_guardian_decision_parts(
         | ReviewDecision::ApprovedExecpolicyAmendment { .. }
         | ReviewDecision::NetworkPolicyAmendment { .. } => ElicitationResponse {
             action: ElicitationAction::Accept,
-            content: Some(edgerun_json::serde_json::json!({})),
+            content: Some(edgerun_json::json!({})),
             meta: Some(mcp_elicitation_auto_meta()),
         },
         ReviewDecision::Denied => mcp_elicitation_decline_with_message(
@@ -610,7 +610,7 @@ fn mcp_elicitation_decline_with_message(message: String) -> ElicitationResponse 
     ElicitationResponse {
         action: ElicitationAction::Decline,
         content: None,
-        meta: Some(edgerun_json::serde_json::json!({
+        meta: Some(edgerun_json::json!({
             MCP_ELICITATION_DECLINE_MESSAGE_KEY: message,
             MCP_ELICITATION_APPROVALS_REVIEWER_KEY: ApprovalsReviewer::AutoReview,
         })),
@@ -625,8 +625,8 @@ fn mcp_elicitation_decline_without_message() -> ElicitationResponse {
     }
 }
 
-fn mcp_elicitation_auto_meta() -> edgerun_json::serde_json::Value {
-    edgerun_json::serde_json::json!({
+fn mcp_elicitation_auto_meta() -> edgerun_json::Value {
+    edgerun_json::json!({
         MCP_ELICITATION_APPROVALS_REVIEWER_KEY: ApprovalsReviewer::AutoReview,
     })
 }

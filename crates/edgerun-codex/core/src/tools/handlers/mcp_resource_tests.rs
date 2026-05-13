@@ -1,7 +1,7 @@
 use super::*;
 use pretty_assertions::assert_eq;
 use rmcp::model::AnnotateAble;
-use edgerun_json::serde_json::json;
+use edgerun_json::json;
 
 fn resource(uri: &str, name: &str) -> Resource {
     rmcp::model::RawResource {
@@ -32,7 +32,7 @@ fn template(uri_template: &str, name: &str) -> ResourceTemplate {
 #[test]
 fn resource_with_server_serializes_server_field() {
     let entry = ResourceWithServer::new("test".to_string(), resource("memo://id", "memo"));
-    let value = edgerun_json::serde_json::to_value(&entry).expect("serialize resource");
+    let value = edgerun_json::to_serde_value(&entry).expect("serialize resource");
 
     assert_eq!(value["server"], json!("test"));
     assert_eq!(value["uri"], json!("memo://id"));
@@ -47,7 +47,7 @@ fn list_resources_payload_from_single_server_copies_next_cursor() {
         resources: vec![resource("memo://id", "memo")],
     };
     let payload = ListResourcesPayload::from_single_server("srv".to_string(), result);
-    let value = edgerun_json::serde_json::to_value(&payload).expect("serialize payload");
+    let value = edgerun_json::to_serde_value(&payload).expect("serialize payload");
 
     assert_eq!(value["server"], json!("srv"));
     assert_eq!(value["nextCursor"], json!("cursor-1"));
@@ -66,7 +66,7 @@ fn list_resources_payload_from_all_servers_is_sorted() {
     );
 
     let payload = ListResourcesPayload::from_all_servers(map);
-    let value = edgerun_json::serde_json::to_value(&payload).expect("serialize payload");
+    let value = edgerun_json::to_serde_value(&payload).expect("serialize payload");
     let uris: Vec<String> = value["resources"]
         .as_array()
         .expect("resources array")
@@ -112,7 +112,7 @@ fn parse_arguments_handles_empty_and_json() {
 #[test]
 fn template_with_server_serializes_server_field() {
     let entry = ResourceTemplateWithServer::new("srv".to_string(), template("memo://{id}", "memo"));
-    let value = edgerun_json::serde_json::to_value(&entry).expect("serialize template");
+    let value = edgerun_json::to_serde_value(&entry).expect("serialize template");
 
     assert_eq!(
         value,

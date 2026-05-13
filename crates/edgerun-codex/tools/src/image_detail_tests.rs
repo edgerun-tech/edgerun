@@ -3,11 +3,11 @@ use codex_protocol::models::DEFAULT_IMAGE_DETAIL;
 use codex_protocol::models::FunctionCallOutputContentItem;
 use codex_protocol::models::ImageDetail;
 use codex_protocol::openai_models::ModelInfo;
-use edgerun_json::serde_json::json;
+use edgerun_json::json;
 use pretty_assertions::assert_eq;
 
 fn model_info() -> ModelInfo {
-    edgerun_json::serde_json::from_value(json!({
+    edgerun_json::from_serde_value(json!({
         "slug": "test-model",
         "display_name": "Test Model",
         "description": null,

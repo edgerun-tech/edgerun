@@ -6,14 +6,13 @@ use codex_protocol::models::FunctionCallOutputBody;
 use codex_protocol::models::ResponseItem;
 use codex_tools::ToolSpec;
 use edgerun_futures::Stream;
-use serde::Deserialize;
-use edgerun_json::serde_json::Value;
+use edgerun_json::Value;
+use edgerun_tokio::sync::mpsc;
+use edgerun_tokio_util::sync::CancellationToken;
 use std::collections::HashSet;
 use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
-use edgerun_tokio::sync::mpsc;
-use edgerun_tokio_util::sync::CancellationToken;
 
 /// Review thread system prompt. Edit `core/src/review_prompt.md` to customize.
 pub const REVIEW_PROMPT: &str = include_str!("../review_prompt.md");
@@ -129,20 +128,27 @@ fn is_shell_tool_name(name: &str) -> bool {
     matches!(name, "shell" | "container.exec")
 }
 
-#[derive(Deserialize)]
 struct ExecOutputJson {
     output: String,
     metadata: ExecOutputMetadataJson,
 }
 
-#[derive(Deserialize)]
 struct ExecOutputMetadataJson {
     exit_code: i32,
     duration_seconds: f32,
 }
 
 fn parse_structured_shell_output(raw: &str) -> Option<String> {
-    let parsed: ExecOutputJson = edgerun_json::serde_json::from_str(raw).ok()?;
+    let tape = edgerun_json::parse_json_tape(raw).ok()?;
+    let root = tape.root(raw)?;
+    let metadata = root.get("metadata")?;
+    let parsed = ExecOutputJson {
+        output: root.get("output")?.as_str()?.to_string(),
+        metadata: ExecOutputMetadataJson {
+            exit_code: metadata.get("exit_code")?.as_i32()?,
+            duration_seconds: metadata.get("duration_seconds")?.as_f64()? as f32,
+        },
+    };
     Some(build_structured_output(&parsed))
 }
 

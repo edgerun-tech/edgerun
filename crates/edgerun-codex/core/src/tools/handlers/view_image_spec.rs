@@ -2,8 +2,8 @@ use codex_protocol::models::VIEW_IMAGE_TOOL_NAME;
 use codex_tools::JsonSchema;
 use codex_tools::ResponsesApiTool;
 use codex_tools::ToolSpec;
-use edgerun_json::serde_json::Value;
-use edgerun_json::serde_json::json;
+use edgerun_json::Value;
+use edgerun_json::json;
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

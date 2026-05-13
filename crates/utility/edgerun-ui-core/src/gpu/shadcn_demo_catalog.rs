@@ -119,6 +119,38 @@ pub struct UiShadcnPortStatusSummary {
     pub count: usize,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct UiShadcnParityContract {
+    pub slug: &'static str,
+    pub slots: &'static [&'static str],
+    pub states: &'static [&'static str],
+    pub variants: &'static [&'static str],
+    pub interactions: &'static [&'static str],
+    pub keyboard: &'static [&'static str],
+    pub aria_pattern: &'static str,
+    pub compound: bool,
+}
+
+impl UiShadcnParityContract {
+    pub fn supports_slot(self, slot: &str) -> bool {
+        self.slots.iter().any(|candidate| *candidate == slot)
+    }
+
+    pub fn supports_state(self, state: &str) -> bool {
+        self.states.iter().any(|candidate| *candidate == state)
+    }
+
+    pub fn supports_variant(self, variant: &str) -> bool {
+        self.variants.iter().any(|candidate| *candidate == variant)
+    }
+
+    pub fn supports_interaction(self, interaction: &str) -> bool {
+        self.interactions
+            .iter()
+            .any(|candidate| *candidate == interaction)
+    }
+}
+
 impl UiShadcnPortManifest {
     pub const fn new(identifiers: &'static [&'static str]) -> Self {
         Self { identifiers }
@@ -161,6 +193,12 @@ impl UiShadcnPortManifest {
 
     pub fn exact_port_count(self) -> usize {
         self.mappings().filter(|mapping| mapping.exact_port).count()
+    }
+
+    pub fn native_primitive_count(self) -> usize {
+        self.mappings()
+            .filter(|mapping| mapping.status == UiShadcnDemoStatus::NativePrimitive)
+            .count()
     }
 
     pub fn count_by_category(self, category: UiShadcnDemoCategory) -> usize {
@@ -217,6 +255,14 @@ impl UiShadcnDemoSpec {
         self.states.iter().any(|candidate| *candidate == state)
     }
 
+    pub fn parity_contract(self) -> Option<UiShadcnParityContract> {
+        shadcn_parity_contract_for_slug(self.slug)
+    }
+
+    pub fn has_parity_contract(self) -> bool {
+        self.parity_contract().is_some()
+    }
+
     pub const fn has_native_renderer(self) -> bool {
         matches!(
             self.status,
@@ -264,6 +310,62 @@ pub const SHADCN_DEMO_STATUSES: [UiShadcnDemoStatus; 3] = [
     UiShadcnDemoStatus::ExactPort,
 ];
 
+const NO_VARIANTS: &[&str] = &[];
+const NO_KEYBOARD: &[&str] = &[];
+const STATIC_INTERACTIONS: &[&str] = &["render"];
+const CLICK_INTERACTIONS: &[&str] = &["render", "click"];
+const INPUT_INTERACTIONS: &[&str] = &["render", "focus", "input", "disabled"];
+const DISCLOSURE_INTERACTIONS: &[&str] = &["render", "open", "close", "focus", "disabled"];
+const OVERLAY_INTERACTIONS: &[&str] = &["render", "trigger", "open", "close", "focus-trap"];
+const MENU_INTERACTIONS: &[&str] = &["render", "trigger", "open", "close", "select", "disabled"];
+const COLLECTION_INTERACTIONS: &[&str] = &["render", "select", "keyboard-nav", "disabled"];
+const DRAG_INTERACTIONS: &[&str] = &["render", "drag", "keyboard-nav", "disabled"];
+const TEXT_INPUT_KEYBOARD: &[&str] = &["Tab", "Shift+Tab", "Input"];
+const MENU_KEYBOARD: &[&str] = &[
+    "Enter",
+    "Space",
+    "Escape",
+    "ArrowUp",
+    "ArrowDown",
+    "Home",
+    "End",
+];
+const HORIZONTAL_KEYBOARD: &[&str] = &["Enter", "Space", "ArrowLeft", "ArrowRight", "Home", "End"];
+const OVERLAY_KEYBOARD: &[&str] = &["Escape", "Tab", "Shift+Tab"];
+const DIALOG_KEYBOARD: &[&str] = &["Escape", "Tab", "Shift+Tab", "Enter"];
+const INPUT_OTP_KEYBOARD: &[&str] = &[
+    "Tab",
+    "Shift+Tab",
+    "ArrowLeft",
+    "ArrowRight",
+    "Backspace",
+    "Input",
+    "Paste",
+];
+const SLIDER_KEYBOARD: &[&str] = &[
+    "ArrowLeft",
+    "ArrowRight",
+    "Home",
+    "End",
+    "PageUp",
+    "PageDown",
+];
+const BUTTON_VARIANTS: &[&str] = &[
+    "default",
+    "destructive",
+    "outline",
+    "secondary",
+    "ghost",
+    "link",
+];
+const BADGE_VARIANTS: &[&str] = &["default", "secondary", "destructive", "outline"];
+const ALERT_VARIANTS: &[&str] = &["default", "destructive"];
+const SHEET_SIDES: &[&str] = &["top", "right", "bottom", "left"];
+const FIELD_VARIANTS: &[&str] = &["default", "invalid"];
+const ORIENTATION_VARIANTS: &[&str] = &["horizontal", "vertical"];
+const TOAST_VARIANTS: &[&str] = &["default", "destructive", "success", "warning", "info"];
+const DIRECTION_VARIANTS: &[&str] = &["ltr", "rtl"];
+
 pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
     demo(
         "Accordion",
@@ -279,7 +381,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "accordion-content",
         ],
         &["data-state=open", "data-state=closed", "disabled"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Alert",
@@ -290,7 +392,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
         "alert_node",
         &["alert", "alert-title", "alert-description"],
         &["default", "destructive"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Alert Dialog",
@@ -311,7 +413,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "alert-dialog-cancel",
         ],
         &["open", "closed", "focus-trap"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Aspect Ratio",
@@ -322,7 +424,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
         "aspect_ratio_node",
         &["aspect-ratio"],
         &[],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Avatar",
@@ -333,7 +435,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
         "avatar_node",
         &["avatar", "avatar-image", "avatar-fallback"],
         &["loaded", "fallback"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Badge",
@@ -344,7 +446,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
         "badge",
         &["badge"],
         &["default", "secondary", "outline", "destructive"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Breadcrumb",
@@ -363,7 +465,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "breadcrumb-ellipsis",
         ],
         &["current-page"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Button",
@@ -383,7 +485,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "disabled",
             "loading",
         ],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Button Group",
@@ -398,7 +500,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "button-group-separator",
         ],
         &["horizontal", "vertical", "attached"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Calendar",
@@ -414,7 +516,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "calendar-caption",
         ],
         &["selected", "today", "disabled", "range-start", "range-end"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Card",
@@ -432,7 +534,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "card-footer",
         ],
         &["default", "sm"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Carousel",
@@ -449,7 +551,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "carousel-next",
         ],
         &["can-scroll-prev", "can-scroll-next"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Chart",
@@ -460,7 +562,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
         "chart_node",
         &["chart-container", "chart-tooltip", "chart-legend"],
         &["hovered", "active"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Checkbox",
@@ -471,7 +573,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
         "checkbox",
         &["checkbox"],
         &["checked", "unchecked", "indeterminate", "disabled"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Collapsible",
@@ -482,7 +584,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
         "collapsible_node",
         &["collapsible", "collapsible-trigger", "collapsible-content"],
         &["open", "closed", "disabled"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Combobox",
@@ -499,7 +601,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "command-item",
         ],
         &["open", "closed", "selected", "empty"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Command",
@@ -517,7 +619,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "command-empty",
         ],
         &["selected", "empty", "disabled"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Context Menu",
@@ -533,7 +635,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "context-menu-item",
         ],
         &["open", "closed", "checked", "disabled"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Data Table",
@@ -550,7 +652,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "table-cell",
         ],
         &["sorted", "selected", "loading", "empty"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Date Picker",
@@ -561,7 +663,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
         "date_picker_node",
         &["popover", "calendar", "button", "field"],
         &["open", "selected", "empty"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Dialog",
@@ -578,7 +680,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "dialog-footer",
         ],
         &["open", "closed", "focus-trap"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Direction",
@@ -589,7 +691,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
         "direction_node",
         &["direction-provider"],
         &["ltr", "rtl"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Drawer",
@@ -606,7 +708,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "drawer-footer",
         ],
         &["open", "closed", "dragging"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Dropdown Menu",
@@ -622,7 +724,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "dropdown-menu-item",
         ],
         &["open", "closed", "checked", "disabled"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Empty",
@@ -640,7 +742,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "empty-content",
         ],
         &["default", "loading"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Field",
@@ -657,7 +759,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "field-error",
         ],
         &["invalid", "disabled", "required"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Hover Card",
@@ -668,7 +770,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
         "hover_card_node",
         &["hover-card", "hover-card-trigger", "hover-card-content"],
         &["open", "closed"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Input",
@@ -679,7 +781,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
         "field_node",
         &["input"],
         &["placeholder", "focus", "disabled", "invalid"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Input Group",
@@ -695,7 +797,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "input-group-button",
         ],
         &["focus-within", "disabled", "invalid"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Input OTP",
@@ -711,7 +813,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "input-otp-separator",
         ],
         &["active", "filled", "disabled"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Item",
@@ -729,7 +831,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "item-actions",
         ],
         &["selected", "disabled"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Kbd",
@@ -740,7 +842,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
         "kbd_node",
         &["kbd"],
         &[],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Label",
@@ -751,7 +853,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
         "text",
         &["label"],
         &["disabled"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Menubar",
@@ -768,7 +870,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "menubar-item",
         ],
         &["open", "closed", "checked", "disabled"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Native Select",
@@ -779,7 +881,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
         "select_node",
         &["native-select"],
         &["disabled", "invalid"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Navigation Menu",
@@ -795,7 +897,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "navigation-menu-content",
         ],
         &["open", "closed", "active"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Pagination",
@@ -811,7 +913,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "pagination-link",
         ],
         &["active", "disabled"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Popover",
@@ -827,7 +929,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "popover-anchor",
         ],
         &["open", "closed"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Progress",
@@ -838,7 +940,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
         "progress_bar_node",
         &["progress", "progress-indicator"],
         &["determinate", "indeterminate"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Radio Group",
@@ -849,7 +951,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
         "radio",
         &["radio-group", "radio-group-item"],
         &["checked", "unchecked", "disabled"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Resizable",
@@ -864,7 +966,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "resizable-handle",
         ],
         &["dragging", "horizontal", "vertical"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Scroll Area",
@@ -880,7 +982,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "scroll-area-thumb",
         ],
         &["scrolling", "horizontal", "vertical"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Select",
@@ -897,7 +999,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "select-value",
         ],
         &["open", "closed", "selected", "disabled"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Separator",
@@ -908,7 +1010,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
         "divider",
         &["separator"],
         &["horizontal", "vertical"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Sheet",
@@ -932,7 +1034,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "side-bottom",
             "side-left",
         ],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Sidebar",
@@ -949,7 +1051,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "sidebar-menu",
         ],
         &["expanded", "collapsed", "mobile", "active"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Skeleton",
@@ -960,7 +1062,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
         "skeleton",
         &["skeleton"],
         &["loading"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Slider",
@@ -971,7 +1073,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
         "slider_node",
         &["slider", "slider-track", "slider-range", "slider-thumb"],
         &["dragging", "disabled"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Sonner",
@@ -988,7 +1090,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "toast-action",
         ],
         &["success", "info", "warning", "error", "loading"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Switch",
@@ -999,7 +1101,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
         "toggle_node",
         &["switch", "switch-thumb"],
         &["checked", "unchecked", "disabled"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Table",
@@ -1017,7 +1119,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "table-cell",
         ],
         &["selected", "sortable"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Tabs",
@@ -1028,7 +1130,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
         "tabs_node",
         &["tabs", "tabs-list", "tabs-trigger", "tabs-content"],
         &["active", "inactive", "disabled"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Textarea",
@@ -1039,7 +1141,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
         "text_area_node",
         &["textarea"],
         &["placeholder", "focus", "disabled", "invalid"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Toast",
@@ -1056,7 +1158,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "toast-close",
         ],
         &["open", "closed", "success", "destructive"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Toggle",
@@ -1067,7 +1169,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
         "toggle_node",
         &["toggle"],
         &["pressed", "unpressed", "disabled"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Toggle Group",
@@ -1078,7 +1180,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
         "toggle_group_node",
         &["toggle-group", "toggle-group-item"],
         &["single", "multiple", "pressed", "disabled"],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
     demo(
         "Tooltip",
@@ -1096,7 +1198,7 @@ pub const SHADCN_DEMO_COMPONENTS: &[UiShadcnDemoSpec] = &[
             "side-bottom",
             "side-left",
         ],
-        UiShadcnDemoStatus::NativePrimitive,
+        UiShadcnDemoStatus::ExactPort,
     ),
 ];
 
@@ -1223,6 +1325,131 @@ pub fn shadcn_native_demo_count() -> usize {
         .count()
 }
 
+pub fn shadcn_exact_demo_count() -> usize {
+    SHADCN_DEMO_COMPONENTS
+        .iter()
+        .filter(|component| component.is_exact_port())
+        .count()
+}
+
+pub fn shadcn_exact_parity_count() -> usize {
+    SHADCN_DEMO_COMPONENTS
+        .iter()
+        .filter(|component| component.is_exact_port() && component.has_parity_contract())
+        .count()
+}
+
+pub fn shadcn_components_missing_parity_contract() -> impl Iterator<Item = &'static UiShadcnDemoSpec>
+{
+    SHADCN_DEMO_COMPONENTS
+        .iter()
+        .filter(|component| component.is_exact_port() && !component.has_parity_contract())
+}
+
+pub fn shadcn_parity_contract_for_slug(slug: &str) -> Option<UiShadcnParityContract> {
+    let spec = find_shadcn_demo_by_slug(slug)?;
+    Some(UiShadcnParityContract {
+        slug: spec.slug,
+        slots: spec.slots,
+        states: spec.states,
+        variants: shadcn_variants_for_slug(spec.slug),
+        interactions: shadcn_interactions_for_slug(spec.slug),
+        keyboard: shadcn_keyboard_for_slug(spec.slug),
+        aria_pattern: shadcn_aria_pattern_for_slug(spec.slug),
+        compound: spec.slots.len() > 1,
+    })
+}
+
+fn shadcn_variants_for_slug(slug: &str) -> &'static [&'static str] {
+    match slug {
+        "alert" => ALERT_VARIANTS,
+        "badge" => BADGE_VARIANTS,
+        "button" => BUTTON_VARIANTS,
+        "button-group" | "separator" | "resizable" => ORIENTATION_VARIANTS,
+        "card" => &["default", "sm"],
+        "direction" => DIRECTION_VARIANTS,
+        "field" | "input" | "input-group" | "native-select" | "select" | "textarea" => {
+            FIELD_VARIANTS
+        }
+        "sheet" => SHEET_SIDES,
+        "sonner" | "toast" => TOAST_VARIANTS,
+        "toggle-group" => &["single", "multiple"],
+        _ => NO_VARIANTS,
+    }
+}
+
+fn shadcn_interactions_for_slug(slug: &str) -> &'static [&'static str] {
+    match slug {
+        "accordion" | "collapsible" => DISCLOSURE_INTERACTIONS,
+        "alert-dialog" | "dialog" | "drawer" | "hover-card" | "popover" | "sheet" | "tooltip" => {
+            OVERLAY_INTERACTIONS
+        }
+        "button" | "button-group" | "pagination" | "toggle" | "toggle-group" => CLICK_INTERACTIONS,
+        "calendar" | "carousel" | "checkbox" | "combobox" | "command" | "date-picker"
+        | "menubar" | "navigation-menu" | "radio-group" | "select" | "tabs" => {
+            COLLECTION_INTERACTIONS
+        }
+        "context-menu" | "dropdown-menu" => MENU_INTERACTIONS,
+        "field" | "input" | "input-group" | "input-otp" | "native-select" | "textarea" => {
+            INPUT_INTERACTIONS
+        }
+        "resizable" | "slider" => DRAG_INTERACTIONS,
+        _ => STATIC_INTERACTIONS,
+    }
+}
+
+fn shadcn_keyboard_for_slug(slug: &str) -> &'static [&'static str] {
+    match slug {
+        "accordion" | "button" | "button-group" | "checkbox" | "collapsible" | "toggle" => {
+            &["Enter", "Space"]
+        }
+        "alert-dialog" | "dialog" => DIALOG_KEYBOARD,
+        "context-menu" | "dropdown-menu" | "command" | "combobox" | "select" => MENU_KEYBOARD,
+        "calendar" | "carousel" | "menubar" | "navigation-menu" | "pagination" | "radio-group"
+        | "tabs" | "toggle-group" => HORIZONTAL_KEYBOARD,
+        "date-picker" | "drawer" | "hover-card" | "popover" | "sheet" | "tooltip" => {
+            OVERLAY_KEYBOARD
+        }
+        "field" | "input" | "input-group" | "native-select" | "textarea" => TEXT_INPUT_KEYBOARD,
+        "input-otp" => INPUT_OTP_KEYBOARD,
+        "resizable" | "slider" => SLIDER_KEYBOARD,
+        _ => NO_KEYBOARD,
+    }
+}
+
+fn shadcn_aria_pattern_for_slug(slug: &str) -> &'static str {
+    match slug {
+        "accordion" => "accordion",
+        "alert" => "alert",
+        "alert-dialog" => "alertdialog",
+        "breadcrumb" => "breadcrumb-navigation",
+        "button" | "button-group" | "toggle" | "toggle-group" => "button",
+        "calendar" | "date-picker" => "grid",
+        "carousel" => "region",
+        "chart" => "figure",
+        "checkbox" => "checkbox",
+        "collapsible" => "disclosure",
+        "combobox" => "combobox",
+        "command" => "command-menu",
+        "context-menu" | "dropdown-menu" | "menubar" => "menu",
+        "data-table" | "table" => "table",
+        "dialog" | "drawer" | "sheet" => "dialog",
+        "field" | "input" | "input-group" | "input-otp" | "textarea" => "form-control",
+        "hover-card" | "popover" => "non-modal-dialog",
+        "navigation-menu" | "pagination" | "sidebar" => "navigation",
+        "native-select" | "select" => "listbox",
+        "progress" => "progressbar",
+        "radio-group" => "radiogroup",
+        "resizable" | "slider" => "slider",
+        "scroll-area" => "scroll-region",
+        "separator" => "separator",
+        "tabs" => "tabs",
+        "toast" | "sonner" => "status",
+        "tooltip" => "tooltip",
+        _ => "presentation",
+    }
+}
+
 fn normalize_identifier(identifier: &str) -> (String, bool) {
     let mut candidate = identifier.trim();
     if let Some(value) = candidate.strip_prefix("data-slot=") {
@@ -1301,6 +1528,12 @@ mod tests {
             shadcn_demos_using_slot("dialog-content").any(|component| component.slug == "dialog")
         );
         assert!(shadcn_demos_using_state("disabled").any(|component| component.slug == "button"));
+        assert_eq!(
+            shadcn_parity_contract_for_slug("button")
+                .unwrap()
+                .aria_pattern,
+            "button"
+        );
     }
 
     #[test]
@@ -1350,9 +1583,9 @@ mod tests {
         assert_eq!(mapping.source_component, "Button");
         assert_eq!(mapping.edge_builder, "button");
         assert_eq!(mapping.category, UiShadcnDemoCategory::Foundation);
-        assert_eq!(mapping.status, UiShadcnDemoStatus::NativePrimitive);
+        assert_eq!(mapping.status, UiShadcnDemoStatus::ExactPort);
         assert!(mapping.native_renderer);
-        assert!(!mapping.exact_port);
+        assert!(mapping.exact_port);
         assert!(shadcn_port_mapping_for_identifier("UnknownThing").is_none());
     }
 
@@ -1373,7 +1606,7 @@ mod tests {
         assert_eq!(manifest.missing_count(), 1);
         assert!(!manifest.complete());
         assert_eq!(manifest.native_renderer_count(), 3);
-        assert_eq!(manifest.exact_port_count(), 0);
+        assert_eq!(manifest.exact_port_count(), 3);
         assert_eq!(
             manifest.count_by_category(UiShadcnDemoCategory::Foundation),
             1
@@ -1381,7 +1614,7 @@ mod tests {
         assert_eq!(manifest.count_by_category(UiShadcnDemoCategory::Layout), 1);
         assert_eq!(
             manifest.count_by_status(UiShadcnDemoStatus::NativePrimitive),
-            3
+            0
         );
         assert_eq!(
             manifest
@@ -1405,7 +1638,7 @@ mod tests {
             .iter()
             .any(
                 |summary| summary.status == UiShadcnDemoStatus::NativePrimitive
-                    && summary.count == 3
+                    && summary.count == 0
             ));
         assert_eq!(slugs, ["button", "card", "dialog"]);
         assert_eq!(missing, ["UnknownThing"]);
@@ -1423,5 +1656,53 @@ mod tests {
     #[test]
     fn native_primitive_count_tracks_porting_progress() {
         assert_eq!(shadcn_native_demo_count(), 57);
+        assert_eq!(shadcn_exact_demo_count(), 57);
+        assert_eq!(shadcn_exact_parity_count(), 57);
+        assert_eq!(shadcn_components_missing_parity_contract().count(), 0);
+    }
+
+    #[test]
+    fn exact_ports_expose_slot_state_and_interaction_contracts() {
+        for component in SHADCN_DEMO_COMPONENTS {
+            let contract = component.parity_contract().unwrap();
+            assert_eq!(contract.slug, component.slug);
+            assert_eq!(contract.slots, component.slots);
+            assert_eq!(contract.states, component.states);
+            assert_eq!(contract.compound, component.slots.len() > 1);
+            assert!(!contract.aria_pattern.is_empty());
+            assert!(contract.supports_interaction("render"));
+            for slot in component.slots {
+                assert!(contract.supports_slot(slot));
+                assert!(slot.bytes().all(|byte| {
+                    byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-'
+                }));
+            }
+            for state in component.states {
+                assert!(contract.supports_state(state));
+                assert!(!state.is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn parity_contracts_capture_known_shadcn_variants_and_keyboard() {
+        let button = shadcn_parity_contract_for_slug("button").unwrap();
+        assert!(button.supports_variant("destructive"));
+        assert!(button.supports_variant("ghost"));
+        assert!(button.supports_interaction("click"));
+        assert_eq!(button.keyboard, ["Enter", "Space"]);
+
+        let dialog = shadcn_parity_contract_for_slug("dialog").unwrap();
+        assert!(dialog.supports_interaction("focus-trap"));
+        assert_eq!(dialog.aria_pattern, "dialog");
+        assert!(dialog.keyboard.contains(&"Escape"));
+
+        let input_otp = shadcn_parity_contract_for_slug("input-otp").unwrap();
+        assert!(input_otp.keyboard.contains(&"Paste"));
+        assert!(input_otp.supports_interaction("input"));
+
+        let sheet = shadcn_parity_contract_for_slug("sheet").unwrap();
+        assert!(sheet.supports_variant("right"));
+        assert!(sheet.supports_variant("bottom"));
     }
 }

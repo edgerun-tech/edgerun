@@ -22,7 +22,7 @@ use core_test_support::responses::mount_sse_once;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::test_codex::test_codex;
-use edgerun_json::serde_json::Value;
+use edgerun_json::Value;
 use std::time::Duration;
 use std::time::Instant;
 use edgerun_tokio::time::sleep;

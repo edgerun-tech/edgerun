@@ -1,4 +1,4 @@
-use edgerun_json::serde_json::Value;
+use edgerun_json::Value;
 use edgerun_similar::ChangeTag;
 use edgerun_similar::TextDiff;
 use regex_lite::Regex;
@@ -268,7 +268,7 @@ fn format_request_body_snapshot(
 ) -> String {
     let mut body = request.body_json();
     canonicalize_json_snapshot_value(&mut body, options);
-    edgerun_json::serde_json::to_string_pretty(&body).expect("request body should serialize")
+    edgerun_json::to_string_pretty(&body).expect("request body should serialize")
 }
 
 fn canonicalize_json_snapshot_value(value: &mut Value, options: &ContextSnapshotOptions) {
@@ -279,7 +279,7 @@ fn canonicalize_json_snapshot_value(value: &mut Value, options: &ContextSnapshot
             }
         }
         Value::Object(map) => {
-            // Keep request-body snapshots stable when edgerun_json::serde_json preserves insertion order.
+            // Keep request-body snapshots stable when edgerun_json preserves insertion order.
             let mut entries = std::mem::take(map).into_iter().collect::<Vec<_>>();
             entries.sort_by(|(left_key, _), (right_key, _)| left_key.cmp(right_key));
             for (key, mut value) in entries {
@@ -456,7 +456,7 @@ mod tests {
     use super::ContextSnapshotOptions;
     use super::ContextSnapshotRenderMode;
     use super::format_response_items_snapshot;
-    use edgerun_json::serde_json::json;
+    use edgerun_json::json;
     use pretty_assertions::assert_eq;
 
     #[test]

@@ -8,7 +8,7 @@ use codex_protocol::models::AdditionalPermissionProfile;
 use codex_protocol::request_permissions::RequestPermissionProfile;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use serde::Serialize;
-use edgerun_json::serde_json::Value;
+use edgerun_json::Value;
 
 use super::GUARDIAN_MAX_ACTION_STRING_TOKENS;
 use super::prompt::guardian_truncate_text;
@@ -169,8 +169,8 @@ struct RequestPermissionsApprovalAction<'a> {
     permissions: &'a RequestPermissionProfile,
 }
 
-fn serialize_guardian_action(value: impl Serialize) -> edgerun_json::serde_json::Result<Value> {
-    edgerun_json::serde_json::to_value(value)
+fn serialize_guardian_action(value: impl Serialize) -> edgerun_json::Result<Value> {
+    edgerun_json::to_serde_value(value)
 }
 
 fn serialize_command_guardian_action(
@@ -181,7 +181,7 @@ fn serialize_command_guardian_action(
     additional_permissions: Option<&AdditionalPermissionProfile>,
     justification: Option<&String>,
     tty: Option<bool>,
-) -> edgerun_json::serde_json::Result<Value> {
+) -> edgerun_json::Result<Value> {
     serialize_guardian_action(CommandApprovalAction {
         tool,
         command,
@@ -258,7 +258,7 @@ pub(crate) struct FormattedGuardianAction {
 
 pub(crate) fn guardian_approval_request_to_json(
     action: &GuardianApprovalRequest,
-) -> edgerun_json::serde_json::Result<Value> {
+) -> edgerun_json::Result<Value> {
     match action {
         GuardianApprovalRequest::Shell {
             id: _,
@@ -313,7 +313,7 @@ pub(crate) fn guardian_approval_request_to_json(
             cwd,
             files,
             patch,
-        } => Ok(edgerun_json::serde_json::json!({
+        } => Ok(edgerun_json::json!({
             "tool": "apply_patch",
             "cwd": cwd,
             "files": files,
@@ -531,11 +531,11 @@ pub(crate) fn guardian_request_turn_id<'a>(
 
 pub(crate) fn format_guardian_action_pretty(
     action: &GuardianApprovalRequest,
-) -> edgerun_json::serde_json::Result<FormattedGuardianAction> {
+) -> edgerun_json::Result<FormattedGuardianAction> {
     let value = guardian_approval_request_to_json(action)?;
     let (value, truncated) = truncate_guardian_action_value(value);
     Ok(FormattedGuardianAction {
-        text: edgerun_json::serde_json::to_string_pretty(&value)?,
+        text: edgerun_json::to_string_pretty(&value)?,
         truncated,
     })
 }

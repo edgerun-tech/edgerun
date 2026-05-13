@@ -1115,7 +1115,7 @@ impl Session {
             .wall_clock
             .clear_active_goal();
         self.send_event_raw(Event {
-            id: edgerun_uuid::Uuid::new_v4().to_string(),
+            id: codex_protocol::local_uuid::Uuid::new_v4().to_string(),
             msg: EventMsg::ThreadGoalUpdated(ThreadGoalUpdatedEvent {
                 thread_id: self.conversation_id,
                 turn_id: None,
@@ -1231,7 +1231,7 @@ impl Session {
         }
 
         let turn_context = self
-            .new_default_turn_with_sub_id(edgerun_uuid::Uuid::new_v4().to_string())
+            .new_default_turn_with_sub_id(codex_protocol::local_uuid::Uuid::new_v4().to_string())
             .await;
         self.maybe_emit_unknown_model_warning_for_turn(turn_context.as_ref())
             .await;

@@ -426,12 +426,12 @@ async fn responses_stream_includes_turn_metadata_header_for_git_workspace_e2e() 
         .single_request()
         .header("x-codex-turn-metadata")
         .expect("x-codex-turn-metadata header should be present");
-    let initial_parsed: edgerun_json::serde_json::Value =
-        edgerun_json::serde_json::from_str(&initial_header)
+    let initial_parsed: edgerun_json::Value =
+        edgerun_json::from_serde_str(&initial_header)
             .expect("x-codex-turn-metadata should be valid JSON");
     let initial_turn_id = initial_parsed
         .get("turn_id")
-        .and_then(edgerun_json::serde_json::Value::as_str)
+        .and_then(edgerun_json::Value::as_str)
         .expect("turn_id should be present")
         .to_string();
     assert!(
@@ -440,7 +440,7 @@ async fn responses_stream_includes_turn_metadata_header_for_git_workspace_e2e() 
     );
     let initial_turn_started_at_unix_ms = initial_parsed
         .get("turn_started_at_unix_ms")
-        .and_then(edgerun_json::serde_json::Value::as_i64)
+        .and_then(edgerun_json::Value::as_i64)
         .expect("turn_started_at_unix_ms should be present");
     assert!(
         initial_turn_started_at_unix_ms > 0,
@@ -449,13 +449,13 @@ async fn responses_stream_includes_turn_metadata_header_for_git_workspace_e2e() 
     assert_eq!(
         initial_parsed
             .get("sandbox")
-            .and_then(edgerun_json::serde_json::Value::as_str),
+            .and_then(edgerun_json::Value::as_str),
         Some("none")
     );
     assert_eq!(
         initial_parsed
             .get("thread_source")
-            .and_then(edgerun_json::serde_json::Value::as_str),
+            .and_then(edgerun_json::Value::as_str),
         None
     );
 
@@ -528,13 +528,13 @@ async fn responses_stream_includes_turn_metadata_header_for_git_workspace_e2e() 
     let requests = request_log.requests();
     assert_eq!(requests.len(), 2, "expected two requests in one turn");
 
-    let first_parsed: edgerun_json::serde_json::Value = edgerun_json::serde_json::from_str(
+    let first_parsed: edgerun_json::Value = edgerun_json::from_serde_str(
         &requests[0]
             .header("x-codex-turn-metadata")
             .expect("first request should include turn metadata"),
     )
     .expect("first metadata should be valid json");
-    let second_parsed: edgerun_json::serde_json::Value = edgerun_json::serde_json::from_str(
+    let second_parsed: edgerun_json::Value = edgerun_json::from_serde_str(
         &requests[1]
             .header("x-codex-turn-metadata")
             .expect("second request should include turn metadata"),
@@ -543,19 +543,19 @@ async fn responses_stream_includes_turn_metadata_header_for_git_workspace_e2e() 
 
     let first_turn_id = first_parsed
         .get("turn_id")
-        .and_then(edgerun_json::serde_json::Value::as_str)
+        .and_then(edgerun_json::Value::as_str)
         .expect("first turn_id should be present");
     let second_turn_id = second_parsed
         .get("turn_id")
-        .and_then(edgerun_json::serde_json::Value::as_str)
+        .and_then(edgerun_json::Value::as_str)
         .expect("second turn_id should be present");
     let first_turn_started_at_unix_ms = first_parsed
         .get("turn_started_at_unix_ms")
-        .and_then(edgerun_json::serde_json::Value::as_i64)
+        .and_then(edgerun_json::Value::as_i64)
         .expect("first turn_started_at_unix_ms should be present");
     let second_turn_started_at_unix_ms = second_parsed
         .get("turn_started_at_unix_ms")
-        .and_then(edgerun_json::serde_json::Value::as_i64)
+        .and_then(edgerun_json::Value::as_i64)
         .expect("second turn_started_at_unix_ms should be present");
     assert!(
         first_turn_started_at_unix_ms > 0,
@@ -568,13 +568,13 @@ async fn responses_stream_includes_turn_metadata_header_for_git_workspace_e2e() 
     assert_eq!(
         first_parsed
             .get("thread_source")
-            .and_then(edgerun_json::serde_json::Value::as_str),
+            .and_then(edgerun_json::Value::as_str),
         None
     );
     assert_eq!(
         second_parsed
             .get("thread_source")
-            .and_then(edgerun_json::serde_json::Value::as_str),
+            .and_then(edgerun_json::Value::as_str),
         None
     );
     assert_eq!(
@@ -590,27 +590,27 @@ async fn responses_stream_includes_turn_metadata_header_for_git_workspace_e2e() 
     assert_eq!(
         second_parsed
             .get("sandbox")
-            .and_then(edgerun_json::serde_json::Value::as_str),
+            .and_then(edgerun_json::Value::as_str),
         Some("none")
     );
 
     let workspace = second_parsed
         .get("workspaces")
-        .and_then(edgerun_json::serde_json::Value::as_object)
+        .and_then(edgerun_json::Value::as_object)
         .and_then(|workspaces| workspaces.values().next())
         .cloned()
         .expect("second request should include git workspace metadata");
     assert_eq!(
         workspace
             .get("latest_git_commit_hash")
-            .and_then(edgerun_json::serde_json::Value::as_str),
+            .and_then(edgerun_json::Value::as_str),
         Some(expected_head.as_str())
     );
     if let Some(actual_origin) = workspace
         .get("associated_remote_urls")
-        .and_then(edgerun_json::serde_json::Value::as_object)
+        .and_then(edgerun_json::Value::as_object)
         .and_then(|remotes| remotes.get("origin"))
-        .and_then(edgerun_json::serde_json::Value::as_str)
+        .and_then(edgerun_json::Value::as_str)
     {
         assert_eq!(
             normalize_git_remote_url(actual_origin),
@@ -620,7 +620,7 @@ async fn responses_stream_includes_turn_metadata_header_for_git_workspace_e2e() 
     assert_eq!(
         workspace
             .get("has_changes")
-            .and_then(edgerun_json::serde_json::Value::as_bool),
+            .and_then(edgerun_json::Value::as_bool),
         Some(false)
     );
 }

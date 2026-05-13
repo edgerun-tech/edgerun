@@ -38,8 +38,8 @@ use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
 use core_test_support::wait_for_event_match;
 use core_test_support::wait_for_event_with_timeout;
-use edgerun_json::serde_json::Value;
-use edgerun_json::serde_json::json;
+use edgerun_json::Value;
+use edgerun_json::json;
 use pretty_assertions::assert_eq;
 use edgerun_tokio::time::Duration;
 use wiremock::ResponseTemplate;
@@ -313,7 +313,7 @@ async fn remote_compact_replaces_history_for_followups() -> Result<()> {
     }];
     let compact_mock = responses::mount_compact_json_once(
         harness.server(),
-        edgerun_json::serde_json::json!({ "output": compacted_history.clone() }),
+        edgerun_json::json!({ "output": compacted_history.clone() }),
     )
     .await;
 
@@ -718,7 +718,7 @@ async fn remote_compact_v2_reuses_context_compaction_for_followups() -> Result<(
                 responses::ev_completed("resp-1"),
             ]),
             responses::sse(vec![
-                edgerun_json::serde_json::json!({
+                edgerun_json::json!({
                     "type": "response.output_item.done",
                     "item": {
                         "type": "context_compaction",
@@ -828,7 +828,7 @@ async fn remote_compact_v2_accepts_additional_output_items_before_context_compac
             ]),
             responses::sse(vec![
                 responses::ev_assistant_message("m-compact-noise", "IGNORED_COMPACT_REPLY"),
-                edgerun_json::serde_json::json!({
+                edgerun_json::json!({
                     "type": "response.output_item.done",
                     "item": {
                         "type": "context_compaction",
@@ -945,7 +945,7 @@ async fn remote_compact_filters_deferred_dynamic_tools() -> Result<()> {
     .await;
     let compact_mock = responses::mount_compact_json_once(
         &server,
-        edgerun_json::serde_json::json!({
+        edgerun_json::json!({
             "output": compacted_summary_only_output("compact summary"),
         }),
     )
@@ -1351,7 +1351,7 @@ async fn auto_remote_compact_failure_stops_agent_loop() -> Result<()> {
 
     let first_compact_mock = responses::mount_compact_json_once(
         harness.server(),
-        edgerun_json::serde_json::json!({ "output": "invalid compact payload shape" }),
+        edgerun_json::json!({ "output": "invalid compact payload shape" }),
     )
     .await;
     let post_compact_turn_mock = mount_sse_once(
@@ -1737,7 +1737,7 @@ async fn remote_manual_compact_failure_emits_task_error_event() -> Result<()> {
 
     let compact_mock = responses::mount_compact_json_once(
         harness.server(),
-        edgerun_json::serde_json::json!({ "output": "invalid compact payload shape" }),
+        edgerun_json::json!({ "output": "invalid compact payload shape" }),
     )
     .await;
 
@@ -1820,7 +1820,7 @@ async fn remote_compact_persists_replacement_history_in_rollout() -> Result<()> 
     ];
     let compact_mock = responses::mount_compact_json_once(
         harness.server(),
-        edgerun_json::serde_json::json!({ "output": compacted_history.clone() }),
+        edgerun_json::json!({ "output": compacted_history.clone() }),
     )
     .await;
 
@@ -1853,7 +1853,7 @@ async fn remote_compact_persists_replacement_history_in_rollout() -> Result<()> 
         .map(str::trim)
         .filter(|l| !l.is_empty())
     {
-        let Ok(entry) = edgerun_json::serde_json::from_str::<RolloutLine>(line) else {
+        let Ok(entry) = edgerun_json::from_serde_str::<RolloutLine>(line) else {
             continue;
         };
         if let RolloutItem::Compacted(compacted) = entry.item
@@ -1961,7 +1961,7 @@ async fn remote_compact_and_resume_refresh_stale_developer_instructions() -> Res
     ];
     let compact_mock = responses::mount_compact_json_once(
         &server,
-        edgerun_json::serde_json::json!({ "output": compacted_history }),
+        edgerun_json::json!({ "output": compacted_history }),
     )
     .await;
 
@@ -2098,7 +2098,7 @@ async fn remote_compact_refreshes_stale_developer_instructions_without_resume() 
     ];
     let compact_mock = responses::mount_compact_json_once(
         &server,
-        edgerun_json::serde_json::json!({ "output": compacted_history }),
+        edgerun_json::json!({ "output": compacted_history }),
     )
     .await;
 
@@ -2179,7 +2179,7 @@ async fn snapshot_request_shape_remote_pre_turn_compaction_restates_realtime_sta
     .await;
     let compact_mock = responses::mount_compact_json_once(
         &server,
-        edgerun_json::serde_json::json!({
+        edgerun_json::json!({
             "output": compacted_summary_only_output(
                 "REMOTE_PRETURN_REALTIME_STILL_ACTIVE_SUMMARY"
             )
@@ -2318,7 +2318,7 @@ async fn snapshot_request_shape_remote_pre_turn_compaction_restates_realtime_end
     .await;
     let compact_mock = responses::mount_compact_json_once(
         &server,
-        edgerun_json::serde_json::json!({
+        edgerun_json::json!({
             "output": compacted_summary_only_output(
                 "REMOTE_PRETURN_REALTIME_CLOSED_SUMMARY"
             )
@@ -2407,7 +2407,7 @@ async fn snapshot_request_shape_remote_manual_compact_restates_realtime_start() 
     .await;
     let compact_mock = responses::mount_compact_json_once(
         &server,
-        edgerun_json::serde_json::json!({
+        edgerun_json::json!({
             "output": compacted_summary_only_output(
                 "REMOTE_MANUAL_REALTIME_STILL_ACTIVE_SUMMARY"
             )
@@ -2505,7 +2505,7 @@ async fn snapshot_request_shape_remote_mid_turn_compaction_does_not_restate_real
     .await;
     let compact_mock = responses::mount_compact_json_once(
         &server,
-        edgerun_json::serde_json::json!({
+        edgerun_json::json!({
             "output": compacted_summary_only_output(
                 "REMOTE_MID_TURN_REALTIME_CLOSED_SUMMARY"
             )
@@ -2609,7 +2609,7 @@ async fn snapshot_request_shape_remote_compact_resume_restates_realtime_end() ->
     .await;
     let compact_mock = responses::mount_compact_json_once(
         &server,
-        edgerun_json::serde_json::json!({
+        edgerun_json::json!({
             "output": compacted_summary_only_output(
                 "REMOTE_RESUME_REALTIME_CLOSED_SUMMARY"
             )
@@ -2961,7 +2961,7 @@ async fn snapshot_request_shape_remote_pre_turn_compaction_context_window_exceed
 
     let compact_mock = responses::mount_compact_response_once(
         harness.server(),
-        ResponseTemplate::new(400).set_body_json(edgerun_json::serde_json::json!({
+        ResponseTemplate::new(400).set_body_json(edgerun_json::json!({
             "error": {
                 "code": "context_length_exceeded",
                 "message": "Your input exceeds the context window of this model. Please adjust your input and try again."
@@ -3148,7 +3148,7 @@ async fn snapshot_request_shape_remote_mid_turn_compaction_summary_only_reinject
     }];
     let compact_mock = responses::mount_compact_json_once(
         harness.server(),
-        edgerun_json::serde_json::json!({ "output": compacted_history }),
+        edgerun_json::json!({ "output": compacted_history }),
     )
     .await;
 
@@ -3329,7 +3329,7 @@ async fn snapshot_request_shape_remote_manual_compact_without_previous_user_mess
 
     let compact_mock = responses::mount_compact_json_once(
         harness.server(),
-        edgerun_json::serde_json::json!({ "output": [] }),
+        edgerun_json::json!({ "output": [] }),
     )
     .await;
 

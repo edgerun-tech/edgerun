@@ -20,8 +20,8 @@ use core_test_support::responses::start_mock_server;
 use core_test_support::test_codex::test_codex;
 use core_test_support::test_codex::turn_permission_fields;
 use core_test_support::wait_for_event;
-use edgerun_json::serde_json::Value;
-use edgerun_json::serde_json::json;
+use edgerun_json::Value;
+use edgerun_json::json;
 use std::fs;
 
 fn collaboration_mode_for_model(model: String) -> CollaborationMode {
@@ -111,7 +111,7 @@ async fn execpolicy_blocks_shell_invocation() -> Result<()> {
             ev_function_call(
                 call_id,
                 "shell_command",
-                &edgerun_json::serde_json::to_string(&args)?,
+                &edgerun_json::to_string(&args)?,
             ),
             ev_completed("resp-1"),
         ]),
@@ -196,7 +196,7 @@ async fn shell_command_empty_script_with_collaboration_mode_does_not_panic() -> 
             ev_function_call(
                 call_id,
                 "shell_command",
-                &edgerun_json::serde_json::to_string(&args)?,
+                &edgerun_json::to_string(&args)?,
             ),
             ev_completed("resp-empty-shell-1"),
         ]),
@@ -259,7 +259,7 @@ async fn unified_exec_empty_script_with_collaboration_mode_does_not_panic() -> R
             ev_function_call(
                 call_id,
                 "exec_command",
-                &edgerun_json::serde_json::to_string(&args)?,
+                &edgerun_json::to_string(&args)?,
             ),
             ev_completed("resp-empty-unified-1"),
         ]),
@@ -318,7 +318,7 @@ async fn shell_command_whitespace_script_with_collaboration_mode_does_not_panic(
             ev_function_call(
                 call_id,
                 "shell_command",
-                &edgerun_json::serde_json::to_string(&args)?,
+                &edgerun_json::to_string(&args)?,
             ),
             ev_completed("resp-whitespace-shell-1"),
         ]),
@@ -381,7 +381,7 @@ async fn unified_exec_whitespace_script_with_collaboration_mode_does_not_panic()
             ev_function_call(
                 call_id,
                 "exec_command",
-                &edgerun_json::serde_json::to_string(&args)?,
+                &edgerun_json::to_string(&args)?,
             ),
             ev_completed("resp-whitespace-unified-1"),
         ]),

@@ -161,7 +161,7 @@ macro_rules! impl_try_from_json_number_cast {
 
 impl JsonValue {
     /// Returns the name of this JSON value's variant (for error messages).
-    pub(crate) fn variant_name(&self) -> &'static str {
+    pub fn variant_name(&self) -> &'static str {
         match self {
             JsonValue::Null => "null",
             JsonValue::Bool(_) => "boolean",

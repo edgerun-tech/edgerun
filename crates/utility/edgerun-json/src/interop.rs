@@ -4,7 +4,7 @@ use crate::{JsonNumber, JsonValue, Map};
 use alloc::borrow::Cow;
 #[cfg(any(feature = "serde", feature = "ts-rs"))]
 use alloc::format;
-#[cfg(any(feature = "serde", feature = "ts-rs"))]
+#[cfg(any(feature = "schemars", feature = "serde", feature = "ts-rs"))]
 use alloc::string::{String, ToString};
 #[cfg(feature = "serde")]
 use alloc::vec::Vec;

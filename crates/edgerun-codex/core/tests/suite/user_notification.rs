@@ -11,8 +11,8 @@ use core_test_support::skip_if_no_network;
 use core_test_support::test_codex::TestCodex;
 use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
-use edgerun_json::serde_json::Value;
-use edgerun_json::serde_json::json;
+use edgerun_json::Value;
+use edgerun_json::json;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 
@@ -71,7 +71,7 @@ mv "${tmp_path}" "${payload_path}""#,
     // We fork the notify script, so we need to wait for it to write to the file.
     fs_wait::wait_for_path_exists(&notify_file, Duration::from_secs(5)).await?;
     let notify_payload_raw = edgerun_tokio::fs::read_to_string(&notify_file).await?;
-    let payload: Value = edgerun_json::serde_json::from_str(&notify_payload_raw)?;
+    let payload: Value = edgerun_json::from_serde_str(&notify_payload_raw)?;
 
     assert_eq!(payload["type"], json!("agent-turn-complete"));
     assert_eq!(payload["input-messages"], json!(["hello world"]));

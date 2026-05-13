@@ -690,7 +690,7 @@ pub enum ResponseInputItem {
         status: String,
         execution: String,
         #[ts(type = "unknown[]")]
-        tools: Vec<edgerun_json::serde_json::Value>,
+        tools: Vec<edgerun_json::Value>,
     },
 }
 
@@ -799,7 +799,7 @@ pub enum ResponseItem {
         status: Option<String>,
         execution: String,
         #[ts(type = "unknown")]
-        arguments: edgerun_json::serde_json::Value,
+        arguments: edgerun_json::Value,
     },
     // NOTE: The `output` field for `function_call_output` uses a dedicated payload type with
     // custom serialization. On the wire it is either:
@@ -841,7 +841,7 @@ pub enum ResponseItem {
         status: String,
         execution: String,
         #[ts(type = "unknown[]")]
-        tools: Vec<edgerun_json::serde_json::Value>,
+        tools: Vec<edgerun_json::Value>,
     },
     // Emitted by the Responses API when the agent triggers a web search.
     // Example payload (from SSE `response.output_item.done`):
@@ -957,9 +957,7 @@ fn prefix_combined_str_len(prefix: &[String]) -> usize {
 fn render_command_prefix(prefix: &[String]) -> String {
     let tokens = prefix
         .iter()
-        .map(|token| {
-            edgerun_json::serde_json::to_string(token).unwrap_or_else(|_| format!("{token:?}"))
-        })
+        .map(|token| edgerun_json::to_string(token).unwrap_or_else(|_| format!("{token:?}")))
         .collect::<Vec<_>>()
         .join(", ");
     format!("[{tokens}]")
@@ -1493,7 +1491,7 @@ impl CallToolResult {
 
     pub fn from_error_text(text: String) -> Self {
         Self {
-            content: vec![edgerun_json::serde_json::json!({
+            content: vec![edgerun_json::json!({
                 "type": "text",
                 "text": text,
             })],
@@ -1511,7 +1509,7 @@ impl CallToolResult {
         if let Some(structured_content) = &self.structured_content
             && !structured_content.is_null()
         {
-            match edgerun_json::serde_json::to_string(structured_content) {
+            match edgerun_json::to_string(structured_content) {
                 Ok(serialized_structured_content) => {
                     return FunctionCallOutputPayload {
                         body: FunctionCallOutputBody::Text(serialized_structured_content),
@@ -1527,7 +1525,7 @@ impl CallToolResult {
             }
         }
 
-        let serialized_content = match edgerun_json::serde_json::to_string(&self.content) {
+        let serialized_content = match edgerun_json::to_string(&self.content) {
             Ok(serialized_content) => serialized_content,
             Err(err) => {
                 return FunctionCallOutputPayload {
@@ -1556,7 +1554,7 @@ impl CallToolResult {
 }
 
 fn convert_mcp_content_to_items(
-    contents: &[edgerun_json::serde_json::Value],
+    contents: &[edgerun_json::Value],
 ) -> Option<Vec<FunctionCallOutputContentItem>> {
     const CODEX_IMAGE_DETAIL_META_KEY: &str = "codex/imageDetail";
 
@@ -1571,7 +1569,7 @@ fn convert_mcp_content_to_items(
             #[serde(rename = "mimeType", alias = "mime_type")]
             mime_type: Option<String>,
             #[serde(rename = "_meta", default)]
-            meta: Option<edgerun_json::serde_json::Value>,
+            meta: Option<edgerun_json::Value>,
         },
         #[serde(other)]
         Unknown,
@@ -1581,7 +1579,7 @@ fn convert_mcp_content_to_items(
     let mut items = Vec::with_capacity(contents.len());
 
     for content in contents {
-        let item = match edgerun_json::serde_json::from_value::<McpContent>(content.clone()) {
+        let item = match edgerun_json::from_serde_value::<McpContent>(content.clone()) {
             Ok(McpContent::Text { text }) => FunctionCallOutputContentItem::InputText { text },
             Ok(McpContent::Image {
                 data,
@@ -1599,9 +1597,9 @@ fn convert_mcp_content_to_items(
                     image_url,
                     detail: meta
                         .as_ref()
-                        .and_then(edgerun_json::serde_json::Value::as_object)
+                        .and_then(edgerun_json::Value::as_object)
                         .and_then(|meta| meta.get(CODEX_IMAGE_DETAIL_META_KEY))
-                        .and_then(edgerun_json::serde_json::Value::as_str)
+                        .and_then(edgerun_json::Value::as_str)
                         .and_then(|detail| match detail {
                             "auto" => Some(ImageDetail::Auto),
                             "low" => Some(ImageDetail::Low),
@@ -1613,8 +1611,7 @@ fn convert_mcp_content_to_items(
                 }
             }
             Ok(McpContent::Unknown) | Err(_) => FunctionCallOutputContentItem::InputText {
-                text: edgerun_json::serde_json::to_string(content)
-                    .unwrap_or_else(|_| "<content>".to_string()),
+                text: edgerun_json::to_string(content).unwrap_or_else(|_| "<content>".to_string()),
             },
         };
         items.push(item);
@@ -1632,7 +1629,7 @@ impl std::fmt::Display for FunctionCallOutputPayload {
         match &self.body {
             FunctionCallOutputBody::Text(content) => f.write_str(content),
             FunctionCallOutputBody::ContentItems(items) => {
-                let content = edgerun_json::serde_json::to_string(items).unwrap_or_default();
+                let content = edgerun_json::to_string(items).unwrap_or_default();
                 f.write_str(content.as_str())
             }
         }
@@ -1710,7 +1707,7 @@ mod tests {
 
     #[test]
     fn convert_mcp_content_to_items_preserves_data_urls() {
-        let contents = vec![edgerun_json::serde_json::json!({
+        let contents = vec![edgerun_json::json!({
             "type": "image",
             "data": "data:image/png;base64,Zm9v",
             "mimeType": "image/png",
@@ -1728,15 +1725,14 @@ mod tests {
 
     #[test]
     fn response_item_parses_image_generation_call() {
-        let item =
-            edgerun_json::serde_json::from_value::<ResponseItem>(edgerun_json::serde_json::json!({
-                "id": "ig_123",
-                "type": "image_generation_call",
-                "status": "completed",
-                "revised_prompt": "A small blue square",
-                "result": "Zm9v",
-            }))
-            .expect("image generation item should deserialize");
+        let item = edgerun_json::from_value::<ResponseItem>(edgerun_json::json!({
+            "id": "ig_123",
+            "type": "image_generation_call",
+            "status": "completed",
+            "revised_prompt": "A small blue square",
+            "result": "Zm9v",
+        }))
+        .expect("image generation item should deserialize");
 
         assert_eq!(
             item,
@@ -1751,14 +1747,13 @@ mod tests {
 
     #[test]
     fn response_item_parses_image_generation_call_without_revised_prompt() {
-        let item =
-            edgerun_json::serde_json::from_value::<ResponseItem>(edgerun_json::serde_json::json!({
-                "id": "ig_123",
-                "type": "image_generation_call",
-                "status": "completed",
-                "result": "Zm9v",
-            }))
-            .expect("image generation item should deserialize");
+        let item = edgerun_json::from_value::<ResponseItem>(edgerun_json::json!({
+            "id": "ig_123",
+            "type": "image_generation_call",
+            "status": "completed",
+            "result": "Zm9v",
+        }))
+        .expect("image generation item should deserialize");
 
         assert_eq!(
             item,
@@ -1809,7 +1804,7 @@ mod tests {
 
     #[test]
     fn permission_profile_deserializes_legacy_rollout_shape() -> Result<()> {
-        let legacy = edgerun_json::serde_json::json!({
+        let legacy = edgerun_json::json!({
             "network": {
                 "enabled": true,
             },
@@ -1827,7 +1822,7 @@ mod tests {
             },
         });
 
-        let permission_profile: PermissionProfile = edgerun_json::serde_json::from_value(legacy)?;
+        let permission_profile: PermissionProfile = edgerun_json::from_value(legacy)?;
 
         assert_eq!(
             permission_profile,
@@ -1985,17 +1980,17 @@ mod tests {
             glob_scan_max_depth: NonZeroUsize::new(2),
         };
 
-        let serialized = edgerun_json::serde_json::to_value(&file_system_permissions)?;
+        let serialized = edgerun_json::to_value(&file_system_permissions)?;
 
         assert_eq!(serialized.get("read"), None);
         assert_eq!(serialized.get("write"), None);
         assert_eq!(
             serialized.get("glob_scan_max_depth"),
-            Some(&edgerun_json::serde_json::json!(2))
+            Some(&edgerun_json::json!(2))
         );
         assert!(serialized.get("entries").is_some());
         assert_eq!(
-            edgerun_json::serde_json::from_value::<FileSystemPermissions>(serialized)?,
+            edgerun_json::from_value::<FileSystemPermissions>(serialized)?,
             file_system_permissions
         );
         Ok(())
@@ -2003,18 +1998,16 @@ mod tests {
 
     #[test]
     fn file_system_permissions_rejects_zero_glob_scan_depth() {
-        edgerun_json::serde_json::from_value::<FileSystemPermissions>(
-            edgerun_json::serde_json::json!({
-                "entries": [],
-                "glob_scan_max_depth": 0,
-            }),
-        )
+        edgerun_json::from_value::<FileSystemPermissions>(edgerun_json::json!({
+            "entries": [],
+            "glob_scan_max_depth": 0,
+        }))
         .expect_err("zero glob scan depth should fail deserialization");
     }
 
     #[test]
     fn convert_mcp_content_to_items_builds_data_urls_when_missing_prefix() {
-        let contents = vec![edgerun_json::serde_json::json!({
+        let contents = vec![edgerun_json::json!({
             "type": "image",
             "data": "Zm9v",
             "mimeType": "image/png",
@@ -2032,7 +2025,7 @@ mod tests {
 
     #[test]
     fn convert_mcp_content_to_items_returns_none_without_images() {
-        let contents = vec![edgerun_json::serde_json::json!({
+        let contents = vec![edgerun_json::json!({
             "type": "text",
             "text": "hello",
         })];
@@ -2100,15 +2093,14 @@ mod tests {
 
     #[test]
     fn function_call_deserializes_optional_namespace() {
-        let item: ResponseItem =
-            edgerun_json::serde_json::from_value(edgerun_json::serde_json::json!({
-                "type": "function_call",
-                "name": "mcp__codex_apps__gmail_get_recent_emails",
-                "namespace": "mcp__codex_apps__gmail",
-                "arguments": "{\"top_k\":5}",
-                "call_id": "call-1",
-            }))
-            .expect("function_call should deserialize");
+        let item: ResponseItem = edgerun_json::from_value(edgerun_json::json!({
+            "type": "function_call",
+            "name": "mcp__codex_apps__gmail_get_recent_emails",
+            "namespace": "mcp__codex_apps__gmail",
+            "arguments": "{\"top_k\":5}",
+            "call_id": "call-1",
+        }))
+        .expect("function_call should deserialize");
 
         assert_eq!(
             item,
@@ -2185,8 +2177,8 @@ mod tests {
             output: FunctionCallOutputPayload::from_text("ok".into()),
         };
 
-        let json = edgerun_json::serde_json::to_string(&item)?;
-        let v: edgerun_json::serde_json::Value = edgerun_json::serde_json::from_str(&json)?;
+        let json = edgerun_json::to_string(&item)?;
+        let v: edgerun_json::Value = edgerun_json::from_str(&json)?;
 
         // Success case -> output should be a plain string
         assert_eq!(v.get("output").unwrap().as_str().unwrap(), "ok");
@@ -2203,8 +2195,8 @@ mod tests {
             },
         };
 
-        let json = edgerun_json::serde_json::to_string(&item)?;
-        let v: edgerun_json::serde_json::Value = edgerun_json::serde_json::from_str(&json)?;
+        let json = edgerun_json::to_string(&item)?;
+        let v: edgerun_json::Value = edgerun_json::from_str(&json)?;
 
         assert_eq!(v.get("output").unwrap().as_str().unwrap(), "bad");
         Ok(())
@@ -2214,8 +2206,8 @@ mod tests {
     fn serializes_image_outputs_as_array() -> Result<()> {
         let call_tool_result = CallToolResult {
             content: vec![
-                edgerun_json::serde_json::json!({"type":"text","text":"caption"}),
-                edgerun_json::serde_json::json!({"type":"image","data":"BASE64","mimeType":"image/png"}),
+                edgerun_json::json!({"type":"text","text":"caption"}),
+                edgerun_json::json!({"type":"image","data":"BASE64","mimeType":"image/png"}),
             ],
             structured_content: None,
             is_error: Some(false),
@@ -2246,8 +2238,8 @@ mod tests {
             output: payload,
         };
 
-        let json = edgerun_json::serde_json::to_string(&item)?;
-        let v: edgerun_json::serde_json::Value = edgerun_json::serde_json::from_str(&json)?;
+        let json = edgerun_json::to_string(&item)?;
+        let v: edgerun_json::Value = edgerun_json::from_str(&json)?;
 
         let output = v.get("output").expect("output field");
         assert!(output.is_array(), "expected array output");
@@ -2268,8 +2260,8 @@ mod tests {
             ]),
         };
 
-        let json = edgerun_json::serde_json::to_string(&item)?;
-        let v: edgerun_json::serde_json::Value = edgerun_json::serde_json::from_str(&json)?;
+        let json = edgerun_json::to_string(&item)?;
+        let v: edgerun_json::Value = edgerun_json::from_str(&json)?;
 
         let output = v.get("output").expect("output field");
         assert!(output.is_array(), "expected array output");
@@ -2280,7 +2272,7 @@ mod tests {
     #[test]
     fn preserves_existing_image_data_urls() -> Result<()> {
         let call_tool_result = CallToolResult {
-            content: vec![edgerun_json::serde_json::json!({
+            content: vec![edgerun_json::json!({
                 "type": "image",
                 "data": "data:image/png;base64,BASE64",
                 "mimeType": "image/png"
@@ -2309,7 +2301,7 @@ mod tests {
     #[test]
     fn preserves_original_detail_metadata_on_mcp_images() -> Result<()> {
         let call_tool_result = CallToolResult {
-            content: vec![edgerun_json::serde_json::json!({
+            content: vec![edgerun_json::json!({
                 "type": "image",
                 "data": "BASE64",
                 "mimeType": "image/png",
@@ -2341,7 +2333,7 @@ mod tests {
     #[test]
     fn preserves_standard_detail_metadata_on_mcp_images() -> Result<()> {
         let call_tool_result = CallToolResult {
-            content: vec![edgerun_json::serde_json::json!({
+            content: vec![edgerun_json::json!({
                 "type": "image",
                 "data": "BASE64",
                 "mimeType": "image/png",
@@ -2377,7 +2369,7 @@ mod tests {
             {"type": "input_image", "image_url": "data:image/png;base64,XYZ"}
         ]"#;
 
-        let payload: FunctionCallOutputPayload = edgerun_json::serde_json::from_str(json)?;
+        let payload: FunctionCallOutputPayload = edgerun_json::from_str(json)?;
 
         assert_eq!(payload.success, None);
         let expected_items = vec![
@@ -2394,8 +2386,8 @@ mod tests {
             FunctionCallOutputBody::ContentItems(expected_items.clone())
         );
         assert_eq!(
-            edgerun_json::serde_json::to_string(&payload)?,
-            edgerun_json::serde_json::to_string(&expected_items)?
+            edgerun_json::to_string(&payload)?,
+            edgerun_json::to_string(&expected_items)?
         );
 
         Ok(())
@@ -2405,7 +2397,7 @@ mod tests {
     fn deserializes_compaction_alias() -> Result<()> {
         let json = r#"{"type":"compaction_summary","encrypted_content":"abc"}"#;
 
-        let item: ResponseItem = edgerun_json::serde_json::from_str(json)?;
+        let item: ResponseItem = edgerun_json::from_str(json)?;
 
         assert_eq!(
             item,
@@ -2420,7 +2412,7 @@ mod tests {
     fn deserializes_context_compaction() -> Result<()> {
         let json = r#"{"type":"context_compaction","encrypted_content":"abc"}"#;
 
-        let item: ResponseItem = edgerun_json::serde_json::from_str(json)?;
+        let item: ResponseItem = edgerun_json::from_str(json)?;
 
         assert_eq!(
             item,
@@ -2438,8 +2430,8 @@ mod tests {
         };
 
         assert_eq!(
-            edgerun_json::serde_json::to_value(item)?,
-            edgerun_json::serde_json::json!({
+            edgerun_json::to_value(item)?,
+            edgerun_json::json!({
                 "type": "context_compaction",
             })
         );
@@ -2458,7 +2450,7 @@ mod tests {
             }
         }"#;
 
-        let item: ResponseItem = edgerun_json::serde_json::from_str(json)?;
+        let item: ResponseItem = edgerun_json::from_str(json)?;
 
         assert_eq!(item, ResponseItem::Other);
         Ok(())
@@ -2534,7 +2526,7 @@ mod tests {
 
         for (json_literal, expected_id, expected_action, expected_status, expect_roundtrip) in cases
         {
-            let parsed: ResponseItem = edgerun_json::serde_json::from_str(json_literal)?;
+            let parsed: ResponseItem = edgerun_json::from_str(json_literal)?;
             let expected = ResponseItem::WebSearchCall {
                 id: expected_id.clone(),
                 status: expected_status.clone(),
@@ -2542,9 +2534,9 @@ mod tests {
             };
             assert_eq!(parsed, expected);
 
-            let serialized = edgerun_json::serde_json::to_value(&parsed)?;
-            let mut expected_serialized: edgerun_json::serde_json::Value =
-                edgerun_json::serde_json::from_str(json_literal)?;
+            let serialized = edgerun_json::to_value(&parsed)?;
+            let mut expected_serialized: edgerun_json::Value =
+                edgerun_json::from_str(json_literal)?;
             if !expect_roundtrip && let Some(obj) = expected_serialized.as_object_mut() {
                 obj.remove("id");
             }
@@ -2562,7 +2554,7 @@ mod tests {
             "timeout": 1000
         }"#;
 
-        let params: ShellToolCallParams = edgerun_json::serde_json::from_str(json)?;
+        let params: ShellToolCallParams = edgerun_json::from_str(json)?;
         assert_eq!(
             ShellToolCallParams {
                 command: vec!["ls".to_string(), "-l".to_string()],
@@ -2610,7 +2602,7 @@ mod tests {
 
     #[test]
     fn tool_search_call_roundtrips() -> Result<()> {
-        let parsed: ResponseItem = edgerun_json::serde_json::from_str(
+        let parsed: ResponseItem = edgerun_json::from_str(
             r#"{
                 "type": "tool_search_call",
                 "call_id": "search-1",
@@ -2629,7 +2621,7 @@ mod tests {
                 call_id: Some("search-1".to_string()),
                 status: None,
                 execution: "client".to_string(),
-                arguments: edgerun_json::serde_json::json!({
+                arguments: edgerun_json::json!({
                     "query": "calendar create",
                     "limit": 1,
                 }),
@@ -2637,8 +2629,8 @@ mod tests {
         );
 
         assert_eq!(
-            edgerun_json::serde_json::to_value(&parsed)?,
-            edgerun_json::serde_json::json!({
+            edgerun_json::to_value(&parsed)?,
+            edgerun_json::json!({
                 "type": "tool_search_call",
                 "call_id": "search-1",
                 "execution": "client",
@@ -2658,7 +2650,7 @@ mod tests {
             call_id: "search-1".to_string(),
             status: "completed".to_string(),
             execution: "client".to_string(),
-            tools: vec![edgerun_json::serde_json::json!({
+            tools: vec![edgerun_json::json!({
                 "type": "function",
                 "name": "mcp__codex_apps__calendar_create_event",
                 "description": "Create a calendar event.",
@@ -2679,7 +2671,7 @@ mod tests {
                 call_id: Some("search-1".to_string()),
                 status: "completed".to_string(),
                 execution: "client".to_string(),
-                tools: vec![edgerun_json::serde_json::json!({
+                tools: vec![edgerun_json::json!({
                     "type": "function",
                     "name": "mcp__codex_apps__calendar_create_event",
                     "description": "Create a calendar event.",
@@ -2697,8 +2689,8 @@ mod tests {
         );
 
         assert_eq!(
-            edgerun_json::serde_json::to_value(input)?,
-            edgerun_json::serde_json::json!({
+            edgerun_json::to_value(input)?,
+            edgerun_json::json!({
                 "type": "tool_search_output",
                 "call_id": "search-1",
                 "status": "completed",
@@ -2725,7 +2717,7 @@ mod tests {
 
     #[test]
     fn tool_search_server_items_allow_null_call_id() -> Result<()> {
-        let parsed_call: ResponseItem = edgerun_json::serde_json::from_str(
+        let parsed_call: ResponseItem = edgerun_json::from_str(
             r#"{
                 "type": "tool_search_call",
                 "execution": "server",
@@ -2743,13 +2735,13 @@ mod tests {
                 call_id: None,
                 status: Some("completed".to_string()),
                 execution: "server".to_string(),
-                arguments: edgerun_json::serde_json::json!({
+                arguments: edgerun_json::json!({
                     "paths": ["crm"],
                 }),
             }
         );
 
-        let parsed_output: ResponseItem = edgerun_json::serde_json::from_str(
+        let parsed_output: ResponseItem = edgerun_json::from_str(
             r#"{
                 "type": "tool_search_output",
                 "execution": "server",

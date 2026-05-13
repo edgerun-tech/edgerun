@@ -65,7 +65,7 @@ impl ToolHandler for LocalShellHandler {
     fn pre_tool_use_payload(&self, invocation: &ToolInvocation) -> Option<PreToolUsePayload> {
         local_shell_payload_command(&invocation.payload).map(|command| PreToolUsePayload {
             tool_name: HookToolName::bash(),
-            tool_input: edgerun_json::serde_json::json!({ "command": command }),
+            tool_input: edgerun_json::json!({ "command": command }),
         })
     }
 
@@ -80,7 +80,7 @@ impl ToolHandler for LocalShellHandler {
         Some(PostToolUsePayload {
             tool_name: HookToolName::bash(),
             tool_use_id: invocation.call_id.clone(),
-            tool_input: edgerun_json::serde_json::json!({ "command": command }),
+            tool_input: edgerun_json::json!({ "command": command }),
             tool_response,
         })
     }

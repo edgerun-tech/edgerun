@@ -13,6 +13,7 @@ use crate::gpu_ui;
 #[cfg(not(feature = "fontdue-text"))]
 use core::marker::PhantomData;
 
+mod accessibility;
 mod app_registry;
 mod apps;
 mod bitmap_font;
@@ -33,6 +34,9 @@ mod runtime;
 mod scene;
 mod shadcn_demo_catalog;
 mod shadcn_demo_preview;
+mod shadcn_events;
+mod shadcn_exact;
+mod shadcn_props;
 mod shell;
 mod source_captures;
 pub mod style;
@@ -42,6 +46,9 @@ mod text;
 mod theme;
 pub mod webgl2;
 mod workspace;
+pub use accessibility::{
+    accessibility_tree, accessibility_tree_with_state, UiA11yNode, UiA11yRole, UiA11yState,
+};
 pub use app_registry::{
     app_spec, app_spec_for_launch_id, UiAppPlacement, UiAppSpec, CAPABILITY_REQUEST_APP_ID,
     CHAT_APP_ID, COMPONENT_GALLERY_APP_ID, EDGERUN_APP_REGISTRY, LAUNCH_CAPABILITY_REQUEST_ITEM_ID,
@@ -119,9 +126,11 @@ pub use runtime::{GpuHit, HitKind, UiAction, UiEvent, UiKey, UiRuntimeState};
 pub use scene::{Color4, GpuClip, GpuRect, GpuScene, RectMode, UiColorScheme};
 pub use shadcn_demo_catalog::{
     find_shadcn_demo_by_slug, find_shadcn_demo_by_source_component, resolve_shadcn_demo_identifier,
-    shadcn_demos_by_category, shadcn_demos_by_edge_builder, shadcn_demos_using_slot,
-    shadcn_demos_using_state, shadcn_native_demo_count, shadcn_port_manifest,
-    shadcn_port_mapping_for_identifier, UiShadcnDemoCategory, UiShadcnDemoSpec, UiShadcnDemoStatus,
+    shadcn_components_missing_parity_contract, shadcn_demos_by_category,
+    shadcn_demos_by_edge_builder, shadcn_demos_using_slot, shadcn_demos_using_state,
+    shadcn_exact_demo_count, shadcn_exact_parity_count, shadcn_native_demo_count,
+    shadcn_parity_contract_for_slug, shadcn_port_manifest, shadcn_port_mapping_for_identifier,
+    UiShadcnDemoCategory, UiShadcnDemoSpec, UiShadcnDemoStatus, UiShadcnParityContract,
     UiShadcnPortCategorySummary, UiShadcnPortManifest, UiShadcnPortMapping,
     UiShadcnPortStatusSummary, UiShadcnResolveKind, UiShadcnResolvedDemo, SHADCN_DEMO_CATEGORIES,
     SHADCN_DEMO_COMPONENTS, SHADCN_DEMO_STATUSES,
@@ -131,6 +140,47 @@ pub use shadcn_demo_preview::{
     build_shadcn_component_preview_by_source_component, build_shadcn_demo_gallery,
     build_shadcn_demo_preview, build_shadcn_demo_preview_by_identifier,
     SHADCN_DEMO_PREVIEW_BASE_ID,
+};
+pub use shadcn_events::{
+    shadcn_event_from_action, shadcn_event_from_action_with_context, UiShadcnEvent,
+    UiShadcnEventContext, UiShadcnEventValue,
+};
+pub use shadcn_exact::{
+    shadcn_accordion, shadcn_alert, shadcn_alert_dialog, shadcn_aspect_ratio, shadcn_avatar,
+    shadcn_badge, shadcn_breadcrumb, shadcn_button, shadcn_button_group, shadcn_calendar,
+    shadcn_card, shadcn_carousel, shadcn_chart, shadcn_checkbox, shadcn_collapsible,
+    shadcn_combobox, shadcn_command, shadcn_context_menu, shadcn_data_table, shadcn_date_picker,
+    shadcn_dialog, shadcn_direction, shadcn_drawer, shadcn_dropdown_menu, shadcn_empty,
+    shadcn_field, shadcn_hover_card, shadcn_input, shadcn_input_group, shadcn_input_otp,
+    shadcn_item, shadcn_kbd, shadcn_label, shadcn_menubar, shadcn_native_select,
+    shadcn_navigation_menu, shadcn_pagination, shadcn_popover, shadcn_progress, shadcn_radio_group,
+    shadcn_resizable, shadcn_scroll_area, shadcn_select, shadcn_separator, shadcn_sheet,
+    shadcn_sidebar, shadcn_skeleton, shadcn_slider, shadcn_sonner, shadcn_switch, shadcn_table,
+    shadcn_tabs, shadcn_textarea, shadcn_toast, shadcn_toggle, shadcn_toggle_group, shadcn_tooltip,
+    UiShadcnBadgeVariant, UiShadcnButtonSize, UiShadcnButtonVariant,
+};
+pub use shadcn_props::{
+    resolve_shadcn_props_surface, shadcn_event_adapted_props_surfaces, shadcn_props_surface_count,
+    shadcn_props_surface_for_slug, shadcn_props_surface_for_source_component,
+    shadcn_props_surface_summary, shadcn_resolved_props_surfaces, shadcn_stateful_props_surfaces,
+    shadcn_static_props_surfaces, UiShadcnAccordionProps, UiShadcnAlertDialogProps,
+    UiShadcnAlertProps, UiShadcnAspectRatioProps, UiShadcnAvatarProps, UiShadcnBadgeProps,
+    UiShadcnBreadcrumbProps, UiShadcnButtonGroupProps, UiShadcnButtonProps, UiShadcnCalendarProps,
+    UiShadcnCardProps, UiShadcnCarouselProps, UiShadcnChartProps, UiShadcnCheckboxProps,
+    UiShadcnCollapsibleProps, UiShadcnComboboxProps, UiShadcnCommandProps,
+    UiShadcnContextMenuProps, UiShadcnDataTableProps, UiShadcnDatePickerProps, UiShadcnDialogProps,
+    UiShadcnDirectionProps, UiShadcnDrawerProps, UiShadcnDropdownMenuProps, UiShadcnEmptyProps,
+    UiShadcnFieldProps, UiShadcnHoverCardProps, UiShadcnInputGroupProps, UiShadcnInputOtpProps,
+    UiShadcnInputProps, UiShadcnItemProps, UiShadcnKbdProps, UiShadcnLabelProps,
+    UiShadcnMenubarProps, UiShadcnNativeSelectProps, UiShadcnNavigationMenuProps,
+    UiShadcnPaginationProps, UiShadcnPopoverProps, UiShadcnProgressProps, UiShadcnPropsSurface,
+    UiShadcnPropsSurfaceManifest, UiShadcnPropsSurfaceSummary, UiShadcnRadioGroupProps,
+    UiShadcnRadioOption, UiShadcnResizableProps, UiShadcnResolvedPropsSurface,
+    UiShadcnScrollAreaProps, UiShadcnSelectOption, UiShadcnSelectProps, UiShadcnSeparatorProps,
+    UiShadcnSheetProps, UiShadcnSidebarProps, UiShadcnSkeletonProps, UiShadcnSliderProps,
+    UiShadcnSonnerProps, UiShadcnSwitchProps, UiShadcnTableProps, UiShadcnTabsProps,
+    UiShadcnTextareaProps, UiShadcnToastProps, UiShadcnToggleGroupProps, UiShadcnToggleProps,
+    UiShadcnTooltipProps, SHADCN_PROPS_SURFACES, SHADCN_PROPS_SURFACE_MANIFEST,
 };
 #[cfg(any(feature = "fontdue-text", test))]
 use shell::render_edgerun_shell_overlay;

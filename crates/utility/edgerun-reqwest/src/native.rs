@@ -447,7 +447,7 @@ impl std::error::Error for Error {}
 
 #[derive(Clone)]
 pub struct Client {
-    inner: edgerun_node::http::HttpClient,
+    inner: edgerun_http_client::http::HttpClient,
     default_headers: HeaderMap,
     cookie_store: Option<Arc<dyn cookie::CookieStore>>,
 }
@@ -520,7 +520,7 @@ impl Default for Client {
 
 #[derive(Clone)]
 pub struct ClientBuilder {
-    version: edgerun_node::http::HttpVersion,
+    version: edgerun_http_client::http::HttpVersion,
     connect_timeout: Option<Duration>,
     timeout: Option<Duration>,
     redirects: Option<usize>,
@@ -535,7 +535,7 @@ pub struct ClientBuilder {
 impl ClientBuilder {
     pub fn new() -> Self {
         Self {
-            version: edgerun_node::http::HttpVersion::Best,
+            version: edgerun_http_client::http::HttpVersion::Best,
             connect_timeout: None,
             timeout: None,
             redirects: None,
@@ -549,7 +549,7 @@ impl ClientBuilder {
     }
 
     pub fn build(self) -> Result<Client, Error> {
-        let mut inner = edgerun_node::http::HttpClient::new().version(self.version);
+        let mut inner = edgerun_http_client::http::HttpClient::new().version(self.version);
         if let Some(timeout) = self.connect_timeout {
             inner = inner.with_connect_timeout(timeout);
         }
@@ -628,17 +628,17 @@ impl ClientBuilder {
     }
 
     pub fn http1_only(mut self) -> Self {
-        self.version = edgerun_node::http::HttpVersion::Http1;
+        self.version = edgerun_http_client::http::HttpVersion::Http1;
         self
     }
 
     pub fn http2_prior_knowledge(mut self) -> Self {
-        self.version = edgerun_node::http::HttpVersion::Http2;
+        self.version = edgerun_http_client::http::HttpVersion::Http2;
         self
     }
 
     pub fn http3_prior_knowledge(mut self) -> Self {
-        self.version = edgerun_node::http::HttpVersion::Http3;
+        self.version = edgerun_http_client::http::HttpVersion::Http3;
         self
     }
 
@@ -747,16 +747,8 @@ impl RequestBuilder {
     }
 
     #[cfg(feature = "json")]
-    pub fn json<T: serde::Serialize + ?Sized>(self, value: &T) -> Self {
-        match edgerun_json::to_vec(value) {
-            Ok(body) => self
-                .header(header::CONTENT_TYPE, "application/json")
-                .body(body),
-            Err(error) => RequestBuilder {
-                url: Err(Error::builder(error.to_string())),
-                ..self
-            },
-        }
+    pub fn json<T: edgerun_json::ToJson + ?Sized>(self, value: &T) -> Self {
+        self.json_edgerun(value)
     }
 
     pub fn json_edgerun<T: edgerun_json::ToJson + ?Sized>(self, value: &T) -> Self {
@@ -834,8 +826,12 @@ impl Response {
     }
 
     #[cfg(feature = "json")]
-    pub async fn json<T: serde::de::DeserializeOwned>(self) -> Result<T, Error> {
+    pub async fn json<T: edgerun_json::serde_bridge::DeserializeOwned>(self) -> Result<T, Error> {
         edgerun_json::from_serde_slice(&self.body).map_err(|error| Error::decode(error.to_string()))
+    }
+
+    pub async fn json_edgerun<T: edgerun_json::FromJson>(self) -> Result<T, Error> {
+        edgerun_json::from_json_slice(&self.body).map_err(|error| Error::decode(error.to_string()))
     }
 
     pub fn error_for_status(self) -> Result<Self, Error> {
@@ -963,27 +959,27 @@ impl IntoUrl for &String {
     }
 }
 
-fn convert_method(method: &Method) -> edgerun_node::http::Method {
+fn convert_method(method: &Method) -> edgerun_http_client::http::Method {
     match method.as_str() {
-        "GET" => edgerun_node::http::Method::GET,
-        "POST" => edgerun_node::http::Method::POST,
-        "PUT" => edgerun_node::http::Method::PUT,
-        "DELETE" => edgerun_node::http::Method::DELETE,
-        "PATCH" => edgerun_node::http::Method::PATCH,
-        "HEAD" => edgerun_node::http::Method::HEAD,
-        "OPTIONS" => edgerun_node::http::Method::OPTIONS,
-        "CONNECT" => edgerun_node::http::Method::CONNECT,
-        "TRACE" => edgerun_node::http::Method::TRACE,
-        other => edgerun_node::http::Method::Extension(other.to_string()),
+        "GET" => edgerun_http_client::http::Method::GET,
+        "POST" => edgerun_http_client::http::Method::POST,
+        "PUT" => edgerun_http_client::http::Method::PUT,
+        "DELETE" => edgerun_http_client::http::Method::DELETE,
+        "PATCH" => edgerun_http_client::http::Method::PATCH,
+        "HEAD" => edgerun_http_client::http::Method::HEAD,
+        "OPTIONS" => edgerun_http_client::http::Method::OPTIONS,
+        "CONNECT" => edgerun_http_client::http::Method::CONNECT,
+        "TRACE" => edgerun_http_client::http::Method::TRACE,
+        other => edgerun_http_client::http::Method::Extension(other.to_string()),
     }
 }
 
-fn convert_status(status: edgerun_node::http::StatusCode) -> Result<StatusCode, Error> {
+fn convert_status(status: edgerun_http_client::http::StatusCode) -> Result<StatusCode, Error> {
     StatusCode::from_u16(status.as_u16()).map_err(|error| Error::http(error.to_string()))
 }
 
-fn convert_headers(headers: &HeaderMap) -> Result<edgerun_node::http::HeaderMap, Error> {
-    let mut out = edgerun_node::http::HeaderMap::new();
+fn convert_headers(headers: &HeaderMap) -> Result<edgerun_http_client::http::HeaderMap, Error> {
+    let mut out = edgerun_http_client::http::HeaderMap::new();
     for (name, value) in headers {
         let value = value
             .to_str()
@@ -993,7 +989,9 @@ fn convert_headers(headers: &HeaderMap) -> Result<edgerun_node::http::HeaderMap,
     Ok(out)
 }
 
-fn convert_response_headers(headers: &edgerun_node::http::HeaderMap) -> Result<HeaderMap, Error> {
+fn convert_response_headers(
+    headers: &edgerun_http_client::http::HeaderMap,
+) -> Result<HeaderMap, Error> {
     let mut out = HeaderMap::new();
     for (name, value) in headers.iter() {
         let name = HeaderName::from_bytes(name.as_str().as_bytes())
@@ -1021,7 +1019,7 @@ async fn execute_edgerun(
         headers.insert(header::COOKIE, cookies);
     }
     let headers = convert_headers(&headers)?;
-    let mut builder = edgerun_node::http::Request::builder()
+    let mut builder = edgerun_http_client::http::Request::builder()
         .method(convert_method(&request.method))
         .uri(&uri)
         .with_headers(headers);

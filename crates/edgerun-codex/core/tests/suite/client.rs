@@ -66,8 +66,8 @@ use core_test_support::test_codex::TestCodex;
 use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
 use dunce::canonicalize as normalize_path;
-use edgerun_json::serde_json::json;
-use edgerun_uuid::Uuid;
+use edgerun_json::json;
+use codex_protocol::local_uuid::Uuid;
 use edgerun_futures::StreamExt;
 use pretty_assertions::assert_eq;
 use std::io::Write;
@@ -88,12 +88,12 @@ use wiremock::matchers::query_param;
 const INSTALLATION_ID_FILENAME: &str = "installation_id";
 
 #[expect(clippy::unwrap_used)]
-fn assert_message_role(request_body: &edgerun_json::serde_json::Value, role: &str) {
+fn assert_message_role(request_body: &edgerun_json::Value, role: &str) {
     assert_eq!(request_body["role"].as_str().unwrap(), role);
 }
 
 #[expect(clippy::unwrap_used)]
-fn message_input_texts(item: &edgerun_json::serde_json::Value) -> Vec<&str> {
+fn message_input_texts(item: &edgerun_json::Value) -> Vec<&str> {
     item["content"]
         .as_array()
         .unwrap()
@@ -129,8 +129,8 @@ fn write_auth_json(
     });
 
     let b64 = |b: &[u8]| edgerun_encoding::base64::base64url_nopad_encode(b);
-    let header_b64 = b64(&edgerun_json::serde_json::to_vec(&header).unwrap());
-    let payload_b64 = b64(&edgerun_json::serde_json::to_vec(&payload).unwrap());
+    let header_b64 = b64(&edgerun_json::to_vec(&header).unwrap());
+    let payload_b64 = b64(&edgerun_json::to_vec(&payload).unwrap());
     let signature_b64 = b64(b"sig");
     let fake_jwt = format!("{header_b64}.{payload_b64}.{signature_b64}");
 
@@ -152,7 +152,7 @@ fn write_auth_json(
 
     std::fs::write(
         codex_home.path().join("auth.json"),
-        edgerun_json::serde_json::to_string_pretty(&auth_json).unwrap(),
+        edgerun_json::to_string_pretty(&auth_json).unwrap(),
     )
     .unwrap();
 
@@ -291,7 +291,7 @@ async fn resume_includes_initial_messages_and_sends_prior_items() {
         }],
         phase: None,
     };
-    let prior_user_json = edgerun_json::serde_json::to_value(&prior_user).unwrap();
+    let prior_user_json = edgerun_json::to_serde_value(&prior_user).unwrap();
     writeln!(
         f,
         "{}",
@@ -312,7 +312,7 @@ async fn resume_includes_initial_messages_and_sends_prior_items() {
         }],
         phase: None,
     };
-    let prior_system_json = edgerun_json::serde_json::to_value(&prior_system).unwrap();
+    let prior_system_json = edgerun_json::to_serde_value(&prior_system).unwrap();
     writeln!(
         f,
         "{}",
@@ -333,7 +333,7 @@ async fn resume_includes_initial_messages_and_sends_prior_items() {
         }],
         phase: Some(MessagePhase::Commentary),
     };
-    let prior_item_json = edgerun_json::serde_json::to_value(&prior_item).unwrap();
+    let prior_item_json = edgerun_json::to_serde_value(&prior_item).unwrap();
     writeln!(
         f,
         "{}",
@@ -374,7 +374,7 @@ async fn resume_includes_initial_messages_and_sends_prior_items() {
         .initial_messages
         .clone()
         .expect("expected initial messages option for resumed session");
-    let initial_json = edgerun_json::serde_json::to_value(&initial_msgs).unwrap();
+    let initial_json = edgerun_json::to_serde_value(&initial_msgs).unwrap();
     let expected_initial_json = json!([]);
     assert_eq!(initial_json, expected_initial_json);
 
@@ -524,7 +524,7 @@ async fn resume_replays_legacy_js_repl_image_rollout_shapes() {
         .join("resume-legacy-js-repl-image-rollout.jsonl");
     let mut f = std::fs::File::create(&session_path).unwrap();
     for line in rollout {
-        writeln!(f, "{}", edgerun_json::serde_json::to_string(&line).unwrap()).unwrap();
+        writeln!(f, "{}", edgerun_json::to_string(&line).unwrap()).unwrap();
     }
 
     let server = MockServer::start().await;
@@ -678,7 +678,7 @@ async fn resume_replays_image_tool_outputs_with_detail() {
         writeln!(
             file,
             "{}",
-            edgerun_json::serde_json::to_string(&line).unwrap()
+            edgerun_json::to_string(&line).unwrap()
         )
         .unwrap();
     }
@@ -703,7 +703,7 @@ async fn resume_replays_image_tool_outputs_with_detail() {
         .function_call_output(function_call_id);
     assert_eq!(
         function_output.get("output"),
-        Some(&edgerun_json::serde_json::json!([
+        Some(&edgerun_json::json!([
             {
                 "type": "input_image",
                 "image_url": image_url,
@@ -717,7 +717,7 @@ async fn resume_replays_image_tool_outputs_with_detail() {
         .custom_tool_call_output(custom_call_id);
     assert_eq!(
         custom_output.get("output"),
-        Some(&edgerun_json::serde_json::json!([
+        Some(&edgerun_json::json!([
             {
                 "type": "input_image",
                 "image_url": image_url,
@@ -2208,7 +2208,7 @@ async fn includes_developer_instructions_message_in_request() {
         "expected permissions message to mention sandbox_mode, got {permissions_text:?}"
     );
 
-    let developer_messages: Vec<&edgerun_json::serde_json::Value> = request_body["input"]
+    let developer_messages: Vec<&edgerun_json::Value> = request_body["input"]
         .as_array()
         .expect("input array")
         .iter()
@@ -2406,8 +2406,8 @@ async fn azure_responses_request_includes_store_and_reasoning_ids() {
     assert_eq!(request.path(), "/openai/responses");
     let body = request.body_json();
 
-    assert_eq!(body["store"], edgerun_json::serde_json::Value::Bool(true));
-    assert_eq!(body["stream"], edgerun_json::serde_json::Value::Bool(true));
+    assert_eq!(body["store"], edgerun_json::Value::Bool(true));
+    assert_eq!(body["stream"], edgerun_json::Value::Bool(true));
     assert_eq!(body["input"].as_array().map(Vec::len), Some(8));
     assert_eq!(body["input"][0]["id"].as_str(), Some("reasoning-id"));
     assert_eq!(body["input"][1]["id"].as_str(), Some("message-id"));
@@ -2488,7 +2488,7 @@ async fn token_count_includes_rate_limits_snapshot() {
         _ => unreachable!(),
     };
 
-    let rate_limit_json = edgerun_json::serde_json::to_value(&rate_limit_only).unwrap();
+    let rate_limit_json = edgerun_json::to_serde_value(&rate_limit_only).unwrap();
     pretty_assertions::assert_eq!(
         rate_limit_json,
         json!({
@@ -2523,7 +2523,7 @@ async fn token_count_includes_rate_limits_snapshot() {
         _ => unreachable!(),
     };
     // Assert full JSON for the final token count event (usage + rate limits)
-    let final_json = edgerun_json::serde_json::to_value(&final_payload).unwrap();
+    let final_json = edgerun_json::to_serde_value(&final_payload).unwrap();
     pretty_assertions::assert_eq!(
         final_json,
         json!({
@@ -2657,7 +2657,7 @@ async fn usage_limit_error_emits_rate_limit_event() -> anyhow::Result<()> {
     };
 
     let event_json =
-        edgerun_json::serde_json::to_value(&event).expect("serialize token count event");
+        edgerun_json::to_serde_value(&event).expect("serialize token count event");
     pretty_assertions::assert_eq!(
         event_json,
         json!({
@@ -3164,7 +3164,7 @@ async fn history_dedupes_streamed_and_final_messages_across_turns() {
     let tail_len = r3_tail_expected.as_array().unwrap().len();
     let actual_tail = &r3_input_array[r3_input_array.len() - tail_len..];
     assert_eq!(
-        edgerun_json::serde_json::Value::Array(actual_tail.to_vec()),
+        edgerun_json::Value::Array(actual_tail.to_vec()),
         r3_tail_expected,
         "request 3 tail mismatch",
     );

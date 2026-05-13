@@ -21,8 +21,8 @@ use core_test_support::responses::mount_sse_sequence;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::test_codex::test_codex;
-use edgerun_json::serde_json::Value;
-use edgerun_json::serde_json::json;
+use edgerun_json::Value;
+use edgerun_json::json;
 use pretty_assertions::assert_eq;
 use wiremock::Mock;
 use wiremock::ResponseTemplate;
@@ -64,7 +64,7 @@ print(json.dumps({{
 "#,
         log_path = log_path.display(),
     );
-    let hooks = edgerun_json::serde_json::json!({
+    let hooks = edgerun_json::json!({
         "hooks": {
             "PostToolUse": [{
                 "matcher": DOCUMENT_EXTRACT_HOOK_MATCHER,
@@ -88,7 +88,7 @@ fn read_post_tool_use_hook_inputs(home: &Path) -> Result<Vec<Value>> {
         .lines()
         .filter(|line| !line.trim().is_empty())
         .map(|line| {
-            edgerun_json::serde_json::from_str(line).context("parse post tool use hook input")
+            edgerun_json::from_serde_str(line).context("parse post tool use hook input")
         })
         .collect()
 }
@@ -200,7 +200,7 @@ async fn codex_apps_file_params_upload_local_paths_before_mcp_tool_call() -> Res
         .unwrap_or_default()
         .into_iter()
         .find_map(|request| {
-            let body: Value = edgerun_json::serde_json::from_slice(&request.body).ok()?;
+            let body: Value = edgerun_json::from_serde_slice(&request.body).ok()?;
             (request.url.path() == "/api/codex/apps"
                 && body.get("method").and_then(Value::as_str) == Some("tools/call")
                 && body.pointer("/params/name").and_then(Value::as_str)

@@ -1,25 +1,23 @@
 use crate::ToolDefinition;
 use crate::parse_tool_input_schema;
-use edgerun_json::serde_json::Value as JsonValue;
-use edgerun_json::serde_json::json;
+use edgerun_json::Value as JsonValue;
+use edgerun_json::json;
 
-pub fn parse_mcp_tool(
-    tool: &rmcp::model::Tool,
-) -> Result<ToolDefinition, edgerun_json::serde_json::Error> {
+pub fn parse_mcp_tool(tool: &rmcp::model::Tool) -> Result<ToolDefinition, edgerun_json::Error> {
     let mut serialized_input_schema =
-        edgerun_json::serde_json::Value::Object(tool.input_schema.as_ref().clone());
+        edgerun_json::Value::Object(tool.input_schema.as_ref().clone());
 
     // OpenAI models mandate the "properties" field in the schema. Some MCP
     // servers omit it (or set it to null), so we insert an empty object to
     // match the behavior of the Agents SDK.
-    if let edgerun_json::serde_json::Value::Object(obj) = &mut serialized_input_schema
+    if let edgerun_json::Value::Object(obj) = &mut serialized_input_schema
         && obj
             .get("properties")
-            .is_none_or(edgerun_json::serde_json::Value::is_null)
+            .is_none_or(edgerun_json::Value::is_null)
     {
         obj.insert(
             "properties".to_string(),
-            edgerun_json::serde_json::Value::Object(edgerun_json::serde_json::Map::new()),
+            edgerun_json::Value::Object(edgerun_json::Map::new()),
         );
     }
 
@@ -27,10 +25,8 @@ pub fn parse_mcp_tool(
     let structured_content_schema = tool
         .output_schema
         .as_ref()
-        .map(|output_schema| {
-            edgerun_json::serde_json::Value::Object(output_schema.as_ref().clone())
-        })
-        .unwrap_or_else(|| JsonValue::Object(edgerun_json::serde_json::Map::new()));
+        .map(|output_schema| edgerun_json::Value::Object(output_schema.as_ref().clone()))
+        .unwrap_or_else(|| JsonValue::Object(edgerun_json::Map::new()));
 
     Ok(ToolDefinition {
         name: tool.name.to_string(),

@@ -26,8 +26,8 @@ use core_test_support::test_codex::TestCodex;
 use core_test_support::test_codex::test_codex;
 use core_test_support::test_codex::turn_permission_fields;
 use core_test_support::wait_for_event;
-use edgerun_json::serde_json::Value;
-use edgerun_json::serde_json::json;
+use edgerun_json::Value;
+use edgerun_json::json;
 use pretty_assertions::assert_eq;
 use edgerun_tokio::sync::oneshot;
 
@@ -159,8 +159,8 @@ async fn shell_tools_run_in_parallel() -> anyhow::Result<()> {
         "login": false,
         "timeout_ms": 1_000,
     });
-    let args_one = edgerun_json::serde_json::to_string(&shell_args)?;
-    let args_two = edgerun_json::serde_json::to_string(&shell_args)?;
+    let args_one = edgerun_json::to_string(&shell_args)?;
+    let args_two = edgerun_json::to_string(&shell_args)?;
 
     let first_response = sse(vec![
         json!({"type": "response.created", "response": {"id": "resp-1"}}),
@@ -191,7 +191,7 @@ async fn mixed_parallel_tools_run_in_parallel() -> anyhow::Result<()> {
         "sleep_after_ms": 300
     })
     .to_string();
-    let shell_args = edgerun_json::serde_json::to_string(&json!({
+    let shell_args = edgerun_json::to_string(&json!({
         "command": "sleep 0.25",
         // Avoid user-specific shell startup cost in timing assertions.
         "login": false,
@@ -223,7 +223,7 @@ async fn tool_results_grouped() -> anyhow::Result<()> {
     let server = start_mock_server().await;
     let test = build_codex_with_test_tool(&server).await?;
 
-    let shell_args = edgerun_json::serde_json::to_string(&json!({
+    let shell_args = edgerun_json::to_string(&json!({
         "command": "echo 'shell output'",
         "timeout_ms": 1_000,
     }))?;

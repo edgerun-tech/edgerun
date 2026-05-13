@@ -2,9 +2,8 @@
 //!
 //! Windows users frequently run into code pages such as CP1251 or CP866 when invoking commands
 //! through VS Code. Those bytes show up as invalid UTF-8 and used to be replaced with the standard
-//! Unicode replacement character. We now lean on `chardetng` and `encoding_rs` so we can
-//! automatically detect and decode the vast majority of legacy encodings before falling back to
-//! lossy UTF-8 decoding.
+//! Unicode replacement character. We now use EdgeRun-owned detection for the encodings this shell
+//! path needs before falling back to lossy UTF-8 decoding.
 
 use edgerun_encoding::chardetng::EncodingDetector;
 use edgerun_encoding::encoding_rs::Encoding;
@@ -74,9 +73,9 @@ pub fn bytes_to_string_smart(bytes: &[u8]) -> String {
 }
 
 // Windows-1252 reassigns a handful of 0x80-0x9F slots to smart punctuation (curly quotes, dashes,
-// ™). CP866 uses those *same byte values* for uppercase Cyrillic letters. When chardetng sees shell
-// snippets that mix these bytes with ASCII it sometimes guesses IBM866, so “smart quotes” render as
-// Cyrillic garbage (“УФЦ”) in VS Code. However, CP866 uppercase tokens are perfectly valid output
+// ™). CP866 uses those *same byte values* for uppercase Cyrillic letters. Short shell snippets
+// that mix these bytes with ASCII can be guessed as IBM866, so “smart quotes” render as Cyrillic
+// garbage (“УФЦ”) in VS Code. However, CP866 uppercase tokens are perfectly valid output
 // (e.g., `ПРИ test`) so we cannot flip every 0x80-0x9F byte to Windows-1252 either. The compromise
 // is to only coerce IBM866 to Windows-1252 when (a) the high bytes are exclusively the punctuation
 // values listed below and (b) we spot adjacent ASCII. This targets the real failure case without
@@ -99,7 +98,7 @@ fn detect_encoding(bytes: &[u8]) -> &'static Encoding {
     detector.feed(bytes, true);
     let (encoding, _is_confident) = detector.guess_assess(None, true);
 
-    // chardetng occasionally reports IBM866 for short strings that only contain Windows-1252 “smart
+    // The detector can report IBM866 for short strings that only contain Windows-1252 “smart
     // punctuation” bytes (0x80-0x9F) because that range maps to Cyrillic letters in IBM866. When
     // those bytes show up alongside an ASCII word (typical shell output: `"“`test), we know the
     // intent was likely CP1252 quotes/dashes. Prefer WINDOWS_1252 in that specific situation so we
@@ -129,7 +128,7 @@ fn decode_bytes(bytes: &[u8], encoding: &'static Encoding) -> String {
 /// otherwise-ASCII text.
 ///
 /// Context: IBM866 and Windows-1252 share the 0x80-0x9F slot range. In IBM866 these bytes decode to
-/// Cyrillic letters, whereas Windows-1252 maps them to curly quotes and dashes. chardetng can guess
+/// Cyrillic letters, whereas Windows-1252 maps them to curly quotes and dashes. Detection can guess
 /// IBM866 for short snippets that only contain those bytes, which turns shell output such as
 /// `“test”` into unreadable Cyrillic. To avoid that, we treat inputs comprising a handful of bytes
 /// from the problematic range plus ASCII letters as CP1252 punctuation. We deliberately do *not*

@@ -7,48 +7,36 @@ use codex_protocol::config_types::WebSearchContextSize;
 use codex_protocol::config_types::WebSearchFilters as ConfigWebSearchFilters;
 use codex_protocol::config_types::WebSearchUserLocation as ConfigWebSearchUserLocation;
 use codex_protocol::config_types::WebSearchUserLocationType;
-use edgerun_json::serde_json::Value;
-use edgerun_serde::Serialize;
+use edgerun_json::{Map, ToJson, Value};
 
 /// When serialized as JSON, this produces a valid "Tool" in the OpenAI
 /// Responses API.
-#[derive(Debug, Clone, Serialize, PartialEq)]
-#[serde(tag = "type")]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ToolSpec {
-    #[serde(rename = "function")]
     Function(ResponsesApiTool),
-    #[serde(rename = "namespace")]
     Namespace(ResponsesApiNamespace),
-    #[serde(rename = "tool_search")]
     ToolSearch {
         execution: String,
         description: String,
         parameters: JsonSchema,
     },
-    #[serde(rename = "local_shell")]
     LocalShell {},
-    #[serde(rename = "image_generation")]
-    ImageGeneration { output_format: String },
+    ImageGeneration {
+        output_format: String,
+    },
     // TODO: Understand why we get an error on web_search although the API docs
     // say it's supported.
     // https://platform.openai.com/docs/guides/tools-web-search?api-mode=responses#:~:text=%7B%20type%3A%20%22web_search%22%20%7D%2C
     // The `external_web_access` field determines whether the web search is over
     // cached or live content.
     // https://platform.openai.com/docs/guides/tools-web-search#live-internet-access
-    #[serde(rename = "web_search")]
     WebSearch {
-        #[serde(skip_serializing_if = "Option::is_none")]
         external_web_access: Option<bool>,
-        #[serde(skip_serializing_if = "Option::is_none")]
         filters: Option<ResponsesApiWebSearchFilters>,
-        #[serde(skip_serializing_if = "Option::is_none")]
         user_location: Option<ResponsesApiWebSearchUserLocation>,
-        #[serde(skip_serializing_if = "Option::is_none")]
         search_context_size: Option<WebSearchContextSize>,
-        #[serde(skip_serializing_if = "Option::is_none")]
         search_content_types: Option<Vec<String>>,
     },
-    #[serde(rename = "custom")]
     Freeform(FreeformTool),
 }
 
@@ -62,6 +50,63 @@ impl ToolSpec {
             ToolSpec::ImageGeneration { .. } => "image_generation",
             ToolSpec::WebSearch { .. } => "web_search",
             ToolSpec::Freeform(tool) => tool.name.as_str(),
+        }
+    }
+}
+
+impl ToJson for ToolSpec {
+    fn to_json(&self) -> Value {
+        match self {
+            Self::Function(tool) => tool.to_json(),
+            Self::Namespace(namespace) => namespace.to_json(),
+            Self::ToolSearch {
+                execution,
+                description,
+                parameters,
+            } => {
+                let mut object = Map::new();
+                object.push_field("type", "tool_search");
+                object.push_field("execution", execution.as_str());
+                object.push_field("description", description.as_str());
+                object.push_field("parameters", parameters.to_json());
+                object.into()
+            }
+            Self::LocalShell {} => {
+                let mut object = Map::new();
+                object.push_field("type", "local_shell");
+                object.into()
+            }
+            Self::ImageGeneration { output_format } => {
+                let mut object = Map::new();
+                object.push_field("type", "image_generation");
+                object.push_field("output_format", output_format.as_str());
+                object.into()
+            }
+            Self::WebSearch {
+                external_web_access,
+                filters,
+                user_location,
+                search_context_size,
+                search_content_types,
+            } => {
+                let mut object = Map::new();
+                object.push_field("type", "web_search");
+                object.push_opt_field("external_web_access", *external_web_access);
+                object.push_opt_field("filters", filters.as_ref().map(ToJson::to_json));
+                object.push_opt_field("user_location", user_location.as_ref().map(ToJson::to_json));
+                object.push_opt_field(
+                    "search_context_size",
+                    search_context_size
+                        .as_ref()
+                        .map(web_search_context_size_json),
+                );
+                object.push_opt_field(
+                    "search_content_types",
+                    search_content_types.as_ref().map(ToJson::to_json),
+                );
+                object.into()
+            }
+            Self::Freeform(tool) => tool.to_json(),
         }
     }
 }
@@ -99,21 +144,31 @@ impl ConfiguredToolSpec {
 /// https://platform.openai.com/docs/guides/function-calling?api-mode=responses
 pub fn create_tools_json_for_responses_api(
     tools: &[ToolSpec],
-) -> Result<Vec<Value>, edgerun_json::serde_json::Error> {
+) -> Result<Vec<Value>, edgerun_json::Error> {
     let mut tools_json = Vec::new();
 
     for tool in tools {
-        let json = edgerun_json::serde_json::to_value(tool)?;
+        let json = tool.to_json();
         tools_json.push(json);
     }
 
     Ok(tools_json)
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ResponsesApiWebSearchFilters {
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub allowed_domains: Option<Vec<String>>,
+}
+
+impl ToJson for ResponsesApiWebSearchFilters {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        object.push_opt_field(
+            "allowed_domains",
+            self.allowed_domains.as_ref().map(ToJson::to_json),
+        );
+        object.into()
+    }
 }
 
 impl From<ConfigWebSearchFilters> for ResponsesApiWebSearchFilters {
@@ -124,18 +179,40 @@ impl From<ConfigWebSearchFilters> for ResponsesApiWebSearchFilters {
     }
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ResponsesApiWebSearchUserLocation {
-    #[serde(rename = "type")]
     pub r#type: WebSearchUserLocationType,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub country: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub region: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub city: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub timezone: Option<String>,
+}
+
+impl ToJson for ResponsesApiWebSearchUserLocation {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        object.push_field("type", web_search_user_location_type_json(&self.r#type));
+        object.push_opt_field("country", self.country.as_ref().map(ToJson::to_json));
+        object.push_opt_field("region", self.region.as_ref().map(ToJson::to_json));
+        object.push_opt_field("city", self.city.as_ref().map(ToJson::to_json));
+        object.push_opt_field("timezone", self.timezone.as_ref().map(ToJson::to_json));
+        object.into()
+    }
+}
+
+fn web_search_context_size_json(value: &WebSearchContextSize) -> Value {
+    let value = match value {
+        WebSearchContextSize::Low => "low",
+        WebSearchContextSize::Medium => "medium",
+        WebSearchContextSize::High => "high",
+    };
+    Value::String(value.to_string())
+}
+
+fn web_search_user_location_type_json(value: &WebSearchUserLocationType) -> Value {
+    match value {
+        WebSearchUserLocationType::Approximate => Value::String("approximate".to_string()),
+    }
 }
 
 impl From<ConfigWebSearchUserLocation> for ResponsesApiWebSearchUserLocation {

@@ -28,3 +28,8 @@ required-features = ["fontdue-text"]
 name = "ui-preview-sdl-gl-svg"
 path = "src/bin/ui-preview-sdl-gl-svg.rs"
 required-features = ["fontdue-text", "tabler-svg-atlas"]
+
+[[bin]]
+name = "ui-preview-sdl-shadcn"
+path = "src/bin/ui-preview-sdl-shadcn.rs"
+required-features = ["std"]

@@ -1,6 +1,6 @@
 use super::*;
 use codex_app_server_protocol::AppInfo;
-use edgerun_json::serde_json::json;
+use edgerun_json::json;
 use pretty_assertions::assert_eq;
 
 #[test]

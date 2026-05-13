@@ -30,17 +30,17 @@ use core_test_support::wait_for_event;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 
-fn text_user_input(text: String) -> edgerun_json::serde_json::Value {
+fn text_user_input(text: String) -> edgerun_json::Value {
     text_user_input_parts(vec![text])
 }
 
-fn text_user_input_parts(texts: Vec<String>) -> edgerun_json::serde_json::Value {
-    edgerun_json::serde_json::json!({
+fn text_user_input_parts(texts: Vec<String>) -> edgerun_json::Value {
+    edgerun_json::json!({
         "type": "message",
         "role": "user",
         "content": texts
             .into_iter()
-            .map(|text| edgerun_json::serde_json::json!({ "type": "input_text", "text": text }))
+            .map(|text| edgerun_json::json!({ "type": "input_text", "text": text }))
             .collect::<Vec<_>>()
     })
 }
@@ -72,7 +72,7 @@ fn assert_default_env_context(text: &str, cwd: &str) {
     );
 }
 
-fn assert_tool_names(body: &edgerun_json::serde_json::Value, expected_names: &[&str]) {
+fn assert_tool_names(body: &edgerun_json::Value, expected_names: &[&str]) {
     assert_eq!(
         body["tools"]
             .as_array()
@@ -197,14 +197,14 @@ async fn prompt_tools_are_consistent_across_requests() -> anyhow::Result<()> {
 
     assert_eq!(
         body0["instructions"],
-        edgerun_json::serde_json::json!(expected_instructions),
+        edgerun_json::json!(expected_instructions),
     );
     assert_tool_names(&body0, &expected_tools_names);
 
     let body1 = req2.single_request().body_json();
     assert_eq!(
         body1["instructions"],
-        edgerun_json::serde_json::json!(expected_instructions),
+        edgerun_json::json!(expected_instructions),
     );
     assert_tool_names(&body1, &expected_tools_names);
 
@@ -482,7 +482,7 @@ async fn overrides_turn_context_but_keeps_cached_prefix_and_key_constant() -> an
 
     // The entire prefix from the first request should be identical and reused
     // as the prefix of the second request, ensuring cache hit potential.
-    let expected_user_message_2 = edgerun_json::serde_json::json!({
+    let expected_user_message_2 = edgerun_json::json!({
         "type": "message",
         "role": "user",
         "content": [ { "type": "input_text", "text": "hello 2" } ]
@@ -500,7 +500,7 @@ async fn overrides_turn_context_but_keeps_cached_prefix_and_key_constant() -> an
     expected_body2.push(expected_user_message_2);
     assert_eq!(
         body2["input"],
-        edgerun_json::serde_json::Value::Array(expected_body2)
+        edgerun_json::Value::Array(expected_body2)
     );
 
     Ok(())
@@ -758,7 +758,7 @@ async fn per_turn_overrides_keep_cached_prefix_and_key_constant() -> anyhow::Res
 
     // The entire prefix from the first request should be identical and reused
     // as the prefix of the second request.
-    let expected_user_message_2 = edgerun_json::serde_json::json!({
+    let expected_user_message_2 = edgerun_json::json!({
         "type": "message",
         "role": "user",
         "content": [ { "type": "input_text", "text": "hello 2" } ]
@@ -793,7 +793,7 @@ async fn per_turn_overrides_keep_cached_prefix_and_key_constant() -> anyhow::Res
     expected_body2.push(expected_user_message_2);
     assert_eq!(
         body2["input"],
-        edgerun_json::serde_json::Value::Array(expected_body2)
+        edgerun_json::Value::Array(expected_body2)
     );
 
     Ok(())
@@ -909,7 +909,7 @@ async fn send_user_turn_with_no_changes_does_not_send_environment_context() -> a
     ]);
     let expected_user_message_1 = text_user_input("hello 1".to_string());
 
-    let expected_input_1 = edgerun_json::serde_json::Value::Array(vec![
+    let expected_input_1 = edgerun_json::Value::Array(vec![
         expected_permissions_msg.clone(),
         expected_contextual_user_msg_1.clone(),
         expected_user_message_1.clone(),
@@ -917,7 +917,7 @@ async fn send_user_turn_with_no_changes_does_not_send_environment_context() -> a
     assert_eq!(body1["input"], expected_input_1);
 
     let expected_user_message_2 = text_user_input("hello 2".to_string());
-    let expected_input_2 = edgerun_json::serde_json::Value::Array(vec![
+    let expected_input_2 = edgerun_json::Value::Array(vec![
         expected_permissions_msg,
         expected_contextual_user_msg_1,
         expected_user_message_1,
@@ -1037,7 +1037,7 @@ async fn send_user_turn_with_changes_sends_environment_context() -> anyhow::Resu
         expected_env_text_1,
     ]);
     let expected_user_message_1 = text_user_input("hello 1".to_string());
-    let expected_input_1 = edgerun_json::serde_json::Value::Array(vec![
+    let expected_input_1 = edgerun_json::Value::Array(vec![
         expected_permissions_msg.clone(),
         expected_contextual_user_msg_1.clone(),
         expected_user_message_1.clone(),
@@ -1061,7 +1061,7 @@ async fn send_user_turn_with_changes_sends_environment_context() -> anyhow::Resu
         "expected model switch section after model override: {expected_settings_update_msg:?}"
     );
     let expected_user_message_2 = text_user_input("hello 2".to_string());
-    let expected_input_2 = edgerun_json::serde_json::Value::Array(vec![
+    let expected_input_2 = edgerun_json::Value::Array(vec![
         expected_permissions_msg,
         expected_contextual_user_msg_1,
         expected_user_message_1,

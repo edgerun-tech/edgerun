@@ -31,7 +31,7 @@ async fn codex_delegate_forwards_exec_approval_and_proceeds_on_approval() {
 
     // Sub-agent turn 1: emit a shell_command function_call requiring approval, then complete.
     let call_id = "call-exec-1";
-    let args = edgerun_json::serde_json::json!({
+    let args = edgerun_json::json!({
         "command": "rm -rf delegated",
         "timeout_ms": 1000,
         "sandbox_permissions": SandboxPermissions::RequireEscalated,
@@ -44,7 +44,7 @@ async fn codex_delegate_forwards_exec_approval_and_proceeds_on_approval() {
     ]);
 
     // Sub-agent turn 2: return structured review output and complete.
-    let review_json = edgerun_json::serde_json::json!({
+    let review_json = edgerun_json::json!({
         "findings": [],
         "overall_correctness": "ok",
         "overall_explanation": "delegate approved exec",
@@ -130,7 +130,7 @@ async fn codex_delegate_forwards_patch_approval_and_proceeds_on_decision() {
         ev_apply_patch_function_call(call_id, patch),
         ev_completed("resp-1"),
     ]);
-    let review_json = edgerun_json::serde_json::json!({
+    let review_json = edgerun_json::json!({
         "findings": [],
         "overall_correctness": "ok",
         "overall_explanation": "delegate patch handled",

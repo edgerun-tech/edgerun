@@ -120,7 +120,7 @@ fn install_mcp_permission_request_hook(
     session: &mut Session,
     turn_context: &TurnContext,
     matcher: &str,
-    hook_output: &edgerun_json::serde_json::Value,
+    hook_output: &edgerun_json::Value,
 ) -> std::path::PathBuf {
     let script_path = turn_context
         .config
@@ -160,7 +160,7 @@ print({hook_output:?})
     };
     std::fs::write(
         turn_context.config.codex_home.join("hooks.json"),
-        edgerun_json::serde_json::json!({
+        edgerun_json::json!({
             "hooks": {
                 "PermissionRequest": [{
                     "matcher": matcher,
@@ -207,7 +207,7 @@ print({hook_output:?})
 
 #[test]
 fn mcp_app_resource_uri_reads_known_tool_meta_keys() {
-    let nested = edgerun_json::serde_json::json!({
+    let nested = edgerun_json::json!({
         "ui": {
             "resourceUri": "ui://widget/nested.html",
         },
@@ -217,7 +217,7 @@ fn mcp_app_resource_uri_reads_known_tool_meta_keys() {
         Some("ui://widget/nested.html".to_string())
     );
 
-    let flat = edgerun_json::serde_json::json!({
+    let flat = edgerun_json::json!({
         "ui/resourceUri": "ui://widget/flat.html",
     });
     assert_eq!(
@@ -225,7 +225,7 @@ fn mcp_app_resource_uri_reads_known_tool_meta_keys() {
         Some("ui://widget/flat.html".to_string())
     );
 
-    let output_template = edgerun_json::serde_json::json!({
+    let output_template = edgerun_json::json!({
         "openai/outputTemplate": "ui://widget/output-template.html",
     });
     assert_eq!(
@@ -236,7 +236,7 @@ fn mcp_app_resource_uri_reads_known_tool_meta_keys() {
 
 #[test]
 fn openai_file_params_are_only_honored_for_codex_apps() {
-    let meta = edgerun_json::serde_json::json!({
+    let meta = edgerun_json::json!({
         "openai/fileParams": ["file"],
     });
     let meta = meta.as_object();
@@ -364,7 +364,7 @@ async fn mcp_tool_call_span_records_expected_fields() {
     );
 }
 
-async fn mcp_result_telemetry_span_logs(meta: Option<edgerun_json::serde_json::Value>) -> String {
+async fn mcp_result_telemetry_span_logs(meta: Option<edgerun_json::Value>) -> String {
     let buffer: &'static std::sync::Mutex<Vec<u8>> =
         Box::leak(Box::new(std::sync::Mutex::new(Vec::new())));
     let subscriber = tracing_subscriber::fmt()
@@ -410,7 +410,7 @@ async fn mcp_result_telemetry_span_logs(meta: Option<edgerun_json::serde_json::V
 
 #[edgerun_tokio::test]
 async fn mcp_result_telemetry_records_allowlisted_span_fields() {
-    let logs = mcp_result_telemetry_span_logs(Some(edgerun_json::serde_json::json!({
+    let logs = mcp_result_telemetry_span_logs(Some(edgerun_json::json!({
         "codex/telemetry": {
             "span": {
                 "target_id": "com.apple.reminders",
@@ -435,7 +435,7 @@ async fn mcp_result_telemetry_records_allowlisted_span_fields() {
 
 #[edgerun_tokio::test]
 async fn mcp_result_telemetry_ignores_invalid_and_missing_values() {
-    let invalid_logs = mcp_result_telemetry_span_logs(Some(edgerun_json::serde_json::json!({
+    let invalid_logs = mcp_result_telemetry_span_logs(Some(edgerun_json::json!({
         "codex/telemetry": {
             "span": {
                 "target_id": 123,
@@ -450,7 +450,7 @@ async fn mcp_result_telemetry_ignores_invalid_and_missing_values() {
         "invalid MCP result telemetry values should be ignored\nlogs:\n{invalid_logs}"
     );
 
-    let missing_logs = mcp_result_telemetry_span_logs(Some(edgerun_json::serde_json::json!({
+    let missing_logs = mcp_result_telemetry_span_logs(Some(edgerun_json::json!({
         "codex/telemetry": {},
     })))
     .await;
@@ -472,7 +472,7 @@ async fn mcp_result_telemetry_ignores_invalid_and_missing_values() {
 async fn mcp_result_telemetry_truncates_long_target_id() {
     let truncated = "x".repeat(MCP_RESULT_TELEMETRY_TARGET_ID_MAX_CHARS);
     let target_id = format!("{truncated}tail");
-    let logs = mcp_result_telemetry_span_logs(Some(edgerun_json::serde_json::json!({
+    let logs = mcp_result_telemetry_span_logs(Some(edgerun_json::json!({
         "codex/telemetry": {
             "span": {
                 "target_id": target_id,
@@ -526,19 +526,19 @@ async fn approval_elicitation_request_uses_message_override_and_preserves_tool_p
                 Some("Create Event"),
                 Some("Create a calendar event."),
             )),
-            tool_params: Some(&edgerun_json::serde_json::json!({
+            tool_params: Some(&edgerun_json::json!({
                 "calendar_id": "primary",
                 "title": "Roadmap review",
             })),
             tool_params_display: Some(&[
                 RenderedMcpToolApprovalParam {
                     name: "calendar_id".to_string(),
-                    value: edgerun_json::serde_json::json!("primary"),
+                    value: edgerun_json::json!("primary"),
                     display_name: "Calendar".to_string(),
                 },
                 RenderedMcpToolApprovalParam {
                     name: "title".to_string(),
-                    value: edgerun_json::serde_json::json!("Roadmap review"),
+                    value: edgerun_json::json!("Roadmap review"),
                     display_name: "Title".to_string(),
                 },
             ]),
@@ -557,7 +557,7 @@ async fn approval_elicitation_request_uses_message_override_and_preserves_tool_p
             turn_id: Some(turn_context.sub_id),
             server_name: CODEX_APPS_MCP_SERVER_NAME.to_string(),
             request: McpServerElicitationRequest::Form {
-                meta: Some(edgerun_json::serde_json::json!({
+                meta: Some(edgerun_json::json!({
                     MCP_TOOL_APPROVAL_KIND_KEY: MCP_TOOL_APPROVAL_KIND_MCP_TOOL_CALL,
                     MCP_TOOL_APPROVAL_PERSIST_KEY: [
                         MCP_TOOL_APPROVAL_PERSIST_SESSION,
@@ -807,12 +807,12 @@ fn codex_apps_connectors_support_persistent_approval() {
 fn sanitize_mcp_tool_result_for_model_rewrites_image_content() {
     let result = Ok(CallToolResult {
         content: vec![
-            edgerun_json::serde_json::json!({
+            edgerun_json::json!({
                 "type": "image",
                 "data": "Zm9v",
                 "mimeType": "image/png",
             }),
-            edgerun_json::serde_json::json!({
+            edgerun_json::json!({
                 "type": "text",
                 "text": "hello",
             }),
@@ -828,11 +828,11 @@ fn sanitize_mcp_tool_result_for_model_rewrites_image_content() {
     assert_eq!(
         got.content,
         vec![
-            edgerun_json::serde_json::json!({
+            edgerun_json::json!({
                 "type": "text",
                 "text": "<image content omitted because you do not support image input>",
             }),
-            edgerun_json::serde_json::json!({
+            edgerun_json::json!({
                 "type": "text",
                 "text": "hello",
             }),
@@ -843,14 +843,14 @@ fn sanitize_mcp_tool_result_for_model_rewrites_image_content() {
 #[test]
 fn sanitize_mcp_tool_result_for_model_preserves_image_when_supported() {
     let original = CallToolResult {
-        content: vec![edgerun_json::serde_json::json!({
+        content: vec![edgerun_json::json!({
             "type": "image",
             "data": "Zm9v",
             "mimeType": "image/png",
         })],
-        structured_content: Some(edgerun_json::serde_json::json!({"x": 1})),
+        structured_content: Some(edgerun_json::json!({"x": 1})),
         is_error: Some(false),
-        meta: Some(edgerun_json::serde_json::json!({"k": "v"})),
+        meta: Some(edgerun_json::json!({"k": "v"})),
     };
 
     let got = sanitize_mcp_tool_result_for_model(
@@ -865,13 +865,13 @@ fn sanitize_mcp_tool_result_for_model_preserves_image_when_supported() {
 #[test]
 fn truncate_mcp_tool_result_for_event_preserves_small_result() {
     let original = CallToolResult {
-        content: vec![edgerun_json::serde_json::json!({
+        content: vec![edgerun_json::json!({
             "type": "text",
             "text": "hello",
         })],
-        structured_content: Some(edgerun_json::serde_json::json!({"x": 1})),
+        structured_content: Some(edgerun_json::json!({"x": 1})),
         is_error: Some(false),
-        meta: Some(edgerun_json::serde_json::json!({"k": "v"})),
+        meta: Some(edgerun_json::json!({"k": "v"})),
     };
 
     let got = truncate_mcp_tool_result_for_event(&Ok(original.clone()))
@@ -883,22 +883,22 @@ fn truncate_mcp_tool_result_for_event_preserves_small_result() {
 #[test]
 fn truncate_mcp_tool_result_for_event_bounds_large_result() {
     let original = CallToolResult {
-        content: vec![edgerun_json::serde_json::json!({
+        content: vec![edgerun_json::json!({
             "type": "text",
             "text": "long-message-with-newlines-\n".repeat(200_000),
         })],
-        structured_content: Some(edgerun_json::serde_json::json!({
+        structured_content: Some(edgerun_json::json!({
             "structured": "structured-value-".repeat(200_000),
         })),
         is_error: Some(false),
-        meta: Some(edgerun_json::serde_json::json!({
+        meta: Some(edgerun_json::json!({
             "meta": "meta-value-".repeat(200_000),
         })),
     };
 
     let got = truncate_mcp_tool_result_for_event(&Ok(original))
         .expect("large result should remain successful");
-    let serialized = edgerun_json::serde_json::to_string(&got).expect("truncated result should serialize");
+    let serialized = edgerun_json::to_string(&got).expect("truncated result should serialize");
 
     // The truncated preview is embedded as a JSON string, so quotes and
     // backslashes can be escaped again. That can roughly double the preview
@@ -911,7 +911,7 @@ fn truncate_mcp_tool_result_for_event_bounds_large_result() {
     assert!(
         got.content[0]
             .get("text")
-            .and_then(edgerun_json::serde_json::Value::as_str)
+            .and_then(edgerun_json::Value::as_str)
             .is_some_and(|text| text.contains("truncated")),
         "large event result should contain a truncation marker: {got:?}"
     );
@@ -950,13 +950,13 @@ async fn mcp_tool_call_request_meta_includes_turn_metadata_for_custom_server() {
     assert_eq!(
         turn_metadata
             .get("model")
-            .and_then(edgerun_json::serde_json::Value::as_str),
+            .and_then(edgerun_json::Value::as_str),
         Some(turn_context.model_info.slug.as_str())
     );
     assert_eq!(
         turn_metadata
             .get("reasoning_effort")
-            .and_then(edgerun_json::serde_json::Value::as_str),
+            .and_then(edgerun_json::Value::as_str),
         turn_context
             .effective_reasoning_effort()
             .map(|effort| effort.to_string())
@@ -965,7 +965,7 @@ async fn mcp_tool_call_request_meta_includes_turn_metadata_for_custom_server() {
 
     assert_eq!(
         meta,
-        edgerun_json::serde_json::json!({
+        edgerun_json::json!({
             crate::X_CODEX_TURN_METADATA_HEADER: expected_turn_metadata,
         })
     );
@@ -992,7 +992,7 @@ async fn mcp_tool_call_request_meta_includes_turn_started_at_unix_ms() {
     assert_eq!(
         turn_metadata
             .get("turn_started_at_unix_ms")
-            .and_then(edgerun_json::serde_json::Value::as_i64),
+            .and_then(edgerun_json::Value::as_i64),
         Some(1_700_000_000_123)
     );
 }
@@ -1013,7 +1013,7 @@ async fn codex_apps_tool_call_request_meta_includes_turn_metadata_and_codex_apps
         tool_description: Some("Create a calendar event.".to_string()),
         mcp_app_resource_uri: None,
         codex_apps_meta: Some(
-            edgerun_json::serde_json::json!({
+            edgerun_json::json!({
                 "resource_uri": "connector://calendar/tools/calendar_create_event",
                 "contains_mcp_source": true,
                 "connector_id": "calendar",
@@ -1032,7 +1032,7 @@ async fn codex_apps_tool_call_request_meta_includes_turn_metadata_and_codex_apps
             "call_abc123xyz789",
             Some(&metadata),
         ),
-        Some(edgerun_json::serde_json::json!({
+        Some(edgerun_json::json!({
             crate::X_CODEX_TURN_METADATA_HEADER: expected_turn_metadata,
             MCP_TOOL_CODEX_APPS_META_KEY: {
                 "call_id": "call_abc123xyz789",
@@ -1059,7 +1059,7 @@ async fn codex_apps_tool_call_request_meta_includes_call_id_without_existing_cod
             "call_abc123xyz789",
             /*metadata*/ None,
         ),
-        Some(edgerun_json::serde_json::json!({
+        Some(edgerun_json::json!({
             crate::X_CODEX_TURN_METADATA_HEADER: expected_turn_metadata,
             MCP_TOOL_CODEX_APPS_META_KEY: {
                 "call_id": "call_abc123xyz789",
@@ -1070,13 +1070,13 @@ async fn codex_apps_tool_call_request_meta_includes_call_id_without_existing_cod
 
 fn codex_apps_auth_failure_result() -> CallToolResult {
     CallToolResult {
-        content: vec![edgerun_json::serde_json::json!({
+        content: vec![edgerun_json::json!({
             "type": "text",
             "text": "Connector reauthentication required",
         })],
         structured_content: None,
         is_error: Some(true),
-        meta: Some(edgerun_json::serde_json::json!({
+        meta: Some(edgerun_json::json!({
             MCP_TOOL_CODEX_APPS_META_KEY: {
                 "connector_auth_failure": {
                     "is_auth_failure": true,
@@ -1306,7 +1306,7 @@ async fn codex_apps_auth_elicitation_feature_enabled_requests_elicitation() {
         .expect("auth elicitation task failed");
     assert_eq!(
         returned.content,
-        vec![edgerun_json::serde_json::json!({
+        vec![edgerun_json::json!({
             "type": "text",
             "text": "Authentication for Google Calendar was requested and accepted. Retry this tool call now.",
         })]
@@ -1317,13 +1317,13 @@ async fn codex_apps_auth_elicitation_feature_enabled_requests_elicitation() {
 fn mcp_tool_call_thread_id_meta_is_added_to_request_meta() {
     assert_eq!(
         with_mcp_tool_call_thread_id_meta(
-            Some(edgerun_json::serde_json::json!({
+            Some(edgerun_json::json!({
                 "source": "test-client",
                 "threadId": "stale-thread",
             })),
             "thread-live",
         ),
-        Some(edgerun_json::serde_json::json!({
+        Some(edgerun_json::json!({
             "source": "test-client",
             "threadId": "thread-live",
         }))
@@ -1331,20 +1331,20 @@ fn mcp_tool_call_thread_id_meta_is_added_to_request_meta() {
 
     assert_eq!(
         with_mcp_tool_call_thread_id_meta(/*meta*/ None, "thread-live"),
-        Some(edgerun_json::serde_json::json!({
+        Some(edgerun_json::json!({
             "threadId": "thread-live",
         }))
     );
 
     assert_eq!(
-        with_mcp_tool_call_thread_id_meta(Some(edgerun_json::serde_json::json!("invalid-meta")), "thread-live"),
-        Some(edgerun_json::serde_json::json!("invalid-meta"))
+        with_mcp_tool_call_thread_id_meta(Some(edgerun_json::json!("invalid-meta")), "thread-live"),
+        Some(edgerun_json::json!("invalid-meta"))
     );
 }
 
 #[test]
 fn accepted_elicitation_content_converts_to_request_user_input_response() {
-    let response = request_user_input_response_from_elicitation_content(Some(edgerun_json::serde_json::json!(
+    let response = request_user_input_response_from_elicitation_content(Some(edgerun_json::json!(
         {
             "approval": MCP_TOOL_APPROVAL_ACCEPT_AND_REMEMBER,
         }
@@ -1375,7 +1375,7 @@ fn approval_elicitation_meta_marks_tool_approvals() {
                 /*allow_session_remember*/ false, /*allow_persistent_approval*/ false
             ),
         ),
-        Some(edgerun_json::serde_json::json!({
+        Some(edgerun_json::json!({
             MCP_TOOL_APPROVAL_KIND_KEY: MCP_TOOL_APPROVAL_KIND_MCP_TOOL_CALL,
         }))
     );
@@ -1393,13 +1393,13 @@ fn approval_elicitation_meta_merges_session_and_always_persist_for_custom_server
                 Some("Run Action"),
                 Some("Runs the selected action."),
             )),
-            Some(&edgerun_json::serde_json::json!({"id": 1})),
+            Some(&edgerun_json::json!({"id": 1})),
             /*tool_params_display*/ None,
             prompt_options(
                 /*allow_session_remember*/ true, /*allow_persistent_approval*/ true
             ),
         ),
-        Some(edgerun_json::serde_json::json!({
+        Some(edgerun_json::json!({
             MCP_TOOL_APPROVAL_KIND_KEY: MCP_TOOL_APPROVAL_KIND_MCP_TOOL_CALL,
             MCP_TOOL_APPROVAL_PERSIST_KEY: [
                 MCP_TOOL_APPROVAL_PERSIST_SESSION,
@@ -1419,7 +1419,7 @@ fn guardian_mcp_review_request_includes_invocation_metadata() {
     let invocation = McpInvocation {
         server: CODEX_APPS_MCP_SERVER_NAME.to_string(),
         tool: "browser_navigate".to_string(),
-        arguments: Some(edgerun_json::serde_json::json!({
+        arguments: Some(edgerun_json::json!({
             "url": "https://example.com",
         })),
     };
@@ -1442,7 +1442,7 @@ fn guardian_mcp_review_request_includes_invocation_metadata() {
             id: "call-1".to_string(),
             server: CODEX_APPS_MCP_SERVER_NAME.to_string(),
             tool_name: "browser_navigate".to_string(),
-            arguments: Some(edgerun_json::serde_json::json!({
+            arguments: Some(edgerun_json::json!({
                 "url": "https://example.com",
             })),
             connector_id: Some("playwright".to_string()),
@@ -1502,7 +1502,7 @@ fn prepare_arc_request_action_serializes_mcp_tool_call_shape() {
     let invocation = McpInvocation {
         server: CODEX_APPS_MCP_SERVER_NAME.to_string(),
         tool: "browser_navigate".to_string(),
-        arguments: Some(edgerun_json::serde_json::json!({
+        arguments: Some(edgerun_json::json!({
             "url": "https://example.com",
         })),
     };
@@ -1520,7 +1520,7 @@ fn prepare_arc_request_action_serializes_mcp_tool_call_shape() {
 
     assert_eq!(
         action,
-        edgerun_json::serde_json::json!({
+        edgerun_json::json!({
             "tool": "mcp_tool_call",
             "server": CODEX_APPS_MCP_SERVER_NAME,
             "tool_name": "browser_navigate",
@@ -1605,7 +1605,7 @@ fn approval_elicitation_meta_includes_connector_source_for_codex_apps() {
                 Some("Run Action"),
                 Some("Runs the selected action."),
             )),
-            Some(&edgerun_json::serde_json::json!({
+            Some(&edgerun_json::json!({
                 "calendar_id": "primary",
             })),
             /*tool_params_display*/ None,
@@ -1613,7 +1613,7 @@ fn approval_elicitation_meta_includes_connector_source_for_codex_apps() {
                 /*allow_session_remember*/ false, /*allow_persistent_approval*/ false
             ),
         ),
-        Some(edgerun_json::serde_json::json!({
+        Some(edgerun_json::json!({
             MCP_TOOL_APPROVAL_KIND_KEY: MCP_TOOL_APPROVAL_KIND_MCP_TOOL_CALL,
             MCP_TOOL_APPROVAL_SOURCE_KEY: MCP_TOOL_APPROVAL_SOURCE_CONNECTOR,
             MCP_TOOL_APPROVAL_CONNECTOR_ID_KEY: "calendar",
@@ -1640,7 +1640,7 @@ fn approval_elicitation_meta_merges_session_and_always_persist_with_connector_so
                 Some("Run Action"),
                 Some("Runs the selected action."),
             )),
-            Some(&edgerun_json::serde_json::json!({
+            Some(&edgerun_json::json!({
                 "calendar_id": "primary",
             })),
             /*tool_params_display*/ None,
@@ -1648,7 +1648,7 @@ fn approval_elicitation_meta_merges_session_and_always_persist_with_connector_so
                 /*allow_session_remember*/ true, /*allow_persistent_approval*/ true
             ),
         ),
-        Some(edgerun_json::serde_json::json!({
+        Some(edgerun_json::json!({
             MCP_TOOL_APPROVAL_KIND_KEY: MCP_TOOL_APPROVAL_KIND_MCP_TOOL_CALL,
             MCP_TOOL_APPROVAL_PERSIST_KEY: [
                 MCP_TOOL_APPROVAL_PERSIST_SESSION,
@@ -1690,7 +1690,7 @@ fn declined_elicitation_response_stays_decline() {
     let response = parse_mcp_tool_approval_elicitation_response(
         Some(ElicitationResponse {
             action: ElicitationAction::Decline,
-            content: Some(edgerun_json::serde_json::json!({
+            content: Some(edgerun_json::json!({
                 "approval": MCP_TOOL_APPROVAL_ACCEPT,
             })),
             meta: None,
@@ -1724,7 +1724,7 @@ fn accepted_elicitation_response_uses_always_persist_meta() {
         Some(ElicitationResponse {
             action: ElicitationAction::Accept,
             content: None,
-            meta: Some(edgerun_json::serde_json::json!({
+            meta: Some(edgerun_json::json!({
                 MCP_TOOL_APPROVAL_PERSIST_KEY: MCP_TOOL_APPROVAL_PERSIST_ALWAYS,
             })),
         }),
@@ -1740,7 +1740,7 @@ fn accepted_elicitation_response_uses_session_persist_meta() {
         Some(ElicitationResponse {
             action: ElicitationAction::Accept,
             content: None,
-            meta: Some(edgerun_json::serde_json::json!({
+            meta: Some(edgerun_json::json!({
                 MCP_TOOL_APPROVAL_PERSIST_KEY: MCP_TOOL_APPROVAL_PERSIST_SESSION,
             })),
         }),
@@ -2275,7 +2275,7 @@ async fn permission_request_hook_allows_mcp_tool_call() {
         &mut session,
         &turn_context,
         "mcp__memory__.*",
-        &edgerun_json::serde_json::json!({
+        &edgerun_json::json!({
             "hookSpecificOutput": {
                 "hookEventName": "PermissionRequest",
                 "decision": { "behavior": "allow" }
@@ -2287,7 +2287,7 @@ async fn permission_request_hook_allows_mcp_tool_call() {
     let invocation = McpInvocation {
         server: "memory".to_string(),
         tool: "create_entities".to_string(),
-        arguments: Some(edgerun_json::serde_json::json!({
+        arguments: Some(edgerun_json::json!({
             "entities": [{
                 "name": "Ada",
                 "entityType": "person"
@@ -2325,11 +2325,11 @@ async fn permission_request_hook_allows_mcp_tool_call() {
     let log = std::fs::read_to_string(log_path).expect("read MCP permission hook log");
     let inputs = log
         .lines()
-        .map(|line| edgerun_json::serde_json::from_str::<edgerun_json::serde_json::Value>(line).expect("parse hook input"))
+        .map(|line| edgerun_json::from_serde_str::<edgerun_json::Value>(line).expect("parse hook input"))
         .collect::<Vec<_>>();
     assert_eq!(
         inputs,
-        vec![edgerun_json::serde_json::json!({
+        vec![edgerun_json::json!({
             "session_id": session.conversation_id,
             "turn_id": "turn_id",
             "cwd": turn_context.cwd,
@@ -2355,7 +2355,7 @@ async fn permission_request_hook_uses_hook_tool_name_without_metadata() {
         &mut session,
         &turn_context,
         "mcp__memory__.*",
-        &edgerun_json::serde_json::json!({
+        &edgerun_json::json!({
             "hookSpecificOutput": {
                 "hookEventName": "PermissionRequest",
                 "decision": { "behavior": "allow" }
@@ -2367,7 +2367,7 @@ async fn permission_request_hook_uses_hook_tool_name_without_metadata() {
     let invocation = McpInvocation {
         server: "memory".to_string(),
         tool: "create_entities".to_string(),
-        arguments: Some(edgerun_json::serde_json::json!({ "entities": [] })),
+        arguments: Some(edgerun_json::json!({ "entities": [] })),
     };
 
     let decision = maybe_request_mcp_tool_approval(
@@ -2385,11 +2385,11 @@ async fn permission_request_hook_uses_hook_tool_name_without_metadata() {
     let log = std::fs::read_to_string(log_path).expect("read MCP permission hook log");
     let inputs = log
         .lines()
-        .map(|line| edgerun_json::serde_json::from_str::<edgerun_json::serde_json::Value>(line).expect("parse hook input"))
+        .map(|line| edgerun_json::from_serde_str::<edgerun_json::Value>(line).expect("parse hook input"))
         .collect::<Vec<_>>();
     assert_eq!(
         inputs,
-        vec![edgerun_json::serde_json::json!({
+        vec![edgerun_json::json!({
             "session_id": session.conversation_id,
             "turn_id": "turn_id",
             "cwd": turn_context.cwd,
@@ -2410,7 +2410,7 @@ async fn permission_request_hook_runs_after_remembered_mcp_approval() {
         &mut session,
         &turn_context,
         "mcp__memory__.*",
-        &edgerun_json::serde_json::json!({
+        &edgerun_json::json!({
             "hookSpecificOutput": {
                 "hookEventName": "PermissionRequest",
                 "decision": {
@@ -2423,7 +2423,7 @@ async fn permission_request_hook_runs_after_remembered_mcp_approval() {
     let invocation = McpInvocation {
         server: "memory".to_string(),
         tool: "create_entities".to_string(),
-        arguments: Some(edgerun_json::serde_json::json!({ "entities": [] })),
+        arguments: Some(edgerun_json::json!({ "entities": [] })),
     };
     let metadata = McpToolApprovalMetadata {
         annotations: Some(annotations(
@@ -2474,7 +2474,7 @@ async fn guardian_mode_mcp_denial_returns_rationale_message() {
             ev_response_created("resp-guardian"),
             ev_assistant_message(
                 "msg-guardian",
-                &edgerun_json::serde_json::json!({
+                &edgerun_json::json!({
                     "risk_level": "high",
                     "user_authorization": "low",
                     "outcome": "deny",
@@ -2513,7 +2513,7 @@ async fn guardian_mode_mcp_denial_returns_rationale_message() {
     let invocation = McpInvocation {
         server: "custom_server".to_string(),
         tool: "dangerous_tool".to_string(),
-        arguments: Some(edgerun_json::serde_json::json!({ "calendar_id": "primary" })),
+        arguments: Some(edgerun_json::json!({ "calendar_id": "primary" })),
     };
     let metadata = McpToolApprovalMetadata {
         annotations: Some(annotations(Some(false), Some(true), Some(true))),
@@ -2617,7 +2617,7 @@ async fn approve_mode_skips_arc_interrupt_for_model() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/codex/safety/arc"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(edgerun_json::serde_json::json!({
+        .respond_with(ResponseTemplate::new(200).set_body_json(edgerun_json::json!({
             "outcome": "steer-model",
             "short_reason": "needs approval",
             "rationale": "high-risk action",
@@ -2645,7 +2645,7 @@ async fn approve_mode_skips_arc_interrupt_for_model() {
     let invocation = McpInvocation {
         server: CODEX_APPS_MCP_SERVER_NAME.to_string(),
         tool: "dangerous_tool".to_string(),
-        arguments: Some(edgerun_json::serde_json::json!({ "id": 1 })),
+        arguments: Some(edgerun_json::json!({ "id": 1 })),
     };
     let metadata = McpToolApprovalMetadata {
         annotations: Some(annotations(Some(false), Some(true), Some(true))),
@@ -2684,7 +2684,7 @@ async fn custom_approve_mode_skips_arc_interrupt_for_model() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/codex/safety/arc"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(edgerun_json::serde_json::json!({
+        .respond_with(ResponseTemplate::new(200).set_body_json(edgerun_json::json!({
             "outcome": "steer-model",
             "short_reason": "needs approval",
             "rationale": "high-risk action",
@@ -2712,7 +2712,7 @@ async fn custom_approve_mode_skips_arc_interrupt_for_model() {
     let invocation = McpInvocation {
         server: "docs".to_string(),
         tool: "dangerous_tool".to_string(),
-        arguments: Some(edgerun_json::serde_json::json!({ "id": 1 })),
+        arguments: Some(edgerun_json::json!({ "id": 1 })),
     };
     let metadata = McpToolApprovalMetadata {
         annotations: Some(annotations(Some(false), Some(true), Some(true))),
@@ -2751,7 +2751,7 @@ async fn approve_mode_skips_arc_interrupt_without_annotations() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/codex/safety/arc"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(edgerun_json::serde_json::json!({
+        .respond_with(ResponseTemplate::new(200).set_body_json(edgerun_json::json!({
             "outcome": "steer-model",
             "short_reason": "needs approval",
             "rationale": "high-risk action",
@@ -2779,7 +2779,7 @@ async fn approve_mode_skips_arc_interrupt_without_annotations() {
     let invocation = McpInvocation {
         server: CODEX_APPS_MCP_SERVER_NAME.to_string(),
         tool: "dangerous_tool".to_string(),
-        arguments: Some(edgerun_json::serde_json::json!({ "id": 1 })),
+        arguments: Some(edgerun_json::json!({ "id": 1 })),
     };
     let metadata = McpToolApprovalMetadata {
         annotations: None,
@@ -2818,7 +2818,7 @@ async fn full_access_mode_skips_arc_monitor_for_all_approval_modes() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/codex/safety/arc"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(edgerun_json::serde_json::json!({
+        .respond_with(ResponseTemplate::new(200).set_body_json(edgerun_json::json!({
             "outcome": "steer-model",
             "short_reason": "needs approval",
             "rationale": "high-risk action",
@@ -2851,7 +2851,7 @@ async fn full_access_mode_skips_arc_monitor_for_all_approval_modes() {
     let invocation = McpInvocation {
         server: CODEX_APPS_MCP_SERVER_NAME.to_string(),
         tool: "dangerous_tool".to_string(),
-        arguments: Some(edgerun_json::serde_json::json!({ "id": 1 })),
+        arguments: Some(edgerun_json::json!({ "id": 1 })),
     };
     let metadata = McpToolApprovalMetadata {
         annotations: Some(annotations(Some(false), Some(true), Some(true))),
@@ -2901,7 +2901,7 @@ async fn approve_mode_skips_arc_and_guardian_in_every_permission_mode() {
         .await;
     Mock::given(method("POST"))
         .and(path("/codex/safety/arc"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(edgerun_json::serde_json::json!({
+        .respond_with(ResponseTemplate::new(200).set_body_json(edgerun_json::json!({
             "outcome": "ask-user",
             "short_reason": "needs confirmation",
             "rationale": "ARC wants a second review",
@@ -2919,7 +2919,7 @@ async fn approve_mode_skips_arc_and_guardian_in_every_permission_mode() {
     let invocation = McpInvocation {
         server: CODEX_APPS_MCP_SERVER_NAME.to_string(),
         tool: "dangerous_tool".to_string(),
-        arguments: Some(edgerun_json::serde_json::json!({ "id": 1 })),
+        arguments: Some(edgerun_json::json!({ "id": 1 })),
     };
     let metadata = McpToolApprovalMetadata {
         annotations: Some(annotations(Some(false), Some(true), Some(true))),

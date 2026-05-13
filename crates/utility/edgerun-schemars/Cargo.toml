@@ -10,7 +10,6 @@ description = "Edgerun shim for schemars"
 
 [dependencies]
 edgerun-schemars-derive = { path = "../edgerun-schemars-derive" }
-serde = { package = "edgerun-serde", path = "../edgerun-serde", features = ["derive", "std"] }
 
 [features]
 chrono04 = []

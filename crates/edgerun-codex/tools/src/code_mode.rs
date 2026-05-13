@@ -3,6 +3,7 @@ use crate::ToolName;
 use crate::ToolSpec;
 use codex_code_mode::CodeModeToolKind;
 use codex_code_mode::ToolDefinition as CodeModeToolDefinition;
+use edgerun_json::ToJson;
 
 /// Augment tool descriptions with code-mode-specific exec samples.
 pub fn augment_tool_spec_for_code_mode(spec: ToolSpec) -> ToolSpec {
@@ -36,7 +37,7 @@ pub fn augment_tool_spec_for_code_mode(spec: ToolSpec) -> ToolSpec {
                             tool_name,
                             description: tool.description.clone(),
                             kind: CodeModeToolKind::Function,
-                            input_schema: edgerun_json::serde_json::to_value(&tool.parameters).ok(),
+                            input_schema: Some(tool.parameters.to_json()),
                             output_schema: tool.output_schema.clone(),
                         };
                         tool.description =
@@ -104,7 +105,7 @@ fn code_mode_tool_definitions_for_spec(spec: &ToolSpec) -> Vec<CodeModeToolDefin
                 name,
                 description: tool.description.clone(),
                 kind: CodeModeToolKind::Function,
-                input_schema: edgerun_json::serde_json::to_value(&tool.parameters).ok(),
+                input_schema: Some(tool.parameters.to_json()),
                 output_schema: tool.output_schema.clone(),
             }]
         }
@@ -130,7 +131,7 @@ fn code_mode_tool_definitions_for_spec(spec: &ToolSpec) -> Vec<CodeModeToolDefin
                         tool_name,
                         description: tool.description.clone(),
                         kind: CodeModeToolKind::Function,
-                        input_schema: edgerun_json::serde_json::to_value(&tool.parameters).ok(),
+                        input_schema: Some(tool.parameters.to_json()),
                         output_schema: tool.output_schema.clone(),
                     }
                 }

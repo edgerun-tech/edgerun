@@ -5,9 +5,7 @@ use codex_app_server_protocol::McpElicitationObjectType;
 use codex_app_server_protocol::McpElicitationSchema;
 use codex_app_server_protocol::McpServerElicitationRequest;
 use codex_app_server_protocol::McpServerElicitationRequestParams;
-use edgerun_json::serde_json::json;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
+use edgerun_json::{FromJson, JsonValueError, Map, ToJson, Value};
 
 use crate::DiscoverableTool;
 use crate::DiscoverableToolAction;
@@ -17,7 +15,7 @@ pub const REQUEST_PLUGIN_INSTALL_APPROVAL_KIND_VALUE: &str = "tool_suggestion";
 pub const REQUEST_PLUGIN_INSTALL_PERSIST_KEY: &str = "persist";
 pub const REQUEST_PLUGIN_INSTALL_PERSIST_ALWAYS_VALUE: &str = "always";
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug)]
 pub struct RequestPluginInstallArgs {
     pub tool_type: DiscoverableToolType,
     pub action_type: DiscoverableToolAction,
@@ -25,7 +23,19 @@ pub struct RequestPluginInstallArgs {
     pub suggest_reason: String,
 }
 
-#[derive(Debug, Serialize, PartialEq, Eq)]
+impl FromJson for RequestPluginInstallArgs {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("RequestPluginInstallArgs")?;
+        Ok(Self {
+            tool_type: object.take_required("tool_type")?,
+            action_type: object.take_required("action_type")?,
+            tool_id: object.take_required("tool_id")?,
+            suggest_reason: object.take_required("suggest_reason")?,
+        })
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub struct RequestPluginInstallResult {
     pub completed: bool,
     pub user_confirmed: bool,
@@ -36,7 +46,21 @@ pub struct RequestPluginInstallResult {
     pub suggest_reason: String,
 }
 
-#[derive(Debug, Serialize, PartialEq, Eq)]
+impl ToJson for RequestPluginInstallResult {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        object.push_field("completed", self.completed);
+        object.push_field("user_confirmed", self.user_confirmed);
+        object.push_field("tool_type", self.tool_type.to_json());
+        object.push_field("action_type", self.action_type.to_json());
+        object.push_field("tool_id", self.tool_id.as_str());
+        object.push_field("tool_name", self.tool_name.as_str());
+        object.push_field("suggest_reason", self.suggest_reason.as_str());
+        object.into()
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub struct RequestPluginInstallMeta<'a> {
     pub codex_approval_kind: &'static str,
     pub persist: &'static str,
@@ -45,8 +69,22 @@ pub struct RequestPluginInstallMeta<'a> {
     pub suggest_reason: &'a str,
     pub tool_id: &'a str,
     pub tool_name: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
     pub install_url: Option<&'a str>,
+}
+
+impl ToJson for RequestPluginInstallMeta<'_> {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        object.push_field("codex_approval_kind", self.codex_approval_kind);
+        object.push_field("persist", self.persist);
+        object.push_field("tool_type", self.tool_type.to_json());
+        object.push_field("suggest_type", self.suggest_type.to_json());
+        object.push_field("suggest_reason", self.suggest_reason);
+        object.push_field("tool_id", self.tool_id);
+        object.push_field("tool_name", self.tool_name);
+        object.push_opt_field("install_url", self.install_url);
+        object.into()
+    }
 }
 
 pub fn build_request_plugin_install_elicitation_request(
@@ -66,14 +104,17 @@ pub fn build_request_plugin_install_elicitation_request(
         turn_id: Some(turn_id),
         server_name: server_name.to_string(),
         request: McpServerElicitationRequest::Form {
-            meta: Some(json!(build_request_plugin_install_meta(
-                args.tool_type,
-                args.action_type,
-                suggest_reason,
-                tool.id(),
-                tool_name.as_str(),
-                install_url.as_deref(),
-            ))),
+            meta: Some(
+                build_request_plugin_install_meta(
+                    args.tool_type,
+                    args.action_type,
+                    suggest_reason,
+                    tool.id(),
+                    tool_name.as_str(),
+                    install_url.as_deref(),
+                )
+                .to_json(),
+            ),
             message,
             requested_schema: McpElicitationSchema {
                 schema_uri: None,

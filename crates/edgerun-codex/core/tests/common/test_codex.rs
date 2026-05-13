@@ -41,7 +41,7 @@ use codex_utils_absolute_path::AbsolutePathBuf;
 use edgerun_error::Context;
 use edgerun_error::Result;
 use edgerun_error::anyhow;
-use edgerun_json::serde_json::Value;
+use edgerun_json::Value;
 use edgerun_futures::future::BoxFuture;
 use tempfile::TempDir;
 use wiremock::MockServer;
@@ -1017,7 +1017,7 @@ pub fn test_codex() -> TestCodexBuilder {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_json::serde_json::json;
+    use edgerun_json::json;
     use pretty_assertions::assert_eq;
 
     #[test]

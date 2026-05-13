@@ -22,7 +22,8 @@ use codex_tools::collect_request_plugin_install_entries;
 use codex_tools::filter_request_plugin_install_discoverable_tools_for_client;
 use codex_tools::verified_connector_install_completed;
 use rmcp::model::RequestId;
-use edgerun_json::serde_json::Value;
+use edgerun_json::FromJson;
+use edgerun_json::Value;
 use tracing::warn;
 
 use crate::config::edit::ConfigEdit;
@@ -32,7 +33,6 @@ use crate::function_tool::FunctionCallError;
 use crate::tools::context::FunctionToolOutput;
 use crate::tools::context::ToolInvocation;
 use crate::tools::context::ToolPayload;
-use crate::tools::handlers::parse_arguments;
 use crate::tools::handlers::request_plugin_install_spec::create_request_plugin_install_tool;
 use crate::tools::registry::ToolHandler;
 use crate::tools::registry::ToolKind;
@@ -91,7 +91,16 @@ impl ToolHandler for RequestPluginInstallHandler {
             }
         };
 
-        let args: RequestPluginInstallArgs = parse_arguments(&arguments)?;
+        let args = RequestPluginInstallArgs::from_json(
+            edgerun_json::from_str(&arguments).map_err(|err| {
+                FunctionCallError::RespondToModel(format!(
+                    "failed to parse function arguments: {err}"
+                ))
+            })?,
+        )
+        .map_err(|err| {
+            FunctionCallError::RespondToModel(format!("failed to parse function arguments: {err}"))
+        })?;
         let suggest_reason = args.suggest_reason.trim();
         if suggest_reason.is_empty() {
             return Err(FunctionCallError::RespondToModel(
@@ -178,7 +187,7 @@ impl ToolHandler for RequestPluginInstallHandler {
                 .await;
         }
 
-        let content = edgerun_json::serde_json::to_string(&RequestPluginInstallResult {
+        let content = edgerun_json::to_json_string(&RequestPluginInstallResult {
             completed,
             user_confirmed,
             tool_type: args.tool_type,

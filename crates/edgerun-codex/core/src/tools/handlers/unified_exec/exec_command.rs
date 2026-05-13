@@ -129,7 +129,7 @@ impl ToolHandler for ExecCommandHandler {
             .ok()
             .map(|args| PreToolUsePayload {
                 tool_name: HookToolName::bash(),
-                tool_input: edgerun_json::serde_json::json!({ "command": args.cmd }),
+                tool_input: edgerun_json::json!({ "command": args.cmd }),
             })
     }
 

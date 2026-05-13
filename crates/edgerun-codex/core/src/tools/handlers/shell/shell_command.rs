@@ -30,6 +30,7 @@ use super::super::shell_spec::create_shell_command_tool;
 use super::RunExecLikeArgs;
 use super::run_exec_like;
 use super::shell_command_payload_command;
+use super::shell_command_string_from_arguments;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ShellCommandBackend {
@@ -157,17 +158,24 @@ impl ToolHandler for ShellCommandHandler {
             return true;
         };
 
-        edgerun_json::serde_json::from_str::<ShellCommandToolCallParams>(arguments)
-            .map(|params| {
+        shell_command_string_from_arguments(arguments)
+            .map(|command_text| {
+                let login = edgerun_json::parse_json_tape(arguments)
+                    .ok()
+                    .and_then(|tape| {
+                        tape.root(arguments)
+                            .and_then(|root| root.get("login"))
+                            .and_then(|login| login.as_bool())
+                    });
                 let use_login_shell = match Self::resolve_use_login_shell(
-                    params.login,
+                    login,
                     invocation.turn.tools_config.allow_login_shell,
                 ) {
                     Ok(use_login_shell) => use_login_shell,
                     Err(_) => return true,
                 };
                 let shell = invocation.session.user_shell();
-                let command = Self::base_command(shell.as_ref(), &params.command, use_login_shell);
+                let command = Self::base_command(shell.as_ref(), &command_text, use_login_shell);
                 !is_known_safe_command(&command)
             })
             .unwrap_or(true)
@@ -176,7 +184,7 @@ impl ToolHandler for ShellCommandHandler {
     fn pre_tool_use_payload(&self, invocation: &ToolInvocation) -> Option<PreToolUsePayload> {
         shell_command_payload_command(&invocation.payload).map(|command| PreToolUsePayload {
             tool_name: HookToolName::bash(),
-            tool_input: edgerun_json::serde_json::json!({ "command": command }),
+            tool_input: edgerun_json::json!({ "command": command }),
         })
     }
 
@@ -191,7 +199,7 @@ impl ToolHandler for ShellCommandHandler {
         Some(PostToolUsePayload {
             tool_name: HookToolName::bash(),
             tool_use_id: invocation.call_id.clone(),
-            tool_input: edgerun_json::serde_json::json!({ "command": command }),
+            tool_input: edgerun_json::json!({ "command": command }),
             tool_response,
         })
     }

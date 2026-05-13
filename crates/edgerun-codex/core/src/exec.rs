@@ -589,7 +589,7 @@ async fn exec_windows_sandbox(
         None
     };
 
-    let policy_str = edgerun_json::serde_json::to_string(sandbox_policy).map_err(|err| {
+    let policy_str = edgerun_json::to_string(sandbox_policy).map_err(|err| {
         CodexErr::Io(io::Error::other(format!(
             "failed to serialize Windows sandbox policy: {err}"
         )))

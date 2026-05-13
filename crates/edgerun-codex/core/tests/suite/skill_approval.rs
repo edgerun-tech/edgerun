@@ -31,8 +31,8 @@ fn write_skill_metadata(home: &Path, name: &str, contents: &str) -> Result<()> {
 }
 
 fn shell_command_arguments(command: &str) -> Result<String> {
-    Ok(edgerun_json::serde_json::to_string(
-        &edgerun_json::serde_json::json!({
+    Ok(edgerun_json::to_string(
+        &edgerun_json::json!({
             "command": command,
             "timeout_ms": 500,
         }),

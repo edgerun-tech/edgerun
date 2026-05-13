@@ -11,7 +11,7 @@ description = "Edgerun node orchestration, command dispatch, query, and daemon r
 [[bin]]
 name = "edged"
 path = "src/main.rs"
-required-features = ["std"]
+required-features = ["std", "node-core"]
 
 [[bin]]
 name = "edgerun-server"
@@ -19,13 +19,32 @@ path = "src/bin/edgerun-server.rs"
 required-features = ["std", "http", "smtp", "imap", "dns"]
 
 [features]
-std = ["edgerun-tpm/std"]
+std = []
 default = [
     "std",
+    "node-core",
     "all-hardware",
     "oci",
     "protocols",
     "service-suite",
+]
+node-core = [
+    "dep:edgerun-devices",
+    "dep:edgerun-capabilities",
+    "dep:edgerun-storage",
+    "dep:edgerun-remote-capability",
+    "dep:edgerun-mesh",
+    "dep:edgerun-hardware-signing",
+    "dep:edgerun-protocols",
+    "dep:edgerun-work",
+    "dep:rkyv",
+    "edgerun-protocols/sign-p256",
+    "edgerun-protocols/keygen",
+    "edgerun-protocols/seal",
+    "edgerun-protocols/core",
+    "edgerun-protocols/wire",
+    "edgerun-protocols/ethernet-ipv4",
+    "edgerun-protocols/serial-mux",
 ]
 protocols = ["tls", "quic", "tftp"]
 client = ["http1", "http2", "runtime"]
@@ -84,7 +103,7 @@ full = [
     "service-suite",
 ]
 display = ["dep:edgerun-linux-sysfs"]
-http = ["edgerun-protocols/http"]
+http = ["dep:edgerun-protocols", "edgerun-protocols/http"]
 https = ["http", "tls"]
 dns = ["edgerun-protocols/dns"]
 dhcp = ["edgerun-protocols/dhcp"]
@@ -94,10 +113,11 @@ lmtp = ["edgerun-protocols/lmtp", "edgerun-protocols/smtp"]
 proxy = ["edgerun-protocols/proxy"]
 virtual-disk = ["dep:edgerun-virtual-disk", "edgerun-protocols/block"]
 derived-db = ["http", "edgerun-storage/std"]
-android-keystore = ["edgerun-hardware-signing/android-keystore"]
+android-keystore = ["dep:edgerun-hardware-signing", "edgerun-hardware-signing/android-keystore"]
 oci = []
 hardware = [
     "dep:edgerun-evdev-input",
+    "dep:edgerun-hardware-signing",
 ]
 all-hardware = [
     "hardware",
@@ -107,36 +127,40 @@ all-hardware = [
     "dep:edgerun-linux-sysfs",
     "virtual-disk",
     "dep:edgerun-machine-report",
+    "dep:edgerun-linux-netif",
+    "dep:edgerun-tpm",
+    "edgerun-tpm/std",
+    "dep:edgerun-yubikey",
     "edgerun-protocols/goodix-fingerprint",
     "edgerun-protocols/bluetooth-mgmt",
     "edgerun-protocols/usb",
 ]
 
 [dependencies]
-edgerun-devices.workspace = true
+edgerun-devices = { workspace = true, optional = true }
 edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding" }
-edgerun-capabilities = { version = "0.1", path = "../../capability/edgerun-capabilities" }
-edgerun-storage = { version = "0.1", path = "../../authority/edgerun-storage" }
-edgerun-remote-capability = { version = "0.1", path = "../../capability/edgerun-remote-capability" }
-edgerun-mesh = { version = "0.1", path = "../../mesh/edgerun-mesh" }
+edgerun-capabilities = { version = "0.1", path = "../../capability/edgerun-capabilities", optional = true }
+edgerun-storage = { version = "0.1", path = "../../authority/edgerun-storage", optional = true }
+edgerun-remote-capability = { version = "0.1", path = "../../capability/edgerun-remote-capability", optional = true }
+edgerun-mesh = { version = "0.1", path = "../../mesh/edgerun-mesh", optional = true }
 edgerun-crypto = { workspace = true, default-features = false, features = ["ed25519", "p256"] }
 edgerun-log = { version = "0.1", path = "../../utility/edgerun-log" }
 edgerun-platform = { version = "0.1", path = "../../edgerun-platform" }
-edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-hardware-signing", default-features = false }
+edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-hardware-signing", default-features = false, optional = true }
 edgerun-json = { version = "0.1", path = "../../utility/edgerun-json" }
 edgerun-url = { workspace = true }
-edgerun-protocols = { workspace = true, features = ["sign-p256", "keygen", "seal", "core", "wire", "ethernet-ipv4", "serial-mux"] }
-edgerun-work = { version = "0.1", path = "../../protocol/edgerun-work", default-features = false, features = ["std"] }
+edgerun-protocols = { workspace = true, optional = true }
+edgerun-work = { version = "0.1", path = "../../protocol/edgerun-work", default-features = false, features = ["std"], optional = true }
 edgerun-codelyzer = { version = "0.1", path = "../../edgerun-codelyzer", default-features = false, optional = true }
-rkyv.workspace = true
+rkyv = { workspace = true, optional = true }
 edgerun-hpack = { version = "0.1", path = "../../utility/edgerun-hpack", optional = true }
 edgerun-machine-report = { version = "0.1", path = "../edgerun-machine-report", features = ["std"], optional = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-edgerun-linux-netif = { version = "0.1", path = "../../linux-adapters/edgerun-linux-netif" }
-edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-hardware-signing", features = ["tpm", "android-keystore", "yubikey"] }
-edgerun-tpm = { version = "0.1", path = "../../identity/edgerun-tpm" }
-edgerun-yubikey = { version = "0.1", path = "../../identity/edgerun-yubikey" }
+edgerun-linux-netif = { version = "0.1", path = "../../linux-adapters/edgerun-linux-netif", optional = true }
+edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-hardware-signing", features = ["tpm", "android-keystore", "yubikey"], optional = true }
+edgerun-tpm = { version = "0.1", path = "../../identity/edgerun-tpm", optional = true }
+edgerun-yubikey = { version = "0.1", path = "../../identity/edgerun-yubikey", optional = true }
 edgerun-evdev-input = { version = "0.1", path = "../../linux-adapters/edgerun-evdev-input", optional = true }
 edgerun-linux-wifi = { version = "0.1", path = "../../linux-adapters/edgerun-linux-wifi", optional = true }
 edgerun-linux-usb = { version = "0.1", path = "../../linux-adapters/edgerun-linux-usb", optional = true }

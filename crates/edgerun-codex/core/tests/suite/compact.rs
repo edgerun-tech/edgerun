@@ -49,8 +49,8 @@ use core_test_support::responses::sse;
 use core_test_support::responses::sse_failed;
 use core_test_support::responses::sse_response;
 use core_test_support::responses::start_mock_server;
-use edgerun_json::serde_json::Value;
-use edgerun_json::serde_json::json;
+use edgerun_json::Value;
+use edgerun_json::json;
 use pretty_assertions::assert_eq;
 use std::fs;
 use std::path::Path;
@@ -119,7 +119,7 @@ fn body_contains_text(body: &str, text: &str) -> bool {
 }
 
 fn json_fragment(text: &str) -> String {
-    edgerun_json::serde_json::to_string(text)
+    edgerun_json::to_string(text)
         .expect("serialize text to JSON")
         .trim_matches('"')
         .to_string()
@@ -131,7 +131,7 @@ fn read_hook_inputs(path: &Path) -> Vec<Value> {
     text.lines()
         .filter(|line| !line.trim().is_empty())
         .map(|line| {
-            edgerun_json::serde_json::from_str(line)
+            edgerun_json::from_serde_str(line)
                 .unwrap_or_else(|err| panic!("failed to parse hook input log line: {err}"))
         })
         .collect()
@@ -248,9 +248,9 @@ fn model_info_with_context_window(slug: &str, context_window: i64) -> ModelInfo 
 }
 
 fn assert_pre_sampling_switch_compaction_requests(
-    first: &edgerun_json::serde_json::Value,
-    compact: &edgerun_json::serde_json::Value,
-    follow_up: &edgerun_json::serde_json::Value,
+    first: &edgerun_json::Value,
+    compact: &edgerun_json::Value,
+    follow_up: &edgerun_json::Value,
     previous_model: &str,
     next_model: &str,
 ) {
@@ -518,7 +518,7 @@ async fn summarize_context_three_requests_and_instructions() {
         if trimmed.is_empty() {
             continue;
         }
-        let Ok(entry): Result<RolloutLine, _> = edgerun_json::serde_json::from_str(trimmed) else {
+        let Ok(entry): Result<RolloutLine, _> = edgerun_json::from_serde_str(trimmed) else {
             continue;
         };
         match entry.item {
@@ -1042,8 +1042,8 @@ async fn multiple_auto_compact_per_task_runs_after_token_limit_hit() {
     let input = body.get("input").and_then(|v| v.as_array()).unwrap();
 
     fn strip_agents_parts_from_user_message(
-        value: &edgerun_json::serde_json::Value,
-    ) -> Option<edgerun_json::serde_json::Value> {
+        value: &edgerun_json::Value,
+    ) -> Option<edgerun_json::Value> {
         let content = value
             .get("content")
             .and_then(|content| content.as_array())?;
@@ -1061,13 +1061,13 @@ async fn multiple_auto_compact_per_task_runs_after_token_limit_hit() {
             return None;
         }
         let mut normalized = value.clone();
-        normalized["content"] = edgerun_json::serde_json::Value::Array(filtered_content);
+        normalized["content"] = edgerun_json::Value::Array(filtered_content);
         Some(normalized)
     }
 
     fn normalize_inputs(
-        values: &[edgerun_json::serde_json::Value],
-    ) -> Vec<edgerun_json::serde_json::Value> {
+        values: &[edgerun_json::Value],
+    ) -> Vec<edgerun_json::Value> {
         values
             .iter()
             .filter_map(|value| {
@@ -1896,7 +1896,7 @@ async fn auto_compact_runs_after_resume_when_token_usage_is_over_limit() {
     ];
     let compact_mock = mount_compact_json_once(
         &server,
-        edgerun_json::serde_json::json!({ "output": compacted_history }),
+        edgerun_json::json!({ "output": compacted_history }),
     )
     .await;
 
@@ -2328,7 +2328,7 @@ async fn auto_compact_persists_rollout_entries() {
         if trimmed.is_empty() {
             continue;
         }
-        let Ok(entry): Result<RolloutLine, _> = edgerun_json::serde_json::from_str(trimmed) else {
+        let Ok(entry): Result<RolloutLine, _> = edgerun_json::from_serde_str(trimmed) else {
             continue;
         };
         match entry.item {
@@ -3064,7 +3064,7 @@ async fn auto_compact_counts_encrypted_reasoning_before_last_user() {
     ];
     let compact_mock = mount_compact_json_once(
         &server,
-        edgerun_json::serde_json::json!({ "output": compacted_history }),
+        edgerun_json::json!({ "output": compacted_history }),
     )
     .await;
     let chatgpt_base_url = format!("{}/backend-api", server.uri());
@@ -3190,7 +3190,7 @@ async fn auto_compact_runs_when_reasoning_header_clears_between_turns() {
     ];
     let compact_mock = mount_compact_json_once(
         &server,
-        edgerun_json::serde_json::json!({ "output": compacted_history }),
+        edgerun_json::json!({ "output": compacted_history }),
     )
     .await;
 

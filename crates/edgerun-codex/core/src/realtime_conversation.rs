@@ -47,7 +47,7 @@ use edgerun_encoding::base64::standard_decode;
 use edgerun_http::HeaderMap;
 use edgerun_http::HeaderValue;
 use edgerun_http::header::AUTHORIZATION;
-use edgerun_json::serde_json::json;
+use edgerun_json::json;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;

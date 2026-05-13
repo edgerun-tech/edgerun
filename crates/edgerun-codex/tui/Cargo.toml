@@ -8,13 +8,15 @@ version.workspace = true
 name = "codex-tui"
 path = "src/main.rs"
 
+[[bin]]
+name = "edgerun-codex"
+path = "src/bin/edgerun-codex.rs"
+
 [dependencies]
 codex-core = { workspace = true, features = ["native-transport"] }
-crossterm = "0.29"
 edgerun-http = { workspace = true }
-edgerun-json = { workspace = true, features = ["serde-compat"] }
+edgerun-json = { workspace = true }
 edgerun-tokio = { workspace = true, features = ["rt", "sync"] }
-ratatui = "0.29"
 
 [lints]
 workspace = true

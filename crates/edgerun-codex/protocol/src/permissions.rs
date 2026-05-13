@@ -6,7 +6,6 @@ use std::path::PathBuf;
 
 use crate::compat::absolute_path::AbsolutePathBuf;
 use crate::compat::absolute_path::canonicalize_preserving_symlinks;
-use edgerun_glob::glob_match_with_separator;
 use edgerun_serde::Deserialize;
 use edgerun_serde::Serialize;
 use edgerun_strum_macros::Display;
@@ -28,6 +27,120 @@ pub const PROTECTED_METADATA_PATH_NAMES: &[&str] = &[
     PROTECTED_METADATA_AGENTS_PATH_NAME,
     PROTECTED_METADATA_CODEX_PATH_NAME,
 ];
+
+fn glob_match_with_separator(pattern: &str, path: &str, sep: char) -> bool {
+    let pattern: Vec<char> = pattern.chars().collect();
+    let path: Vec<char> = path.chars().collect();
+    glob_match_from(&pattern, 0, &path, 0, sep)
+}
+
+fn glob_match_from(pattern: &[char], pi: usize, path: &[char], ti: usize, sep: char) -> bool {
+    let mut pi = pi;
+    let mut ti = ti;
+
+    while pi < pattern.len() {
+        match pattern[pi] {
+            '*' if pattern.get(pi + 1) == Some(&'*') => {
+                pi += 2;
+                if pattern.get(pi) == Some(&sep) {
+                    pi += 1;
+                }
+                if pi == pattern.len() {
+                    return true;
+                }
+                let mut scan = ti;
+                loop {
+                    if glob_match_from(pattern, pi, path, scan, sep) {
+                        return true;
+                    }
+                    if scan == path.len() {
+                        return false;
+                    }
+                    scan += 1;
+                }
+            }
+            '*' => {
+                pi += 1;
+                if pi == pattern.len() {
+                    return !path[ti..].contains(&sep);
+                }
+                let mut scan = ti;
+                loop {
+                    if glob_match_from(pattern, pi, path, scan, sep) {
+                        return true;
+                    }
+                    if scan == path.len() || path[scan] == sep {
+                        return false;
+                    }
+                    scan += 1;
+                }
+            }
+            '?' => {
+                if ti == path.len() || path[ti] == sep {
+                    return false;
+                }
+                pi += 1;
+                ti += 1;
+            }
+            '[' => {
+                if ti == path.len() || path[ti] == sep {
+                    return false;
+                }
+                let Some((next_pi, matched)) = glob_match_class(pattern, pi, path[ti]) else {
+                    if path.get(ti) != Some(&pattern[pi]) {
+                        return false;
+                    }
+                    pi += 1;
+                    ti += 1;
+                    continue;
+                };
+                if !matched {
+                    return false;
+                }
+                pi = next_pi;
+                ti += 1;
+            }
+            literal => {
+                if path.get(ti) != Some(&literal) {
+                    return false;
+                }
+                pi += 1;
+                ti += 1;
+            }
+        }
+    }
+
+    ti == path.len()
+}
+
+fn glob_match_class(pattern: &[char], start: usize, ch: char) -> Option<(usize, bool)> {
+    let mut end = start + 1;
+    while end < pattern.len() && pattern[end] != ']' {
+        end += 1;
+    }
+    if end == pattern.len() {
+        return None;
+    }
+
+    let mut i = start + 1;
+    let negated = matches!(pattern.get(i), Some('!' | '^'));
+    if negated {
+        i += 1;
+    }
+
+    let mut matched = false;
+    while i < end {
+        if i + 2 < end && pattern[i + 1] == '-' {
+            matched |= pattern[i] <= ch && ch <= pattern[i + 2];
+            i += 3;
+        } else {
+            matched |= pattern[i] == ch;
+            i += 1;
+        }
+    }
+
+    Some((end + 1, if negated { !matched } else { matched }))
+}
 
 /// Returns true when a path basename is one of the protected workspace metadata names.
 pub fn is_protected_metadata_name(name: &OsStr) -> bool {
@@ -1857,19 +1970,19 @@ mod tests {
 
     #[test]
     fn legacy_current_working_directory_special_path_deserializes_as_project_roots()
-    -> edgerun_json::serde_json::Result<()> {
-        let value = edgerun_json::serde_json::json!({
+    -> edgerun_json::Result<()> {
+        let value = edgerun_json::json!({
             "kind": "current_working_directory",
         });
 
-        let special_path = edgerun_json::serde_json::from_value::<FileSystemSpecialPath>(value)?;
+        let special_path = edgerun_json::from_value::<FileSystemSpecialPath>(value)?;
         assert_eq!(
             special_path,
             FileSystemSpecialPath::project_roots(/*subpath*/ None)
         );
         assert_eq!(
-            edgerun_json::serde_json::to_value(&special_path)?,
-            edgerun_json::serde_json::json!({
+            edgerun_json::to_value(&special_path)?,
+            edgerun_json::json!({
                 "kind": "project_roots",
             })
         );

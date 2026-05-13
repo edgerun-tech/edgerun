@@ -43,7 +43,7 @@ use std::path::PathBuf;
 use super::*;
 use crate::tools::tool_search_entry::build_tool_search_entries_for_config;
 
-fn mcp_tool(name: &str, description: &str, input_schema: edgerun_json::serde_json::Value) -> rmcp::model::Tool {
+fn mcp_tool(name: &str, description: &str, input_schema: edgerun_json::Value) -> rmcp::model::Tool {
     rmcp::model::Tool {
         name: name.to_string().into(),
         title: None,
@@ -119,7 +119,7 @@ fn deferred_responses_api_tool_serializes_with_defer_loading() {
     let tool = mcp_tool(
         "lookup_order",
         "Look up an order",
-        edgerun_json::serde_json::json!({
+        edgerun_json::json!({
             "type": "object",
             "properties": {
                 "order_id": {"type": "string"}
@@ -129,7 +129,7 @@ fn deferred_responses_api_tool_serializes_with_defer_loading() {
         }),
     );
 
-    let serialized = edgerun_json::serde_json::to_value(ToolSpec::Function(
+    let serialized = edgerun_json::to_serde_value(ToolSpec::Function(
         mcp_tool_to_deferred_responses_api_tool(
             &ToolName::namespaced("mcp__codex_apps__", "lookup_order"),
             &tool,
@@ -140,7 +140,7 @@ fn deferred_responses_api_tool_serializes_with_defer_loading() {
 
     assert_eq!(
         serialized,
-        edgerun_json::serde_json::json!({
+        edgerun_json::json!({
             "type": "function",
             "name": "lookup_order",
             "description": "Look up an order",
@@ -898,7 +898,7 @@ async fn search_tool_description_falls_back_to_connector_name_without_descriptio
             tool: mcp_tool(
                 "calendar_create_event",
                 "Create calendar event",
-                edgerun_json::serde_json::json!({"type": "object"}),
+                edgerun_json::json!({"type": "object"}),
             ),
             connector_id: Some("calendar".to_string()),
             connector_name: Some("Calendar".to_string()),
@@ -946,7 +946,7 @@ async fn search_tool_registers_namespaced_mcp_tool_aliases() {
                 tool: mcp_tool(
                     "calendar-create-event",
                     "Create calendar event",
-                    edgerun_json::serde_json::json!({"type": "object"}),
+                    edgerun_json::json!({"type": "object"}),
                 ),
                 connector_id: Some("calendar".to_string()),
                 connector_name: Some("Calendar".to_string()),
@@ -960,7 +960,7 @@ async fn search_tool_registers_namespaced_mcp_tool_aliases() {
                 tool: mcp_tool(
                     "calendar-list-events",
                     "List calendar events",
-                    edgerun_json::serde_json::json!({"type": "object"}),
+                    edgerun_json::json!({"type": "object"}),
                 ),
                 connector_id: Some("calendar".to_string()),
                 connector_name: Some("Calendar".to_string()),
@@ -971,7 +971,7 @@ async fn search_tool_registers_namespaced_mcp_tool_aliases() {
                 callable_name: "echo".to_string(),
                 callable_namespace: "mcp__rmcp__".to_string(),
                 namespace_description: None,
-                tool: mcp_tool("echo", "Echo", edgerun_json::serde_json::json!({"type": "object"})),
+                tool: mcp_tool("echo", "Echo", edgerun_json::json!({"type": "object"})),
                 connector_id: None,
                 connector_name: None,
                 plugin_display_names: Vec::new(),
@@ -1009,21 +1009,21 @@ async fn tool_search_entries_skip_namespace_outputs_when_namespace_tools_are_dis
     let mcp_tools = vec![mcp_tool_info(mcp_tool(
         "echo",
         "Echo",
-        edgerun_json::serde_json::json!({"type": "object"}),
+        edgerun_json::json!({"type": "object"}),
     ))];
     let dynamic_tools = vec![
         DynamicToolSpec {
             namespace: Some("codex_app".to_string()),
             name: "automation_update".to_string(),
             description: "Create or update automations.".to_string(),
-            input_schema: edgerun_json::serde_json::json!({"type": "object", "properties": {}}),
+            input_schema: edgerun_json::json!({"type": "object", "properties": {}}),
             defer_loading: true,
         },
         DynamicToolSpec {
             namespace: None,
             name: "plain_dynamic".to_string(),
             description: "Plain dynamic tool.".to_string(),
-            input_schema: edgerun_json::serde_json::json!({"type": "object", "properties": {}}),
+            input_schema: edgerun_json::json!({"type": "object", "properties": {}}),
             defer_loading: true,
         },
     ];
@@ -1065,7 +1065,7 @@ async fn direct_mcp_tools_register_namespaced_handlers() {
         Some(vec![mcp_tool_info(mcp_tool(
             "echo",
             "Echo",
-            edgerun_json::serde_json::json!({"type": "object"}),
+            edgerun_json::json!({"type": "object"}),
         ))]),
         /*deferred_mcp_tools*/ None,
         &[],
@@ -1150,7 +1150,7 @@ async fn test_mcp_tool_property_missing_type_defaults_to_string() {
             mcp_tool(
                 "search",
                 "Search docs",
-                edgerun_json::serde_json::json!({
+                edgerun_json::json!({
                     "type": "object",
                     "properties": {
                         "query": {"description": "search query"}
@@ -1179,7 +1179,7 @@ async fn test_mcp_tool_property_missing_type_defaults_to_string() {
             ),
             description: "Search docs".to_string(),
             strict: false,
-            output_schema: Some(mcp_call_tool_result_output_schema(edgerun_json::serde_json::json!({}))),
+            output_schema: Some(mcp_call_tool_result_output_schema(edgerun_json::json!({}))),
             defer_loading: None,
         }
     );
@@ -1210,7 +1210,7 @@ async fn test_mcp_tool_preserves_integer_schema() {
             mcp_tool(
                 "paginate",
                 "Pagination",
-                edgerun_json::serde_json::json!({
+                edgerun_json::json!({
                     "type": "object",
                     "properties": {"page": {"type": "integer"}}
                 }),
@@ -1237,7 +1237,7 @@ async fn test_mcp_tool_preserves_integer_schema() {
             ),
             description: "Pagination".to_string(),
             strict: false,
-            output_schema: Some(mcp_call_tool_result_output_schema(edgerun_json::serde_json::json!({}))),
+            output_schema: Some(mcp_call_tool_result_output_schema(edgerun_json::json!({}))),
             defer_loading: None,
         }
     );
@@ -1269,7 +1269,7 @@ async fn test_mcp_tool_array_without_items_gets_default_string_items() {
             mcp_tool(
                 "tags",
                 "Tags",
-                edgerun_json::serde_json::json!({
+                edgerun_json::json!({
                     "type": "object",
                     "properties": {"tags": {"type": "array"}}
                 }),
@@ -1299,7 +1299,7 @@ async fn test_mcp_tool_array_without_items_gets_default_string_items() {
             ),
             description: "Tags".to_string(),
             strict: false,
-            output_schema: Some(mcp_call_tool_result_output_schema(edgerun_json::serde_json::json!({}))),
+            output_schema: Some(mcp_call_tool_result_output_schema(edgerun_json::json!({}))),
             defer_loading: None,
         }
     );
@@ -1330,7 +1330,7 @@ async fn test_mcp_tool_anyof_defaults_to_string() {
             mcp_tool(
                 "value",
                 "AnyOf Value",
-                edgerun_json::serde_json::json!({
+                edgerun_json::json!({
                     "type": "object",
                     "properties": {
                         "value": {"anyOf": [{"type": "string"}, {"type": "number"}]}
@@ -1365,7 +1365,7 @@ async fn test_mcp_tool_anyof_defaults_to_string() {
             ),
             description: "AnyOf Value".to_string(),
             strict: false,
-            output_schema: Some(mcp_call_tool_result_output_schema(edgerun_json::serde_json::json!({}))),
+            output_schema: Some(mcp_call_tool_result_output_schema(edgerun_json::json!({}))),
             defer_loading: None,
         }
     );
@@ -1395,7 +1395,7 @@ async fn test_get_openai_tools_mcp_tools_with_additional_properties_schema() {
             mcp_tool(
                 "do_something_cool",
                 "Do something cool",
-                edgerun_json::serde_json::json!({
+                edgerun_json::json!({
                     "type": "object",
                     "properties": {
                     "string_argument": {"type": "string"},
@@ -1477,7 +1477,7 @@ async fn test_get_openai_tools_mcp_tools_with_additional_properties_schema() {
             ),
             description: "Do something cool".to_string(),
             strict: false,
-            output_schema: Some(mcp_call_tool_result_output_schema(edgerun_json::serde_json::json!({}))),
+            output_schema: Some(mcp_call_tool_result_output_schema(edgerun_json::json!({}))),
             defer_loading: None,
         }
     );

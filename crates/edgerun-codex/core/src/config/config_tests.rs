@@ -2429,7 +2429,7 @@ exclude_slash_tmp = true
 [projects."/tmp/test"]
 trust_level = "trusted"
 "#,
-        edgerun_json::serde_json::json!(writable_root)
+        edgerun_json::json!(writable_root)
     );
 
     let sandbox_workspace_write_cfg = toml::from_str::<ConfigToml>(&sandbox_workspace_write)
@@ -2469,7 +2469,7 @@ writable_roots = [
 exclude_tmpdir_env_var = true
 exclude_slash_tmp = true
 "#,
-        edgerun_json::serde_json::json!(writable_root)
+        edgerun_json::json!(writable_root)
     );
 
     let sandbox_workspace_write_cfg = toml::from_str::<ConfigToml>(&sandbox_workspace_write)
@@ -2527,7 +2527,7 @@ writable_roots = [{}]
 exclude_tmpdir_env_var = true
 exclude_slash_tmp = true
 "#,
-                edgerun_json::serde_json::json!(extra_root)
+                edgerun_json::json!(extra_root)
             ),
         ),
     ];
@@ -6787,7 +6787,7 @@ async fn model_catalog_json_loads_from_path() -> std::io::Result<()> {
     catalog.models = catalog.models.into_iter().take(1).collect();
     std::fs::write(
         &catalog_path,
-        edgerun_json::serde_json::to_string(&catalog).expect("serialize catalog"),
+        edgerun_json::to_string(&catalog).expect("serialize catalog"),
     )?;
 
     let cfg = ConfigToml {

@@ -7,8 +7,8 @@ use core_test_support::responses::sse;
 use core_test_support::responses::sse_response;
 use core_test_support::responses::start_mock_server;
 use core_test_support::test_codex::test_codex;
-use edgerun_json::serde_json::Value;
-use edgerun_json::serde_json::json;
+use edgerun_json::Value;
+use edgerun_json::json;
 use regex_lite::Regex;
 use std::fs;
 use std::sync::Arc;
@@ -56,7 +56,7 @@ impl StopAfterFirstResponder {
 impl Respond for StopAfterFirstResponder {
     fn respond(&self, request: &wiremock::Request) -> ResponseTemplate {
         let body_bytes = decode_body_bytes(request);
-        let body: Value = edgerun_json::serde_json::from_slice(&body_bytes).unwrap_or(Value::Null);
+        let body: Value = edgerun_json::from_serde_slice(&body_bytes).unwrap_or(Value::Null);
 
         if has_function_call_output(&body) {
             return sse_response(sse(vec![
@@ -75,7 +75,7 @@ impl Respond for StopAfterFirstResponder {
                 "result": { "item_id": item_id },
                 "stop": stop,
             });
-            let args_json = edgerun_json::serde_json::to_string(&args).unwrap_or_else(|err| {
+            let args_json = edgerun_json::to_string(&args).unwrap_or_else(|err| {
                 panic!("worker args serialize: {err}");
             });
             return sse_response(sse(vec![
@@ -103,7 +103,7 @@ impl Respond for StopAfterFirstResponder {
 impl Respond for AgentJobsResponder {
     fn respond(&self, request: &wiremock::Request) -> ResponseTemplate {
         let body_bytes = decode_body_bytes(request);
-        let body: Value = edgerun_json::serde_json::from_slice(&body_bytes).unwrap_or(Value::Null);
+        let body: Value = edgerun_json::from_serde_slice(&body_bytes).unwrap_or(Value::Null);
 
         if has_function_call_output(&body) {
             return sse_response(sse(vec![
@@ -122,7 +122,7 @@ impl Respond for AgentJobsResponder {
                 "item_id": item_id,
                 "result": { "item_id": item_id }
             });
-            let args_json = edgerun_json::serde_json::to_string(&args).unwrap_or_else(|err| {
+            let args_json = edgerun_json::to_string(&args).unwrap_or_else(|err| {
                 panic!("worker args serialize: {err}");
             });
             return sse_response(sse(vec![
@@ -242,7 +242,7 @@ async fn report_agent_job_result_rejects_wrong_thread() -> Result<()> {
         "instruction": "Return {path}",
         "output_csv_path": output_path.display().to_string(),
     });
-    let args_json = edgerun_json::serde_json::to_string(&args)?;
+    let args_json = edgerun_json::to_string(&args)?;
 
     let responder = AgentJobsResponder::new(args_json);
     Mock::given(method("POST"))
@@ -308,7 +308,7 @@ async fn spawn_agents_on_csv_runs_and_exports() -> Result<()> {
         "instruction": "Return {path}",
         "output_csv_path": output_path.display().to_string(),
     });
-    let args_json = edgerun_json::serde_json::to_string(&args)?;
+    let args_json = edgerun_json::to_string(&args)?;
 
     let responder = AgentJobsResponder::new(args_json);
     Mock::given(method("POST"))
@@ -352,7 +352,7 @@ async fn spawn_agents_on_csv_dedupes_item_ids() -> Result<()> {
         "id_column": "id",
         "output_csv_path": output_path.display().to_string(),
     });
-    let args_json = edgerun_json::serde_json::to_string(&args)?;
+    let args_json = edgerun_json::to_string(&args)?;
 
     let responder = AgentJobsResponder::new(args_json);
     Mock::given(method("POST"))
@@ -410,7 +410,7 @@ async fn spawn_agents_on_csv_stop_halts_future_items() -> Result<()> {
         "output_csv_path": output_path.display().to_string(),
         "max_concurrency": 1,
     });
-    let args_json = edgerun_json::serde_json::to_string(&args)?;
+    let args_json = edgerun_json::to_string(&args)?;
 
     let worker_calls = Arc::new(AtomicUsize::new(0));
     let responder = StopAfterFirstResponder::new(args_json, worker_calls.clone());

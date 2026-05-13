@@ -300,6 +300,18 @@ impl<T: FromJson> FromJson for Vec<T> {
     }
 }
 
+impl<T: ToJson + ?Sized> ToJson for Box<T> {
+    fn to_json(&self) -> JsonValue {
+        self.as_ref().to_json()
+    }
+}
+
+impl<T: FromJson> FromJson for Box<T> {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        T::from_json(value).map(Box::new)
+    }
+}
+
 impl<T: ToJson> ToJson for BTreeMap<String, T> {
     fn to_json(&self) -> JsonValue {
         let mut object: Map = Map::with_capacity(self.len());

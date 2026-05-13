@@ -40,7 +40,7 @@ codex-models-manager = { workspace = true, optional = true }
 codex-protocol = { workspace = true }
 codex-shell-command = { workspace = true }
 codex-tools = { path = "../tools", default-features = false }
-edgerun-json = { workspace = true, features = ["serde-compat"] }
+edgerun-json = { workspace = true }
 edgerun-reqwest = { workspace = true, default-features = false, optional = true }
 
 [dev-dependencies]

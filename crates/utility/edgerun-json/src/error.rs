@@ -177,6 +177,12 @@ impl From<JsonParseError> for JsonError {
     }
 }
 
+impl From<crate::JsonValueError> for JsonError {
+    fn from(error: crate::JsonValueError) -> Self {
+        Self::Message(error.to_string())
+    }
+}
+
 impl JsonError {
     #[cfg(all(feature = "std", not(target_os = "none")))]
     pub fn io(_error: std::io::Error) -> Self {

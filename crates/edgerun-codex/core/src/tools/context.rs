@@ -22,7 +22,7 @@ use codex_utils_output_truncation::TruncationPolicy;
 use codex_utils_output_truncation::formatted_truncate_text;
 use codex_utils_string::take_bytes_at_char_boundary;
 use serde::Serialize;
-use edgerun_json::serde_json::Value as JsonValue;
+use edgerun_json::Value as JsonValue;
 use std::borrow::Cow;
 use std::sync::Arc;
 use std::time::Duration;
@@ -131,7 +131,7 @@ impl ToolOutput for CallToolResult {
     }
 
     fn code_mode_result(&self, _payload: &ToolPayload) -> JsonValue {
-        edgerun_json::serde_json::to_value(self).unwrap_or_else(|err| {
+        edgerun_json::to_serde_value(self).unwrap_or_else(|err| {
             JsonValue::String(format!("failed to serialize mcp result: {err}"))
         })
     }
@@ -150,7 +150,7 @@ impl ToolOutput for McpToolOutput {
     fn log_preview(&self) -> String {
         let payload = self.response_payload();
         let preview = payload.body.to_text().unwrap_or_else(|| {
-            edgerun_json::serde_json::to_string(&self.result.content)
+            edgerun_json::to_string(&self.result.content)
                 .unwrap_or_else(|err| format!("failed to serialize mcp result: {err}"))
         });
         telemetry_preview(&preview)
@@ -168,13 +168,13 @@ impl ToolOutput for McpToolOutput {
     }
 
     fn code_mode_result(&self, _payload: &ToolPayload) -> JsonValue {
-        edgerun_json::serde_json::to_value(&self.result).unwrap_or_else(|err| {
+        edgerun_json::to_serde_value(&self.result).unwrap_or_else(|err| {
             JsonValue::String(format!("failed to serialize mcp result: {err}"))
         })
     }
 
     fn post_tool_use_response(&self, _call_id: &str, _payload: &ToolPayload) -> Option<JsonValue> {
-        edgerun_json::serde_json::to_value(&self.result).ok()
+        edgerun_json::to_serde_value(&self.result).ok()
     }
 }
 
@@ -222,7 +222,7 @@ impl ToolOutput for ToolSearchOutput {
             .tools
             .iter()
             .map(|tool| {
-                edgerun_json::serde_json::to_value(tool).unwrap_or_else(|err| {
+                edgerun_json::to_serde_value(tool).unwrap_or_else(|err| {
                     JsonValue::String(format!("failed to serialize tool_search output: {err}"))
                 })
             })
@@ -243,7 +243,7 @@ impl ToolOutput for ToolSearchOutput {
                 .tools
                 .iter()
                 .map(|tool| {
-                    edgerun_json::serde_json::to_value(tool).unwrap_or_else(|err| {
+                    edgerun_json::to_serde_value(tool).unwrap_or_else(|err| {
                         JsonValue::String(format!("failed to serialize tool_search output: {err}"))
                     })
                 })
@@ -338,7 +338,7 @@ impl ToolOutput for ApplyPatchToolOutput {
     }
 
     fn code_mode_result(&self, _payload: &ToolPayload) -> JsonValue {
-        JsonValue::Object(edgerun_json::serde_json::Map::new())
+        JsonValue::Object(edgerun_json::Map::new())
     }
 }
 
@@ -445,7 +445,7 @@ impl ToolOutput for ExecCommandToolOutput {
             output: self.truncated_output(),
         };
 
-        edgerun_json::serde_json::to_value(result).unwrap_or_else(|err| {
+        edgerun_json::to_serde_value(result).unwrap_or_else(|err| {
             JsonValue::String(format!("failed to serialize exec result: {err}"))
         })
     }

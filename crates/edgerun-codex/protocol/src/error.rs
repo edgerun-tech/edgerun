@@ -146,7 +146,7 @@ pub enum CodexErr {
     #[error(transparent)]
     Io(#[from] io::Error),
     #[error(transparent)]
-    Json(#[from] edgerun_json::serde_json::Error),
+    Json(#[from] edgerun_json::JsonError),
     #[cfg(target_os = "linux")]
     #[error(transparent)]
     LandlockRuleset(#[from] landlock::RulesetError),
@@ -326,13 +326,12 @@ impl UnexpectedResponseError {
     }
 
     fn extract_error_message(&self) -> Option<String> {
-        let json =
-            edgerun_json::serde_json::from_str::<edgerun_json::serde_json::Value>(&self.body)
-                .ok()?;
-        let message = json
+        let tape = edgerun_json::parse_json_tape(&self.body).ok()?;
+        let message = tape
+            .root(&self.body)?
             .get("error")
             .and_then(|error| error.get("message"))
-            .and_then(edgerun_json::serde_json::Value::as_str)?;
+            .and_then(|message| message.as_str())?;
         let message = message.trim();
         if message.is_empty() {
             None

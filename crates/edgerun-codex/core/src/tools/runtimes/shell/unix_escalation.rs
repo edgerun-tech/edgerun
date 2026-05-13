@@ -61,7 +61,7 @@ use codex_shell_escalation::ResolvedPermissionProfile;
 use codex_shell_escalation::ShellCommandExecutor;
 use codex_shell_escalation::Stopwatch;
 use codex_utils_absolute_path::AbsolutePathBuf;
-use edgerun_uuid::Uuid;
+use codex_protocol::local_uuid::Uuid;
 use std::collections::HashMap;
 use std::path::Path;
 use std::path::PathBuf;

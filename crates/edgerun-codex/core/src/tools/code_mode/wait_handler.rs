@@ -1,5 +1,3 @@
-use serde::Deserialize;
-
 use crate::function_tool::FunctionCallError;
 use crate::tools::context::FunctionToolOutput;
 use crate::tools::context::ToolInvocation;
@@ -8,6 +6,9 @@ use crate::tools::registry::ToolHandler;
 use crate::tools::registry::ToolKind;
 use codex_tools::ToolName;
 use codex_tools::ToolSpec;
+use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
+use edgerun_json::Value;
 
 use super::DEFAULT_WAIT_YIELD_TIME_MS;
 use super::ExecContext;
@@ -17,28 +18,26 @@ use super::wait_spec::create_wait_tool;
 
 pub struct CodeModeWaitHandler;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug)]
 struct ExecWaitArgs {
     cell_id: String,
-    #[serde(default = "default_wait_yield_time_ms")]
     yield_time_ms: u64,
-    #[serde(default)]
     max_tokens: Option<usize>,
-    #[serde(default)]
     terminate: bool,
 }
 
-fn default_wait_yield_time_ms() -> u64 {
-    DEFAULT_WAIT_YIELD_TIME_MS
-}
-
-fn parse_arguments<T>(arguments: &str) -> Result<T, FunctionCallError>
-where
-    T: for<'de> Deserialize<'de>,
-{
-    edgerun_json::serde_json::from_str(arguments).map_err(|err| {
-        FunctionCallError::RespondToModel(format!("failed to parse function arguments: {err}"))
-    })
+impl FromJson for ExecWaitArgs {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ExecWaitArgs")?;
+        Ok(Self {
+            cell_id: object.take_required("cell_id")?,
+            yield_time_ms: object
+                .take_optional("yield_time_ms")?
+                .unwrap_or(DEFAULT_WAIT_YIELD_TIME_MS),
+            max_tokens: object.take_optional("max_tokens")?,
+            terminate: object.take_optional("terminate")?.unwrap_or(false),
+        })
+    }
 }
 
 impl ToolHandler for CodeModeWaitHandler {
@@ -69,7 +68,11 @@ impl ToolHandler for CodeModeWaitHandler {
             ToolPayload::Function { arguments }
                 if tool_name.namespace.is_none() && tool_name.name.as_str() == WAIT_TOOL_NAME =>
             {
-                let args: ExecWaitArgs = parse_arguments(&arguments)?;
+                let args: ExecWaitArgs = edgerun_json::from_json_str(&arguments).map_err(|err| {
+                    FunctionCallError::RespondToModel(format!(
+                        "failed to parse function arguments: {err}"
+                    ))
+                })?;
                 let exec = ExecContext { session, turn };
                 let started_at = std::time::Instant::now();
                 let wait_response = exec

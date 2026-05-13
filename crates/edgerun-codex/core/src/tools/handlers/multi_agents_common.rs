@@ -24,7 +24,7 @@ use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::user_input::UserInput;
 use serde::Serialize;
-use edgerun_json::serde_json::Value as JsonValue;
+use edgerun_json::Value as JsonValue;
 use std::collections::HashMap;
 
 /// Minimum wait timeout to prevent tight polling loops from burning CPU.
@@ -45,7 +45,7 @@ pub(crate) fn tool_output_json_text<T>(value: &T, tool_name: &str) -> String
 where
     T: Serialize,
 {
-    edgerun_json::serde_json::to_string(value).unwrap_or_else(|err| {
+    edgerun_json::to_string(value).unwrap_or_else(|err| {
         JsonValue::String(format!("failed to serialize {tool_name} result: {err}")).to_string()
     })
 }
@@ -68,7 +68,7 @@ pub(crate) fn tool_output_code_mode_result<T>(value: &T, tool_name: &str) -> Jso
 where
     T: Serialize,
 {
-    edgerun_json::serde_json::to_value(value).unwrap_or_else(|err| {
+    edgerun_json::to_serde_value(value).unwrap_or_else(|err| {
         JsonValue::String(format!("failed to serialize {tool_name} result: {err}"))
     })
 }

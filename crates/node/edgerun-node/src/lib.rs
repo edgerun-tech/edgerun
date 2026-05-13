@@ -15,27 +15,38 @@ extern crate alloc;
 #[cfg(not(target_os = "none"))]
 extern crate std;
 
+#[cfg(feature = "node-core")]
 pub mod app_model;
+#[cfg(feature = "node-core")]
 pub mod bootstrap;
+#[cfg(feature = "node-core")]
 pub mod command_dispatch;
+#[cfg(feature = "node-core")]
 pub mod command_dispatch_event;
+#[cfg(feature = "node-core")]
 pub mod command_dispatch_result;
 #[cfg(feature = "dns")]
 pub mod dns;
+#[cfg(feature = "node-core")]
 pub mod error;
-#[cfg(all(feature = "std", not(target_arch = "wasm32")))]
+#[cfg(all(feature = "node-core", feature = "std", not(target_arch = "wasm32")))]
 pub mod hardware;
 #[cfg(feature = "http")]
 pub mod http;
 #[cfg(feature = "http")]
 pub mod http_client;
 pub mod logging;
+#[cfg(feature = "node-core")]
 pub mod mesh_node;
+#[cfg(feature = "node-core")]
 pub mod network;
+#[cfg(feature = "node-core")]
 pub mod router;
 pub mod rt;
+#[cfg(feature = "node-core")]
 pub mod runtime;
 #[cfg(all(
+    feature = "node-core",
     not(target_arch = "wasm32"),
     any(
         feature = "http",
@@ -51,7 +62,9 @@ pub mod runtime;
     )
 ))]
 pub mod services;
+#[cfg(feature = "node-core")]
 pub mod storage;
+#[cfg(feature = "node-core")]
 pub mod stream_append;
 #[cfg(feature = "tls")]
 pub mod tls;
@@ -62,9 +75,10 @@ pub mod work_quic_transport;
 #[cfg(feature = "xray")]
 pub mod xray;
 
+#[cfg(feature = "node-core")]
 mod protocol_signer;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "node-core"))]
 pub(crate) mod test_support {
     use alloc::format;
     use std::sync::Mutex;
@@ -124,30 +138,50 @@ pub(crate) mod test_support {
     }
 }
 
+#[cfg(feature = "node-core")]
 use alloc::collections::{BTreeMap, BTreeSet};
+#[cfg(feature = "node-core")]
 use alloc::format;
+#[cfg(feature = "node-core")]
 use alloc::string::{String, ToString};
+#[cfg(feature = "node-core")]
 use alloc::sync::Arc;
+#[cfg(feature = "node-core")]
 use alloc::vec::Vec;
 
+#[cfg(feature = "node-core")]
 use edgerun_capabilities::SimplePolicyEngine;
+#[cfg(feature = "node-core")]
 use edgerun_hardware_signing::NodeID;
+#[cfg(feature = "node-core")]
 use edgerun_protocols::core_protocol::command::{CommandValidationContext, validate_command};
+#[cfg(feature = "node-core")]
 use edgerun_protocols::core_protocol::protocol::{CommandEnvelope, EventEnvelope, EventType};
+#[cfg(feature = "node-core")]
 use edgerun_protocols::core_protocol::result::Verdict;
+#[cfg(feature = "node-core")]
 use edgerun_protocols::core_protocol::util::now_unix_millis_i64 as now_ms;
+#[cfg(feature = "node-core")]
 use edgerun_protocols::core_protocol::value::Value;
+#[cfg(feature = "node-core")]
 use edgerun_protocols::sign::ProtocolSigner;
+#[cfg(feature = "node-core")]
 use edgerun_storage::core::EventLog;
+#[cfg(feature = "node-core")]
 use edgerun_storage::{DurableStreamWriter, MemEventLog};
+#[cfg(feature = "node-core")]
 pub use error::{NodeError, NodeResult};
+#[cfg(feature = "node-core")]
 use protocol_signer::MeshProtocolSigner;
 
+#[cfg(feature = "node-core")]
 type HashMap<K, V> = BTreeMap<K, V>;
+#[cfg(feature = "node-core")]
 type HashSet<T> = BTreeSet<T>;
 
 /// Minimal node construction input.
 #[derive(Clone, Debug, Default)]
+#[cfg(feature = "node-core")]
 pub struct NodeConfig {
     /// The node's stream identifier.
     pub stream_id: String,
@@ -159,6 +193,7 @@ pub struct NodeConfig {
     pub trust_nodes: Vec<String>,
 }
 
+#[cfg(feature = "node-core")]
 impl NodeConfig {
     pub fn new(
         stream_id: impl Into<String>,
@@ -184,6 +219,7 @@ impl NodeConfig {
 /// The node owns its stream, manages capability grants, and processes
 /// incoming commands through the full validation → authorization →
 /// event recording pipeline.
+#[cfg(feature = "node-core")]
 pub struct Node<L = MemEventLog, S = MeshProtocolSigner> {
     /// The node's identity (public key).
     identity: NodeID,
@@ -200,6 +236,7 @@ pub struct Node<L = MemEventLog, S = MeshProtocolSigner> {
     revoked_delegation_ids: HashSet<Vec<u8>>,
 }
 
+#[cfg(feature = "node-core")]
 impl Node<MemEventLog, MeshProtocolSigner> {
     /// Creates a new node from native construction input.
     ///
@@ -213,6 +250,7 @@ impl Node<MemEventLog, MeshProtocolSigner> {
     }
 }
 
+#[cfg(feature = "node-core")]
 impl<L: EventLog> Node<L, MeshProtocolSigner> {
     /// Creates a new node backed by a caller-provided durable event log.
     pub fn from_config_with_event_log(
@@ -226,6 +264,7 @@ impl<L: EventLog> Node<L, MeshProtocolSigner> {
     }
 }
 
+#[cfg(feature = "node-core")]
 impl<L: EventLog, S: ProtocolSigner> Node<L, S> {
     /// Creates a new node backed by a caller-provided protocol signer.
     pub fn from_config_with_protocol_signer(

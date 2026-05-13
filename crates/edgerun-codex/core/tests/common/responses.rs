@@ -9,7 +9,7 @@ use codex_protocol::models::ContentItem;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::openai_models::ModelsResponse;
 use edgerun_error::Result;
-use edgerun_json::serde_json::Value;
+use edgerun_json::Value;
 use edgerun_tokio_tungstenite::Message;
 use edgerun_tokio_tungstenite::accept_hdr_async_with_config;
 use edgerun_tungstenite::extensions::ExtensionsConfig;
@@ -109,7 +109,7 @@ impl ResponsesRequest {
                 .get("content-encoding")
                 .and_then(|value| value.to_str().ok()),
         );
-        edgerun_json::serde_json::from_slice(&body).unwrap()
+        edgerun_json::from_serde_slice(&body).unwrap()
     }
 
     pub fn body_bytes(&self) -> Vec<u8> {
@@ -117,7 +117,7 @@ impl ResponsesRequest {
     }
 
     pub fn body_contains_text(&self, text: &str) -> bool {
-        let json_fragment = edgerun_json::serde_json::to_string(text)
+        let json_fragment = edgerun_json::to_string(text)
             .expect("serialize text to JSON")
             .trim_matches('"')
             .to_string();
@@ -357,8 +357,8 @@ mod tests {
                 .expect("valid request url"),
             method: Method::POST,
             headers: HeaderMap::new(),
-            body: edgerun_json::serde_json::to_vec(
-                &edgerun_json::serde_json::json!({ "input": input }),
+            body: edgerun_json::to_vec(
+                &edgerun_json::json!({ "input": input }),
             )
             .expect("serialize request body"),
         })
@@ -366,7 +366,7 @@ mod tests {
 
     #[test]
     fn call_output_content_and_success_returns_only_single_text_content_item() {
-        let single_text = request_with_input(edgerun_json::serde_json::json!([
+        let single_text = request_with_input(edgerun_json::json!([
             {
                 "type": "function_call_output",
                 "call_id": "call-1",
@@ -387,7 +387,7 @@ mod tests {
             Some((Some("world".to_string()), None))
         );
 
-        let mixed_content = request_with_input(edgerun_json::serde_json::json!([
+        let mixed_content = request_with_input(edgerun_json::json!([
             {
                 "type": "function_call_output",
                 "call_id": "call-3",
@@ -621,7 +621,7 @@ pub fn sse_completed(id: &str) -> String {
 
 /// Convenience: SSE event for a completed response with a specific id.
 pub fn ev_completed(id: &str) -> Value {
-    edgerun_json::serde_json::json!({
+    edgerun_json::json!({
         "type": "response.completed",
         "response": {
             "id": id,
@@ -632,7 +632,7 @@ pub fn ev_completed(id: &str) -> Value {
 
 /// Convenience: SSE event for a created response with a specific id.
 pub fn ev_response_created(id: &str) -> Value {
-    edgerun_json::serde_json::json!({
+    edgerun_json::json!({
         "type": "response.created",
         "response": {
             "id": id,
@@ -641,7 +641,7 @@ pub fn ev_response_created(id: &str) -> Value {
 }
 
 pub fn ev_model_verification_metadata(id: &str, verifications: Vec<&str>) -> Value {
-    edgerun_json::serde_json::json!({
+    edgerun_json::json!({
         "type": "response.metadata",
         "sequence_number": 1,
         "response_id": id,
@@ -652,7 +652,7 @@ pub fn ev_model_verification_metadata(id: &str, verifications: Vec<&str>) -> Val
 }
 
 pub fn ev_completed_with_tokens(id: &str, total_tokens: i64) -> Value {
-    edgerun_json::serde_json::json!({
+    edgerun_json::json!({
         "type": "response.completed",
         "response": {
             "id": id,
@@ -669,7 +669,7 @@ pub fn ev_completed_with_tokens(id: &str, total_tokens: i64) -> Value {
 
 /// Convenience: SSE event for a single assistant message output item.
 pub fn ev_assistant_message(id: &str, text: &str) -> Value {
-    edgerun_json::serde_json::json!({
+    edgerun_json::json!({
         "type": "response.output_item.done",
         "item": {
             "type": "message",
@@ -692,7 +692,7 @@ pub fn user_message_item(text: &str) -> ResponseItem {
 }
 
 pub fn ev_message_item_added(id: &str, text: &str) -> Value {
-    edgerun_json::serde_json::json!({
+    edgerun_json::json!({
         "type": "response.output_item.added",
         "item": {
             "type": "message",
@@ -704,7 +704,7 @@ pub fn ev_message_item_added(id: &str, text: &str) -> Value {
 }
 
 pub fn ev_output_text_delta(delta: &str) -> Value {
-    edgerun_json::serde_json::json!({
+    edgerun_json::json!({
         "type": "response.output_text.delta",
         "delta": delta,
     })
@@ -713,7 +713,7 @@ pub fn ev_output_text_delta(delta: &str) -> Value {
 pub fn ev_reasoning_item(id: &str, summary: &[&str], raw_content: &[&str]) -> Value {
     let summary_entries: Vec<Value> = summary
         .iter()
-        .map(|text| edgerun_json::serde_json::json!({"type": "summary_text", "text": text}))
+        .map(|text| edgerun_json::json!({"type": "summary_text", "text": text}))
         .collect();
 
     let overhead = "b".repeat(550);
@@ -721,7 +721,7 @@ pub fn ev_reasoning_item(id: &str, summary: &[&str], raw_content: &[&str]) -> Va
     let encrypted_content =
         edgerun_encoding::base64::standard_encode(overhead + raw_content_joined.as_str());
 
-    let mut event = edgerun_json::serde_json::json!({
+    let mut event = edgerun_json::json!({
         "type": "response.output_item.done",
         "item": {
             "type": "reasoning",
@@ -734,7 +734,7 @@ pub fn ev_reasoning_item(id: &str, summary: &[&str], raw_content: &[&str]) -> Va
     if !raw_content.is_empty() {
         let content_entries: Vec<Value> = raw_content
             .iter()
-            .map(|text| edgerun_json::serde_json::json!({"type": "reasoning_text", "text": text}))
+            .map(|text| edgerun_json::json!({"type": "reasoning_text", "text": text}))
             .collect();
         event["item"]["content"] = Value::Array(content_entries);
     }
@@ -745,10 +745,10 @@ pub fn ev_reasoning_item(id: &str, summary: &[&str], raw_content: &[&str]) -> Va
 pub fn ev_reasoning_item_added(id: &str, summary: &[&str]) -> Value {
     let summary_entries: Vec<Value> = summary
         .iter()
-        .map(|text| edgerun_json::serde_json::json!({"type": "summary_text", "text": text}))
+        .map(|text| edgerun_json::json!({"type": "summary_text", "text": text}))
         .collect();
 
-    edgerun_json::serde_json::json!({
+    edgerun_json::json!({
         "type": "response.output_item.added",
         "item": {
             "type": "reasoning",
@@ -759,7 +759,7 @@ pub fn ev_reasoning_item_added(id: &str, summary: &[&str]) -> Value {
 }
 
 pub fn ev_reasoning_summary_text_delta(delta: &str) -> Value {
-    edgerun_json::serde_json::json!({
+    edgerun_json::json!({
         "type": "response.reasoning_summary_text.delta",
         "delta": delta,
         "summary_index": 0,
@@ -767,7 +767,7 @@ pub fn ev_reasoning_summary_text_delta(delta: &str) -> Value {
 }
 
 pub fn ev_reasoning_text_delta(delta: &str) -> Value {
-    edgerun_json::serde_json::json!({
+    edgerun_json::json!({
         "type": "response.reasoning_text.delta",
         "delta": delta,
         "content_index": 0,
@@ -775,7 +775,7 @@ pub fn ev_reasoning_text_delta(delta: &str) -> Value {
 }
 
 pub fn ev_web_search_call_added_partial(id: &str, status: &str) -> Value {
-    edgerun_json::serde_json::json!({
+    edgerun_json::json!({
         "type": "response.output_item.added",
         "item": {
             "type": "web_search_call",
@@ -786,7 +786,7 @@ pub fn ev_web_search_call_added_partial(id: &str, status: &str) -> Value {
 }
 
 pub fn ev_web_search_call_done(id: &str, status: &str, query: &str) -> Value {
-    edgerun_json::serde_json::json!({
+    edgerun_json::json!({
         "type": "response.output_item.done",
         "item": {
             "type": "web_search_call",
@@ -803,7 +803,7 @@ pub fn ev_image_generation_call(
     revised_prompt: &str,
     result: &str,
 ) -> Value {
-    edgerun_json::serde_json::json!({
+    edgerun_json::json!({
         "type": "response.output_item.done",
         "item": {
             "type": "image_generation_call",
@@ -816,7 +816,7 @@ pub fn ev_image_generation_call(
 }
 
 pub fn ev_function_call(call_id: &str, name: &str, arguments: &str) -> Value {
-    edgerun_json::serde_json::json!({
+    edgerun_json::json!({
         "type": "response.output_item.done",
         "item": {
             "type": "function_call",
@@ -833,7 +833,7 @@ pub fn ev_function_call_with_namespace(
     name: &str,
     arguments: &str,
 ) -> Value {
-    edgerun_json::serde_json::json!({
+    edgerun_json::json!({
         "type": "response.output_item.done",
         "item": {
             "type": "function_call",
@@ -845,8 +845,8 @@ pub fn ev_function_call_with_namespace(
     })
 }
 
-pub fn ev_tool_search_call(call_id: &str, arguments: &edgerun_json::serde_json::Value) -> Value {
-    edgerun_json::serde_json::json!({
+pub fn ev_tool_search_call(call_id: &str, arguments: &edgerun_json::Value) -> Value {
+    edgerun_json::json!({
         "type": "response.output_item.done",
         "item": {
             "type": "tool_search_call",
@@ -858,7 +858,7 @@ pub fn ev_tool_search_call(call_id: &str, arguments: &edgerun_json::serde_json::
 }
 
 pub fn ev_custom_tool_call(call_id: &str, name: &str, input: &str) -> Value {
-    edgerun_json::serde_json::json!({
+    edgerun_json::json!({
         "type": "response.output_item.done",
         "item": {
             "type": "custom_tool_call",
@@ -870,7 +870,7 @@ pub fn ev_custom_tool_call(call_id: &str, name: &str, input: &str) -> Value {
 }
 
 pub fn ev_local_shell_call(call_id: &str, status: &str, command: Vec<&str>) -> Value {
-    edgerun_json::serde_json::json!({
+    edgerun_json::json!({
         "type": "response.output_item.done",
         "item": {
             "type": "local_shell_call",
@@ -906,7 +906,7 @@ pub fn ev_apply_patch_call(
 /// text. This mirrors the payload produced by the Responses API when the model
 /// invokes `apply_patch` directly (before we convert it to a function call).
 pub fn ev_apply_patch_custom_tool_call(call_id: &str, patch: &str) -> Value {
-    edgerun_json::serde_json::json!({
+    edgerun_json::json!({
         "type": "response.output_item.done",
         "item": {
             "type": "custom_tool_call",
@@ -921,11 +921,11 @@ pub fn ev_apply_patch_custom_tool_call(call_id: &str, patch: &str) -> Value {
 /// wraps the patch content in a JSON string under the `input` key; we recreate
 /// the same structure so downstream code exercises the full parsing path.
 pub fn ev_apply_patch_function_call(call_id: &str, patch: &str) -> Value {
-    let arguments = edgerun_json::serde_json::json!({ "input": patch });
+    let arguments = edgerun_json::json!({ "input": patch });
     let arguments =
-        edgerun_json::serde_json::to_string(&arguments).expect("serialize apply_patch arguments");
+        edgerun_json::to_string(&arguments).expect("serialize apply_patch arguments");
 
-    edgerun_json::serde_json::json!({
+    edgerun_json::json!({
         "type": "response.output_item.done",
         "item": {
             "type": "function_call",
@@ -937,46 +937,46 @@ pub fn ev_apply_patch_function_call(call_id: &str, patch: &str) -> Value {
 }
 
 pub fn ev_shell_command_call(call_id: &str, command: &str) -> Value {
-    let args = edgerun_json::serde_json::json!({ "command": command });
+    let args = edgerun_json::json!({ "command": command });
     ev_shell_command_call_with_args(call_id, &args)
 }
 
 pub fn ev_shell_command_call_with_args(
     call_id: &str,
-    args: &edgerun_json::serde_json::Value,
+    args: &edgerun_json::Value,
 ) -> Value {
     let arguments =
-        edgerun_json::serde_json::to_string(args).expect("serialize shell command arguments");
+        edgerun_json::to_string(args).expect("serialize shell command arguments");
     ev_function_call(call_id, "shell_command", &arguments)
 }
 
 pub fn ev_apply_patch_shell_call(call_id: &str, patch: &str) -> Value {
-    let args = edgerun_json::serde_json::json!({ "command": ["apply_patch", patch] });
+    let args = edgerun_json::json!({ "command": ["apply_patch", patch] });
     let arguments =
-        edgerun_json::serde_json::to_string(&args).expect("serialize apply_patch arguments");
+        edgerun_json::to_string(&args).expect("serialize apply_patch arguments");
 
     ev_function_call(call_id, "shell", &arguments)
 }
 
 pub fn ev_apply_patch_shell_call_via_heredoc(call_id: &str, patch: &str) -> Value {
     let script = format!("apply_patch <<'EOF'\n{patch}\nEOF\n");
-    let args = edgerun_json::serde_json::json!({ "command": ["bash", "-lc", script] });
+    let args = edgerun_json::json!({ "command": ["bash", "-lc", script] });
     let arguments =
-        edgerun_json::serde_json::to_string(&args).expect("serialize apply_patch arguments");
+        edgerun_json::to_string(&args).expect("serialize apply_patch arguments");
 
     ev_function_call(call_id, "shell", &arguments)
 }
 
 pub fn ev_apply_patch_shell_command_call_via_heredoc(call_id: &str, patch: &str) -> Value {
-    let args = edgerun_json::serde_json::json!({ "command": format!("apply_patch <<'EOF'\n{patch}\nEOF\n") });
+    let args = edgerun_json::json!({ "command": format!("apply_patch <<'EOF'\n{patch}\nEOF\n") });
     let arguments =
-        edgerun_json::serde_json::to_string(&args).expect("serialize apply_patch arguments");
+        edgerun_json::to_string(&args).expect("serialize apply_patch arguments");
 
     ev_function_call(call_id, "shell_command", &arguments)
 }
 
 pub fn sse_failed(id: &str, code: &str, message: &str) -> String {
-    sse(vec![edgerun_json::serde_json::json!({
+    sse(vec![edgerun_json::json!({
         "type": "response.failed",
         "response": {
             "id": id,
@@ -1066,7 +1066,7 @@ pub async fn mount_sse_once(server: &MockServer, body: String) -> ResponseMock {
 pub async fn mount_compact_json_once_match<M>(
     server: &MockServer,
     matcher: M,
-    body: edgerun_json::serde_json::Value,
+    body: edgerun_json::Value,
 ) -> ResponseMock
 where
     M: wiremock::Match + Send + Sync + 'static,
@@ -1086,7 +1086,7 @@ where
 
 pub async fn mount_compact_json_once(
     server: &MockServer,
-    body: edgerun_json::serde_json::Value,
+    body: edgerun_json::Value,
 ) -> ResponseMock {
     mount_compact_response_once(
         server,
@@ -1135,7 +1135,7 @@ pub async fn mount_compact_user_history_with_summary_sequence(
                     .get("content-encoding")
                     .and_then(|value| value.to_str().ok()),
             );
-            let body_json: Value = edgerun_json::serde_json::from_slice(&body_bytes)
+            let body_json: Value = edgerun_json::from_serde_slice(&body_bytes)
                 .unwrap_or_else(|err| panic!("failed to parse compact request body: {err}"));
             let mut output = body_json
                 .get("input")
@@ -1157,13 +1157,13 @@ pub async fn mount_compact_user_history_with_summary_sequence(
                 })
                 .collect::<Vec<Value>>();
             // Append a synthetic compaction item as the newest item.
-            output.push(edgerun_json::serde_json::json!({
+            output.push(edgerun_json::json!({
                 "type": "compaction",
                 "encrypted_content": summary_text,
             }));
             ResponseTemplate::new(200)
                 .insert_header("content-type", "application/json")
-                .set_body_json(edgerun_json::serde_json::json!({ "output": output }))
+                .set_body_json(edgerun_json::json!({ "output": output }))
         }
     }
 
@@ -1416,7 +1416,7 @@ pub async fn start_websocket_server_with_headers(
                         .find_map(|event| event.get("delta").and_then(Value::as_str)),
                 );
                 for event in &request_events {
-                    let Ok(payload) = edgerun_json::serde_json::to_string(event) else {
+                    let Ok(payload) = edgerun_json::to_string(event) else {
                         continue;
                     };
                     if ws_stream.send(Message::Text(payload.into())).await.is_err() {
@@ -1450,8 +1450,8 @@ pub async fn start_websocket_server_with_headers(
 
 fn parse_ws_request_body(message: Message) -> Option<Value> {
     match message {
-        Message::Text(text) => edgerun_json::serde_json::from_str(&text).ok(),
-        Message::Binary(bytes) => edgerun_json::serde_json::from_slice(&bytes).ok(),
+        Message::Text(text) => edgerun_json::from_serde_str(&text).ok(),
+        Message::Binary(bytes) => edgerun_json::from_serde_slice(&bytes).ok(),
         _ => None,
     }
 }
@@ -1597,7 +1597,7 @@ fn validate_request_body_invariants(request: &wiremock::Request) {
             .get("content-encoding")
             .and_then(|value| value.to_str().ok()),
     );
-    let Ok(body): Result<Value, _> = edgerun_json::serde_json::from_slice(&body_bytes) else {
+    let Ok(body): Result<Value, _> = edgerun_json::from_serde_slice(&body_bytes) else {
         return;
     };
     let Some(items) = body.get("input").and_then(Value::as_array) else {

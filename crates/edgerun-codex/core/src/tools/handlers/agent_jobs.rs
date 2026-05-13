@@ -20,7 +20,7 @@ use edgerun_futures::StreamExt;
 use edgerun_futures::stream::FuturesUnordered;
 use serde::Deserialize;
 use serde::Serialize;
-use edgerun_json::serde_json::Value;
+use edgerun_json::Value;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -29,7 +29,7 @@ use edgerun_tokio::sync::watch::Receiver;
 use edgerun_tokio::time::Duration;
 use edgerun_tokio::time::Instant;
 use edgerun_tokio::time::timeout;
-use edgerun_uuid::Uuid;
+use codex_protocol::local_uuid::Uuid;
 
 mod report_agent_job_result;
 mod spawn_agents_on_csv;
@@ -545,10 +545,10 @@ fn build_worker_prompt(
     let output_schema = job
         .output_schema_json
         .as_ref()
-        .map(edgerun_json::serde_json::to_string_pretty)
+        .map(edgerun_json::to_string_pretty)
         .transpose()?
         .unwrap_or_else(|| "{}".to_string());
-    let row_json = edgerun_json::serde_json::to_string_pretty(&item.row_json)?;
+    let row_json = edgerun_json::to_string_pretty(&item.row_json)?;
     Ok(format!(
         "You are processing one item for a generic agent job.\n\
 Job ID: {job_id}\n\

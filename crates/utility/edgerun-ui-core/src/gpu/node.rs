@@ -1399,10 +1399,13 @@ impl UiNode {
             } => {
                 let label_refs = labels.iter().map(String::as_str).collect::<Vec<_>>();
                 let h = self.style.height.unwrap_or(34.0).min(rect.h);
+                let selected = state
+                    .map(|state| state.selected_tab_index(*base_id, labels.len(), *selected))
+                    .unwrap_or(*selected);
                 ui.segmented_tabs(
                     UiRect::new(rect.x, rect.y, rect.w, h),
                     &label_refs,
-                    *selected,
+                    selected,
                     *base_id,
                 );
             }

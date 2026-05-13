@@ -81,7 +81,7 @@ fn goal_response(
     completion_budget_report: CompletionBudgetReport,
 ) -> Result<FunctionToolOutput, FunctionCallError> {
     let response =
-        edgerun_json::serde_json::to_string_pretty(&GoalToolResponse::new(goal, completion_budget_report))
+        edgerun_json::to_string_pretty(&GoalToolResponse::new(goal, completion_budget_report))
             .map_err(|err| FunctionCallError::Fatal(err.to_string()))?;
     Ok(FunctionToolOutput::from_text(response, Some(true)))
 }

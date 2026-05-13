@@ -1,6 +1,6 @@
 use super::*;
 use crate::DiscoverablePluginInfo;
-use edgerun_json::serde_json::json;
+use edgerun_json::ToJson;
 use pretty_assertions::assert_eq;
 
 #[test]
@@ -46,7 +46,7 @@ fn build_request_plugin_install_elicitation_request_uses_expected_shape() {
             turn_id: Some("turn-1".to_string()),
             server_name: "codex-apps".to_string(),
             request: McpServerElicitationRequest::Form {
-                meta: Some(json!(RequestPluginInstallMeta {
+                meta: Some(RequestPluginInstallMeta {
                     codex_approval_kind: REQUEST_PLUGIN_INSTALL_APPROVAL_KIND_VALUE,
                     persist: REQUEST_PLUGIN_INSTALL_PERSIST_ALWAYS_VALUE,
                     tool_type: DiscoverableToolType::Connector,
@@ -57,7 +57,7 @@ fn build_request_plugin_install_elicitation_request_uses_expected_shape() {
                     install_url: Some(
                         "https://chatgpt.com/apps/google-calendar/connector_2128aebfecb84f64a069897515042a44"
                     ),
-                })),
+                }.to_json()),
                 message: "Plan and reference events from your calendar".to_string(),
                 requested_schema: McpElicitationSchema {
                     schema_uri: None,
@@ -103,16 +103,19 @@ fn build_request_plugin_install_elicitation_request_for_plugin_omits_install_url
             turn_id: Some("turn-1".to_string()),
             server_name: "codex-apps".to_string(),
             request: McpServerElicitationRequest::Form {
-                meta: Some(json!(RequestPluginInstallMeta {
-                    codex_approval_kind: REQUEST_PLUGIN_INSTALL_APPROVAL_KIND_VALUE,
-                    persist: REQUEST_PLUGIN_INSTALL_PERSIST_ALWAYS_VALUE,
-                    tool_type: DiscoverableToolType::Plugin,
-                    suggest_type: DiscoverableToolAction::Install,
-                    suggest_reason: "Use the sample plugin's skills and MCP server",
-                    tool_id: "sample@openai-curated",
-                    tool_name: "Sample Plugin",
-                    install_url: None,
-                })),
+                meta: Some(
+                    RequestPluginInstallMeta {
+                        codex_approval_kind: REQUEST_PLUGIN_INSTALL_APPROVAL_KIND_VALUE,
+                        persist: REQUEST_PLUGIN_INSTALL_PERSIST_ALWAYS_VALUE,
+                        tool_type: DiscoverableToolType::Plugin,
+                        suggest_type: DiscoverableToolAction::Install,
+                        suggest_reason: "Use the sample plugin's skills and MCP server",
+                        tool_id: "sample@openai-curated",
+                        tool_name: "Sample Plugin",
+                        install_url: None,
+                    }
+                    .to_json()
+                ),
                 message: "Use the sample plugin's skills and MCP server".to_string(),
                 requested_schema: McpElicitationSchema {
                     schema_uri: None,

@@ -210,7 +210,7 @@ impl ToolRouter {
                 ..
             } if execution == "client" => {
                 let arguments: SearchToolCallParams =
-                    edgerun_json::serde_json::from_value(arguments).map_err(|err| {
+                    edgerun_json::from_serde_value(arguments).map_err(|err| {
                         FunctionCallError::RespondToModel(format!(
                             "failed to parse tool_search arguments: {err}"
                         ))

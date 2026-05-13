@@ -18,7 +18,7 @@ use core_test_support::test_codex::test_codex;
 use core_test_support::test_codex::turn_permission_fields;
 use core_test_support::wait_for_event;
 use core_test_support::wait_for_event_match;
-use edgerun_json::serde_json::json;
+use edgerun_json::json;
 use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::path::Path;
@@ -142,7 +142,7 @@ async fn run_snapshot_command_with_options(
             ev_function_call(
                 call_id,
                 "exec_command",
-                &edgerun_json::serde_json::to_string(&args)?,
+                &edgerun_json::to_string(&args)?,
             ),
             ev_completed("resp-1"),
         ]),
@@ -241,7 +241,7 @@ async fn run_shell_command_snapshot_with_options(
             ev_function_call(
                 call_id,
                 "shell_command",
-                &edgerun_json::serde_json::to_string(&args)?,
+                &edgerun_json::to_string(&args)?,
             ),
             ev_completed("resp-1"),
         ]),
@@ -314,7 +314,7 @@ async fn run_tool_turn_on_harness(
     prompt: &str,
     call_id: &str,
     tool_name: &str,
-    args: edgerun_json::serde_json::Value,
+    args: edgerun_json::Value,
 ) -> Result<ExecCommandEndEvent> {
     let responses = vec![
         sse(vec![
@@ -322,7 +322,7 @@ async fn run_tool_turn_on_harness(
             ev_function_call(
                 call_id,
                 tool_name,
-                &edgerun_json::serde_json::to_string(&args)?,
+                &edgerun_json::to_string(&args)?,
             ),
             ev_completed("resp-1"),
         ]),
@@ -568,7 +568,7 @@ async fn shell_command_snapshot_still_intercepts_apply_patch() -> Result<()> {
             ev_function_call(
                 call_id,
                 "shell_command",
-                &edgerun_json::serde_json::to_string(&args)?,
+                &edgerun_json::to_string(&args)?,
             ),
             ev_completed("resp-1"),
         ]),
