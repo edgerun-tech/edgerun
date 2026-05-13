@@ -473,6 +473,265 @@ pub enum Axis {
     Vertical,
 }
 
+#[derive(Clone, Debug)]
+pub struct UiStyle {
+    pub direction: Axis,
+    pub gap: f32,
+    pub padding: [f32; 4],
+    pub width: Option<f32>,
+    pub height: Option<f32>,
+    pub grow: bool,
+    pub bg: Option<Color4>,
+    pub text: Color4,
+    pub border: bool,
+    pub radius: f32,
+    pub truncate: bool,
+}
+
+impl Default for UiStyle {
+    fn default() -> Self {
+        Self {
+            direction: Axis::Vertical,
+            gap: 0.0,
+            padding: [0.0; 4],
+            width: None,
+            height: None,
+            grow: false,
+            bg: None,
+            text: palette::TEXT,
+            border: false,
+            radius: 0.0,
+            truncate: false,
+        }
+    }
+}
+
+impl UiStyle {
+    pub fn parse(classes: &str) -> Self {
+        let mut style = Self::default();
+        for class in classes.split_whitespace() {
+            style.apply_class(class);
+        }
+        style
+    }
+
+    fn apply_class(&mut self, class: &str) {
+        match class {
+            "row" | "flex-row" => self.direction = Axis::Horizontal,
+            "col" | "column" | "flex-col" => self.direction = Axis::Vertical,
+            "flex-1" | "grow" => self.grow = true,
+            "truncate" => self.truncate = true,
+            "border" => self.border = true,
+            "rounded" => self.radius = 8.0,
+            "rounded-sm" => self.radius = 4.0,
+            "rounded-md" => self.radius = 8.0,
+            "rounded-lg" => self.radius = 12.0,
+            "rounded-xl" => self.radius = 16.0,
+            "rounded-full" => self.radius = 999.0,
+            "w-full" => self.width = Some(-1.0),
+            "h-full" => self.height = Some(-1.0),
+            "bg-bg" => self.bg = Some(palette::BG),
+            "bg-sidebar" => self.bg = Some(palette::SIDEBAR),
+            "bg-topbar" => self.bg = Some(palette::TOPBAR),
+            "bg-panel" => self.bg = Some(palette::PANEL),
+            "bg-row" => self.bg = Some(palette::ROW),
+            "bg-active" => self.bg = Some(palette::ACTIVE_ROW),
+            "bg-composer" => self.bg = Some(palette::COMPOSER),
+            "bg-accent" => self.bg = Some(palette::ACCENT),
+            "text-primary" | "text-text" => self.text = palette::TEXT,
+            "text-muted" => self.text = palette::MUTED,
+            "text-accent" => self.text = palette::ACCENT,
+            "text-green" => self.text = palette::GREEN,
+            "text-violet" => self.text = palette::VIOLET,
+            "text-amber" => self.text = palette::AMBER,
+            "text-danger" => self.text = palette::DANGER,
+            _ => {
+                if let Some(value) = class.strip_prefix("gap-").and_then(spacing_value) {
+                    self.gap = value;
+                } else if let Some(value) = class.strip_prefix("p-").and_then(spacing_value) {
+                    self.padding = [value; 4];
+                } else if let Some(value) = class.strip_prefix("px-").and_then(spacing_value) {
+                    self.padding[1] = value;
+                    self.padding[3] = value;
+                } else if let Some(value) = class.strip_prefix("py-").and_then(spacing_value) {
+                    self.padding[0] = value;
+                    self.padding[2] = value;
+                } else if let Some(value) = class.strip_prefix("w-").and_then(size_value) {
+                    self.width = Some(value);
+                } else if let Some(value) = class.strip_prefix("h-").and_then(size_value) {
+                    self.height = Some(value);
+                } else if let Some(value) = class.strip_prefix("size-").and_then(size_value) {
+                    self.width = Some(value);
+                    self.height = Some(value);
+                }
+            }
+        }
+    }
+
+    fn layout_rect(&self, bounds: UiRect) -> UiRect {
+        UiRect {
+            x: bounds.x,
+            y: bounds.y,
+            w: match self.width {
+                Some(value) if value >= 0.0 => value.min(bounds.w),
+                _ => bounds.w,
+            },
+            h: match self.height {
+                Some(value) if value >= 0.0 => value.min(bounds.h),
+                _ => bounds.h,
+            },
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub enum UiNodeKind {
+    Row,
+    Column,
+    Card,
+    Text(String),
+    Button {
+        label: String,
+        id: u32,
+        style: ButtonStyle,
+    },
+}
+
+#[derive(Clone, Debug)]
+pub struct UiNode {
+    kind: UiNodeKind,
+    style: UiStyle,
+    children: Vec<UiNode>,
+}
+
+impl UiNode {
+    pub fn row(classes: &str) -> Self {
+        Self {
+            kind: UiNodeKind::Row,
+            style: UiStyle::parse(classes),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn column(classes: &str) -> Self {
+        let mut style = UiStyle::parse(classes);
+        style.direction = Axis::Vertical;
+        Self {
+            kind: UiNodeKind::Column,
+            style,
+            children: Vec::new(),
+        }
+    }
+
+    pub fn card(classes: &str) -> Self {
+        Self {
+            kind: UiNodeKind::Card,
+            style: UiStyle::parse(classes),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn text(value: &str) -> Self {
+        Self {
+            kind: UiNodeKind::Text(value.to_string()),
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn button(label: &str, id: u32, style: ButtonStyle) -> Self {
+        Self {
+            kind: UiNodeKind::Button {
+                label: label.to_string(),
+                id,
+                style,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn class(mut self, classes: &str) -> Self {
+        let mut parsed = UiStyle::parse(classes);
+        if matches!(self.kind, UiNodeKind::Row) {
+            parsed.direction = Axis::Horizontal;
+        }
+        self.style = parsed;
+        self
+    }
+
+    pub fn child(mut self, child: UiNode) -> Self {
+        self.children.push(child);
+        self
+    }
+
+    pub fn render(&self, ui: &mut UiPainter<'_, '_>, bounds: UiRect) {
+        let rect = self.style.layout_rect(bounds);
+        match &self.kind {
+            UiNodeKind::Text(value) => {
+                ui.bounded_label(rect.x, rect.y, rect.w, value, 2.0, self.style.text);
+            }
+            UiNodeKind::Button { label, id, style } => {
+                let h = self.style.height.unwrap_or(34.0).min(rect.h);
+                ui.button(
+                    UiRect::new(rect.x, rect.y, rect.w, h),
+                    label,
+                    *style,
+                    *id,
+                    true,
+                );
+            }
+            UiNodeKind::Row | UiNodeKind::Column | UiNodeKind::Card => {
+                if let Some(bg) = self.style.bg {
+                    if matches!(self.kind, UiNodeKind::Card) {
+                        ui.card(rect.x, rect.y, rect.w, rect.h, self.style.radius, bg);
+                    } else {
+                        ui.scene.push_rect(GpuRect::fill(
+                            rect.x,
+                            rect.y,
+                            rect.w,
+                            rect.h,
+                            self.style.radius,
+                            bg,
+                        ));
+                        if self.style.border {
+                            ui.scene.push_rect(GpuRect::border(
+                                rect.x,
+                                rect.y,
+                                rect.w,
+                                rect.h,
+                                self.style.radius,
+                                palette::BORDER,
+                            ));
+                        }
+                    }
+                }
+                render_children(ui, rect, &self.style, &self.children);
+            }
+        }
+    }
+}
+
+pub fn row(classes: &str) -> UiNode {
+    UiNode::row(classes)
+}
+
+pub fn column(classes: &str) -> UiNode {
+    UiNode::column(classes)
+}
+
+pub fn card(classes: &str) -> UiNode {
+    UiNode::card(classes)
+}
+
+pub fn text(value: &str) -> UiNode {
+    UiNode::text(value)
+}
+
+pub fn button(label: &str, id: u32, style: ButtonStyle) -> UiNode {
+    UiNode::button(label, id, style)
+}
+
 impl<'a, 'font> UiPainter<'a, 'font> {
     pub fn new(scene: &'a mut GpuScene) -> Self {
         Self {
@@ -1447,6 +1706,14 @@ fn build_unified_chat_shell_impl(
             state.connected,
             44,
         );
+        row("row bg-row border rounded-md p-2 gap-2")
+            .child(text("policy").class("w-14 text-muted truncate"))
+            .child(text("scoped").class("flex-1 text-green truncate"))
+            .child(button("open", 55, ButtonStyle::Ghost).class("w-16 h-8"))
+            .render(
+                &mut ui,
+                UiRect::new(rail_x + 16.0, transcript_top + 206.0, rail_w - 32.0, 42.0),
+            );
     }
     if state.messages.len() > 2 {
         ui.scrollbar(
@@ -2274,6 +2541,112 @@ fn component_label_width(
         #[cfg(feature = "fontdue-text")]
         atlas,
     )
+}
+
+fn render_children(ui: &mut UiPainter<'_, '_>, rect: UiRect, style: &UiStyle, children: &[UiNode]) {
+    if children.is_empty() {
+        return;
+    }
+    let content = UiRect {
+        x: rect.x + style.padding[3],
+        y: rect.y + style.padding[0],
+        w: (rect.w - style.padding[1] - style.padding[3]).max(0.0),
+        h: (rect.h - style.padding[0] - style.padding[2]).max(0.0),
+    };
+    let main_available = match style.direction {
+        Axis::Horizontal => content.w,
+        Axis::Vertical => content.h,
+    };
+    let gap_total = style.gap * children.len().saturating_sub(1) as f32;
+    let mut fixed = 0.0;
+    let mut grow_count = 0usize;
+    for child in children {
+        if child.style.grow {
+            grow_count += 1;
+            continue;
+        }
+        fixed += child_main_size(child, style.direction);
+    }
+    let grow_size = if grow_count > 0 {
+        ((main_available - fixed - gap_total).max(0.0)) / grow_count as f32
+    } else {
+        0.0
+    };
+
+    let mut cursor = match style.direction {
+        Axis::Horizontal => content.x,
+        Axis::Vertical => content.y,
+    };
+    for child in children {
+        let main = if child.style.grow {
+            grow_size
+        } else {
+            child_main_size(child, style.direction)
+        };
+        let child_rect = match style.direction {
+            Axis::Horizontal => UiRect::new(
+                cursor,
+                content.y,
+                main.max(0.0).min(content.x + content.w - cursor),
+                child_cross_size(child, Axis::Horizontal).min(content.h),
+            ),
+            Axis::Vertical => UiRect::new(
+                content.x,
+                cursor,
+                child_cross_size(child, Axis::Vertical).min(content.w),
+                main.max(0.0).min(content.y + content.h - cursor),
+            ),
+        };
+        child.render(ui, child_rect);
+        cursor += main + style.gap;
+    }
+}
+
+fn child_main_size(child: &UiNode, axis: Axis) -> f32 {
+    match axis {
+        Axis::Horizontal => child.style.width.unwrap_or_else(|| intrinsic_width(child)),
+        Axis::Vertical => child
+            .style
+            .height
+            .unwrap_or_else(|| intrinsic_height(child)),
+    }
+}
+
+fn child_cross_size(child: &UiNode, parent_axis: Axis) -> f32 {
+    match parent_axis {
+        Axis::Horizontal => child
+            .style
+            .height
+            .unwrap_or_else(|| intrinsic_height(child)),
+        Axis::Vertical => child.style.width.unwrap_or(-1.0),
+    }
+}
+
+fn intrinsic_width(child: &UiNode) -> f32 {
+    match &child.kind {
+        UiNodeKind::Text(value) => (value.chars().count() as f32 * 8.0 + 2.0).clamp(24.0, 220.0),
+        UiNodeKind::Button { label, .. } => (label.chars().count() as f32 * 8.0 + 28.0).max(44.0),
+        _ => child.style.width.unwrap_or(120.0),
+    }
+}
+
+fn intrinsic_height(child: &UiNode) -> f32 {
+    match child.kind {
+        UiNodeKind::Text(_) => 20.0,
+        UiNodeKind::Button { .. } => 34.0,
+        _ => child.style.height.unwrap_or(44.0),
+    }
+}
+
+fn spacing_value(value: &str) -> Option<f32> {
+    value.parse::<f32>().ok().map(|n| n * 4.0)
+}
+
+fn size_value(value: &str) -> Option<f32> {
+    match value {
+        "full" => Some(-1.0),
+        _ => value.parse::<f32>().ok().map(|n| n * 4.0),
+    }
 }
 
 #[cfg(feature = "fontdue-text")]
