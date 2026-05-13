@@ -3099,7 +3099,7 @@ fn render_scroll_children(
     for child in children {
         let h = child_main_size(child, Axis::Vertical);
         let bottom = cursor + h;
-        if bottom >= content.y && cursor <= content.y + content.h {
+        if cursor >= content.y && bottom <= content.y + content.h {
             child.render(ui, UiRect::new(content.x, cursor, content.w, h));
         }
         cursor += h + style.gap;
@@ -3335,6 +3335,11 @@ mod tests {
             .hits()
             .iter()
             .any(|hit| hit.kind == HitKind::ListRow && hit.id == 109));
+        assert!(scene
+            .hits()
+            .iter()
+            .filter(|hit| hit.kind == HitKind::ListRow)
+            .all(|hit| hit.y >= 8.0 && hit.y + hit.h <= 152.0));
     }
 
     #[test]
