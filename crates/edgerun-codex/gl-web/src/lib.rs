@@ -9,6 +9,7 @@ thread_local! {
     static SCENE: RefCell<GpuScene> = RefCell::new(GpuScene::new(palette::BG));
     static PACKED_RECTS: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
     static PACKED_TEXT_VERTICES: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
+    static PACKED_HITS: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
     static SELECTED_CONTACT: RefCell<usize> = const { RefCell::new(0) };
     static COLOR_SCHEME: RefCell<UiColorScheme> = const { RefCell::new(UiColorScheme::Dark) };
     static FONT: FontAtlas = FontAtlas::from_font_bytes(include_bytes!(env!("CODEX_GL_INTER_FONT")), 18.0)
@@ -77,6 +78,21 @@ fn pack_scene(scene: &GpuScene) {
         packed.reserve(scene.text_quads().len() * 48);
         for quad in scene.text_quads() {
             push_packed_text_quad(packed, quad);
+        }
+    });
+
+    PACKED_HITS.with_borrow_mut(|packed| {
+        packed.clear();
+        packed.reserve(scene.hits().len() * 6);
+        for hit in scene.hits() {
+            packed.extend_from_slice(&[
+                hit_kind_code(hit.kind) as f32,
+                (hit.id & 0x00ff_ffff) as f32,
+                hit.x,
+                hit.y,
+                hit.w,
+                hit.h,
+            ]);
         }
     });
 }
@@ -177,6 +193,21 @@ pub extern "C" fn codex_gl_hit_test(x: f32, y: f32) -> u32 {
 #[unsafe(no_mangle)]
 pub extern "C" fn codex_gl_hit_count() -> u32 {
     SCENE.with_borrow(|scene| scene.hits().len() as u32)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_hit_float_stride() -> u32 {
+    6
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_hit_buffer_len() -> u32 {
+    PACKED_HITS.with_borrow(|packed| packed.len() as u32)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_hit_buffer_ptr() -> *const f32 {
+    PACKED_HITS.with_borrow(|packed| packed.as_ptr())
 }
 
 fn hit_kind_code(kind: HitKind) -> u32 {
