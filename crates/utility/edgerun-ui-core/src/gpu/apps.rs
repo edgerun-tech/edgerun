@@ -865,7 +865,7 @@ pub(super) fn render_component_gallery_app(
                 scroll_area("bg-panel border rounded-md p-4 gap-4 flex-1 h-full", 0.0)
                     .scroll_id(760)
                     .child(component_studio_toolbar(preview))
-                    .child(component_preview_canvas(
+                    .child(shadcn_component_wall(
                         preview,
                         (content.w - 256.0).max(360.0),
                     )),
@@ -875,7 +875,7 @@ pub(super) fn render_component_gallery_app(
             .scroll_id(760)
             .child(component_style_authority_panel(preview, false).class("h-96"))
             .child(component_studio_toolbar(preview))
-            .child(component_preview_canvas(preview, content.w))
+            .child(shadcn_component_wall(preview, content.w))
     };
 
     studio.render_with_state(ui, content, Some(&app.runtime));
@@ -888,9 +888,9 @@ fn component_style_authority_panel(preview: UiComponentPreviewState, rail: bool)
     let author = preview.author_preset;
     let active = preview.resolved_theme();
     let classes = if rail {
-        "bg-topbar border rounded-md p-3 gap-3"
+        "bg-sidebar border rounded-lg p-3 gap-3"
     } else {
-        "bg-topbar border rounded-md p-3 gap-3"
+        "bg-sidebar border rounded-lg p-3 gap-3"
     };
 
     card(classes)
@@ -900,66 +900,40 @@ fn component_style_authority_panel(preview: UiComponentPreviewState, rail: bool)
                 .child(icon_button(UiIcon::Settings, 760).class("size-8")),
         )
         .child(divider("h-px"))
-        .child(section("Style", ""))
+        .child(shadcn_label("Style"))
         .child(
-            menu_item_node(user.name, 761)
-                .detail(active.authority_label())
-                .badge_text("active")
+            shadcn_item(user.name, active.authority_label(), 761, active.colors.accent)
                 .selected(matches!(preview.authority, UiStyleAuthority::User)),
         )
-        .child(
-            control_row_node("Base color")
-                .detail("user palette")
-                .value_text(user.base_color),
-        )
-        .child(
-            control_row_node("Theme")
-                .detail("semantic scheme")
-                .value_text(user.scheme_label())
-                .hit_id(766),
-        )
-        .child(
-            control_row_node("Accent")
-                .detail("shared token")
-                .value_text(user.accent_label())
-                .hit_id(767),
-        )
+        .child(shadcn_select("Base Color", user.base_color, 766))
+        .child(shadcn_item("Theme", user.scheme_label(), 766, active.colors.info))
+        .child(shadcn_item("Accent", user.accent_label(), 767, active.colors.accent))
         .child(divider("h-px"))
-        .child(section("Typography", ""))
-        .child(control_row_node("Heading").detail("Inter").value_text("Aa"))
-        .child(control_row_node("Body").detail("Inter").value_text("Aa"))
+        .child(shadcn_label("Typography"))
+        .child(shadcn_field("Heading", "Geist"))
+        .child(shadcn_field("Font", "Geist"))
         .child(divider("h-px"))
-        .child(section("System", ""))
-        .child(
-            control_row_node("Icon library")
-                .detail(user.icon_set)
-                .value_text("Tabler"),
-        )
-        .child(
-            control_row_node("Radius")
-                .detail("component shape")
-                .value_text(user.radius_label())
-                .hit_id(768),
-        )
+        .child(shadcn_label("System"))
+        .child(shadcn_select("Icon Library", user.icon_set, 769))
+        .child(shadcn_item("Radius", user.radius_label(), 768, active.colors.success))
         .child(divider("h-px"))
-        .child(section("Author Preset", "optional"))
+        .child(shadcn_label("Author Preset"))
         .child(
-            menu_item_node(author.name, 771)
-                .detail(author.scheme_label())
-                .badge_text(if preview.author_available() {
-                    "available"
-                } else {
-                    "active"
-                })
+            shadcn_item(author.name, author.scheme_label(), 771, active.colors.info)
                 .selected(matches!(preview.authority, UiStyleAuthority::AuthorVision)),
         )
-        .child(
-            control_row_node("Author accent")
-                .detail(author.base_color)
-                .value_text(author.accent_label()),
-        )
-        .child(button("Preview Author", 762, ButtonStyle::Secondary).class("h-9"))
-        .child(button("Keep User Style", 763, ButtonStyle::Primary).class("h-9"))
+        .child(shadcn_button(
+            "Preview Author",
+            762,
+            UiShadcnButtonVariant::Secondary,
+            UiShadcnButtonSize::Default,
+        ))
+        .child(shadcn_button(
+            "Keep User Style",
+            763,
+            UiShadcnButtonVariant::Default,
+            UiShadcnButtonSize::Default,
+        ))
         .child(
             identity_card("Local identity", "browser node", "policy:personal", 800).class("h-28"),
         )
@@ -971,173 +945,219 @@ fn component_studio_toolbar(preview: UiComponentPreviewState) -> UiNode {
 
     row("row gap-3 items-center h-11")
         .child(
-            command_palette("Search components, blocks, charts, app surfaces", 780)
+            shadcn_command("Search documentation...", 780)
                 .class("h-11 flex-1"),
         )
-        .child(badge(active.authority_label(), active.colors.success))
-        .child(button("Open Preview", 764, ButtonStyle::Secondary).class("h-10 w-28"))
-        .child(button("Get Code", 765, ButtonStyle::Primary).class("h-10 w-24"))
+        .child(shadcn_badge(active.authority_label(), UiShadcnBadgeVariant::Secondary))
+        .child(shadcn_button(
+            "Open in v0",
+            764,
+            UiShadcnButtonVariant::Outline,
+            UiShadcnButtonSize::Default,
+        ))
+        .child(shadcn_button(
+            "Get Code",
+            765,
+            UiShadcnButtonVariant::Default,
+            UiShadcnButtonSize::Default,
+        ))
 }
 
 #[cfg(any(feature = "fontdue-text", test))]
-fn component_preview_canvas(preview: UiComponentPreviewState, width: f32) -> UiNode {
+fn shadcn_component_wall(preview: UiComponentPreviewState, width: f32) -> UiNode {
     let active = preview.resolved_theme();
     let months = ["Dec", "Jan", "Feb", "Mar", "Apr", "May"];
     let activity = [0.56, 0.78, 0.62, 0.92, 0.52, 0.98];
 
-    column("gap-4 h-760")
+    column("gap-4 h-980")
         .child(
-            row("row gap-3 items-center h-14")
-                .child(
-                    column("gap-1 flex-1")
-                        .child(text("Component Studio").class("text-text truncate"))
-                        .child(
-                            text("Developers compose reusable structure. User style remains the active renderer authority.")
-                                .class("text-muted truncate"),
-                        ),
-                )
-                .child(badge(active.preset.name, active.colors.accent))
-                .child(button("Author vision", 761, ButtonStyle::Secondary).class("h-9 w-32")),
+            shadcn_menubar(
+                &["Docs", "Components", "Blocks", "Charts", "Directory", "Create"],
+                1,
+                820,
+            )
+            .class("h-11"),
         )
         .child(
             grid_auto_for_width(
-                "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 h-560",
+                "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 h-760",
                 width,
             )
                 .child(
-                    card("bg-panel border rounded-md p-3 gap-3 h-108")
+                    shadcn_card("Contribution History", "Last 6 months of activity")
+                        .class("h-108")
                         .child(
-                            bar_chart_labels("Contribution History", &months, &activity)
-                                .detail("last 6 months")
+                            shadcn_chart("Activity", &months, &activity)
                                 .accent(active.colors.accent)
                                 .class("h-48"),
                         )
                         .child(
                             grid("grid grid-cols-2 gap-3", 2)
                                 .child(
-                                    metric("Upcoming", "May 25")
-                                        .detail("$1,000 scheduled")
+                                    shadcn_card("Upcoming", "May 25, 2024")
+                                        .child(shadcn_badge("$1,000 scheduled", UiShadcnBadgeVariant::Secondary))
                                         .class("h-28"),
                                 )
                                 .child(
-                                    metric("Auto-save plan", "Accelerated")
-                                        .detail("recurring weekly")
+                                    shadcn_card("Auto-save Plan", "Accelerated")
+                                        .child(shadcn_badge("Recurring weekly", UiShadcnBadgeVariant::Secondary))
                                         .class("h-28"),
                                 ),
                         )
-                        .child(button("View Full Report", 772, ButtonStyle::Primary).class("h-9")),
+                        .child(shadcn_button(
+                            "View Full Report",
+                            772,
+                            UiShadcnButtonVariant::Default,
+                            UiShadcnButtonSize::Default,
+                        )),
                 )
                 .child(
-                    card("bg-panel border rounded-md p-3 gap-3 h-108")
-                        .child(header("Payout Threshold").detail("policy-bound form controls"))
-                        .child(select_node("Preferred Currency", "USD - United States Dollar", 773))
+                    shadcn_card("Payout Threshold", "Set the minimum balance required before payout is triggered.")
+                        .class("h-108")
+                        .child(shadcn_select("Preferred Currency", "USD - United States Dollar", 773))
                         .child(
-                            slider_node("Minimum Payout Amount", 0.25, 774)
-                                .range_labels("$50 min", "$10,000 max")
+                            shadcn_slider("Minimum Payout Amount", 0.25, 774)
+                                .range_labels("$50 (MIN)", "$10,000 (MAX)")
                                 .accent(active.colors.accent)
                                 .class("h-20"),
                         )
                         .child(
-                            text_area_node("Notes", "Any notes for this payout configuration...")
+                            shadcn_textarea("Notes", "Add any notes for this payout configuration...")
                                 .hit_id(775)
                                 .class("h-28"),
                         )
-                        .child(button("Save Threshold", 776, ButtonStyle::Primary).class("h-9")),
+                        .child(shadcn_button(
+                            "Save Threshold",
+                            776,
+                            UiShadcnButtonVariant::Default,
+                            UiShadcnButtonSize::Default,
+                        )),
                 )
                 .child(
-                    card("bg-panel border rounded-md p-3 gap-3 h-108")
-                        .child(header("Savings Targets").detail("preview data"))
+                    shadcn_card("Savings Targets", "Active milestones for 2024")
+                        .class("h-108")
                         .child(
-                            metric("Retirement", "$420,000")
-                                .detail("65% achieved")
-                                .progress(0.65)
-                                .accent(active.colors.success)
+                            shadcn_card("Retirement", "$420,000")
+                                .child(shadcn_progress(0.65).class("w-full"))
+                                .child(shadcn_badge("65% achieved", UiShadcnBadgeVariant::Secondary))
                                 .class("h-32"),
                         )
                         .child(
-                            metric("Real Estate", "$85,000")
-                                .detail("32% achieved")
-                                .progress(0.32)
-                                .accent(active.colors.success)
+                            shadcn_card("Real Estate", "$85,000")
+                                .child(shadcn_progress(0.32).class("w-full"))
+                                .child(shadcn_badge("32% achieved", UiShadcnBadgeVariant::Secondary))
                                 .class("h-32"),
                         )
                         .child(text("You have not met your targets for this year.").class("text-muted truncate")),
                 )
                 .child(
-                    card("bg-panel border rounded-md p-3 gap-3 h-108")
-                        .child(header("Account Access").detail("credentials and local approval"))
-                        .child(field_node("Email Address", "artist@studio.inc").hit_id(810))
-                        .child(field_node("Current Password", "**********").hit_id(811))
-                        .child(button("Update Security", 812, ButtonStyle::Primary).class("h-9"))
-                        .child(control_row_node("Danger Zone").detail("archive account").control_button("Open", 813, ButtonStyle::Danger)),
+                    shadcn_card("Buy Investment", "Review before sending an order")
+                        .class("h-108")
+                        .child(shadcn_input("Amount to Invest", "$1,000.00").hit_id(810))
+                        .child(shadcn_select("Order Type", "Market Order", 811))
+                        .child(shadcn_table(
+                            &["Estimate", "Value"],
+                            &[&["Estimated Shares", "1.95"], &["Buying Power", "$12,450.00"]],
+                            812,
+                        ).class("h-24"))
+                        .child(shadcn_button(
+                            "Review Order",
+                            813,
+                            UiShadcnButtonVariant::Default,
+                            UiShadcnButtonSize::Default,
+                        )),
                 )
                 .child(
-                    card("bg-panel border rounded-md p-3 gap-3 h-104")
-                        .child(header("Run Network App").detail("package policy summary"))
-                        .child(field_node("Package", "b3:chat-ui-preview").hit_id(777))
-                        .child(field_node("Policy", "free-run / verify-cache").hit_id(778))
-                        .child(checkbox("Verify and cache package bytes", true, 764).class("h-9"))
-                        .child(button("Run", 779, ButtonStyle::Primary).class("h-9")),
+                    shadcn_empty(
+                        "Distribute Track",
+                        "Upload your first master to start reaching listeners.",
+                        UiIcon::App,
+                    )
+                    .child(shadcn_button(
+                        "Create Release",
+                        779,
+                        UiShadcnButtonVariant::Default,
+                        UiShadcnButtonSize::Default,
+                    ))
+                    .class("h-104"),
                 )
                 .child(
-                    card("bg-panel border rounded-md p-3 gap-3 h-104")
-                        .child(header("Recent Transactions").detail("proof-backed rows"))
-                        .child(
-                            transaction_node("Blue Bottle Coffee", "-$6.50", 781)
-                                .detail("Food & Drink")
-                                .date("Today"),
-                        )
-                        .child(
-                            transaction_node("Whole Foods Market", "-$142.36", 782)
-                                .detail("Groceries")
-                                .date("Yesterday"),
-                        )
-                        .child(
-                            transaction_node("Stripe Payout", "+$4,200.00", 783)
-                                .detail("Income")
-                                .date("Oct 12")
-                                .positive(true),
-                        ),
+                    shadcn_card("Claimable Balance", "$0.00")
+                        .class("h-104")
+                        .child(shadcn_badge("Pending Setup", UiShadcnBadgeVariant::Outline))
+                        .child(shadcn_table(
+                            &["Royalty", "Amount"],
+                            &[
+                                &["Net Royalties", "$0.00"],
+                                &["Processing Fee", "-$0.00"],
+                                &["Total Ready to Claim", "$0.00 USD"],
+                            ],
+                            781,
+                        ).class("h-36")),
                 )
                 .child(
-                    card("bg-panel border rounded-md p-3 gap-3 h-104")
-                        .child(header("EdgeRun Domain").detail("real app primitives"))
-                        .child(identity_card(
-                            "Local identity",
-                            "browser node",
-                            "policy:personal",
-                            800,
-                        ))
-                        .child(package_card("EdgeRun Chat", "run by hash", "b3:message-ui", 801))
-                        .child(capability_grant_row("Chat", "decrypt message", "single use", 804))
-                        .child(route_path("Message route", &["app", "device", "admission", "relay"])),
+                    shadcn_card("Recent Transactions", "Your latest account activity.")
+                        .class("h-104")
+                        .child(shadcn_table(
+                            &["Merchant", "Date", "Amount"],
+                            &[
+                                &["Blue Bottle Coffee", "Today", "-$6.50"],
+                                &["Whole Foods Market", "Yesterday", "-$142.30"],
+                                &["Stripe Payout", "Oct 12", "+$4,200.00"],
+                                &["Uber Technologies", "Oct 11", "-$24.10"],
+                                &["Netflix Subscription", "Oct 10", "-$19.99"],
+                            ],
+                            784,
+                        ).class("h-52")),
                 )
                 .child(
-                    card("bg-panel border rounded-md p-3 gap-3 h-104")
-                        .child(header("Transfer Funds").detail("settlement-ready payment surface"))
-                        .child(field_node("Amount", "$1,200.00").hit_id(814))
-                        .child(select_node("From Account", "Main Checking (-8402)", 815))
-                        .child(select_node("To Account", "High Yield Savings (-1192)", 816))
-                        .child(button("Confirm Transfer", 817, ButtonStyle::Primary).class("h-9")),
+                    shadcn_sheet(
+                        "Account Access",
+                        "Update your credentials",
+                        "Email Address",
+                        "artist@studio.inc",
+                        "Update Security",
+                        814,
+                    )
+                    .child(shadcn_alert("Danger Zone", "Archive account", UiIcon::Warning))
+                    .class("h-104"),
                 ),
         )
         .child(
             grid_auto_for_width(
-                "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 h-40",
+                "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 h-52",
                 width,
             )
-                .child(contact_card("Codex Client", "local app identity", 802))
-                .child(thread_row("Alice", "encrypted message available", true, 803))
-                .child(proof_event_row("Relay delivery", "b3:relay-proof", "accepted", 805))
-                .child(receipt_row("Relay delivery", "$0.0004", "pending", 806)),
+                .child(shadcn_sidebar(
+                    "Overview",
+                    "Dashboard",
+                    &["Dashboard", "Transactions", "Investments", "Goals", "Budget"],
+                    0,
+                    "Account",
+                    "Profile, billing, notifications, security",
+                    802,
+                ))
+                .child(shadcn_breadcrumb(&["Home", "Payments", "Transfer"], 2, 810))
+                .child(shadcn_calendar(
+                    "May 2024",
+                    &["", "", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
+                    8,
+                    830,
+                ))
+                .child(shadcn_sonner(&[
+                    ("Order reviewed", UiIcon::Check, active.colors.success),
+                    ("Policy requires approval", UiIcon::Warning, active.colors.warning),
+                ])),
         )
         .child(
-            table_labels(
+            shadcn_table(
                 &["Component", "Authority", "State"],
                 &[
-                    &["button", "user style", "ready"],
-                    &["chart", "user palette", "ready"],
-                    &["author preset", "optional", "available"],
+                    &["Button", "shadcn_button", "ready"],
+                    &["Card", "shadcn_card", "ready"],
+                    &["Input", "shadcn_input", "ready"],
+                    &["Table", "shadcn_table", "ready"],
+                    &["Dialog", "shadcn_dialog", "ready"],
                 ],
                 790,
             )
