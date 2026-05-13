@@ -1,7 +1,6 @@
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::sync::Arc;
-use alloc::vec;
 use alloc::vec::Vec;
 
 use crate::network::{HostSocketTransport, TransportAddress};
@@ -9,12 +8,6 @@ use crate::rt::{
     self, AsyncReadExt, AsyncTcpListener, AsyncTcpStream, AsyncWriteExt, CancellationToken,
 };
 use edgerun_crypto::p256::ecdsa::{Signature, VerifyingKey, signature::Verifier};
-use edgerun_protocols::websocket::{
-    WS_EXTENDED_64_LEN, WS_MASK_LEN, WebSocketError, WebSocketMessage, decode_client_message,
-    decode_frame_prefix, decode_handshake_request, decode_payload_len, encode_server_binary,
-    encode_server_control, encode_upgrade_response, handshake_complete,
-};
-use edgerun_work::{MAX_WORK_FRAME_LEN, NodeId, channel_envelope_from_bytes};
 
 #[cfg(target_os = "none")]
 use crate::rt::io;
@@ -25,24 +18,14 @@ use std::{
     collections::BTreeMap,
     fs::{self, OpenOptions},
     io::Write,
-    sync::mpsc::{self, SyncSender},
     sync::{Mutex, OnceLock},
 };
 
 #[cfg(not(target_os = "none"))]
 const NODE_RELAY_DIRECTORY_PATH: &str = "/var/lib/edgerun/.edgerun/node-relay-directory.jsonl";
-#[cfg(not(target_os = "none"))]
-const EDGERUN_WORK_WS_PROTOCOL: &str = "edgerun-work-v1";
-#[cfg(not(target_os = "none"))]
-const EDGERUN_WORK_WS_READ_POLL_MS: u64 = 100;
-#[cfg(not(target_os = "none"))]
-const EDGERUN_WORK_WS_MAX_QUEUE: usize = 256;
 
 #[cfg(not(target_os = "none"))]
 static NODE_RELAY_DIRECTORY: OnceLock<Mutex<BTreeMap<String, NodeRelayRecord>>> = OnceLock::new();
-#[cfg(not(target_os = "none"))]
-static EDGERUN_WORK_WS_PEERS: OnceLock<Mutex<BTreeMap<NodeId, SyncSender<Vec<u8>>>>> =
-    OnceLock::new();
 
 #[cfg(not(target_os = "none"))]
 #[derive(Clone, Debug)]
@@ -108,9 +91,10 @@ async fn dispatch_to_app(
     #[cfg(not(target_os = "none"))]
     if request_method(request) == Some("GET")
         && path == Some("/work")
-        && is_websocket_upgrade(request)
+        && crate::services::work_websocket::is_websocket_upgrade(request)
     {
-        return dispatch_work_websocket(stream, buffer[..n].to_vec()).await;
+        return crate::services::work_websocket::serve_work_websocket(stream, buffer[..n].to_vec())
+            .await;
     }
     crate::node_info!(
         "http request accepted for app {:02x}{:02x}{:02x}{:02x}",
@@ -145,148 +129,6 @@ async fn dispatch_to_app(
         .write_all(response.as_bytes())
         .await
         .map_err(io_error)
-}
-
-#[cfg(not(target_os = "none"))]
-async fn dispatch_work_websocket(
-    mut stream: Arc<AsyncTcpStream>,
-    request: Vec<u8>,
-) -> io::Result<()> {
-    let request = decode_handshake_request(request)
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, format!("{error:?}")))?;
-    let response = encode_upgrade_response(&request, EDGERUN_WORK_WS_PROTOCOL)
-        .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, format!("{error:?}")))?;
-    stream
-        .write_all(response.as_bytes())
-        .await
-        .map_err(io_error)?;
-    stream.flush().await.map_err(io_error)?;
-
-    let peers = EDGERUN_WORK_WS_PEERS.get_or_init(|| Mutex::new(BTreeMap::new()));
-    let (tx, rx) = mpsc::sync_channel::<Vec<u8>>(EDGERUN_WORK_WS_MAX_QUEUE);
-    let mut registered_node = None;
-
-    loop {
-        let mut queued = Vec::new();
-        while let Ok(frame) = rx.try_recv() {
-            queued.push(frame);
-        }
-        for frame in queued {
-            stream.write_all(&frame).await.map_err(io_error)?;
-        }
-        stream.flush().await.map_err(io_error)?;
-        match rt::timeout(
-            core::time::Duration::from_millis(EDGERUN_WORK_WS_READ_POLL_MS),
-            read_work_ws_message(&mut stream),
-        )
-        .await
-        {
-            Ok(Ok(WebSocketMessage::Binary(bytes))) => {
-                let envelope = channel_envelope_from_bytes(&bytes).map_err(|error| {
-                    io::Error::new(io::ErrorKind::InvalidData, format!("{error:?}"))
-                })?;
-                register_work_ws_peer(peers, &mut registered_node, envelope.from, tx.clone());
-                forward_work_ws_envelope(peers, envelope.to, &bytes);
-            }
-            Ok(Ok(WebSocketMessage::Ping(payload))) => {
-                let frame = encode_server_control(0xA, &payload).map_err(invalid_ws_data)?;
-                stream.write_all(&frame).await.map_err(io_error)?;
-                stream.flush().await.map_err(io_error)?;
-            }
-            Ok(Ok(WebSocketMessage::Pong)) => {}
-            Ok(Ok(WebSocketMessage::Close)) => break,
-            Ok(Err(error)) if error.kind() == io::ErrorKind::UnexpectedEof => break,
-            Ok(Err(error)) => return Err(error),
-            Err(_) => {}
-        }
-    }
-
-    if let Some(node_id) = registered_node {
-        peers
-            .lock()
-            .expect("work websocket peer map poisoned")
-            .remove(&node_id);
-    }
-    Ok(())
-}
-
-#[cfg(not(target_os = "none"))]
-fn register_work_ws_peer(
-    peers: &Mutex<BTreeMap<NodeId, SyncSender<Vec<u8>>>>,
-    registered_node: &mut Option<NodeId>,
-    node_id: NodeId,
-    tx: SyncSender<Vec<u8>>,
-) {
-    if registered_node.as_ref() == Some(&node_id) {
-        return;
-    }
-    if let Some(previous) = registered_node.replace(node_id) {
-        peers
-            .lock()
-            .expect("work websocket peer map poisoned")
-            .remove(&previous);
-    }
-    peers
-        .lock()
-        .expect("work websocket peer map poisoned")
-        .insert(node_id, tx);
-}
-
-#[cfg(not(target_os = "none"))]
-fn forward_work_ws_envelope(
-    peers: &Mutex<BTreeMap<NodeId, SyncSender<Vec<u8>>>>,
-    node_id: NodeId,
-    payload: &[u8],
-) {
-    let Ok(frame) = encode_server_binary(payload).map_err(invalid_ws_data) else {
-        return;
-    };
-    let mut peers = peers.lock().expect("work websocket peer map poisoned");
-    let Some(tx) = peers.get(&node_id) else {
-        return;
-    };
-    if tx.try_send(frame).is_err() {
-        peers.remove(&node_id);
-    }
-}
-
-#[cfg(not(target_os = "none"))]
-async fn read_work_ws_message(stream: &mut Arc<AsyncTcpStream>) -> io::Result<WebSocketMessage> {
-    let mut header = [0u8; 2];
-    stream.read_exact(&mut header).await.map_err(io_error)?;
-    let prefix = decode_frame_prefix(&header)
-        .and_then(|prefix| prefix.require_client_mask())
-        .map_err(invalid_ws_data)?;
-    let mut extended = [0u8; WS_EXTENDED_64_LEN];
-    let extended_len = prefix.extended_len_bytes();
-    if extended_len != 0 {
-        stream
-            .read_exact(&mut extended[..extended_len])
-            .await
-            .map_err(io_error)?;
-    }
-    let payload_len = decode_payload_len(prefix, &extended[..extended_len], MAX_WORK_FRAME_LEN)
-        .map_err(invalid_ws_data)?;
-    let mut mask = [0u8; WS_MASK_LEN];
-    stream.read_exact(&mut mask).await.map_err(io_error)?;
-    let mut payload = vec![0u8; payload_len];
-    stream.read_exact(&mut payload).await.map_err(io_error)?;
-    decode_client_message(prefix.fin, prefix.opcode, mask, payload).map_err(invalid_ws_data)
-}
-
-#[cfg(not(target_os = "none"))]
-fn is_websocket_upgrade(request: &str) -> bool {
-    request
-        .lines()
-        .any(|line| line.eq_ignore_ascii_case("upgrade: websocket"))
-}
-
-#[cfg(not(target_os = "none"))]
-fn invalid_ws_data(error: impl core::fmt::Debug) -> io::Error {
-    io::Error::new(
-        io::ErrorKind::InvalidData,
-        format!("invalid websocket data: {error:?}"),
-    )
 }
 
 fn request_path(request: &str) -> Option<&str> {
