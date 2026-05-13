@@ -278,6 +278,11 @@ pub enum HitKind {
     Tab,
     Toggle,
     ListRow,
+    Input,
+    TextArea,
+    Slider,
+    MenuItem,
+    TransactionRow,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -579,11 +584,13 @@ pub enum UiNodeKind {
         value: String,
         helper: String,
         focused: bool,
+        id: Option<u32>,
     },
     TextArea {
         label: String,
         value: String,
         focused: bool,
+        id: Option<u32>,
     },
     Slider {
         label: String,
@@ -752,6 +759,7 @@ impl UiNode {
                 value: value.to_string(),
                 helper: String::new(),
                 focused: false,
+                id: None,
             },
             style: UiStyle::default(),
             children: Vec::new(),
@@ -764,6 +772,7 @@ impl UiNode {
                 label: label.to_string(),
                 value: value.to_string(),
                 focused: false,
+                id: None,
             },
             style: UiStyle::default(),
             children: Vec::new(),
@@ -930,6 +939,16 @@ impl UiNode {
         self
     }
 
+    pub fn hit_id(mut self, id: u32) -> Self {
+        match &mut self.kind {
+            UiNodeKind::Field { id: field_id, .. } | UiNodeKind::TextArea { id: field_id, .. } => {
+                *field_id = Some(id)
+            }
+            _ => {}
+        }
+        self
+    }
+
     pub fn badge_text(mut self, value: &str) -> Self {
         if let UiNodeKind::MenuItem { badge, .. } = &mut self.kind {
             *badge = value.to_string();
@@ -1076,6 +1095,7 @@ impl UiNode {
                 value,
                 helper,
                 focused,
+                id,
             } => {
                 self::components::field(
                     ui,
@@ -1085,6 +1105,7 @@ impl UiNode {
                         value,
                         helper,
                         focused: *focused,
+                        id: *id,
                     },
                 );
             }
@@ -1092,6 +1113,7 @@ impl UiNode {
                 label,
                 value,
                 focused,
+                id,
             } => {
                 self::components::text_area(
                     ui,
@@ -1100,6 +1122,7 @@ impl UiNode {
                         label,
                         value,
                         focused: *focused,
+                        id: *id,
                     },
                 );
             }

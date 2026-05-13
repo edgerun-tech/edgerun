@@ -75,6 +75,7 @@ pub struct Field<'a> {
     pub value: &'a str,
     pub helper: &'a str,
     pub focused: bool,
+    pub id: Option<u32>,
 }
 
 impl<'a> Field<'a> {
@@ -84,6 +85,7 @@ impl<'a> Field<'a> {
             value: "",
             helper: "",
             focused: false,
+            id: None,
         }
     }
 
@@ -101,6 +103,11 @@ impl<'a> Field<'a> {
         self.focused = focused;
         self
     }
+
+    pub const fn id(mut self, id: u32) -> Self {
+        self.id = Some(id);
+        self
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -108,6 +115,7 @@ pub struct TextArea<'a> {
     pub label: &'a str,
     pub value: &'a str,
     pub focused: bool,
+    pub id: Option<u32>,
 }
 
 impl<'a> TextArea<'a> {
@@ -116,6 +124,7 @@ impl<'a> TextArea<'a> {
             label,
             value: "",
             focused: false,
+            id: None,
         }
     }
 
@@ -126,6 +135,11 @@ impl<'a> TextArea<'a> {
 
     pub const fn focused(mut self, focused: bool) -> Self {
         self.focused = focused;
+        self
+    }
+
+    pub const fn id(mut self, id: u32) -> Self {
+        self.id = Some(id);
         self
     }
 }
@@ -436,6 +450,16 @@ pub fn metric_card(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: MetricCard<'_
 pub fn field(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: Field<'_>) {
     ui.bounded_label(rect.x, rect.y, rect.w, spec.label, 2.0, palette::MUTED);
     let field_rect = UiRect::new(rect.x, rect.y + 25.0, rect.w, 40.0);
+    if let Some(id) = spec.id {
+        ui.hit(
+            HitKind::Input,
+            id,
+            field_rect.x,
+            field_rect.y,
+            field_rect.w,
+            field_rect.h,
+        );
+    }
     ui.input_field(field_rect, spec.value, spec.focused);
     if !spec.helper.is_empty() {
         ui.bounded_label(
@@ -452,6 +476,16 @@ pub fn field(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: Field<'_>) {
 pub fn text_area(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: TextArea<'_>) {
     ui.bounded_label(rect.x, rect.y, rect.w, spec.label, 2.0, palette::MUTED);
     let field_rect = UiRect::new(rect.x, rect.y + 25.0, rect.w, rect.h - 25.0);
+    if let Some(id) = spec.id {
+        ui.hit(
+            HitKind::TextArea,
+            id,
+            field_rect.x,
+            field_rect.y,
+            field_rect.w,
+            field_rect.h,
+        );
+    }
     ui.fill_rect(field_rect, 8.0, palette::COMPOSER);
     ui.border_rect(
         field_rect,
@@ -477,7 +511,7 @@ pub fn text_area(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: TextArea<'_>) {
 }
 
 pub fn slider(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: Slider<'_>) {
-    ui.hit(HitKind::Toggle, spec.id, rect.x, rect.y, rect.w, rect.h);
+    ui.hit(HitKind::Slider, spec.id, rect.x, rect.y, rect.w, rect.h);
     ui.bounded_label(rect.x, rect.y, rect.w, spec.label, 2.0, palette::TEXT);
     let track = UiRect::new(rect.x, rect.y + 34.0, rect.w, 6.0);
     ui.progress_bar(track, spec.value, spec.accent);
@@ -547,7 +581,14 @@ pub fn bar_chart(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: BarChart<'_>) {
 }
 
 pub fn transaction_row(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: TransactionRow<'_>) {
-    ui.hit(HitKind::ListRow, spec.id, rect.x, rect.y, rect.w, rect.h);
+    ui.hit(
+        HitKind::TransactionRow,
+        spec.id,
+        rect.x,
+        rect.y,
+        rect.w,
+        rect.h,
+    );
     ui.fill_rect(rect, 0.0, palette::PANEL);
     ui.divider(rect.x, rect.y + rect.h - 1.0, rect.w, Axis::Horizontal);
     let icon = UiRect::new(rect.x + 12.0, rect.y + 12.0, 34.0, 34.0);
@@ -593,7 +634,7 @@ pub fn transaction_row(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: Transacti
 }
 
 pub fn menu_item(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: MenuItem<'_>) {
-    ui.hit(HitKind::ListRow, spec.id, rect.x, rect.y, rect.w, rect.h);
+    ui.hit(HitKind::MenuItem, spec.id, rect.x, rect.y, rect.w, rect.h);
     if spec.selected {
         ui.fill_rect(rect, 8.0, palette::ACTIVE_ROW);
         ui.border_rect(rect, 8.0, spec.accent.with_alpha(0.42));
@@ -689,7 +730,8 @@ mod tests {
                 UiRect::new(280.0, 16.0, 260.0, 92.0),
                 Field::new("Endpoint")
                     .value("nodes.edgerun.tech")
-                    .focused(true),
+                    .focused(true)
+                    .id(6),
             );
             slider(
                 &mut ui,
@@ -722,6 +764,21 @@ mod tests {
         }
 
         assert!(scene.rects().len() > 20);
-        assert!(scene.hits().len() >= 2);
+        assert!(scene
+            .hits()
+            .iter()
+            .any(|hit| hit.kind == HitKind::Input && hit.id == 6));
+        assert!(scene
+            .hits()
+            .iter()
+            .any(|hit| hit.kind == HitKind::Slider && hit.id == 7));
+        assert!(scene
+            .hits()
+            .iter()
+            .any(|hit| hit.kind == HitKind::TransactionRow && hit.id == 8));
+        assert!(scene
+            .hits()
+            .iter()
+            .any(|hit| hit.kind == HitKind::MenuItem && hit.id == 9));
     }
 }

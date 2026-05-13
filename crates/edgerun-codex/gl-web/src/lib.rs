@@ -188,6 +188,11 @@ fn hit_kind_code(kind: HitKind) -> u32 {
         HitKind::Tab => 5,
         HitKind::Toggle => 6,
         HitKind::ListRow => 7,
+        HitKind::Input => 8,
+        HitKind::TextArea => 9,
+        HitKind::Slider => 10,
+        HitKind::MenuItem => 11,
+        HitKind::TransactionRow => 12,
     }
 }
 
