@@ -658,6 +658,17 @@ impl UiNode {
         }
     }
 
+    pub fn grid_auto(classes: &str) -> Self {
+        let style = UiStyle::parse(classes);
+        Self {
+            kind: UiNodeKind::Grid {
+                columns: style.grid_cols.unwrap_or(1),
+            },
+            style,
+            children: Vec::new(),
+        }
+    }
+
     pub fn card(classes: &str) -> Self {
         Self {
             kind: UiNodeKind::Card,
@@ -839,6 +850,11 @@ impl UiNode {
         let mut parsed = UiStyle::parse(classes);
         if matches!(self.kind, UiNodeKind::Row) {
             parsed.direction = Axis::Horizontal;
+        }
+        if let UiNodeKind::Grid { columns } = &mut self.kind {
+            if let Some(grid_cols) = parsed.grid_cols {
+                *columns = grid_cols;
+            }
         }
         if self.style.col_span > 1 && parsed.col_span == 1 {
             parsed.col_span = self.style.col_span;
@@ -1202,6 +1218,10 @@ pub fn column(classes: &str) -> UiNode {
 
 pub fn grid(classes: &str, columns: u16) -> UiNode {
     UiNode::grid(classes, columns)
+}
+
+pub fn grid_auto(classes: &str) -> UiNode {
+    UiNode::grid_auto(classes)
 }
 
 pub fn card(classes: &str) -> UiNode {
@@ -2904,6 +2924,23 @@ mod tests {
 
         assert!(scene.rects().len() > 30);
         assert!(scene.hits().is_empty());
+    }
+
+    #[test]
+    fn grid_auto_reads_columns_from_classes() {
+        let mut scene = GpuScene::new(palette::BG);
+        {
+            let mut ui = UiPainter::new(&mut scene);
+            grid_auto("grid grid-cols-3 bg-panel border rounded-md p-3 gap-3")
+                .children([
+                    metric("One", "1").class("h-24"),
+                    metric("Two", "2").class("h-24"),
+                    metric("Three", "3").class("h-24"),
+                ])
+                .render(&mut ui, UiRect::new(0.0, 0.0, 480.0, 160.0));
+        }
+
+        assert!(scene.rects().len() > 20);
     }
 
     #[test]

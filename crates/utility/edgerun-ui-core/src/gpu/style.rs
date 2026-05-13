@@ -33,6 +33,7 @@ pub struct UiStyle {
     pub width: Option<f32>,
     pub height: Option<f32>,
     pub grow: bool,
+    pub grid_cols: Option<u16>,
     pub col_span: u16,
     pub align: AlignItems,
     pub justify: JustifyContent,
@@ -52,6 +53,7 @@ impl Default for UiStyle {
             width: None,
             height: None,
             grow: false,
+            grid_cols: None,
             col_span: 1,
             align: AlignItems::Stretch,
             justify: JustifyContent::Start,
@@ -106,6 +108,17 @@ impl UiStyle {
     }
 
     fn apply_grid_class(&mut self, class: &str) -> bool {
+        if class == "grid" {
+            self.grid_cols = Some(self.grid_cols.unwrap_or(1));
+            return true;
+        }
+        if let Some(columns) = class
+            .strip_prefix("grid-cols-")
+            .and_then(|value| value.parse::<u16>().ok())
+        {
+            self.grid_cols = Some(columns.max(1));
+            return true;
+        }
         if let Some(span) = class
             .strip_prefix("col-span-")
             .and_then(|value| value.parse::<u16>().ok())
@@ -275,6 +288,7 @@ mod tests {
         assert_eq!(style.padding, [8.0, 16.0, 8.0, 16.0]);
         assert_eq!(style.width, Some(256.0));
         assert_eq!(style.height, Some(FILL_PARENT));
+        assert_eq!(style.grid_cols, None);
         assert_eq!(style.col_span, 1);
         assert_eq!(style.align, AlignItems::Stretch);
         assert_eq!(style.justify, JustifyContent::Start);
@@ -291,8 +305,9 @@ mod tests {
 
     #[test]
     fn parses_grid_span_class() {
-        let style = UiStyle::parse("col-span-3");
+        let style = UiStyle::parse("grid grid-cols-4 col-span-3");
 
+        assert_eq!(style.grid_cols, Some(4));
         assert_eq!(style.col_span, 3);
     }
 
