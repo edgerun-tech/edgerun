@@ -101,7 +101,6 @@ members = [
   "crates/utility/edgerun-unicode",
   "crates/utility/edgerun-unit-macros",
   "crates/utility/edgerun-url",
-  "crates/utility/edgerun-v8",
   "crates/utility/edgerun-zeroize",
   "crates/utility/edgerun-zstd",
 ]
