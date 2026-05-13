@@ -491,6 +491,9 @@ pub enum Axis {
     Vertical,
 }
 
+const SPACING_UNIT: f32 = 4.0;
+const FILL_PARENT: f32 = -1.0;
+
 #[derive(Clone, Debug)]
 pub struct UiStyle {
     pub direction: Axis,
@@ -534,62 +537,93 @@ impl UiStyle {
     }
 
     fn apply_class(&mut self, class: &str) {
+        if self.apply_layout_class(class)
+            || self.apply_radius_class(class)
+            || self.apply_color_class(class)
+            || self.apply_spacing_class(class)
+            || self.apply_size_class(class)
+        {
+            return;
+        }
+    }
+
+    fn apply_layout_class(&mut self, class: &str) -> bool {
         match class {
             "row" | "flex-row" => self.direction = Axis::Horizontal,
             "col" | "column" | "flex-col" => self.direction = Axis::Vertical,
             "flex-1" | "grow" => self.grow = true,
             "truncate" => self.truncate = true,
             "border" => self.border = true,
-            "rounded" => self.radius = 8.0,
-            "rounded-sm" => self.radius = 4.0,
-            "rounded-md" => self.radius = 8.0,
-            "rounded-lg" => self.radius = 12.0,
-            "rounded-xl" => self.radius = 16.0,
-            "rounded-full" => self.radius = 999.0,
-            "w-full" => self.width = Some(-1.0),
-            "h-full" => self.height = Some(-1.0),
-            "bg-bg" => self.bg = Some(palette::BG),
-            "bg-sidebar" => self.bg = Some(palette::SIDEBAR),
-            "bg-topbar" => self.bg = Some(palette::TOPBAR),
-            "bg-panel" => self.bg = Some(palette::PANEL),
-            "bg-row" => self.bg = Some(palette::ROW),
-            "bg-active" => self.bg = Some(palette::ACTIVE_ROW),
-            "bg-composer" => self.bg = Some(palette::COMPOSER),
-            "bg-accent" => self.bg = Some(palette::ACCENT),
-            "text-primary" | "text-text" => self.text = palette::TEXT,
-            "text-muted" => self.text = palette::MUTED,
-            "text-accent" => self.text = palette::ACCENT,
-            "text-green" => self.text = palette::GREEN,
-            "text-violet" => self.text = palette::VIOLET,
-            "text-amber" => self.text = palette::AMBER,
-            "text-danger" => self.text = palette::DANGER,
-            _ => {
-                if let Some(color) = class.strip_prefix("bg-").and_then(tailwind_class_color) {
-                    self.bg = Some(color);
-                } else if let Some(color) =
-                    class.strip_prefix("text-").and_then(tailwind_class_color)
-                {
-                    self.text = color;
-                } else if let Some(value) = class.strip_prefix("gap-").and_then(spacing_value) {
-                    self.gap = value;
-                } else if let Some(value) = class.strip_prefix("p-").and_then(spacing_value) {
-                    self.padding = [value; 4];
-                } else if let Some(value) = class.strip_prefix("px-").and_then(spacing_value) {
-                    self.padding[1] = value;
-                    self.padding[3] = value;
-                } else if let Some(value) = class.strip_prefix("py-").and_then(spacing_value) {
-                    self.padding[0] = value;
-                    self.padding[2] = value;
-                } else if let Some(value) = class.strip_prefix("w-").and_then(size_value) {
-                    self.width = Some(value);
-                } else if let Some(value) = class.strip_prefix("h-").and_then(size_value) {
-                    self.height = Some(value);
-                } else if let Some(value) = class.strip_prefix("size-").and_then(size_value) {
-                    self.width = Some(value);
-                    self.height = Some(value);
-                }
-            }
+            _ => return false,
         }
+        true
+    }
+
+    fn apply_radius_class(&mut self, class: &str) -> bool {
+        self.radius = match class {
+            "rounded" | "rounded-md" => 8.0,
+            "rounded-sm" => 4.0,
+            "rounded-lg" => 12.0,
+            "rounded-xl" => 16.0,
+            "rounded-full" => 999.0,
+            _ => return false,
+        };
+        true
+    }
+
+    fn apply_color_class(&mut self, class: &str) -> bool {
+        if let Some(color) = semantic_bg_color(class) {
+            self.bg = Some(color);
+            return true;
+        }
+        if let Some(color) = semantic_text_color(class) {
+            self.text = color;
+            return true;
+        }
+        if let Some(color) = class.strip_prefix("bg-").and_then(tailwind_class_color) {
+            self.bg = Some(color);
+            return true;
+        }
+        if let Some(color) = class.strip_prefix("text-").and_then(tailwind_class_color) {
+            self.text = color;
+            return true;
+        }
+        false
+    }
+
+    fn apply_spacing_class(&mut self, class: &str) -> bool {
+        if let Some(value) = class.strip_prefix("gap-").and_then(spacing_value) {
+            self.gap = value;
+        } else if let Some(value) = class.strip_prefix("p-").and_then(spacing_value) {
+            self.padding = [value; 4];
+        } else if let Some(value) = class.strip_prefix("px-").and_then(spacing_value) {
+            self.padding[1] = value;
+            self.padding[3] = value;
+        } else if let Some(value) = class.strip_prefix("py-").and_then(spacing_value) {
+            self.padding[0] = value;
+            self.padding[2] = value;
+        } else {
+            return false;
+        }
+        true
+    }
+
+    fn apply_size_class(&mut self, class: &str) -> bool {
+        if class == "w-full" {
+            self.width = Some(FILL_PARENT);
+        } else if class == "h-full" {
+            self.height = Some(FILL_PARENT);
+        } else if let Some(value) = class.strip_prefix("w-").and_then(size_value) {
+            self.width = Some(value);
+        } else if let Some(value) = class.strip_prefix("h-").and_then(size_value) {
+            self.height = Some(value);
+        } else if let Some(value) = class.strip_prefix("size-").and_then(size_value) {
+            self.width = Some(value);
+            self.height = Some(value);
+        } else {
+            return false;
+        }
+        true
     }
 
     fn layout_rect(&self, bounds: UiRect) -> UiRect {
@@ -2663,13 +2697,40 @@ fn intrinsic_height(child: &UiNode) -> f32 {
 }
 
 fn spacing_value(value: &str) -> Option<f32> {
-    value.parse::<f32>().ok().map(|n| n * 4.0)
+    value.parse::<f32>().ok().map(|n| n * SPACING_UNIT)
 }
 
 fn size_value(value: &str) -> Option<f32> {
     match value {
-        "full" => Some(-1.0),
-        _ => value.parse::<f32>().ok().map(|n| n * 4.0),
+        "full" => Some(FILL_PARENT),
+        _ => value.parse::<f32>().ok().map(|n| n * SPACING_UNIT),
+    }
+}
+
+fn semantic_bg_color(class: &str) -> Option<Color4> {
+    match class {
+        "bg-bg" => Some(palette::BG),
+        "bg-sidebar" => Some(palette::SIDEBAR),
+        "bg-topbar" => Some(palette::TOPBAR),
+        "bg-panel" => Some(palette::PANEL),
+        "bg-row" => Some(palette::ROW),
+        "bg-active" => Some(palette::ACTIVE_ROW),
+        "bg-composer" => Some(palette::COMPOSER),
+        "bg-accent" => Some(palette::ACCENT),
+        _ => None,
+    }
+}
+
+fn semantic_text_color(class: &str) -> Option<Color4> {
+    match class {
+        "text-primary" | "text-text" => Some(palette::TEXT),
+        "text-muted" => Some(palette::MUTED),
+        "text-accent" => Some(palette::ACCENT),
+        "text-green" => Some(palette::GREEN),
+        "text-violet" => Some(palette::VIOLET),
+        "text-amber" => Some(palette::AMBER),
+        "text-danger" => Some(palette::DANGER),
+        _ => None,
     }
 }
 
@@ -2737,6 +2798,51 @@ pub mod palette {
     pub const ACCENT_TEXT: Color4 = Color4::from_color(crate::EDGERUN_DARK.accent_text);
     pub const TEXT: Color4 = Color4::from_color(crate::EDGERUN_DARK.text);
     pub const MUTED: Color4 = Color4::from_color(crate::EDGERUN_DARK.muted);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_layout_spacing_and_size_classes_independently() {
+        let style =
+            UiStyle::parse("row flex-1 truncate border rounded-lg gap-3 px-4 py-2 w-64 h-full");
+
+        assert_eq!(style.direction, Axis::Horizontal);
+        assert!(style.grow);
+        assert!(style.truncate);
+        assert!(style.border);
+        assert_eq!(style.radius, 12.0);
+        assert_eq!(style.gap, 12.0);
+        assert_eq!(style.padding, [8.0, 16.0, 8.0, 16.0]);
+        assert_eq!(style.width, Some(256.0));
+        assert_eq!(style.height, Some(FILL_PARENT));
+    }
+
+    #[test]
+    fn resolves_semantic_and_tailwind_color_classes_from_shared_palette() {
+        let semantic = UiStyle::parse("bg-panel text-muted");
+        assert_eq!(semantic.bg, Some(palette::PANEL));
+        assert_eq!(semantic.text, palette::MUTED);
+
+        let tailwind = UiStyle::parse("bg-slate-900 text-cyan-600");
+        assert_eq!(
+            tailwind.bg,
+            Some(Color4::from_color(crate::TAILWIND.slate_900))
+        );
+        assert_eq!(tailwind.text, Color4::from_color(crate::TAILWIND.cyan_600));
+    }
+
+    #[test]
+    fn unknown_classes_are_ignored_without_mutating_defaults() {
+        let style = UiStyle::parse("hover:bg-slate-900 made-up-class");
+        assert_eq!(style.direction, Axis::Vertical);
+        assert_eq!(style.bg, None);
+        assert_eq!(style.text, palette::TEXT);
+        assert_eq!(style.width, None);
+        assert_eq!(style.height, None);
+    }
 }
 
 fn glyph5x7(ch: char) -> [u8; 7] {
