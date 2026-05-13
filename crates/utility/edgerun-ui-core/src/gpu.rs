@@ -74,6 +74,30 @@ pub struct GpuRect {
     pub shadow: f32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GpuClip {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+}
+
+impl GpuClip {
+    pub const fn new(x: f32, y: f32, w: f32, h: f32) -> Self {
+        Self { x, y, w, h }
+    }
+
+    pub fn intersect(self, other: Self) -> Option<Self> {
+        let x0 = self.x.max(other.x);
+        let y0 = self.y.max(other.y);
+        let x1 = (self.x + self.w).min(other.x + other.w);
+        let y1 = (self.y + self.h).min(other.y + other.h);
+        let w = x1 - x0;
+        let h = y1 - y0;
+        (w > 0.0 && h > 0.0).then_some(Self::new(x0, y0, w, h))
+    }
+}
+
 impl GpuRect {
     pub const fn fill(x: f32, y: f32, w: f32, h: f32, radius: f32, color: Color4) -> Self {
         Self {
@@ -128,6 +152,7 @@ pub struct GpuScene {
     pub clear: Color4,
     rects: Vec<GpuRect>,
     hits: Vec<GpuHit>,
+    clip_stack: Vec<GpuClip>,
     #[cfg(feature = "fontdue-text")]
     text_quads: Vec<TextQuad>,
 }
@@ -138,6 +163,7 @@ impl GpuScene {
             clear,
             rects: Vec::new(),
             hits: Vec::new(),
+            clip_stack: Vec::new(),
             #[cfg(feature = "fontdue-text")]
             text_quads: Vec::new(),
         }
@@ -146,16 +172,70 @@ impl GpuScene {
     pub fn clear_rects(&mut self) {
         self.rects.clear();
         self.hits.clear();
+        self.clip_stack.clear();
         #[cfg(feature = "fontdue-text")]
         self.text_quads.clear();
     }
 
     pub fn push_rect(&mut self, rect: GpuRect) {
-        self.rects.push(rect);
+        if let Some(rect) = self.clip_rect(rect) {
+            self.rects.push(rect);
+        }
     }
 
     pub fn push_hit(&mut self, hit: GpuHit) {
-        self.hits.push(hit);
+        if let Some(hit) = self.clip_hit(hit) {
+            self.hits.push(hit);
+        }
+    }
+
+    pub fn push_clip(&mut self, clip: GpuClip) -> bool {
+        let next = if let Some(current) = self.current_clip() {
+            current.intersect(clip)
+        } else if clip.w > 0.0 && clip.h > 0.0 {
+            Some(clip)
+        } else {
+            None
+        };
+        if let Some(next) = next {
+            self.clip_stack.push(next);
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn pop_clip(&mut self) {
+        self.clip_stack.pop();
+    }
+
+    pub fn current_clip(&self) -> Option<GpuClip> {
+        self.clip_stack.last().copied()
+    }
+
+    fn clip_rect(&self, mut rect: GpuRect) -> Option<GpuRect> {
+        let Some(clip) = self.current_clip() else {
+            return (rect.w > 0.0 && rect.h > 0.0).then_some(rect);
+        };
+        let clipped = GpuClip::new(rect.x, rect.y, rect.w, rect.h).intersect(clip)?;
+        rect.x = clipped.x;
+        rect.y = clipped.y;
+        rect.w = clipped.w;
+        rect.h = clipped.h;
+        rect.radius = rect.radius.min(rect.w * 0.5).min(rect.h * 0.5);
+        Some(rect)
+    }
+
+    fn clip_hit(&self, mut hit: GpuHit) -> Option<GpuHit> {
+        let Some(clip) = self.current_clip() else {
+            return (hit.w > 0.0 && hit.h > 0.0).then_some(hit);
+        };
+        let clipped = GpuClip::new(hit.x, hit.y, hit.w, hit.h).intersect(clip)?;
+        hit.x = clipped.x;
+        hit.y = clipped.y;
+        hit.w = clipped.w;
+        hit.h = clipped.h;
+        Some(hit)
     }
 
     pub fn push_text(&mut self, mut x: f32, y: f32, text: &str, scale: f32, color: Color4) {
@@ -227,6 +307,40 @@ impl GpuScene {
     #[cfg(feature = "fontdue-text")]
     pub fn push_font_text(&mut self, atlas: &FontAtlas, x: f32, y: f32, text: &str, color: Color4) {
         atlas.layout_text(self, x, y, text, color);
+    }
+
+    #[cfg(feature = "fontdue-text")]
+    fn push_text_quad(&mut self, quad: TextQuad) {
+        if let Some(quad) = self.clip_text_quad(quad) {
+            self.text_quads.push(quad);
+        }
+    }
+
+    #[cfg(feature = "fontdue-text")]
+    fn clip_text_quad(&self, mut quad: TextQuad) -> Option<TextQuad> {
+        let Some(clip) = self.current_clip() else {
+            return (quad.w > 0.0 && quad.h > 0.0).then_some(quad);
+        };
+        let x0 = quad.x;
+        let y0 = quad.y;
+        let x1 = quad.x + quad.w;
+        let y1 = quad.y + quad.h;
+        let clipped = GpuClip::new(quad.x, quad.y, quad.w, quad.h).intersect(clip)?;
+        let u_span = quad.u1 - quad.u0;
+        let v_span = quad.v1 - quad.v0;
+        let left = ((clipped.x - x0) / (x1 - x0)).clamp(0.0, 1.0);
+        let top = ((clipped.y - y0) / (y1 - y0)).clamp(0.0, 1.0);
+        let right = ((clipped.x + clipped.w - x0) / (x1 - x0)).clamp(0.0, 1.0);
+        let bottom = ((clipped.y + clipped.h - y0) / (y1 - y0)).clamp(0.0, 1.0);
+        quad.x = clipped.x;
+        quad.y = clipped.y;
+        quad.w = clipped.w;
+        quad.h = clipped.h;
+        quad.u1 = quad.u0 + u_span * right;
+        quad.v1 = quad.v0 + v_span * bottom;
+        quad.u0 += u_span * left;
+        quad.v0 += v_span * top;
+        Some(quad)
     }
 
     #[cfg(feature = "fontdue-text")]
@@ -447,7 +561,7 @@ impl FontAtlas {
                 continue;
             };
             if glyph.size[0] > 0.0 && glyph.size[1] > 0.0 {
-                scene.text_quads.push(TextQuad {
+                scene.push_text_quad(TextQuad {
                     x: x + glyph.bearing[0],
                     y: baseline - glyph.bearing[1] - glyph.size[1],
                     w: glyph.size[0],
@@ -3105,21 +3219,13 @@ fn render_children(ui: &mut UiPainter<'_, '_>, rect: UiRect, style: &UiStyle, ch
             Axis::Horizontal => {
                 let cross =
                     aligned_cross(content.y, content.h, child, Axis::Horizontal, style.align);
-                UiRect::new(
-                    cursor,
-                    cross.0,
-                    main.max(0.0).min(content.x + content.w - cursor),
-                    cross.1,
-                )
+                let w = main.max(0.0).min((content.x + content.w - cursor).max(0.0));
+                UiRect::new(cursor, cross.0, w, cross.1)
             }
             Axis::Vertical => {
                 let cross = aligned_cross(content.x, content.w, child, Axis::Vertical, style.align);
-                UiRect::new(
-                    cross.0,
-                    cursor,
-                    cross.1,
-                    main.max(0.0).min(content.y + content.h - cursor),
-                )
+                let h = main.max(0.0).min((content.y + content.h - cursor).max(0.0));
+                UiRect::new(cross.0, cursor, cross.1, h)
             }
         };
         child.render(ui, child_rect);
@@ -3235,13 +3341,19 @@ fn render_scroll_children(
     let scroll_y = scrollable * offset.clamp(0.0, 1.0);
     let mut cursor = content.y - scroll_y;
 
+    let clipped = ui
+        .scene
+        .push_clip(GpuClip::new(content.x, content.y, content.w, content.h));
     for child in children {
         let h = child_main_size(child, Axis::Vertical);
         let bottom = cursor + h;
-        if cursor >= content.y && bottom <= content.y + content.h {
+        if bottom >= content.y && cursor <= content.y + content.h && clipped {
             child.render(ui, UiRect::new(content.x, cursor, content.w, h));
         }
         cursor += h + style.gap;
+    }
+    if clipped {
+        ui.scene.pop_clip();
     }
 
     if total > content.h {
@@ -3371,7 +3483,7 @@ mod tests {
                         .selected(true),
                     button("Open", 43, ButtonStyle::Secondary).class("h-8"),
                 ])
-                .render(&mut ui, UiRect::new(0.0, 0.0, 360.0, 420.0));
+                .render(&mut ui, UiRect::new(0.0, 0.0, 360.0, 620.0));
         }
 
         assert!(scene.rects().len() > 20);
@@ -3445,7 +3557,7 @@ mod tests {
                     button("Run", 70, ButtonStyle::Primary).class("h-8")
                 ]
             )
-            .render(&mut ui, UiRect::new(0.0, 0.0, 320.0, 260.0));
+            .render(&mut ui, UiRect::new(0.0, 0.0, 320.0, 320.0));
         }
 
         assert!(scene.rects().len() > 25);
@@ -3505,6 +3617,37 @@ mod tests {
             .hits()
             .iter()
             .any(|hit| hit.kind == HitKind::Scrollbar && hit.id == 99));
+    }
+
+    #[test]
+    fn scene_clip_stack_clips_rects_and_hits() {
+        let mut scene = GpuScene::new(palette::BG);
+        assert!(scene.push_clip(GpuClip::new(10.0, 20.0, 80.0, 40.0)));
+        scene.push_rect(GpuRect::fill(0.0, 0.0, 40.0, 40.0, 8.0, palette::ACCENT));
+        scene.push_hit(GpuHit::new(HitKind::Button, 7, 0.0, 0.0, 40.0, 40.0));
+        scene.push_rect(GpuRect::fill(120.0, 0.0, 20.0, 20.0, 0.0, palette::ACCENT));
+        scene.pop_clip();
+
+        assert_eq!(scene.rects().len(), 1);
+        assert_eq!(
+            (
+                scene.rects()[0].x,
+                scene.rects()[0].y,
+                scene.rects()[0].w,
+                scene.rects()[0].h
+            ),
+            (10.0, 20.0, 30.0, 20.0)
+        );
+        assert_eq!(scene.hits().len(), 1);
+        assert_eq!(
+            (
+                scene.hits()[0].x,
+                scene.hits()[0].y,
+                scene.hits()[0].w,
+                scene.hits()[0].h
+            ),
+            (10.0, 20.0, 30.0, 20.0)
+        );
     }
 
     #[test]
