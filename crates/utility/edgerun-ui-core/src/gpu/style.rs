@@ -6,6 +6,22 @@ pub enum Axis {
     Vertical,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AlignItems {
+    Start,
+    Center,
+    End,
+    Stretch,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum JustifyContent {
+    Start,
+    Center,
+    End,
+    Between,
+}
+
 const SPACING_UNIT: f32 = 4.0;
 const FILL_PARENT: f32 = -1.0;
 
@@ -18,6 +34,8 @@ pub struct UiStyle {
     pub height: Option<f32>,
     pub grow: bool,
     pub col_span: u16,
+    pub align: AlignItems,
+    pub justify: JustifyContent,
     pub bg: Option<Color4>,
     pub text: Color4,
     pub border: bool,
@@ -35,6 +53,8 @@ impl Default for UiStyle {
             height: None,
             grow: false,
             col_span: 1,
+            align: AlignItems::Stretch,
+            justify: JustifyContent::Start,
             bg: None,
             text: palette::TEXT,
             border: false,
@@ -72,6 +92,14 @@ impl UiStyle {
             "flex-1" | "grow" => self.grow = true,
             "truncate" => self.truncate = true,
             "border" => self.border = true,
+            "items-start" => self.align = AlignItems::Start,
+            "items-center" => self.align = AlignItems::Center,
+            "items-end" => self.align = AlignItems::End,
+            "items-stretch" => self.align = AlignItems::Stretch,
+            "justify-start" => self.justify = JustifyContent::Start,
+            "justify-center" => self.justify = JustifyContent::Center,
+            "justify-end" => self.justify = JustifyContent::End,
+            "justify-between" => self.justify = JustifyContent::Between,
             _ => return false,
         }
         true
@@ -248,6 +276,17 @@ mod tests {
         assert_eq!(style.width, Some(256.0));
         assert_eq!(style.height, Some(FILL_PARENT));
         assert_eq!(style.col_span, 1);
+        assert_eq!(style.align, AlignItems::Stretch);
+        assert_eq!(style.justify, JustifyContent::Start);
+    }
+
+    #[test]
+    fn parses_alignment_classes() {
+        let style = UiStyle::parse("row items-center justify-between");
+
+        assert_eq!(style.direction, Axis::Horizontal);
+        assert_eq!(style.align, AlignItems::Center);
+        assert_eq!(style.justify, JustifyContent::Between);
     }
 
     #[test]

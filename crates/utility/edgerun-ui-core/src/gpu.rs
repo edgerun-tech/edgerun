@@ -17,7 +17,7 @@ pub use components::{
     BarChart, Field, MenuItem, MetricCard, PanelHeader, Slider, TextArea, TransactionRow, UiGrid,
     UiStack,
 };
-pub use style::{Axis, UiStyle};
+pub use style::{AlignItems, Axis, JustifyContent, UiStyle};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Color4 {
@@ -629,9 +629,11 @@ pub struct UiNode {
 
 impl UiNode {
     pub fn row(classes: &str) -> Self {
+        let mut style = UiStyle::parse(classes);
+        style.direction = Axis::Horizontal;
         Self {
             kind: UiNodeKind::Row,
-            style: UiStyle::parse(classes),
+            style,
             children: Vec::new(),
         }
     }
@@ -2580,7 +2582,6 @@ fn render_children(ui: &mut UiPainter<'_, '_>, rect: UiRect, style: &UiStyle, ch
         Axis::Horizontal => content.w,
         Axis::Vertical => content.h,
     };
-    let gap_total = style.gap * children.len().saturating_sub(1) as f32;
     let mut fixed = 0.0;
     let mut grow_count = 0usize;
     for child in children {
@@ -2590,39 +2591,90 @@ fn render_children(ui: &mut UiPainter<'_, '_>, rect: UiRect, style: &UiStyle, ch
         }
         fixed += child_main_size(child, style.direction);
     }
+    let gap_total = style.gap * children.len().saturating_sub(1) as f32;
     let grow_size = if grow_count > 0 {
         ((main_available - fixed - gap_total).max(0.0)) / grow_count as f32
     } else {
         0.0
     };
-
-    let mut cursor = match style.direction {
-        Axis::Horizontal => content.x,
-        Axis::Vertical => content.y,
-    };
+    let mut main_sizes = Vec::with_capacity(children.len());
     for child in children {
-        let main = if child.style.grow {
+        main_sizes.push(if child.style.grow {
             grow_size
         } else {
             child_main_size(child, style.direction)
-        };
+        });
+    }
+    let main_sum: f32 = main_sizes.iter().sum();
+    let mut gap = style.gap;
+    let slack = (main_available - main_sum - gap_total).max(0.0);
+    let start_offset = if grow_count > 0 {
+        0.0
+    } else {
+        match style.justify {
+            JustifyContent::Start | JustifyContent::Between => 0.0,
+            JustifyContent::Center => slack * 0.5,
+            JustifyContent::End => slack,
+        }
+    };
+    if grow_count == 0 && matches!(style.justify, JustifyContent::Between) && children.len() > 1 {
+        gap = (main_available - main_sum).max(0.0) / children.len().saturating_sub(1) as f32;
+    }
+
+    let mut cursor = match style.direction {
+        Axis::Horizontal => content.x + start_offset,
+        Axis::Vertical => content.y + start_offset,
+    };
+    for (child, main) in children.iter().zip(main_sizes) {
         let child_rect = match style.direction {
-            Axis::Horizontal => UiRect::new(
-                cursor,
-                content.y,
-                main.max(0.0).min(content.x + content.w - cursor),
-                child_cross_size(child, Axis::Horizontal).min(content.h),
-            ),
-            Axis::Vertical => UiRect::new(
-                content.x,
-                cursor,
-                child_cross_size(child, Axis::Vertical).min(content.w),
-                main.max(0.0).min(content.y + content.h - cursor),
-            ),
+            Axis::Horizontal => {
+                let cross =
+                    aligned_cross(content.y, content.h, child, Axis::Horizontal, style.align);
+                UiRect::new(
+                    cursor,
+                    cross.0,
+                    main.max(0.0).min(content.x + content.w - cursor),
+                    cross.1,
+                )
+            }
+            Axis::Vertical => {
+                let cross = aligned_cross(content.x, content.w, child, Axis::Vertical, style.align);
+                UiRect::new(
+                    cross.0,
+                    cursor,
+                    cross.1,
+                    main.max(0.0).min(content.y + content.h - cursor),
+                )
+            }
         };
         child.render(ui, child_rect);
-        cursor += main + style.gap;
+        cursor += main + gap;
     }
+}
+
+fn aligned_cross(
+    content_start: f32,
+    content_size: f32,
+    child: &UiNode,
+    parent_axis: Axis,
+    align: AlignItems,
+) -> (f32, f32) {
+    let explicit = match parent_axis {
+        Axis::Horizontal => child.style.height,
+        Axis::Vertical => child.style.width,
+    };
+    let size = match explicit {
+        Some(value) if value >= 0.0 => value.min(content_size),
+        _ if matches!(align, AlignItems::Stretch) => content_size,
+        _ => child_cross_size(child, parent_axis).min(content_size),
+    }
+    .max(0.0);
+    let offset = match align {
+        AlignItems::Start | AlignItems::Stretch => 0.0,
+        AlignItems::Center => (content_size - size).max(0.0) * 0.5,
+        AlignItems::End => (content_size - size).max(0.0),
+    };
+    (content_start + offset, size)
 }
 
 fn render_grid_children(
@@ -2694,7 +2746,7 @@ fn child_cross_size(child: &UiNode, parent_axis: Axis) -> f32 {
             .style
             .height
             .unwrap_or_else(|| intrinsic_height(child)),
-        Axis::Vertical => child.style.width.unwrap_or(-1.0),
+        Axis::Vertical => child.style.width.unwrap_or_else(|| intrinsic_width(child)),
     }
 }
 
@@ -2852,6 +2904,46 @@ mod tests {
 
         assert!(scene.rects().len() > 30);
         assert!(scene.hits().is_empty());
+    }
+
+    #[test]
+    fn alignment_classes_control_child_placement() {
+        let mut scene = GpuScene::new(palette::BG);
+        {
+            let mut ui = UiPainter::new(&mut scene);
+            row("bg-panel border rounded-md p-2 items-center justify-between")
+                .children([
+                    text("Left").class("w-12"),
+                    button("Right", 80, ButtonStyle::Secondary).class("w-20 h-8"),
+                ])
+                .render(&mut ui, UiRect::new(0.0, 0.0, 320.0, 80.0));
+        }
+
+        let hit = scene
+            .hits()
+            .iter()
+            .find(|hit| hit.id == 80)
+            .expect("button hit");
+        assert!(hit.x > 220.0);
+        assert!((hit.y - 24.0).abs() < 0.1);
+    }
+
+    #[test]
+    fn column_children_stretch_by_default() {
+        let mut scene = GpuScene::new(palette::BG);
+        {
+            let mut ui = UiPainter::new(&mut scene);
+            column("bg-panel border rounded-md p-2 gap-2")
+                .child(button("Wide", 81, ButtonStyle::Secondary).class("h-8"))
+                .render(&mut ui, UiRect::new(0.0, 0.0, 220.0, 80.0));
+        }
+
+        let hit = scene
+            .hits()
+            .iter()
+            .find(|hit| hit.id == 81)
+            .expect("button hit");
+        assert!(hit.w > 190.0);
     }
 
     #[test]
