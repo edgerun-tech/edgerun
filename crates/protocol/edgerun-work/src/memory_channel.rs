@@ -1,16 +1,24 @@
 use alloc::vec::Vec;
 
 use crate::channel::*;
-use crate::codec::encode_channel_envelope_for_route;
 use crate::protocol::{Hash, NodeId, WorkPacket};
 use crate::route_binding::current_unix_ms;
-use crate::route_table::RouteState;
+use crate::route_table::{RouteState, RouteStateSendError};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MemoryChannelError {
     RouteMissing,
     RouteInvalid,
     PacketHashFailed,
+}
+
+impl From<RouteStateSendError> for MemoryChannelError {
+    fn from(error: RouteStateSendError) -> Self {
+        match error {
+            RouteStateSendError::RouteMissing => Self::RouteMissing,
+            RouteStateSendError::PacketHashFailed => Self::PacketHashFailed,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -49,15 +57,9 @@ impl MemoryChannelEngine {
         to: NodeId,
         packet: WorkPacket,
     ) -> Result<ChannelEnvelope, MemoryChannelError> {
-        let route = self
-            .routes
-            .route_for_send(&to, current_unix_ms())
-            .ok_or(MemoryChannelError::RouteMissing)?;
-        let encoded = encode_channel_envelope_for_route(route, from, to, packet)
-            .map_err(|_| MemoryChannelError::PacketHashFailed)?;
-        let envelope = encoded.envelope;
-        self.routes.push_inbox(envelope.clone());
-        Ok(envelope)
+        self.routes
+            .queue_send(from, to, packet, current_unix_ms())
+            .map_err(Into::into)
     }
 
     pub fn drain_inbox(&mut self, node_id: NodeId) -> Vec<ChannelEnvelope> {

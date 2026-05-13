@@ -82,6 +82,24 @@ impl ChannelOrderBook {
         Ok(message_hash)
     }
 
+    pub fn accept_envelope(
+        &mut self,
+        envelope: ChannelEnvelope,
+        expected_route_hash: Hash,
+    ) -> Result<OrderedChannelEnvelope, ChannelOrderError> {
+        let from = envelope.from;
+        let to = envelope.to;
+        let sequence = self.next_sequence(envelope.channel_id, from, to);
+        let previous_message_hash = self.last_message_hash(envelope.channel_id, from, to);
+        let ordered = OrderedChannelEnvelope {
+            envelope,
+            sequence,
+            previous_message_hash,
+        };
+        self.accept(&ordered, expected_route_hash)?;
+        Ok(ordered)
+    }
+
     pub fn last_message_hash(&self, channel_id: ChannelId, from: NodeId, to: NodeId) -> Hash {
         self.streams
             .get(&StreamKey {

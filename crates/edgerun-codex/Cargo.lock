@@ -338,6 +338,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "codex-host"
+version = "0.0.0"
+dependencies = [
+ "codex-core",
+ "edgerun-crypto",
+ "edgerun-http",
+ "edgerun-json",
+ "edgerun-tokio",
+ "edgerun-work",
+]
+
+[[package]]
 name = "codex-model-provider"
 version = "0.0.0"
 dependencies = [

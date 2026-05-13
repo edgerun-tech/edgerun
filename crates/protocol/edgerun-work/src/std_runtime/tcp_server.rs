@@ -7,14 +7,13 @@ use std::sync::{
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use crate::channel::{ChannelEnvelope, RouteBinding};
-use crate::codec::{ArchivedWorkPacketFrame, encode_channel_envelope_for_route};
-use crate::protocol::{NodeId, WorkPacket};
+use crate::channel::RouteBinding;
+use crate::codec::ArchivedWorkPacketFrame;
+use crate::protocol::WorkPacket;
 use crate::std_runtime::framing::{
     read_work_packet_frame, write_encoded_work_packet, write_work_packet,
 };
 use crate::std_runtime::threading::{drain_joined_threads, join_locked_optional_thread};
-use crate::work_channel::{WorkChannelError, WorkChannelError::*};
 
 const ACCEPT_POLL_MS: u64 = 10;
 const CONNECTION_READ_TIMEOUT_MS: u64 = 250;
@@ -127,17 +126,8 @@ pub(crate) fn route_addr(route: &RouteBinding) -> String {
     String::from_utf8_lossy(&route.endpoint.address).into_owned()
 }
 
-pub(crate) fn send_unordered_to_route(
-    route: &RouteBinding,
-    from: NodeId,
-    to: NodeId,
-    packet: WorkPacket,
-) -> Result<ChannelEnvelope, WorkChannelError> {
-    let encoded =
-        encode_channel_envelope_for_route(route, from, to, packet).map_err(|_| PacketHashFailed)?;
-    send_encoded_packet_to_addr(route_addr(route), encoded.packet.as_bytes())
-        .map_err(|_| DeliveryFailed)?;
-    Ok(encoded.envelope)
+pub(crate) fn send_encoded_packet_to_route(route: &RouteBinding, bytes: &[u8]) -> io::Result<()> {
+    send_encoded_packet_to_addr(route_addr(route), bytes)
 }
 
 impl Drop for TcpPacketServer {

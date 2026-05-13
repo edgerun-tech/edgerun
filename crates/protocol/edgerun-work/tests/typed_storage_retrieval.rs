@@ -88,7 +88,7 @@ fn typed_storage_store_retrieve_and_reconstruct_over_work_channel() {
         TypedObjectStoreRole::default(),
     ];
 
-    let mut channel = MemoryWorkChannel::new();
+    let mut channel = MemoryChannelEngine::new();
     for storage in &storage_nodes {
         let route = storage.bind_memory_route(
             storage.identity.node_id,
@@ -108,7 +108,6 @@ fn typed_storage_store_retrieve_and_reconstruct_over_work_channel() {
     verify_manifest(&manifest, &shards).expect("manifest");
 
     let first_route = channel
-        .engine()
         .route_for(&storage_nodes[0].identity.node_id)
         .unwrap()
         .clone();

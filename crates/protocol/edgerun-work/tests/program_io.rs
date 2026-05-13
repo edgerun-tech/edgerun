@@ -91,7 +91,7 @@ fn decode_events(bytes: &[u8]) -> Vec<ProgramIoEvent> {
         .events
 }
 
-fn output_bytes(response: &ProgramIoResponse) -> Vec<u8> {
+fn output_bytes(response: &WorkServiceResponse) -> Vec<u8> {
     let events = decode_events(&response.bytes);
     let ProgramIoEvent::Output(output) = &events[0] else {
         panic!("expected output event");

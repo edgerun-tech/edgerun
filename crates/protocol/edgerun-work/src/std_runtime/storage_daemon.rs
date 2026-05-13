@@ -23,8 +23,6 @@ use crate::storage_adapter::{InMemoryObjectStorage, ObjectStorageAdapter};
 
 const ACCEPT_POLL_MS: u64 = 10;
 
-pub type StorageDaemonResponse = WorkServiceResponse;
-
 pub struct TcpObjectStorageDaemon<S: ObjectStorageAdapter + Send + 'static> {
     identity: NodeIdentity,
     listen_addr: SocketAddr,
@@ -33,8 +31,6 @@ pub struct TcpObjectStorageDaemon<S: ObjectStorageAdapter + Send + 'static> {
     accept_thread: Option<JoinHandle<()>>,
     worker_threads: Arc<Mutex<Vec<JoinHandle<()>>>>,
 }
-
-pub type ObjectStorageDaemon<S> = TcpObjectStorageDaemon<S>;
 
 impl TcpObjectStorageDaemon<InMemoryObjectStorage> {
     pub fn bind_memory<A: ToSocketAddrs>(
@@ -191,11 +187,11 @@ impl<S: ObjectStorageAdapter + Send + 'static> Drop for TcpObjectStorageDaemon<S
 pub fn send_storage_daemon_request<A: ToSocketAddrs>(
     addr: A,
     packet: &WorkPacket,
-) -> io::Result<StorageDaemonResponse> {
+) -> io::Result<WorkServiceResponse> {
     send_work_service_request(addr, packet)
 }
 
-pub fn read_storage_daemon_response(stream: &mut TcpStream) -> io::Result<StorageDaemonResponse> {
+pub fn read_storage_daemon_response(stream: &mut TcpStream) -> io::Result<WorkServiceResponse> {
     read_work_service_response(stream)
 }
 

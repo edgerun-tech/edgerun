@@ -2,7 +2,6 @@ use alloc::vec::Vec;
 
 use crate::channel::{CHANNEL_KIND_WEBSOCKET, ChannelEnvelope, RouteBinding};
 use crate::channel_order::{ChannelOrderBook, OrderedChannelEnvelope};
-use crate::codec::encode_channel_envelope_for_route;
 use crate::frame_codec::channel_envelope_bytes;
 use crate::protocol::{Hash, NodeId, WorkPacket};
 use crate::route_binding::current_unix_ms;
@@ -49,19 +48,10 @@ impl WsWorkChannel {
         order: &mut ChannelOrderBook,
         envelope: ChannelEnvelope,
     ) -> Result<OrderedChannelEnvelope, WorkChannelError> {
-        let from = envelope.from;
-        let to = envelope.to;
-        let sequence = order.next_sequence(envelope.channel_id, from, to);
-        let previous_message_hash = order.last_message_hash(envelope.channel_id, from, to);
-        let ordered = OrderedChannelEnvelope {
-            envelope,
-            sequence,
-            previous_message_hash,
-        };
+        let route_hash = envelope.route_hash;
         order
-            .accept(&ordered, ordered.envelope.route_hash)
-            .map_err(WorkChannelError::Order)?;
-        Ok(ordered)
+            .accept_envelope(envelope, route_hash)
+            .map_err(WorkChannelError::Order)
     }
 }
 
@@ -91,12 +81,10 @@ impl WorkChannel for WsWorkChannel {
         to: NodeId,
         packet: WorkPacket,
     ) -> Result<ChannelEnvelope, WorkChannelError> {
-        let route = self
+        let encoded = self
             .routes
-            .route_for_send(&to, current_unix_ms())
-            .ok_or(WorkChannelError::RouteMissing)?;
-        let encoded = encode_channel_envelope_for_route(route, from, to, packet)
-            .map_err(|_| WorkChannelError::PacketHashFailed)?;
+            .encode_for_send(from, to, packet, current_unix_ms())
+            .map_err(WorkChannelError::from)?;
         let envelope = encoded.envelope;
         let envelope_bytes =
             channel_envelope_bytes(&envelope).map_err(|_| WorkChannelError::PacketHashFailed)?;

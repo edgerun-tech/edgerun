@@ -1,0 +1,20 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "codex-host"
+version.workspace = true
+
+[[bin]]
+name = "codex-host"
+path = "src/main.rs"
+
+[dependencies]
+codex-core = { workspace = true, features = ["native-transport"] }
+edgerun-crypto = { path = "../../utility/edgerun-crypto", default-features = false, features = ["ed25519", "x25519", "aead", "hmac"] }
+edgerun-http = { workspace = true }
+edgerun-json = { workspace = true, features = ["serde-compat"] }
+edgerun-tokio = { workspace = true, features = ["rt", "sync"] }
+edgerun-work = { path = "../../protocol/edgerun-work", features = ["std"] }
+
+[lints]
+workspace = true

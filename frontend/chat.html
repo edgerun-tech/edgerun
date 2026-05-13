@@ -475,6 +475,7 @@
     const SEALED_RECORD_HEADER_LEN = 292;
     const stores = ["contacts", "threads", "messages", "payloads", "settings", "outbox", "inbox"];
     const enc = new TextEncoder();
+    const dec = new TextDecoder();
 
     let db;
     let state = {
@@ -906,9 +907,29 @@
       const messages = rows
         .filter(m => m.thread_id === threadId)
         .sort((a, b) => a.sequence - b.sequence);
-      for (const msg of messages) msg.text = "Encrypted message";
+      for (const msg of messages) msg.text = await messageDisplayText(msg);
       state.messages = messages;
       renderMessages();
+    }
+
+    async function messageDisplayText(msg) {
+      if (msg.text) return msg.text;
+      const payload = msg.frame_hash ? await request(tx("payloads").get(msg.frame_hash)) : null;
+      if (payload?.plaintext) return payload.plaintext;
+      if (payload?.frame && msg.to === state.owner && state.wasm?.edgerun_chat_open_envelope) {
+        try {
+          const plaintext = callChatWasm("edgerun_chat_open_envelope", concatBytes([
+            u32be(payload.frame.length),
+            new Uint8Array(payload.frame)
+          ]));
+          const text = dec.decode(plaintext);
+          await put("payloads", { ...payload, plaintext: text });
+          return text;
+        } catch (error) {
+          console.warn("message decrypt failed", error);
+        }
+      }
+      return "Encrypted message";
     }
 
     async function selectContact(contactId) {
@@ -955,7 +976,7 @@
       }
       const frame = sealed.frame;
       const frameHash = sealed.frameHash;
-      await put("payloads", { hash: frameHash, frame: Array.from(frame), created_unix_ms: Date.now() });
+      await put("payloads", { hash: frameHash, frame: Array.from(frame), plaintext: text.trim(), created_unix_ms: Date.now() });
       const msg = {
         abi_version: 1,
         message_id: sealed.messageId,
@@ -971,6 +992,7 @@
         frame_hash: frameHash,
         storage_ref: "",
         previous_message_hash: sealed.previousMessageHash,
+        text: text.trim(),
         status: state.connected ? "queued" : "local"
       };
       thread.entries.push({
@@ -999,7 +1021,18 @@
         u32be(frame.length),
         frame
       ])));
-      await put("payloads", { hash: sealed.frameHash, frame: Array.from(sealed.frame), created_unix_ms: Date.now() });
+      let plaintext = "";
+      if (sealed.to === state.owner && state.wasm?.edgerun_chat_open_envelope) {
+        try {
+          plaintext = dec.decode(callChatWasm("edgerun_chat_open_envelope", concatBytes([
+            u32be(frame.length),
+            frame
+          ])));
+        } catch (error) {
+          console.warn("incoming message decrypt failed", error);
+        }
+      }
+      await put("payloads", { hash: sealed.frameHash, frame: Array.from(sealed.frame), plaintext, created_unix_ms: Date.now() });
       const contact = state.contacts.find(c => c.primary_node_id === sealed.from || c.primary_node_id === sealed.to);
       const thread = await ensureThread(contact || {
         primary_node_id: sealed.from === state.owner ? sealed.to : sealed.from
@@ -1019,6 +1052,7 @@
         frame_hash: sealed.frameHash,
         storage_ref: "",
         previous_message_hash: sealed.previousMessageHash,
+        text: plaintext,
         status: "received"
       };
       await put("messages", msg);

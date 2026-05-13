@@ -74,10 +74,6 @@ impl RoleOutput {
             bytes,
         }
     }
-
-    pub fn into_response(self) -> WorkServiceResponse {
-        self
-    }
 }
 
 pub trait WorkRole {

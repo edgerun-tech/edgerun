@@ -88,7 +88,7 @@ fn storage_lifecycle_runs_over_generic_work_channel() {
         ObjectStoreRole::default(),
     ];
 
-    let mut channel = MemoryWorkChannel::new();
+    let mut channel = MemoryChannelEngine::new();
     for storage in &storage_nodes {
         let route = storage.bind_memory_route(storage.identity.node_id, vec![DEPARTMENT_STORAGE]);
         channel.add_route(route).expect("storage route");
@@ -107,7 +107,6 @@ fn storage_lifecycle_runs_over_generic_work_channel() {
         .route_hash_for(&storage_nodes[0].identity.node_id)
         .expect("first storage route hash");
     let first_route = channel
-        .engine()
         .route_for(&storage_nodes[0].identity.node_id)
         .expect("first storage route")
         .clone();

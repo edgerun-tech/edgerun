@@ -198,8 +198,6 @@ impl<A: ProgramIoAdapter> WorkRole for ProgramIoRole<A> {
     }
 }
 
-pub type ProgramIoResponse = WorkServiceResponse;
-
 pub struct ProgramIoService<A> {
     key: Ed25519SigningKey,
     identity: NodeIdentity,
@@ -256,7 +254,7 @@ impl<A: ProgramIoAdapter> ProgramIoService<A> {
         )
     }
 
-    pub fn handle_packet(&mut self, packet: WorkPacket, now_unix_ms: u64) -> ProgramIoResponse {
+    pub fn handle_packet(&mut self, packet: WorkPacket, now_unix_ms: u64) -> WorkServiceResponse {
         let request = match &packet {
             WorkPacket::NetworkMessage(message) => Some(message.clone()),
             _ => None,

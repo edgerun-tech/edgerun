@@ -149,31 +149,19 @@ fn tcp_runtime_stores_erasure_shards_and_settles_receipts() {
             .map(|bytes| blake3_hash(&bytes))
             .unwrap();
         let channel_id = route.endpoint.channel_id;
-        let sequence = receiver_order.next_sequence(
-            channel_id,
-            client.identity.node_id,
-            storage.identity.node_id,
-        );
-        let previous_message_hash = receiver_order.last_message_hash(
-            channel_id,
-            client.identity.node_id,
-            storage.identity.node_id,
-        );
-        let ordered = OrderedChannelEnvelope {
-            envelope: ChannelEnvelope {
-                abi_version: WORK_WIRE_ABI_VERSION,
-                channel_id,
-                from: client.identity.node_id,
-                to: storage.identity.node_id,
+        let ordered = receiver_order
+            .accept_envelope(
+                ChannelEnvelope {
+                    abi_version: WORK_WIRE_ABI_VERSION,
+                    channel_id,
+                    from: client.identity.node_id,
+                    to: storage.identity.node_id,
+                    route_hash,
+                    packet_hash,
+                    packet,
+                },
                 route_hash,
-                packet_hash,
-                packet,
-            },
-            sequence,
-            previous_message_hash,
-        };
-        receiver_order
-            .accept(&ordered, route_hash)
+            )
             .expect("ordered receive");
         storage
             .accept_ordered(&ordered, route_hash)

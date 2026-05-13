@@ -9,6 +9,7 @@ members = [
     "core",
     "gl-ui",
     "gl-web",
+    "host",
     "model-provider",
     "model-provider-info",
     "models-manager",

@@ -5,6 +5,7 @@ use crate::channel_order::{ChannelOrderBook, ChannelOrderError, OrderedChannelEn
 use crate::memory_channel::{MemoryChannelEngine, MemoryChannelError};
 use crate::protocol::{Hash, NodeId, WorkPacket};
 use crate::route_binding::route_hash;
+use crate::route_table::RouteStateSendError;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WorkChannelError {
     RouteInvalid,
@@ -20,6 +21,15 @@ impl From<MemoryChannelError> for WorkChannelError {
             MemoryChannelError::RouteInvalid => Self::RouteInvalid,
             MemoryChannelError::RouteMissing => Self::RouteMissing,
             MemoryChannelError::PacketHashFailed => Self::PacketHashFailed,
+        }
+    }
+}
+
+impl From<RouteStateSendError> for WorkChannelError {
+    fn from(error: RouteStateSendError) -> Self {
+        match error {
+            RouteStateSendError::RouteMissing => Self::RouteMissing,
+            RouteStateSendError::PacketHashFailed => Self::PacketHashFailed,
         }
     }
 }
@@ -46,17 +56,10 @@ pub trait OrderedWorkChannel: WorkChannel {
         packet: WorkPacket,
     ) -> Result<OrderedChannelEnvelope, WorkChannelError> {
         let envelope = self.send_unordered(from, to, packet)?;
-        let previous_message_hash = order.last_message_hash(envelope.channel_id, from, to);
-        let sequence = order.next_sequence(envelope.channel_id, from, to);
-        let ordered = OrderedChannelEnvelope {
-            envelope,
-            sequence,
-            previous_message_hash,
-        };
+        let route_hash = envelope.route_hash;
         order
-            .accept(&ordered, ordered.envelope.route_hash)
-            .map_err(WorkChannelError::Order)?;
-        Ok(ordered)
+            .accept_envelope(envelope, route_hash)
+            .map_err(WorkChannelError::Order)
     }
 }
 
@@ -86,59 +89,5 @@ impl WorkChannel for MemoryChannelEngine {
 
     fn recv_all(&mut self, node_id: NodeId) -> Vec<ChannelEnvelope> {
         self.drain_inbox(node_id)
-    }
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct MemoryWorkChannel {
-    engine: MemoryChannelEngine,
-}
-
-impl MemoryWorkChannel {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    pub fn from_engine(engine: MemoryChannelEngine) -> Self {
-        Self { engine }
-    }
-
-    pub fn into_engine(self) -> MemoryChannelEngine {
-        self.engine
-    }
-
-    pub fn engine(&self) -> &MemoryChannelEngine {
-        &self.engine
-    }
-
-    pub fn engine_mut(&mut self) -> &mut MemoryChannelEngine {
-        &mut self.engine
-    }
-}
-
-impl WorkChannel for MemoryWorkChannel {
-    fn add_route(&mut self, route: RouteBinding) -> Result<Hash, WorkChannelError> {
-        WorkChannel::add_route(&mut self.engine, route)
-    }
-
-    fn remove_route(&mut self, node_id: NodeId) -> Option<RouteBinding> {
-        WorkChannel::remove_route(&mut self.engine, node_id)
-    }
-
-    fn route_hash_for(&self, node_id: &NodeId) -> Option<Hash> {
-        WorkChannel::route_hash_for(&self.engine, node_id)
-    }
-
-    fn send_unordered(
-        &mut self,
-        from: NodeId,
-        to: NodeId,
-        packet: WorkPacket,
-    ) -> Result<ChannelEnvelope, WorkChannelError> {
-        WorkChannel::send_unordered(&mut self.engine, from, to, packet)
-    }
-
-    fn recv_all(&mut self, node_id: NodeId) -> Vec<ChannelEnvelope> {
-        WorkChannel::recv_all(&mut self.engine, node_id)
     }
 }

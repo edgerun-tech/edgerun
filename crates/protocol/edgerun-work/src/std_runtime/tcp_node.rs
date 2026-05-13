@@ -7,7 +7,7 @@ use crate::codec::ArchivedWorkPacketFrame;
 use crate::protocol::{Hash, NodeId, WorkPacket};
 use crate::route_table::RouteState;
 use crate::std_runtime::framing::unix_ms;
-use crate::std_runtime::tcp_server::{TcpPacketServer, send_unordered_to_route};
+use crate::std_runtime::tcp_server::{TcpPacketServer, send_encoded_packet_to_route};
 use crate::work_channel::{WorkChannel, WorkChannelError};
 
 #[derive(Debug)]
@@ -68,8 +68,6 @@ impl TcpNodeRuntime {
             .filter_map(|frame| {
                 let packet_hash = frame.hash;
                 let packet = frame.into_packet().ok()?;
-                let sequence = order.next_sequence(channel_id, from, self.node_id);
-                let previous_message_hash = order.last_message_hash(channel_id, from, self.node_id);
                 let envelope = ChannelEnvelope::new(
                     channel_id,
                     from,
@@ -78,13 +76,7 @@ impl TcpNodeRuntime {
                     packet_hash,
                     packet,
                 );
-                let ordered = OrderedChannelEnvelope {
-                    envelope,
-                    sequence,
-                    previous_message_hash,
-                };
-                order.accept(&ordered, route_hash).ok()?;
-                Some(ordered)
+                order.accept_envelope(envelope, route_hash).ok()
             })
             .collect()
     }
@@ -111,11 +103,13 @@ impl WorkChannel for TcpNodeRuntime {
         to: NodeId,
         packet: WorkPacket,
     ) -> Result<ChannelEnvelope, WorkChannelError> {
-        let route = self
+        let (route, encoded) = self
             .routes
-            .route_for_send(&to, unix_ms())
-            .ok_or(WorkChannelError::RouteMissing)?;
-        send_unordered_to_route(route, from, to, packet)
+            .encode_for_send_with_route(from, to, packet, unix_ms())
+            .map_err(WorkChannelError::from)?;
+        send_encoded_packet_to_route(&route, encoded.packet.as_bytes())
+            .map_err(|_| WorkChannelError::DeliveryFailed)?;
+        Ok(encoded.envelope)
     }
 
     fn recv_all(&mut self, _node_id: NodeId) -> Vec<ChannelEnvelope> {

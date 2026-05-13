@@ -53,6 +53,14 @@ defaults should use this registry instead of duplicating ids or titles.
   fallback text emission, and color-scheme remapping.
 - `src/gpu/bitmap_font.rs`: compact 5x7 fallback glyph table for no-font
   scene text.
+- `src/gpu/primitives.rs`: shared UI geometry, control style, and unified
+  chat/contact state structs.
+- `src/gpu/node.rs`: JSX-like immediate-mode UI node tree, builder helpers,
+  and node rendering dispatch.
+- `src/gpu/paint.rs`: shared text measurement/truncation, labels, pills,
+  message bubbles, and panel/card drawing helpers.
+- `src/gpu/apps.rs`: public scene-build entry points and built-in app surface
+  renderers for chat, Trust Manager, Storage, lock, capability, and gallery.
 - `src/gpu/app_registry.rs`: canonical app ids, launcher ids, app metadata, and
   app surface construction.
 - `src/gpu/workspace.rs`: tiled workspace model, app surfaces, tabs, focus, and

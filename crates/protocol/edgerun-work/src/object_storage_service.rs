@@ -13,8 +13,6 @@ use crate::route_builder::route_binding;
 use crate::storage_adapter::{InMemoryObjectStorage, ObjectStorageAdapter};
 use crate::typed_storage_role::TypedObjectStoreRole;
 
-pub type ObjectStorageResponse = WorkServiceResponse;
-
 pub struct ObjectStorageService<S = InMemoryObjectStorage> {
     key: Ed25519SigningKey,
     identity: NodeIdentity,
@@ -103,7 +101,7 @@ impl<S: ObjectStorageAdapter> ObjectStorageService<S> {
         )
     }
 
-    pub fn handle_packet(&mut self, packet: WorkPacket, now_unix_ms: u64) -> ObjectStorageResponse {
+    pub fn handle_packet(&mut self, packet: WorkPacket, now_unix_ms: u64) -> WorkServiceResponse {
         execute_role_packet(
             &mut self.role,
             &self.identity,
@@ -111,6 +109,5 @@ impl<S: ObjectStorageAdapter> ObjectStorageService<S> {
             packet,
             now_unix_ms,
         )
-        .into_response()
     }
 }

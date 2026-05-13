@@ -3,7 +3,7 @@ use edgerun_work::*;
 #[derive(Default)]
 struct FakeTransport {
     sent: Vec<(u16, Vec<u8>)>,
-    recv: Vec<TransportPacketFrame>,
+    recv: Vec<RelayPacketFrame>,
 }
 
 impl WorkPacketTransport for FakeTransport {
@@ -11,12 +11,12 @@ impl WorkPacketTransport for FakeTransport {
         &mut self,
         route: &RouteBinding,
         packet_bytes: &[u8],
-    ) -> Result<(), WorkTransportError> {
+    ) -> Result<(), RelayTransportError> {
         self.sent.push((route.endpoint.kind, packet_bytes.to_vec()));
         Ok(())
     }
 
-    fn recv_packet_frame(&mut self) -> Result<Option<TransportPacketFrame>, WorkTransportError> {
+    fn recv_packet_frame(&mut self) -> Result<Option<RelayPacketFrame>, RelayTransportError> {
         Ok(self.recv.pop())
     }
 }
@@ -31,7 +31,7 @@ fn route_for_endpoint(node: &SimNode, endpoint: ChannelEndpoint, _sequence: u64)
 fn native_transport_channel_sends_quic_route_as_rkyv_bytes() {
     let mut sender = SimNode::from_seed(211, NODE_ROLE_MESSAGE);
     let receiver = SimNode::from_seed(212, NODE_ROLE_MESSAGE);
-    let mut channel = TransportWorkChannel::native(FakeTransport::default());
+    let mut channel = RelayWorkChannel::native(FakeTransport::default());
     let route = route_for_endpoint(&receiver, quic_endpoint("quic", b"127.0.0.1:4433"), 1);
     let route_hash = channel
         .add_route(route)
@@ -57,7 +57,7 @@ fn native_transport_channel_sends_quic_route_as_rkyv_bytes() {
 #[test]
 fn browser_transport_channel_rejects_raw_quic_route_and_accepts_webtransport() {
     let receiver = SimNode::from_seed(213, NODE_ROLE_MESSAGE);
-    let mut channel = TransportWorkChannel::browser(FakeTransport::default());
+    let mut channel = RelayWorkChannel::browser(FakeTransport::default());
     let quic = route_for_endpoint(&receiver, quic_endpoint("quic", b"203.0.113.10:4433"), 1);
     let webtransport = route_for_endpoint(
         &receiver,
@@ -86,14 +86,14 @@ fn transport_channel_poll_recv_materializes_archived_frames_only_at_boundary() {
     let route_hash = [7u8; 32];
     let channel_id = [8u8; 32];
     let mut transport = FakeTransport::default();
-    transport.recv.push(TransportPacketFrame {
+    transport.recv.push(RelayPacketFrame {
         channel_id,
         from: sender.identity.node_id,
         to: receiver.identity.node_id,
         route_hash,
         frame,
     });
-    let mut channel = TransportWorkChannel::browser(transport);
+    let mut channel = RelayWorkChannel::browser(transport);
 
     assert_eq!(channel.poll_recv().expect("poll recv"), 1);
     let inbox = channel.recv_all(receiver.identity.node_id);

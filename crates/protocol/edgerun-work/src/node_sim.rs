@@ -111,17 +111,10 @@ pub fn deliver_ordered(
     let envelope = channel
         .deliver(from, to, packet)
         .map_err(NodeSimError::Route)?;
-    let previous_message_hash = sender_order.last_message_hash(envelope.channel_id, from, to);
-    let sequence = sender_order.next_sequence(envelope.channel_id, from, to);
-    let ordered = OrderedChannelEnvelope {
-        envelope,
-        sequence,
-        previous_message_hash,
-    };
+    let route_hash = envelope.route_hash;
     sender_order
-        .accept(&ordered, ordered.envelope.route_hash)
-        .map_err(NodeSimError::Order)?;
-    Ok(ordered)
+        .accept_envelope(envelope, route_hash)
+        .map_err(NodeSimError::Order)
 }
 
 pub fn envelope_packet_hash(envelope: &ChannelEnvelope) -> Result<Hash, NodeSimError> {

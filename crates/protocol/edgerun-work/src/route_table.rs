@@ -2,7 +2,8 @@ use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
 use crate::channel::{ChannelEnvelope, RouteBinding};
-use crate::protocol::{Hash, NodeId};
+use crate::codec::{EncodedChannelEnvelope, encode_channel_envelope_for_route};
+use crate::protocol::{Hash, NodeId, WorkPacket};
 use crate::route_binding::{route_hash, route_is_available, verify_live_route_binding};
 
 type RouteMap = BTreeMap<NodeId, RouteBinding>;
@@ -12,6 +13,12 @@ type RouteInboxMap = BTreeMap<NodeId, Vec<ChannelEnvelope>>;
 pub(crate) struct RouteState {
     routes: RouteMap,
     inboxes: RouteInboxMap,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum RouteStateSendError {
+    RouteMissing,
+    PacketHashFailed,
 }
 
 impl RouteState {
@@ -49,20 +56,54 @@ impl RouteState {
         route_is_available(route, now_unix_ms).then_some(route)
     }
 
-    pub(crate) fn route_for_send(
+    pub(crate) fn encode_for_send(
         &mut self,
-        node_id: &NodeId,
+        from: NodeId,
+        to: NodeId,
+        packet: WorkPacket,
         now_unix_ms: u64,
-    ) -> Option<&RouteBinding> {
+    ) -> Result<EncodedChannelEnvelope, RouteStateSendError> {
+        self.encode_for_send_with_route(from, to, packet, now_unix_ms)
+            .map(|(_, encoded)| encoded)
+    }
+
+    pub(crate) fn encode_for_send_with_route(
+        &mut self,
+        from: NodeId,
+        to: NodeId,
+        packet: WorkPacket,
+        now_unix_ms: u64,
+    ) -> Result<(RouteBinding, EncodedChannelEnvelope), RouteStateSendError> {
         if self
             .routes
-            .get(node_id)
+            .get(&to)
             .is_some_and(|route| !route_is_available(route, now_unix_ms))
         {
-            self.remove_route(*node_id);
-            return None;
+            self.remove_route(to);
+            return Err(RouteStateSendError::RouteMissing);
         }
-        self.routes.get(node_id)
+        let route = self
+            .routes
+            .get(&to)
+            .ok_or(RouteStateSendError::RouteMissing)?
+            .clone();
+        let encoded = encode_channel_envelope_for_route(&route, from, to, packet)
+            .map_err(|_| RouteStateSendError::PacketHashFailed)?;
+        Ok((route, encoded))
+    }
+
+    pub(crate) fn queue_send(
+        &mut self,
+        from: NodeId,
+        to: NodeId,
+        packet: WorkPacket,
+        now_unix_ms: u64,
+    ) -> Result<ChannelEnvelope, RouteStateSendError> {
+        let envelope = self
+            .encode_for_send(from, to, packet, now_unix_ms)?
+            .envelope;
+        self.push_inbox(envelope.clone());
+        Ok(envelope)
     }
 
     pub(crate) fn push_inbox(&mut self, envelope: ChannelEnvelope) {

@@ -7,7 +7,7 @@ use crate::protocol::{Hash, NodeId, WorkPacket};
 use crate::route_table::RouteState;
 use crate::std_runtime::framing::unix_ms;
 use crate::std_runtime::tcp_server::{
-    TcpPacketServer, send_encoded_packet_to_addr, send_packet_to_addr, send_unordered_to_route,
+    TcpPacketServer, send_encoded_packet_to_addr, send_encoded_packet_to_route, send_packet_to_addr,
 };
 use crate::work_channel::{WorkChannel, WorkChannelError};
 
@@ -86,11 +86,13 @@ impl WorkChannel for TcpWorkChannel {
         to: NodeId,
         packet: WorkPacket,
     ) -> Result<ChannelEnvelope, WorkChannelError> {
-        let route = self
+        let (route, encoded) = self
             .routes
-            .route_for_send(&to, unix_ms())
-            .ok_or(WorkChannelError::RouteMissing)?;
-        let envelope = send_unordered_to_route(route, from, to, packet)?;
+            .encode_for_send_with_route(from, to, packet, unix_ms())
+            .map_err(WorkChannelError::from)?;
+        send_encoded_packet_to_route(&route, encoded.packet.as_bytes())
+            .map_err(|_| WorkChannelError::DeliveryFailed)?;
+        let envelope = encoded.envelope;
         self.routes.push_inbox(envelope.clone());
         Ok(envelope)
     }

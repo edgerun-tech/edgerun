@@ -1,0 +1,421 @@
+use std::string::String;
+use std::vec::Vec;
+
+use super::*;
+
+pub(super) fn push_label(
+    scene: &mut GpuScene,
+    #[cfg(feature = "fontdue-text")] atlas: Option<&FontAtlas>,
+    x: f32,
+    y: f32,
+    text: &str,
+    scale: f32,
+    color: Color4,
+) {
+    #[cfg(feature = "fontdue-text")]
+    if let Some(atlas) = atlas {
+        scene.push_font_text(atlas, x, y, text, color);
+        return;
+    }
+    scene.push_text(x, y, text, scale, color);
+}
+
+pub(super) fn push_bounded_label(
+    scene: &mut GpuScene,
+    #[cfg(feature = "fontdue-text")] atlas: Option<&FontAtlas>,
+    x: f32,
+    y: f32,
+    max_w: f32,
+    text: &str,
+    scale: f32,
+    color: Color4,
+) {
+    if max_w <= 0.0 {
+        return;
+    }
+    let label = truncate_label_to_width(
+        text,
+        max_w,
+        scale,
+        #[cfg(feature = "fontdue-text")]
+        atlas,
+    );
+    push_label(
+        scene,
+        #[cfg(feature = "fontdue-text")]
+        atlas,
+        x,
+        y,
+        &label,
+        scale,
+        color,
+    );
+}
+
+pub(super) fn draw_pill(
+    scene: &mut GpuScene,
+    #[cfg(feature = "fontdue-text")] atlas: Option<&FontAtlas>,
+    x: f32,
+    y: f32,
+    w: f32,
+    label: &str,
+    color: Color4,
+) {
+    scene.push_rect(GpuRect::fill(x, y, w, 28.0, 14.0, color.with_alpha(0.14)));
+    scene.push_rect(GpuRect::border(x, y, w, 28.0, 14.0, color.with_alpha(0.46)));
+    push_bounded_label(
+        scene,
+        #[cfg(feature = "fontdue-text")]
+        atlas,
+        x + 12.0,
+        y + 7.0,
+        (w - 24.0).max(0.0),
+        label,
+        2.0,
+        color,
+    );
+}
+
+pub(super) fn draw_contact_row(
+    scene: &mut GpuScene,
+    #[cfg(feature = "fontdue-text")] atlas: Option<&FontAtlas>,
+    x: f32,
+    y: f32,
+    w: f32,
+    contact: &UnifiedContact<'_>,
+    selected: bool,
+) {
+    soft_card(
+        scene,
+        x,
+        y,
+        w,
+        56.0,
+        10.0,
+        if selected {
+            palette::ACTIVE_ROW
+        } else {
+            palette::ROW
+        },
+    );
+    let accent = match contact.kind {
+        UnifiedContactKind::Person => palette::ACCENT,
+        UnifiedContactKind::CodexClient => palette::VIOLET,
+        UnifiedContactKind::Node => palette::GREEN,
+    };
+    scene.push_rect(GpuRect::fill(
+        x + 14.0,
+        y + 13.0,
+        30.0,
+        30.0,
+        15.0,
+        accent.with_alpha(0.22),
+    ));
+    push_bounded_label(
+        scene,
+        #[cfg(feature = "fontdue-text")]
+        atlas,
+        x + 23.0,
+        y + 19.0,
+        10.0,
+        contact_initial(contact.name),
+        2.0,
+        accent,
+    );
+    scene.push_rect(GpuRect::fill(
+        x + 38.0,
+        y + 36.0,
+        8.0,
+        8.0,
+        4.0,
+        if contact.online {
+            palette::GREEN
+        } else {
+            palette::MUTED
+        },
+    ));
+    let unread_w = if contact.unread > 0 { 50.0 } else { 0.0 };
+    let text_w = (w - 72.0 - unread_w).max(0.0);
+    push_bounded_label(
+        scene,
+        #[cfg(feature = "fontdue-text")]
+        atlas,
+        x + 56.0,
+        y + 11.0,
+        text_w,
+        contact.name,
+        2.0,
+        if selected {
+            palette::TEXT
+        } else {
+            palette::MUTED
+        },
+    );
+    push_bounded_label(
+        scene,
+        #[cfg(feature = "fontdue-text")]
+        atlas,
+        x + 56.0,
+        y + 32.0,
+        text_w,
+        contact.detail,
+        2.0,
+        accent,
+    );
+    if contact.unread > 0 {
+        let label = if contact.unread > 9 { "9+" } else { "new" };
+        draw_pill(
+            scene,
+            #[cfg(feature = "fontdue-text")]
+            atlas,
+            x + w - 58.0,
+            y + 14.0,
+            42.0,
+            label,
+            palette::AMBER,
+        );
+    }
+}
+
+pub(super) fn contact_initial(name: &str) -> &str {
+    name.get(0..1).unwrap_or("?")
+}
+
+pub(super) fn draw_message(
+    scene: &mut GpuScene,
+    #[cfg(feature = "fontdue-text")] atlas: Option<&FontAtlas>,
+    x: f32,
+    y: f32,
+    w: f32,
+    role: &str,
+    body: &str,
+    fill: Color4,
+    accent: Color4,
+) -> f32 {
+    let body_w = (w - 42.0).max(120.0);
+    let lines = wrap_lines(
+        body,
+        body_w,
+        4,
+        #[cfg(feature = "fontdue-text")]
+        atlas,
+    );
+    let h = 56.0 + lines.len() as f32 * 22.0;
+    soft_card(scene, x, y, w, h, 14.0, fill);
+    scene.push_rect(GpuRect::fill(x, y, 4.0, h, 2.0, accent));
+    push_bounded_label(
+        scene,
+        #[cfg(feature = "fontdue-text")]
+        atlas,
+        x + 22.0,
+        y + 16.0,
+        (w - 44.0).max(0.0),
+        role,
+        2.0,
+        accent,
+    );
+    for (index, line) in lines.iter().enumerate() {
+        push_bounded_label(
+            scene,
+            #[cfg(feature = "fontdue-text")]
+            atlas,
+            x + 22.0,
+            y + 42.0 + index as f32 * 22.0,
+            body_w,
+            line,
+            2.0,
+            palette::TEXT,
+        );
+    }
+    h
+}
+
+pub(super) fn estimate_message_height(
+    text: &str,
+    max_width: f32,
+    max_lines: usize,
+    #[cfg(feature = "fontdue-text")] atlas: Option<&FontAtlas>,
+) -> f32 {
+    56.0 + wrap_lines(
+        text,
+        max_width,
+        max_lines,
+        #[cfg(feature = "fontdue-text")]
+        atlas,
+    )
+    .len() as f32
+        * 22.0
+}
+
+pub(super) fn wrap_lines(
+    text: &str,
+    max_width: f32,
+    max_lines: usize,
+    #[cfg(feature = "fontdue-text")] atlas: Option<&FontAtlas>,
+) -> Vec<String> {
+    let mut lines = Vec::new();
+    let mut current = String::new();
+
+    for word in text.split_whitespace() {
+        let candidate = if current.is_empty() {
+            word.to_string()
+        } else {
+            format!("{current} {word}")
+        };
+        if measure_label_width(
+            &candidate,
+            2.0,
+            #[cfg(feature = "fontdue-text")]
+            atlas,
+        ) <= max_width
+        {
+            current = candidate;
+            continue;
+        }
+
+        if !current.is_empty() {
+            lines.push(current);
+        }
+        current = word.to_string();
+
+        if lines.len() + 1 >= max_lines {
+            break;
+        }
+    }
+
+    if !current.is_empty() && lines.len() < max_lines {
+        lines.push(current);
+    }
+
+    if lines.is_empty() {
+        lines.push(String::new());
+    }
+
+    let consumed_words = lines
+        .iter()
+        .map(|line| line.split_whitespace().count())
+        .sum::<usize>();
+    let total_words = text.split_whitespace().count();
+    if consumed_words < total_words {
+        if let Some(last) = lines.last_mut() {
+            while !last.is_empty()
+                && measure_label_width(
+                    &format!("{last}..."),
+                    2.0,
+                    #[cfg(feature = "fontdue-text")]
+                    atlas,
+                ) > max_width
+            {
+                last.pop();
+            }
+            last.push_str("...");
+        }
+    }
+
+    lines
+}
+
+pub(super) fn measure_label_width(
+    text: &str,
+    scale: f32,
+    #[cfg(feature = "fontdue-text")] atlas: Option<&FontAtlas>,
+) -> f32 {
+    #[cfg(feature = "fontdue-text")]
+    if let Some(atlas) = atlas {
+        return atlas.text_width(text);
+    }
+    text.chars().count() as f32 * scale.max(1.0) * 6.0
+}
+
+pub(super) fn truncate_label_to_width(
+    text: &str,
+    max_width: f32,
+    scale: f32,
+    #[cfg(feature = "fontdue-text")] atlas: Option<&FontAtlas>,
+) -> String {
+    if measure_label_width(
+        text,
+        scale,
+        #[cfg(feature = "fontdue-text")]
+        atlas,
+    ) <= max_width
+    {
+        return text.to_string();
+    }
+
+    let ellipsis = "...";
+    let ellipsis_w = measure_label_width(
+        ellipsis,
+        scale,
+        #[cfg(feature = "fontdue-text")]
+        atlas,
+    );
+    if ellipsis_w > max_width {
+        return String::new();
+    }
+
+    let mut out = String::new();
+    for ch in text.chars() {
+        out.push(ch);
+        let candidate = format!("{out}{ellipsis}");
+        if measure_label_width(
+            &candidate,
+            scale,
+            #[cfg(feature = "fontdue-text")]
+            atlas,
+        ) > max_width
+        {
+            out.pop();
+            break;
+        }
+    }
+    out.push_str(ellipsis);
+    out
+}
+
+pub(super) fn component_label_width(
+    text: &str,
+    scale: f32,
+    #[cfg(feature = "fontdue-text")] atlas: Option<&FontAtlas>,
+) -> f32 {
+    measure_label_width(
+        text,
+        scale,
+        #[cfg(feature = "fontdue-text")]
+        atlas,
+    )
+}
+
+pub(super) fn soft_card(
+    scene: &mut GpuScene,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    radius: f32,
+    color: Color4,
+) {
+    scene.push_rect(GpuRect::shadow(
+        x,
+        y + 4.0,
+        w,
+        h,
+        radius,
+        Color4::rgba(0.0, 0.0, 0.0, 0.24),
+        10.0,
+    ));
+    panel(scene, x, y, w, h, radius, color);
+}
+
+pub(super) fn panel(
+    scene: &mut GpuScene,
+    x: f32,
+    y: f32,
+    w: f32,
+    h: f32,
+    radius: f32,
+    color: Color4,
+) {
+    scene.push_rect(GpuRect::fill(x, y, w, h, radius, color));
+    scene.push_rect(GpuRect::border(x, y, w, h, radius, palette::BORDER));
+}
