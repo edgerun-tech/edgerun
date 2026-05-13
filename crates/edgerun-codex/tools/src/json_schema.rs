@@ -415,10 +415,7 @@ fn schema_type_name(schema_type: JsonSchemaPrimitiveType) -> &'static str {
 }
 
 fn singleton_null_schema_error() -> edgerun_json::Error {
-    edgerun_json::Error::io(std::io::Error::new(
-        std::io::ErrorKind::InvalidInput,
-        "tool input schema must not be a singleton null type",
-    ))
+    edgerun_json::Error::Message("tool input schema must not be a singleton null type".to_string())
 }
 
 #[cfg(test)]

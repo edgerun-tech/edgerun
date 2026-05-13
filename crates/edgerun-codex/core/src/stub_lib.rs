@@ -209,7 +209,7 @@ impl ModelClient {
             model,
             provider,
             auth,
-            Arc::new(ReqwestTransport::new(edgerun_reqwest::Client::new())),
+            Arc::new(ReqwestTransport::new_default()),
         )
     }
 

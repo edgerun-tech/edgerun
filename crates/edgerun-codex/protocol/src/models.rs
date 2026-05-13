@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::io;
 use std::num::NonZeroUsize;
 use std::path::Path;
@@ -1745,7 +1745,7 @@ pub struct LocalShellExecAction {
     pub command: Vec<String>,
     pub timeout_ms: Option<u64>,
     pub working_directory: Option<String>,
-    pub env: Option<HashMap<String, String>>,
+    pub env: Option<BTreeMap<String, String>>,
     pub user: Option<String>,
 }
 
