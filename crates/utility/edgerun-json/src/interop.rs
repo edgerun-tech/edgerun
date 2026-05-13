@@ -2,23 +2,18 @@ use crate::{JsonNumber, JsonValue, Map};
 
 #[cfg(any(feature = "schemars", feature = "ts-rs"))]
 use alloc::borrow::Cow;
-#[cfg(any(feature = "serde", feature = "ts-rs"))]
+#[cfg(feature = "ts-rs")]
 use alloc::format;
-#[cfg(any(feature = "schemars", feature = "serde", feature = "ts-rs"))]
 use alloc::string::{String, ToString};
-#[cfg(feature = "serde")]
 use alloc::vec::Vec;
-#[cfg(feature = "serde")]
 use serde::de::IntoDeserializer;
 
-#[cfg(feature = "serde")]
 pub(crate) fn to_json_value_from_serde<T: serde::Serialize + ?Sized>(
     value: &T,
 ) -> Result<JsonValue, crate::JsonError> {
     value.serialize(JsonSerializer)
 }
 
-#[cfg(feature = "serde")]
 pub(crate) fn from_json_value_with_serde<T>(value: JsonValue) -> Result<T, crate::JsonError>
 where
     T: serde::de::DeserializeOwned,
@@ -26,10 +21,8 @@ where
     T::deserialize(value)
 }
 
-#[cfg(feature = "serde")]
 struct JsonSerializer;
 
-#[cfg(feature = "serde")]
 impl serde::Serializer for JsonSerializer {
     type Ok = JsonValue;
     type Error = crate::JsonError;
@@ -217,12 +210,10 @@ impl serde::Serializer for JsonSerializer {
     }
 }
 
-#[cfg(feature = "serde")]
 struct JsonSeqSerializer {
     values: Vec<JsonValue>,
 }
 
-#[cfg(feature = "serde")]
 impl serde::ser::SerializeSeq for JsonSeqSerializer {
     type Ok = JsonValue;
     type Error = crate::JsonError;
@@ -240,7 +231,6 @@ impl serde::ser::SerializeSeq for JsonSeqSerializer {
     }
 }
 
-#[cfg(feature = "serde")]
 impl serde::ser::SerializeTuple for JsonSeqSerializer {
     type Ok = JsonValue;
     type Error = crate::JsonError;
@@ -257,7 +247,6 @@ impl serde::ser::SerializeTuple for JsonSeqSerializer {
     }
 }
 
-#[cfg(feature = "serde")]
 impl serde::ser::SerializeTupleStruct for JsonSeqSerializer {
     type Ok = JsonValue;
     type Error = crate::JsonError;
@@ -274,13 +263,11 @@ impl serde::ser::SerializeTupleStruct for JsonSeqSerializer {
     }
 }
 
-#[cfg(feature = "serde")]
 struct JsonTupleVariantSerializer {
     variant: &'static str,
     values: Vec<JsonValue>,
 }
 
-#[cfg(feature = "serde")]
 impl serde::ser::SerializeTupleVariant for JsonTupleVariantSerializer {
     type Ok = JsonValue;
     type Error = crate::JsonError;
@@ -300,13 +287,11 @@ impl serde::ser::SerializeTupleVariant for JsonTupleVariantSerializer {
     }
 }
 
-#[cfg(feature = "serde")]
 struct JsonMapSerializer {
     object: Map,
     next_key: Option<String>,
 }
 
-#[cfg(feature = "serde")]
 impl serde::ser::SerializeMap for JsonMapSerializer {
     type Ok = JsonValue;
     type Error = crate::JsonError;
@@ -339,7 +324,6 @@ impl serde::ser::SerializeMap for JsonMapSerializer {
     }
 }
 
-#[cfg(feature = "serde")]
 impl serde::ser::SerializeStruct for JsonMapSerializer {
     type Ok = JsonValue;
     type Error = crate::JsonError;
@@ -359,13 +343,11 @@ impl serde::ser::SerializeStruct for JsonMapSerializer {
     }
 }
 
-#[cfg(feature = "serde")]
 struct JsonStructVariantSerializer {
     variant: &'static str,
     object: Map,
 }
 
-#[cfg(feature = "serde")]
 impl serde::ser::SerializeStructVariant for JsonStructVariantSerializer {
     type Ok = JsonValue;
     type Error = crate::JsonError;
@@ -387,7 +369,6 @@ impl serde::ser::SerializeStructVariant for JsonStructVariantSerializer {
     }
 }
 
-#[cfg(feature = "serde")]
 impl<'de> serde::Deserializer<'de> for JsonValue {
     type Error = crate::JsonError;
 
@@ -444,12 +425,10 @@ impl<'de> serde::Deserializer<'de> for JsonValue {
     }
 }
 
-#[cfg(feature = "serde")]
 struct JsonSeqAccess {
     iter: alloc::vec::IntoIter<JsonValue>,
 }
 
-#[cfg(feature = "serde")]
 impl<'de> serde::de::SeqAccess<'de> for JsonSeqAccess {
     type Error = crate::JsonError;
 
@@ -464,13 +443,11 @@ impl<'de> serde::de::SeqAccess<'de> for JsonSeqAccess {
     }
 }
 
-#[cfg(feature = "serde")]
 struct JsonObjectAccess {
     iter: alloc::vec::IntoIter<(String, JsonValue)>,
     pending_value: Option<JsonValue>,
 }
 
-#[cfg(feature = "serde")]
 impl<'de> serde::de::MapAccess<'de> for JsonObjectAccess {
     type Error = crate::JsonError;
 
@@ -497,7 +474,6 @@ impl<'de> serde::de::MapAccess<'de> for JsonObjectAccess {
     }
 }
 
-#[cfg(feature = "serde")]
 impl serde::Serialize for JsonNumber {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -511,7 +487,6 @@ impl serde::Serialize for JsonNumber {
     }
 }
 
-#[cfg(feature = "serde")]
 impl<'de> serde::Deserialize<'de> for JsonNumber {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -521,10 +496,8 @@ impl<'de> serde::Deserialize<'de> for JsonNumber {
     }
 }
 
-#[cfg(feature = "serde")]
 struct JsonNumberVisitor;
 
-#[cfg(feature = "serde")]
 impl<'de> serde::de::Visitor<'de> for JsonNumberVisitor {
     type Value = JsonNumber;
 
@@ -564,7 +537,6 @@ impl<'de> serde::de::Visitor<'de> for JsonNumberVisitor {
     }
 }
 
-#[cfg(feature = "serde")]
 impl<K, V> serde::Serialize for Map<K, V> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -580,7 +552,6 @@ impl<K, V> serde::Serialize for Map<K, V> {
     }
 }
 
-#[cfg(feature = "serde")]
 impl<'de, K, V> serde::Deserialize<'de> for Map<K, V> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -592,10 +563,8 @@ impl<'de, K, V> serde::Deserialize<'de> for Map<K, V> {
     }
 }
 
-#[cfg(feature = "serde")]
 struct JsonMapVisitor;
 
-#[cfg(feature = "serde")]
 impl<'de> serde::de::Visitor<'de> for JsonMapVisitor {
     type Value = Map;
 
@@ -615,7 +584,6 @@ impl<'de> serde::de::Visitor<'de> for JsonMapVisitor {
     }
 }
 
-#[cfg(feature = "serde")]
 impl serde::Serialize for JsonValue {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -640,7 +608,6 @@ impl serde::Serialize for JsonValue {
     }
 }
 
-#[cfg(feature = "serde")]
 impl<'de> serde::Deserialize<'de> for JsonValue {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -650,10 +617,8 @@ impl<'de> serde::Deserialize<'de> for JsonValue {
     }
 }
 
-#[cfg(feature = "serde")]
 struct JsonValueVisitor;
 
-#[cfg(feature = "serde")]
 impl<'de> serde::de::Visitor<'de> for JsonValueVisitor {
     type Value = JsonValue;
 

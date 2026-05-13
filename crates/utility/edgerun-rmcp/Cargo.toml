@@ -23,7 +23,7 @@ transport-io = []
 transport-streamable-http-client = []
 
 [dependencies]
-edgerun-json = { version = "0.1", path = "../edgerun-json", default-features = false, features = ["serde"] }
+edgerun-json = { version = "0.1", path = "../edgerun-json", default-features = false }
 serde = { package = "edgerun-serde", version = "0.1", path = "../edgerun-serde", features = ["derive", "rc", "std"] }
 
 [lints]

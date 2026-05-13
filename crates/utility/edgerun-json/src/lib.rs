@@ -85,9 +85,7 @@ pub use api::{
     to_vec_pretty,
 };
 pub use api::{from_reader, to_writer, to_writer_pretty};
-#[cfg(feature = "serde")]
 pub use api::{from_serde_slice, from_serde_str, from_serde_value, to_serde_value};
-#[cfg(feature = "serde")]
 pub mod serde_bridge {
     pub trait Serialize: serde::Serialize {}
 

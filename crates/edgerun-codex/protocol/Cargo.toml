@@ -16,7 +16,7 @@ workspace = true
 edgerun-encoding = { workspace = true, features = ["text-encoding"] }
 edgerun-error = { workspace = true }
 edgerun-http = { workspace = true }
-edgerun-json = { workspace = true, features = ["serde"] }
+edgerun-json = { workspace = true }
 edgerun-locale = { workspace = true }
 edgerun-time = { workspace = true }
 schemars = { workspace = true }
