@@ -567,6 +567,24 @@ pub enum UiNodeKind {
         id: u32,
         style: ButtonStyle,
     },
+    IconButton {
+        glyph: String,
+        id: u32,
+        active: bool,
+    },
+    Toggle {
+        on: bool,
+        id: u32,
+    },
+    Avatar {
+        label: String,
+        color: Color4,
+        online: bool,
+    },
+    ProgressBar {
+        value: f32,
+        color: Color4,
+    },
     PanelHeader {
         title: String,
         subtitle: String,
@@ -721,6 +739,46 @@ impl UiNode {
                 id,
                 style,
             },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn icon_button(glyph: &str, id: u32) -> Self {
+        Self {
+            kind: UiNodeKind::IconButton {
+                glyph: glyph.to_string(),
+                id,
+                active: true,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn toggle(on: bool, id: u32) -> Self {
+        Self {
+            kind: UiNodeKind::Toggle { on, id },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn avatar(label: &str, color: Color4) -> Self {
+        Self {
+            kind: UiNodeKind::Avatar {
+                label: label.to_string(),
+                color,
+                online: false,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn progress_bar(value: f32, color: Color4) -> Self {
+        Self {
+            kind: UiNodeKind::ProgressBar { value, color },
             style: UiStyle::default(),
             children: Vec::new(),
         }
@@ -957,8 +1015,13 @@ impl UiNode {
     }
 
     pub fn progress(mut self, value: f32) -> Self {
-        if let UiNodeKind::MetricCard { progress, .. } = &mut self.kind {
-            *progress = Some(value);
+        match &mut self.kind {
+            UiNodeKind::MetricCard { progress, .. } => *progress = Some(value),
+            UiNodeKind::ProgressBar {
+                value: progress_value,
+                ..
+            } => *progress_value = value,
+            _ => {}
         }
         self
     }
@@ -969,6 +1032,14 @@ impl UiNode {
             | UiNodeKind::Slider { accent, .. }
             | UiNodeKind::BarChart { accent, .. }
             | UiNodeKind::MenuItem { accent, .. } => *accent = color,
+            UiNodeKind::Avatar {
+                color: avatar_color,
+                ..
+            }
+            | UiNodeKind::ProgressBar {
+                color: avatar_color,
+                ..
+            } => *avatar_color = color,
             UiNodeKind::Badge {
                 color: badge_color, ..
             } => *badge_color = color,
@@ -1026,6 +1097,35 @@ impl UiNode {
         self
     }
 
+    pub fn active(mut self, active: bool) -> Self {
+        if let UiNodeKind::IconButton {
+            active: node_active,
+            ..
+        } = &mut self.kind
+        {
+            *node_active = active;
+        }
+        self
+    }
+
+    pub fn online(mut self, online: bool) -> Self {
+        if let UiNodeKind::Avatar {
+            online: node_online,
+            ..
+        } = &mut self.kind
+        {
+            *node_online = online;
+        }
+        self
+    }
+
+    pub fn on(mut self, on: bool) -> Self {
+        if let UiNodeKind::Toggle { on: node_on, .. } = &mut self.kind {
+            *node_on = on;
+        }
+        self
+    }
+
     pub fn selected(mut self, selected: bool) -> Self {
         if let UiNodeKind::MenuItem {
             selected: node_selected,
@@ -1055,6 +1155,39 @@ impl UiNode {
                     *id,
                     true,
                 );
+            }
+            UiNodeKind::IconButton { glyph, id, active } => {
+                let size = self
+                    .style
+                    .width
+                    .or(self.style.height)
+                    .unwrap_or(34.0)
+                    .min(rect.w)
+                    .min(rect.h);
+                ui.icon_button(UiRect::new(rect.x, rect.y, size, size), glyph, *id, *active);
+            }
+            UiNodeKind::Toggle { on, id } => {
+                let y = rect.y + ((rect.h - 24.0).max(0.0) * 0.5);
+                ui.toggle(rect.x, y, *on, *id);
+            }
+            UiNodeKind::Avatar {
+                label,
+                color,
+                online,
+            } => {
+                let size = self
+                    .style
+                    .width
+                    .or(self.style.height)
+                    .unwrap_or(36.0)
+                    .min(rect.w)
+                    .min(rect.h);
+                ui.avatar(rect.x, rect.y, size, label, *color, *online);
+            }
+            UiNodeKind::ProgressBar { value, color } => {
+                let h = self.style.height.unwrap_or(8.0).min(rect.h);
+                let y = rect.y + ((rect.h - h).max(0.0) * 0.5);
+                ui.progress_bar(UiRect::new(rect.x, y, rect.w, h), *value, *color);
             }
             UiNodeKind::PanelHeader {
                 title,
@@ -1287,6 +1420,22 @@ pub fn badge(label: &str, color: Color4) -> UiNode {
 
 pub fn button(label: &str, id: u32, style: ButtonStyle) -> UiNode {
     UiNode::button(label, id, style)
+}
+
+pub fn icon_button(glyph: &str, id: u32) -> UiNode {
+    UiNode::icon_button(glyph, id)
+}
+
+pub fn toggle_node(on: bool, id: u32) -> UiNode {
+    UiNode::toggle(on, id)
+}
+
+pub fn avatar_node(label: &str, color: Color4) -> UiNode {
+    UiNode::avatar(label, color)
+}
+
+pub fn progress_bar_node(value: f32, color: Color4) -> UiNode {
+    UiNode::progress_bar(value, color)
 }
 
 pub fn header(title: &str) -> UiNode {
@@ -2826,6 +2975,10 @@ fn intrinsic_width(child: &UiNode) -> f32 {
             (label.chars().count() as f32 * 8.0 + 22.0).clamp(36.0, 180.0)
         }
         UiNodeKind::Button { label, .. } => (label.chars().count() as f32 * 8.0 + 28.0).max(44.0),
+        UiNodeKind::IconButton { .. } => 34.0,
+        UiNodeKind::Toggle { .. } => 46.0,
+        UiNodeKind::Avatar { .. } => 36.0,
+        UiNodeKind::ProgressBar { .. } => 120.0,
         UiNodeKind::PanelHeader { .. } => 280.0,
         UiNodeKind::MetricCard { .. } => 220.0,
         UiNodeKind::Field { .. } => 240.0,
@@ -2845,6 +2998,10 @@ fn intrinsic_height(child: &UiNode) -> f32 {
         UiNodeKind::Text(_) => 20.0,
         UiNodeKind::Badge { .. } => 22.0,
         UiNodeKind::Button { .. } => 34.0,
+        UiNodeKind::IconButton { .. } => 34.0,
+        UiNodeKind::Toggle { .. } => 24.0,
+        UiNodeKind::Avatar { .. } => 36.0,
+        UiNodeKind::ProgressBar { .. } => 8.0,
         UiNodeKind::PanelHeader { .. } => 44.0,
         UiNodeKind::MetricCard { .. } => 132.0,
         UiNodeKind::Field { .. } => 92.0,
@@ -2931,21 +3088,36 @@ mod tests {
                 column("bg-panel border rounded-md p-4 gap-3"),
                 [
                     gpu_ui!(
-                        row("gap-2 h-10"),
+                        row("gap-2 h-10 items-center"),
                         [
+                            avatar_node("EdgeRun", palette::ACCENT).online(true),
                             text("Components").class("flex-1 text-text truncate"),
-                            badge("rust", palette::ACCENT)
+                            badge("rust", palette::ACCENT),
+                            icon_button(">", 69).class("size-8")
                         ]
                     ),
                     metric("Storage", "128 MB").detail("verified cache"),
+                    progress_bar_node(0.58, palette::GREEN).class("h-2"),
+                    toggle_node(true, 68),
                     button("Run", 70, ButtonStyle::Primary).class("h-8")
                 ]
             )
             .render(&mut ui, UiRect::new(0.0, 0.0, 320.0, 260.0));
         }
 
-        assert!(scene.rects().len() > 15);
-        assert_eq!(scene.hits().len(), 1);
+        assert!(scene.rects().len() > 25);
+        assert!(scene
+            .hits()
+            .iter()
+            .any(|hit| hit.kind == HitKind::Toggle && hit.id == 68));
+        assert!(scene
+            .hits()
+            .iter()
+            .any(|hit| hit.kind == HitKind::Button && hit.id == 69));
+        assert!(scene
+            .hits()
+            .iter()
+            .any(|hit| hit.kind == HitKind::Button && hit.id == 70));
     }
 
     #[test]
