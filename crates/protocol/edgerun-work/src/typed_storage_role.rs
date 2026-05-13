@@ -31,15 +31,18 @@ impl TypedObjectStoreRole<crate::storage_adapter::FileObjectStorage> {
         root: impl Into<std::path::PathBuf>,
         capacity_bytes: u64,
     ) -> Result<Self, std::io::Error> {
-        Ok(Self::with_storage(crate::storage_adapter::FileObjectStorage::open(
-            root,
-            capacity_bytes,
-        )?))
+        Ok(Self::with_storage(
+            crate::storage_adapter::FileObjectStorage::open(root, capacity_bytes)?,
+        ))
     }
 }
 
 #[cfg(feature = "virtual-disk")]
-impl TypedObjectStoreRole<crate::storage_adapter::VirtualDiskObjectStorage<edgerun_virtual_disk::MemoryBlockBackend>> {
+impl
+    TypedObjectStoreRole<
+        crate::storage_adapter::VirtualDiskObjectStorage<edgerun_virtual_disk::MemoryBlockBackend>,
+    >
+{
     pub fn memory_virtual_disk(
         capacity_bytes: u64,
         block_size: u32,
@@ -57,7 +60,11 @@ impl TypedObjectStoreRole<crate::storage_adapter::VirtualDiskObjectStorage<edger
 
 #[cfg(feature = "virtual-disk")]
 #[cfg(not(any(target_os = "none", target_arch = "wasm32")))]
-impl TypedObjectStoreRole<crate::storage_adapter::VirtualDiskObjectStorage<edgerun_virtual_disk::FileBlockBackend>> {
+impl
+    TypedObjectStoreRole<
+        crate::storage_adapter::VirtualDiskObjectStorage<edgerun_virtual_disk::FileBlockBackend>,
+    >
+{
     pub fn file_virtual_disk(
         path: impl AsRef<std::path::Path>,
         capacity_bytes: u64,
@@ -165,7 +172,8 @@ impl<S: ObjectStorageAdapter> WorkRole for TypedObjectStoreRole<S> {
                     Ok(response) => response,
                     Err(err) => return RoleOutput::rejected(err.message().to_vec()),
                 };
-                let Ok(bytes) = storage_payload_bytes(&StoragePayload::RetrieveResponse(response)) else {
+                let Ok(bytes) = storage_payload_bytes(&StoragePayload::RetrieveResponse(response))
+                else {
                     return RoleOutput::rejected(b"response encode failed".to_vec());
                 };
                 RoleOutput {
@@ -182,7 +190,9 @@ impl<S: ObjectStorageAdapter> WorkRole for TypedObjectStoreRole<S> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage_payload::{storage_payload_from_bytes, typed_shard_hash, verify_retrieve_response};
+    use crate::storage_payload::{
+        storage_payload_from_bytes, typed_shard_hash, verify_retrieve_response,
+    };
 
     fn store_request(bytes: &[u8]) -> ObjectStoreRequest {
         let job_id = [9u8; 32];
@@ -245,7 +255,11 @@ mod tests {
         let stored = role.handle(
             &context,
             RoleInput {
-                packet: storage_message(local, WORK_TYPE_OBJECT_STORE, StoragePayload::StoreRequest(object)),
+                packet: storage_message(
+                    local,
+                    WORK_TYPE_OBJECT_STORE,
+                    StoragePayload::StoreRequest(object),
+                ),
                 previous_hash: [0u8; 32],
                 channel_hash: [0u8; 32],
             },

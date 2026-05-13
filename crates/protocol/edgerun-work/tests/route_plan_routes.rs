@@ -44,11 +44,11 @@ fn route_plan_filters_expired_department_routes() {
         .expect("fresh route selected");
 
     assert_eq!(selected.node.node_id, fresh.identity.node_id);
-    assert_eq!(plan.routes_for_department_at(DEPARTMENT_MESSAGE, 50).len(), 1);
     assert_eq!(
-        plan.route_for_node_at(expired.identity.node_id, 50),
-        None,
+        plan.routes_for_department_at(DEPARTMENT_MESSAGE, 50).len(),
+        1
     );
+    assert_eq!(plan.route_for_node_at(expired.identity.node_id, 50), None,);
 }
 
 #[test]
@@ -56,7 +56,12 @@ fn route_plan_filters_unavailable_department_routes() {
     let unavailable = SimNode::from_seed(80, NODE_ROLE_MESSAGE);
     let fresh = SimNode::from_seed(81, NODE_ROLE_MESSAGE);
     let plan = plan_from_routes(vec![
-        signed_memory_route(&unavailable, DEPARTMENT_MESSAGE, ROUTE_STATUS_UNAVAILABLE, 100),
+        signed_memory_route(
+            &unavailable,
+            DEPARTMENT_MESSAGE,
+            ROUTE_STATUS_UNAVAILABLE,
+            100,
+        ),
         signed_memory_route(&fresh, DEPARTMENT_MESSAGE, ROUTE_STATUS_AVAILABLE, 100),
     ]);
 
@@ -65,7 +70,10 @@ fn route_plan_filters_unavailable_department_routes() {
         .expect("available route selected");
 
     assert_eq!(selected.node.node_id, fresh.identity.node_id);
-    assert_eq!(plan.routes_for_department_at(DEPARTMENT_MESSAGE, 50).len(), 1);
+    assert_eq!(
+        plan.routes_for_department_at(DEPARTMENT_MESSAGE, 50).len(),
+        1
+    );
     assert_eq!(
         plan.route_for_node_at(unavailable.identity.node_id, 50),
         None,

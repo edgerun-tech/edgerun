@@ -1,6 +1,10 @@
 use edgerun_work::*;
 
-fn route_for_endpoint(node: &SimNode, endpoint: ChannelEndpoint, sequence: u64) -> RouteAdvertisement {
+fn route_for_endpoint(
+    node: &SimNode,
+    endpoint: ChannelEndpoint,
+    sequence: u64,
+) -> RouteAdvertisement {
     RouteAdvertisementBuilder::new(&node.key, node.identity.role, endpoint)
         .departments(vec![DEPARTMENT_MESSAGE])
         .sequence(sequence)
@@ -107,18 +111,29 @@ fn department_routes_are_sorted_by_policy_preference() {
     );
     let plan = verified_plan(vec![ws, quic, webtransport]);
 
-    let native = plan.routes_for_department_by_policy(DEPARTMENT_MESSAGE, &RouteSelectionPolicy::native());
-    assert_eq!(native.iter().map(|route| route.endpoint.kind).collect::<Vec<_>>(), vec![
-        CHANNEL_KIND_QUIC,
-        CHANNEL_KIND_WEBSOCKET,
-        CHANNEL_KIND_WEBTRANSPORT,
-    ]);
+    let native =
+        plan.routes_for_department_by_policy(DEPARTMENT_MESSAGE, &RouteSelectionPolicy::native());
+    assert_eq!(
+        native
+            .iter()
+            .map(|route| route.endpoint.kind)
+            .collect::<Vec<_>>(),
+        vec![
+            CHANNEL_KIND_QUIC,
+            CHANNEL_KIND_WEBSOCKET,
+            CHANNEL_KIND_WEBTRANSPORT,
+        ]
+    );
 
-    let browser = plan.routes_for_department_by_policy(DEPARTMENT_MESSAGE, &RouteSelectionPolicy::browser());
-    assert_eq!(browser.iter().map(|route| route.endpoint.kind).collect::<Vec<_>>(), vec![
-        CHANNEL_KIND_WEBTRANSPORT,
-        CHANNEL_KIND_WEBSOCKET,
-    ]);
+    let browser =
+        plan.routes_for_department_by_policy(DEPARTMENT_MESSAGE, &RouteSelectionPolicy::browser());
+    assert_eq!(
+        browser
+            .iter()
+            .map(|route| route.endpoint.kind)
+            .collect::<Vec<_>>(),
+        vec![CHANNEL_KIND_WEBTRANSPORT, CHANNEL_KIND_WEBSOCKET,]
+    );
 }
 
 #[test]

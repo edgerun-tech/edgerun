@@ -9,10 +9,9 @@ fn ordered_message_can_be_executed_by_message_role_library() {
 
     let mut channel = MemoryChannelEngine::new();
     channel
-        .add_route(receiver.advertise_memory_route(
-            relay.identity.node_id,
-            vec![DEPARTMENT_MESSAGE],
-        ))
+        .add_route(
+            receiver.advertise_memory_route(relay.identity.node_id, vec![DEPARTMENT_MESSAGE]),
+        )
         .expect("receiver route");
 
     let packet = sender.message_to(
@@ -63,10 +62,7 @@ fn ordered_storage_payload_can_be_executed_by_object_store_role_library() {
 
     let mut channel = MemoryChannelEngine::new();
     channel
-        .add_route(storage.advertise_memory_route(
-            relay.identity.node_id,
-            vec![DEPARTMENT_STORAGE],
-        ))
+        .add_route(storage.advertise_memory_route(relay.identity.node_id, vec![DEPARTMENT_STORAGE]))
         .expect("storage route");
 
     let payload = b"object bytes".to_vec();

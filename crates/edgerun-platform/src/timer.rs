@@ -2,8 +2,32 @@
 
 #![allow(unsafe_op_in_unsafe_fn)]
 
+#[cfg(all(
+    target_os = "none",
+    not(any(
+        target_arch = "x86_64",
+        target_arch = "aarch64",
+        target_arch = "riscv64",
+        target_arch = "xtensa"
+    ))
+))]
 use core::sync::atomic::{AtomicU64, Ordering};
 
+#[cfg(not(target_os = "none"))]
+use std::sync::OnceLock;
+
+#[cfg(not(target_os = "none"))]
+static HOST_TIMER_START: OnceLock<std::time::Instant> = OnceLock::new();
+
+#[cfg(all(
+    target_os = "none",
+    not(any(
+        target_arch = "x86_64",
+        target_arch = "aarch64",
+        target_arch = "riscv64",
+        target_arch = "xtensa"
+    ))
+))]
 static FALLBACK_TICKS: AtomicU64 = AtomicU64::new(0);
 
 pub struct MonoTime(u64);
@@ -32,7 +56,13 @@ pub fn timer_freq() -> u64 {
 
 #[inline]
 pub fn timer_ticks() -> u64 {
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(not(target_os = "none"))]
+    {
+        let start = HOST_TIMER_START.get_or_init(std::time::Instant::now);
+        return start.elapsed().as_micros() as u64;
+    }
+
+    #[cfg(all(target_os = "none", target_arch = "x86_64"))]
     {
         let lo: u32;
         let hi: u32;
@@ -42,7 +72,7 @@ pub fn timer_ticks() -> u64 {
         ((hi as u64) << 32) | (lo as u64)
     }
 
-    #[cfg(target_arch = "aarch64")]
+    #[cfg(all(target_os = "none", target_arch = "aarch64"))]
     {
         let ticks: u64;
         unsafe {
@@ -51,7 +81,7 @@ pub fn timer_ticks() -> u64 {
         ticks
     }
 
-    #[cfg(target_arch = "riscv64")]
+    #[cfg(all(target_os = "none", target_arch = "riscv64"))]
     {
         let ticks: u64;
         unsafe {
@@ -60,17 +90,20 @@ pub fn timer_ticks() -> u64 {
         ticks
     }
 
-    #[cfg(target_arch = "xtensa")]
+    #[cfg(all(target_os = "none", target_arch = "xtensa"))]
     {
         crate::arch::xtensa::ccount() as u64
     }
 
-    #[cfg(not(any(
-        target_arch = "x86_64",
-        target_arch = "aarch64",
-        target_arch = "riscv64",
-        target_arch = "xtensa"
-    )))]
+    #[cfg(all(
+        target_os = "none",
+        not(any(
+            target_arch = "x86_64",
+            target_arch = "aarch64",
+            target_arch = "riscv64",
+            target_arch = "xtensa"
+        ))
+    ))]
     {
         FALLBACK_TICKS.fetch_add(1, Ordering::AcqRel)
     }

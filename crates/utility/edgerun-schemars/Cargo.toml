@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "Edgerun shim for schemars"
 
 [dependencies]
-schemars = { path = "../../../vendor/cargo/schemars-0.8.22" }
+schemars = "0.8.22"
 
 [features]
 chrono04 = ["schemars/chrono"]

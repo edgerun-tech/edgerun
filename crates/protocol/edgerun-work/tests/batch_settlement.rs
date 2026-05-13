@@ -87,7 +87,8 @@ fn batch_settlement_handles_10k_receipts_with_deterministic_root() {
         .collect::<Vec<_>>();
 
     let request_hash = blake3_hash(b"batch-settlement-10k");
-    let admission_doc = signed_batch_admission(&admission, user, request_hash, RECEIPT_COUNT as u64);
+    let admission_doc =
+        signed_batch_admission(&admission, user, request_hash, RECEIPT_COUNT as u64);
     let admission_hash = work_admission_hash(&admission_doc).expect("admission hash");
 
     let receipts = (0..RECEIPT_COUNT)

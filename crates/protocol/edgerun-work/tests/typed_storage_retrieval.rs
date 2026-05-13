@@ -89,7 +89,10 @@ fn typed_storage_store_retrieve_and_reconstruct_over_work_channel() {
 
     let mut channel = MemoryWorkChannel::new();
     for storage in &storage_nodes {
-        let route = storage.advertise_memory_route(storage.identity.node_id, vec![DEPARTMENT_STORAGE, DEPARTMENT_RETRIEVAL]);
+        let route = storage.advertise_memory_route(
+            storage.identity.node_id,
+            vec![DEPARTMENT_STORAGE, DEPARTMENT_RETRIEVAL],
+        );
         channel.add_route(route).expect("storage route");
     }
 
@@ -103,7 +106,11 @@ fn typed_storage_store_retrieve_and_reconstruct_over_work_channel() {
     let manifest_hash = manifest_hash(&manifest);
     verify_manifest(&manifest, &shards).expect("manifest");
 
-    let first_route = channel.engine().route_for(&storage_nodes[0].identity.node_id).unwrap().clone();
+    let first_route = channel
+        .engine()
+        .route_for(&storage_nodes[0].identity.node_id)
+        .unwrap()
+        .clone();
     let admission_doc = signed_admission(
         &admission,
         user,
@@ -117,7 +124,8 @@ fn typed_storage_store_retrieve_and_reconstruct_over_work_channel() {
     ledger.deposit_user_credit(user, 100);
 
     for (index, shard) in shards.iter().enumerate() {
-        let store_payload = StoragePayload::StoreRequest(store_request_from_shard(&manifest, shard));
+        let store_payload =
+            StoragePayload::StoreRequest(store_request_from_shard(&manifest, shard));
         let packet = client.message_to(
             storage_nodes[index].identity.node_id,
             storage_nodes[index].identity.node_id,
@@ -133,7 +141,9 @@ fn typed_storage_store_retrieve_and_reconstruct_over_work_channel() {
                 packet,
             )
             .expect("ordered store request");
-        let route_hash = channel.route_hash_for(&storage_nodes[index].identity.node_id).unwrap();
+        let route_hash = channel
+            .route_hash_for(&storage_nodes[index].identity.node_id)
+            .unwrap();
         storage_nodes[index]
             .accept_ordered(&ordered, route_hash)
             .expect("storage accepts store order");
@@ -161,7 +171,9 @@ fn typed_storage_store_retrieve_and_reconstruct_over_work_channel() {
             10,
             index as u64 + 1,
         );
-        ledger.settle_receipt(&admission_doc, &receipt).expect("store receipt settles");
+        ledger
+            .settle_receipt(&admission_doc, &receipt)
+            .expect("store receipt settles");
     }
 
     let mut retrieved_shards = Vec::new();
@@ -172,7 +184,8 @@ fn typed_storage_store_retrieve_and_reconstruct_over_work_channel() {
             storage_nodes[index as usize].identity.node_id,
             DEPARTMENT_RETRIEVAL,
             WORK_TYPE_OBJECT_RETRIEVE,
-            storage_payload_bytes(&StoragePayload::RetrieveRequest(req)).expect("retrieve payload bytes"),
+            storage_payload_bytes(&StoragePayload::RetrieveRequest(req))
+                .expect("retrieve payload bytes"),
         );
         let ordered = channel
             .send_ordered(
@@ -182,7 +195,9 @@ fn typed_storage_store_retrieve_and_reconstruct_over_work_channel() {
                 packet,
             )
             .expect("ordered retrieve request");
-        let route_hash = channel.route_hash_for(&storage_nodes[index as usize].identity.node_id).unwrap();
+        let route_hash = channel
+            .route_hash_for(&storage_nodes[index as usize].identity.node_id)
+            .unwrap();
         storage_nodes[index as usize]
             .accept_ordered(&ordered, route_hash)
             .expect("storage accepts retrieve order");
@@ -224,10 +239,13 @@ fn typed_storage_store_retrieve_and_reconstruct_over_work_channel() {
             10,
             100 + index as u64,
         );
-        ledger.settle_receipt(&admission_doc, &receipt).expect("retrieve receipt settles");
+        ledger
+            .settle_receipt(&admission_doc, &receipt)
+            .expect("retrieve receipt settles");
     }
 
-    let reconstructed = reconstruct_xor_2_1(&manifest, &retrieved_shards).expect("reconstruct typed retrieved shards");
+    let reconstructed = reconstruct_xor_2_1(&manifest, &retrieved_shards)
+        .expect("reconstruct typed retrieved shards");
     assert_eq!(reconstructed, file);
     assert_eq!(ledger.user_balance(&user), 40);
 }

@@ -2,8 +2,8 @@ use alloc::collections::{BTreeMap, VecDeque};
 use alloc::vec::Vec;
 
 use edgerun_work::{
-    archived_packet_frame_from_bytes, ChannelEnvelope, Hash, NodeId, RouteAdvertisement,
-    TransportPacketFrame, WorkPacketTransport, WorkTransportError, CHANNEL_KIND_QUIC,
+    CHANNEL_KIND_QUIC, ChannelEnvelope, Hash, NodeId, RouteAdvertisement, TransportPacketFrame,
+    WorkPacketTransport, WorkTransportError, archived_packet_frame_from_bytes,
 };
 
 use crate::http::http3::quic::QuicConnection;
@@ -119,7 +119,10 @@ impl QuicWorkTransport {
         self.pending.drain(..).collect()
     }
 
-    pub async fn flush(&mut self, connection: &mut QuicConnection) -> Result<usize, WorkTransportError> {
+    pub async fn flush(
+        &mut self,
+        connection: &mut QuicConnection,
+    ) -> Result<usize, WorkTransportError> {
         let mut sent = 0usize;
         while let Some(packet) = self.pending.pop_front() {
             if let Err(_error) = connection
@@ -228,10 +231,10 @@ mod tests {
     use super::*;
     use edgerun_crypto::Ed25519SigningKey;
     use edgerun_work::{
-        archived_packet_frame_from_bytes, empty_signature, encode_work_packet_once, quic_endpoint,
-        sign_route_advertisement, websocket_endpoint, ChannelEndpoint, NodeIdentity,
-        RouteAdvertisement, SimNode, WorkPacket, DEPARTMENT_MESSAGE, NODE_ROLE_MESSAGE,
-        ROUTE_STATUS_AVAILABLE, WORK_TYPE_MESSAGE_DELIVER, WORK_WIRE_ABI_VERSION,
+        ChannelEndpoint, DEPARTMENT_MESSAGE, NODE_ROLE_MESSAGE, NodeIdentity,
+        ROUTE_STATUS_AVAILABLE, RouteAdvertisement, SimNode, WORK_TYPE_MESSAGE_DELIVER,
+        WORK_WIRE_ABI_VERSION, WorkPacket, archived_packet_frame_from_bytes, empty_signature,
+        encode_work_packet_once, quic_endpoint, sign_route_advertisement, websocket_endpoint,
     };
 
     fn route(endpoint: ChannelEndpoint) -> RouteAdvertisement {

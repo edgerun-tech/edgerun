@@ -2,9 +2,9 @@ use std::hint::black_box;
 use std::time::Instant;
 
 use edgerun_work::{
-    blake3_hash, empty_signature, encode_work_packet_once, packet_bytes, packet_hash,
-    sign_network_message, verify_network_message, NetworkMessage, SimNode, WorkPacket,
-    DEPARTMENT_MESSAGE, NODE_ROLE_MESSAGE, WORK_TYPE_MESSAGE_DELIVER, WORK_WIRE_ABI_VERSION,
+    DEPARTMENT_MESSAGE, NODE_ROLE_MESSAGE, NetworkMessage, SimNode, WORK_TYPE_MESSAGE_DELIVER,
+    WORK_WIRE_ABI_VERSION, WorkPacket, blake3_hash, empty_signature, encode_work_packet_once,
+    packet_bytes, packet_hash, sign_network_message, verify_network_message,
 };
 
 fn bench(name: &str, payload_bytes: usize, iters: usize, mut f: impl FnMut()) {
@@ -22,7 +22,11 @@ fn bench(name: &str, payload_bytes: usize, iters: usize, mut f: impl FnMut()) {
     println!("{name},{payload_bytes},{iters},{ns_per_op},{ops_per_sec}");
 }
 
-fn unsigned_message_template(sender: &SimNode, receiver: &SimNode, payload: Vec<u8>) -> NetworkMessage {
+fn unsigned_message_template(
+    sender: &SimNode,
+    receiver: &SimNode,
+    payload: Vec<u8>,
+) -> NetworkMessage {
     let payload_hash = blake3_hash(&payload);
     let mut id_input = Vec::new();
     id_input.extend_from_slice(&sender.identity.node_id);
@@ -79,9 +83,14 @@ fn main() {
         black_box(packet_bytes(black_box(&packet_1k)).expect("packet encodes"));
     });
 
-    bench("encode_work_packet_once_1k", payload_1k.len(), 50_000, || {
-        black_box(encode_work_packet_once(black_box(&packet_1k)).expect("packet encodes"));
-    });
+    bench(
+        "encode_work_packet_once_1k",
+        payload_1k.len(),
+        50_000,
+        || {
+            black_box(encode_work_packet_once(black_box(&packet_1k)).expect("packet encodes"));
+        },
+    );
 
     bench("packet_hash_1k", payload_1k.len(), 50_000, || {
         black_box(packet_hash(black_box(&packet_1k)).expect("packet hashes"));
@@ -94,10 +103,15 @@ fn main() {
         ));
     });
 
-    bench("verify_network_message_1k", payload_1k.len(), 10_000, || {
-        black_box(verify_network_message(
-            black_box(&signed_1k),
-            black_box(&sender.identity),
-        ));
-    });
+    bench(
+        "verify_network_message_1k",
+        payload_1k.len(),
+        10_000,
+        || {
+            black_box(verify_network_message(
+                black_box(&signed_1k),
+                black_box(&sender.identity),
+            ));
+        },
+    );
 }

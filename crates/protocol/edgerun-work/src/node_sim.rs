@@ -4,9 +4,9 @@ use crate::channel::ChannelEnvelope;
 use crate::channel_order::{ChannelOrderBook, ChannelOrderError, OrderedChannelEnvelope};
 use crate::codec::{blake3_hash, packet_bytes};
 use crate::identity::node_identity_from_key;
-use crate::memory_channel::{route_hash, MemoryChannelEngine, MemoryChannelError};
+use crate::memory_channel::{MemoryChannelEngine, MemoryChannelError, route_hash};
 use crate::protocol::*;
-use crate::route_builder::{memory_endpoint, RouteAdvertisementBuilder};
+use crate::route_builder::{RouteAdvertisementBuilder, memory_endpoint};
 use crate::signing::{empty_signature, sign_network_message};
 use edgerun_crypto::Ed25519SigningKey;
 
@@ -103,7 +103,9 @@ pub fn deliver_ordered(
     to: NodeId,
     packet: WorkPacket,
 ) -> Result<OrderedChannelEnvelope, NodeSimError> {
-    let envelope = channel.deliver(from, to, packet).map_err(NodeSimError::Route)?;
+    let envelope = channel
+        .deliver(from, to, packet)
+        .map_err(NodeSimError::Route)?;
     let previous_message_hash = sender_order.last_message_hash(envelope.channel_id, from, to);
     let sequence = sender_order.next_sequence(envelope.channel_id, from, to);
     let ordered = OrderedChannelEnvelope {

@@ -12,6 +12,8 @@
 )]
 
 extern crate alloc;
+#[cfg(not(target_os = "none"))]
+extern crate std;
 
 pub mod arch;
 pub mod cpu;

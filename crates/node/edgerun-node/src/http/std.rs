@@ -139,6 +139,7 @@ pub mod io {
 pub mod net {
     use super::io;
     use alloc::string::{String, ToString};
+    use alloc::vec::Vec;
     pub use core::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4};
 
     pub trait ToSocketAddrs {
@@ -155,18 +156,25 @@ pub mod net {
     }
 
     impl ToSocketAddrs for &str {
-        type Iter = core::option::IntoIter<SocketAddr>;
+        type Iter = alloc::vec::IntoIter<SocketAddr>;
 
         fn to_socket_addrs(&self) -> io::Result<Self::Iter> {
+            #[cfg(not(target_os = "none"))]
+            {
+                return std::net::ToSocketAddrs::to_socket_addrs(self)
+                    .map(|addrs| addrs.collect::<Vec<_>>().into_iter())
+                    .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e));
+            }
+
+            #[cfg(target_os = "none")]
             self.parse::<SocketAddr>()
-                .map(Some)
-                .map(Option::into_iter)
+                .map(|addr| alloc::vec![addr].into_iter())
                 .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))
         }
     }
 
     impl ToSocketAddrs for String {
-        type Iter = core::option::IntoIter<SocketAddr>;
+        type Iter = alloc::vec::IntoIter<SocketAddr>;
 
         fn to_socket_addrs(&self) -> io::Result<Self::Iter> {
             self.as_str().to_socket_addrs()
@@ -174,14 +182,24 @@ pub mod net {
     }
 
     impl ToSocketAddrs for (&str, u16) {
-        type Iter = core::option::IntoIter<SocketAddr>;
+        type Iter = alloc::vec::IntoIter<SocketAddr>;
 
         fn to_socket_addrs(&self) -> io::Result<Self::Iter> {
-            let ip = self
-                .0
-                .parse()
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
-            Ok(Some(SocketAddr::new(IpAddr::V4(ip), self.1)).into_iter())
+            #[cfg(not(target_os = "none"))]
+            {
+                return std::net::ToSocketAddrs::to_socket_addrs(self)
+                    .map(|addrs| addrs.collect::<Vec<_>>().into_iter())
+                    .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e));
+            }
+
+            #[cfg(target_os = "none")]
+            {
+                let ip = self
+                    .0
+                    .parse()
+                    .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))?;
+                Ok(alloc::vec![SocketAddr::new(IpAddr::V4(ip), self.1)].into_iter())
+            }
         }
     }
 

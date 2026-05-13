@@ -3,12 +3,14 @@ use alloc::vec::Vec;
 use edgerun_crypto::Ed25519SigningKey;
 
 use crate::channel::ChannelProof;
-use crate::channel_order::{ordered_message_hash, OrderedChannelEnvelope};
+use crate::channel_order::{OrderedChannelEnvelope, ordered_message_hash};
 use crate::preimage::{HashBuilder, PreimageBuilder};
-use crate::protocol::{Hash, NodeId, NodeIdentity, WorkPacket, WorkProtocolError, WORK_WIRE_ABI_VERSION};
+use crate::protocol::{
+    Hash, NodeId, NodeIdentity, WORK_WIRE_ABI_VERSION, WorkPacket, WorkProtocolError,
+};
 use crate::recipient_policy::{
-    recipient_message_policy_allows, recipient_message_policy_hash, RecipientMessagePolicy,
-    RecipientPolicyError,
+    RecipientMessagePolicy, RecipientPolicyError, recipient_message_policy_allows,
+    recipient_message_policy_hash,
 };
 use crate::signing::{empty_signature, sign_ed25519, verify_signature};
 
@@ -42,7 +44,10 @@ pub fn channel_proof_preimage(value: &ChannelProof) -> Vec<u8> {
         .finish()
 }
 
-pub fn policy_bound_ordered_message_hash(ordered: &OrderedChannelEnvelope, policy_hash: Hash) -> Hash {
+pub fn policy_bound_ordered_message_hash(
+    ordered: &OrderedChannelEnvelope,
+    policy_hash: Hash,
+) -> Hash {
     HashBuilder::domain(POLICY_BOUND_MESSAGE_DOMAIN)
         .hash(&ordered_message_hash(ordered))
         .hash(&policy_hash)

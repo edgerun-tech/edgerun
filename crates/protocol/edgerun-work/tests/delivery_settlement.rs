@@ -53,13 +53,15 @@ fn fixture() -> DeliveryFixture {
     let admission_node = SimNode::from_seed(181, NODE_ROLE_ADMISSION);
     let user = public_key_from_seed(182);
     let mut sender = SimNode::from_seed(183, NODE_ROLE_MESSAGE);
-    let mut recipient = SimNode::from_seed(184, NODE_ROLE_MESSAGE);
+    let recipient = SimNode::from_seed(184, NODE_ROLE_MESSAGE);
     let relay_node = SimNode::from_seed(185, NODE_ROLE_RELAY);
     let mut relay = RelayRole::from_seed(185, 3);
     let mut channel = MemoryChannelEngine::new();
 
-    let relay_route = relay_node.advertise_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_RELAY]);
-    let recipient_route = recipient.advertise_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_MESSAGE]);
+    let relay_route =
+        relay_node.advertise_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_RELAY]);
+    let recipient_route =
+        recipient.advertise_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_MESSAGE]);
     let relay_route_hash = channel.add_route(relay_route.clone()).expect("relay route");
     let recipient_route_hash = channel.add_route(recipient_route).expect("recipient route");
     let mut recipient_policy = open_recipient_message_policy(recipient.identity.clone(), 1, 1_000);
@@ -118,7 +120,8 @@ fn fixture() -> DeliveryFixture {
         999,
     )
     .expect("policy-gated recipient proof");
-    let payable_receipt = relay.finalized_delivery_receipt(&result, channel_proof_hash(&recipient_proof));
+    let payable_receipt =
+        relay.finalized_delivery_receipt(&result, channel_proof_hash(&recipient_proof));
 
     DeliveryFixture {
         admission,
@@ -173,15 +176,22 @@ fn settle_delivery_requires_policy_bound_recipient_proof_and_transit_hash() {
 
     assert_eq!(settled.amount, 3);
     assert_eq!(ledger.user_balance(&fixture.user), 7);
-    assert_eq!(ledger.worker_balance(&fixture.payable_receipt.worker.node_id), 3);
+    assert_eq!(
+        ledger.worker_balance(&fixture.payable_receipt.worker.node_id),
+        3
+    );
 }
 
 #[test]
 fn receiver_helper_refuses_to_sign_disallowed_message() {
     let mut fixture = fixture();
-    fixture.recipient_policy.blocked_senders.push(fixture.relay_input.envelope.from);
+    fixture
+        .recipient_policy
+        .blocked_senders
+        .push(fixture.relay_input.envelope.from);
     let recipient_key = Ed25519SigningKey::from_bytes(&[184u8; 32]);
-    fixture.recipient_policy = sign_recipient_message_policy(&recipient_key, fixture.recipient_policy.clone());
+    fixture.recipient_policy =
+        sign_recipient_message_policy(&recipient_key, fixture.recipient_policy.clone());
 
     assert!(matches!(
         channel_proof_for_allowed_ordered_message(
@@ -241,9 +251,13 @@ fn settle_delivery_rejects_policy_hash_mismatch() {
 #[test]
 fn settle_delivery_rejects_message_disallowed_by_recipient_policy() {
     let mut fixture = fixture();
-    fixture.recipient_policy.blocked_senders.push(fixture.relay_input.envelope.from);
+    fixture
+        .recipient_policy
+        .blocked_senders
+        .push(fixture.relay_input.envelope.from);
     let recipient_key = Ed25519SigningKey::from_bytes(&[184u8; 32]);
-    fixture.recipient_policy = sign_recipient_message_policy(&recipient_key, fixture.recipient_policy.clone());
+    fixture.recipient_policy =
+        sign_recipient_message_policy(&recipient_key, fixture.recipient_policy.clone());
     fixture.admission.policy_hash = recipient_message_policy_hash(&fixture.recipient_policy);
     let admission_key = Ed25519SigningKey::from_bytes(&[181u8; 32]);
     fixture.admission = sign_work_admission(&admission_key, fixture.admission.clone());

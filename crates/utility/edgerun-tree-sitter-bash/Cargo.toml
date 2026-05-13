@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "Edgerun shim for tree-sitter-bash"
 
 [dependencies]
-tree-sitter-bash = { path = "../../../vendor/cargo/tree-sitter-bash" }
+tree-sitter-bash = "0.25.1"
 
 [lints]
 workspace = true

@@ -3,7 +3,9 @@ use alloc::vec::Vec;
 
 use crate::preimage::HashBuilder;
 use crate::protocol::*;
-use crate::settlement::{work_admission_hash, work_receipt_hash, SettlementError, SettlementLedger};
+use crate::settlement::{
+    SettlementError, SettlementLedger, work_admission_hash, work_receipt_hash,
+};
 use crate::signing::{verify_work_admission, verify_work_receipt};
 
 const RECEIPT_BATCH_LEAF_DOMAIN: &[u8] = b"edgerun:v1:work:receipt-batch-leaf";
@@ -77,18 +79,27 @@ pub fn build_receipt_batch(
         return Err(BatchSettlementError::EmptyBatch);
     }
     if !verify_work_admission(admission) {
-        return Err(BatchSettlementError::Settlement(SettlementError::InvalidAdmission));
+        return Err(BatchSettlementError::Settlement(
+            SettlementError::InvalidAdmission,
+        ));
     }
-    let admission_hash = work_admission_hash(admission).map_err(BatchSettlementError::Settlement)?;
+    let admission_hash =
+        work_admission_hash(admission).map_err(BatchSettlementError::Settlement)?;
     let mut receipt_hashes = Vec::with_capacity(receipts.len());
     let mut seen = BTreeSet::new();
     let mut total_claim = 0u64;
     for receipt in receipts {
         if !verify_work_receipt(receipt) {
-            return Err(BatchSettlementError::Settlement(SettlementError::InvalidReceipt));
+            return Err(BatchSettlementError::Settlement(
+                SettlementError::InvalidReceipt,
+            ));
         }
-        if receipt.admission_hash != admission_hash || receipt.request_hash != admission.request_hash {
-            return Err(BatchSettlementError::Settlement(SettlementError::ReceiptAdmissionMismatch));
+        if receipt.admission_hash != admission_hash
+            || receipt.request_hash != admission.request_hash
+        {
+            return Err(BatchSettlementError::Settlement(
+                SettlementError::ReceiptAdmissionMismatch,
+            ));
         }
         let hash = work_receipt_hash(receipt).map_err(BatchSettlementError::Settlement)?;
         if !seen.insert(hash) {
@@ -98,7 +109,9 @@ pub fn build_receipt_batch(
         total_claim = total_claim.saturating_add(receipt.total_claim);
     }
     if total_claim > admission.admitted_budget {
-        return Err(BatchSettlementError::Settlement(SettlementError::ClaimExceedsAdmissionBudget));
+        return Err(BatchSettlementError::Settlement(
+            SettlementError::ClaimExceedsAdmissionBudget,
+        ));
     }
     let batch_root = receipt_batch_root(admission_hash, &receipt_hashes, total_claim);
     Ok(ReceiptBatch {
@@ -146,7 +159,11 @@ pub fn merkle_root(mut leaves: Vec<Hash>) -> Hash {
         let mut i = 0;
         while i < leaves.len() {
             let left = leaves[i];
-            let right = if i + 1 < leaves.len() { leaves[i + 1] } else { left };
+            let right = if i + 1 < leaves.len() {
+                leaves[i + 1]
+            } else {
+                left
+            };
             next.push(merkle_parent_hash(left, right));
             i += 2;
         }

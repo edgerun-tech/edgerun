@@ -28,7 +28,8 @@ impl PreimageBuilder {
     }
 
     pub fn bytes(mut self, value: &[u8]) -> Self {
-        self.bytes.extend_from_slice(&(value.len() as u64).to_be_bytes());
+        self.bytes
+            .extend_from_slice(&(value.len() as u64).to_be_bytes());
         self.bytes.extend_from_slice(value);
         self
     }
@@ -49,7 +50,8 @@ impl PreimageBuilder {
     }
 
     pub fn u16_list(mut self, values: &[u16]) -> Self {
-        self.bytes.extend_from_slice(&(values.len() as u64).to_be_bytes());
+        self.bytes
+            .extend_from_slice(&(values.len() as u64).to_be_bytes());
         for value in values {
             self.bytes.extend_from_slice(&value.to_be_bytes());
         }
@@ -57,7 +59,8 @@ impl PreimageBuilder {
     }
 
     pub fn hash_list(mut self, values: &[Hash]) -> Self {
-        self.bytes.extend_from_slice(&(values.len() as u64).to_be_bytes());
+        self.bytes
+            .extend_from_slice(&(values.len() as u64).to_be_bytes());
         for value in values {
             self.bytes.extend_from_slice(value);
         }
@@ -78,7 +81,8 @@ impl PreimageBuilder {
 
     pub fn relay(mut self, value: &RelayEndpoint) -> Self {
         self.bytes.extend_from_slice(&value.relay_node_id);
-        self.bytes.extend_from_slice(&(value.host.as_bytes().len() as u64).to_be_bytes());
+        self.bytes
+            .extend_from_slice(&(value.host.as_bytes().len() as u64).to_be_bytes());
         self.bytes.extend_from_slice(value.host.as_bytes());
         self.bytes.extend_from_slice(&value.port.to_be_bytes());
         self
@@ -87,9 +91,11 @@ impl PreimageBuilder {
     pub fn channel(mut self, value: &ChannelEndpoint) -> Self {
         self.bytes.extend_from_slice(&value.channel_id);
         self.bytes.extend_from_slice(&value.kind.to_be_bytes());
-        self.bytes.extend_from_slice(&(value.address.len() as u64).to_be_bytes());
+        self.bytes
+            .extend_from_slice(&(value.address.len() as u64).to_be_bytes());
         self.bytes.extend_from_slice(&value.address);
-        self.bytes.extend_from_slice(&(value.label.as_bytes().len() as u64).to_be_bytes());
+        self.bytes
+            .extend_from_slice(&(value.label.as_bytes().len() as u64).to_be_bytes());
         self.bytes.extend_from_slice(value.label.as_bytes());
         self
     }

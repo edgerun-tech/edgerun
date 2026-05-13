@@ -21,7 +21,11 @@ impl WorkPacketTransport for FakeTransport {
     }
 }
 
-fn route_for_endpoint(node: &SimNode, endpoint: ChannelEndpoint, sequence: u64) -> RouteAdvertisement {
+fn route_for_endpoint(
+    node: &SimNode,
+    endpoint: ChannelEndpoint,
+    sequence: u64,
+) -> RouteAdvertisement {
     RouteAdvertisementBuilder::new(&node.key, node.identity.role, endpoint)
         .departments(vec![DEPARTMENT_MESSAGE])
         .sequence(sequence)
@@ -33,12 +37,10 @@ fn native_transport_channel_sends_quic_route_as_rkyv_bytes() {
     let mut sender = SimNode::from_seed(211, NODE_ROLE_MESSAGE);
     let receiver = SimNode::from_seed(212, NODE_ROLE_MESSAGE);
     let mut channel = TransportWorkChannel::native(FakeTransport::default());
-    let route = route_for_endpoint(
-        &receiver,
-        quic_endpoint("quic", b"127.0.0.1:4433"),
-        1,
-    );
-    let route_hash = channel.add_route(route).expect("native quic route accepted");
+    let route = route_for_endpoint(&receiver, quic_endpoint("quic", b"127.0.0.1:4433"), 1);
+    let route_hash = channel
+        .add_route(route)
+        .expect("native quic route accepted");
     let packet = sender.message_to(
         receiver.identity.node_id,
         receiver.identity.node_id,
@@ -61,11 +63,7 @@ fn native_transport_channel_sends_quic_route_as_rkyv_bytes() {
 fn browser_transport_channel_rejects_raw_quic_route_and_accepts_webtransport() {
     let receiver = SimNode::from_seed(213, NODE_ROLE_MESSAGE);
     let mut channel = TransportWorkChannel::browser(FakeTransport::default());
-    let quic = route_for_endpoint(
-        &receiver,
-        quic_endpoint("quic", b"203.0.113.10:4433"),
-        1,
-    );
+    let quic = route_for_endpoint(&receiver, quic_endpoint("quic", b"203.0.113.10:4433"), 1);
     let webtransport = route_for_endpoint(
         &receiver,
         webtransport_endpoint("webtransport", b"https://relay.edgerun.test/wt"),

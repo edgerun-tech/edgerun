@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "Edgerun shim for icu_decimal"
 
 [dependencies]
-icu_decimal = { path = "../../../vendor/cargo/icu_decimal" }
+icu_decimal = "2.1.1"
 
 [lints]
 workspace = true

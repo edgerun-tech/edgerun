@@ -1,15 +1,18 @@
 use std::collections::BTreeMap;
 use std::io;
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
-use std::sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
+};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
-use crate::channel::{ChannelEnvelope, RouteAdvertisement, ROUTE_STATUS_AVAILABLE};
+use crate::channel::{ChannelEnvelope, ROUTE_STATUS_AVAILABLE, RouteAdvertisement};
 use crate::channel_order::{ChannelOrderBook, OrderedChannelEnvelope};
-use crate::codec::{encode_work_packet_once, ArchivedWorkPacketFrame};
+use crate::codec::{ArchivedWorkPacketFrame, encode_work_packet_once};
 use crate::memory_channel::route_hash;
-use crate::protocol::{Hash, NodeId, WorkPacket, WORK_WIRE_ABI_VERSION};
+use crate::protocol::{Hash, NodeId, WORK_WIRE_ABI_VERSION, WorkPacket};
 use crate::route_auth::verify_route_advertisement;
 use crate::std_runtime::framing::{read_work_packet_frame, unix_ms, write_encoded_work_packet};
 use crate::work_channel::{WorkChannel, WorkChannelError};
@@ -57,7 +60,9 @@ impl TcpNodeRuntime {
             while !shutdown_for_thread.load(Ordering::Acquire) {
                 match listener.accept() {
                     Ok((stream, _peer)) => {
-                        let _ = stream.set_read_timeout(Some(Duration::from_millis(CONNECTION_READ_TIMEOUT_MS)));
+                        let _ = stream.set_read_timeout(Some(Duration::from_millis(
+                            CONNECTION_READ_TIMEOUT_MS,
+                        )));
                         let inbox = Arc::clone(&inbox_for_thread);
                         let shutdown = Arc::clone(&shutdown_for_thread);
                         let handle = thread::spawn(move || {
@@ -97,20 +102,36 @@ impl TcpNodeRuntime {
     pub fn shutdown(&self) -> io::Result<()> {
         self.shutdown.store(true, Ordering::Release);
         let _ = TcpStream::connect(self.listen_addr);
-        if let Some(handle) = self.accept_thread.lock().expect("tcp accept thread poisoned").take() {
-            handle.join().map_err(|_| io::Error::new(io::ErrorKind::Other, "tcp accept thread panicked"))?;
+        if let Some(handle) = self
+            .accept_thread
+            .lock()
+            .expect("tcp accept thread poisoned")
+            .take()
+        {
+            handle
+                .join()
+                .map_err(|_| io::Error::new(io::ErrorKind::Other, "tcp accept thread panicked"))?;
         }
-        let mut workers = self.worker_threads.lock().expect("tcp worker thread list poisoned");
+        let mut workers = self
+            .worker_threads
+            .lock()
+            .expect("tcp worker thread list poisoned");
         let handles = workers.drain(..).collect::<Vec<_>>();
         drop(workers);
         for handle in handles {
-            handle.join().map_err(|_| io::Error::new(io::ErrorKind::Other, "tcp worker thread panicked"))?;
+            handle
+                .join()
+                .map_err(|_| io::Error::new(io::ErrorKind::Other, "tcp worker thread panicked"))?;
         }
         Ok(())
     }
 
     pub fn drain_packet_frames(&self) -> Vec<ArchivedWorkPacketFrame> {
-        self.inbox.lock().expect("tcp node inbox poisoned").drain(..).collect()
+        self.inbox
+            .lock()
+            .expect("tcp node inbox poisoned")
+            .drain(..)
+            .collect()
     }
 
     pub fn drain_packets(&self) -> Vec<WorkPacket> {
@@ -198,15 +219,21 @@ impl WorkChannel for TcpNodeRuntime {
         packet: WorkPacket,
     ) -> Result<ChannelEnvelope, WorkChannelError> {
         let now = unix_ms();
-        if self.routes.get(&to).is_some_and(|route| !Self::route_available(route, now)) {
+        if self
+            .routes
+            .get(&to)
+            .is_some_and(|route| !Self::route_available(route, now))
+        {
             self.routes.remove(&to);
             return Err(WorkChannelError::RouteMissing);
         }
         let route = self.routes.get(&to).ok_or(WorkChannelError::RouteMissing)?;
-        let encoded = encode_work_packet_once(&packet).map_err(|_| WorkChannelError::PacketHashFailed)?;
+        let encoded =
+            encode_work_packet_once(&packet).map_err(|_| WorkChannelError::PacketHashFailed)?;
         let addr = Self::route_addr(route).ok_or(WorkChannelError::RouteMissing)?;
         let mut stream = TcpStream::connect(addr).map_err(|_| WorkChannelError::DeliveryFailed)?;
-        write_encoded_work_packet(&mut stream, encoded.as_bytes()).map_err(|_| WorkChannelError::DeliveryFailed)?;
+        write_encoded_work_packet(&mut stream, encoded.as_bytes())
+            .map_err(|_| WorkChannelError::DeliveryFailed)?;
         Ok(ChannelEnvelope {
             abi_version: WORK_WIRE_ABI_VERSION,
             channel_id: route.endpoint.channel_id,

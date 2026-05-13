@@ -12,7 +12,9 @@ fn deterministic_bytes(len: usize, seed: u8) -> Vec<u8> {
     let mut out = Vec::with_capacity(len);
     let mut x = seed as u64 + 1;
     for _ in 0..len {
-        x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        x = x
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         out.push((x >> 32) as u8);
     }
     out
@@ -109,7 +111,8 @@ fn scaled_storage_retrieval_and_relay_costs_match_settlement() {
     }
     for (index, storage) in storage_nodes.iter().enumerate() {
         let relay = &relays[index % relays.len()];
-        routes.push(storage.advertise_memory_route(relay.identity.node_id, vec![DEPARTMENT_STORAGE]));
+        routes
+            .push(storage.advertise_memory_route(relay.identity.node_id, vec![DEPARTMENT_STORAGE]));
     }
     let snapshot = sign_route_snapshot(
         &admission.key,
@@ -146,24 +149,43 @@ fn scaled_storage_retrieval_and_relay_costs_match_settlement() {
 
     for (file_index, file_size) in file_sizes.iter().copied().enumerate() {
         let assigned_nodes = [
-            storage_routes[(file_index * 3) % storage_routes.len()].node.node_id,
-            storage_routes[(file_index * 3 + 1) % storage_routes.len()].node.node_id,
-            storage_routes[(file_index * 3 + 2) % storage_routes.len()].node.node_id,
+            storage_routes[(file_index * 3) % storage_routes.len()]
+                .node
+                .node_id,
+            storage_routes[(file_index * 3 + 1) % storage_routes.len()]
+                .node
+                .node_id,
+            storage_routes[(file_index * 3 + 2) % storage_routes.len()]
+                .node
+                .node_id,
         ];
         let file = deterministic_bytes(file_size, file_index as u8 + 50);
-        let (manifest, shards) = encode_xor_2_1(&file, assigned_nodes).expect("encode erasure file");
+        let (manifest, shards) =
+            encode_xor_2_1(&file, assigned_nodes).expect("encode erasure file");
         verify_manifest(&manifest, &shards).expect("manifest verifies");
         assert_eq!(manifest.original_hash, blake3_hash(&file));
 
-        let relay_nodes = relays.iter().map(|relay| relay.identity.node_id).collect::<Vec<_>>();
-        let estimate = estimate_erasure_storage_cost(&manifest, &shards, &relay_nodes, epochs, prices);
+        let relay_nodes = relays
+            .iter()
+            .map(|relay| relay.identity.node_id)
+            .collect::<Vec<_>>();
+        let estimate =
+            estimate_erasure_storage_cost(&manifest, &shards, &relay_nodes, epochs, prices);
         assert_eq!(estimate.original_bytes, file_size as u64);
-        assert_eq!(estimate.stored_bytes, shards.iter().map(|s| s.bytes.len() as u64).sum::<u64>());
+        assert_eq!(
+            estimate.stored_bytes,
+            shards.iter().map(|s| s.bytes.len() as u64).sum::<u64>()
+        );
         assert!(estimate.erasure_overhead_bps >= 15_000 || file_size <= 1);
-        assert_eq!(estimate.total, estimate.storage_total + estimate.retrieval_total + estimate.relay_total);
+        assert_eq!(
+            estimate.total,
+            estimate.storage_total + estimate.retrieval_total + estimate.relay_total
+        );
         assert_ne!(estimate.estimate_hash, [0u8; 32]);
 
-        let first_route = plan.route_for_node(assigned_nodes[0]).expect("assigned route");
+        let first_route = plan
+            .route_for_node(assigned_nodes[0])
+            .expect("assigned route");
         let admission_doc = signed_admission(
             &admission,
             user,
@@ -194,11 +216,16 @@ fn scaled_storage_retrieval_and_relay_costs_match_settlement() {
                 share.amount,
                 index as u64 + 1,
             );
-            ledger.settle_receipt(&admission_doc, &receipt).expect("storage settlement");
+            ledger
+                .settle_receipt(&admission_doc, &receipt)
+                .expect("storage settlement");
         }
 
         let retrieved = retrieve_shards(&shard_store, &manifest, &[0, 1, 2]);
-        assert_eq!(reconstruct_xor_2_1(&manifest, &retrieved).expect("reconstruct all"), file);
+        assert_eq!(
+            reconstruct_xor_2_1(&manifest, &retrieved).expect("reconstruct all"),
+            file
+        );
 
         for (index, share) in estimate.retrieval_shares.iter().enumerate() {
             let worker = storage_nodes
@@ -215,7 +242,9 @@ fn scaled_storage_retrieval_and_relay_costs_match_settlement() {
                 share.amount,
                 10_000 + index as u64,
             );
-            ledger.settle_receipt(&admission_doc, &receipt).expect("retrieval settlement");
+            ledger
+                .settle_receipt(&admission_doc, &receipt)
+                .expect("retrieval settlement");
         }
 
         for (index, share) in estimate.relay_shares.iter().enumerate() {
@@ -234,13 +263,16 @@ fn scaled_storage_retrieval_and_relay_costs_match_settlement() {
                 share.amount,
                 20_000 + index as u64,
             );
-            ledger.settle_receipt(&admission_doc, &receipt).expect("relay settlement");
+            ledger
+                .settle_receipt(&admission_doc, &receipt)
+                .expect("relay settlement");
         }
 
         assert_eq!(ledger.admission_spent(&admission_hash), estimate.total);
         expected_total = expected_total.saturating_add(estimate.total);
         expected_storage_total = expected_storage_total.saturating_add(estimate.storage_total);
-        expected_retrieval_total = expected_retrieval_total.saturating_add(estimate.retrieval_total);
+        expected_retrieval_total =
+            expected_retrieval_total.saturating_add(estimate.retrieval_total);
         expected_relay_total = expected_relay_total.saturating_add(estimate.relay_total);
     }
 
@@ -253,7 +285,10 @@ fn scaled_storage_retrieval_and_relay_costs_match_settlement() {
         .iter()
         .map(|node| ledger.worker_balance(&node.identity.node_id))
         .sum::<u64>();
-    assert_eq!(storage_paid, expected_storage_total + expected_retrieval_total);
+    assert_eq!(
+        storage_paid,
+        expected_storage_total + expected_retrieval_total
+    );
     assert_eq!(relay_paid, expected_relay_total);
     assert_eq!(storage_paid + relay_paid, expected_total);
 }

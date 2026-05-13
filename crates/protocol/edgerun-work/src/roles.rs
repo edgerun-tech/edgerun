@@ -1,7 +1,9 @@
 use alloc::vec::Vec;
 
 use crate::protocol::*;
-use crate::types::{department_for_work_type_typed, role_for_department_typed, Department, NodeRole, WorkType};
+use crate::types::{
+    Department, NodeRole, WorkType, department_for_work_type_typed, role_for_department_typed,
+};
 
 pub const ROLE_STATUS_ACCEPTED: u16 = 1;
 pub const ROLE_STATUS_REJECTED: u16 = 2;
@@ -30,15 +32,27 @@ pub struct RoleOutput {
 
 impl RoleOutput {
     pub fn accepted(packet: WorkPacket) -> Self {
-        Self { status: ROLE_STATUS_ACCEPTED, packet: Some(packet), bytes: Vec::new() }
+        Self {
+            status: ROLE_STATUS_ACCEPTED,
+            packet: Some(packet),
+            bytes: Vec::new(),
+        }
     }
 
     pub fn ignored() -> Self {
-        Self { status: ROLE_STATUS_IGNORED, packet: None, bytes: Vec::new() }
+        Self {
+            status: ROLE_STATUS_IGNORED,
+            packet: None,
+            bytes: Vec::new(),
+        }
     }
 
     pub fn rejected(reason: Vec<u8>) -> Self {
-        Self { status: ROLE_STATUS_REJECTED, packet: None, bytes: reason }
+        Self {
+            status: ROLE_STATUS_REJECTED,
+            packet: None,
+            bytes: reason,
+        }
     }
 }
 

@@ -143,10 +143,12 @@ impl Url {
             let _ = write!(s, ":{port}");
         }
         if !self.path.is_empty() {
-            if !self.path.starts_with('/') {
+            if self.path.starts_with('/') {
+                s.push_str(&self.path);
+            } else {
                 s.push('/');
+                s.push_str(&self.path);
             }
-            s.push_str(self.path.trim_start_matches('/'));
         }
         if let Some(ref q) = self.query {
             s.push('?');
@@ -308,5 +310,13 @@ mod tests {
         let original = "https://acme-v02.api.letsencrypt.org/directory";
         let url = Url::parse(original).unwrap();
         assert_eq!(url.to_string(), original);
+    }
+
+    #[test]
+    fn test_roundtrip_path_with_multiple_segments() {
+        let original = "https://chatgpt.com/backend-api/codex/responses";
+        let url = Url::parse(original).unwrap();
+        assert_eq!(url.to_string(), original);
+        assert_eq!(url.path(), "/backend-api/codex/responses");
     }
 }

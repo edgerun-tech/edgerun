@@ -103,15 +103,22 @@ pub fn storage_route_from_relay_assignment(
     if assignment.node_id != storage.node_id {
         return Err(WorkProtocolError::WrongRelay);
     }
-    Ok(RouteAdvertisementBuilder::new(storage_key, NODE_ROLE_STORAGE, endpoint)
-        .relay_node_id(assignment.relay.relay_node_id)
-        .departments(vec![DEPARTMENT_STORAGE, DEPARTMENT_RETRIEVAL])
-        .valid_until_unix_ms(assignment.valid_until_unix_ms)
-        .build(storage_key))
+    Ok(
+        RouteAdvertisementBuilder::new(storage_key, NODE_ROLE_STORAGE, endpoint)
+            .relay_node_id(assignment.relay.relay_node_id)
+            .departments(vec![DEPARTMENT_STORAGE, DEPARTMENT_RETRIEVAL])
+            .valid_until_unix_ms(assignment.valid_until_unix_ms)
+            .build(storage_key),
+    )
 }
 
 pub fn memory_endpoint(label: impl Into<String>, seed: &[u8]) -> ChannelEndpoint {
-    ChannelEndpoint::new(endpoint_channel_id(CHANNEL_KIND_MEMORY, seed), CHANNEL_KIND_MEMORY, Vec::new(), label.into())
+    ChannelEndpoint::new(
+        endpoint_channel_id(CHANNEL_KIND_MEMORY, seed),
+        CHANNEL_KIND_MEMORY,
+        Vec::new(),
+        label.into(),
+    )
 }
 
 pub fn tcp_endpoint(label: impl Into<String>, address: impl AsRef<[u8]>) -> ChannelEndpoint {
@@ -146,7 +153,12 @@ fn endpoint_from_address(
     address: impl AsRef<[u8]>,
 ) -> ChannelEndpoint {
     let address = address.as_ref().to_vec();
-    ChannelEndpoint::new(endpoint_channel_id(kind, &address), kind, address, label.into())
+    ChannelEndpoint::new(
+        endpoint_channel_id(kind, &address),
+        kind,
+        address,
+        label.into(),
+    )
 }
 
 #[cfg(test)]
@@ -186,6 +198,9 @@ mod tests {
         .expect("storage route");
         assert_eq!(route.node.node_id, storage.node_id);
         assert_eq!(route.relay_node_id, relay.node_id);
-        assert_eq!(route.departments, vec![DEPARTMENT_STORAGE, DEPARTMENT_RETRIEVAL]);
+        assert_eq!(
+            route.departments,
+            vec![DEPARTMENT_STORAGE, DEPARTMENT_RETRIEVAL]
+        );
     }
 }

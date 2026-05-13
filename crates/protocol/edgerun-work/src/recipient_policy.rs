@@ -108,13 +108,19 @@ pub fn recipient_message_policy_allows(
     if !policy.allow_unknown_senders && !contains_node_id(&policy.allowed_senders, &message.from) {
         return Err(RecipientPolicyError::SenderNotAllowed);
     }
-    if !policy.allowed_relays.is_empty() && !contains_node_id(&policy.allowed_relays, &message.via_relay) {
+    if !policy.allowed_relays.is_empty()
+        && !contains_node_id(&policy.allowed_relays, &message.via_relay)
+    {
         return Err(RecipientPolicyError::RelayNotAllowed);
     }
-    if !policy.allowed_departments.is_empty() && !policy.allowed_departments.contains(&message.department) {
+    if !policy.allowed_departments.is_empty()
+        && !policy.allowed_departments.contains(&message.department)
+    {
         return Err(RecipientPolicyError::DepartmentNotAllowed);
     }
-    if !policy.allowed_work_types.is_empty() && !policy.allowed_work_types.contains(&message.work_type) {
+    if !policy.allowed_work_types.is_empty()
+        && !policy.allowed_work_types.contains(&message.work_type)
+    {
         return Err(RecipientPolicyError::WorkTypeNotAllowed);
     }
     if message.payload.len() as u64 > policy.max_payload_bytes {

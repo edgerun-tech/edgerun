@@ -2,9 +2,9 @@ use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
 use crate::channel::{ChannelEnvelope, RouteAdvertisement};
-use crate::codec::{encode_work_packet_once, ArchivedWorkPacketFrame};
+use crate::codec::{ArchivedWorkPacketFrame, encode_work_packet_once};
 use crate::memory_channel::{route_hash, route_is_available};
-use crate::protocol::{Hash, NodeId, WorkPacket, WORK_WIRE_ABI_VERSION};
+use crate::protocol::{Hash, NodeId, WORK_WIRE_ABI_VERSION, WorkPacket};
 use crate::route_auth::verify_route_advertisement;
 use crate::route_plan::{RouteRuntimeProfile, RouteSelectionPolicy};
 use crate::work_channel::{WorkChannel, WorkChannelError};
@@ -181,7 +181,11 @@ impl<T: WorkPacketTransport> WorkChannel for TransportWorkChannel<T> {
         packet: WorkPacket,
     ) -> Result<ChannelEnvelope, WorkChannelError> {
         let now = current_unix_ms();
-        if self.routes.get(&to).is_some_and(|route| !route_is_available(route, now)) {
+        if self
+            .routes
+            .get(&to)
+            .is_some_and(|route| !route_is_available(route, now))
+        {
             self.routes.remove(&to);
             return Err(WorkChannelError::RouteMissing);
         }
@@ -189,7 +193,8 @@ impl<T: WorkPacketTransport> WorkChannel for TransportWorkChannel<T> {
         if !self.policy.allows(route) {
             return Err(WorkChannelError::RouteInvalid);
         }
-        let encoded = encode_work_packet_once(&packet).map_err(|_| WorkChannelError::PacketHashFailed)?;
+        let encoded =
+            encode_work_packet_once(&packet).map_err(|_| WorkChannelError::PacketHashFailed)?;
         self.transport
             .send_packet_bytes(route, encoded.as_bytes())
             .map_err(|_| WorkChannelError::DeliveryFailed)?;

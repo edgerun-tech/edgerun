@@ -1,5 +1,5 @@
 use edgerun_crypto::Ed25519SigningKey;
-use edgerun_work::channel::{ChannelEndpoint, CHANNEL_KIND_MEMORY};
+use edgerun_work::channel::{CHANNEL_KIND_MEMORY, ChannelEndpoint};
 use edgerun_work::*;
 
 fn signed_storage_admission(
@@ -142,7 +142,8 @@ fn settlement_rejects_duplicate_and_over_budget_receipts() {
     let mut ledger = SettlementLedger::new();
     ledger.deposit_user_credit(user, 100);
 
-    let receipt = signed_storage_receipt(&storage0, request_hash, admission_hash, &shards[0], 10, 1);
+    let receipt =
+        signed_storage_receipt(&storage0, request_hash, admission_hash, &shards[0], 10, 1);
     ledger
         .settle_receipt_unchecked_evidence(&admission_doc, &receipt)
         .expect("first settlement");
@@ -152,7 +153,8 @@ fn settlement_rejects_duplicate_and_over_budget_receipts() {
         Err(SettlementError::DuplicateReceipt)
     ));
 
-    let receipt2 = signed_storage_receipt(&storage1, request_hash, admission_hash, &shards[1], 10, 2);
+    let receipt2 =
+        signed_storage_receipt(&storage1, request_hash, admission_hash, &shards[1], 10, 2);
     assert!(matches!(
         ledger.settle_receipt_unchecked_evidence(&admission_doc, &receipt2),
         Err(SettlementError::ClaimExceedsAdmissionBudget)
@@ -169,12 +171,17 @@ fn settlement_charges_only_user_committed_in_admission() {
     real_user.copy_from_slice(real_user_key.verifying_key().as_bytes());
     fake_user.copy_from_slice(fake_user_key.verifying_key().as_bytes());
     let storage = SimNode::from_seed(134, NODE_ROLE_STORAGE);
-    let nodes = [storage.identity.node_id, storage.identity.node_id, storage.identity.node_id];
+    let nodes = [
+        storage.identity.node_id,
+        storage.identity.node_id,
+        storage.identity.node_id,
+    ];
 
     let (manifest, shards) = encode_xor_2_1(b"charge bound user", nodes).expect("encode");
     let admission_doc = signed_storage_admission(&admission, real_user, manifest.job_id, 10);
     let admission_hash = work_admission_hash(&admission_doc).expect("admission hash");
-    let receipt = signed_storage_receipt(&storage, manifest.job_id, admission_hash, &shards[0], 10, 1);
+    let receipt =
+        signed_storage_receipt(&storage, manifest.job_id, admission_hash, &shards[0], 10, 1);
 
     let mut ledger = SettlementLedger::new();
     ledger.deposit_user_credit(real_user, 100);

@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "Edgerun shim for icu_provider"
 
 [dependencies]
-icu_provider = { path = "../../../vendor/cargo/icu_provider", default-features = false }
+icu_provider = { version = "2.1.1", default-features = false }
 
 [features]
 default = []

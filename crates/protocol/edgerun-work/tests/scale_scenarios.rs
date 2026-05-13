@@ -110,7 +110,8 @@ fn scale_many_routes_messages_files_and_payments() {
 
     for (i, receiver) in receivers.iter().enumerate() {
         let relay = &relays[i % RELAY_COUNT];
-        let route = receiver.advertise_memory_route(relay.identity.node_id, vec![DEPARTMENT_MESSAGE]);
+        let route =
+            receiver.advertise_memory_route(relay.identity.node_id, vec![DEPARTMENT_MESSAGE]);
         channel.add_route(route.clone()).expect("receiver route");
         route_snapshot_routes.push(route);
     }
@@ -125,7 +126,8 @@ fn scale_many_routes_messages_files_and_payments() {
     ];
     for (i, storage) in storage_nodes.iter().enumerate() {
         let relay = &relays[i % RELAY_COUNT];
-        let route = storage.advertise_memory_route(relay.identity.node_id, vec![DEPARTMENT_STORAGE]);
+        let route =
+            storage.advertise_memory_route(relay.identity.node_id, vec![DEPARTMENT_STORAGE]);
         channel.add_route(route.clone()).expect("storage route");
         route_snapshot_routes.push(route);
     }
@@ -142,8 +144,14 @@ fn scale_many_routes_messages_files_and_payments() {
         },
     );
     let plan = VerifiedRoutePlan::from_snapshot(snapshot).expect("verified route snapshot");
-    assert_eq!(plan.routes_for_department(DEPARTMENT_RELAY).len(), RELAY_COUNT);
-    assert_eq!(plan.routes_for_department(DEPARTMENT_STORAGE).len(), storage_nodes.len());
+    assert_eq!(
+        plan.routes_for_department(DEPARTMENT_RELAY).len(),
+        RELAY_COUNT
+    );
+    assert_eq!(
+        plan.routes_for_department(DEPARTMENT_STORAGE).len(),
+        storage_nodes.len()
+    );
 
     let mut relay_paid_total = 0u64;
     for i in 0..MESSAGE_COUNT {
@@ -212,11 +220,18 @@ fn scale_many_routes_messages_files_and_payments() {
     let mut storage_paid_total = 0u64;
     for file_index in 0..FILE_COUNT {
         let assigned_nodes = [
-            storage_routes[(file_index * 3) % storage_routes.len()].node.node_id,
-            storage_routes[(file_index * 3 + 1) % storage_routes.len()].node.node_id,
-            storage_routes[(file_index * 3 + 2) % storage_routes.len()].node.node_id,
+            storage_routes[(file_index * 3) % storage_routes.len()]
+                .node
+                .node_id,
+            storage_routes[(file_index * 3 + 1) % storage_routes.len()]
+                .node
+                .node_id,
+            storage_routes[(file_index * 3 + 2) % storage_routes.len()]
+                .node
+                .node_id,
         ];
-        let file = format!("scaled erasure file {file_index} with deterministic payload").into_bytes();
+        let file =
+            format!("scaled erasure file {file_index} with deterministic payload").into_bytes();
         let (manifest, shards) = encode_xor_2_1(&file, assigned_nodes).expect("encode file");
         verify_manifest(&manifest, &shards).expect("manifest verifies");
         let request_hash = manifest.job_id;
@@ -252,7 +267,10 @@ fn scale_many_routes_messages_files_and_payments() {
             storage_paid_total += 5;
         }
         let retrieved = retrieve_shards(&shard_store, &manifest, &[0, 1, 2]);
-        assert_eq!(reconstruct_xor_2_1(&manifest, &retrieved).expect("reconstruct"), file);
+        assert_eq!(
+            reconstruct_xor_2_1(&manifest, &retrieved).expect("reconstruct"),
+            file
+        );
     }
 
     assert_eq!(storage_paid_total, (FILE_COUNT as u64) * 15);

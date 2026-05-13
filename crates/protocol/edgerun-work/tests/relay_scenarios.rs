@@ -47,8 +47,10 @@ fn relay_forwards_ordered_message_to_final_node_and_gets_paid_with_delivery_proo
     let mut relay = RelayRole::from_seed(145, 3);
 
     let mut channel = MemoryChannelEngine::new();
-    let relay_route = relay_node.advertise_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_RELAY]);
-    let receiver_route = receiver.advertise_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_MESSAGE]);
+    let relay_route =
+        relay_node.advertise_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_RELAY]);
+    let receiver_route =
+        receiver.advertise_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_MESSAGE]);
     let relay_route_hash = channel.add_route(relay_route.clone()).expect("relay route");
     let receiver_route_hash = channel.add_route(receiver_route).expect("receiver route");
     let mut recipient_policy = open_recipient_message_policy(receiver.identity.clone(), 1, 1_000);
@@ -113,7 +115,8 @@ fn relay_forwards_ordered_message_to_final_node_and_gets_paid_with_delivery_proo
         999,
     )
     .expect("receiver signs policy-gated delivery proof");
-    let payable_receipt = relay.finalized_delivery_receipt(&result, channel_proof_hash(&recipient_proof));
+    let payable_receipt =
+        relay.finalized_delivery_receipt(&result, channel_proof_hash(&recipient_proof));
 
     let evidence = DeliverySettlementEvidence {
         admission: &admission_doc,
@@ -145,10 +148,14 @@ fn relay_transit_hashes_chain_across_forwarded_packets() {
     let mut relay = RelayRole::from_seed(148, 1);
     let mut channel = MemoryChannelEngine::new();
     channel
-        .add_route(relay_node.advertise_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_RELAY]))
+        .add_route(
+            relay_node.advertise_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_RELAY]),
+        )
         .expect("relay route");
     channel
-        .add_route(receiver.advertise_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_MESSAGE]))
+        .add_route(
+            receiver.advertise_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_MESSAGE]),
+        )
         .expect("receiver route");
 
     let first = sender.message_to(
@@ -191,8 +198,14 @@ fn relay_transit_hashes_chain_across_forwarded_packets() {
 
     assert_ne!(first_result.transit_hash, second_result.transit_hash);
     assert_eq!(relay.last_transit_hash, second_result.transit_hash);
-    assert_eq!(first_result.transit_receipt.output_hash, first_result.transit_hash);
-    assert_eq!(second_result.transit_receipt.output_hash, second_result.transit_hash);
+    assert_eq!(
+        first_result.transit_receipt.output_hash,
+        first_result.transit_hash
+    );
+    assert_eq!(
+        second_result.transit_receipt.output_hash,
+        second_result.transit_hash
+    );
     assert_eq!(first_result.transit_receipt.sequence, 1);
     assert_eq!(second_result.transit_receipt.sequence, 2);
 }
@@ -210,7 +223,9 @@ fn relay_rejects_message_for_wrong_relay() {
         .add_route(relay_b.advertise_memory_route(relay_b.identity.node_id, vec![DEPARTMENT_RELAY]))
         .expect("relay b route");
     channel
-        .add_route(receiver.advertise_memory_route(relay_b.identity.node_id, vec![DEPARTMENT_MESSAGE]))
+        .add_route(
+            receiver.advertise_memory_route(relay_b.identity.node_id, vec![DEPARTMENT_MESSAGE]),
+        )
         .expect("receiver route");
 
     let packet = sender.message_to(
@@ -249,7 +264,9 @@ fn relay_rejects_when_destination_route_is_missing() {
 
     let mut channel = MemoryChannelEngine::new();
     channel
-        .add_route(relay_node.advertise_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_RELAY]))
+        .add_route(
+            relay_node.advertise_memory_route(relay_node.identity.node_id, vec![DEPARTMENT_RELAY]),
+        )
         .expect("relay route");
 
     let packet = sender.message_to(

@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 
 use rkyv::{Archive, Deserialize, Serialize};
 
-use crate::erasure_storage::{erasure_shard_hash, ErasureManifest, ErasureShard};
+use crate::erasure_storage::{ErasureManifest, ErasureShard, erasure_shard_hash};
 use crate::preimage::HashBuilder;
 use crate::protocol::{Hash, WorkProtocolError};
 
@@ -109,21 +109,23 @@ pub fn retrieve_response_from_store_request(
 }
 
 pub fn verify_store_request(request: &ObjectStoreRequest) -> bool {
-    request.shard_hash == typed_shard_hash(
-        request.job_id,
-        request.shard_index,
-        request.shard_index == 2,
-        &request.bytes,
-    )
+    request.shard_hash
+        == typed_shard_hash(
+            request.job_id,
+            request.shard_index,
+            request.shard_index == 2,
+            &request.bytes,
+        )
 }
 
 pub fn verify_retrieve_response(response: &ObjectRetrieveResponse) -> bool {
-    response.shard_hash == typed_shard_hash(
-        response.job_id,
-        response.shard_index,
-        response.shard_index == 2,
-        &response.bytes,
-    )
+    response.shard_hash
+        == typed_shard_hash(
+            response.job_id,
+            response.shard_index,
+            response.shard_index == 2,
+            &response.bytes,
+        )
 }
 
 pub fn storage_payload_bytes(payload: &StoragePayload) -> Result<Vec<u8>, WorkProtocolError> {
@@ -134,7 +136,11 @@ pub fn storage_payload_bytes(payload: &StoragePayload) -> Result<Vec<u8>, WorkPr
 
 pub fn storage_payload_from_bytes(bytes: &[u8]) -> Result<StoragePayload, WorkProtocolError> {
     use edgerun_wire::util;
-    if bytes.as_ptr().align_offset(core::mem::align_of::<ArchivedStoragePayload>()) != 0 {
+    if bytes
+        .as_ptr()
+        .align_offset(core::mem::align_of::<ArchivedStoragePayload>())
+        != 0
+    {
         let mut aligned = util::AlignedVec::<16>::with_capacity(bytes.len());
         aligned.extend_from_slice(bytes);
         return storage_payload_from_aligned_bytes(aligned.as_slice());
@@ -143,7 +149,7 @@ pub fn storage_payload_from_bytes(bytes: &[u8]) -> Result<StoragePayload, WorkPr
 }
 
 fn storage_payload_from_aligned_bytes(bytes: &[u8]) -> Result<StoragePayload, WorkProtocolError> {
-    use edgerun_wire::{access, deserialize, WireError};
+    use edgerun_wire::{WireError, access, deserialize};
     let archived = access::<ArchivedStoragePayload, WireError>(bytes)
         .map_err(|_| WorkProtocolError::InvalidPacket)?;
     deserialize::<StoragePayload, WireError>(archived).map_err(|_| WorkProtocolError::InvalidPacket)

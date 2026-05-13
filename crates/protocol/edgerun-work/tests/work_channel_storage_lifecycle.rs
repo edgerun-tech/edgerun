@@ -89,7 +89,8 @@ fn storage_lifecycle_runs_over_generic_work_channel() {
 
     let mut channel = MemoryWorkChannel::new();
     for storage in &storage_nodes {
-        let route = storage.advertise_memory_route(storage.identity.node_id, vec![DEPARTMENT_STORAGE]);
+        let route =
+            storage.advertise_memory_route(storage.identity.node_id, vec![DEPARTMENT_STORAGE]);
         channel.add_route(route).expect("storage route");
     }
 

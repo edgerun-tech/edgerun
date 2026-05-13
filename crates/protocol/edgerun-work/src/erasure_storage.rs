@@ -137,7 +137,8 @@ pub fn verify_manifest(
         return Err(ErasureStorageError::InvalidDataShardCount);
     }
     for shard in shards {
-        let expected_hash = erasure_shard_hash(shard.job_id, shard.index, shard.is_parity, &shard.bytes);
+        let expected_hash =
+            erasure_shard_hash(shard.job_id, shard.index, shard.is_parity, &shard.bytes);
         if shard.hash != expected_hash {
             return Err(ErasureStorageError::HashMismatch);
         }
@@ -174,7 +175,9 @@ pub fn reconstruct_xor_2_1(
         return Err(ErasureStorageError::TooManyMissingDataShards);
     }
     if data[0].is_none() || data[1].is_none() {
-        let parity = parity.as_ref().ok_or(ErasureStorageError::MissingParityShard)?;
+        let parity = parity
+            .as_ref()
+            .ok_or(ErasureStorageError::MissingParityShard)?;
         if data[0].is_none() {
             let data1 = data[1].as_ref().ok_or(ErasureStorageError::MissingShard)?;
             data[0] = Some(xor_bytes(data1, parity));
