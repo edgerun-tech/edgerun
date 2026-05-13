@@ -1,9 +1,0 @@
-id: object/10-descriptor-header-object-mismatch-reject
-suite: object
-validator: validate_object_retrieval
-version: 1
-priority: mandatory
-description: object descriptor and representation header must agree on object identity
-tags:
-- object
-- validate_object_retrieval

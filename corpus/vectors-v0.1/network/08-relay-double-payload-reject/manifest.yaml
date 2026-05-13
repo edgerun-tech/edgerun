@@ -1,9 +1,0 @@
-id: network/08-relay-double-payload-reject
-suite: network
-validator: validate_network
-version: 1
-priority: mandatory
-description: relay envelope is rejected when both payload encodings are present simultaneously
-tags:
-- network
-- validate_network

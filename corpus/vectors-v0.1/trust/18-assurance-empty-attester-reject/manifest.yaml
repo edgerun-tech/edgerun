@@ -1,9 +1,0 @@
-id: trust/18-assurance-empty-attester-reject
-suite: trust
-validator: validate_trust
-version: 1
-priority: mandatory
-description: assurance claim with empty attester is structurally invalid
-tags:
-- trust
-- validate_trust

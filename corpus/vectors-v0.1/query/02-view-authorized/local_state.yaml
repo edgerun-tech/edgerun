@@ -1,7 +1,0 @@
-local_node: node_server
-current_controller_set:
-- node_server
-trust_roots:
-- node_server
-replay_cache: {}
-revocations: []

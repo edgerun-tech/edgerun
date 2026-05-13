@@ -1,6 +1,0 @@
-route_trust_assignments:
-  issuer: peer_untrusted
-  assignments:
-  - subject:
-      identity_id: node_target
-    trust_score: 5

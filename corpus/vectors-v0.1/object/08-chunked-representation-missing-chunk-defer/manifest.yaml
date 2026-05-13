@@ -1,9 +1,0 @@
-id: object/08-chunked-representation-missing-chunk-defer
-suite: object
-validator: validate_object_retrieval
-version: 1
-priority: mandatory
-description: chunked representation defers when required chunks are not locally available
-tags:
-- object
-- validate_object_retrieval

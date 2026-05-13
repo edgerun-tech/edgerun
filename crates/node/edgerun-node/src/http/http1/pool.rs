@@ -899,27 +899,24 @@ impl ConnectionPool {
             return Self::connect_sock_static(connect_timeout, &SocketAddr::new(ip, port)).await;
         }
 
-        let host_owned = host.to_string();
-        let dns_result = rt_timeout(
-            dns_timeout,
-            crate::http::runtime::spawn_blocking(move || {
-                use crate::http::runtime::net::ToSocketAddrs;
-                format!("{}:{}", host_owned, port).to_socket_addrs()
-            }),
-        )
-        .await;
-
-        if let Ok(Ok(Ok(addrs))) = dns_result {
-            let addr_list: Vec<SocketAddr> = addrs.into_iter().collect();
-            for addr in addr_list.iter() {
-                match addr.ip() {
-                    IpAddr::V4(_) => return Self::connect_sock_static(connect_timeout, addr).await,
-                    IpAddr::V6(_) => continue,
+        let _ = dns_timeout;
+        {
+            use crate::http::runtime::net::ToSocketAddrs;
+            let addrs = format!("{}:{}", host, port).to_socket_addrs();
+            if let Ok(addrs) = addrs {
+                let addr_list: Vec<SocketAddr> = addrs.into_iter().collect();
+                for addr in addr_list.iter() {
+                    match addr.ip() {
+                        IpAddr::V4(_) => {
+                            return Self::connect_sock_static(connect_timeout, addr).await;
+                        }
+                        IpAddr::V6(_) => continue,
+                    }
                 }
-            }
-            for addr in addr_list.into_iter() {
-                if let IpAddr::V6(_) = addr.ip() {
-                    return Self::connect_sock_static(connect_timeout, &addr).await;
+                for addr in addr_list.into_iter() {
+                    if let IpAddr::V6(_) = addr.ip() {
+                        return Self::connect_sock_static(connect_timeout, &addr).await;
+                    }
                 }
             }
         }

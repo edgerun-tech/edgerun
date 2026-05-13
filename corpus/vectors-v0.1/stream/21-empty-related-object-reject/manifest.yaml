@@ -1,9 +1,0 @@
-id: stream/21-empty-related-object-reject
-suite: stream
-validator: validate_stream_append
-version: 1
-priority: mandatory
-description: related object reference must carry an object id
-tags:
-- stream
-- validate_stream_append

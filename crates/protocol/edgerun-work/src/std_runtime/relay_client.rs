@@ -7,7 +7,9 @@ use crate::codec::blake3_hash;
 use crate::identity::node_identity_from_key;
 use crate::preimage::HashBuilder;
 use crate::protocol::*;
-use crate::signing::{empty_signature, sign_network_message, sign_node_available, sign_node_heartbeat};
+use crate::signing::{
+    empty_signature, sign_network_message, sign_node_available, sign_node_heartbeat,
+};
 use crate::std_runtime::framing::{read_work_packet, unix_ms, write_work_packet};
 
 const CLIENT_CONNECTION_HASH_DOMAIN: &[u8] = b"edgerun:v1:work:client-connection";

@@ -30,7 +30,11 @@ pub fn sign_ed25519(key: &Ed25519SigningKey, preimage: &[u8]) -> WorkSignature {
     }
 }
 
-pub fn verify_signature(identity: &NodeIdentity, signature: &WorkSignature, preimage: &[u8]) -> bool {
+pub fn verify_signature(
+    identity: &NodeIdentity,
+    signature: &WorkSignature,
+    preimage: &[u8],
+) -> bool {
     if !verify_node_identity(identity) {
         return false;
     }
@@ -47,7 +51,8 @@ pub fn verify_solana_ed25519(public_key: &PublicKey, preimage: &[u8], signature:
     if signature.len() != 64 {
         return false;
     }
-    let Ok(verifying_key) = edgerun_crypto::ed25519_dalek::VerifyingKey::from_bytes(public_key) else {
+    let Ok(verifying_key) = edgerun_crypto::ed25519_dalek::VerifyingKey::from_bytes(public_key)
+    else {
         return false;
     };
     let Ok(signature) = edgerun_crypto::ed25519_dalek::Signature::from_slice(signature) else {
@@ -144,7 +149,10 @@ pub fn sign_node_heartbeat(key: &Ed25519SigningKey, mut value: NodeHeartbeat) ->
     value
 }
 
-pub fn sign_relay_assignment(key: &Ed25519SigningKey, mut value: RelayAssignment) -> RelayAssignment {
+pub fn sign_relay_assignment(
+    key: &Ed25519SigningKey,
+    mut value: RelayAssignment,
+) -> RelayAssignment {
     value.signature = sign_ed25519(key, &relay_assignment_preimage(&value));
     value
 }
@@ -167,18 +175,30 @@ pub fn sign_work_receipt(key: &Ed25519SigningKey, mut value: WorkReceipt) -> Wor
 
 pub fn verify_node_available(value: &NodeAvailable) -> bool {
     value.abi_version == WORK_WIRE_ABI_VERSION
-        && verify_signature(&value.node, &value.signature, &node_available_preimage(value))
+        && verify_signature(
+            &value.node,
+            &value.signature,
+            &node_available_preimage(value),
+        )
 }
 
 pub fn verify_node_heartbeat(value: &NodeHeartbeat) -> bool {
     value.abi_version == WORK_WIRE_ABI_VERSION
-        && verify_signature(&value.node, &value.signature, &node_heartbeat_preimage(value))
+        && verify_signature(
+            &value.node,
+            &value.signature,
+            &node_heartbeat_preimage(value),
+        )
 }
 
 pub fn verify_relay_assignment(value: &RelayAssignment) -> bool {
     value.abi_version == WORK_WIRE_ABI_VERSION
         && value.assigned_by.role == NODE_ROLE_ADMISSION
-        && verify_signature(&value.assigned_by, &value.signature, &relay_assignment_preimage(value))
+        && verify_signature(
+            &value.assigned_by,
+            &value.signature,
+            &relay_assignment_preimage(value),
+        )
 }
 
 pub fn verify_network_message(value: &NetworkMessage, signer: &NodeIdentity) -> bool {
@@ -191,10 +211,18 @@ pub fn verify_network_message(value: &NetworkMessage, signer: &NodeIdentity) -> 
 pub fn verify_work_admission(value: &WorkAdmission) -> bool {
     value.abi_version == WORK_WIRE_ABI_VERSION
         && value.admission_node.role == NODE_ROLE_ADMISSION
-        && verify_signature(&value.admission_node, &value.signature, &work_admission_preimage(value))
+        && verify_signature(
+            &value.admission_node,
+            &value.signature,
+            &work_admission_preimage(value),
+        )
 }
 
 pub fn verify_work_receipt(value: &WorkReceipt) -> bool {
     value.abi_version == WORK_WIRE_ABI_VERSION
-        && verify_signature(&value.worker, &value.signature, &work_receipt_preimage(value))
+        && verify_signature(
+            &value.worker,
+            &value.signature,
+            &work_receipt_preimage(value),
+        )
 }

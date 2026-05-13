@@ -1,3 +1,5 @@
+#![cfg(feature = "std")]
+
 use std::net::{TcpListener, TcpStream};
 use std::thread::{self, JoinHandle};
 
@@ -77,7 +79,9 @@ fn admit_relay(controller: &InMemoryAdmissionController, seed: u8) -> (TcpStream
     let controller = controller.clone();
     let server = thread::spawn(move || {
         let (stream, _) = listener.accept().expect("accept admission test stream");
-        controller.handle_connection(stream).expect("handle relay admission connection");
+        controller
+            .handle_connection(stream)
+            .expect("handle relay admission connection");
     });
 
     let mut client = TcpStream::connect(addr).expect("connect relay admission client");
@@ -122,7 +126,9 @@ fn admission_replay_state_rejects_duplicate_request_id() {
     let duplicate = signed_request(&key, 2, first.request_id);
     let mut replay = AdmissionReplayState::new();
 
-    replay.record_checked(&first).expect("first request accepted");
+    replay
+        .record_checked(&first)
+        .expect("first request accepted");
 
     assert_eq!(
         replay.record_checked(&duplicate),
@@ -140,8 +146,12 @@ fn admission_replay_state_prunes_expired_request_ids_without_resetting_user_sequ
     let stale_after_prune = signed_expiring_request(&key, 1, [53u8; 32], 1_000);
     let mut replay = AdmissionReplayState::new();
 
-    replay.record_checked(&expired).expect("expired request initially recorded");
-    replay.record_checked(&fresh).expect("fresh request initially recorded");
+    replay
+        .record_checked(&expired)
+        .expect("expired request initially recorded");
+    replay
+        .record_checked(&fresh)
+        .expect("fresh request initially recorded");
 
     assert_eq!(replay.prune_expired(101), 1);
     assert_eq!(replay.seen_request_count(), 1);
@@ -164,7 +174,9 @@ fn admission_replay_state_rejects_non_increasing_user_sequence() {
     let fresh = signed_request(&key, 11, [13u8; 32]);
     let mut replay = AdmissionReplayState::new();
 
-    replay.record_checked(&first).expect("first sequence accepted");
+    replay
+        .record_checked(&first)
+        .expect("first sequence accepted");
 
     assert_eq!(
         replay.record_checked(&stale),
@@ -180,7 +192,9 @@ fn admission_replay_state_rejects_non_increasing_user_sequence() {
             received: 9,
         })
     );
-    replay.record_checked(&fresh).expect("fresh sequence accepted");
+    replay
+        .record_checked(&fresh)
+        .expect("fresh sequence accepted");
 
     assert_eq!(replay.seen_request_count(), 2);
     assert_eq!(replay.highest_sequence_for(&first.user), Some(11));
@@ -193,7 +207,9 @@ fn admission_replay_state_does_not_mutate_on_failed_validate() {
     let stale = signed_request(&key, 4, [21u8; 32]);
     let mut replay = AdmissionReplayState::new();
 
-    replay.record_checked(&first).expect("first sequence accepted");
+    replay
+        .record_checked(&first)
+        .expect("first sequence accepted");
     assert!(replay.validate(&stale).is_err());
 
     assert_eq!(replay.seen_request_count(), 1);
@@ -265,26 +281,38 @@ fn admission_controller_rejects_stale_user_sequence_after_admission() {
 
     assert_admission(
         controller
-            .handle_packet(WorkPacket::WorkRequest(signed_request(&user_key, 10, [31u8; 32])), None)
+            .handle_packet(
+                WorkPacket::WorkRequest(signed_request(&user_key, 10, [31u8; 32])),
+                None,
+            )
             .expect("first request handled"),
     );
     assert_ack(
         controller
-            .handle_packet(WorkPacket::WorkRequest(signed_request(&user_key, 10, [32u8; 32])), None)
+            .handle_packet(
+                WorkPacket::WorkRequest(signed_request(&user_key, 10, [32u8; 32])),
+                None,
+            )
             .expect("equal sequence request handled"),
         409,
         "stale user request sequence",
     );
     assert_ack(
         controller
-            .handle_packet(WorkPacket::WorkRequest(signed_request(&user_key, 9, [33u8; 32])), None)
+            .handle_packet(
+                WorkPacket::WorkRequest(signed_request(&user_key, 9, [33u8; 32])),
+                None,
+            )
             .expect("older sequence request handled"),
         409,
         "stale user request sequence",
     );
     assert_admission(
         controller
-            .handle_packet(WorkPacket::WorkRequest(signed_request(&user_key, 11, [34u8; 32])), None)
+            .handle_packet(
+                WorkPacket::WorkRequest(signed_request(&user_key, 11, [34u8; 32])),
+                None,
+            )
             .expect("fresh request handled"),
     );
 

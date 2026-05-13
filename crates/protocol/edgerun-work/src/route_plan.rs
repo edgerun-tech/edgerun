@@ -1,13 +1,15 @@
 use alloc::vec::Vec;
 
 use crate::channel::{
-    RouteAdvertisement, RouteSnapshot, CHANNEL_KIND_MEMORY, CHANNEL_KIND_QUIC, CHANNEL_KIND_TCP,
-    CHANNEL_KIND_WASM_HOST, CHANNEL_KIND_WEBSOCKET, CHANNEL_KIND_WEBTRANSPORT,
+    CHANNEL_KIND_MEMORY, CHANNEL_KIND_QUIC, CHANNEL_KIND_TCP, CHANNEL_KIND_WASM_HOST,
+    CHANNEL_KIND_WEBSOCKET, CHANNEL_KIND_WEBTRANSPORT, RouteAdvertisement, RouteSnapshot,
 };
 use crate::memory_channel::route_is_available;
 use crate::preimage::HashBuilder;
 use crate::protocol::{Hash, NodeId};
-use crate::route_auth::{route_advertisement_preimage, verify_route_advertisement, verify_route_snapshot};
+use crate::route_auth::{
+    route_advertisement_preimage, verify_route_advertisement, verify_route_snapshot,
+};
 
 const ROUTE_COMMITMENT_DOMAIN: &[u8] = b"edgerun:v1:work:route-commitment";
 const ROUTE_ROOT_DOMAIN: &[u8] = b"edgerun:v1:work:route-root";
@@ -122,7 +124,11 @@ impl VerifiedRoutePlan {
         self.route_for_node_at(node_id, current_unix_ms())
     }
 
-    pub fn route_for_node_at(&self, node_id: NodeId, now_unix_ms: u64) -> Option<&RouteAdvertisement> {
+    pub fn route_for_node_at(
+        &self,
+        node_id: NodeId,
+        now_unix_ms: u64,
+    ) -> Option<&RouteAdvertisement> {
         self.snapshot
             .routes
             .iter()
@@ -158,7 +164,11 @@ impl VerifiedRoutePlan {
         self.first_route_for_department_at(department, current_unix_ms())
     }
 
-    pub fn first_route_for_department_at(&self, department: u16, now_unix_ms: u64) -> Option<&RouteAdvertisement> {
+    pub fn first_route_for_department_at(
+        &self,
+        department: u16,
+        now_unix_ms: u64,
+    ) -> Option<&RouteAdvertisement> {
         self.snapshot.routes.iter().find(|route| {
             route_is_available(route, now_unix_ms) && route.departments.contains(&department)
         })
@@ -193,11 +203,17 @@ impl VerifiedRoutePlan {
         self.routes_for_department_at(department, current_unix_ms())
     }
 
-    pub fn routes_for_department_at(&self, department: u16, now_unix_ms: u64) -> Vec<&RouteAdvertisement> {
+    pub fn routes_for_department_at(
+        &self,
+        department: u16,
+        now_unix_ms: u64,
+    ) -> Vec<&RouteAdvertisement> {
         self.snapshot
             .routes
             .iter()
-            .filter(|route| route_is_available(route, now_unix_ms) && route.departments.contains(&department))
+            .filter(|route| {
+                route_is_available(route, now_unix_ms) && route.departments.contains(&department)
+            })
             .collect()
     }
 
@@ -229,12 +245,21 @@ impl VerifiedRoutePlan {
         routes
     }
 
-    pub fn require_department_route(&self, department: u16) -> Result<&RouteAdvertisement, RoutePlanError> {
-        self.first_route_for_department(department).ok_or(RoutePlanError::NoRoute)
+    pub fn require_department_route(
+        &self,
+        department: u16,
+    ) -> Result<&RouteAdvertisement, RoutePlanError> {
+        self.first_route_for_department(department)
+            .ok_or(RoutePlanError::NoRoute)
     }
 
-    pub fn require_department_route_at(&self, department: u16, now_unix_ms: u64) -> Result<&RouteAdvertisement, RoutePlanError> {
-        self.first_route_for_department_at(department, now_unix_ms).ok_or(RoutePlanError::NoRoute)
+    pub fn require_department_route_at(
+        &self,
+        department: u16,
+        now_unix_ms: u64,
+    ) -> Result<&RouteAdvertisement, RoutePlanError> {
+        self.first_route_for_department_at(department, now_unix_ms)
+            .ok_or(RoutePlanError::NoRoute)
     }
 
     pub fn require_preferred_department_route(

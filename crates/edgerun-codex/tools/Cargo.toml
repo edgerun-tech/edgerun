@@ -7,8 +7,12 @@ version.workspace = true
 [lints]
 workspace = true
 
+[features]
+default = ["mcp"]
+mcp = ["dep:codex-app-server-protocol", "dep:rmcp"]
+
 [dependencies]
-codex-app-server-protocol = { workspace = true }
+codex-app-server-protocol = { workspace = true, optional = true }
 codex-code-mode = { workspace = true }
 codex-protocol = { workspace = true }
 edgerun-json = { workspace = true, features = ["serde-compat"] }
@@ -16,6 +20,6 @@ rmcp = { workspace = true, default-features = false, features = [
     "base64",
     "macros",
     "schemars",
-] }
+], optional = true }
 serde = { workspace = true, features = ["derive"] }
 tracing = { workspace = true }

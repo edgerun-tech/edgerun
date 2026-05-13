@@ -1,9 +1,0 @@
-id: trust/10-assurance-bad-signature-reject
-suite: trust
-validator: validate_trust
-version: 1
-priority: mandatory
-description: assurance claim is rejected when signature verification fails
-tags:
-- trust
-- validate_trust

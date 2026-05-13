@@ -1,8 +1,0 @@
-verdict: ACCEPT
-reason_code: null
-derived:
-  decision: route_selected
-  selected_advertiser: adv_b
-  selected_next_hop: hop_b
-  route_score: 5
-  advisory_only: true

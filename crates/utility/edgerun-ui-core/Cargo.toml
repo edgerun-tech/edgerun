@@ -1,0 +1,30 @@
+[package]
+name = "edgerun-ui-core"
+version = "0.1.1"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+repository = "https://github.com/Sylchi/edgerun_reference_core"
+homepage = "https://github.com/Sylchi/edgerun_reference_core"
+rust-version = "1.95"
+
+[features]
+default = []
+std = []
+gpu-gl = ["std"]
+fontdue-text = ["std", "dep:fontdue"]
+tabler-icons = []
+tabler-svg-atlas = []
+
+[dependencies]
+fontdue = { version = "0.9", default-features = false, optional = true }
+
+[[bin]]
+name = "ui-preview-sdl-font-icons"
+path = "src/bin/ui-preview-sdl-font-icons.rs"
+required-features = ["fontdue-text"]
+
+[[bin]]
+name = "ui-preview-sdl-gl-svg"
+path = "src/bin/ui-preview-sdl-gl-svg.rs"
+required-features = ["fontdue-text", "tabler-svg-atlas"]

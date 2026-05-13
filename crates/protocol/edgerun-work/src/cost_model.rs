@@ -58,7 +58,10 @@ pub fn estimate_erasure_storage_cost(
     prices: UnitPriceTable,
 ) -> StorageCostEstimate {
     let original_bytes = manifest.original_len;
-    let stored_bytes = shards.iter().map(|shard| shard.bytes.len() as u64).sum::<u64>();
+    let stored_bytes = shards
+        .iter()
+        .map(|shard| shard.bytes.len() as u64)
+        .sum::<u64>();
     let erasure_overhead_bps = if original_bytes == 0 {
         0
     } else {
@@ -100,7 +103,8 @@ pub fn estimate_erasure_storage_cost(
         } else {
             shards[index % shards.len()].bytes.len() as u64
         };
-        let amount = cost_for_bytes(bytes, prices.relay_per_kib).saturating_add(prices.receipt_base);
+        let amount =
+            cost_for_bytes(bytes, prices.relay_per_kib).saturating_add(prices.receipt_base);
         relay_total = relay_total.saturating_add(amount);
         relay_shares.push(NodeCostShare {
             node_id: *relay_node,
@@ -109,9 +113,9 @@ pub fn estimate_erasure_storage_cost(
         });
     }
 
-    let receipt_base_total = prices
-        .receipt_base
-        .saturating_mul((storage_shares.len() + retrieval_shares.len() + relay_shares.len()) as u64);
+    let receipt_base_total = prices.receipt_base.saturating_mul(
+        (storage_shares.len() + retrieval_shares.len() + relay_shares.len()) as u64,
+    );
     let total = storage_total
         .saturating_add(retrieval_total)
         .saturating_add(relay_total);

@@ -5,7 +5,7 @@ mod chatgpt_hosts;
 #[cfg(feature = "native-transport")]
 #[path = "custom_ca_edgerun_tls.rs"]
 mod custom_ca;
-#[cfg(feature = "native-transport")]
+#[cfg(feature = "reqwest-transport")]
 mod default_client;
 mod error;
 mod request;
@@ -36,9 +36,9 @@ pub use crate::custom_ca::build_reqwest_client_with_custom_ca;
 pub use crate::custom_ca::maybe_build_edgerun_tls_client_config_with_custom_ca;
 #[cfg(feature = "native-transport")]
 pub use crate::custom_ca::maybe_build_rustls_client_config_with_custom_ca;
-#[cfg(feature = "native-transport")]
+#[cfg(feature = "reqwest-transport")]
 pub use crate::default_client::CodexHttpClient;
-#[cfg(feature = "native-transport")]
+#[cfg(feature = "reqwest-transport")]
 pub use crate::default_client::CodexRequestBuilder;
 pub use crate::error::StreamError;
 pub use crate::error::TransportError;
@@ -55,6 +55,6 @@ pub use crate::sse::sse_stream;
 pub use crate::telemetry::RequestTelemetry;
 pub use crate::transport::ByteStream;
 pub use crate::transport::HttpTransport;
-#[cfg(feature = "native-transport")]
+#[cfg(feature = "reqwest-transport")]
 pub use crate::transport::ReqwestTransport;
 pub use crate::transport::StreamResponse;

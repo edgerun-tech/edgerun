@@ -1,9 +1,0 @@
-id: control/06-bad-signature-reject
-suite: control
-validator: validate_control_change
-version: 1
-priority: mandatory
-description: control change with invalid signature is rejected
-tags:
-- control
-- validate_control_change

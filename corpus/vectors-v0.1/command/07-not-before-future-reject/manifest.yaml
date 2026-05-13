@@ -1,9 +1,0 @@
-id: command/07-not-before-future-reject
-suite: command
-validator: validate_command
-version: 1
-priority: mandatory
-description: command not yet valid is rejected
-tags:
-- command
-- validate_command

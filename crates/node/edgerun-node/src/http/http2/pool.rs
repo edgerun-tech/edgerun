@@ -308,16 +308,10 @@ impl Http2Pool {
             return Self::connect_sock_static(connect_timeout, &SocketAddr::new(ip, port)).await;
         }
 
-        let host_str = host.to_string();
-        if let Ok(Ok(addrs)) = rt_timeout(
-            dns_timeout,
-            crate::http::runtime::spawn_blocking(move || {
-                use crate::http::runtime::net::ToSocketAddrs;
-                format!("{}:{}", host_str, port).to_socket_addrs()
-            }),
-        )
-        .await
+        let _ = dns_timeout;
         {
+            use crate::http::runtime::net::ToSocketAddrs;
+            let addrs = format!("{}:{}", host, port).to_socket_addrs();
             if let Ok(addrs) = addrs {
                 let addr_list: Vec<SocketAddr> = addrs.into_iter().collect();
                 for addr in addr_list.iter() {

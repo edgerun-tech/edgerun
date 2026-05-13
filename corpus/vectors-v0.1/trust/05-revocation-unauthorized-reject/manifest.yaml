@@ -1,9 +1,0 @@
-id: trust/05-revocation-unauthorized-reject
-suite: trust
-validator: validate_trust
-version: 1
-priority: mandatory
-description: revocation record is rejected when issuer lacks authority over the target
-tags:
-- trust
-- validate_trust

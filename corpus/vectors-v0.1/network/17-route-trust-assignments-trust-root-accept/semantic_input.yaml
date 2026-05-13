@@ -1,6 +1,0 @@
-route_trust_assignments:
-  issuer: root_authority
-  assignments:
-  - subject:
-      identity_id: node_target
-    trust_score: 7

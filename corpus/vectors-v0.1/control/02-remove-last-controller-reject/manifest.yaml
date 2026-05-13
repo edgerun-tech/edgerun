@@ -1,9 +1,0 @@
-id: control/02-remove-last-controller-reject
-suite: control
-validator: validate_control_change
-version: 1
-priority: mandatory
-description: removing the last controller violates control invariant
-tags:
-- control
-- validate_control_change

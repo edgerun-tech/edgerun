@@ -1,3 +1,5 @@
+#![cfg(feature = "std")]
+
 use std::net::TcpListener;
 use std::thread;
 use std::time::Duration;
@@ -77,7 +79,9 @@ fn admission_assigns_relay_and_relay_forwards_storage_work() {
             let (stream, _) = listener.accept().expect("admission accept");
             let controller = admission.clone();
             handlers.push(thread::spawn(move || {
-                controller.handle_connection(stream).expect("admission connection");
+                controller
+                    .handle_connection(stream)
+                    .expect("admission connection");
             }));
         }
         handlers
@@ -130,7 +134,9 @@ fn admission_assigns_relay_and_relay_forwards_storage_work() {
     .valid_until_unix_ms(assignment.valid_until_unix_ms)
     .build(&storage_key);
 
-    let relay_route_hash = client_tcp.add_route(relay_route.clone()).expect("client route");
+    let relay_route_hash = client_tcp
+        .add_route(relay_route.clone())
+        .expect("client route");
     relay_tcp.add_route(storage_route).expect("storage route");
 
     let object = make_store(b"stored through assigned relay");
@@ -141,9 +147,19 @@ fn admission_assigns_relay_and_relay_forwards_storage_work() {
         shard_hash: object.shard_hash,
     };
     let payload = storage_payload_bytes(&StoragePayload::StoreRequest(object)).expect("payload");
-    let message = make_message(&client_key, client.node_id, storage_id.node_id, relay_id.node_id, payload);
+    let message = make_message(
+        &client_key,
+        client.node_id,
+        storage_id.node_id,
+        relay_id.node_id,
+        payload,
+    );
     client_tcp
-        .send_unordered(client.node_id, relay_id.node_id, WorkPacket::NetworkMessage(message))
+        .send_unordered(
+            client.node_id,
+            relay_id.node_id,
+            WorkPacket::NetworkMessage(message),
+        )
         .expect("send to relay");
 
     thread::sleep(Duration::from_millis(50));
@@ -177,7 +193,10 @@ fn admission_assigns_relay_and_relay_forwards_storage_work() {
         },
     );
     assert_eq!(output.status, ROLE_STATUS_ACCEPTED);
-    assert_eq!(storage_role.retrieve(&retrieve).expect("stored").bytes, b"stored through assigned relay");
+    assert_eq!(
+        storage_role.retrieve(&retrieve).expect("stored").bytes,
+        b"stored through assigned relay"
+    );
 
     drop(storage_admission);
     drop(relay_admission);

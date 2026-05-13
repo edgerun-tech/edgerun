@@ -84,14 +84,22 @@ impl ChannelOrderBook {
 
     pub fn last_message_hash(&self, channel_id: ChannelId, from: NodeId, to: NodeId) -> Hash {
         self.streams
-            .get(&StreamKey { channel_id, from, to })
+            .get(&StreamKey {
+                channel_id,
+                from,
+                to,
+            })
             .map(|state| state.last_message_hash)
             .unwrap_or([0u8; 32])
     }
 
     pub fn next_sequence(&self, channel_id: ChannelId, from: NodeId, to: NodeId) -> u64 {
         self.streams
-            .get(&StreamKey { channel_id, from, to })
+            .get(&StreamKey {
+                channel_id,
+                from,
+                to,
+            })
             .map(|state| state.next_sequence)
             .unwrap_or(1)
     }

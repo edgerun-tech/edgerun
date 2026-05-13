@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "Edgerun shim for tracing-opentelemetry"
 
 [dependencies]
-tracing-opentelemetry = { path = "../../../vendor/cargo/tracing-opentelemetry" }
+tracing-opentelemetry = "0.32.1"
 
 [lints]
 workspace = true

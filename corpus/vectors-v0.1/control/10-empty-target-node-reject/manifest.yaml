@@ -1,9 +1,0 @@
-id: control/10-empty-target-node-reject
-suite: control
-validator: validate_control_change
-version: 1
-priority: mandatory
-description: control command with empty target node is structurally invalid
-tags:
-- control
-- validate_control_change

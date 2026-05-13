@@ -36,7 +36,11 @@ pub fn sign_route_advertisement(
 pub fn verify_route_advertisement(value: &RouteAdvertisement) -> bool {
     value.abi_version == WORK_WIRE_ABI_VERSION
         && is_valid_route_status(value.status)
-        && verify_signature(&value.node, &value.signature, &route_advertisement_preimage(value))
+        && verify_signature(
+            &value.node,
+            &value.signature,
+            &route_advertisement_preimage(value),
+        )
 }
 
 pub fn verify_available_route_advertisement(value: &RouteAdvertisement) -> bool {
@@ -44,7 +48,10 @@ pub fn verify_available_route_advertisement(value: &RouteAdvertisement) -> bool 
 }
 
 pub fn is_valid_route_status(status: u16) -> bool {
-    matches!(status, ROUTE_STATUS_AVAILABLE | ROUTE_STATUS_DRAINING | ROUTE_STATUS_UNAVAILABLE)
+    matches!(
+        status,
+        ROUTE_STATUS_AVAILABLE | ROUTE_STATUS_DRAINING | ROUTE_STATUS_UNAVAILABLE
+    )
 }
 
 pub fn route_snapshot_preimage(value: &RouteSnapshot) -> Vec<u8> {
@@ -67,5 +74,9 @@ pub fn sign_route_snapshot(key: &Ed25519SigningKey, mut value: RouteSnapshot) ->
 
 pub fn verify_route_snapshot(value: &RouteSnapshot) -> bool {
     value.abi_version == WORK_WIRE_ABI_VERSION
-        && verify_signature(&value.issued_by, &value.signature, &route_snapshot_preimage(value))
+        && verify_signature(
+            &value.issued_by,
+            &value.signature,
+            &route_snapshot_preimage(value),
+        )
 }

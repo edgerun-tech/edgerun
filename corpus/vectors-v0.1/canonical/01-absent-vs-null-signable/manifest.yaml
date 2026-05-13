@@ -1,9 +1,0 @@
-id: canonical/01-absent-vs-null-signable
-suite: canonical
-validator: canonicalize_signable
-version: 1
-priority: mandatory
-description: absent optional field canonicalizes differently from empty and zero
-tags:
-- canonical
-- canonicalize_signable

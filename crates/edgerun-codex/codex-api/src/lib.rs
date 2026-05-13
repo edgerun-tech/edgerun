@@ -82,8 +82,10 @@ pub use crate::provider::Provider;
 pub use crate::provider::RetryConfig;
 pub use crate::provider::is_azure_responses_provider;
 pub use crate::requests::Compression;
+#[cfg(feature = "native-transport")]
 pub use crate::sse::stream_from_fixture;
 pub use crate::telemetry::SseTelemetry;
+#[cfg(feature = "native-transport")]
 pub use crate::telemetry::WebsocketTelemetry;
 pub use codex_protocol::protocol::RealtimeAudioFrame;
 pub use codex_protocol::protocol::RealtimeEvent;

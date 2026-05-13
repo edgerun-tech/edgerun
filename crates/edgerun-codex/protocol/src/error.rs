@@ -13,7 +13,7 @@ use crate::protocol::ErrorEvent;
 use crate::protocol::RateLimitSnapshot;
 use crate::protocol::TruncationPolicy;
 use edgerun_error::Error;
-use edgerun_reqwest::StatusCode;
+use edgerun_http::StatusCode;
 use edgerun_time::chrono::ChronoDatelike;
 use edgerun_time::chrono::ChronoLocal as Local;
 use edgerun_time::chrono::ChronoUtc as Utc;

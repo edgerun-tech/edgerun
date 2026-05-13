@@ -1,20 +1,20 @@
 use alloc::collections::{BTreeMap, BTreeSet};
 
+use crate::batch_settlement::{BatchSettlementError, BatchSettlementResult};
 use crate::channel::ChannelProof;
 use crate::channel_order::OrderedChannelEnvelope;
 use crate::codec::{blake3_hash, packet_bytes};
-use crate::batch_settlement::{BatchSettlementError, BatchSettlementResult};
-use crate::delivery_proof::{
-    channel_proof_hash, verify_channel_proof_for_ordered_with_policy,
-};
+use crate::delivery_proof::{channel_proof_hash, verify_channel_proof_for_ordered_with_policy};
 use crate::preimage::HashBuilder;
 use crate::protocol::*;
 use crate::recipient_policy::{
-    recipient_message_policy_allows, recipient_message_policy_hash, RecipientMessagePolicy,
+    RecipientMessagePolicy, recipient_message_policy_allows, recipient_message_policy_hash,
 };
 use crate::relay_role::ordered_message_input_hash;
 use crate::signing::{verify_work_admission, verify_work_receipt};
-use crate::transit_proof::{packet_transit_hash, relay_delivery_output_hash, PacketTransitHashInput};
+use crate::transit_proof::{
+    PacketTransitHashInput, packet_transit_hash, relay_delivery_output_hash,
+};
 
 const RECEIPT_ID_DOMAIN: &[u8] = b"edgerun:v1:work:receipt-id";
 
@@ -226,7 +226,10 @@ impl SettlementLedger {
             .insert(receipt_hash);
         *user_balance -= receipt.total_claim;
         self.admission_spend.insert(admission_hash, next_spend);
-        let worker_balance = self.worker_balances.entry(receipt.worker.node_id).or_default();
+        let worker_balance = self
+            .worker_balances
+            .entry(receipt.worker.node_id)
+            .or_default();
         *worker_balance = worker_balance.saturating_add(receipt.total_claim);
         Ok(SettlementResult {
             user: admission.user,
@@ -241,7 +244,10 @@ impl SettlementLedger {
 
     pub fn prune_finalized_admission(&mut self, admission_hash: &Hash) -> SettlementPruneResult {
         let removed_admission = self.admission_spend.remove(admission_hash).is_some();
-        let receipts = self.admission_receipts.remove(admission_hash).unwrap_or_default();
+        let receipts = self
+            .admission_receipts
+            .remove(admission_hash)
+            .unwrap_or_default();
         let removed_receipts = receipts.len() as u64;
         for receipt_hash in receipts {
             self.paid_receipts.remove(&receipt_hash);
@@ -267,7 +273,8 @@ pub fn verify_delivery_evidence(
         return Err(SettlementError::PolicyHashMismatch);
     }
     if evidence.admission.assigned_route_hash != evidence.relay_input.envelope.route_hash
-        || evidence.admission.assigned_channel.channel_id != evidence.relay_input.envelope.channel_id
+        || evidence.admission.assigned_channel.channel_id
+            != evidence.relay_input.envelope.channel_id
     {
         return Err(SettlementError::AdmissionRouteMismatch);
     }
@@ -277,16 +284,21 @@ pub fn verify_delivery_evidence(
     if evidence.recipient_delivery.envelope.to != evidence.recipient.node_id {
         return Err(SettlementError::WrongRecipient);
     }
-    if evidence.relay_input.envelope.packet_hash != evidence.recipient_delivery.envelope.packet_hash {
+    if evidence.relay_input.envelope.packet_hash != evidence.recipient_delivery.envelope.packet_hash
+    {
         return Err(SettlementError::DeliveryPacketMismatch);
     }
     let WorkPacket::NetworkMessage(message) = &evidence.relay_input.envelope.packet else {
         return Err(SettlementError::DeliveryPacketMismatch);
     };
-    if recipient_message_policy_allows(evidence.recipient_policy, message, evidence.now_unix_ms).is_err() {
+    if recipient_message_policy_allows(evidence.recipient_policy, message, evidence.now_unix_ms)
+        .is_err()
+    {
         return Err(SettlementError::MessagePolicyRejected);
     }
-    if message.via_relay != receipt.worker.node_id || evidence.relay_input.envelope.to != receipt.worker.node_id {
+    if message.via_relay != receipt.worker.node_id
+        || evidence.relay_input.envelope.to != receipt.worker.node_id
+    {
         return Err(SettlementError::WrongRelay);
     }
     if message.to != evidence.recipient.node_id {

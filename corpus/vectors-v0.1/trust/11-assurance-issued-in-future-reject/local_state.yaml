@@ -1,4 +1,0 @@
-now: '2030-01-01T12:00:00Z'
-acceptable_attesters:
-- user_alice
-policy_profile: default-v0

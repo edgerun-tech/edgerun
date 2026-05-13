@@ -1,8 +1,8 @@
 use alloc::vec::Vec;
 
-use edgerun_wire::{access, deserialize, to_bytes, util, WireError};
+use edgerun_wire::{WireError, access, deserialize, to_bytes, util};
 
-use crate::channel::{ChannelEnvelope, ArchivedChannelEnvelope};
+use crate::channel::{ArchivedChannelEnvelope, ChannelEnvelope};
 use crate::protocol::WorkProtocolError;
 
 pub const MAX_CHANNEL_FRAME_LEN: usize = 1024 * 1024;
@@ -37,5 +37,6 @@ pub fn channel_envelope_from_bytes(bytes: &[u8]) -> Result<ChannelEnvelope, Work
 fn channel_envelope_from_aligned_bytes(bytes: &[u8]) -> Result<ChannelEnvelope, WorkProtocolError> {
     let archived = access::<ArchivedChannelEnvelope, WireError>(bytes)
         .map_err(|_| WorkProtocolError::InvalidPacket)?;
-    deserialize::<ChannelEnvelope, WireError>(archived).map_err(|_| WorkProtocolError::InvalidPacket)
+    deserialize::<ChannelEnvelope, WireError>(archived)
+        .map_err(|_| WorkProtocolError::InvalidPacket)
 }

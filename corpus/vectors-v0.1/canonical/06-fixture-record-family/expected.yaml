@@ -1,4 +1,0 @@
-verdict: ACCEPT
-reason_code: null
-derived:
-  canonical_equivalence: distinct encodings for null/empty/zero

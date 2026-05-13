@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "Edgerun shim for opentelemetry_sdk"
 
 [dependencies]
-opentelemetry_sdk = { path = "../../../vendor/cargo/opentelemetry-sdk-0.31.0" }
+opentelemetry_sdk = "0.31.0"
 
 [lints]
 workspace = true

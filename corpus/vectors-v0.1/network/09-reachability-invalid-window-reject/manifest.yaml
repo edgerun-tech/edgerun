@@ -1,9 +1,0 @@
-id: network/09-reachability-invalid-window-reject
-suite: network
-validator: validate_network
-version: 1
-priority: mandatory
-description: reachability hint is rejected when valid_until precedes valid_after
-tags:
-- network
-- validate_network

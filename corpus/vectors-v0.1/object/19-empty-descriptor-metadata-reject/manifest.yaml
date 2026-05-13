@@ -1,9 +1,0 @@
-id: object/19-empty-descriptor-metadata-reject
-suite: object
-validator: validate_object
-version: 1
-priority: mandatory
-description: object descriptor metadata reference must carry an object id
-tags:
-- object
-- validate_object

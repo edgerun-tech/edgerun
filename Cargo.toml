@@ -23,6 +23,7 @@ exclude = [
 ]
 
 members = [
+  "crates/utility/edgerun-ui-core",
   "crates/utility/edgerun-async-channel",
   "crates/utility/edgerun-async-trait",
   "crates/utility/edgerun-bytes",
@@ -31,11 +32,9 @@ members = [
   "crates/utility/edgerun-shlex",
   "crates/utility/edgerun-similar",
   "crates/utility/edgerun-time",
-  "crates/utility/edgerun-tungstenite",
   "crates/utility/edgerun-uuid",
   "crates/utility/edgerun-zstd",
   "crates/utility/edgerun-regex",
-  "crates/utility/edgerun-rmcp",
   "crates/edgerun-standards",
   "crates/edgerun-unit",
   "crates/edgerun-sdk",
@@ -83,9 +82,6 @@ members = [
   "crates/utility/edgerun-strum",
   "crates/utility/edgerun-strum-macros",
   "crates/linux-adapters/edgerun-linux-cec",
-  "crates/utility/edgerun-rusttls",
-  "crates/utility/edgerun-rustls-pki-types",
-  "crates/utility/edgerun-rustls-native-certs",
   "crates/linux-adapters/edgerun-linux-gpu",
   "crates/linux-adapters/edgerun-linux-netif",
   "crates/linux-adapters/edgerun-linux-nfc",
@@ -103,7 +99,6 @@ members = [
   "crates/mesh/edgerun-mesh-session",
   "crates/linux-adapters/edgerun-mgmt-bluetooth",
   "crates/node/edgerun-node",
-  "crates/relay/edgerun-relay",
   "crates/edgerun-oci",
   "crates/edgerun-quectel-ec200a",
   "crates/utility/edgerun-qpack",
@@ -169,7 +164,6 @@ edgerun-storage = { version = "0.1", path = "crates/authority/edgerun-storage" }
 edgerun-stream = { version = "0.1", path = "crates/authority/edgerun-stream" }
 edgerun-virtual-disk = { version = "0.1", path = "crates/authority/edgerun-virtual-disk", default-features = false }
 edgerun-node = { version = "0.1", path = "crates/node/edgerun-node" }
-edgerun-relay = { version = "0.1", path = "crates/relay/edgerun-relay" }
 edgerun-hardware-signing = { version = "0.1", path = "crates/identity/edgerun-hardware-signing" }
 edgerun-capabilities = { version = "0.1", path = "crates/capability/edgerun-capabilities" }
 edgerun-mesh = { version = "0.1", path = "crates/mesh/edgerun-mesh" }
@@ -200,16 +194,8 @@ edgerun-serde-with = { version = "0.1", path = "crates/utility/edgerun-serde-wit
 edgerun-strum = { version = "0.1", path = "crates/utility/edgerun-strum" }
 edgerun-strum-macros = { version = "0.1", path = "crates/utility/edgerun-strum-macros" }
 edgerun-time = { version = "0.1", path = "crates/utility/edgerun-time" }
-edgerun-tokio = { version = "0.1", path = "crates/utility/edgerun-tokio" }
-edgerun-tokio-tungstenite = { version = "0.1", path = "crates/utility/edgerun-tokio-tungstenite" }
-edgerun-tokio-util = { version = "0.1", path = "crates/utility/edgerun-tokio-util" }
-edgerun-tungstenite = { version = "0.1", path = "crates/utility/edgerun-tungstenite" }
-edgerun-rusttls = { version = "0.1", path = "crates/utility/edgerun-rusttls", default-features = false }
-edgerun-rustls-pki-types = { version = "0.1", path = "crates/utility/edgerun-rustls-pki-types", default-features = false }
-edgerun-rustls-native-certs = { version = "0.1", path = "crates/utility/edgerun-rustls-native-certs" }
 edgerun-regex = { version = "0.1", path = "crates/utility/edgerun-regex" }
 edgerun-reqwest = { version = "0.1", path = "crates/utility/edgerun-reqwest" }
-edgerun-rmcp = { version = "0.1", path = "crates/utility/edgerun-rmcp" }
 edgerun-email = { version = "0.1", path = "crates/apps/edgerun-email" }
 edgerun-wallet-app = { version = "0.1", path = "crates/apps/edgerun-wallet-app" }
 edgerun-log = { version = "0.1", path = "crates/utility/edgerun-log" }

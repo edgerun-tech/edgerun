@@ -16,7 +16,8 @@ impl NodeRole {
 
     pub fn from_u16(value: u16) -> Option<Self> {
         match value {
-            NODE_ROLE_RELAY | NODE_ROLE_STORAGE | NODE_ROLE_COMPUTE | NODE_ROLE_ADMISSION | NODE_ROLE_MESSAGE => Some(Self(value)),
+            NODE_ROLE_RELAY | NODE_ROLE_STORAGE | NODE_ROLE_COMPUTE | NODE_ROLE_ADMISSION
+            | NODE_ROLE_MESSAGE => Some(Self(value)),
             _ => None,
         }
     }
@@ -85,12 +86,8 @@ impl Department {
 
     pub fn from_u16(value: u16) -> Option<Self> {
         match value {
-            DEPARTMENT_ADMISSION
-            | DEPARTMENT_RELAY
-            | DEPARTMENT_MESSAGE
-            | DEPARTMENT_STORAGE
-            | DEPARTMENT_RETRIEVAL
-            | DEPARTMENT_COMPUTE => Some(Self(value)),
+            DEPARTMENT_ADMISSION | DEPARTMENT_RELAY | DEPARTMENT_MESSAGE | DEPARTMENT_STORAGE
+            | DEPARTMENT_RETRIEVAL | DEPARTMENT_COMPUTE => Some(Self(value)),
             _ => None,
         }
     }

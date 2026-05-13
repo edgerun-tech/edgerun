@@ -1,5 +1,0 @@
-session_hello:
-  initiator: node_phone
-  supported_protocol_versions:
-  - 1
-  session_nonce_hex: '0x01020304'

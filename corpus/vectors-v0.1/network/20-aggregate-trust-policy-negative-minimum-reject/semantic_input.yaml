@@ -1,3 +1,0 @@
-aggregate_trust_policy:
-  issuer: root_authority
-  minimum_trust_score: -1

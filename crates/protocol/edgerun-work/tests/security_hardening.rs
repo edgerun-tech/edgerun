@@ -8,7 +8,12 @@ fn public_key_from_seed(seed: u8) -> PublicKey {
     out
 }
 
-fn admission_doc(admission: &SimNode, user: PublicKey, request_hash: Hash, budget: u64) -> WorkAdmission {
+fn admission_doc(
+    admission: &SimNode,
+    user: PublicKey,
+    request_hash: Hash,
+    budget: u64,
+) -> WorkAdmission {
     let channel = ChannelEndpoint::new(
         blake3_hash(b"security-channel"),
         CHANNEL_KIND_MEMORY,
@@ -35,7 +40,12 @@ fn admission_doc(admission: &SimNode, user: PublicKey, request_hash: Hash, budge
     )
 }
 
-fn receipt_doc(worker: &SimNode, request_hash: Hash, admission_hash: Hash, claim: u64) -> WorkReceipt {
+fn receipt_doc(
+    worker: &SimNode,
+    request_hash: Hash,
+    admission_hash: Hash,
+    claim: u64,
+) -> WorkReceipt {
     let input_hash = blake3_hash(b"security-input");
     let output_hash = blake3_hash(b"security-output");
     sign_work_receipt(
@@ -126,7 +136,8 @@ fn relay_assignment_rejects_forged_assigned_by_node_id() {
 fn route_signature_verifies_non_available_status_but_planner_filters_it() {
     let admission = SimNode::from_seed(31, NODE_ROLE_ADMISSION);
     let storage = SimNode::from_seed(32, NODE_ROLE_STORAGE);
-    let mut route = storage.advertise_memory_route(storage.identity.node_id, vec![DEPARTMENT_STORAGE]);
+    let mut route =
+        storage.advertise_memory_route(storage.identity.node_id, vec![DEPARTMENT_STORAGE]);
     route.status = ROUTE_STATUS_DRAINING;
     route = sign_route_advertisement(&storage.key, route);
 

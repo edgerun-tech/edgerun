@@ -4,7 +4,9 @@ use alloc::vec::Vec;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::channel::ChannelEndpoint;
-pub use crate::node_control::{NodeAvailable, NodeHeartbeat, RelayAssignment, RelayEndpoint, RelayPeerList};
+pub use crate::node_control::{
+    NodeAvailable, NodeHeartbeat, RelayAssignment, RelayEndpoint, RelayPeerList,
+};
 
 pub const WORK_WIRE_ABI_VERSION: u16 = 1;
 pub const DEFAULT_HEARTBEAT_SECS: u64 = 10;

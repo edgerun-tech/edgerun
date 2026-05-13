@@ -1,9 +1,0 @@
-id: delegation/10-empty-request-action-reject
-suite: delegation
-validator: validate_delegation_chain
-version: 1
-priority: mandatory
-description: delegation request with empty action is structurally invalid
-tags:
-- delegation
-- validate_delegation_chain

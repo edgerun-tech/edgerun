@@ -1,9 +1,0 @@
-id: snapshot/03-delta-gap-defer
-suite: snapshot
-validator: validate_snapshot
-version: 1
-priority: mandatory
-description: delta sequence gap causes defer
-tags:
-- snapshot
-- validate_snapshot

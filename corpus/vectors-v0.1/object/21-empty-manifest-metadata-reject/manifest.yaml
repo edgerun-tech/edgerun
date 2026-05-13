@@ -1,9 +1,0 @@
-id: object/21-empty-manifest-metadata-reject
-suite: object
-validator: validate_object
-version: 1
-priority: mandatory
-description: chunk manifest metadata reference must carry an object id
-tags:
-- object
-- validate_object

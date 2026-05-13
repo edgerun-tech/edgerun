@@ -80,18 +80,33 @@ fn channel_proof_rejects_wrong_relay_recipient_or_message() {
     .expect("recipient signs channel proof");
 
     assert_eq!(
-        verify_channel_proof_for_ordered(&proof, &receiver.identity, wrong_relay.identity.node_id, &ordered),
+        verify_channel_proof_for_ordered(
+            &proof,
+            &receiver.identity,
+            wrong_relay.identity.node_id,
+            &ordered
+        ),
         Err(ChannelProofError::WrongRelay)
     );
     assert_eq!(
-        verify_channel_proof_for_ordered(&proof, &wrong_receiver.identity, relay.identity.node_id, &ordered),
+        verify_channel_proof_for_ordered(
+            &proof,
+            &wrong_receiver.identity,
+            relay.identity.node_id,
+            &ordered
+        ),
         Err(ChannelProofError::WrongRecipient)
     );
 
     let mut tampered = ordered.clone();
     tampered.sequence = 2;
     assert_eq!(
-        verify_channel_proof_for_ordered(&proof, &receiver.identity, relay.identity.node_id, &tampered),
+        verify_channel_proof_for_ordered(
+            &proof,
+            &receiver.identity,
+            relay.identity.node_id,
+            &tampered
+        ),
         Err(ChannelProofError::WrongMessage)
     );
 }
@@ -135,7 +150,12 @@ fn channel_proof_rejects_signature_from_wrong_key() {
 
     assert!(!verify_channel_proof(&proof, &receiver.identity));
     assert_eq!(
-        verify_channel_proof_for_ordered(&proof, &receiver.identity, relay.identity.node_id, &ordered),
+        verify_channel_proof_for_ordered(
+            &proof,
+            &receiver.identity,
+            relay.identity.node_id,
+            &ordered
+        ),
         Err(ChannelProofError::InvalidSignature)
     );
 }

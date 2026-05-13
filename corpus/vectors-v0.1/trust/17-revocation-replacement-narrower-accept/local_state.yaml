@@ -1,9 +1,0 @@
-trust_roots:
-- root_authority
-delegation_scopes:
-  del_query_1: timeline:abc
-existing_revocations:
-  rev_old_1:
-    target_delegation: del_query_1
-    scope_override: timeline:abc
-policy_profile: default-v0

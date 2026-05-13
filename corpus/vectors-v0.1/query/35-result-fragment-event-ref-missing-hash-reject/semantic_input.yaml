@@ -1,7 +1,0 @@
-result_fragment:
-  query_id: query_active
-  responder: node_server
-  completeness: RESULT_COMPLETENESS_PARTIAL
-  event_refs:
-  - stream_id: stream_a
-    seq: 7

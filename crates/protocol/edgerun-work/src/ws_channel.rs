@@ -1,12 +1,12 @@
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
-use crate::channel::{ChannelEnvelope, RouteAdvertisement, CHANNEL_KIND_WEBSOCKET};
+use crate::channel::{CHANNEL_KIND_WEBSOCKET, ChannelEnvelope, RouteAdvertisement};
 use crate::channel_order::{ChannelOrderBook, OrderedChannelEnvelope};
 use crate::codec::encode_work_packet_once;
 use crate::frame_codec::channel_envelope_bytes;
 use crate::memory_channel::{route_hash, route_is_available};
-use crate::protocol::{Hash, NodeId, WorkPacket, WORK_WIRE_ABI_VERSION};
+use crate::protocol::{Hash, NodeId, WORK_WIRE_ABI_VERSION, WorkPacket};
 use crate::route_auth::verify_route_advertisement;
 use crate::work_channel::{WorkChannel, WorkChannelError};
 
@@ -109,12 +109,17 @@ impl WorkChannel for WsWorkChannel {
         packet: WorkPacket,
     ) -> Result<ChannelEnvelope, WorkChannelError> {
         let now = current_unix_ms();
-        if self.routes.get(&to).is_some_and(|route| !route_is_available(route, now)) {
+        if self
+            .routes
+            .get(&to)
+            .is_some_and(|route| !route_is_available(route, now))
+        {
             self.routes.remove(&to);
             return Err(WorkChannelError::RouteMissing);
         }
         let route = self.routes.get(&to).ok_or(WorkChannelError::RouteMissing)?;
-        let encoded = encode_work_packet_once(&packet).map_err(|_| WorkChannelError::PacketHashFailed)?;
+        let encoded =
+            encode_work_packet_once(&packet).map_err(|_| WorkChannelError::PacketHashFailed)?;
         let envelope = ChannelEnvelope {
             abi_version: WORK_WIRE_ABI_VERSION,
             channel_id: route.endpoint.channel_id,
@@ -124,8 +129,8 @@ impl WorkChannel for WsWorkChannel {
             packet_hash: encoded.hash,
             packet,
         };
-        let envelope_bytes = channel_envelope_bytes(&envelope)
-            .map_err(|_| WorkChannelError::PacketHashFailed)?;
+        let envelope_bytes =
+            channel_envelope_bytes(&envelope).map_err(|_| WorkChannelError::PacketHashFailed)?;
         self.outbound_frames.push(WsFrame {
             to,
             route_hash: envelope.route_hash,

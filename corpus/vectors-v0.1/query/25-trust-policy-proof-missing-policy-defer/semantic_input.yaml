@@ -1,4 +1,0 @@
-trust_policy_proof:
-  source_query_id: query_active
-  policy_object:
-    object_id: policy_missing

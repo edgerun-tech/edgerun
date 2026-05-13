@@ -1,5 +1,0 @@
-verdict: ACCEPT
-reason_code: null
-derived:
-  decision: route_advertisement_accepted
-  advisory_only: true

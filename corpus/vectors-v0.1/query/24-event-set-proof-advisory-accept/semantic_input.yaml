@@ -1,8 +1,0 @@
-event_set_proof:
-  source_query_id: query_active
-  events:
-  - stream_id: stream_a
-    seq: 7
-    event_hash_hex: '0x2424242424242424242424242424242424242424242424242424242424242424'
-  related_objects:
-  - object_id: obj_1

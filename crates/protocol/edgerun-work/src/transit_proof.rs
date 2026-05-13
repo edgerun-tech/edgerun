@@ -43,7 +43,8 @@ pub fn relay_delivery_output_hash(
 }
 
 pub fn packet_transit_chain_hash(transit_hashes: &[Hash]) -> Hash {
-    let mut builder = HashBuilder::domain(PACKET_TRANSIT_CHAIN_DOMAIN).u64(transit_hashes.len() as u64);
+    let mut builder =
+        HashBuilder::domain(PACKET_TRANSIT_CHAIN_DOMAIN).u64(transit_hashes.len() as u64);
     for hash in transit_hashes {
         builder = builder.hash(hash);
     }

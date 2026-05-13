@@ -16,11 +16,11 @@ schemars = ["dep:schemars"]
 server = ["schemars"]
 
 [dependencies]
-chrono = { path = "../../../vendor/cargo/chrono-0.4.43", default-features = false, features = ["clock", "serde", "std"] }
+chrono = { version = "0.4.43", default-features = false, features = ["clock", "serde", "std"] }
 edgerun-encoding = { version = "0.1", path = "../edgerun-encoding" }
 edgerun-json = { version = "0.1", path = "../edgerun-json", features = ["serde-compat"] }
 serde = { package = "edgerun-serde", version = "0.1", path = "../edgerun-serde", features = ["derive", "rc"] }
-pastey = { path = "../../../vendor/cargo/pastey" }
+pastey = "0.2.1"
 schemars = { package = "edgerun-schemars", path = "../edgerun-schemars", features = ["chrono04"], optional = true }
 
 [lints]

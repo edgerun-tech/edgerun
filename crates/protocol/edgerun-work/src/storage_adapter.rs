@@ -3,9 +3,11 @@ use alloc::vec::Vec;
 
 use crate::protocol::Hash;
 use crate::storage_payload::{
-    ObjectRetrieveRequest, ObjectRetrieveResponse, ObjectStoreRequest, StoragePayload,
-    retrieve_response_from_store_request, storage_payload_bytes, storage_payload_from_bytes,
+    ObjectRetrieveRequest, ObjectRetrieveResponse, ObjectStoreRequest,
+    retrieve_response_from_store_request,
 };
+#[cfg(any(feature = "std", feature = "virtual-disk"))]
+use crate::storage_payload::{StoragePayload, storage_payload_bytes, storage_payload_from_bytes};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StorageAdapterError {
@@ -166,7 +168,9 @@ impl FileObjectStorage {
     }
 
     fn shard_path(&self, shard_hash: &Hash) -> std::path::PathBuf {
-        self.root.join(hash_hex(shard_hash)).with_extension("estore")
+        self.root
+            .join(hash_hex(shard_hash))
+            .with_extension("estore")
     }
 }
 
@@ -385,13 +389,14 @@ impl<B: edgerun_protocols::block::BlockBackend> VirtualDiskObjectStorage<B> {
     }
 
     fn first_free_slot(&self) -> Option<u64> {
-        (0..self.slot_count)
-            .find(|slot| !self.index.values().any(|entry| entry.slot == *slot))
+        (0..self.slot_count).find(|slot| !self.index.values().any(|entry| entry.slot == *slot))
     }
 }
 
 #[cfg(feature = "virtual-disk")]
-impl<B: edgerun_protocols::block::BlockBackend> ObjectStorageAdapter for VirtualDiskObjectStorage<B> {
+impl<B: edgerun_protocols::block::BlockBackend> ObjectStorageAdapter
+    for VirtualDiskObjectStorage<B>
+{
     fn object_count(&self) -> usize {
         self.index.len()
     }
@@ -452,8 +457,8 @@ impl<B: edgerun_protocols::block::BlockBackend> ObjectStorageAdapter for Virtual
             .get(&request.shard_hash)
             .ok_or(StorageAdapterError::NotFound)?;
         let slot_bytes = self.read_slot(entry.slot)?;
-        let header = VirtualDiskSlotHeader::decode(&slot_bytes)?
-            .ok_or(StorageAdapterError::NotFound)?;
+        let header =
+            VirtualDiskSlotHeader::decode(&slot_bytes)?.ok_or(StorageAdapterError::NotFound)?;
         if header.shard_hash != request.shard_hash || header.payload_len != entry.len {
             return Err(StorageAdapterError::HashMismatch);
         }
@@ -684,10 +689,8 @@ mod tests {
 
     #[test]
     fn file_store_roundtrips_request() {
-        let dir = std::env::temp_dir().join(format!(
-            "edgerun-work-file-store-{}",
-            std::process::id()
-        ));
+        let dir =
+            std::env::temp_dir().join(format!("edgerun-work-file-store-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let mut store = FileObjectStorage::open(&dir, 4096).expect("open");
         let object = request(b"stored on disk");

@@ -1,9 +1,0 @@
-id: command/02-reject-wrong-target
-suite: command
-validator: validate_command
-version: 1
-priority: mandatory
-description: command for another node is rejected
-tags:
-- command
-- validate_command

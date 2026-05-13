@@ -1,9 +1,0 @@
-brief:
-  object_kind: PAYLOAD
-  canonicalization_id: raw-bytes-v0
-object:
-  descriptor:
-    object_kind: OBJECT_KIND_PAYLOAD
-    canonicalization_id: raw-bytes-v0
-    object_id: '0xc4deb8203731f840d2e606191278fd83910da12162454f255467ab4e5073ba08'
-  realized_bytes_hex: '0x68656c6c6f'

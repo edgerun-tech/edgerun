@@ -3,7 +3,7 @@ use alloc::vec::Vec;
 
 use crate::channel::*;
 use crate::codec::{blake3_hash, encode_work_packet_once};
-use crate::protocol::{Hash, NodeId, WorkPacket, WORK_WIRE_ABI_VERSION};
+use crate::protocol::{Hash, NodeId, WORK_WIRE_ABI_VERSION, WorkPacket};
 use crate::route_auth::{route_advertisement_preimage, verify_route_advertisement};
 
 #[cfg(feature = "std")]
@@ -71,12 +71,20 @@ impl MemoryChannelEngine {
         packet: WorkPacket,
     ) -> Result<ChannelEnvelope, MemoryChannelError> {
         let now = current_unix_ms();
-        if self.routes.get(&to).is_some_and(|route| !route_is_available(route, now)) {
+        if self
+            .routes
+            .get(&to)
+            .is_some_and(|route| !route_is_available(route, now))
+        {
             self.remove_route(to);
             return Err(MemoryChannelError::RouteMissing);
         }
-        let route = self.routes.get(&to).ok_or(MemoryChannelError::RouteMissing)?;
-        let encoded = encode_work_packet_once(&packet).map_err(|_| MemoryChannelError::PacketHashFailed)?;
+        let route = self
+            .routes
+            .get(&to)
+            .ok_or(MemoryChannelError::RouteMissing)?;
+        let encoded =
+            encode_work_packet_once(&packet).map_err(|_| MemoryChannelError::PacketHashFailed)?;
         let envelope = ChannelEnvelope {
             abi_version: WORK_WIRE_ABI_VERSION,
             channel_id: route.endpoint.channel_id,

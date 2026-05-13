@@ -1,9 +1,0 @@
-id: query/04-result-limit-policy-reject
-suite: query
-validator: validate_query
-version: 1
-priority: mandatory
-description: query is rejected when requested result limit exceeds local policy
-tags:
-- query
-- validate_query

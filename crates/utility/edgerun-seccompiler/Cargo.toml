@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "Edgerun shim for seccompiler"
 
 [dependencies]
-seccompiler = { path = "../../../vendor/cargo/seccompiler" }
+seccompiler = "0.5.0"
 
 [lints]
 workspace = true

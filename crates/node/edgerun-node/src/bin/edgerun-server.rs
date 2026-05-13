@@ -2,10 +2,14 @@ use std::env;
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, TcpStream, UdpSocket};
 use std::path::PathBuf;
+#[cfg(feature = "tls")]
+use std::sync::Arc;
 use std::time::Duration;
 
-use edgerun_node::rt::{self, CancellationToken};
+use edgerun_node::rt::{self, AsyncTcpStream, CancellationToken};
 use edgerun_node::services::{DnsConfig, ImapConfig, NodeRuntime, SmtpConfig};
+#[cfg(feature = "tls")]
+use edgerun_node::tls::{AsyncTlsServerStream, CertificateAndKey};
 use edgerun_protocols::dns::DnsZone;
 
 const NODE_LABEL: &str = "edgerun-tech-main-server";
@@ -16,13 +20,15 @@ const NODE_ID: &str = "4de436f31887836ceb40d4bfc34952909c284f11f36c57877e489893f
 const MAILDIR_ROOT: &str = "/var/lib/edgerun/mail/maildirs";
 const QUEUE_ROOT: &str = "/var/lib/edgerun/mail/queue";
 const DKIM_KEY_PATH: &str = "/etc/edgerun/server/dkim-mail.private.pem";
-const TLS_CERT_PATH: &str = "/etc/edgerun/server/tls/fullchain.pem";
-const TLS_KEY_PATH: &str = "/etc/edgerun/server/tls/privkey.pem";
+const TLS_CERT_PATH: &str = "/etc/edgerun/server/tls/cloudflare-origin.pem";
+const TLS_KEY_PATH: &str = "/etc/edgerun/server/tls/cloudflare-origin.key";
 const ACME_ACCOUNT_PATH: &str = "/etc/edgerun/server/acme-account.pem";
 const RUNTIME_ROOT: &str = "/var/lib/edgerun/.edgerun";
 const DERIVED_DB_PATH: &str = "/var/lib/edgerun/.edgerun/runtime.edb";
 const CONTROLLER_ZERO: &str = "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+#[cfg(feature = "tls")]
+const HTTPS_BIND_ADDR: &str = "0.0.0.0:443";
 
 #[derive(Default)]
 struct Args {
@@ -106,6 +112,8 @@ fn run_server(args: Args) -> std::io::Result<()> {
         println!(
             "[INFO] edgerun_server: TLS certs not found at {TLS_CERT_PATH} / {TLS_KEY_PATH}, running without TLS"
         );
+    } else {
+        println!("[INFO] edgerun_server: Cloudflare origin TLS cert loaded from {TLS_CERT_PATH}");
     }
     println!("[INFO] edgerun_server: DNS zone built for {ORIGIN}");
     println!("[INFO] edgerun_server: derived database ready at {DERIVED_DB_PATH}");
@@ -143,7 +151,103 @@ fn run_server(args: Args) -> std::io::Result<()> {
 
     println!("[INFO] edgerun_server: All services started. Press Ctrl-C to stop.");
     let shutdown = CancellationToken::new();
+    #[cfg(feature = "tls")]
+    start_cloudflare_origin_tls();
     rt::block_on(async move { runtime.run(shutdown).await })
+}
+
+#[cfg(feature = "tls")]
+fn start_cloudflare_origin_tls() {
+    let Ok(cert_pem) = std::fs::read_to_string(TLS_CERT_PATH) else {
+        return;
+    };
+    let Ok(key_pem) = std::fs::read_to_string(TLS_KEY_PATH) else {
+        return;
+    };
+    let cert = match CertificateAndKey::from_pem(&format!("{cert_pem}\n{key_pem}")) {
+        Ok(cert) => Arc::new(cert),
+        Err(error) => {
+            eprintln!("[WARN] edgerun_server: failed to parse Cloudflare origin cert/key: {error}");
+            return;
+        }
+    };
+    rt::spawn(async move {
+        if let Err(error) = run_cloudflare_origin_tls(cert).await {
+            eprintln!("[WARN] edgerun_server: Cloudflare origin TLS listener stopped: {error}");
+        }
+    });
+}
+
+#[cfg(feature = "tls")]
+async fn run_cloudflare_origin_tls(cert: Arc<CertificateAndKey>) -> std::io::Result<()> {
+    let listener = rt::AsyncTcpListener::bind(HTTPS_BIND_ADDR).map_err(node_io_error)?;
+    println!("[INFO] edgerun_server: Cloudflare origin TLS listening on {HTTPS_BIND_ADDR}");
+    loop {
+        let (stream, peer) = listener.accept().await.map_err(node_io_error)?;
+        let cert = Arc::clone(&cert);
+        rt::spawn(async move {
+            if let Err(error) = handle_cloudflare_origin_tls(stream, cert).await {
+                eprintln!("[WARN] edgerun_server: Cloudflare origin TLS client {peer}: {error}");
+            }
+        });
+    }
+}
+
+#[cfg(feature = "tls")]
+async fn handle_cloudflare_origin_tls(
+    stream: Arc<AsyncTcpStream>,
+    cert: Arc<CertificateAndKey>,
+) -> std::io::Result<()> {
+    let mut stream = AsyncTlsServerStream::accept(stream, cert.as_ref())
+        .await
+        .map_err(|error| io_error(format!("TLS handshake failed: {error}")))?;
+    let request = edgerun_node::services::work_websocket::read_http_request(&mut stream).await?;
+    let request_text = core::str::from_utf8(&request).unwrap_or("");
+    match (
+        edgerun_node::services::work_websocket::request_method(request_text),
+        edgerun_node::services::work_websocket::request_path(request_text),
+    ) {
+        (Some("GET"), Some("/work"))
+            if edgerun_node::services::work_websocket::is_websocket_upgrade(request_text) =>
+        {
+            edgerun_node::services::work_websocket::serve_work_websocket(stream, request).await
+        }
+        (_, Some("/health")) => edgerun_node::services::work_websocket::write_http_response(
+            &mut stream,
+            "200 OK",
+            "application/json",
+            "{\"status\":\"ok\",\"service\":\"edgerun-server\",\"tls\":\"cloudflare-origin\"}\n",
+        )
+        .await,
+        (_, Some("/")) => {
+            edgerun_node::services::work_websocket::write_http_response(
+                &mut stream,
+                "200 OK",
+                "text/plain; charset=utf-8",
+                "EdgeRun node online\n",
+            )
+            .await
+        }
+        _ => {
+            edgerun_node::services::work_websocket::write_http_response(
+                &mut stream,
+                "404 Not Found",
+                "text/plain; charset=utf-8",
+                "not found\n",
+            )
+            .await
+        }
+    }
+}
+
+#[cfg(feature = "tls")]
+fn node_io_error(error: rt::IoError) -> std::io::Error {
+    io_error(error.to_string())
+}
+
+#[cfg(feature = "tls")]
+fn io_error(message: impl Into<String>) -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::Other, message.into())
 }
 
 fn build_dns_zone() -> DnsZone {

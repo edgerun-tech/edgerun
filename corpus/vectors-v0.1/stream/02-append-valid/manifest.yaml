@@ -1,9 +1,0 @@
-id: stream/02-append-valid
-suite: stream
-validator: validate_stream_append
-version: 1
-priority: mandatory
-description: valid event appends after known head
-tags:
-- stream
-- validate_stream_append

@@ -1,9 +1,15 @@
+#![cfg(feature = "std")]
+
 use std::thread;
 use std::time::Duration;
 
 use edgerun_work::*;
 
-fn signed_memory_route(node: &SimNode, status: u16, valid_until_unix_ms: u64) -> RouteAdvertisement {
+fn signed_memory_route(
+    node: &SimNode,
+    status: u16,
+    valid_until_unix_ms: u64,
+) -> RouteAdvertisement {
     let mut route = node.advertise_memory_route(node.identity.node_id, vec![DEPARTMENT_MESSAGE]);
     route.status = status;
     route.valid_until_unix_ms = valid_until_unix_ms;
@@ -16,7 +22,10 @@ fn memory_channel_rejects_expired_route_on_add() {
     let route = signed_memory_route(&node, ROUTE_STATUS_AVAILABLE, 0);
     let mut channel = MemoryChannelEngine::new();
 
-    assert_eq!(channel.add_route(route), Err(MemoryChannelError::RouteInvalid));
+    assert_eq!(
+        channel.add_route(route),
+        Err(MemoryChannelError::RouteInvalid)
+    );
     assert_eq!(channel.route_count(), 0);
 }
 
@@ -26,7 +35,10 @@ fn memory_channel_rejects_unavailable_route_on_add() {
     let route = signed_memory_route(&node, ROUTE_STATUS_UNAVAILABLE, u64::MAX);
     let mut channel = MemoryChannelEngine::new();
 
-    assert_eq!(channel.add_route(route), Err(MemoryChannelError::RouteInvalid));
+    assert_eq!(
+        channel.add_route(route),
+        Err(MemoryChannelError::RouteInvalid)
+    );
     assert_eq!(channel.route_count(), 0);
 }
 

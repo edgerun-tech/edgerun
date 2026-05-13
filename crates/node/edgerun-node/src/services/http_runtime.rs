@@ -88,6 +88,14 @@ async fn dispatch_to_app(
     let n = stream.read(&mut buffer).await.map_err(io_error)?;
     let request = core::str::from_utf8(&buffer[..n]).unwrap_or("");
     let path = request_path(request);
+    #[cfg(not(target_os = "none"))]
+    if request_method(request) == Some("GET")
+        && path == Some("/work")
+        && crate::services::work_websocket::is_websocket_upgrade(request)
+    {
+        return crate::services::work_websocket::serve_work_websocket(stream, buffer[..n].to_vec())
+            .await;
+    }
     crate::node_info!(
         "http request accepted for app {:02x}{:02x}{:02x}{:02x}",
         target_app_id[0],

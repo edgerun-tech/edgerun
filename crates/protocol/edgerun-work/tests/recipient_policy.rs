@@ -1,6 +1,11 @@
 use edgerun_work::*;
 
-fn message_from(sender: &mut SimNode, recipient: &SimNode, relay: &SimNode, payload: &[u8]) -> NetworkMessage {
+fn message_from(
+    sender: &mut SimNode,
+    recipient: &SimNode,
+    relay: &SimNode,
+    payload: &[u8],
+) -> NetworkMessage {
     let packet = sender.message_to(
         recipient.identity.node_id,
         relay.identity.node_id,

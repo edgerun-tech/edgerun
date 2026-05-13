@@ -1,0 +1,252 @@
+use std::ffi::{CStr, CString};
+use std::os::raw::{c_char, c_int, c_void};
+use std::thread;
+use std::time::{Duration, Instant};
+
+use edgerun_ui_core::gpu::gl::GlRenderer;
+use edgerun_ui_core::gpu::{FontAtlas, GpuScene, build_codex_chat_shell_with_font, palette};
+
+const SDL_INIT_VIDEO: u32 = 0x0000_0020;
+const SDL_WINDOWPOS_CENTERED: c_int = 0x2fff_0000u32 as c_int;
+const SDL_WINDOW_OPENGL: u32 = 0x0000_0002;
+const SDL_WINDOW_SHOWN: u32 = 0x0000_0004;
+const SDL_WINDOW_RESIZABLE: u32 = 0x0000_0020;
+const SDL_QUIT: u32 = 0x100;
+const SDL_KEYDOWN: u32 = 0x300;
+const SDL_WINDOWEVENT: u32 = 0x200;
+const SDL_WINDOWEVENT_RESIZED: u8 = 0x05;
+const SDL_GL_CONTEXT_MAJOR_VERSION: c_int = 17;
+const SDL_GL_CONTEXT_MINOR_VERSION: c_int = 18;
+const SDL_GL_CONTEXT_PROFILE_MASK: c_int = 21;
+const SDL_GL_CONTEXT_PROFILE_CORE: c_int = 0x0001;
+const SDL_GL_DOUBLEBUFFER: c_int = 5;
+const SDLK_ESCAPE: i32 = 27;
+
+#[repr(C)]
+struct SDL_Window(c_void);
+
+type SdlGlContext = *mut c_void;
+
+#[repr(C)]
+struct SdlEvent {
+    data: [u8; 56],
+}
+
+impl SdlEvent {
+    fn event_type(&self) -> u32 {
+        u32::from_ne_bytes([self.data[0], self.data[1], self.data[2], self.data[3]])
+    }
+
+    fn window_event(&self) -> u8 {
+        self.data[8]
+    }
+
+    fn data1(&self) -> i32 {
+        i32::from_ne_bytes([self.data[16], self.data[17], self.data[18], self.data[19]])
+    }
+
+    fn data2(&self) -> i32 {
+        i32::from_ne_bytes([self.data[20], self.data[21], self.data[22], self.data[23]])
+    }
+
+    fn key_sym(&self) -> i32 {
+        i32::from_ne_bytes([self.data[20], self.data[21], self.data[22], self.data[23]])
+    }
+}
+
+#[link(name = "SDL2")]
+unsafe extern "C" {
+    fn SDL_Init(flags: u32) -> c_int;
+    fn SDL_Quit();
+    fn SDL_GetError() -> *const c_char;
+    fn SDL_GL_SetAttribute(attr: c_int, value: c_int) -> c_int;
+    fn SDL_CreateWindow(
+        title: *const c_char,
+        x: c_int,
+        y: c_int,
+        w: c_int,
+        h: c_int,
+        flags: u32,
+    ) -> *mut SDL_Window;
+    fn SDL_DestroyWindow(window: *mut SDL_Window);
+    fn SDL_GL_CreateContext(window: *mut SDL_Window) -> SdlGlContext;
+    fn SDL_GL_DeleteContext(context: SdlGlContext);
+    fn SDL_GL_SetSwapInterval(interval: c_int) -> c_int;
+    fn SDL_GL_SwapWindow(window: *mut SDL_Window);
+    fn SDL_PollEvent(event: *mut SdlEvent) -> c_int;
+    fn SDL_Delay(ms: u32);
+}
+
+fn main() {
+    if let Err(error) = run() {
+        eprintln!("codex-gl-ui: {error}");
+        std::process::exit(1);
+    }
+}
+
+fn run() -> Result<(), String> {
+    let args = Args::parse()?;
+    if args.dump_scene {
+        let mut scene = GpuScene::new(palette::BG);
+        let atlas = FontAtlas::load_inter(18.0)?;
+        build_codex_chat_shell_with_font(&mut scene, &atlas, 1120.0, 720.0, true);
+        println!(
+            "codex-gl-ui scene rects={} text_quads={}",
+            scene.rects().len(),
+            scene.text_quads().len()
+        );
+        return Ok(());
+    }
+
+    let _sdl = Sdl::init()?;
+    unsafe {
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+        SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    }
+
+    let mut width = 1120;
+    let mut height = 720;
+    let title = CString::new("Codex GL UI").map_err(|error| error.to_string())?;
+    let window = Window(unsafe {
+        SDL_CreateWindow(
+            title.as_ptr(),
+            SDL_WINDOWPOS_CENTERED,
+            SDL_WINDOWPOS_CENTERED,
+            width,
+            height,
+            SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE,
+        )
+    });
+    if window.0.is_null() {
+        return Err(format!("SDL_CreateWindow failed: {}", sdl_error()));
+    }
+
+    let _context = GlContext(unsafe { SDL_GL_CreateContext(window.0) });
+    if _context.0.is_null() {
+        return Err(format!("SDL_GL_CreateContext failed: {}", sdl_error()));
+    }
+    unsafe {
+        SDL_GL_SetSwapInterval(1);
+    }
+
+    let atlas = FontAtlas::load_inter(18.0)?;
+    let renderer = unsafe { GlRenderer::new_current_context_with_font(&atlas)? };
+    let started = Instant::now();
+    let mut scene = GpuScene::new(palette::BG);
+    let mut running = true;
+    let mut frames = 0u32;
+    while running {
+        let mut event = SdlEvent { data: [0; 56] };
+        while unsafe { SDL_PollEvent(&mut event) } != 0 {
+            match event.event_type() {
+                SDL_QUIT => running = false,
+                SDL_KEYDOWN if event.key_sym() == SDLK_ESCAPE => running = false,
+                SDL_WINDOWEVENT if event.window_event() == SDL_WINDOWEVENT_RESIZED => {
+                    width = event.data1().max(360);
+                    height = event.data2().max(320);
+                }
+                _ => {}
+            }
+        }
+
+        let thinking = (started.elapsed().as_millis() / 800).is_multiple_of(2);
+        build_codex_chat_shell_with_font(&mut scene, &atlas, width as f32, height as f32, thinking);
+        renderer.render(width, height, &scene);
+        unsafe {
+            SDL_GL_SwapWindow(window.0);
+            SDL_Delay(1);
+        }
+        frames = frames.saturating_add(1);
+        if args.frames.is_some_and(|limit| frames >= limit) {
+            running = false;
+        }
+        thread::sleep(Duration::from_millis(1));
+    }
+    Ok(())
+}
+
+#[derive(Default)]
+struct Args {
+    frames: Option<u32>,
+    dump_scene: bool,
+}
+
+impl Args {
+    fn parse() -> Result<Self, String> {
+        let mut args = std::env::args().skip(1);
+        let mut parsed = Self::default();
+        while let Some(arg) = args.next() {
+            match arg.as_str() {
+                "--frames" => {
+                    let value = args
+                        .next()
+                        .ok_or("--frames requires a frame count")?
+                        .parse::<u32>()
+                        .map_err(|error| format!("invalid --frames value: {error}"))?;
+                    parsed.frames = Some(value);
+                }
+                "--dump-scene" => parsed.dump_scene = true,
+                "--help" | "-h" => {
+                    println!("Usage: codex-gl-ui [--frames N] [--dump-scene]");
+                    std::process::exit(0);
+                }
+                other => return Err(format!("unknown argument: {other}")),
+            }
+        }
+        Ok(parsed)
+    }
+}
+
+struct Sdl;
+
+impl Sdl {
+    fn init() -> Result<Self, String> {
+        let rc = unsafe { SDL_Init(SDL_INIT_VIDEO) };
+        if rc == 0 { Ok(Self) } else { Err(sdl_error()) }
+    }
+}
+
+impl Drop for Sdl {
+    fn drop(&mut self) {
+        unsafe {
+            SDL_Quit();
+        }
+    }
+}
+
+struct Window(*mut SDL_Window);
+
+impl Drop for Window {
+    fn drop(&mut self) {
+        if !self.0.is_null() {
+            unsafe {
+                SDL_DestroyWindow(self.0);
+            }
+        }
+    }
+}
+
+struct GlContext(SdlGlContext);
+
+impl Drop for GlContext {
+    fn drop(&mut self) {
+        if !self.0.is_null() {
+            unsafe {
+                SDL_GL_DeleteContext(self.0);
+            }
+        }
+    }
+}
+
+fn sdl_error() -> String {
+    let ptr = unsafe { SDL_GetError() };
+    if ptr.is_null() {
+        "unknown SDL error".to_string()
+    } else {
+        unsafe { CStr::from_ptr(ptr) }
+            .to_string_lossy()
+            .into_owned()
+    }
+}

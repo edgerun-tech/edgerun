@@ -1,9 +1,0 @@
-id: command/09-issuer-without-authority-reject
-suite: command
-validator: validate_command
-version: 1
-priority: mandatory
-description: issuer without controller rights or delegation is rejected
-tags:
-- command
-- validate_command

@@ -1,16 +1,21 @@
 use std::collections::BTreeMap;
 use std::io;
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
-use std::sync::{atomic::{AtomicBool, Ordering}, Arc, Mutex};
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
+};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use crate::channel::{ChannelEnvelope, RouteAdvertisement};
-use crate::codec::{encode_work_packet_once, ArchivedWorkPacketFrame};
+use crate::codec::{ArchivedWorkPacketFrame, encode_work_packet_once};
 use crate::memory_channel::{route_hash, route_is_available};
-use crate::protocol::{Hash, NodeId, WorkPacket, WORK_WIRE_ABI_VERSION};
+use crate::protocol::{Hash, NodeId, WORK_WIRE_ABI_VERSION, WorkPacket};
 use crate::route_auth::verify_route_advertisement;
-use crate::std_runtime::framing::{read_work_packet_frame, unix_ms, write_encoded_work_packet, write_work_packet};
+use crate::std_runtime::framing::{
+    read_work_packet_frame, unix_ms, write_encoded_work_packet, write_work_packet,
+};
 use crate::work_channel::{WorkChannel, WorkChannelError};
 
 const ACCEPT_POLL_MS: u64 = 10;
@@ -83,9 +88,9 @@ impl TcpIncomingServer {
         self.shutdown.store(true, Ordering::Release);
         let _ = TcpStream::connect(self.listen_addr);
         if let Some(handle) = self.thread.take() {
-            handle
-                .join()
-                .map_err(|_| io::Error::new(io::ErrorKind::Other, "tcp incoming server thread panicked"))?;
+            handle.join().map_err(|_| {
+                io::Error::new(io::ErrorKind::Other, "tcp incoming server thread panicked")
+            })?;
         }
         Ok(())
     }
@@ -156,14 +161,20 @@ impl WorkChannel for TcpWorkChannel {
         packet: WorkPacket,
     ) -> Result<ChannelEnvelope, WorkChannelError> {
         let now = unix_ms();
-        if self.routes.get(&to).is_some_and(|route| !route_is_available(route, now)) {
+        if self
+            .routes
+            .get(&to)
+            .is_some_and(|route| !route_is_available(route, now))
+        {
             self.routes.remove(&to);
             return Err(WorkChannelError::RouteMissing);
         }
         let route = self.routes.get(&to).ok_or(WorkChannelError::RouteMissing)?;
         let addr = Self::route_addr(route).ok_or(WorkChannelError::RouteMissing)?;
-        let encoded = encode_work_packet_once(&packet).map_err(|_| WorkChannelError::PacketHashFailed)?;
-        Self::send_encoded_packet_to_addr(addr, encoded.as_bytes()).map_err(|_| WorkChannelError::DeliveryFailed)?;
+        let encoded =
+            encode_work_packet_once(&packet).map_err(|_| WorkChannelError::PacketHashFailed)?;
+        Self::send_encoded_packet_to_addr(addr, encoded.as_bytes())
+            .map_err(|_| WorkChannelError::DeliveryFailed)?;
         let envelope = ChannelEnvelope {
             abi_version: WORK_WIRE_ABI_VERSION,
             channel_id: route.endpoint.channel_id,

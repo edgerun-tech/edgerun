@@ -1,5 +1,0 @@
-trust_roots:
-- root_authority
-delegation_scopes:
-  del_query_1: timeline:abc
-policy_profile: default-v0

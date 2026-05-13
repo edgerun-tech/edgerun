@@ -1,9 +1,0 @@
-brief:
-  command_type: ADD_CONTROLLER
-  new_controller: user_bob
-command:
-  command_type: ADD_CONTROLLER
-  new_controller: user_bob
-  issuer: user_carol
-  target_node: node_server
-  command_id: ctrl_11-unauthorized-issuer-reject

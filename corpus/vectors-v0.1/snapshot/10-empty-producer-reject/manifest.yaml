@@ -1,9 +1,0 @@
-id: snapshot/10-empty-producer-reject
-suite: snapshot
-validator: validate_snapshot
-version: 1
-priority: mandatory
-description: snapshot with empty producer is structurally invalid
-tags:
-- snapshot
-- validate_snapshot

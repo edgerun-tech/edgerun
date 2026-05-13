@@ -55,7 +55,9 @@ pub fn admitted_capability_route_from_parts(
     worker_route: &RouteAdvertisement,
     source_node_id: NodeId,
 ) -> Result<AdmittedCapabilityRoute, WorkProtocolError> {
-    if request.abi_version != WORK_WIRE_ABI_VERSION || admission.abi_version != WORK_WIRE_ABI_VERSION {
+    if request.abi_version != WORK_WIRE_ABI_VERSION
+        || admission.abi_version != WORK_WIRE_ABI_VERSION
+    {
         return Err(WorkProtocolError::InvalidShape);
     }
     if !verify_work_admission(admission) || !verify_available_route_advertisement(worker_route) {
@@ -112,7 +114,12 @@ pub fn verify_admitted_capability_route(
     admission: &WorkAdmission,
     worker_route: &RouteAdvertisement,
 ) -> Result<(), WorkProtocolError> {
-    let expected = admitted_capability_route_from_parts(request, admission, worker_route, value.source_node_id)?;
+    let expected = admitted_capability_route_from_parts(
+        request,
+        admission,
+        worker_route,
+        value.source_node_id,
+    )?;
     if &expected != value {
         return Err(WorkProtocolError::HashMismatch);
     }
@@ -172,7 +179,9 @@ mod tests {
     use crate::request_auth::sign_work_request;
     use crate::route_builder::{storage_route_from_relay_assignment, tcp_endpoint};
     use crate::settlement::receipt_id_for_claim;
-    use crate::signing::{empty_signature, sign_relay_assignment, sign_work_admission, sign_work_receipt};
+    use crate::signing::{
+        empty_signature, sign_relay_assignment, sign_work_admission, sign_work_receipt,
+    };
 
     #[test]
     fn admitted_route_binds_request_admission_message_and_receipt() {
@@ -202,7 +211,8 @@ mod tests {
                 signature: empty_signature(),
             },
         );
-        let request_hash = packet_hash(&WorkPacket::WorkRequest(request.clone())).expect("request hash");
+        let request_hash =
+            packet_hash(&WorkPacket::WorkRequest(request.clone())).expect("request hash");
         let assignment = sign_relay_assignment(
             &admission_key,
             RelayAssignment {
@@ -248,13 +258,9 @@ mod tests {
                 signature: empty_signature(),
             },
         );
-        let admitted = admitted_capability_route_from_parts(
-            &request,
-            &admission,
-            &worker_route,
-            [13u8; 32],
-        )
-        .expect("admitted route");
+        let admitted =
+            admitted_capability_route_from_parts(&request, &admission, &worker_route, [13u8; 32])
+                .expect("admitted route");
         verify_admitted_capability_route(&admitted, &request, &admission, &worker_route)
             .expect("verify route");
 
@@ -276,7 +282,8 @@ mod tests {
 
         let input_hash = [15u8; 32];
         let output_hash = [16u8; 32];
-        let admission_hash = packet_hash(&WorkPacket::WorkAdmission(admission.clone())).expect("admission hash");
+        let admission_hash =
+            packet_hash(&WorkPacket::WorkAdmission(admission.clone())).expect("admission hash");
         let receipt = sign_work_receipt(
             &storage_key,
             WorkReceipt {

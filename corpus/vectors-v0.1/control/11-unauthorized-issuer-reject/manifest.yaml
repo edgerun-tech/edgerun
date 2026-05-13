@@ -1,9 +1,0 @@
-id: control/11-unauthorized-issuer-reject
-suite: control
-validator: validate_control_change
-version: 1
-priority: mandatory
-description: control command from a non-controller issuer is authority denied
-tags:
-- control
-- validate_control_change

@@ -5,20 +5,25 @@ use crate::rate_limits::parse_all_rate_limits;
 use crate::telemetry::SseTelemetry;
 use codex_client::ByteStream;
 use codex_client::StreamResponse;
+#[cfg(any(feature = "native-transport", test))]
 use codex_client::TransportError;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::protocol::ModelVerification;
 use codex_protocol::protocol::TokenUsage;
 use edgerun_eventsource_stream::Eventsource;
 use edgerun_futures::StreamExt;
+#[cfg(any(feature = "native-transport", test))]
 use edgerun_futures::TryStreamExt;
 use edgerun_json::serde_json::Value;
 use edgerun_serde::Deserialize;
 use edgerun_tokio::sync::mpsc;
 use edgerun_tokio::time::Instant;
 use edgerun_tokio::time::timeout;
+#[cfg(any(feature = "native-transport", test))]
 use edgerun_tokio_util::io::ReaderStream;
+#[cfg(feature = "native-transport")]
 use std::io::BufRead;
+#[cfg(feature = "native-transport")]
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::OnceLock;
@@ -32,6 +37,7 @@ const REQUEST_ID_HEADER: &str = "x-request-id";
 const TRUSTED_ACCESS_FOR_CYBER_VERIFICATION: &str = "trusted_access_for_cyber";
 
 /// Streams SSE events from an on-disk fixture for tests.
+#[cfg(feature = "native-transport")]
 pub fn stream_from_fixture(
     path: impl AsRef<Path>,
     idle_timeout: Duration,

@@ -1,9 +1,0 @@
-id: object/06-derived-object-id-when-omitted
-suite: object
-validator: validate_object_retrieval
-version: 1
-priority: mandatory
-description: object validation derives the object id when it is not explicitly claimed
-tags:
-- object
-- validate_object_retrieval

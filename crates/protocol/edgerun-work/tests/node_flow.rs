@@ -11,10 +11,9 @@ fn memory_channel_accepts_ordered_messages_and_rejects_replay() {
         .add_route(relay.advertise_memory_route(relay.identity.node_id, vec![DEPARTMENT_RELAY]))
         .expect("relay route");
     channel
-        .add_route(receiver.advertise_memory_route(
-            relay.identity.node_id,
-            vec![DEPARTMENT_MESSAGE],
-        ))
+        .add_route(
+            receiver.advertise_memory_route(relay.identity.node_id, vec![DEPARTMENT_MESSAGE]),
+        )
         .expect("receiver route");
 
     let packet = sender.message_to(
@@ -76,10 +75,9 @@ fn memory_channel_rejects_out_of_order_and_wrong_previous_hash() {
 
     let mut channel = MemoryChannelEngine::new();
     channel
-        .add_route(receiver.advertise_memory_route(
-            relay.identity.node_id,
-            vec![DEPARTMENT_MESSAGE],
-        ))
+        .add_route(
+            receiver.advertise_memory_route(relay.identity.node_id, vec![DEPARTMENT_MESSAGE]),
+        )
         .expect("receiver route");
 
     let packet = sender.message_to(
@@ -123,10 +121,9 @@ fn memory_channel_rejects_tampered_packet_hash_and_wrong_route() {
 
     let mut channel = MemoryChannelEngine::new();
     channel
-        .add_route(receiver.advertise_memory_route(
-            relay.identity.node_id,
-            vec![DEPARTMENT_MESSAGE],
-        ))
+        .add_route(
+            receiver.advertise_memory_route(relay.identity.node_id, vec![DEPARTMENT_MESSAGE]),
+        )
         .expect("receiver route");
 
     let packet = sender.message_to(

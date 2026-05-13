@@ -82,10 +82,8 @@ fn wasm_worker_node_processes_storage_work_over_ws_channel() {
         [0u8; 32],
     );
 
-    let mut route = wasm_storage.advertise_memory_route(
-        wasm_storage.identity.node_id,
-        vec![DEPARTMENT_STORAGE],
-    );
+    let mut route = wasm_storage
+        .advertise_memory_route(wasm_storage.identity.node_id, vec![DEPARTMENT_STORAGE]);
     route.endpoint.kind = CHANNEL_KIND_WEBSOCKET;
     route.endpoint.address = b"ws://127.0.0.1:8080/edgerun".to_vec();
     route.endpoint.label = "browser-worker-ws".into();

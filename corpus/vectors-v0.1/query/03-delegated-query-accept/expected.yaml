@@ -1,5 +1,0 @@
-verdict: ACCEPT
-reason_code: null
-derived:
-  decision: authorized
-  query_class: QUERY_CLASS_HEAD

@@ -1,9 +1,0 @@
-id: object/22-empty-manifest-entry-representation-reject
-suite: object
-validator: validate_object
-version: 1
-priority: mandatory
-description: chunk manifest entry representation id must be nonempty when present
-tags:
-- object
-- validate_object

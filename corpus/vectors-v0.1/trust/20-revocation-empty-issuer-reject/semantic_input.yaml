@@ -1,4 +1,0 @@
-revocation_record:
-  issuer: ''
-  issued_at: '2030-01-01T00:00:00Z'
-  target_delegation: del_query_1

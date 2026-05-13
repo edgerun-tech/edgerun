@@ -2136,6 +2136,15 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 }
 
 fn current_unix_secs() -> u64 {
+    #[cfg(not(target_os = "none"))]
+    {
+        return std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|duration| duration.as_secs())
+            .unwrap_or(0);
+    }
+
+    #[cfg(target_os = "none")]
     1_704_067_200
 }
 

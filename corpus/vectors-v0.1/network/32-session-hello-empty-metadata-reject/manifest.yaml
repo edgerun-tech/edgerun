@@ -1,9 +1,0 @@
-id: network/32-session-hello-empty-metadata-reject
-suite: network
-validator: validate_network
-version: 1
-priority: mandatory
-description: session hello metadata reference must carry an object id
-tags:
-- network
-- validate_network

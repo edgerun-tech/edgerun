@@ -1,9 +1,0 @@
-id: object/03-object-id-mismatch
-suite: object
-validator: validate_object_retrieval
-version: 1
-priority: mandatory
-description: claimed logical object id mismatch is rejected
-tags:
-- object
-- validate_object_retrieval

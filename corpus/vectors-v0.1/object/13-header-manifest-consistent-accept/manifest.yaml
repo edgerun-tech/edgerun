@@ -1,9 +1,0 @@
-id: object/13-header-manifest-consistent-accept
-suite: object
-validator: validate_object_retrieval
-version: 1
-priority: mandatory
-description: descriptor, header, and chunk manifest are accepted when mutually consistent
-tags:
-- object
-- validate_object_retrieval

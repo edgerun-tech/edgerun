@@ -65,6 +65,8 @@ mod proxy_runtime;
 pub mod tftp_runtime;
 #[cfg(all(feature = "virtual-disk", not(target_os = "none")))]
 pub mod virtual_disk_runtime;
+#[cfg(all(feature = "http", not(target_os = "none")))]
+pub mod work_websocket;
 pub use crate::network::{
     NodeTransportSurface, ServiceBindingDecision, ServiceBindingIntent, binding_intents,
     decide_binding, decide_bindings,

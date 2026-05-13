@@ -1,9 +1,0 @@
-id: object/17-descriptor-manifest-object-mismatch-reject
-suite: object
-validator: validate_object_retrieval
-version: 1
-priority: mandatory
-description: descriptor and manifest must agree on object identity
-tags:
-- object
-- validate_object_retrieval

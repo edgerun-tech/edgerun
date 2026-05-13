@@ -1,5 +1,0 @@
-verdict: ACCEPT
-reason_code: null
-derived:
-  decision: aggregate_trust_policy_accepted
-  advisory_only: true

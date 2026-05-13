@@ -1,9 +1,0 @@
-id: snapshot/05-bad-signature-reject
-suite: snapshot
-validator: validate_snapshot
-version: 1
-priority: mandatory
-description: trusted snapshot with invalid signature is rejected
-tags:
-- snapshot
-- validate_snapshot

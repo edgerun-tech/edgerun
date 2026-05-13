@@ -2,7 +2,7 @@ use alloc::vec::Vec;
 use core::fmt;
 
 use edgerun_crypto::sha256;
-use edgerun_wire::{access, deserialize, to_bytes, util, WireError};
+use edgerun_wire::{WireError, access, deserialize, to_bytes, util};
 
 use crate::protocol::*;
 
@@ -68,13 +68,17 @@ pub fn packet_hash(packet: &WorkPacket) -> Result<Hash, WorkProtocolError> {
     Ok(encode_work_packet_once(packet)?.hash)
 }
 
-pub fn encode_work_packet_once(packet: &WorkPacket) -> Result<EncodedWorkPacket, WorkProtocolError> {
+pub fn encode_work_packet_once(
+    packet: &WorkPacket,
+) -> Result<EncodedWorkPacket, WorkProtocolError> {
     let bytes = packet_aligned_bytes(packet)?;
     let hash = blake3_hash(bytes.as_slice());
     Ok(EncodedWorkPacket { bytes, hash })
 }
 
-pub fn packet_aligned_bytes(packet: &WorkPacket) -> Result<AlignedWorkPacketBytes, WorkProtocolError> {
+pub fn packet_aligned_bytes(
+    packet: &WorkPacket,
+) -> Result<AlignedWorkPacketBytes, WorkProtocolError> {
     let bytes: AlignedWorkPacketBytes =
         to_bytes::<WireError>(packet).map_err(|_| WorkProtocolError::InvalidPacket)?;
     if bytes.len() > MAX_WORK_FRAME_LEN {
@@ -87,7 +91,9 @@ pub fn packet_bytes(packet: &WorkPacket) -> Result<Vec<u8>, WorkProtocolError> {
     Ok(packet_aligned_bytes(packet)?.to_vec())
 }
 
-pub fn archived_packet_frame_from_bytes(bytes: &[u8]) -> Result<ArchivedWorkPacketFrame, WorkProtocolError> {
+pub fn archived_packet_frame_from_bytes(
+    bytes: &[u8],
+) -> Result<ArchivedWorkPacketFrame, WorkProtocolError> {
     if bytes.is_empty() {
         return Err(WorkProtocolError::EmptyPacket);
     }
@@ -98,7 +104,10 @@ pub fn archived_packet_frame_from_bytes(bytes: &[u8]) -> Result<ArchivedWorkPack
     aligned.extend_from_slice(bytes);
     archived_work_packet_from_aligned_bytes(aligned.as_slice())?;
     let hash = blake3_hash(aligned.as_slice());
-    Ok(ArchivedWorkPacketFrame { bytes: aligned, hash })
+    Ok(ArchivedWorkPacketFrame {
+        bytes: aligned,
+        hash,
+    })
 }
 
 pub fn archived_work_packet_from_aligned_bytes(

@@ -1,9 +1,0 @@
-id: object/20-empty-header-object-reject
-suite: object
-validator: validate_object
-version: 1
-priority: mandatory
-description: representation header object reference must carry an object id
-tags:
-- object
-- validate_object

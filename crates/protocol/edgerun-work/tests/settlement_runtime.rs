@@ -1,3 +1,5 @@
+#![cfg(feature = "std")]
+
 use std::thread;
 
 use edgerun_crypto::Ed25519SigningKey;
@@ -10,7 +12,12 @@ fn public_key_from_seed(seed: u8) -> PublicKey {
     out
 }
 
-fn admission_doc(admission: &SimNode, user: PublicKey, request_hash: Hash, budget: u64) -> WorkAdmission {
+fn admission_doc(
+    admission: &SimNode,
+    user: PublicKey,
+    request_hash: Hash,
+    budget: u64,
+) -> WorkAdmission {
     let channel = ChannelEndpoint::new(
         blake3_hash(b"runtime-settlement-channel"),
         CHANNEL_KIND_MEMORY,
@@ -115,7 +122,9 @@ fn thread_safe_settlement_wrapper_serializes_concurrent_settlements() {
         let doc = doc.clone();
         let receipt = receipt_doc(&worker, request_hash, admission_hash, 1, i + 1);
         handles.push(thread::spawn(move || {
-            ledger.settle_receipt(&doc, &receipt).expect("settle concurrent")
+            ledger
+                .settle_receipt(&doc, &receipt)
+                .expect("settle concurrent")
         }));
     }
     for handle in handles {

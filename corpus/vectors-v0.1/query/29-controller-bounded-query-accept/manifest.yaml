@@ -1,9 +1,0 @@
-id: query/01-controller-bounded-query-accept
-suite: query
-validator: validate_query
-version: 1
-priority: mandatory
-description: bounded query from a current controller is answerable
-tags:
-- query
-- validate_query

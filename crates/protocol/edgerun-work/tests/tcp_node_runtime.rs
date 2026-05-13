@@ -1,10 +1,16 @@
+#![cfg(feature = "std")]
+
 use std::net::{TcpListener, TcpStream};
 use std::thread;
 use std::time::Duration;
 
 use edgerun_work::*;
 
-fn signed_tcp_route(node: &SimNode, address: String, valid_until_unix_ms: u64) -> RouteAdvertisement {
+fn signed_tcp_route(
+    node: &SimNode,
+    address: String,
+    valid_until_unix_ms: u64,
+) -> RouteAdvertisement {
     let mut route = node.advertise_memory_route(node.identity.node_id, vec![DEPARTMENT_MESSAGE]);
     route.endpoint.kind = CHANNEL_KIND_TCP;
     route.endpoint.address = address.into_bytes();
@@ -17,8 +23,8 @@ fn signed_tcp_route(node: &SimNode, address: String, valid_until_unix_ms: u64) -
 fn tcp_node_runtime_receives_framed_packet_over_loopback() {
     let mut sender = SimNode::from_seed(251, NODE_ROLE_MESSAGE);
     let mut receiver = SimNode::from_seed(252, NODE_ROLE_MESSAGE);
-    let mut runtime = TcpNodeRuntime::bind(receiver.identity.node_id, "127.0.0.1:0")
-        .expect("bind tcp runtime");
+    let mut runtime =
+        TcpNodeRuntime::bind(receiver.identity.node_id, "127.0.0.1:0").expect("bind tcp runtime");
 
     let route = signed_tcp_route(&receiver, runtime.listen_addr().to_string(), u64::MAX);
     let route_hash = runtime.add_route(route.clone()).expect("add route");
@@ -50,7 +56,9 @@ fn tcp_node_runtime_receives_framed_packet_over_loopback() {
     }
     assert_eq!(packets.len(), 1);
 
-    let packet_hash = packet_bytes(&packets[0]).map(|bytes| blake3_hash(&bytes)).unwrap();
+    let packet_hash = packet_bytes(&packets[0])
+        .map(|bytes| blake3_hash(&bytes))
+        .unwrap();
     let ordered = OrderedChannelEnvelope {
         envelope: ChannelEnvelope {
             abi_version: WORK_WIRE_ABI_VERSION,
@@ -104,8 +112,7 @@ fn tcp_node_runtime_reports_delivery_failed_for_dead_route() {
 
 #[test]
 fn tcp_node_runtime_shutdown_stops_accepting_connections() {
-    let runtime = TcpNodeRuntime::bind([1u8; 32], "127.0.0.1:0")
-        .expect("bind tcp runtime");
+    let runtime = TcpNodeRuntime::bind([1u8; 32], "127.0.0.1:0").expect("bind tcp runtime");
     let addr = runtime.listen_addr();
     drop(TcpStream::connect(addr).expect("runtime accepts before shutdown"));
 
@@ -118,8 +125,8 @@ fn tcp_node_runtime_shutdown_stops_accepting_connections() {
 fn tcp_node_runtime_removes_expired_route_during_selection() {
     let mut sender = SimNode::from_seed(255, NODE_ROLE_MESSAGE);
     let receiver = SimNode::from_seed(250, NODE_ROLE_MESSAGE);
-    let mut runtime = TcpNodeRuntime::bind(sender.identity.node_id, "127.0.0.1:0")
-        .expect("bind tcp runtime");
+    let mut runtime =
+        TcpNodeRuntime::bind(sender.identity.node_id, "127.0.0.1:0").expect("bind tcp runtime");
 
     let route = signed_tcp_route(
         &receiver,

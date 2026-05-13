@@ -1,4 +1,0 @@
-revocation_record:
-  issuer: root_authority
-  target_delegation: del_query_2
-  replacement_id: rev_old_1

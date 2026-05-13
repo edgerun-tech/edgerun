@@ -1,9 +1,0 @@
-id: query/03-delegated-query-accept
-suite: query
-validator: validate_query
-version: 1
-priority: mandatory
-description: delegated requester may issue a bounded query within delegated scope
-tags:
-- query
-- validate_query

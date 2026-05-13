@@ -1,5 +1,0 @@
-aggregate_descriptor:
-  aggregate_id: agg_11
-  source_query_id: query_active
-  aggregator: node_server
-  input_fragments: []

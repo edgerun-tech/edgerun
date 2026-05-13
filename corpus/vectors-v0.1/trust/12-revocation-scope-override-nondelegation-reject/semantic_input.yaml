@@ -1,4 +1,0 @@
-revocation_record:
-  issuer: root_authority
-  target_identity: user_bob
-  scope_override: timeline:abc

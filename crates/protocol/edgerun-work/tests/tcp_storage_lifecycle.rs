@@ -1,3 +1,5 @@
+#![cfg(feature = "std")]
+
 use std::thread;
 use std::time::Duration;
 
@@ -83,7 +85,8 @@ fn tcp_runtime_stores_erasure_shards_and_settles_receipts() {
     let mut runtime = TcpNodeRuntime::bind(storage.identity.node_id, "127.0.0.1:0")
         .expect("bind storage tcp runtime");
 
-    let mut route = storage.advertise_memory_route(storage.identity.node_id, vec![DEPARTMENT_STORAGE]);
+    let mut route =
+        storage.advertise_memory_route(storage.identity.node_id, vec![DEPARTMENT_STORAGE]);
     route.endpoint.kind = CHANNEL_KIND_TCP;
     route.endpoint.address = runtime.listen_addr().to_string().into_bytes();
     route.endpoint.label = "tcp-storage-loopback".into();
@@ -91,7 +94,11 @@ fn tcp_runtime_stores_erasure_shards_and_settles_receipts() {
     let route_hash = runtime.add_route(route.clone()).expect("storage tcp route");
 
     let file = b"tcp runtime erasure storage lifecycle payload".to_vec();
-    let assigned_nodes = [storage.identity.node_id, storage.identity.node_id, storage.identity.node_id];
+    let assigned_nodes = [
+        storage.identity.node_id,
+        storage.identity.node_id,
+        storage.identity.node_id,
+    ];
     let (manifest, shards) = encode_xor_2_1(&file, assigned_nodes).expect("encode");
     verify_manifest(&manifest, &shards).expect("manifest");
 
@@ -139,10 +146,20 @@ fn tcp_runtime_stores_erasure_shards_and_settles_receipts() {
 
     let mut receiver_order = ChannelOrderBook::new();
     for (index, packet) in packets.into_iter().enumerate() {
-        let packet_hash = packet_bytes(&packet).map(|bytes| blake3_hash(&bytes)).unwrap();
+        let packet_hash = packet_bytes(&packet)
+            .map(|bytes| blake3_hash(&bytes))
+            .unwrap();
         let channel_id = route.endpoint.channel_id;
-        let sequence = receiver_order.next_sequence(channel_id, client.identity.node_id, storage.identity.node_id);
-        let previous_message_hash = receiver_order.last_message_hash(channel_id, client.identity.node_id, storage.identity.node_id);
+        let sequence = receiver_order.next_sequence(
+            channel_id,
+            client.identity.node_id,
+            storage.identity.node_id,
+        );
+        let previous_message_hash = receiver_order.last_message_hash(
+            channel_id,
+            client.identity.node_id,
+            storage.identity.node_id,
+        );
         let ordered = OrderedChannelEnvelope {
             envelope: ChannelEnvelope {
                 abi_version: WORK_WIRE_ABI_VERSION,
@@ -156,8 +173,12 @@ fn tcp_runtime_stores_erasure_shards_and_settles_receipts() {
             sequence,
             previous_message_hash,
         };
-        receiver_order.accept(&ordered, route_hash).expect("ordered receive");
-        storage.accept_ordered(&ordered, route_hash).expect("storage accepts order");
+        receiver_order
+            .accept(&ordered, route_hash)
+            .expect("ordered receive");
+        storage
+            .accept_ordered(&ordered, route_hash)
+            .expect("storage accepts order");
 
         let context = RoleContext {
             now_unix_ms: 1,
@@ -183,11 +204,16 @@ fn tcp_runtime_stores_erasure_shards_and_settles_receipts() {
             10,
             index as u64 + 1,
         );
-        ledger.settle_receipt(&admission_doc, &receipt).expect("settle shard receipt");
+        ledger
+            .settle_receipt(&admission_doc, &receipt)
+            .expect("settle shard receipt");
     }
 
     let retrieved = retrieve_shards(&shard_store, &manifest, &[0, 1, 2]);
-    assert_eq!(reconstruct_xor_2_1(&manifest, &retrieved).expect("reconstruct"), file);
+    assert_eq!(
+        reconstruct_xor_2_1(&manifest, &retrieved).expect("reconstruct"),
+        file
+    );
     assert_eq!(ledger.user_balance(&user), 70);
     assert_eq!(ledger.worker_balance(&storage.identity.node_id), 30);
 }

@@ -1,9 +1,0 @@
-id: stream/06-missing-seq-reject
-suite: stream
-validator: validate_stream_append
-version: 1
-priority: mandatory
-description: event without sequence is structurally invalid
-tags:
-- stream
-- validate_stream_append

@@ -1,9 +1,0 @@
-id: object/23-descriptor-missing-canonical-digest-reject
-suite: object
-validator: validate_object
-version: 1
-priority: mandatory
-description: object descriptor must carry a canonical digest
-tags:
-- object
-- validate_object

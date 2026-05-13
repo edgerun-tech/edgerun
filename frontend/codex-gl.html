@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex GL UI</title>
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #090b0e;
+    }
+
+    canvas {
+      width: 100vw;
+      height: 100vh;
+      display: block;
+    }
+
+    .status {
+      position: fixed;
+      left: 14px;
+      bottom: 12px;
+      color: rgba(240, 246, 252, .72);
+      font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+<canvas id="codex"></canvas>
+<div class="status" id="status">loading wasm...</div>
+<script type="module">
+const vertexSource = `#version 300 es
+layout(location = 0) in vec2 a_pos;
+uniform vec2 u_screen;
+uniform vec4 u_rect;
+out vec2 v_local;
+out vec2 v_size;
+void main() {
+  vec2 px = u_rect.xy + a_pos * u_rect.zw;
+  vec2 ndc = vec2(px.x / u_screen.x * 2.0 - 1.0, 1.0 - px.y / u_screen.y * 2.0);
+  gl_Position = vec4(ndc, 0.0, 1.0);
+  v_local = a_pos * u_rect.zw;
+  v_size = u_rect.zw;
+}`;
+
+const fragmentSource = `#version 300 es
+precision highp float;
+in vec2 v_local;
+in vec2 v_size;
+out vec4 out_color;
+uniform vec4 u_color;
+uniform float u_radius;
+uniform float u_shadow;
+uniform int u_mode;
+float rounded_box(vec2 p, vec2 b, float r) {
+  vec2 q = abs(p) - b + vec2(r);
+  return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r;
+}
+void main() {
+  vec2 p = v_local - v_size * 0.5;
+  float d = rounded_box(p, v_size * 0.5, u_radius);
+  float aa = max(fwidth(d), 0.75);
+  float alpha = 1.0 - smoothstep(0.0, aa, d);
+  if (u_mode == 1) {
+    float sd = rounded_box(p - vec2(0.0, -u_shadow * 0.18), v_size * 0.5, u_radius + u_shadow * 0.35);
+    float blur = max(u_shadow, 1.0);
+    alpha = 1.0 - smoothstep(-blur, blur, sd);
+    out_color = vec4(u_color.rgb, u_color.a * alpha * 0.28);
+  } else if (u_mode == 2) {
+    float inner = rounded_box(p, v_size * 0.5 - vec2(1.25), max(u_radius - 1.25, 0.0));
+    float border = (1.0 - smoothstep(0.0, aa, d)) * smoothstep(0.0, aa, inner);
+    out_color = vec4(u_color.rgb, u_color.a * border);
+  } else {
+    out_color = vec4(u_color.rgb, u_color.a * alpha);
+  }
+}`;
+
+const textVertexSource = `#version 300 es
+layout(location = 0) in vec4 a_data;
+uniform vec2 u_screen;
+out vec2 v_uv;
+void main() {
+  vec2 px = a_data.xy;
+  vec2 ndc = vec2(px.x / u_screen.x * 2.0 - 1.0, 1.0 - px.y / u_screen.y * 2.0);
+  gl_Position = vec4(ndc, 0.0, 1.0);
+  v_uv = a_data.zw;
+}`;
+
+const textFragmentSource = `#version 300 es
+precision highp float;
+in vec2 v_uv;
+out vec4 out_color;
+uniform sampler2D u_tex;
+uniform vec4 u_color;
+void main() {
+  float a = texture(u_tex, v_uv).r;
+  out_color = vec4(u_color.rgb, u_color.a * a);
+}`;
+
+const canvas = document.getElementById("codex");
+const statusEl = document.getElementById("status");
+const gl = canvas.getContext("webgl2", { antialias: true, alpha: false });
+if (!gl) throw new Error("WebGL2 is required");
+
+function shader(type, source) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, source);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+    throw new Error(gl.getShaderInfoLog(s));
+  }
+  return s;
+}
+
+const program = gl.createProgram();
+gl.attachShader(program, shader(gl.VERTEX_SHADER, vertexSource));
+gl.attachShader(program, shader(gl.FRAGMENT_SHADER, fragmentSource));
+gl.linkProgram(program);
+if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+  throw new Error(gl.getProgramInfoLog(program));
+}
+
+const vao = gl.createVertexArray();
+gl.bindVertexArray(vao);
+const vbo = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+  0, 0, 1, 0, 1, 1,
+  0, 0, 1, 1, 0, 1,
+]), gl.STATIC_DRAW);
+gl.enableVertexAttribArray(0);
+gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 8, 0);
+
+const uniforms = {
+  screen: gl.getUniformLocation(program, "u_screen"),
+  rect: gl.getUniformLocation(program, "u_rect"),
+  color: gl.getUniformLocation(program, "u_color"),
+  radius: gl.getUniformLocation(program, "u_radius"),
+  mode: gl.getUniformLocation(program, "u_mode"),
+  shadow: gl.getUniformLocation(program, "u_shadow"),
+};
+
+const wasm = await WebAssembly.instantiateStreaming(fetch("./codex_gl_web.wasm"), {});
+const api = wasm.instance.exports;
+
+const textProgram = gl.createProgram();
+gl.attachShader(textProgram, shader(gl.VERTEX_SHADER, textVertexSource));
+gl.attachShader(textProgram, shader(gl.FRAGMENT_SHADER, textFragmentSource));
+gl.linkProgram(textProgram);
+if (!gl.getProgramParameter(textProgram, gl.LINK_STATUS)) {
+  throw new Error(gl.getProgramInfoLog(textProgram));
+}
+
+const textVao = gl.createVertexArray();
+gl.bindVertexArray(textVao);
+const textVbo = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, textVbo);
+gl.enableVertexAttribArray(0);
+gl.vertexAttribPointer(0, 4, gl.FLOAT, false, 16, 0);
+const textUniforms = {
+  screen: gl.getUniformLocation(textProgram, "u_screen"),
+  color: gl.getUniformLocation(textProgram, "u_color"),
+  tex: gl.getUniformLocation(textProgram, "u_tex"),
+};
+
+const atlasW = api.codex_gl_font_atlas_width();
+const atlasH = api.codex_gl_font_atlas_height();
+const atlasPtr = api.codex_gl_font_atlas_ptr();
+const atlasBytes = new Uint8Array(api.memory.buffer, atlasPtr, atlasW * atlasH);
+const textTexture = gl.createTexture();
+gl.bindTexture(gl.TEXTURE_2D, textTexture);
+gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, atlasW, atlasH, 0, gl.RED, gl.UNSIGNED_BYTE, atlasBytes);
+
+statusEl.textContent = "wasm scene + WebGL2";
+
+function resize() {
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const width = Math.floor(canvas.clientWidth * dpr);
+  const height = Math.floor(canvas.clientHeight * dpr);
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
+  }
+  return { width, height };
+}
+
+function draw(t) {
+  const { width, height } = resize();
+  const thinking = Math.floor(t / 800) % 2;
+  const count = api.codex_gl_build_scene(width, height, thinking);
+  gl.viewport(0, 0, width, height);
+  gl.clearColor(api.codex_gl_clear_r(), api.codex_gl_clear_g(), api.codex_gl_clear_b(), api.codex_gl_clear_a());
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  gl.useProgram(program);
+  gl.bindVertexArray(vao);
+  gl.uniform2f(uniforms.screen, width, height);
+
+  for (let i = 0; i < count; i++) {
+    gl.uniform4f(
+      uniforms.rect,
+      api.codex_gl_rect_x(i),
+      api.codex_gl_rect_y(i),
+      api.codex_gl_rect_w(i),
+      api.codex_gl_rect_h(i),
+    );
+    gl.uniform4f(
+      uniforms.color,
+      api.codex_gl_rect_r(i),
+      api.codex_gl_rect_g(i),
+      api.codex_gl_rect_b(i),
+      api.codex_gl_rect_a(i),
+    );
+    gl.uniform1f(uniforms.radius, api.codex_gl_rect_radius(i));
+    gl.uniform1i(uniforms.mode, api.codex_gl_rect_mode(i));
+    gl.uniform1f(uniforms.shadow, api.codex_gl_rect_shadow(i));
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+  }
+
+  const textCount = api.codex_gl_text_quad_count();
+  gl.useProgram(textProgram);
+  gl.bindVertexArray(textVao);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, textTexture);
+  gl.uniform1i(textUniforms.tex, 0);
+  gl.uniform2f(textUniforms.screen, width, height);
+  for (let i = 0; i < textCount; i++) {
+    const x = api.codex_gl_text_x(i);
+    const y = api.codex_gl_text_y(i);
+    const w = api.codex_gl_text_w(i);
+    const h = api.codex_gl_text_h(i);
+    const u0 = api.codex_gl_text_u0(i);
+    const v0 = api.codex_gl_text_v0(i);
+    const u1 = api.codex_gl_text_u1(i);
+    const v1 = api.codex_gl_text_v1(i);
+    gl.uniform4f(
+      textUniforms.color,
+      api.codex_gl_text_r(i),
+      api.codex_gl_text_g(i),
+      api.codex_gl_text_b(i),
+      api.codex_gl_text_a(i),
+    );
+    gl.bindBuffer(gl.ARRAY_BUFFER, textVbo);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+      x, y, u0, v0,
+      x + w, y, u1, v0,
+      x + w, y + h, u1, v1,
+      x, y, u0, v0,
+      x + w, y + h, u1, v1,
+      x, y + h, u0, v1,
+    ]), gl.DYNAMIC_DRAW);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+  }
+  requestAnimationFrame(draw);
+}
+
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>

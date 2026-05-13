@@ -1,6 +1,0 @@
-assurance_claim:
-  subject_node: node_server
-  attester: user_bob
-  assurance_class: ASSURANCE_CLASS_ATTESTED_RUNTIME
-  issued_at: '2030-01-01T00:00:00Z'
-  expires_at: '2030-01-02T00:00:00Z'

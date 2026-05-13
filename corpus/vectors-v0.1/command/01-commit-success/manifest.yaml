@@ -1,9 +1,0 @@
-id: command/01-commit-success
-suite: command
-validator: validate_command
-version: 1
-priority: mandatory
-description: authorized command for this node is committed
-tags:
-- command
-- validate_command
