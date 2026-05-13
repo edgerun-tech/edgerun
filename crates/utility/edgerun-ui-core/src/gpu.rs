@@ -355,6 +355,505 @@ impl Default for ChatShellMetrics {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UnifiedContactKind {
+    Person,
+    CodexClient,
+    Node,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct UnifiedContact<'a> {
+    pub name: &'a str,
+    pub detail: &'a str,
+    pub kind: UnifiedContactKind,
+    pub unread: u16,
+    pub online: bool,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct UnifiedMessage<'a> {
+    pub author: &'a str,
+    pub body: &'a str,
+    pub outgoing: bool,
+    pub accent: Color4,
+}
+
+#[derive(Clone, Debug)]
+pub struct UnifiedChatState<'a> {
+    pub title: &'a str,
+    pub subtitle: &'a str,
+    pub contacts: &'a [UnifiedContact<'a>],
+    pub selected_contact: usize,
+    pub messages: &'a [UnifiedMessage<'a>],
+    pub composer_placeholder: &'a str,
+    pub connected: bool,
+}
+
+impl<'a> UnifiedChatState<'a> {
+    pub fn demo(codex_active: bool) -> Self {
+        const ACTIVE_CONTACTS: &[UnifiedContact<'static>] = &[
+            UnifiedContact {
+                name: "Ken",
+                detail: "identity contact",
+                kind: UnifiedContactKind::Person,
+                unread: 0,
+                online: true,
+            },
+            UnifiedContact {
+                name: "Codex native",
+                detail: "local agent client",
+                kind: UnifiedContactKind::CodexClient,
+                unread: 2,
+                online: true,
+            },
+            UnifiedContact {
+                name: "Codex WebGL",
+                detail: "browser wasm client",
+                kind: UnifiedContactKind::CodexClient,
+                unread: 0,
+                online: true,
+            },
+            UnifiedContact {
+                name: "nodes.edgerun.tech",
+                detail: "admission and relay",
+                kind: UnifiedContactKind::Node,
+                unread: 0,
+                online: true,
+            },
+            UnifiedContact {
+                name: "Family admission",
+                detail: "policy source",
+                kind: UnifiedContactKind::Node,
+                unread: 0,
+                online: false,
+            },
+        ];
+        const IDLE_CONTACTS: &[UnifiedContact<'static>] = &[
+            UnifiedContact {
+                name: "Ken",
+                detail: "identity contact",
+                kind: UnifiedContactKind::Person,
+                unread: 0,
+                online: true,
+            },
+            UnifiedContact {
+                name: "Codex native",
+                detail: "local agent client",
+                kind: UnifiedContactKind::CodexClient,
+                unread: 2,
+                online: true,
+            },
+            UnifiedContact {
+                name: "Codex WebGL",
+                detail: "browser wasm client",
+                kind: UnifiedContactKind::CodexClient,
+                unread: 0,
+                online: false,
+            },
+            UnifiedContact {
+                name: "nodes.edgerun.tech",
+                detail: "admission and relay",
+                kind: UnifiedContactKind::Node,
+                unread: 0,
+                online: true,
+            },
+            UnifiedContact {
+                name: "Family admission",
+                detail: "policy source",
+                kind: UnifiedContactKind::Node,
+                unread: 0,
+                online: false,
+            },
+        ];
+        const MESSAGES: &[UnifiedMessage<'static>] = &[
+            UnifiedMessage {
+                author: "Ken",
+                body: "Codex clients should show up as contacts, not as a separate product surface.",
+                outgoing: true,
+                accent: palette::ACCENT,
+            },
+            UnifiedMessage {
+                author: "Codex native",
+                body: "I can live in the same contact book as people and node instances. The thread decides what capabilities I can use.",
+                outgoing: false,
+                accent: palette::VIOLET,
+            },
+            UnifiedMessage {
+                author: "nodes.edgerun.tech",
+                body: "Relay route is available. Messages remain recipient encrypted before they reach transport.",
+                outgoing: false,
+                accent: palette::GREEN,
+            },
+        ];
+
+        Self {
+            title: "EdgeRun Chat",
+            subtitle: "contacts, Codex clients, and nodes",
+            contacts: if codex_active {
+                ACTIVE_CONTACTS
+            } else {
+                IDLE_CONTACTS
+            },
+            selected_contact: 1,
+            messages: MESSAGES,
+            composer_placeholder: "Message Codex native...",
+            connected: codex_active,
+        }
+    }
+}
+
+pub fn build_unified_chat_shell(scene: &mut GpuScene, width: f32, height: f32, codex_active: bool) {
+    let state = UnifiedChatState::demo(codex_active);
+    build_unified_chat_shell_impl(
+        scene,
+        width,
+        height,
+        &state,
+        #[cfg(feature = "fontdue-text")]
+        None,
+    );
+}
+
+#[cfg(feature = "fontdue-text")]
+pub fn build_unified_chat_shell_with_font(
+    scene: &mut GpuScene,
+    atlas: &FontAtlas,
+    width: f32,
+    height: f32,
+    state: &UnifiedChatState<'_>,
+) {
+    build_unified_chat_shell_impl(scene, width, height, state, Some(atlas));
+}
+
+fn build_unified_chat_shell_impl(
+    scene: &mut GpuScene,
+    width: f32,
+    height: f32,
+    state: &UnifiedChatState<'_>,
+    #[cfg(feature = "fontdue-text")] atlas: Option<&FontAtlas>,
+) {
+    scene.clear = palette::BG;
+    scene.clear_rects();
+    let m = ChatShellMetrics::default();
+    let w = width.max(360.0);
+    let h = height.max(320.0);
+    let sidebar_w = if w < 760.0 { 0.0 } else { m.sidebar_w + 28.0 };
+    let main_x = sidebar_w;
+    let main_w = w - sidebar_w;
+
+    if sidebar_w > 0.0 {
+        panel(scene, 0.0, 0.0, sidebar_w, h, 0.0, palette::SIDEBAR);
+        scene.push_rect(GpuRect::fill(
+            0.0,
+            0.0,
+            sidebar_w,
+            4.0,
+            0.0,
+            palette::ACCENT,
+        ));
+        push_label(
+            scene,
+            #[cfg(feature = "fontdue-text")]
+            atlas,
+            24.0,
+            20.0,
+            state.title,
+            3.0,
+            palette::TEXT,
+        );
+        push_label(
+            scene,
+            #[cfg(feature = "fontdue-text")]
+            atlas,
+            24.0,
+            50.0,
+            state.subtitle,
+            2.0,
+            palette::MUTED,
+        );
+        draw_pill(
+            scene,
+            #[cfg(feature = "fontdue-text")]
+            atlas,
+            sidebar_w - 104.0,
+            22.0,
+            78.0,
+            if state.connected { "relay" } else { "local" },
+            if state.connected {
+                palette::GREEN
+            } else {
+                palette::AMBER
+            },
+        );
+        scene.push_rect(GpuRect::fill(
+            sidebar_w - 1.0,
+            0.0,
+            1.0,
+            h,
+            0.0,
+            palette::BORDER,
+        ));
+
+        for (index, contact) in state.contacts.iter().enumerate() {
+            let y = 88.0 + index as f32 * 68.0;
+            let selected = index == state.selected_contact;
+            draw_contact_row(
+                scene,
+                #[cfg(feature = "fontdue-text")]
+                atlas,
+                16.0,
+                y,
+                sidebar_w - 32.0,
+                contact,
+                selected,
+            );
+        }
+    }
+
+    panel(scene, main_x, 0.0, main_w, m.topbar_h, 0.0, palette::TOPBAR);
+    let active = state
+        .contacts
+        .get(state.selected_contact)
+        .or_else(|| state.contacts.first());
+    let active_name = active.map(|contact| contact.name).unwrap_or("Unified chat");
+    let active_detail = active
+        .map(|contact| contact.detail)
+        .unwrap_or("contact thread");
+    push_label(
+        scene,
+        #[cfg(feature = "fontdue-text")]
+        atlas,
+        main_x + 20.0,
+        14.0,
+        active_name,
+        2.0,
+        palette::TEXT,
+    );
+    push_label(
+        scene,
+        #[cfg(feature = "fontdue-text")]
+        atlas,
+        main_x + 20.0,
+        35.0,
+        active_detail,
+        2.0,
+        palette::MUTED,
+    );
+    draw_pill(
+        scene,
+        #[cfg(feature = "fontdue-text")]
+        atlas,
+        main_x + main_w - 322.0,
+        15.0,
+        132.0,
+        "recipient sealed",
+        palette::GREEN,
+    );
+    draw_pill(
+        scene,
+        #[cfg(feature = "fontdue-text")]
+        atlas,
+        main_x + main_w - 178.0,
+        15.0,
+        154.0,
+        "identity routed",
+        palette::ACCENT,
+    );
+    scene.push_rect(GpuRect::fill(
+        main_x,
+        m.topbar_h - 1.0,
+        main_w,
+        1.0,
+        0.0,
+        palette::BORDER,
+    ));
+
+    let transcript_top = m.topbar_h + m.pad;
+    let transcript_x = main_x + m.pad;
+    let transcript_w = main_w - m.pad * 2.0;
+    let rail_w = if transcript_w > 820.0 { 220.0 } else { 0.0 };
+    let message_area_w = transcript_w - if rail_w > 0.0 { rail_w + 18.0 } else { 0.0 };
+    let message_w = (message_area_w * 0.82).clamp(220.0, 760.0);
+    let transcript_limit = h - m.composer_h - m.pad * 2.0;
+    let mut message_y = transcript_top;
+
+    for message in state.messages {
+        let x = if message.outgoing {
+            transcript_x + message_area_w - message_w
+        } else {
+            transcript_x
+        };
+        let fill = if message.outgoing {
+            palette::USER
+        } else {
+            palette::ASSISTANT
+        };
+        let height = estimate_message_height(
+            message.body,
+            (message_w - 42.0).max(120.0),
+            4,
+            #[cfg(feature = "fontdue-text")]
+            atlas,
+        );
+        if message_y + height > transcript_limit {
+            break;
+        }
+        let drawn = draw_message(
+            scene,
+            #[cfg(feature = "fontdue-text")]
+            atlas,
+            x,
+            message_y,
+            message_w,
+            message.author,
+            message.body,
+            fill,
+            message.accent,
+        );
+        message_y += drawn + 16.0;
+    }
+
+    if rail_w > 0.0 {
+        let rail_x = transcript_x + transcript_w - rail_w;
+        soft_card(
+            scene,
+            rail_x,
+            transcript_top,
+            rail_w,
+            170.0,
+            12.0,
+            palette::PANEL,
+        );
+        push_label(
+            scene,
+            #[cfg(feature = "fontdue-text")]
+            atlas,
+            rail_x + 16.0,
+            transcript_top + 18.0,
+            "Thread policy",
+            2.0,
+            palette::TEXT,
+        );
+        draw_pill(
+            scene,
+            #[cfg(feature = "fontdue-text")]
+            atlas,
+            rail_x + 16.0,
+            transcript_top + 50.0,
+            132.0,
+            "2 recipients",
+            palette::ACCENT,
+        );
+        draw_pill(
+            scene,
+            #[cfg(feature = "fontdue-text")]
+            atlas,
+            rail_x + 16.0,
+            transcript_top + 84.0,
+            158.0,
+            "codex tools scoped",
+            palette::VIOLET,
+        );
+        draw_pill(
+            scene,
+            #[cfg(feature = "fontdue-text")]
+            atlas,
+            rail_x + 16.0,
+            transcript_top + 118.0,
+            140.0,
+            "relay admitted",
+            palette::GREEN,
+        );
+    }
+
+    let composer = (
+        main_x + m.pad,
+        h - m.composer_h - m.pad,
+        main_w - m.pad * 2.0,
+        m.composer_h,
+    );
+    soft_card(
+        scene,
+        composer.0,
+        composer.1,
+        composer.2,
+        composer.3,
+        16.0,
+        palette::COMPOSER,
+    );
+    scene.push_rect(GpuRect::border(
+        composer.0,
+        composer.1,
+        composer.2,
+        composer.3,
+        16.0,
+        if state.connected {
+            palette::ACCENT
+        } else {
+            palette::BORDER
+        },
+    ));
+    push_label(
+        scene,
+        #[cfg(feature = "fontdue-text")]
+        atlas,
+        composer.0 + 22.0,
+        composer.1 + 24.0,
+        state.composer_placeholder,
+        2.0,
+        palette::MUTED,
+    );
+    draw_pill(
+        scene,
+        #[cfg(feature = "fontdue-text")]
+        atlas,
+        composer.0 + 20.0,
+        composer.1 + composer.3 - 34.0,
+        92.0,
+        "encrypted",
+        palette::GREEN,
+    );
+    draw_pill(
+        scene,
+        #[cfg(feature = "fontdue-text")]
+        atlas,
+        composer.0 + 122.0,
+        composer.1 + composer.3 - 34.0,
+        88.0,
+        "contact",
+        palette::ACCENT,
+    );
+    draw_pill(
+        scene,
+        #[cfg(feature = "fontdue-text")]
+        atlas,
+        composer.0 + 220.0,
+        composer.1 + composer.3 - 34.0,
+        112.0,
+        "codex tools",
+        palette::VIOLET,
+    );
+    scene.push_rect(GpuRect::fill(
+        composer.0 + composer.2 - 58.0,
+        composer.1 + composer.3 - 56.0,
+        40.0,
+        38.0,
+        12.0,
+        palette::ACCENT,
+    ));
+    push_label(
+        scene,
+        #[cfg(feature = "fontdue-text")]
+        atlas,
+        composer.0 + composer.2 - 47.0,
+        composer.1 + composer.3 - 45.0,
+        ">",
+        3.0,
+        palette::ACCENT_TEXT,
+    );
+}
+
 pub fn build_codex_chat_shell(scene: &mut GpuScene, width: f32, height: f32, thinking: bool) {
     build_codex_chat_shell_impl(
         scene,
@@ -804,6 +1303,106 @@ fn draw_pill(
         2.0,
         color,
     );
+}
+
+fn draw_contact_row(
+    scene: &mut GpuScene,
+    #[cfg(feature = "fontdue-text")] atlas: Option<&FontAtlas>,
+    x: f32,
+    y: f32,
+    w: f32,
+    contact: &UnifiedContact<'_>,
+    selected: bool,
+) {
+    soft_card(
+        scene,
+        x,
+        y,
+        w,
+        56.0,
+        10.0,
+        if selected {
+            palette::ACTIVE_ROW
+        } else {
+            palette::ROW
+        },
+    );
+    let accent = match contact.kind {
+        UnifiedContactKind::Person => palette::ACCENT,
+        UnifiedContactKind::CodexClient => palette::VIOLET,
+        UnifiedContactKind::Node => palette::GREEN,
+    };
+    scene.push_rect(GpuRect::fill(
+        x + 14.0,
+        y + 13.0,
+        30.0,
+        30.0,
+        15.0,
+        accent.with_alpha(0.22),
+    ));
+    push_label(
+        scene,
+        #[cfg(feature = "fontdue-text")]
+        atlas,
+        x + 23.0,
+        y + 19.0,
+        contact_initial(contact.name),
+        2.0,
+        accent,
+    );
+    scene.push_rect(GpuRect::fill(
+        x + 38.0,
+        y + 36.0,
+        8.0,
+        8.0,
+        4.0,
+        if contact.online {
+            palette::GREEN
+        } else {
+            palette::MUTED
+        },
+    ));
+    push_label(
+        scene,
+        #[cfg(feature = "fontdue-text")]
+        atlas,
+        x + 56.0,
+        y + 11.0,
+        contact.name,
+        2.0,
+        if selected {
+            palette::TEXT
+        } else {
+            palette::MUTED
+        },
+    );
+    push_label(
+        scene,
+        #[cfg(feature = "fontdue-text")]
+        atlas,
+        x + 56.0,
+        y + 32.0,
+        contact.detail,
+        2.0,
+        accent,
+    );
+    if contact.unread > 0 {
+        let label = if contact.unread > 9 { "9+" } else { "new" };
+        draw_pill(
+            scene,
+            #[cfg(feature = "fontdue-text")]
+            atlas,
+            x + w - 58.0,
+            y + 14.0,
+            42.0,
+            label,
+            palette::AMBER,
+        );
+    }
+}
+
+fn contact_initial(name: &str) -> &str {
+    name.get(0..1).unwrap_or("?")
 }
 
 fn draw_message(

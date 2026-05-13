@@ -179,7 +179,9 @@ gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, atlasW, atlasH, 0, gl.RED, gl.UNSIGNED_BYTE, atlasBytes);
 
-statusEl.textContent = "wasm scene + WebGL2";
+const params = new URLSearchParams(location.search);
+const surface = params.get("surface") || "unified";
+statusEl.textContent = `${surface} wasm scene + WebGL2`;
 
 function resize() {
   const dpr = Math.max(1, window.devicePixelRatio || 1);
@@ -195,7 +197,9 @@ function resize() {
 function draw(t) {
   const { width, height } = resize();
   const thinking = Math.floor(t / 800) % 2;
-  const count = api.codex_gl_build_scene(width, height, thinking);
+  const count = surface === "codex"
+    ? api.codex_gl_build_codex_scene(width, height, thinking)
+    : api.codex_gl_build_unified_chat_scene(width, height, thinking);
   gl.viewport(0, 0, width, height);
   gl.clearColor(api.codex_gl_clear_r(), api.codex_gl_clear_g(), api.codex_gl_clear_b(), api.codex_gl_clear_a());
   gl.clear(gl.COLOR_BUFFER_BIT);

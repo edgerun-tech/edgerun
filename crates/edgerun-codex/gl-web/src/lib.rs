@@ -1,7 +1,8 @@
 use std::cell::RefCell;
 
 use edgerun_ui_core::gpu::{
-    FontAtlas, GpuScene, RectMode, build_codex_chat_shell_with_font, palette,
+    FontAtlas, GpuScene, RectMode, UnifiedChatState, build_codex_chat_shell_with_font,
+    build_unified_chat_shell_with_font, palette,
 };
 
 thread_local! {
@@ -14,10 +15,71 @@ thread_local! {
 pub extern "C" fn codex_gl_build_scene(width: f32, height: f32, thinking: u32) -> u32 {
     FONT.with(|font| {
         SCENE.with_borrow_mut(|scene| {
-            build_codex_chat_shell_with_font(scene, font, width, height, thinking != 0);
+            build_scene(
+                scene,
+                font,
+                width,
+                height,
+                thinking != 0,
+                Surface::UnifiedChat,
+            );
             scene.rects().len() as u32
         })
     })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_build_codex_scene(width: f32, height: f32, thinking: u32) -> u32 {
+    FONT.with(|font| {
+        SCENE.with_borrow_mut(|scene| {
+            build_scene(scene, font, width, height, thinking != 0, Surface::Codex);
+            scene.rects().len() as u32
+        })
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_build_unified_chat_scene(
+    width: f32,
+    height: f32,
+    connected: u32,
+) -> u32 {
+    FONT.with(|font| {
+        SCENE.with_borrow_mut(|scene| {
+            build_scene(
+                scene,
+                font,
+                width,
+                height,
+                connected != 0,
+                Surface::UnifiedChat,
+            );
+            scene.rects().len() as u32
+        })
+    })
+}
+
+#[derive(Clone, Copy)]
+enum Surface {
+    Codex,
+    UnifiedChat,
+}
+
+fn build_scene(
+    scene: &mut GpuScene,
+    font: &FontAtlas,
+    width: f32,
+    height: f32,
+    active: bool,
+    surface: Surface,
+) {
+    match surface {
+        Surface::Codex => build_codex_chat_shell_with_font(scene, font, width, height, active),
+        Surface::UnifiedChat => {
+            let state = UnifiedChatState::demo(active);
+            build_unified_chat_shell_with_font(scene, font, width, height, &state);
+        }
+    }
 }
 
 #[unsafe(no_mangle)]
