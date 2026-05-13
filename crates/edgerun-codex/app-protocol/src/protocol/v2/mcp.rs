@@ -6,6 +6,8 @@ use codex_protocol::mcp::Resource as McpResource;
 pub use codex_protocol::mcp::ResourceContent as McpResourceContent;
 use codex_protocol::mcp::ResourceTemplate as McpResourceTemplate;
 use codex_protocol::mcp::Tool as McpTool;
+use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
 use edgerun_json::Value as JsonValue;
 use edgerun_serde::Deserialize;
 use edgerun_serde::Serialize;
@@ -613,6 +615,213 @@ pub struct McpElicitationConstOption {
     pub title: String,
 }
 
+fn json_wrong_type(message: impl Into<String>) -> JsonValueError {
+    JsonValueError::WrongType(message.into())
+}
+
+fn parse_string_type(value: JsonValue) -> Result<McpElicitationStringType, JsonValueError> {
+    match String::from_json(value)?.as_str() {
+        "string" => Ok(McpElicitationStringType::String),
+        other => Err(json_wrong_type(format!(
+            "expected string type, found `{other}`"
+        ))),
+    }
+}
+
+fn parse_string_format(
+    value: Option<JsonValue>,
+) -> Result<Option<McpElicitationStringFormat>, JsonValueError> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    match String::from_json(value)?.as_str() {
+        "email" => Ok(Some(McpElicitationStringFormat::Email)),
+        "uri" => Ok(Some(McpElicitationStringFormat::Uri)),
+        "date" => Ok(Some(McpElicitationStringFormat::Date)),
+        "date-time" => Ok(Some(McpElicitationStringFormat::DateTime)),
+        other => Err(json_wrong_type(format!("unknown string format `{other}`"))),
+    }
+}
+
+fn parse_const_options(
+    values: JsonValue,
+) -> Result<Vec<McpElicitationConstOption>, JsonValueError> {
+    Vec::<JsonValue>::from_json(values)?
+        .into_iter()
+        .map(|value| {
+            let mut object = value.into_object("McpElicitationConstOption")?;
+            Ok(McpElicitationConstOption {
+                const_: object.take_required("const")?,
+                title: object.take_required("title")?,
+            })
+        })
+        .collect()
+}
+
+fn parse_mcp_elicitation_schema(value: JsonValue) -> Result<McpElicitationSchema, JsonValueError> {
+    let mut object = value.into_object("McpElicitationSchema")?;
+    let type_value = String::from_json(object.take_required("type")?)?;
+    if type_value != "object" {
+        return Err(json_wrong_type(format!(
+            "expected object schema type, found `{type_value}`"
+        )));
+    }
+    let properties = object
+        .take_required::<BTreeMap<String, JsonValue>>("properties")?
+        .into_iter()
+        .map(|(key, value)| parse_mcp_primitive_schema(value).map(|value| (key, value)))
+        .collect::<Result<BTreeMap<_, _>, _>>()?;
+    Ok(McpElicitationSchema {
+        schema_uri: object.take_optional("$schema")?,
+        type_: McpElicitationObjectType::Object,
+        properties,
+        required: object.take_optional("required")?,
+    })
+}
+
+fn parse_mcp_primitive_schema(
+    value: JsonValue,
+) -> Result<McpElicitationPrimitiveSchema, JsonValueError> {
+    let mut object = value.into_object("McpElicitationPrimitiveSchema")?;
+    let type_value = String::from_json(
+        object
+            .remove("type")
+            .ok_or_else(|| json_wrong_type("missing required field `type`"))?,
+    )?;
+    match type_value.as_str() {
+        "string" => {
+            if object.contains_key("oneOf") {
+                return Ok(McpElicitationPrimitiveSchema::Enum(
+                    McpElicitationEnumSchema::SingleSelect(
+                        McpElicitationSingleSelectEnumSchema::Titled(
+                            McpElicitationTitledSingleSelectEnumSchema {
+                                type_: McpElicitationStringType::String,
+                                title: object.take_optional("title")?,
+                                description: object.take_optional("description")?,
+                                one_of: parse_const_options(object.take_required("oneOf")?)?,
+                                default: object.take_optional("default")?,
+                            },
+                        ),
+                    ),
+                ));
+            }
+            if object.contains_key("enum") {
+                let enum_: Vec<String> = object.take_required("enum")?;
+                let title = object.take_optional("title")?;
+                let description = object.take_optional("description")?;
+                let default = object.take_optional("default")?;
+                if object.contains_key("enumNames") {
+                    return Ok(McpElicitationPrimitiveSchema::Enum(
+                        McpElicitationEnumSchema::Legacy(McpElicitationLegacyTitledEnumSchema {
+                            type_: McpElicitationStringType::String,
+                            title,
+                            description,
+                            enum_,
+                            enum_names: object.take_optional("enumNames")?,
+                            default,
+                        }),
+                    ));
+                }
+                return Ok(McpElicitationPrimitiveSchema::Enum(
+                    McpElicitationEnumSchema::SingleSelect(
+                        McpElicitationSingleSelectEnumSchema::Untitled(
+                            McpElicitationUntitledSingleSelectEnumSchema {
+                                type_: McpElicitationStringType::String,
+                                title,
+                                description,
+                                enum_,
+                                default,
+                            },
+                        ),
+                    ),
+                ));
+            }
+            Ok(McpElicitationPrimitiveSchema::String(
+                McpElicitationStringSchema {
+                    type_: McpElicitationStringType::String,
+                    title: object.take_optional("title")?,
+                    description: object.take_optional("description")?,
+                    min_length: object.take_optional("minLength")?,
+                    max_length: object.take_optional("maxLength")?,
+                    format: parse_string_format(object.remove("format"))?,
+                    default: object.take_optional("default")?,
+                },
+            ))
+        }
+        "number" | "integer" => Ok(McpElicitationPrimitiveSchema::Number(
+            McpElicitationNumberSchema {
+                type_: if type_value == "integer" {
+                    McpElicitationNumberType::Integer
+                } else {
+                    McpElicitationNumberType::Number
+                },
+                title: object.take_optional("title")?,
+                description: object.take_optional("description")?,
+                minimum: object.take_optional("minimum")?,
+                maximum: object.take_optional("maximum")?,
+                default: object.take_optional("default")?,
+            },
+        )),
+        "boolean" => Ok(McpElicitationPrimitiveSchema::Boolean(
+            McpElicitationBooleanSchema {
+                type_: McpElicitationBooleanType::Boolean,
+                title: object.take_optional("title")?,
+                description: object.take_optional("description")?,
+                default: object.take_optional("default")?,
+            },
+        )),
+        "array" => {
+            let mut items = object
+                .take_required::<JsonValue>("items")?
+                .into_object("McpElicitationArrayItems")?;
+            if items.contains_key("anyOf") || items.contains_key("oneOf") {
+                let options = items
+                    .remove("anyOf")
+                    .or_else(|| items.remove("oneOf"))
+                    .ok_or_else(|| json_wrong_type("missing enum options"))?;
+                return Ok(McpElicitationPrimitiveSchema::Enum(
+                    McpElicitationEnumSchema::MultiSelect(
+                        McpElicitationMultiSelectEnumSchema::Titled(
+                            McpElicitationTitledMultiSelectEnumSchema {
+                                type_: McpElicitationArrayType::Array,
+                                title: object.take_optional("title")?,
+                                description: object.take_optional("description")?,
+                                min_items: object.take_optional("minItems")?,
+                                max_items: object.take_optional("maxItems")?,
+                                items: McpElicitationTitledEnumItems {
+                                    any_of: parse_const_options(options)?,
+                                },
+                                default: object.take_optional("default")?,
+                            },
+                        ),
+                    ),
+                ));
+            }
+            Ok(McpElicitationPrimitiveSchema::Enum(
+                McpElicitationEnumSchema::MultiSelect(
+                    McpElicitationMultiSelectEnumSchema::Untitled(
+                        McpElicitationUntitledMultiSelectEnumSchema {
+                            type_: McpElicitationArrayType::Array,
+                            title: object.take_optional("title")?,
+                            description: object.take_optional("description")?,
+                            min_items: object.take_optional("minItems")?,
+                            max_items: object.take_optional("maxItems")?,
+                            items: McpElicitationUntitledEnumItems {
+                                type_: parse_string_type(items.take_required("type")?)?,
+                                enum_: items.take_required("enum")?,
+                            },
+                            default: object.take_optional("default")?,
+                        },
+                    ),
+                ),
+            ))
+        }
+        other => Err(json_wrong_type(format!(
+            "unknown MCP elicitation primitive type `{other}`"
+        ))),
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(tag = "mode", rename_all = "camelCase")]
 #[ts(tag = "mode")]
@@ -640,7 +849,7 @@ pub enum McpServerElicitationRequest {
 }
 
 impl TryFrom<CoreElicitationRequest> for McpServerElicitationRequest {
-    type Error = edgerun_json::Error;
+    type Error = JsonValueError;
 
     fn try_from(value: CoreElicitationRequest) -> Result<Self, Self::Error> {
         match value {
@@ -651,7 +860,7 @@ impl TryFrom<CoreElicitationRequest> for McpServerElicitationRequest {
             } => Ok(Self::Form {
                 meta,
                 message,
-                requested_schema: edgerun_json::from_serde_value(requested_schema)?,
+                requested_schema: parse_mcp_elicitation_schema(requested_schema)?,
             }),
             CoreElicitationRequest::Url {
                 meta,

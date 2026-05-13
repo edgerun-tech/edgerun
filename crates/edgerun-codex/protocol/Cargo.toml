@@ -18,7 +18,6 @@ edgerun-error = { workspace = true }
 edgerun-http = { workspace = true }
 edgerun-json = { workspace = true, features = ["serde"] }
 edgerun-locale = { workspace = true }
-edgerun-reqwest = { workspace = true }
 edgerun-time = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

@@ -700,7 +700,7 @@ fn json_files_in_recursive(dir: &Path) -> Result<Vec<PathBuf>> {
 fn read_json_value(path: &Path) -> Result<Value> {
     let content =
         fs::read_to_string(path).with_context(|| format!("Failed to read {}", path.display()))?;
-    edgerun_json::from_serde_str(&content)
+    edgerun_json::from_json_str(&content)
         .with_context(|| format!("Failed to parse {}", path.display()))
 }
 

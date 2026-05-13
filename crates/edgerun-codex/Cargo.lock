@@ -256,7 +256,6 @@ dependencies = [
  "edgerun-landlock",
  "edgerun-locale",
  "edgerun-log",
- "edgerun-reqwest",
  "edgerun-schemars",
  "edgerun-seccompiler",
  "edgerun-serde",
