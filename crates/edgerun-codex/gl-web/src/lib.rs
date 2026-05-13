@@ -1,15 +1,17 @@
 use std::cell::RefCell;
 
 use edgerun_ui_core::gpu::{
-    FontAtlas, GpuRect, GpuScene, HitKind, RectMode, TextQuad, UiColorScheme, UnifiedChatState,
-    build_unified_chat_shell_with_font, palette,
+    FontAtlas, GpuHit, GpuRect, GpuScene, HitKind, RectMode, TextQuad, UiAction, UiColorScheme,
+    UiEvent, UiKey, UiRuntimeState, UnifiedChatState, build_unified_chat_shell_with_font, palette,
 };
 
 thread_local! {
     static SCENE: RefCell<GpuScene> = RefCell::new(GpuScene::new(palette::BG));
+    static UI_STATE: RefCell<UiRuntimeState> = RefCell::new(UiRuntimeState::default());
     static PACKED_RECTS: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
     static PACKED_TEXT_VERTICES: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
     static PACKED_HITS: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
+    static INPUT_BYTES: RefCell<Vec<u8>> = RefCell::new(vec![0; 4096]);
     static SELECTED_CONTACT: RefCell<usize> = const { RefCell::new(0) };
     static COLOR_SCHEME: RefCell<UiColorScheme> = const { RefCell::new(UiColorScheme::Dark) };
     static FONT: FontAtlas = FontAtlas::from_font_bytes(include_bytes!(env!("CODEX_GL_INTER_FONT")), 18.0)
@@ -161,23 +163,115 @@ pub extern "C" fn codex_gl_set_selected_contact(index: u32) {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn codex_gl_handle_pointer(x: f32, y: f32) -> u32 {
+    let changed = handle_ui_event(UiEvent::PointerDown { x, y }) != 0;
+    let changed = handle_ui_event(UiEvent::PointerUp { x, y }) != 0 || changed;
+    changed as u32
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_handle_pointer_down(x: f32, y: f32) -> u32 {
+    handle_ui_event(UiEvent::PointerDown { x, y })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_handle_pointer_move(x: f32, y: f32) -> u32 {
+    handle_ui_event(UiEvent::PointerMove { x, y })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_handle_pointer_up(x: f32, y: f32) -> u32 {
+    handle_ui_event(UiEvent::PointerUp { x, y })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_handle_wheel(x: f32, y: f32, delta_y: f32) -> u32 {
+    handle_ui_event(UiEvent::Wheel { x, y, delta_y })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_handle_key(code: u32) -> u32 {
+    handle_ui_event(UiEvent::KeyDown {
+        key: key_from_code(code),
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_handle_blur() -> u32 {
+    handle_ui_event(UiEvent::Blur)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_input_buffer_ptr() -> *mut u8 {
+    INPUT_BYTES.with_borrow_mut(|bytes| bytes.as_mut_ptr())
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_input_buffer_capacity() -> u32 {
+    INPUT_BYTES.with_borrow(|bytes| bytes.len() as u32)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_handle_text_input(len: u32) -> u32 {
+    let value = INPUT_BYTES.with_borrow(|bytes| {
+        let len = (len as usize).min(bytes.len());
+        core::str::from_utf8(&bytes[..len])
+            .unwrap_or("")
+            .to_string()
+    });
+    handle_ui_event(UiEvent::TextInput(value))
+}
+
+fn handle_ui_event(event: UiEvent) -> u32 {
     SCENE.with_borrow(|scene| {
-        let Some(hit) = scene.hit_test(x, y) else {
-            return 0;
-        };
-        if !matches!(hit.kind, HitKind::Contact) {
-            return 0;
-        }
-        SELECTED_CONTACT.with_borrow_mut(|selected| {
-            let next = hit.id as usize;
-            if *selected == next {
-                0
-            } else {
-                *selected = next;
-                1
-            }
+        UI_STATE.with_borrow_mut(|state| {
+            let action = state.handle_event(scene, event);
+            ui_action_dirty(action)
         })
     })
+}
+
+fn ui_action_dirty(action: UiAction) -> u32 {
+    match action {
+        UiAction::None | UiAction::Hovered(_) => 0,
+        UiAction::Activated(hit) => activate_hit(hit),
+        UiAction::TabSelected { .. }
+        | UiAction::Toggled { .. }
+        | UiAction::SliderChanged { .. }
+        | UiAction::ScrollChanged { .. }
+        | UiAction::TextChanged { .. }
+        | UiAction::Focused(_)
+        | UiAction::Submitted { .. }
+        | UiAction::Cancelled => 1,
+    }
+}
+
+fn activate_hit(hit: GpuHit) -> u32 {
+    if !matches!(hit.kind, HitKind::Contact) {
+        return 1;
+    }
+    SELECTED_CONTACT.with_borrow_mut(|selected| {
+        let next = hit.id as usize;
+        if *selected == next {
+            0
+        } else {
+            *selected = next;
+            1
+        }
+    })
+}
+
+fn key_from_code(code: u32) -> UiKey {
+    match code {
+        8 => UiKey::Backspace,
+        9 => UiKey::Tab,
+        13 => UiKey::Enter,
+        27 => UiKey::Escape,
+        37 => UiKey::ArrowLeft,
+        38 => UiKey::ArrowUp,
+        39 => UiKey::ArrowRight,
+        40 => UiKey::ArrowDown,
+        other => UiKey::Other(other),
+    }
 }
 
 #[unsafe(no_mangle)]

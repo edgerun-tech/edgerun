@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use edgerun_ui_core::gpu::gl::GlRenderer;
 use edgerun_ui_core::gpu::{
-    FontAtlas, GpuScene, UiColorScheme, UnifiedChatState, build_unified_chat_shell_with_font,
-    palette,
+    FontAtlas, GpuScene, UiColorScheme, UiEvent, UiKey, UiRuntimeState, UnifiedChatState,
+    build_unified_chat_shell_with_font, palette,
 };
 
 const SDL_INIT_VIDEO: u32 = 0x0000_0020;
@@ -16,6 +16,10 @@ const SDL_WINDOW_SHOWN: u32 = 0x0000_0004;
 const SDL_WINDOW_RESIZABLE: u32 = 0x0000_0020;
 const SDL_QUIT: u32 = 0x100;
 const SDL_KEYDOWN: u32 = 0x300;
+const SDL_MOUSEMOTION: u32 = 0x400;
+const SDL_MOUSEBUTTONDOWN: u32 = 0x401;
+const SDL_MOUSEBUTTONUP: u32 = 0x402;
+const SDL_MOUSEWHEEL: u32 = 0x403;
 const SDL_WINDOWEVENT: u32 = 0x200;
 const SDL_WINDOWEVENT_RESIZED: u8 = 0x05;
 const SDL_GL_CONTEXT_MAJOR_VERSION: c_int = 17;
@@ -54,6 +58,18 @@ impl SdlEvent {
 
     fn key_sym(&self) -> i32 {
         i32::from_ne_bytes([self.data[20], self.data[21], self.data[22], self.data[23]])
+    }
+
+    fn mouse_x(&self) -> f32 {
+        i32::from_ne_bytes([self.data[20], self.data[21], self.data[22], self.data[23]]) as f32
+    }
+
+    fn mouse_y(&self) -> f32 {
+        i32::from_ne_bytes([self.data[24], self.data[25], self.data[26], self.data[27]]) as f32
+    }
+
+    fn wheel_y(&self) -> f32 {
+        i32::from_ne_bytes([self.data[24], self.data[25], self.data[26], self.data[27]]) as f32
     }
 }
 
@@ -137,6 +153,7 @@ fn run() -> Result<(), String> {
     let atlas = FontAtlas::load_inter(18.0)?;
     let renderer = unsafe { GlRenderer::new_current_context_with_font(&atlas)? };
     let mut scene = GpuScene::new(palette::BG);
+    let mut ui_state = UiRuntimeState::default();
     let mut running = true;
     let mut frames = 0u32;
     let mut scene_dirty = true;
@@ -145,7 +162,60 @@ fn run() -> Result<(), String> {
         while unsafe { SDL_PollEvent(&mut event) } != 0 {
             match event.event_type() {
                 SDL_QUIT => running = false,
-                SDL_KEYDOWN if event.key_sym() == SDLK_ESCAPE => running = false,
+                SDL_KEYDOWN if event.key_sym() == SDLK_ESCAPE => {
+                    running = false;
+                    let _ = ui_state.handle_event(&scene, UiEvent::KeyDown { key: UiKey::Escape });
+                }
+                SDL_KEYDOWN => {
+                    ui_state.handle_event(
+                        &scene,
+                        UiEvent::KeyDown {
+                            key: sdl_key(event.key_sym()),
+                        },
+                    );
+                    scene_dirty = true;
+                }
+                SDL_MOUSEBUTTONDOWN => {
+                    ui_state.handle_event(
+                        &scene,
+                        UiEvent::PointerDown {
+                            x: event.mouse_x(),
+                            y: event.mouse_y(),
+                        },
+                    );
+                    scene_dirty = true;
+                }
+                SDL_MOUSEMOTION => {
+                    ui_state.handle_event(
+                        &scene,
+                        UiEvent::PointerMove {
+                            x: event.mouse_x(),
+                            y: event.mouse_y(),
+                        },
+                    );
+                    scene_dirty = true;
+                }
+                SDL_MOUSEBUTTONUP => {
+                    ui_state.handle_event(
+                        &scene,
+                        UiEvent::PointerUp {
+                            x: event.mouse_x(),
+                            y: event.mouse_y(),
+                        },
+                    );
+                    scene_dirty = true;
+                }
+                SDL_MOUSEWHEEL => {
+                    ui_state.handle_event(
+                        &scene,
+                        UiEvent::Wheel {
+                            x: ui_state.hovered().map(|hit| hit.x).unwrap_or(0.0),
+                            y: ui_state.hovered().map(|hit| hit.y).unwrap_or(0.0),
+                            delta_y: -event.wheel_y() * 120.0,
+                        },
+                    );
+                    scene_dirty = true;
+                }
                 SDL_WINDOWEVENT if event.window_event() == SDL_WINDOWEVENT_RESIZED => {
                     width = event.data1().max(360);
                     height = event.data2().max(320);
@@ -175,6 +245,20 @@ fn run() -> Result<(), String> {
         thread::sleep(Duration::from_millis(1));
     }
     Ok(())
+}
+
+fn sdl_key(sym: i32) -> UiKey {
+    match sym {
+        8 => UiKey::Backspace,
+        9 => UiKey::Tab,
+        13 => UiKey::Enter,
+        27 => UiKey::Escape,
+        1073741904 => UiKey::ArrowLeft,
+        1073741903 => UiKey::ArrowRight,
+        1073741906 => UiKey::ArrowUp,
+        1073741905 => UiKey::ArrowDown,
+        other => UiKey::Other(other as u32),
+    }
 }
 
 fn build_surface(
@@ -212,11 +296,15 @@ impl Args {
                 }
                 "--dump-scene" => parsed.dump_scene = true,
                 "--scheme" => {
-                    let value = args.next().ok_or("--scheme requires dark, light, or terminal")?;
+                    let value = args
+                        .next()
+                        .ok_or("--scheme requires dark, light, or terminal")?;
                     parsed.scheme = parse_scheme(&value)?;
                 }
                 "--help" | "-h" => {
-                    println!("Usage: codex-gl-ui [--frames N] [--dump-scene] [--scheme dark|light|terminal]");
+                    println!(
+                        "Usage: codex-gl-ui [--frames N] [--dump-scene] [--scheme dark|light|terminal]"
+                    );
                     std::process::exit(0);
                 }
                 other => return Err(format!("unknown argument: {other}")),

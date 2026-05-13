@@ -115,6 +115,7 @@ void main() {
 }`;
 
 const canvas = document.getElementById("codex");
+canvas.tabIndex = 0;
 const statusEl = document.getElementById("status");
 const gl = canvas.getContext("webgl2", { antialias: true, alpha: false });
 if (!gl) throw new Error("WebGL2 is required");
@@ -264,15 +265,61 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
-canvas.addEventListener("click", (event) => {
+const textEncoder = new TextEncoder();
+
+function canvasPoint(event) {
   const dpr = Math.max(1, window.devicePixelRatio || 1);
   const rect = canvas.getBoundingClientRect();
-  const x = (event.clientX - rect.left) * dpr;
-  const y = (event.clientY - rect.top) * dpr;
-  if (api.codex_gl_handle_pointer(x, y) !== 0) {
+  return {
+    x: (event.clientX - rect.left) * dpr,
+    y: (event.clientY - rect.top) * dpr,
+  };
+}
+
+function markDirty(changed) {
+  if (changed !== 0) {
     sceneDirty = true;
     scheduleFrame();
   }
+}
+
+canvas.addEventListener("pointerdown", (event) => {
+  canvas.focus();
+  canvas.setPointerCapture(event.pointerId);
+  const point = canvasPoint(event);
+  markDirty(api.codex_gl_handle_pointer_down(point.x, point.y));
+});
+
+canvas.addEventListener("pointermove", (event) => {
+  const point = canvasPoint(event);
+  markDirty(api.codex_gl_handle_pointer_move(point.x, point.y));
+});
+
+canvas.addEventListener("pointerup", (event) => {
+  const point = canvasPoint(event);
+  markDirty(api.codex_gl_handle_pointer_up(point.x, point.y));
+});
+
+canvas.addEventListener("wheel", (event) => {
+  event.preventDefault();
+  const point = canvasPoint(event);
+  markDirty(api.codex_gl_handle_wheel(point.x, point.y, event.deltaY));
+}, { passive: false });
+
+canvas.addEventListener("keydown", (event) => {
+  markDirty(api.codex_gl_handle_key(event.keyCode));
+  if (event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey) {
+    const bytes = textEncoder.encode(event.key);
+    const cap = api.codex_gl_input_buffer_capacity();
+    const len = Math.min(bytes.length, cap);
+    const ptr = api.codex_gl_input_buffer_ptr();
+    new Uint8Array(api.memory.buffer, ptr, len).set(bytes.subarray(0, len));
+    markDirty(api.codex_gl_handle_text_input(len));
+  }
+});
+
+canvas.addEventListener("blur", () => {
+  markDirty(api.codex_gl_handle_blur());
 });
 
 function draw(t) {
