@@ -579,7 +579,7 @@ pub fn component_studio() -> UiNode {
         .child(network_app_block().class("h-96"))
         .child(identity_card(
             "Local identity",
-            "browser node",
+            "node instance",
             "policy:personal",
             800,
         ))

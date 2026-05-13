@@ -174,22 +174,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "codex-gl-ui"
-version = "0.0.0"
-dependencies = [
- "edgerun-ui-core",
-]
-
-[[package]]
-name = "codex-gl-web"
-version = "0.0.0"
-dependencies = [
- "edgerun-crypto",
- "edgerun-ui-core",
- "edgerun-work",
-]
-
-[[package]]
 name = "codex-host"
 version = "0.0.0"
 dependencies = [
@@ -393,6 +377,20 @@ name = "edgerun-eventsource-stream"
 version = "0.1.1"
 dependencies = [
  "edgerun-futures",
+]
+
+[[package]]
+name = "edgerun-frontend-native"
+version = "0.0.0"
+dependencies = [
+ "edgerun-ui-core",
+]
+
+[[package]]
+name = "edgerun-frontend-web"
+version = "0.0.0"
+dependencies = [
+ "edgerun-ui-core",
 ]
 
 [[package]]

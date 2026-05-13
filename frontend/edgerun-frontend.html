@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Codex GL UI</title>
+  <title>EdgeRun Frontend</title>
   <style>
     html, body {
       height: 100%;
@@ -25,7 +25,7 @@
       background: transparent;
     }
 
-    #codex {
+    #frontend {
       position: fixed;
       inset: 0;
       z-index: 1;
@@ -42,7 +42,7 @@
   </style>
 </head>
 <body>
-<canvas id="codex"></canvas>
+<canvas id="frontend"></canvas>
 <canvas id="shell"></canvas>
 <div class="status" id="status">loading wasm...</div>
 <script type="module">
@@ -128,7 +128,7 @@ void main() {
   out_color = vec4(v_color.rgb, v_color.a * a);
 }`;
 
-const canvas = document.getElementById("codex");
+const canvas = document.getElementById("frontend");
 canvas.tabIndex = 0;
 const shellCanvas = document.getElementById("shell");
 shellCanvas.tabIndex = 0;
@@ -189,14 +189,43 @@ const uniforms = {
   screen: gl.getUniformLocation(program, "u_screen"),
 };
 
-const wasm = await WebAssembly.instantiateStreaming(fetch("./codex_gl_web.wasm"), {});
+const wasm = await WebAssembly.instantiateStreaming(fetch("./edgerun_frontend.wasm"), {});
 const api = wasm.instance.exports;
-const rectStride = api.codex_gl_rect_float_stride();
-const textVertexStride = api.codex_gl_text_vertex_float_stride();
+const rectStride = api.edgerun_frontend_rect_float_stride();
+const textVertexStride = api.edgerun_frontend_text_vertex_float_stride();
+const textEncoder = new TextEncoder();
 const schemeCode = { dark: 0, light: 1, terminal: 2 }[
   new URLSearchParams(location.search).get("scheme") || "dark"
 ] ?? 0;
-api.codex_gl_set_color_scheme(schemeCode);
+api.edgerun_frontend_set_color_scheme(schemeCode);
+
+function pushInputBytes(bytes) {
+  const cap = api.edgerun_frontend_input_buffer_capacity();
+  const len = Math.min(bytes.length, cap);
+  const ptr = api.edgerun_frontend_input_buffer_ptr();
+  new Uint8Array(api.memory.buffer, ptr, len).set(bytes.subarray(0, len));
+  return len;
+}
+
+function pushInputString(value) {
+  return pushInputBytes(textEncoder.encode(value));
+}
+
+function setWorkProjectionBytes(bytes) {
+  if (!api.edgerun_frontend_set_work_projection_from_input || !bytes) return false;
+  const len = pushInputBytes(bytes);
+  const accepted = api.edgerun_frontend_set_work_projection_from_input(len) === 1;
+  if (accepted) {
+    sceneDirty = true;
+    scheduleFrame();
+  }
+  return accepted;
+}
+
+window.EdgeRunFrontend = Object.assign(window.EdgeRunFrontend || {}, {
+  setWorkProjectionBytes,
+  workProjectionSchemaVersion: api.edgerun_frontend_work_projection_schema_version?.() ?? 0,
+});
 
 const textProgram = gl.createProgram();
 gl.attachShader(textProgram, shader(gl.VERTEX_SHADER, textVertexSource));
@@ -219,9 +248,9 @@ const textUniforms = {
   tex: gl.getUniformLocation(textProgram, "u_tex"),
 };
 
-const atlasW = api.codex_gl_font_atlas_width();
-const atlasH = api.codex_gl_font_atlas_height();
-const atlasPtr = api.codex_gl_font_atlas_ptr();
+const atlasW = api.edgerun_frontend_font_atlas_width();
+const atlasH = api.edgerun_frontend_font_atlas_height();
+const atlasPtr = api.edgerun_frontend_font_atlas_ptr();
 const atlasBytes = new Uint8Array(api.memory.buffer, atlasPtr, atlasW * atlasH);
 const textTexture = gl.createTexture();
 gl.bindTexture(gl.TEXTURE_2D, textTexture);
@@ -300,9 +329,9 @@ function createOverlayRenderer(context) {
       context.useProgram(shapeProgram);
       context.bindVertexArray(shapeVao);
       context.uniform2f(context.getUniformLocation(shapeProgram, "u_screen"), width, height);
-      const rectBufferLen = api.codex_gl_shell_rect_buffer_len();
+      const rectBufferLen = api.edgerun_frontend_shell_rect_buffer_len();
       if (rectBufferLen > 0) {
-        const rectBufferPtr = api.codex_gl_shell_rect_buffer_ptr();
+        const rectBufferPtr = api.edgerun_frontend_shell_rect_buffer_ptr();
         const rects = new Float32Array(api.memory.buffer, rectBufferPtr, rectBufferLen);
         context.bindBuffer(context.ARRAY_BUFFER, instanceVbo);
         context.bufferData(context.ARRAY_BUFFER, rects, context.DYNAMIC_DRAW);
@@ -315,9 +344,9 @@ function createOverlayRenderer(context) {
       context.bindTexture(context.TEXTURE_2D, overlayTexture);
       context.uniform1i(context.getUniformLocation(overlayTextProgram, "u_tex"), 0);
       context.uniform2f(context.getUniformLocation(overlayTextProgram, "u_screen"), width, height);
-      const textVertexBufferLen = api.codex_gl_shell_text_vertex_buffer_len();
+      const textVertexBufferLen = api.edgerun_frontend_shell_text_vertex_buffer_len();
       if (textVertexBufferLen > 0) {
-        const textVertexBufferPtr = api.codex_gl_shell_text_vertex_buffer_ptr();
+        const textVertexBufferPtr = api.edgerun_frontend_shell_text_vertex_buffer_ptr();
         const textVertices = new Float32Array(api.memory.buffer, textVertexBufferPtr, textVertexBufferLen);
         context.bindBuffer(context.ARRAY_BUFFER, overlayTextVbo);
         context.bufferData(context.ARRAY_BUFFER, textVertices, context.DYNAMIC_DRAW);
@@ -328,7 +357,7 @@ function createOverlayRenderer(context) {
 }
 
 const shellRenderer = createOverlayRenderer(shellGl);
-statusEl.textContent = "edgerun shell + workspace wasm scenes";
+statusEl.textContent = "edgerun frontend wasm scene";
 let sceneDirty = true;
 let frameScheduled = false;
 let animationTimer = 0;
@@ -385,8 +414,6 @@ document.addEventListener("visibilitychange", () => {
   }
 });
 
-const textEncoder = new TextEncoder();
-
 function canvasPoint(event) {
   const dpr = Math.max(1, window.devicePixelRatio || 1);
   const rect = shellCanvas.getBoundingClientRect();
@@ -397,7 +424,7 @@ function canvasPoint(event) {
 }
 
 function shellHasHit(point) {
-  return api.codex_gl_shell_hit_test(point.x, point.y) !== 0xffffffff;
+  return api.edgerun_frontend_shell_hit_test(point.x, point.y) !== 0xffffffff;
 }
 
 function markDirty(changed) {
@@ -412,51 +439,47 @@ shellCanvas.addEventListener("pointerdown", (event) => {
   shellCanvas.setPointerCapture(event.pointerId);
   const point = canvasPoint(event);
   if (shellHasHit(point)) {
-    markDirty(api.codex_gl_handle_shell_pointer_down(point.x, point.y));
+    markDirty(api.edgerun_frontend_handle_shell_pointer_down(point.x, point.y));
   } else {
-    markDirty(api.codex_gl_handle_pointer_down(point.x, point.y));
+    markDirty(api.edgerun_frontend_handle_pointer_down(point.x, point.y));
   }
 });
 
 shellCanvas.addEventListener("pointermove", (event) => {
   const point = canvasPoint(event);
   if (shellHasHit(point)) {
-    markDirty(api.codex_gl_handle_shell_pointer_move(point.x, point.y));
+    markDirty(api.edgerun_frontend_handle_shell_pointer_move(point.x, point.y));
   } else {
-    markDirty(api.codex_gl_handle_pointer_move(point.x, point.y));
+    markDirty(api.edgerun_frontend_handle_pointer_move(point.x, point.y));
   }
 });
 
 shellCanvas.addEventListener("pointerup", (event) => {
   const point = canvasPoint(event);
   if (shellHasHit(point)) {
-    markDirty(api.codex_gl_handle_shell_pointer_up(point.x, point.y));
+    markDirty(api.edgerun_frontend_handle_shell_pointer_up(point.x, point.y));
   } else {
-    markDirty(api.codex_gl_handle_pointer_up(point.x, point.y));
+    markDirty(api.edgerun_frontend_handle_pointer_up(point.x, point.y));
   }
 });
 
 shellCanvas.addEventListener("wheel", (event) => {
   event.preventDefault();
   const point = canvasPoint(event);
-  markDirty(api.codex_gl_handle_wheel(point.x, point.y, event.deltaY));
+  markDirty(api.edgerun_frontend_handle_wheel(point.x, point.y, event.deltaY));
 }, { passive: false });
 
 shellCanvas.addEventListener("keydown", (event) => {
-  const shellChanged = api.codex_gl_handle_shell_key(event.keyCode);
-  markDirty(shellChanged || api.codex_gl_handle_key(event.keyCode));
+  const shellChanged = api.edgerun_frontend_handle_shell_key(event.keyCode);
+  markDirty(shellChanged || api.edgerun_frontend_handle_key(event.keyCode));
   if (event.key.length === 1 && !event.metaKey && !event.ctrlKey && !event.altKey) {
-    const bytes = textEncoder.encode(event.key);
-    const cap = api.codex_gl_input_buffer_capacity();
-    const len = Math.min(bytes.length, cap);
-    const ptr = api.codex_gl_input_buffer_ptr();
-    new Uint8Array(api.memory.buffer, ptr, len).set(bytes.subarray(0, len));
-    markDirty(api.codex_gl_handle_text_input(len));
+    const len = pushInputString(event.key);
+    markDirty(api.edgerun_frontend_handle_text_input(len));
   }
 });
 
 shellCanvas.addEventListener("blur", () => {
-  markDirty(api.codex_gl_handle_blur());
+  markDirty(api.edgerun_frontend_handle_blur());
 });
 
 function draw(t) {
@@ -473,14 +496,14 @@ function draw(t) {
     return;
   }
 
-  api.codex_gl_build_frame(width, height, t);
-  api.codex_gl_build_shell_frame(width, height, t);
+  api.edgerun_frontend_build_frame(width, height, t);
+  api.edgerun_frontend_build_shell_frame(width, height, t);
   sceneDirty = false;
   lastWidth = width;
   lastHeight = height;
   lastFrameBucket = frameBucket;
   gl.viewport(0, 0, width, height);
-  gl.clearColor(api.codex_gl_clear_r(), api.codex_gl_clear_g(), api.codex_gl_clear_b(), api.codex_gl_clear_a());
+  gl.clearColor(api.edgerun_frontend_clear_r(), api.edgerun_frontend_clear_g(), api.edgerun_frontend_clear_b(), api.edgerun_frontend_clear_a());
   gl.clear(gl.COLOR_BUFFER_BIT);
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -488,8 +511,8 @@ function draw(t) {
   gl.bindVertexArray(vao);
   gl.uniform2f(uniforms.screen, width, height);
 
-  const rectBufferLen = api.codex_gl_rect_buffer_len();
-  const rectBufferPtr = api.codex_gl_rect_buffer_ptr();
+  const rectBufferLen = api.edgerun_frontend_rect_buffer_len();
+  const rectBufferPtr = api.edgerun_frontend_rect_buffer_ptr();
   const rects = new Float32Array(api.memory.buffer, rectBufferPtr, rectBufferLen);
   if (rectBufferLen > 0) {
     gl.bindBuffer(gl.ARRAY_BUFFER, rectInstanceVbo);
@@ -503,9 +526,9 @@ function draw(t) {
   gl.bindTexture(gl.TEXTURE_2D, textTexture);
   gl.uniform1i(textUniforms.tex, 0);
   gl.uniform2f(textUniforms.screen, width, height);
-  const textVertexBufferLen = api.codex_gl_text_vertex_buffer_len();
+  const textVertexBufferLen = api.edgerun_frontend_text_vertex_buffer_len();
   if (textVertexBufferLen > 0) {
-    const textVertexBufferPtr = api.codex_gl_text_vertex_buffer_ptr();
+    const textVertexBufferPtr = api.edgerun_frontend_text_vertex_buffer_ptr();
     const textVertices = new Float32Array(api.memory.buffer, textVertexBufferPtr, textVertexBufferLen);
     gl.bindBuffer(gl.ARRAY_BUFFER, textVbo);
     gl.bufferData(gl.ARRAY_BUFFER, textVertices, gl.DYNAMIC_DRAW);

@@ -212,8 +212,13 @@ fn build_unified_chat_shell_impl(
         ));
     for (index, contact) in state.contacts.iter().enumerate() {
         contacts = contacts.child(
-            shadcn_item(contact.name, contact.detail, index as u32, contact_accent(contact.kind))
-                .selected(index == state.selected_contact),
+            shadcn_item(
+                contact.name,
+                contact.detail,
+                index as u32,
+                contact_accent(contact.kind),
+            )
+            .selected(index == state.selected_contact),
         );
     }
     if state.contacts.is_empty() {
@@ -248,7 +253,11 @@ fn build_unified_chat_shell_impl(
         ));
     }
     transcript = transcript
-        .child(shadcn_textarea("Message", composer_text).hit_id(0).class("h-24"))
+        .child(
+            shadcn_textarea("Message", composer_text)
+                .hit_id(0)
+                .class("h-24"),
+        )
         .child(shadcn_button(
             "Send",
             2,
@@ -282,7 +291,11 @@ fn render_workspace_chat_app(
     let mut panel = shadcn_card("EdgeRun Chat", chat_state.subtitle)
         .child(shadcn_tabs(&["Contacts", "Thread", "Proofs"], 0, 120))
         .child(shadcn_badge(
-            if chat_state.connected { "relay" } else { "local" },
+            if chat_state.connected {
+                "relay"
+            } else {
+                "local"
+            },
             UiShadcnBadgeVariant::Secondary,
         ));
     if chat_state.contacts.is_empty() {
@@ -340,13 +353,13 @@ fn render_trust_manager_app(
     shadcn_card("Trust Manager", "proof dashboard")
         .child(shadcn_item(
             "Local identity",
-            &work.browser_node,
+            &work.local_node,
             221,
             ui.theme().colors.accent,
         ))
         .child(shadcn_alert(
             "Admitted route",
-            "browser -> admission -> relay -> storage",
+            "node instance -> admission -> relay -> capability",
             UiIcon::Shield,
         ))
         .child(shadcn_table(
@@ -364,12 +377,20 @@ fn render_trust_manager_app(
                 &[
                     "WorkRequest",
                     &work.request_hash,
-                    if work.request_verified { "ok" } else { "pending" },
+                    if work.request_verified {
+                        "ok"
+                    } else {
+                        "pending"
+                    },
                 ],
                 &[
                     "WorkAdmission",
                     &work.admission_hash,
-                    if work.admission_verified { "ok" } else { "pending" },
+                    if work.admission_verified {
+                        "ok"
+                    } else {
+                        "pending"
+                    },
                 ],
             ],
             220,
@@ -528,8 +549,8 @@ pub(super) fn render_capability_request_app(
                     UiShadcnButtonSize::Default,
                 ))
                 .child(shadcn_button(
-                        "Details",
-                        CAPABILITY_DETAILS_BUTTON_ID,
+                    "Details",
+                    CAPABILITY_DETAILS_BUTTON_ID,
                     UiShadcnButtonVariant::Secondary,
                     UiShadcnButtonSize::Default,
                 ))
@@ -602,12 +623,27 @@ fn component_style_authority_panel(preview: UiComponentPreviewState, rail: bool)
         .child(divider("h-px"))
         .child(shadcn_label("Style"))
         .child(
-            shadcn_item(user.name, active.authority_label(), 761, active.colors.accent)
-                .selected(matches!(preview.authority, UiStyleAuthority::User)),
+            shadcn_item(
+                user.name,
+                active.authority_label(),
+                761,
+                active.colors.accent,
+            )
+            .selected(matches!(preview.authority, UiStyleAuthority::User)),
         )
         .child(shadcn_select("Base Color", user.base_color, 766))
-        .child(shadcn_item("Theme", user.scheme_label(), 766, active.colors.info))
-        .child(shadcn_item("Accent", user.accent_label(), 767, active.colors.accent))
+        .child(shadcn_item(
+            "Theme",
+            user.scheme_label(),
+            766,
+            active.colors.info,
+        ))
+        .child(shadcn_item(
+            "Accent",
+            user.accent_label(),
+            767,
+            active.colors.accent,
+        ))
         .child(divider("h-px"))
         .child(shadcn_label("Typography"))
         .child(shadcn_field("Heading", "Geist"))
@@ -615,7 +651,12 @@ fn component_style_authority_panel(preview: UiComponentPreviewState, rail: bool)
         .child(divider("h-px"))
         .child(shadcn_label("System"))
         .child(shadcn_select("Icon Library", user.icon_set, 769))
-        .child(shadcn_item("Radius", user.radius_label(), 768, active.colors.success))
+        .child(shadcn_item(
+            "Radius",
+            user.radius_label(),
+            768,
+            active.colors.success,
+        ))
         .child(divider("h-px"))
         .child(shadcn_label("Author Preset"))
         .child(
@@ -635,7 +676,7 @@ fn component_style_authority_panel(preview: UiComponentPreviewState, rail: bool)
             UiShadcnButtonSize::Default,
         ))
         .child(
-            identity_card("Local identity", "browser node", "policy:personal", 800).class("h-28"),
+            identity_card("Local identity", "node instance", "policy:personal", 800).class("h-28"),
         )
 }
 
@@ -644,11 +685,11 @@ fn component_studio_toolbar(preview: UiComponentPreviewState) -> UiNode {
     let active = preview.resolved_theme();
 
     row("row gap-3 items-center h-11")
-        .child(
-            shadcn_command("Search documentation...", 780)
-                .class("h-11 flex-1"),
-        )
-        .child(shadcn_badge(active.authority_label(), UiShadcnBadgeVariant::Secondary))
+        .child(shadcn_command("Search documentation...", 780).class("h-11 flex-1"))
+        .child(shadcn_badge(
+            active.authority_label(),
+            UiShadcnBadgeVariant::Secondary,
+        ))
         .child(shadcn_button(
             "Open in v0",
             764,
@@ -672,7 +713,14 @@ fn shadcn_component_wall(preview: UiComponentPreviewState, width: f32) -> UiNode
     column("gap-4 h-980")
         .child(
             shadcn_menubar(
-                &["Docs", "Components", "Blocks", "Charts", "Directory", "Create"],
+                &[
+                    "Docs",
+                    "Components",
+                    "Blocks",
+                    "Charts",
+                    "Directory",
+                    "Create",
+                ],
                 1,
                 820,
             )
@@ -683,109 +731,138 @@ fn shadcn_component_wall(preview: UiComponentPreviewState, width: f32) -> UiNode
                 "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 h-760",
                 width,
             )
-                .child(
-                    shadcn_card("Contribution History", "Last 6 months of activity")
-                        .class("h-108")
-                        .child(
-                            shadcn_chart("Activity", &months, &activity)
-                                .accent(active.colors.accent)
-                                .class("h-48"),
-                        )
-                        .child(
-                            grid("grid grid-cols-2 gap-3", 2)
-                                .child(
-                                    shadcn_card("Upcoming", "May 25, 2024")
-                                        .child(shadcn_badge("$1,000 scheduled", UiShadcnBadgeVariant::Secondary))
-                                        .class("h-28"),
-                                )
-                                .child(
-                                    shadcn_card("Auto-save Plan", "Accelerated")
-                                        .child(shadcn_badge("Recurring weekly", UiShadcnBadgeVariant::Secondary))
-                                        .class("h-28"),
-                                ),
-                        )
-                        .child(shadcn_button(
-                            "View Full Report",
-                            772,
-                            UiShadcnButtonVariant::Default,
-                            UiShadcnButtonSize::Default,
-                        )),
-                )
-                .child(
-                    shadcn_card("Payout Threshold", "Set the minimum balance required before payout is triggered.")
-                        .class("h-108")
-                        .child(shadcn_select("Preferred Currency", "USD - United States Dollar", 773))
-                        .child(
-                            shadcn_slider("Minimum Payout Amount", 0.25, 774)
-                                .range_labels("$50 (MIN)", "$10,000 (MAX)")
-                                .accent(active.colors.accent)
-                                .class("h-20"),
-                        )
-                        .child(
-                            shadcn_textarea("Notes", "Add any notes for this payout configuration...")
-                                .hit_id(775)
-                                .class("h-28"),
-                        )
-                        .child(shadcn_button(
-                            "Save Threshold",
-                            776,
-                            UiShadcnButtonVariant::Default,
-                            UiShadcnButtonSize::Default,
-                        )),
-                )
-                .child(
-                    shadcn_card("Savings Targets", "Active milestones for 2024")
-                        .class("h-108")
-                        .child(
-                            shadcn_card("Retirement", "$420,000")
-                                .child(shadcn_progress(0.65).class("w-full"))
-                                .child(shadcn_badge("65% achieved", UiShadcnBadgeVariant::Secondary))
-                                .class("h-32"),
-                        )
-                        .child(
-                            shadcn_card("Real Estate", "$85,000")
-                                .child(shadcn_progress(0.32).class("w-full"))
-                                .child(shadcn_badge("32% achieved", UiShadcnBadgeVariant::Secondary))
-                                .class("h-32"),
-                        )
-                        .child(text("You have not met your targets for this year.").class("text-muted truncate")),
-                )
-                .child(
-                    shadcn_card("Buy Investment", "Review before sending an order")
-                        .class("h-108")
-                        .child(shadcn_input("Amount to Invest", "$1,000.00").hit_id(810))
-                        .child(shadcn_select("Order Type", "Market Order", 811))
-                        .child(shadcn_table(
-                            &["Estimate", "Value"],
-                            &[&["Estimated Shares", "1.95"], &["Buying Power", "$12,450.00"]],
-                            812,
-                        ).class("h-24"))
-                        .child(shadcn_button(
-                            "Review Order",
-                            813,
-                            UiShadcnButtonVariant::Default,
-                            UiShadcnButtonSize::Default,
-                        )),
-                )
-                .child(
-                    shadcn_empty(
-                        "Distribute Track",
-                        "Upload your first master to start reaching listeners.",
-                        UiIcon::App,
+            .child(
+                shadcn_card("Contribution History", "Last 6 months of activity")
+                    .class("h-108")
+                    .child(
+                        shadcn_chart("Activity", &months, &activity)
+                            .accent(active.colors.accent)
+                            .class("h-48"),
+                    )
+                    .child(
+                        grid("grid grid-cols-2 gap-3", 2)
+                            .child(
+                                shadcn_card("Upcoming", "May 25, 2024")
+                                    .child(shadcn_badge(
+                                        "$1,000 scheduled",
+                                        UiShadcnBadgeVariant::Secondary,
+                                    ))
+                                    .class("h-28"),
+                            )
+                            .child(
+                                shadcn_card("Auto-save Plan", "Accelerated")
+                                    .child(shadcn_badge(
+                                        "Recurring weekly",
+                                        UiShadcnBadgeVariant::Secondary,
+                                    ))
+                                    .class("h-28"),
+                            ),
                     )
                     .child(shadcn_button(
-                        "Create Release",
-                        779,
+                        "View Full Report",
+                        772,
                         UiShadcnButtonVariant::Default,
                         UiShadcnButtonSize::Default,
-                    ))
-                    .class("h-104"),
+                    )),
+            )
+            .child(
+                shadcn_card(
+                    "Payout Threshold",
+                    "Set the minimum balance required before payout is triggered.",
+                )
+                .class("h-108")
+                .child(shadcn_select(
+                    "Preferred Currency",
+                    "USD - United States Dollar",
+                    773,
+                ))
+                .child(
+                    shadcn_slider("Minimum Payout Amount", 0.25, 774)
+                        .range_labels("$50 (MIN)", "$10,000 (MAX)")
+                        .accent(active.colors.accent)
+                        .class("h-20"),
                 )
                 .child(
-                    shadcn_card("Claimable Balance", "$0.00")
-                        .class("h-104")
-                        .child(shadcn_badge("Pending Setup", UiShadcnBadgeVariant::Outline))
-                        .child(shadcn_table(
+                    shadcn_textarea("Notes", "Add any notes for this payout configuration...")
+                        .hit_id(775)
+                        .class("h-28"),
+                )
+                .child(shadcn_button(
+                    "Save Threshold",
+                    776,
+                    UiShadcnButtonVariant::Default,
+                    UiShadcnButtonSize::Default,
+                )),
+            )
+            .child(
+                shadcn_card("Savings Targets", "Active milestones for 2024")
+                    .class("h-108")
+                    .child(
+                        shadcn_card("Retirement", "$420,000")
+                            .child(shadcn_progress(0.65).class("w-full"))
+                            .child(shadcn_badge(
+                                "65% achieved",
+                                UiShadcnBadgeVariant::Secondary,
+                            ))
+                            .class("h-32"),
+                    )
+                    .child(
+                        shadcn_card("Real Estate", "$85,000")
+                            .child(shadcn_progress(0.32).class("w-full"))
+                            .child(shadcn_badge(
+                                "32% achieved",
+                                UiShadcnBadgeVariant::Secondary,
+                            ))
+                            .class("h-32"),
+                    )
+                    .child(
+                        text("You have not met your targets for this year.")
+                            .class("text-muted truncate"),
+                    ),
+            )
+            .child(
+                shadcn_card("Buy Investment", "Review before sending an order")
+                    .class("h-108")
+                    .child(shadcn_input("Amount to Invest", "$1,000.00").hit_id(810))
+                    .child(shadcn_select("Order Type", "Market Order", 811))
+                    .child(
+                        shadcn_table(
+                            &["Estimate", "Value"],
+                            &[
+                                &["Estimated Shares", "1.95"],
+                                &["Buying Power", "$12,450.00"],
+                            ],
+                            812,
+                        )
+                        .class("h-24"),
+                    )
+                    .child(shadcn_button(
+                        "Review Order",
+                        813,
+                        UiShadcnButtonVariant::Default,
+                        UiShadcnButtonSize::Default,
+                    )),
+            )
+            .child(
+                shadcn_empty(
+                    "Distribute Track",
+                    "Upload your first master to start reaching listeners.",
+                    UiIcon::App,
+                )
+                .child(shadcn_button(
+                    "Create Release",
+                    779,
+                    UiShadcnButtonVariant::Default,
+                    UiShadcnButtonSize::Default,
+                ))
+                .class("h-104"),
+            )
+            .child(
+                shadcn_card("Claimable Balance", "$0.00")
+                    .class("h-104")
+                    .child(shadcn_badge("Pending Setup", UiShadcnBadgeVariant::Outline))
+                    .child(
+                        shadcn_table(
                             &["Royalty", "Amount"],
                             &[
                                 &["Net Royalties", "$0.00"],
@@ -793,12 +870,15 @@ fn shadcn_component_wall(preview: UiComponentPreviewState, width: f32) -> UiNode
                                 &["Total Ready to Claim", "$0.00 USD"],
                             ],
                             781,
-                        ).class("h-36")),
-                )
-                .child(
-                    shadcn_card("Recent Transactions", "Your latest account activity.")
-                        .class("h-104")
-                        .child(shadcn_table(
+                        )
+                        .class("h-36"),
+                    ),
+            )
+            .child(
+                shadcn_card("Recent Transactions", "Your latest account activity.")
+                    .class("h-104")
+                    .child(
+                        shadcn_table(
                             &["Merchant", "Date", "Amount"],
                             &[
                                 &["Blue Bottle Coffee", "Today", "-$6.50"],
@@ -808,46 +888,62 @@ fn shadcn_component_wall(preview: UiComponentPreviewState, width: f32) -> UiNode
                                 &["Netflix Subscription", "Oct 10", "-$19.99"],
                             ],
                             784,
-                        ).class("h-52")),
+                        )
+                        .class("h-52"),
+                    ),
+            )
+            .child(
+                shadcn_sheet(
+                    "Account Access",
+                    "Update your credentials",
+                    "Email Address",
+                    "artist@studio.inc",
+                    "Update Security",
+                    814,
                 )
-                .child(
-                    shadcn_sheet(
-                        "Account Access",
-                        "Update your credentials",
-                        "Email Address",
-                        "artist@studio.inc",
-                        "Update Security",
-                        814,
-                    )
-                    .child(shadcn_alert("Danger Zone", "Archive account", UiIcon::Warning))
-                    .class("h-104"),
-                ),
+                .child(shadcn_alert(
+                    "Danger Zone",
+                    "Archive account",
+                    UiIcon::Warning,
+                ))
+                .class("h-104"),
+            ),
         )
         .child(
             grid_auto_for_width(
                 "grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 h-52",
                 width,
             )
-                .child(shadcn_sidebar(
-                    "Overview",
+            .child(shadcn_sidebar(
+                "Overview",
+                "Dashboard",
+                &[
                     "Dashboard",
-                    &["Dashboard", "Transactions", "Investments", "Goals", "Budget"],
-                    0,
-                    "Account",
-                    "Profile, billing, notifications, security",
-                    802,
-                ))
-                .child(shadcn_breadcrumb(&["Home", "Payments", "Transfer"], 2, 810))
-                .child(shadcn_calendar(
-                    "May 2024",
-                    &["", "", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
-                    8,
-                    830,
-                ))
-                .child(shadcn_sonner(&[
-                    ("Order reviewed", UiIcon::Check, active.colors.success),
-                    ("Policy requires approval", UiIcon::Warning, active.colors.warning),
-                ])),
+                    "Transactions",
+                    "Investments",
+                    "Goals",
+                    "Budget",
+                ],
+                0,
+                "Account",
+                "Profile, billing, notifications, security",
+                802,
+            ))
+            .child(shadcn_breadcrumb(&["Home", "Payments", "Transfer"], 2, 810))
+            .child(shadcn_calendar(
+                "May 2024",
+                &["", "", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
+                8,
+                830,
+            ))
+            .child(shadcn_sonner(&[
+                ("Order reviewed", UiIcon::Check, active.colors.success),
+                (
+                    "Policy requires approval",
+                    UiIcon::Warning,
+                    active.colors.warning,
+                ),
+            ])),
         )
         .child(
             shadcn_table(
@@ -867,12 +963,11 @@ fn shadcn_component_wall(preview: UiComponentPreviewState, width: f32) -> UiNode
 
 #[cfg(feature = "fontdue-text")]
 fn render_generic_workspace_app(ui: &mut UiPainter<'_, '_>, bounds: UiRect, app: &UiAppSurface) {
-    shadcn_empty(
-        &app.title,
-        "No app renderer registered.",
-        UiIcon::App,
-    )
-        .render_with_state(ui, bounds.inset(14.0, 14.0), Some(&app.runtime));
+    shadcn_empty(&app.title, "No app renderer registered.", UiIcon::App).render_with_state(
+        ui,
+        bounds.inset(14.0, 14.0),
+        Some(&app.runtime),
+    );
 }
 
 fn contact_accent(kind: UnifiedContactKind) -> Color4 {

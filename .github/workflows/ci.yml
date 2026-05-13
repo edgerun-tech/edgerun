@@ -134,6 +134,28 @@ jobs:
       - name: edgerun-work wasm build
         run: cargo build -p edgerun-work --target wasm32-unknown-unknown --release --no-default-features
 
+  edgerun-ui-shell:
+    needs: repository-hygiene
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: UI core tests
+        run: cargo test --manifest-path crates/utility/edgerun-ui-core/Cargo.toml --features fontdue-text --lib
+
+      - name: EdgeRun frontend web host tests
+        run: cargo test --manifest-path crates/edgerun-codex/Cargo.toml -p edgerun-frontend-web
+
+      - name: EdgeRun frontend wasm build
+        run: cargo build --manifest-path crates/edgerun-codex/Cargo.toml -p edgerun-frontend-web --target wasm32-unknown-unknown --release
+
   quality:
     needs: repository-hygiene
     runs-on: ubuntu-latest

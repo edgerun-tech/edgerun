@@ -125,7 +125,7 @@ impl<'a> UnifiedChatState<'a> {
 
 #[derive(Clone, Debug)]
 pub struct UiWorkProjection {
-    pub browser_node: String,
+    pub local_node: String,
     pub admission_node: String,
     pub relay_node: String,
     pub channel: String,
@@ -145,7 +145,7 @@ pub struct UiWorkProjection {
 impl UiWorkProjection {
     pub fn preview() -> Self {
         Self {
-            browser_node: "browser node pending".into(),
+            local_node: "node instance pending".into(),
             admission_node: "admission pending".into(),
             relay_node: "relay pending".into(),
             channel: "channel pending".into(),

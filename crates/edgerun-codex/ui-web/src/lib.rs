@@ -1,19 +1,10 @@
 use std::cell::RefCell;
 
-use edgerun_crypto::Ed25519SigningKey;
 use edgerun_ui_core::gpu::{
     FontAtlas, GpuHit, GpuRect, GpuScene, HitKind, RectMode, TextQuad, UiAction, UiAppSurface,
     UiColorScheme, UiEvent, UiKey, UiShellAction, UiShellState, UiWorkProjection, UiWorkspace,
     UiWorkspaceAction, UnifiedChatState, build_edgerun_shell_overlay_with_font,
     build_edgerun_workspace_shell_with_font_and_work, palette,
-};
-use edgerun_work::{
-    CHANNEL_KIND_WASM_HOST, ChannelEndpoint, DEPARTMENT_STORAGE, NODE_ROLE_ADMISSION,
-    NODE_ROLE_RELAY, NODE_ROLE_STORAGE, ObjectStoreRequest, StoragePayload, WORK_TYPE_OBJECT_STORE,
-    WORK_WIRE_ABI_VERSION, WorkAdmission, WorkPacket, WorkRequest, blake3_hash, empty_signature,
-    encode_xor_2_1, node_identity_from_key, packet_hash, sign_work_admission, sign_work_request,
-    storage_payload_bytes, verify_store_request, verify_work_admission, verify_work_request,
-    work_request_preimage,
 };
 
 thread_local! {
@@ -30,7 +21,7 @@ thread_local! {
     static INPUT_BYTES: RefCell<Vec<u8>> = RefCell::new(vec![0; 4096]);
     static SELECTED_CONTACT: RefCell<usize> = const { RefCell::new(0) };
     static COLOR_SCHEME: RefCell<UiColorScheme> = const { RefCell::new(UiColorScheme::Dark) };
-    static WORK_PROJECTION: RefCell<UiWorkProjection> = RefCell::new(build_protocol_projection());
+    static WORK_PROJECTION: RefCell<UiWorkProjection> = RefCell::new(UiWorkProjection::preview());
     static FONT: FontAtlas = FontAtlas::from_font_bytes(include_bytes!(env!("CODEX_GL_INTER_FONT")), 18.0)
         .expect("embedded Inter font should parse");
 }
@@ -48,47 +39,76 @@ fn capability_request_workspace() -> UiWorkspace {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_build_scene(width: f32, height: f32, thinking: u32) -> u32 {
+pub extern "C" fn edgerun_frontend_build_scene(width: f32, height: f32, thinking: u32) -> u32 {
     build_scene(width, height, thinking != 0)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_build_frame(width: f32, height: f32, time_ms: f64) -> u32 {
+pub extern "C" fn edgerun_frontend_build_frame(width: f32, height: f32, time_ms: f64) -> u32 {
     build_scene(width, height, frame_active(time_ms))
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_set_color_scheme(code: u32) {
+pub extern "C" fn edgerun_frontend_set_color_scheme(code: u32) {
     COLOR_SCHEME.with_borrow_mut(|scheme| *scheme = UiColorScheme::from_code(code));
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_color_scheme() -> u32 {
+pub extern "C" fn edgerun_frontend_color_scheme() -> u32 {
     COLOR_SCHEME.with_borrow(|scheme| scheme.code())
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_show_workspace() {
+pub extern "C" fn edgerun_frontend_work_projection_schema_version() -> u32 {
+    1
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn edgerun_frontend_clear_work_projection() {
+    WORK_PROJECTION.with_borrow_mut(|projection| *projection = UiWorkProjection::preview());
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn edgerun_frontend_set_work_projection_from_input(len: u32) -> u32 {
+    let input = match input_buffer_string(len) {
+        Some(input) => input,
+        None => return 0,
+    };
+    match parse_work_projection(&input) {
+        Some(projection) => {
+            WORK_PROJECTION.with_borrow_mut(|stored| *stored = projection);
+            1
+        }
+        None => 0,
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn edgerun_frontend_show_workspace() {
     WORKSPACE.with_borrow_mut(|workspace| *workspace = default_workspace());
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_show_lock_screen() {
+pub extern "C" fn edgerun_frontend_show_lock_screen() {
     WORKSPACE.with_borrow_mut(|workspace| *workspace = lock_workspace());
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_show_capability_request() {
+pub extern "C" fn edgerun_frontend_show_capability_request() {
     WORKSPACE.with_borrow_mut(|workspace| *workspace = capability_request_workspace());
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_build_codex_scene(width: f32, height: f32, thinking: u32) -> u32 {
+pub extern "C" fn edgerun_frontend_build_agent_scene(
+    width: f32,
+    height: f32,
+    thinking: u32,
+) -> u32 {
     build_scene(width, height, thinking != 0)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_build_unified_chat_scene(
+pub extern "C" fn edgerun_frontend_build_unified_chat_scene(
     width: f32,
     height: f32,
     connected: u32,
@@ -122,140 +142,12 @@ fn build_scene(width: f32, height: f32, active: bool) -> u32 {
     })
 }
 
-fn build_protocol_projection() -> UiWorkProjection {
-    let user_key = Ed25519SigningKey::from_bytes(&[7u8; 32]);
-    let admission_key = Ed25519SigningKey::from_bytes(&[11u8; 32]);
-    let relay_key = Ed25519SigningKey::from_bytes(&[13u8; 32]);
-    let storage_key = Ed25519SigningKey::from_bytes(&[17u8; 32]);
-
-    let admission_node = node_identity_from_key(&admission_key, NODE_ROLE_ADMISSION);
-    let relay_node = node_identity_from_key(&relay_key, NODE_ROLE_RELAY);
-    let storage_node = node_identity_from_key(&storage_key, NODE_ROLE_STORAGE);
-    let user_public = public_key(&user_key);
-
-    let (manifest, shards) = encode_xor_2_1(
-        b"EdgeRun network app package bytes for UI protocol projection",
-        [
-            storage_node.node_id,
-            relay_node.node_id,
-            admission_node.node_id,
-        ],
-    )
-    .expect("deterministic erasure fixture should encode");
-    let store_request: ObjectStoreRequest =
-        edgerun_work::store_request_from_shard(&manifest, &shards[0]);
-    let storage_payload = StoragePayload::StoreRequest(store_request.clone());
-    let payload_bytes =
-        storage_payload_bytes(&storage_payload).expect("storage payload should encode");
-    let payload_hash = blake3_hash(&payload_bytes);
-    let input_root = edgerun_work::manifest_hash(&manifest);
-
-    let request = sign_work_request(
-        &user_key,
-        WorkRequest {
-            abi_version: WORK_WIRE_ABI_VERSION,
-            request_id: blake3_hash(b"edgerun-ui-web:storage-request:v1"),
-            user: user_public,
-            user_sequence: 1,
-            recipient: storage_node.node_id,
-            work_type: WORK_TYPE_OBJECT_STORE,
-            department: DEPARTMENT_STORAGE,
-            payload_hash,
-            input_root,
-            max_total_cost: 48,
-            valid_until_unix_ms: 1_893_456_000_000,
-            signature: empty_signature(),
-        },
-    );
-    let request_hash =
-        packet_hash(&WorkPacket::WorkRequest(request.clone())).expect("request should hash");
-
-    let route_commitment = blake3_hash(
-        &[
-            relay_node.node_id.as_slice(),
-            storage_node.node_id.as_slice(),
-            input_root.as_slice(),
-        ]
-        .concat(),
-    );
-    let assigned_channel = ChannelEndpoint::new(
-        blake3_hash(b"edgerun-ui-web:wasm-host-channel:v1"),
-        CHANNEL_KIND_WASM_HOST,
-        b"browser://edgerun-work/ui-web".to_vec(),
-        "browser wasm host".into(),
-    );
-    let policy_hash = blake3_hash(b"edgerun-ui-web:run-from-network-storage-policy:v1");
-    let admission = sign_work_admission(
-        &admission_key,
-        WorkAdmission {
-            abi_version: WORK_WIRE_ABI_VERSION,
-            admission_id: blake3_hash(
-                &[
-                    admission_node.node_id.as_slice(),
-                    request_hash.as_slice(),
-                    &[1],
-                ]
-                .concat(),
-            ),
-            dao_id: admission_node.public_key,
-            user: user_public,
-            admission_node: admission_node.clone(),
-            request_hash,
-            assigned_route_commitment: route_commitment,
-            assigned_channel: assigned_channel.clone(),
-            assigned_relay_path: vec![relay_node.node_id],
-            admitted_budget: 48,
-            policy_hash,
-            sequence: 1,
-            valid_until_unix_ms: 1_893_456_000_000,
-            signature: empty_signature(),
-        },
-    );
-    let admission_hash =
-        packet_hash(&WorkPacket::WorkAdmission(admission.clone())).expect("admission should hash");
-
-    UiWorkProjection {
-        browser_node: short_hash(&user_public),
-        admission_node: short_hash(&admission_node.node_id),
-        relay_node: short_hash(&relay_node.node_id),
-        channel: short_hash(&assigned_channel.channel_id),
-        policy_hash: short_hash(&policy_hash),
-        request_hash: short_hash(&request_hash),
-        admission_hash: short_hash(&admission_hash),
-        route_commitment: short_hash(&route_commitment),
-        storage_payload_hash: short_hash(&payload_hash),
-        manifest_hash: short_hash(&input_root),
-        admitted_budget: admission.admitted_budget,
-        retrieval_cost: payload_bytes.len() as u64,
-        request_verified: verify_work_request(&request)
-            && blake3_hash(&work_request_preimage(&request)) != [0u8; 32],
-        admission_verified: verify_work_admission(&admission),
-        storage_payload_verified: verify_store_request(&store_request),
-    }
-}
-
-fn public_key(key: &Ed25519SigningKey) -> [u8; 32] {
-    let mut out = [0u8; 32];
-    out.copy_from_slice(key.verifying_key().as_bytes());
-    out
-}
-
-fn short_hash(hash: &[u8; 32]) -> String {
-    let hex = hash_hex(hash);
-    format!("{}...{}", &hex[..10], &hex[hex.len() - 8..])
-}
-
-fn hash_hex(hash: &[u8; 32]) -> String {
-    let mut out = String::with_capacity(64);
-    for byte in hash {
-        use std::fmt::Write;
-        let _ = write!(&mut out, "{byte:02x}");
-    }
-    out
-}
-
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_build_shell_frame(width: f32, height: f32, _time_ms: f64) -> u32 {
+pub extern "C" fn edgerun_frontend_build_shell_frame(
+    width: f32,
+    height: f32,
+    _time_ms: f64,
+) -> u32 {
     FONT.with(|font| {
         SHELL_SCENE.with_borrow_mut(|scene| {
             SHELL.with_borrow_mut(|shell| {
@@ -386,73 +278,124 @@ fn push_text_vertex(packed: &mut Vec<f32>, x: f32, y: f32, u: f32, v: f32, quad:
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_selected_contact() -> u32 {
+pub extern "C" fn edgerun_frontend_selected_contact() -> u32 {
     SELECTED_CONTACT.with_borrow(|selected| *selected as u32)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_set_selected_contact(index: u32) {
+pub extern "C" fn edgerun_frontend_set_selected_contact(index: u32) {
     SELECTED_CONTACT.with_borrow_mut(|selected| *selected = index as usize);
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_handle_pointer(x: f32, y: f32) -> u32 {
+pub extern "C" fn edgerun_frontend_handle_pointer(x: f32, y: f32) -> u32 {
     let changed = handle_ui_event(UiEvent::PointerDown { x, y }) != 0;
     let changed = handle_ui_event(UiEvent::PointerUp { x, y }) != 0 || changed;
     changed as u32
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_handle_pointer_down(x: f32, y: f32) -> u32 {
+pub extern "C" fn edgerun_frontend_handle_pointer_down(x: f32, y: f32) -> u32 {
     handle_ui_event(UiEvent::PointerDown { x, y })
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_handle_pointer_move(x: f32, y: f32) -> u32 {
+pub extern "C" fn edgerun_frontend_handle_pointer_move(x: f32, y: f32) -> u32 {
     handle_ui_event(UiEvent::PointerMove { x, y })
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_handle_pointer_up(x: f32, y: f32) -> u32 {
+pub extern "C" fn edgerun_frontend_handle_pointer_up(x: f32, y: f32) -> u32 {
     handle_ui_event(UiEvent::PointerUp { x, y })
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_handle_wheel(x: f32, y: f32, delta_y: f32) -> u32 {
+pub extern "C" fn edgerun_frontend_handle_wheel(x: f32, y: f32, delta_y: f32) -> u32 {
     handle_ui_event(UiEvent::Wheel { x, y, delta_y })
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_handle_key(code: u32) -> u32 {
+pub extern "C" fn edgerun_frontend_handle_key(code: u32) -> u32 {
     handle_ui_event(UiEvent::KeyDown {
         key: key_from_code(code),
     })
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_handle_blur() -> u32 {
+pub extern "C" fn edgerun_frontend_handle_blur() -> u32 {
     handle_ui_event(UiEvent::Blur)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_input_buffer_ptr() -> *mut u8 {
+pub extern "C" fn edgerun_frontend_input_buffer_ptr() -> *mut u8 {
     INPUT_BYTES.with_borrow_mut(|bytes| bytes.as_mut_ptr())
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_input_buffer_capacity() -> u32 {
+pub extern "C" fn edgerun_frontend_input_buffer_capacity() -> u32 {
     INPUT_BYTES.with_borrow(|bytes| bytes.len() as u32)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_handle_text_input(len: u32) -> u32 {
-    let value = INPUT_BYTES.with_borrow(|bytes| {
+pub extern "C" fn edgerun_frontend_handle_text_input(len: u32) -> u32 {
+    let value = input_buffer_string(len).unwrap_or_default();
+    handle_ui_event(UiEvent::TextInput(value))
+}
+
+fn input_buffer_string(len: u32) -> Option<String> {
+    INPUT_BYTES.with_borrow(|bytes| {
         let len = (len as usize).min(bytes.len());
         core::str::from_utf8(&bytes[..len])
-            .unwrap_or("")
-            .to_string()
-    });
-    handle_ui_event(UiEvent::TextInput(value))
+            .ok()
+            .map(ToString::to_string)
+    })
+}
+
+fn parse_work_projection(input: &str) -> Option<UiWorkProjection> {
+    let mut projection = UiWorkProjection::preview();
+    let mut saw_field = false;
+
+    for line in input.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let (key, value) = line.split_once('=')?;
+        let key = key.trim();
+        let value = value.trim();
+        saw_field = true;
+
+        match key {
+            "local_node" => projection.local_node = value.into(),
+            "admission_node" => projection.admission_node = value.into(),
+            "relay_node" => projection.relay_node = value.into(),
+            "channel" => projection.channel = value.into(),
+            "policy_hash" => projection.policy_hash = value.into(),
+            "request_hash" => projection.request_hash = value.into(),
+            "admission_hash" => projection.admission_hash = value.into(),
+            "route_commitment" => projection.route_commitment = value.into(),
+            "storage_payload_hash" => projection.storage_payload_hash = value.into(),
+            "manifest_hash" => projection.manifest_hash = value.into(),
+            "admitted_budget" => projection.admitted_budget = value.parse().ok()?,
+            "retrieval_cost" => projection.retrieval_cost = value.parse().ok()?,
+            "request_verified" => projection.request_verified = parse_bool_field(value)?,
+            "admission_verified" => projection.admission_verified = parse_bool_field(value)?,
+            "storage_payload_verified" => {
+                projection.storage_payload_verified = parse_bool_field(value)?;
+            }
+            _ => return None,
+        }
+    }
+
+    saw_field.then_some(projection)
+}
+
+fn parse_bool_field(value: &str) -> Option<bool> {
+    match value {
+        "true" | "1" | "yes" => Some(true),
+        "false" | "0" | "no" => Some(false),
+        _ => None,
+    }
 }
 
 fn handle_ui_event(event: UiEvent) -> u32 {
@@ -465,29 +408,29 @@ fn handle_ui_event(event: UiEvent) -> u32 {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_handle_shell_pointer_down(x: f32, y: f32) -> u32 {
+pub extern "C" fn edgerun_frontend_handle_shell_pointer_down(x: f32, y: f32) -> u32 {
     handle_shell_event(UiEvent::PointerDown { x, y })
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_handle_shell_pointer_move(x: f32, y: f32) -> u32 {
+pub extern "C" fn edgerun_frontend_handle_shell_pointer_move(x: f32, y: f32) -> u32 {
     handle_shell_event(UiEvent::PointerMove { x, y })
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_handle_shell_pointer_up(x: f32, y: f32) -> u32 {
+pub extern "C" fn edgerun_frontend_handle_shell_pointer_up(x: f32, y: f32) -> u32 {
     handle_shell_event(UiEvent::PointerUp { x, y })
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_handle_shell_key(code: u32) -> u32 {
+pub extern "C" fn edgerun_frontend_handle_shell_key(code: u32) -> u32 {
     handle_shell_event(UiEvent::KeyDown {
         key: key_from_code(code),
     })
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_shell_hit_test(x: f32, y: f32) -> u32 {
+pub extern "C" fn edgerun_frontend_shell_hit_test(x: f32, y: f32) -> u32 {
     SHELL_SCENE.with_borrow(|scene| {
         scene
             .hit_test(x, y)
@@ -575,7 +518,7 @@ fn key_from_code(code: u32) -> UiKey {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_hit_test(x: f32, y: f32) -> u32 {
+pub extern "C" fn edgerun_frontend_hit_test(x: f32, y: f32) -> u32 {
     SCENE.with_borrow(|scene| {
         scene
             .hit_test(x, y)
@@ -585,52 +528,52 @@ pub extern "C" fn codex_gl_hit_test(x: f32, y: f32) -> u32 {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_hit_count() -> u32 {
+pub extern "C" fn edgerun_frontend_hit_count() -> u32 {
     SCENE.with_borrow(|scene| scene.hits().len() as u32)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_hit_float_stride() -> u32 {
+pub extern "C" fn edgerun_frontend_hit_float_stride() -> u32 {
     6
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_hit_buffer_len() -> u32 {
+pub extern "C" fn edgerun_frontend_hit_buffer_len() -> u32 {
     PACKED_HITS.with_borrow(|packed| packed.len() as u32)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_hit_buffer_ptr() -> *const f32 {
+pub extern "C" fn edgerun_frontend_hit_buffer_ptr() -> *const f32 {
     PACKED_HITS.with_borrow(|packed| packed.as_ptr())
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_shell_rect_buffer_len() -> u32 {
+pub extern "C" fn edgerun_frontend_shell_rect_buffer_len() -> u32 {
     SHELL_PACKED_RECTS.with_borrow(|packed| packed.len() as u32)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_shell_rect_buffer_ptr() -> *const f32 {
+pub extern "C" fn edgerun_frontend_shell_rect_buffer_ptr() -> *const f32 {
     SHELL_PACKED_RECTS.with_borrow(|packed| packed.as_ptr())
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_shell_text_vertex_buffer_len() -> u32 {
+pub extern "C" fn edgerun_frontend_shell_text_vertex_buffer_len() -> u32 {
     SHELL_PACKED_TEXT_VERTICES.with_borrow(|packed| packed.len() as u32)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_shell_text_vertex_buffer_ptr() -> *const f32 {
+pub extern "C" fn edgerun_frontend_shell_text_vertex_buffer_ptr() -> *const f32 {
     SHELL_PACKED_TEXT_VERTICES.with_borrow(|packed| packed.as_ptr())
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_shell_hit_buffer_len() -> u32 {
+pub extern "C" fn edgerun_frontend_shell_hit_buffer_len() -> u32 {
     SHELL_PACKED_HITS.with_borrow(|packed| packed.len() as u32)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_shell_hit_buffer_ptr() -> *const f32 {
+pub extern "C" fn edgerun_frontend_shell_hit_buffer_ptr() -> *const f32 {
     SHELL_PACKED_HITS.with_borrow(|packed| packed.as_ptr())
 }
 
@@ -663,92 +606,92 @@ fn hit_kind_code(kind: HitKind) -> u32 {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_text_quad_count() -> u32 {
+pub extern "C" fn edgerun_frontend_text_quad_count() -> u32 {
     SCENE.with_borrow(|scene| scene.text_quads().len() as u32)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_rect_float_stride() -> u32 {
+pub extern "C" fn edgerun_frontend_rect_float_stride() -> u32 {
     11
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_rect_buffer_len() -> u32 {
+pub extern "C" fn edgerun_frontend_rect_buffer_len() -> u32 {
     PACKED_RECTS.with_borrow(|packed| packed.len() as u32)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_rect_buffer_ptr() -> *const f32 {
+pub extern "C" fn edgerun_frontend_rect_buffer_ptr() -> *const f32 {
     PACKED_RECTS.with_borrow(|packed| packed.as_ptr())
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_text_vertex_float_stride() -> u32 {
+pub extern "C" fn edgerun_frontend_text_vertex_float_stride() -> u32 {
     8
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_text_vertex_buffer_len() -> u32 {
+pub extern "C" fn edgerun_frontend_text_vertex_buffer_len() -> u32 {
     PACKED_TEXT_VERTICES.with_borrow(|packed| packed.len() as u32)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_text_vertex_buffer_ptr() -> *const f32 {
+pub extern "C" fn edgerun_frontend_text_vertex_buffer_ptr() -> *const f32 {
     PACKED_TEXT_VERTICES.with_borrow(|packed| packed.as_ptr())
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_clear_r() -> f32 {
+pub extern "C" fn edgerun_frontend_clear_r() -> f32 {
     SCENE.with_borrow(|scene| scene.clear.r)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_clear_g() -> f32 {
+pub extern "C" fn edgerun_frontend_clear_g() -> f32 {
     SCENE.with_borrow(|scene| scene.clear.g)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_clear_b() -> f32 {
+pub extern "C" fn edgerun_frontend_clear_b() -> f32 {
     SCENE.with_borrow(|scene| scene.clear.b)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_clear_a() -> f32 {
+pub extern "C" fn edgerun_frontend_clear_a() -> f32 {
     SCENE.with_borrow(|scene| scene.clear.a)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_rect_x(index: u32) -> f32 {
+pub extern "C" fn edgerun_frontend_rect_x(index: u32) -> f32 {
     rect_field(index, |rect| rect.x)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_rect_y(index: u32) -> f32 {
+pub extern "C" fn edgerun_frontend_rect_y(index: u32) -> f32 {
     rect_field(index, |rect| rect.y)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_rect_w(index: u32) -> f32 {
+pub extern "C" fn edgerun_frontend_rect_w(index: u32) -> f32 {
     rect_field(index, |rect| rect.w)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_rect_h(index: u32) -> f32 {
+pub extern "C" fn edgerun_frontend_rect_h(index: u32) -> f32 {
     rect_field(index, |rect| rect.h)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_rect_radius(index: u32) -> f32 {
+pub extern "C" fn edgerun_frontend_rect_radius(index: u32) -> f32 {
     rect_field(index, |rect| rect.radius)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_rect_shadow(index: u32) -> f32 {
+pub extern "C" fn edgerun_frontend_rect_shadow(index: u32) -> f32 {
     rect_field(index, |rect| rect.shadow)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_rect_mode(index: u32) -> u32 {
+pub extern "C" fn edgerun_frontend_rect_mode(index: u32) -> u32 {
     SCENE.with_borrow(|scene| {
         scene
             .rects()
@@ -759,97 +702,97 @@ pub extern "C" fn codex_gl_rect_mode(index: u32) -> u32 {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_rect_r(index: u32) -> f32 {
+pub extern "C" fn edgerun_frontend_rect_r(index: u32) -> f32 {
     rect_field(index, |rect| rect.color.r)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_rect_g(index: u32) -> f32 {
+pub extern "C" fn edgerun_frontend_rect_g(index: u32) -> f32 {
     rect_field(index, |rect| rect.color.g)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_rect_b(index: u32) -> f32 {
+pub extern "C" fn edgerun_frontend_rect_b(index: u32) -> f32 {
     rect_field(index, |rect| rect.color.b)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_rect_a(index: u32) -> f32 {
+pub extern "C" fn edgerun_frontend_rect_a(index: u32) -> f32 {
     rect_field(index, |rect| rect.color.a)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_font_atlas_width() -> u32 {
+pub extern "C" fn edgerun_frontend_font_atlas_width() -> u32 {
     FONT.with(|font| font.width)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_font_atlas_height() -> u32 {
+pub extern "C" fn edgerun_frontend_font_atlas_height() -> u32 {
     FONT.with(|font| font.height)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_font_atlas_ptr() -> *const u8 {
+pub extern "C" fn edgerun_frontend_font_atlas_ptr() -> *const u8 {
     FONT.with(|font| font.alpha.as_ptr())
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_text_x(index: u32) -> f32 {
+pub extern "C" fn edgerun_frontend_text_x(index: u32) -> f32 {
     text_field(index, |quad| quad.x)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_text_y(index: u32) -> f32 {
+pub extern "C" fn edgerun_frontend_text_y(index: u32) -> f32 {
     text_field(index, |quad| quad.y)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_text_w(index: u32) -> f32 {
+pub extern "C" fn edgerun_frontend_text_w(index: u32) -> f32 {
     text_field(index, |quad| quad.w)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_text_h(index: u32) -> f32 {
+pub extern "C" fn edgerun_frontend_text_h(index: u32) -> f32 {
     text_field(index, |quad| quad.h)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_text_u0(index: u32) -> f32 {
+pub extern "C" fn edgerun_frontend_text_u0(index: u32) -> f32 {
     text_field(index, |quad| quad.u0)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_text_v0(index: u32) -> f32 {
+pub extern "C" fn edgerun_frontend_text_v0(index: u32) -> f32 {
     text_field(index, |quad| quad.v0)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_text_u1(index: u32) -> f32 {
+pub extern "C" fn edgerun_frontend_text_u1(index: u32) -> f32 {
     text_field(index, |quad| quad.u1)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_text_v1(index: u32) -> f32 {
+pub extern "C" fn edgerun_frontend_text_v1(index: u32) -> f32 {
     text_field(index, |quad| quad.v1)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_text_r(index: u32) -> f32 {
+pub extern "C" fn edgerun_frontend_text_r(index: u32) -> f32 {
     text_field(index, |quad| quad.color.r)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_text_g(index: u32) -> f32 {
+pub extern "C" fn edgerun_frontend_text_g(index: u32) -> f32 {
     text_field(index, |quad| quad.color.g)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_text_b(index: u32) -> f32 {
+pub extern "C" fn edgerun_frontend_text_b(index: u32) -> f32 {
     text_field(index, |quad| quad.color.b)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn codex_gl_text_a(index: u32) -> f32 {
+pub extern "C" fn edgerun_frontend_text_a(index: u32) -> f32 {
     text_field(index, |quad| quad.color.a)
 }
 
@@ -877,4 +820,45 @@ fn rect_mode_code(mode: RectMode) -> u32 {
 
 fn frame_active(time_ms: f64) -> bool {
     ((time_ms.max(0.0) as u64) / 800).is_multiple_of(2)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_host_supplied_work_projection() {
+        let projection = parse_work_projection(
+            "\
+local_node=wasm:alice:storage
+admission_node=admission:dao
+relay_node=relay:public
+channel=channel:7
+policy_hash=policy_abc
+request_hash=request_abc
+admission_hash=admission_abc
+route_commitment=route_abc
+storage_payload_hash=payload_abc
+manifest_hash=manifest_abc
+admitted_budget=1200
+retrieval_cost=15
+request_verified=true
+admission_verified=1
+storage_payload_verified=yes
+",
+        )
+        .expect("valid projection should parse");
+
+        assert_eq!(projection.local_node, "wasm:alice:storage");
+        assert_eq!(projection.admitted_budget, 1200);
+        assert_eq!(projection.retrieval_cost, 15);
+        assert!(projection.request_verified);
+        assert!(projection.admission_verified);
+        assert!(projection.storage_payload_verified);
+    }
+
+    #[test]
+    fn rejects_unknown_projection_fields() {
+        assert!(parse_work_projection("made_up=true").is_none());
+    }
 }

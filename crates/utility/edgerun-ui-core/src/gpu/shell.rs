@@ -1,13 +1,13 @@
 use super::app_registry::app_id_for_kind;
-#[cfg(any(feature = "fontdue-text", test))]
-use super::{
-    card, row, shadcn_badge, shadcn_button, shadcn_command, shadcn_item, text,
-    UiShadcnBadgeVariant, UiShadcnButtonSize, UiShadcnButtonVariant, UiPainter, UiRect,
-    EDGERUN_APP_REGISTRY, SHELL_LAUNCHER_BUTTON_ID,
-};
 use super::{
     app_spec_for_launch_id, GpuHit, GpuScene, HitKind, UiAction, UiAppKind,
     UiComponentPreviewState, UiEvent, UiRuntimeState,
+};
+#[cfg(any(feature = "fontdue-text", test))]
+use super::{
+    card, row, shadcn_badge, shadcn_button, shadcn_command, shadcn_item, text, UiPainter, UiRect,
+    UiShadcnBadgeVariant, UiShadcnButtonSize, UiShadcnButtonVariant, EDGERUN_APP_REGISTRY,
+    SHELL_LAUNCHER_BUTTON_ID,
 };
 
 #[derive(Clone, Debug, Default)]
@@ -90,8 +90,10 @@ pub(super) fn render_edgerun_shell_overlay(
             360.0_f32.min(bounds.w - 20.0),
             392.0,
         );
-        let mut launcher = card("bg-panel border rounded-lg p-3 gap-2")
-            .child(shadcn_command("Search apps...", SHELL_LAUNCHER_BUTTON_ID + 1));
+        let mut launcher = card("bg-panel border rounded-lg p-3 gap-2").child(shadcn_command(
+            "Search apps...",
+            SHELL_LAUNCHER_BUTTON_ID + 1,
+        ));
         for spec in EDGERUN_APP_REGISTRY {
             launcher = launcher.child(shadcn_item(
                 spec.title,

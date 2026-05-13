@@ -1,11 +1,11 @@
 [package]
 edition.workspace = true
 license.workspace = true
-name = "codex-gl-ui"
+name = "edgerun-frontend-native"
 version.workspace = true
 
 [[bin]]
-name = "codex-gl-ui"
+name = "edgerun-frontend"
 path = "src/main.rs"
 
 [dependencies]

@@ -491,7 +491,6 @@ version = "0.1.1"
 name = "edgerun-json"
 version = "0.1.1"
 dependencies = [
- "edgerun-error",
  "edgerun-json-derive",
  "edgerun-schemars",
  "edgerun-serde",

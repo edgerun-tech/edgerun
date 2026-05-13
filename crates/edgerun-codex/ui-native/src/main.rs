@@ -99,7 +99,7 @@ unsafe extern "C" {
 
 fn main() {
     if let Err(error) = run() {
-        eprintln!("codex-gl-ui: {error}");
+        eprintln!("edgerun-frontend: {error}");
         std::process::exit(1);
     }
 }
@@ -121,7 +121,7 @@ fn run() -> Result<(), String> {
             args.scheme,
         );
         println!(
-            "codex-gl-ui unified-chat scene rects={} text_quads={}",
+            "edgerun-frontend scene rects={} text_quads={}",
             scene.rects().len(),
             scene.text_quads().len()
         );
@@ -393,7 +393,7 @@ impl Args {
                 }
                 "--help" | "-h" => {
                     println!(
-                        "Usage: codex-gl-ui [--frames N] [--dump-scene] [--scheme dark|light|terminal] [--surface workspace|lock|capability|gallery]"
+                        "Usage: edgerun-frontend [--frames N] [--dump-scene] [--scheme dark|light|terminal] [--surface workspace|lock|capability|gallery]"
                     );
                     std::process::exit(0);
                 }

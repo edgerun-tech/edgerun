@@ -100,7 +100,7 @@ all hosts use packed buffers.
 ## Current Cleanup Queue
 
 - Split `gpu.rs` into focused modules.
-- Move web rendering setup out of `codex-gl.html` into a minimal reusable host.
+- Move web rendering setup out of the EdgeRun frontend HTML into a minimal reusable host.
 - Delete or migrate old pixel-buffer UI paths once GPU UI covers their use cases.
 - Keep one maintained native preview binary.
 - Replace preview strings with real projected state.

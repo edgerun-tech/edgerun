@@ -1,15 +1,13 @@
 [package]
 edition.workspace = true
 license.workspace = true
-name = "codex-gl-web"
+name = "edgerun-frontend-web"
 version.workspace = true
 
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-edgerun-crypto = { path = "../../utility/edgerun-crypto", default-features = false, features = ["ed25519"] }
-edgerun-work = { path = "../../protocol/edgerun-work", default-features = false }
 edgerun-ui-core = { workspace = true, features = ["fontdue-text", "std"] }
 
 [lints]
