@@ -23,6 +23,24 @@ impl Color4 {
         Self { r, g, b, a }
     }
 
+    pub const fn from_color(color: crate::Color) -> Self {
+        Self::rgba(
+            color.r as f32 / 255.0,
+            color.g as f32 / 255.0,
+            color.b as f32 / 255.0,
+            color.a as f32 / 255.0,
+        )
+    }
+
+    pub const fn from_color_alpha(color: crate::Color, a: f32) -> Self {
+        Self::rgba(
+            color.r as f32 / 255.0,
+            color.g as f32 / 255.0,
+            color.b as f32 / 255.0,
+            a,
+        )
+    }
+
     pub const fn with_alpha(self, a: f32) -> Self {
         Self { a, ..self }
     }
@@ -546,7 +564,13 @@ impl UiStyle {
             "text-amber" => self.text = palette::AMBER,
             "text-danger" => self.text = palette::DANGER,
             _ => {
-                if let Some(value) = class.strip_prefix("gap-").and_then(spacing_value) {
+                if let Some(color) = class.strip_prefix("bg-").and_then(tailwind_class_color) {
+                    self.bg = Some(color);
+                } else if let Some(color) =
+                    class.strip_prefix("text-").and_then(tailwind_class_color)
+                {
+                    self.text = color;
+                } else if let Some(value) = class.strip_prefix("gap-").and_then(spacing_value) {
                     self.gap = value;
                 } else if let Some(value) = class.strip_prefix("p-").and_then(spacing_value) {
                     self.padding = [value; 4];
@@ -2649,6 +2673,26 @@ fn size_value(value: &str) -> Option<f32> {
     }
 }
 
+fn tailwind_class_color(value: &str) -> Option<Color4> {
+    let color = match value {
+        "slate-50" => crate::TAILWIND.slate_50,
+        "slate-400" => crate::TAILWIND.slate_400,
+        "slate-700" => crate::TAILWIND.slate_700,
+        "slate-800" => crate::TAILWIND.slate_800,
+        "slate-900" => crate::TAILWIND.slate_900,
+        "slate-950" => crate::TAILWIND.slate_950,
+        "sky-50" => crate::TAILWIND.sky_50,
+        "cyan-600" => crate::TAILWIND.cyan_600,
+        "emerald-500" => crate::TAILWIND.emerald_500,
+        "amber-500" => crate::TAILWIND.amber_500,
+        "violet-500" => crate::TAILWIND.violet_500,
+        "rose-600" => crate::TAILWIND.rose_600,
+        "black" => crate::TAILWIND.black,
+        _ => return None,
+    };
+    Some(Color4::from_color(color))
+}
+
 #[cfg(feature = "fontdue-text")]
 fn ascii_chars() -> Vec<char> {
     (32u8..=126u8).map(char::from).collect()
@@ -2675,24 +2719,24 @@ fn panel(scene: &mut GpuScene, x: f32, y: f32, w: f32, h: f32, radius: f32, colo
 pub mod palette {
     use super::Color4;
 
-    pub const BG: Color4 = Color4::rgba(0.035, 0.043, 0.055, 1.0);
-    pub const SIDEBAR: Color4 = Color4::rgba(0.070, 0.078, 0.090, 0.98);
-    pub const TOPBAR: Color4 = Color4::rgba(0.055, 0.063, 0.078, 0.96);
-    pub const ROW: Color4 = Color4::rgba(0.104, 0.118, 0.140, 0.74);
-    pub const ACTIVE_ROW: Color4 = Color4::rgba(0.110, 0.230, 0.255, 0.42);
-    pub const PANEL: Color4 = Color4::rgba(0.074, 0.083, 0.101, 0.94);
-    pub const ASSISTANT: Color4 = Color4::rgba(0.090, 0.105, 0.125, 0.96);
-    pub const USER: Color4 = Color4::rgba(0.080, 0.160, 0.180, 0.86);
-    pub const COMPOSER: Color4 = Color4::rgba(0.075, 0.086, 0.105, 0.98);
-    pub const BORDER: Color4 = Color4::rgba(0.220, 0.245, 0.275, 0.48);
-    pub const ACCENT: Color4 = Color4::rgba(0.055, 0.624, 0.820, 1.0);
-    pub const GREEN: Color4 = Color4::rgba(0.180, 0.760, 0.500, 1.0);
-    pub const VIOLET: Color4 = Color4::rgba(0.560, 0.500, 0.940, 1.0);
-    pub const AMBER: Color4 = Color4::rgba(0.930, 0.650, 0.220, 1.0);
-    pub const DANGER: Color4 = Color4::rgba(0.940, 0.250, 0.310, 1.0);
-    pub const ACCENT_TEXT: Color4 = Color4::rgba(0.940, 0.980, 1.000, 1.0);
-    pub const TEXT: Color4 = Color4::rgba(0.930, 0.950, 0.970, 1.0);
-    pub const MUTED: Color4 = Color4::rgba(0.560, 0.620, 0.700, 1.0);
+    pub const BG: Color4 = Color4::from_color(crate::EDGERUN_DARK.bg);
+    pub const SIDEBAR: Color4 = Color4::from_color_alpha(crate::EDGERUN_DARK.panel, 0.98);
+    pub const TOPBAR: Color4 = Color4::from_color_alpha(crate::EDGERUN_DARK.panel, 0.96);
+    pub const ROW: Color4 = Color4::from_color_alpha(crate::EDGERUN_DARK.panel_2, 0.74);
+    pub const ACTIVE_ROW: Color4 = Color4::from_color_alpha(crate::EDGERUN_DARK.accent, 0.42);
+    pub const PANEL: Color4 = Color4::from_color_alpha(crate::EDGERUN_DARK.panel, 0.94);
+    pub const ASSISTANT: Color4 = Color4::from_color_alpha(crate::EDGERUN_DARK.panel_2, 0.96);
+    pub const USER: Color4 = Color4::from_color_alpha(crate::EDGERUN_DARK.accent, 0.34);
+    pub const COMPOSER: Color4 = Color4::from_color_alpha(crate::EDGERUN_DARK.panel, 0.98);
+    pub const BORDER: Color4 = Color4::from_color_alpha(crate::EDGERUN_DARK.border, 0.48);
+    pub const ACCENT: Color4 = Color4::from_color(crate::EDGERUN_DARK.accent);
+    pub const GREEN: Color4 = Color4::from_color(crate::TAILWIND.emerald_500);
+    pub const VIOLET: Color4 = Color4::from_color(crate::TAILWIND.violet_500);
+    pub const AMBER: Color4 = Color4::from_color(crate::TAILWIND.amber_500);
+    pub const DANGER: Color4 = Color4::from_color(crate::EDGERUN_DARK.danger);
+    pub const ACCENT_TEXT: Color4 = Color4::from_color(crate::EDGERUN_DARK.accent_text);
+    pub const TEXT: Color4 = Color4::from_color(crate::EDGERUN_DARK.text);
+    pub const MUTED: Color4 = Color4::from_color(crate::EDGERUN_DARK.muted);
 }
 
 fn glyph5x7(ch: char) -> [u8; 7] {

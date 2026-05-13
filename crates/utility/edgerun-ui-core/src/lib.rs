@@ -90,16 +90,49 @@ pub struct Theme {
     pub shadow: Color,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TailwindPalette {
+    pub slate_50: Color,
+    pub slate_400: Color,
+    pub slate_700: Color,
+    pub slate_800: Color,
+    pub slate_900: Color,
+    pub slate_950: Color,
+    pub sky_50: Color,
+    pub cyan_600: Color,
+    pub emerald_500: Color,
+    pub amber_500: Color,
+    pub violet_500: Color,
+    pub rose_600: Color,
+    pub black: Color,
+}
+
+pub const TAILWIND: TailwindPalette = TailwindPalette {
+    slate_50: Color::rgb(0xf8, 0xfa, 0xfc),
+    slate_400: Color::rgb(0x94, 0xa3, 0xb8),
+    slate_700: Color::rgb(0x33, 0x41, 0x55),
+    slate_800: Color::rgb(0x1e, 0x29, 0x3b),
+    slate_900: Color::rgb(0x0f, 0x17, 0x2a),
+    slate_950: Color::rgb(0x02, 0x06, 0x17),
+    sky_50: Color::rgb(0xf0, 0xf9, 0xff),
+    cyan_600: Color::rgb(0x08, 0x91, 0xb2),
+    emerald_500: Color::rgb(0x10, 0xb9, 0x81),
+    amber_500: Color::rgb(0xf5, 0x9e, 0x0b),
+    violet_500: Color::rgb(0x8b, 0x5c, 0xf6),
+    rose_600: Color::rgb(0xe1, 0x1d, 0x48),
+    black: Color::rgb(0x00, 0x00, 0x00),
+};
+
 pub const EDGERUN_DARK: Theme = Theme {
-    bg: Color::rgb(0x02, 0x06, 0x17),          // slate-950
-    panel: Color::rgb(0x0f, 0x17, 0x2a),       // slate-900
-    panel_2: Color::rgb(0x1e, 0x29, 0x3b),     // slate-800
-    text: Color::rgb(0xf8, 0xfa, 0xfc),        // slate-50
-    muted: Color::rgb(0x94, 0xa3, 0xb8),       // slate-400
-    border: Color::rgb(0x33, 0x41, 0x55),      // slate-700
-    accent: Color::rgb(0x0e, 0x9f, 0xd1),      // cyan/sky
-    accent_text: Color::rgb(0xf0, 0xf9, 0xff), // sky-50
-    danger: Color::rgb(0xe1, 0x1d, 0x48),      // rose-600
+    bg: TAILWIND.slate_950,
+    panel: TAILWIND.slate_900,
+    panel_2: TAILWIND.slate_800,
+    text: TAILWIND.slate_50,
+    muted: TAILWIND.slate_400,
+    border: TAILWIND.slate_700,
+    accent: TAILWIND.cyan_600,
+    accent_text: TAILWIND.sky_50,
+    danger: TAILWIND.rose_600,
     shadow: Color::rgba(0x00, 0x00, 0x00, 34),
 };
 
