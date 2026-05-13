@@ -3245,6 +3245,38 @@ pub fn build_unified_chat_shell_with_font_and_runtime(
     build_unified_chat_shell_impl(scene, width, height, state, Some(runtime), Some(atlas));
 }
 
+#[cfg(feature = "fontdue-text")]
+pub fn build_edgerun_workspace_shell_with_font(
+    scene: &mut GpuScene,
+    atlas: &FontAtlas,
+    width: f32,
+    height: f32,
+    workspace: &mut UiWorkspace,
+    chat_state: &UnifiedChatState<'_>,
+) {
+    scene.clear = palette::BG;
+    scene.clear_rects();
+    let mut ui = UiPainter {
+        scene,
+        atlas: Some(atlas),
+    };
+    ui.fill_rect(
+        UiRect::new(0.0, 0.0, width.max(360.0), height.max(320.0)),
+        0.0,
+        palette::BG,
+    );
+    workspace.render(
+        &mut ui,
+        UiRect::new(8.0, 8.0, (width - 16.0).max(0.0), (height - 16.0).max(0.0)),
+        |ui, bounds, app| match app.id {
+            1 => render_workspace_chat_app(ui, bounds, app, chat_state),
+            2 => render_trust_manager_app(ui, bounds, app),
+            3 => render_storage_app(ui, bounds, app),
+            _ => render_generic_workspace_app(ui, bounds, app),
+        },
+    );
+}
+
 fn build_unified_chat_shell_impl(
     scene: &mut GpuScene,
     width: f32,
@@ -3585,6 +3617,161 @@ fn build_unified_chat_shell_impl(
             ("codex tools", palette::VIOLET),
         ],
     );
+}
+
+fn render_workspace_chat_app(
+    ui: &mut UiPainter<'_, '_>,
+    bounds: UiRect,
+    app: &UiAppSurface,
+    chat_state: &UnifiedChatState<'_>,
+) {
+    let pad = 14.0;
+    ui.fill_rect(bounds, 0.0, palette::BG);
+    row("row bg-topbar border rounded-md p-3 gap-3 items-center")
+        .child(text("Contacts").class("w-20 text-muted truncate"))
+        .child(text(chat_state.subtitle).class("flex-1 text-text truncate"))
+        .child(badge(
+            if chat_state.connected {
+                "relay"
+            } else {
+                "local"
+            },
+            if chat_state.connected {
+                palette::GREEN
+            } else {
+                palette::AMBER
+            },
+        ))
+        .render_with_state(
+            ui,
+            UiRect::new(
+                bounds.x + pad,
+                bounds.y + pad,
+                (bounds.w - pad * 2.0).max(0.0),
+                46.0,
+            ),
+            Some(&app.runtime),
+        );
+
+    let composer_h = 76.0;
+    let content_top = bounds.y + 72.0;
+    let content_bottom = bounds.y + bounds.h - composer_h - pad;
+    let content_h = (content_bottom - content_top).max(0.0);
+    if chat_state.contacts.is_empty() {
+        card("bg-panel border rounded-md p-4 gap-3")
+            .child(text("No contacts yet").class("text-text truncate"))
+            .child(
+                text("Connect a contact book or receive an identity-routed contact.")
+                    .class("text-muted truncate"),
+            )
+            .render_with_state(
+                ui,
+                UiRect::new(
+                    bounds.x + pad,
+                    content_top,
+                    (bounds.w - pad * 2.0).max(0.0),
+                    112.0,
+                ),
+                Some(&app.runtime),
+            );
+    } else {
+        let rows = chat_state
+            .contacts
+            .iter()
+            .enumerate()
+            .map(|(index, contact)| {
+                list_row_node(contact.name, contact.detail, index as u32).accent(
+                    match contact.kind {
+                        UnifiedContactKind::Person => palette::ACCENT,
+                        UnifiedContactKind::CodexClient => palette::VIOLET,
+                        UnifiedContactKind::Node => palette::GREEN,
+                    },
+                )
+            });
+        scroll_area("bg-panel border rounded-md p-2 gap-2", 0.0)
+            .scroll_id(101)
+            .children(rows)
+            .render_with_state(
+                ui,
+                UiRect::new(
+                    bounds.x + pad,
+                    content_top,
+                    (bounds.w - pad * 2.0).max(0.0),
+                    content_h,
+                ),
+                Some(&app.runtime),
+            );
+    }
+
+    let draft = app.runtime.text_value(0, chat_state.composer_placeholder);
+    ui.composer(
+        bounds.x + pad,
+        bounds.y + bounds.h - composer_h - pad,
+        (bounds.w - pad * 2.0).max(0.0),
+        composer_h,
+        draft,
+        app.runtime
+            .focused()
+            .is_some_and(|hit| hit.kind == HitKind::Composer),
+        &[("encrypted", palette::GREEN), ("identity", palette::ACCENT)],
+    );
+}
+
+fn render_trust_manager_app(ui: &mut UiPainter<'_, '_>, bounds: UiRect, app: &UiAppSurface) {
+    let rows = [
+        control_row_node("Identity")
+            .detail("sealed Trust Container")
+            .value_text("local"),
+        control_row_node("Admission")
+            .detail("policy gate")
+            .value_text("not connected"),
+        control_row_node("Relay route")
+            .detail("identity-routed websocket")
+            .value_text("pending"),
+        control_row_node("Runtime proofs")
+            .detail("events recorded locally")
+            .value_text("0"),
+        control_row_node("Capability grants")
+            .detail("app-scoped permissions")
+            .control_button("open", 220, ButtonStyle::Ghost),
+    ];
+    column("bg-panel border rounded-md p-4 gap-3")
+        .child(header("Trust Manager").detail("proof dashboard"))
+        .children(rows)
+        .render_with_state(ui, bounds.inset(14.0, 14.0), Some(&app.runtime));
+}
+
+fn render_storage_app(ui: &mut UiPainter<'_, '_>, bounds: UiRect, app: &UiAppSurface) {
+    column("bg-panel border rounded-md p-4 gap-3")
+        .child(header("Storage").detail("verified local cache"))
+        .child(
+            metric("Cached package bytes", "unknown")
+                .detail("waiting for package store")
+                .progress(0.0),
+        )
+        .child(list_row_node(
+            "Network apps",
+            "run by hash, cache by policy",
+            301,
+        ))
+        .child(list_row_node(
+            "Contact book",
+            "IndexedDB projection pending",
+            302,
+        ))
+        .child(list_row_node(
+            "Message payloads",
+            "encrypted payload objects",
+            303,
+        ))
+        .render_with_state(ui, bounds.inset(14.0, 14.0), Some(&app.runtime));
+}
+
+fn render_generic_workspace_app(ui: &mut UiPainter<'_, '_>, bounds: UiRect, app: &UiAppSurface) {
+    card("bg-panel border rounded-md p-4 gap-3")
+        .child(text(&app.title).class("text-text truncate"))
+        .child(text("No app renderer registered.").class("text-muted truncate"))
+        .render_with_state(ui, bounds.inset(14.0, 14.0), Some(&app.runtime));
 }
 
 fn push_label(

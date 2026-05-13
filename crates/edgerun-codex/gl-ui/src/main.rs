@@ -5,8 +5,8 @@ use std::time::Duration;
 
 use edgerun_ui_core::gpu::gl::GlRenderer;
 use edgerun_ui_core::gpu::{
-    FontAtlas, GpuScene, UiColorScheme, UiEvent, UiKey, UiRuntimeState, UnifiedChatState,
-    build_unified_chat_shell_with_font_and_runtime, palette,
+    FontAtlas, GpuScene, UiAppSurface, UiColorScheme, UiEvent, UiKey, UiTileAxis, UiTileNode,
+    UiWorkspace, UnifiedChatState, build_edgerun_workspace_shell_with_font, palette,
 };
 
 const SDL_INIT_VIDEO: u32 = 0x0000_0020;
@@ -108,8 +108,15 @@ fn run() -> Result<(), String> {
     if args.dump_scene {
         let mut scene = GpuScene::new(palette::BG);
         let atlas = FontAtlas::load_inter(18.0)?;
-        let ui_state = UiRuntimeState::default();
-        build_surface(&mut scene, &atlas, &ui_state, 1120.0, 720.0, args.scheme);
+        let mut workspace = default_workspace();
+        build_surface(
+            &mut scene,
+            &atlas,
+            &mut workspace,
+            1120.0,
+            720.0,
+            args.scheme,
+        );
         println!(
             "codex-gl-ui unified-chat scene rects={} text_quads={}",
             scene.rects().len(),
@@ -154,7 +161,7 @@ fn run() -> Result<(), String> {
     let atlas = FontAtlas::load_inter(18.0)?;
     let renderer = unsafe { GlRenderer::new_current_context_with_font(&atlas)? };
     let mut scene = GpuScene::new(palette::BG);
-    let mut ui_state = UiRuntimeState::default();
+    let mut workspace = default_workspace();
     let mut running = true;
     let mut frames = 0u32;
     let mut scene_dirty = true;
@@ -165,10 +172,10 @@ fn run() -> Result<(), String> {
                 SDL_QUIT => running = false,
                 SDL_KEYDOWN if event.key_sym() == SDLK_ESCAPE => {
                     running = false;
-                    let _ = ui_state.handle_event(&scene, UiEvent::KeyDown { key: UiKey::Escape });
+                    let _ = workspace.handle_event(&scene, UiEvent::KeyDown { key: UiKey::Escape });
                 }
                 SDL_KEYDOWN => {
-                    ui_state.handle_event(
+                    workspace.handle_event(
                         &scene,
                         UiEvent::KeyDown {
                             key: sdl_key(event.key_sym()),
@@ -177,7 +184,7 @@ fn run() -> Result<(), String> {
                     scene_dirty = true;
                 }
                 SDL_MOUSEBUTTONDOWN => {
-                    ui_state.handle_event(
+                    workspace.handle_event(
                         &scene,
                         UiEvent::PointerDown {
                             x: event.mouse_x(),
@@ -187,7 +194,7 @@ fn run() -> Result<(), String> {
                     scene_dirty = true;
                 }
                 SDL_MOUSEMOTION => {
-                    ui_state.handle_event(
+                    workspace.handle_event(
                         &scene,
                         UiEvent::PointerMove {
                             x: event.mouse_x(),
@@ -197,7 +204,7 @@ fn run() -> Result<(), String> {
                     scene_dirty = true;
                 }
                 SDL_MOUSEBUTTONUP => {
-                    ui_state.handle_event(
+                    workspace.handle_event(
                         &scene,
                         UiEvent::PointerUp {
                             x: event.mouse_x(),
@@ -207,11 +214,15 @@ fn run() -> Result<(), String> {
                     scene_dirty = true;
                 }
                 SDL_MOUSEWHEEL => {
-                    ui_state.handle_event(
+                    let hover = workspace
+                        .focused_app
+                        .and_then(|id| workspace.app(id))
+                        .and_then(|app| app.runtime.hovered());
+                    workspace.handle_event(
                         &scene,
                         UiEvent::Wheel {
-                            x: ui_state.hovered().map(|hit| hit.x).unwrap_or(0.0),
-                            y: ui_state.hovered().map(|hit| hit.y).unwrap_or(0.0),
+                            x: hover.map(|hit| hit.x).unwrap_or(0.0),
+                            y: hover.map(|hit| hit.y).unwrap_or(0.0),
                             delta_y: -event.wheel_y() * 120.0,
                         },
                     );
@@ -230,7 +241,7 @@ fn run() -> Result<(), String> {
             build_surface(
                 &mut scene,
                 &atlas,
-                &ui_state,
+                &mut workspace,
                 width as f32,
                 height as f32,
                 args.scheme,
@@ -272,14 +283,36 @@ fn sdl_key(sym: i32) -> UiKey {
 fn build_surface(
     scene: &mut GpuScene,
     atlas: &FontAtlas,
-    ui_state: &UiRuntimeState,
+    workspace: &mut UiWorkspace,
     width: f32,
     height: f32,
     scheme: UiColorScheme,
 ) {
     let state = UnifiedChatState::empty();
-    build_unified_chat_shell_with_font_and_runtime(scene, atlas, width, height, &state, ui_state);
+    build_edgerun_workspace_shell_with_font(scene, atlas, width, height, workspace, &state);
     scene.apply_color_scheme(scheme);
+}
+
+fn default_workspace() -> UiWorkspace {
+    UiWorkspace {
+        apps: vec![
+            UiAppSurface::new(1, "EdgeRun Chat"),
+            UiAppSurface::new(2, "Trust Manager"),
+            UiAppSurface::new(3, "Storage"),
+        ],
+        root: UiTileNode::Split {
+            axis: UiTileAxis::Horizontal,
+            ratio_percent: 56,
+            first: Box::new(UiTileNode::Leaf { app_id: 1 }),
+            second: Box::new(UiTileNode::Split {
+                axis: UiTileAxis::Vertical,
+                ratio_percent: 52,
+                first: Box::new(UiTileNode::Leaf { app_id: 2 }),
+                second: Box::new(UiTileNode::Leaf { app_id: 3 }),
+            }),
+        },
+        focused_app: Some(1),
+    }
 }
 
 #[derive(Default)]

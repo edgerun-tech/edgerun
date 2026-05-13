@@ -1,14 +1,14 @@
 use std::cell::RefCell;
 
 use edgerun_ui_core::gpu::{
-    FontAtlas, GpuHit, GpuRect, GpuScene, HitKind, RectMode, TextQuad, UiAction, UiColorScheme,
-    UiEvent, UiKey, UiRuntimeState, UnifiedChatState,
-    build_unified_chat_shell_with_font_and_runtime, palette,
+    FontAtlas, GpuHit, GpuRect, GpuScene, HitKind, RectMode, TextQuad, UiAction, UiAppSurface,
+    UiColorScheme, UiEvent, UiKey, UiTileAxis, UiTileNode, UiWorkspace, UiWorkspaceAction,
+    UnifiedChatState, build_edgerun_workspace_shell_with_font, palette,
 };
 
 thread_local! {
     static SCENE: RefCell<GpuScene> = RefCell::new(GpuScene::new(palette::BG));
-    static UI_STATE: RefCell<UiRuntimeState> = RefCell::new(UiRuntimeState::default());
+    static WORKSPACE: RefCell<UiWorkspace> = RefCell::new(default_workspace());
     static PACKED_RECTS: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
     static PACKED_TEXT_VERTICES: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
     static PACKED_HITS: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
@@ -17,6 +17,28 @@ thread_local! {
     static COLOR_SCHEME: RefCell<UiColorScheme> = const { RefCell::new(UiColorScheme::Dark) };
     static FONT: FontAtlas = FontAtlas::from_font_bytes(include_bytes!(env!("CODEX_GL_INTER_FONT")), 18.0)
         .expect("embedded Inter font should parse");
+}
+
+fn default_workspace() -> UiWorkspace {
+    UiWorkspace {
+        apps: vec![
+            UiAppSurface::new(1, "EdgeRun Chat"),
+            UiAppSurface::new(2, "Trust Manager"),
+            UiAppSurface::new(3, "Storage"),
+        ],
+        root: UiTileNode::Split {
+            axis: UiTileAxis::Horizontal,
+            ratio_percent: 56,
+            first: Box::new(UiTileNode::Leaf { app_id: 1 }),
+            second: Box::new(UiTileNode::Split {
+                axis: UiTileAxis::Vertical,
+                ratio_percent: 52,
+                first: Box::new(UiTileNode::Leaf { app_id: 2 }),
+                second: Box::new(UiTileNode::Leaf { app_id: 3 }),
+            }),
+        },
+        focused_app: Some(1),
+    }
 }
 
 #[unsafe(no_mangle)]
@@ -58,9 +80,9 @@ fn build_scene(width: f32, height: f32, active: bool) -> u32 {
         SCENE.with_borrow_mut(|scene| {
             let mut state = UnifiedChatState::empty();
             state.connected = active;
-            UI_STATE.with_borrow(|runtime| {
-                build_unified_chat_shell_with_font_and_runtime(
-                    scene, font, width, height, &state, runtime,
+            WORKSPACE.with_borrow_mut(|workspace| {
+                build_edgerun_workspace_shell_with_font(
+                    scene, font, width, height, workspace, &state,
                 );
             });
             let scheme = COLOR_SCHEME.with_borrow(|scheme| *scheme);
@@ -228,11 +250,21 @@ pub extern "C" fn codex_gl_handle_text_input(len: u32) -> u32 {
 
 fn handle_ui_event(event: UiEvent) -> u32 {
     SCENE.with_borrow(|scene| {
-        UI_STATE.with_borrow_mut(|state| {
-            let action = state.handle_event(scene, event);
-            ui_action_dirty(action)
+        WORKSPACE.with_borrow_mut(|workspace| {
+            let action = workspace.handle_event(scene, event);
+            workspace_action_dirty(action)
         })
     })
+}
+
+fn workspace_action_dirty(action: UiWorkspaceAction) -> u32 {
+    match action {
+        UiWorkspaceAction::None => 0,
+        UiWorkspaceAction::AppAction { action, .. } => ui_action_dirty(action),
+        UiWorkspaceAction::FocusedApp(_)
+        | UiWorkspaceAction::ClosedApp(_)
+        | UiWorkspaceAction::SplitRequested { .. } => 1,
+    }
 }
 
 fn ui_action_dirty(action: UiAction) -> u32 {
