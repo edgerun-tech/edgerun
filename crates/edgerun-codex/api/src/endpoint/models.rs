@@ -194,7 +194,7 @@ mod tests {
     async fn parses_models_response() {
         let response = ModelsResponse {
             models: vec![
-                edgerun_json::from_serde_value(json!({
+                edgerun_json::from_json_value(json!({
                     "slug": "gpt-test",
                     "display_name": "gpt-test",
                     "description": "desc",

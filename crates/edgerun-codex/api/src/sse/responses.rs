@@ -1336,7 +1336,7 @@ mod tests {
 
     #[test]
     fn responses_stream_event_response_model_reads_top_level_headers() {
-        let ev: ResponsesStreamEvent = edgerun_json::from_serde_value(json!({
+        let ev: ResponsesStreamEvent = edgerun_json::from_json_value(json!({
             "type": "response.metadata",
             "headers": {
                 "openai-model": CYBER_RESTRICTED_MODEL_FOR_TESTS,
@@ -1352,7 +1352,7 @@ mod tests {
 
     #[test]
     fn responses_stream_event_response_model_prefers_response_headers() {
-        let ev: ResponsesStreamEvent = edgerun_json::from_serde_value(json!({
+        let ev: ResponsesStreamEvent = edgerun_json::from_json_value(json!({
             "type": "response.created",
             "headers": {
                 "openai-model": "top-level-model"
@@ -1383,7 +1383,7 @@ mod tests {
             }
         });
         let event: ResponsesStreamEvent =
-            edgerun_json::from_serde_value(event).expect("expected event to deserialize");
+            edgerun_json::from_json_value(event).expect("expected event to deserialize");
 
         assert_eq!(
             event.model_verifications(),
@@ -1400,7 +1400,7 @@ mod tests {
             }
         });
         let event: ResponsesStreamEvent =
-            edgerun_json::from_serde_value(event).expect("expected event to deserialize");
+            edgerun_json::from_json_value(event).expect("expected event to deserialize");
 
         assert_eq!(event.model_verifications(), None);
     }
@@ -1414,7 +1414,7 @@ mod tests {
             }
         });
         let event: ResponsesStreamEvent =
-            edgerun_json::from_serde_value(event).expect("expected event to deserialize");
+            edgerun_json::from_json_value(event).expect("expected event to deserialize");
 
         assert_eq!(event.model_verifications(), None);
     }

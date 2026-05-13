@@ -1539,7 +1539,7 @@ mod tests {
                 .expect("first msg ok")
                 .into_text()
                 .expect("text");
-            let first_json: Value = edgerun_json::from_serde_str(&first).expect("json");
+            let first_json: Value = edgerun_json::from_json_str(&first).expect("json");
             assert_eq!(first_json["type"], "session.update");
             assert_eq!(
                 first_json["session"]["type"],
@@ -1580,7 +1580,7 @@ mod tests {
                 .expect("second msg ok")
                 .into_text()
                 .expect("text");
-            let second_json: Value = edgerun_json::from_serde_str(&second).expect("json");
+            let second_json: Value = edgerun_json::from_json_str(&second).expect("json");
             assert_eq!(second_json["type"], "input_audio_buffer.append");
 
             let third = ws
@@ -1590,7 +1590,7 @@ mod tests {
                 .expect("third msg ok")
                 .into_text()
                 .expect("text");
-            let third_json: Value = edgerun_json::from_serde_str(&third).expect("json");
+            let third_json: Value = edgerun_json::from_json_str(&third).expect("json");
             assert_eq!(third_json["type"], "conversation.item.create");
             assert_eq!(third_json["item"]["content"][0]["text"], "hello agent");
 
@@ -1601,7 +1601,7 @@ mod tests {
                 .expect("fourth msg ok")
                 .into_text()
                 .expect("text");
-            let fourth_json: Value = edgerun_json::from_serde_str(&fourth).expect("json");
+            let fourth_json: Value = edgerun_json::from_json_str(&fourth).expect("json");
             assert_eq!(fourth_json["type"], "conversation.handoff.append");
             assert_eq!(fourth_json["handoff_id"], "handoff_1");
             assert_eq!(
@@ -1832,7 +1832,7 @@ mod tests {
                 .expect("first msg ok")
                 .into_text()
                 .expect("text");
-            let first_json: Value = edgerun_json::from_serde_str(&first).expect("json");
+            let first_json: Value = edgerun_json::from_json_str(&first).expect("json");
             assert_eq!(first_json["type"], "session.update");
             assert_eq!(
                 first_json["session"]["type"],
@@ -1925,7 +1925,7 @@ mod tests {
                 .expect("second msg ok")
                 .into_text()
                 .expect("text");
-            let second_json: Value = edgerun_json::from_serde_str(&second).expect("json");
+            let second_json: Value = edgerun_json::from_json_str(&second).expect("json");
             assert_eq!(second_json["type"], "conversation.item.create");
             assert_eq!(
                 second_json["item"]["type"],
@@ -1947,7 +1947,7 @@ mod tests {
                 .expect("third msg ok")
                 .into_text()
                 .expect("text");
-            let third_json: Value = edgerun_json::from_serde_str(&third).expect("json");
+            let third_json: Value = edgerun_json::from_json_str(&third).expect("json");
             assert_eq!(third_json["type"], "conversation.item.create");
             assert_eq!(
                 third_json["item"]["type"],
@@ -2040,7 +2040,7 @@ mod tests {
                 .expect("first msg ok")
                 .into_text()
                 .expect("text");
-            let first_json: Value = edgerun_json::from_serde_str(&first).expect("json");
+            let first_json: Value = edgerun_json::from_json_str(&first).expect("json");
             assert_eq!(first_json["type"], "session.update");
             assert_eq!(
                 first_json["session"]["type"],
@@ -2074,7 +2074,7 @@ mod tests {
                 .expect("second msg ok")
                 .into_text()
                 .expect("text");
-            let second_json: Value = edgerun_json::from_serde_str(&second).expect("json");
+            let second_json: Value = edgerun_json::from_json_str(&second).expect("json");
             assert_eq!(second_json["type"], "input_audio_buffer.append");
         });
 
@@ -2154,7 +2154,7 @@ mod tests {
                 .expect("first msg ok")
                 .into_text()
                 .expect("text");
-            let first_json: Value = edgerun_json::from_serde_str(&first).expect("json");
+            let first_json: Value = edgerun_json::from_json_str(&first).expect("json");
             assert_eq!(first_json["type"], "session.update");
             assert_eq!(
                 first_json["session"]["type"],
@@ -2247,7 +2247,7 @@ mod tests {
                 .expect("first msg ok")
                 .into_text()
                 .expect("text");
-            let first_json: Value = edgerun_json::from_serde_str(&first).expect("json");
+            let first_json: Value = edgerun_json::from_json_str(&first).expect("json");
             assert_eq!(first_json["type"], "session.update");
 
             let second = ws
@@ -2257,7 +2257,7 @@ mod tests {
                 .expect("second msg ok")
                 .into_text()
                 .expect("text");
-            let second_json: Value = edgerun_json::from_serde_str(&second).expect("json");
+            let second_json: Value = edgerun_json::from_json_str(&second).expect("json");
             assert_eq!(second_json["type"], "input_audio_buffer.append");
 
             ws.send(Message::Text(
