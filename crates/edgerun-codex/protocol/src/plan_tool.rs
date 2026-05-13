@@ -1,8 +1,8 @@
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
 use edgerun_json::FromJson;
 use edgerun_json::JsonValueError;
 use edgerun_json::Value;
+use edgerun_serde::Deserialize;
+use edgerun_serde::Serialize;
 use schemars::JsonSchema;
 use ts_rs::TS;
 

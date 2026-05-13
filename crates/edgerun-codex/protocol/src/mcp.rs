@@ -3,9 +3,9 @@
 //!
 //! We intentionally keep these types TS/JSON-schema friendly (via `ts-rs` and
 //! `schemars`) so they can be embedded in Codex's own protocol structures.
+use edgerun_json::FromJson;
 use edgerun_serde::Deserialize;
 use edgerun_serde::Serialize;
-use edgerun_json::FromJson;
 use schemars::JsonSchema;
 use ts_rs::TS;
 
@@ -189,9 +189,7 @@ impl Resource {
         value: edgerun_json::Value,
     ) -> Result<Self, edgerun_json::JsonValueError> {
         let mut object = value.into_object("Resource")?;
-        let size = object
-            .remove("size")
-            .and_then(lossy_i64);
+        let size = object.remove("size").and_then(lossy_i64);
         Ok(Self {
             annotations: object.take_optional("annotations")?,
             description: object.take_optional("description")?,
