@@ -559,6 +559,11 @@ pub enum UiNodeKind {
         id: u32,
         style: ButtonStyle,
     },
+    PanelHeader {
+        title: String,
+        subtitle: String,
+        action: Option<(String, u32)>,
+    },
     MetricCard {
         title: String,
         value: String,
@@ -571,6 +576,34 @@ pub enum UiNodeKind {
         value: String,
         helper: String,
         focused: bool,
+    },
+    TextArea {
+        label: String,
+        value: String,
+        focused: bool,
+    },
+    Slider {
+        label: String,
+        value: f32,
+        min_label: String,
+        max_label: String,
+        accent: Color4,
+        id: u32,
+    },
+    BarChart {
+        title: String,
+        subtitle: String,
+        labels: Vec<String>,
+        values: Vec<f32>,
+        accent: Color4,
+    },
+    TransactionRow {
+        title: String,
+        subtitle: String,
+        date: String,
+        amount: String,
+        positive: bool,
+        id: u32,
     },
     MenuItem {
         label: String,
@@ -649,6 +682,18 @@ impl UiNode {
         }
     }
 
+    pub fn panel_header(title: &str) -> Self {
+        Self {
+            kind: UiNodeKind::PanelHeader {
+                title: title.to_string(),
+                subtitle: String::new(),
+                action: None,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
     pub fn metric_card(title: &str, value: &str) -> Self {
         Self {
             kind: UiNodeKind::MetricCard {
@@ -670,6 +715,66 @@ impl UiNode {
                 value: value.to_string(),
                 helper: String::new(),
                 focused: false,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn text_area(label: &str, value: &str) -> Self {
+        Self {
+            kind: UiNodeKind::TextArea {
+                label: label.to_string(),
+                value: value.to_string(),
+                focused: false,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn slider(label: &str, value: f32, id: u32) -> Self {
+        Self {
+            kind: UiNodeKind::Slider {
+                label: label.to_string(),
+                value,
+                min_label: String::new(),
+                max_label: String::new(),
+                accent: palette::ACCENT,
+                id,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn bar_chart(
+        title: &str,
+        labels: impl IntoIterator<Item = String>,
+        values: impl IntoIterator<Item = f32>,
+    ) -> Self {
+        Self {
+            kind: UiNodeKind::BarChart {
+                title: title.to_string(),
+                subtitle: String::new(),
+                labels: labels.into_iter().collect(),
+                values: values.into_iter().collect(),
+                accent: palette::ACCENT,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn transaction_row(title: &str, amount: &str, id: u32) -> Self {
+        Self {
+            kind: UiNodeKind::TransactionRow {
+                title: title.to_string(),
+                subtitle: String::new(),
+                date: String::new(),
+                amount: amount.to_string(),
+                positive: false,
+                id,
             },
             style: UiStyle::default(),
             children: Vec::new(),
@@ -740,7 +845,18 @@ impl UiNode {
                 *detail = value.to_string()
             }
             UiNodeKind::Field { helper, .. } => *helper = value.to_string(),
+            UiNodeKind::TextArea { value: text, .. } => *text = value.to_string(),
+            UiNodeKind::TransactionRow { subtitle, .. }
+            | UiNodeKind::BarChart { subtitle, .. }
+            | UiNodeKind::PanelHeader { subtitle, .. } => *subtitle = value.to_string(),
             _ => {}
+        }
+        self
+    }
+
+    pub fn action(mut self, label: &str, id: u32) -> Self {
+        if let UiNodeKind::PanelHeader { action, .. } = &mut self.kind {
+            *action = Some((label.to_string(), id));
         }
         self
     }
@@ -761,9 +877,10 @@ impl UiNode {
 
     pub fn accent(mut self, color: Color4) -> Self {
         match &mut self.kind {
-            UiNodeKind::MetricCard { accent, .. } | UiNodeKind::MenuItem { accent, .. } => {
-                *accent = color
-            }
+            UiNodeKind::MetricCard { accent, .. }
+            | UiNodeKind::Slider { accent, .. }
+            | UiNodeKind::BarChart { accent, .. }
+            | UiNodeKind::MenuItem { accent, .. } => *accent = color,
             UiNodeKind::Badge {
                 color: badge_color, ..
             } => *badge_color = color,
@@ -772,13 +889,51 @@ impl UiNode {
         self
     }
 
-    pub fn focused(mut self, focused: bool) -> Self {
-        if let UiNodeKind::Field {
-            focused: node_focused,
+    pub fn range_labels(mut self, min_label: &str, max_label: &str) -> Self {
+        if let UiNodeKind::Slider {
+            min_label: min_node_label,
+            max_label: max_node_label,
             ..
         } = &mut self.kind
         {
-            *node_focused = focused;
+            *min_node_label = min_label.to_string();
+            *max_node_label = max_label.to_string();
+        }
+        self
+    }
+
+    pub fn date(mut self, date: &str) -> Self {
+        if let UiNodeKind::TransactionRow {
+            date: node_date, ..
+        } = &mut self.kind
+        {
+            *node_date = date.to_string();
+        }
+        self
+    }
+
+    pub fn positive(mut self, positive: bool) -> Self {
+        if let UiNodeKind::TransactionRow {
+            positive: node_positive,
+            ..
+        } = &mut self.kind
+        {
+            *node_positive = positive;
+        }
+        self
+    }
+
+    pub fn focused(mut self, focused: bool) -> Self {
+        match &mut self.kind {
+            UiNodeKind::Field {
+                focused: node_focused,
+                ..
+            }
+            | UiNodeKind::TextArea {
+                focused: node_focused,
+                ..
+            } => *node_focused = focused,
+            _ => {}
         }
         self
     }
@@ -811,6 +966,21 @@ impl UiNode {
                     *style,
                     *id,
                     true,
+                );
+            }
+            UiNodeKind::PanelHeader {
+                title,
+                subtitle,
+                action,
+            } => {
+                self::components::panel_header(
+                    ui,
+                    rect,
+                    self::components::PanelHeader {
+                        title,
+                        subtitle,
+                        action: action.as_ref().map(|(label, id)| (label.as_str(), *id)),
+                    },
                 );
             }
             UiNodeKind::MetricCard {
@@ -846,6 +1016,83 @@ impl UiNode {
                         value,
                         helper,
                         focused: *focused,
+                    },
+                );
+            }
+            UiNodeKind::TextArea {
+                label,
+                value,
+                focused,
+            } => {
+                self::components::text_area(
+                    ui,
+                    rect,
+                    self::components::TextArea {
+                        label,
+                        value,
+                        focused: *focused,
+                    },
+                );
+            }
+            UiNodeKind::Slider {
+                label,
+                value,
+                min_label,
+                max_label,
+                accent,
+                id,
+            } => {
+                self::components::slider(
+                    ui,
+                    rect,
+                    self::components::Slider {
+                        label,
+                        value: *value,
+                        min_label,
+                        max_label,
+                        accent: *accent,
+                        id: *id,
+                    },
+                );
+            }
+            UiNodeKind::BarChart {
+                title,
+                subtitle,
+                labels,
+                values,
+                accent,
+            } => {
+                let label_refs = labels.iter().map(String::as_str).collect::<Vec<_>>();
+                self::components::bar_chart(
+                    ui,
+                    rect,
+                    self::components::BarChart {
+                        title,
+                        subtitle,
+                        labels: &label_refs,
+                        values,
+                        accent: *accent,
+                    },
+                );
+            }
+            UiNodeKind::TransactionRow {
+                title,
+                subtitle,
+                date,
+                amount,
+                positive,
+                id,
+            } => {
+                self::components::transaction_row(
+                    ui,
+                    rect,
+                    self::components::TransactionRow {
+                        title,
+                        subtitle,
+                        date,
+                        amount,
+                        positive: *positive,
+                        id: *id,
                     },
                 );
             }
@@ -934,12 +1181,36 @@ pub fn button(label: &str, id: u32, style: ButtonStyle) -> UiNode {
     UiNode::button(label, id, style)
 }
 
+pub fn header(title: &str) -> UiNode {
+    UiNode::panel_header(title)
+}
+
 pub fn metric(title: &str, value: &str) -> UiNode {
     UiNode::metric_card(title, value)
 }
 
 pub fn field_node(label: &str, value: &str) -> UiNode {
     UiNode::field(label, value)
+}
+
+pub fn text_area_node(label: &str, value: &str) -> UiNode {
+    UiNode::text_area(label, value)
+}
+
+pub fn slider_node(label: &str, value: f32, id: u32) -> UiNode {
+    UiNode::slider(label, value, id)
+}
+
+pub fn bar_chart_node(
+    title: &str,
+    labels: impl IntoIterator<Item = String>,
+    values: impl IntoIterator<Item = f32>,
+) -> UiNode {
+    UiNode::bar_chart(title, labels, values)
+}
+
+pub fn transaction_node(title: &str, amount: &str, id: u32) -> UiNode {
+    UiNode::transaction_row(title, amount, id)
 }
 
 pub fn menu_item_node(label: &str, id: u32) -> UiNode {
@@ -2326,8 +2597,13 @@ fn intrinsic_width(child: &UiNode) -> f32 {
             (label.chars().count() as f32 * 8.0 + 22.0).clamp(36.0, 180.0)
         }
         UiNodeKind::Button { label, .. } => (label.chars().count() as f32 * 8.0 + 28.0).max(44.0),
+        UiNodeKind::PanelHeader { .. } => 280.0,
         UiNodeKind::MetricCard { .. } => 220.0,
         UiNodeKind::Field { .. } => 240.0,
+        UiNodeKind::TextArea { .. } => 280.0,
+        UiNodeKind::Slider { .. } => 240.0,
+        UiNodeKind::BarChart { .. } => 320.0,
+        UiNodeKind::TransactionRow { .. } => 320.0,
         UiNodeKind::MenuItem { .. } => 220.0,
         UiNodeKind::Divider => 1.0,
         UiNodeKind::Spacer => child.style.width.unwrap_or(12.0),
@@ -2340,8 +2616,13 @@ fn intrinsic_height(child: &UiNode) -> f32 {
         UiNodeKind::Text(_) => 20.0,
         UiNodeKind::Badge { .. } => 22.0,
         UiNodeKind::Button { .. } => 34.0,
+        UiNodeKind::PanelHeader { .. } => 44.0,
         UiNodeKind::MetricCard { .. } => 132.0,
         UiNodeKind::Field { .. } => 92.0,
+        UiNodeKind::TextArea { .. } => 132.0,
+        UiNodeKind::Slider { .. } => 78.0,
+        UiNodeKind::BarChart { .. } => 180.0,
+        UiNodeKind::TransactionRow { .. } => 58.0,
         UiNodeKind::MenuItem { .. } => 58.0,
         UiNodeKind::Divider => 1.0,
         UiNodeKind::Spacer => child.style.height.unwrap_or(12.0),
@@ -2381,6 +2662,35 @@ mod tests {
 
         assert!(scene.rects().len() > 20);
         assert!(scene.hits().len() >= 2);
+    }
+
+    #[test]
+    fn ui_node_builder_renders_dashboard_primitives() {
+        let mut scene = GpuScene::new(palette::BG);
+        {
+            let mut ui = UiPainter::new(&mut scene);
+            let months = ["Jan", "Feb", "Mar", "Apr"].into_iter().map(str::to_string);
+            let values = [0.42, 0.72, 0.55, 0.91];
+            column("bg-panel border rounded-md p-4 gap-3")
+                .children([
+                    header("Contribution History")
+                        .detail("Last 4 months")
+                        .action("View", 50),
+                    bar_chart_node("Relay Receipts", months, values).class("h-44"),
+                    slider_node("Payout threshold", 0.62, 51)
+                        .range_labels("$50", "$10,000")
+                        .accent(palette::GREEN),
+                    text_area_node("Notes", "Route budget and admission notes").focused(true),
+                    transaction_node("Stripe payout", "+$4,200.00", 52)
+                        .detail("Income")
+                        .date("Today")
+                        .positive(true),
+                ])
+                .render(&mut ui, UiRect::new(0.0, 0.0, 420.0, 620.0));
+        }
+
+        assert!(scene.rects().len() > 35);
+        assert!(scene.hits().len() >= 3);
     }
 
     #[test]
