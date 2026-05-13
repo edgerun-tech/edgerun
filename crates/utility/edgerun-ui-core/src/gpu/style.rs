@@ -1,4 +1,4 @@
-use super::{Color4, UiRect, palette};
+use super::{palette, Color4, UiRect};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Axis {

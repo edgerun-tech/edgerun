@@ -10,7 +10,13 @@ use std::vec::Vec;
 #[cfg(feature = "fontdue-text")]
 use std::collections::HashMap;
 
+pub mod components;
 pub mod style;
+pub use components::{
+    bar_chart, field, menu_item, metric_card, panel_header, slider, text_area, transaction_row,
+    BarChart, Field, MenuItem, MetricCard, PanelHeader, Slider, TextArea, TransactionRow, UiGrid,
+    UiStack,
+};
 pub use style::{Axis, UiStyle};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -744,6 +750,17 @@ impl<'a, 'font> UiPainter<'a, 'font> {
 
     pub fn card(&mut self, x: f32, y: f32, w: f32, h: f32, radius: f32, color: Color4) {
         soft_card(self.scene, x, y, w, h, radius, color);
+    }
+
+    pub fn fill_rect(&mut self, rect: UiRect, radius: f32, color: Color4) {
+        self.scene
+            .push_rect(GpuRect::fill(rect.x, rect.y, rect.w, rect.h, radius, color));
+    }
+
+    pub fn border_rect(&mut self, rect: UiRect, radius: f32, color: Color4) {
+        self.scene.push_rect(GpuRect::border(
+            rect.x, rect.y, rect.w, rect.h, radius, color,
+        ));
     }
 
     pub fn pill(&mut self, x: f32, y: f32, w: f32, label: &str, color: Color4) {
