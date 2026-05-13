@@ -6,17 +6,18 @@ use edgerun_crypto::Ed25519SigningKey;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::channel::{ChannelEndpoint, RouteAdvertisement};
-use crate::codec::{aligned_copy_if_needed_for, blake3_hash};
+use crate::codec::{blake3_hash, wire_bytes, wire_from_bytes};
 use crate::identity::node_identity_from_key;
 use crate::protocol::{
-    Hash, NodeId, NodeIdentity, WorkPacket, WorkProtocolError, DEPARTMENT_COMPUTE,
-    NODE_ROLE_COMPUTE, WORK_TYPE_PROGRAM_CLOSE, WORK_TYPE_PROGRAM_EVENT, WORK_TYPE_PROGRAM_OPEN,
-    WORK_TYPE_PROGRAM_POLL, WORK_TYPE_PROGRAM_STDIN,
+    DEPARTMENT_COMPUTE, Hash, NODE_ROLE_COMPUTE, NodeId, NodeIdentity, WORK_TYPE_PROGRAM_CLOSE,
+    WORK_TYPE_PROGRAM_EVENT, WORK_TYPE_PROGRAM_OPEN, WORK_TYPE_PROGRAM_POLL,
+    WORK_TYPE_PROGRAM_STDIN, WorkPacket, WorkProtocolError,
 };
 use crate::roles::{
-    network_message_for_role, RoleContext, RoleInput, RoleOutput, WorkRole, ROLE_STATUS_ACCEPTED,
+    ROLE_STATUS_ACCEPTED, RoleContext, RoleInput, RoleOutput, WorkRole, WorkServiceResponse,
+    execute_role_packet, network_message_for_role,
 };
-use crate::route_builder::RouteAdvertisementBuilder;
+use crate::route_builder::signed_route_advertisement;
 use crate::signing::{sign_network_message_payload, simple_network_message_id};
 
 pub const PROGRAM_STREAM_STDIN: u16 = 0;
@@ -193,20 +194,11 @@ impl<A: ProgramIoAdapter> WorkRole for ProgramIoRole<A> {
         let Ok(bytes) = program_io_events_bytes(&ProgramIoEvents { events }) else {
             return RoleOutput::rejected(b"program io response encode failed".to_vec());
         };
-        RoleOutput {
-            status: ROLE_STATUS_ACCEPTED,
-            packet: None,
-            bytes,
-        }
+        RoleOutput::accepted_bytes(bytes)
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ProgramIoResponse {
-    pub status: u16,
-    pub packet: Option<WorkPacket>,
-    pub bytes: Vec<u8>,
-}
+pub type ProgramIoResponse = WorkServiceResponse;
 
 pub struct ProgramIoService<A> {
     key: Ed25519SigningKey,
@@ -254,11 +246,14 @@ impl<A: ProgramIoAdapter> ProgramIoService<A> {
         relay_node_id: NodeId,
         valid_until_unix_ms: u64,
     ) -> RouteAdvertisement {
-        RouteAdvertisementBuilder::new(&self.key, NODE_ROLE_COMPUTE, endpoint)
-            .relay_node_id(relay_node_id)
-            .departments(vec![DEPARTMENT_COMPUTE])
-            .valid_until_unix_ms(valid_until_unix_ms)
-            .build(&self.key)
+        signed_route_advertisement(
+            &self.key,
+            NODE_ROLE_COMPUTE,
+            endpoint,
+            relay_node_id,
+            vec![DEPARTMENT_COMPUTE],
+            valid_until_unix_ms,
+        )
     }
 
     pub fn handle_packet(&mut self, packet: WorkPacket, now_unix_ms: u64) -> ProgramIoResponse {
@@ -266,31 +261,20 @@ impl<A: ProgramIoAdapter> ProgramIoService<A> {
             WorkPacket::NetworkMessage(message) => Some(message.clone()),
             _ => None,
         };
-        let output = self.role.handle(
-            &RoleContext {
-                now_unix_ms,
-                local_node: self.identity.clone(),
-                policy_hash: self.policy_hash,
-            },
-            RoleInput {
-                packet,
-                previous_hash: [0u8; 32],
-                channel_hash: [0u8; 32],
-            },
+        let mut output = execute_role_packet(
+            &mut self.role,
+            &self.identity,
+            self.policy_hash,
+            packet,
+            now_unix_ms,
         );
-        let packet = if output.status == ROLE_STATUS_ACCEPTED && !output.bytes.is_empty() {
-            request.map(|message| {
+        if output.status == ROLE_STATUS_ACCEPTED && !output.bytes.is_empty() {
+            output.packet = request.map(|message| {
                 self.event_sequence = self.event_sequence.wrapping_add(1);
                 self.signed_event_packet(&message, output.bytes.clone(), self.event_sequence)
-            })
-        } else {
-            output.packet
-        };
-        ProgramIoResponse {
-            status: output.status,
-            packet,
-            bytes: output.bytes,
+            });
         }
+        output
     }
 
     fn signed_event_packet(
@@ -322,47 +306,17 @@ impl<A: ProgramIoAdapter> ProgramIoService<A> {
 }
 
 pub fn program_io_payload_bytes(payload: &ProgramIoPayload) -> Result<Vec<u8>, WorkProtocolError> {
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(payload)
-        .map(|bytes| bytes.to_vec())
-        .map_err(|_| WorkProtocolError::InvalidPacket)
+    wire_bytes(payload)
 }
 
 pub fn program_io_payload_from_bytes(bytes: &[u8]) -> Result<ProgramIoPayload, WorkProtocolError> {
-    if let Some(aligned) = aligned_copy_if_needed_for::<ArchivedProgramIoPayload>(bytes) {
-        return program_io_payload_from_aligned_bytes(aligned.as_slice());
-    }
-    program_io_payload_from_aligned_bytes(bytes)
-}
-
-fn program_io_payload_from_aligned_bytes(
-    bytes: &[u8],
-) -> Result<ProgramIoPayload, WorkProtocolError> {
-    use edgerun_wire::{access, deserialize, WireError};
-    let archived = access::<ArchivedProgramIoPayload, WireError>(bytes)
-        .map_err(|_| WorkProtocolError::InvalidPacket)?;
-    deserialize::<ProgramIoPayload, WireError>(archived)
-        .map_err(|_| WorkProtocolError::InvalidPacket)
+    wire_from_bytes::<ProgramIoPayload, ArchivedProgramIoPayload>(bytes)
 }
 
 pub fn program_io_events_bytes(events: &ProgramIoEvents) -> Result<Vec<u8>, WorkProtocolError> {
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(events)
-        .map(|bytes| bytes.to_vec())
-        .map_err(|_| WorkProtocolError::InvalidPacket)
+    wire_bytes(events)
 }
 
 pub fn program_io_events_from_bytes(bytes: &[u8]) -> Result<ProgramIoEvents, WorkProtocolError> {
-    if let Some(aligned) = aligned_copy_if_needed_for::<ArchivedProgramIoEvents>(bytes) {
-        return program_io_events_from_aligned_bytes(aligned.as_slice());
-    }
-    program_io_events_from_aligned_bytes(bytes)
-}
-
-fn program_io_events_from_aligned_bytes(
-    bytes: &[u8],
-) -> Result<ProgramIoEvents, WorkProtocolError> {
-    use edgerun_wire::{access, deserialize, WireError};
-    let archived = access::<ArchivedProgramIoEvents, WireError>(bytes)
-        .map_err(|_| WorkProtocolError::InvalidPacket)?;
-    deserialize::<ProgramIoEvents, WireError>(archived)
-        .map_err(|_| WorkProtocolError::InvalidPacket)
+    wire_from_bytes::<ProgramIoEvents, ArchivedProgramIoEvents>(bytes)
 }

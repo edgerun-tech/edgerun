@@ -1,28 +1,18 @@
 use alloc::vec::Vec;
 
 use crate::channel::{
-    RouteAdvertisement, RouteSnapshot, CHANNEL_KIND_MEMORY, CHANNEL_KIND_QUIC, CHANNEL_KIND_TCP,
-    CHANNEL_KIND_WASM_HOST, CHANNEL_KIND_WEBSOCKET, CHANNEL_KIND_WEBTRANSPORT,
+    CHANNEL_KIND_MEMORY, CHANNEL_KIND_QUIC, CHANNEL_KIND_TCP, CHANNEL_KIND_WASM_HOST,
+    CHANNEL_KIND_WEBSOCKET, CHANNEL_KIND_WEBTRANSPORT, RouteAdvertisement, RouteSnapshot,
 };
-use crate::memory_channel::route_is_available;
 use crate::preimage::HashBuilder;
 use crate::protocol::{Hash, NodeId};
 use crate::route_auth::{
-    route_advertisement_preimage, verify_route_advertisement, verify_route_snapshot,
+    current_unix_ms, route_advertisement_preimage, route_is_available, verify_route_advertisement,
+    verify_route_snapshot,
 };
 
 const ROUTE_COMMITMENT_DOMAIN: &[u8] = b"edgerun:v1:work:route-commitment";
 const ROUTE_ROOT_DOMAIN: &[u8] = b"edgerun:v1:work:route-root";
-
-#[cfg(feature = "std")]
-fn current_unix_ms() -> u64 {
-    crate::std_runtime::unix_ms()
-}
-
-#[cfg(not(feature = "std"))]
-fn current_unix_ms() -> u64 {
-    0
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum RouteRuntimeProfile {
@@ -132,7 +122,7 @@ impl VerifiedRoutePlan {
         self.snapshot
             .routes
             .iter()
-            .find(|route| route.node.node_id == node_id && route_is_available(route, now_unix_ms))
+            .find(|route| route_matches_node(route, node_id, now_unix_ms))
     }
 
     pub fn preferred_route_for_node(
@@ -152,11 +142,7 @@ impl VerifiedRoutePlan {
         self.snapshot
             .routes
             .iter()
-            .filter(|route| {
-                route.node.node_id == node_id
-                    && route_is_available(route, now_unix_ms)
-                    && policy.allows(route)
-            })
+            .filter(|route| route_matches_node_policy(route, node_id, policy, now_unix_ms))
             .min_by_key(|route| policy.priority(route).unwrap_or(usize::MAX))
     }
 
@@ -169,9 +155,10 @@ impl VerifiedRoutePlan {
         department: u16,
         now_unix_ms: u64,
     ) -> Option<&RouteAdvertisement> {
-        self.snapshot.routes.iter().find(|route| {
-            route_is_available(route, now_unix_ms) && route.departments.contains(&department)
-        })
+        self.snapshot
+            .routes
+            .iter()
+            .find(|route| route_matches_department(route, department, now_unix_ms))
     }
 
     pub fn preferred_route_for_department(
@@ -191,11 +178,7 @@ impl VerifiedRoutePlan {
         self.snapshot
             .routes
             .iter()
-            .filter(|route| {
-                route_is_available(route, now_unix_ms)
-                    && route.departments.contains(&department)
-                    && policy.allows(route)
-            })
+            .filter(|route| route_matches_department_policy(route, department, policy, now_unix_ms))
             .min_by_key(|route| policy.priority(route).unwrap_or(usize::MAX))
     }
 
@@ -211,9 +194,7 @@ impl VerifiedRoutePlan {
         self.snapshot
             .routes
             .iter()
-            .filter(|route| {
-                route_is_available(route, now_unix_ms) && route.departments.contains(&department)
-            })
+            .filter(|route| route_matches_department(route, department, now_unix_ms))
             .collect()
     }
 
@@ -235,11 +216,7 @@ impl VerifiedRoutePlan {
             .snapshot
             .routes
             .iter()
-            .filter(|route| {
-                route_is_available(route, now_unix_ms)
-                    && route.departments.contains(&department)
-                    && policy.allows(route)
-            })
+            .filter(|route| route_matches_department_policy(route, department, policy, now_unix_ms))
             .collect::<Vec<_>>();
         routes.sort_by_key(|route| policy.priority(route).unwrap_or(usize::MAX));
         routes
@@ -270,6 +247,32 @@ impl VerifiedRoutePlan {
         self.preferred_route_for_department(department, policy)
             .ok_or(RoutePlanError::NoRoute)
     }
+}
+
+fn route_matches_node(route: &RouteAdvertisement, node_id: NodeId, now_unix_ms: u64) -> bool {
+    route.node.node_id == node_id && route_is_available(route, now_unix_ms)
+}
+
+fn route_matches_node_policy(
+    route: &RouteAdvertisement,
+    node_id: NodeId,
+    policy: &RouteSelectionPolicy,
+    now_unix_ms: u64,
+) -> bool {
+    route_matches_node(route, node_id, now_unix_ms) && policy.allows(route)
+}
+
+fn route_matches_department(route: &RouteAdvertisement, department: u16, now_unix_ms: u64) -> bool {
+    route_is_available(route, now_unix_ms) && route.departments.contains(&department)
+}
+
+fn route_matches_department_policy(
+    route: &RouteAdvertisement,
+    department: u16,
+    policy: &RouteSelectionPolicy,
+    now_unix_ms: u64,
+) -> bool {
+    route_matches_department(route, department, now_unix_ms) && policy.allows(route)
 }
 
 pub fn route_commitment(route: &RouteAdvertisement) -> Hash {

@@ -2,8 +2,9 @@ use alloc::vec::Vec;
 
 use crate::channel::{ChannelEnvelope, RouteAdvertisement};
 use crate::channel_order::{ChannelOrderBook, ChannelOrderError, OrderedChannelEnvelope};
-use crate::memory_channel::{route_hash, MemoryChannelEngine, MemoryChannelError};
+use crate::memory_channel::{MemoryChannelEngine, MemoryChannelError};
 use crate::protocol::{Hash, NodeId, WorkPacket};
+use crate::route_auth::route_hash;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WorkChannelError {
     RouteInvalid,
@@ -11,6 +12,17 @@ pub enum WorkChannelError {
     DeliveryFailed,
     Order(ChannelOrderError),
     PacketHashFailed,
+}
+
+impl From<MemoryChannelError> for WorkChannelError {
+    fn from(error: MemoryChannelError) -> Self {
+        match error {
+            MemoryChannelError::RouteInvalid => Self::RouteInvalid,
+            MemoryChannelError::RouteMissing => Self::RouteMissing,
+            MemoryChannelError::PacketHashFailed => Self::PacketHashFailed,
+            MemoryChannelError::InboxMissing => Self::DeliveryFailed,
+        }
+    }
 }
 
 pub trait WorkChannel {
@@ -53,12 +65,7 @@ impl<T: WorkChannel> OrderedWorkChannel for T {}
 
 impl WorkChannel for MemoryChannelEngine {
     fn add_route(&mut self, route: RouteAdvertisement) -> Result<Hash, WorkChannelError> {
-        MemoryChannelEngine::add_route(self, route).map_err(|error| match error {
-            MemoryChannelError::RouteInvalid => WorkChannelError::RouteInvalid,
-            MemoryChannelError::RouteMissing => WorkChannelError::RouteMissing,
-            MemoryChannelError::PacketHashFailed => WorkChannelError::PacketHashFailed,
-            MemoryChannelError::InboxMissing => WorkChannelError::DeliveryFailed,
-        })
+        MemoryChannelEngine::add_route(self, route).map_err(Into::into)
     }
 
     fn remove_route(&mut self, node_id: NodeId) -> Option<RouteAdvertisement> {
@@ -75,11 +82,7 @@ impl WorkChannel for MemoryChannelEngine {
         to: NodeId,
         packet: WorkPacket,
     ) -> Result<ChannelEnvelope, WorkChannelError> {
-        self.deliver(from, to, packet).map_err(|error| match error {
-            MemoryChannelError::RouteMissing => WorkChannelError::RouteMissing,
-            MemoryChannelError::PacketHashFailed => WorkChannelError::PacketHashFailed,
-            _ => WorkChannelError::DeliveryFailed,
-        })
+        self.deliver(from, to, packet).map_err(Into::into)
     }
 
     fn recv_all(&mut self, node_id: NodeId) -> Vec<ChannelEnvelope> {

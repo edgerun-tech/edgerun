@@ -166,11 +166,7 @@ impl<S: ObjectStorageAdapter> WorkRole for TypedObjectStoreRole<S> {
                 else {
                     return RoleOutput::rejected(b"response encode failed".to_vec());
                 };
-                RoleOutput {
-                    status: ROLE_STATUS_ACCEPTED,
-                    packet: None,
-                    bytes,
-                }
+                RoleOutput::accepted_bytes(bytes)
             }
             StoragePayload::RetrieveResponse(_) => RoleOutput::ignored(),
         }
@@ -180,9 +176,11 @@ impl<S: ObjectStorageAdapter> WorkRole for TypedObjectStoreRole<S> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::identity::node_identity_from_key;
     use crate::storage_payload::{
         storage_payload_from_bytes, typed_shard_hash, verify_retrieve_response,
     };
+    use edgerun_crypto::Ed25519SigningKey;
 
     fn store_request(bytes: &[u8]) -> ObjectStoreRequest {
         let job_id = [9u8; 32];
@@ -229,16 +227,14 @@ mod tests {
     }
 
     fn assert_role_roundtrip<S: ObjectStorageAdapter>(mut role: TypedObjectStoreRole<S>) {
-        let local = [8u8; 32];
+        let key = Ed25519SigningKey::from_bytes(&[8u8; 32]);
+        let local_node = node_identity_from_key(&key, NODE_ROLE_STORAGE);
+        let local = local_node.node_id;
         let object = store_request(b"role adapter data");
         let retrieve = retrieve_request(&object);
         let context = RoleContext {
             now_unix_ms: 1,
-            local_node: NodeIdentity {
-                node_id: local,
-                role: NODE_ROLE_STORAGE,
-                public_key: [0u8; 32],
-            },
+            local_node,
             policy_hash: [0u8; 32],
         };
 

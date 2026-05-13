@@ -1,5 +1,7 @@
 #![cfg(feature = "std")]
 
+use std::net::TcpListener;
+
 use edgerun_crypto::Ed25519SigningKey;
 use edgerun_work::*;
 
@@ -178,4 +180,22 @@ fn native_storage_daemon_binds_object_store_to_storage_identity() {
     assert!(verify_retrieve_response(&response));
 
     daemon.shutdown().expect("shutdown daemon");
+}
+
+#[test]
+fn service_response_rejects_oversized_byte_body() {
+    let listener = TcpListener::bind("127.0.0.1:0").expect("bind listener");
+    let addr = listener.local_addr().expect("listener addr");
+    let client = std::thread::spawn(move || std::net::TcpStream::connect(addr).expect("connect"));
+    let (mut server, _) = listener.accept().expect("accept");
+    let response = WorkServiceResponse {
+        status: ROLE_STATUS_ACCEPTED,
+        packet: None,
+        bytes: vec![0u8; MAX_WORK_FRAME_LEN + 1],
+    };
+
+    let error = write_work_service_response(&mut server, &response).expect_err("oversized body");
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+    drop(server);
+    let _ = client.join().expect("client thread");
 }

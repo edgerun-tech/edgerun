@@ -2,8 +2,8 @@ use alloc::vec::Vec;
 
 use rkyv::{Archive, Deserialize, Serialize};
 
-use crate::codec::aligned_copy_if_needed_for;
-use crate::erasure_storage::{erasure_shard_hash, ErasureManifest, ErasureShard};
+use crate::codec::{wire_bytes, wire_from_bytes};
+use crate::erasure_storage::{ErasureManifest, ErasureShard, erasure_shard_hash};
 use crate::preimage::HashBuilder;
 use crate::protocol::{Hash, WorkProtocolError};
 
@@ -130,23 +130,11 @@ pub fn verify_retrieve_response(response: &ObjectRetrieveResponse) -> bool {
 }
 
 pub fn storage_payload_bytes(payload: &StoragePayload) -> Result<Vec<u8>, WorkProtocolError> {
-    edgerun_wire::to_bytes::<edgerun_wire::WireError>(payload)
-        .map(|bytes| bytes.to_vec())
-        .map_err(|_| WorkProtocolError::InvalidPacket)
+    wire_bytes(payload)
 }
 
 pub fn storage_payload_from_bytes(bytes: &[u8]) -> Result<StoragePayload, WorkProtocolError> {
-    if let Some(aligned) = aligned_copy_if_needed_for::<ArchivedStoragePayload>(bytes) {
-        return storage_payload_from_aligned_bytes(aligned.as_slice());
-    }
-    storage_payload_from_aligned_bytes(bytes)
-}
-
-fn storage_payload_from_aligned_bytes(bytes: &[u8]) -> Result<StoragePayload, WorkProtocolError> {
-    use edgerun_wire::{access, deserialize, WireError};
-    let archived = access::<ArchivedStoragePayload, WireError>(bytes)
-        .map_err(|_| WorkProtocolError::InvalidPacket)?;
-    deserialize::<StoragePayload, WireError>(archived).map_err(|_| WorkProtocolError::InvalidPacket)
+    wire_from_bytes::<StoragePayload, ArchivedStoragePayload>(bytes)
 }
 
 pub fn typed_shard_hash(job_id: Hash, index: u16, is_parity: bool, bytes: &[u8]) -> Hash {

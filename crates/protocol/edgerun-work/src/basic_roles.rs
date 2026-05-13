@@ -1,7 +1,7 @@
 use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
-use crate::chat_index::{MessageObject, CHAT_MESSAGE_KIND_TEXT};
+use crate::chat_index::{CHAT_MESSAGE_KIND_TEXT, MessageObject};
 use crate::codec::blake3_hash;
 use crate::message_seal::sealed_message_object_from_network_message;
 use crate::protocol::*;

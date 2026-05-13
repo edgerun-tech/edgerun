@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use edgerun_crypto::Ed25519SigningKey;
 
-use crate::channel::{ChannelEndpoint, CHANNEL_KIND_TCP};
+use crate::channel::{CHANNEL_KIND_TCP, ChannelEndpoint};
 use crate::codec::packet_hash;
 use crate::identity::node_identity_from_key;
 use crate::preimage::HashBuilder;

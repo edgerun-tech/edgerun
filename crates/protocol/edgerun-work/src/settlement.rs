@@ -8,12 +8,12 @@ use crate::delivery_proof::{channel_proof_hash, verify_channel_proof_for_ordered
 use crate::preimage::HashBuilder;
 use crate::protocol::*;
 use crate::recipient_policy::{
-    recipient_message_policy_allows, recipient_message_policy_hash, RecipientMessagePolicy,
+    RecipientMessagePolicy, recipient_message_policy_allows, recipient_message_policy_hash,
 };
 use crate::relay_role::ordered_message_input_hash;
 use crate::signing::{verify_work_admission, verify_work_receipt};
 use crate::transit_proof::{
-    packet_transit_hash, relay_delivery_output_hash, PacketTransitHashInput,
+    PacketTransitHashInput, packet_transit_hash, relay_delivery_output_hash,
 };
 
 const RECEIPT_ID_DOMAIN: &[u8] = b"edgerun:v1:work:receipt-id";

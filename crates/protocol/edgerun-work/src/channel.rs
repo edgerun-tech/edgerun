@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::protocol::{
-    Hash, NodeId, NodeIdentity, WorkPacket, WorkSignature, WORK_WIRE_ABI_VERSION,
+    Hash, NodeId, NodeIdentity, WORK_WIRE_ABI_VERSION, WorkPacket, WorkSignature,
 };
 
 pub const CHANNEL_KIND_MEMORY: u16 = 1;
@@ -82,6 +82,45 @@ pub struct ChannelEnvelope {
     pub route_hash: Hash,
     pub packet_hash: Hash,
     pub packet: WorkPacket,
+}
+
+impl ChannelEnvelope {
+    pub fn new(
+        channel_id: ChannelId,
+        from: NodeId,
+        to: NodeId,
+        route_hash: Hash,
+        packet_hash: Hash,
+        packet: WorkPacket,
+    ) -> Self {
+        Self {
+            abi_version: WORK_WIRE_ABI_VERSION,
+            channel_id,
+            from,
+            to,
+            route_hash,
+            packet_hash,
+            packet,
+        }
+    }
+
+    pub fn for_route(
+        route: &RouteAdvertisement,
+        route_hash: Hash,
+        from: NodeId,
+        to: NodeId,
+        packet_hash: Hash,
+        packet: WorkPacket,
+    ) -> Self {
+        Self::new(
+            route.endpoint.channel_id,
+            from,
+            to,
+            route_hash,
+            packet_hash,
+            packet,
+        )
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]

@@ -4,7 +4,7 @@ use crate::channel::{ChannelEnvelope, RouteAdvertisement};
 use crate::channel_order::{ChannelOrderBook, OrderedChannelEnvelope};
 use crate::frame_codec::channel_envelope_from_bytes;
 use crate::protocol::{Hash, NodeId, NodeIdentity, WorkPacket};
-use crate::roles::{RoleContext, RoleInput, RoleOutput, WorkRole};
+use crate::roles::{RoleOutput, WorkRole, execute_role};
 use crate::work_channel::{OrderedWorkChannel, WorkChannel, WorkChannelError};
 use crate::ws_channel::{WsFrame, WsWorkChannel};
 
@@ -64,17 +64,14 @@ impl<R: WorkRole> WasmWorkerNode<R> {
         now_unix_ms: u64,
     ) -> Result<RoleOutput, WorkChannelError> {
         let ordered = self.channel.ordered_inbound(&mut self.order, envelope)?;
-        let output = self.role.handle(
-            &RoleContext {
-                now_unix_ms,
-                local_node: self.identity.clone(),
-                policy_hash: self.policy_hash,
-            },
-            RoleInput {
-                packet: ordered.envelope.packet,
-                previous_hash: ordered.previous_message_hash,
-                channel_hash: ordered.envelope.channel_id,
-            },
+        let output = execute_role(
+            &mut self.role,
+            &self.identity,
+            self.policy_hash,
+            ordered.envelope.packet,
+            now_unix_ms,
+            ordered.previous_message_hash,
+            ordered.envelope.channel_id,
         );
         Ok(output)
     }

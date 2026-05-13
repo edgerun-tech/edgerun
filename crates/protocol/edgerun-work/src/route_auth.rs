@@ -5,11 +5,21 @@ use edgerun_crypto::Ed25519SigningKey;
 use crate::channel::*;
 use crate::codec::blake3_hash;
 use crate::preimage::PreimageBuilder;
-use crate::protocol::WORK_WIRE_ABI_VERSION;
+use crate::protocol::{Hash, WORK_WIRE_ABI_VERSION};
 use crate::signing::{sign_ed25519, verify_signature};
 
 const ROUTE_ADVERTISEMENT_DOMAIN: &[u8] = b"edgerun:v1:work:route-advertisement";
 const ROUTE_SNAPSHOT_DOMAIN: &[u8] = b"edgerun:v1:work:route-snapshot";
+
+#[cfg(feature = "std")]
+pub(crate) fn current_unix_ms() -> u64 {
+    crate::std_runtime::unix_ms()
+}
+
+#[cfg(not(feature = "std"))]
+pub(crate) fn current_unix_ms() -> u64 {
+    0
+}
 
 pub fn route_advertisement_preimage(value: &RouteAdvertisement) -> Vec<u8> {
     PreimageBuilder::domain(ROUTE_ADVERTISEMENT_DOMAIN)
@@ -45,6 +55,22 @@ pub fn verify_route_advertisement(value: &RouteAdvertisement) -> bool {
 
 pub fn verify_available_route_advertisement(value: &RouteAdvertisement) -> bool {
     verify_route_advertisement(value) && value.status == ROUTE_STATUS_AVAILABLE
+}
+
+pub fn verify_live_route_advertisement(value: &RouteAdvertisement, now_unix_ms: u64) -> bool {
+    verify_route_advertisement(value) && route_is_available(value, now_unix_ms)
+}
+
+pub fn route_is_available(route: &RouteAdvertisement, now_unix_ms: u64) -> bool {
+    route.status == ROUTE_STATUS_AVAILABLE && route.valid_until_unix_ms >= now_unix_ms
+}
+
+pub fn route_hash(route: &RouteAdvertisement) -> Hash {
+    blake3_hash(&route_advertisement_preimage(route))
+}
+
+pub fn available_route_hash(route: &RouteAdvertisement, now_unix_ms: u64) -> Option<Hash> {
+    route_is_available(route, now_unix_ms).then(|| route_hash(route))
 }
 
 pub fn is_valid_route_status(status: u16) -> bool {

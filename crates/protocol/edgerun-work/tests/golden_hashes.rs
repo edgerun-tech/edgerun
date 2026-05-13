@@ -22,67 +22,67 @@ fn hash_from_hex(input: &str) -> Hash {
 const EXPECTED_GOLDEN_HASHES: &[(&str, &str)] = &[
     (
         "node_id:user_message",
-        "fb74afedcca675a261c98f02e52577f0ec72f3b78a267e40c306f3d50265f84a",
+        "ca93ac1705187071d67b83c7ff0efe8108e8ec4530575d7726879333dbdabe7c",
     ),
     (
         "work_request_preimage",
-        "42200c48c15b2f03886b9281041a895ae2944652df1413862887441a1e85fcd1",
+        "028c173e9077896de78bb21d04c04d8f5e7595f0ed328c5587211a41f41b0894",
     ),
     (
         "work_admission_preimage",
-        "f906e254063bb6d1751aed6a4f811c39512320b3017f4daddad8cf8c1677572e",
+        "c0c694b8114de48d3f25cc8f6c4ac31de9add22c1a1e317c36358264f0d433e7",
     ),
     (
         "work_receipt_preimage",
-        "9c8ab00359ccc0ec570d38cab0bdf5479614497da65258f223ddccd027b26e1b",
+        "3d52783556bb036c0615328b6a7260aadb3668e10659a5ee010520aa3f84d687",
     ),
     (
         "route_advertisement_preimage",
-        "ce3579f8ea3cc80e994f677546bf7465c745e1013468c68571d5a3413034514c",
+        "48ae00b805bdbbccb16648f92f7b1f13d6805e3e6d0f25f9386758b2675c7c02",
     ),
     (
         "route_root_hash",
-        "3e27360fb444a6f5e71131f50c940c7015b7c0ed04572d4d688c81aa99bd479d",
+        "fd3071dd26cb11450356a8ab83ae54e70b1c213deb8d79d63e05330fbe970df6",
     ),
     (
         "route_snapshot_preimage",
-        "89362e5dfc9b97b43ca018f4ec948d943f3b9f5f3cbc750b8683ed715c1300ce",
+        "139b72c43fb982ec6db9184bcd78b2c00aea2e326e6be5f873c5bcaff53ac325",
     ),
     (
         "ordered_message_hash",
-        "5386e49e98d9f544ca53e4528b866f937edb61468e11eed9031cf98d2229ea37",
+        "d8b0748cad6cd8c5ccb7c3f7a196dbcae11100ea4752cd5ed49385ac0077afc5",
     ),
     (
         "channel_proof_preimage",
-        "f26ac196dc090adaae818859a8deb26526200daf51e17b824c1ef7de4d841f90",
+        "4673b102b568a310d525f52e48f8e011f695f231c92ac8bc1727495d6d69e3c7",
     ),
     (
         "channel_proof_hash",
-        "77090a1b7d1171f518b1d398d01830cb80ebf6caad79fd30022a92ab9f0529d6",
+        "dc1a7c176bd7f7b068bc458d837ca3bcefdbfbb16897cff3c244acf5904b1020",
     ),
     (
         "packet_transit_hash",
-        "cde9610c7e82b7c10f0b9a90ca9cb969bf94114fc42fbdc1538c11197691ee88",
+        "6d59148dd523f65c1b008339b013715e9e9d5723ba4643ca258df8b2689305b9",
     ),
     (
         "relay_delivery_output_hash",
-        "5e897b6e71d33bbfe31842bfc16c1a9b6dbed2a4789bbce261b322616b19228c",
+        "aa6ebd3baf1cbb54c264fbd59a21b7f2504367527466f9325ade231b9430b6a5",
     ),
     (
         "receipt_id_for_claim",
-        "0fcd2b6d435bd78eb02eb9800135958a3503faca380e9f45a7544a26625fa4d7",
+        "79e7333fa02d8db7cd5936c7cc38c6b885bfeebdd5a9551c3a7f3c085c34d15b",
     ),
     (
         "work_admission_hash",
-        "51dc7e37772bedc5c040eef979f8682f0bdbc7f5626f7fa91062bfffef0000a3",
+        "b0ebbf404d401ef29e27ec570e70799014963ea83622ac3e284eb8c71a4fe6e3",
     ),
     (
         "work_receipt_hash",
-        "8736dd298bd1df983e809cde5a38f9a7259c44afca5a5c4022f00816467ae79f",
+        "3534261218366a4bbd9b1c0aa547385bf2ffd1650ca9c87471c67ffbbdb5766f",
     ),
     (
         "receipt_batch_root",
-        "4a3be87f9f7185d1ee837a355fc98866a92aecc4589838fb5c289817cab927f9",
+        "85c9a92d83297677db9489cf9f39d5c7aff635b1560065ce9cd183289686cb1c",
     ),
     (
         "erasure_job_id",
@@ -94,11 +94,11 @@ const EXPECTED_GOLDEN_HASHES: &[(&str, &str)] = &[
     ),
     (
         "manifest_hash",
-        "56d25eb1572d8aab90737f9f639be2319ca2049982f29e6866224e279456a38f",
+        "43e77f2db96e502873df9ae211643ef165e7e6a069464cb1835ccf9fb0bb1f50",
     ),
     (
         "recipient_message_policy_hash",
-        "935f68580de07d4d9328da9a42ea9a74a0f012056a68d3543197142ea9d575ef",
+        "6da3168e82dd880a2a91ff571d95fbed429ff611caf7a89c00005ce20efa220a",
     ),
 ];
 

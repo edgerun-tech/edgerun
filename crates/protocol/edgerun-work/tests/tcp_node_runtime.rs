@@ -45,6 +45,7 @@ fn tcp_node_runtime_receives_framed_packet_over_loopback() {
         )
         .expect("send ordered to tcp runtime");
     assert_eq!(sent.envelope.route_hash, route_hash);
+    assert!(runtime.recv_all(receiver.identity.node_id).is_empty());
 
     let mut packets = Vec::new();
     for _ in 0..50 {

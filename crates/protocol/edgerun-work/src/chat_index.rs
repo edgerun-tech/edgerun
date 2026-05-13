@@ -1,9 +1,8 @@
 use alloc::vec::Vec;
 
-use edgerun_wire::{access, deserialize, to_bytes, WireError};
 use rkyv::{Archive, Deserialize, Serialize};
 
-use crate::codec::{aligned_copy_if_needed_for, blake3_hash};
+use crate::codec::{blake3_hash, wire_bytes, wire_from_bytes};
 use crate::preimage::HashBuilder;
 use crate::protocol::{Hash, NodeId, WORK_WIRE_ABI_VERSION};
 
@@ -337,62 +336,43 @@ pub fn chat_payload_hash(payload: &[u8]) -> Hash {
 }
 
 pub fn message_object_bytes(value: &MessageObject) -> Result<Vec<u8>, ChatIndexError> {
-    let bytes = to_bytes::<WireError>(value).map_err(|_| ChatIndexError::InvalidObject)?;
-    Ok(bytes.to_vec())
+    wire_bytes(value).map_err(|_| ChatIndexError::InvalidObject)
 }
 
 pub fn message_object_from_bytes(bytes: &[u8]) -> Result<MessageObject, ChatIndexError> {
     if bytes.is_empty() {
         return Err(ChatIndexError::InvalidObject);
     }
-    if let Some(aligned) = aligned_copy_if_needed_for::<ArchivedMessageObject>(bytes) {
-        return message_object_from_bytes(aligned.as_slice());
-    }
-    let archived = access::<ArchivedMessageObject, WireError>(bytes)
-        .map_err(|_| ChatIndexError::InvalidObject)?;
-    deserialize::<MessageObject, WireError>(archived).map_err(|_| ChatIndexError::InvalidObject)
+    wire_from_bytes::<MessageObject, ArchivedMessageObject>(bytes)
+        .map_err(|_| ChatIndexError::InvalidObject)
 }
 
 pub fn thread_object_bytes(value: &ThreadObject) -> Result<Vec<u8>, ChatIndexError> {
-    let bytes = to_bytes::<WireError>(value).map_err(|_| ChatIndexError::InvalidObject)?;
-    Ok(bytes.to_vec())
+    wire_bytes(value).map_err(|_| ChatIndexError::InvalidObject)
 }
 
 pub fn thread_object_from_bytes(bytes: &[u8]) -> Result<ThreadObject, ChatIndexError> {
     if bytes.is_empty() {
         return Err(ChatIndexError::InvalidObject);
     }
-    if let Some(aligned) = aligned_copy_if_needed_for::<ArchivedThreadObject>(bytes) {
-        return thread_object_from_bytes(aligned.as_slice());
-    }
-    let archived = access::<ArchivedThreadObject, WireError>(bytes)
-        .map_err(|_| ChatIndexError::InvalidObject)?;
-    deserialize::<ThreadObject, WireError>(archived).map_err(|_| ChatIndexError::InvalidObject)
+    wire_from_bytes::<ThreadObject, ArchivedThreadObject>(bytes)
+        .map_err(|_| ChatIndexError::InvalidObject)
 }
 
 pub fn contact_book_bytes(value: &ContactBook) -> Result<Vec<u8>, ChatIndexError> {
-    let bytes = to_bytes::<WireError>(value).map_err(|_| ChatIndexError::InvalidObject)?;
-    Ok(bytes.to_vec())
+    wire_bytes(value).map_err(|_| ChatIndexError::InvalidObject)
 }
 
 pub fn contact_book_from_bytes(bytes: &[u8]) -> Result<ContactBook, ChatIndexError> {
     if bytes.is_empty() {
         return Err(ChatIndexError::InvalidObject);
     }
-    if let Some(aligned) = aligned_copy_if_needed_for::<ArchivedContactBook>(bytes) {
-        return contact_book_from_bytes(aligned.as_slice());
-    }
-    let archived = access::<ArchivedContactBook, WireError>(bytes)
-        .map_err(|_| ChatIndexError::InvalidObject)?;
-    deserialize::<ContactBook, WireError>(archived).map_err(|_| ChatIndexError::InvalidObject)
+    wire_from_bytes::<ContactBook, ArchivedContactBook>(bytes)
+        .map_err(|_| ChatIndexError::InvalidObject)
 }
 
 fn ordered_participants(a: NodeId, b: NodeId) -> (NodeId, NodeId) {
-    if a <= b {
-        (a, b)
-    } else {
-        (b, a)
-    }
+    if a <= b { (a, b) } else { (b, a) }
 }
 
 fn thread_has_participants(thread: &ThreadObject, from: NodeId, to: NodeId) -> bool {

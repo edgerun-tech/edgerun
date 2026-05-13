@@ -1,23 +1,15 @@
-use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
 use crate::channel::{ChannelEnvelope, RouteAdvertisement};
-use crate::codec::{encode_work_packet_once, ArchivedWorkPacketFrame};
-use crate::memory_channel::{route_hash, route_is_available};
-use crate::protocol::{Hash, NodeId, WorkPacket, WORK_WIRE_ABI_VERSION};
-use crate::route_auth::verify_route_advertisement;
+use crate::codec::{ArchivedWorkPacketFrame, encode_work_packet_once};
+use crate::protocol::{Hash, NodeId, WorkPacket};
+use crate::route_auth::{current_unix_ms, route_hash};
 use crate::route_plan::{RouteRuntimeProfile, RouteSelectionPolicy};
+use crate::route_table::{
+    RouteInboxMap, RouteMap, drain_inbox, insert_live_route_with_inbox, live_route_hash_for,
+    remove_route_with_inbox, route_for_send,
+};
 use crate::work_channel::{WorkChannel, WorkChannelError};
-
-#[cfg(feature = "std")]
-fn current_unix_ms() -> u64 {
-    crate::std_runtime::unix_ms()
-}
-
-#[cfg(not(feature = "std"))]
-fn current_unix_ms() -> u64 {
-    0
-}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WorkTransportError {
@@ -64,8 +56,8 @@ pub trait WorkPacketTransport {
 pub struct TransportWorkChannel<T> {
     transport: T,
     policy: RouteSelectionPolicy,
-    routes: BTreeMap<NodeId, RouteAdvertisement>,
-    inboxes: BTreeMap<NodeId, Vec<ChannelEnvelope>>,
+    routes: RouteMap,
+    inboxes: RouteInboxMap,
 }
 
 impl<T> TransportWorkChannel<T> {
@@ -73,8 +65,8 @@ impl<T> TransportWorkChannel<T> {
         Self {
             transport,
             policy,
-            routes: BTreeMap::new(),
-            inboxes: BTreeMap::new(),
+            routes: RouteMap::new(),
+            inboxes: RouteInboxMap::new(),
         }
     }
 
@@ -131,15 +123,14 @@ impl<T> TransportWorkChannel<T> {
             .frame
             .into_packet()
             .map_err(|_| WorkTransportError::InvalidFrame)?;
-        let envelope = ChannelEnvelope {
-            abi_version: WORK_WIRE_ABI_VERSION,
-            channel_id: frame.channel_id,
-            from: frame.from,
-            to: frame.to,
-            route_hash: frame.route_hash,
+        let envelope = ChannelEnvelope::new(
+            frame.channel_id,
+            frame.from,
+            frame.to,
+            frame.route_hash,
             packet_hash,
             packet,
-        };
+        );
         self.inboxes.entry(envelope.to).or_default().push(envelope);
         Ok(())
     }
@@ -151,27 +142,25 @@ impl<T> TransportWorkChannel<T> {
 
 impl<T: WorkPacketTransport> WorkChannel for TransportWorkChannel<T> {
     fn add_route(&mut self, route: RouteAdvertisement) -> Result<Hash, WorkChannelError> {
-        if !verify_route_advertisement(&route)
-            || !route_is_available(&route, current_unix_ms())
-            || !self.policy.allows(&route)
-        {
+        if !self.policy.allows(&route) {
             return Err(WorkChannelError::RouteInvalid);
         }
-        let node_id = route.node.node_id;
-        let hash = route_hash(&route);
-        self.routes.insert(node_id, route);
-        self.inboxes.entry(node_id).or_default();
+        let hash = insert_live_route_with_inbox(
+            &mut self.routes,
+            &mut self.inboxes,
+            route,
+            current_unix_ms(),
+        )
+        .ok_or(WorkChannelError::RouteInvalid)?;
         Ok(hash)
     }
 
     fn remove_route(&mut self, node_id: NodeId) -> Option<RouteAdvertisement> {
-        self.inboxes.remove(&node_id);
-        self.routes.remove(&node_id)
+        remove_route_with_inbox(&mut self.routes, &mut self.inboxes, node_id)
     }
 
     fn route_hash_for(&self, node_id: &NodeId) -> Option<Hash> {
-        let route = self.routes.get(node_id)?;
-        route_is_available(route, current_unix_ms()).then(|| route_hash(route))
+        live_route_hash_for(&self.routes, node_id, current_unix_ms())
     }
 
     fn send_unordered(
@@ -180,16 +169,8 @@ impl<T: WorkPacketTransport> WorkChannel for TransportWorkChannel<T> {
         to: NodeId,
         packet: WorkPacket,
     ) -> Result<ChannelEnvelope, WorkChannelError> {
-        let now = current_unix_ms();
-        if self
-            .routes
-            .get(&to)
-            .is_some_and(|route| !route_is_available(route, now))
-        {
-            self.routes.remove(&to);
-            return Err(WorkChannelError::RouteMissing);
-        }
-        let route = self.routes.get(&to).ok_or(WorkChannelError::RouteMissing)?;
+        let route = route_for_send(&mut self.routes, &to, current_unix_ms())
+            .ok_or(WorkChannelError::RouteMissing)?;
         if !self.policy.allows(route) {
             return Err(WorkChannelError::RouteInvalid);
         }
@@ -198,19 +179,18 @@ impl<T: WorkPacketTransport> WorkChannel for TransportWorkChannel<T> {
         self.transport
             .send_packet_bytes(route, encoded.as_bytes())
             .map_err(|_| WorkChannelError::DeliveryFailed)?;
-        Ok(ChannelEnvelope {
-            abi_version: WORK_WIRE_ABI_VERSION,
-            channel_id: route.endpoint.channel_id,
+        Ok(ChannelEnvelope::for_route(
+            route,
+            route_hash(route),
             from,
             to,
-            route_hash: route_hash(route),
-            packet_hash: encoded.hash,
+            encoded.hash,
             packet,
-        })
+        ))
     }
 
     fn recv_all(&mut self, node_id: NodeId) -> Vec<ChannelEnvelope> {
         let _ = self.poll_recv();
-        self.inboxes.entry(node_id).or_default().drain(..).collect()
+        drain_inbox(&mut self.inboxes, node_id)
     }
 }

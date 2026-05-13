@@ -91,6 +91,21 @@ impl RouteAdvertisementBuilder {
     }
 }
 
+pub fn signed_route_advertisement(
+    key: &Ed25519SigningKey,
+    role: u16,
+    endpoint: ChannelEndpoint,
+    relay_node_id: NodeId,
+    departments: Vec<u16>,
+    valid_until_unix_ms: u64,
+) -> RouteAdvertisement {
+    RouteAdvertisementBuilder::new(key, role, endpoint)
+        .relay_node_id(relay_node_id)
+        .departments(departments)
+        .valid_until_unix_ms(valid_until_unix_ms)
+        .build(key)
+}
+
 pub fn storage_route_from_relay_assignment(
     storage_key: &Ed25519SigningKey,
     assignment: &RelayAssignment,
@@ -103,13 +118,14 @@ pub fn storage_route_from_relay_assignment(
     if assignment.node_id != storage.node_id {
         return Err(WorkProtocolError::WrongRelay);
     }
-    Ok(
-        RouteAdvertisementBuilder::new(storage_key, NODE_ROLE_STORAGE, endpoint)
-            .relay_node_id(assignment.relay.relay_node_id)
-            .departments(vec![DEPARTMENT_STORAGE, DEPARTMENT_RETRIEVAL])
-            .valid_until_unix_ms(assignment.valid_until_unix_ms)
-            .build(storage_key),
-    )
+    Ok(signed_route_advertisement(
+        storage_key,
+        NODE_ROLE_STORAGE,
+        endpoint,
+        assignment.relay.relay_node_id,
+        vec![DEPARTMENT_STORAGE, DEPARTMENT_RETRIEVAL],
+        assignment.valid_until_unix_ms,
+    ))
 }
 
 pub fn memory_endpoint(label: impl Into<String>, seed: &[u8]) -> ChannelEndpoint {

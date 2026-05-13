@@ -1,25 +1,19 @@
 use alloc::vec;
-use alloc::vec::Vec;
 
 use edgerun_crypto::Ed25519SigningKey;
 
 use crate::channel::{ChannelEndpoint, RouteAdvertisement};
 use crate::identity::node_identity_from_key;
 use crate::protocol::{
-    Hash, NodeId, NodeIdentity, WorkPacket, DEPARTMENT_RETRIEVAL, DEPARTMENT_STORAGE,
-    NODE_ROLE_STORAGE,
+    DEPARTMENT_RETRIEVAL, DEPARTMENT_STORAGE, Hash, NODE_ROLE_STORAGE, NodeId, NodeIdentity,
+    WorkPacket,
 };
-use crate::roles::{RoleContext, RoleInput, WorkRole};
-use crate::route_builder::RouteAdvertisementBuilder;
+use crate::roles::{WorkServiceResponse, execute_role_packet};
+use crate::route_builder::signed_route_advertisement;
 use crate::storage_adapter::{InMemoryObjectStorage, ObjectStorageAdapter};
 use crate::typed_storage_role::TypedObjectStoreRole;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ObjectStorageResponse {
-    pub status: u16,
-    pub packet: Option<WorkPacket>,
-    pub bytes: Vec<u8>,
-}
+pub type ObjectStorageResponse = WorkServiceResponse;
 
 pub struct ObjectStorageService<S = InMemoryObjectStorage> {
     key: Ed25519SigningKey,
@@ -99,30 +93,24 @@ impl<S: ObjectStorageAdapter> ObjectStorageService<S> {
         relay_node_id: NodeId,
         valid_until_unix_ms: u64,
     ) -> RouteAdvertisement {
-        RouteAdvertisementBuilder::new(&self.key, NODE_ROLE_STORAGE, endpoint)
-            .relay_node_id(relay_node_id)
-            .departments(vec![DEPARTMENT_STORAGE, DEPARTMENT_RETRIEVAL])
-            .valid_until_unix_ms(valid_until_unix_ms)
-            .build(&self.key)
+        signed_route_advertisement(
+            &self.key,
+            NODE_ROLE_STORAGE,
+            endpoint,
+            relay_node_id,
+            vec![DEPARTMENT_STORAGE, DEPARTMENT_RETRIEVAL],
+            valid_until_unix_ms,
+        )
     }
 
     pub fn handle_packet(&mut self, packet: WorkPacket, now_unix_ms: u64) -> ObjectStorageResponse {
-        let output = self.role.handle(
-            &RoleContext {
-                now_unix_ms,
-                local_node: self.identity.clone(),
-                policy_hash: self.policy_hash,
-            },
-            RoleInput {
-                packet,
-                previous_hash: [0u8; 32],
-                channel_hash: [0u8; 32],
-            },
-        );
-        ObjectStorageResponse {
-            status: output.status,
-            packet: output.packet,
-            bytes: output.bytes,
-        }
+        execute_role_packet(
+            &mut self.role,
+            &self.identity,
+            self.policy_hash,
+            packet,
+            now_unix_ms,
+        )
+        .into_response()
     }
 }

@@ -2,7 +2,10 @@ use alloc::vec::Vec;
 use core::fmt;
 
 use edgerun_crypto::sha256;
-use edgerun_wire::{access, deserialize, to_bytes, util, WireError};
+use edgerun_wire::api::high::{HighDeserializer, HighSerializer, HighValidator};
+use edgerun_wire::bytecheck::CheckBytes;
+use edgerun_wire::ser::allocator::ArenaHandle;
+use edgerun_wire::{Portable, Serialize, WireError, access, deserialize, to_bytes, util};
 
 use crate::protocol::*;
 
@@ -91,6 +94,15 @@ pub fn packet_bytes(packet: &WorkPacket) -> Result<Vec<u8>, WorkProtocolError> {
     Ok(packet_aligned_bytes(packet)?.to_vec())
 }
 
+pub fn wire_bytes<T>(value: &T) -> Result<Vec<u8>, WorkProtocolError>
+where
+    T: for<'a> Serialize<HighSerializer<AlignedWorkPacketBytes, ArenaHandle<'a>, WireError>>,
+{
+    to_bytes::<WireError>(value)
+        .map(|bytes| bytes.to_vec())
+        .map_err(|_| WorkProtocolError::InvalidPacket)
+}
+
 pub fn aligned_copy(bytes: &[u8]) -> AlignedWorkPacketBytes {
     let mut aligned = util::AlignedVec::<16>::with_capacity(bytes.len());
     aligned.extend_from_slice(bytes);
@@ -103,6 +115,28 @@ pub fn aligned_copy_if_needed_for<T>(bytes: &[u8]) -> Option<AlignedWorkPacketBy
     } else {
         None
     }
+}
+
+pub fn wire_from_bytes<T, A>(bytes: &[u8]) -> Result<T, WorkProtocolError>
+where
+    A: Portable
+        + for<'a> CheckBytes<HighValidator<'a, WireError>>
+        + edgerun_wire::Deserialize<T, HighDeserializer<WireError>>,
+{
+    if let Some(aligned) = aligned_copy_if_needed_for::<A>(bytes) {
+        return wire_from_aligned_bytes::<T, A>(aligned.as_slice());
+    }
+    wire_from_aligned_bytes::<T, A>(bytes)
+}
+
+pub fn wire_from_aligned_bytes<T, A>(bytes: &[u8]) -> Result<T, WorkProtocolError>
+where
+    A: Portable
+        + for<'a> CheckBytes<HighValidator<'a, WireError>>
+        + edgerun_wire::Deserialize<T, HighDeserializer<WireError>>,
+{
+    let archived = access::<A, WireError>(bytes).map_err(|_| WorkProtocolError::InvalidPacket)?;
+    deserialize::<T, WireError>(archived).map_err(|_| WorkProtocolError::InvalidPacket)
 }
 
 pub fn archived_packet_frame_from_bytes(

@@ -1,9 +1,10 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use crate::identity::verify_node_identity;
 use crate::protocol::*;
 use crate::types::{
-    department_for_work_type_typed, role_for_department_typed, Department, NodeRole, WorkType,
+    Department, NodeRole, WorkType, department_for_work_type_typed, role_for_department_typed,
 };
 
 pub const ROLE_STATUS_ACCEPTED: u16 = 1;
@@ -30,6 +31,8 @@ pub struct RoleOutput {
     pub packet: Option<WorkPacket>,
     pub bytes: Vec<u8>,
 }
+
+pub type WorkServiceResponse = RoleOutput;
 
 impl RoleOutput {
     pub fn accepted(packet: WorkPacket) -> Self {
@@ -63,6 +66,18 @@ impl RoleOutput {
             text: text.into(),
         }))
     }
+
+    pub fn accepted_bytes(bytes: Vec<u8>) -> Self {
+        Self {
+            status: ROLE_STATUS_ACCEPTED,
+            packet: None,
+            bytes,
+        }
+    }
+
+    pub fn into_response(self) -> WorkServiceResponse {
+        self
+    }
 }
 
 pub trait WorkRole {
@@ -70,6 +85,47 @@ pub trait WorkRole {
     fn accepts_department(&self, department: u16) -> bool;
     fn accepts_work_type(&self, work_type: u16) -> bool;
     fn handle(&mut self, context: &RoleContext, input: RoleInput) -> RoleOutput;
+}
+
+pub fn execute_role<R: WorkRole + ?Sized>(
+    role: &mut R,
+    local_node: &NodeIdentity,
+    policy_hash: Hash,
+    packet: WorkPacket,
+    now_unix_ms: u64,
+    previous_hash: Hash,
+    channel_hash: Hash,
+) -> RoleOutput {
+    role.handle(
+        &RoleContext {
+            now_unix_ms,
+            local_node: local_node.clone(),
+            policy_hash,
+        },
+        RoleInput {
+            packet,
+            previous_hash,
+            channel_hash,
+        },
+    )
+}
+
+pub fn execute_role_packet<R: WorkRole + ?Sized>(
+    role: &mut R,
+    local_node: &NodeIdentity,
+    policy_hash: Hash,
+    packet: WorkPacket,
+    now_unix_ms: u64,
+) -> RoleOutput {
+    execute_role(
+        role,
+        local_node,
+        policy_hash,
+        packet,
+        now_unix_ms,
+        [0u8; 32],
+        [0u8; 32],
+    )
 }
 
 pub fn network_message_for_role<R: WorkRole + ?Sized>(
@@ -80,7 +136,9 @@ pub fn network_message_for_role<R: WorkRole + ?Sized>(
     let WorkPacket::NetworkMessage(message) = input.packet else {
         return None;
     };
-    if message.to != context.local_node.node_id
+    if !verify_node_identity(&context.local_node)
+        || context.local_node.role != role.role_id()
+        || message.to != context.local_node.node_id
         || !role.accepts_department(message.department)
         || !role.accepts_work_type(message.work_type)
     {

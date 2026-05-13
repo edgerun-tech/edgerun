@@ -2,21 +2,22 @@ use std::collections::BTreeMap;
 use std::io::{self, ErrorKind, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
     Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
 };
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use edgerun_protocols::websocket::{
-    decode_client_message, decode_frame_prefix, decode_handshake_request, decode_payload_len,
-    encode_server_binary, encode_server_control, encode_upgrade_response, handshake_complete,
-    WebSocketError, WebSocketMessage, WS_EXTENDED_64_LEN, WS_MASK_LEN,
+    WS_EXTENDED_64_LEN, WS_MASK_LEN, WebSocketError, WebSocketMessage, decode_client_message,
+    decode_frame_prefix, decode_handshake_request, decode_payload_len, encode_server_binary,
+    encode_server_control, encode_upgrade_response, handshake_complete,
 };
 
 use crate::channel::ChannelEnvelope;
 use crate::frame_codec::{channel_envelope_bytes, channel_envelope_from_bytes};
-use crate::protocol::{NodeId, MAX_WORK_FRAME_LEN};
+use crate::protocol::{MAX_WORK_FRAME_LEN, NodeId};
+use crate::std_runtime::threading::{drain_joined_threads, join_optional_thread};
 
 const ACCEPT_POLL_MS: u64 = 10;
 const CONNECTION_READ_TIMEOUT_MS: u64 = 250;
@@ -125,23 +126,12 @@ impl WebSocketWorkHub {
     pub fn shutdown(&mut self) -> io::Result<()> {
         self.shutdown.store(true, Ordering::Release);
         let _ = TcpStream::connect(self.listen_addr);
-        if let Some(handle) = self.accept_thread.take() {
-            handle.join().map_err(|_| {
-                io::Error::new(io::ErrorKind::Other, "websocket accept thread panicked")
-            })?;
-        }
-        let mut workers = self
-            .worker_threads
-            .lock()
-            .expect("websocket worker thread list poisoned");
-        let handles = workers.drain(..).collect::<Vec<_>>();
-        drop(workers);
-        for handle in handles {
-            handle.join().map_err(|_| {
-                io::Error::new(io::ErrorKind::Other, "websocket worker thread panicked")
-            })?;
-        }
-        Ok(())
+        join_optional_thread(&mut self.accept_thread, "websocket accept thread panicked")?;
+        drain_joined_threads(
+            &self.worker_threads,
+            "websocket worker thread list poisoned",
+            "websocket worker thread panicked",
+        )
     }
 }
 

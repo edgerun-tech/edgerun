@@ -99,7 +99,7 @@ pub fn admitted_capability_route_from_parts(
         department: request.department,
         work_type: request.work_type,
         admission_relay_route_hash: admission.assigned_route_hash,
-        worker_route_hash: crate::memory_channel::route_hash(worker_route),
+        worker_route_hash: crate::route_auth::route_hash(worker_route),
         policy_hash: admission.policy_hash,
         admitted_budget: admission.admitted_budget,
         valid_until_unix_ms: admission.valid_until_unix_ms,

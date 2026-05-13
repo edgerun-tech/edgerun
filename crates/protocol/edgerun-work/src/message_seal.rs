@@ -3,13 +3,12 @@ use alloc::vec::Vec;
 use edgerun_crypto::ed25519_dalek::VerifyingKey;
 use edgerun_crypto::x25519::{PublicKey as X25519PublicKey, StaticSecret as X25519Secret};
 use edgerun_crypto::{Aes256GcmCipher, Ed25519SigningKey, Nonce, Tag};
-use edgerun_wire::{access, deserialize, to_bytes, WireError};
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::chat_index::{
-    chat_payload_hash, finalize_message_object, thread_id_for_participants, MessageObject,
+    MessageObject, chat_payload_hash, finalize_message_object, thread_id_for_participants,
 };
-use crate::codec::{aligned_copy_if_needed_for, blake3_hash};
+use crate::codec::{blake3_hash, wire_bytes, wire_from_bytes};
 use crate::identity::verify_node_identity;
 use crate::preimage::PreimageBuilder;
 use crate::protocol::{
@@ -72,8 +71,7 @@ pub fn encryption_public_from_ed25519_public(
 pub fn sealed_message_payload_bytes(
     payload: &SealedMessagePayload,
 ) -> Result<Vec<u8>, MessageSealError> {
-    let bytes = to_bytes::<WireError>(payload).map_err(|_| MessageSealError::InvalidEnvelope)?;
-    Ok(bytes.to_vec())
+    wire_bytes(payload).map_err(|_| MessageSealError::InvalidEnvelope)
 }
 
 pub fn sealed_message_payload_from_bytes(
@@ -82,10 +80,8 @@ pub fn sealed_message_payload_from_bytes(
     if bytes.is_empty() {
         return Err(MessageSealError::InvalidEnvelope);
     }
-    if let Some(aligned) = aligned_copy_if_needed_for::<ArchivedSealedMessagePayload>(bytes) {
-        return sealed_message_payload_from_aligned_bytes(aligned.as_slice());
-    }
-    sealed_message_payload_from_aligned_bytes(bytes)
+    wire_from_bytes::<SealedMessagePayload, ArchivedSealedMessagePayload>(bytes)
+        .map_err(|_| MessageSealError::InvalidEnvelope)
 }
 
 pub fn sealed_message_object_from_network_message(
@@ -112,15 +108,6 @@ pub fn sealed_message_object_from_network_message(
         storage_ref: Vec::new(),
         previous_message_hash: message.prev_hash,
     }))
-}
-
-fn sealed_message_payload_from_aligned_bytes(
-    bytes: &[u8],
-) -> Result<SealedMessagePayload, MessageSealError> {
-    let archived = access::<ArchivedSealedMessagePayload, WireError>(bytes)
-        .map_err(|_| MessageSealError::InvalidEnvelope)?;
-    deserialize::<SealedMessagePayload, WireError>(archived)
-        .map_err(|_| MessageSealError::InvalidEnvelope)
 }
 
 pub fn seal_message_for_recipient(

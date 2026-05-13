@@ -6,6 +6,7 @@ mod settlement_runtime;
 mod storage_daemon;
 mod tcp_channel;
 mod tcp_node;
+mod threading;
 mod websocket_channel;
 
 pub use admission::*;

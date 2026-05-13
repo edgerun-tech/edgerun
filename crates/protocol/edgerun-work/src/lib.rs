@@ -29,6 +29,7 @@ pub mod roles;
 pub mod route_auth;
 pub mod route_builder;
 pub mod route_plan;
+pub(crate) mod route_table;
 pub mod settlement;
 pub mod signing;
 pub mod storage_adapter;

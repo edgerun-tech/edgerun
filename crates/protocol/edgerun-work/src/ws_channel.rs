@@ -1,29 +1,21 @@
-use alloc::collections::BTreeMap;
 use alloc::vec::Vec;
 
-use crate::channel::{ChannelEnvelope, RouteAdvertisement, CHANNEL_KIND_WEBSOCKET};
+use crate::channel::{CHANNEL_KIND_WEBSOCKET, ChannelEnvelope, RouteAdvertisement};
 use crate::channel_order::{ChannelOrderBook, OrderedChannelEnvelope};
 use crate::codec::encode_work_packet_once;
 use crate::frame_codec::channel_envelope_bytes;
-use crate::memory_channel::{route_hash, route_is_available};
-use crate::protocol::{Hash, NodeId, WorkPacket, WORK_WIRE_ABI_VERSION};
-use crate::route_auth::verify_route_advertisement;
+use crate::protocol::{Hash, NodeId, WorkPacket};
+use crate::route_auth::{current_unix_ms, route_hash};
+use crate::route_table::{
+    RouteInboxMap, RouteMap, drain_inbox, insert_live_route_with_inbox, live_route_hash_for,
+    remove_route_with_inbox, route_for_send,
+};
 use crate::work_channel::{WorkChannel, WorkChannelError};
-
-#[cfg(feature = "std")]
-fn current_unix_ms() -> u64 {
-    crate::std_runtime::unix_ms()
-}
-
-#[cfg(not(feature = "std"))]
-fn current_unix_ms() -> u64 {
-    0
-}
 
 #[derive(Clone, Debug, Default)]
 pub struct WsWorkChannel {
-    routes: BTreeMap<NodeId, RouteAdvertisement>,
-    inboxes: BTreeMap<NodeId, Vec<ChannelEnvelope>>,
+    routes: RouteMap,
+    inboxes: RouteInboxMap,
     outbound_frames: Vec<WsFrame>,
 }
 
@@ -79,27 +71,25 @@ impl WsWorkChannel {
 
 impl WorkChannel for WsWorkChannel {
     fn add_route(&mut self, route: RouteAdvertisement) -> Result<Hash, WorkChannelError> {
-        if !verify_route_advertisement(&route)
-            || route.endpoint.kind != CHANNEL_KIND_WEBSOCKET
-            || !route_is_available(&route, current_unix_ms())
-        {
+        if route.endpoint.kind != CHANNEL_KIND_WEBSOCKET {
             return Err(WorkChannelError::RouteInvalid);
         }
-        let node_id = route.node.node_id;
-        let hash = route_hash(&route);
-        self.routes.insert(node_id, route);
-        self.inboxes.entry(node_id).or_default();
+        let hash = insert_live_route_with_inbox(
+            &mut self.routes,
+            &mut self.inboxes,
+            route,
+            current_unix_ms(),
+        )
+        .ok_or(WorkChannelError::RouteInvalid)?;
         Ok(hash)
     }
 
     fn remove_route(&mut self, node_id: NodeId) -> Option<RouteAdvertisement> {
-        self.inboxes.remove(&node_id);
-        self.routes.remove(&node_id)
+        remove_route_with_inbox(&mut self.routes, &mut self.inboxes, node_id)
     }
 
     fn route_hash_for(&self, node_id: &NodeId) -> Option<Hash> {
-        let route = self.routes.get(node_id)?;
-        route_is_available(route, current_unix_ms()).then(|| route_hash(route))
+        live_route_hash_for(&self.routes, node_id, current_unix_ms())
     }
 
     fn send_unordered(
@@ -108,27 +98,12 @@ impl WorkChannel for WsWorkChannel {
         to: NodeId,
         packet: WorkPacket,
     ) -> Result<ChannelEnvelope, WorkChannelError> {
-        let now = current_unix_ms();
-        if self
-            .routes
-            .get(&to)
-            .is_some_and(|route| !route_is_available(route, now))
-        {
-            self.routes.remove(&to);
-            return Err(WorkChannelError::RouteMissing);
-        }
-        let route = self.routes.get(&to).ok_or(WorkChannelError::RouteMissing)?;
+        let route = route_for_send(&mut self.routes, &to, current_unix_ms())
+            .ok_or(WorkChannelError::RouteMissing)?;
         let encoded =
             encode_work_packet_once(&packet).map_err(|_| WorkChannelError::PacketHashFailed)?;
-        let envelope = ChannelEnvelope {
-            abi_version: WORK_WIRE_ABI_VERSION,
-            channel_id: route.endpoint.channel_id,
-            from,
-            to,
-            route_hash: route_hash(route),
-            packet_hash: encoded.hash,
-            packet,
-        };
+        let envelope =
+            ChannelEnvelope::for_route(route, route_hash(route), from, to, encoded.hash, packet);
         let envelope_bytes =
             channel_envelope_bytes(&envelope).map_err(|_| WorkChannelError::PacketHashFailed)?;
         self.outbound_frames.push(WsFrame {
@@ -143,6 +118,6 @@ impl WorkChannel for WsWorkChannel {
     }
 
     fn recv_all(&mut self, node_id: NodeId) -> Vec<ChannelEnvelope> {
-        self.inboxes.entry(node_id).or_default().drain(..).collect()
+        drain_inbox(&mut self.inboxes, node_id)
     }
 }

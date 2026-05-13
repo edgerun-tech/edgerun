@@ -1,8 +1,8 @@
-use std::io::{self, ErrorKind, Read, Write};
+use std::io;
 use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
 use std::sync::{
-    atomic::{AtomicBool, Ordering},
     Arc, Mutex,
+    atomic::{AtomicBool, Ordering},
 };
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
@@ -10,19 +10,20 @@ use std::time::Duration;
 use edgerun_crypto::Ed25519SigningKey;
 
 use crate::channel::RouteAdvertisement;
-use crate::object_storage_service::{ObjectStorageResponse, ObjectStorageService};
+use crate::object_storage_service::ObjectStorageService;
 use crate::protocol::{Hash, NodeId, NodeIdentity, WorkPacket};
-use crate::roles::ROLE_STATUS_ACCEPTED;
+use crate::roles::WorkServiceResponse;
 use crate::route_builder::tcp_endpoint;
-use crate::std_runtime::framing::{read_work_packet, unix_ms, write_encoded_work_packet};
+use crate::std_runtime::framing::{
+    read_work_packet, read_work_service_response, send_work_service_request, unix_ms,
+    write_work_service_response,
+};
+use crate::std_runtime::threading::{drain_joined_threads, join_optional_thread};
 use crate::storage_adapter::{InMemoryObjectStorage, ObjectStorageAdapter};
 
 const ACCEPT_POLL_MS: u64 = 10;
-const STORAGE_RESPONSE_KIND_NONE: u8 = 0;
-const STORAGE_RESPONSE_KIND_PACKET: u8 = 1;
-const STORAGE_RESPONSE_KIND_BYTES: u8 = 2;
 
-pub type StorageDaemonResponse = ObjectStorageResponse;
+pub type StorageDaemonResponse = WorkServiceResponse;
 
 pub struct TcpObjectStorageDaemon<S: ObjectStorageAdapter + Send + 'static> {
     identity: NodeIdentity,
@@ -173,29 +174,15 @@ impl<S: ObjectStorageAdapter + Send + 'static> TcpObjectStorageDaemon<S> {
     pub fn shutdown(&mut self) -> io::Result<()> {
         self.shutdown.store(true, Ordering::Release);
         let _ = TcpStream::connect(self.listen_addr);
-        if let Some(handle) = self.accept_thread.take() {
-            handle.join().map_err(|_| {
-                io::Error::new(
-                    io::ErrorKind::Other,
-                    "object storage daemon accept thread panicked",
-                )
-            })?;
-        }
-        let mut workers = self
-            .worker_threads
-            .lock()
-            .expect("object storage daemon worker list poisoned");
-        let handles = workers.drain(..).collect::<Vec<_>>();
-        drop(workers);
-        for handle in handles {
-            handle.join().map_err(|_| {
-                io::Error::new(
-                    io::ErrorKind::Other,
-                    "object storage daemon worker thread panicked",
-                )
-            })?;
-        }
-        Ok(())
+        join_optional_thread(
+            &mut self.accept_thread,
+            "object storage daemon accept thread panicked",
+        )?;
+        drain_joined_threads(
+            &self.worker_threads,
+            "object storage daemon worker list poisoned",
+            "object storage daemon worker thread panicked",
+        )
     }
 }
 
@@ -209,46 +196,11 @@ pub fn send_storage_daemon_request<A: ToSocketAddrs>(
     addr: A,
     packet: &WorkPacket,
 ) -> io::Result<StorageDaemonResponse> {
-    let mut stream = TcpStream::connect(addr)?;
-    crate::std_runtime::framing::write_work_packet(&mut stream, packet)?;
-    read_storage_daemon_response(&mut stream)
+    send_work_service_request(addr, packet)
 }
 
 pub fn read_storage_daemon_response(stream: &mut TcpStream) -> io::Result<StorageDaemonResponse> {
-    let mut header = [0u8; 7];
-    stream.read_exact(&mut header)?;
-    let status = u16::from_be_bytes([header[0], header[1]]);
-    let kind = header[2];
-    let len = u32::from_be_bytes([header[3], header[4], header[5], header[6]]) as usize;
-    let mut body = vec![0u8; len];
-    if len > 0 {
-        stream.read_exact(&mut body)?;
-    }
-    match kind {
-        STORAGE_RESPONSE_KIND_NONE => Ok(StorageDaemonResponse {
-            status,
-            packet: None,
-            bytes: body,
-        }),
-        STORAGE_RESPONSE_KIND_PACKET => {
-            let packet = crate::codec::packet_from_bytes(&body)
-                .map_err(|_| io::Error::new(ErrorKind::InvalidData, "invalid response packet"))?;
-            Ok(StorageDaemonResponse {
-                status,
-                packet: Some(packet),
-                bytes: Vec::new(),
-            })
-        }
-        STORAGE_RESPONSE_KIND_BYTES => Ok(StorageDaemonResponse {
-            status,
-            packet: None,
-            bytes: body,
-        }),
-        _ => Err(io::Error::new(
-            ErrorKind::InvalidData,
-            "invalid storage response kind",
-        )),
-    }
+    read_work_service_response(stream)
 }
 
 fn handle_storage_connection<S: ObjectStorageAdapter>(
@@ -264,36 +216,5 @@ fn handle_storage_connection<S: ObjectStorageAdapter>(
         .lock()
         .expect("object storage daemon service poisoned")
         .handle_packet(packet, unix_ms());
-    write_storage_daemon_response(&mut stream, &output)
-}
-
-fn write_storage_daemon_response(
-    stream: &mut TcpStream,
-    output: &ObjectStorageResponse,
-) -> io::Result<()> {
-    let (kind, body) = if let Some(packet) = &output.packet {
-        let bytes = crate::codec::packet_bytes(packet)
-            .map_err(|_| io::Error::new(ErrorKind::InvalidData, "invalid response packet"))?;
-        (STORAGE_RESPONSE_KIND_PACKET, bytes)
-    } else if !output.bytes.is_empty() {
-        (STORAGE_RESPONSE_KIND_BYTES, output.bytes.clone())
-    } else {
-        (STORAGE_RESPONSE_KIND_NONE, Vec::new())
-    };
-    if output.status != ROLE_STATUS_ACCEPTED && kind == STORAGE_RESPONSE_KIND_NONE {
-        stream.write_all(&output.status.to_be_bytes())?;
-        stream.write_all(&[STORAGE_RESPONSE_KIND_BYTES])?;
-        stream.write_all(&(output.bytes.len() as u32).to_be_bytes())?;
-        stream.write_all(&output.bytes)?;
-        return stream.flush();
-    }
-    stream.write_all(&output.status.to_be_bytes())?;
-    stream.write_all(&[kind])?;
-    if kind == STORAGE_RESPONSE_KIND_PACKET {
-        write_encoded_work_packet(stream, &body)
-    } else {
-        stream.write_all(&(body.len() as u32).to_be_bytes())?;
-        stream.write_all(&body)?;
-        stream.flush()
-    }
+    write_work_service_response(&mut stream, &output)
 }

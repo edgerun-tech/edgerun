@@ -1,3 +1,4 @@
+use edgerun_crypto::Ed25519SigningKey;
 use edgerun_work::*;
 
 #[test]
@@ -116,4 +117,37 @@ fn ordered_storage_payload_can_be_executed_by_object_store_role_library() {
     assert_eq!(output.status, ROLE_STATUS_ACCEPTED);
     assert_eq!(role.object_count(), 1);
     assert_eq!(role.get(&expected_object_hash), Some(payload.as_slice()));
+}
+
+#[test]
+fn role_execution_rejects_same_key_wrong_role_capability() {
+    let key = Ed25519SigningKey::from_bytes(&[55u8; 32]);
+    let storage_identity = node_identity_from_key(&key, NODE_ROLE_STORAGE);
+    let compute_identity = node_identity_from_key(&key, NODE_ROLE_COMPUTE);
+    assert_eq!(storage_identity.node_id, compute_identity.node_id);
+
+    let mut sender = SimNode::from_seed(56, NODE_ROLE_MESSAGE);
+    let packet = sender.message_to(
+        storage_identity.node_id,
+        storage_identity.node_id,
+        DEPARTMENT_STORAGE,
+        WORK_TYPE_OBJECT_STORE,
+        b"object bytes".to_vec(),
+    );
+    let mut role = ObjectStoreRole::default();
+    let output = role.handle(
+        &RoleContext {
+            now_unix_ms: 1,
+            local_node: compute_identity,
+            policy_hash: [0u8; 32],
+        },
+        RoleInput {
+            packet,
+            previous_hash: [0u8; 32],
+            channel_hash: [0u8; 32],
+        },
+    );
+
+    assert_eq!(output.status, ROLE_STATUS_IGNORED);
+    assert_eq!(role.object_count(), 0);
 }

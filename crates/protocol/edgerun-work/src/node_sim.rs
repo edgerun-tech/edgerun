@@ -4,9 +4,10 @@ use crate::channel::ChannelEnvelope;
 use crate::channel_order::{ChannelOrderBook, ChannelOrderError, OrderedChannelEnvelope};
 use crate::codec::{blake3_hash, packet_bytes};
 use crate::identity::node_identity_from_key;
-use crate::memory_channel::{route_hash, MemoryChannelEngine, MemoryChannelError};
+use crate::memory_channel::{MemoryChannelEngine, MemoryChannelError};
 use crate::protocol::*;
-use crate::route_builder::{memory_endpoint, RouteAdvertisementBuilder};
+use crate::route_auth::route_hash;
+use crate::route_builder::{memory_endpoint, signed_route_advertisement};
 use crate::signing::{sign_network_message_payload, simple_network_message_id};
 use edgerun_crypto::Ed25519SigningKey;
 
@@ -41,14 +42,14 @@ impl SimNode {
         relay_node_id: NodeId,
         departments: Vec<u16>,
     ) -> crate::channel::RouteAdvertisement {
-        RouteAdvertisementBuilder::new(
+        signed_route_advertisement(
             &self.key,
             self.identity.role,
             memory_endpoint("memory", &self.identity.node_id),
+            relay_node_id,
+            departments,
+            u64::MAX,
         )
-        .relay_node_id(relay_node_id)
-        .departments(departments)
-        .build(&self.key)
     }
 
     pub fn message_to(

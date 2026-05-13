@@ -2,13 +2,12 @@ use core::ptr::{addr_of, addr_of_mut};
 
 use edgerun_crypto::{Aes256GcmCipher, Ed25519SigningKey, Nonce, Tag};
 use edgerun_work::{
-    derive_node_id, encode_work_packet_once, node_identity_from_key,
-    seal_message_for_recipient, sealed_message_object_from_network_message, sign_ed25519,
-    sign_network_message_payload, simple_network_message_id, thread_id_for_participants,
-    unseal_message_from_recipient_payload, verify_solana_ed25519, ChannelEnvelope, ChannelId, Hash,
-    MessageObject, NodeIdentity, PublicKey, WorkPacket, CHANNEL_KIND_WEBSOCKET,
-    CHAT_MESSAGE_KIND_TEXT, DEPARTMENT_MESSAGE, NODE_ROLE_MESSAGE, WORK_TYPE_MESSAGE_DELIVER,
-    WORK_WIRE_ABI_VERSION,
+    CHANNEL_KIND_WEBSOCKET, CHAT_MESSAGE_KIND_TEXT, ChannelEnvelope, ChannelId, DEPARTMENT_MESSAGE,
+    Hash, MessageObject, NODE_ROLE_MESSAGE, NodeIdentity, PublicKey, WORK_TYPE_MESSAGE_DELIVER,
+    WORK_WIRE_ABI_VERSION, WorkPacket, derive_node_id, encode_work_packet_once,
+    node_identity_from_key, seal_message_for_recipient, sealed_message_object_from_network_message,
+    sign_ed25519, sign_network_message_payload, simple_network_message_id,
+    thread_id_for_participants, unseal_message_from_recipient_payload, verify_solana_ed25519,
 };
 
 const BUFFER_LEN: usize = 1024 * 1024;
@@ -110,22 +109,28 @@ pub extern "C" fn edgerun_chat_seal_identity(input_len: usize) -> usize {
         return fail(5);
     };
     let mut ciphertext = owner_seed_bytes().to_vec();
-    let Ok(tag) = cipher.encrypt_in_place_detached(
-        &Nonce::from(nonce),
-        IDENTITY_SEAL_MAGIC,
-        &mut ciphertext,
-    ) else {
+    let Ok(tag) =
+        cipher.encrypt_in_place_detached(&Nonce::from(nonce), IDENTITY_SEAL_MAGIC, &mut ciphertext)
+    else {
         return fail(6);
     };
-    let total_len =
-        IDENTITY_SEAL_MAGIC.len() + IDENTITY_SEAL_NONCE_LEN + ciphertext.len() + IDENTITY_SEAL_TAG_LEN;
+    let total_len = IDENTITY_SEAL_MAGIC.len()
+        + IDENTITY_SEAL_NONCE_LEN
+        + ciphertext.len()
+        + IDENTITY_SEAL_TAG_LEN;
     if total_len > BUFFER_LEN {
         return fail(7);
     }
     write_output(IDENTITY_SEAL_MAGIC, 0);
     write_output(&nonce, IDENTITY_SEAL_MAGIC.len());
-    write_output(&ciphertext, IDENTITY_SEAL_MAGIC.len() + IDENTITY_SEAL_NONCE_LEN);
-    write_output(tag.as_slice(), IDENTITY_SEAL_MAGIC.len() + IDENTITY_SEAL_NONCE_LEN + ciphertext.len());
+    write_output(
+        &ciphertext,
+        IDENTITY_SEAL_MAGIC.len() + IDENTITY_SEAL_NONCE_LEN,
+    );
+    write_output(
+        tag.as_slice(),
+        IDENTITY_SEAL_MAGIC.len() + IDENTITY_SEAL_NONCE_LEN + ciphertext.len(),
+    );
     finish(total_len)
 }
 
@@ -139,7 +144,11 @@ pub extern "C" fn edgerun_chat_unseal_identity(input_len: usize) -> usize {
     let unlock_len = u32::from_be_bytes(read_array::<4>(input, 0)) as usize;
     let sealed_len = u32::from_be_bytes(read_array::<4>(input, 4)) as usize;
     if unlock_len == 0
-        || sealed_len < IDENTITY_SEAL_MAGIC.len() + IDENTITY_SEAL_NONCE_LEN + OWNER_SEED_LEN + IDENTITY_SEAL_TAG_LEN
+        || sealed_len
+            < IDENTITY_SEAL_MAGIC.len()
+                + IDENTITY_SEAL_NONCE_LEN
+                + OWNER_SEED_LEN
+                + IDENTITY_SEAL_TAG_LEN
         || 8usize.saturating_add(unlock_len).saturating_add(sealed_len) != input_len
     {
         return fail(2);
@@ -281,12 +290,8 @@ pub extern "C" fn edgerun_chat_seal_envelope(input_len: usize) -> usize {
     };
 
     let payload_hash = edgerun_work::blake3_hash(&sealed_payload);
-    let message_id = simple_network_message_id(
-        &sender.node_id,
-        &recipient.node_id,
-        sequence,
-        &payload_hash,
-    );
+    let message_id =
+        simple_network_message_id(&sender.node_id, &recipient.node_id, sequence, &payload_hash);
     let message = sign_network_message_payload(
         &sender_key,
         message_id,
