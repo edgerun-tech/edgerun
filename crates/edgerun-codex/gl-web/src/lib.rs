@@ -20,6 +20,11 @@ pub extern "C" fn codex_gl_build_scene(width: f32, height: f32, thinking: u32) -
 }
 
 #[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_build_frame(width: f32, height: f32, time_ms: f64) -> u32 {
+    build_scene(width, height, frame_active(time_ms))
+}
+
+#[unsafe(no_mangle)]
 pub extern "C" fn codex_gl_build_codex_scene(width: f32, height: f32, thinking: u32) -> u32 {
     build_scene(width, height, thinking != 0)
 }
@@ -123,6 +128,27 @@ pub extern "C" fn codex_gl_selected_contact() -> u32 {
 #[unsafe(no_mangle)]
 pub extern "C" fn codex_gl_set_selected_contact(index: u32) {
     SELECTED_CONTACT.with_borrow_mut(|selected| *selected = index as usize);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_handle_pointer(x: f32, y: f32) -> u32 {
+    SCENE.with_borrow(|scene| {
+        let Some(hit) = scene.hit_test(x, y) else {
+            return 0;
+        };
+        if !matches!(hit.kind, HitKind::Contact) {
+            return 0;
+        }
+        SELECTED_CONTACT.with_borrow_mut(|selected| {
+            let next = hit.id as usize;
+            if *selected == next {
+                0
+            } else {
+                *selected = next;
+                1
+            }
+        })
+    })
 }
 
 #[unsafe(no_mangle)]
@@ -363,4 +389,8 @@ fn rect_mode_code(mode: RectMode) -> u32 {
         RectMode::Shadow => 1,
         RectMode::Border => 2,
     }
+}
+
+fn frame_active(time_ms: f64) -> bool {
+    ((time_ms.max(0.0) as u64) / 800).is_multiple_of(2)
 }
