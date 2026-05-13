@@ -68,9 +68,19 @@ impl Default for UiStyle {
 
 impl UiStyle {
     pub fn parse(classes: &str) -> Self {
+        Self::parse_impl(classes, None)
+    }
+
+    pub fn parse_for_width(classes: &str, width: f32) -> Self {
+        Self::parse_impl(classes, Some(width))
+    }
+
+    fn parse_impl(classes: &str, width: Option<f32>) -> Self {
         let mut style = Self::default();
         for class in classes.split_whitespace() {
-            style.apply_class(class);
+            if let Some(class) = responsive_class(class, width) {
+                style.apply_class(class);
+            }
         }
         style
     }
@@ -212,6 +222,24 @@ impl UiStyle {
     }
 }
 
+fn responsive_class<'a>(class: &'a str, width: Option<f32>) -> Option<&'a str> {
+    let Some((prefix, base)) = class.split_once(':') else {
+        return Some(class);
+    };
+    let min_width = match prefix {
+        "sm" => 640.0,
+        "md" => 768.0,
+        "lg" => 1024.0,
+        "xl" => 1280.0,
+        _ => return None,
+    };
+    if width.unwrap_or(0.0) >= min_width {
+        Some(base)
+    } else {
+        None
+    }
+}
+
 fn spacing_value(value: &str) -> Option<f32> {
     value.parse::<f32>().ok().map(|n| n * SPACING_UNIT)
 }
@@ -309,6 +337,17 @@ mod tests {
 
         assert_eq!(style.grid_cols, Some(4));
         assert_eq!(style.col_span, 3);
+    }
+
+    #[test]
+    fn applies_responsive_classes_at_matching_widths() {
+        let narrow = UiStyle::parse_for_width("grid grid-cols-1 md:grid-cols-4 md:gap-4", 640.0);
+        let wide = UiStyle::parse_for_width("grid grid-cols-1 md:grid-cols-4 md:gap-4", 900.0);
+
+        assert_eq!(narrow.grid_cols, Some(1));
+        assert_eq!(narrow.gap, 0.0);
+        assert_eq!(wide.grid_cols, Some(4));
+        assert_eq!(wide.gap, 16.0);
     }
 
     #[test]

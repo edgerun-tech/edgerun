@@ -669,6 +669,17 @@ impl UiNode {
         }
     }
 
+    pub fn grid_auto_for_width(classes: &str, width: f32) -> Self {
+        let style = UiStyle::parse_for_width(classes, width);
+        Self {
+            kind: UiNodeKind::Grid {
+                columns: style.grid_cols.unwrap_or(1),
+            },
+            style,
+            children: Vec::new(),
+        }
+    }
+
     pub fn card(classes: &str) -> Self {
         Self {
             kind: UiNodeKind::Card,
@@ -848,6 +859,19 @@ impl UiNode {
 
     pub fn class(mut self, classes: &str) -> Self {
         let mut parsed = UiStyle::parse(classes);
+        self.apply_parsed_style(&mut parsed);
+        self.style = parsed;
+        self
+    }
+
+    pub fn class_for_width(mut self, classes: &str, width: f32) -> Self {
+        let mut parsed = UiStyle::parse_for_width(classes, width);
+        self.apply_parsed_style(&mut parsed);
+        self.style = parsed;
+        self
+    }
+
+    fn apply_parsed_style(&mut self, parsed: &mut UiStyle) {
         if matches!(self.kind, UiNodeKind::Row) {
             parsed.direction = Axis::Horizontal;
         }
@@ -859,8 +883,6 @@ impl UiNode {
         if self.style.col_span > 1 && parsed.col_span == 1 {
             parsed.col_span = self.style.col_span;
         }
-        self.style = parsed;
-        self
     }
 
     pub fn span(mut self, span: u16) -> Self {
@@ -1222,6 +1244,10 @@ pub fn grid(classes: &str, columns: u16) -> UiNode {
 
 pub fn grid_auto(classes: &str) -> UiNode {
     UiNode::grid_auto(classes)
+}
+
+pub fn grid_auto_for_width(classes: &str, width: f32) -> UiNode {
+    UiNode::grid_auto_for_width(classes, width)
 }
 
 pub fn card(classes: &str) -> UiNode {
@@ -2938,6 +2964,26 @@ mod tests {
                     metric("Three", "3").class("h-24"),
                 ])
                 .render(&mut ui, UiRect::new(0.0, 0.0, 480.0, 160.0));
+        }
+
+        assert!(scene.rects().len() > 20);
+    }
+
+    #[test]
+    fn grid_auto_for_width_applies_responsive_columns() {
+        let mut scene = GpuScene::new(palette::BG);
+        {
+            let mut ui = UiPainter::new(&mut scene);
+            grid_auto_for_width(
+                "grid grid-cols-1 md:grid-cols-3 bg-panel p-3 gap-2 md:gap-3",
+                900.0,
+            )
+            .children([
+                metric("One", "1").class("h-24"),
+                metric("Two", "2").class("h-24"),
+                metric("Three", "3").class("h-24"),
+            ])
+            .render(&mut ui, UiRect::new(0.0, 0.0, 480.0, 160.0));
         }
 
         assert!(scene.rects().len() > 20);
