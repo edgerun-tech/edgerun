@@ -58,6 +58,7 @@ xray = [
 ]
 tls = [
     "edgerun-protocols/tls",
+    "edgerun-protocols/tls-x25519",
     "edgerun-crypto/aead",
     "edgerun-crypto/hmac",
     "edgerun-crypto/p256",

@@ -9,6 +9,8 @@ use std::env;
 use edgerun_node::rt::{
     self, AsyncRead, AsyncReadExt, AsyncTcpStream, AsyncWrite, AsyncWriteExt, ConnectFuture,
 };
+#[cfg(feature = "tls")]
+use edgerun_node::tls::AsyncTlsStream;
 use edgerun_work::{
     ChannelEnvelope, NODE_ROLE_MESSAGE, SimNode, WORK_WIRE_ABI_VERSION, WorkAck, WorkPacket,
     channel_envelope_bytes, channel_envelope_from_bytes, encode_work_packet_once,
@@ -18,6 +20,8 @@ extern crate alloc;
 
 const DEFAULT_ADDR: &str = "172.245.67.49:80";
 const DEFAULT_HOST: &str = "nodes.edgerun.tech";
+#[cfg(feature = "tls")]
+const DEFAULT_WSS_ADDR: &str = "nodes.edgerun.tech:443";
 
 fn masked_client_binary(payload: &[u8]) -> Vec<u8> {
     let mask = [1u8, 2, 3, 4];
@@ -63,10 +67,10 @@ fn envelope(from_seed: u8, to_seed: u8, text: &str) -> ChannelEnvelope {
     }
 }
 
-async fn connect_websocket(addr: &str, host: &str) -> Result<Arc<AsyncTcpStream>, String> {
-    let mut stream = ConnectFuture::new(addr)
-        .await
-        .map_err(|e| format!("{e:?}"))?;
+async fn handshake_websocket<S>(mut stream: S, host: &str) -> Result<S, String>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
     let request = format!(
         "GET /work HTTP/1.1\r\n\
          Host: {host}\r\n\
@@ -106,6 +110,27 @@ async fn connect_websocket(addr: &str, host: &str) -> Result<Arc<AsyncTcpStream>
         return Err(format!("missing edgerun-work-v1 protocol: {response_text}"));
     }
     Ok(stream)
+}
+
+async fn connect_websocket(addr: &str, host: &str) -> Result<Arc<AsyncTcpStream>, String> {
+    let stream = ConnectFuture::new(addr)
+        .await
+        .map_err(|e| format!("{e:?}"))?;
+    handshake_websocket(stream, host).await
+}
+
+#[cfg(feature = "tls")]
+async fn connect_secure_websocket(
+    addr: &str,
+    host: &str,
+) -> Result<AsyncTlsStream<Arc<AsyncTcpStream>>, String> {
+    let stream = ConnectFuture::new(addr)
+        .await
+        .map_err(|e| format!("{e:?}"))?;
+    let tls = AsyncTlsStream::client(stream, host, &[], None)
+        .await
+        .map_err(|e| format!("{e:?}"))?;
+    handshake_websocket(tls, host).await
 }
 
 async fn write_envelope<S>(stream: &mut S, envelope: &ChannelEnvelope) -> Result<Vec<u8>, String>
@@ -187,6 +212,42 @@ fn live_origin_work_websocket_relays_between_two_identity_peers() {
         assert_eq!(received, delivered_bytes);
         assert_eq!(
             channel_envelope_from_bytes(&received).expect("decode relayed envelope"),
+            delivered
+        );
+    });
+}
+
+#[cfg(feature = "tls")]
+#[test]
+#[ignore = "requires the live Cloudflare WSS endpoint for nodes.edgerun.tech"]
+fn live_cloudflare_wss_relays_between_two_identity_peers() {
+    rt::block_on(async {
+        let addr =
+            env::var("EDGERUN_LIVE_WORK_WSS_ADDR").unwrap_or_else(|_| DEFAULT_WSS_ADDR.into());
+        let host = env::var("EDGERUN_LIVE_WORK_WS_HOST").unwrap_or_else(|_| DEFAULT_HOST.into());
+
+        let mut recipient = connect_secure_websocket(&addr, &host)
+            .await
+            .expect("connect recipient WSS");
+        let registration = envelope(2, 1, "recipient registers over wss");
+        write_envelope(&mut recipient, &registration)
+            .await
+            .expect("register recipient WSS peer");
+
+        let mut sender = connect_secure_websocket(&addr, &host)
+            .await
+            .expect("connect sender WSS");
+        let delivered = envelope(1, 2, "sender to recipient through live wss relay");
+        let delivered_bytes = write_envelope(&mut sender, &delivered)
+            .await
+            .expect("send WSS relay envelope");
+
+        let received = read_server_binary(&mut recipient)
+            .await
+            .expect("recipient receives WSS relayed frame");
+        assert_eq!(received, delivered_bytes);
+        assert_eq!(
+            channel_envelope_from_bytes(&received).expect("decode WSS relayed envelope"),
             delivered
         );
     });
