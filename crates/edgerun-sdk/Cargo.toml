@@ -33,7 +33,7 @@ edgerun-encoding = { workspace = true, optional = true }
 edgerun-machine-report = { version = "0.1", path = "../node/edgerun-machine-report", optional = true }
 edgerun-protocols = { workspace = true, default-features = false, features = ["ed25519", "seal", "sign", "ssh", "verify", "wire"], optional = true }
 edgerun-wire = { workspace = true, optional = true }
-edgerun-json = { workspace = true, features = ["std"], optional = true }
+edgerun-json = { workspace = true, optional = true }
 
 [lints]
 workspace = true

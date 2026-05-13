@@ -25,6 +25,6 @@ vfs = []
 
 [dependencies]
 edgerun-crypto = { workspace = true, default-features = false, features = ["sha1"] }
-edgerun-json = { workspace = true, features = ["std", "toml"] }
+edgerun-json = { workspace = true, features = ["toml"] }
 edgerun-log.workspace = true
 rkyv.workspace = true

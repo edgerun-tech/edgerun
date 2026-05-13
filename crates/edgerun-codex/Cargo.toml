@@ -91,7 +91,7 @@ edgerun-futures = { path = "../utility/edgerun-futures" }
 edgerun-http = { path = "../utility/edgerun-http" }
 edgerun-ui-core = { path = "../utility/edgerun-ui-core" }
 edgerun-inventory = { path = "../utility/edgerun-inventory" }
-edgerun-json = { path = "../utility/edgerun-json", default-features = false, features = ["derive", "std", "schemars", "ts-rs"] }
+edgerun-json = { path = "../utility/edgerun-json", default-features = false, features = ["derive", "schemars", "ts-rs"] }
 edgerun-locale = { path = "../utility/edgerun-locale" }
 edgerun-random = { path = "../utility/edgerun-random" }
 edgerun-reqwest = { path = "../utility/edgerun-reqwest", default-features = false }
