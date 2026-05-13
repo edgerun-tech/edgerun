@@ -193,7 +193,7 @@ fn build_surface(
     match surface {
         Surface::Codex => build_codex_chat_shell_with_font(scene, atlas, width, height, thinking),
         Surface::UnifiedChat => {
-            let state = UnifiedChatState::demo(thinking);
+            let state = UnifiedChatState::demo_selected(thinking, 1);
             build_unified_chat_shell_with_font(scene, atlas, width, height, &state);
         }
     }

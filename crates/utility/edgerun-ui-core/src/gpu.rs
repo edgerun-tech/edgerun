@@ -100,6 +100,7 @@ impl GpuRect {
 pub struct GpuScene {
     pub clear: Color4,
     rects: Vec<GpuRect>,
+    hits: Vec<GpuHit>,
     #[cfg(feature = "fontdue-text")]
     text_quads: Vec<TextQuad>,
 }
@@ -109,6 +110,7 @@ impl GpuScene {
         Self {
             clear,
             rects: Vec::new(),
+            hits: Vec::new(),
             #[cfg(feature = "fontdue-text")]
             text_quads: Vec::new(),
         }
@@ -116,12 +118,17 @@ impl GpuScene {
 
     pub fn clear_rects(&mut self) {
         self.rects.clear();
+        self.hits.clear();
         #[cfg(feature = "fontdue-text")]
         self.text_quads.clear();
     }
 
     pub fn push_rect(&mut self, rect: GpuRect) {
         self.rects.push(rect);
+    }
+
+    pub fn push_hit(&mut self, hit: GpuHit) {
+        self.hits.push(hit);
     }
 
     pub fn push_text(&mut self, mut x: f32, y: f32, text: &str, scale: f32, color: Color4) {
@@ -162,6 +169,18 @@ impl GpuScene {
         &self.rects
     }
 
+    pub fn hits(&self) -> &[GpuHit] {
+        &self.hits
+    }
+
+    pub fn hit_test(&self, x: f32, y: f32) -> Option<GpuHit> {
+        self.hits
+            .iter()
+            .rev()
+            .copied()
+            .find(|hit| hit.contains(x, y))
+    }
+
     #[cfg(feature = "fontdue-text")]
     pub fn push_font_text(&mut self, atlas: &FontAtlas, x: f32, y: f32, text: &str, color: Color4) {
         atlas.layout_text(self, x, y, text, color);
@@ -170,6 +189,40 @@ impl GpuScene {
     #[cfg(feature = "fontdue-text")]
     pub fn text_quads(&self) -> &[TextQuad] {
         &self.text_quads
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HitKind {
+    Contact,
+    Composer,
+    Send,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct GpuHit {
+    pub kind: HitKind,
+    pub id: u32,
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+}
+
+impl GpuHit {
+    pub const fn new(kind: HitKind, id: u32, x: f32, y: f32, w: f32, h: f32) -> Self {
+        Self {
+            kind,
+            id,
+            x,
+            y,
+            w,
+            h,
+        }
+    }
+
+    pub fn contains(&self, x: f32, y: f32) -> bool {
+        x >= self.x && y >= self.y && x <= self.x + self.w && y <= self.y + self.h
     }
 }
 
@@ -392,6 +445,10 @@ pub struct UnifiedChatState<'a> {
 
 impl<'a> UnifiedChatState<'a> {
     pub fn demo(codex_active: bool) -> Self {
+        Self::demo_selected(codex_active, 1)
+    }
+
+    pub fn demo_selected(codex_active: bool, selected_contact: usize) -> Self {
         const ACTIVE_CONTACTS: &[UnifiedContact<'static>] = &[
             UnifiedContact {
                 name: "Ken",
@@ -486,18 +543,80 @@ impl<'a> UnifiedChatState<'a> {
                 accent: palette::GREEN,
             },
         ];
+        const KEN_MESSAGES: &[UnifiedMessage<'static>] = &[
+            UnifiedMessage {
+                author: "Ken",
+                body: "Personal contacts and agent contacts should feel the same, with different policy attached.",
+                outgoing: false,
+                accent: palette::ACCENT,
+            },
+            UnifiedMessage {
+                author: "You",
+                body: "Right. The contact book is the root. Threads and capabilities hang off identities.",
+                outgoing: true,
+                accent: palette::ACCENT,
+            },
+        ];
+        const WEBGL_MESSAGES: &[UnifiedMessage<'static>] = &[
+            UnifiedMessage {
+                author: "Codex WebGL",
+                body: "I am a browser hosted Codex client, rendered from the same Rust scene as native.",
+                outgoing: false,
+                accent: palette::VIOLET,
+            },
+            UnifiedMessage {
+                author: "You",
+                body: "Stay as a thin host. Rust owns layout, contact state, and byte-level bridges.",
+                outgoing: true,
+                accent: palette::ACCENT,
+            },
+        ];
+        const NODE_MESSAGES: &[UnifiedMessage<'static>] = &[
+            UnifiedMessage {
+                author: "nodes.edgerun.tech",
+                body: "Work WebSocket relay is live. Recipient encrypted envelopes can route by identity.",
+                outgoing: false,
+                accent: palette::GREEN,
+            },
+            UnifiedMessage {
+                author: "You",
+                body: "Keep transport dumb. Frontend owns encryption and decryption.",
+                outgoing: true,
+                accent: palette::ACCENT,
+            },
+        ];
+        const ADMISSION_MESSAGES: &[UnifiedMessage<'static>] = &[UnifiedMessage {
+            author: "Family admission",
+            body: "Policy source is currently offline. Local draft rules remain inspectable.",
+            outgoing: false,
+            accent: palette::AMBER,
+        }];
 
+        let contacts = if codex_active {
+            ACTIVE_CONTACTS
+        } else {
+            IDLE_CONTACTS
+        };
+        let selected_contact = selected_contact.min(contacts.len().saturating_sub(1));
         Self {
             title: "EdgeRun Chat",
             subtitle: "contacts, Codex clients, and nodes",
-            contacts: if codex_active {
-                ACTIVE_CONTACTS
-            } else {
-                IDLE_CONTACTS
+            contacts,
+            selected_contact,
+            messages: match selected_contact {
+                0 => KEN_MESSAGES,
+                1 => MESSAGES,
+                2 => WEBGL_MESSAGES,
+                3 => NODE_MESSAGES,
+                _ => ADMISSION_MESSAGES,
             },
-            selected_contact: 1,
-            messages: MESSAGES,
-            composer_placeholder: "Message Codex native...",
+            composer_placeholder: match selected_contact {
+                0 => "Message Ken...",
+                1 => "Message Codex native...",
+                2 => "Message Codex WebGL...",
+                3 => "Message nodes.edgerun.tech...",
+                _ => "Message Family admission...",
+            },
             connected: codex_active,
         }
     }
@@ -598,6 +717,14 @@ fn build_unified_chat_shell_impl(
         for (index, contact) in state.contacts.iter().enumerate() {
             let y = 88.0 + index as f32 * 68.0;
             let selected = index == state.selected_contact;
+            scene.push_hit(GpuHit::new(
+                HitKind::Contact,
+                index as u32,
+                16.0,
+                y,
+                sidebar_w - 32.0,
+                56.0,
+            ));
             draw_contact_row(
                 scene,
                 #[cfg(feature = "fontdue-text")]
@@ -773,6 +900,14 @@ fn build_unified_chat_shell_impl(
         main_w - m.pad * 2.0,
         m.composer_h,
     );
+    scene.push_hit(GpuHit::new(
+        HitKind::Composer,
+        0,
+        composer.0,
+        composer.1,
+        composer.2,
+        composer.3,
+    ));
     soft_card(
         scene,
         composer.0,
@@ -834,6 +969,14 @@ fn build_unified_chat_shell_impl(
         "codex tools",
         palette::VIOLET,
     );
+    scene.push_hit(GpuHit::new(
+        HitKind::Send,
+        0,
+        composer.0 + composer.2 - 58.0,
+        composer.1 + composer.3 - 56.0,
+        40.0,
+        38.0,
+    ));
     scene.push_rect(GpuRect::fill(
         composer.0 + composer.2 - 58.0,
         composer.1 + composer.3 - 56.0,

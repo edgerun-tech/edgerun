@@ -1,12 +1,13 @@
 use std::cell::RefCell;
 
 use edgerun_ui_core::gpu::{
-    FontAtlas, GpuScene, RectMode, UnifiedChatState, build_codex_chat_shell_with_font,
+    FontAtlas, GpuScene, HitKind, RectMode, UnifiedChatState, build_codex_chat_shell_with_font,
     build_unified_chat_shell_with_font, palette,
 };
 
 thread_local! {
     static SCENE: RefCell<GpuScene> = RefCell::new(GpuScene::new(palette::BG));
+    static SELECTED_CONTACT: RefCell<usize> = const { RefCell::new(1) };
     static FONT: FontAtlas = FontAtlas::from_font_bytes(include_bytes!(env!("CODEX_GL_INTER_FONT")), 18.0)
         .expect("embedded Inter font should parse");
 }
@@ -76,9 +77,43 @@ fn build_scene(
     match surface {
         Surface::Codex => build_codex_chat_shell_with_font(scene, font, width, height, active),
         Surface::UnifiedChat => {
-            let state = UnifiedChatState::demo(active);
+            let selected = SELECTED_CONTACT.with_borrow(|selected| *selected);
+            let state = UnifiedChatState::demo_selected(active, selected);
             build_unified_chat_shell_with_font(scene, font, width, height, &state);
         }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_selected_contact() -> u32 {
+    SELECTED_CONTACT.with_borrow(|selected| *selected as u32)
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_set_selected_contact(index: u32) {
+    SELECTED_CONTACT.with_borrow_mut(|selected| *selected = index as usize);
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_hit_test(x: f32, y: f32) -> u32 {
+    SCENE.with_borrow(|scene| {
+        scene
+            .hit_test(x, y)
+            .map(|hit| (hit_kind_code(hit.kind) << 24) | (hit.id & 0x00ff_ffff))
+            .unwrap_or(u32::MAX)
+    })
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn codex_gl_hit_count() -> u32 {
+    SCENE.with_borrow(|scene| scene.hits().len() as u32)
+}
+
+fn hit_kind_code(kind: HitKind) -> u32 {
+    match kind {
+        HitKind::Contact => 1,
+        HitKind::Composer => 2,
+        HitKind::Send => 3,
     }
 }
 

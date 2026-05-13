@@ -182,6 +182,7 @@ gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, atlasW, atlasH, 0, gl.RED, gl.UNSIGNED_BY
 const params = new URLSearchParams(location.search);
 const surface = params.get("surface") || "unified";
 statusEl.textContent = `${surface} wasm scene + WebGL2`;
+let sceneDirty = true;
 
 function resize() {
   const dpr = Math.max(1, window.devicePixelRatio || 1);
@@ -194,12 +195,32 @@ function resize() {
   return { width, height };
 }
 
+canvas.addEventListener("click", (event) => {
+  if (surface === "codex") return;
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const rect = canvas.getBoundingClientRect();
+  const x = (event.clientX - rect.left) * dpr;
+  const y = (event.clientY - rect.top) * dpr;
+  const hit = api.codex_gl_hit_test(x, y) >>> 0;
+  if (hit === 0xffffffff) return;
+  const kind = hit >>> 24;
+  const id = hit & 0x00ffffff;
+  if (kind === 1) {
+    api.codex_gl_set_selected_contact(id);
+    sceneDirty = true;
+  }
+});
+
 function draw(t) {
   const { width, height } = resize();
   const thinking = Math.floor(t / 800) % 2;
   const count = surface === "codex"
     ? api.codex_gl_build_codex_scene(width, height, thinking)
     : api.codex_gl_build_unified_chat_scene(width, height, thinking);
+  sceneDirty = false;
+  if (surface !== "codex") {
+    statusEl.textContent = `${surface} contact ${api.codex_gl_selected_contact()} + ${api.codex_gl_hit_count()} hits`;
+  }
   gl.viewport(0, 0, width, height);
   gl.clearColor(api.codex_gl_clear_r(), api.codex_gl_clear_g(), api.codex_gl_clear_b(), api.codex_gl_clear_a());
   gl.clear(gl.COLOR_BUFFER_BIT);
