@@ -1703,6 +1703,15 @@ impl UiNode {
     }
 
     pub fn render(&self, ui: &mut UiPainter<'_, '_>, bounds: UiRect) {
+        self.render_with_state(ui, bounds, None);
+    }
+
+    pub fn render_with_state(
+        &self,
+        ui: &mut UiPainter<'_, '_>,
+        bounds: UiRect,
+        state: Option<&UiRuntimeState>,
+    ) {
         let rect = self.style.layout_rect(bounds);
         match &self.kind {
             UiNodeKind::Text(value) => {
@@ -1733,7 +1742,10 @@ impl UiNode {
             }
             UiNodeKind::Toggle { on, id } => {
                 let y = rect.y + ((rect.h - 24.0).max(0.0) * 0.5);
-                ui.toggle(rect.x, y, *on, *id);
+                let on = state
+                    .map(|state| state.toggle_value(*id, *on))
+                    .unwrap_or(*on);
+                ui.toggle(rect.x, y, on, *id);
             }
             UiNodeKind::Avatar {
                 label,
@@ -1809,6 +1821,15 @@ impl UiNode {
                 focused,
                 id,
             } => {
+                let value = id
+                    .and_then(|id| state.map(|state| state.text_value(id, value)))
+                    .unwrap_or(value);
+                let focused = *focused
+                    || state.is_some_and(|state| {
+                        state
+                            .focused()
+                            .is_some_and(|hit| hit.kind == HitKind::Input && Some(hit.id) == *id)
+                    });
                 self::components::field(
                     ui,
                     rect,
@@ -1816,7 +1837,7 @@ impl UiNode {
                         label,
                         value,
                         helper,
-                        focused: *focused,
+                        focused,
                         id: *id,
                     },
                 );
@@ -1827,13 +1848,22 @@ impl UiNode {
                 focused,
                 id,
             } => {
+                let value = id
+                    .and_then(|id| state.map(|state| state.text_value(id, value)))
+                    .unwrap_or(value);
+                let focused = *focused
+                    || state.is_some_and(|state| {
+                        state
+                            .focused()
+                            .is_some_and(|hit| hit.kind == HitKind::TextArea && Some(hit.id) == *id)
+                    });
                 self::components::text_area(
                     ui,
                     rect,
                     self::components::TextArea {
                         label,
                         value,
-                        focused: *focused,
+                        focused,
                         id: *id,
                     },
                 );
@@ -1846,12 +1876,15 @@ impl UiNode {
                 accent,
                 id,
             } => {
+                let value = state
+                    .map(|state| state.slider_value(*id, *value))
+                    .unwrap_or(*value);
                 self::components::slider(
                     ui,
                     rect,
                     self::components::Slider {
                         label,
-                        value: *value,
+                        value,
                         min_label,
                         max_label,
                         accent: *accent,
@@ -1944,7 +1977,10 @@ impl UiNode {
                         self::components::ControlAccessory::Badge(label, *color)
                     }
                     UiControlAccessory::Toggle { on, id } => {
-                        self::components::ControlAccessory::Toggle { on: *on, id: *id }
+                        let on = state
+                            .map(|state| state.toggle_value(*id, *on))
+                            .unwrap_or(*on);
+                        self::components::ControlAccessory::Toggle { on, id: *id }
                     }
                     UiControlAccessory::Button { label, id, style } => {
                         self::components::ControlAccessory::Button {
@@ -2004,11 +2040,22 @@ impl UiNode {
                     }
                 }
                 if let UiNodeKind::Grid { columns } = &self.kind {
-                    render_grid_children(ui, rect, &self.style, *columns, &self.children);
+                    render_grid_children(ui, rect, &self.style, *columns, &self.children, state);
                 } else if let UiNodeKind::ScrollArea { offset, id } = &self.kind {
-                    render_scroll_children(ui, rect, &self.style, *offset, *id, &self.children);
+                    let offset = id
+                        .and_then(|id| state.map(|state| state.scroll_offset(id)))
+                        .unwrap_or(*offset);
+                    render_scroll_children(
+                        ui,
+                        rect,
+                        &self.style,
+                        offset,
+                        *id,
+                        &self.children,
+                        state,
+                    );
                 } else {
-                    render_children(ui, rect, &self.style, &self.children);
+                    render_children(ui, rect, &self.style, &self.children, state);
                 }
             }
         }
@@ -2718,6 +2765,7 @@ pub fn build_unified_chat_shell(scene: &mut GpuScene, width: f32, height: f32) {
         width,
         height,
         &state,
+        None,
         #[cfg(feature = "fontdue-text")]
         None,
     );
@@ -2731,7 +2779,19 @@ pub fn build_unified_chat_shell_with_font(
     height: f32,
     state: &UnifiedChatState<'_>,
 ) {
-    build_unified_chat_shell_impl(scene, width, height, state, Some(atlas));
+    build_unified_chat_shell_impl(scene, width, height, state, None, Some(atlas));
+}
+
+#[cfg(feature = "fontdue-text")]
+pub fn build_unified_chat_shell_with_font_and_runtime(
+    scene: &mut GpuScene,
+    atlas: &FontAtlas,
+    width: f32,
+    height: f32,
+    state: &UnifiedChatState<'_>,
+    runtime: &UiRuntimeState,
+) {
+    build_unified_chat_shell_impl(scene, width, height, state, Some(runtime), Some(atlas));
 }
 
 fn build_unified_chat_shell_impl(
@@ -2739,6 +2799,7 @@ fn build_unified_chat_shell_impl(
     width: f32,
     height: f32,
     state: &UnifiedChatState<'_>,
+    runtime: Option<&UiRuntimeState>,
     #[cfg(feature = "fontdue-text")] atlas: Option<&FontAtlas>,
 ) {
     scene.clear = palette::BG;
@@ -2901,13 +2962,21 @@ fn build_unified_chat_shell_impl(
             main_w - m.pad * 2.0,
             m.composer_h,
         );
+        let composer_text = runtime
+            .map(|runtime| runtime.text_value(0, state.composer_placeholder))
+            .unwrap_or(state.composer_placeholder);
+        let composer_active = runtime.is_some_and(|runtime| {
+            runtime
+                .focused()
+                .is_some_and(|hit| hit.kind == HitKind::Composer)
+        });
         ui.composer(
             composer.0,
             composer.1,
             composer.2,
             composer.3,
-            state.composer_placeholder,
-            false,
+            composer_text,
+            composer_active,
             &[],
         );
         return;
@@ -3010,7 +3079,9 @@ fn build_unified_chat_shell_impl(
         ui.toggle(
             rail_x + rail_w - 66.0,
             transcript_top + 162.0,
-            state.connected,
+            runtime
+                .map(|runtime| runtime.toggle_value(44, state.connected))
+                .unwrap_or(state.connected),
             44,
         );
         row("row bg-row border rounded-md p-2 gap-2")
@@ -3041,13 +3112,22 @@ fn build_unified_chat_shell_impl(
         main_w - m.pad * 2.0,
         m.composer_h,
     );
+    let composer_text = runtime
+        .map(|runtime| runtime.text_value(0, state.composer_placeholder))
+        .unwrap_or(state.composer_placeholder);
+    let composer_active = state.connected
+        || runtime.is_some_and(|runtime| {
+            runtime
+                .focused()
+                .is_some_and(|hit| hit.kind == HitKind::Composer)
+        });
     ui.composer(
         composer.0,
         composer.1,
         composer.2,
         composer.3,
-        state.composer_placeholder,
-        state.connected,
+        composer_text,
+        composer_active,
         &[
             ("encrypted", palette::GREEN),
             ("contact", palette::ACCENT),
@@ -3439,7 +3519,13 @@ fn component_label_width(
     )
 }
 
-fn render_children(ui: &mut UiPainter<'_, '_>, rect: UiRect, style: &UiStyle, children: &[UiNode]) {
+fn render_children(
+    ui: &mut UiPainter<'_, '_>,
+    rect: UiRect,
+    style: &UiStyle,
+    children: &[UiNode],
+    state: Option<&UiRuntimeState>,
+) {
     if children.is_empty() {
         return;
     }
@@ -3510,7 +3596,7 @@ fn render_children(ui: &mut UiPainter<'_, '_>, rect: UiRect, style: &UiStyle, ch
                 UiRect::new(cross.0, cursor, cross.1, h)
             }
         };
-        child.render(ui, child_rect);
+        child.render_with_state(ui, child_rect, state);
         cursor += main + gap;
     }
 }
@@ -3546,6 +3632,7 @@ fn render_grid_children(
     style: &UiStyle,
     columns: u16,
     children: &[UiNode],
+    state: Option<&UiRuntimeState>,
 ) {
     if children.is_empty() {
         return;
@@ -3586,7 +3673,7 @@ fn render_grid_children(
             let w = track_w * span as f32 + gap * span.saturating_sub(1) as f32;
             let h = child_main_size(child, Axis::Vertical).min(content.y + content.h - row_y);
             let x = content.x + col as f32 * (track_w + gap);
-            child.render(ui, UiRect::new(x, row_y, w, h));
+            child.render_with_state(ui, UiRect::new(x, row_y, w, h), state);
             col += span;
         }
         row_y += row_h + gap;
@@ -3600,6 +3687,7 @@ fn render_scroll_children(
     offset: f32,
     id: Option<u32>,
     children: &[UiNode],
+    state: Option<&UiRuntimeState>,
 ) {
     if children.is_empty() {
         return;
@@ -3630,7 +3718,7 @@ fn render_scroll_children(
         let h = child_main_size(child, Axis::Vertical);
         let bottom = cursor + h;
         if bottom >= content.y && cursor <= content.y + content.h && clipped {
-            child.render(ui, UiRect::new(content.x, cursor, content.w, h));
+            child.render_with_state(ui, UiRect::new(content.x, cursor, content.w, h), state);
         }
         cursor += h + style.gap;
     }
@@ -3984,6 +4072,37 @@ mod tests {
             ),
             UiAction::ScrollChanged { id: 9, offset: 0.2 }
         );
+    }
+
+    #[test]
+    fn ui_node_render_consumes_runtime_scroll_state() {
+        let rows = (0..8).map(|index| {
+            list_row_node(
+                &format!("Runtime row {}", index + 1),
+                "state owned by rust",
+                130 + index,
+            )
+        });
+        let mut runtime = UiRuntimeState::default();
+        runtime.set_scroll_offset(77, 1.0);
+
+        let mut scene = GpuScene::new(palette::BG);
+        {
+            let mut ui = UiPainter::new(&mut scene);
+            scroll_area("bg-panel border rounded-md p-2 gap-2", 0.0)
+                .scroll_id(77)
+                .children(rows)
+                .render_with_state(&mut ui, UiRect::new(0.0, 0.0, 320.0, 150.0), Some(&runtime));
+        }
+
+        assert!(!scene
+            .hits()
+            .iter()
+            .any(|hit| hit.kind == HitKind::ListRow && hit.id == 130));
+        assert!(scene
+            .hits()
+            .iter()
+            .any(|hit| hit.kind == HitKind::ListRow && hit.id == 137));
     }
 
     #[test]

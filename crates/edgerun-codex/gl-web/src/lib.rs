@@ -2,7 +2,8 @@ use std::cell::RefCell;
 
 use edgerun_ui_core::gpu::{
     FontAtlas, GpuHit, GpuRect, GpuScene, HitKind, RectMode, TextQuad, UiAction, UiColorScheme,
-    UiEvent, UiKey, UiRuntimeState, UnifiedChatState, build_unified_chat_shell_with_font, palette,
+    UiEvent, UiKey, UiRuntimeState, UnifiedChatState,
+    build_unified_chat_shell_with_font_and_runtime, palette,
 };
 
 thread_local! {
@@ -57,7 +58,11 @@ fn build_scene(width: f32, height: f32, active: bool) -> u32 {
         SCENE.with_borrow_mut(|scene| {
             let mut state = UnifiedChatState::empty();
             state.connected = active;
-            build_unified_chat_shell_with_font(scene, font, width, height, &state);
+            UI_STATE.with_borrow(|runtime| {
+                build_unified_chat_shell_with_font_and_runtime(
+                    scene, font, width, height, &state, runtime,
+                );
+            });
             let scheme = COLOR_SCHEME.with_borrow(|scheme| *scheme);
             scene.apply_color_scheme(scheme);
             pack_scene(scene);

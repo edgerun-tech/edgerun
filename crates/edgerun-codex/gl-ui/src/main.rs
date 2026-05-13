@@ -6,7 +6,7 @@ use std::time::Duration;
 use edgerun_ui_core::gpu::gl::GlRenderer;
 use edgerun_ui_core::gpu::{
     FontAtlas, GpuScene, UiColorScheme, UiEvent, UiKey, UiRuntimeState, UnifiedChatState,
-    build_unified_chat_shell_with_font, palette,
+    build_unified_chat_shell_with_font_and_runtime, palette,
 };
 
 const SDL_INIT_VIDEO: u32 = 0x0000_0020;
@@ -108,7 +108,8 @@ fn run() -> Result<(), String> {
     if args.dump_scene {
         let mut scene = GpuScene::new(palette::BG);
         let atlas = FontAtlas::load_inter(18.0)?;
-        build_surface(&mut scene, &atlas, 1120.0, 720.0, args.scheme);
+        let ui_state = UiRuntimeState::default();
+        build_surface(&mut scene, &atlas, &ui_state, 1120.0, 720.0, args.scheme);
         println!(
             "codex-gl-ui unified-chat scene rects={} text_quads={}",
             scene.rects().len(),
@@ -226,7 +227,14 @@ fn run() -> Result<(), String> {
         }
 
         if scene_dirty {
-            build_surface(&mut scene, &atlas, width as f32, height as f32, args.scheme);
+            build_surface(
+                &mut scene,
+                &atlas,
+                &ui_state,
+                width as f32,
+                height as f32,
+                args.scheme,
+            );
             renderer.render(width, height, &scene);
             unsafe {
                 SDL_GL_SwapWindow(window.0);
@@ -264,12 +272,13 @@ fn sdl_key(sym: i32) -> UiKey {
 fn build_surface(
     scene: &mut GpuScene,
     atlas: &FontAtlas,
+    ui_state: &UiRuntimeState,
     width: f32,
     height: f32,
     scheme: UiColorScheme,
 ) {
     let state = UnifiedChatState::empty();
-    build_unified_chat_shell_with_font(scene, atlas, width, height, &state);
+    build_unified_chat_shell_with_font_and_runtime(scene, atlas, width, height, &state, ui_state);
     scene.apply_color_scheme(scheme);
 }
 
