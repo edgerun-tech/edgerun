@@ -150,6 +150,10 @@ const wasm = await WebAssembly.instantiateStreaming(fetch("./codex_gl_web.wasm")
 const api = wasm.instance.exports;
 const rectStride = api.codex_gl_rect_float_stride();
 const textVertexStride = api.codex_gl_text_vertex_float_stride();
+const schemeCode = { dark: 0, light: 1, terminal: 2 }[
+  new URLSearchParams(location.search).get("scheme") || "dark"
+] ?? 0;
+api.codex_gl_set_color_scheme(schemeCode);
 
 const textProgram = gl.createProgram();
 gl.attachShader(textProgram, shader(gl.VERTEX_SHADER, textVertexSource));

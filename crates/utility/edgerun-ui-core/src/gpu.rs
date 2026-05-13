@@ -202,6 +202,22 @@ impl GpuScene {
             .find(|hit| hit.contains(x, y))
     }
 
+    pub fn apply_color_scheme(&mut self, scheme: UiColorScheme) {
+        if scheme == UiColorScheme::Dark {
+            return;
+        }
+        let from = SchemePalette::dark();
+        let to = scheme.palette();
+        self.clear = remap_scheme_color(self.clear, from, to);
+        for rect in &mut self.rects {
+            rect.color = remap_scheme_color(rect.color, from, to);
+        }
+        #[cfg(feature = "fontdue-text")]
+        for quad in &mut self.text_quads {
+            quad.color = remap_scheme_color(quad.color, from, to);
+        }
+    }
+
     #[cfg(feature = "fontdue-text")]
     pub fn push_font_text(&mut self, atlas: &FontAtlas, x: f32, y: f32, text: &str, color: Color4) {
         atlas.layout_text(self, x, y, text, color);
@@ -210,6 +226,40 @@ impl GpuScene {
     #[cfg(feature = "fontdue-text")]
     pub fn text_quads(&self) -> &[TextQuad] {
         &self.text_quads
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum UiColorScheme {
+    #[default]
+    Dark,
+    Light,
+    Terminal,
+}
+
+impl UiColorScheme {
+    pub const fn from_code(code: u32) -> Self {
+        match code {
+            1 => Self::Light,
+            2 => Self::Terminal,
+            _ => Self::Dark,
+        }
+    }
+
+    pub const fn code(self) -> u32 {
+        match self {
+            Self::Dark => 0,
+            Self::Light => 1,
+            Self::Terminal => 2,
+        }
+    }
+
+    fn palette(self) -> SchemePalette {
+        match self {
+            Self::Dark => SchemePalette::dark(),
+            Self::Light => SchemePalette::light(),
+            Self::Terminal => SchemePalette::terminal(),
+        }
     }
 }
 
@@ -2461,6 +2511,145 @@ pub mod palette {
     pub const ACCENT_TEXT: Color4 = Color4::from_color(crate::EDGERUN_DARK.accent_text);
     pub const TEXT: Color4 = Color4::from_color(crate::EDGERUN_DARK.text);
     pub const MUTED: Color4 = Color4::from_color(crate::EDGERUN_DARK.muted);
+}
+
+#[derive(Clone, Copy, Debug)]
+struct SchemePalette {
+    bg: Color4,
+    sidebar: Color4,
+    topbar: Color4,
+    row: Color4,
+    active_row: Color4,
+    panel: Color4,
+    assistant: Color4,
+    user: Color4,
+    composer: Color4,
+    border: Color4,
+    accent: Color4,
+    green: Color4,
+    violet: Color4,
+    amber: Color4,
+    danger: Color4,
+    accent_text: Color4,
+    text: Color4,
+    muted: Color4,
+}
+
+impl SchemePalette {
+    const fn dark() -> Self {
+        Self {
+            bg: palette::BG,
+            sidebar: palette::SIDEBAR,
+            topbar: palette::TOPBAR,
+            row: palette::ROW,
+            active_row: palette::ACTIVE_ROW,
+            panel: palette::PANEL,
+            assistant: palette::ASSISTANT,
+            user: palette::USER,
+            composer: palette::COMPOSER,
+            border: palette::BORDER,
+            accent: palette::ACCENT,
+            green: palette::GREEN,
+            violet: palette::VIOLET,
+            amber: palette::AMBER,
+            danger: palette::DANGER,
+            accent_text: palette::ACCENT_TEXT,
+            text: palette::TEXT,
+            muted: palette::MUTED,
+        }
+    }
+
+    const fn light() -> Self {
+        Self {
+            bg: Color4::rgba(0.972, 0.980, 0.988, 1.0),
+            sidebar: Color4::rgba(1.000, 1.000, 1.000, 0.98),
+            topbar: Color4::rgba(1.000, 1.000, 1.000, 0.96),
+            row: Color4::rgba(0.945, 0.960, 0.975, 0.90),
+            active_row: Color4::rgba(0.055, 0.455, 0.565, 0.16),
+            panel: Color4::rgba(1.000, 1.000, 1.000, 0.96),
+            assistant: Color4::rgba(0.945, 0.960, 0.975, 0.96),
+            user: Color4::rgba(0.055, 0.455, 0.565, 0.16),
+            composer: Color4::rgba(1.000, 1.000, 1.000, 0.98),
+            border: Color4::rgba(0.580, 0.640, 0.720, 0.42),
+            accent: Color4::rgba(0.035, 0.455, 0.565, 1.0),
+            green: Color4::rgba(0.020, 0.520, 0.370, 1.0),
+            violet: Color4::rgba(0.430, 0.250, 0.760, 1.0),
+            amber: Color4::rgba(0.710, 0.390, 0.000, 1.0),
+            danger: Color4::rgba(0.760, 0.070, 0.235, 1.0),
+            accent_text: Color4::rgba(0.960, 0.990, 1.000, 1.0),
+            text: Color4::rgba(0.060, 0.090, 0.160, 1.0),
+            muted: Color4::rgba(0.390, 0.455, 0.550, 1.0),
+        }
+    }
+
+    const fn terminal() -> Self {
+        Self {
+            bg: Color4::rgba(0.000, 0.050, 0.035, 1.0),
+            sidebar: Color4::rgba(0.000, 0.075, 0.055, 0.98),
+            topbar: Color4::rgba(0.000, 0.070, 0.050, 0.96),
+            row: Color4::rgba(0.000, 0.135, 0.095, 0.74),
+            active_row: Color4::rgba(0.160, 0.980, 0.620, 0.22),
+            panel: Color4::rgba(0.000, 0.095, 0.070, 0.94),
+            assistant: Color4::rgba(0.000, 0.120, 0.085, 0.96),
+            user: Color4::rgba(0.160, 0.980, 0.620, 0.18),
+            composer: Color4::rgba(0.000, 0.100, 0.075, 0.98),
+            border: Color4::rgba(0.160, 0.980, 0.620, 0.36),
+            accent: Color4::rgba(0.160, 0.980, 0.620, 1.0),
+            green: Color4::rgba(0.160, 0.980, 0.620, 1.0),
+            violet: Color4::rgba(0.500, 0.840, 1.000, 1.0),
+            amber: Color4::rgba(0.980, 0.780, 0.260, 1.0),
+            danger: Color4::rgba(1.000, 0.330, 0.430, 1.0),
+            accent_text: Color4::rgba(0.000, 0.050, 0.035, 1.0),
+            text: Color4::rgba(0.800, 1.000, 0.890, 1.0),
+            muted: Color4::rgba(0.430, 0.760, 0.600, 1.0),
+        }
+    }
+}
+
+fn remap_scheme_color(color: Color4, from: SchemePalette, to: SchemePalette) -> Color4 {
+    let pairs = [
+        (from.bg, to.bg),
+        (from.sidebar, to.sidebar),
+        (from.topbar, to.topbar),
+        (from.row, to.row),
+        (from.active_row, to.active_row),
+        (from.panel, to.panel),
+        (from.assistant, to.assistant),
+        (from.user, to.user),
+        (from.composer, to.composer),
+        (from.border, to.border),
+        (from.accent, to.accent),
+        (from.green, to.green),
+        (from.violet, to.violet),
+        (from.amber, to.amber),
+        (from.danger, to.danger),
+        (from.accent_text, to.accent_text),
+        (from.text, to.text),
+        (from.muted, to.muted),
+    ];
+    for (source, target) in pairs {
+        if same_color(color, source) {
+            return target.with_alpha(color.a);
+        }
+    }
+    for (source, target) in pairs {
+        if same_rgb(color, source) {
+            return target.with_alpha(color.a);
+        }
+    }
+    color
+}
+
+fn same_color(a: Color4, b: Color4) -> bool {
+    same_rgb(a, b) && close_f32(a.a, b.a)
+}
+
+fn same_rgb(a: Color4, b: Color4) -> bool {
+    close_f32(a.r, b.r) && close_f32(a.g, b.g) && close_f32(a.b, b.b)
+}
+
+fn close_f32(a: f32, b: f32) -> bool {
+    (a - b).abs() < 0.001
 }
 
 fn glyph5x7(ch: char) -> [u8; 7] {
