@@ -398,6 +398,9 @@ pub enum HitKind {
     MenuItem,
     TransactionRow,
     Scrollbar,
+    WorkspaceTab,
+    WorkspaceClose,
+    WorkspaceSplit,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -709,6 +712,450 @@ fn text_value_mut(values: &mut Vec<(u32, String)>, id: u32) -> &mut String {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UiTileAxis {
+    Horizontal,
+    Vertical,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum UiTileNode {
+    Leaf {
+        app_id: u32,
+    },
+    Split {
+        axis: UiTileAxis,
+        ratio_percent: u8,
+        first: Box<UiTileNode>,
+        second: Box<UiTileNode>,
+    },
+    Tabs {
+        app_ids: Vec<u32>,
+        selected: usize,
+    },
+}
+
+#[derive(Clone, Debug)]
+pub struct UiAppSurface {
+    pub id: u32,
+    pub title: String,
+    pub runtime: UiRuntimeState,
+    bounds: Option<UiRect>,
+}
+
+impl UiAppSurface {
+    pub fn new(id: u32, title: impl Into<String>) -> Self {
+        Self {
+            id,
+            title: title.into(),
+            runtime: UiRuntimeState::default(),
+            bounds: None,
+        }
+    }
+
+    pub fn bounds(&self) -> Option<UiRect> {
+        self.bounds
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct UiWorkspace {
+    pub apps: Vec<UiAppSurface>,
+    pub root: UiTileNode,
+    pub focused_app: Option<u32>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum UiWorkspaceAction {
+    None,
+    FocusedApp(u32),
+    ClosedApp(u32),
+    SplitRequested { app_id: u32, axis: UiTileAxis },
+    AppAction { app_id: u32, action: UiAction },
+}
+
+const WORKSPACE_CHROME_H: f32 = 34.0;
+const WORKSPACE_GAP: f32 = 6.0;
+
+impl UiWorkspace {
+    pub fn single(app: UiAppSurface) -> Self {
+        let focused_app = Some(app.id);
+        Self {
+            root: UiTileNode::Leaf { app_id: app.id },
+            apps: vec![app],
+            focused_app,
+        }
+    }
+
+    pub fn split(axis: UiTileAxis, first: UiAppSurface, second: UiAppSurface) -> Self {
+        let focused_app = Some(first.id);
+        Self {
+            root: UiTileNode::Split {
+                axis,
+                ratio_percent: 50,
+                first: Box::new(UiTileNode::Leaf { app_id: first.id }),
+                second: Box::new(UiTileNode::Leaf { app_id: second.id }),
+            },
+            apps: vec![first, second],
+            focused_app,
+        }
+    }
+
+    pub fn tabs(apps: Vec<UiAppSurface>, selected: usize) -> Self {
+        let selected = selected.min(apps.len().saturating_sub(1));
+        let focused_app = apps.get(selected).map(|app| app.id);
+        Self {
+            root: UiTileNode::Tabs {
+                app_ids: apps.iter().map(|app| app.id).collect(),
+                selected,
+            },
+            apps,
+            focused_app,
+        }
+    }
+
+    pub fn app(&self, id: u32) -> Option<&UiAppSurface> {
+        self.apps.iter().find(|app| app.id == id)
+    }
+
+    pub fn app_mut(&mut self, id: u32) -> Option<&mut UiAppSurface> {
+        self.apps.iter_mut().find(|app| app.id == id)
+    }
+
+    pub fn render(
+        &mut self,
+        ui: &mut UiPainter<'_, '_>,
+        bounds: UiRect,
+        mut render_app: impl FnMut(&mut UiPainter<'_, '_>, UiRect, &UiAppSurface),
+    ) {
+        for app in &mut self.apps {
+            app.bounds = None;
+        }
+        let root = self.root.clone();
+        self.render_tile(ui, bounds, &root, &mut render_app);
+    }
+
+    pub fn handle_event(&mut self, scene: &GpuScene, event: UiEvent) -> UiWorkspaceAction {
+        match event {
+            UiEvent::PointerDown { x, y } => {
+                if let Some(hit) = scene.hit_test(x, y) {
+                    match hit.kind {
+                        HitKind::WorkspaceTab => {
+                            self.focused_app = Some(hit.id);
+                            return UiWorkspaceAction::FocusedApp(hit.id);
+                        }
+                        HitKind::WorkspaceClose => return UiWorkspaceAction::ClosedApp(hit.id),
+                        HitKind::WorkspaceSplit => {
+                            return UiWorkspaceAction::SplitRequested {
+                                app_id: hit.id,
+                                axis: UiTileAxis::Horizontal,
+                            };
+                        }
+                        _ => {}
+                    }
+                }
+                let Some(app_id) = self.app_id_at(x, y) else {
+                    return UiWorkspaceAction::None;
+                };
+                self.focused_app = Some(app_id);
+                self.route_to_app(scene, app_id, UiEvent::PointerDown { x, y })
+            }
+            UiEvent::PointerMove { x, y } => {
+                let app_id = self.app_id_at(x, y).or(self.focused_app);
+                app_id
+                    .map(|app_id| self.route_to_app(scene, app_id, UiEvent::PointerMove { x, y }))
+                    .unwrap_or(UiWorkspaceAction::None)
+            }
+            UiEvent::PointerUp { x, y } => self
+                .focused_app
+                .map(|app_id| self.route_to_app(scene, app_id, UiEvent::PointerUp { x, y }))
+                .unwrap_or(UiWorkspaceAction::None),
+            UiEvent::Wheel { x, y, delta_y } => {
+                let app_id = self.app_id_at(x, y).or(self.focused_app);
+                app_id
+                    .map(|app_id| {
+                        self.route_to_app(scene, app_id, UiEvent::Wheel { x, y, delta_y })
+                    })
+                    .unwrap_or(UiWorkspaceAction::None)
+            }
+            UiEvent::KeyDown { key } => self
+                .focused_app
+                .map(|app_id| self.route_to_app(scene, app_id, UiEvent::KeyDown { key }))
+                .unwrap_or(UiWorkspaceAction::None),
+            UiEvent::TextInput(value) => self
+                .focused_app
+                .map(|app_id| self.route_to_app(scene, app_id, UiEvent::TextInput(value)))
+                .unwrap_or(UiWorkspaceAction::None),
+            UiEvent::Blur => {
+                let mut last = UiWorkspaceAction::None;
+                for app in &mut self.apps {
+                    let action = app.runtime.handle_event(scene, UiEvent::Blur);
+                    if action != UiAction::None {
+                        last = UiWorkspaceAction::AppAction {
+                            app_id: app.id,
+                            action,
+                        };
+                    }
+                }
+                last
+            }
+        }
+    }
+
+    fn route_to_app(&mut self, scene: &GpuScene, app_id: u32, event: UiEvent) -> UiWorkspaceAction {
+        let Some(app) = self.app_mut(app_id) else {
+            return UiWorkspaceAction::None;
+        };
+        let action = app.runtime.handle_event(scene, event);
+        if action == UiAction::None {
+            UiWorkspaceAction::None
+        } else {
+            UiWorkspaceAction::AppAction { app_id, action }
+        }
+    }
+
+    fn app_id_at(&self, x: f32, y: f32) -> Option<u32> {
+        self.apps
+            .iter()
+            .find(|app| app.bounds.is_some_and(|bounds| bounds.contains(x, y)))
+            .map(|app| app.id)
+    }
+
+    fn render_tile(
+        &mut self,
+        ui: &mut UiPainter<'_, '_>,
+        rect: UiRect,
+        tile: &UiTileNode,
+        render_app: &mut impl FnMut(&mut UiPainter<'_, '_>, UiRect, &UiAppSurface),
+    ) {
+        match tile {
+            UiTileNode::Leaf { app_id } => self.render_leaf(ui, rect, *app_id, render_app),
+            UiTileNode::Split {
+                axis,
+                ratio_percent,
+                first,
+                second,
+            } => {
+                let ratio = (*ratio_percent as f32 / 100.0).clamp(0.18, 0.82);
+                match axis {
+                    UiTileAxis::Horizontal => {
+                        let first_w = ((rect.w - WORKSPACE_GAP) * ratio).max(0.0);
+                        let second_w = (rect.w - WORKSPACE_GAP - first_w).max(0.0);
+                        self.render_tile(
+                            ui,
+                            UiRect::new(rect.x, rect.y, first_w, rect.h),
+                            first,
+                            render_app,
+                        );
+                        self.render_tile(
+                            ui,
+                            UiRect::new(rect.x + first_w + WORKSPACE_GAP, rect.y, second_w, rect.h),
+                            second,
+                            render_app,
+                        );
+                    }
+                    UiTileAxis::Vertical => {
+                        let first_h = ((rect.h - WORKSPACE_GAP) * ratio).max(0.0);
+                        let second_h = (rect.h - WORKSPACE_GAP - first_h).max(0.0);
+                        self.render_tile(
+                            ui,
+                            UiRect::new(rect.x, rect.y, rect.w, first_h),
+                            first,
+                            render_app,
+                        );
+                        self.render_tile(
+                            ui,
+                            UiRect::new(rect.x, rect.y + first_h + WORKSPACE_GAP, rect.w, second_h),
+                            second,
+                            render_app,
+                        );
+                    }
+                }
+            }
+            UiTileNode::Tabs { app_ids, selected } => {
+                self.render_tab_strip(ui, rect, app_ids, *selected);
+                if let Some(app_id) = app_ids.get(*selected) {
+                    self.render_app_body(
+                        ui,
+                        UiRect::new(
+                            rect.x,
+                            rect.y + WORKSPACE_CHROME_H,
+                            rect.w,
+                            (rect.h - WORKSPACE_CHROME_H).max(0.0),
+                        ),
+                        *app_id,
+                        render_app,
+                    );
+                }
+            }
+        }
+    }
+
+    fn render_leaf(
+        &mut self,
+        ui: &mut UiPainter<'_, '_>,
+        rect: UiRect,
+        app_id: u32,
+        render_app: &mut impl FnMut(&mut UiPainter<'_, '_>, UiRect, &UiAppSurface),
+    ) {
+        self.render_app_chrome(ui, rect, app_id);
+        self.render_app_body(
+            ui,
+            UiRect::new(
+                rect.x,
+                rect.y + WORKSPACE_CHROME_H,
+                rect.w,
+                (rect.h - WORKSPACE_CHROME_H).max(0.0),
+            ),
+            app_id,
+            render_app,
+        );
+    }
+
+    fn render_tab_strip(
+        &self,
+        ui: &mut UiPainter<'_, '_>,
+        rect: UiRect,
+        app_ids: &[u32],
+        selected: usize,
+    ) {
+        ui.fill_rect(
+            UiRect::new(rect.x, rect.y, rect.w, WORKSPACE_CHROME_H),
+            8.0,
+            palette::TOPBAR,
+        );
+        let mut x = rect.x + 8.0;
+        for (index, app_id) in app_ids.iter().copied().enumerate() {
+            let title = self
+                .app(app_id)
+                .map(|app| app.title.as_str())
+                .unwrap_or("App");
+            let w = (title.chars().count() as f32 * 8.0 + 42.0).clamp(82.0, 180.0);
+            let tab = UiRect::new(x, rect.y + 5.0, w, 24.0);
+            ui.hit(HitKind::WorkspaceTab, app_id, tab.x, tab.y, tab.w, tab.h);
+            ui.fill_rect(
+                tab,
+                8.0,
+                if index == selected {
+                    palette::ACTIVE_ROW
+                } else {
+                    palette::ROW
+                },
+            );
+            ui.bounded_label(
+                tab.x + 12.0,
+                tab.y + 6.0,
+                tab.w - 24.0,
+                title,
+                2.0,
+                if index == selected {
+                    palette::TEXT
+                } else {
+                    palette::MUTED
+                },
+            );
+            x += w + 6.0;
+        }
+    }
+
+    fn render_app_chrome(&self, ui: &mut UiPainter<'_, '_>, rect: UiRect, app_id: u32) {
+        let chrome = UiRect::new(rect.x, rect.y, rect.w, WORKSPACE_CHROME_H);
+        let focused = self.focused_app == Some(app_id);
+        ui.fill_rect(chrome, 8.0, palette::TOPBAR);
+        ui.border_rect(
+            rect,
+            8.0,
+            if focused {
+                palette::ACCENT.with_alpha(0.68)
+            } else {
+                palette::BORDER
+            },
+        );
+        let title = self
+            .app(app_id)
+            .map(|app| app.title.as_str())
+            .unwrap_or("App");
+        ui.hit(
+            HitKind::WorkspaceTab,
+            app_id,
+            chrome.x,
+            chrome.y,
+            chrome.w,
+            chrome.h,
+        );
+        ui.bounded_label(
+            chrome.x + 12.0,
+            chrome.y + 10.0,
+            (chrome.w - 98.0).max(0.0),
+            title,
+            2.0,
+            if focused {
+                palette::TEXT
+            } else {
+                palette::MUTED
+            },
+        );
+        if chrome.w > 110.0 {
+            ui.hit(
+                HitKind::WorkspaceSplit,
+                app_id,
+                chrome.x + chrome.w - 58.0,
+                chrome.y + 7.0,
+                20.0,
+                20.0,
+            );
+            ui.bounded_label(
+                chrome.x + chrome.w - 53.0,
+                chrome.y + 10.0,
+                12.0,
+                "|",
+                2.0,
+                palette::MUTED,
+            );
+            ui.hit(
+                HitKind::WorkspaceClose,
+                app_id,
+                chrome.x + chrome.w - 30.0,
+                chrome.y + 7.0,
+                20.0,
+                20.0,
+            );
+            ui.bounded_label(
+                chrome.x + chrome.w - 25.0,
+                chrome.y + 10.0,
+                12.0,
+                "x",
+                2.0,
+                palette::MUTED,
+            );
+        }
+    }
+
+    fn render_app_body(
+        &mut self,
+        ui: &mut UiPainter<'_, '_>,
+        rect: UiRect,
+        app_id: u32,
+        render_app: &mut impl FnMut(&mut UiPainter<'_, '_>, UiRect, &UiAppSurface),
+    ) {
+        if rect.w <= 0.0 || rect.h <= 0.0 {
+            return;
+        }
+        if let Some(app) = self.app_mut(app_id) {
+            app.bounds = Some(rect);
+        }
+        let clipped = ui
+            .scene
+            .push_clip(GpuClip::new(rect.x, rect.y, rect.w, rect.h));
+        if clipped {
+            if let Some(app) = self.app(app_id) {
+                render_app(ui, rect, app);
+            }
+            ui.scene.pop_clip();
+        }
+    }
+}
+
 #[cfg(feature = "fontdue-text")]
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TextQuad {
@@ -935,6 +1382,10 @@ impl UiRect {
             w: self.w,
             h,
         }
+    }
+
+    pub fn contains(self, x: f32, y: f32) -> bool {
+        x >= self.x && y >= self.y && x <= self.x + self.w && y <= self.y + self.h
     }
 }
 
@@ -4103,6 +4554,104 @@ mod tests {
             .hits()
             .iter()
             .any(|hit| hit.kind == HitKind::ListRow && hit.id == 137));
+    }
+
+    #[test]
+    fn workspace_tiles_apps_without_overlap_and_clips_surfaces() {
+        let mut workspace = UiWorkspace::split(
+            UiTileAxis::Horizontal,
+            UiAppSurface::new(1, "Chat"),
+            UiAppSurface::new(2, "Trust"),
+        );
+        let mut scene = GpuScene::new(palette::BG);
+        {
+            let mut ui = UiPainter::new(&mut scene);
+            workspace.render(
+                &mut ui,
+                UiRect::new(0.0, 0.0, 640.0, 360.0),
+                |ui, bounds, app| {
+                    ui.fill_rect(bounds, 0.0, palette::PANEL);
+                    ui.bounded_label(
+                        bounds.x + 12.0,
+                        bounds.y + 14.0,
+                        bounds.w - 24.0,
+                        &app.title,
+                        2.0,
+                        palette::TEXT,
+                    );
+                    ui.hit(
+                        HitKind::Button,
+                        app.id + 100,
+                        bounds.x,
+                        bounds.y,
+                        bounds.w,
+                        bounds.h,
+                    );
+                },
+            );
+        }
+
+        let first = workspace.app(1).and_then(UiAppSurface::bounds).unwrap();
+        let second = workspace.app(2).and_then(UiAppSurface::bounds).unwrap();
+        assert!(first.x + first.w <= second.x);
+        assert!(first.h <= 360.0 - WORKSPACE_CHROME_H);
+        assert!(scene
+            .hits()
+            .iter()
+            .any(|hit| hit.kind == HitKind::WorkspaceTab && hit.id == 1));
+        assert!(scene
+            .hits()
+            .iter()
+            .any(|hit| hit.kind == HitKind::WorkspaceClose && hit.id == 2));
+        assert!(scene
+            .hits()
+            .iter()
+            .filter(|hit| hit.kind == HitKind::Button)
+            .all(|hit| hit.y >= WORKSPACE_CHROME_H));
+    }
+
+    #[test]
+    fn workspace_routes_pointer_events_to_app_runtime() {
+        let mut workspace = UiWorkspace::single(UiAppSurface::new(7, "Chat"));
+        let mut scene = GpuScene::new(palette::BG);
+        {
+            let mut ui = UiPainter::new(&mut scene);
+            workspace.render(
+                &mut ui,
+                UiRect::new(0.0, 0.0, 320.0, 220.0),
+                |ui, bounds, _app| {
+                    ui.hit(
+                        HitKind::Toggle,
+                        55,
+                        bounds.x + 20.0,
+                        bounds.y + 20.0,
+                        46.0,
+                        24.0,
+                    );
+                    ui.toggle(bounds.x + 20.0, bounds.y + 20.0, false, 55);
+                },
+            );
+        }
+
+        let down = workspace.handle_event(&scene, UiEvent::PointerDown { x: 24.0, y: 58.0 });
+        assert!(matches!(
+            down,
+            UiWorkspaceAction::AppAction {
+                app_id: 7,
+                action: UiAction::Activated(_)
+            }
+        ));
+        let up = workspace.handle_event(&scene, UiEvent::PointerUp { x: 24.0, y: 58.0 });
+        assert_eq!(
+            up,
+            UiWorkspaceAction::AppAction {
+                app_id: 7,
+                action: UiAction::Toggled { id: 55, on: true }
+            }
+        );
+        assert!(workspace
+            .app(7)
+            .is_some_and(|app| app.runtime.toggle_value(55, false)));
     }
 
     #[test]

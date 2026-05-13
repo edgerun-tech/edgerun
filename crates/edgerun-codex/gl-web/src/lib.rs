@@ -324,6 +324,9 @@ fn hit_kind_code(kind: HitKind) -> u32 {
         HitKind::MenuItem => 11,
         HitKind::TransactionRow => 12,
         HitKind::Scrollbar => 13,
+        HitKind::WorkspaceTab => 14,
+        HitKind::WorkspaceClose => 15,
+        HitKind::WorkspaceSplit => 16,
     }
 }
 
