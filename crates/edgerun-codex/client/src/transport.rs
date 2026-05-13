@@ -66,6 +66,10 @@ impl ReqwestTransport {
         }
     }
 
+    pub fn new_default() -> Self {
+        Self::new(edgerun_reqwest::Client::new())
+    }
+
     fn build(&self, req: Request) -> Result<CodexRequestBuilder, TransportError> {
         let prepared = req.prepare_body_for_send().map_err(TransportError::Build)?;
 

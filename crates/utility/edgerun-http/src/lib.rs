@@ -274,6 +274,10 @@ impl HeaderMap {
         }
     }
 
+    pub fn with_capacity(_capacity: usize) -> Self {
+        Self::new()
+    }
+
     pub fn insert<K: IntoHeaderName>(
         &mut self,
         key: K,

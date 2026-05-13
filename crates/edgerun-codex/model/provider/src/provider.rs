@@ -142,7 +142,7 @@ pub fn create_model_provider(
     create_model_provider_with_transport(
         provider_info,
         auth_manager,
-        Arc::new(ReqwestTransport::new(edgerun_reqwest::Client::new())),
+        Arc::new(ReqwestTransport::new_default()),
     )
 }
 

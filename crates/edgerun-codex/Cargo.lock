@@ -216,7 +216,6 @@ dependencies = [
  "edgerun-http",
  "edgerun-json",
  "edgerun-log",
- "edgerun-reqwest",
  "edgerun-tokio",
 ]
 
