@@ -82,7 +82,7 @@ pub mod client {
                 return Err(Error::Other("websocket URI has an empty host".to_string()));
             }
 
-            HttpRequest::builder()
+            HttpRequest::<()>::builder()
                 .method("GET")
                 .header("Host", host)
                 .header("Connection", "Upgrade")
@@ -299,7 +299,6 @@ pub mod stream {
         {
             match stream {
                 crate::backend::stream::MaybeTlsStream::Plain(stream) => Self::Plain(stream),
-                stream => Self::Tls(Box::new(stream)),
             }
         }
     }
@@ -1641,34 +1640,1026 @@ pub fn uri_mode(uri: &http::Uri) -> Result<Mode> {
 }
 
 mod backend {
-    pub use tungstenite::Error;
-    pub use tungstenite::Message;
-    pub use tungstenite::WebSocket;
+    use std::fmt;
+    use std::io::{self, BufRead, BufReader, Read, Write};
+    use std::net::TcpStream;
+
+    use bytes::Bytes;
+    use edgerun_crypto::sha1::Sha1;
+    use edgerun_encoding::base64::standard_encode;
+
     #[cfg(feature = "handshake")]
-    pub use tungstenite::accept_hdr_with_config;
+    pub use edgerun_http as http;
+
+    pub mod extensions {
+        #[derive(Copy, Clone, Debug, Default)]
+        pub struct ExtensionsConfig {
+            pub permessage_deflate: Option<compression::deflate::DeflateConfig>,
+        }
+
+        pub mod compression {
+            pub mod deflate {
+                #[derive(Copy, Clone, Debug, Default)]
+                pub struct DeflateConfig;
+            }
+        }
+    }
+
+    pub mod stream {
+        use std::io::{Read, Result as IoResult, Write};
+
+        #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+        pub enum Mode {
+            Plain,
+            Tls,
+        }
+
+        #[allow(clippy::large_enum_variant)]
+        pub enum MaybeTlsStream<S: Read + Write> {
+            Plain(S),
+        }
+
+        impl<S: Read + Write> Read for MaybeTlsStream<S> {
+            fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
+                match self {
+                    Self::Plain(stream) => stream.read(buf),
+                }
+            }
+        }
+
+        impl<S: Read + Write> Write for MaybeTlsStream<S> {
+            fn write(&mut self, buf: &[u8]) -> IoResult<usize> {
+                match self {
+                    Self::Plain(stream) => stream.write(buf),
+                }
+            }
+
+            fn flush(&mut self) -> IoResult<()> {
+                match self {
+                    Self::Plain(stream) => stream.flush(),
+                }
+            }
+        }
+    }
+
+    pub mod protocol {
+        pub use self::frame::Frame;
+        pub use crate::backend::extensions::ExtensionsConfig;
+
+        #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+        pub enum Role {
+            Server,
+            Client,
+        }
+
+        pub mod frame {
+            use std::fmt;
+            use std::io::{Cursor, Read, Write};
+
+            use bytes::Bytes;
+
+            use crate::backend::{Error, Result};
+
+            pub mod coding {
+                use std::fmt;
+
+                #[derive(Debug, Eq, PartialEq, Clone, Copy)]
+                pub enum CloseCode {
+                    Normal,
+                    Away,
+                    Protocol,
+                    Unsupported,
+                    Status,
+                    Abnormal,
+                    Invalid,
+                    Policy,
+                    Size,
+                    Extension,
+                    Error,
+                    Restart,
+                    Again,
+                    Tls,
+                    Reserved(u16),
+                    Iana(u16),
+                    Library(u16),
+                    Bad(u16),
+                }
+
+                impl From<CloseCode> for u16 {
+                    fn from(code: CloseCode) -> Self {
+                        match code {
+                            CloseCode::Normal => 1000,
+                            CloseCode::Away => 1001,
+                            CloseCode::Protocol => 1002,
+                            CloseCode::Unsupported => 1003,
+                            CloseCode::Status => 1005,
+                            CloseCode::Abnormal => 1006,
+                            CloseCode::Invalid => 1007,
+                            CloseCode::Policy => 1008,
+                            CloseCode::Size => 1009,
+                            CloseCode::Extension => 1010,
+                            CloseCode::Error => 1011,
+                            CloseCode::Restart => 1012,
+                            CloseCode::Again => 1013,
+                            CloseCode::Tls => 1015,
+                            CloseCode::Reserved(code)
+                            | CloseCode::Iana(code)
+                            | CloseCode::Library(code)
+                            | CloseCode::Bad(code) => code,
+                        }
+                    }
+                }
+
+                impl From<&CloseCode> for u16 {
+                    fn from(code: &CloseCode) -> Self {
+                        (*code).into()
+                    }
+                }
+
+                impl From<u16> for CloseCode {
+                    fn from(code: u16) -> Self {
+                        match code {
+                            1000 => Self::Normal,
+                            1001 => Self::Away,
+                            1002 => Self::Protocol,
+                            1003 => Self::Unsupported,
+                            1005 => Self::Status,
+                            1006 => Self::Abnormal,
+                            1007 => Self::Invalid,
+                            1008 => Self::Policy,
+                            1009 => Self::Size,
+                            1010 => Self::Extension,
+                            1011 => Self::Error,
+                            1012 => Self::Restart,
+                            1013 => Self::Again,
+                            1015 => Self::Tls,
+                            1..=999 => Self::Bad(code),
+                            1016..=2999 => Self::Reserved(code),
+                            3000..=3999 => Self::Iana(code),
+                            4000..=4999 => Self::Library(code),
+                            _ => Self::Bad(code),
+                        }
+                    }
+                }
+
+                impl fmt::Display for CloseCode {
+                    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                        write!(f, "{}", u16::from(self))
+                    }
+                }
+
+                #[derive(Debug, Clone, Copy, Eq, PartialEq)]
+                pub enum Data {
+                    Continue,
+                    Text,
+                    Binary,
+                    Reserved(u8),
+                }
+
+                #[derive(Debug, Clone, Copy, Eq, PartialEq)]
+                pub enum Control {
+                    Close,
+                    Ping,
+                    Pong,
+                    Reserved(u8),
+                }
+
+                #[derive(Debug, Clone, Copy, Eq, PartialEq)]
+                pub enum OpCode {
+                    Data(Data),
+                    Control(Control),
+                }
+
+                impl From<OpCode> for u8 {
+                    fn from(code: OpCode) -> Self {
+                        match code {
+                            OpCode::Data(Data::Continue) => 0,
+                            OpCode::Data(Data::Text) => 1,
+                            OpCode::Data(Data::Binary) => 2,
+                            OpCode::Data(Data::Reserved(code)) => code,
+                            OpCode::Control(Control::Close) => 8,
+                            OpCode::Control(Control::Ping) => 9,
+                            OpCode::Control(Control::Pong) => 10,
+                            OpCode::Control(Control::Reserved(code)) => code,
+                        }
+                    }
+                }
+
+                impl From<u8> for OpCode {
+                    fn from(code: u8) -> Self {
+                        match code {
+                            0 => Self::Data(Data::Continue),
+                            1 => Self::Data(Data::Text),
+                            2 => Self::Data(Data::Binary),
+                            code @ 3..=7 => Self::Data(Data::Reserved(code)),
+                            8 => Self::Control(Control::Close),
+                            9 => Self::Control(Control::Ping),
+                            10 => Self::Control(Control::Pong),
+                            code @ 11..=15 => Self::Control(Control::Reserved(code)),
+                            _ => panic!("Bug: OpCode out of range"),
+                        }
+                    }
+                }
+
+                impl fmt::Display for Data {
+                    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                        write!(f, "{self:?}")
+                    }
+                }
+
+                impl fmt::Display for Control {
+                    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                        write!(f, "{self:?}")
+                    }
+                }
+
+                impl fmt::Display for OpCode {
+                    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                        match self {
+                            Self::Data(data) => data.fmt(f),
+                            Self::Control(control) => control.fmt(f),
+                        }
+                    }
+                }
+            }
+
+            use coding::{CloseCode, Control, Data, OpCode};
+
+            #[derive(Debug, Clone)]
+            pub struct CloseFrame {
+                pub code: CloseCode,
+                pub reason: crate::Utf8Bytes,
+            }
+
+            #[derive(Debug, Clone, Eq, PartialEq)]
+            pub struct FrameHeader {
+                pub is_final: bool,
+                pub rsv1: bool,
+                pub rsv2: bool,
+                pub rsv3: bool,
+                pub opcode: OpCode,
+                pub mask: Option<[u8; 4]>,
+            }
+
+            impl FrameHeader {
+                pub fn parse(cursor: &mut Cursor<impl AsRef<[u8]>>) -> Result<Option<(Self, u64)>> {
+                    let bytes = cursor.get_ref().as_ref();
+                    let pos = cursor.position() as usize;
+                    if bytes.len().saturating_sub(pos) < 2 {
+                        return Ok(None);
+                    }
+                    let first = bytes[pos];
+                    let second = bytes[pos + 1];
+                    let mut consumed = 2usize;
+                    let mut len = u64::from(second & 0x7f);
+                    if len == 126 {
+                        if bytes.len().saturating_sub(pos) < consumed + 2 {
+                            return Ok(None);
+                        }
+                        len = u64::from(u16::from_be_bytes([
+                            bytes[pos + consumed],
+                            bytes[pos + consumed + 1],
+                        ]));
+                        consumed += 2;
+                    } else if len == 127 {
+                        if bytes.len().saturating_sub(pos) < consumed + 8 {
+                            return Ok(None);
+                        }
+                        let mut len_bytes = [0u8; 8];
+                        len_bytes.copy_from_slice(&bytes[pos + consumed..pos + consumed + 8]);
+                        len = u64::from_be_bytes(len_bytes);
+                        consumed += 8;
+                    }
+                    let mask = if second & 0x80 != 0 {
+                        if bytes.len().saturating_sub(pos) < consumed + 4 {
+                            return Ok(None);
+                        }
+                        let mut mask = [0u8; 4];
+                        mask.copy_from_slice(&bytes[pos + consumed..pos + consumed + 4]);
+                        consumed += 4;
+                        Some(mask)
+                    } else {
+                        None
+                    };
+                    cursor.set_position((pos + consumed) as u64);
+                    Ok(Some((
+                        Self {
+                            is_final: first & 0x80 != 0,
+                            rsv1: first & 0x40 != 0,
+                            rsv2: first & 0x20 != 0,
+                            rsv3: first & 0x10 != 0,
+                            opcode: OpCode::from(first & 0x0f),
+                            mask,
+                        },
+                        len,
+                    )))
+                }
+
+                pub fn len(&self, length: u64) -> usize {
+                    2 + usize::from(length >= 126) * if length <= 0xffff { 2 } else { 8 }
+                        + usize::from(self.mask.is_some()) * 4
+                }
+
+                pub fn format(&self, length: u64, output: &mut impl Write) -> Result<()> {
+                    let mut first = u8::from(self.opcode);
+                    if self.is_final {
+                        first |= 0x80;
+                    }
+                    if self.rsv1 {
+                        first |= 0x40;
+                    }
+                    if self.rsv2 {
+                        first |= 0x20;
+                    }
+                    if self.rsv3 {
+                        first |= 0x10;
+                    }
+                    output.write_all(&[first])?;
+                    let mask_bit = if self.mask.is_some() { 0x80 } else { 0 };
+                    if length < 126 {
+                        output.write_all(&[mask_bit | length as u8])?;
+                    } else if length <= 0xffff {
+                        output.write_all(&[mask_bit | 126])?;
+                        output.write_all(&(length as u16).to_be_bytes())?;
+                    } else {
+                        output.write_all(&[mask_bit | 127])?;
+                        output.write_all(&length.to_be_bytes())?;
+                    }
+                    if let Some(mask) = self.mask {
+                        output.write_all(&mask)?;
+                    }
+                    Ok(())
+                }
+            }
+
+            #[derive(Debug, Clone)]
+            pub struct Frame {
+                pub(crate) header: FrameHeader,
+                payload: Bytes,
+            }
+
+            impl Frame {
+                pub fn message(data: Vec<u8>, opcode: OpCode, is_final: bool) -> Self {
+                    Self {
+                        header: FrameHeader {
+                            is_final,
+                            rsv1: false,
+                            rsv2: false,
+                            rsv3: false,
+                            opcode,
+                            mask: None,
+                        },
+                        payload: data.into(),
+                    }
+                }
+
+                pub fn pong(data: Vec<u8>) -> Self {
+                    Self::message(data, OpCode::Control(Control::Pong), true)
+                }
+
+                pub fn ping(data: Vec<u8>) -> Self {
+                    Self::message(data, OpCode::Control(Control::Ping), true)
+                }
+
+                pub fn close(message: Option<CloseFrame>) -> Self {
+                    let mut payload = Vec::new();
+                    if let Some(message) = message {
+                        payload.extend_from_slice(&u16::from(message.code).to_be_bytes());
+                        payload.extend_from_slice(message.reason.as_bytes());
+                    }
+                    Self::message(payload, OpCode::Control(Control::Close), true)
+                }
+
+                pub fn from_payload(header: FrameHeader, payload: Bytes) -> Self {
+                    Self { header, payload }
+                }
+
+                pub fn format(self, output: &mut impl Write) -> Result<()> {
+                    self.header.format(self.payload.len() as u64, output)?;
+                    let mut payload = self.payload.to_vec();
+                    if let Some(mask) = self.header.mask {
+                        for (index, byte) in payload.iter_mut().enumerate() {
+                            *byte ^= mask[index % 4];
+                        }
+                    }
+                    output.write_all(&payload)?;
+                    Ok(())
+                }
+
+                pub fn header(&self) -> &FrameHeader {
+                    &self.header
+                }
+
+                pub fn len(&self) -> usize {
+                    self.payload.len()
+                }
+
+                pub fn is_empty(&self) -> bool {
+                    self.payload.is_empty()
+                }
+
+                pub fn payload(&self) -> &[u8] {
+                    &self.payload
+                }
+
+                pub fn into_payload(self) -> Bytes {
+                    self.payload
+                }
+
+                pub(crate) fn read_from(reader: &mut impl Read) -> Result<Self> {
+                    let mut first_two = [0u8; 2];
+                    reader.read_exact(&mut first_two)?;
+                    let mut header_bytes = first_two.to_vec();
+                    let mut len = u64::from(first_two[1] & 0x7f);
+                    if len == 126 {
+                        let mut bytes = [0u8; 2];
+                        reader.read_exact(&mut bytes)?;
+                        header_bytes.extend_from_slice(&bytes);
+                        len = u64::from(u16::from_be_bytes(bytes));
+                    } else if len == 127 {
+                        let mut bytes = [0u8; 8];
+                        reader.read_exact(&mut bytes)?;
+                        header_bytes.extend_from_slice(&bytes);
+                        len = u64::from_be_bytes(bytes);
+                    }
+                    if first_two[1] & 0x80 != 0 {
+                        let mut mask = [0u8; 4];
+                        reader.read_exact(&mut mask)?;
+                        header_bytes.extend_from_slice(&mask);
+                    }
+                    let (header, _) = FrameHeader::parse(&mut Cursor::new(header_bytes))?
+                        .ok_or_else(|| Error::Protocol("incomplete frame header".to_string()))?;
+                    let mut payload = vec![0u8; len as usize];
+                    reader.read_exact(&mut payload)?;
+                    if let Some(mask) = header.mask {
+                        for (index, byte) in payload.iter_mut().enumerate() {
+                            *byte ^= mask[index % 4];
+                        }
+                    }
+                    Ok(Self {
+                        header: FrameHeader {
+                            mask: None,
+                            ..header
+                        },
+                        payload: payload.into(),
+                    })
+                }
+            }
+
+            impl fmt::Display for Frame {
+                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    write!(
+                        f,
+                        "{:?} frame, {} bytes",
+                        self.header.opcode,
+                        self.payload.len()
+                    )
+                }
+            }
+
+            pub(crate) fn opcode_message(payload: Bytes, opcode: OpCode) -> super::super::Message {
+                match opcode {
+                    OpCode::Data(Data::Text) => super::super::Message::Text(
+                        String::from_utf8_lossy(&payload).to_string().into(),
+                    ),
+                    OpCode::Data(Data::Binary) => super::super::Message::Binary(payload),
+                    OpCode::Control(Control::Ping) => super::super::Message::Ping(payload),
+                    OpCode::Control(Control::Pong) => super::super::Message::Pong(payload),
+                    OpCode::Control(Control::Close) => {
+                        let close = if payload.len() >= 2 {
+                            let code =
+                                CloseCode::from(u16::from_be_bytes([payload[0], payload[1]]));
+                            let reason = String::from_utf8_lossy(&payload[2..]).to_string().into();
+                            Some(CloseFrame { code, reason })
+                        } else {
+                            None
+                        };
+                        super::super::Message::Close(close)
+                    }
+                    _ => super::super::Message::Frame(Frame::from_payload(
+                        FrameHeader {
+                            is_final: true,
+                            rsv1: false,
+                            rsv2: false,
+                            rsv3: false,
+                            opcode,
+                            mask: None,
+                        },
+                        payload,
+                    )),
+                }
+            }
+        }
+
+        #[derive(Debug, Clone, Copy)]
+        pub struct WebSocketConfig {
+            pub read_buffer_size: usize,
+            pub write_buffer_size: usize,
+            pub max_write_buffer_size: usize,
+            pub max_message_size: Option<usize>,
+            pub max_frame_size: Option<usize>,
+            pub accept_unmasked_frames: bool,
+            pub extensions: ExtensionsConfig,
+        }
+
+        impl Default for WebSocketConfig {
+            fn default() -> Self {
+                Self {
+                    read_buffer_size: 128 * 1024,
+                    write_buffer_size: 128 * 1024,
+                    max_write_buffer_size: usize::MAX,
+                    max_message_size: Some(64 << 20),
+                    max_frame_size: Some(16 << 20),
+                    accept_unmasked_frames: false,
+                    extensions: ExtensionsConfig::default(),
+                }
+            }
+        }
+
+        impl WebSocketConfig {
+            pub fn read_buffer_size(mut self, value: usize) -> Self {
+                self.read_buffer_size = value;
+                self
+            }
+
+            pub fn write_buffer_size(mut self, value: usize) -> Self {
+                self.write_buffer_size = value;
+                self
+            }
+
+            pub fn max_write_buffer_size(mut self, value: usize) -> Self {
+                self.max_write_buffer_size = value;
+                self
+            }
+
+            pub fn max_message_size(mut self, value: Option<usize>) -> Self {
+                self.max_message_size = value;
+                self
+            }
+
+            pub fn max_frame_size(mut self, value: Option<usize>) -> Self {
+                self.max_frame_size = value;
+                self
+            }
+
+            pub fn accept_unmasked_frames(mut self, value: bool) -> Self {
+                self.accept_unmasked_frames = value;
+                self
+            }
+        }
+
+        pub use frame::CloseFrame;
+        pub use frame::FrameHeader;
+        pub use frame::coding::CloseCode;
+    }
+
+    pub use protocol::WebSocketConfig;
+    pub use protocol::frame::CloseFrame;
+    pub use protocol::frame::Frame;
+    pub use protocol::frame::coding::CloseCode;
+
+    #[derive(Debug, Clone)]
+    pub enum Message {
+        Text(crate::Utf8Bytes),
+        Binary(Bytes),
+        Ping(Bytes),
+        Pong(Bytes),
+        Close(Option<CloseFrame>),
+        Frame(Frame),
+    }
+
+    #[derive(Debug)]
+    pub enum Error {
+        ConnectionClosed,
+        AlreadyClosed,
+        Io(io::Error),
+        Tls(String),
+        Capacity(String),
+        Protocol(String),
+        WriteBufferFull(Box<Message>),
+        Utf8(String),
+        AttackAttempt,
+        Url(String),
+        #[cfg(feature = "handshake")]
+        Http(Box<http::Response<Option<Vec<u8>>>>),
+        #[cfg(feature = "handshake")]
+        HttpFormat(String),
+    }
+
+    impl fmt::Display for Error {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                Self::ConnectionClosed => f.write_str("connection closed"),
+                Self::AlreadyClosed => f.write_str("connection already closed"),
+                Self::Io(error) => write!(f, "{error}"),
+                Self::Tls(error)
+                | Self::Capacity(error)
+                | Self::Protocol(error)
+                | Self::Utf8(error)
+                | Self::Url(error) => f.write_str(error),
+                Self::WriteBufferFull(_) => f.write_str("write buffer is full"),
+                Self::AttackAttempt => f.write_str("attack attempt detected"),
+                #[cfg(feature = "handshake")]
+                Self::Http(response) => write!(f, "HTTP {}", response.status()),
+                #[cfg(feature = "handshake")]
+                Self::HttpFormat(error) => f.write_str(error),
+            }
+        }
+    }
+
+    impl std::error::Error for Error {}
+
+    impl From<io::Error> for Error {
+        fn from(error: io::Error) -> Self {
+            Self::Io(error)
+        }
+    }
+
+    pub type Result<T> = std::result::Result<T, Error>;
+
+    #[derive(Debug)]
+    pub struct WebSocket<S> {
+        stream: S,
+        role: protocol::Role,
+        config: WebSocketConfig,
+        closed: bool,
+    }
+
+    impl<S> WebSocket<S> {
+        pub fn from_raw_socket(
+            stream: S,
+            role: protocol::Role,
+            config: Option<WebSocketConfig>,
+        ) -> Self {
+            Self {
+                stream,
+                role,
+                config: config.unwrap_or_default(),
+                closed: false,
+            }
+        }
+
+        pub fn from_partially_read(
+            stream: S,
+            _part: Vec<u8>,
+            role: protocol::Role,
+            config: Option<WebSocketConfig>,
+        ) -> Self {
+            Self::from_raw_socket(stream, role, config)
+        }
+
+        pub fn into_inner(self) -> S {
+            self.stream
+        }
+
+        pub fn get_ref(&self) -> &S {
+            &self.stream
+        }
+
+        pub fn get_mut(&mut self) -> &mut S {
+            &mut self.stream
+        }
+
+        pub fn set_config(&mut self, set_func: impl FnOnce(&mut WebSocketConfig)) {
+            set_func(&mut self.config);
+        }
+
+        pub fn get_config(&self) -> &WebSocketConfig {
+            &self.config
+        }
+
+        pub fn can_read(&self) -> bool {
+            !self.closed
+        }
+
+        pub fn can_write(&self) -> bool {
+            !self.closed
+        }
+    }
+
+    impl<S: Read + Write> WebSocket<S> {
+        pub fn read(&mut self) -> Result<Message> {
+            if self.closed {
+                return Err(Error::AlreadyClosed);
+            }
+            let frame = Frame::read_from(&mut self.stream)?;
+            if let Some(max) = self.config.max_frame_size {
+                if frame.len() > max {
+                    return Err(Error::Capacity("frame exceeds max frame size".to_string()));
+                }
+            }
+            let opcode = frame.header().opcode;
+            let message = protocol::frame::opcode_message(frame.into_payload(), opcode);
+            if matches!(message, Message::Close(_)) {
+                self.closed = true;
+            }
+            Ok(message)
+        }
+
+        pub fn send(&mut self, message: Message) -> Result<()> {
+            self.write(message)?;
+            self.flush()
+        }
+
+        pub fn write(&mut self, message: Message) -> Result<()> {
+            if self.closed {
+                return Err(Error::AlreadyClosed);
+            }
+            let mut frame = match message {
+                Message::Text(text) => Frame::message(
+                    String::from(text).into_bytes(),
+                    protocol::frame::coding::OpCode::Data(protocol::frame::coding::Data::Text),
+                    true,
+                ),
+                Message::Binary(bytes) => Frame::message(
+                    bytes.to_vec(),
+                    protocol::frame::coding::OpCode::Data(protocol::frame::coding::Data::Binary),
+                    true,
+                ),
+                Message::Ping(bytes) => Frame::ping(bytes.to_vec()),
+                Message::Pong(bytes) => Frame::pong(bytes.to_vec()),
+                Message::Close(frame) => {
+                    self.closed = true;
+                    Frame::close(frame)
+                }
+                Message::Frame(frame) => frame,
+            };
+            if matches!(self.role, protocol::Role::Client) {
+                let mask = edgerun_random::u64().to_be_bytes();
+                frame.header.mask = Some([mask[0], mask[1], mask[2], mask[3]]);
+            }
+            frame.format(&mut self.stream)
+        }
+
+        pub fn flush(&mut self) -> Result<()> {
+            self.stream.flush().map_err(Error::from)
+        }
+
+        pub fn close(&mut self, frame: Option<CloseFrame>) -> Result<()> {
+            self.write(Message::Close(frame))?;
+            self.flush()
+        }
+    }
+
     #[cfg(feature = "handshake")]
-    pub use tungstenite::accept_with_config;
+    pub mod handshake {
+        pub mod server {
+            use std::io::Write;
+
+            use edgerun_encoding::base64::standard_encode;
+
+            use crate::backend::{Error, Result, http};
+
+            pub fn create_response(request: &http::Request<()>) -> Result<http::Response<()>> {
+                create_response_with_body(request, || ())
+            }
+
+            pub fn create_response_with_body<T1, T2>(
+                request: &http::Request<T1>,
+                generate_body: impl FnOnce() -> T2,
+            ) -> Result<http::Response<T2>> {
+                let key = request
+                    .headers()
+                    .get("sec-websocket-key")
+                    .ok_or_else(|| Error::Protocol("missing Sec-WebSocket-Key".to_string()))?
+                    .to_str()
+                    .map_err(|error| Error::HttpFormat(error.to_string()))?;
+                http::Response::<()>::builder()
+                    .status(http::StatusCode::SWITCHING_PROTOCOLS)
+                    .header("Connection", "Upgrade")
+                    .header("Upgrade", "websocket")
+                    .header("Sec-WebSocket-Accept", websocket_accept(key))
+                    .body(generate_body())
+                    .map_err(|error| Error::HttpFormat(error.to_string()))
+            }
+
+            pub fn write_response<T>(
+                mut writer: impl Write,
+                response: &http::Response<T>,
+            ) -> Result<()> {
+                let reason = response.status().canonical_reason().unwrap_or("");
+                write!(
+                    writer,
+                    "HTTP/1.1 {} {}\r\n",
+                    response.status().as_u16(),
+                    reason
+                )?;
+                for (name, value) in response.headers() {
+                    write!(
+                        writer,
+                        "{}: {}\r\n",
+                        name.as_str(),
+                        value.to_str().unwrap_or("")
+                    )?;
+                }
+                writer.write_all(b"\r\n")?;
+                Ok(())
+            }
+
+            fn websocket_accept(key: &str) -> String {
+                let mut data = key.as_bytes().to_vec();
+                data.extend_from_slice(b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11");
+                standard_encode(&edgerun_crypto::sha1::Sha1::digest(data))
+            }
+        }
+    }
+
     #[cfg(feature = "handshake")]
-    pub use tungstenite::client::client_with_config;
+    fn read_http_request(stream: &mut impl Read) -> Result<http::Request<()>> {
+        let mut reader = BufReader::new(stream);
+        let mut first = String::new();
+        reader.read_line(&mut first)?;
+        let mut parts = first.split_whitespace();
+        let method = parts.next().unwrap_or("GET");
+        let target = parts.next().unwrap_or("/");
+        let mut builder = http::Request::<()>::builder()
+            .method(method)
+            .uri(format!("ws://localhost{target}"));
+        loop {
+            let mut line = String::new();
+            reader.read_line(&mut line)?;
+            let line = line.trim_end_matches(['\r', '\n']);
+            if line.is_empty() {
+                break;
+            }
+            if let Some((name, value)) = line.split_once(':') {
+                builder = builder.header(name.trim(), value.trim());
+            }
+        }
+        builder
+            .body(())
+            .map_err(|error| Error::HttpFormat(error.to_string()))
+    }
+
     #[cfg(feature = "handshake")]
-    pub use tungstenite::client::connect_with_config;
+    fn read_http_response(stream: &mut impl Read) -> Result<http::Response<Option<Vec<u8>>>> {
+        let mut reader = BufReader::new(stream);
+        let mut first = String::new();
+        reader.read_line(&mut first)?;
+        let status = first
+            .split_whitespace()
+            .nth(1)
+            .and_then(|value| value.parse::<u16>().ok())
+            .ok_or_else(|| Error::HttpFormat("invalid HTTP response status".to_string()))?;
+        let mut builder = http::Response::<Option<Vec<u8>>>::builder().status(
+            http::StatusCode::from_u16(status)
+                .map_err(|error| Error::HttpFormat(error.to_string()))?,
+        );
+        loop {
+            let mut line = String::new();
+            reader.read_line(&mut line)?;
+            let line = line.trim_end_matches(['\r', '\n']);
+            if line.is_empty() {
+                break;
+            }
+            if let Some((name, value)) = line.split_once(':') {
+                builder = builder.header(name.trim(), value.trim());
+            }
+        }
+        builder
+            .body(None)
+            .map_err(|error| Error::HttpFormat(error.to_string()))
+    }
+
     #[cfg(feature = "handshake")]
-    pub use tungstenite::client::uri_mode;
+    pub fn accept_with_config<S: Read + Write>(
+        mut stream: S,
+        config: Option<WebSocketConfig>,
+    ) -> Result<WebSocket<S>> {
+        let request = read_http_request(&mut stream)?;
+        let response = handshake::server::create_response(&request)?;
+        handshake::server::write_response(&mut stream, &response)?;
+        Ok(WebSocket::from_raw_socket(
+            stream,
+            protocol::Role::Server,
+            config,
+        ))
+    }
+
     #[cfg(feature = "handshake")]
-    pub use tungstenite::connect;
-    pub use tungstenite::extensions;
+    pub fn accept_hdr_with_config<S, C>(
+        mut stream: S,
+        callback: C,
+        config: Option<WebSocketConfig>,
+    ) -> Result<WebSocket<S>>
+    where
+        S: Read + Write,
+        C: FnOnce(
+            &http::Request<()>,
+            http::Response<()>,
+        )
+            -> std::result::Result<http::Response<()>, http::Response<Option<String>>>,
+    {
+        let request = read_http_request(&mut stream)?;
+        let response = handshake::server::create_response(&request)?;
+        let response = callback(&request, response).map_err(|response| {
+            Error::Http(Box::new(
+                http::Response::<Option<Vec<u8>>>::builder()
+                    .status(response.status())
+                    .body(response.into_body().map(|body| body.into_bytes()))
+                    .expect("response"),
+            ))
+        })?;
+        handshake::server::write_response(&mut stream, &response)?;
+        Ok(WebSocket::from_raw_socket(
+            stream,
+            protocol::Role::Server,
+            config,
+        ))
+    }
+
     #[cfg(feature = "handshake")]
-    pub use tungstenite::handshake;
+    pub mod client {
+        use std::io::Write;
+
+        use crate::backend::{
+            Error, Result, WebSocket, WebSocketConfig, http, protocol, read_http_response,
+        };
+
+        pub fn client_with_config<S: std::io::Read + std::io::Write>(
+            request: http::Request<()>,
+            mut stream: S,
+            config: Option<WebSocketConfig>,
+        ) -> Result<(WebSocket<S>, http::Response<Option<Vec<u8>>>)> {
+            let path = request.uri().path_and_query();
+            write!(stream, "GET {path} HTTP/1.1\r\n")?;
+            for (name, value) in request.headers() {
+                write!(
+                    stream,
+                    "{}: {}\r\n",
+                    name.as_str(),
+                    value.to_str().unwrap_or("")
+                )?;
+            }
+            stream.write_all(b"\r\n")?;
+            stream.flush()?;
+            let response = read_http_response(&mut stream)?;
+            if response.status() != http::StatusCode::SWITCHING_PROTOCOLS {
+                return Err(Error::Http(Box::new(response)));
+            }
+            Ok((
+                WebSocket::from_raw_socket(stream, protocol::Role::Client, config),
+                response,
+            ))
+        }
+
+        pub fn uri_mode(uri: &http::Uri) -> Result<super::stream::Mode> {
+            match uri.scheme_str() {
+                Some("ws") => Ok(super::stream::Mode::Plain),
+                Some("wss") => Ok(super::stream::Mode::Tls),
+                _ => Err(Error::Url("unsupported websocket URI scheme".to_string())),
+            }
+        }
+
+        pub fn connect_with_config(
+            request: http::Request<()>,
+            config: Option<WebSocketConfig>,
+            _max_redirects: u8,
+        ) -> Result<(
+            WebSocket<super::stream::MaybeTlsStream<std::net::TcpStream>>,
+            http::Response<Option<Vec<u8>>>,
+        )> {
+            let host = request
+                .uri()
+                .host()
+                .ok_or_else(|| Error::Url("websocket URI has no host".to_string()))?;
+            let port = request.uri().port_u16().unwrap_or_else(|| {
+                if request.uri().scheme_str() == Some("wss") {
+                    443
+                } else {
+                    80
+                }
+            });
+            if request.uri().scheme_str() == Some("wss") {
+                return Err(Error::Tls(
+                    "TLS websocket connections require an EdgeRun TLS connector".to_string(),
+                ));
+            }
+            let stream = std::net::TcpStream::connect((host, port))?;
+            client_with_config(
+                request,
+                super::stream::MaybeTlsStream::Plain(stream),
+                config,
+            )
+        }
+    }
+
     #[cfg(feature = "handshake")]
-    pub use tungstenite::http;
-    pub use tungstenite::protocol;
-    pub use tungstenite::protocol::CloseFrame;
-    pub use tungstenite::protocol::WebSocketConfig;
-    pub use tungstenite::protocol::frame::Frame;
-    pub use tungstenite::protocol::frame::coding::CloseCode;
-    pub use tungstenite::stream;
-    #[cfg(feature = "rustls-tls-native-roots")]
-    pub use tungstenite::{Connector, client_tls_with_config};
+    pub use client::client_with_config;
+    #[cfg(feature = "handshake")]
+    pub use client::connect_with_config;
+    #[cfg(feature = "handshake")]
+    pub use client::uri_mode;
+
+    #[cfg(feature = "handshake")]
+    pub fn connect(
+        request: http::Request<()>,
+    ) -> Result<(
+        WebSocket<stream::MaybeTlsStream<TcpStream>>,
+        http::Response<Option<Vec<u8>>>,
+    )> {
+        client::connect_with_config(request, None, 3)
+    }
 }
 
 #[cfg(test)]

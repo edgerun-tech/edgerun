@@ -10,15 +10,16 @@ description = "Edgerun compatibility surface for tungstenite-style WebSocket API
 
 [features]
 default = ["deflate", "proxy"]
-deflate = ["tungstenite/deflate"]
-handshake = ["tungstenite/handshake"]
-proxy = ["handshake", "tungstenite/proxy"]
+deflate = []
+handshake = []
+proxy = ["handshake"]
 
 [dependencies]
 bytes = { package = "edgerun-bytes", version = "0.1", path = "../edgerun-bytes" }
+edgerun-crypto = { workspace = true, default-features = false, features = ["sha1"] }
 edgerun-encoding = { workspace = true, default-features = false }
+edgerun-http = { version = "0.1", path = "../edgerun-http" }
 edgerun-random = { workspace = true }
-tungstenite = { git = "https://github.com/openai-oss-forks/tungstenite-rs", rev = "9200079d3b54a1ff51072e24d81fd354f085156f", default-features = false }
 
 [lints]
 workspace = true

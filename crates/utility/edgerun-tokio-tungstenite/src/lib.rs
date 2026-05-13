@@ -18,10 +18,10 @@ pub mod tungstenite {
     pub use edgerun_tungstenite::*;
 }
 
-#[cfg(feature = "handshake")]
-pub use edgerun_tungstenite::http;
 pub use edgerun_tungstenite::Error;
 pub use edgerun_tungstenite::Message;
+#[cfg(feature = "handshake")]
+pub use edgerun_tungstenite::http;
 
 #[non_exhaustive]
 #[derive(Clone)]
@@ -216,11 +216,17 @@ where
         self.inner.send(item)
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_flush(
+        mut self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(self.inner.flush())
     }
 
-    fn poll_close(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_close(
+        mut self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(self.inner.close(None))
     }
 }
@@ -268,11 +274,16 @@ where
         .map_err(|error| Error::Io(std::io::Error::other(error.to_string())))?;
 
     if is_tls_request(&request) {
-        let (ws, response) =
-            edgerun_tungstenite::client_tls_with_config(request, stream, config, connector.map(Into::into))?;
+        let (ws, response) = edgerun_tungstenite::client_tls_with_config(
+            request,
+            stream,
+            config,
+            connector.map(Into::into),
+        )?;
         let config = ws.get_config();
         let stream = MaybeTlsStream::from_inner(ws.into_inner());
-        let ws = edgerun_tungstenite::WebSocket::from_raw_socket(stream, Role::Client, Some(config));
+        let ws =
+            edgerun_tungstenite::WebSocket::from_raw_socket(stream, Role::Client, Some(config));
         Ok((WebSocketStream::direct(ws), response))
     } else {
         let stream = MaybeTlsStream::plain(stream);
@@ -332,7 +343,13 @@ where
 pub async fn client_async_tls<R, S>(
     request: R,
     stream: S,
-) -> Result<(WebSocketStream<MaybeTlsStream<S>>, http::Response<Option<Vec<u8>>>), Error>
+) -> Result<
+    (
+        WebSocketStream<MaybeTlsStream<S>>,
+        http::Response<Option<Vec<u8>>>,
+    ),
+    Error,
+>
 where
     R: IntoClientRequest + Unpin,
     S: Read + Write + Send + Unpin + 'static,
@@ -346,7 +363,13 @@ pub async fn client_async_tls_with_config<R, S>(
     stream: S,
     config: Option<WebSocketConfig>,
     connector: Option<Connector>,
-) -> Result<(WebSocketStream<MaybeTlsStream<S>>, http::Response<Option<Vec<u8>>>), Error>
+) -> Result<
+    (
+        WebSocketStream<MaybeTlsStream<S>>,
+        http::Response<Option<Vec<u8>>>,
+    ),
+    Error,
+>
 where
     R: IntoClientRequest + Unpin,
     S: Read + Write + Send + Unpin + 'static,
@@ -427,5 +450,6 @@ where
     S: Read + Write,
     C: edgerun_tungstenite::handshake::server::Callback,
 {
-    edgerun_tungstenite::accept_hdr_with_config(stream, callback, config).map(WebSocketStream::direct)
+    edgerun_tungstenite::accept_hdr_with_config(stream, callback, config)
+        .map(WebSocketStream::direct)
 }
