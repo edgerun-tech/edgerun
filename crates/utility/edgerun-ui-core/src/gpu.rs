@@ -39,8 +39,6 @@ pub use app_registry::{
     LOCK_SCREEN_APP_ID, SHELL_LAUNCHER_BUTTON_ID, STORAGE_APP_ID, TRUST_MANAGER_APP_ID,
     UiAppPlacement, UiAppSpec, app_spec, app_spec_for_launch_id,
 };
-#[cfg(test)]
-use apps::render_component_gallery_app;
 pub use apps::{
     CAPABILITY_ALLOW_BUTTON_ID, CAPABILITY_DENY_BUTTON_ID, CAPABILITY_DETAILS_BUTTON_ID,
     LOCK_UNLOCK_BUTTON_ID, LOCK_UNLOCK_FIELD_ID, build_edgerun_fullscreen_app_with_font,
@@ -48,6 +46,8 @@ pub use apps::{
     build_edgerun_workspace_with_shell_with_font, build_unified_chat_shell,
     build_unified_chat_shell_with_font, build_unified_chat_shell_with_font_and_runtime,
 };
+#[cfg(test)]
+use apps::{render_capability_request_app, render_component_gallery_app, render_lock_screen_app};
 pub use components::{
     BarChart, ControlAccessory, ControlRow, Field, MenuItem, MetricCard, PanelHeader, Slider,
     TextArea, TransactionRow, UiGrid, UiStack, bar_chart, control_row, field, menu_item,

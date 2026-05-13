@@ -655,7 +655,11 @@ pub const CAPABILITY_ALLOW_BUTTON_ID: u32 = 920;
 pub const CAPABILITY_DENY_BUTTON_ID: u32 = 921;
 pub const CAPABILITY_DETAILS_BUTTON_ID: u32 = 922;
 
-fn render_lock_screen_app(ui: &mut UiPainter<'_, '_>, bounds: UiRect, app: &UiAppSurface) {
+pub(super) fn render_lock_screen_app(
+    ui: &mut UiPainter<'_, '_>,
+    bounds: UiRect,
+    app: &UiAppSurface,
+) {
     ui.fill_rect(bounds, 0.0, palette::BG);
     let panel_w = bounds.w.clamp(320.0, 520.0);
     let panel_h = 320.0_f32.min((bounds.h - 32.0).max(220.0));
@@ -694,7 +698,11 @@ fn render_lock_screen_app(ui: &mut UiPainter<'_, '_>, bounds: UiRect, app: &UiAp
         .render_with_state(ui, panel, Some(&app.runtime));
 }
 
-fn render_capability_request_app(ui: &mut UiPainter<'_, '_>, bounds: UiRect, app: &UiAppSurface) {
+pub(super) fn render_capability_request_app(
+    ui: &mut UiPainter<'_, '_>,
+    bounds: UiRect,
+    app: &UiAppSurface,
+) {
     ui.fill_rect(bounds, 0.0, palette::BG);
     let panel_w = bounds.w.clamp(340.0, 720.0);
     let panel_h = 430.0_f32.min((bounds.h - 32.0).max(300.0));
