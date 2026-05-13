@@ -4,7 +4,9 @@
   "private": true,
   "description": "Single-file EdgeRun admission network editor.",
   "scripts": {
+    "build:chat-wasm": "cargo build --manifest-path ../crates/protocol/edgerun-work/Cargo.toml --target wasm32-unknown-unknown --release --example chat_wasm --no-default-features --features wasm-chat && sh -c 'target_dir=${CARGO_TARGET_DIR:-$HOME/.cache/cargo-target}; cp \"$target_dir/wasm32-unknown-unknown/release/examples/chat_wasm.wasm\" ./edgerun_chat.wasm'",
     "dev": "python3 -m http.server 3000 --directory .",
+    "chat": "python3 -m http.server 3000 --directory .",
     "start": "python3 -m http.server 3000 --directory ."
   },
   "dependencies": {},
