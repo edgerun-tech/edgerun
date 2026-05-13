@@ -550,11 +550,38 @@ pub enum UiNodeKind {
     Column,
     Card,
     Text(String),
+    Badge {
+        label: String,
+        color: Color4,
+    },
     Button {
         label: String,
         id: u32,
         style: ButtonStyle,
     },
+    MetricCard {
+        title: String,
+        value: String,
+        detail: String,
+        progress: Option<f32>,
+        accent: Color4,
+    },
+    Field {
+        label: String,
+        value: String,
+        helper: String,
+        focused: bool,
+    },
+    MenuItem {
+        label: String,
+        detail: String,
+        badge: String,
+        selected: bool,
+        accent: Color4,
+        id: u32,
+    },
+    Divider,
+    Spacer,
 }
 
 #[derive(Clone, Debug)]
@@ -599,6 +626,17 @@ impl UiNode {
         }
     }
 
+    pub fn badge(label: &str, color: Color4) -> Self {
+        Self {
+            kind: UiNodeKind::Badge {
+                label: label.to_string(),
+                color,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
     pub fn button(label: &str, id: u32, style: ButtonStyle) -> Self {
         Self {
             kind: UiNodeKind::Button {
@@ -607,6 +645,64 @@ impl UiNode {
                 style,
             },
             style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn metric_card(title: &str, value: &str) -> Self {
+        Self {
+            kind: UiNodeKind::MetricCard {
+                title: title.to_string(),
+                value: value.to_string(),
+                detail: String::new(),
+                progress: None,
+                accent: palette::ACCENT,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn field(label: &str, value: &str) -> Self {
+        Self {
+            kind: UiNodeKind::Field {
+                label: label.to_string(),
+                value: value.to_string(),
+                helper: String::new(),
+                focused: false,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn menu_item(label: &str, id: u32) -> Self {
+        Self {
+            kind: UiNodeKind::MenuItem {
+                label: label.to_string(),
+                detail: String::new(),
+                badge: String::new(),
+                selected: false,
+                accent: palette::ACCENT,
+                id,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn divider(classes: &str) -> Self {
+        Self {
+            kind: UiNodeKind::Divider,
+            style: UiStyle::parse(classes),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn spacer(classes: &str) -> Self {
+        Self {
+            kind: UiNodeKind::Spacer,
+            style: UiStyle::parse(classes),
             children: Vec::new(),
         }
     }
@@ -625,11 +721,87 @@ impl UiNode {
         self
     }
 
+    pub fn children(mut self, children: impl IntoIterator<Item = UiNode>) -> Self {
+        self.children.extend(children);
+        self
+    }
+
+    pub fn when(self, condition: bool, child: UiNode) -> Self {
+        if condition {
+            self.child(child)
+        } else {
+            self
+        }
+    }
+
+    pub fn detail(mut self, value: &str) -> Self {
+        match &mut self.kind {
+            UiNodeKind::MetricCard { detail, .. } | UiNodeKind::MenuItem { detail, .. } => {
+                *detail = value.to_string()
+            }
+            UiNodeKind::Field { helper, .. } => *helper = value.to_string(),
+            _ => {}
+        }
+        self
+    }
+
+    pub fn badge_text(mut self, value: &str) -> Self {
+        if let UiNodeKind::MenuItem { badge, .. } = &mut self.kind {
+            *badge = value.to_string();
+        }
+        self
+    }
+
+    pub fn progress(mut self, value: f32) -> Self {
+        if let UiNodeKind::MetricCard { progress, .. } = &mut self.kind {
+            *progress = Some(value);
+        }
+        self
+    }
+
+    pub fn accent(mut self, color: Color4) -> Self {
+        match &mut self.kind {
+            UiNodeKind::MetricCard { accent, .. } | UiNodeKind::MenuItem { accent, .. } => {
+                *accent = color
+            }
+            UiNodeKind::Badge {
+                color: badge_color, ..
+            } => *badge_color = color,
+            _ => {}
+        }
+        self
+    }
+
+    pub fn focused(mut self, focused: bool) -> Self {
+        if let UiNodeKind::Field {
+            focused: node_focused,
+            ..
+        } = &mut self.kind
+        {
+            *node_focused = focused;
+        }
+        self
+    }
+
+    pub fn selected(mut self, selected: bool) -> Self {
+        if let UiNodeKind::MenuItem {
+            selected: node_selected,
+            ..
+        } = &mut self.kind
+        {
+            *node_selected = selected;
+        }
+        self
+    }
+
     pub fn render(&self, ui: &mut UiPainter<'_, '_>, bounds: UiRect) {
         let rect = self.style.layout_rect(bounds);
         match &self.kind {
             UiNodeKind::Text(value) => {
                 ui.bounded_label(rect.x, rect.y, rect.w, value, 2.0, self.style.text);
+            }
+            UiNodeKind::Badge { label, color } => {
+                ui.badge(rect.x, rect.y, label, *color);
             }
             UiNodeKind::Button { label, id, style } => {
                 let h = self.style.height.unwrap_or(34.0).min(rect.h);
@@ -641,6 +813,72 @@ impl UiNode {
                     true,
                 );
             }
+            UiNodeKind::MetricCard {
+                title,
+                value,
+                detail,
+                progress,
+                accent,
+            } => {
+                self::components::metric_card(
+                    ui,
+                    rect,
+                    self::components::MetricCard {
+                        title,
+                        value,
+                        detail,
+                        progress: *progress,
+                        accent: *accent,
+                    },
+                );
+            }
+            UiNodeKind::Field {
+                label,
+                value,
+                helper,
+                focused,
+            } => {
+                self::components::field(
+                    ui,
+                    rect,
+                    self::components::Field {
+                        label,
+                        value,
+                        helper,
+                        focused: *focused,
+                    },
+                );
+            }
+            UiNodeKind::MenuItem {
+                label,
+                detail,
+                badge,
+                selected,
+                accent,
+                id,
+            } => {
+                self::components::menu_item(
+                    ui,
+                    rect,
+                    self::components::MenuItem {
+                        label,
+                        detail,
+                        badge,
+                        selected: *selected,
+                        accent: *accent,
+                        id: *id,
+                    },
+                );
+            }
+            UiNodeKind::Divider => {
+                let axis = if rect.w >= rect.h {
+                    Axis::Horizontal
+                } else {
+                    Axis::Vertical
+                };
+                ui.divider(rect.x, rect.y, rect.w.max(rect.h), axis);
+            }
+            UiNodeKind::Spacer => {}
             UiNodeKind::Row | UiNodeKind::Column | UiNodeKind::Card => {
                 if let Some(bg) = self.style.bg {
                     if matches!(self.kind, UiNodeKind::Card) {
@@ -688,8 +926,32 @@ pub fn text(value: &str) -> UiNode {
     UiNode::text(value)
 }
 
+pub fn badge(label: &str, color: Color4) -> UiNode {
+    UiNode::badge(label, color)
+}
+
 pub fn button(label: &str, id: u32, style: ButtonStyle) -> UiNode {
     UiNode::button(label, id, style)
+}
+
+pub fn metric(title: &str, value: &str) -> UiNode {
+    UiNode::metric_card(title, value)
+}
+
+pub fn field_node(label: &str, value: &str) -> UiNode {
+    UiNode::field(label, value)
+}
+
+pub fn menu_item_node(label: &str, id: u32) -> UiNode {
+    UiNode::menu_item(label, id)
+}
+
+pub fn divider(classes: &str) -> UiNode {
+    UiNode::divider(classes)
+}
+
+pub fn spacer(classes: &str) -> UiNode {
+    UiNode::spacer(classes)
 }
 
 impl<'a, 'font> UiPainter<'a, 'font> {
@@ -2060,7 +2322,15 @@ fn child_cross_size(child: &UiNode, parent_axis: Axis) -> f32 {
 fn intrinsic_width(child: &UiNode) -> f32 {
     match &child.kind {
         UiNodeKind::Text(value) => (value.chars().count() as f32 * 8.0 + 2.0).clamp(24.0, 220.0),
+        UiNodeKind::Badge { label, .. } => {
+            (label.chars().count() as f32 * 8.0 + 22.0).clamp(36.0, 180.0)
+        }
         UiNodeKind::Button { label, .. } => (label.chars().count() as f32 * 8.0 + 28.0).max(44.0),
+        UiNodeKind::MetricCard { .. } => 220.0,
+        UiNodeKind::Field { .. } => 240.0,
+        UiNodeKind::MenuItem { .. } => 220.0,
+        UiNodeKind::Divider => 1.0,
+        UiNodeKind::Spacer => child.style.width.unwrap_or(12.0),
         _ => child.style.width.unwrap_or(120.0),
     }
 }
@@ -2068,8 +2338,62 @@ fn intrinsic_width(child: &UiNode) -> f32 {
 fn intrinsic_height(child: &UiNode) -> f32 {
     match child.kind {
         UiNodeKind::Text(_) => 20.0,
+        UiNodeKind::Badge { .. } => 22.0,
         UiNodeKind::Button { .. } => 34.0,
+        UiNodeKind::MetricCard { .. } => 132.0,
+        UiNodeKind::Field { .. } => 92.0,
+        UiNodeKind::MenuItem { .. } => 58.0,
+        UiNodeKind::Divider => 1.0,
+        UiNodeKind::Spacer => child.style.height.unwrap_or(12.0),
         _ => child.style.height.unwrap_or(44.0),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ui_node_builder_renders_component_tree() {
+        let mut scene = GpuScene::new(palette::BG);
+        {
+            let mut ui = UiPainter::new(&mut scene);
+            column("bg-panel border rounded-md p-4 gap-3")
+                .children([
+                    row("gap-2 h-10")
+                        .child(text("Dashboard").class("flex-1 text-text truncate"))
+                        .child(badge("sealed", palette::GREEN)),
+                    metric("Relay balance", "$0.00")
+                        .detail("pending setup")
+                        .progress(0.32)
+                        .class("h-32"),
+                    field_node("Endpoint", "nodes.edgerun.tech")
+                        .detail("identity-routed relay")
+                        .focused(true),
+                    menu_item_node("Payments", 42)
+                        .detail("proof-backed receipts")
+                        .badge_text("new")
+                        .selected(true),
+                    button("Open", 43, ButtonStyle::Secondary).class("h-8"),
+                ])
+                .render(&mut ui, UiRect::new(0.0, 0.0, 360.0, 420.0));
+        }
+
+        assert!(scene.rects().len() > 20);
+        assert!(scene.hits().len() >= 2);
+    }
+
+    #[test]
+    fn conditional_children_do_not_allocate_placeholder_layout() {
+        let mut hidden = row("gap-2")
+            .when(false, text("hidden"))
+            .child(text("visible"));
+        let shown = row("gap-2").when(true, text("visible"));
+
+        assert_eq!(hidden.children.len(), 1);
+        assert_eq!(shown.children.len(), 1);
+        hidden = hidden.child(text("second"));
+        assert_eq!(hidden.children.len(), 2);
     }
 }
 
