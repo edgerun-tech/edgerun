@@ -224,6 +224,7 @@ fn hit_kind_code(kind: HitKind) -> u32 {
         HitKind::Slider => 10,
         HitKind::MenuItem => 11,
         HitKind::TransactionRow => 12,
+        HitKind::Scrollbar => 13,
     }
 }
 

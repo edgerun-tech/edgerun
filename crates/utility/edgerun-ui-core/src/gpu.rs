@@ -283,6 +283,7 @@ pub enum HitKind {
     Slider,
     MenuItem,
     TransactionRow,
+    Scrollbar,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -559,6 +560,7 @@ pub enum UiNodeKind {
     Card,
     ScrollArea {
         offset: f32,
+        id: Option<u32>,
     },
     Text(String),
     Badge {
@@ -731,7 +733,7 @@ impl UiNode {
         let mut style = UiStyle::parse(classes);
         style.direction = Axis::Vertical;
         Self {
-            kind: UiNodeKind::ScrollArea { offset },
+            kind: UiNodeKind::ScrollArea { offset, id: None },
             style,
             children: Vec::new(),
         }
@@ -1017,9 +1019,17 @@ impl UiNode {
     pub fn scroll_offset(mut self, offset: f32) -> Self {
         if let UiNodeKind::ScrollArea {
             offset: node_offset,
+            ..
         } = &mut self.kind
         {
             *node_offset = offset;
+        }
+        self
+    }
+
+    pub fn scroll_id(mut self, id: u32) -> Self {
+        if let UiNodeKind::ScrollArea { id: node_id, .. } = &mut self.kind {
+            *node_id = Some(id);
         }
         self
     }
@@ -1475,8 +1485,8 @@ impl UiNode {
                 }
                 if let UiNodeKind::Grid { columns } = &self.kind {
                     render_grid_children(ui, rect, &self.style, *columns, &self.children);
-                } else if let UiNodeKind::ScrollArea { offset } = &self.kind {
-                    render_scroll_children(ui, rect, &self.style, *offset, &self.children);
+                } else if let UiNodeKind::ScrollArea { offset, id } = &self.kind {
+                    render_scroll_children(ui, rect, &self.style, *offset, *id, &self.children);
                 } else {
                     render_children(ui, rect, &self.style, &self.children);
                 }
@@ -3072,6 +3082,7 @@ fn render_scroll_children(
     rect: UiRect,
     style: &UiStyle,
     offset: f32,
+    id: Option<u32>,
     children: &[UiNode],
 ) {
     if children.is_empty() {
@@ -3106,11 +3117,18 @@ fn render_scroll_children(
     }
 
     if total > content.h {
-        ui.scrollbar(
-            UiRect::new(rect.x + rect.w - 6.0, content.y, 3.0, content.h),
-            content.h / total,
-            offset,
-        );
+        let scrollbar = UiRect::new(rect.x + rect.w - 6.0, content.y, 3.0, content.h);
+        if let Some(id) = id {
+            ui.hit(
+                HitKind::Scrollbar,
+                id,
+                scrollbar.x - 7.0,
+                scrollbar.y,
+                10.0,
+                scrollbar.h,
+            );
+        }
+        ui.scrollbar(scrollbar, content.h / total, offset);
     }
 }
 
@@ -3317,6 +3335,7 @@ mod tests {
         {
             let mut ui = UiPainter::new(&mut scene);
             scroll_area("bg-panel border rounded-md p-2 gap-2", 1.0)
+                .scroll_id(99)
                 .children(rows)
                 .render(&mut ui, UiRect::new(0.0, 0.0, 320.0, 160.0));
         }
@@ -3340,6 +3359,10 @@ mod tests {
             .iter()
             .filter(|hit| hit.kind == HitKind::ListRow)
             .all(|hit| hit.y >= 8.0 && hit.y + hit.h <= 152.0));
+        assert!(scene
+            .hits()
+            .iter()
+            .any(|hit| hit.kind == HitKind::Scrollbar && hit.id == 99));
     }
 
     #[test]
