@@ -2,7 +2,7 @@ use std::cell::RefCell;
 
 use edgerun_ui_core::gpu::{
     FontAtlas, GpuRect, GpuScene, HitKind, RectMode, TextQuad, UnifiedChatState,
-    build_codex_chat_shell_with_font, build_unified_chat_shell_with_font, palette,
+    build_unified_chat_shell_with_font, palette,
 };
 
 thread_local! {
@@ -16,31 +16,12 @@ thread_local! {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn codex_gl_build_scene(width: f32, height: f32, thinking: u32) -> u32 {
-    FONT.with(|font| {
-        SCENE.with_borrow_mut(|scene| {
-            build_scene(
-                scene,
-                font,
-                width,
-                height,
-                thinking != 0,
-                Surface::UnifiedChat,
-            );
-            pack_scene(scene);
-            scene.rects().len() as u32
-        })
-    })
+    build_scene(width, height, thinking != 0)
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn codex_gl_build_codex_scene(width: f32, height: f32, thinking: u32) -> u32 {
-    FONT.with(|font| {
-        SCENE.with_borrow_mut(|scene| {
-            build_scene(scene, font, width, height, thinking != 0, Surface::Codex);
-            pack_scene(scene);
-            scene.rects().len() as u32
-        })
-    })
+    build_scene(width, height, thinking != 0)
 }
 
 #[unsafe(no_mangle)]
@@ -49,44 +30,19 @@ pub extern "C" fn codex_gl_build_unified_chat_scene(
     height: f32,
     connected: u32,
 ) -> u32 {
+    build_scene(width, height, connected != 0)
+}
+
+fn build_scene(width: f32, height: f32, active: bool) -> u32 {
     FONT.with(|font| {
         SCENE.with_borrow_mut(|scene| {
-            build_scene(
-                scene,
-                font,
-                width,
-                height,
-                connected != 0,
-                Surface::UnifiedChat,
-            );
+            let selected = SELECTED_CONTACT.with_borrow(|selected| *selected);
+            let state = UnifiedChatState::demo_selected(active, selected);
+            build_unified_chat_shell_with_font(scene, font, width, height, &state);
             pack_scene(scene);
             scene.rects().len() as u32
         })
     })
-}
-
-#[derive(Clone, Copy)]
-enum Surface {
-    Codex,
-    UnifiedChat,
-}
-
-fn build_scene(
-    scene: &mut GpuScene,
-    font: &FontAtlas,
-    width: f32,
-    height: f32,
-    active: bool,
-    surface: Surface,
-) {
-    match surface {
-        Surface::Codex => build_codex_chat_shell_with_font(scene, font, width, height, active),
-        Surface::UnifiedChat => {
-            let selected = SELECTED_CONTACT.with_borrow(|selected| *selected);
-            let state = UnifiedChatState::demo_selected(active, selected);
-            build_unified_chat_shell_with_font(scene, font, width, height, &state);
-        }
-    }
 }
 
 fn pack_scene(scene: &GpuScene) {

@@ -185,9 +185,7 @@ gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, atlasW, atlasH, 0, gl.RED, gl.UNSIGNED_BYTE, atlasBytes);
 
-const params = new URLSearchParams(location.search);
-const surface = params.get("surface") || "unified";
-statusEl.textContent = `${surface} wasm scene + WebGL2`;
+statusEl.textContent = "unified chat wasm scene + WebGL2";
 let sceneDirty = true;
 let frameScheduled = false;
 let animationTimer = 0;
@@ -243,7 +241,6 @@ document.addEventListener("visibilitychange", () => {
 });
 
 canvas.addEventListener("click", (event) => {
-  if (surface === "codex") return;
   const dpr = Math.max(1, window.devicePixelRatio || 1);
   const rect = canvas.getBoundingClientRect();
   const x = (event.clientX - rect.left) * dpr;
@@ -273,16 +270,12 @@ function draw(t) {
     return;
   }
 
-  surface === "codex"
-    ? api.codex_gl_build_codex_scene(width, height, phase)
-    : api.codex_gl_build_unified_chat_scene(width, height, phase);
+  api.codex_gl_build_unified_chat_scene(width, height, phase);
   sceneDirty = false;
   lastWidth = width;
   lastHeight = height;
   lastPhase = phase;
-  if (surface !== "codex") {
-    statusEl.textContent = `${surface} contact ${api.codex_gl_selected_contact()} + ${api.codex_gl_hit_count()} hits`;
-  }
+  statusEl.textContent = `unified chat contact ${api.codex_gl_selected_contact()} + ${api.codex_gl_hit_count()} hits`;
   gl.viewport(0, 0, width, height);
   gl.clearColor(api.codex_gl_clear_r(), api.codex_gl_clear_g(), api.codex_gl_clear_b(), api.codex_gl_clear_a());
   gl.clear(gl.COLOR_BUFFER_BIT);

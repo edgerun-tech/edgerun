@@ -5,8 +5,7 @@ use std::time::{Duration, Instant};
 
 use edgerun_ui_core::gpu::gl::GlRenderer;
 use edgerun_ui_core::gpu::{
-    FontAtlas, GpuScene, UnifiedChatState, build_codex_chat_shell_with_font,
-    build_unified_chat_shell_with_font, palette,
+    FontAtlas, GpuScene, UnifiedChatState, build_unified_chat_shell_with_font, palette,
 };
 
 const SDL_INIT_VIDEO: u32 = 0x0000_0020;
@@ -92,10 +91,9 @@ fn run() -> Result<(), String> {
     if args.dump_scene {
         let mut scene = GpuScene::new(palette::BG);
         let atlas = FontAtlas::load_inter(18.0)?;
-        build_surface(&mut scene, &atlas, 1120.0, 720.0, true, args.surface);
+        build_surface(&mut scene, &atlas, 1120.0, 720.0, true);
         println!(
-            "codex-gl-ui {:?} scene rects={} text_quads={}",
-            args.surface,
+            "codex-gl-ui unified-chat scene rects={} text_quads={}",
             scene.rects().len(),
             scene.text_quads().len()
         );
@@ -112,11 +110,7 @@ fn run() -> Result<(), String> {
 
     let mut width = 1120;
     let mut height = 720;
-    let title = CString::new(match args.surface {
-        Surface::Codex => "Codex GL UI",
-        Surface::UnifiedChat => "EdgeRun Unified Chat",
-    })
-    .map_err(|error| error.to_string())?;
+    let title = CString::new("EdgeRun Unified Chat").map_err(|error| error.to_string())?;
     let window = Window(unsafe {
         SDL_CreateWindow(
             title.as_ptr(),
@@ -170,7 +164,6 @@ fn run() -> Result<(), String> {
                 width as f32,
                 height as f32,
                 thinking,
-                args.surface,
             );
             renderer.render(width, height, &scene);
             unsafe {
@@ -191,35 +184,15 @@ fn run() -> Result<(), String> {
     Ok(())
 }
 
-fn build_surface(
-    scene: &mut GpuScene,
-    atlas: &FontAtlas,
-    width: f32,
-    height: f32,
-    thinking: bool,
-    surface: Surface,
-) {
-    match surface {
-        Surface::Codex => build_codex_chat_shell_with_font(scene, atlas, width, height, thinking),
-        Surface::UnifiedChat => {
-            let state = UnifiedChatState::demo_selected(thinking, 1);
-            build_unified_chat_shell_with_font(scene, atlas, width, height, &state);
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Default)]
-enum Surface {
-    Codex,
-    #[default]
-    UnifiedChat,
+fn build_surface(scene: &mut GpuScene, atlas: &FontAtlas, width: f32, height: f32, active: bool) {
+    let state = UnifiedChatState::demo_selected(active, 1);
+    build_unified_chat_shell_with_font(scene, atlas, width, height, &state);
 }
 
 #[derive(Default)]
 struct Args {
     frames: Option<u32>,
     dump_scene: bool,
-    surface: Surface,
 }
 
 impl Args {
@@ -237,18 +210,8 @@ impl Args {
                     parsed.frames = Some(value);
                 }
                 "--dump-scene" => parsed.dump_scene = true,
-                "--surface" => {
-                    let value = args.next().ok_or("--surface requires codex or unified")?;
-                    parsed.surface = match value.as_str() {
-                        "codex" => Surface::Codex,
-                        "unified" | "chat" | "edgerun" => Surface::UnifiedChat,
-                        _ => return Err(format!("invalid --surface value: {value}")),
-                    };
-                }
                 "--help" | "-h" => {
-                    println!(
-                        "Usage: codex-gl-ui [--frames N] [--dump-scene] [--surface codex|unified]"
-                    );
+                    println!("Usage: codex-gl-ui [--frames N] [--dump-scene]");
                     std::process::exit(0);
                 }
                 other => return Err(format!("unknown argument: {other}")),
