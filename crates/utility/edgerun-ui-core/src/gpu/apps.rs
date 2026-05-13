@@ -190,67 +190,8 @@ fn build_unified_chat_shell_impl(
         #[cfg(not(feature = "fontdue-text"))]
         _font: PhantomData,
     };
-    let m = ChatShellMetrics::default();
     let w = width.max(360.0);
     let h = height.max(320.0);
-    let sidebar_w = if w < 760.0 { 0.0 } else { m.sidebar_w + 28.0 };
-    let main_x = sidebar_w;
-    let main_w = w - sidebar_w;
-
-    if sidebar_w > 0.0 {
-        ui.panel(0.0, 0.0, sidebar_w, h, 0.0, palette::SIDEBAR);
-        ui.scene.push_rect(GpuRect::fill(
-            0.0,
-            0.0,
-            sidebar_w,
-            4.0,
-            0.0,
-            palette::ACCENT,
-        ));
-        ui.bounded_label(
-            24.0,
-            20.0,
-            (sidebar_w - 138.0).max(0.0),
-            state.title,
-            3.0,
-            palette::TEXT,
-        );
-        ui.bounded_label(
-            24.0,
-            50.0,
-            (sidebar_w - 48.0).max(0.0),
-            state.subtitle,
-            2.0,
-            palette::MUTED,
-        );
-        ui.pill(
-            sidebar_w - 104.0,
-            22.0,
-            78.0,
-            if state.connected { "relay" } else { "local" },
-            if state.connected {
-                palette::GREEN
-            } else {
-                palette::AMBER
-            },
-        );
-        ui.scene.push_rect(GpuRect::fill(
-            sidebar_w - 1.0,
-            0.0,
-            1.0,
-            h,
-            0.0,
-            palette::BORDER,
-        ));
-
-        for (index, contact) in state.contacts.iter().enumerate() {
-            let y = 88.0 + index as f32 * 68.0;
-            let selected = index == state.selected_contact;
-            ui.contact_row(16.0, y, sidebar_w - 32.0, contact, selected, index as u32);
-        }
-    }
-
-    ui.panel(main_x, 0.0, main_w, m.topbar_h, 0.0, palette::TOPBAR);
     let active = state
         .contacts
         .get(state.selected_contact)
@@ -259,262 +200,72 @@ fn build_unified_chat_shell_impl(
     let active_detail = active
         .map(|contact| contact.detail)
         .unwrap_or("contact thread");
-    let title_w = if main_w > 620.0 {
-        190.0
-    } else {
-        (main_w - 40.0).max(0.0)
-    };
-    ui.bounded_label(
-        main_x + 20.0,
-        14.0,
-        title_w,
-        active_name,
-        2.0,
-        palette::TEXT,
-    );
-    ui.bounded_label(
-        main_x + 20.0,
-        35.0,
-        title_w,
-        active_detail,
-        2.0,
-        palette::MUTED,
-    );
-    let tabs_w = 226.0_f32.min((main_w - 390.0).max(0.0));
-    if tabs_w > 160.0 {
-        ui.segmented_tabs(
-            UiRect::new(main_x + 220.0, 13.0, tabs_w, 32.0),
-            &["chat", "proofs", "files"],
-            0,
-            20,
-        );
-    }
-    ui.pill(
-        main_x + main_w - 322.0,
-        15.0,
-        132.0,
-        "recipient sealed",
-        palette::GREEN,
-    );
-    ui.pill(
-        main_x + main_w - 178.0,
-        15.0,
-        154.0,
-        "identity routed",
-        palette::ACCENT,
-    );
-    ui.scene.push_rect(GpuRect::fill(
-        main_x,
-        m.topbar_h - 1.0,
-        main_w,
-        1.0,
-        0.0,
-        palette::BORDER,
-    ));
-
-    let transcript_top = m.topbar_h + m.pad;
-    let transcript_x = main_x + m.pad;
-    let transcript_w = main_w - m.pad * 2.0;
-    if state.contacts.is_empty() {
-        let empty_w = transcript_w.clamp(260.0, 520.0);
-        let empty_h = 126.0;
-        let empty_x = transcript_x + (transcript_w - empty_w) * 0.5;
-        let empty_y = transcript_top + 46.0;
-        ui.card(empty_x, empty_y, empty_w, empty_h, 12.0, palette::PANEL);
-        ui.bounded_label(
-            empty_x + 22.0,
-            empty_y + 24.0,
-            empty_w - 44.0,
-            "No contacts yet",
-            3.0,
-            palette::TEXT,
-        );
-        ui.bounded_label(
-            empty_x + 22.0,
-            empty_y + 62.0,
-            empty_w - 44.0,
-            "Connect a contact book or receive an identity-routed contact to show threads here.",
-            2.0,
-            palette::MUTED,
-        );
-        let composer = (
-            main_x + m.pad,
-            h - m.composer_h - m.pad,
-            main_w - m.pad * 2.0,
-            m.composer_h,
-        );
-        let composer_text = runtime
-            .map(|runtime| runtime.text_value(0, state.composer_placeholder))
-            .unwrap_or(state.composer_placeholder);
-        let composer_active = runtime.is_some_and(|runtime| {
-            runtime
-                .focused()
-                .is_some_and(|hit| hit.kind == HitKind::Composer)
-        });
-        ui.composer(
-            composer.0,
-            composer.1,
-            composer.2,
-            composer.3,
-            composer_text,
-            composer_active,
-            &[],
-        );
-        return;
-    }
-
-    let rail_w = if transcript_w > 820.0 { 220.0 } else { 0.0 };
-    let message_area_w = transcript_w - if rail_w > 0.0 { rail_w + 18.0 } else { 0.0 };
-    let message_w = (message_area_w * 0.82).clamp(220.0, 760.0);
-    let transcript_limit = h - m.composer_h - m.pad * 2.0;
-    let mut message_y = transcript_top;
-
-    for message in state.messages {
-        let x = if message.outgoing {
-            transcript_x + message_area_w - message_w
-        } else {
-            transcript_x
-        };
-        let fill = if message.outgoing {
-            palette::USER
-        } else {
-            palette::ASSISTANT
-        };
-        let height = estimate_message_height(
-            message.body,
-            (message_w - 42.0).max(120.0),
-            4,
-            #[cfg(feature = "fontdue-text")]
-            ui.atlas,
-        );
-        if message_y + height > transcript_limit {
-            break;
-        }
-        let drawn = ui.message_bubble(
-            x,
-            message_y,
-            message_w,
-            message.author,
-            message.body,
-            fill,
-            message.accent,
-        );
-        message_y += drawn + 16.0;
-    }
-
-    if rail_w > 0.0 {
-        let rail_x = transcript_x + transcript_w - rail_w;
-        ui.card(rail_x, transcript_top, rail_w, 220.0, 12.0, palette::PANEL);
-        ui.bounded_label(
-            rail_x + 16.0,
-            transcript_top + 18.0,
-            rail_w - 32.0,
-            "Thread policy",
-            2.0,
-            palette::TEXT,
-        );
-        ui.pill(
-            rail_x + 16.0,
-            transcript_top + 50.0,
-            132.0,
-            "2 recipients",
-            palette::ACCENT,
-        );
-        ui.pill(
-            rail_x + 16.0,
-            transcript_top + 84.0,
-            158.0,
-            "codex tools scoped",
-            palette::VIOLET,
-        );
-        ui.pill(
-            rail_x + 16.0,
-            transcript_top + 118.0,
-            140.0,
-            "relay admitted",
-            palette::GREEN,
-        );
-        ui.divider(
-            rail_x + 16.0,
-            transcript_top + 152.0,
-            rail_w - 32.0,
-            Axis::Horizontal,
-        );
-        ui.bounded_label(
-            rail_x + 16.0,
-            transcript_top + 166.0,
-            rail_w - 88.0,
-            "route health",
-            2.0,
-            palette::MUTED,
-        );
-        ui.progress_bar(
-            UiRect::new(rail_x + 16.0, transcript_top + 190.0, rail_w - 32.0, 8.0),
-            if state.connected { 0.86 } else { 0.38 },
-            if state.connected {
-                palette::GREEN
-            } else {
-                palette::AMBER
-            },
-        );
-        ui.toggle(
-            rail_x + rail_w - 66.0,
-            transcript_top + 162.0,
-            runtime
-                .map(|runtime| runtime.toggle_value(44, state.connected))
-                .unwrap_or(state.connected),
-            44,
-        );
-        row("row bg-row border rounded-md p-2 gap-2")
-            .child(text("policy").class("w-14 text-muted truncate"))
-            .child(text("scoped").class("flex-1 text-green truncate"))
-            .child(button("open", 55, ButtonStyle::Ghost).class("w-16 h-8"))
-            .render(
-                &mut ui,
-                UiRect::new(rail_x + 16.0, transcript_top + 206.0, rail_w - 32.0, 42.0),
-            );
-    }
-    if state.messages.len() > 2 {
-        ui.scrollbar(
-            UiRect::new(
-                transcript_x + message_area_w + 6.0,
-                transcript_top,
-                6.0,
-                (transcript_limit - transcript_top).max(80.0),
-            ),
-            0.72,
-            0.0,
-        );
-    }
-
-    let composer = (
-        main_x + m.pad,
-        h - m.composer_h - m.pad,
-        main_w - m.pad * 2.0,
-        m.composer_h,
-    );
     let composer_text = runtime
         .map(|runtime| runtime.text_value(0, state.composer_placeholder))
         .unwrap_or(state.composer_placeholder);
-    let composer_active = state.connected
-        || runtime.is_some_and(|runtime| {
-            runtime
-                .focused()
-                .is_some_and(|hit| hit.kind == HitKind::Composer)
-        });
-    ui.composer(
-        composer.0,
-        composer.1,
-        composer.2,
-        composer.3,
-        composer_text,
-        composer_active,
-        &[
-            ("encrypted", palette::GREEN),
-            ("contact", palette::ACCENT),
-            ("codex tools", palette::VIOLET),
-        ],
-    );
+
+    let mut contacts = card("bg-sidebar border rounded-lg p-3 gap-2")
+        .child(shadcn_command(state.title, 1))
+        .child(shadcn_badge(
+            if state.connected { "relay" } else { "local" },
+            UiShadcnBadgeVariant::Secondary,
+        ));
+    for (index, contact) in state.contacts.iter().enumerate() {
+        contacts = contacts.child(
+            shadcn_item(contact.name, contact.detail, index as u32, contact_accent(contact.kind))
+                .selected(index == state.selected_contact),
+        );
+    }
+    if state.contacts.is_empty() {
+        contacts = contacts.child(shadcn_empty(
+            "No contacts yet",
+            "Connect a contact book or receive an identity-routed contact.",
+            UiIcon::Search,
+        ));
+    }
+
+    let mut transcript = card("bg-panel border rounded-lg p-3 gap-3")
+        .child(shadcn_breadcrumb(
+            &[state.title, active_name, "Thread"],
+            2,
+            20,
+        ))
+        .child(shadcn_tabs(&["Chat", "Proofs", "Files"], 0, 30))
+        .child(shadcn_alert("Thread policy", active_detail, UiIcon::Shield));
+    for (index, message) in state.messages.iter().enumerate() {
+        transcript = transcript.child(shadcn_item(
+            message.author,
+            message.body,
+            100 + index as u32,
+            message.accent,
+        ));
+    }
+    if state.messages.is_empty() {
+        transcript = transcript.child(shadcn_empty(
+            "No messages yet",
+            "Start a verified, identity-routed thread.",
+            UiIcon::Chat,
+        ));
+    }
+    transcript = transcript
+        .child(shadcn_textarea("Message", composer_text).hit_id(0).class("h-24"))
+        .child(shadcn_button(
+            "Send",
+            2,
+            UiShadcnButtonVariant::Default,
+            UiShadcnButtonSize::Default,
+        ));
+
+    let root = if w >= 760.0 {
+        row("row gap-3 h-full")
+            .child(contacts.class("w-80 h-full"))
+            .child(transcript.class("flex-1 h-full"))
+    } else {
+        column("gap-3 h-full")
+            .child(contacts.class("h-64"))
+            .child(transcript.class("flex-1"))
+    };
+    root.render_with_state(&mut ui, UiRect::new(0.0, 0.0, w, h), runtime);
 }
 
 #[cfg(feature = "fontdue-text")]
