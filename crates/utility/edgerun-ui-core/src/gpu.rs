@@ -585,6 +585,11 @@ pub enum UiNodeKind {
         value: f32,
         color: Color4,
     },
+    Tabs {
+        labels: Vec<String>,
+        selected: usize,
+        base_id: u32,
+    },
     PanelHeader {
         title: String,
         subtitle: String,
@@ -638,6 +643,12 @@ pub enum UiNodeKind {
         detail: String,
         badge: String,
         selected: bool,
+        accent: Color4,
+        id: u32,
+    },
+    ListRow {
+        title: String,
+        detail: String,
         accent: Color4,
         id: u32,
     },
@@ -784,6 +795,26 @@ impl UiNode {
         }
     }
 
+    pub fn tabs(labels: impl IntoIterator<Item = String>, selected: usize, base_id: u32) -> Self {
+        Self {
+            kind: UiNodeKind::Tabs {
+                labels: labels.into_iter().collect(),
+                selected,
+                base_id,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn tab_labels(labels: &[&str], selected: usize, base_id: u32) -> Self {
+        Self::tabs(
+            labels.iter().copied().map(str::to_string),
+            selected,
+            base_id,
+        )
+    }
+
     pub fn panel_header(title: &str) -> Self {
         Self {
             kind: UiNodeKind::PanelHeader {
@@ -908,6 +939,19 @@ impl UiNode {
         }
     }
 
+    pub fn list_row(title: &str, detail: &str, id: u32) -> Self {
+        Self {
+            kind: UiNodeKind::ListRow {
+                title: title.to_string(),
+                detail: detail.to_string(),
+                accent: palette::ACCENT,
+                id,
+            },
+            style: UiStyle::default(),
+            children: Vec::new(),
+        }
+    }
+
     pub fn divider(classes: &str) -> Self {
         Self {
             kind: UiNodeKind::Divider,
@@ -980,6 +1024,7 @@ impl UiNode {
             UiNodeKind::MetricCard { detail, .. } | UiNodeKind::MenuItem { detail, .. } => {
                 *detail = value.to_string()
             }
+            UiNodeKind::ListRow { detail, .. } => *detail = value.to_string(),
             UiNodeKind::Field { helper, .. } => *helper = value.to_string(),
             UiNodeKind::TextArea { value: text, .. } => *text = value.to_string(),
             UiNodeKind::TransactionRow { subtitle, .. }
@@ -1032,6 +1077,9 @@ impl UiNode {
             | UiNodeKind::Slider { accent, .. }
             | UiNodeKind::BarChart { accent, .. }
             | UiNodeKind::MenuItem { accent, .. } => *accent = color,
+            UiNodeKind::ListRow {
+                accent: row_accent, ..
+            } => *row_accent = color,
             UiNodeKind::Avatar {
                 color: avatar_color,
                 ..
@@ -1189,6 +1237,20 @@ impl UiNode {
                 let y = rect.y + ((rect.h - h).max(0.0) * 0.5);
                 ui.progress_bar(UiRect::new(rect.x, y, rect.w, h), *value, *color);
             }
+            UiNodeKind::Tabs {
+                labels,
+                selected,
+                base_id,
+            } => {
+                let label_refs = labels.iter().map(String::as_str).collect::<Vec<_>>();
+                let h = self.style.height.unwrap_or(34.0).min(rect.h);
+                ui.segmented_tabs(
+                    UiRect::new(rect.x, rect.y, rect.w, h),
+                    &label_refs,
+                    *selected,
+                    *base_id,
+                );
+            }
             UiNodeKind::PanelHeader {
                 title,
                 subtitle,
@@ -1342,6 +1404,14 @@ impl UiNode {
                     },
                 );
             }
+            UiNodeKind::ListRow {
+                title,
+                detail,
+                accent,
+                id,
+            } => {
+                ui.list_row(rect, title, detail, *accent, *id);
+            }
             UiNodeKind::Divider => {
                 let axis = if rect.w >= rect.h {
                     Axis::Horizontal
@@ -1438,6 +1508,18 @@ pub fn progress_bar_node(value: f32, color: Color4) -> UiNode {
     UiNode::progress_bar(value, color)
 }
 
+pub fn tabs_node(
+    labels: impl IntoIterator<Item = String>,
+    selected: usize,
+    base_id: u32,
+) -> UiNode {
+    UiNode::tabs(labels, selected, base_id)
+}
+
+pub fn tab_labels(labels: &[&str], selected: usize, base_id: u32) -> UiNode {
+    UiNode::tab_labels(labels, selected, base_id)
+}
+
 pub fn header(title: &str) -> UiNode {
     UiNode::panel_header(title)
 }
@@ -1476,6 +1558,10 @@ pub fn transaction_node(title: &str, amount: &str, id: u32) -> UiNode {
 
 pub fn menu_item_node(label: &str, id: u32) -> UiNode {
     UiNode::menu_item(label, id)
+}
+
+pub fn list_row_node(title: &str, detail: &str, id: u32) -> UiNode {
+    UiNode::list_row(title, detail, id)
 }
 
 pub fn divider(classes: &str) -> UiNode {
@@ -2979,6 +3065,7 @@ fn intrinsic_width(child: &UiNode) -> f32 {
         UiNodeKind::Toggle { .. } => 46.0,
         UiNodeKind::Avatar { .. } => 36.0,
         UiNodeKind::ProgressBar { .. } => 120.0,
+        UiNodeKind::Tabs { labels, .. } => (labels.len().max(1) as f32 * 82.0).clamp(120.0, 360.0),
         UiNodeKind::PanelHeader { .. } => 280.0,
         UiNodeKind::MetricCard { .. } => 220.0,
         UiNodeKind::Field { .. } => 240.0,
@@ -2987,6 +3074,7 @@ fn intrinsic_width(child: &UiNode) -> f32 {
         UiNodeKind::BarChart { .. } => 320.0,
         UiNodeKind::TransactionRow { .. } => 320.0,
         UiNodeKind::MenuItem { .. } => 220.0,
+        UiNodeKind::ListRow { .. } => 220.0,
         UiNodeKind::Divider => 1.0,
         UiNodeKind::Spacer => child.style.width.unwrap_or(12.0),
         _ => child.style.width.unwrap_or(120.0),
@@ -3002,6 +3090,7 @@ fn intrinsic_height(child: &UiNode) -> f32 {
         UiNodeKind::Toggle { .. } => 24.0,
         UiNodeKind::Avatar { .. } => 36.0,
         UiNodeKind::ProgressBar { .. } => 8.0,
+        UiNodeKind::Tabs { .. } => 34.0,
         UiNodeKind::PanelHeader { .. } => 44.0,
         UiNodeKind::MetricCard { .. } => 132.0,
         UiNodeKind::Field { .. } => 92.0,
@@ -3010,6 +3099,7 @@ fn intrinsic_height(child: &UiNode) -> f32 {
         UiNodeKind::BarChart { .. } => 180.0,
         UiNodeKind::TransactionRow { .. } => 58.0,
         UiNodeKind::MenuItem { .. } => 58.0,
+        UiNodeKind::ListRow { .. } => 58.0,
         UiNodeKind::Divider => 1.0,
         UiNodeKind::Spacer => child.style.height.unwrap_or(12.0),
         _ => child.style.height.unwrap_or(44.0),
@@ -3027,7 +3117,9 @@ mod tests {
             let mut ui = UiPainter::new(&mut scene);
             column("bg-panel border rounded-md p-4 gap-3")
                 .children([
-                    row("gap-2 h-10")
+                    tab_labels(&["Routes", "Proofs", "Files"], 1, 80).class("h-9"),
+                    row("gap-2 h-10 items-center")
+                        .child(avatar_node("EdgeRun", palette::ACCENT).online(true))
                         .child(text("Dashboard").class("flex-1 text-text truncate"))
                         .child(badge("sealed", palette::GREEN)),
                     metric("Relay balance", "$0.00")
@@ -3037,6 +3129,8 @@ mod tests {
                     field_node("Endpoint", "nodes.edgerun.tech")
                         .detail("identity-routed relay")
                         .focused(true),
+                    list_row_node("Admission route", "policy-bound relay", 83)
+                        .accent(palette::GREEN),
                     menu_item_node("Payments", 42)
                         .detail("proof-backed receipts")
                         .badge_text("new")
@@ -3047,7 +3141,14 @@ mod tests {
         }
 
         assert!(scene.rects().len() > 20);
-        assert!(scene.hits().len() >= 2);
+        assert!(scene
+            .hits()
+            .iter()
+            .any(|hit| hit.kind == HitKind::Tab && hit.id == 81));
+        assert!(scene
+            .hits()
+            .iter()
+            .any(|hit| hit.kind == HitKind::ListRow && hit.id == 83));
     }
 
     #[test]
