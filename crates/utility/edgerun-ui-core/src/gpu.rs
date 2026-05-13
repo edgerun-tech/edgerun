@@ -557,6 +557,9 @@ pub enum UiNodeKind {
         columns: u16,
     },
     Card,
+    ScrollArea {
+        offset: f32,
+    },
     Text(String),
     Badge {
         label: String,
@@ -720,6 +723,16 @@ impl UiNode {
         Self {
             kind: UiNodeKind::Card,
             style: UiStyle::parse(classes),
+            children: Vec::new(),
+        }
+    }
+
+    pub fn scroll_area(classes: &str, offset: f32) -> Self {
+        let mut style = UiStyle::parse(classes);
+        style.direction = Axis::Vertical;
+        Self {
+            kind: UiNodeKind::ScrollArea { offset },
+            style,
             children: Vec::new(),
         }
     }
@@ -998,6 +1011,16 @@ impl UiNode {
 
     pub fn span(mut self, span: u16) -> Self {
         self.style.col_span = span.max(1);
+        self
+    }
+
+    pub fn scroll_offset(mut self, offset: f32) -> Self {
+        if let UiNodeKind::ScrollArea {
+            offset: node_offset,
+        } = &mut self.kind
+        {
+            *node_offset = offset;
+        }
         self
     }
 
@@ -1421,7 +1444,11 @@ impl UiNode {
                 ui.divider(rect.x, rect.y, rect.w.max(rect.h), axis);
             }
             UiNodeKind::Spacer => {}
-            UiNodeKind::Row | UiNodeKind::Column | UiNodeKind::Grid { .. } | UiNodeKind::Card => {
+            UiNodeKind::Row
+            | UiNodeKind::Column
+            | UiNodeKind::Grid { .. }
+            | UiNodeKind::Card
+            | UiNodeKind::ScrollArea { .. } => {
                 if let Some(bg) = self.style.bg {
                     if matches!(self.kind, UiNodeKind::Card) {
                         ui.card(rect.x, rect.y, rect.w, rect.h, self.style.radius, bg);
@@ -1448,6 +1475,8 @@ impl UiNode {
                 }
                 if let UiNodeKind::Grid { columns } = &self.kind {
                     render_grid_children(ui, rect, &self.style, *columns, &self.children);
+                } else if let UiNodeKind::ScrollArea { offset } = &self.kind {
+                    render_scroll_children(ui, rect, &self.style, *offset, &self.children);
                 } else {
                     render_children(ui, rect, &self.style, &self.children);
                 }
@@ -1478,6 +1507,10 @@ pub fn grid_auto_for_width(classes: &str, width: f32) -> UiNode {
 
 pub fn card(classes: &str) -> UiNode {
     UiNode::card(classes)
+}
+
+pub fn scroll_area(classes: &str, offset: f32) -> UiNode {
+    UiNode::scroll_area(classes, offset)
 }
 
 pub fn text(value: &str) -> UiNode {
@@ -3034,6 +3067,53 @@ fn render_grid_children(
     }
 }
 
+fn render_scroll_children(
+    ui: &mut UiPainter<'_, '_>,
+    rect: UiRect,
+    style: &UiStyle,
+    offset: f32,
+    children: &[UiNode],
+) {
+    if children.is_empty() {
+        return;
+    }
+    let content = UiRect {
+        x: rect.x + style.padding[3],
+        y: rect.y + style.padding[0],
+        w: (rect.w - style.padding[1] - style.padding[3] - 10.0).max(0.0),
+        h: (rect.h - style.padding[0] - style.padding[2]).max(0.0),
+    };
+    if content.w <= 0.0 || content.h <= 0.0 {
+        return;
+    }
+
+    let total: f32 = children
+        .iter()
+        .map(|child| child_main_size(child, Axis::Vertical))
+        .sum::<f32>()
+        + style.gap * children.len().saturating_sub(1) as f32;
+    let scrollable = (total - content.h).max(0.0);
+    let scroll_y = scrollable * offset.clamp(0.0, 1.0);
+    let mut cursor = content.y - scroll_y;
+
+    for child in children {
+        let h = child_main_size(child, Axis::Vertical);
+        let bottom = cursor + h;
+        if bottom >= content.y && cursor <= content.y + content.h {
+            child.render(ui, UiRect::new(content.x, cursor, content.w, h));
+        }
+        cursor += h + style.gap;
+    }
+
+    if total > content.h {
+        ui.scrollbar(
+            UiRect::new(rect.x + rect.w - 6.0, content.y, 3.0, content.h),
+            content.h / total,
+            offset,
+        );
+    }
+}
+
 fn child_main_size(child: &UiNode, axis: Axis) -> f32 {
     match axis {
         Axis::Horizontal => child.style.width.unwrap_or_else(|| intrinsic_width(child)),
@@ -3077,6 +3157,7 @@ fn intrinsic_width(child: &UiNode) -> f32 {
         UiNodeKind::ListRow { .. } => 220.0,
         UiNodeKind::Divider => 1.0,
         UiNodeKind::Spacer => child.style.width.unwrap_or(12.0),
+        UiNodeKind::ScrollArea { .. } => child.style.width.unwrap_or(240.0),
         _ => child.style.width.unwrap_or(120.0),
     }
 }
@@ -3102,6 +3183,7 @@ fn intrinsic_height(child: &UiNode) -> f32 {
         UiNodeKind::ListRow { .. } => 58.0,
         UiNodeKind::Divider => 1.0,
         UiNodeKind::Spacer => child.style.height.unwrap_or(12.0),
+        UiNodeKind::ScrollArea { .. } => child.style.height.unwrap_or(180.0),
         _ => child.style.height.unwrap_or(44.0),
     }
 }
@@ -3219,6 +3301,40 @@ mod tests {
             .hits()
             .iter()
             .any(|hit| hit.kind == HitKind::Button && hit.id == 70));
+    }
+
+    #[test]
+    fn scroll_area_only_renders_visible_rows() {
+        let rows = (0..10).map(|index| {
+            list_row_node(
+                &format!("Route {}", index + 1),
+                "identity-routed relay",
+                100 + index,
+            )
+        });
+
+        let mut scene = GpuScene::new(palette::BG);
+        {
+            let mut ui = UiPainter::new(&mut scene);
+            scroll_area("bg-panel border rounded-md p-2 gap-2", 1.0)
+                .children(rows)
+                .render(&mut ui, UiRect::new(0.0, 0.0, 320.0, 160.0));
+        }
+
+        let visible_rows = scene
+            .hits()
+            .iter()
+            .filter(|hit| hit.kind == HitKind::ListRow)
+            .count();
+        assert!((1..10).contains(&visible_rows));
+        assert!(!scene
+            .hits()
+            .iter()
+            .any(|hit| hit.kind == HitKind::ListRow && hit.id == 100));
+        assert!(scene
+            .hits()
+            .iter()
+            .any(|hit| hit.kind == HitKind::ListRow && hit.id == 109));
     }
 
     #[test]
