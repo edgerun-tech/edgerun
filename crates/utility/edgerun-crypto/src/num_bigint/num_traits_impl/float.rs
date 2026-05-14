@@ -5,9 +5,6 @@ use core::ops::{Add, Div, Neg};
 use core::f32;
 use core::f64;
 
-#[cfg(all(not(feature = "std"), feature = "libm"))]
-use crate::num_bigint::libm;
-
 use crate::num_bigint::{Num, NumCast, ToPrimitive};
 
 // Generic trait for floating point numbers that works with `no_std`.
@@ -847,20 +844,6 @@ impl FloatCore for f32 {
         Self::powi(self, n: i32) -> Self;
     }
 
-    #[cfg(all(not(feature = "std"), feature = "libm"))]
-    forward! {
-        libm::floorf as floor(self) -> Self;
-        libm::ceilf as ceil(self) -> Self;
-        libm::roundf as round(self) -> Self;
-        libm::truncf as trunc(self) -> Self;
-        libm::fabsf as abs(self) -> Self;
-    }
-
-    #[cfg(all(not(feature = "std"), feature = "libm"))]
-    #[inline]
-    fn fract(self) -> Self {
-        self - libm::truncf(self)
-    }
 }
 
 impl FloatCore for f64 {
@@ -909,20 +892,6 @@ impl FloatCore for f64 {
         Self::powi(self, n: i32) -> Self;
     }
 
-    #[cfg(all(not(feature = "std"), feature = "libm"))]
-    forward! {
-        libm::floor as floor(self) -> Self;
-        libm::ceil as ceil(self) -> Self;
-        libm::round as round(self) -> Self;
-        libm::trunc as trunc(self) -> Self;
-        libm::fabs as abs(self) -> Self;
-    }
-
-    #[cfg(all(not(feature = "std"), feature = "libm"))]
-    #[inline]
-    fn fract(self) -> Self {
-        self - libm::trunc(self)
-    }
 }
 
 // FIXME: these doctests aren't actually helpful, because they're using and
@@ -930,8 +899,8 @@ impl FloatCore for f64 {
 
 // Generic trait for floating point numbers
 //
-// This trait is only available with the `std` feature, or with the `libm` feature otherwise.
-#[cfg(any(feature = "std", feature = "libm"))]
+// This trait is only available with the `std` feature.
+#[cfg(feature = "std")]
 pub trait Float: Num + Copy + NumCast + PartialOrd + Neg<Output = Self> {
     // Returns the `NaN` value.
     //
@@ -1996,59 +1965,6 @@ macro_rules! float_impl_std {
     };
 }
 
-#[cfg(all(not(feature = "std"), feature = "libm"))]
-macro_rules! float_impl_libm {
-    ($T:ident $decode:ident) => {
-        constant! {
-            nan() -> $T::NAN;
-            infinity() -> $T::INFINITY;
-            neg_infinity() -> $T::NEG_INFINITY;
-            neg_zero() -> -0.0;
-            min_value() -> $T::MIN;
-            min_positive_value() -> $T::MIN_POSITIVE;
-            epsilon() -> $T::EPSILON;
-            max_value() -> $T::MAX;
-        }
-
-        #[inline]
-        fn integer_decode(self) -> (u64, i16, i8) {
-            $decode(self)
-        }
-
-        #[inline]
-        fn fract(self) -> Self {
-            self - Float::trunc(self)
-        }
-
-        #[inline]
-        fn log(self, base: Self) -> Self {
-            self.ln() / base.ln()
-        }
-
-        forward! {
-            Self::is_nan(self) -> bool;
-            Self::is_infinite(self) -> bool;
-            Self::is_finite(self) -> bool;
-            Self::is_normal(self) -> bool;
-            Self::is_subnormal(self) -> bool;
-            Self::clamp(self, min: Self, max: Self) -> Self;
-            Self::classify(self) -> FpCategory;
-            Self::is_sign_positive(self) -> bool;
-            Self::is_sign_negative(self) -> bool;
-            Self::min(self, other: Self) -> Self;
-            Self::max(self, other: Self) -> Self;
-            Self::recip(self) -> Self;
-            Self::to_degrees(self) -> Self;
-            Self::to_radians(self) -> Self;
-        }
-
-        forward! {
-            FloatCore::signum(self) -> Self;
-            FloatCore::powi(self, n: i32) -> Self;
-        }
-    };
-}
-
 fn integer_decode_f32(f: f32) -> (u64, i16, i8) {
     let bits: u32 = f.to_bits();
     let sign: i8 = if bits >> 31 == 0 { 1 } else { -1 };
@@ -2081,98 +1997,6 @@ fn integer_decode_f64(f: f64) -> (u64, i16, i8) {
 float_impl_std!(f32 integer_decode_f32);
 #[cfg(feature = "std")]
 float_impl_std!(f64 integer_decode_f64);
-
-#[cfg(all(not(feature = "std"), feature = "libm"))]
-impl Float for f32 {
-    float_impl_libm!(f32 integer_decode_f32);
-
-    #[inline]
-    #[allow(deprecated)]
-    fn abs_sub(self, other: Self) -> Self {
-        libm::fdimf(self, other)
-    }
-
-    forward! {
-        libm::floorf as floor(self) -> Self;
-        libm::ceilf as ceil(self) -> Self;
-        libm::roundf as round(self) -> Self;
-        libm::truncf as trunc(self) -> Self;
-        libm::fabsf as abs(self) -> Self;
-        libm::fmaf as mul_add(self, a: Self, b: Self) -> Self;
-        libm::powf as powf(self, n: Self) -> Self;
-        libm::sqrtf as sqrt(self) -> Self;
-        libm::expf as exp(self) -> Self;
-        libm::exp2f as exp2(self) -> Self;
-        libm::logf as ln(self) -> Self;
-        libm::log2f as log2(self) -> Self;
-        libm::log10f as log10(self) -> Self;
-        libm::cbrtf as cbrt(self) -> Self;
-        libm::hypotf as hypot(self, other: Self) -> Self;
-        libm::sinf as sin(self) -> Self;
-        libm::cosf as cos(self) -> Self;
-        libm::tanf as tan(self) -> Self;
-        libm::asinf as asin(self) -> Self;
-        libm::acosf as acos(self) -> Self;
-        libm::atanf as atan(self) -> Self;
-        libm::atan2f as atan2(self, other: Self) -> Self;
-        libm::sincosf as sin_cos(self) -> (Self, Self);
-        libm::expm1f as exp_m1(self) -> Self;
-        libm::log1pf as ln_1p(self) -> Self;
-        libm::sinhf as sinh(self) -> Self;
-        libm::coshf as cosh(self) -> Self;
-        libm::tanhf as tanh(self) -> Self;
-        libm::asinhf as asinh(self) -> Self;
-        libm::acoshf as acosh(self) -> Self;
-        libm::atanhf as atanh(self) -> Self;
-        libm::copysignf as copysign(self, other: Self) -> Self;
-    }
-}
-
-#[cfg(all(not(feature = "std"), feature = "libm"))]
-impl Float for f64 {
-    float_impl_libm!(f64 integer_decode_f64);
-
-    #[inline]
-    #[allow(deprecated)]
-    fn abs_sub(self, other: Self) -> Self {
-        libm::fdim(self, other)
-    }
-
-    forward! {
-        libm::floor as floor(self) -> Self;
-        libm::ceil as ceil(self) -> Self;
-        libm::round as round(self) -> Self;
-        libm::trunc as trunc(self) -> Self;
-        libm::fabs as abs(self) -> Self;
-        libm::fma as mul_add(self, a: Self, b: Self) -> Self;
-        libm::pow as powf(self, n: Self) -> Self;
-        libm::sqrt as sqrt(self) -> Self;
-        libm::exp as exp(self) -> Self;
-        libm::exp2 as exp2(self) -> Self;
-        libm::log as ln(self) -> Self;
-        libm::log2 as log2(self) -> Self;
-        libm::log10 as log10(self) -> Self;
-        libm::cbrt as cbrt(self) -> Self;
-        libm::hypot as hypot(self, other: Self) -> Self;
-        libm::sin as sin(self) -> Self;
-        libm::cos as cos(self) -> Self;
-        libm::tan as tan(self) -> Self;
-        libm::asin as asin(self) -> Self;
-        libm::acos as acos(self) -> Self;
-        libm::atan as atan(self) -> Self;
-        libm::atan2 as atan2(self, other: Self) -> Self;
-        libm::sincos as sin_cos(self) -> (Self, Self);
-        libm::expm1 as exp_m1(self) -> Self;
-        libm::log1p as ln_1p(self) -> Self;
-        libm::sinh as sinh(self) -> Self;
-        libm::cosh as cosh(self) -> Self;
-        libm::tanh as tanh(self) -> Self;
-        libm::asinh as asinh(self) -> Self;
-        libm::acosh as acosh(self) -> Self;
-        libm::atanh as atanh(self) -> Self;
-        libm::copysign as copysign(self, sign: Self) -> Self;
-    }
-}
 
 macro_rules! float_const_impl {
     ($(#[$doc:meta] $constant:ident,)+) => (
@@ -2343,7 +2167,7 @@ mod tests {
         }
     }
 
-    #[cfg(any(feature = "std", feature = "libm"))]
+    #[cfg(feature = "std")]
     #[test]
     fn convert_deg_rad_std() {
         for &(deg, rad) in &DEG_RAD_PAIRS {
@@ -2369,7 +2193,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(any(feature = "std", feature = "libm"))]
+    #[cfg(feature = "std")]
     fn extra_logs() {
         use crate::num_bigint::float::{Float, FloatConst};
 
@@ -2388,7 +2212,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(any(feature = "std", feature = "libm"))]
+    #[cfg(feature = "std")]
     fn copysign() {
         use crate::num_bigint::float::Float;
         test_copysign_generic(2.0_f32, -2.0_f32, f32::nan());
@@ -2396,7 +2220,7 @@ mod tests {
         test_copysignf(2.0_f32, -2.0_f32, f32::nan());
     }
 
-    #[cfg(any(feature = "std", feature = "libm"))]
+    #[cfg(feature = "std")]
     fn test_copysignf(p: f32, n: f32, nan: f32) {
         use crate::num_bigint::float::Float;
         use core::ops::Neg;
@@ -2415,7 +2239,7 @@ mod tests {
         assert!(Float::copysign(nan, n).is_sign_negative());
     }
 
-    #[cfg(any(feature = "std", feature = "libm"))]
+    #[cfg(feature = "std")]
     fn test_copysign_generic<F: crate::num_bigint::float::Float + ::core::fmt::Debug>(p: F, n: F, nan: F) {
         assert!(p.is_sign_positive());
         assert!(n.is_sign_negative());
@@ -2432,7 +2256,7 @@ mod tests {
         assert!(nan.copysign(n).is_sign_negative());
     }
 
-    #[cfg(any(feature = "std", feature = "libm"))]
+    #[cfg(feature = "std")]
     fn test_subnormal<F: crate::num_bigint::float::Float + ::core::fmt::Debug>() {
         let min_positive = F::min_positive_value();
         let lower_than_min = min_positive / F::from(2.0f32).unwrap();
@@ -2441,7 +2265,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(any(feature = "std", feature = "libm"))]
+    #[cfg(feature = "std")]
     fn subnormal() {
         test_subnormal::<f64>();
         test_subnormal::<f32>();

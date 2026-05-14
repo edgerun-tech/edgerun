@@ -18,7 +18,7 @@ use core::ops::{Add, Div, Mul, Rem, Sub};
 use core::ops::{AddAssign, DivAssign, MulAssign, RemAssign, SubAssign};
 
 pub use crate::num_bigint::bounds::Bounded;
-#[cfg(any(feature = "std", feature = "libm"))]
+#[cfg(feature = "std")]
 pub use crate::num_bigint::float::Float;
 pub use crate::num_bigint::float::FloatConst;
 // pub use real::{FloatCore, Real}; // NOTE: Don't do this, it breaks `use crate::num_bigint::*;`.

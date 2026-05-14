@@ -115,9 +115,6 @@ use core::fmt;
 #[cfg(feature = "std")]
 use std::error::Error;
 
-pub mod libm {
-    include!("libm_impl.rs");
-}
 include!("num_traits_impl.rs");
 
 #[macro_use]

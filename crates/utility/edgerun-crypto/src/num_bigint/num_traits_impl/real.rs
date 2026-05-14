@@ -1,4 +1,4 @@
-#![cfg(any(feature = "std", feature = "libm"))]
+#![cfg(feature = "std")]
 
 use core::ops::Neg;
 

@@ -21,7 +21,6 @@ alloc = []
 oid = []
 pem = ["alloc"]
 zeroize = []
-libm = []
 i128 = []
 compiler-builtins = []
 unstable-public-internals = []
@@ -84,7 +83,6 @@ p256_sha256 = ["p256_ecdsa_digest", "p256_ecdsa_hazmat", "sha2"]
 rsa = [
     "digest",
     "i128",
-    "libm",
     "zeroize",
     "alloc",
     "oid",

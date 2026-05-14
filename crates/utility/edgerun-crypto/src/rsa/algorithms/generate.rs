@@ -1,8 +1,6 @@
 //! Generate prime components for the RSA Private Key
 
 use crate::num_bigint::BigUint;
-#[allow(unused_imports)]
-use crate::num_bigint::Float;
 use crate::num_bigint::Zero;
 use crate::rand_core::CryptoRngCore;
 use alloc::vec::Vec;
@@ -44,17 +42,8 @@ pub(crate) fn generate_multi_prime_key_with_exp<R: CryptoRngCore + ?Sized>(
     }
 
     if bit_size < 64 {
-        let prime_limit = (1u64 << (bit_size / nprimes) as u64) as f64;
-
-        // pi aproximates the number of primes less than prime_limit
-        let mut pi = prime_limit / (prime_limit.ln() - 1f64);
-        // Generated primes start with 0b11, so we can only use a quarter of them.
-        pi /= 4f64;
-        // Use a factor of two to ensure that key generation terminates in a
-        // reasonable amount of time.
-        pi /= 2f64;
-
-        if pi < nprimes as f64 {
+        let bits_per_prime = bit_size / nprimes;
+        if available_top_bit_primes(bits_per_prime) < nprimes {
             return Err(Error::TooFewPrimes);
         }
     }
@@ -116,6 +105,40 @@ pub(crate) fn generate_multi_prime_key_with_exp<R: CryptoRngCore + ?Sized>(
         d: d_final,
         primes,
     })
+}
+
+fn available_top_bit_primes(bits: usize) -> usize {
+    if bits < 2 {
+        return 0;
+    }
+
+    let start = 3u64 << (bits - 2);
+    let end = 1u64 << bits;
+    ((start | 1)..end)
+        .step_by(2)
+        .filter(|n| is_prime(*n))
+        .count()
+}
+
+fn is_prime(n: u64) -> bool {
+    if n < 2 {
+        return false;
+    }
+    if n == 2 {
+        return true;
+    }
+    if n % 2 == 0 {
+        return false;
+    }
+
+    let mut d = 3u64;
+    while d <= n / d {
+        if n % d == 0 {
+            return false;
+        }
+        d += 2;
+    }
+    true
 }
 
 #[cfg(all(test, feature = "rsa_internal_tests"))]
