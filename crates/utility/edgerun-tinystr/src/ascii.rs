@@ -889,10 +889,6 @@ impl<const N: usize> PartialEq<TinyAsciiStr<N>> for String {
 #[cfg(test)]
 mod test {
     use super::*;
-    use rand::distr::Distribution;
-    use rand::distr::StandardUniform;
-    use rand::rngs::SmallRng;
-    use rand::SeedableRng;
 
     const STRINGS: [&str; 26] = [
         "Latn",
@@ -924,23 +920,40 @@ mod test {
     ];
 
     fn gen_strings(num_strings: usize, allowed_lengths: &[usize]) -> Vec<String> {
-        use rand::seq::IndexedRandom;
-        let mut rng = SmallRng::seed_from_u64(2022);
-        // Need to do this in 2 steps since the RNG is needed twice
-        let string_lengths = core::iter::repeat_with(|| *allowed_lengths.choose(&mut rng).unwrap())
-            .take(num_strings)
-            .collect::<Vec<usize>>();
-        string_lengths
-            .iter()
-            .map(|len| {
-                StandardUniform
-                    .sample_iter(&mut rng)
-                    .filter(|b: &u8| *b > 0 && *b < 0x80)
-                    .take(*len)
+        let mut rng = TestRng::new(2022);
+        (0..num_strings)
+            .map(|_| {
+                let len = allowed_lengths[rng.next_index(allowed_lengths.len())];
+                core::iter::repeat_with(|| rng.next_ascii())
+                    .take(len)
                     .collect::<Vec<u8>>()
             })
             .map(|byte_vec| String::from_utf8(byte_vec).expect("All ASCII"))
             .collect()
+    }
+
+    struct TestRng(u64);
+
+    impl TestRng {
+        fn new(seed: u64) -> Self {
+            Self(seed ^ 0x9e37_79b9_7f4a_7c15)
+        }
+
+        fn next_u64(&mut self) -> u64 {
+            self.0 = self
+                .0
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            self.0
+        }
+
+        fn next_index(&mut self, len: usize) -> usize {
+            (self.next_u64() as usize) % len
+        }
+
+        fn next_ascii(&mut self) -> u8 {
+            ((self.next_u64() % 0x7f) as u8).max(1)
+        }
     }
 
     fn check_operation<T, F1, F2, const N: usize>(reference_f: F1, tinystr_f: F2)

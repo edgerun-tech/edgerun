@@ -1,6 +1,4 @@
 use opentelemetry::trace::{SpanId, TraceId};
-use rand::{rngs, Rng, SeedableRng};
-use std::cell::RefCell;
 use std::fmt;
 
 /// Interface for generating IDs
@@ -22,15 +20,10 @@ pub struct RandomIdGenerator {
 
 impl IdGenerator for RandomIdGenerator {
     fn new_trace_id(&self) -> TraceId {
-        CURRENT_RNG.with(|rng| TraceId::from(rng.borrow_mut().random::<u128>()))
+        TraceId::from(edgerun_crypto::random_u128().expect("edgerun secure random source"))
     }
 
     fn new_span_id(&self) -> SpanId {
-        CURRENT_RNG.with(|rng| SpanId::from(rng.borrow_mut().random::<u64>()))
+        SpanId::from(edgerun_crypto::random_u64().expect("edgerun secure random source"))
     }
-}
-
-thread_local! {
-    /// Store random number generator for each thread
-    static CURRENT_RNG: RefCell<rngs::SmallRng> = RefCell::new(rngs::SmallRng::from_os_rng());
 }

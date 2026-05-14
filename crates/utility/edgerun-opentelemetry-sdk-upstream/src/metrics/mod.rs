@@ -122,7 +122,6 @@ mod tests {
     use opentelemetry::InstrumentationScope;
     use opentelemetry::Value;
     use opentelemetry::{metrics::MeterProvider as _, KeyValue};
-    use rand::{rngs, Rng, SeedableRng};
     use std::cmp::{max, min};
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::{Arc, Mutex};
@@ -2327,16 +2326,15 @@ mod tests {
         let histogram = test_context.meter().u64_histogram("my_histogram").build();
 
         // Act
-        let mut rand = rngs::SmallRng::from_os_rng();
         let values_kv1 = (0..50)
-            .map(|_| rand.random_range(0..100))
+            .map(|_| edgerun_crypto::random_below_u64(100).expect("edgerun secure random source"))
             .collect::<Vec<u64>>();
         for value in values_kv1.iter() {
             histogram.record(*value, &[KeyValue::new("key1", "value1")]);
         }
 
         let values_kv2 = (0..30)
-            .map(|_| rand.random_range(0..100))
+            .map(|_| edgerun_crypto::random_below_u64(100).expect("edgerun secure random source"))
             .collect::<Vec<u64>>();
         for value in values_kv2.iter() {
             histogram.record(*value, &[KeyValue::new("key1", "value2")]);

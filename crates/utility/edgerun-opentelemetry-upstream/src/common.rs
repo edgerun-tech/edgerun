@@ -630,7 +630,6 @@ mod tests {
 
     use crate::{InstrumentationScope, KeyValue};
 
-    use rand::random;
     use std::collections::hash_map::DefaultHasher;
     use std::f64;
 
@@ -663,7 +662,7 @@ mod tests {
         }
 
         for _ in 0..100 {
-            let random_value = random::<f64>();
+            let random_value = next_test_f64();
             let kv1 = KeyValue::new("key", random_value);
             let kv2 = KeyValue::new("key", random_value);
             assert_eq!(kv1, kv2);
@@ -688,10 +687,26 @@ mod tests {
         }
 
         for _ in 0..100 {
-            let random_value = random::<f64>();
+            let random_value = next_test_f64();
             let kv1 = KeyValue::new("key", random_value);
             let kv2 = KeyValue::new("key", random_value);
             assert_eq!(hash_helper(&kv1), hash_helper(&kv2));
+        }
+    }
+
+    fn next_test_f64() -> f64 {
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        static STATE: AtomicU64 = AtomicU64::new(0x9e37_79b9_7f4a_7c15);
+        let mut current = STATE.load(Ordering::Relaxed);
+        loop {
+            let next = current
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            match STATE.compare_exchange_weak(current, next, Ordering::Relaxed, Ordering::Relaxed) {
+                Ok(_) => return ((next >> 11) as f64) / ((1u64 << 53) as f64),
+                Err(actual) => current = actual,
+            }
         }
     }
 

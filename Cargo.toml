@@ -82,7 +82,6 @@ members = [
   "crates/utility/edgerun-futures-sink",
   "crates/utility/edgerun-futures-task",
   "crates/utility/edgerun-futures-util",
-  "crates/utility/edgerun-getrandom",
   "crates/utility/edgerun-hashbrown",
   "crates/utility/edgerun-hpack",
   "crates/utility/edgerun-http-client",
@@ -132,9 +131,6 @@ members = [
   "crates/utility/edgerun-ptr-meta-derive",
   "crates/utility/edgerun-pty",
   "crates/utility/edgerun-rancor",
-  "crates/utility/edgerun-rand-chacha",
-  "crates/utility/edgerun-rand-core",
-  "crates/utility/edgerun-rand-upstream",
   "crates/utility/edgerun-random",
   "crates/utility/edgerun-quote",
   "crates/utility/edgerun-reqwest",
@@ -314,7 +310,6 @@ futures-macro = { path = "crates/utility/edgerun-futures-macro" }
 futures-sink = { path = "crates/utility/edgerun-futures-sink" }
 futures-task = { path = "crates/utility/edgerun-futures-task" }
 futures-util = { path = "crates/utility/edgerun-futures-util" }
-getrandom = { path = "crates/utility/edgerun-getrandom" }
 hashbrown = { path = "crates/utility/edgerun-hashbrown" }
 icu_collections = { path = "crates/utility/edgerun-icu-collections" }
 icu_decimal = { path = "crates/utility/edgerun-icu-decimal-upstream" }
@@ -346,9 +341,6 @@ potential_utf = { path = "crates/utility/edgerun-potential-utf" }
 proc-macro2 = { path = "crates/utility/edgerun-proc-macro2" }
 ptr_meta = { path = "crates/utility/edgerun-ptr-meta" }
 ptr_meta_derive = { path = "crates/utility/edgerun-ptr-meta-derive" }
-rand = { path = "crates/utility/edgerun-rand-upstream" }
-rand_chacha = { path = "crates/utility/edgerun-rand-chacha" }
-rand_core = { path = "crates/utility/edgerun-rand-core" }
 rancor = { path = "crates/utility/edgerun-rancor" }
 rend = { path = "crates/utility/edgerun-rend" }
 rkyv = { path = "crates/utility/edgerun-rkyv" }

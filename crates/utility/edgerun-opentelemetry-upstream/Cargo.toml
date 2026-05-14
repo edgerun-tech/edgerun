@@ -95,14 +95,6 @@ path = "../edgerun-tracing"
 optional = true
 default-features = false
 
-[dev-dependencies.rand]
-path = "../edgerun-rand-upstream"
-features = [
-    "os_rng",
-    "thread_rng",
-]
-default-features = false
-
 [target.'cfg(all(target_arch = "wasm32", not(target_os = "wasi")))'.dependencies.js-sys]
 version = "0.3.63"
 

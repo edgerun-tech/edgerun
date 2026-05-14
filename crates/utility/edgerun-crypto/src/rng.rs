@@ -3,9 +3,9 @@
 //! Source order:
 //! 1. registered platform source, intended for TPM-backed entropy
 //! 2. CPU hardware random instructions
-//! 3. no_std SHA-256 counter DRBG seeded from mixed entropy when available
+//! 3. Linux kernel randomness
 
-use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use core::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::error::{CryptoError, Result};
 use crate::sha::Digest;
@@ -15,7 +15,6 @@ pub type RandomSource = fn(&mut [u8]) -> Result<()>;
 const EXTERNAL_SOURCE_NONE: usize = 0;
 
 static EXTERNAL_SOURCE: AtomicUsize = AtomicUsize::new(EXTERNAL_SOURCE_NONE);
-static DRBG_INITIALIZED: AtomicBool = AtomicBool::new(false);
 static DRBG_COUNTER: AtomicUsize = AtomicUsize::new(1);
 static DRBG_STATE: [AtomicUsize; 8] = [
     AtomicUsize::new(0),
@@ -41,7 +40,7 @@ impl OsRng {
     }
 
     pub fn fill_bytes(&mut self, dest: &mut [u8]) {
-        let _ = fill_random(dest);
+        fill_random(dest).expect("edgerun secure random source unavailable");
     }
 
     pub fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<()> {
@@ -70,7 +69,6 @@ pub fn mix_entropy(entropy: &[u8]) {
         &DRBG_COUNTER.fetch_add(1, Ordering::AcqRel).to_le_bytes(),
     );
     store_state(hasher.finalize().as_slice());
-    DRBG_INITIALIZED.store(true, Ordering::Release);
 }
 
 pub fn random_bytes(len: usize) -> Result<alloc::vec::Vec<u8>> {
@@ -92,6 +90,30 @@ pub fn random_u64() -> Result<u64> {
     Ok(u64::from_le_bytes(bytes))
 }
 
+pub fn random_u128() -> Result<u128> {
+    let mut bytes = [0u8; 16];
+    fill_random(&mut bytes)?;
+    Ok(u128::from_le_bytes(bytes))
+}
+
+pub fn random_f64() -> Result<f64> {
+    const SCALE: f64 = (1u64 << 53) as f64;
+    Ok(((random_u64()? >> 11) as f64) / SCALE)
+}
+
+pub fn random_below_u64(upper: u64) -> Result<u64> {
+    if upper == 0 {
+        return Ok(0);
+    }
+    let zone = u64::MAX - (u64::MAX % upper);
+    loop {
+        let value = random_u64()?;
+        if value < zone {
+            return Ok(value % upper);
+        }
+    }
+}
+
 #[inline]
 pub fn fill_random(buf: &mut [u8]) -> Result<()> {
     if buf.is_empty() {
@@ -105,8 +127,11 @@ pub fn fill_random(buf: &mut [u8]) -> Result<()> {
         mix_entropy(buf);
         return Ok(());
     }
-    software_fill(buf);
-    Ok(())
+    if linux_random::fill_bytes(buf) {
+        mix_entropy(buf);
+        return Ok(());
+    }
+    Err(CryptoError::RandomGenerationFailed)
 }
 
 fn fill_from_external(buf: &mut [u8]) -> Result<()> {
@@ -116,55 +141,6 @@ fn fill_from_external(buf: &mut [u8]) -> Result<()> {
     }
     let source: RandomSource = unsafe { core::mem::transmute(source) };
     source(buf)
-}
-
-fn software_fill(out: &mut [u8]) {
-    ensure_drbg_initialized();
-    let mut offset = 0;
-    while offset < out.len() {
-        let block = next_drbg_block();
-        let n = core::cmp::min(block.len(), out.len() - offset);
-        out[offset..offset + n].copy_from_slice(&block[..n]);
-        offset += n;
-    }
-}
-
-fn ensure_drbg_initialized() {
-    if DRBG_INITIALIZED.load(Ordering::Acquire) {
-        return;
-    }
-
-    let mut seed = [0u8; 32];
-    if !cpu_random::fill_bytes(&mut seed) {
-        let counter = DRBG_COUNTER.fetch_add(1, Ordering::AcqRel);
-        let stack_addr = (&seed as *const [u8; 32] as usize as u64).to_le_bytes();
-        let mut hasher = crate::sha::Sha256::new();
-        Digest::update(&mut hasher, b"edgerun-crypto software rng bootstrap v1");
-        Digest::update(&mut hasher, &counter.to_le_bytes());
-        Digest::update(&mut hasher, &stack_addr);
-        #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-        Digest::update(&mut hasher, &cpu_random::timestamp_counter().to_le_bytes());
-        seed.copy_from_slice(hasher.finalize().as_slice());
-    }
-    store_state(&seed);
-    DRBG_INITIALIZED.store(true, Ordering::Release);
-}
-
-fn next_drbg_block() -> [u8; 32] {
-    let counter = DRBG_COUNTER.fetch_add(1, Ordering::AcqRel);
-    let mut hasher = crate::sha::Sha256::new();
-    Digest::update(&mut hasher, b"edgerun-crypto software rng generate v1");
-    Digest::update(&mut hasher, state_bytes().as_slice());
-    Digest::update(&mut hasher, &counter.to_le_bytes());
-    let block: [u8; 32] = hasher.finalize().into();
-
-    let mut update = crate::sha::Sha256::new();
-    Digest::update(&mut update, b"edgerun-crypto software rng update v1");
-    Digest::update(&mut update, state_bytes().as_slice());
-    Digest::update(&mut update, &block);
-    Digest::update(&mut update, &counter.to_le_bytes());
-    store_state(update.finalize().as_slice());
-    block
 }
 
 fn state_bytes() -> [u8; 32] {
@@ -268,10 +244,74 @@ mod cpu_random {
     pub fn fill_bytes(_buf: &mut [u8]) -> bool {
         false
     }
+}
 
-    #[cfg(any(target_arch = "x86_64", target_arch = "x86"))]
-    pub fn timestamp_counter() -> u64 {
-        0
+#[cfg(target_os = "linux")]
+mod linux_random {
+    const EINTR: isize = 4;
+
+    pub fn fill_bytes(buf: &mut [u8]) -> bool {
+        let mut filled = 0;
+        while filled < buf.len() {
+            let ret = unsafe { getrandom(buf[filled..].as_mut_ptr(), buf.len() - filled) };
+            if ret > 0 {
+                filled += ret as usize;
+                continue;
+            }
+            if ret == -EINTR {
+                continue;
+            }
+            return false;
+        }
+        true
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    unsafe fn getrandom(buf: *mut u8, len: usize) -> isize {
+        const SYS_GETRANDOM: usize = 318;
+        let ret: isize;
+        unsafe {
+            core::arch::asm!(
+                "syscall",
+                inlateout("rax") SYS_GETRANDOM => ret,
+                in("rdi") buf,
+                in("rsi") len,
+                in("rdx") 0usize,
+                lateout("rcx") _,
+                lateout("r11") _,
+                options(nostack, preserves_flags),
+            );
+        }
+        ret
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    unsafe fn getrandom(buf: *mut u8, len: usize) -> isize {
+        const SYS_GETRANDOM: usize = 278;
+        let ret: isize;
+        unsafe {
+            core::arch::asm!(
+                "svc 0",
+                inlateout("x8") SYS_GETRANDOM => _,
+                inlateout("x0") buf => ret,
+                in("x1") len,
+                in("x2") 0usize,
+                options(nostack),
+            );
+        }
+        ret
+    }
+
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+    unsafe fn getrandom(_buf: *mut u8, _len: usize) -> isize {
+        -1
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+mod linux_random {
+    pub fn fill_bytes(_buf: &mut [u8]) -> bool {
+        false
     }
 }
 

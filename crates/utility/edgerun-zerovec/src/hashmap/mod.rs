@@ -218,15 +218,13 @@ where
 mod tests {
     use super::*;
     use crate::ule::AsULE;
-    use rand::{distr::StandardUniform, Rng, SeedableRng};
-    use rand_pcg::Lcg64Xsh32;
 
     #[test]
     fn test_zhms_u64k_u64v() {
         const N: usize = 65530;
         let seed = u64::from_le_bytes(*b"testseed");
-        let rng = Lcg64Xsh32::seed_from_u64(seed);
-        let kv: Vec<(u64, u64)> = rng.sample_iter(&StandardUniform).take(N).collect();
+        let mut rng = TestRng::new(seed);
+        let kv: Vec<(u64, u64)> = (0..N).map(|_| (rng.next_u64(), rng.next_u64())).collect();
         let hashmap: ZeroHashMap<u64, u64> =
             ZeroHashMap::from_iter(kv.iter().map(|e| (&e.0, &e.1)));
         for (k, v) in kv {
@@ -234,6 +232,22 @@ mod tests {
                 hashmap.get(&k).copied().map(<u64 as AsULE>::from_unaligned),
                 Some(v),
             );
+        }
+    }
+
+    struct TestRng(u64);
+
+    impl TestRng {
+        fn new(seed: u64) -> Self {
+            Self(seed ^ 0x9e37_79b9_7f4a_7c15)
+        }
+
+        fn next_u64(&mut self) -> u64 {
+            self.0 = self
+                .0
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            self.0
         }
     }
 }

@@ -235,11 +235,21 @@ mod test {
             assert_eq!(deserialized.values.capacity(), len);
             assert_eq!(deserialized.values.len(), len);
             // again, but with a shuffled map
-            rand::seq::SliceRandom::shuffle(&mut map[..], &mut rand::rng());
+            deterministic_shuffle(&mut map);
             let postcard = postcard::to_stdvec(&map).unwrap();
             let deserialized: LiteMap<u32, String> = postcard::from_bytes(&postcard).unwrap();
             assert_eq!(deserialized.values.capacity(), len);
             assert_eq!(deserialized.values.len(), len);
+        }
+    }
+
+    fn deterministic_shuffle<T>(items: &mut [T]) {
+        let mut state = 0x9e37_79b9_7f4a_7c15u64 ^ items.len() as u64;
+        for i in (1..items.len()).rev() {
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            items.swap(i, (state as usize) % (i + 1));
         }
     }
 }

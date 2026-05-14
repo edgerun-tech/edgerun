@@ -9,15 +9,15 @@
 //! Interface to the random number generator of the operating system.
 
 use crate::rand_core::{CryptoRng, Error, RngCore, impls};
-use getrandom::getrandom;
 
 /// A random number generator that retrieves randomness from the
 /// operating system.
 ///
 /// This is a zero-sized struct. It can be freely constructed with `OsRng`.
 ///
-/// The implementation is provided by the [getrandom] crate. Refer to
-/// [getrandom] documentation for details.
+/// The implementation is provided by the centralized EdgeRun random source:
+/// registered secure hardware, CPU hardware random instructions, then Linux
+/// kernel randomness.
 ///
 /// This struct is only available when specifying the crate feature `getrandom`
 /// or `std`. When using the `rand` lib, it is also available as `rand::rngs::OsRng`.
@@ -42,7 +42,6 @@ use getrandom::getrandom;
 /// let random_u64 = OsRng.next_u64();
 /// ```ignore
 ///
-/// [getrandom]: https://crates.io/crates/getrandom
 #[derive(Clone, Copy, Debug, Default)]
 pub struct OsRng;
 
@@ -64,8 +63,7 @@ impl RngCore for OsRng {
     }
 
     fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Error> {
-        getrandom(dest)?;
-        Ok(())
+        crate::rng::fill_random(dest).map_err(|_| Error::from_rng_failure())
     }
 }
 

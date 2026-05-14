@@ -250,7 +250,6 @@ mod tests {
     use super::*;
     use crate::testing::trace::TestSpan;
     use opentelemetry::trace::{SpanContext, SpanId, TraceFlags};
-    use rand::random;
 
     #[rustfmt::skip]
     fn sampler_data() -> Vec<(&'static str, Sampler, f64, bool, bool)> {
@@ -323,7 +322,9 @@ mod tests {
                     None
                 };
 
-                let trace_id = TraceId::from(random::<u128>());
+                let trace_id = TraceId::from(
+                    edgerun_crypto::random_u128().expect("edgerun secure random source"),
+                );
                 if sampler
                     .should_sample(
                         parent_context.as_ref(),

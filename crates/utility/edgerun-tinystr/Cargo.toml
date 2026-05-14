@@ -82,13 +82,6 @@ version = "0.11.6"
 optional = true
 default-features = false
 
-[dev-dependencies.rand]
-path = "../edgerun-rand-upstream"
-features = [
-    "small_rng",
-]
-default-features = false
-
 [lints.clippy]
 alloc-instead-of-core = "warn"
 branches-sharing-code = "warn"

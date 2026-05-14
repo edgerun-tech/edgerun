@@ -138,8 +138,6 @@ fn time_stamp_to_duration(time_stamp: f64) -> Duration {
 mod test {
 	use std::time::Duration;
 
-	use rand::distributions::Uniform;
-	use rand::Rng;
 	use wasm_bindgen_test::wasm_bindgen_test;
 
 	wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
@@ -227,11 +225,14 @@ mod test {
 
 	#[wasm_bindgen_test]
 	fn fuzzing() {
-		let mut random =
-			rand::thread_rng().sample_iter(Uniform::new_inclusive(0., MAXIMUM_ACCURATE_MILLIS));
+		let mut state = 0x9e37_79b9_7f4a_7c15u64;
 
 		for _ in 0..10_000_000 {
-			let time_stamp = random.next().unwrap();
+			state = state
+				.wrapping_mul(6364136223846793005)
+				.wrapping_add(1442695040888963407);
+			let unit = ((state >> 11) as f64) / ((1u64 << 53) as f64);
+			let time_stamp = unit * MAXIMUM_ACCURATE_MILLIS;
 
 			let control = ControlDuration::new(time_stamp);
 			let duration = super::time_stamp_to_duration(time_stamp);

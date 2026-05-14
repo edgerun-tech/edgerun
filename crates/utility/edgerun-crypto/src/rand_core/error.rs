@@ -41,6 +41,13 @@ impl Error {
     ///
     /// This is identical to [`getrandom::Error::INTERNAL_START`](https://docs.rs/getrandom/latest/getrandom/struct.Error.html#associatedconstant.INTERNAL_START).
     pub const INTERNAL_START: u32 = 1 << 31;
+    const EDGERUN_RNG_FAILURE: u32 = Self::CUSTOM_START;
+
+    #[inline]
+    pub(crate) fn from_rng_failure() -> Self {
+        let code = NonZeroU32::new(Self::EDGERUN_RNG_FAILURE).expect("non-zero error code");
+        Self::from(code)
+    }
 
     /// Construct from any type supporting `std::error::Error`
     ///
@@ -119,11 +126,7 @@ impl fmt::Debug for Error {
         {
             write!(f, "Error {{ inner: {:?} }}", self.inner)
         }
-        #[cfg(all(feature = "rng_core_getrandom", not(feature = "rng_core_std")))]
-        {
-            getrandom::Error::from(self.code).fmt(f)
-        }
-        #[cfg(not(feature = "rng_core_getrandom"))]
+        #[cfg(not(feature = "rng_core_std"))]
         {
             write!(f, "Error {{ code: {} }}", self.code)
         }
@@ -136,13 +139,15 @@ impl fmt::Display for Error {
         {
             write!(f, "{}", self.inner)
         }
-        #[cfg(all(feature = "rng_core_getrandom", not(feature = "rng_core_std")))]
+        #[cfg(not(feature = "rng_core_std"))]
         {
-            getrandom::Error::from(self.code).fmt(f)
-        }
-        #[cfg(not(feature = "rng_core_getrandom"))]
-        {
-            write!(f, "error code {}", self.code)
+            match self.code() {
+                Some(code) if code.get() == Self::EDGERUN_RNG_FAILURE => {
+                    write!(f, "edgerun secure random source unavailable")
+                }
+                Some(code) => write!(f, "error code {}", code),
+                None => write!(f, "random number generator error"),
+            }
         }
     }
 }
@@ -159,23 +164,6 @@ impl From<NonZeroU32> for Error {
         #[cfg(not(feature = "rng_core_std"))]
         {
             Error { code }
-        }
-    }
-}
-
-#[cfg(feature = "rng_core_getrandom")]
-impl From<getrandom::Error> for Error {
-    #[inline]
-    fn from(error: getrandom::Error) -> Self {
-        #[cfg(feature = "rng_core_std")]
-        {
-            Error {
-                inner: Box::new(error),
-            }
-        }
-        #[cfg(not(feature = "rng_core_std"))]
-        {
-            Error { code: error.code() }
         }
     }
 }
@@ -216,14 +204,9 @@ impl std::error::Error for ErrorCode {}
 
 #[cfg(test)]
 mod test {
-    #[cfg(feature = "rng_core_getrandom")]
     #[test]
     fn test_error_codes() {
-        // Make sure the values are the same as in `getrandom`.
-        assert_eq!(super::Error::CUSTOM_START, getrandom::Error::CUSTOM_START);
-        assert_eq!(
-            super::Error::INTERNAL_START,
-            getrandom::Error::INTERNAL_START
-        );
+        assert_eq!(super::Error::CUSTOM_START, 0xC000_0000);
+        assert_eq!(super::Error::INTERNAL_START, 0x8000_0000);
     }
 }

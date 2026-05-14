@@ -82,7 +82,7 @@ testing = [
 ]
 trace = [
     "opentelemetry/trace",
-    "rand",
+    "edgerun-crypto",
     "percent-encoding",
 ]
 
@@ -114,20 +114,13 @@ default-features = false
 path = "../edgerun-percent-encoding-upstream"
 optional = true
 
-[dependencies.rand]
-path = "../edgerun-rand-upstream"
-features = [
-    "std",
-    "std_rng",
-    "small_rng",
-    "os_rng",
-    "thread_rng",
-]
-optional = true
-default-features = false
-
 [dependencies.thiserror]
 path = "../edgerun-thiserror"
+default-features = false
+
+[dependencies.edgerun-crypto]
+path = "../edgerun-crypto"
+optional = true
 default-features = false
 
 [dependencies.edgerun-json]
