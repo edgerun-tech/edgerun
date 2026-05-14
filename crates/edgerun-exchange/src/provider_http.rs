@@ -2,7 +2,7 @@
 
 extern crate alloc;
 
-use crate::provider::{ProviderCode, ProviderOrder, ProviderStatus};
+use crate::provider::{ProviderCode, ProviderFeatures, ProviderOrder, ProviderStatus};
 use crate::provider_mapping::map_provider_status;
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -21,6 +21,44 @@ pub(crate) fn parse_asset_id(id: &str) -> (String, String) {
     id.split_once(':')
         .map(|(symbol, network)| (symbol.to_string(), network.to_string()))
         .unwrap_or_else(|| (id.to_string(), String::new()))
+}
+
+pub(crate) fn provider_features(provider: ProviderCode) -> ProviderFeatures {
+    ProviderFeatures {
+        supports_fixed_rate: true,
+        supports_float_rate: true,
+        supports_refund_address: true,
+        requires_destination_tag: matches!(provider, ProviderCode::ChangeNOW),
+        min_confirmations: match provider {
+            ProviderCode::FFio => 1,
+            ProviderCode::ChangeNOW => 2,
+            ProviderCode::SideShift => 3,
+        },
+    }
+}
+
+pub(crate) fn supports_pair(
+    provider: ProviderCode,
+    settlement_asset_id: &str,
+    pay_asset_id: &str,
+) -> bool {
+    let (settlement_symbol, _) = parse_asset_id(settlement_asset_id);
+    let (pay_symbol, _) = parse_asset_id(pay_asset_id);
+    let pair = (settlement_symbol.to_lowercase(), pay_symbol.to_lowercase());
+
+    matches!(
+        (pair.0.as_str(), pair.1.as_str()),
+        ("usdt", "doge")
+            | ("usdt", "btc")
+            | ("usdt", "eth")
+            | ("btc", "usdt")
+            | ("eth", "usdt")
+            | ("doge", "usdt")
+    ) || matches!(provider, ProviderCode::ChangeNOW)
+        && matches!(
+            (pair.0.as_str(), pair.1.as_str()),
+            ("usdt", "sol") | ("sol", "usdt")
+        )
 }
 
 pub(crate) fn call_json_api(

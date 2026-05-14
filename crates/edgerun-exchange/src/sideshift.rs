@@ -7,8 +7,8 @@ extern crate alloc;
 
 use crate::provider::*;
 use crate::provider_http::{
-    build_client, call_json_api, decimal, mapped_status, object, parse_asset_id, provider_order,
-    str_field,
+    build_client, call_json_api, decimal, mapped_status, object, parse_asset_id, provider_features,
+    provider_order, str_field, supports_pair,
 };
 use alloc::string::String;
 use core::result::Result;
@@ -54,30 +54,14 @@ impl ExchangeProvider for SideShiftAdapter {
     }
 
     fn features(&self) -> ProviderFeatures {
-        ProviderFeatures {
-            supports_fixed_rate: true,
-            supports_float_rate: true,
-            supports_refund_address: true,
-            requires_destination_tag: false,
-            min_confirmations: 3,
-        }
+        provider_features(ProviderCode::SideShift)
     }
 
     fn supports_quote(&self, req: &QuoteRequest) -> bool {
-        let (settle_sym, _) = parse_asset_id(&req.settlement_asset_id);
-        let (pay_sym, _) = parse_asset_id(&req.pay_asset_id);
-
-        matches!(
-            (
-                settle_sym.to_lowercase().as_str(),
-                pay_sym.to_lowercase().as_str()
-            ),
-            ("usdt", "doge")
-                | ("usdt", "btc")
-                | ("usdt", "eth")
-                | ("btc", "usdt")
-                | ("eth", "usdt")
-                | ("doge", "usdt")
+        supports_pair(
+            ProviderCode::SideShift,
+            &req.settlement_asset_id,
+            &req.pay_asset_id,
         )
     }
 
