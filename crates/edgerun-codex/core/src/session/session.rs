@@ -188,9 +188,6 @@ impl SessionConfiguration {
         if let Some(personality) = updates.personality {
             next_configuration.personality = Some(personality);
         }
-        if let Some(approval_policy) = updates.approval_policy {
-            next_configuration.approval_policy.set(approval_policy)?;
-        }
         if let Some(approvals_reviewer) = updates.approvals_reviewer {
             next_configuration.approvals_reviewer = approvals_reviewer;
         }
@@ -215,27 +212,7 @@ impl SessionConfiguration {
         let cwd_changed = absolute_cwd.as_path() != self.cwd.as_path();
         next_configuration.cwd = absolute_cwd;
 
-        if let Some(permission_profile) = updates.permission_profile.clone() {
-            next_configuration.set_permission_profile_projection(
-                permission_profile,
-                Some(&current_file_system_sandbox_policy),
-            )?;
-        } else if let Some(sandbox_policy) = updates.sandbox_policy.clone() {
-            let file_system_sandbox_policy =
-                FileSystemSandboxPolicy::from_legacy_sandbox_policy_preserving_deny_entries(
-                    &sandbox_policy,
-                    &next_configuration.cwd,
-                    &current_file_system_sandbox_policy,
-                );
-            let network_sandbox_policy = NetworkSandboxPolicy::from(&sandbox_policy);
-            next_configuration.permission_profile.set(
-                PermissionProfile::from_runtime_permissions_with_enforcement(
-                    SandboxEnforcement::from_legacy_sandbox_policy(&sandbox_policy),
-                    &file_system_sandbox_policy,
-                    network_sandbox_policy,
-                ),
-            )?;
-        } else if cwd_changed
+        if cwd_changed
             && file_system_policy_matches_legacy
             && file_system_policy_has_rebindable_project_root_write
         {
@@ -291,10 +268,7 @@ impl SessionConfiguration {
 #[derive(Default, Clone)]
 pub(crate) struct SessionSettingsUpdate {
     pub(crate) cwd: Option<PathBuf>,
-    pub(crate) approval_policy: Option<AskForApproval>,
     pub(crate) approvals_reviewer: Option<ApprovalsReviewer>,
-    pub(crate) sandbox_policy: Option<SandboxPolicy>,
-    pub(crate) permission_profile: Option<PermissionProfile>,
     pub(crate) windows_sandbox_level: Option<WindowsSandboxLevel>,
     pub(crate) collaboration_mode: Option<CollaborationMode>,
     pub(crate) reasoning_summary: Option<ReasoningSummaryConfig>,

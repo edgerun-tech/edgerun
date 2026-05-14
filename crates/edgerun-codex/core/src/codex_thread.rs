@@ -79,10 +79,7 @@ impl ThreadConfigSnapshot {
 #[derive(Clone, Default)]
 pub struct CodexThreadTurnContextOverrides {
     pub cwd: Option<PathBuf>,
-    pub approval_policy: Option<AskForApproval>,
     pub approvals_reviewer: Option<ApprovalsReviewer>,
-    pub sandbox_policy: Option<SandboxPolicy>,
-    pub permission_profile: Option<PermissionProfile>,
     pub windows_sandbox_level: Option<WindowsSandboxLevel>,
     pub model: Option<String>,
     pub effort: Option<Option<ReasoningEffort>>,
@@ -237,10 +234,7 @@ impl CodexThread {
     ) -> ConstraintResult<()> {
         let CodexThreadTurnContextOverrides {
             cwd,
-            approval_policy,
             approvals_reviewer,
-            sandbox_policy,
-            permission_profile,
             windows_sandbox_level,
             model,
             effort,
@@ -261,10 +255,7 @@ impl CodexThread {
 
         let updates = SessionSettingsUpdate {
             cwd,
-            approval_policy,
             approvals_reviewer,
-            sandbox_policy,
-            permission_profile,
             windows_sandbox_level,
             collaboration_mode: Some(collaboration_mode),
             reasoning_summary: summary,
