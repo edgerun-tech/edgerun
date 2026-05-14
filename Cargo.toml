@@ -80,6 +80,7 @@ members = [
   "crates/utility/edgerun-futures-sink",
   "crates/utility/edgerun-futures-task",
   "crates/utility/edgerun-futures-util",
+  "crates/utility/edgerun-getrandom",
   "crates/utility/edgerun-hashbrown",
   "crates/utility/edgerun-hpack",
   "crates/utility/edgerun-http-client",
@@ -110,12 +111,16 @@ members = [
   "crates/utility/edgerun-once-cell",
   "crates/utility/edgerun-percent-encoding-upstream",
   "crates/utility/edgerun-pin-project-lite",
+  "crates/utility/edgerun-ppv-lite86",
   "crates/utility/edgerun-pretty-assertions",
   "crates/utility/edgerun-proc-macro2",
   "crates/utility/edgerun-ptr-meta",
   "crates/utility/edgerun-ptr-meta-derive",
   "crates/utility/edgerun-pty",
   "crates/utility/edgerun-rancor",
+  "crates/utility/edgerun-rand-chacha",
+  "crates/utility/edgerun-rand-core",
+  "crates/utility/edgerun-rand-upstream",
   "crates/utility/edgerun-random",
   "crates/utility/edgerun-quote",
   "crates/utility/edgerun-reqwest",
@@ -176,6 +181,8 @@ members = [
   "crates/utility/edgerun-wiremock",
   "crates/utility/edgerun-writeable",
   "crates/utility/edgerun-zeroize",
+  "crates/utility/edgerun-zerocopy",
+  "crates/utility/edgerun-zerocopy-derive",
   "crates/utility/edgerun-zstd",
 ]
 
@@ -275,6 +282,7 @@ futures-macro = { path = "crates/utility/edgerun-futures-macro" }
 futures-sink = { path = "crates/utility/edgerun-futures-sink" }
 futures-task = { path = "crates/utility/edgerun-futures-task" }
 futures-util = { path = "crates/utility/edgerun-futures-util" }
+getrandom = { path = "crates/utility/edgerun-getrandom" }
 hashbrown = { path = "crates/utility/edgerun-hashbrown" }
 jni = { path = "crates/utility/edgerun-jni" }
 jni-macros = { path = "crates/utility/edgerun-jni-macros" }
@@ -290,9 +298,13 @@ munge_macro = { path = "crates/utility/edgerun-munge-macro" }
 once_cell = { path = "crates/utility/edgerun-once-cell" }
 percent-encoding = { path = "crates/utility/edgerun-percent-encoding-upstream" }
 pin-project-lite = { path = "crates/utility/edgerun-pin-project-lite" }
+ppv-lite86 = { path = "crates/utility/edgerun-ppv-lite86" }
 proc-macro2 = { path = "crates/utility/edgerun-proc-macro2" }
 ptr_meta = { path = "crates/utility/edgerun-ptr-meta" }
 ptr_meta_derive = { path = "crates/utility/edgerun-ptr-meta-derive" }
+rand = { path = "crates/utility/edgerun-rand-upstream" }
+rand_chacha = { path = "crates/utility/edgerun-rand-chacha" }
+rand_core = { path = "crates/utility/edgerun-rand-core" }
 rancor = { path = "crates/utility/edgerun-rancor" }
 rend = { path = "crates/utility/edgerun-rend" }
 rkyv = { path = "crates/utility/edgerun-rkyv" }
@@ -323,3 +335,5 @@ unicode-ident = { path = "crates/utility/edgerun-unicode-ident" }
 valuable = { path = "crates/utility/edgerun-valuable" }
 walkdir = { path = "crates/utility/edgerun-walkdir" }
 writeable = { path = "crates/utility/edgerun-writeable" }
+zerocopy = { path = "crates/utility/edgerun-zerocopy" }
+zerocopy-derive = { path = "crates/utility/edgerun-zerocopy-derive" }
