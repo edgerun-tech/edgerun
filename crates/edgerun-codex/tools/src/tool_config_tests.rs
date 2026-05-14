@@ -1,15 +1,14 @@
 use super::*;
 use crate::Feature;
 use crate::Features;
+use codex_protocol::compat::absolute_path::AbsolutePathBuf;
 use codex_protocol::config_types::WebSearchMode;
-use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::openai_models::ConfigShellToolType;
 use codex_protocol::openai_models::InputModality;
 use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
-use codex_protocol::compat::absolute_path::AbsolutePathBuf;
 use edgerun_json::json;
 use pretty_assertions::assert_eq;
 use std::path::PathBuf;
@@ -64,14 +63,13 @@ fn model_provided_unified_exec_requires_feature_flag() {
         web_search_mode: Some(WebSearchMode::Cached),
         session_source: SessionSource::Cli,
         permission_profile: &PermissionProfile::Disabled,
-        windows_sandbox_level: WindowsSandboxLevel::Disabled,
     });
 
     assert_eq!(tools_config.shell_type, ConfigShellToolType::ShellCommand);
 }
 
 #[test]
-fn unified_exec_can_be_enabled_for_restricted_token_workspace_write() {
+fn unified_exec_can_be_enabled_for_workspace_write() {
     let model_info = model_info();
     let mut features = Features::with_defaults();
     features.enable(Feature::UnifiedExec);
@@ -85,7 +83,6 @@ fn unified_exec_can_be_enabled_for_restricted_token_workspace_write() {
         web_search_mode: Some(WebSearchMode::Cached),
         session_source: SessionSource::Cli,
         permission_profile: &PermissionProfile::workspace_write(),
-        windows_sandbox_level: WindowsSandboxLevel::RestrictedToken,
     });
 
     let expected_shell_type = if super::conpty_supported() {
@@ -112,7 +109,6 @@ fn shell_zsh_fork_prefers_shell_command_over_unified_exec() {
         web_search_mode: Some(WebSearchMode::Live),
         session_source: SessionSource::Cli,
         permission_profile: &PermissionProfile::Disabled,
-        windows_sandbox_level: WindowsSandboxLevel::Disabled,
     });
 
     assert_eq!(tools_config.shell_type, ConfigShellToolType::ShellCommand);
@@ -172,7 +168,6 @@ fn subagents_keep_request_user_input_config_and_agent_jobs_workers_opt_in_by_lab
             "agent_job:test".to_string(),
         )),
         permission_profile: &PermissionProfile::Disabled,
-        windows_sandbox_level: WindowsSandboxLevel::Disabled,
     });
 
     assert_eq!(
@@ -203,7 +198,6 @@ fn image_generation_requires_feature_and_supported_model() {
         web_search_mode: Some(WebSearchMode::Cached),
         session_source: SessionSource::Cli,
         permission_profile: &PermissionProfile::Disabled,
-        windows_sandbox_level: WindowsSandboxLevel::Disabled,
     });
     let supported_tools_config = ToolsConfig::new(&ToolsConfigParams {
         model_info: &supported_model_info,
@@ -213,7 +207,6 @@ fn image_generation_requires_feature_and_supported_model() {
         web_search_mode: Some(WebSearchMode::Cached),
         session_source: SessionSource::Cli,
         permission_profile: &PermissionProfile::Disabled,
-        windows_sandbox_level: WindowsSandboxLevel::Disabled,
     });
     let auth_disallowed_tools_config = ToolsConfig::new(&ToolsConfigParams {
         model_info: &supported_model_info,
@@ -223,7 +216,6 @@ fn image_generation_requires_feature_and_supported_model() {
         web_search_mode: Some(WebSearchMode::Cached),
         session_source: SessionSource::Cli,
         permission_profile: &PermissionProfile::Disabled,
-        windows_sandbox_level: WindowsSandboxLevel::Disabled,
     });
     let unsupported_tools_config = ToolsConfig::new(&ToolsConfigParams {
         model_info: &unsupported_model_info,
@@ -233,7 +225,6 @@ fn image_generation_requires_feature_and_supported_model() {
         web_search_mode: Some(WebSearchMode::Cached),
         session_source: SessionSource::Cli,
         permission_profile: &PermissionProfile::Disabled,
-        windows_sandbox_level: WindowsSandboxLevel::Disabled,
     });
     assert!(!default_tools_config.image_gen_tool);
     assert!(supported_tools_config.image_gen_tool);
@@ -254,7 +245,6 @@ fn provider_capability_methods_disable_provider_bound_tool_surfaces() {
         web_search_mode: Some(WebSearchMode::Cached),
         session_source: SessionSource::Cli,
         permission_profile: &PermissionProfile::Disabled,
-        windows_sandbox_level: WindowsSandboxLevel::Disabled,
     });
     tools_config.search_tool = true;
     tools_config.tool_suggest = true;
