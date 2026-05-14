@@ -1,0 +1,32 @@
+[package]
+name = "synstructure"
+version = "0.13.2"
+edition = "2018"
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun-owned helper methods and macros for custom derives"
+
+[features]
+default = ["proc-macro"]
+proc-macro = [
+    "proc-macro2/proc-macro",
+    "quote/proc-macro",
+    "syn/proc-macro",
+]
+
+[dependencies]
+proc-macro2 = { path = "../edgerun-proc-macro2", default-features = false }
+quote = { path = "../edgerun-quote", default-features = false }
+syn = { path = "../edgerun-syn", default-features = false, features = [
+    "clone-impls",
+    "derive",
+    "extra-traits",
+    "parsing",
+    "printing",
+    "visit",
+] }
+
+[lints]
+workspace = true

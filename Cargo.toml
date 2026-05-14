@@ -61,6 +61,7 @@ members = [
   "crates/utility/edgerun-clipboard",
   "crates/utility/edgerun-crypto",
   "crates/utility/edgerun-deno-core-icudata",
+  "crates/utility/edgerun-displaydoc",
   "crates/utility/edgerun-emoji",
   "crates/utility/edgerun-encoding",
   "crates/utility/edgerun-error",
@@ -113,10 +114,13 @@ members = [
   "crates/utility/edgerun-strum",
   "crates/utility/edgerun-strum-macros",
   "crates/utility/edgerun-syn",
+  "crates/utility/edgerun-synstructure",
   "crates/utility/edgerun-subtle",
   "crates/utility/edgerun-terminal-parser",
   "crates/utility/edgerun-tempfile",
   "crates/utility/edgerun-time",
+  "crates/utility/edgerun-thiserror",
+  "crates/utility/edgerun-thiserror-impl",
   "crates/utility/edgerun-tinyvec",
   "crates/utility/edgerun-tinyvec-macros",
   "crates/utility/edgerun-tokio",
@@ -221,6 +225,7 @@ libc = "0.2"
 [patch.crates-io]
 bytecheck = { path = "crates/utility/edgerun-bytecheck" }
 bytecheck_derive = { path = "crates/utility/edgerun-bytecheck-derive" }
+displaydoc = { path = "crates/utility/edgerun-displaydoc" }
 hashbrown = { path = "crates/utility/edgerun-hashbrown" }
 munge = { path = "crates/utility/edgerun-munge" }
 munge_macro = { path = "crates/utility/edgerun-munge-macro" }
@@ -236,6 +241,9 @@ serde = { path = "crates/utility/edgerun-serde-upstream" }
 serde_core = { path = "crates/utility/edgerun-serde-core" }
 serde_derive = { path = "crates/utility/edgerun-serde-derive" }
 syn = { path = "crates/utility/edgerun-syn" }
+synstructure = { path = "crates/utility/edgerun-synstructure" }
+thiserror = { path = "crates/utility/edgerun-thiserror" }
+thiserror-impl = { path = "crates/utility/edgerun-thiserror-impl" }
 tinyvec = { path = "crates/utility/edgerun-tinyvec" }
 tinyvec_macros = { path = "crates/utility/edgerun-tinyvec-macros" }
 unicode-ident = { path = "crates/utility/edgerun-unicode-ident" }
