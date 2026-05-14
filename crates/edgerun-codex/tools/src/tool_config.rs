@@ -6,7 +6,6 @@ use codex_protocol::config_types::ModeKind;
 use codex_protocol::config_types::TUI_VISIBLE_COLLABORATION_MODES;
 use codex_protocol::config_types::WebSearchConfig;
 use codex_protocol::config_types::WebSearchMode;
-use codex_protocol::models::PermissionProfile;
 use codex_protocol::openai_models::ApplyPatchToolType;
 use codex_protocol::openai_models::ConfigShellToolType;
 use codex_protocol::openai_models::InputModality;
@@ -133,7 +132,6 @@ pub struct ToolsConfigParams<'a> {
     pub image_generation_tool_auth_allowed: bool,
     pub web_search_mode: Option<WebSearchMode>,
     pub session_source: SessionSource,
-    pub permission_profile: &'a PermissionProfile,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

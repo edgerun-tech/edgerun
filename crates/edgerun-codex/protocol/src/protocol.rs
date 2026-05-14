@@ -1739,6 +1739,28 @@ pub enum AgentStatus {
     NotFound,
 }
 
+impl ToJson for AgentStatus {
+    fn to_json(&self) -> Value {
+        match self {
+            Self::PendingInit => Value::String("pending_init".to_string()),
+            Self::Running => Value::String("running".to_string()),
+            Self::Interrupted => Value::String("interrupted".to_string()),
+            Self::Completed(message) => {
+                let mut object = Map::new();
+                object.push_field("completed", message.to_json());
+                Value::Object(object)
+            }
+            Self::Errored(message) => {
+                let mut object = Map::new();
+                object.push_field("errored", message.to_json());
+                Value::Object(object)
+            }
+            Self::Shutdown => Value::String("shutdown".to_string()),
+            Self::NotFound => Value::String("not_found".to_string()),
+        }
+    }
+}
+
 /// Turn kinds that reject same-turn steering.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, JsonSchema, TS)]
 #[serde(rename_all = "snake_case")]

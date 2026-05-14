@@ -3,7 +3,6 @@ use crate::Feature;
 use crate::Features;
 use codex_protocol::compat::absolute_path::AbsolutePathBuf;
 use codex_protocol::config_types::WebSearchMode;
-use codex_protocol::models::PermissionProfile;
 use codex_protocol::openai_models::ConfigShellToolType;
 use codex_protocol::openai_models::InputModality;
 use codex_protocol::openai_models::ModelInfo;
@@ -62,7 +61,6 @@ fn model_provided_unified_exec_requires_feature_flag() {
         image_generation_tool_auth_allowed: true,
         web_search_mode: Some(WebSearchMode::Cached),
         session_source: SessionSource::Cli,
-        permission_profile: &PermissionProfile::Disabled,
     });
 
     assert_eq!(tools_config.shell_type, ConfigShellToolType::ShellCommand);
@@ -82,7 +80,6 @@ fn unified_exec_can_be_enabled_for_workspace_write() {
         image_generation_tool_auth_allowed: true,
         web_search_mode: Some(WebSearchMode::Cached),
         session_source: SessionSource::Cli,
-        permission_profile: &PermissionProfile::workspace_write(),
     });
 
     let expected_shell_type = if super::conpty_supported() {
@@ -108,7 +105,6 @@ fn shell_zsh_fork_prefers_shell_command_over_unified_exec() {
         image_generation_tool_auth_allowed: true,
         web_search_mode: Some(WebSearchMode::Live),
         session_source: SessionSource::Cli,
-        permission_profile: &PermissionProfile::Disabled,
     });
 
     assert_eq!(tools_config.shell_type, ConfigShellToolType::ShellCommand);
@@ -167,7 +163,6 @@ fn subagents_keep_request_user_input_config_and_agent_jobs_workers_opt_in_by_lab
         session_source: SessionSource::SubAgent(SubAgentSource::Other(
             "agent_job:test".to_string(),
         )),
-        permission_profile: &PermissionProfile::Disabled,
     });
 
     assert_eq!(
@@ -197,7 +192,6 @@ fn image_generation_requires_feature_and_supported_model() {
         image_generation_tool_auth_allowed: true,
         web_search_mode: Some(WebSearchMode::Cached),
         session_source: SessionSource::Cli,
-        permission_profile: &PermissionProfile::Disabled,
     });
     let supported_tools_config = ToolsConfig::new(&ToolsConfigParams {
         model_info: &supported_model_info,
@@ -206,7 +200,6 @@ fn image_generation_requires_feature_and_supported_model() {
         image_generation_tool_auth_allowed: true,
         web_search_mode: Some(WebSearchMode::Cached),
         session_source: SessionSource::Cli,
-        permission_profile: &PermissionProfile::Disabled,
     });
     let auth_disallowed_tools_config = ToolsConfig::new(&ToolsConfigParams {
         model_info: &supported_model_info,
@@ -215,7 +208,6 @@ fn image_generation_requires_feature_and_supported_model() {
         image_generation_tool_auth_allowed: false,
         web_search_mode: Some(WebSearchMode::Cached),
         session_source: SessionSource::Cli,
-        permission_profile: &PermissionProfile::Disabled,
     });
     let unsupported_tools_config = ToolsConfig::new(&ToolsConfigParams {
         model_info: &unsupported_model_info,
@@ -224,7 +216,6 @@ fn image_generation_requires_feature_and_supported_model() {
         image_generation_tool_auth_allowed: true,
         web_search_mode: Some(WebSearchMode::Cached),
         session_source: SessionSource::Cli,
-        permission_profile: &PermissionProfile::Disabled,
     });
     assert!(!default_tools_config.image_gen_tool);
     assert!(supported_tools_config.image_gen_tool);
@@ -244,7 +235,6 @@ fn provider_capability_methods_disable_provider_bound_tool_surfaces() {
         image_generation_tool_auth_allowed: true,
         web_search_mode: Some(WebSearchMode::Cached),
         session_source: SessionSource::Cli,
-        permission_profile: &PermissionProfile::Disabled,
     });
     tools_config.search_tool = true;
     tools_config.tool_suggest = true;
