@@ -2827,9 +2827,7 @@ fn thread_lifecycle_responses_default_missing_optional_fields() {
         "modelProvider": "openai",
         "serviceTier": null,
         "cwd": absolute_path_string("tmp"),
-        "approvalPolicy": "on-failure",
         "approvalsReviewer": "user",
-        "sandbox": { "type": "dangerFullAccess" },
         "reasoningEffort": null
     });
 
@@ -2843,9 +2841,6 @@ fn thread_lifecycle_responses_default_missing_optional_fields() {
     assert_eq!(start.instruction_sources, Vec::<AbsolutePathBuf>::new());
     assert_eq!(resume.instruction_sources, Vec::<AbsolutePathBuf>::new());
     assert_eq!(fork.instruction_sources, Vec::<AbsolutePathBuf>::new());
-    assert_eq!(start.permission_profile, None);
-    assert_eq!(resume.permission_profile, None);
-    assert_eq!(fork.permission_profile, None);
 }
 
 #[test]

@@ -2132,10 +2132,7 @@ mod tests {
                 service_tier: None,
                 cwd,
                 instruction_sources: vec![absolute_path("/tmp/AGENTS.md")],
-                approval_policy: v2::AskForApproval::OnFailure,
                 approvals_reviewer: v2::ApprovalsReviewer::User,
-                sandbox: v2::SandboxPolicy::DangerFullAccess,
-                permission_profile: None,
                 reasoning_effort: None,
             },
         };
@@ -2175,13 +2172,7 @@ mod tests {
                     "serviceTier": null,
                     "cwd": absolute_path_string("tmp"),
                     "instructionSources": [absolute_path_string("tmp/AGENTS.md")],
-                    "approvalPolicy": "on-failure",
                     "approvalsReviewer": "user",
-                    "sandbox": {
-                        "type": "dangerFullAccess"
-                    },
-                    "permissionProfile": null,
-                    "activePermissionProfile": null,
                     "reasoningEffort": null
                 }
             }),

@@ -1,7 +1,4 @@
 use super::ApprovalsReviewer;
-use super::AskForApproval;
-use super::PermissionProfile;
-use super::SandboxPolicy;
 use super::Thread;
 use super::ThreadItem;
 use super::ThreadSource;
@@ -323,17 +320,8 @@ pub struct ThreadStartResponse {
     /// Instruction source files currently loaded for this thread.
     #[serde(default)]
     pub instruction_sources: Vec<AbsolutePathBuf>,
-    pub approval_policy: AskForApproval,
     /// Reviewer currently used for approval requests on this thread.
     pub approvals_reviewer: ApprovalsReviewer,
-    /// Legacy sandbox policy retained for compatibility. Experimental clients
-    /// should prefer `permissionProfile` when they need exact runtime
-    /// permissions.
-    pub sandbox: SandboxPolicy,
-    /// Full active permissions for this thread. `activePermissionProfile`
-    /// carries display/provenance metadata for this runtime profile.
-    #[serde(default)]
-    pub permission_profile: Option<PermissionProfile>,
     pub reasoning_effort: Option<ReasoningEffort>,
 }
 
@@ -347,10 +335,7 @@ impl FromJson for ThreadStartResponse {
                  service_tier,
                  cwd,
                  instruction_sources,
-                 approval_policy,
                  approvals_reviewer,
-                 sandbox,
-                 permission_profile,
                  reasoning_effort,
              }| Self {
                 thread,
@@ -359,10 +344,7 @@ impl FromJson for ThreadStartResponse {
                 service_tier,
                 cwd,
                 instruction_sources,
-                approval_policy,
                 approvals_reviewer,
-                sandbox,
-                permission_profile,
                 reasoning_effort,
             },
         )
@@ -446,17 +428,8 @@ pub struct ThreadResumeResponse {
     /// Instruction source files currently loaded for this thread.
     #[serde(default)]
     pub instruction_sources: Vec<AbsolutePathBuf>,
-    pub approval_policy: AskForApproval,
     /// Reviewer currently used for approval requests on this thread.
     pub approvals_reviewer: ApprovalsReviewer,
-    /// Legacy sandbox policy retained for compatibility. Experimental clients
-    /// should prefer `permissionProfile` when they need exact runtime
-    /// permissions.
-    pub sandbox: SandboxPolicy,
-    /// Full active permissions for this thread. `activePermissionProfile`
-    /// carries display/provenance metadata for this runtime profile.
-    #[serde(default)]
-    pub permission_profile: Option<PermissionProfile>,
     pub reasoning_effort: Option<ReasoningEffort>,
 }
 
@@ -470,10 +443,7 @@ impl FromJson for ThreadResumeResponse {
                  service_tier,
                  cwd,
                  instruction_sources,
-                 approval_policy,
                  approvals_reviewer,
-                 sandbox,
-                 permission_profile,
                  reasoning_effort,
              }| Self {
                 thread,
@@ -482,10 +452,7 @@ impl FromJson for ThreadResumeResponse {
                 service_tier,
                 cwd,
                 instruction_sources,
-                approval_policy,
                 approvals_reviewer,
-                sandbox,
-                permission_profile,
                 reasoning_effort,
             },
         )
@@ -564,17 +531,8 @@ pub struct ThreadForkResponse {
     /// Instruction source files currently loaded for this thread.
     #[serde(default)]
     pub instruction_sources: Vec<AbsolutePathBuf>,
-    pub approval_policy: AskForApproval,
     /// Reviewer currently used for approval requests on this thread.
     pub approvals_reviewer: ApprovalsReviewer,
-    /// Legacy sandbox policy retained for compatibility. Experimental clients
-    /// should prefer `permissionProfile` when they need exact runtime
-    /// permissions.
-    pub sandbox: SandboxPolicy,
-    /// Full active permissions for this thread. `activePermissionProfile`
-    /// carries display/provenance metadata for this runtime profile.
-    #[serde(default)]
-    pub permission_profile: Option<PermissionProfile>,
     pub reasoning_effort: Option<ReasoningEffort>,
 }
 
@@ -588,10 +546,7 @@ impl FromJson for ThreadForkResponse {
                  service_tier,
                  cwd,
                  instruction_sources,
-                 approval_policy,
                  approvals_reviewer,
-                 sandbox,
-                 permission_profile,
                  reasoning_effort,
              }| Self {
                 thread,
@@ -600,10 +555,7 @@ impl FromJson for ThreadForkResponse {
                 service_tier,
                 cwd,
                 instruction_sources,
-                approval_policy,
                 approvals_reviewer,
-                sandbox,
-                permission_profile,
                 reasoning_effort,
             },
         )
@@ -617,10 +569,7 @@ struct ThreadLifecycleResponse {
     service_tier: Option<String>,
     cwd: AbsolutePathBuf,
     instruction_sources: Vec<AbsolutePathBuf>,
-    approval_policy: AskForApproval,
     approvals_reviewer: ApprovalsReviewer,
-    sandbox: SandboxPolicy,
-    permission_profile: Option<PermissionProfile>,
     reasoning_effort: Option<ReasoningEffort>,
 }
 
@@ -637,10 +586,7 @@ fn thread_lifecycle_response_from_json(
         instruction_sources: object
             .take_optional("instructionSources")?
             .unwrap_or_default(),
-        approval_policy: object.take_required("approvalPolicy")?,
         approvals_reviewer: object.take_required("approvalsReviewer")?,
-        sandbox: object.take_required("sandbox")?,
-        permission_profile: object.take_optional("permissionProfile")?,
         reasoning_effort: object.take_optional("reasoningEffort")?,
     })
 }
