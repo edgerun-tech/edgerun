@@ -87,6 +87,7 @@ members = [
   "crates/utility/edgerun-munge-macro",
   "crates/utility/edgerun-opentelemetry",
   "crates/utility/edgerun-opentelemetry-sdk",
+  "crates/utility/edgerun-percent-encoding-upstream",
   "crates/utility/edgerun-pretty-assertions",
   "crates/utility/edgerun-proc-macro2",
   "crates/utility/edgerun-ptr-meta",
@@ -229,6 +230,7 @@ displaydoc = { path = "crates/utility/edgerun-displaydoc" }
 hashbrown = { path = "crates/utility/edgerun-hashbrown" }
 munge = { path = "crates/utility/edgerun-munge" }
 munge_macro = { path = "crates/utility/edgerun-munge-macro" }
+percent-encoding = { path = "crates/utility/edgerun-percent-encoding-upstream" }
 proc-macro2 = { path = "crates/utility/edgerun-proc-macro2" }
 ptr_meta = { path = "crates/utility/edgerun-ptr-meta" }
 ptr_meta_derive = { path = "crates/utility/edgerun-ptr-meta-derive" }
