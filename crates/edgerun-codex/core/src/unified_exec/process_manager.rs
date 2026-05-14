@@ -343,7 +343,7 @@ impl UnifiedExecProcessManager {
                     .unwrap_or(1000)
             } else {
                 // production mode → random
-                edgerun_random::i32_range(1_000..100_000)
+                edgerun_crypto::random_i32_range(1_000..100_000).unwrap_or(1_000)
             };
 
             if store.reserved_process_ids.contains(&process_id) {

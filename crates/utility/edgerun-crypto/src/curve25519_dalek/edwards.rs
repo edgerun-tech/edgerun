@@ -54,10 +54,6 @@
 //! * the `*` operator between a `Scalar` and a `EdwardsPoint`, which
 //! performs constant-time variable-base scalar multiplication;
 //!
-//! * the `*` operator between a `Scalar` and a
-//! `EdwardsBasepointTable`, which performs constant-time fixed-base
-//! scalar multiplication;
-//!
 //! * an implementation of the
 //! [`MultiscalarMul`](../traits/trait.MultiscalarMul.html) trait for
 //! constant-time variable-base multiscalar multiplication;
@@ -134,15 +130,6 @@ use crate::curve25519_dalek::backend::serial::curve_models::AffineNielsPoint;
 use crate::curve25519_dalek::backend::serial::curve_models::CompletedPoint;
 use crate::curve25519_dalek::backend::serial::curve_models::ProjectiveNielsPoint;
 use crate::curve25519_dalek::backend::serial::curve_models::ProjectivePoint;
-
-#[cfg(feature = "precomputed-tables")]
-use crate::curve25519_dalek::window::{
-    LookupTableRadix16, LookupTableRadix32, LookupTableRadix64, LookupTableRadix128,
-    LookupTableRadix256,
-};
-
-#[cfg(feature = "precomputed-tables")]
-use crate::curve25519_dalek::traits::BasepointTable;
 
 use crate::curve25519_dalek::traits::ValidityCheck;
 use crate::curve25519_dalek::traits::{Identity, IsIdentity};
@@ -720,9 +707,6 @@ define_mul_variants!(LHS = Scalar, RHS = EdwardsPoint, Output = EdwardsPoint);
 impl<'a, 'b> Mul<&'b Scalar> for &'a EdwardsPoint {
     type Output = EdwardsPoint;
     /// Scalar multiplication: compute `scalar * self`.
-    ///
-    /// For scalar multiplication of a basepoint,
-    /// `EdwardsBasepointTable` is approximately 4x faster.
     fn mul(self, scalar: &'b Scalar) -> EdwardsPoint {
         crate::curve25519_dalek::backend::variable_base_mul(self, scalar)
     }
@@ -732,9 +716,6 @@ impl<'a, 'b> Mul<&'b EdwardsPoint> for &'a Scalar {
     type Output = EdwardsPoint;
 
     /// Scalar multiplication: compute `scalar * self`.
-    ///
-    /// For scalar multiplication of a basepoint,
-    /// `EdwardsBasepointTable` is approximately 4x faster.
     fn mul(self, point: &'b EdwardsPoint) -> EdwardsPoint {
         point * self
     }
@@ -742,19 +723,8 @@ impl<'a, 'b> Mul<&'b EdwardsPoint> for &'a Scalar {
 
 impl EdwardsPoint {
     /// Fixed-base scalar multiplication by the Ed25519 base point.
-    ///
-    /// Uses precomputed basepoint tables when the `precomputed-tables` feature
-    /// is enabled, trading off increased code size for ~4x better performance.
     pub fn mul_base(scalar: &Scalar) -> Self {
-        #[cfg(not(feature = "precomputed-tables"))]
-        {
-            scalar * constants::ED25519_BASEPOINT_POINT
-        }
-
-        #[cfg(feature = "precomputed-tables")]
-        {
-            scalar * constants::ED25519_BASEPOINT_TABLE
-        }
+        scalar * constants::ED25519_BASEPOINT_POINT
     }
 
     /// Multiply this point by `clamp_integer(bytes)`. For a description of clamping, see
@@ -905,280 +875,6 @@ impl EdwardsPoint {
         b: &Scalar,
     ) -> EdwardsPoint {
         crate::curve25519_dalek::backend::vartime_double_base_mul(a, A, b)
-    }
-}
-
-#[cfg(feature = "precomputed-tables")]
-macro_rules! impl_basepoint_table {
-    (Name = $name:ident, LookupTable = $table:ident, Point = $point:ty, Radix = $radix:expr, Additions = $adds:expr) => {
-        /// A precomputed table of multiples of a basepoint, for accelerating
-        /// fixed-base scalar multiplication.  One table, for the Ed25519
-        /// basepoint, is provided in the [`constants`] module.
-        ///
-        /// The basepoint tables are reasonably large, so they should probably be boxed.
-        ///
-        /// The sizes for the tables and the number of additions required for one scalar
-        /// multiplication are as follows:
-        ///
-        /// * [`EdwardsBasepointTableRadix16`]: 30KB, 64A
-        ///   (this is the default size, and is used for
-        ///   [`constants::ED25519_BASEPOINT_TABLE`])
-        /// * [`EdwardsBasepointTableRadix64`]: 120KB, 43A
-        /// * [`EdwardsBasepointTableRadix128`]: 240KB, 37A
-        /// * [`EdwardsBasepointTableRadix256`]: 480KB, 33A
-        ///
-        /// # Why 33 additions for radix-256?
-        ///
-        /// Normally, the radix-256 tables would allow for only 32 additions per scalar
-        /// multiplication.  However, due to the fact that standardised definitions of
-        /// legacy protocols—such as x25519—require allowing unreduced 255-bit scalars
-        /// invariants, when converting such an unreduced scalar's representation to
-        /// radix-\\(2^{8}\\), we cannot guarantee the carry bit will fit in the last
-        /// coefficient (the coefficients are `i8`s).  When, \\(w\\), the power-of-2 of
-        /// the radix, is \\(w < 8\\), we can fold the final carry onto the last
-        /// coefficient, \\(d\\), because \\(d < 2^{w/2}\\), so
-        /// $$
-        ///     d + carry \cdot 2^{w} = d + 1 \cdot 2^{w} < 2^{w+1} < 2^{8}
-        /// $$
-        /// When \\(w = 8\\), we can't fit \\(carry \cdot 2^{w}\\) into an `i8`, so we
-        /// add the carry bit onto an additional coefficient.
-        #[derive(Clone)]
-        #[repr(transparent)]
-        pub struct $name(pub(crate) [$table<AffineNielsPoint>; 32]);
-
-        impl BasepointTable for $name {
-            type Point = $point;
-
-            /// Create a table of precomputed multiples of `basepoint`.
-            fn create(basepoint: &$point) -> $name {
-                // XXX use init_with
-                let mut table = $name([$table::default(); 32]);
-                let mut P = *basepoint;
-                for i in 0..32 {
-                    // P = (2w)^i * B
-                    table.0[i] = $table::from(&P);
-                    P = P.mul_by_pow_2($radix + $radix);
-                }
-                table
-            }
-
-            /// Get the basepoint for this table as an `EdwardsPoint`.
-            fn basepoint(&self) -> $point {
-                // self.0[0].select(1) = 1*(16^2)^0*B
-                // but as an `AffineNielsPoint`, so add identity to convert to extended.
-                (&<$point>::identity() + &self.0[0].select(1)).as_extended()
-            }
-
-            /// The computation uses Pippeneger's algorithm, as described for the
-            /// specific case of radix-16 on page 13 of the Ed25519 paper.
-            ///
-            /// # Piggenger's Algorithm Generalised
-            ///
-            /// Write the scalar \\(a\\) in radix-\\(w\\), where \\(w\\) is a power of
-            /// 2, with coefficients in \\([\frac{-w}{2},\frac{w}{2})\\), i.e.,
-            /// $$
-            ///     a = a\_0 + a\_1 w\^1 + \cdots + a\_{x} w\^{x},
-            /// $$
-            /// with
-            /// $$
-            /// \begin{aligned}
-            ///     \frac{-w}{2} \leq a_i < \frac{w}{2}
-            ///     &&\cdots&&
-            ///     \frac{-w}{2} \leq a\_{x} \leq \frac{w}{2}
-            /// \end{aligned}
-            /// $$
-            /// and the number of additions, \\(x\\), is given by
-            /// \\(x = \lceil \frac{256}{w} \rceil\\). Then
-            /// $$
-            ///     a B = a\_0 B + a\_1 w\^1 B + \cdots + a\_{x-1} w\^{x-1} B.
-            /// $$
-            /// Grouping even and odd coefficients gives
-            /// $$
-            /// \begin{aligned}
-            ///     a B = \quad a\_0 w\^0 B +& a\_2 w\^2 B + \cdots + a\_{x-2} w\^{x-2} B    \\\\
-            ///               + a\_1 w\^1 B +& a\_3 w\^3 B + \cdots + a\_{x-1} w\^{x-1} B    \\\\
-            ///         = \quad(a\_0 w\^0 B +& a\_2 w\^2 B + \cdots + a\_{x-2} w\^{x-2} B)   \\\\
-            ///             + w(a\_1 w\^0 B +& a\_3 w\^2 B + \cdots + a\_{x-1} w\^{x-2} B).  \\\\
-            /// \end{aligned}
-            /// $$
-            /// For each \\(i = 0 \ldots 31\\), we create a lookup table of
-            /// $$
-            /// [w\^{2i} B, \ldots, \frac{w}{2}\cdot w\^{2i} B],
-            /// $$
-            /// and use it to select \\( y \cdot w\^{2i} \cdot B \\) in constant time.
-            ///
-            /// The radix-\\(w\\) representation requires that the scalar is bounded
-            /// by \\(2\^{255}\\), which is always the case.
-            ///
-            /// The above algorithm is trivially generalised to other powers-of-2 radices.
-            fn mul_base(&self, scalar: &Scalar) -> $point {
-                let a = scalar.as_radix_2w($radix);
-
-                let tables = &self.0;
-                let mut P = <$point>::identity();
-
-                for i in (0..$adds).filter(|x| x % 2 == 1) {
-                    P = (&P + &tables[i / 2].select(a[i])).as_extended();
-                }
-
-                P = P.mul_by_pow_2($radix);
-
-                for i in (0..$adds).filter(|x| x % 2 == 0) {
-                    P = (&P + &tables[i / 2].select(a[i])).as_extended();
-                }
-
-                P
-            }
-        }
-
-        impl<'a, 'b> Mul<&'b Scalar> for &'a $name {
-            type Output = $point;
-
-            /// Construct an `EdwardsPoint` from a `Scalar` \\(a\\) by
-            /// computing the multiple \\(aB\\) of this basepoint \\(B\\).
-            fn mul(self, scalar: &'b Scalar) -> $point {
-                // delegate to a private function so that its documentation appears in internal docs
-                self.mul_base(scalar)
-            }
-        }
-
-        impl<'a, 'b> Mul<&'a $name> for &'b Scalar {
-            type Output = $point;
-
-            /// Construct an `EdwardsPoint` from a `Scalar` \\(a\\) by
-            /// computing the multiple \\(aB\\) of this basepoint \\(B\\).
-            fn mul(self, basepoint_table: &'a $name) -> $point {
-                basepoint_table * self
-            }
-        }
-
-        impl Debug for $name {
-            fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-                write!(f, "{:?}([\n", stringify!($name))?;
-                for i in 0..32 {
-                    write!(f, "\t{:?},\n", &self.0[i])?;
-                }
-                write!(f, "])")
-            }
-        }
-    };
-} // End macro_rules! impl_basepoint_table
-
-// The number of additions required is ceil(256/w) where w is the radix representation.
-cfg_if! {
-    if #[cfg(feature = "precomputed-tables")] {
-        impl_basepoint_table! {
-            Name = EdwardsBasepointTable,
-            LookupTable = LookupTableRadix16,
-            Point = EdwardsPoint,
-            Radix = 4,
-            Additions = 64
-        }
-        impl_basepoint_table! {
-            Name = EdwardsBasepointTableRadix32,
-            LookupTable = LookupTableRadix32,
-            Point = EdwardsPoint,
-            Radix = 5,
-            Additions = 52
-        }
-        impl_basepoint_table! {
-            Name = EdwardsBasepointTableRadix64,
-            LookupTable = LookupTableRadix64,
-            Point = EdwardsPoint,
-            Radix = 6,
-            Additions = 43
-        }
-        impl_basepoint_table! {
-            Name = EdwardsBasepointTableRadix128,
-            LookupTable = LookupTableRadix128,
-            Point = EdwardsPoint,
-            Radix = 7,
-            Additions = 37
-        }
-        impl_basepoint_table! {
-            Name = EdwardsBasepointTableRadix256,
-            LookupTable = LookupTableRadix256,
-            Point = EdwardsPoint,
-            Radix = 8,
-            Additions = 33
-        }
-
-        /// A type-alias for [`EdwardsBasepointTable`] because the latter is
-        /// used as a constructor in the [`constants`] module.
-        //
-        // Same as for `LookupTableRadix16`, we have to define `EdwardsBasepointTable`
-        // first, because it's used as a constructor, and then provide a type alias for
-        // it.
-        pub type EdwardsBasepointTableRadix16 = EdwardsBasepointTable;
-    }
-}
-
-#[cfg(feature = "precomputed-tables")]
-macro_rules! impl_basepoint_table_conversions {
-    (LHS = $lhs:ty, RHS = $rhs:ty) => {
-        impl<'a> From<&'a $lhs> for $rhs {
-            fn from(table: &'a $lhs) -> $rhs {
-                <$rhs>::create(&table.basepoint())
-            }
-        }
-
-        impl<'a> From<&'a $rhs> for $lhs {
-            fn from(table: &'a $rhs) -> $lhs {
-                <$lhs>::create(&table.basepoint())
-            }
-        }
-    };
-}
-
-cfg_if! {
-    if #[cfg(feature = "precomputed-tables")] {
-        // Conversions from radix 16
-        impl_basepoint_table_conversions! {
-            LHS = EdwardsBasepointTableRadix16,
-            RHS = EdwardsBasepointTableRadix32
-        }
-        impl_basepoint_table_conversions! {
-            LHS = EdwardsBasepointTableRadix16,
-            RHS = EdwardsBasepointTableRadix64
-        }
-        impl_basepoint_table_conversions! {
-            LHS = EdwardsBasepointTableRadix16,
-            RHS = EdwardsBasepointTableRadix128
-        }
-        impl_basepoint_table_conversions! {
-            LHS = EdwardsBasepointTableRadix16,
-            RHS = EdwardsBasepointTableRadix256
-        }
-
-        // Conversions from radix 32
-        impl_basepoint_table_conversions! {
-            LHS = EdwardsBasepointTableRadix32,
-            RHS = EdwardsBasepointTableRadix64
-        }
-        impl_basepoint_table_conversions! {
-            LHS = EdwardsBasepointTableRadix32,
-            RHS = EdwardsBasepointTableRadix128
-        }
-        impl_basepoint_table_conversions! {
-            LHS = EdwardsBasepointTableRadix32,
-            RHS = EdwardsBasepointTableRadix256
-        }
-
-        // Conversions from radix 64
-        impl_basepoint_table_conversions! {
-            LHS = EdwardsBasepointTableRadix64,
-            RHS = EdwardsBasepointTableRadix128
-        }
-        impl_basepoint_table_conversions! {
-            LHS = EdwardsBasepointTableRadix64,
-            RHS = EdwardsBasepointTableRadix256
-        }
-
-        // Conversions from radix 128
-        impl_basepoint_table_conversions! {
-            LHS = EdwardsBasepointTableRadix128,
-            RHS = EdwardsBasepointTableRadix256
-        }
     }
 }
 
@@ -1473,9 +1169,6 @@ impl Mul<&Scalar> for &SubgroupPoint {
     type Output = SubgroupPoint;
 
     /// Scalar multiplication: compute `scalar * self`.
-    ///
-    /// For scalar multiplication of a basepoint,
-    /// `EdwardsBasepointTable` is approximately 4x faster.
     fn mul(self, scalar: &Scalar) -> SubgroupPoint {
         SubgroupPoint(self.0 * scalar)
     }
@@ -1489,9 +1182,6 @@ impl Mul<&SubgroupPoint> for &Scalar {
     type Output = SubgroupPoint;
 
     /// Scalar multiplication: compute `scalar * self`.
-    ///
-    /// For scalar multiplication of a basepoint,
-    /// `EdwardsBasepointTable` is approximately 4x faster.
     fn mul(self, point: &SubgroupPoint) -> SubgroupPoint {
         point * self
     }
@@ -1600,9 +1290,6 @@ mod test {
     #[cfg(feature = "alloc")]
     use alloc::vec::Vec;
 
-    #[cfg(feature = "precomputed-tables")]
-    use crate::curve25519_dalek::constants::ED25519_BASEPOINT_TABLE;
-
     /// X coordinate of the basepoint.
     /// = 15112221349535400772501151409588531511454012693041857206046113283949847762202
     static BASE_X_COORD_BYTES: [u8; 32] = [
@@ -1688,23 +1375,6 @@ mod test {
         assert_eq!(minus_basepoint.T, -(&constants::ED25519_BASEPOINT_POINT.T));
     }
 
-    /// Test that computing 1*basepoint gives the correct basepoint.
-    #[cfg(feature = "precomputed-tables")]
-    #[test]
-    fn basepoint_mult_one_vs_basepoint() {
-        let bp = ED25519_BASEPOINT_TABLE * &Scalar::ONE;
-        let compressed = bp.compress();
-        assert_eq!(compressed, constants::ED25519_BASEPOINT_COMPRESSED);
-    }
-
-    /// Test that `EdwardsBasepointTable::basepoint()` gives the correct basepoint.
-    #[cfg(feature = "precomputed-tables")]
-    #[test]
-    fn basepoint_table_basepoint_function_correct() {
-        let bp = ED25519_BASEPOINT_TABLE.basepoint();
-        assert_eq!(bp.compress(), constants::ED25519_BASEPOINT_COMPRESSED);
-    }
-
     /// Test `impl Add<EdwardsPoint> for EdwardsPoint`
     /// using basepoint + basepoint versus the 2*basepoint constant.
     #[test]
@@ -1749,17 +1419,6 @@ mod test {
         assert!(bool::from(id1.ct_eq(&id2)));
     }
 
-    /// Sanity check for conversion to precomputed points
-    #[cfg(feature = "precomputed-tables")]
-    #[test]
-    fn to_affine_niels_clears_denominators() {
-        // construct a point as aB so it has denominators (ie. Z != 1)
-        let aB = ED25519_BASEPOINT_TABLE * &A_SCALAR;
-        let aB_affine_niels = aB.as_affine_niels();
-        let also_aB = (&EdwardsPoint::identity() + &aB_affine_niels).as_extended();
-        assert_eq!(aB.compress(), also_aB.compress());
-    }
-
     /// Test mul_base versus a known scalar multiple from ed25519.py
     #[test]
     fn basepoint_mult_vs_ed25519py() {
@@ -1772,15 +1431,6 @@ mod test {
     fn basepoint_mult_by_basepoint_order() {
         let should_be_id = EdwardsPoint::mul_base(&constants::BASEPOINT_ORDER_PRIVATE);
         assert!(should_be_id.is_identity());
-    }
-
-    /// Test precomputed basepoint mult
-    #[cfg(feature = "precomputed-tables")]
-    #[test]
-    fn test_precomputed_basepoint_mult() {
-        let aB_1 = ED25519_BASEPOINT_TABLE * &A_SCALAR;
-        let aB_2 = constants::ED25519_BASEPOINT_POINT * A_SCALAR;
-        assert_eq!(aB_1.compress(), aB_2.compress());
     }
 
     /// Test scalar_mul versus a known scalar multiple from ed25519.py
@@ -1807,61 +1457,6 @@ mod test {
         assert_eq!(bp2.compress(), BASE2_CMPRSSD);
     }
 
-    /// Test that all the basepoint table types compute the same results.
-    #[cfg(feature = "precomputed-tables")]
-    #[test]
-    fn basepoint_tables() {
-        let P = &constants::ED25519_BASEPOINT_POINT;
-        let a = A_SCALAR;
-
-        let table_radix16 = EdwardsBasepointTableRadix16::create(P);
-        let table_radix32 = EdwardsBasepointTableRadix32::create(P);
-        let table_radix64 = EdwardsBasepointTableRadix64::create(P);
-        let table_radix128 = EdwardsBasepointTableRadix128::create(P);
-        let table_radix256 = EdwardsBasepointTableRadix256::create(P);
-
-        let aP = (ED25519_BASEPOINT_TABLE * &a).compress();
-        let aP16 = (&table_radix16 * &a).compress();
-        let aP32 = (&table_radix32 * &a).compress();
-        let aP64 = (&table_radix64 * &a).compress();
-        let aP128 = (&table_radix128 * &a).compress();
-        let aP256 = (&table_radix256 * &a).compress();
-
-        assert_eq!(aP, aP16);
-        assert_eq!(aP16, aP32);
-        assert_eq!(aP32, aP64);
-        assert_eq!(aP64, aP128);
-        assert_eq!(aP128, aP256);
-    }
-
-    /// Check unreduced scalar multiplication by the basepoint tables is the same no matter what
-    /// radix the table is.
-    #[cfg(feature = "precomputed-tables")]
-    #[test]
-    fn basepoint_tables_unreduced_scalar() {
-        let P = &constants::ED25519_BASEPOINT_POINT;
-        let a = crate::curve25519_dalek::scalar::test::LARGEST_UNREDUCED_SCALAR;
-
-        let table_radix16 = EdwardsBasepointTableRadix16::create(P);
-        let table_radix32 = EdwardsBasepointTableRadix32::create(P);
-        let table_radix64 = EdwardsBasepointTableRadix64::create(P);
-        let table_radix128 = EdwardsBasepointTableRadix128::create(P);
-        let table_radix256 = EdwardsBasepointTableRadix256::create(P);
-
-        let aP = (ED25519_BASEPOINT_TABLE * &a).compress();
-        let aP16 = (&table_radix16 * &a).compress();
-        let aP32 = (&table_radix32 * &a).compress();
-        let aP64 = (&table_radix64 * &a).compress();
-        let aP128 = (&table_radix128 * &a).compress();
-        let aP256 = (&table_radix256 * &a).compress();
-
-        assert_eq!(aP, aP16);
-        assert_eq!(aP16, aP32);
-        assert_eq!(aP32, aP64);
-        assert_eq!(aP64, aP128);
-        assert_eq!(aP128, aP256);
-    }
-
     /// Check that converting to projective and then back to extended round-trips.
     #[test]
     fn basepoint_projective_extended_round_trip() {
@@ -1886,30 +1481,12 @@ mod test {
     fn mul_base_clamped() {
         let mut csprng = crate::rand_core::OsRng;
 
-        // Make a random curve point in the curve. Give it torsion to make things interesting.
-        #[cfg(feature = "precomputed-tables")]
-        let random_point = {
-            let mut b = [0u8; 32];
-            csprng.fill_bytes(&mut b);
-            EdwardsPoint::mul_base_clamped(b) + constants::EIGHT_TORSION[1]
-        };
-        // Make a basepoint table from the random point. We'll use this with mul_base_clamped
-        #[cfg(feature = "precomputed-tables")]
-        let random_table = EdwardsBasepointTableRadix256::create(&random_point);
-
-        // Now test scalar mult. agreement on the default basepoint as well as random_point
-
         // Test that mul_base_clamped and mul_clamped agree on a large integer. Even after
         // clamping, this integer is not reduced mod l.
         let a_bytes = [0xff; 32];
         assert_eq!(
             EdwardsPoint::mul_base_clamped(a_bytes),
             constants::ED25519_BASEPOINT_POINT.mul_clamped(a_bytes)
-        );
-        #[cfg(feature = "precomputed-tables")]
-        assert_eq!(
-            random_table.mul_base_clamped(a_bytes),
-            random_point.mul_clamped(a_bytes)
         );
 
         // Test agreement on random integers
@@ -1921,11 +1498,6 @@ mod test {
             assert_eq!(
                 EdwardsPoint::mul_base_clamped(a_bytes),
                 constants::ED25519_BASEPOINT_POINT.mul_clamped(a_bytes)
-            );
-            #[cfg(feature = "precomputed-tables")]
-            assert_eq!(
-                random_table.mul_base_clamped(a_bytes),
-                random_point.mul_clamped(a_bytes)
             );
         }
     }
@@ -2032,7 +1604,7 @@ mod test {
     // A single iteration of a consistency check for MSM.
     #[cfg(feature = "alloc")]
     fn multiscalar_consistency_iter(n: usize) {
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::rand_core::OsRng;
 
         // Construct random coefficients x0, ..., x_{n-1},
         // followed by some extra hardcoded ones.
@@ -2095,7 +1667,7 @@ mod test {
     #[test]
     #[cfg(feature = "alloc")]
     fn vartime_precomputed_vs_nonprecomputed_multiscalar() {
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::rand_core::OsRng;
 
         let static_scalars = (0..128)
             .map(|_| Scalar::random(&mut rng))

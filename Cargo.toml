@@ -146,7 +146,6 @@ members = [
   "crates/utility/edgerun-ptr-meta-derive",
   "crates/utility/edgerun-pty",
   "crates/utility/edgerun-rancor",
-  "crates/utility/edgerun-random",
   "crates/utility/edgerun-quote",
   "crates/utility/edgerun-reqwest",
   "crates/utility/edgerun-rend",
@@ -316,7 +315,6 @@ edgerun-work = { version = "0.1", path = "crates/protocol/edgerun-work", default
 edgerun-crypto = { version = "0.1", path = "crates/utility/edgerun-crypto", default-features = false }
 edgerun-json = { version = "0.1", path = "crates/utility/edgerun-json", default-features = false, features = ["derive", "schemars", "ts-rs"] }
 edgerun-locale = { version = "0.1", path = "crates/utility/edgerun-locale", features = ["std"] }
-edgerun-random = { version = "0.1", path = "crates/utility/edgerun-random" }
 edgerun-emoji = { version = "0.1", path = "crates/utility/edgerun-emoji" }
 edgerun-sixel = { version = "0.1", path = "crates/utility/edgerun-sixel" }
 edgerun-terminal-parser = { version = "0.1", path = "crates/utility/edgerun-terminal-parser" }

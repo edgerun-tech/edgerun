@@ -25,8 +25,6 @@
 
 #![allow(unused_qualifications)]
 
-use crate::cfg_if;
-
 use crate::subtle::Choice;
 use crate::subtle::ConditionallyNegatable;
 use crate::subtle::ConditionallySelectable;
@@ -35,43 +33,21 @@ use crate::subtle::ConstantTimeEq;
 use crate::curve25519_dalek::backend;
 use crate::curve25519_dalek::constants;
 
-cfg_if! {
-    if #[cfg(curve25519_dalek_backend = "fiat")] {
-        /// A `FieldElement` represents an element of the field
-        /// \\( \mathbb Z / (2\^{255} - 19)\\).
-        ///
-        /// The `FieldElement` type is an alias for one of the platform-specific
-        /// implementations.
-        ///
-        /// Using formally-verified field arithmetic from fiat-crypto.
-        #[cfg(curve25519_dalek_bits = "32")]
-        pub(crate) type FieldElement = backend::serial::fiat_u32::field::FieldElement2625;
+/// A `FieldElement` represents an element of the field
+/// \\( \mathbb Z / (2\^{255} - 19)\\).
+///
+/// The `FieldElement` type is an alias for one of the platform-specific
+/// implementations.
+#[cfg(curve25519_dalek_bits = "64")]
+pub(crate) type FieldElement = backend::serial::u64::field::FieldElement51;
 
-        /// A `FieldElement` represents an element of the field
-        /// \\( \mathbb Z / (2\^{255} - 19)\\).
-        ///
-        /// The `FieldElement` type is an alias for one of the platform-specific
-        /// implementations.
-        ///
-        /// Using formally-verified field arithmetic from fiat-crypto.
-        #[cfg(curve25519_dalek_bits = "64")]
-        pub(crate) type FieldElement = backend::serial::fiat_u64::field::FieldElement51;
-    } else if #[cfg(curve25519_dalek_bits = "64")] {
-        /// A `FieldElement` represents an element of the field
-        /// \\( \mathbb Z / (2\^{255} - 19)\\).
-        ///
-        /// The `FieldElement` type is an alias for one of the platform-specific
-        /// implementations.
-        pub(crate) type FieldElement = backend::serial::u64::field::FieldElement51;
-    } else {
-        /// A `FieldElement` represents an element of the field
-        /// \\( \mathbb Z / (2\^{255} - 19)\\).
-        ///
-        /// The `FieldElement` type is an alias for one of the platform-specific
-        /// implementations.
-        pub(crate) type FieldElement = backend::serial::u32::field::FieldElement2625;
-    }
-}
+/// A `FieldElement` represents an element of the field
+/// \\( \mathbb Z / (2\^{255} - 19)\\).
+///
+/// The `FieldElement` type is an alias for one of the platform-specific
+/// implementations.
+#[cfg(curve25519_dalek_bits = "32")]
+pub(crate) type FieldElement = backend::serial::u32::field::FieldElement2625;
 
 impl Eq for FieldElement {}
 

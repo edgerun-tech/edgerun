@@ -95,10 +95,6 @@
 //! * the `*` operator between a `Scalar` and a `RistrettoPoint`, which
 //! performs constant-time variable-base scalar multiplication;
 //!
-//! * the `*` operator between a `Scalar` and a
-//! `RistrettoBasepointTable`, which performs constant-time fixed-base
-//! scalar multiplication;
-//!
 //! * an implementation of the
 //! [`MultiscalarMul`](../traits/trait.MultiscalarMul.html) trait for
 //! constant-time variable-base multiscalar multiplication;
@@ -195,14 +191,10 @@ use crate::subtle::ConstantTimeEq;
 #[cfg(feature = "zeroize")]
 use crate::zeroize::Zeroize;
 
-#[cfg(feature = "precomputed-tables")]
-use crate::curve25519_dalek::edwards::EdwardsBasepointTable;
 use crate::curve25519_dalek::edwards::EdwardsPoint;
 
 use crate::curve25519_dalek::scalar::Scalar;
 
-#[cfg(feature = "precomputed-tables")]
-use crate::curve25519_dalek::traits::BasepointTable;
 use crate::curve25519_dalek::traits::Identity;
 #[cfg(feature = "alloc")]
 use crate::curve25519_dalek::traits::{
@@ -948,19 +940,8 @@ impl<'a, 'b> Mul<&'b RistrettoPoint> for &'a Scalar {
 
 impl RistrettoPoint {
     /// Fixed-base scalar multiplication by the Ristretto base point.
-    ///
-    /// Uses precomputed basepoint tables when the `precomputed-tables` feature
-    /// is enabled, trading off increased code size for ~4x better performance.
     pub fn mul_base(scalar: &Scalar) -> Self {
-        #[cfg(not(feature = "precomputed-tables"))]
-        {
-            scalar * constants::RISTRETTO_BASEPOINT_POINT
-        }
-
-        #[cfg(feature = "precomputed-tables")]
-        {
-            scalar * constants::RISTRETTO_BASEPOINT_TABLE
-        }
+        scalar * constants::RISTRETTO_BASEPOINT_POINT
     }
 }
 
@@ -1067,54 +1048,6 @@ impl RistrettoPoint {
         RistrettoPoint(EdwardsPoint::vartime_double_scalar_mul_basepoint(
             a, &A.0, b,
         ))
-    }
-}
-
-/// A precomputed table of multiples of a basepoint, used to accelerate
-/// scalar multiplication.
-///
-/// A precomputed table of multiples of the Ristretto basepoint is
-/// available in the `constants` module:
-/// ```
-/// use crate::curve25519_dalek::constants::RISTRETTO_BASEPOINT_TABLE;
-/// use crate::curve25519_dalek::scalar::Scalar;
-///
-/// let a = Scalar::from(87329482u64);
-/// let P = &a * RISTRETTO_BASEPOINT_TABLE;
-/// ```
-#[cfg(feature = "precomputed-tables")]
-#[derive(Clone)]
-#[repr(transparent)]
-pub struct RistrettoBasepointTable(pub(crate) EdwardsBasepointTable);
-
-#[cfg(feature = "precomputed-tables")]
-impl<'a, 'b> Mul<&'b Scalar> for &'a RistrettoBasepointTable {
-    type Output = RistrettoPoint;
-
-    fn mul(self, scalar: &'b Scalar) -> RistrettoPoint {
-        RistrettoPoint(&self.0 * scalar)
-    }
-}
-
-#[cfg(feature = "precomputed-tables")]
-impl<'a, 'b> Mul<&'a RistrettoBasepointTable> for &'b Scalar {
-    type Output = RistrettoPoint;
-
-    fn mul(self, basepoint_table: &'a RistrettoBasepointTable) -> RistrettoPoint {
-        RistrettoPoint(self * &basepoint_table.0)
-    }
-}
-
-#[cfg(feature = "precomputed-tables")]
-impl RistrettoBasepointTable {
-    /// Create a precomputed table of multiples of the given `basepoint`.
-    pub fn create(basepoint: &RistrettoPoint) -> RistrettoBasepointTable {
-        RistrettoBasepointTable(EdwardsBasepointTable::create(&basepoint.0))
-    }
-
-    /// Get the basepoint for this table as a `RistrettoPoint`.
-    pub fn basepoint(&self) -> RistrettoPoint {
-        RistrettoPoint(self.0.basepoint())
     }
 }
 
@@ -1831,7 +1764,7 @@ mod test {
     #[test]
     #[cfg(feature = "alloc")]
     fn vartime_precomputed_vs_nonprecomputed_multiscalar() {
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::rand_core::OsRng;
 
         let static_scalars = (0..128)
             .map(|_| Scalar::random(&mut rng))

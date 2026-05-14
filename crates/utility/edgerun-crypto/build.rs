@@ -1,6 +1,6 @@
 fn main() {
     println!("cargo:rustc-check-cfg=cfg(curve25519_dalek_bits, values(\"32\", \"64\"))");
-    println!("cargo:rustc-check-cfg=cfg(curve25519_dalek_backend, values(\"serial\", \"simd\"))");
+    println!("cargo:rustc-check-cfg=cfg(curve25519_dalek_backend, values(\"serial\"))");
     println!("cargo:rustc-check-cfg=cfg(nightly)");
     println!("cargo:rustc-check-cfg=cfg(allow_unused_unsafe)");
     println!("cargo:rustc-check-cfg=cfg(curve25519_dalek_upstream_tests)");

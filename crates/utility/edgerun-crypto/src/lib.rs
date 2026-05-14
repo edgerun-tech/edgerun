@@ -308,8 +308,9 @@ pub use keys::{Ed25519SigningKey, Ed25519VerifyingKey};
 #[cfg(feature = "p256")]
 pub use keys::{P256SigningKey, P256VerifyingKey};
 pub use rng::{
-    fill_random, mix_entropy, random_below_u64, random_bytes, random_f64, random_u32, random_u64,
-    random_u128, register_random_source, unregister_random_source,
+    fill_random, mix_entropy, random_below_u64, random_bytes, random_choice, random_f64,
+    random_f64_range, random_i32_range, random_u32, random_u64, random_u128, random_usize_range,
+    register_random_source, unregister_random_source,
 };
 
 pub use crate::rng::OsRng;

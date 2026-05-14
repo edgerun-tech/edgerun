@@ -32,13 +32,6 @@ pub use crate::typenum::{
 #[rustfmt::skip]
 pub use consts::*;
 
-#[cfg(feature = "const-generics")]
-pub use crate::typenum::r#gen::generic_const_mappings;
-
-#[cfg(feature = "const-generics")]
-#[doc(no_inline)]
-pub use generic_const_mappings::{Const, ToUInt, U};
-
 #[derive(Eq, PartialEq, Ord, PartialOrd, Clone, Copy, Hash, Debug, Default)]
 #[cfg_attr(feature = "scale_info", derive(scale_info::TypeInfo))]
 pub struct Greater;

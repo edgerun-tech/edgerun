@@ -550,60 +550,6 @@ mod tests {
 
     use crate::num_bigint::FromPrimitive;
 
-    #[cfg(feature = "rand")]
-    use crate::num_bigint::bigrand::RandBigInt;
-    #[cfg(feature = "rand")]
-    use crate::num_bigint::{One, Zero};
-    #[cfg(feature = "rand")]
-    use rand::SeedableRng;
-    #[cfg(feature = "rand")]
-    use rand_xorshift::XorShiftRng;
-
-    #[cfg(feature = "rand")]
-    fn extended_gcd_euclid(a: Cow<BigUint>, b: Cow<BigUint>) -> (BigInt, BigInt, BigInt) {
-        // use crate::num_bigint::bigint::ToBigInt;
-
-        if a.is_zero() && b.is_zero() {
-            return (0.into(), 0.into(), 0.into());
-        }
-
-        let (mut s, mut old_s) = (BigInt::zero(), BigInt::one());
-        let (mut t, mut old_t) = (BigInt::one(), BigInt::zero());
-        let (mut r, mut old_r) = (b.to_bigint().unwrap(), a.to_bigint().unwrap());
-
-        while !r.is_zero() {
-            let quotient = &old_r / &r;
-            old_r = old_r - &quotient * &r;
-            core::mem::swap(&mut old_r, &mut r);
-            old_s = old_s - &quotient * &s;
-            core::mem::swap(&mut old_s, &mut s);
-            old_t = old_t - quotient * &t;
-            core::mem::swap(&mut old_t, &mut t);
-        }
-
-        (old_r, old_s, old_t)
-    }
-
-    #[test]
-    #[cfg(feature = "rand")]
-    fn test_extended_gcd_assumptions() {
-        let mut rng = XorShiftRng::from_seed([1u8; 16]);
-
-        for i in 1usize..100 {
-            for j in &[1usize, 64, 128] {
-                //println!("round {} - {}", i, j);
-                let a = rng.gen_biguint(i * j);
-                let b = rng.gen_biguint(i * j);
-                let (q, s_k, t_k) = extended_gcd(Cow::Borrowed(&a), Cow::Borrowed(&b), true);
-
-                let lhs = BigInt::from_biguint(Plus, a) * &s_k.unwrap();
-                let rhs = BigInt::from_biguint(Plus, b) * &t_k.unwrap();
-
-                assert_eq!(q.clone(), &lhs + &rhs, "{} = {} + {}", q, lhs, rhs);
-            }
-        }
-    }
-
     #[test]
     fn test_extended_gcd_example() {
         // simple example for wikipedia
@@ -702,50 +648,6 @@ mod tests {
             assert_eq!(_d, d_case);
             assert_eq!(_x.unwrap(), x_case);
             assert_eq!(_y.unwrap(), y_case);
-        }
-    }
-
-    #[test]
-    #[cfg(feature = "rand")]
-    fn test_gcd_lehmer_euclid_extended() {
-        let mut rng = XorShiftRng::from_seed([1u8; 16]);
-
-        for i in 1usize..80 {
-            for j in &[1usize, 16, 24, 64, 128] {
-                //println!("round {} - {}", i, j);
-                let a = rng.gen_biguint(i * j);
-                let b = rng.gen_biguint(i * j);
-                let (q, s_k, t_k) = extended_gcd(Cow::Borrowed(&a), Cow::Borrowed(&b), true);
-
-                let expected = extended_gcd_euclid(Cow::Borrowed(&a), Cow::Borrowed(&b));
-                assert_eq!(q, expected.0);
-                assert_eq!(s_k.unwrap(), expected.1);
-                assert_eq!(t_k.unwrap(), expected.2);
-            }
-        }
-    }
-
-    #[test]
-    #[cfg(feature = "rand")]
-    fn test_gcd_lehmer_euclid_not_extended() {
-        let mut rng = XorShiftRng::from_seed([1u8; 16]);
-
-        for i in 1usize..80 {
-            for j in &[1usize, 16, 24, 64, 128] {
-                //println!("round {} - {}", i, j);
-                let a = rng.gen_biguint(i * j);
-                let b = rng.gen_biguint(i * j);
-                let (q, s_k, t_k) = extended_gcd(Cow::Borrowed(&a), Cow::Borrowed(&b), false);
-
-                let expected = extended_gcd_euclid(Cow::Borrowed(&a), Cow::Borrowed(&b));
-                assert_eq!(
-                    q, expected.0,
-                    "gcd({}, {}) = {} != {}",
-                    &a, &b, &q, expected.0
-                );
-                assert_eq!(s_k, None);
-                assert_eq!(t_k, None);
-            }
         }
     }
 }

@@ -128,22 +128,6 @@ pub struct BigInt {
     pub(crate) data: BigUint,
 }
 
-// Return the magnitude of a `BigInt`.
-//
-// This is in a private module, pseudo pub(crate)
-#[cfg(feature = "rand")]
-pub fn magnitude(i: &BigInt) -> &BigUint {
-    &i.data
-}
-
-// Return the owned magnitude of a `BigInt`.
-//
-// This is in a private module, pseudo pub(crate)
-#[cfg(feature = "rand")]
-pub fn into_magnitude(i: BigInt) -> BigUint {
-    i.data
-}
-
 impl PartialEq for BigInt {
     #[inline]
     fn eq(&self, other: &BigInt) -> bool {

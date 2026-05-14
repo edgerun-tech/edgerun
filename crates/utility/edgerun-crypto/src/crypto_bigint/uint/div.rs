@@ -585,14 +585,6 @@ mod tests {
     use super::*;
     use crate::crypto_bigint::{Limb, U256, limb::HI_BIT};
 
-    #[cfg(feature = "rand")]
-    use {
-        crate::crypto_bigint::{CheckedMul, Random},
-        crate::rand_core::RngCore,
-        crate::rand_core::SeedableRng,
-        crate::test_rng::ChaChaRng,
-    };
-
     #[test]
     fn div_word() {
         for (n, d, e, ee) in &[
@@ -613,22 +605,6 @@ mod tests {
             assert!(is_some.is_true_vartime());
             assert_eq!(U256::from(*e), q);
             assert_eq!(U256::from(*ee), r);
-        }
-    }
-
-    #[cfg(feature = "rand")]
-    #[test]
-    fn div() {
-        let mut rng = ChaChaRng::from_seed([7u8; 32]);
-        for _ in 0..25 {
-            let num = U256::random(&mut rng).shr_vartime(128);
-            let den = U256::random(&mut rng).shr_vartime(128);
-            let n = num.checked_mul(&den);
-            if n.is_some().into() {
-                let (q, _, is_some) = n.unwrap().ct_div_rem(&den);
-                assert!(is_some.is_true_vartime());
-                assert_eq!(q, num);
-            }
         }
     }
 
@@ -713,21 +689,6 @@ mod tests {
         b.limbs[b.limbs.len() - 1] = Limb(0x82 << (HI_BIT - 7));
         let r = a.wrapping_rem(&b);
         assert_eq!(r, a);
-    }
-
-    #[cfg(feature = "rand")]
-    #[test]
-    fn rem2krand() {
-        let mut rng = ChaChaRng::from_seed([7u8; 32]);
-        for _ in 0..25 {
-            let num = U256::random(&mut rng);
-            let k = (rng.next_u32() % 256) as usize;
-            let den = U256::ONE.shl_vartime(k);
-
-            let a = num.rem2k(k);
-            let e = num.wrapping_rem(&den);
-            assert_eq!(a, e);
-        }
     }
 
     #[allow(clippy::op_ref)]

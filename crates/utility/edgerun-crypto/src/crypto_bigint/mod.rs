@@ -95,36 +95,6 @@
 //! That includes modular exponentiation and multiplicative inverses.
 //! These features are described in the [`modular`] module.
 //!
-//! ### Random number generation
-//!
-//! When the `rand_core` or `rand` features of this crate are enabled, it's
-//! possible to generate random numbers using any CSRNG by using the
-//! [`Random`] trait:
-//!
-//! ```
-//! # #[cfg(feature = "rand")]
-//! # {
-//! use edgerun_crypto::crypto_bigint::{Random, U256, crate::rand_core::OsRng};
-//!
-//! let n = U256::random(&mut OsRng);
-//! # }
-//! ```
-//!
-//! #### Modular random number generation
-//!
-//! The [`RandomMod`] trait supports generating random numbers with a uniform
-//! distribution around a given [`NonZero`] modulus.
-//!
-//! ```
-//! # #[cfg(feature = "rand")]
-//! # {
-//! use edgerun_crypto::crypto_bigint::{NonZero, RandomMod, U256, crate::rand_core::OsRng};
-//!
-//! let modulus = NonZero::new(U256::from(3u8)).unwrap();
-//! let n = U256::random_mod(&mut OsRng, &modulus);
-//! # }
-//! ```
-//!
 //! [`Add`]: core::ops::Add
 //! [`Div`]: core::ops::Div
 //! [`Mul`]: core::ops::Mul

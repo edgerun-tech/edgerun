@@ -20,7 +20,7 @@ use crate::rand_core::{CryptoRng, Error, RngCore, impls};
 /// kernel randomness.
 ///
 /// This struct is only available when specifying the crate feature `getrandom`
-/// or `std`. When using the `rand` lib, it is also available as `rand::rngs::OsRng`.
+/// or `std`. Use `edgerun_crypto::OsRng` for EdgeRun-owned entropy.
 ///
 /// # Blocking and error handling
 ///

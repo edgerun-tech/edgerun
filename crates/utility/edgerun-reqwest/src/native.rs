@@ -628,10 +628,6 @@ impl ClientBuilder {
         self
     }
 
-    pub fn use_rustls_tls(self) -> Self {
-        self
-    }
-
     pub fn min_tls_version(mut self, version: tls::Version) -> Self {
         self.tls12_first = matches!(version, tls::Version::TLS_1_2);
         self

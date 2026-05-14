@@ -5,6 +5,7 @@
 //! 2. CPU hardware random instructions
 //! 3. Linux kernel randomness
 
+use core::ops::Range;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::error::{CryptoError, Result};
@@ -111,6 +112,37 @@ pub fn random_below_u64(upper: u64) -> Result<u64> {
         if value < zone {
             return Ok(value % upper);
         }
+    }
+}
+
+pub fn random_f64_range(range: Range<f64>) -> Result<f64> {
+    if range.start >= range.end {
+        return Err(CryptoError::InternalError);
+    }
+    Ok(range.start + ((range.end - range.start) * random_f64()?))
+}
+
+pub fn random_i32_range(range: Range<i32>) -> Result<i32> {
+    if range.start >= range.end {
+        return Err(CryptoError::InternalError);
+    }
+    let span = (range.end as i64 - range.start as i64) as u64;
+    Ok(range.start + random_below_u64(span)? as i32)
+}
+
+pub fn random_usize_range(range: Range<usize>) -> Result<usize> {
+    if range.start >= range.end {
+        return Err(CryptoError::InternalError);
+    }
+    let span = range.end - range.start;
+    Ok(range.start + random_below_u64(span as u64)? as usize)
+}
+
+pub fn random_choice<T>(items: &[T]) -> Result<Option<&T>> {
+    if items.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(&items[random_usize_range(0..items.len())?]))
     }
 }
 

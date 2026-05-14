@@ -1,5 +1,14 @@
 use std::path::{Path, PathBuf};
 
+fn random_suffix() -> std::io::Result<u64> {
+    edgerun_crypto::random_u64().map_err(|error| {
+        std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("secure random source unavailable: {error}"),
+        )
+    })
+}
+
 #[derive(Debug)]
 pub struct TempDir {
     path: PathBuf,
@@ -17,7 +26,7 @@ impl TempDir {
             let path = base.join(format!(
                 "edgerun-temp-{}-{}",
                 std::process::id(),
-                edgerun_random::u64()
+                random_suffix()?
             ));
             match std::fs::create_dir(&path) {
                 Ok(()) => return Ok(Self { path }),
@@ -53,7 +62,7 @@ impl NamedTempFile {
             let path = base.join(format!(
                 "edgerun-temp-file-{}-{}",
                 std::process::id(),
-                edgerun_random::u64()
+                random_suffix()?
             ));
             match std::fs::OpenOptions::new()
                 .write(true)

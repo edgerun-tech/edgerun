@@ -17,7 +17,7 @@
 //!
 //! use rsa::{RsaPrivateKey, RsaPublicKey, Oaep, sha2::Sha256};
 //!
-//! let mut rng = rand::thread_rng(); // rand@0.8
+//! let mut rng = crate::rand_core::OsRng;
 //!
 //! let bits = 2048;
 //! let private_key = RsaPrivateKey::new(&mut rng, bits).expect("failed to generate a key");
@@ -39,7 +39,7 @@
 //! ```ignore
 //! use rsa::{RsaPrivateKey, RsaPublicKey, Pkcs1v15Encrypt};
 //!
-//! let mut rng = rand::thread_rng(); // rand@0.8
+//! let mut rng = crate::rand_core::OsRng;
 //!
 //! let bits = 2048;
 //! let private_key = RsaPrivateKey::new(&mut rng, bits).expect("failed to generate a key");
@@ -64,7 +64,7 @@
 //! use rsa::signature::{Keypair, RandomizedSigner, SignatureEncoding, Verifier};
 //! use rsa::sha2::{Digest, Sha256};
 //!
-//! let mut rng = rand::thread_rng(); // rand@0.8
+//! let mut rng = crate::rand_core::OsRng;
 //!
 //! let bits = 2048;
 //! let private_key = RsaPrivateKey::new(&mut rng, bits).expect("failed to generate a key");
@@ -89,7 +89,7 @@
 //! use rsa::signature::{Keypair,RandomizedSigner, SignatureEncoding, Verifier};
 //! use rsa::sha2::{Digest, Sha256};
 //!
-//! let mut rng = rand::thread_rng(); // rand@0.8
+//! let mut rng = crate::rand_core::OsRng;
 //!
 //! let bits = 2048;
 //! let private_key = RsaPrivateKey::new(&mut rng, bits).expect("failed to generate a key");

@@ -114,6 +114,7 @@ dependencies = [
  "edgerun-async-trait",
  "edgerun-bytes",
  "edgerun-codex-utils-cargo-bin",
+ "edgerun-crypto",
  "edgerun-encoding",
  "edgerun-error",
  "edgerun-eventsource-stream",
@@ -123,7 +124,6 @@ dependencies = [
  "edgerun-json",
  "edgerun-log",
  "edgerun-pretty-assertions",
- "edgerun-random",
  "edgerun-reqwest",
  "edgerun-tempfile",
  "edgerun-tokio",
@@ -158,6 +158,7 @@ dependencies = [
  "codex-tools",
  "edgerun-async-trait",
  "edgerun-bytes",
+ "edgerun-crypto",
  "edgerun-futures",
  "edgerun-http",
  "edgerun-json",
@@ -359,6 +360,7 @@ dependencies = [
  "edgerun-crypto",
  "edgerun-json",
  "edgerun-log",
+ "miniz_oxide",
  "rkyv",
 ]
 
@@ -782,10 +784,6 @@ name = "edgerun-pty"
 version = "0.1.1"
 
 [[package]]
-name = "edgerun-random"
-version = "0.1.1"
-
-[[package]]
 name = "edgerun-remote-capability"
 version = "0.1.1"
 dependencies = [
@@ -923,7 +921,7 @@ dependencies = [
 name = "edgerun-tempfile"
 version = "0.1.1"
 dependencies = [
- "edgerun-random",
+ "edgerun-crypto",
 ]
 
 [[package]]
@@ -1020,7 +1018,6 @@ dependencies = [
  "edgerun-crypto",
  "edgerun-encoding",
  "edgerun-http",
- "edgerun-random",
 ]
 
 [[package]]

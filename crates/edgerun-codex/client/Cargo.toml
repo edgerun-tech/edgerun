@@ -19,7 +19,7 @@ reqwest-transport = [
     "edgerun-reqwest/http2",
     "edgerun-reqwest/http3",
     "edgerun-reqwest/native-root",
-    "edgerun-reqwest/rustls-tls-native-roots",
+    "edgerun-reqwest/tls",
     "edgerun-reqwest/stream",
 ]
 native-transport = [
@@ -29,12 +29,12 @@ native-transport = [
 [dependencies]
 edgerun-async-trait = { workspace = true }
 edgerun-bytes = { workspace = true }
+edgerun-crypto = { workspace = true, default-features = false }
 edgerun-encoding = { workspace = true }
 edgerun-error = { workspace = true }
 edgerun-eventsource-stream = { workspace = true }
 edgerun-http = { workspace = true }
 edgerun-json = { workspace = true }
-edgerun-random = { workspace = true }
 edgerun-futures = { workspace = true }
 edgerun-reqwest = { workspace = true, default-features = false, optional = true }
 edgerun-tokio = { workspace = true, features = ["macros", "rt", "time", "sync"] }

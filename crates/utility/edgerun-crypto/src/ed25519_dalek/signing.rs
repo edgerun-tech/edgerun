@@ -187,7 +187,7 @@ impl SigningKey {
     #[cfg_attr(feature = "rand_core", doc = "```")]
     #[cfg_attr(not(feature = "rand_core"), doc = "```ignore")]
     /// # fn main() {
-    /// use rand::rngs::OsRng;
+    /// use crate::rand_core::OsRng;
     /// use ed25519_dalek::{Signature, SigningKey};
     ///
     /// let mut csprng = OsRng;
@@ -239,7 +239,7 @@ impl SigningKey {
     /// use ed25519_dalek::SigningKey;
     /// use ed25519_dalek::Signature;
     /// use crate::sha2::Sha512;
-    /// use rand::rngs::OsRng;
+    /// use crate::rand_core::OsRng;
     ///
     /// # fn main() {
     /// let mut csprng = OsRng;
@@ -284,7 +284,7 @@ impl SigningKey {
     /// # use ed25519_dalek::Signature;
     /// # use ed25519_dalek::SignatureError;
     /// # use crate::sha2::Sha512;
-    /// # use rand::rngs::OsRng;
+    /// # use crate::rand_core::OsRng;
     /// #
     /// # fn do_test() -> Result<Signature, SignatureError> {
     /// # let mut csprng = OsRng;
@@ -363,7 +363,7 @@ impl SigningKey {
     /// use ed25519_dalek::Signature;
     /// use ed25519_dalek::SignatureError;
     /// use crate::sha2::Sha512;
-    /// use rand::rngs::OsRng;
+    /// use crate::rand_core::OsRng;
     ///
     /// # fn do_test() -> Result<(), SignatureError> {
     /// let mut csprng = OsRng;

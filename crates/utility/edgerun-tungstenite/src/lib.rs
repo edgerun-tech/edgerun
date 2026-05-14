@@ -16,8 +16,6 @@ use std::net::TcpStream;
 use std::ops::Deref;
 use std::str::Utf8Error;
 use std::string::FromUtf8Error;
-#[cfg(feature = "rustls-tls-native-roots")]
-use std::sync::Arc;
 
 #[cfg(feature = "handshake")]
 pub mod http {
@@ -167,8 +165,7 @@ pub mod client {
 
     pub fn generate_key() -> String {
         let mut bytes = [0u8; 16];
-        bytes[..8].copy_from_slice(&edgerun_random::u64().to_be_bytes());
-        bytes[8..].copy_from_slice(&edgerun_random::u64().to_be_bytes());
+        edgerun_crypto::fill_random(&mut bytes).expect("edgerun secure random source unavailable");
         standard_encode(&bytes)
     }
 
@@ -234,18 +231,6 @@ pub use client::ClientRequestBuilder;
 #[allow(missing_debug_implementations)]
 pub enum Connector {
     Plain,
-    #[cfg(feature = "rustls-tls-native-roots")]
-    Rustls(Arc<rustls::ClientConfig>),
-}
-
-#[cfg(feature = "rustls-tls-native-roots")]
-impl From<Connector> for crate::backend::Connector {
-    fn from(value: Connector) -> Self {
-        match value {
-            Connector::Plain => Self::Plain,
-            Connector::Rustls(config) => Self::Rustls(config),
-        }
-    }
 }
 
 pub mod stream {
@@ -1549,49 +1534,6 @@ where
         .map_err(|error| Error::Other(error.to_string()))
 }
 
-#[cfg(feature = "rustls-tls-native-roots")]
-pub fn client_tls<R, S>(
-    request: R,
-    stream: S,
-) -> Result<(WebSocket<MaybeTlsStream<S>>, handshake::client::Response)>
-where
-    R: client::IntoClientRequest,
-    S: Read + Write + Send + Unpin + 'static,
-{
-    client_tls_with_config(request, stream, None, None)
-}
-
-#[cfg(feature = "rustls-tls-native-roots")]
-pub fn client_tls_with_config<R, S>(
-    request: R,
-    stream: S,
-    config: Option<protocol::WebSocketConfig>,
-    connector: Option<Connector>,
-) -> Result<(WebSocket<MaybeTlsStream<S>>, handshake::client::Response)>
-where
-    R: client::IntoClientRequest,
-    S: Read + Write + Send + Unpin + 'static,
-{
-    let request = request.into_client_request()?;
-    crate::backend::client_tls_with_config(
-        request,
-        stream,
-        config.map(Into::into),
-        connector.map(Into::into),
-    )
-    .map(|(inner, response)| {
-        let config = protocol::WebSocketConfig::from(inner.get_config());
-        let stream = MaybeTlsStream::from_backend(inner.into_inner());
-        let inner = crate::backend::WebSocket::from_raw_socket(
-            stream,
-            protocol::Role::Client.into(),
-            Some(config.into()),
-        );
-        (WebSocket { inner }, response)
-    })
-    .map_err(|error| Error::Other(error.to_string()))
-}
-
 #[cfg(feature = "handshake")]
 pub fn connect<R>(
     request: R,
@@ -2385,8 +2327,10 @@ mod backend {
                 Message::Frame(frame) => frame,
             };
             if matches!(self.role, protocol::Role::Client) {
-                let mask = edgerun_random::u64().to_be_bytes();
-                frame.header.mask = Some([mask[0], mask[1], mask[2], mask[3]]);
+                let mut mask = [0u8; 4];
+                edgerun_crypto::fill_random(&mut mask)
+                    .expect("edgerun secure random source unavailable");
+                frame.header.mask = Some(mask);
             }
             frame.format(&mut self.stream)
         }

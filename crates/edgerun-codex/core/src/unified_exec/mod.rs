@@ -166,7 +166,12 @@ pub(crate) fn resolve_max_tokens(max_tokens: Option<usize>) -> usize {
 
 pub(crate) fn generate_chunk_id() -> String {
     (0..6)
-        .map(|_| format!("{:x}", edgerun_random::usize_range(0..16)))
+        .map(|_| {
+            format!(
+                "{:x}",
+                edgerun_crypto::random_usize_range(0..16).unwrap_or(0)
+            )
+        })
         .collect()
 }
 

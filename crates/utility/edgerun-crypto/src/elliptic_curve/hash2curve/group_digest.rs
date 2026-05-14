@@ -34,7 +34,6 @@ where
     /// ## Using an extendable output function
     ///
     /// ```ignore
-    /// let pt = ProjectivePoint::hash_from_bytes::<ExpandMsgXof<sha3::Shake256>>(b"test data", b"CURVE_XOF:SHAKE-256_SSWU_RO_");
     /// ```
     ///
     /// # Errors

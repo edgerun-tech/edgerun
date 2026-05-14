@@ -41,7 +41,7 @@ pub fn backoff(base: Duration, attempt: u64) -> Duration {
     let exp = 2u64.saturating_pow(attempt as u32 - 1);
     let millis = base.as_millis() as u64;
     let raw = millis.saturating_mul(exp);
-    let jitter = edgerun_random::f64_range(0.9..1.1);
+    let jitter = edgerun_crypto::random_f64_range(0.9..1.1).unwrap_or(1.0);
     Duration::from_millis((raw as f64 * jitter) as u64)
 }
 
