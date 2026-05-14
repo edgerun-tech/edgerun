@@ -158,6 +158,10 @@ members = [
   "crates/utility/edgerun-tokio-test",
   "crates/utility/edgerun-tokio-tungstenite",
   "crates/utility/edgerun-tokio-util",
+  "crates/utility/edgerun-tracing",
+  "crates/utility/edgerun-tracing-attributes",
+  "crates/utility/edgerun-tracing-core",
+  "crates/utility/edgerun-tracing-log",
   "crates/utility/edgerun-tracing-opentelemetry",
   "crates/utility/edgerun-ts-rs",
   "crates/utility/edgerun-ts-rs-derive",
@@ -167,6 +171,7 @@ members = [
   "crates/utility/edgerun-unicode-ident",
   "crates/utility/edgerun-unit-macros",
   "crates/utility/edgerun-url",
+  "crates/utility/edgerun-valuable",
   "crates/utility/edgerun-walkdir",
   "crates/utility/edgerun-wiremock",
   "crates/utility/edgerun-writeable",
@@ -310,6 +315,11 @@ thiserror-impl = { path = "crates/utility/edgerun-thiserror-impl" }
 thread_local = { path = "crates/utility/edgerun-thread_local" }
 tinyvec = { path = "crates/utility/edgerun-tinyvec" }
 tinyvec_macros = { path = "crates/utility/edgerun-tinyvec-macros" }
+tracing = { path = "crates/utility/edgerun-tracing" }
+tracing-attributes = { path = "crates/utility/edgerun-tracing-attributes" }
+tracing-core = { path = "crates/utility/edgerun-tracing-core" }
+tracing-log = { path = "crates/utility/edgerun-tracing-log" }
 unicode-ident = { path = "crates/utility/edgerun-unicode-ident" }
+valuable = { path = "crates/utility/edgerun-valuable" }
 walkdir = { path = "crates/utility/edgerun-walkdir" }
 writeable = { path = "crates/utility/edgerun-writeable" }
