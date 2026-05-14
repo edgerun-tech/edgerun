@@ -11,6 +11,8 @@ pub mod events;
 pub mod policy;
 pub mod projection;
 pub mod provider;
+#[cfg(feature = "provider-http")]
+mod provider_http;
 pub mod provider_mapping;
 pub mod router;
 pub mod settlement_intent;

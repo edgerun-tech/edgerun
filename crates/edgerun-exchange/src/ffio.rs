@@ -7,13 +7,17 @@
 extern crate alloc;
 
 use crate::provider::*;
+use crate::provider_http::{
+    build_client, call_json_api, decimal, mapped_status, object, parse_asset_id, provider_order,
+    str_field,
+};
 use alloc::string::String;
 use core::result::Result;
-use edgerun_json::{to_string, JsonValue, Map, ToJson};
-use edgerun_node::http::client_middleware::Chain;
-use edgerun_node::http::{HttpClient, Method};
-use edgerun_node::rt::block_on;
-use edgerun_proto::edgerun::v0::wallet::v0::{AssetRef, Quote, QuoteRequest};
+use edgerun_json::{JsonValue, Map};
+use edgerun_node::http::Method;
+use edgerun_protocols::core_protocol::protocol::edgerun_wallet_v0::{
+    AssetRef, Quote, QuoteRequest,
+};
 use edgerun_wallet::{DecimalAmount, WalletError};
 
 const FFIO_BASE_URL: &str = "https://api.ff.io/api/v1";
@@ -37,76 +41,13 @@ impl core::fmt::Debug for FFioAdapter {
 
 impl FFioAdapter {
     pub fn new(api_key: String, api_secret: String, refcode: String) -> Self {
-        let http_client = HttpClient::new();
-        let client = Chain::new(http_client).build();
         Self {
             api_key,
             api_secret,
             refcode,
             afftax_bps: 0,
-            client,
+            client: build_client(),
         }
-    }
-
-    fn parse_asset_id(id: &str) -> (String, String) {
-        let parts: Vec<&str> = id.split(':').collect();
-        if parts.len() >= 2 {
-            (parts[0].to_string(), parts[1].to_string())
-        } else {
-            (id.to_string(), "".to_string())
-        }
-    }
-
-    fn call_api(
-        &self,
-        method: Method,
-        path: &str,
-        body: Option<JsonValue>,
-    ) -> Result<JsonValue, WalletError> {
-        let url = format!("{}{}", FFIO_BASE_URL, path);
-
-        let body_bytes = if let Some(b) = body {
-            let body_str = to_string(&b).map_err(|e| WalletError::Serialization(e.to_string()))?;
-            Some(body_str.into_bytes())
-        } else {
-            None
-        };
-
-        let response = match method {
-            Method::GET => block_on(async { self.client.get(&url).await }),
-            Method::POST => block_on(async {
-                self.client
-                    .post(
-                        &url,
-                        body_bytes.as_ref().map(|b| b.as_slice()).unwrap_or(b""),
-                    )
-                    .await
-            }),
-            _ => return Err(WalletError::HttpError("unsupported method".into())),
-        }
-        .map_err(|e| WalletError::HttpError(e.to_string()))?;
-
-        if !response.status().is_success() {
-            return Err(WalletError::ProviderError(format!(
-                "FF.io API error: HTTP {}",
-                response.status().as_u16()
-            )));
-        }
-
-        let body = response.body();
-        if body.is_empty() {
-            return Err(WalletError::ProviderError(
-                "FF.io API returned empty response".into(),
-            ));
-        }
-
-        let body_str =
-            core::str::from_utf8(body).map_err(|e| WalletError::Serialization(e.to_string()))?;
-        let tape = edgerun_json::parse_json_tape(body_str)
-            .map_err(|e| WalletError::Serialization(e.to_string()))?;
-        tape.root(body_str)
-            .and_then(|value| value.to_json_value())
-            .ok_or_else(|| WalletError::Serialization("missing JSON root value".into()))
     }
 }
 
@@ -126,8 +67,8 @@ impl ExchangeProvider for FFioAdapter {
     }
 
     fn supports_quote(&self, req: &QuoteRequest) -> bool {
-        let (settle_sym, _) = Self::parse_asset_id(&req.settlement_asset_id);
-        let (pay_sym, _) = Self::parse_asset_id(&req.pay_asset_id);
+        let (settle_sym, _) = parse_asset_id(&req.settlement_asset_id);
+        let (pay_sym, _) = parse_asset_id(&req.pay_asset_id);
 
         matches!(
             (
@@ -148,8 +89,8 @@ impl ExchangeProvider for FFioAdapter {
         req: &QuoteRequest,
         _ctx: &ProviderContext,
     ) -> Result<ProviderQuote, WalletError> {
-        let (settle_sym, settle_net) = Self::parse_asset_id(&req.settlement_asset_id);
-        let (pay_sym, _) = Self::parse_asset_id(&req.pay_asset_id);
+        let (settle_sym, settle_net) = parse_asset_id(&req.settlement_asset_id);
+        let (pay_sym, _) = parse_asset_id(&req.pay_asset_id);
 
         let mut body = Map::new();
         body.insert("from".into(), JsonValue::String(pay_sym.to_lowercase()));
@@ -162,38 +103,22 @@ impl ExchangeProvider for FFioAdapter {
             );
         }
 
-        let response = self.call_api(Method::POST, "/quote", Some(JsonValue::Object(body)))?;
+        let response = call_json_api(
+            &self.client,
+            FFIO_BASE_URL,
+            "FF.io",
+            Method::POST,
+            "/quote",
+            Some(JsonValue::Object(body)),
+        )?;
 
-        let obj = response.as_object().ok_or(WalletError::ProviderError(
-            "Invalid quote response from FF.io".into(),
-        ))?;
+        let obj = object(&response, "Invalid quote response from FF.io")?;
+        let est_amount = str_field(obj, "toAmount", "Missing toAmount in FF.io response")?;
+        let rate = str_field(obj, "rate", "Missing rate in FF.io response")?;
+        let quote_id = str_field(obj, "id", "Missing id in FF.io response")?;
 
-        let est_amount =
-            obj.get("toAmount")
-                .and_then(|v| v.as_str())
-                .ok_or(WalletError::ProviderError(
-                    "Missing toAmount in FF.io response".into(),
-                ))?;
-
-        let rate = obj
-            .get("rate")
-            .and_then(|v| v.as_str())
-            .ok_or(WalletError::ProviderError(
-                "Missing rate in FF.io response".into(),
-            ))?;
-
-        let quote_id = obj
-            .get("id")
-            .and_then(|v| v.as_str())
-            .ok_or(WalletError::ProviderError(
-                "Missing id in FF.io response".into(),
-            ))?;
-
-        let settlement_amount = DecimalAmount::parse(est_amount)
-            .ok_or_else(|| WalletError::InvalidDecimal(est_amount.into()))?;
-
-        let rate_dec =
-            DecimalAmount::parse(rate).ok_or_else(|| WalletError::InvalidDecimal(rate.into()))?;
+        let settlement_amount = decimal(est_amount)?;
+        let rate_dec = decimal(rate)?;
 
         Ok(ProviderQuote {
             provider: ProviderCode::FFio,
@@ -236,34 +161,22 @@ impl ExchangeProvider for FFioAdapter {
             JsonValue::String(req.recipient_address.clone()),
         );
 
-        let response = self.call_api(Method::POST, "/order", Some(JsonValue::Object(body)))?;
+        let response = call_json_api(
+            &self.client,
+            FFIO_BASE_URL,
+            "FF.io",
+            Method::POST,
+            "/order",
+            Some(JsonValue::Object(body)),
+        )?;
 
-        let obj = response.as_object().ok_or(WalletError::ProviderError(
-            "Invalid order response from FF.io".into(),
-        ))?;
-
-        let order_id = obj
-            .get("id")
-            .and_then(|v| v.as_str())
-            .ok_or(WalletError::ProviderError(
-                "Missing order ID in FF.io response".into(),
-            ))?;
-
-        let deposit_address =
-            obj.get("fromAddress")
-                .and_then(|v| v.as_str())
-                .ok_or(WalletError::ProviderError(
-                    "Missing fromAddress in FF.io response".into(),
-                ))?;
-
-        Ok(ProviderOrder {
-            provider: ProviderCode::FFio,
-            provider_order_id: order_id.into(),
-            order_id: order_id.into(),
-            deposit_address: deposit_address.into(),
-            status: 3,
-            created_at_ms: 0,
-        })
+        provider_order(
+            ProviderCode::FFio,
+            object(&response, "Invalid order response from FF.io")?,
+            "id",
+            "fromAddress",
+            "FF.io",
+        )
     }
 
     fn get_order_status(
@@ -273,42 +186,22 @@ impl ExchangeProvider for FFioAdapter {
     ) -> Result<ProviderStatus, WalletError> {
         let path = format!("/order/{}", provider_order_id);
 
-        let response = self.call_api(Method::GET, &path, None)?;
+        let response = call_json_api(
+            &self.client,
+            FFIO_BASE_URL,
+            "FF.io",
+            Method::GET,
+            &path,
+            None,
+        )?;
 
-        let obj = response.as_object().ok_or(WalletError::ProviderError(
-            "Invalid order status from FF.io".into(),
-        ))?;
+        let obj = object(&response, "Invalid order status from FF.io")?;
+        let status_str = str_field(obj, "status", "Missing status in FF.io response")?;
 
-        let status_str =
-            obj.get("status")
-                .and_then(|v| v.as_str())
-                .ok_or(WalletError::ProviderError(
-                    "Missing status in FF.io response".into(),
-                ))?;
-
-        let status = match status_str {
-            "pending" => 3,
-            "awaiting_deposit" => 4,
-            "processing" => 6,
-            "completed" => 7,
-            "failed" => 8,
-            "cancelled" => 9,
-            _ => {
-                return Err(WalletError::ProviderError(format!(
-                    "Unknown FF.io status: {}",
-                    status_str
-                )))
-            }
-        };
-
-        Ok(ProviderStatus {
-            provider: ProviderCode::FFio,
-            provider_order_id: provider_order_id.into(),
-            status,
-            deposit_tx: None,
-            payout_tx: None,
-            status_detail: Some(status_str.into()),
-            updated_at_ms: 0,
-        })
+        Ok(mapped_status(
+            ProviderCode::FFio,
+            provider_order_id,
+            status_str,
+        ))
     }
 }

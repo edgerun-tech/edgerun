@@ -47,9 +47,19 @@ pub fn map_provider_status(provider_code: &str, provider_status: &str) -> i32 {
         ("expired", 14),   // EXPIRED
     ];
 
+    let ffio_mappings: &[(&str, i32)] = &[
+        ("pending", 3),
+        ("awaiting_deposit", 4),
+        ("processing", 6),
+        ("completed", 7),
+        ("failed", 8),
+        ("cancelled", 9),
+    ];
+
     let mappings: &[(&str, i32)] = match provider_code {
         "SIDESHIFT" => sideshift_mappings,
         "CHANGENOW" => changenow_mappings,
+        "FFIO" => ffio_mappings,
         _ => &[],
     };
 
