@@ -16,9 +16,7 @@ use codex_protocol::models::ReasoningItemContent;
 use codex_protocol::models::ReasoningItemReasoningSummary;
 use codex_protocol::openai_models::InputModality;
 use codex_protocol::openai_models::default_input_modalities;
-use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::InterAgentCommunication;
-use codex_protocol::protocol::SandboxPolicy;
 use codex_protocol::protocol::TurnContextItem;
 use codex_utils_output_truncation::TruncationPolicy;
 use codex_utils_output_truncation::truncate_text;
@@ -124,11 +122,7 @@ fn reference_context_item() -> TurnContextItem {
         cwd: PathBuf::from("/tmp/reference-cwd"),
         current_date: Some("2026-03-23".to_string()),
         timezone: Some("America/Los_Angeles".to_string()),
-        approval_policy: AskForApproval::OnRequest,
-        sandbox_policy: SandboxPolicy::new_read_only_policy(),
-        permission_profile: None,
         network: None,
-        file_system_sandbox_policy: None,
         model: "gpt-test".to_string(),
         personality: None,
         collaboration_mode: None,

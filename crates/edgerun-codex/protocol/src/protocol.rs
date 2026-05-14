@@ -2851,14 +2851,8 @@ pub struct TurnContextItem {
     pub current_date: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timezone: Option<String>,
-    pub approval_policy: AskForApproval,
-    pub sandbox_policy: SandboxPolicy,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub permission_profile: Option<PermissionProfile>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub network: Option<TurnContextNetworkItem>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub file_system_sandbox_policy: Option<FileSystemSandboxPolicy>,
     pub model: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub personality: Option<Personality>,
@@ -2877,25 +2871,6 @@ pub struct TurnContextItem {
     pub final_output_json_schema: Option<Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub truncation_policy: Option<TruncationPolicy>,
-}
-
-impl TurnContextItem {
-    pub fn permission_profile(&self) -> PermissionProfile {
-        self.permission_profile.clone().unwrap_or_else(|| {
-            let file_system_sandbox_policy =
-                self.file_system_sandbox_policy.clone().unwrap_or_else(|| {
-                    FileSystemSandboxPolicy::from_legacy_sandbox_policy_for_cwd(
-                        &self.sandbox_policy,
-                        &self.cwd,
-                    )
-                });
-            PermissionProfile::from_runtime_permissions_with_enforcement(
-                SandboxEnforcement::from_legacy_sandbox_policy(&self.sandbox_policy),
-                &file_system_sandbox_policy,
-                NetworkSandboxPolicy::from(&self.sandbox_policy),
-            )
-        })
-    }
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
@@ -5192,15 +5167,12 @@ mod tests {
     fn turn_context_item_deserializes_without_network() -> Result<()> {
         let item: TurnContextItem = edgerun_json::from_serde_value(json!({
             "cwd": test_path_buf("/tmp"),
-            "approval_policy": "never",
-            "sandbox_policy": { "type": "danger-full-access" },
             "model": "gpt-5",
             "summary": "auto",
         }))?;
 
         assert_eq!(item.trace_id, None);
         assert_eq!(item.network, None);
-        assert_eq!(item.file_system_sandbox_policy, None);
         Ok(())
     }
 
@@ -5212,21 +5184,10 @@ mod tests {
             cwd: test_path_buf("/tmp"),
             current_date: None,
             timezone: None,
-            approval_policy: AskForApproval::Never,
-            sandbox_policy: SandboxPolicy::DangerFullAccess,
-            permission_profile: None,
             network: Some(TurnContextNetworkItem {
                 allowed_domains: vec!["api.example.com".to_string()],
                 denied_domains: vec!["blocked.example.com".to_string()],
             }),
-            file_system_sandbox_policy: Some(FileSystemSandboxPolicy::restricted(vec![
-                FileSystemSandboxEntry {
-                    path: FileSystemPath::GlobPattern {
-                        pattern: "/tmp/private/**/*.txt".to_string(),
-                    },
-                    access: FileSystemAccessMode::None,
-                },
-            ])),
             model: "gpt-5".to_string(),
             personality: None,
             collaboration_mode: None,
@@ -5245,19 +5206,6 @@ mod tests {
             json!({
                 "allowed_domains": ["api.example.com"],
                 "denied_domains": ["blocked.example.com"],
-            })
-        );
-        assert_eq!(
-            value["file_system_sandbox_policy"],
-            json!({
-                "kind": "restricted",
-                "entries": [{
-                    "path": {
-                        "type": "glob_pattern",
-                        "pattern": "/tmp/private/**/*.txt"
-                    },
-                    "access": "none"
-                }]
             })
         );
         Ok(())
