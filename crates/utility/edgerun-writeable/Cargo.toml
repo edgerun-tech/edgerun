@@ -1,0 +1,17 @@
+[package]
+name = "writeable"
+version = "0.6.3"
+edition = "2021"
+license = "Unicode-3.0"
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun-owned efficient formatting compatibility crate"
+
+[features]
+alloc = []
+default = ["alloc"]
+either = []
+
+[lints]
+workspace = true

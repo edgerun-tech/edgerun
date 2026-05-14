@@ -1,17 +1,17 @@
-[workspace]
-
 [package]
-name = "edgerun-stable-deref-trait"
-version = "0.1.0"
-edition = "2024"
-license = "MIT OR Apache-2.0"
-publish = false
-description = "Edgerun-owned stable_deref_trait crate: marker trait for stable-address deref types"
-
-[lib]
-path = "src/lib.rs"
+name = "stable_deref_trait"
+version = "1.2.1"
+edition = "2018"
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun-owned stable deref marker trait compatibility crate"
 
 [features]
+alloc = []
 default = ["std"]
 std = ["alloc"]
-alloc = []
+
+[lints]
+workspace = true

@@ -1,0 +1,24 @@
+[package]
+name = "litemap"
+version = "0.8.2"
+edition = "2021"
+license = "Unicode-3.0"
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun-owned flat sorted map compatibility crate"
+
+[features]
+alloc = []
+databake = []
+default = ["alloc"]
+serde = ["dep:serde_core", "alloc"]
+testing = ["alloc"]
+yoke = ["dep:yoke"]
+
+[dependencies]
+serde_core = { path = "../edgerun-serde-core", optional = true, default-features = false, features = ["alloc"] }
+yoke = { version = "0.8.2", optional = true, default-features = false, features = ["derive"] }
+
+[lints]
+workspace = true
