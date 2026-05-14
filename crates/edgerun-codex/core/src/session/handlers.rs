@@ -749,10 +749,7 @@ pub(super) async fn submission_loop(
                 }
                 Op::OverrideTurnContext {
                     cwd,
-                    approval_policy,
                     approvals_reviewer,
-                    sandbox_policy,
-                    permission_profile,
                     windows_sandbox_level,
                     model,
                     effort,
@@ -776,10 +773,7 @@ pub(super) async fn submission_loop(
                         sub.id.clone(),
                         SessionSettingsUpdate {
                             cwd,
-                            approval_policy,
                             approvals_reviewer,
-                            sandbox_policy,
-                            permission_profile,
                             windows_sandbox_level,
                             collaboration_mode: Some(collaboration_mode),
                             reasoning_summary: summary,

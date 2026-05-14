@@ -465,21 +465,9 @@ pub enum Op {
         #[serde(skip_serializing_if = "Option::is_none")]
         cwd: Option<PathBuf>,
 
-        /// Updated command approval policy.
-        #[serde(skip_serializing_if = "Option::is_none")]
-        approval_policy: Option<AskForApproval>,
-
         /// Updated approval reviewer for future approval prompts.
         #[serde(skip_serializing_if = "Option::is_none")]
         approvals_reviewer: Option<ApprovalsReviewer>,
-
-        /// Updated sandbox policy for tool calls.
-        #[serde(skip_serializing_if = "Option::is_none")]
-        sandbox_policy: Option<SandboxPolicy>,
-
-        /// Updated permissions profile for tool calls.
-        #[serde(skip_serializing_if = "Option::is_none")]
-        permission_profile: Option<PermissionProfile>,
 
         /// Updated model slug. When set, the model info is derived
         /// automatically.

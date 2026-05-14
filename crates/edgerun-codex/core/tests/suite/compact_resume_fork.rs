@@ -550,10 +550,7 @@ async fn snapshot_rollback_followup_turn_trims_context_updates() -> Result<()> {
     conversation
         .submit(Op::OverrideTurnContext {
             cwd: Some(override_cwd.to_path_buf()),
-            approval_policy: None,
             approvals_reviewer: None,
-            sandbox_policy: None,
-            permission_profile: None,
             windows_sandbox_level: None,
             model: None,
             effort: None,
