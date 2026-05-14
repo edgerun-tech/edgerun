@@ -102,6 +102,9 @@ members = [
   "crates/utility/edgerun-schemars-derive",
   "crates/utility/edgerun-seccompiler",
   "crates/utility/edgerun-serde",
+  "crates/utility/edgerun-serde-core",
+  "crates/utility/edgerun-serde-derive",
+  "crates/utility/edgerun-serde-upstream",
   "crates/utility/edgerun-shlex",
   "crates/utility/edgerun-similar",
   "crates/utility/edgerun-sixel",
@@ -223,5 +226,8 @@ rancor = { path = "crates/utility/edgerun-rancor" }
 rend = { path = "crates/utility/edgerun-rend" }
 rkyv = { path = "crates/utility/edgerun-rkyv" }
 rkyv_derive = { path = "crates/utility/edgerun-rkyv-derive" }
+serde = { path = "crates/utility/edgerun-serde-upstream" }
+serde_core = { path = "crates/utility/edgerun-serde-core" }
+serde_derive = { path = "crates/utility/edgerun-serde-derive" }
 tinyvec = { path = "crates/utility/edgerun-tinyvec" }
 tinyvec_macros = { path = "crates/utility/edgerun-tinyvec-macros" }

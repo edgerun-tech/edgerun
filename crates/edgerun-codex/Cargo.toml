@@ -129,5 +129,8 @@ rancor = { path = "../utility/edgerun-rancor" }
 rend = { path = "../utility/edgerun-rend" }
 rkyv = { path = "../utility/edgerun-rkyv" }
 rkyv_derive = { path = "../utility/edgerun-rkyv-derive" }
+serde = { path = "../utility/edgerun-serde-upstream" }
+serde_core = { path = "../utility/edgerun-serde-core" }
+serde_derive = { path = "../utility/edgerun-serde-derive" }
 tinyvec = { path = "../utility/edgerun-tinyvec" }
 tinyvec_macros = { path = "../utility/edgerun-tinyvec-macros" }

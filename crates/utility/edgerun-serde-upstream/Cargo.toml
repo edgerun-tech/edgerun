@@ -1,0 +1,25 @@
+[package]
+name = "serde"
+version = "1.0.228"
+edition = "2021"
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun-owned serialization framework"
+build = "build.rs"
+
+[features]
+default = ["std"]
+alloc = ["serde_core/alloc"]
+derive = ["serde_derive"]
+rc = ["serde_core/rc"]
+std = ["serde_core/std"]
+unstable = ["serde_core/unstable"]
+
+[dependencies]
+serde_core = { path = "../edgerun-serde-core", features = ["result"], default-features = false }
+serde_derive = { path = "../edgerun-serde-derive", optional = true }
+
+[lints]
+workspace = true
