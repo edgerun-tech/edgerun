@@ -84,9 +84,13 @@ members = [
   "crates/utility/edgerun-opentelemetry",
   "crates/utility/edgerun-opentelemetry-sdk",
   "crates/utility/edgerun-pretty-assertions",
+  "crates/utility/edgerun-ptr-meta",
+  "crates/utility/edgerun-ptr-meta-derive",
   "crates/utility/edgerun-pty",
+  "crates/utility/edgerun-rancor",
   "crates/utility/edgerun-random",
   "crates/utility/edgerun-reqwest",
+  "crates/utility/edgerun-rend",
   "crates/utility/edgerun-rmcp",
   "crates/utility/edgerun-runtime",
   "crates/utility/edgerun-schemars",
@@ -205,5 +209,9 @@ libc = "0.2"
 [patch.crates-io]
 bytecheck = { path = "crates/utility/edgerun-bytecheck" }
 bytecheck_derive = { path = "crates/utility/edgerun-bytecheck-derive" }
+ptr_meta = { path = "crates/utility/edgerun-ptr-meta" }
+ptr_meta_derive = { path = "crates/utility/edgerun-ptr-meta-derive" }
+rancor = { path = "crates/utility/edgerun-rancor" }
+rend = { path = "crates/utility/edgerun-rend" }
 tinyvec = { path = "crates/utility/edgerun-tinyvec" }
 tinyvec_macros = { path = "crates/utility/edgerun-tinyvec-macros" }
