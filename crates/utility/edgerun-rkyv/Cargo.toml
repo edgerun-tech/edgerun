@@ -1,0 +1,36 @@
+[package]
+name = "rkyv"
+version = "0.8.16"
+edition = "2021"
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun-owned zero-copy deserialization framework"
+
+[features]
+default = ["std", "bytecheck"]
+aligned = []
+alloc = ["hashbrown", "tinyvec-1/alloc", "rancor/alloc"]
+big_endian = []
+bytecheck = ["dep:bytecheck", "rend/bytecheck", "rkyv_derive/bytecheck"]
+hashbrown-0_17 = ["hashbrown"]
+little_endian = []
+pointer_width_16 = []
+pointer_width_32 = []
+pointer_width_64 = []
+std = ["alloc", "ptr_meta/std"]
+unaligned = []
+
+[dependencies]
+bytecheck = { path = "../edgerun-bytecheck", features = ["simdutf8"], optional = true, default-features = false }
+hashbrown = { path = "../edgerun-hashbrown", optional = true, default-features = false }
+munge = { path = "../edgerun-munge", default-features = false }
+ptr_meta = { path = "../edgerun-ptr-meta", default-features = false }
+rancor = { path = "../edgerun-rancor", default-features = false }
+rend = { path = "../edgerun-rend", default-features = false }
+rkyv_derive = { path = "../edgerun-rkyv-derive", default-features = false }
+tinyvec-1 = { package = "tinyvec", path = "../edgerun-tinyvec", optional = true, default-features = false }
+
+[lints]
+workspace = true

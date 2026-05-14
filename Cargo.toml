@@ -96,6 +96,8 @@ members = [
   "crates/utility/edgerun-rend",
   "crates/utility/edgerun-rmcp",
   "crates/utility/edgerun-runtime",
+  "crates/utility/edgerun-rkyv",
+  "crates/utility/edgerun-rkyv-derive",
   "crates/utility/edgerun-schemars",
   "crates/utility/edgerun-schemars-derive",
   "crates/utility/edgerun-seccompiler",
@@ -219,5 +221,7 @@ ptr_meta = { path = "crates/utility/edgerun-ptr-meta" }
 ptr_meta_derive = { path = "crates/utility/edgerun-ptr-meta-derive" }
 rancor = { path = "crates/utility/edgerun-rancor" }
 rend = { path = "crates/utility/edgerun-rend" }
+rkyv = { path = "crates/utility/edgerun-rkyv" }
+rkyv_derive = { path = "crates/utility/edgerun-rkyv-derive" }
 tinyvec = { path = "crates/utility/edgerun-tinyvec" }
 tinyvec_macros = { path = "crates/utility/edgerun-tinyvec-macros" }
