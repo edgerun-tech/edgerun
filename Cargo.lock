@@ -138,6 +138,7 @@ dependencies = [
  "edgerun-async-trait",
  "edgerun-json",
  "edgerun-log",
+ "edgerun-pretty-assertions",
  "edgerun-tokio",
  "edgerun-tokio-util",
 ]
