@@ -120,6 +120,7 @@ ts-rs = { package = "edgerun-ts-rs", path = "../utility/edgerun-ts-rs" }
 [patch.crates-io]
 bytecheck = { path = "../utility/edgerun-bytecheck" }
 bytecheck_derive = { path = "../utility/edgerun-bytecheck-derive" }
+hashbrown = { path = "../utility/edgerun-hashbrown" }
 munge = { path = "../utility/edgerun-munge" }
 munge_macro = { path = "../utility/edgerun-munge-macro" }
 ptr_meta = { path = "../utility/edgerun-ptr-meta" }

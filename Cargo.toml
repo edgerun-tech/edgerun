@@ -68,6 +68,7 @@ members = [
   "crates/utility/edgerun-eventsource-stream",
   "crates/utility/edgerun-fontdue",
   "crates/utility/edgerun-futures",
+  "crates/utility/edgerun-hashbrown",
   "crates/utility/edgerun-hpack",
   "crates/utility/edgerun-http-client",
   "crates/utility/edgerun-http",
@@ -211,6 +212,7 @@ libc = "0.2"
 [patch.crates-io]
 bytecheck = { path = "crates/utility/edgerun-bytecheck" }
 bytecheck_derive = { path = "crates/utility/edgerun-bytecheck-derive" }
+hashbrown = { path = "crates/utility/edgerun-hashbrown" }
 munge = { path = "crates/utility/edgerun-munge" }
 munge_macro = { path = "crates/utility/edgerun-munge-macro" }
 ptr_meta = { path = "crates/utility/edgerun-ptr-meta" }
