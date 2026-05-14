@@ -17,7 +17,7 @@ invocation = []
 
 [dependencies]
 cfg-if = { path = "../edgerun-cfg-if" }
-combine = "4.1.0"
+combine = { path = "../edgerun-combine" }
 jni-macros = { path = "../edgerun-jni-macros" }
 jni-sys = { path = "../edgerun-jni-sys" }
 log = { path = "../edgerun-log-upstream" }

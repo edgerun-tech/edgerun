@@ -57,10 +57,12 @@ members = [
   "crates/utility/edgerun-bytecheck",
   "crates/utility/edgerun-bytecheck-derive",
   "crates/utility/edgerun-bytes",
+  "crates/utility/edgerun-bytes-upstream",
   "crates/utility/edgerun-cfg-if",
   "crates/utility/edgerun-codex-utils-absolute-path",
   "crates/utility/edgerun-codex-utils-cargo-bin",
   "crates/utility/edgerun-clipboard",
+  "crates/utility/edgerun-combine",
   "crates/utility/edgerun-crypto",
   "crates/utility/edgerun-deno-core-icudata",
   "crates/utility/edgerun-displaydoc",
@@ -99,6 +101,7 @@ members = [
   "crates/utility/edgerun-log",
   "crates/utility/edgerun-log-upstream",
   "crates/utility/edgerun-log-macros",
+  "crates/utility/edgerun-memchr",
   "crates/utility/edgerun-miniz-oxide",
   "crates/utility/edgerun-munge",
   "crates/utility/edgerun-munge-macro",
@@ -256,7 +259,9 @@ libc = "0.2"
 adler2 = { path = "crates/utility/edgerun-adler2" }
 bytecheck = { path = "crates/utility/edgerun-bytecheck" }
 bytecheck_derive = { path = "crates/utility/edgerun-bytecheck-derive" }
+bytes = { path = "crates/utility/edgerun-bytes-upstream" }
 cfg-if = { path = "crates/utility/edgerun-cfg-if" }
+combine = { path = "crates/utility/edgerun-combine" }
 displaydoc = { path = "crates/utility/edgerun-displaydoc" }
 futures-channel = { path = "crates/utility/edgerun-futures-channel" }
 futures-core = { path = "crates/utility/edgerun-futures-core" }
@@ -273,6 +278,7 @@ jni-sys-macros = { path = "crates/utility/edgerun-jni-sys-macros" }
 lazy_static = { path = "crates/utility/edgerun-lazy_static" }
 litemap = { path = "crates/utility/edgerun-litemap" }
 log = { path = "crates/utility/edgerun-log-upstream" }
+memchr = { path = "crates/utility/edgerun-memchr" }
 miniz_oxide = { path = "crates/utility/edgerun-miniz-oxide" }
 munge = { path = "crates/utility/edgerun-munge" }
 munge_macro = { path = "crates/utility/edgerun-munge-macro" }
