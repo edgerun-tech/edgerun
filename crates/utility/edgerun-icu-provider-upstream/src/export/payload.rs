@@ -157,7 +157,7 @@ impl DataPayload<ExportMarker> {
     /// // Serialize the payload to a JSON string
     /// let mut buffer: Vec<u8> = vec![];
     /// export
-    ///     .serialize(&mut serde_json::Serializer::new(&mut buffer))
+    ///     .serialize(&mut edgerun_json::Serializer::new(&mut buffer))
     ///     .expect("Serialization should succeed");
     /// assert_eq!(r#"{"message":"(und) Hello World"}"#.as_bytes(), buffer);
     /// ```

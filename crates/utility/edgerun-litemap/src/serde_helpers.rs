@@ -9,7 +9,7 @@
 use serde_core::ser::{Impossible, Serialize, Serializer};
 
 pub fn is_num_or_string<T: Serialize + ?Sized>(k: &T) -> bool {
-    // Serializer that errors in the same cases as serde_json::ser::MapKeySerializer
+    // Serializer that errors in the same cases as edgerun_json::ser::MapKeySerializer
     struct MapKeySerializerDryRun;
     impl Serializer for MapKeySerializerDryRun {
         type Ok = ();

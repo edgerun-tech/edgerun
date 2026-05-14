@@ -30,7 +30,7 @@
 //! # The Deserializer trait
 //!
 //! [`Deserializer`] implementations are provided by third-party crates, for
-//! example [`serde_json`], [`serde_yaml`] and [`postcard`].
+//! example [`edgerun_json`], [`serde_yaml`] and [`postcard`].
 //!
 //! A partial list of well-maintained formats is given on the [Serde
 //! website][data formats].
@@ -107,7 +107,7 @@
 //! [`postcard`]: https://github.com/jamesmunns/postcard
 //! [`linked-hash-map`]: https://crates.io/crates/linked-hash-map
 //! [`serde_derive`]: https://crates.io/crates/serde_derive
-//! [`serde_json`]: https://github.com/serde-rs/json
+//! [`edgerun_json`]: https://github.com/serde-rs/json
 //! [`serde_yaml`]: https://github.com/dtolnay/serde-yaml
 //! [derive section of the manual]: https://serde.rs/derive.html
 //! [data formats]: https://serde.rs/#data-formats
@@ -143,7 +143,7 @@ macro_rules! declare_error_trait {
         /// Every `Deserializer` declares an `Error` type that encompasses both
         /// general-purpose deserialization errors as well as errors specific to the
         /// particular deserialization format. For example the `Error` type of
-        /// `serde_json` can represent errors like an invalid JSON escape sequence or an
+        /// `edgerun_json` can represent errors like an invalid JSON escape sequence or an
         /// unterminated string literal, in addition to the error cases that are part of
         /// this trait.
         ///
@@ -901,16 +901,16 @@ where
 ///    know that it is seeing a map. If the data format supports
 ///    `Deserializer::deserialize_any`, it will drive the Visitor using whatever
 ///    type it sees in the input. JSON uses this approach when deserializing
-///    `serde_json::Value` which is an enum that can represent any JSON
+///    `edgerun_json::Value` which is an enum that can represent any JSON
 ///    document. Without knowing what is in a JSON document, we can deserialize
-///    it to `serde_json::Value` by going through
+///    it to `edgerun_json::Value` by going through
 ///    `Deserializer::deserialize_any`.
 ///
 /// 2. The various `deserialize_*` methods. Non-self-describing formats like
 ///    Postcard need to be told what is in the input in order to deserialize it.
 ///    The `deserialize_*` methods are hints to the deserializer for how to
 ///    interpret the next piece of input. Non-self-describing formats are not
-///    able to deserialize something like `serde_json::Value` which relies on
+///    able to deserialize something like `edgerun_json::Value` which relies on
 ///    `Deserializer::deserialize_any`.
 ///
 /// When implementing `Deserialize`, you should avoid relying on

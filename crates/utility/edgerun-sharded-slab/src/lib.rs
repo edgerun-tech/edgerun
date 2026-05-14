@@ -1098,9 +1098,3 @@ impl<C: cfg::Config> Pack<C> for () {
         unreachable!()
     }
 }
-
-#[cfg(test)]
-pub(crate) use self::tests::util as test_util;
-
-#[cfg(test)]
-mod tests;

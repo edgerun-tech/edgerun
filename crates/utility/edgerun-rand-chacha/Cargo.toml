@@ -72,3 +72,8 @@ path = "../edgerun-rand-core"
 path = "../edgerun-serde-upstream"
 features = ["derive"]
 optional = true
+
+[dev-dependencies.edgerun-json]
+version = "0.1"
+path = "../edgerun-json"
+default-features = false

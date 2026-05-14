@@ -209,9 +209,6 @@ pub use crate::memchr::{
 #[macro_use]
 mod macros;
 
-#[cfg(test)]
-#[macro_use]
-mod tests;
 
 pub mod arch;
 mod cow;

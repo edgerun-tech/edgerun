@@ -23,8 +23,6 @@ use codex_core::protocol::models::LocalShellAction;
 use codex_core::protocol::models::LocalShellStatus;
 use codex_core::protocol::models::ResponseItem;
 use codex_core::tools::AdditionalProperties;
-use codex_core::tools::FreeformTool;
-use codex_core::tools::FreeformToolFormat;
 use codex_core::tools::JsonSchema;
 use codex_core::tools::ResponsesApiTool;
 use codex_core::tools::ToolSpec;
@@ -33,8 +31,6 @@ use edgerun_http::HeaderValue;
 use edgerun_http::header::AUTHORIZATION;
 use edgerun_json::Value;
 
-const APPLY_PATCH_LARK_GRAMMAR: &str =
-    include_str!("../../core/src/tools/handlers/apply_patch.lark");
 const MAX_TOOL_ROUNDS: usize = 16;
 const MAX_TOOL_OUTPUT_BYTES: usize = 24 * 1024;
 
@@ -314,7 +310,7 @@ async fn execute_tool_call(call: &ToolCall) -> FunctionCallOutputPayload {
 }
 
 async fn execute_shell_command(arguments: &str) -> Result<String, String> {
-    let params = edgerun_json::from_str(arguments).map_err(|error| error.to_string())?;
+    let params = parse_tool_arguments(arguments)?;
     let command = json_required_string(&params, "command")?.to_string();
     let workdir = json_optional_string(&params, "workdir").map(ToString::to_string);
     let timeout_ms =
@@ -322,11 +318,16 @@ async fn execute_shell_command(arguments: &str) -> Result<String, String> {
     let login = json_optional_bool(&params, "login").unwrap_or(false);
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
     let shell_flag = if login { "-lc" } else { "-c" };
-    execute_process(vec![shell, shell_flag.to_string(), command], workdir, timeout_ms).await
+    execute_process(
+        vec![shell, shell_flag.to_string(), command],
+        workdir,
+        timeout_ms,
+    )
+    .await
 }
 
 async fn execute_shell(arguments: &str) -> Result<String, String> {
-    let params = edgerun_json::from_str(arguments).map_err(|error| error.to_string())?;
+    let params = parse_tool_arguments(arguments)?;
     let command = json_required_string_array(&params, "command")?;
     let workdir = json_optional_string(&params, "workdir").map(ToString::to_string);
     let timeout_ms =
@@ -400,9 +401,33 @@ async fn execute_process(
 }
 
 async fn execute_apply_patch_json(arguments: &str) -> Result<String, String> {
-    let args = edgerun_json::from_str(arguments).map_err(|error| error.to_string())?;
+    let args = parse_tool_arguments(arguments)?;
     let input = json_required_string(&args, "input")?;
     execute_apply_patch(input).await
+}
+
+fn parse_tool_arguments(arguments: &str) -> Result<Value, String> {
+    match edgerun_json::from_str(arguments) {
+        Ok(Value::String(inner)) => {
+            return edgerun_json::from_str(&inner).map_err(|error| error.to_string());
+        }
+        Ok(value) => return Ok(value),
+        Err(error) => {
+            let trimmed = arguments.trim();
+            if (trimmed.starts_with('{') || trimmed.starts_with('[')) && trimmed.contains("\\\"") {
+                let wrapped = format!("\"{trimmed}\"");
+                if let Ok(inner) = edgerun_json::from_str::<String>(&wrapped) {
+                    return edgerun_json::from_str(&inner).map_err(|inner_error| {
+                        format!(
+                            "{}; also failed to parse escaped arguments after unwrapping: {}",
+                            error, inner_error
+                        )
+                    });
+                }
+            }
+            Err(error.to_string())
+        }
+    }
 }
 
 fn json_required_string<'a>(value: &'a Value, key: &str) -> Result<&'a str, String> {
@@ -462,11 +487,7 @@ async fn execute_apply_patch(input: &str) -> Result<String, String> {
         )),
         Err(error) => {
             let (error, _) = error.into_parts();
-            Err(format!(
-                "{}{}",
-                String::from_utf8_lossy(&stderr),
-                error
-            ))
+            Err(format!("{}{}", String::from_utf8_lossy(&stderr), error))
         }
     }
 }
@@ -500,12 +521,7 @@ fn truncate_tool_output(mut text: String) -> String {
 }
 
 fn native_agent_tools() -> Vec<ToolSpec> {
-    vec![
-        shell_command_tool(),
-        shell_tool(),
-        apply_patch_freeform_tool(),
-        apply_patch_json_tool(),
-    ]
+    vec![shell_command_tool(), shell_tool(), apply_patch_json_tool()]
 }
 
 fn shell_command_tool() -> ToolSpec {
@@ -537,7 +553,9 @@ fn shell_command_tool() -> ToolSpec {
     ]);
     ToolSpec::Function(ResponsesApiTool {
         name: "shell_command".to_string(),
-        description: "Runs a shell command and returns exit code, stdout, and stderr. Always set workdir.".to_string(),
+        description:
+            "Runs a shell command and returns exit code, stdout, and stderr. Always set workdir."
+                .to_string(),
         strict: false,
         defer_loading: None,
         parameters: JsonSchema::object(
@@ -582,20 +600,6 @@ fn shell_tool() -> ToolSpec {
             Some(AdditionalProperties::Boolean(false)),
         ),
         output_schema: None,
-    })
-}
-
-fn apply_patch_freeform_tool() -> ToolSpec {
-    ToolSpec::Freeform(FreeformTool {
-        name: "apply_patch".to_string(),
-        description:
-            "Use the apply_patch tool to edit files. This is a freeform tool; do not wrap the patch in JSON."
-                .to_string(),
-        format: FreeformToolFormat {
-            r#type: "grammar".to_string(),
-            syntax: "lark".to_string(),
-            definition: APPLY_PATCH_LARK_GRAMMAR.to_string(),
-        },
     })
 }
 

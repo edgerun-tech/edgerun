@@ -87,6 +87,10 @@ optional = true
 path = "../edgerun-tracing-core"
 default-features = false
 
+[dependencies.edgerun-json]
+path = "../edgerun-json"
+default-features = false
+
 [dev-dependencies.tracing]
 path = "../edgerun-tracing"
 

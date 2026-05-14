@@ -701,7 +701,7 @@ fn read_json_value(path: &Path) -> Result<Value> {
     let content =
         fs::read_to_string(path).with_context(|| format!("Failed to read {}", path.display()))?;
     edgerun_json::from_json_str(&content)
-        .with_context(|| format!("Failed to parse {}", path.display()))
+        .map_err(|error| anyhow!("Failed to parse {}: {}", path.display(), error))
 }
 
 fn split_type_alias(content: &str) -> Option<(String, String, String)> {
@@ -2715,7 +2715,7 @@ mod tests {
 
         let _guard = TempDirGuard(output_dir.clone());
         let path = output_dir.join("Config.ts");
-        let content = r#"import type { JsonValue } from "../serde_json/JsonValue";
+        let content = r#"import type { JsonValue } from "../edgerun_json/JsonValue";
 import type { Keep } from "./Keep";
 
 export type Config = { stableField: Keep, unstableField: string | null } & ({ [key in string]?: number | string | boolean | Array<JsonValue> | { [key in string]?: JsonValue } | null });
@@ -2733,7 +2733,7 @@ export type Config = { stableField: Keep, unstableField: string | null } & ({ [k
         let filtered = fs::read_to_string(&path)?;
         assert_eq!(filtered.contains("unstableField"), false);
         assert_eq!(
-            filtered.contains(r#"import type { JsonValue } from "../serde_json/JsonValue";"#),
+            filtered.contains(r#"import type { JsonValue } from "../edgerun_json/JsonValue";"#),
             true
         );
         assert_eq!(

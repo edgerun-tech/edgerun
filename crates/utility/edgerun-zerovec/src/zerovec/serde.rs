@@ -174,19 +174,19 @@ mod test {
     }
 
     #[test]
-    fn test_serde_json() {
+    fn test_edgerun_json() {
         let zerovec_orig = ZeroVec::from_slice_or_alloc(TEST_SLICE);
-        let json_str = serde_json::to_string(&zerovec_orig).expect("serialize");
+        let json_str = edgerun_json::to_string(&zerovec_orig).expect("serialize");
         assert_eq!(JSON_STR, json_str);
         // ZeroVec should deserialize from JSON to either Vec or ZeroVec
         let vec_new: Vec<u32> =
-            serde_json::from_str(&json_str).expect("deserialize from buffer to Vec");
+            edgerun_json::from_serde_str(&json_str).expect("deserialize from buffer to Vec");
         assert_eq!(
             zerovec_orig,
             ZeroVec::<u32>::from_slice_or_alloc(vec_new.as_slice())
         );
         let zerovec_new: ZeroVec<u32> =
-            serde_json::from_str(&json_str).expect("deserialize from buffer to ZeroVec");
+            edgerun_json::from_serde_str(&json_str).expect("deserialize from buffer to ZeroVec");
         assert_eq!(zerovec_orig, zerovec_new);
         assert!(zerovec_new.is_owned());
     }

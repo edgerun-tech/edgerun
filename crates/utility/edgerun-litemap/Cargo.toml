@@ -20,5 +20,10 @@ yoke = ["dep:yoke"]
 serde_core = { path = "../edgerun-serde-core", optional = true, default-features = false, features = ["alloc"] }
 yoke = { version = "0.8.2", optional = true, default-features = false, features = ["derive"] }
 
+[dev-dependencies.edgerun-json]
+version = "0.1"
+path = "../edgerun-json"
+default-features = false
+
 [lints]
 workspace = true

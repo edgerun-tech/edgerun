@@ -151,7 +151,6 @@ members = [
   "crates/utility/edgerun-serde",
   "crates/utility/edgerun-serde-core",
   "crates/utility/edgerun-serde-derive",
-  "crates/utility/edgerun-serde-json",
   "crates/utility/edgerun-serde-upstream",
   "crates/utility/edgerun-sharded-slab",
   "crates/utility/edgerun-shlex",
@@ -359,7 +358,6 @@ rustversion = { path = "crates/utility/edgerun-rustversion" }
 serde = { path = "crates/utility/edgerun-serde-upstream" }
 serde_core = { path = "crates/utility/edgerun-serde-core" }
 serde_derive = { path = "crates/utility/edgerun-serde-derive" }
-serde_json = { path = "crates/utility/edgerun-serde-json" }
 same-file = { path = "crates/utility/edgerun-same-file" }
 sharded-slab = { path = "crates/utility/edgerun-sharded-slab" }
 simd_cesu8 = { path = "crates/utility/edgerun-simd-cesu8" }

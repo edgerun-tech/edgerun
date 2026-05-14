@@ -1,10 +1,7 @@
 use super::{Format, FormatEvent, FormatFields, FormatTime, Writer};
 use crate::{
     field::{RecordFields, VisitOutput},
-    fmt::{
-        fmt_layer::{FmtContext, FormattedFields},
-        writer::WriteAdaptor,
-    },
+    fmt::fmt_layer::{FmtContext, FormattedFields},
     registry::LookupSpan,
 };
 use alloc::{
@@ -13,8 +10,8 @@ use alloc::{
     format,
     string::String,
 };
+use edgerun_json::JsonValue;
 use serde::ser::{SerializeMap, Serializer as _};
-use serde_json::Serializer;
 use tracing_core::{
     field::{self, Field},
     span::Record,
@@ -169,13 +166,13 @@ where
 
         // TODO: let's _not_ do this, but this resolves
         // https://github.com/tokio-rs/tracing/issues/391.
-        // We should probably rework this to use a `serde_json::Value` or something
+        // We should probably rework this to use a JSON value or something
         // similar in a JSON-specific layer, but I'd (david)
         // rather have a uglier fix now rather than shipping broken JSON.
-        match serde_json::from_str::<serde_json::Value>(data) {
-            Ok(serde_json::Value::Object(fields)) => {
-                for field in fields {
-                    serializer.serialize_entry(&field.0, &field.1)?;
+        match edgerun_json::from_str(data) {
+            Ok(JsonValue::Object(fields)) => {
+                for (key, value) in fields.into_vec() {
+                    serializer.serialize_entry(&key, &value)?;
                 }
             }
             // We have fields for this span which are valid JSON but not an object.
@@ -407,8 +404,8 @@ impl<'a> FormatFields<'a> for JsonFields {
         // then, we could store fields as JSON values, and add to them
         // without having to parse and re-serialize.
         let mut new = String::new();
-        let map: BTreeMap<&'_ str, serde_json::Value> =
-            serde_json::from_str(current).map_err(|_| fmt::Error)?;
+        let map: BTreeMap<String, JsonValue> =
+            edgerun_json::from_serde_str(current).map_err(|_| fmt::Error)?;
         let mut v = JsonVisitor::new(&mut new);
         v.values = map;
         fields.record(&mut v);
@@ -424,7 +421,7 @@ impl<'a> FormatFields<'a> for JsonFields {
 /// [visitor]: crate::field::Visit
 /// [`MakeVisitor`]: crate::field::MakeVisitor
 pub struct JsonVisitor<'a> {
-    values: BTreeMap<&'a str, serde_json::Value>,
+    values: BTreeMap<String, JsonValue>,
     writer: &'a mut dyn Write,
 }
 
@@ -457,29 +454,15 @@ impl crate::field::VisitFmt for JsonVisitor<'_> {
 
 impl crate::field::VisitOutput<fmt::Result> for JsonVisitor<'_> {
     fn finish(self) -> fmt::Result {
-        let inner = || {
-            let mut serializer = Serializer::new(WriteAdaptor::new(self.writer));
-            let mut ser_map = serializer.serialize_map(None)?;
-
-            for (k, v) in self.values {
-                ser_map.serialize_entry(k, &v)?;
-            }
-
-            ser_map.end()
-        };
-
-        if inner().is_err() {
-            Err(fmt::Error)
-        } else {
-            Ok(())
-        }
+        let json = edgerun_json::to_string(&self.values).map_err(|_| fmt::Error)?;
+        self.writer.write_str(&json)
     }
 }
 
 impl field::Visit for JsonVisitor<'_> {
     #[cfg(all(tracing_unstable, feature = "valuable"))]
     fn record_value(&mut self, field: &Field, value: valuable_crate::Value<'_>) {
-        let value = match serde_json::to_value(valuable_serde::Serializable::new(value)) {
+        let value = match edgerun_json::to_serde_value(valuable_serde::Serializable::new(value)) {
             Ok(value) => value,
             Err(_e) => {
                 #[cfg(debug_assertions)]
@@ -500,36 +483,38 @@ impl field::Visit for JsonVisitor<'_> {
     /// Visit a double precision floating point value.
     fn record_f64(&mut self, field: &Field, value: f64) {
         self.values
-            .insert(field.name(), serde_json::Value::from(value));
+            .insert(field.name().into(), JsonValue::from(value));
     }
 
     /// Visit a signed 64-bit integer value.
     fn record_i64(&mut self, field: &Field, value: i64) {
         self.values
-            .insert(field.name(), serde_json::Value::from(value));
+            .insert(field.name().into(), JsonValue::from(value));
     }
 
     /// Visit an unsigned 64-bit integer value.
     fn record_u64(&mut self, field: &Field, value: u64) {
         self.values
-            .insert(field.name(), serde_json::Value::from(value));
+            .insert(field.name().into(), JsonValue::from(value));
     }
 
     /// Visit a boolean value.
     fn record_bool(&mut self, field: &Field, value: bool) {
         self.values
-            .insert(field.name(), serde_json::Value::from(value));
+            .insert(field.name().into(), JsonValue::from(value));
     }
 
     /// Visit a string value.
     fn record_str(&mut self, field: &Field, value: &str) {
         self.values
-            .insert(field.name(), serde_json::Value::from(value));
+            .insert(field.name().into(), JsonValue::from(value));
     }
 
     fn record_bytes(&mut self, field: &Field, value: &[u8]) {
-        self.values
-            .insert(field.name(), serde_json::Value::from(value));
+        self.values.insert(
+            field.name().into(),
+            JsonValue::Array(value.iter().map(|byte| JsonValue::from(u64::from(*byte))).collect()),
+        );
     }
 
     fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
@@ -539,11 +524,11 @@ impl field::Visit for JsonVisitor<'_> {
             name if name.starts_with("log.") => (),
             name if name.starts_with("r#") => {
                 self.values
-                    .insert(&name[2..], serde_json::Value::from(format!("{:?}", value)));
+                    .insert(name[2..].into(), JsonValue::from(format!("{:?}", value)));
             }
             name => {
                 self.values
-                    .insert(name, serde_json::Value::from(format!("{:?}", value)));
+                    .insert(name.into(), JsonValue::from(format!("{:?}", value)));
             }
         };
     }
@@ -829,13 +814,13 @@ mod test {
         });
     }
 
-    fn parse_as_json(buffer: &MockMakeWriter) -> serde_json::Value {
+    fn parse_as_json(buffer: &MockMakeWriter) -> JsonValue {
         let buf = String::from_utf8(buffer.buf().to_vec()).unwrap();
         let json = buf
             .lines()
             .last()
             .expect("expected at least one line to be written!");
-        match serde_json::from_str(json) {
+        match edgerun_json::from_str(json) {
             Ok(v) => v,
             Err(e) => panic!(
                 "assertion failed: JSON shouldn't be malformed\n  error: {}\n  json: {}",
@@ -860,9 +845,9 @@ mod test {
         let buf = make_writer.buf();
         let actual = std::str::from_utf8(&buf[..]).unwrap();
         assert_eq!(
-            serde_json::from_str::<std::collections::HashMap<&str, serde_json::Value>>(expected)
+            edgerun_json::from_serde_str::<std::collections::HashMap<String, JsonValue>>(expected)
                 .unwrap(),
-            serde_json::from_str(actual).unwrap()
+            edgerun_json::from_serde_str(actual).unwrap()
         );
     }
 
@@ -881,12 +866,12 @@ mod test {
 
         let buf = make_writer.buf();
         let actual = std::str::from_utf8(&buf[..]).unwrap();
-        let mut expected =
-            serde_json::from_str::<std::collections::HashMap<&str, serde_json::Value>>(expected)
+        let mut expected: std::collections::HashMap<String, JsonValue> =
+            edgerun_json::from_serde_str(expected)
                 .unwrap();
         let expect_line_number = expected.remove("line_number").is_some();
-        let mut actual: std::collections::HashMap<&str, serde_json::Value> =
-            serde_json::from_str(actual).unwrap();
+        let mut actual: std::collections::HashMap<String, JsonValue> =
+            edgerun_json::from_serde_str(actual).unwrap();
         let line_number = actual.remove("line_number");
         if expect_line_number {
             assert_eq!(line_number.map(|x| x.is_number()), Some(true));

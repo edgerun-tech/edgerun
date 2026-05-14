@@ -151,6 +151,7 @@ name = "edgerun-crypto"
 version = "0.1.1"
 dependencies = [
  "edgerun-encoding",
+ "edgerun-json",
 ]
 
 [[package]]
@@ -989,6 +990,7 @@ dependencies = [
  "potential_utf",
  "serde",
  "tinystr",
+ "writeable",
  "zerovec",
 ]
 
@@ -997,6 +999,7 @@ name = "icu_locale_core"
 version = "2.1.1"
 dependencies = [
  "displaydoc",
+ "edgerun-json",
  "litemap",
  "serde",
  "tinystr",
@@ -1013,6 +1016,7 @@ name = "icu_provider"
 version = "2.1.1"
 dependencies = [
  "displaydoc",
+ "edgerun-json",
  "icu_locale_core",
  "log",
  "serde",
@@ -1034,6 +1038,7 @@ version = "0.22.4"
 dependencies = [
  "cfg-if",
  "combine",
+ "edgerun-assert-matches",
  "jni-macros",
  "jni-sys",
  "log",
@@ -1086,6 +1091,7 @@ version = "1.5.0"
 name = "litemap"
 version = "0.8.2"
 dependencies = [
+ "edgerun-json",
  "serde_core",
  "yoke",
 ]
@@ -1149,6 +1155,7 @@ dependencies = [
 name = "opentelemetry_sdk"
 version = "0.31.0"
 dependencies = [
+ "edgerun-json",
  "futures-channel",
  "futures-executor",
  "futures-util",
@@ -1223,6 +1230,7 @@ dependencies = [
 name = "rand"
 version = "0.9.4"
 dependencies = [
+ "edgerun-json",
  "rand_chacha",
  "rand_core",
  "serde",
@@ -1232,6 +1240,7 @@ dependencies = [
 name = "rand_chacha"
 version = "0.9.0"
 dependencies = [
+ "edgerun-json",
  "ppv-lite86",
  "rand_core",
  "serde",
@@ -1305,17 +1314,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
-]
-
-[[package]]
-name = "serde_json"
-version = "1.0.149"
-dependencies = [
- "itoa",
- "memchr",
- "serde",
- "serde_core",
- "zmij",
 ]
 
 [[package]]
@@ -1465,6 +1463,7 @@ dependencies = [
 name = "tracing-subscriber"
 version = "0.3.23"
 dependencies = [
+ "edgerun-json",
  "sharded-slab",
  "thread_local",
  "tracing",
@@ -1491,10 +1490,10 @@ name = "wasm-bindgen"
 version = "0.2.121"
 dependencies = [
  "cfg-if",
+ "edgerun-json",
  "once_cell",
  "rustversion",
  "serde",
- "serde_json",
  "wasm-bindgen-macro",
  "wasm-bindgen-shared",
 ]
@@ -1595,6 +1594,7 @@ name = "zerotrie"
 version = "0.2.4"
 dependencies = [
  "displaydoc",
+ "edgerun-json",
  "litemap",
  "serde_core",
  "yoke",
@@ -1606,6 +1606,7 @@ dependencies = [
 name = "zerovec"
 version = "0.11.6"
 dependencies = [
+ "edgerun-json",
  "serde",
  "yoke",
  "zerofrom",

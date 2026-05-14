@@ -270,11 +270,11 @@ mod test {
     }
 
     #[test]
-    fn test_serde_json() {
+    fn test_edgerun_json() {
         let map = make_map();
-        let json_str = serde_json::to_string(&map).expect("serialize");
+        let json_str = edgerun_json::to_string(&map).expect("serialize");
         assert_eq!(JSON_STR, json_str);
-        let new_map: ZeroMap<u32, str> = serde_json::from_str(&json_str).expect("deserialize");
+        let new_map: ZeroMap<u32, str> = edgerun_json::from_serde_str(&json_str).expect("deserialize");
         assert_eq!(
             new_map.iter().collect::<Vec<_>>(),
             map.iter().collect::<Vec<_>>()
@@ -282,18 +282,18 @@ mod test {
     }
 
     #[test]
-    fn test_serde_json_complex_key() {
+    fn test_edgerun_json_complex_key() {
         let mut map = ZeroMap::new();
         map.insert(&(1, 1), "uno");
         map.insert(&(2, 2), "dos");
         map.insert(&(3, 3), "tres");
-        let json_str = serde_json::to_string(&map).expect("serialize");
+        let json_str = edgerun_json::to_string(&map).expect("serialize");
         assert_eq!(
             json_str,
             "[[[1,1],\"uno\"],[[2,2],\"dos\"],[[3,3],\"tres\"]]"
         );
         let new_map: ZeroMap<(u32, u32), str> =
-            serde_json::from_str(&json_str).expect("deserialize");
+            edgerun_json::from_serde_str(&json_str).expect("deserialize");
         assert_eq!(
             new_map.iter().collect::<Vec<_>>(),
             map.iter().collect::<Vec<_>>()

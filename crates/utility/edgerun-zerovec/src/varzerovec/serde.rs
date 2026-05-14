@@ -256,16 +256,16 @@ mod test {
         4, 0, 1, 0, 3, 0, 6, 0, 119, 207, 137, 230, 150, 135, 240, 145, 132, 131,
     ];
     #[test]
-    fn test_serde_json() {
+    fn test_edgerun_json() {
         let zerovec_orig: VarZeroVec<str> = VarZeroVec::parse_bytes(BYTES).expect("parse");
-        let json_str = serde_json::to_string(&zerovec_orig).expect("serialize");
+        let json_str = edgerun_json::to_string(&zerovec_orig).expect("serialize");
         assert_eq!(JSON_STR, json_str);
         // VarZeroVec should deserialize from JSON to either Vec or VarZeroVec
         let vec_new: Vec<Box<str>> =
-            serde_json::from_str(&json_str).expect("deserialize from buffer to Vec");
+            edgerun_json::from_serde_str(&json_str).expect("deserialize from buffer to Vec");
         assert_eq!(zerovec_orig.to_vec(), vec_new);
         let zerovec_new: VarZeroVec<str> =
-            serde_json::from_str(&json_str).expect("deserialize from buffer to VarZeroVec");
+            edgerun_json::from_serde_str(&json_str).expect("deserialize from buffer to VarZeroVec");
         assert_eq!(zerovec_orig.to_vec(), zerovec_new.to_vec());
         assert!(zerovec_new.is_owned());
     }

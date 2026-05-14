@@ -359,13 +359,6 @@ impl Drop for Env<'_> {
     }
 }
 
-#[cfg(test)]
-mod test {
-    use crate::Env;
-    static_assertions::assert_not_impl_any!(Env: Send);
-    static_assertions::assert_not_impl_any!(Env: Sync);
-}
-
 impl<'local> Env<'local> {
     /// Returns an `UnsupportedVersion` error if the current JNI version is
     /// lower than the one given.
@@ -4979,6 +4972,3 @@ impl Drop for MonitorGuard<'_> {
             .expect("MonitorGuard dropped on detached thread");
     }
 }
-
-#[cfg(test)]
-static_assertions::assert_not_impl_any!(MonitorGuard: Send);

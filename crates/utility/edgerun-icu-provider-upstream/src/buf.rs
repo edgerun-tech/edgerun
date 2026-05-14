@@ -51,7 +51,7 @@ impl DynamicDataMarker for BufferMarker {
 ///
 /// // Deserializing manually
 /// assert_eq!(
-///     serde_json::from_slice::<HelloWorld>(
+///     edgerun_json::from_serde_slice::<HelloWorld>(
 ///         buffer_provider
 ///             .load_data(
 ///                 HelloWorldV1::INFO,
@@ -102,7 +102,7 @@ impl<P: DynamicDataProvider<BufferMarker> + ?Sized> BufferProvider for P {}
 #[cfg_attr(feature = "serde", derive(::serde::Serialize, ::serde::Deserialize))]
 #[non_exhaustive]
 pub enum BufferFormat {
-    /// Serialize using JavaScript Object Notation (JSON), using the [`serde_json`] crate.
+    /// Serialize using JavaScript Object Notation (JSON), using the [`edgerun_json`] crate.
     Json,
     /// Serialize using the [`bincode`] crate, version 1.
     Bincode1,

@@ -47,7 +47,7 @@ msrv = []
 rustversion = []
 serde-serialize = [
     "serde",
-    "serde_json",
+    "dep:edgerun-json",
     "std",
 ]
 spans = []
@@ -74,9 +74,9 @@ version = "1.0"
 path = "../edgerun-serde-upstream"
 optional = true
 
-[dependencies.serde_json]
-version = "1.0"
-path = "../edgerun-serde-json"
+[dependencies.edgerun-json]
+version = "0.1"
+path = "../edgerun-json"
 optional = true
 
 [dependencies.wasm-bindgen-macro]

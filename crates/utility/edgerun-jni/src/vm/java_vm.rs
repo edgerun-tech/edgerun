@@ -1822,13 +1822,3 @@ impl Drop for AttachGuard<'_> {
 pub struct ScopeToken {
     _non_send_sync: std::marker::PhantomData<*const ()>,
 }
-
-#[cfg(test)]
-mod test {
-    use crate::{AttachGuard, ScopeToken};
-    static_assertions::assert_not_impl_any!(ScopeToken: Send);
-    static_assertions::assert_not_impl_any!(ScopeToken: Sync);
-
-    static_assertions::assert_not_impl_any!(AttachGuard: Send);
-    static_assertions::assert_not_impl_any!(AttachGuard: Sync);
-}

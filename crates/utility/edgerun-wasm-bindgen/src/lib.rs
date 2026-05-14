@@ -290,11 +290,11 @@ impl JsValue {
     /// Returns any error encountered when serializing `T` into JSON.
     #[cfg(feature = "serde-serialize")]
     #[deprecated = "causes dependency cycles, use `serde-wasm-bindgen` or `gloo_utils::format::JsValueSerdeExt` instead"]
-    pub fn from_serde<T>(t: &T) -> serde_json::Result<JsValue>
+    pub fn from_serde<T>(t: &T) -> edgerun_json::Result<JsValue>
     where
         T: serde::ser::Serialize + ?Sized,
     {
-        let s = serde_json::to_string(t)?;
+        let s = edgerun_json::to_string(t)?;
         Ok(__wbindgen_json_parse(s))
     }
 
@@ -321,7 +321,7 @@ impl JsValue {
     /// Returns any error encountered when parsing the JSON into a `T`.
     #[cfg(feature = "serde-serialize")]
     #[deprecated = "causes dependency cycles, use `serde-wasm-bindgen` or `gloo_utils::format::JsValueSerdeExt` instead"]
-    pub fn into_serde<T>(&self) -> serde_json::Result<T>
+    pub fn into_serde<T>(&self) -> edgerun_json::Result<T>
     where
         T: for<'a> serde::de::Deserialize<'a>,
     {
@@ -329,7 +329,7 @@ impl JsValue {
         // Turns out `JSON.stringify(undefined) === undefined`, so if
         // we're passed `undefined` reinterpret it as `null` for JSON
         // purposes.
-        serde_json::from_str(s.as_deref().unwrap_or("null"))
+        edgerun_json::from_serde_str(s.as_deref().unwrap_or("null"))
     }
 
     /// Returns the `f64` value of this JS value if it's an instance of a

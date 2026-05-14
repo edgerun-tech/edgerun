@@ -30,7 +30,7 @@
 //! # The Serializer trait
 //!
 //! [`Serializer`] implementations are provided by third-party crates, for
-//! example [`serde_json`], [`serde_yaml`] and [`postcard`].
+//! example [`edgerun_json`], [`serde_yaml`] and [`postcard`].
 //!
 //! A partial list of well-maintained formats is given on the [Serde
 //! website][data formats].
@@ -102,7 +102,7 @@
 //! [`postcard`]: https://github.com/jamesmunns/postcard
 //! [`linked-hash-map`]: https://crates.io/crates/linked-hash-map
 //! [`serde_derive`]: https://crates.io/crates/serde_derive
-//! [`serde_json`]: https://github.com/serde-rs/json
+//! [`edgerun_json`]: https://github.com/serde-rs/json
 //! [`serde_yaml`]: https://github.com/dtolnay/serde-yaml
 //! [derive section of the manual]: https://serde.rs/derive.html
 //! [data formats]: https://serde.rs/#data-formats
@@ -334,8 +334,8 @@ pub trait Serialize {
 /// Many Serde serializers produce text or binary data as output, for example
 /// JSON or Postcard. This is not a requirement of the `Serializer` trait, and
 /// there are serializers that do not produce text or binary output. One example
-/// is the `serde_json::value::Serializer` (distinct from the main `serde_json`
-/// serializer) that produces a `serde_json::Value` data structure in memory as
+/// is the `edgerun_json::value::Serializer` (distinct from the main `edgerun_json`
+/// serializer) that produces a `edgerun_json::Value` data structure in memory as
 /// output.
 ///
 /// [Serde data model]: https://serde.rs/data-model.html

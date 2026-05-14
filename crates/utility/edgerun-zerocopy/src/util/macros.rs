@@ -532,11 +532,8 @@ macro_rules! unsafe_impl_known_layout {
 macro_rules! assert_unaligned {
     ($($tys:ty),*) => {
         $(
-            // We only compile this assertion under `cfg(test)` to avoid taking
-            // an extra non-dev dependency (and making this crate more expensive
-            // to compile for our dependents).
             #[cfg(test)]
-            static_assertions::const_assert_eq!(core::mem::align_of::<$tys>(), 1);
+            const _: [(); 1] = [(); (core::mem::align_of::<$tys>() == 1) as usize];
         )*
     };
 }

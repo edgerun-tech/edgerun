@@ -225,7 +225,7 @@ impl DynamicDataProvider<BufferMarker> for HelloWorldJsonProvider {
             },
             #[expect(clippy::unwrap_used)] // HelloWorld::serialize is infallible
             payload: DataPayload::from_owned_buffer(
-                serde_json::to_string(result.payload.get())
+                edgerun_json::to_string(result.payload.get())
                     .unwrap()
                     .into_bytes()
                     .into_boxed_slice(),

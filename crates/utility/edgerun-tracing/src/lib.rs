@@ -180,11 +180,11 @@
 //! use tracing::info_span;
 //!
 //! # fn doc() -> Result<(), ()> {
-//! # mod serde_json {
+//! # mod edgerun_json {
 //! #    pub(crate) fn from_slice(buf: &[u8]) -> Result<(), ()> { Ok(()) }
 //! # }
 //! # let buf: [u8; 0] = [];
-//! let json = info_span!("json.parse").in_scope(|| serde_json::from_slice(&buf))?;
+//! let json = info_span!("json.parse").in_scope(|| edgerun_json::from_slice(&buf))?;
 //! # let _ = json; // suppress unused variable warning
 //! # Ok(())
 //! # }

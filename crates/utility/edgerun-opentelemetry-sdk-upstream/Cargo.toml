@@ -130,6 +130,10 @@ default-features = false
 path = "../edgerun-thiserror"
 default-features = false
 
+[dependencies.edgerun-json]
+path = "../edgerun-json"
+default-features = false
+
 [lints.clippy.all]
 level = "warn"
 priority = 1

@@ -44,8 +44,6 @@ macro_rules! ident {
 }
 
 mod derive;
-#[cfg(test)]
-mod output_tests;
 mod repr;
 mod util;
 

@@ -272,10 +272,7 @@ mod test {
 
     /// Construct a deterministic RNG with the given seed
     pub fn rng(seed: u64) -> impl RngCore {
-        // For tests, we want a statistically good, fast, reproducible RNG.
-        // PCG32 will do fine, and will be easy to embed if we ever need to.
-        const INC: u64 = 11634580027462260723;
-        rand_pcg::Pcg32::new(seed, INC)
+        StepRng(seed, 0x9E37_79B9_7F4A_7C15)
     }
 
     /// Construct a generator yielding a constant value

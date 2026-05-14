@@ -24,7 +24,7 @@ where
         "Single element roundtrips with bincode"
     );
 
-    let json = serde_json::to_string(var).unwrap();
-    let deserialized: Box<T> = serde_json::from_str(&json).unwrap();
+    let json = edgerun_json::to_string(var).unwrap();
+    let deserialized: Box<T> = edgerun_json::from_serde_str(&json).unwrap();
     assert_eq!(var, &*deserialized, "Single element roundtrips with serde");
 }

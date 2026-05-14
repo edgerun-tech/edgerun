@@ -123,3 +123,7 @@ features = [
     "yoke",
 ]
 default-features = false
+
+[dependencies.writeable]
+version = "0.6.0"
+default-features = false

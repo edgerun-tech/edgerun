@@ -94,7 +94,7 @@ mod test {
             keys: ZeroVec::alloc_from_slice(&keys),
             values: VarZeroVec::<str>::from(&values),
         };
-        serde_json::to_string(&invalid_hm).expect("serialize")
+        edgerun_json::to_string(&invalid_hm).expect("serialize")
     }
 
     #[test]
@@ -104,7 +104,7 @@ mod test {
             build_invalid_hashmap_str(vec![(0, 1), (0, 0)], vec![1, 2], vec!["a", "b", "c"]);
 
         assert_eq!(
-            serde_json::from_str::<ZeroHashMap<u32, str>>(&invalid_hm_str)
+            edgerun_json::from_serde_str::<ZeroHashMap<u32, str>>(&invalid_hm_str)
                 .unwrap_err()
                 .to_string(),
             "Mismatched key and value sizes in ZeroHashMap"
@@ -116,7 +116,7 @@ mod test {
             build_invalid_hashmap_str(vec![(0, 1), (0, 0)], vec![2, 1, 0], vec!["a", "b", "c"]);
 
         assert_eq!(
-            serde_json::from_str::<ZeroHashMap<u32, str>>(&invalid_hm_str)
+            edgerun_json::from_serde_str::<ZeroHashMap<u32, str>>(&invalid_hm_str)
                 .unwrap_err()
                 .to_string(),
             "Mismatched displacements and key, value sizes in ZeroHashMap"
@@ -128,10 +128,10 @@ mod test {
     #[test]
     fn test_serde_valid_deser_zhm() {
         let hm = make_zerohashmap();
-        let json_str = serde_json::to_string(&hm).expect("serialize");
+        let json_str = edgerun_json::to_string(&hm).expect("serialize");
         assert_eq!(json_str, JSON_STR);
         let deserialized_hm: ZeroHashMap<u32, str> =
-            serde_json::from_str(JSON_STR).expect("deserialize");
+            edgerun_json::from_serde_str(JSON_STR).expect("deserialize");
         assert_eq!(
             hm.iter().collect::<Vec<_>>(),
             deserialized_hm.iter().collect::<Vec<_>>()

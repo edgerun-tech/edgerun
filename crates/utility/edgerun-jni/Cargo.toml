@@ -27,5 +27,8 @@ thiserror = { path = "../edgerun-thiserror" }
 [build-dependencies]
 walkdir = { path = "../edgerun-walkdir" }
 
+[dev-dependencies]
+assert_matches = { package = "edgerun-assert-matches", path = "../edgerun-assert-matches" }
+
 [lints]
 workspace = true

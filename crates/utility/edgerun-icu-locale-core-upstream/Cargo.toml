@@ -72,6 +72,7 @@ default-features = false
 
 [dependencies.litemap]
 version = "0.8.0"
+features = ["testing"]
 default-features = false
 
 [dependencies.serde]
@@ -90,4 +91,9 @@ default-features = false
 [dependencies.zerovec]
 version = "0.11.3"
 optional = true
+default-features = false
+
+[dev-dependencies.edgerun-json]
+version = "0.1"
+path = "../edgerun-json"
 default-features = false

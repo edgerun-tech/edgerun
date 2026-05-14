@@ -92,3 +92,6 @@ path = "src/lib.rs"
 [dependencies.zerocopy-derive]
 path = "../edgerun-zerocopy-derive"
 optional = true
+
+[dev-dependencies.zerocopy-derive]
+path = "../edgerun-zerocopy-derive"

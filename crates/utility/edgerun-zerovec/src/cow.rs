@@ -415,8 +415,8 @@ mod tests {
             );
             assert!(!deserialized.is_owned());
 
-            let json = serde_json::to_string(&messy).unwrap();
-            let deserialized: VarZeroCow<Messy> = serde_json::from_str(&json).unwrap();
+            let json = edgerun_json::to_string(&messy).unwrap();
+            let deserialized: VarZeroCow<Messy> = edgerun_json::from_serde_str(&json).unwrap();
             assert_eq!(messy, deserialized, "Single element roundtrips with serde");
         }
     }

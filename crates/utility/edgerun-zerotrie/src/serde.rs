@@ -367,7 +367,7 @@ mod tests {
     pub fn test_serde_simpleascii_cow() {
         let trie = ZeroTrieSimpleAscii::from_store(Cow::from(testdata::basic::TRIE_ASCII));
         let original = ZeroTrieSimpleAsciiCow { trie };
-        let json_str = serde_json::to_string(&original).unwrap();
+        let json_str = edgerun_json::to_string(&original).unwrap();
         let bincode_bytes = bincode::serialize(&original).unwrap();
         let rmp_bytes = rmp_serde::to_vec(&original).unwrap();
 
@@ -377,7 +377,7 @@ mod tests {
         assert_eq!(&rmp_bytes[0..5], &[145, 146, 0, 196, 26]);
         assert_eq!(&rmp_bytes[5..], testdata::basic::BINCODE_BYTES_ASCII);
 
-        let json_recovered: ZeroTrieSimpleAsciiCow = serde_json::from_str(&json_str).unwrap();
+        let json_recovered: ZeroTrieSimpleAsciiCow = edgerun_json::from_serde_str(&json_str).unwrap();
         let bincode_recovered: ZeroTrieSimpleAsciiCow =
             bincode::deserialize(&bincode_bytes).unwrap();
         let rmp_recovered: ZeroTrieSimpleAsciiCow = rmp_serde::from_slice(&rmp_bytes).unwrap();
@@ -403,14 +403,14 @@ mod tests {
     pub fn test_serde_asciiignorecase_cow() {
         let trie = ZeroAsciiIgnoreCaseTrie::from_store(Cow::from(testdata::basic::TRIE_ASCII));
         let original = ZeroAsciiIgnoreCaseTrieCow { trie };
-        let json_str = serde_json::to_string(&original).unwrap();
+        let json_str = edgerun_json::to_string(&original).unwrap();
         let bincode_bytes = bincode::serialize(&original).unwrap();
 
         assert_eq!(json_str, testdata::basic::JSON_STR_ASCII);
         assert_eq!(&bincode_bytes[0..9], &[8, 26, 0, 0, 0, 0, 0, 0, 0]);
         assert_eq!(&bincode_bytes[9..], testdata::basic::BINCODE_BYTES_ASCII);
 
-        let json_recovered: ZeroAsciiIgnoreCaseTrieCow = serde_json::from_str(&json_str).unwrap();
+        let json_recovered: ZeroAsciiIgnoreCaseTrieCow = edgerun_json::from_serde_str(&json_str).unwrap();
         let bincode_recovered: ZeroAsciiIgnoreCaseTrieCow =
             bincode::deserialize(&bincode_bytes).unwrap();
 
@@ -434,14 +434,14 @@ mod tests {
     pub fn test_serde_perfecthash_cow() {
         let trie = ZeroTriePerfectHash::from_store(Cow::from(testdata::basic::TRIE_ASCII));
         let original = ZeroTriePerfectHashCow { trie };
-        let json_str = serde_json::to_string(&original).unwrap();
+        let json_str = edgerun_json::to_string(&original).unwrap();
         let bincode_bytes = bincode::serialize(&original).unwrap();
 
         assert_eq!(json_str, testdata::basic::JSON_STR_ASCII);
         assert_eq!(&bincode_bytes[0..9], &[3, 26, 0, 0, 0, 0, 0, 0, 0]);
         assert_eq!(&bincode_bytes[9..], testdata::basic::BINCODE_BYTES_ASCII);
 
-        let json_recovered: ZeroTriePerfectHashCow = serde_json::from_str(&json_str).unwrap();
+        let json_recovered: ZeroTriePerfectHashCow = edgerun_json::from_serde_str(&json_str).unwrap();
         let bincode_recovered: ZeroTriePerfectHashCow =
             bincode::deserialize(&bincode_bytes).unwrap();
 
@@ -459,14 +459,14 @@ mod tests {
     pub fn test_serde_perfecthash_cow_u() {
         let trie = ZeroTriePerfectHash::from_store(Cow::from(testdata::basic::TRIE_UNICODE));
         let original = ZeroTriePerfectHashCow { trie };
-        let json_str = serde_json::to_string(&original).unwrap();
+        let json_str = edgerun_json::to_string(&original).unwrap();
         let bincode_bytes = bincode::serialize(&original).unwrap();
 
         assert_eq!(json_str, testdata::basic::JSON_STR_UNICODE);
         assert_eq!(&bincode_bytes[0..9], &[3, 39, 0, 0, 0, 0, 0, 0, 0]);
         assert_eq!(&bincode_bytes[9..], testdata::basic::BINCODE_BYTES_UNICODE);
 
-        let json_recovered: ZeroTriePerfectHashCow = serde_json::from_str(&json_str).unwrap();
+        let json_recovered: ZeroTriePerfectHashCow = edgerun_json::from_serde_str(&json_str).unwrap();
         let bincode_recovered: ZeroTriePerfectHashCow =
             bincode::deserialize(&bincode_bytes).unwrap();
 
@@ -484,14 +484,14 @@ mod tests {
     pub fn test_serde_perfecthash_cow_bin() {
         let trie = ZeroTriePerfectHash::from_store(Cow::from(testdata::basic::TRIE_BINARY));
         let original = ZeroTriePerfectHashCow { trie };
-        let json_str = serde_json::to_string(&original).unwrap();
+        let json_str = edgerun_json::to_string(&original).unwrap();
         let bincode_bytes = bincode::serialize(&original).unwrap();
 
         assert_eq!(json_str, testdata::basic::JSON_STR_BINARY);
         assert_eq!(&bincode_bytes[0..9], &[3, 26, 0, 0, 0, 0, 0, 0, 0]);
         assert_eq!(&bincode_bytes[9..], testdata::basic::BINCODE_BYTES_BINARY);
 
-        let json_recovered: ZeroTriePerfectHashCow = serde_json::from_str(&json_str).unwrap();
+        let json_recovered: ZeroTriePerfectHashCow = edgerun_json::from_serde_str(&json_str).unwrap();
         let bincode_recovered: ZeroTriePerfectHashCow =
             bincode::deserialize(&bincode_bytes).unwrap();
 
@@ -516,14 +516,14 @@ mod tests {
         let trie =
             ZeroTrieSimpleAscii::from_store(Cow::from(testdata::basic::TRIE_ASCII)).into_zerotrie();
         let original = ZeroTrieAnyCow { trie };
-        let json_str = serde_json::to_string(&original).unwrap();
+        let json_str = edgerun_json::to_string(&original).unwrap();
         let bincode_bytes = bincode::serialize(&original).unwrap();
 
         assert_eq!(json_str, testdata::basic::JSON_STR_ASCII);
         assert_eq!(&bincode_bytes[0..9], &[27, 0, 0, 0, 0, 0, 0, 0, 0]);
         assert_eq!(&bincode_bytes[9..], testdata::basic::BINCODE_BYTES_ASCII);
 
-        let json_recovered: ZeroTrieAnyCow = serde_json::from_str(&json_str).unwrap();
+        let json_recovered: ZeroTrieAnyCow = edgerun_json::from_serde_str(&json_str).unwrap();
         let bincode_recovered: ZeroTrieAnyCow = bincode::deserialize(&bincode_bytes).unwrap();
 
         assert_eq!(original.trie, json_recovered.trie);
@@ -541,14 +541,14 @@ mod tests {
         let trie = ZeroTriePerfectHash::from_store(Cow::from(testdata::basic::TRIE_UNICODE))
             .into_zerotrie();
         let original = ZeroTrieAnyCow { trie };
-        let json_str = serde_json::to_string(&original).unwrap();
+        let json_str = edgerun_json::to_string(&original).unwrap();
         let bincode_bytes = bincode::serialize(&original).unwrap();
 
         assert_eq!(json_str, testdata::basic::JSON_STR_UNICODE);
         assert_eq!(&bincode_bytes[0..9], &[40, 0, 0, 0, 0, 0, 0, 0, 3]);
         assert_eq!(&bincode_bytes[9..], testdata::basic::BINCODE_BYTES_UNICODE);
 
-        let json_recovered: ZeroTrieAnyCow = serde_json::from_str(&json_str).unwrap();
+        let json_recovered: ZeroTrieAnyCow = edgerun_json::from_serde_str(&json_str).unwrap();
         let bincode_recovered: ZeroTrieAnyCow = bincode::deserialize(&bincode_bytes).unwrap();
 
         assert_eq!(original.trie, json_recovered.trie);
@@ -580,14 +580,14 @@ mod tests_zerovec {
         let trie =
             ZeroTrieSimpleAscii::from_store(ZeroVec::new_borrowed(testdata::basic::TRIE_ASCII));
         let original = ZeroTrieSimpleAsciiZeroVec { trie };
-        let json_str = serde_json::to_string(&original).unwrap();
+        let json_str = edgerun_json::to_string(&original).unwrap();
         let bincode_bytes = bincode::serialize(&original).unwrap();
 
         assert_eq!(json_str, testdata::basic::JSON_STR_ASCII);
         assert_eq!(&bincode_bytes[0..9], &[0, 26, 0, 0, 0, 0, 0, 0, 0]);
         assert_eq!(&bincode_bytes[9..], testdata::basic::BINCODE_BYTES_ASCII);
 
-        let json_recovered: ZeroTrieSimpleAsciiZeroVec = serde_json::from_str(&json_str).unwrap();
+        let json_recovered: ZeroTrieSimpleAsciiZeroVec = edgerun_json::from_serde_str(&json_str).unwrap();
         let bincode_recovered: ZeroTrieSimpleAsciiZeroVec =
             bincode::deserialize(&bincode_bytes).unwrap();
 
@@ -609,14 +609,14 @@ mod tests_zerovec {
         let trie =
             ZeroTriePerfectHash::from_store(ZeroVec::new_borrowed(testdata::basic::TRIE_ASCII));
         let original = ZeroTriePerfectHashZeroVec { trie };
-        let json_str = serde_json::to_string(&original).unwrap();
+        let json_str = edgerun_json::to_string(&original).unwrap();
         let bincode_bytes = bincode::serialize(&original).unwrap();
 
         assert_eq!(json_str, testdata::basic::JSON_STR_ASCII);
         assert_eq!(&bincode_bytes[0..9], &[3, 26, 0, 0, 0, 0, 0, 0, 0]);
         assert_eq!(&bincode_bytes[9..], testdata::basic::BINCODE_BYTES_ASCII);
 
-        let json_recovered: ZeroTriePerfectHashZeroVec = serde_json::from_str(&json_str).unwrap();
+        let json_recovered: ZeroTriePerfectHashZeroVec = edgerun_json::from_serde_str(&json_str).unwrap();
         let bincode_recovered: ZeroTriePerfectHashZeroVec =
             bincode::deserialize(&bincode_bytes).unwrap();
 

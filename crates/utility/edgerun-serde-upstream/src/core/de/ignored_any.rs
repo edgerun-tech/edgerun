@@ -6,7 +6,7 @@ use crate::de::{
 
 /// An efficient way of discarding data from a deserializer.
 ///
-/// Think of this like `serde_json::Value` in that it can be deserialized from
+/// Think of this like `edgerun_json::Value` in that it can be deserialized from
 /// any type, except that it does not store any information about the data that
 /// gets deserialized.
 ///

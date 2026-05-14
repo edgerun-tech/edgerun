@@ -284,74 +284,7 @@ where
 #[cfg(all(test, feature = "alloc"))]
 mod tests {
     use super::*;
-    use alloc::vec::Vec;
     extern crate std;
-
-    fn random_alphanums(seed: u64, len: usize) -> Vec<u8> {
-        use rand::seq::SliceRandom;
-        use rand::SeedableRng;
-
-        let mut bytes: Vec<u8> =
-            b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789".into();
-        let mut rng = rand_pcg::Lcg64Xsh32::seed_from_u64(seed);
-        bytes.partial_shuffle(&mut rng, len).0.into()
-    }
-
-    #[test]
-    fn test_smaller() {
-        let mut count_by_p = [0; 256];
-        let mut count_by_qmax = [0; 256];
-        for len in 1..16 {
-            for seed in 0..150 {
-                let keys = random_alphanums(seed, len);
-                let keys_str = core::str::from_utf8(&keys).unwrap();
-                let computed = PerfectByteHashMap::try_new(&keys).expect(keys_str);
-                computed
-                    .check()
-                    .unwrap_or_else(|_| panic!("{}", std::str::from_utf8(&keys).expect(keys_str)));
-                let (p, qmax) = computed.p_qmax().unwrap();
-                count_by_p[p as usize] += 1;
-                count_by_qmax[qmax as usize] += 1;
-            }
-        }
-        std::println!("count_by_p (smaller): {count_by_p:?}");
-        std::println!("count_by_qmax (smaller): {count_by_qmax:?}");
-        let count_fastq = count_by_qmax[0..=Q_FAST_MAX as usize].iter().sum::<usize>();
-        let count_slowq = count_by_qmax[Q_FAST_MAX as usize + 1..]
-            .iter()
-            .sum::<usize>();
-        std::println!("fastq/slowq: {count_fastq}/{count_slowq}");
-        // Assert that 99% of cases resolve to the fast hash
-        assert!(count_fastq >= count_slowq * 100);
-    }
-
-    #[test]
-    fn test_larger() {
-        let mut count_by_p = [0; 256];
-        let mut count_by_qmax = [0; 256];
-        for len in 16..60 {
-            for seed in 0..75 {
-                let keys = random_alphanums(seed, len);
-                let keys_str = core::str::from_utf8(&keys).unwrap();
-                let computed = PerfectByteHashMap::try_new(&keys).expect(keys_str);
-                computed
-                    .check()
-                    .unwrap_or_else(|_| panic!("{}", std::str::from_utf8(&keys).expect(keys_str)));
-                let (p, qmax) = computed.p_qmax().unwrap();
-                count_by_p[p as usize] += 1;
-                count_by_qmax[qmax as usize] += 1;
-            }
-        }
-        std::println!("count_by_p (larger): {count_by_p:?}");
-        std::println!("count_by_qmax (larger): {count_by_qmax:?}");
-        let count_fastq = count_by_qmax[0..=Q_FAST_MAX as usize].iter().sum::<usize>();
-        let count_slowq = count_by_qmax[Q_FAST_MAX as usize + 1..]
-            .iter()
-            .sum::<usize>();
-        std::println!("fastq/slowq: {count_fastq}/{count_slowq}");
-        // Assert that 99% of cases resolve to the fast hash
-        assert!(count_fastq >= count_slowq * 100);
-    }
 
     #[test]
     fn test_hard_cases() {

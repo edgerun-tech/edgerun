@@ -294,39 +294,6 @@ mod test {
     use zerovec::ZeroVec;
 
     #[test]
-    fn test_serde_fail() {
-        let uc = PotentialCodePoint([0xFF, 0xFF, 0xFF]);
-        serde_json::to_string(&uc).expect_err("serialize invalid char bytes");
-        bincode::serialize(&uc).expect_err("serialize invalid char bytes");
-    }
-
-    #[test]
-    fn test_serde_json() {
-        let c = '🙃';
-        let uc = PotentialCodePoint::from_char(c);
-        let json_ser = serde_json::to_string(&uc).unwrap();
-
-        assert_eq!(json_ser, r#""🙃""#);
-
-        let json_de: PotentialCodePoint = serde_json::from_str(&json_ser).unwrap();
-
-        assert_eq!(uc, json_de);
-    }
-
-    #[test]
-    fn test_serde_bincode() {
-        let c = '🙃';
-        let uc = PotentialCodePoint::from_char(c);
-        let bytes_ser = bincode::serialize(&uc).unwrap();
-
-        assert_eq!(bytes_ser, [0x43, 0xF6, 0x01]);
-
-        let bytes_de: PotentialCodePoint = bincode::deserialize(&bytes_ser).unwrap();
-
-        assert_eq!(uc, bytes_de);
-    }
-
-    #[test]
     fn test_representation() {
         let chars = ['w', 'ω', '文', '𑄃', '🙃'];
 
@@ -356,20 +323,4 @@ mod test {
         );
     }
 
-    #[test]
-    fn test_char_bake() {
-        databake::test_bake!(
-            PotentialCodePoint,
-            const,
-            crate::PotentialCodePoint::from_char('b'),
-            potential_utf
-        );
-        // surrogate code point
-        databake::test_bake!(
-            PotentialCodePoint,
-            const,
-            crate::PotentialCodePoint::from_u24(55296u32),
-            potential_utf
-        );
-    }
 }

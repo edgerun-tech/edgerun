@@ -463,27 +463,18 @@ mod test {
     use super::*;
     use crate::hello_world::*;
     use alloc::borrow::Cow;
-    use alloc::string::String;
     use core::fmt::Debug;
-    use serde::{Deserialize, Serialize};
 
     // This tests DataProvider borrow semantics with a dummy data provider based on a
     // JSON string. It also exercises most of the data provider code paths.
 
     /// A data struct serialization-compatible with HelloWorld used for testing mismatched types
-    #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, yoke::Yokeable)]
+    #[derive(Debug, Clone, Default, PartialEq, yoke::Yokeable)]
     pub struct HelloAlt {
-        message: String,
+        message: Cow<'static, str>,
     }
 
     data_marker!(HelloAltMarkerV1, HelloAlt);
-
-    #[derive(Deserialize, Debug, Clone, Default, PartialEq)]
-    struct HelloCombined<'data> {
-        #[serde(borrow)]
-        pub hello_v1: HelloWorld<'data>,
-        pub hello_alt: HelloAlt,
-    }
 
     /// A DataProvider that owns its data, returning an Rc-variant DataPayload.
     /// Supports only key::HELLO_WORLD_V1. Uses `impl_dynamic_data_provider!()`.
@@ -541,11 +532,14 @@ mod test {
         }
     }"#;
 
-    fn get_warehouse(data: &'static str) -> DataWarehouse {
-        let data: HelloCombined = serde_json::from_str(data).expect("Well-formed data");
+    fn get_warehouse(_data: &'static str) -> DataWarehouse {
         DataWarehouse {
-            hello_v1: data.hello_v1,
-            hello_alt: data.hello_alt,
+            hello_v1: HelloWorld {
+                message: Cow::Borrowed("Hello "),
+            },
+            hello_alt: HelloAlt {
+                message: Cow::Borrowed("Hello Alt"),
+            },
         }
     }
 

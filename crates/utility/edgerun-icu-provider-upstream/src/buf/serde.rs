@@ -17,6 +17,8 @@ use crate::data_provider::DynamicDryDataProvider;
 use crate::prelude::*;
 use crate::DryDataProvider;
 use serde::de::Deserialize;
+#[cfg(feature = "deserialize_json")]
+use serde::de::DeserializeOwned;
 use yoke::Yokeable;
 
 /// A [`BufferProvider`] that deserializes its data using Serde.
@@ -61,13 +63,12 @@ fn deserialize_impl<'data, M>(
 where
     M: DynamicDataMarker,
     for<'de> <M::DataStruct as Yokeable<'de>>::Output: Deserialize<'de>,
+    #[cfg(feature = "deserialize_json")]
+    for<'de> <M::DataStruct as Yokeable<'de>>::Output: DeserializeOwned,
 {
     match buffer_format {
         #[cfg(feature = "deserialize_json")]
-        BufferFormat::Json => {
-            let mut d = serde_json::Deserializer::from_slice(bytes);
-            Ok(Deserialize::deserialize(&mut d)?)
-        }
+        BufferFormat::Json => Ok(edgerun_json::from_serde_slice(bytes)?),
 
         #[cfg(feature = "deserialize_bincode_1")]
         BufferFormat::Bincode1 => {
@@ -219,10 +220,10 @@ where
 }
 
 #[cfg(feature = "deserialize_json")]
-impl From<serde_json::error::Error> for crate::DataError {
-    fn from(e: serde_json::error::Error) -> Self {
+impl From<edgerun_json::JsonError> for crate::DataError {
+    fn from(e: edgerun_json::JsonError) -> Self {
         DataErrorKind::Deserialize
-            .with_str_context("serde_json")
+            .with_str_context("edgerun_json")
             .with_display_context(&e)
     }
 }

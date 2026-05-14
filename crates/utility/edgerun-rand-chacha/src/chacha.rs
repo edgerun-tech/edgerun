@@ -371,13 +371,13 @@ mod test {
         let mut rng2 = ChaCha12Rng::from_seed(seed);
         let mut rng3 = ChaCha8Rng::from_seed(seed);
 
-        let encoded1 = serde_json::to_string(&rng1).unwrap();
-        let encoded2 = serde_json::to_string(&rng2).unwrap();
-        let encoded3 = serde_json::to_string(&rng3).unwrap();
+        let encoded1 = edgerun_json::to_string(&rng1).unwrap();
+        let encoded2 = edgerun_json::to_string(&rng2).unwrap();
+        let encoded3 = edgerun_json::to_string(&rng3).unwrap();
 
-        let mut decoded1: ChaCha20Rng = serde_json::from_str(&encoded1).unwrap();
-        let mut decoded2: ChaCha12Rng = serde_json::from_str(&encoded2).unwrap();
-        let mut decoded3: ChaCha8Rng = serde_json::from_str(&encoded3).unwrap();
+        let mut decoded1: ChaCha20Rng = edgerun_json::from_serde_str(&encoded1).unwrap();
+        let mut decoded2: ChaCha12Rng = edgerun_json::from_serde_str(&encoded2).unwrap();
+        let mut decoded3: ChaCha8Rng = edgerun_json::from_serde_str(&encoded3).unwrap();
 
         assert_eq!(rng1, decoded1);
         assert_eq!(rng2, decoded2);
@@ -402,8 +402,8 @@ mod test {
     #[test]
     fn test_chacha_serde_format_stability() {
         let j = r#"{"seed":[4,8,15,16,23,42,4,8,15,16,23,42,4,8,15,16,23,42,4,8,15,16,23,42,4,8,15,16,23,42,4,8],"stream":27182818284,"word_pos":314159265359}"#;
-        let r: ChaChaRng = serde_json::from_str(j).unwrap();
-        let j1 = serde_json::to_string(&r).unwrap();
+        let r: ChaChaRng = edgerun_json::from_serde_str(j).unwrap();
+        let j1 = edgerun_json::to_string(&r).unwrap();
         assert_eq!(j, j1);
     }
 

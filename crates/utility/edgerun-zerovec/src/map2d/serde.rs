@@ -389,12 +389,12 @@ mod test {
     }
 
     #[test]
-    fn test_serde_json() {
+    fn test_edgerun_json() {
         let map = make_map();
-        let json_str = serde_json::to_string(&map).expect("serialize");
+        let json_str = edgerun_json::to_string(&map).expect("serialize");
         assert_eq!(JSON_STR, json_str);
         let new_map: ZeroMap2d<u32, u16, str> =
-            serde_json::from_str(&json_str).expect("deserialize");
+            edgerun_json::from_serde_str(&json_str).expect("deserialize");
         assert_eq!(format!("{new_map:?}"), format!("{map:?}"));
     }
 

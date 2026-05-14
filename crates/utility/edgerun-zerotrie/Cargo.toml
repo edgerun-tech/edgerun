@@ -161,3 +161,8 @@ check-cfg = [
     "cfg(icu4x_run_size_tests)",
     "cfg(icu4x_unstable_fast_trie_only)",
 ]
+
+[dev-dependencies.edgerun-json]
+version = "0.1"
+path = "../edgerun-json"
+default-features = false

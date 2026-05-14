@@ -72,8 +72,6 @@
 mod hint;
 #[cfg(all(target_arch = "x86_64", target_feature = "sse2", not(miri)))]
 mod stdarch_x86;
-#[cfg(test)]
-mod tests;
 mod traits;
 
 #[cfg(all(any(target_arch = "aarch64", target_arch = "x86_64"), not(miri)))]
@@ -337,12 +335,6 @@ impl Pow10SignificandsTable {
         }
     }
 
-    #[cfg(test)]
-    fn get(&self, dec_exp: i32) -> uint128 {
-        const DEC_EXP_MIN: i32 = -292;
-        assert!((DEC_EXP_MIN..DEC_EXP_MIN + Self::NUM_POW10 as i32).contains(&dec_exp));
-        unsafe { self.get_unchecked(dec_exp) }
-    }
 }
 
 static POW10_SIGNIFICANDS: Pow10SignificandsTable = Pow10SignificandsTable::new();

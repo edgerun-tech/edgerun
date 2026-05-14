@@ -208,7 +208,7 @@
 //!
 //! let a = record.key_values().get(Key::from("a")).unwrap();
 //!
-//! assert_eq!("{\"a\":1,\"b\":true,\"c\":\"Some data\"}", serde_json::to_string(&a)?);
+//! assert_eq!("{\"a\":1,\"b\":true,\"c\":\"Some data\"}", edgerun_json::to_string(&a)?);
 //! # }
 //! # Ok(())
 //! # }

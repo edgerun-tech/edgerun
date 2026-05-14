@@ -91,7 +91,6 @@ fn take_ident(read: &mut &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pretty_assertions::assert_eq;
     use proc_macro2::Span;
 
     fn assert(input: &str, fmt: &str, args: &str) {
