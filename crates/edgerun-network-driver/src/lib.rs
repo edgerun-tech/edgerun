@@ -485,33 +485,45 @@ pub struct LinuxTapFrameDevice {
 #[cfg(all(feature = "tap", target_os = "linux"))]
 impl LinuxTapFrameDevice {
     pub fn open(name: &str, mac: [u8; 6], mtu: u16) -> std::io::Result<Self> {
+        use core::ffi::{c_char, c_int, c_short, c_ulong, c_void};
         use std::os::fd::AsRawFd;
         use std::os::unix::fs::OpenOptionsExt;
 
         const IFNAMSIZ: usize = 16;
-        const IFF_TAP: libc::c_short = 0x0002;
-        const IFF_NO_PI: libc::c_short = 0x1000;
-        const TUNSETIFF: libc::c_ulong = 0x4004_54ca;
+        const IFF_TAP: c_short = 0x0002;
+        const IFF_NO_PI: c_short = 0x1000;
+        const O_NONBLOCK: c_int = 0o4000;
+        const TUNSETIFF: c_ulong = 0x4004_54ca;
 
         #[repr(C)]
         struct IfReq {
-            name: [libc::c_char; IFNAMSIZ],
-            flags: libc::c_short,
+            name: [c_char; IFNAMSIZ],
+            flags: c_short,
+        }
+
+        unsafe extern "C" {
+            fn ioctl(fd: c_int, request: c_ulong, ...) -> c_int;
         }
 
         let file = std::fs::OpenOptions::new()
             .read(true)
             .write(true)
-            .custom_flags(libc::O_NONBLOCK)
+            .custom_flags(O_NONBLOCK)
             .open("/dev/net/tun")?;
         let mut request = IfReq {
             name: [0; IFNAMSIZ],
             flags: IFF_TAP | IFF_NO_PI,
         };
         for (dst, src) in request.name.iter_mut().zip(name.as_bytes().iter().copied()) {
-            *dst = src as libc::c_char;
+            *dst = src as c_char;
         }
-        let rc = unsafe { libc::ioctl(file.as_raw_fd(), TUNSETIFF, &request) };
+        let rc = unsafe {
+            ioctl(
+                file.as_raw_fd(),
+                TUNSETIFF,
+                &request as *const IfReq as *const c_void,
+            )
+        };
         if rc < 0 {
             return Err(std::io::Error::last_os_error());
         }

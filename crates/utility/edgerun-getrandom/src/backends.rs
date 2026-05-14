@@ -26,8 +26,7 @@ cfg_if! {
         mod rndr;
         pub use rndr::*;
     } else if #[cfg(getrandom_backend = "efi_rng")] {
-        mod efi_rng;
-        pub use efi_rng::*;
+        compile_error!("EdgeRun getrandom does not enable the UEFI RNG backend");
     } else if #[cfg(getrandom_backend = "windows_legacy")] {
         mod windows_legacy;
         pub use windows_legacy::*;
@@ -48,6 +47,10 @@ cfg_if! {
         mod unsupported;
         pub use unsupported::*;
     } else if #[cfg(all(target_os = "linux", target_env = ""))] {
+        mod linux_raw;
+        mod sanitizer;
+        pub use linux_raw::*;
+    } else if #[cfg(any(target_os = "linux", target_os = "android"))] {
         mod linux_raw;
         mod sanitizer;
         pub use linux_raw::*;
@@ -158,8 +161,7 @@ cfg_if! {
                 mod wasi_p1;
                 pub use wasi_p1::*;
             } else if #[cfg(target_env = "p2")] {
-                mod wasi_p2;
-                pub use wasi_p2::*;
+                compile_error!("EdgeRun getrandom does not enable the WASI preview 2 backend");
             } else {
                 compile_error!(
                     "Unknown version of WASI (only previews 1 and 2 are supported) \

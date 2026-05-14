@@ -18,8 +18,8 @@ default = []
 tpm = ["dep:edgerun-tpm"]
 tpm-std = ["tpm", "edgerun-tpm/std"]
 android-keystore = []
-# Real JNI-backed Android implementation (requires NDK toolchain)
-android-real = ["android-keystore", "dep:jni", "dep:ndk-context"]
+# Android runtime integration is not built in this workspace.
+android-real = ["android-keystore", "dep:jni"]
 yubikey = ["dep:edgerun-yubikey"]
 # All backends
 all-hardware = ["tpm", "android-keystore", "yubikey"]
@@ -35,7 +35,6 @@ edgerun-crypto = { workspace = true, default-features = false, features = ["p256
 
 [target.'cfg(target_os = "android")'.dependencies]
 jni = { version = "0.22", optional = true }
-ndk-context = { version = "0.1", optional = true }
 
 [lints]
 workspace = true

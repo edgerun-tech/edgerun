@@ -297,7 +297,6 @@ edgerun-network-driver = { version = "0.1", path = "crates/edgerun-network-drive
 edgerun-unicode = { version = "0.1", path = "crates/utility/edgerun-unicode" }
 
 rkyv = { version = "0.8.16", default-features = true }
-libc = "0.2"
 
 [patch.crates-io]
 adler2 = { path = "crates/utility/edgerun-adler2" }
