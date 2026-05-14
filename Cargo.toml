@@ -69,6 +69,13 @@ members = [
   "crates/utility/edgerun-eventsource-stream",
   "crates/utility/edgerun-fontdue",
   "crates/utility/edgerun-futures",
+  "crates/utility/edgerun-futures-channel",
+  "crates/utility/edgerun-futures-core",
+  "crates/utility/edgerun-futures-executor",
+  "crates/utility/edgerun-futures-macro",
+  "crates/utility/edgerun-futures-sink",
+  "crates/utility/edgerun-futures-task",
+  "crates/utility/edgerun-futures-util",
   "crates/utility/edgerun-hashbrown",
   "crates/utility/edgerun-hpack",
   "crates/utility/edgerun-http-client",
@@ -235,6 +242,13 @@ libc = "0.2"
 bytecheck = { path = "crates/utility/edgerun-bytecheck" }
 bytecheck_derive = { path = "crates/utility/edgerun-bytecheck-derive" }
 displaydoc = { path = "crates/utility/edgerun-displaydoc" }
+futures-channel = { path = "crates/utility/edgerun-futures-channel" }
+futures-core = { path = "crates/utility/edgerun-futures-core" }
+futures-executor = { path = "crates/utility/edgerun-futures-executor" }
+futures-macro = { path = "crates/utility/edgerun-futures-macro" }
+futures-sink = { path = "crates/utility/edgerun-futures-sink" }
+futures-task = { path = "crates/utility/edgerun-futures-task" }
+futures-util = { path = "crates/utility/edgerun-futures-util" }
 hashbrown = { path = "crates/utility/edgerun-hashbrown" }
 litemap = { path = "crates/utility/edgerun-litemap" }
 log = { path = "crates/utility/edgerun-log-upstream" }
