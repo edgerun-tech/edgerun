@@ -23,7 +23,7 @@ use codex_protocol::protocol::Op;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::user_input::UserInput;
-use serde::Serialize;
+use edgerun_json::ToJson;
 use edgerun_json::Value as JsonValue;
 use std::collections::HashMap;
 
@@ -43,9 +43,9 @@ pub(crate) fn function_arguments(payload: ToolPayload) -> Result<String, Functio
 
 pub(crate) fn tool_output_json_text<T>(value: &T, tool_name: &str) -> String
 where
-    T: Serialize,
+    T: ToJson,
 {
-    edgerun_json::to_string(value).unwrap_or_else(|err| {
+    edgerun_json::to_json_string(value).unwrap_or_else(|err| {
         JsonValue::String(format!("failed to serialize {tool_name} result: {err}")).to_string()
     })
 }
@@ -58,7 +58,7 @@ pub(crate) fn tool_output_response_item<T>(
     tool_name: &str,
 ) -> ResponseInputItem
 where
-    T: Serialize,
+    T: ToJson,
 {
     FunctionToolOutput::from_text(tool_output_json_text(value, tool_name), success)
         .to_response_item(call_id, payload)
@@ -66,11 +66,10 @@ where
 
 pub(crate) fn tool_output_code_mode_result<T>(value: &T, tool_name: &str) -> JsonValue
 where
-    T: Serialize,
+    T: ToJson,
 {
-    edgerun_json::to_serde_value(value).unwrap_or_else(|err| {
-        JsonValue::String(format!("failed to serialize {tool_name} result: {err}"))
-    })
+    let _ = tool_name;
+    value.to_json()
 }
 
 pub(crate) fn build_wait_agent_statuses(

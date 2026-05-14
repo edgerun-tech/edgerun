@@ -68,11 +68,12 @@ impl ToolHandler for CodeModeWaitHandler {
             ToolPayload::Function { arguments }
                 if tool_name.namespace.is_none() && tool_name.name.as_str() == WAIT_TOOL_NAME =>
             {
-                let args: ExecWaitArgs = edgerun_json::from_json_str(&arguments).map_err(|err| {
-                    FunctionCallError::RespondToModel(format!(
-                        "failed to parse function arguments: {err}"
-                    ))
-                })?;
+                let args: ExecWaitArgs =
+                    edgerun_json::from_json_str(&arguments).map_err(|err| {
+                        FunctionCallError::RespondToModel(format!(
+                            "failed to parse function arguments: {err}"
+                        ))
+                    })?;
                 let exec = ExecContext { session, turn };
                 let started_at = std::time::Instant::now();
                 let wait_response = exec

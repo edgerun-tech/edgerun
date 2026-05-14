@@ -44,7 +44,6 @@ default = ["std"]
 enable-interning = ["std"]
 gg-alloc = []
 msrv = []
-rustversion = []
 serde-serialize = [
     "serde",
     "dep:edgerun-json",
@@ -86,11 +85,6 @@ path = "../edgerun-wasm-bindgen-macro"
 [dependencies.wasm-bindgen-shared]
 version = "=0.2.121"
 path = "../edgerun-wasm-bindgen-shared"
-
-[build-dependencies.rustversion-compat]
-version = "1.0.6"
-path = "../edgerun-rustversion"
-package = "rustversion"
 
 [lints.clippy]
 large_enum_variant = "allow"

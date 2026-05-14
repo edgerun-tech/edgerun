@@ -27,6 +27,7 @@ use codex_protocol::error::CodexErr;
 use codex_protocol::error::SandboxErr;
 use codex_protocol::exec_output::ExecToolCallOutput;
 use codex_protocol::exec_output::StreamOutput;
+use codex_protocol::local_uuid::Uuid;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::permissions::FileSystemSandboxPolicy;
 use codex_protocol::permissions::NetworkSandboxPolicy;
@@ -52,14 +53,13 @@ use codex_shell_escalation::PreparedExec;
 use codex_shell_escalation::ShellCommandExecutor;
 use codex_shell_escalation::Stopwatch;
 use codex_utils_absolute_path::AbsolutePathBuf;
-use codex_protocol::local_uuid::Uuid;
+use edgerun_tokio::sync::RwLock;
+use edgerun_tokio_util::sync::CancellationToken;
 use std::collections::HashMap;
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
-use edgerun_tokio::sync::RwLock;
-use edgerun_tokio_util::sync::CancellationToken;
 
 pub(crate) struct PreparedUnifiedExecZshFork {
     pub(crate) exec_request: ExecRequest,
@@ -97,11 +97,7 @@ pub(super) async fn try_run_zsh_fork(
         capture_policy: ExecCapturePolicy::ShellTool,
     };
     let sandbox_exec_request = attempt
-        .env_for(
-            command,
-            options,
-            req.network.as_ref(),
-        )
+        .env_for(command, options, req.network.as_ref())
         .map_err(|err| ToolError::Codex(err.into()))?;
     let crate::sandboxing::ExecRequest {
         command,
@@ -400,9 +396,8 @@ impl CoreShellActionProvider {
                 {
                     EscalationDecision::deny(Some("Execution forbidden by policy".to_string()))
                 } else {
-                    let prompt_decision = self
-                        .prompt(program, argv, workdir, &self.stopwatch)
-                        .await?;
+                    let prompt_decision =
+                        self.prompt(program, argv, workdir, &self.stopwatch).await?;
                     match prompt_decision.decision {
                         ReviewDecision::Approved
                         | ReviewDecision::ApprovedForSession

@@ -7,15 +7,15 @@ use codex_protocol::items::McpToolCallItem;
 use codex_protocol::items::McpToolCallStatus;
 use codex_protocol::items::TurnItem;
 use codex_protocol::mcp::CallToolResult;
+use edgerun_json::FromJson;
+use edgerun_json::Map;
+use edgerun_json::ToJson;
+use edgerun_json::Value;
 use rmcp::model::ListResourceTemplatesResult;
 use rmcp::model::ListResourcesResult;
 use rmcp::model::ReadResourceResult;
 use rmcp::model::Resource;
 use rmcp::model::ResourceTemplate;
-use serde::Deserialize;
-use serde::Serialize;
-use serde::de::DeserializeOwned;
-use edgerun_json::Value;
 
 use crate::function_tool::FunctionCallError;
 use crate::session::session::Session;
@@ -31,34 +31,37 @@ pub use list_mcp_resource_templates::ListMcpResourceTemplatesHandler;
 pub use list_mcp_resources::ListMcpResourcesHandler;
 pub use read_mcp_resource::ReadMcpResourceHandler;
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, FromJson, Default)]
 struct ListResourcesArgs {
     /// Lists all resources from all servers if not specified.
     #[serde(default)]
+    #[json(default)]
     server: Option<String>,
     #[serde(default)]
+    #[json(default)]
     cursor: Option<String>,
 }
 
-#[derive(Debug, Deserialize, Default)]
+#[derive(Debug, FromJson, Default)]
 struct ListResourceTemplatesArgs {
     /// Lists all resource templates from all servers if not specified.
     #[serde(default)]
+    #[json(default)]
     server: Option<String>,
     #[serde(default)]
+    #[json(default)]
     cursor: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, FromJson)]
 struct ReadResourceArgs {
     server: String,
     uri: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug)]
 struct ResourceWithServer {
     server: String,
-    #[serde(flatten)]
     resource: Resource,
 }
 
@@ -68,10 +71,17 @@ impl ResourceWithServer {
     }
 }
 
-#[derive(Debug, Serialize)]
+impl ToJson for ResourceWithServer {
+    fn to_json(&self) -> Value {
+        let mut object = resource_to_map(&self.resource);
+        object.insert("server".to_string(), self.server.to_json());
+        Value::Object(object)
+    }
+}
+
+#[derive(Debug)]
 struct ResourceTemplateWithServer {
     server: String,
-    #[serde(flatten)]
     template: ResourceTemplate,
 }
 
@@ -81,13 +91,18 @@ impl ResourceTemplateWithServer {
     }
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+impl ToJson for ResourceTemplateWithServer {
+    fn to_json(&self) -> Value {
+        let mut object = resource_template_to_map(&self.template);
+        object.insert("server".to_string(), self.server.to_json());
+        Value::Object(object)
+    }
+}
+
+#[derive(Debug)]
 struct ListResourcesPayload {
-    #[serde(skip_serializing_if = "Option::is_none")]
     server: Option<String>,
     resources: Vec<ResourceWithServer>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     next_cursor: Option<String>,
 }
 
@@ -124,13 +139,20 @@ impl ListResourcesPayload {
     }
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+impl ToJson for ListResourcesPayload {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        object.push_opt_field("server", self.server.clone());
+        object.push_field("resources", self.resources.to_json());
+        object.push_opt_field("nextCursor", self.next_cursor.clone());
+        Value::Object(object)
+    }
+}
+
+#[derive(Debug)]
 struct ListResourceTemplatesPayload {
-    #[serde(skip_serializing_if = "Option::is_none")]
     server: Option<String>,
     resource_templates: Vec<ResourceTemplateWithServer>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     next_cursor: Option<String>,
 }
 
@@ -168,12 +190,48 @@ impl ListResourceTemplatesPayload {
     }
 }
 
-#[derive(Debug, Serialize)]
+impl ToJson for ListResourceTemplatesPayload {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        object.push_opt_field("server", self.server.clone());
+        object.push_field("resourceTemplates", self.resource_templates.to_json());
+        object.push_opt_field("nextCursor", self.next_cursor.clone());
+        Value::Object(object)
+    }
+}
+
+#[derive(Debug)]
 struct ReadResourcePayload {
     server: String,
     uri: String,
-    #[serde(flatten)]
     result: ReadResourceResult,
+}
+
+impl ToJson for ReadResourcePayload {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        object.push_field("server", self.server.clone());
+        object.push_field("uri", self.uri.clone());
+        object.push_field(
+            "contents",
+            Value::array_from_iter(self.result.contents.iter().map(ToJson::to_json)),
+        );
+        Value::Object(object)
+    }
+}
+
+fn resource_to_map(resource: &Resource) -> Map<String, Value> {
+    resource
+        .to_json()
+        .into_object("Resource")
+        .unwrap_or_else(|_| Map::new())
+}
+
+fn resource_template_to_map(template: &ResourceTemplate) -> Map<String, Value> {
+    template
+        .to_json()
+        .into_object("ResourceTemplate")
+        .unwrap_or_else(|_| Map::new())
 }
 
 fn call_tool_result_from_content(content: &str, success: Option<bool>) -> CallToolResult {
@@ -270,9 +328,9 @@ fn normalize_required_string(field: &str, value: String) -> Result<String, Funct
 
 fn serialize_function_output<T>(payload: T) -> Result<FunctionToolOutput, FunctionCallError>
 where
-    T: Serialize,
+    T: ToJson,
 {
-    let content = edgerun_json::to_string(&payload).map_err(|err| {
+    let content = edgerun_json::to_json_string(&payload).map_err(|err| {
         FunctionCallError::RespondToModel(format!(
             "failed to serialize MCP resource response: {err}"
         ))
@@ -298,10 +356,10 @@ fn parse_arguments(raw_args: &str) -> Result<Option<Value>, FunctionCallError> {
 
 fn parse_args<T>(arguments: Option<Value>) -> Result<T, FunctionCallError>
 where
-    T: DeserializeOwned,
+    T: FromJson,
 {
     match arguments {
-        Some(value) => edgerun_json::from_serde_value(value).map_err(|err| {
+        Some(value) => edgerun_json::from_json_value(value).map_err(|err| {
             FunctionCallError::RespondToModel(format!("failed to parse function arguments: {err}"))
         }),
         None => Err(FunctionCallError::RespondToModel(
@@ -312,7 +370,7 @@ where
 
 fn parse_args_with_default<T>(arguments: Option<Value>) -> Result<T, FunctionCallError>
 where
-    T: DeserializeOwned + Default,
+    T: FromJson + Default,
 {
     match arguments {
         Some(value) => parse_args(Some(value)),

@@ -487,9 +487,20 @@ pub fn metric_card(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: MetricCard<'_
         theme.radius.card,
         colors.panel,
     );
+    let title_y = rect.y + 14.0;
+    let value_y = if rect.h < 118.0 {
+        rect.y + 39.0
+    } else {
+        rect.y + 48.0
+    };
+    let detail_y = if rect.h < 118.0 {
+        rect.y + rect.h - 24.0
+    } else {
+        rect.y + rect.h - 30.0
+    };
     ui.bounded_label(
         rect.x + 16.0,
-        rect.y + 15.0,
+        title_y,
         rect.w - 32.0,
         spec.title,
         2.0,
@@ -497,16 +508,16 @@ pub fn metric_card(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: MetricCard<'_
     );
     ui.bounded_label(
         rect.x + 16.0,
-        rect.y + 48.0,
+        value_y,
         rect.w - 32.0,
         spec.value,
-        4.0,
+        if rect.h < 118.0 { 3.0 } else { 4.0 },
         colors.text,
     );
     if !spec.detail.is_empty() {
         ui.bounded_label(
             rect.x + 16.0,
-            rect.y + rect.h - 30.0,
+            detail_y,
             rect.w - 32.0,
             spec.detail,
             2.0,

@@ -40,7 +40,6 @@ edgerun-crypto = { workspace = true, default-features = false, optional = true }
 edgerun-encoding = { workspace = true, default-features = false, optional = true }
 edgerun-hpack = { version = "0.1", path = "../edgerun-hpack", optional = true }
 edgerun-log = { version = "0.1", path = "../edgerun-log" }
-edgerun-platform = { version = "0.1", path = "../../edgerun-platform" }
 edgerun-protocols = { workspace = true, optional = true }
 edgerun-runtime = { version = "0.1", path = "../edgerun-runtime", default-features = false, features = ["std"] }
 

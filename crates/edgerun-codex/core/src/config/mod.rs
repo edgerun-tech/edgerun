@@ -1303,7 +1303,7 @@ pub fn validate_feature_requirements_for_config_toml(
 
 fn load_catalog_json(path: &AbsolutePathBuf) -> std::io::Result<ModelsResponse> {
     let file_contents = std::fs::read_to_string(path)?;
-    let catalog = edgerun_json::from_serde_str::<ModelsResponse>(&file_contents).map_err(|err| {
+    let catalog = edgerun_json::from_json_str::<ModelsResponse>(&file_contents).map_err(|err| {
         std::io::Error::new(
             ErrorKind::InvalidData,
             format!(

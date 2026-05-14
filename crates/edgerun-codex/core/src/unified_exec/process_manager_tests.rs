@@ -1,7 +1,7 @@
 use super::*;
-use pretty_assertions::assert_eq;
 use edgerun_tokio::time::Duration;
 use edgerun_tokio::time::Instant;
+use pretty_assertions::assert_eq;
 
 #[test]
 fn unified_exec_env_injects_defaults() {

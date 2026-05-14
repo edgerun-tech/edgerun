@@ -499,7 +499,7 @@ pub fn shadcn_card(title: &str, detail: &str) -> UiNode {
 }
 
 pub fn shadcn_chat_message(role: UiShadcnChatRole, body: &str) -> UiNode {
-    let (heading, detail) = shadcn_message_heading(body);
+    let (heading, detail) = shadcn_message_heading(role, body);
     if role == UiShadcnChatRole::Diff {
         return card("bg-panel border rounded-lg p-3 gap-2")
             .child(
@@ -533,12 +533,26 @@ pub fn shadcn_chat_message(role: UiShadcnChatRole, body: &str) -> UiNode {
         .child(shadcn_label(detail).class("h-full text-text"))
 }
 
-fn shadcn_message_heading(body: &str) -> (&str, &str) {
-    match body.split_once('\n') {
-        Some((heading, detail)) if !heading.trim().is_empty() && !detail.trim().is_empty() => {
-            (heading, detail)
-        }
-        _ => ("", body),
+fn shadcn_message_heading(role: UiShadcnChatRole, body: &str) -> (&str, &str) {
+    let Some((heading, detail)) = body.split_once('\n') else {
+        return ("", body);
+    };
+    if heading.trim().is_empty() || detail.trim().is_empty() {
+        return ("", body);
+    }
+    let known_heading = match role {
+        UiShadcnChatRole::Reasoning => matches!(heading, "Thinking"),
+        UiShadcnChatRole::Assistant => matches!(heading, "Response"),
+        UiShadcnChatRole::Diff => matches!(heading, "Patch / tool input" | "Patch" | "Tool input"),
+        UiShadcnChatRole::ToolRunning => matches!(heading, "Started"),
+        UiShadcnChatRole::ToolSuccess => matches!(heading, "Completed"),
+        UiShadcnChatRole::ToolError => matches!(heading, "Failed"),
+        UiShadcnChatRole::User | UiShadcnChatRole::Error => false,
+    };
+    if known_heading {
+        (heading, detail)
+    } else {
+        ("", body)
     }
 }
 
@@ -549,7 +563,8 @@ pub fn shadcn_chat_message_height_for_role(
     body: &str,
     card_width: f32,
 ) -> f32 {
-    let measured = shadcn_chat_message_height(atlas, body, card_width);
+    let (_, detail) = shadcn_message_heading(role, body);
+    let measured = shadcn_chat_message_height(atlas, detail, card_width);
     if role.is_timeline_event() {
         measured.max(62.0) - 12.0
     } else {
@@ -1522,10 +1537,21 @@ mod tests {
             UiNodeKind::Card { .. }
         ));
         assert_eq!(
-            shadcn_message_heading("Thinking\nchecking files"),
+            shadcn_message_heading(UiShadcnChatRole::Reasoning, "Thinking\nchecking files"),
             ("Thinking", "checking files")
         );
-        assert_eq!(shadcn_message_heading("plain body"), ("", "plain body"));
+        assert_eq!(
+            shadcn_message_heading(UiShadcnChatRole::Assistant, "plain body"),
+            ("", "plain body")
+        );
+        assert_eq!(
+            shadcn_message_heading(UiShadcnChatRole::Assistant, "Summary\n- item"),
+            ("", "Summary\n- item")
+        );
+        assert_eq!(
+            shadcn_message_heading(UiShadcnChatRole::User, "Response\nkeep literal"),
+            ("", "Response\nkeep literal")
+        );
         assert!(matches!(
             shadcn_toast("Saved", UiIcon::Check, palette::GREEN).kind,
             UiNodeKind::Toast { .. }

@@ -1921,6 +1921,23 @@ pub struct ShellCommandToolCallParams {
     pub prefix_rule: Option<Vec<String>>,
 }
 
+impl FromJson for ShellCommandToolCallParams {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ShellCommandToolCallParams")?;
+        let timeout_ms = match object.remove("timeout_ms") {
+            Some(Value::Null) | None => object.take_optional("timeout")?,
+            Some(value) => Some(u64::from_json(value)?),
+        };
+        Ok(Self {
+            command: object.take_required("command")?,
+            workdir: object.take_optional("workdir")?,
+            login: object.take_optional("login")?,
+            timeout_ms,
+            prefix_rule: object.take_optional("prefix_rule")?,
+        })
+    }
+}
+
 /// Responses API compatible content items that can be returned by a tool call.
 /// This is a subset of ContentItem with the types we support as function call outputs.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema, TS)]

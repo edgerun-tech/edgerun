@@ -35,7 +35,7 @@ impl ToolHandler for Handler {
             ..
         } = invocation;
         let arguments = function_arguments(payload)?;
-        let args: ResumeAgentArgs = parse_arguments(&arguments)?;
+        let args: ResumeAgentArgs = parse_json_arguments(&arguments)?;
         let receiver_thread_id = ThreadId::from_string(&args.id).map_err(|err| {
             FunctionCallError::RespondToModel(format!("invalid agent id {}: {err:?}", args.id))
         })?;
@@ -134,12 +134,12 @@ impl ToolHandler for Handler {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, FromJson)]
 struct ResumeAgentArgs {
     id: String,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, ToJson, PartialEq, Eq)]
 pub(crate) struct ResumeAgentResult {
     pub(crate) status: AgentStatus,
 }

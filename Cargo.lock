@@ -101,7 +101,6 @@ dependencies = [
  "edgerun-assert-cmd",
  "edgerun-assert-matches",
  "edgerun-async-trait",
- "edgerun-codex-utils-absolute-path",
  "edgerun-codex-utils-cargo-bin",
  "edgerun-error",
  "edgerun-pretty-assertions",
@@ -137,10 +136,8 @@ name = "codex-code-mode"
 version = "0.1.1"
 dependencies = [
  "codex-protocol",
- "edgerun-async-channel",
  "edgerun-async-trait",
  "edgerun-json",
- "edgerun-log",
  "edgerun-pretty-assertions",
  "edgerun-tokio",
  "edgerun-tokio-util",
@@ -282,7 +279,6 @@ dependencies = [
  "codex-app-server-protocol",
  "codex-code-mode",
  "codex-protocol",
- "edgerun-codex-utils-absolute-path",
  "edgerun-json",
  "edgerun-log",
  "edgerun-pretty-assertions",
@@ -294,10 +290,12 @@ name = "codex-tui"
 version = "0.1.1"
 dependencies = [
  "codex-core",
+ "edgerun-codelyzer",
  "edgerun-http",
  "edgerun-json",
  "edgerun-tokio",
  "edgerun-ui-core",
+ "edgerun-vfs",
 ]
 
 [[package]]
@@ -354,17 +352,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "edgerun-clipboard"
-version = "0.1.1"
-
-[[package]]
 name = "edgerun-codelyzer"
 version = "0.1.1"
 dependencies = [
- "edgerun-crypto",
  "edgerun-encoding",
  "edgerun-json",
- "edgerun-log",
+ "edgerun-vfs",
  "rkyv",
 ]
 
@@ -401,12 +394,7 @@ name = "edgerun-crypto"
 version = "0.1.1"
 dependencies = [
  "edgerun-encoding",
- "edgerun-json",
 ]
-
-[[package]]
-name = "edgerun-deno-core-icudata"
-version = "0.1.1"
 
 [[package]]
 name = "edgerun-devices"
@@ -470,7 +458,6 @@ dependencies = [
 name = "edgerun-exchange"
 version = "0.1.1"
 dependencies = [
- "edgerun-crypto",
  "edgerun-json",
  "edgerun-log",
  "edgerun-node",
@@ -484,11 +471,9 @@ version = "0.1.1"
 dependencies = [
  "edgerun-exchange",
  "edgerun-json",
- "edgerun-log",
  "edgerun-node",
  "edgerun-protocols",
  "edgerun-sdk",
- "edgerun-url",
  "edgerun-wallet",
 ]
 
@@ -545,7 +530,6 @@ dependencies = [
  "edgerun-encoding",
  "edgerun-hpack",
  "edgerun-log",
- "edgerun-platform",
  "edgerun-protocols",
  "edgerun-runtime",
 ]
@@ -682,15 +666,13 @@ dependencies = [
  "edgerun-linux-usb",
  "edgerun-linux-wifi",
  "edgerun-log",
- "edgerun-machine-report",
  "edgerun-mesh",
  "edgerun-platform",
  "edgerun-protocols",
- "edgerun-remote-capability",
  "edgerun-sdk",
  "edgerun-storage",
  "edgerun-tpm",
- "edgerun-url",
+ "edgerun-ui-core",
  "edgerun-virtual-disk",
  "edgerun-work",
  "edgerun-yubikey",
@@ -762,17 +744,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "edgerun-pty"
-version = "0.1.1"
-
-[[package]]
 name = "edgerun-remote-capability"
 version = "0.1.1"
 dependencies = [
  "edgerun-capabilities",
- "edgerun-crypto",
  "edgerun-devices",
- "edgerun-encoding",
  "edgerun-hardware-signing",
  "edgerun-protocols",
 ]
@@ -885,20 +861,6 @@ name = "edgerun-strum-macros"
 version = "0.1.1"
 
 [[package]]
-name = "edgerun-subtle"
-version = "0.1.1"
-
-[[package]]
-name = "edgerun-tcl-ac"
-version = "0.1.1"
-dependencies = [
- "edgerun-bluetooth-gatt",
- "edgerun-capabilities",
- "edgerun-crypto",
- "edgerun-protocols",
-]
-
-[[package]]
 name = "edgerun-tempfile"
 version = "0.1.1"
 dependencies = [
@@ -1002,17 +964,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "edgerun-tuya"
-version = "0.1.1"
-dependencies = [
- "edgerun-capabilities",
- "edgerun-crypto",
- "edgerun-json",
- "edgerun-node",
- "edgerun-protocols",
-]
-
-[[package]]
 name = "edgerun-ui-core"
 version = "0.1.1"
 dependencies = [
@@ -1042,17 +993,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-vfs"
+version = "0.1.1"
+dependencies = [
+ "edgerun-encoding",
+ "edgerun-wire",
+ "edgerun-work",
+]
+
+[[package]]
 name = "edgerun-virtio"
 version = "0.1.0"
-dependencies = [
- "edgerun-platform",
-]
 
 [[package]]
 name = "edgerun-virtual-disk"
 version = "0.1.1"
 dependencies = [
- "edgerun-crypto",
  "edgerun-encoding",
  "edgerun-protocols",
 ]
@@ -1061,9 +1017,6 @@ dependencies = [
 name = "edgerun-wallet"
 version = "0.1.1"
 dependencies = [
- "edgerun-crypto",
- "edgerun-json",
- "edgerun-log",
  "edgerun-protocols",
 ]
 
@@ -1079,7 +1032,6 @@ dependencies = [
 name = "edgerun-wiremock"
 version = "0.1.1"
 dependencies = [
- "edgerun-http",
  "edgerun-json",
 ]
 
@@ -1105,10 +1057,6 @@ dependencies = [
 
 [[package]]
 name = "edgerun-zeroize"
-version = "0.1.1"
-
-[[package]]
-name = "edgerun-zstd"
 version = "0.1.1"
 
 [[package]]
@@ -1182,7 +1130,6 @@ dependencies = [
  "log",
  "simd_cesu8",
  "thiserror",
- "walkdir",
 ]
 
 [[package]]
@@ -1369,10 +1316,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rustversion"
-version = "1.0.22"
-
-[[package]]
 name = "same-file"
 version = "1.0.6"
 
@@ -1387,9 +1330,6 @@ dependencies = [
 [[package]]
 name = "serde_core"
 version = "1.0.228"
-dependencies = [
- "serde_derive",
-]
 
 [[package]]
 name = "serde_derive"
@@ -1425,10 +1365,6 @@ version = "0.4.12"
 [[package]]
 name = "smallvec"
 version = "1.15.1"
-
-[[package]]
-name = "stable_deref_trait"
-version = "1.2.1"
 
 [[package]]
 name = "syn"
@@ -1523,7 +1459,6 @@ name = "tracing-opentelemetry"
 version = "0.32.1"
 dependencies = [
  "js-sys",
- "lazy_static",
  "opentelemetry",
  "smallvec",
  "tracing",
@@ -1566,7 +1501,6 @@ dependencies = [
  "cfg-if",
  "edgerun-json",
  "once_cell",
- "rustversion",
  "serde",
  "wasm-bindgen-macro",
  "wasm-bindgen-shared",
@@ -1606,7 +1540,3 @@ dependencies = [
  "serde",
  "wasm-bindgen",
 ]
-
-[[package]]
-name = "zmij"
-version = "1.0.21"

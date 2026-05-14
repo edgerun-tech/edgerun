@@ -38,6 +38,7 @@ use codex_sandboxing::SandboxablePreference;
 use codex_shell_command::powershell::prefix_powershell_script_with_utf8;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use edgerun_futures::future::BoxFuture;
+use edgerun_json::ToJson;
 use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
@@ -85,7 +86,7 @@ pub struct ShellRuntime {
     backend: ShellRuntimeBackend,
 }
 
-#[derive(serde::Serialize, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(ToJson, Clone, Debug, Eq, PartialEq, Hash)]
 pub(crate) struct ApprovalKey {
     command: Vec<String>,
     cwd: AbsolutePathBuf,

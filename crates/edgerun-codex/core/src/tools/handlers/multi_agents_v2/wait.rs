@@ -47,7 +47,7 @@ impl ToolHandler for Handler {
             ..
         } = invocation;
         let arguments = function_arguments(payload)?;
-        let args: WaitArgs = parse_arguments(&arguments)?;
+        let args: WaitArgs = parse_json_arguments(&arguments)?;
         let timeout_ms = args.timeout_ms.unwrap_or(DEFAULT_WAIT_TIMEOUT_MS);
         let min_timeout_ms = turn
             .config
@@ -105,13 +105,13 @@ impl ToolHandler for Handler {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, FromJson)]
 #[serde(deny_unknown_fields)]
 struct WaitArgs {
     timeout_ms: Option<i64>,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, ToJson, PartialEq, Eq)]
 pub(crate) struct WaitAgentResult {
     pub(crate) message: String,
     pub(crate) timed_out: bool,

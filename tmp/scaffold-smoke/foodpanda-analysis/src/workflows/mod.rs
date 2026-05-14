@@ -1,3 +1,0 @@
-pub mod com_deliveryhero_config_dashboard_ui_configdashboardactivity;
-pub mod com_deliveryhero_config_dashboard_ui_experimentationdashboardactivity;
-pub mod com_deliveryhero_push_service_sp_pushmessagingservice;

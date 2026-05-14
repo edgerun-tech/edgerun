@@ -2,8 +2,8 @@ use super::canonicalize;
 use super::config_schema_json;
 use super::write_config_schema;
 
-use pretty_assertions::assert_eq;
 use edgerun_similar::TextDiff;
+use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 
 fn trim_single_trailing_newline(contents: &str) -> &str {

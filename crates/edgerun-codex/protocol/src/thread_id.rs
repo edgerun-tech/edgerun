@@ -2,6 +2,10 @@ use std::fmt::Display;
 
 use crate::local_uuid;
 use crate::local_uuid::Uuid;
+use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
+use edgerun_json::ToJson;
+use edgerun_json::Value;
 use edgerun_serde::Deserialize;
 use edgerun_serde::Serialize;
 use schemars::JsonSchema;
@@ -60,6 +64,19 @@ impl Default for ThreadId {
 impl Display for ThreadId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Display::fmt(&self.uuid, f)
+    }
+}
+
+impl ToJson for ThreadId {
+    fn to_json(&self) -> Value {
+        self.to_string().to_json()
+    }
+}
+
+impl FromJson for ThreadId {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let value = String::from_json(value)?;
+        Self::from_string(&value).map_err(|err| JsonValueError::WrongType(err.to_string()))
     }
 }
 

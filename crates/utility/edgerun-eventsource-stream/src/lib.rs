@@ -1,5 +1,10 @@
 //! Owned Server-Sent Events stream parser.
 
+#![no_std]
+
+extern crate alloc;
+
+use alloc::string::{String, ToString};
 use core::fmt;
 use core::pin::Pin;
 use core::task::Context;

@@ -474,7 +474,7 @@ impl CodexThread {
             )
             .await?;
 
-        Ok(edgerun_json::to_serde_value(result)?)
+        Ok(edgerun_json::ToJson::to_json(&result))
     }
 
     pub async fn call_mcp_tool(

@@ -22,7 +22,9 @@ use edgerun_ui_core::gpu::{
     shadcn_switch, shadcn_toggle_group, spacer,
 };
 
-use super::{AgentEvent, codex_home, provider, read_chatgpt_auth, run_agent_loop, user_item};
+use super::{
+    AgentEvent, WorkspaceEngine, codex_home, provider, read_chatgpt_auth, run_agent_loop, user_item,
+};
 use codex_core::TokenUsage;
 use codex_core::protocol::protocol::RateLimitSnapshot;
 
@@ -288,6 +290,16 @@ struct UiSession {
     messages: Vec<Message>,
     assistant_streaming: bool,
     reasoning_streaming: bool,
+    sidebar_revision: u64,
+    cached_sidebar_revision: u64,
+    cached_sidebar_detail: String,
+    cached_usage_label: String,
+    cached_limits_label: String,
+    messages_revision: u64,
+    cached_message_revision: u64,
+    cached_message_width: u32,
+    cached_message_density: DensityMode,
+    cached_message_heights: Vec<f32>,
 }
 
 impl UiSession {
@@ -309,6 +321,16 @@ impl UiSession {
             }],
             assistant_streaming: false,
             reasoning_streaming: false,
+            sidebar_revision: 1,
+            cached_sidebar_revision: u64::MAX,
+            cached_sidebar_detail: String::new(),
+            cached_usage_label: String::new(),
+            cached_limits_label: String::new(),
+            messages_revision: 1,
+            cached_message_revision: u64::MAX,
+            cached_message_width: 0,
+            cached_message_density: DensityMode::Comfortable,
+            cached_message_heights: Vec::new(),
         }
     }
 
@@ -328,6 +350,57 @@ impl UiSession {
         self.busy = false;
         self.assistant_streaming = false;
         self.reasoning_streaming = false;
+        self.mark_sidebar_dirty();
+        self.mark_messages_dirty();
+    }
+
+    fn push_message(&mut self, role: Role, text: impl Into<String>) {
+        self.messages.push(Message {
+            role,
+            text: text.into(),
+        });
+        self.mark_messages_dirty();
+    }
+
+    fn mark_sidebar_dirty(&mut self) {
+        self.sidebar_revision = self.sidebar_revision.wrapping_add(1);
+    }
+
+    fn mark_messages_dirty(&mut self) {
+        self.messages_revision = self.messages_revision.wrapping_add(1);
+    }
+
+    fn refresh_sidebar_cache(&mut self) {
+        if self.cached_sidebar_revision == self.sidebar_revision {
+            return;
+        }
+        self.cached_sidebar_detail = session_sidebar_detail(self);
+        self.cached_usage_label = self.usage.total_label();
+        self.cached_limits_label = self.rate_limits.label();
+        self.cached_sidebar_revision = self.sidebar_revision;
+    }
+
+    fn refresh_message_heights(&mut self, atlas: &FontAtlas, width: f32, density: DensityMode) {
+        let width_bucket = width.max(1.0).ceil() as u32;
+        if self.cached_message_revision == self.messages_revision
+            && self.cached_message_width == width_bucket
+            && self.cached_message_density == density
+            && self.cached_message_heights.len() == self.messages.len()
+        {
+            return;
+        }
+        self.cached_message_heights.clear();
+        self.cached_message_heights.reserve(self.messages.len());
+        for message in &self.messages {
+            let role = chat_role(message.role);
+            self.cached_message_heights.push(message_height_for_density(
+                shadcn_chat_message_height_for_role(atlas, role, &message.text, width),
+                density,
+            ));
+        }
+        self.cached_message_revision = self.messages_revision;
+        self.cached_message_width = width_bucket;
+        self.cached_message_density = density;
     }
 }
 
@@ -396,6 +469,22 @@ impl SessionStore {
         id
     }
 
+    fn refresh_sidebar_caches(&mut self) {
+        for session in &mut self.sessions {
+            session.refresh_sidebar_cache();
+        }
+    }
+
+    fn refresh_selected_message_heights(
+        &mut self,
+        atlas: &FontAtlas,
+        width: f32,
+        density: DensityMode,
+    ) {
+        self.selected_mut()
+            .refresh_message_heights(atlas, width, density);
+    }
+
     fn select_by_sidebar_index(&mut self, index: usize) -> bool {
         let Some(session) = self.sessions.get(index) else {
             return false;
@@ -425,6 +514,8 @@ impl SessionStore {
 #[derive(Debug)]
 struct CodexUi {
     model: String,
+    model_label: String,
+    workspace_label: String,
     input: UiTextBuffer,
     status: String,
     busy: bool,
@@ -655,8 +746,11 @@ pub fn run(options: UiOptions) -> Result<(), String> {
         .map(load_prompt_history)
         .unwrap_or_default();
 
+    let model_label = format!("model {}", options.model);
     let mut state = CodexUi {
         model: options.model,
+        model_label,
+        workspace_label: workspace_label(),
         input: UiTextBuffer::new(),
         status: "Starting Codex worker".to_string(),
         busy: true,
@@ -681,7 +775,7 @@ pub fn run(options: UiOptions) -> Result<(), String> {
         let atlas = FontAtlas::load_inter(18.0)?;
         let mut scene = GpuScene::new(BG);
         state.drain_events();
-        build_scene(&mut scene, &atlas, &state, 1120.0, 720.0);
+        build_scene(&mut scene, &atlas, &mut state, 1120.0, 720.0);
         println!(
             "edgerun-codex ui scene rects={} icon_quads={} text_quads={}",
             scene.rects().len(),
@@ -709,6 +803,8 @@ fn start_worker(
         };
         let histories: Arc<Mutex<HashMap<UiSessionId, Vec<codex_core::ResponseItem>>>> =
             Arc::new(Mutex::new(HashMap::new()));
+        let workspaces: Arc<Mutex<HashMap<UiSessionId, Arc<Mutex<WorkspaceEngine>>>>> =
+            Arc::new(Mutex::new(HashMap::new()));
         let cancellations: Arc<Mutex<HashMap<UiSessionId, Arc<AtomicBool>>>> =
             Arc::new(Mutex::new(HashMap::new()));
         let _ = event_tx.send(WorkerEvent::Ready);
@@ -723,6 +819,9 @@ fn start_worker(
                     }
                     if let Ok(mut histories) = histories.lock() {
                         histories.remove(&session_id);
+                    }
+                    if let Ok(mut workspaces) = workspaces.lock() {
+                        workspaces.remove(&session_id);
                     }
                     send_session_event(
                         &event_tx,
@@ -754,6 +853,39 @@ fn start_worker(
                         session_id,
                         SessionWorkerEvent::Status("Thinking".to_string()),
                     );
+                    let workspace = match workspaces.lock() {
+                        Ok(mut workspaces) => {
+                            if let Some(workspace) = workspaces.get(&session_id) {
+                                workspace.clone()
+                            } else {
+                                match WorkspaceEngine::load_current() {
+                                    Ok(workspace) => {
+                                        let workspace = Arc::new(Mutex::new(workspace));
+                                        workspaces.insert(session_id, workspace.clone());
+                                        workspace
+                                    }
+                                    Err(error) => {
+                                        send_session_event(
+                                            &event_tx,
+                                            session_id,
+                                            SessionWorkerEvent::Error(format!(
+                                                "workspace: {error}"
+                                            )),
+                                        );
+                                        continue;
+                                    }
+                                }
+                            }
+                        }
+                        Err(_) => {
+                            send_session_event(
+                                &event_tx,
+                                session_id,
+                                SessionWorkerEvent::Error("workspace lock poisoned".to_string()),
+                            );
+                            continue;
+                        }
+                    };
                     let cancel = Arc::new(AtomicBool::new(false));
                     if let Ok(mut cancellations) = cancellations.lock() {
                         if let Some(previous) = cancellations.insert(session_id, cancel.clone()) {
@@ -839,6 +971,7 @@ fn start_worker(
                         };
                         let result = runtime.block_on(run_agent_loop(
                             &client,
+                            workspace,
                             history,
                             Some(&mut emit),
                             Some(cancel.clone()),
@@ -1018,8 +1151,8 @@ fn run_window(frames: Option<u32>, mut state: CodexUi) -> Result<(), String> {
                         SDL_WINDOWEVENT_RESIZED | SDL_WINDOWEVENT_SIZE_CHANGED
                     ) =>
                 {
-                    width = event.data1().max(640);
-                    height = event.data2().max(480);
+                    width = event.data1().max(420);
+                    height = event.data2().max(360);
                     scene_dirty = true;
                 }
                 _ => {}
@@ -1030,7 +1163,7 @@ fn run_window(frames: Option<u32>, mut state: CodexUi) -> Result<(), String> {
             if state.busy || state.sessions.any_busy() {
                 state.animation_tick = state.animation_tick.wrapping_add(1);
             }
-            build_scene(&mut scene, &atlas, &state, width as f32, height as f32);
+            build_scene(&mut scene, &atlas, &mut state, width as f32, height as f32);
             renderer.render(width, height, &scene);
             unsafe {
                 SDL_GL_SwapWindow(window.0);
@@ -1069,10 +1202,8 @@ impl CodexUi {
                     let session = self.sessions.selected_mut();
                     session.status = "Error".to_string();
                     session.failures += 1;
-                    session.messages.push(Message {
-                        role: Role::Error,
-                        text: normalize_error_message(&error),
-                    });
+                    session.push_message(Role::Error, normalize_error_message(&error));
+                    session.mark_sidebar_dirty();
                 }
                 WorkerEvent::Session { session_id, event } => {
                     self.apply_session_event(session_id, event);
@@ -1088,6 +1219,7 @@ impl CodexUi {
             SessionWorkerEvent::Status(status) => {
                 if let Some(session) = self.sessions.session_mut(session_id) {
                     session.status = status.clone();
+                    session.mark_sidebar_dirty();
                 }
                 if selected {
                     self.status = status;
@@ -1099,10 +1231,7 @@ impl CodexUi {
             }
             SessionWorkerEvent::AssistantText(text) => {
                 if let Some(session) = self.sessions.session_mut(session_id) {
-                    session.messages.push(Message {
-                        role: Role::Assistant,
-                        text,
-                    });
+                    session.push_message(Role::Assistant, text);
                     session.assistant_streaming = false;
                     session.reasoning_streaming = false;
                 }
@@ -1150,10 +1279,8 @@ impl CodexUi {
                     session.reasoning_streaming = false;
                     session.active_tool = Some(name.clone());
                     session.status = "Tool running".to_string();
-                    session.messages.push(Message {
-                        role: Role::ToolRunning,
-                        text: format!("Started\n{name}"),
-                    });
+                    session.push_message(Role::ToolRunning, format!("Started\n{name}"));
+                    session.mark_sidebar_dirty();
                 }
                 self.record_log(LogLevel::Normal, format!("tool started: {name}"));
                 if selected {
@@ -1174,22 +1301,23 @@ impl CodexUi {
                         session.failures += 1;
                     }
                     session.active_tool = None;
-                    session.messages.push(Message {
-                        role: if success {
+                    session.push_message(
+                        if success {
                             Role::ToolSuccess
                         } else {
                             Role::ToolError
                         },
-                        text: format!(
+                        format!(
                             "{}\n{name}\n{summary}",
                             if success { "Completed" } else { "Failed" }
                         ),
-                    });
+                    );
                     session.status = if success {
                         "Tool completed".to_string()
                     } else {
                         "Tool failed".to_string()
                     };
+                    session.mark_sidebar_dirty();
                     if selected {
                         self.status = session.status.clone();
                     }
@@ -1214,10 +1342,8 @@ impl CodexUi {
                     session.assistant_streaming = false;
                     session.reasoning_streaming = false;
                     session.status = "Error".to_string();
-                    session.messages.push(Message {
-                        role: Role::Error,
-                        text: normalize_error_message(&error),
-                    });
+                    session.push_message(Role::Error, normalize_error_message(&error));
+                    session.mark_sidebar_dirty();
                 }
                 if selected {
                     self.status = "Error".to_string();
@@ -1235,10 +1361,8 @@ impl CodexUi {
                     session.assistant_streaming = false;
                     session.reasoning_streaming = false;
                     session.status = "Stopped".to_string();
-                    session.messages.push(Message {
-                        role: Role::ToolError,
-                        text: "Turn stopped.".to_string(),
-                    });
+                    session.push_message(Role::ToolError, "Turn stopped.");
+                    session.mark_sidebar_dirty();
                 }
                 if selected {
                     self.status = "Stopped".to_string();
@@ -1252,6 +1376,7 @@ impl CodexUi {
                     session.assistant_streaming = false;
                     session.reasoning_streaming = false;
                     session.status = "Ready".to_string();
+                    session.mark_sidebar_dirty();
                 }
                 if selected {
                     self.status = "Ready".to_string();
@@ -1260,6 +1385,7 @@ impl CodexUi {
             SessionWorkerEvent::Usage(usage) => {
                 if let Some(session) = self.sessions.session_mut(session_id) {
                     session.usage.record(usage);
+                    session.mark_sidebar_dirty();
                 }
                 self.record_log(
                     LogLevel::Debug,
@@ -1269,6 +1395,7 @@ impl CodexUi {
             SessionWorkerEvent::RateLimits(snapshot) => {
                 if let Some(session) = self.sessions.session_mut(session_id) {
                     session.rate_limits.record(snapshot);
+                    session.mark_sidebar_dirty();
                 }
                 self.record_log(
                     LogLevel::Debug,
@@ -1334,7 +1461,7 @@ impl CodexUi {
                 self.open_inspector_panel(InspectorPanel::Logs);
                 true
             }
-            UiKey::Other(code) if code_eq(code, b'c') => {
+            UiKey::Other(code) if code_eq(code, b'c') && self.sessions.selected().busy => {
                 self.cancel_selected_session();
                 true
             }
@@ -1491,23 +1618,28 @@ impl CodexUi {
             return;
         };
         let streaming = match role {
-            Role::Assistant => &mut session.assistant_streaming,
-            Role::Reasoning => &mut session.reasoning_streaming,
+            Role::Assistant => session.assistant_streaming,
+            Role::Reasoning => session.reasoning_streaming,
             _ => return,
         };
-        if *streaming
+        if streaming
             && let Some(message) = session.messages.last_mut()
             && message.role == role
         {
             message.text.push_str(&text);
+            session.mark_messages_dirty();
         } else {
             let text = match role {
                 Role::Reasoning => format!("Thinking\n{text}"),
                 Role::Assistant => format!("Response\n{text}"),
                 _ => text,
             };
-            session.messages.push(Message { role, text });
-            *streaming = true;
+            session.push_message(role, text);
+            match role {
+                Role::Assistant => session.assistant_streaming = true,
+                Role::Reasoning => session.reasoning_streaming = true,
+                _ => {}
+            }
         }
         match role {
             Role::Assistant => session.reasoning_streaming = false,
@@ -1530,6 +1662,7 @@ impl CodexUi {
             && message.role == Role::Diff
         {
             append_capped(&mut message.text, &text, MAX_DIFF_DISPLAY_BYTES);
+            session.mark_messages_dirty();
         } else {
             let mut text = text;
             if text.len() > MAX_DIFF_DISPLAY_BYTES {
@@ -1539,10 +1672,7 @@ impl CodexUi {
             if !text.starts_with("Patch") && !text.starts_with("Tool input") {
                 text = format!("Patch / tool input\n{text}");
             }
-            session.messages.push(Message {
-                role: Role::Diff,
-                text,
-            });
+            session.push_message(Role::Diff, text);
         }
         if self.sessions.selected == session_id {
             self.scroll_transcript_to_bottom();
@@ -1569,15 +1699,13 @@ impl CodexUi {
             if session.turns == 0 {
                 session.title = session_title_from_prompt(&prompt);
             }
-            session.messages.push(Message {
-                role: Role::User,
-                text: prompt.clone(),
-            });
+            session.push_message(Role::User, prompt.clone());
             session.turns += 1;
             session.busy = true;
             session.status = "Queued".to_string();
             session.assistant_streaming = false;
             session.reasoning_streaming = false;
+            session.mark_sidebar_dirty();
         }
         self.clear_pending_clear_confirmation();
         self.remember_prompt(prompt.clone());
@@ -1596,6 +1724,7 @@ impl CodexUi {
             if let Some(session) = self.sessions.session_mut(session_id) {
                 session.busy = false;
                 session.status = "Worker disconnected".to_string();
+                session.mark_sidebar_dirty();
             }
             self.status = "Worker disconnected".to_string();
         }
@@ -1639,6 +1768,7 @@ impl CodexUi {
         self.status = "Press clear again to confirm".to_string();
         if let Some(session) = self.sessions.session_mut(session_id) {
             session.status = "Confirm clear".to_string();
+            session.mark_sidebar_dirty();
         }
     }
 
@@ -1655,6 +1785,7 @@ impl CodexUi {
             && session.status == "Confirm clear"
         {
             session.status = "Ready".to_string();
+            session.mark_sidebar_dirty();
         }
     }
 
@@ -1668,6 +1799,7 @@ impl CodexUi {
         self.status = "Cancelling".to_string();
         if let Some(session) = self.sessions.session_mut(session_id) {
             session.status = "Cancelling".to_string();
+            session.mark_sidebar_dirty();
         }
         let _ = self.command_tx.send(WorkerCommand::Cancel { session_id });
     }
@@ -1736,16 +1868,40 @@ impl CodexUi {
     }
 }
 
-fn build_scene(scene: &mut GpuScene, atlas: &FontAtlas, state: &CodexUi, width: f32, height: f32) {
+fn build_scene(
+    scene: &mut GpuScene,
+    atlas: &FontAtlas,
+    state: &mut CodexUi,
+    width: f32,
+    height: f32,
+) {
     scene.clear = BG;
     scene.clear_rects();
 
     let w = width.max(1.0);
     let h = height.max(1.0);
+    let inspector_width = if state.inspector_open && w >= 900.0 {
+        320.0
+    } else {
+        0.0
+    };
+    let main_width = if w >= 980.0 {
+        w - 260.0 - inspector_width
+    } else {
+        w - inspector_width
+    };
+    let conversation_width = main_width - 48.0;
+    let density = state.density;
+    state.sessions.refresh_sidebar_caches();
+    state
+        .sessions
+        .refresh_selected_message_heights(atlas, conversation_width, density);
+
     let selected = state.sessions.selected();
-    let usage = selected.usage.total_label();
-    let model = format!("model {}", state.model);
-    let workspace = workspace_label();
+    let usage = selected.cached_usage_label.as_str();
+    let limits = selected.cached_limits_label.as_str();
+    let model = state.model_label.as_str();
+    let workspace = state.workspace_label.as_str();
     let tone = header_tone(state);
     let (activity_title, activity_detail, activity_icon) = sidebar_activity(state);
     let header_status = if state.busy {
@@ -1757,17 +1913,7 @@ fn build_scene(scene: &mut GpuScene, atlas: &FontAtlas, state: &CodexUi, width: 
     } else {
         selected.status.as_str()
     };
-    let inspector_width = if state.inspector_open && w >= 900.0 {
-        320.0
-    } else {
-        0.0
-    };
-    let main_width = if w >= 980.0 {
-        w - 260.0 - inspector_width
-    } else {
-        w - inspector_width
-    };
-    let messages = conversation_messages(atlas, state, main_width - 48.0);
+    let messages = conversation_messages(state);
     let composer_text = state.input.display_value(
         "Ask Codex to inspect, edit, run commands, or patch files...",
         '|',
@@ -1785,40 +1931,30 @@ fn build_scene(scene: &mut GpuScene, atlas: &FontAtlas, state: &CodexUi, width: 
             UiShadcnButtonVariant::Secondary,
         ),
     ];
-    let session_details = state
-        .sessions
-        .sessions
-        .iter()
-        .map(session_sidebar_detail)
-        .collect::<Vec<_>>();
     let session_rows = state
         .sessions
         .sessions
         .iter()
-        .zip(session_details.iter())
-        .map(|(session, detail)| {
+        .map(|session| {
             UiShadcnSessionRow::new(
                 session.title.as_str(),
-                detail.as_str(),
+                session.cached_sidebar_detail.as_str(),
                 session.id == state.sessions.selected,
             )
             .with_state(session_sidebar_state(session))
         })
         .collect::<Vec<_>>();
-    let limits = selected.rate_limits.label();
-    let footer_lines = [
-        model.as_str(),
-        usage.as_str(),
-        limits.as_str(),
-        "shell, process, patch",
-    ];
-    let log_badge = format!("log {}", state.log_level.label().to_ascii_lowercase());
-    let header_badges = if w < 520.0 {
-        vec![usage.as_str()]
+    let footer_lines = [model, usage, limits, "shell, process, patch"];
+    let log_badge = log_badge_label(state.log_level);
+    let header_badges_small = [usage];
+    let header_badges_medium = [state.model.as_str(), usage];
+    let header_badges_wide = [state.model.as_str(), usage, log_badge];
+    let header_badges: &[&str] = if w < 520.0 {
+        &header_badges_small
     } else if w < 700.0 {
-        vec![state.model.as_str(), usage.as_str()]
+        &header_badges_medium
     } else {
-        vec![state.model.as_str(), usage.as_str(), log_badge.as_str()]
+        &header_badges_wide
     };
     let header_actions = [
         UiShadcnChatClientIconAction::new(
@@ -1853,14 +1989,14 @@ fn build_scene(scene: &mut GpuScene, atlas: &FontAtlas, state: &CodexUi, width: 
     let client = shadcn_chat_client(UiShadcnChatClientSpec {
         show_sidebar: w >= 980.0,
         sidebar_title: "edgerun codex",
-        sidebar_detail: workspace.as_str(),
+        sidebar_detail: workspace,
         sidebar_actions: &actions,
         session_rows: &session_rows,
         activity: UiShadcnActivity::new(activity_title, activity_detail, activity_icon),
         footer_lines: &footer_lines,
         header_title: "Codex",
         header_status,
-        header_badges: &header_badges,
+        header_badges,
         header_action: (w < 980.0).then_some(UiShadcnChatClientIconAction::new(
             UiIcon::MessagePlus,
             NEW_CHAT_ID,
@@ -2048,26 +2184,24 @@ fn header_tone(state: &CodexUi) -> UiShadcnStatusTone {
     }
 }
 
-fn conversation_messages<'a>(
-    atlas: &FontAtlas,
-    state: &'a CodexUi,
-    width: f32,
-) -> Vec<UiShadcnConversationMessage<'a>> {
+fn log_badge_label(level: LogLevel) -> &'static str {
+    match level {
+        LogLevel::Quiet => "log quiet",
+        LogLevel::Normal => "log normal",
+        LogLevel::Debug => "log debug",
+    }
+}
+
+fn conversation_messages(state: &CodexUi) -> Vec<UiShadcnConversationMessage<'_>> {
     state
         .sessions
         .selected()
         .messages
         .iter()
+        .zip(state.sessions.selected().cached_message_heights.iter())
         .map(|message| {
-            let role = chat_role(message.role);
-            UiShadcnConversationMessage::new(
-                role,
-                &message.text,
-                message_height_for_density(
-                    shadcn_chat_message_height_for_role(atlas, role, &message.text, width),
-                    state.density,
-                ),
-            )
+            let (message, height) = message;
+            UiShadcnConversationMessage::new(chat_role(message.role), &message.text, *height)
         })
         .collect()
 }
@@ -2117,9 +2251,28 @@ fn workspace_label() -> String {
 }
 
 fn session_title_from_prompt(prompt: &str) -> String {
-    let trimmed = prompt.split_whitespace().collect::<Vec<_>>().join(" ");
-    let mut title = trimmed.chars().take(32).collect::<String>();
-    if trimmed.chars().count() > 32 {
+    let mut title = String::new();
+    let mut truncated = false;
+    for word in prompt.split_whitespace() {
+        let separator_len = usize::from(!title.is_empty());
+        let remaining = 32usize.saturating_sub(title.chars().count());
+        if remaining <= separator_len {
+            truncated = true;
+            break;
+        }
+        if separator_len == 1 {
+            title.push(' ');
+        }
+        let available = 32usize.saturating_sub(title.chars().count());
+        let word_chars = word.chars().count();
+        if word_chars > available {
+            title.extend(word.chars().take(available));
+            truncated = true;
+            break;
+        }
+        title.push_str(word);
+    }
+    if truncated {
         title.push_str("...");
     }
     if title.is_empty() {
@@ -2432,6 +2585,8 @@ mod tests {
         let (_event_tx, event_rx) = std::sync::mpsc::channel();
         CodexUi {
             model: "gpt-5.5".to_string(),
+            model_label: "model gpt-5.5".to_string(),
+            workspace_label: "workspace".to_string(),
             input: UiTextBuffer::new(),
             status: status.to_string(),
             busy,
@@ -2479,11 +2634,11 @@ mod tests {
         ]);
         session.turns = 1;
         session.tools_run = 1;
-        let state = test_state("Ready", false, runtime, session);
+        let mut state = test_state("Ready", false, runtime, session);
         let atlas = FontAtlas::load_inter(18.0).expect("load UI font");
         let mut scene = GpuScene::new(BG);
 
-        build_scene(&mut scene, &atlas, &state, 1120.0, 720.0);
+        build_scene(&mut scene, &atlas, &mut state, 1120.0, 720.0);
 
         assert!(scene.text_quads().len() > 80);
         assert!(scene.icon_quads().len() >= 2);
@@ -2520,11 +2675,11 @@ mod tests {
             text: "Ready for local workspace work.".to_string(),
         }]);
         session.turns = 1;
-        let state = test_state("Ready", false, runtime, session);
+        let mut state = test_state("Ready", false, runtime, session);
         let atlas = FontAtlas::load_inter(18.0).expect("load UI font");
         let mut scene = GpuScene::new(BG);
 
-        build_scene(&mut scene, &atlas, &state, 640.0, 520.0);
+        build_scene(&mut scene, &atlas, &mut state, 640.0, 520.0);
 
         for id in [NEW_CHAT_ID, CLEAR_ID, SEND_ID] {
             let hit = scene
@@ -2924,6 +3079,8 @@ mod tests {
         let session_id = UiSessionId(1);
         let mut state = CodexUi {
             model: "gpt-5.5".to_string(),
+            model_label: "model gpt-5.5".to_string(),
+            workspace_label: "workspace".to_string(),
             input: UiTextBuffer::new(),
             status: "Ready".to_string(),
             busy: false,
@@ -2969,6 +3126,8 @@ mod tests {
 
         assert!(state.handle_command_key(UiKey::Backspace, ctrl_shift));
         assert_eq!(state.clear_confirm_session, Some(session_id));
+
+        assert!(!state.handle_command_key(UiKey::Other(b'c' as u32), ctrl));
 
         assert!(state.handle_command_key(UiKey::Other(b'N' as u32), ctrl_shift));
         match command_rx.recv().expect("new chat sends reset") {
@@ -3031,6 +3190,8 @@ mod tests {
         runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, 0.0);
         let mut state = CodexUi {
             model: "gpt-5.5".to_string(),
+            model_label: "model gpt-5.5".to_string(),
+            workspace_label: "workspace".to_string(),
             input: UiTextBuffer::new(),
             status: "Ready".to_string(),
             busy: false,
@@ -3091,6 +3252,8 @@ mod tests {
         session.busy = true;
         let mut state = CodexUi {
             model: "gpt-5.5".to_string(),
+            model_label: "model gpt-5.5".to_string(),
+            workspace_label: "workspace".to_string(),
             input: UiTextBuffer::new(),
             status: "Thinking".to_string(),
             busy: false,

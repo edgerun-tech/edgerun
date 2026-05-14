@@ -346,9 +346,7 @@ pub async fn resolve_elicitation(
     };
     let content = match action {
         // Preserve the legacy fallback for clients that only send an action.
-        ElicitationAction::Accept => {
-            Some(content.unwrap_or_else(|| edgerun_json::json!({})))
-        }
+        ElicitationAction::Accept => Some(content.unwrap_or_else(|| edgerun_json::json!({}))),
         ElicitationAction::Decline | ElicitationAction::Cancel => None,
     };
     let response = ElicitationResponse {
@@ -886,7 +884,7 @@ async fn approve_guardian_denied_action(sess: &Arc<Session>, event: GuardianAsse
         "action": &event.action,
         "outcome": "allowed",
     });
-    let approved_action_json = match edgerun_json::to_string_pretty(&approved_action) {
+    let approved_action_json = match edgerun_json::to_json_string_pretty(&approved_action) {
         Ok(approved_action_json) => approved_action_json,
         Err(error) => {
             warn!(%error, review_id = event.id.as_str(), "failed to serialize approved Guardian action");

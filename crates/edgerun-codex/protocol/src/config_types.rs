@@ -873,11 +873,12 @@ mod tests {
     fn approvals_reviewer_serializes_auto_review_and_accepts_legacy_guardian_subagent() {
         assert_eq!(ApprovalsReviewer::User.to_string(), "user");
         assert_eq!(
-            edgerun_json::to_string(&ApprovalsReviewer::User).expect("serialize reviewer"),
+            edgerun_json::to_json_string(&ApprovalsReviewer::User).expect("serialize reviewer"),
             "\"user\""
         );
         assert_eq!(
-            edgerun_json::to_string(&ApprovalsReviewer::AutoReview).expect("serialize reviewer"),
+            edgerun_json::to_json_string(&ApprovalsReviewer::AutoReview)
+                .expect("serialize reviewer"),
             "\"guardian_subagent\""
         );
 

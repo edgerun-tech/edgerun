@@ -12,7 +12,6 @@ description = "EdgeRun-owned wiremock-compatible test server"
 name = "wiremock"
 
 [dependencies]
-edgerun-http = { path = "../edgerun-http" }
 edgerun-json = { workspace = true }
 
 [lints]

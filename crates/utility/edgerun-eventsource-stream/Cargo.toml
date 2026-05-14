@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "Edgerun-owned Server-Sent Events stream parser"
 
 [dependencies]
-edgerun-futures = { version = "0.1", path = "../edgerun-futures" }
+edgerun-futures = { version = "0.1", path = "../edgerun-futures", default-features = false }
 
 [lints]
 workspace = true

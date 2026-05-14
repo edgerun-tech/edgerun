@@ -1,11 +1,10 @@
-use std::path::Path;
-
 use codex_analytics::GuardianReviewedAction;
 use codex_protocol::approvals::GuardianAssessmentAction;
 use codex_protocol::approvals::GuardianCommandSource;
 use codex_protocol::approvals::NetworkApprovalProtocol;
 use codex_utils_absolute_path::AbsolutePathBuf;
-use serde::Serialize;
+use edgerun_json::Map;
+use edgerun_json::ToJson;
 use edgerun_json::Value;
 
 use super::GUARDIAN_MAX_ACTION_STRING_TOKENS;
@@ -63,100 +62,53 @@ pub(crate) enum GuardianApprovalRequest {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, ToJson)]
 #[serde(rename_all = "camelCase")]
+#[json(rename_all = "camelCase")]
 pub(crate) struct GuardianNetworkAccessTrigger {
     pub(crate) call_id: String,
     pub(crate) tool_name: String,
     pub(crate) command: Vec<String>,
     pub(crate) cwd: AbsolutePathBuf,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[json(skip_serializing_if = "Option::is_none")]
     pub(crate) justification: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[json(skip_serializing_if = "Option::is_none")]
     pub(crate) tty: Option<bool>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, ToJson)]
 pub(crate) struct GuardianMcpAnnotations {
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[json(skip_serializing_if = "Option::is_none")]
     pub(crate) destructive_hint: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[json(skip_serializing_if = "Option::is_none")]
     pub(crate) open_world_hint: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    #[json(skip_serializing_if = "Option::is_none")]
     pub(crate) read_only_hint: Option<bool>,
-}
-
-#[derive(Serialize)]
-struct CommandApprovalAction<'a> {
-    tool: &'a str,
-    command: &'a [String],
-    cwd: &'a Path,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    justification: Option<&'a String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tty: Option<bool>,
-}
-
-#[cfg(unix)]
-#[derive(Serialize)]
-struct ExecveApprovalAction<'a> {
-    tool: &'a str,
-    program: &'a str,
-    argv: &'a [String],
-    cwd: &'a Path,
-}
-
-#[derive(Serialize)]
-struct McpToolCallApprovalAction<'a> {
-    tool: &'static str,
-    server: &'a str,
-    tool_name: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    arguments: Option<&'a Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    connector_id: Option<&'a String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    connector_name: Option<&'a String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    connector_description: Option<&'a String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_title: Option<&'a String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tool_description: Option<&'a String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    annotations: Option<&'a GuardianMcpAnnotations>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct NetworkAccessApprovalAction<'a> {
-    tool: &'static str,
-    target: &'a str,
-    host: &'a str,
-    protocol: NetworkApprovalProtocol,
-    port: u16,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    trigger: Option<&'a GuardianNetworkAccessTrigger>,
-}
-
-fn serialize_guardian_action(value: impl Serialize) -> edgerun_json::Result<Value> {
-    edgerun_json::to_serde_value(value)
 }
 
 fn serialize_command_guardian_action(
     tool: &'static str,
     command: &[String],
-    cwd: &Path,
+    cwd: &AbsolutePathBuf,
     justification: Option<&String>,
     tty: Option<bool>,
 ) -> edgerun_json::Result<Value> {
-    serialize_guardian_action(CommandApprovalAction {
-        tool,
-        command,
-        cwd,
-        justification,
-        tty,
-    })
+    let mut object = Map::new();
+    object.push_field("tool", tool.to_json());
+    object.push_field("command", command.to_json());
+    object.push_field("cwd", cwd.to_json());
+    if let Some(justification) = justification {
+        object.push_field("justification", justification.to_json());
+    }
+    if let Some(tty) = tty {
+        object.push_field("tty", tty.to_json());
+    }
+    Ok(Value::Object(object))
 }
 
 fn command_assessment_action(
@@ -258,12 +210,12 @@ pub(crate) fn guardian_approval_request_to_json(
             program,
             argv,
             cwd,
-        } => serialize_guardian_action(ExecveApprovalAction {
-            tool: guardian_command_source_tool_name(*source),
-            program,
-            argv,
-            cwd,
-        }),
+        } => Ok(edgerun_json::json!({
+            "tool": guardian_command_source_tool_name(*source),
+            "program": program,
+            "argv": argv,
+            "cwd": cwd,
+        })),
         GuardianApprovalRequest::ApplyPatch {
             id: _,
             cwd,
@@ -283,14 +235,18 @@ pub(crate) fn guardian_approval_request_to_json(
             protocol,
             port,
             trigger,
-        } => serialize_guardian_action(NetworkAccessApprovalAction {
-            tool: "network_access",
-            target,
-            host,
-            protocol: *protocol,
-            port: *port,
-            trigger: trigger.as_ref(),
-        }),
+        } => {
+            let mut object = Map::new();
+            object.push_field("tool", "network_access".to_json());
+            object.push_field("target", target.to_json());
+            object.push_field("host", host.to_json());
+            object.push_field("protocol", protocol.to_json());
+            object.push_field("port", port.to_json());
+            if let Some(trigger) = trigger {
+                object.push_field("trigger", trigger.to_json());
+            }
+            Ok(Value::Object(object))
+        }
         GuardianApprovalRequest::McpToolCall {
             id: _,
             server,
@@ -302,18 +258,34 @@ pub(crate) fn guardian_approval_request_to_json(
             tool_title,
             tool_description,
             annotations,
-        } => serialize_guardian_action(McpToolCallApprovalAction {
-            tool: "mcp_tool_call",
-            server,
-            tool_name,
-            arguments: arguments.as_ref(),
-            connector_id: connector_id.as_ref(),
-            connector_name: connector_name.as_ref(),
-            connector_description: connector_description.as_ref(),
-            tool_title: tool_title.as_ref(),
-            tool_description: tool_description.as_ref(),
-            annotations: annotations.as_ref(),
-        }),
+        } => {
+            let mut object = Map::new();
+            object.push_field("tool", "mcp_tool_call".to_json());
+            object.push_field("server", server.to_json());
+            object.push_field("tool_name", tool_name.to_json());
+            if let Some(arguments) = arguments {
+                object.push_field("arguments", arguments.to_json());
+            }
+            if let Some(connector_id) = connector_id {
+                object.push_field("connector_id", connector_id.to_json());
+            }
+            if let Some(connector_name) = connector_name {
+                object.push_field("connector_name", connector_name.to_json());
+            }
+            if let Some(connector_description) = connector_description {
+                object.push_field("connector_description", connector_description.to_json());
+            }
+            if let Some(tool_title) = tool_title {
+                object.push_field("tool_title", tool_title.to_json());
+            }
+            if let Some(tool_description) = tool_description {
+                object.push_field("tool_description", tool_description.to_json());
+            }
+            if let Some(annotations) = annotations {
+                object.push_field("annotations", annotations.to_json());
+            }
+            Ok(Value::Object(object))
+        }
     }
 }
 
@@ -451,7 +423,7 @@ pub(crate) fn format_guardian_action_pretty(
     let value = guardian_approval_request_to_json(action)?;
     let (value, truncated) = truncate_guardian_action_value(value);
     Ok(FormattedGuardianAction {
-        text: edgerun_json::to_string_pretty(&value)?,
+        text: edgerun_json::to_json_string_pretty(&value)?,
         truncated,
     })
 }

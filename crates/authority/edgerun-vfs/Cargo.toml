@@ -1,0 +1,21 @@
+[package]
+name = "edgerun-vfs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+
+[features]
+default = ["std"]
+std = []
+
+[dependencies]
+edgerun-encoding = { workspace = true, features = ["compression"] }
+edgerun-wire = { workspace = true }
+edgerun-work = { workspace = true }
+
+[lints]
+workspace = true

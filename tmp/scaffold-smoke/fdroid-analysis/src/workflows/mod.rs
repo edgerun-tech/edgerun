@@ -1,8 +1,0 @@
-pub mod org_fdroid_fdroid_panic_panicpreferencesactivity;
-pub mod org_fdroid_fdroid_panic_panicresponderactivity;
-pub mod org_fdroid_fdroid_panic_calculatoractivity;
-pub mod org_fdroid_fdroid_views_repos_addrepoactivity;
-pub mod org_fdroid_fdroid_views_appdetailsactivity;
-pub mod org_fdroid_fdroid_views_main_mainactivity;
-pub mod org_fdroid_fdroid_nearby_usbdeviceattachedreceiver;
-pub mod org_fdroid_fdroid_nearby_usbdevicedetachedreceiver;

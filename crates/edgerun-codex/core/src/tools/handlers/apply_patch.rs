@@ -22,7 +22,7 @@ use crate::tools::events::ToolEventCtx;
 use crate::tools::handlers::apply_patch_spec::ApplyPatchToolArgs;
 use crate::tools::handlers::apply_patch_spec::create_apply_patch_freeform_tool;
 use crate::tools::handlers::apply_patch_spec::create_apply_patch_json_tool;
-use crate::tools::handlers::parse_arguments;
+use crate::tools::handlers::parse_json_arguments;
 use crate::tools::hook_names::HookToolName;
 use crate::tools::orchestrator::ToolOrchestrator;
 use crate::tools::registry::PostToolUsePayload;
@@ -231,7 +231,7 @@ fn to_abs_path(cwd: &AbsolutePathBuf, path: &Path) -> Option<AbsolutePathBuf> {
 /// hooks see the raw patch body in `tool_input.command` either way.
 fn apply_patch_payload_command(payload: &ToolPayload) -> Option<String> {
     match payload {
-        ToolPayload::Function { arguments } => parse_arguments::<ApplyPatchToolArgs>(arguments)
+        ToolPayload::Function { arguments } => parse_json_arguments::<ApplyPatchToolArgs>(arguments)
             .ok()
             .map(|args| args.input),
         ToolPayload::Custom { input } => Some(input.clone()),
@@ -322,7 +322,7 @@ impl ToolHandler for ApplyPatchHandler {
 
         let patch_input = match payload {
             ToolPayload::Function { arguments } => {
-                let args: ApplyPatchToolArgs = parse_arguments(&arguments)?;
+                let args: ApplyPatchToolArgs = parse_json_arguments(&arguments)?;
                 args.input
             }
             ToolPayload::Custom { input } => input,

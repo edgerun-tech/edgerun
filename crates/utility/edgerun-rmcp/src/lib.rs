@@ -1,7 +1,14 @@
 //! Minimal EdgeRun-owned MCP model surface.
 
+#![no_std]
+
+extern crate alloc;
+
 pub mod model {
-    use std::sync::Arc;
+    use alloc::format;
+    use alloc::string::{String, ToString};
+    use alloc::sync::Arc;
+    use alloc::vec::Vec;
 
     use edgerun_json::{FromJson, JsonValueError, ToJson};
 

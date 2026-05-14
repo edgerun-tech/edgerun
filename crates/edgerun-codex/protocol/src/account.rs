@@ -144,17 +144,17 @@ mod tests {
     #[test]
     fn usage_based_plan_types_use_expected_wire_names() {
         assert_eq!(
-            edgerun_json::to_string(&PlanType::SelfServeBusinessUsageBased)
+            edgerun_json::to_json_string(&PlanType::SelfServeBusinessUsageBased)
                 .expect("self-serve business usage based should serialize"),
             "\"self_serve_business_usage_based\""
         );
         assert_eq!(
-            edgerun_json::to_string(&PlanType::EnterpriseCbpUsageBased)
+            edgerun_json::to_json_string(&PlanType::EnterpriseCbpUsageBased)
                 .expect("enterprise cbp usage based should serialize"),
             "\"enterprise_cbp_usage_based\""
         );
         assert_eq!(
-            edgerun_json::to_string(&PlanType::ProLite).expect("prolite should serialize"),
+            edgerun_json::to_json_string(&PlanType::ProLite).expect("prolite should serialize"),
             "\"prolite\""
         );
         assert_eq!(

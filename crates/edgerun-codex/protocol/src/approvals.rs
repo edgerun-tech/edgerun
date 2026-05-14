@@ -95,8 +95,11 @@ pub enum NetworkPolicyRuleAction {
     Deny,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(
+    Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS, ToJson, FromJson,
+)]
 #[serde(rename_all = "lowercase")]
+#[json(rename_all = "lowercase")]
 pub enum GuardianRiskLevel {
     Low,
     Medium,
@@ -104,8 +107,11 @@ pub enum GuardianRiskLevel {
     Critical,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(
+    Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS, ToJson, FromJson,
+)]
 #[serde(rename_all = "lowercase")]
+#[json(rename_all = "lowercase")]
 pub enum GuardianUserAuthorization {
     Unknown,
     Low,
@@ -114,8 +120,11 @@ pub enum GuardianUserAuthorization {
 }
 
 /// Final allow/deny outcome returned by the guardian reviewer.
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(
+    Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS, ToJson, FromJson,
+)]
 #[serde(rename_all = "lowercase")]
+#[json(rename_all = "lowercase")]
 pub enum GuardianAssessmentOutcome {
     Allow,
     Deny,

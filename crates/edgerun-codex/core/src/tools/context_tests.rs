@@ -1,8 +1,8 @@
 use super::*;
 use codex_protocol::models::DEFAULT_IMAGE_DETAIL;
 use core_test_support::assert_regex_match;
-use pretty_assertions::assert_eq;
 use edgerun_json::json;
+use pretty_assertions::assert_eq;
 
 #[test]
 fn custom_tool_calls_should_roundtrip_as_custom_outputs() {
@@ -123,9 +123,10 @@ fn mcp_tool_output_response_item_includes_wall_time() {
             let Some(payload) = text.strip_prefix("Wall time: 1.2500 seconds\nOutput:\n") else {
                 panic!("MCP output should include wall-time header: {text}");
             };
-            let parsed: edgerun_json::Value = edgerun_json::from_str(payload).unwrap_or_else(|err| {
-                panic!("MCP output should serialize JSON content: {err}");
-            });
+            let parsed: edgerun_json::Value =
+                edgerun_json::from_str(payload).unwrap_or_else(|err| {
+                    panic!("MCP output should serialize JSON content: {err}");
+                });
             assert_eq!(
                 parsed,
                 json!([{

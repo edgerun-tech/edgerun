@@ -9,14 +9,15 @@ homepage.workspace = true
 autobins = false
 
 [lib]
-crate-type = ["rlib", "cdylib"]
+crate-type = ["rlib"]
 
 [[bin]]
 name = "edgerun-apk-api-calls"
 path = "src/bin/apk_api_calls.rs"
 
 [features]
-default = ["lang-rust"]
+default = ["std", "lang-rust"]
+std = ["edgerun-vfs?/std"]
 lang-rust = []
 lang-typescript = []
 lang-c = []
@@ -25,12 +26,11 @@ lang-go = []
 lang-java = []
 lang-javascript = []
 mount = ["vfs"]
-vfs = []
+vfs = ["dep:edgerun-vfs"]
 wire-rkyv = ["dep:rkyv"]
 
 [dependencies]
-edgerun-crypto = { workspace = true, default-features = false, features = ["sha1"] }
 edgerun-json = { workspace = true, features = ["toml"] }
 edgerun-encoding = { workspace = true, features = ["compression"] }
-edgerun-log.workspace = true
+edgerun-vfs = { workspace = true, optional = true }
 rkyv = { workspace = true, features = ["std", "bytecheck"], optional = true }

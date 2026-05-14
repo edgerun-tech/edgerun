@@ -58,7 +58,7 @@ fn shell_command_for_invocation(invocation: &ToolInvocation) -> Option<(Vec<Stri
                 (command, invocation.turn.resolve_path(workdir).to_path_buf())
             })
         }
-        (None, "exec_command") => edgerun_json::from_serde_str::<ExecCommandArgs>(arguments)
+        (None, "exec_command") => edgerun_json::from_json_str::<ExecCommandArgs>(arguments)
             .ok()
             .and_then(|params| {
                 let command = crate::tools::handlers::unified_exec::get_command(

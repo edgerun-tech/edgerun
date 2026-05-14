@@ -952,6 +952,16 @@ impl NetworkAccess {
     }
 }
 
+impl ToJson for NetworkAccess {
+    fn to_json(&self) -> Value {
+        match self {
+            Self::Restricted => "restricted",
+            Self::Enabled => "enabled",
+        }
+        .to_json()
+    }
+}
+
 impl FromJson for NetworkAccess {
     fn from_json(value: Value) -> Result<Self, JsonValueError> {
         match String::from_json(value)?.as_str() {
@@ -1122,6 +1132,42 @@ impl FromJson for SandboxPolicy {
                 "unknown sandbox policy `{other}`"
             ))),
         }
+    }
+}
+
+impl ToJson for SandboxPolicy {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        match self {
+            Self::DangerFullAccess => {
+                object.push_field("type", "danger-full-access");
+            }
+            Self::ReadOnly { network_access } => {
+                object.push_field("type", "read-only");
+                if *network_access {
+                    object.push_field("network_access", *network_access);
+                }
+            }
+            Self::ExternalSandbox { network_access } => {
+                object.push_field("type", "external-sandbox");
+                object.push_field("network_access", network_access.to_json());
+            }
+            Self::WorkspaceWrite {
+                writable_roots,
+                network_access,
+                exclude_tmpdir_env_var,
+                exclude_slash_tmp,
+            } => {
+                object.push_field("type", "workspace-write");
+                if !writable_roots.is_empty() {
+                    object.push_field("writable_roots", writable_roots.to_json());
+                }
+                object.push_field("network_access", *network_access);
+                object.push_field("exclude_tmpdir_env_var", *exclude_tmpdir_env_var);
+                object.push_field("exclude_slash_tmp", *exclude_slash_tmp);
+            }
+        }
+        Value::Object(object)
     }
 }
 
@@ -2989,7 +3035,7 @@ pub struct ReviewRequest {
 }
 
 /// Structured review result produced by a child review session.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS, FromJson)]
 pub struct ReviewOutputEvent {
     pub findings: Vec<ReviewFinding>,
     pub overall_correctness: String,
@@ -3009,7 +3055,7 @@ impl Default for ReviewOutputEvent {
 }
 
 /// A single review finding describing an observed issue or recommendation.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS, FromJson)]
 pub struct ReviewFinding {
     pub title: String,
     pub body: String,
@@ -3019,14 +3065,14 @@ pub struct ReviewFinding {
 }
 
 /// Location of the code related to a review finding.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS, FromJson)]
 pub struct ReviewCodeLocation {
     pub absolute_file_path: PathBuf,
     pub line_range: ReviewLineRange,
 }
 
 /// Inclusive line range in a file associated with the finding.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS, FromJson)]
 pub struct ReviewLineRange {
     pub start: u32,
     pub end: u32,
@@ -3541,8 +3587,11 @@ impl<'de> Deserialize<'de> for SessionConfiguredEvent {
     }
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(
+    Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS, ToJson, FromJson,
+)]
 #[serde(rename_all = "camelCase")]
+#[json(rename_all = "camelCase")]
 #[ts(export_to = "protocol/")]
 pub enum ThreadGoalStatus {
     Active,
@@ -3565,14 +3614,16 @@ pub fn validate_thread_goal_objective(value: &str) -> Result<(), String> {
     Ok(())
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS, ToJson, FromJson)]
 #[serde(rename_all = "camelCase")]
+#[json(rename_all = "camelCase")]
 #[ts(export_to = "protocol/")]
 pub struct ThreadGoal {
     pub thread_id: ThreadId,
     pub objective: String,
     pub status: ThreadGoalStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[json(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub token_budget: Option<i64>,
     pub tokens_used: i64,

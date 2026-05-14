@@ -101,6 +101,7 @@ pub struct UiStyle {
     pub border: bool,
     pub radius: f32,
     pub truncate: bool,
+    pub clip: bool,
     pub disabled: bool,
     pub loading: bool,
 }
@@ -123,6 +124,7 @@ impl Default for UiStyle {
             border: false,
             radius: 0.0,
             truncate: false,
+            clip: false,
             disabled: false,
             loading: false,
         }
@@ -166,6 +168,7 @@ impl UiStyle {
             "col" | "column" | "flex-col" => self.direction = Axis::Vertical,
             "flex-1" | "grow" => self.grow = true,
             "truncate" => self.truncate = true,
+            "overflow-hidden" | "overflow-clip" => self.clip = true,
             "disabled" => self.disabled = true,
             "loading" => self.loading = true,
             "border" | "border-border" | "border-input" | "border-dashed" | "ring" | "ring-1"
@@ -522,5 +525,12 @@ mod tests {
         assert_eq!(style.text, UiStyleColor::semantic(UiColorToken::Text));
         assert_eq!(style.width, None);
         assert_eq!(style.height, None);
+    }
+
+    #[test]
+    fn parses_overflow_clip_classes() {
+        assert!(UiStyle::parse("overflow-hidden").clip);
+        assert!(UiStyle::parse("overflow-clip").clip);
+        assert!(!UiStyle::parse("overflow-visible").clip);
     }
 }

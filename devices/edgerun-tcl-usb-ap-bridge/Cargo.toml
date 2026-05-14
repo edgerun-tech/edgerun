@@ -25,9 +25,6 @@ opt-level = "z"
 [dependencies]
 esp-idf-svc = { version = "0.52.1", features = ["critical-section", "embassy-time-driver", "embassy-sync"] }
 
-[build-dependencies]
-embuild = "0.33"
-
 [[package.metadata.esp-idf-sys.extra_components]]
 component_dirs = ["components/usb_ppp_ap_bridge"]
 

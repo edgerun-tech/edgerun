@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::sync::OnceLock;
 use std::time::Duration;
 
-use serde::Deserialize;
+use edgerun_json::FromJson;
 use edgerun_tokio::sync::Barrier;
 use edgerun_tokio::time::sleep;
 
@@ -12,7 +12,7 @@ use crate::function_tool::FunctionCallError;
 use crate::tools::context::FunctionToolOutput;
 use crate::tools::context::ToolInvocation;
 use crate::tools::context::ToolPayload;
-use crate::tools::handlers::parse_arguments;
+use crate::tools::handlers::parse_json_arguments;
 use crate::tools::handlers::test_sync_spec::create_test_sync_tool;
 use crate::tools::registry::ToolHandler;
 use crate::tools::registry::ToolKind;
@@ -30,21 +30,21 @@ struct BarrierState {
     participants: usize,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, FromJson)]
 struct BarrierArgs {
     id: String,
     participants: usize,
-    #[serde(default = "default_timeout_ms")]
+    #[json(default = "default_timeout_ms")]
     timeout_ms: u64,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, FromJson)]
 struct TestSyncArgs {
-    #[serde(default)]
+    #[json(default)]
     sleep_before_ms: Option<u64>,
-    #[serde(default)]
+    #[json(default)]
     sleep_after_ms: Option<u64>,
-    #[serde(default)]
+    #[json(default)]
     barrier: Option<BarrierArgs>,
 }
 
@@ -87,7 +87,7 @@ impl ToolHandler for TestSyncHandler {
             }
         };
 
-        let args: TestSyncArgs = parse_arguments(&arguments)?;
+        let args: TestSyncArgs = parse_json_arguments(&arguments)?;
 
         if let Some(delay) = args.sleep_before_ms
             && delay > 0

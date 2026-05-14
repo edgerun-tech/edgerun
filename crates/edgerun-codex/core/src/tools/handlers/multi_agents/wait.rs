@@ -55,7 +55,7 @@ impl ToolHandler for Handler {
             ..
         } = invocation;
         let arguments = function_arguments(payload)?;
-        let args: WaitArgs = parse_arguments(&arguments)?;
+        let args: WaitArgs = parse_json_arguments(&arguments)?;
         let receiver_thread_ids = parse_agent_id_targets(args.targets)?;
         let mut receiver_agents = Vec::with_capacity(receiver_thread_ids.len());
         let mut target_by_thread_id = HashMap::with_capacity(receiver_thread_ids.len());
@@ -208,14 +208,15 @@ impl ToolHandler for Handler {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, FromJson)]
 struct WaitArgs {
     #[serde(default)]
+    #[json(default)]
     targets: Vec<String>,
     timeout_ms: Option<i64>,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, ToJson, PartialEq, Eq)]
 pub(crate) struct WaitAgentResult {
     pub(crate) status: HashMap<String, AgentStatus>,
     pub(crate) timed_out: bool,

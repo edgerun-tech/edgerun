@@ -1,5 +1,13 @@
 //! Sixel decoder for Edgerun terminal adapters.
 
+#![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
+
+use alloc::vec;
+use alloc::vec::Vec;
+use core::fmt;
+
 #[derive(Clone, Copy, Debug)]
 pub struct DcsSettings {
     pub aspect_ratio: Option<u16>,
@@ -28,8 +36,8 @@ pub enum SixelError {
     InvalidColor,
 }
 
-impl std::fmt::Display for SixelError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for SixelError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Empty => f.write_str("empty sixel payload"),
             Self::InvalidRepeat => f.write_str("invalid sixel repeat count"),
@@ -38,6 +46,7 @@ impl std::fmt::Display for SixelError {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for SixelError {}
 
 #[derive(Clone, Debug)]

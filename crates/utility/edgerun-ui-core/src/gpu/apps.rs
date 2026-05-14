@@ -609,7 +609,7 @@ fn component_style_authority_panel(preview: UiComponentPreviewState, rail: bool)
     let author = preview.author_preset;
     let active = preview.resolved_theme();
     let classes = if rail {
-        "bg-sidebar border rounded-lg p-3 gap-3"
+        "bg-sidebar border rounded-lg p-2 gap-1"
     } else {
         "bg-sidebar border rounded-lg p-3 gap-3"
     };
@@ -629,38 +629,25 @@ fn component_style_authority_panel(preview: UiComponentPreviewState, rail: bool)
                 761,
                 active.colors.accent,
             )
+            .class("h-10")
             .selected(matches!(preview.authority, UiStyleAuthority::User)),
         )
-        .child(shadcn_select("Base Color", user.base_color, 766))
-        .child(shadcn_item(
-            "Theme",
-            user.scheme_label(),
-            766,
-            active.colors.info,
-        ))
-        .child(shadcn_item(
-            "Accent",
-            user.accent_label(),
-            767,
-            active.colors.accent,
-        ))
+        .child(shadcn_select("Base Color", user.base_color, 766).class("h-10"))
+        .child(shadcn_item("Theme", user.scheme_label(), 766, active.colors.info).class("h-10"))
+        .child(shadcn_item("Accent", user.accent_label(), 767, active.colors.accent).class("h-10"))
         .child(divider("h-px"))
         .child(shadcn_label("Typography"))
-        .child(shadcn_field("Heading", "Geist"))
-        .child(shadcn_field("Font", "Geist"))
+        .child(shadcn_field("Heading", "Geist").class("h-12"))
+        .child(shadcn_field("Font", "Geist").class("h-12"))
         .child(divider("h-px"))
         .child(shadcn_label("System"))
-        .child(shadcn_select("Icon Library", user.icon_set, 769))
-        .child(shadcn_item(
-            "Radius",
-            user.radius_label(),
-            768,
-            active.colors.success,
-        ))
+        .child(shadcn_select("Icon Library", user.icon_set, 769).class("h-10"))
+        .child(shadcn_item("Radius", user.radius_label(), 768, active.colors.success).class("h-10"))
         .child(divider("h-px"))
         .child(shadcn_label("Author Preset"))
         .child(
             shadcn_item(author.name, author.scheme_label(), 771, active.colors.info)
+                .class("h-10")
                 .selected(matches!(preview.authority, UiStyleAuthority::AuthorVision)),
         )
         .child(shadcn_button(
@@ -676,7 +663,7 @@ fn component_style_authority_panel(preview: UiComponentPreviewState, rail: bool)
             UiShadcnButtonSize::Default,
         ))
         .child(
-            identity_card("Local identity", "node instance", "policy:personal", 800).class("h-28"),
+            identity_card("Local identity", "node instance", "policy:personal", 800).class("h-20"),
         )
 }
 

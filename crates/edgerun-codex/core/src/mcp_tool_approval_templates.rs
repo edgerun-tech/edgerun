@@ -1,7 +1,6 @@
 use std::collections::HashSet;
 use std::sync::LazyLock;
 
-use serde::Serialize;
 use edgerun_json::FromJson;
 use edgerun_json::JsonValueError;
 use edgerun_json::Map;
@@ -23,7 +22,7 @@ pub(crate) struct RenderedMcpToolApprovalTemplate {
     pub(crate) tool_params_display: Vec<RenderedMcpToolApprovalParam>,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, PartialEq, edgerun_json::ToJson)]
 pub(crate) struct RenderedMcpToolApprovalParam {
     pub(crate) name: String,
     pub(crate) value: Value,
@@ -225,8 +224,8 @@ fn render_tool_params(
 
 #[cfg(test)]
 mod tests {
-    use pretty_assertions::assert_eq;
     use edgerun_json::json;
+    use pretty_assertions::assert_eq;
 
     use super::*;
 

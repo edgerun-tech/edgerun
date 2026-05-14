@@ -12,6 +12,7 @@ rust-version = "1.95"
 default = ["tabler-icons"]
 std = []
 gpu-gl = ["std"]
+sdl = ["gpu-gl", "fontdue-text"]
 fontdue-text = ["std", "dep:fontdue"]
 tabler-icons = []
 tabler-svg-atlas = []

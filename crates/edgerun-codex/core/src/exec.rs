@@ -188,7 +188,8 @@ impl ExecExpiration {
                 ExecExpirationOutcome::TimedOut
             }
             ExecExpiration::DefaultTimeout => {
-                edgerun_tokio::time::sleep(Duration::from_millis(DEFAULT_EXEC_COMMAND_TIMEOUT_MS)).await;
+                edgerun_tokio::time::sleep(Duration::from_millis(DEFAULT_EXEC_COMMAND_TIMEOUT_MS))
+                    .await;
                 ExecExpirationOutcome::TimedOut
             }
             ExecExpiration::Cancellation(cancel) => {
@@ -584,7 +585,7 @@ async fn exec_windows_sandbox(
         None
     };
 
-    let policy_str = edgerun_json::to_string(sandbox_policy).map_err(|err| {
+    let policy_str = edgerun_json::to_json_string(sandbox_policy).map_err(|err| {
         CodexErr::Io(io::Error::other(format!(
             "failed to serialize Windows sandbox policy: {err}"
         )))

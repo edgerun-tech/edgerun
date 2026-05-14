@@ -8,5 +8,9 @@ repository.workspace = true
 homepage.workspace = true
 description = "Edgerun futures compatibility surface"
 
+[features]
+default = ["std"]
+std = []
+
 [lints]
 workspace = true

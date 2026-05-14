@@ -24,9 +24,6 @@ log = { path = "../edgerun-log-upstream" }
 simd_cesu8 = { path = "../edgerun-simd-cesu8" }
 thiserror = { path = "../edgerun-thiserror" }
 
-[build-dependencies]
-walkdir = { path = "../edgerun-walkdir" }
-
 [dev-dependencies]
 assert_matches = { package = "edgerun-assert-matches", path = "../edgerun-assert-matches" }
 

@@ -3,8 +3,7 @@ use codex_tools::FreeformToolFormat;
 use codex_tools::JsonSchema;
 use codex_tools::ResponsesApiTool;
 use codex_tools::ToolSpec;
-use serde::Deserialize;
-use serde::Serialize;
+use edgerun_json::FromJson;
 use std::collections::BTreeMap;
 
 const APPLY_PATCH_LARK_GRAMMAR: &str = include_str!("apply_patch.lark");
@@ -79,7 +78,7 @@ It is important to remember:
 "#;
 
 /// TODO(dylan): deprecate once we get rid of json tool
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, FromJson)]
 pub struct ApplyPatchToolArgs {
     pub input: String,
 }

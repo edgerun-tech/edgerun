@@ -6,7 +6,7 @@ use crate::tools::context::ToolInvocation;
 use crate::tools::context::ToolPayload;
 use crate::tools::handlers::goal_spec::UPDATE_GOAL_TOOL_NAME;
 use crate::tools::handlers::goal_spec::create_update_goal_tool;
-use crate::tools::handlers::parse_arguments;
+use crate::tools::handlers::parse_json_arguments;
 use crate::tools::registry::ToolHandler;
 use crate::tools::registry::ToolKind;
 use codex_protocol::protocol::ThreadGoalStatus;
@@ -52,7 +52,7 @@ impl ToolHandler for UpdateGoalHandler {
             }
         };
 
-        let args: UpdateGoalArgs = parse_arguments(&arguments)?;
+        let args: UpdateGoalArgs = parse_json_arguments(&arguments)?;
         if args.status != ThreadGoalStatus::Complete {
             return Err(FunctionCallError::RespondToModel(
                 "update_goal can only mark the existing goal complete; pause, resume, and budget-limited status changes are controlled by the user or system"

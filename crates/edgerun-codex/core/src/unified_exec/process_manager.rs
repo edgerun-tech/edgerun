@@ -1,14 +1,14 @@
+use edgerun_tokio::sync::Notify;
+use edgerun_tokio::sync::watch;
+use edgerun_tokio::time::Duration;
+use edgerun_tokio::time::Instant;
+use edgerun_tokio_util::sync::CancellationToken;
 use std::cmp::Reverse;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
-use edgerun_tokio::sync::Notify;
-use edgerun_tokio::sync::watch;
-use edgerun_tokio::time::Duration;
-use edgerun_tokio::time::Instant;
-use edgerun_tokio_util::sync::CancellationToken;
 
 use crate::exec_env::CODEX_THREAD_ID_ENV_VAR;
 use crate::exec_env::create_env;
@@ -874,7 +874,7 @@ impl UnifiedExecProcessManager {
         #[cfg(target_os = "windows")]
         if request.sandbox == codex_sandboxing::SandboxType::WindowsRestrictedToken {
             let sandbox_policy = request.compatibility_sandbox_policy();
-            let policy_json = edgerun_json::to_string(&sandbox_policy).map_err(|err| {
+            let policy_json = edgerun_json::to_json_string(&sandbox_policy).map_err(|err| {
                 UnifiedExecError::create_process(format!(
                     "failed to serialize Windows sandbox policy: {err}"
                 ))

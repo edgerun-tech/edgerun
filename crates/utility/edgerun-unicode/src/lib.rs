@@ -1,5 +1,7 @@
 //! Unicode helpers used by Edgerun text interfaces.
 
+#![no_std]
+
 /// Return the terminal cell width for a scalar value.
 pub fn terminal_width_char(ch: char) -> usize {
     let code = ch as u32;

@@ -1,3 +1,5 @@
+#![no_std]
+
 #[macro_export]
 macro_rules! assert_matches {
     ($expression:expr, $pattern:pat $(if $guard:expr)? $(,)?) => {

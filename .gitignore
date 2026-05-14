@@ -87,6 +87,8 @@ rfc*.html
 docs/*_spec.html
 docs/*.pdf
 QWEN.md
+/apk-analysis/
+/tmp/
 
 # Embedded git repos (cloned test/spec repos)
 specs/h1spec/

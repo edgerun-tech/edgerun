@@ -50,7 +50,7 @@ impl ToolHandler for Handler {
             ..
         } = invocation;
         let arguments = function_arguments(payload)?;
-        let args: SpawnAgentArgs = parse_arguments(&arguments)?;
+        let args: SpawnAgentArgs = parse_json_arguments(&arguments)?;
         let role_name = args
             .agent_type
             .as_deref()
@@ -196,7 +196,7 @@ impl ToolHandler for Handler {
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, FromJson)]
 struct SpawnAgentArgs {
     message: Option<String>,
     items: Option<Vec<UserInput>>,
@@ -204,10 +204,11 @@ struct SpawnAgentArgs {
     model: Option<String>,
     reasoning_effort: Option<ReasoningEffort>,
     #[serde(default)]
+    #[json(default)]
     fork_context: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, ToJson)]
 pub(crate) struct SpawnAgentResult {
     agent_id: String,
     nickname: Option<String>,

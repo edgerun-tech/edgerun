@@ -1203,22 +1203,30 @@ impl<'a, 'font> UiPainter<'a, 'font> {
         );
         self.scene
             .push_rect(GpuRect::fill(rect.x, rect.y, 3.0, rect.h, 2.0, accent));
+        let single_line = detail.trim().is_empty() || rect.h < 46.0;
         self.bounded_label(
             rect.x + 16.0,
-            rect.y + 10.0,
+            rect.y
+                + if single_line {
+                    ((rect.h - 16.0) * 0.5).max(5.0)
+                } else {
+                    10.0
+                },
             (rect.w - 32.0).max(0.0),
             title,
             2.0,
             colors.text,
         );
-        self.bounded_label(
-            rect.x + 16.0,
-            rect.y + 31.0,
-            (rect.w - 32.0).max(0.0),
-            detail,
-            2.0,
-            colors.muted,
-        );
+        if !single_line {
+            self.bounded_label(
+                rect.x + 16.0,
+                rect.y + 31.0,
+                (rect.w - 32.0).max(0.0),
+                detail,
+                2.0,
+                colors.muted,
+            );
+        }
     }
 
     pub fn scrollbar(&mut self, rect: UiRect, visible_fraction: f32, offset_fraction: f32) {

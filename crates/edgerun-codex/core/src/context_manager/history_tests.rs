@@ -1,5 +1,4 @@
 use super::*;
-use edgerun_encoding::base64::standard_encode;
 use codex_protocol::AgentPath;
 use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::models::BaseInstructions;
@@ -20,6 +19,7 @@ use codex_protocol::protocol::InterAgentCommunication;
 use codex_protocol::protocol::TurnContextItem;
 use codex_utils_output_truncation::TruncationPolicy;
 use codex_utils_output_truncation::truncate_text;
+use edgerun_encoding::base64::standard_encode;
 use image::ImageBuffer;
 use image::ImageFormat;
 use image::Luma;
@@ -1749,7 +1749,9 @@ fn non_base64_image_urls_are_unchanged() {
     );
     assert_eq!(
         estimate_response_item_model_visible_bytes(&function_output_item),
-        edgerun_json::to_string(&function_output_item).unwrap().len() as i64
+        edgerun_json::to_string(&function_output_item)
+            .unwrap()
+            .len() as i64
     );
 }
 

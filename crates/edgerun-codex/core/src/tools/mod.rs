@@ -22,7 +22,6 @@ use codex_utils_output_truncation::TruncationPolicy;
 use codex_utils_output_truncation::formatted_truncate_text;
 use codex_utils_output_truncation::truncate_text;
 pub use router::ToolRouter;
-use serde::Serialize;
 
 // Telemetry preview limits: keep log events smaller than model budgets.
 pub(crate) const TELEMETRY_PREVIEW_MAX_BYTES: usize = 2 * 1024; // 2 KiB
@@ -42,33 +41,20 @@ pub fn format_exec_output_for_model_structured(
         ..
     } = exec_output;
 
-    #[derive(Serialize)]
-    struct ExecMetadata {
-        exit_code: i32,
-        duration_seconds: f32,
-    }
-
-    #[derive(Serialize)]
-    struct ExecOutput<'a> {
-        output: &'a str,
-        metadata: ExecMetadata,
-    }
-
     // round to 1 decimal place
     let duration_seconds = ((duration.as_secs_f32()) * 10.0).round() / 10.0;
 
     let formatted_output = format_exec_output_str(exec_output, truncation_policy);
 
-    let payload = ExecOutput {
-        output: &formatted_output,
-        metadata: ExecMetadata {
-            exit_code: *exit_code,
-            duration_seconds,
-        },
-    };
-
     #[expect(clippy::expect_used)]
-    edgerun_json::to_string(&payload).expect("serialize ExecOutput")
+    edgerun_json::to_json_string(&edgerun_json::json!({
+        "output": formatted_output,
+        "metadata": {
+            "exit_code": *exit_code,
+            "duration_seconds": duration_seconds,
+        },
+    }))
+    .expect("serialize ExecOutput")
 }
 
 pub fn format_exec_output_for_model_freeform(

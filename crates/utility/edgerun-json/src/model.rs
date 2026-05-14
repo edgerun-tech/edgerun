@@ -4,6 +4,8 @@ use alloc::collections::BTreeMap;
 use alloc::sync::Arc;
 #[cfg(feature = "std")]
 use std::collections::HashMap;
+#[cfg(feature = "std")]
+use std::path::PathBuf;
 
 use crate::{JsonNumber, JsonValue, JsonValueError, Map};
 
@@ -31,6 +33,18 @@ pub fn to_json_vec<T: ToJson + ?Sized>(value: &T) -> Result<Vec<u8>, crate::Json
     let value = value.to_json();
     let mut out = Vec::with_capacity(crate::util::initial_json_capacity(&value));
     crate::util::write_json_value(&mut out, &value)?;
+    Ok(out)
+}
+
+pub fn to_json_string_pretty<T: ToJson + ?Sized>(value: &T) -> Result<String, crate::JsonError> {
+    let out = to_json_vec_pretty(value)?;
+    Ok(String::from_utf8(out).expect("JSON serialization produced invalid UTF-8"))
+}
+
+pub fn to_json_vec_pretty<T: ToJson + ?Sized>(value: &T) -> Result<Vec<u8>, crate::JsonError> {
+    let value = value.to_json();
+    let mut out = Vec::with_capacity(crate::util::initial_json_capacity(&value) + 16);
+    crate::util::write_json_value_pretty(&mut out, &value, 0)?;
     Ok(out)
 }
 
@@ -200,6 +214,7 @@ impl_to_from_json_number!(u32);
 impl_to_from_json_number!(u64);
 impl_to_from_json_number!(usize);
 impl_to_from_json_number!(f64);
+impl_to_from_json_number!(f32);
 impl_to_from_json_number!(i128);
 impl_to_from_json_number!(u128);
 impl_to_from_json_unsigned_cast!(u8);
@@ -384,6 +399,20 @@ impl<T: FromJson> FromJson for HashMap<String, T> {
                 other.variant_name()
             ))),
         }
+    }
+}
+
+#[cfg(feature = "std")]
+impl ToJson for PathBuf {
+    fn to_json(&self) -> JsonValue {
+        self.to_string_lossy().to_string().to_json()
+    }
+}
+
+#[cfg(feature = "std")]
+impl FromJson for PathBuf {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        Ok(PathBuf::from(String::from_json(value)?))
     }
 }
 

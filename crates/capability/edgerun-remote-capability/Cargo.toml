@@ -13,8 +13,6 @@ edgerun-devices.workspace = true
 edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
 
 edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-hardware-signing" }
-edgerun-crypto = { workspace = true, default-features = false, features = ["p256"] }
-edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding" }
 edgerun-protocols = { workspace = true, default-features = false, features = ["core", "wire"] }
 
 [lints]

@@ -1,5 +1,12 @@
 //! Edgerun terminal control-sequence parser.
 
+#![no_std]
+
+extern crate alloc;
+
+use alloc::vec::Vec;
+use core::{mem, str};
+
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Params {
     values: Vec<Vec<u16>>,
@@ -109,7 +116,7 @@ impl Parser {
         if self.utf8.len() < expected {
             return;
         }
-        if let Ok(text) = std::str::from_utf8(&self.utf8) {
+        if let Ok(text) = str::from_utf8(&self.utf8) {
             if let Some(ch) = text.chars().next() {
                 performer.print(ch);
             }
@@ -259,7 +266,7 @@ impl ParamBuilder {
 
     fn next_param(&mut self) {
         self.push_value();
-        self.values.push(std::mem::take(&mut self.current));
+        self.values.push(mem::take(&mut self.current));
         self.saw_separator = true;
     }
 
@@ -271,9 +278,9 @@ impl ParamBuilder {
     fn finish(&mut self) -> Params {
         if self.has_value || self.saw_separator || !self.current.is_empty() {
             self.push_value();
-            self.values.push(std::mem::take(&mut self.current));
+            self.values.push(mem::take(&mut self.current));
         }
-        let values = std::mem::take(&mut self.values);
+        let values = mem::take(&mut self.values);
         self.clear();
         Params::from_values(values)
     }

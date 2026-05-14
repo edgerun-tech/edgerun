@@ -53,7 +53,7 @@ pub async fn handle(
     session: Arc<Session>,
     arguments: String,
 ) -> Result<FunctionToolOutput, FunctionCallError> {
-    let args: ReportAgentJobResultArgs = parse_arguments(arguments.as_str())?;
+    let args: ReportAgentJobResultArgs = parse_json_arguments(arguments.as_str())?;
     if !args.result.is_object() {
         return Err(FunctionCallError::RespondToModel(
             "result must be a JSON object".to_string(),
@@ -83,7 +83,7 @@ pub async fn handle(
             .await;
     }
     let content =
-        edgerun_json::to_string(&ReportAgentJobResultToolResult { accepted }).map_err(|err| {
+        edgerun_json::to_json_string(&ReportAgentJobResultToolResult { accepted }).map_err(|err| {
             FunctionCallError::Fatal(format!(
                 "failed to serialize report_agent_job_result result: {err}"
             ))

@@ -6,7 +6,7 @@ use crate::function_tool::FunctionCallError;
 use crate::tools::context::FunctionToolOutput;
 use crate::tools::context::ToolInvocation;
 use crate::tools::context::ToolPayload;
-use crate::tools::handlers::parse_arguments_with_base_path;
+use crate::tools::handlers::parse_json_arguments_with_base_path;
 use crate::tools::handlers::resolve_workdir_base_path;
 use crate::tools::registry::PostToolUsePayload;
 use crate::tools::registry::PreToolUsePayload;
@@ -80,7 +80,7 @@ impl ToolHandler for ContainerExecHandler {
         };
 
         let cwd = resolve_workdir_base_path(&arguments, &turn.cwd)?;
-        let params: ShellToolCallParams = parse_arguments_with_base_path(&arguments, &cwd)?;
+        let params: ShellToolCallParams = parse_json_arguments_with_base_path(&arguments, &cwd)?;
         let prefix_rule = params.prefix_rule.clone();
         let exec_params =
             ShellHandler::to_exec_params(&params, turn.as_ref(), session.conversation_id);

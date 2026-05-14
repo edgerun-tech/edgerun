@@ -2,7 +2,7 @@ use crate::function_tool::FunctionCallError;
 use crate::tools::context::FunctionToolOutput;
 use crate::tools::context::ToolInvocation;
 use crate::tools::context::ToolPayload;
-use crate::tools::handlers::parse_arguments;
+use crate::tools::handlers::parse_json_arguments;
 use crate::tools::handlers::request_user_input_spec::REQUEST_USER_INPUT_TOOL_NAME;
 use crate::tools::handlers::request_user_input_spec::create_request_user_input_tool;
 use crate::tools::handlers::request_user_input_spec::normalize_request_user_input_args;
@@ -65,7 +65,7 @@ impl ToolHandler for RequestUserInputHandler {
             return Err(FunctionCallError::RespondToModel(message));
         }
 
-        let args: RequestUserInputArgs = parse_arguments(&arguments)?;
+        let args: RequestUserInputArgs = parse_json_arguments(&arguments)?;
         let args =
             normalize_request_user_input_args(args).map_err(FunctionCallError::RespondToModel)?;
         let response = session
@@ -77,7 +77,7 @@ impl ToolHandler for RequestUserInputHandler {
                 ))
             })?;
 
-        let content = edgerun_json::to_string(&response).map_err(|err| {
+        let content = edgerun_json::to_json_string(&response).map_err(|err| {
             FunctionCallError::Fatal(format!(
                 "failed to serialize {REQUEST_USER_INPUT_TOOL_NAME} response: {err}"
             ))

@@ -106,7 +106,7 @@ pub use index::ValueIndex;
 pub use map::Map;
 pub use model::{
     FromJson, ToJson, from_json_slice, from_json_str, from_json_value, from_value, to_json_string,
-    to_json_value, to_json_vec, to_value,
+    to_json_string_pretty, to_json_value, to_json_vec, to_json_vec_pretty, to_value,
 };
 pub use number::JsonNumber;
 pub use tape::{

@@ -343,9 +343,6 @@ crates/
     edgerun-network-driver
     edgerun-protocols::pxe
     edgerun-protocols::tftp
-  appliance/
-    edgerun-tcl-ac
-    edgerun-tuya
   utility/
     edgerun-crypto
     edgerun-encoding

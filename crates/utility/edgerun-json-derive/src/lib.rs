@@ -88,12 +88,23 @@ fn expand_from_json_struct(item: &Item) -> Result<TokenStream, String> {
         let value = field_read_expr(field, &attrs, &container);
         reads.push_str(&format!("{}: {value},", field.name));
     }
+    let reject_unknown = if container.deny_unknown_fields {
+        "if !object.into_vec().is_empty() {
+            return Err(edgerun_json::JsonValueError::WrongType(
+                edgerun_json::__json_error_message(\"unknown JSON field\")
+            ));
+        }"
+    } else {
+        ""
+    };
 
     format!(
         "impl edgerun_json::FromJson for {} {{
             fn from_json(value: edgerun_json::JsonValue) -> Result<Self, edgerun_json::JsonValueError> {{
                 let mut object = value.into_object(core::any::type_name::<Self>())?;
-                Ok(Self {{ {reads} }})
+                let parsed = Self {{ {reads} }};
+                {reject_unknown}
+                Ok(parsed)
             }}
         }}",
         item.name
@@ -566,6 +577,7 @@ fn apply_rename_all(value: &str, rename_all: Option<&str>) -> String {
 struct ContainerAttrs {
     rename_all: Option<String>,
     tag: Option<String>,
+    deny_unknown_fields: bool,
 }
 
 impl ContainerAttrs {
@@ -579,6 +591,9 @@ impl ContainerAttrs {
                 }
                 if let Some(tag) = pairs.value("tag") {
                     out.tag = Some(unquote_string(tag));
+                }
+                if pairs.has_flag("deny_unknown_fields") {
+                    out.deny_unknown_fields = true;
                 }
             }
         }

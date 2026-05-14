@@ -62,7 +62,7 @@ pub async fn handle(
     turn: Arc<TurnContext>,
     arguments: String,
 ) -> Result<FunctionToolOutput, FunctionCallError> {
-    let args: SpawnAgentsOnCsvArgs = parse_arguments(arguments.as_str())?;
+    let args: SpawnAgentsOnCsvArgs = parse_json_arguments(arguments.as_str())?;
     if args.instruction.trim().is_empty() {
         return Err(FunctionCallError::RespondToModel(
             "instruction must be non-empty".to_string(),
@@ -271,7 +271,7 @@ pub async fn handle(
     } else {
         None
     };
-    let content = edgerun_json::to_string(&SpawnAgentsOnCsvResult {
+    let content = edgerun_json::to_json_string(&SpawnAgentsOnCsvResult {
         job_id,
         status: job.status.as_str().to_string(),
         output_csv_path: job.output_csv_path,

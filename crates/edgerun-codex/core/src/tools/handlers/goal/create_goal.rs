@@ -5,7 +5,7 @@ use crate::tools::context::ToolInvocation;
 use crate::tools::context::ToolPayload;
 use crate::tools::handlers::goal_spec::CREATE_GOAL_TOOL_NAME;
 use crate::tools::handlers::goal_spec::create_create_goal_tool;
-use crate::tools::handlers::parse_arguments;
+use crate::tools::handlers::parse_json_arguments;
 use crate::tools::registry::ToolHandler;
 use crate::tools::registry::ToolKind;
 use codex_tools::ToolName;
@@ -50,7 +50,7 @@ impl ToolHandler for CreateGoalHandler {
             }
         };
 
-        let args: CreateGoalArgs = parse_arguments(&arguments)?;
+        let args: CreateGoalArgs = parse_json_arguments(&arguments)?;
         let goal = session
             .create_thread_goal(
                 turn.as_ref(),

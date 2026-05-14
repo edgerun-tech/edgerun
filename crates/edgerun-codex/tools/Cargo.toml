@@ -23,5 +23,4 @@ rmcp = { workspace = true, default-features = false, features = [
 tracing = { workspace = true }
 
 [dev-dependencies]
-codex_utils_absolute_path = { package = "edgerun-codex-utils-absolute-path", path = "../../utility/edgerun-codex-utils-absolute-path" }
 pretty_assertions = { package = "edgerun-pretty-assertions", path = "../../utility/edgerun-pretty-assertions" }

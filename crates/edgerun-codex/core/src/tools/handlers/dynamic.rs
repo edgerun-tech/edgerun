@@ -4,7 +4,7 @@ use crate::session::turn_context::TurnContext;
 use crate::tools::context::FunctionToolOutput;
 use crate::tools::context::ToolInvocation;
 use crate::tools::context::ToolPayload;
-use crate::tools::handlers::parse_arguments;
+use crate::tools::handlers::parse_json_arguments;
 use crate::tools::registry::ToolHandler;
 use crate::tools::registry::ToolKind;
 use crate::turn_timing::now_unix_timestamp_ms;
@@ -62,7 +62,7 @@ impl ToolHandler for DynamicToolHandler {
             }
         };
 
-        let args: Value = parse_arguments(&arguments)?;
+        let args: Value = parse_json_arguments(&arguments)?;
         let response = request_dynamic_tool(
             &session,
             turn.as_ref(),

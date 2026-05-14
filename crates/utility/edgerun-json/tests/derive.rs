@@ -41,6 +41,12 @@ enum TaggedEvent {
     },
 }
 
+#[derive(Debug, PartialEq, FromJson)]
+#[serde(deny_unknown_fields)]
+struct StrictArgs {
+    value: String,
+}
+
 fn default_priority() -> u32 {
     5
 }
@@ -114,4 +120,19 @@ fn derives_tagged_enum_json() {
         TaggedEvent::from_json(edgerun_json::json!({"type": "created"})).unwrap(),
         TaggedEvent::Created
     );
+}
+
+#[test]
+fn derives_deny_unknown_fields() {
+    assert_eq!(
+        StrictArgs::from_json(edgerun_json::json!({ "value": "ok" })).unwrap(),
+        StrictArgs {
+            value: "ok".to_string()
+        }
+    );
+    assert!(StrictArgs::from_json(edgerun_json::json!({
+        "value": "ok",
+        "extra": true,
+    }))
+    .is_err());
 }

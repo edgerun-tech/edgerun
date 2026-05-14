@@ -21,13 +21,12 @@ use codex_tools::ToolName;
 use codex_utils_output_truncation::TruncationPolicy;
 use codex_utils_output_truncation::formatted_truncate_text;
 use codex_utils_string::take_bytes_at_char_boundary;
-use serde::Serialize;
 use edgerun_json::Value as JsonValue;
+use edgerun_tokio::sync::Mutex;
+use edgerun_tokio_util::sync::CancellationToken;
 use std::borrow::Cow;
 use std::sync::Arc;
 use std::time::Duration;
-use edgerun_tokio::sync::Mutex;
-use edgerun_tokio_util::sync::CancellationToken;
 
 pub type SharedTurnDiffTracker = Arc<Mutex<TurnDiffTracker>>;
 
@@ -422,32 +421,17 @@ impl ToolOutput for ExecCommandToolOutput {
     }
 
     fn code_mode_result(&self, _payload: &ToolPayload) -> JsonValue {
-        #[derive(Serialize)]
-        struct UnifiedExecCodeModeResult {
-            #[serde(skip_serializing_if = "Option::is_none")]
-            chunk_id: Option<String>,
-            wall_time_seconds: f64,
-            #[serde(skip_serializing_if = "Option::is_none")]
-            exit_code: Option<i32>,
-            #[serde(skip_serializing_if = "Option::is_none")]
-            session_id: Option<i32>,
-            #[serde(skip_serializing_if = "Option::is_none")]
-            original_token_count: Option<usize>,
-            output: String,
-        }
-
-        let result = UnifiedExecCodeModeResult {
-            chunk_id: (!self.chunk_id.is_empty()).then(|| self.chunk_id.clone()),
-            wall_time_seconds: self.wall_time.as_secs_f64(),
-            exit_code: self.exit_code,
-            session_id: self.process_id,
-            original_token_count: self.original_token_count,
-            output: self.truncated_output(),
-        };
-
-        edgerun_json::to_serde_value(result).unwrap_or_else(|err| {
-            JsonValue::String(format!("failed to serialize exec result: {err}"))
-        })
+        let mut result = edgerun_json::Map::new();
+        result.push_opt_field(
+            "chunk_id",
+            (!self.chunk_id.is_empty()).then(|| self.chunk_id.clone()),
+        );
+        result.push_field("wall_time_seconds", self.wall_time.as_secs_f64());
+        result.push_opt_field("exit_code", self.exit_code);
+        result.push_opt_field("session_id", self.process_id);
+        result.push_opt_field("original_token_count", self.original_token_count);
+        result.push_field("output", self.truncated_output());
+        JsonValue::Object(result)
     }
 }
 

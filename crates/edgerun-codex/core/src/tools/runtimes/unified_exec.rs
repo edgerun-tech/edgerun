@@ -43,9 +43,10 @@ use codex_shell_command::powershell::prefix_powershell_script_with_utf8;
 use codex_tools::UnifiedExecShellMode;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use edgerun_futures::future::BoxFuture;
+use edgerun_json::ToJson;
+use edgerun_tokio_util::sync::CancellationToken;
 use std::collections::HashMap;
 use std::sync::Arc;
-use edgerun_tokio_util::sync::CancellationToken;
 
 /// Request payload used by the unified-exec runtime after approvals and
 /// sandbox preferences have been resolved for the current turn.
@@ -67,7 +68,7 @@ pub struct UnifiedExecRequest {
 
 /// Cache key for approval decisions that can be reused across equivalent
 /// unified-exec launches.
-#[derive(serde::Serialize, Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(ToJson, Clone, Debug, Eq, PartialEq, Hash)]
 pub struct UnifiedExecApprovalKey {
     pub command: Vec<String>,
     pub cwd: AbsolutePathBuf,

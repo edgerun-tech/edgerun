@@ -80,10 +80,9 @@ use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_output_truncation::TruncationPolicy;
 use codex_utils_output_truncation::truncate_text;
 use codex_utils_pty::DEFAULT_OUTPUT_BYTES_CAP;
+use edgerun_json::Value as JsonValue;
 use rmcp::model::ToolAnnotations;
 use serde::Deserialize;
-use serde::Serialize;
-use edgerun_json::Value as JsonValue;
 use std::sync::Arc;
 use toml_edit::value;
 use tracing::Instrument;
@@ -1129,7 +1128,7 @@ pub(crate) fn is_mcp_tool_approval_question_id(question_id: &str) -> bool {
         .is_some_and(|suffix| suffix.starts_with('_'))
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, edgerun_json::ToJson)]
 struct McpToolApprovalKey {
     server: String,
     connector_id: Option<String>,
@@ -1771,12 +1770,14 @@ fn build_mcp_tool_approval_elicitation_meta(
             tool_params.clone(),
         );
     }
-    if let Some(tool_params_display) = tool_params_display
-        && let Ok(tool_params_display) = edgerun_json::to_serde_value(tool_params_display)
-    {
+    if let Some(tool_params_display) = tool_params_display {
         meta.insert(
             MCP_TOOL_APPROVAL_TOOL_PARAMS_DISPLAY_KEY.to_string(),
-            tool_params_display,
+            edgerun_json::Value::array_from_iter(
+                tool_params_display
+                    .iter()
+                    .map(edgerun_json::ToJson::to_json),
+            ),
         );
     }
     (!meta.is_empty()).then_some(edgerun_json::Value::Object(meta))

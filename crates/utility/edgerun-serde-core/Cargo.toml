@@ -17,8 +17,5 @@ result = []
 std = []
 unstable = []
 
-[target."cfg(any())".dependencies]
-serde_derive = { path = "../edgerun-serde-derive" }
-
 [lints]
 workspace = true

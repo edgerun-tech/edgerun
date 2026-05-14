@@ -28,12 +28,12 @@ use codex_sandboxing::SandboxablePreference;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use edgerun_futures::Future;
 use edgerun_futures::future::BoxFuture;
-use serde::Serialize;
+use edgerun_json::ToJson;
+use edgerun_tokio_util::sync::CancellationToken;
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::sync::Arc;
-use edgerun_tokio_util::sync::CancellationToken;
 
 #[derive(Clone, Default, Debug)]
 pub(crate) struct ApprovalStore {
@@ -44,17 +44,17 @@ pub(crate) struct ApprovalStore {
 impl ApprovalStore {
     pub fn get<K>(&self, key: &K) -> Option<ReviewDecision>
     where
-        K: Serialize,
+        K: ToJson,
     {
-        let s = edgerun_json::to_string(key).ok()?;
+        let s = edgerun_json::to_json_string(key).ok()?;
         self.map.get(&s).cloned()
     }
 
     pub fn put<K>(&mut self, key: K, value: ReviewDecision)
     where
-        K: Serialize,
+        K: ToJson,
     {
-        if let Ok(s) = edgerun_json::to_string(&key) {
+        if let Ok(s) = edgerun_json::to_json_string(&key) {
             self.map.insert(s, value);
         }
     }
@@ -74,7 +74,7 @@ pub(crate) async fn with_cached_approval<K, F, Fut>(
     fetch: F,
 ) -> ReviewDecision
 where
-    K: Serialize,
+    K: ToJson,
     F: FnOnce() -> Fut,
     Fut: Future<Output = ReviewDecision>,
 {

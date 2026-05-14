@@ -33,7 +33,6 @@ use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_absolute_path::AbsolutePathBufGuard;
 use edgerun_json::FromJson;
 use edgerun_json::Value;
-use serde::Deserialize;
 
 use crate::function_tool::FunctionCallError;
 use crate::session::turn_context::TurnContext;
@@ -66,15 +65,6 @@ pub(crate) use unified_exec::ExecCommandHandlerOptions;
 pub use unified_exec::WriteStdinHandler;
 pub use view_image::ViewImageHandler;
 
-fn parse_arguments<T>(arguments: &str) -> Result<T, FunctionCallError>
-where
-    T: for<'de> Deserialize<'de>,
-{
-    edgerun_json::from_serde_str(arguments).map_err(|err| {
-        FunctionCallError::RespondToModel(format!("failed to parse function arguments: {err}"))
-    })
-}
-
 fn parse_json_arguments<T>(arguments: &str) -> Result<T, FunctionCallError>
 where
     T: FromJson,
@@ -82,17 +72,6 @@ where
     edgerun_json::from_json_str(arguments).map_err(|err| {
         FunctionCallError::RespondToModel(format!("failed to parse function arguments: {err}"))
     })
-}
-
-fn parse_arguments_with_base_path<T>(
-    arguments: &str,
-    base_path: &AbsolutePathBuf,
-) -> Result<T, FunctionCallError>
-where
-    T: for<'de> Deserialize<'de>,
-{
-    let _guard = AbsolutePathBufGuard::new(base_path);
-    parse_arguments(arguments)
 }
 
 fn parse_json_arguments_with_base_path<T>(

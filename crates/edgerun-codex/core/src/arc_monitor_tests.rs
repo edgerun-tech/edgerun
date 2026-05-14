@@ -242,8 +242,10 @@ async fn build_arc_monitor_request_includes_relevant_history_and_null_policies()
                 user: None,
                 developer: None,
             }),
-            action: edgerun_json::from_serde_value(edgerun_json::json!({ "tool": "mcp_tool_call" }))
-                .expect("action should deserialize"),
+            action: edgerun_json::from_serde_value(
+                edgerun_json::json!({ "tool": "mcp_tool_call" })
+            )
+            .expect("action should deserialize"),
         }
     );
 }
@@ -303,17 +305,19 @@ async fn monitor_action_posts_expected_arc_request() {
                 "tool": "mcp_tool_call",
             },
         })))
-        .respond_with(ResponseTemplate::new(200).set_body_json(edgerun_json::json!({
-            "outcome": "ask-user",
-            "short_reason": "needs confirmation",
-            "rationale": "tool call needs additional review",
-            "risk_score": 42,
-            "risk_level": "medium",
-            "evidence": [{
-                "message": "browser_navigate",
-                "why": "tool call needs additional review",
-            }],
-        })))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(edgerun_json::json!({
+                "outcome": "ask-user",
+                "short_reason": "needs confirmation",
+                "rationale": "tool call needs additional review",
+                "risk_score": 42,
+                "risk_level": "medium",
+                "evidence": [{
+                    "message": "browser_navigate",
+                    "why": "tool call needs additional review",
+                }],
+            })),
+        )
         .expect(1)
         .mount(&server)
         .await;
@@ -360,17 +364,19 @@ async fn monitor_action_uses_env_url_and_token_overrides() {
     Mock::given(method("POST"))
         .and(path("/override/arc"))
         .and(header("authorization", "Bearer override-token"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(edgerun_json::json!({
-            "outcome": "steer-model",
-            "short_reason": "needs approval",
-            "rationale": "high-risk action",
-            "risk_score": 96,
-            "risk_level": "critical",
-            "evidence": [{
-                "message": "browser_navigate",
-                "why": "high-risk action",
-            }],
-        })))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(edgerun_json::json!({
+                "outcome": "steer-model",
+                "short_reason": "needs approval",
+                "rationale": "high-risk action",
+                "risk_score": 96,
+                "risk_level": "critical",
+                "evidence": [{
+                    "message": "browser_navigate",
+                    "why": "high-risk action",
+                }],
+            })),
+        )
         .expect(1)
         .mount(&server)
         .await;
@@ -395,11 +401,13 @@ async fn monitor_action_rejects_legacy_response_fields() {
     let server = MockServer::start().await;
     Mock::given(method("POST"))
         .and(path("/codex/safety/arc"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(edgerun_json::json!({
-            "outcome": "steer-model",
-            "reason": "legacy high-risk action",
-            "monitorRequestId": "arc_456",
-        })))
+        .respond_with(
+            ResponseTemplate::new(200).set_body_json(edgerun_json::json!({
+                "outcome": "steer-model",
+                "reason": "legacy high-risk action",
+                "monitorRequestId": "arc_456",
+            })),
+        )
         .expect(1)
         .mount(&server)
         .await;

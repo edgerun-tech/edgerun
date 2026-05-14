@@ -168,8 +168,51 @@ pub fn rolling_hash(bytes: &[u8]) -> u64 {
 
 #[cfg(feature = "vfs")]
 pub fn load_vfs(root_dir: &str) -> Result<crate::vfs::SharedVFS, String> {
-    let vfs = crate::vfs::VirtualFileSystem::load_excluding(root_dir, IGNORED_DIRS)?;
-    Ok(std::sync::Arc::new(std::sync::RwLock::new(vfs)))
+    let vfs = load_vfs_from_dir(root_dir, IGNORED_DIRS)?;
+    Ok(crate::vfs::shared_vfs(vfs))
+}
+
+#[cfg(feature = "vfs")]
+pub fn load_vfs_from_dir(
+    root_dir: &str,
+    ignored_dirs: &[&str],
+) -> Result<crate::vfs::VirtualFileSystem, String> {
+    let root = Path::new(root_dir);
+    let mut entries = Vec::new();
+    collect_vfs_entries(root, root, ignored_dirs, &mut entries)?;
+    crate::vfs::VirtualFileSystem::from_entries_with_root(root_dir, entries)
+}
+
+#[cfg(feature = "vfs")]
+fn collect_vfs_entries(
+    root: &Path,
+    current: &Path,
+    ignored_dirs: &[&str],
+    out: &mut Vec<(String, Vec<u8>)>,
+) -> Result<(), String> {
+    for entry in std::fs::read_dir(current).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let path = entry.path();
+        let name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("");
+        if path.is_dir() {
+            if ignored_dirs.contains(&name) {
+                continue;
+            }
+            collect_vfs_entries(root, &path, ignored_dirs, out)?;
+        } else {
+            let rel = path
+                .strip_prefix(root)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .replace('\\', "/");
+            let bytes = std::fs::read(&path).map_err(|error| error.to_string())?;
+            out.push((rel, bytes));
+        }
+    }
+    Ok(())
 }
 
 // ─── Parse Cache ──────────────────────────────────────────────

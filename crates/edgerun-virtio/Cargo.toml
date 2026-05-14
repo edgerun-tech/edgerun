@@ -9,8 +9,5 @@ homepage.workspace = true
 description = "Virtio device support for Edgerun bare-metal runtimes"
 readme = "README.md"
 
-[dependencies]
-edgerun-platform = { version = "0.1", path = "../edgerun-platform" }
-
 [lints]
 workspace = true

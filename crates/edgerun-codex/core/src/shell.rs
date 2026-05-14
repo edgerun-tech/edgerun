@@ -1,12 +1,10 @@
 use crate::shell_detect::detect_shell_type;
 use crate::shell_snapshot::ShellSnapshot;
-use serde::Deserialize;
-use serde::Serialize;
+use edgerun_tokio::sync::watch;
 use std::path::PathBuf;
 use std::sync::Arc;
-use edgerun_tokio::sync::watch;
 
-#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ShellType {
     Zsh,
     Bash,
@@ -15,15 +13,10 @@ pub enum ShellType {
     Cmd,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Shell {
     pub(crate) shell_type: ShellType,
     pub(crate) shell_path: PathBuf,
-    #[serde(
-        skip_serializing,
-        skip_deserializing,
-        default = "empty_shell_snapshot_receiver"
-    )]
     pub(crate) shell_snapshot: watch::Receiver<Option<Arc<ShellSnapshot>>>,
 }
 
