@@ -3465,17 +3465,11 @@ pub struct SessionConfiguredEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub service_tier: Option<String>,
 
-    /// When to escalate for approval for execution
-    pub approval_policy: AskForApproval,
-
     /// Configures who approval requests are routed to for review once they have
     /// been escalated. This does not disable separate safety checks such as
     /// ARC.
     #[serde(default)]
     pub approvals_reviewer: ApprovalsReviewer,
-
-    /// Canonical effective permissions for commands executed in the session.
-    pub permission_profile: PermissionProfile,
 
     /// Working directory that should be treated as the *root* of the
     /// session.
@@ -3518,14 +3512,8 @@ impl<'de> Deserialize<'de> for SessionConfiguredEvent {
             model: String,
             model_provider_id: String,
             service_tier: Option<String>,
-            approval_policy: AskForApproval,
             #[serde(default)]
             approvals_reviewer: ApprovalsReviewer,
-            // `SessionConfiguredEvent` is persisted into rollout history. Older
-            // rollouts only have `sandbox_policy`, so accept it on deserialize
-            // and immediately project it into the canonical `permission_profile`.
-            sandbox_policy: Option<SandboxPolicy>,
-            permission_profile: Option<PermissionProfile>,
             cwd: AbsolutePathBuf,
             reasoning_effort: Option<ReasoningEffortConfig>,
             initial_messages: Option<Vec<EventMsg>>,
@@ -3534,19 +3522,6 @@ impl<'de> Deserialize<'de> for SessionConfiguredEvent {
         }
 
         let wire = Wire::deserialize(deserializer)?;
-        let permission_profile = match (wire.permission_profile, wire.sandbox_policy) {
-            (Some(permission_profile), _) => permission_profile,
-            (None, Some(sandbox_policy)) => PermissionProfile::from_legacy_sandbox_policy_for_cwd(
-                &sandbox_policy,
-                wire.cwd.as_path(),
-            ),
-            (None, None) => {
-                return Err(edgerun_serde::de::Error::missing_field(
-                    "permission_profile",
-                ));
-            }
-        };
-
         Ok(Self {
             session_id: wire.session_id,
             thread_id: wire.thread_id.unwrap_or_else(|| wire.session_id.into()),
@@ -3556,9 +3531,7 @@ impl<'de> Deserialize<'de> for SessionConfiguredEvent {
             model: wire.model,
             model_provider_id: wire.model_provider_id,
             service_tier: wire.service_tier,
-            approval_policy: wire.approval_policy,
             approvals_reviewer: wire.approvals_reviewer,
-            permission_profile,
             cwd: wire.cwd,
             reasoning_effort: wire.reasoning_effort,
             initial_messages: wire.initial_messages,
@@ -5218,7 +5191,6 @@ mod tests {
         let session_id = SessionId::from_string("67e55044-10b1-426f-9247-bb680e5fe0c7")?;
         let thread_id = ThreadId::from_string("67e55044-10b1-426f-9247-bb680e5fe0c8")?;
         let rollout_file = NamedTempFile::new()?;
-        let permission_profile = PermissionProfile::read_only();
         let event = Event {
             id: "1234".to_string(),
             msg: EventMsg::SessionConfigured(SessionConfiguredEvent {
@@ -5230,9 +5202,7 @@ mod tests {
                 model: "codex-mini-latest".to_string(),
                 model_provider_id: "openai".to_string(),
                 service_tier: None,
-                approval_policy: AskForApproval::Never,
                 approvals_reviewer: ApprovalsReviewer::User,
-                permission_profile: permission_profile.clone(),
                 cwd: test_path_buf("/home/user/project").abs(),
                 reasoning_effort: Some(ReasoningEffortConfig::default()),
                 initial_messages: None,
@@ -5241,7 +5211,6 @@ mod tests {
             }),
         };
 
-        let expected_permission_profile = edgerun_json::to_serde_value(&permission_profile)?;
         let expected = json!({
             "id": "1234",
             "msg": {
@@ -5250,35 +5219,13 @@ mod tests {
                 "thread_id": "67e55044-10b1-426f-9247-bb680e5fe0c8",
                 "model": "codex-mini-latest",
                 "model_provider_id": "openai",
-                "approval_policy": "never",
                 "approvals_reviewer": "user",
-                "permission_profile": expected_permission_profile,
                 "cwd": test_path_buf("/home/user/project"),
                 "reasoning_effort": "medium",
                 "rollout_path": format!("{}", rollout_file.path().display()),
             }
         });
         assert_eq!(expected, edgerun_json::to_serde_value(&event)?);
-        Ok(())
-    }
-
-    #[test]
-    fn deserialize_legacy_session_configured_event_uses_sandbox_policy() -> Result<()> {
-        let cwd = test_path_buf("/home/user/project");
-        let value = json!({
-            "session_id": "67e55044-10b1-426f-9247-bb680e5fe0c8",
-            "model": "codex-mini-latest",
-            "model_provider_id": "openai",
-            "approval_policy": "never",
-            "approvals_reviewer": "user",
-            "sandbox_policy": {
-                "type": "read-only"
-            },
-            "cwd": cwd,
-        });
-
-        let event: SessionConfiguredEvent = edgerun_json::from_serde_value(value)?;
-        assert_eq!(event.permission_profile, PermissionProfile::read_only());
         Ok(())
     }
 
