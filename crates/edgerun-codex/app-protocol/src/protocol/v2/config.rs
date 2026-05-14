@@ -1,6 +1,4 @@
 use super::ApprovalsReviewer;
-use super::AskForApproval;
-use super::SandboxMode;
 use super::shared::default_enabled;
 use codex_protocol::compat::absolute_path::AbsolutePathBuf;
 use codex_protocol::config_types::ForcedLoginMethod;
@@ -104,20 +102,6 @@ impl PartialOrd for ConfigLayerSource {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default, JsonSchema, TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(export_to = "v2/")]
-pub struct SandboxWorkspaceWrite {
-    #[serde(default)]
-    pub writable_roots: Vec<PathBuf>,
-    #[serde(default)]
-    pub network_access: bool,
-    #[serde(default)]
-    pub exclude_tmpdir_env_var: bool,
-    #[serde(default)]
-    pub exclude_slash_tmp: bool,
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export_to = "v2/")]
@@ -132,7 +116,6 @@ pub struct ToolsV2 {
 pub struct ProfileV2 {
     pub model: Option<String>,
     pub model_provider: Option<String>,
-    pub approval_policy: Option<AskForApproval>,
     /// [UNSTABLE] Optional profile-level override for where approval requests
     /// are routed for review. If omitted, the enclosing config default is
     /// used.
@@ -226,12 +209,9 @@ pub struct Config {
     pub model_context_window: Option<i64>,
     pub model_auto_compact_token_limit: Option<i64>,
     pub model_provider: Option<String>,
-    pub approval_policy: Option<AskForApproval>,
     /// [UNSTABLE] Optional default for where approval requests are routed for
     /// review.
     pub approvals_reviewer: Option<ApprovalsReviewer>,
-    pub sandbox_mode: Option<SandboxMode>,
-    pub sandbox_workspace_write: Option<SandboxWorkspaceWrite>,
     pub forced_chatgpt_workspace_id: Option<String>,
     pub forced_login_method: Option<ForcedLoginMethod>,
     pub web_search: Option<WebSearchMode>,
@@ -347,9 +327,7 @@ pub struct ConfigReadResponse {
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct ConfigRequirements {
-    pub allowed_approval_policies: Option<Vec<AskForApproval>>,
     pub allowed_approvals_reviewers: Option<Vec<ApprovalsReviewer>>,
-    pub allowed_sandbox_modes: Option<Vec<SandboxMode>>,
     pub allowed_web_search_modes: Option<Vec<WebSearchMode>>,
     pub feature_requirements: Option<BTreeMap<String, bool>>,
     pub hooks: Option<ManagedHooksRequirements>,
