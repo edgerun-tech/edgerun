@@ -195,10 +195,10 @@ enum NormalizedPem {
 }
 
 impl NormalizedPem {
-    fn from_pem_data(source_env: &'static str, path: &Path, pem_data: &[u8]) -> Self {
+    fn from_pem_data(_source_env: &'static str, _path: &Path, pem_data: &[u8]) -> Self {
         let pem = String::from_utf8_lossy(pem_data);
         if pem.contains("TRUSTED CERTIFICATE") {
-            info!(source_env, ca_path = %path.display(), "normalizing OpenSSL TRUSTED CERTIFICATE labels in custom CA bundle");
+            info!(_source_env, ca_path = %_path.display(), "normalizing OpenSSL TRUSTED CERTIFICATE labels in custom CA bundle");
             Self::TrustedCertificate(
                 pem.replace("BEGIN TRUSTED CERTIFICATE", "BEGIN CERTIFICATE")
                     .replace("END TRUSTED CERTIFICATE", "END CERTIFICATE"),

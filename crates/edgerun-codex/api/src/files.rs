@@ -64,11 +64,7 @@ pub enum OpenAiFileError {
         body: String,
     },
     #[error("failed to parse OpenAI file response from {url}: {source}")]
-    Decode {
-        url: String,
-        #[source]
-        source: JsonValueError,
-    },
+    Decode { url: String, source: JsonValueError },
     #[error("OpenAI file upload for `{file_id}` is not ready yet")]
     UploadNotReady { file_id: String },
     #[error("OpenAI file upload for `{file_id}` failed: {message}")]
@@ -271,8 +267,8 @@ fn authorized_request(
 
 fn build_reqwest_client() -> edgerun_reqwest::Client {
     build_reqwest_client_with_custom_ca(edgerun_reqwest::Client::builder()).unwrap_or_else(
-        |error| {
-            tracing::warn!(error = %error, "failed to build OpenAI file upload client");
+        |_error| {
+            tracing::warn!(error = %_error, "failed to build OpenAI file upload client");
             edgerun_reqwest::Client::new()
         },
     )
@@ -391,7 +387,7 @@ mod tests {
 
                 ResponseTemplate::new(200).set_body_json(edgerun_json::json!({
                     "status": "success",
-                    "download_url": download_url,
+                    "download_url": download_url.clone(),
                     "file_name": "hello.txt",
                     "mime_type": "text/plain",
                     "file_size_bytes": 5

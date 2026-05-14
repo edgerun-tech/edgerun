@@ -4,11 +4,11 @@ use codex_protocol::protocol::RealtimeTranscriptDone;
 use edgerun_json::Value;
 use tracing::debug;
 
-pub(super) fn parse_realtime_payload(payload: &str, parser_name: &str) -> Option<(Value, String)> {
+pub(super) fn parse_realtime_payload(payload: &str, _parser_name: &str) -> Option<(Value, String)> {
     let parsed: Value = match edgerun_json::from_str(payload) {
         Ok(message) => message,
-        Err(err) => {
-            debug!("failed to parse {parser_name} event: {err}, data: {payload}");
+        Err(_err) => {
+            debug!("failed to parse {_parser_name} event: {_err}, data: {payload}");
             return None;
         }
     };
@@ -16,7 +16,7 @@ pub(super) fn parse_realtime_payload(payload: &str, parser_name: &str) -> Option
     let message_type = match parsed.get("type").and_then(Value::as_str) {
         Some(message_type) => message_type.to_string(),
         None => {
-            debug!("received {parser_name} event without type field: {payload}");
+            debug!("received {_parser_name} event without type field: {payload}");
             return None;
         }
     };

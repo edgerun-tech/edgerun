@@ -115,7 +115,7 @@ fn certs_from_pem(pem_text: &str) -> Vec<Vec<u8>> {
 /// Generate a self-signed certificate for the given hostname(s).
 ///
 /// Uses `rcgen` to produce a properly DER-encoded X.509 v3 certificate
-/// with ECDSA P-256 key, SAN extensions, and 1-year validity.
+/// with ECDSA P-256 key, SAN extensions, and 10-year validity.
 pub fn generate_self_signed(hostnames: &[&str]) -> Result<CertificateAndKey, CryptoError> {
     let signing_key = edgerun_crypto::random_p256_signing_key();
     let cert_der = edgerun_crypto::generate_self_signed_for_names(&signing_key, hostnames);

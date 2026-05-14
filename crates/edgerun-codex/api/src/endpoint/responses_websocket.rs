@@ -10,7 +10,6 @@ use crate::sse::ResponsesStreamEvent;
 use crate::sse::process_responses_event;
 use crate::telemetry::WebsocketTelemetry;
 use codex_client::TransportError;
-use edgerun_futures::SinkExt;
 use edgerun_futures::StreamExt;
 use edgerun_http::HeaderMap;
 use edgerun_http::HeaderName;
@@ -662,8 +661,8 @@ async fn run_websocket_response_stream(
 
                 let event = match edgerun_json::from_json_str::<ResponsesStreamEvent>(&text) {
                     Ok(event) => event,
-                    Err(err) => {
-                        debug!("failed to parse websocket event: {err}, data: {text}");
+                    Err(_err) => {
+                        debug!("failed to parse websocket event: {_err}, data: {text}");
                         continue;
                     }
                 };

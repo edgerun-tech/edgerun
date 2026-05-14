@@ -669,7 +669,7 @@ pub fn generate_self_signed_for_names(key: &SigningKey, names: &[&str]) -> alloc
     let public_key = public_key.as_bytes();
 
     let not_before = current_unix_secs().saturating_sub(60);
-    let not_after = not_before.saturating_add(365 * 24 * 60 * 60);
+    let not_after = not_before.saturating_add(10 * 365 * 24 * 60 * 60);
 
     let serial = random_serial();
     let sig_alg = seq(concat(&[oid(&[

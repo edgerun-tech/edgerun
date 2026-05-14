@@ -173,6 +173,26 @@ pub mod absolute_path {
         }
         out
     }
+
+    #[cfg(test)]
+    pub mod test_support {
+        use super::AbsolutePathBuf;
+        use std::path::PathBuf;
+
+        pub trait PathBufExt {
+            fn abs(self) -> AbsolutePathBuf;
+        }
+
+        impl PathBufExt for PathBuf {
+            fn abs(self) -> AbsolutePathBuf {
+                AbsolutePathBuf::from_absolute_path(self).expect("absolute test path")
+            }
+        }
+
+        pub fn test_path_buf(path: &str) -> PathBuf {
+            PathBuf::from(path)
+        }
+    }
 }
 
 pub mod async_utils {

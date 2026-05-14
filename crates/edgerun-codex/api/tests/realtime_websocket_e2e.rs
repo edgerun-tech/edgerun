@@ -16,7 +16,6 @@ use codex_protocol::protocol::RealtimeTranscriptDelta;
 use codex_protocol::protocol::RealtimeTranscriptDone;
 use codex_protocol::protocol::RealtimeTranscriptEntry;
 use codex_protocol::protocol::RealtimeVoice;
-use edgerun_futures::SinkExt;
 use edgerun_futures::StreamExt;
 use edgerun_http::HeaderMap;
 use edgerun_json::Value;

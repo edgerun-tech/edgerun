@@ -1896,9 +1896,9 @@ fn is_git_pointer_file(path: &AbsolutePathBuf) -> bool {
 fn resolve_gitdir_from_file(dot_git: &AbsolutePathBuf) -> Option<AbsolutePathBuf> {
     let contents = match std::fs::read_to_string(dot_git.as_path()) {
         Ok(contents) => contents,
-        Err(err) => {
+        Err(_err) => {
             error!(
-                "Failed to read {path} for gitdir pointer: {err}",
+                "Failed to read {path} for gitdir pointer: {_err}",
                 path = dot_git.as_path().display()
             );
             return None;

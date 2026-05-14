@@ -441,7 +441,6 @@ mod tests {
     use crate::file_system::LOCAL_FS;
     use crate::unified_diff_from_chunks;
     use assert_matches::assert_matches;
-    use codex_utils_absolute_path::test_support::PathExt;
     use pretty_assertions::assert_eq;
     use std::fs;
     use std::path::PathBuf;
@@ -756,7 +755,7 @@ PATCH"#,
             _ => panic!("Expected a single UpdateFile hunk"),
         };
 
-        let path_abs = path.as_path().abs();
+        let path_abs = AbsolutePathBuf::from_absolute_path(&path).unwrap();
         let diff =
             unified_diff_from_chunks(&path_abs, chunks, LOCAL_FS.as_ref(), /*sandbox*/ None)
                 .await
@@ -796,7 +795,7 @@ PATCH"#,
             _ => panic!("Expected a single UpdateFile hunk"),
         };
 
-        let path_abs = path.as_path().abs();
+        let path_abs = AbsolutePathBuf::from_absolute_path(&path).unwrap();
         let diff =
             unified_diff_from_chunks(&path_abs, chunks, LOCAL_FS.as_ref(), /*sandbox*/ None)
                 .await

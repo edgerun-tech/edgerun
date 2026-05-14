@@ -24,8 +24,6 @@
 //! leading/trailing whitespace around patch markers.
 use crate::ApplyPatchArgs;
 use crate::absolute_path::AbsolutePathBuf;
-#[cfg(test)]
-use codex_utils_absolute_path::test_support::PathBufExt;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -707,8 +705,8 @@ fn test_parse_patch() {
 #[test]
 fn test_parse_patch_accepts_relative_and_absolute_hunk_paths() {
     let dir = tempfile::tempdir().unwrap();
-    let absolute_delete = dir.path().join("absolute-delete.py").abs();
-    let absolute_update = dir.path().join("absolute-update.py").abs();
+    let absolute_delete = dir.path().join("absolute-delete.py");
+    let absolute_update = dir.path().join("absolute-update.py");
     let patch_text = format!(
         r#"*** Begin Patch
 *** Add File: relative-add.py
@@ -752,11 +750,16 @@ fn test_parse_patch_accepts_relative_and_absolute_hunk_paths() {
 #[test]
 fn test_hunk_resolve_path_accepts_relative_and_absolute_paths() {
     let cwd_dir = tempfile::tempdir().unwrap();
-    let cwd = cwd_dir.path().to_path_buf().abs();
+    let cwd = AbsolutePathBuf::from_absolute_path(cwd_dir.path()).unwrap();
     let absolute_dir = tempfile::tempdir().unwrap();
-    let absolute_add = absolute_dir.path().join("absolute-add.py").abs();
-    let absolute_delete = absolute_dir.path().join("absolute-delete.py").abs();
-    let absolute_update = absolute_dir.path().join("absolute-update.py").abs();
+    let absolute_add =
+        AbsolutePathBuf::from_absolute_path(absolute_dir.path().join("absolute-add.py")).unwrap();
+    let absolute_delete =
+        AbsolutePathBuf::from_absolute_path(absolute_dir.path().join("absolute-delete.py"))
+            .unwrap();
+    let absolute_update =
+        AbsolutePathBuf::from_absolute_path(absolute_dir.path().join("absolute-update.py"))
+            .unwrap();
 
     for (hunk, expected_path) in [
         (
@@ -764,13 +767,13 @@ fn test_hunk_resolve_path_accepts_relative_and_absolute_paths() {
                 path: PathBuf::from("relative-add.py"),
                 contents: String::new(),
             },
-            cwd.join("relative-add.py"),
+            cwd.join(Path::new("relative-add.py")),
         ),
         (
             DeleteFile {
                 path: PathBuf::from("relative-delete.py"),
             },
-            cwd.join("relative-delete.py"),
+            cwd.join(Path::new("relative-delete.py")),
         ),
         (
             UpdateFile {
@@ -778,7 +781,7 @@ fn test_hunk_resolve_path_accepts_relative_and_absolute_paths() {
                 move_path: None,
                 chunks: Vec::new(),
             },
-            cwd.join("relative-update.py"),
+            cwd.join(Path::new("relative-update.py")),
         ),
         (
             AddFile {

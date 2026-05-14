@@ -385,10 +385,10 @@ impl ModelInfo {
                 .get_personality_message(personality)
                 .unwrap_or_default();
             template.replace(PERSONALITY_PLACEHOLDER, personality_message.as_str())
-        } else if let Some(personality) = personality {
+        } else if let Some(_personality) = personality {
             warn!(
                 model = %self.slug,
-                %personality,
+                %_personality,
                 "Model personality requested but model_messages is missing, falling back to base instructions."
             );
             self.base_instructions.clone()

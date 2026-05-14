@@ -38,3 +38,11 @@ edgerun-reqwest = { workspace = true, default-features = false, optional = true,
 edgerun-tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }
 tracing = { workspace = true }
 edgerun-tokio-util = { workspace = true, optional = true }
+
+[dev-dependencies]
+anyhow = { package = "edgerun-anyhow", path = "../../utility/edgerun-anyhow" }
+assert_matches = { package = "edgerun-assert-matches", path = "../../utility/edgerun-assert-matches" }
+pretty_assertions = { package = "edgerun-pretty-assertions", path = "../../utility/edgerun-pretty-assertions" }
+tempfile = { package = "edgerun-tempfile", path = "../../utility/edgerun-tempfile" }
+tokio_test = { package = "edgerun-tokio-test", path = "../../utility/edgerun-tokio-test" }
+wiremock = { package = "edgerun-wiremock", path = "../../utility/edgerun-wiremock" }

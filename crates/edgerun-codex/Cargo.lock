@@ -31,6 +31,8 @@ version = "0.0.0"
 dependencies = [
  "codex-client",
  "codex-protocol",
+ "edgerun-anyhow",
+ "edgerun-assert-matches",
  "edgerun-async-channel",
  "edgerun-async-trait",
  "edgerun-bytes",
@@ -41,13 +43,17 @@ dependencies = [
  "edgerun-http",
  "edgerun-json",
  "edgerun-log",
+ "edgerun-pretty-assertions",
  "edgerun-reqwest",
+ "edgerun-tempfile",
  "edgerun-time",
  "edgerun-tokio",
+ "edgerun-tokio-test",
  "edgerun-tokio-tungstenite",
  "edgerun-tokio-util",
  "edgerun-tungstenite",
  "edgerun-url",
+ "edgerun-wiremock",
 ]
 
 [[package]]
@@ -72,9 +78,15 @@ dependencies = [
 name = "codex-apply-patch"
 version = "0.0.0"
 dependencies = [
+ "edgerun-assert-cmd",
+ "edgerun-assert-matches",
  "edgerun-async-trait",
+ "edgerun-codex-utils-absolute-path",
+ "edgerun-codex-utils-cargo-bin",
  "edgerun-error",
+ "edgerun-pretty-assertions",
  "edgerun-similar",
+ "edgerun-tempfile",
  "edgerun-tokio",
 ]
 
@@ -84,15 +96,19 @@ version = "0.0.0"
 dependencies = [
  "edgerun-async-trait",
  "edgerun-bytes",
+ "edgerun-codex-utils-cargo-bin",
  "edgerun-encoding",
  "edgerun-error",
  "edgerun-eventsource-stream",
  "edgerun-futures",
  "edgerun-http",
+ "edgerun-http-client",
  "edgerun-json",
  "edgerun-log",
+ "edgerun-pretty-assertions",
  "edgerun-random",
  "edgerun-reqwest",
+ "edgerun-tempfile",
  "edgerun-tokio",
 ]
 
@@ -188,6 +204,7 @@ dependencies = [
 name = "codex-protocol"
 version = "0.0.0"
 dependencies = [
+ "edgerun-anyhow",
  "edgerun-encoding",
  "edgerun-error",
  "edgerun-http",
@@ -195,11 +212,13 @@ dependencies = [
  "edgerun-landlock",
  "edgerun-locale",
  "edgerun-log",
+ "edgerun-pretty-assertions",
  "edgerun-schemars",
  "edgerun-seccompiler",
  "edgerun-serde",
  "edgerun-strum",
  "edgerun-strum-macros",
+ "edgerun-tempfile",
  "edgerun-time",
  "edgerun-tokio",
  "edgerun-ts-rs",
@@ -249,6 +268,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-anyhow"
+version = "0.1.1"
+
+[[package]]
+name = "edgerun-assert-cmd"
+version = "0.1.1"
+
+[[package]]
+name = "edgerun-assert-matches"
+version = "0.1.1"
+
+[[package]]
 name = "edgerun-async-channel"
 version = "0.1.1"
 dependencies = [
@@ -261,6 +292,14 @@ version = "0.1.1"
 
 [[package]]
 name = "edgerun-bytes"
+version = "0.1.1"
+
+[[package]]
+name = "edgerun-codex-utils-absolute-path"
+version = "0.1.1"
+
+[[package]]
+name = "edgerun-codex-utils-cargo-bin"
 version = "0.1.1"
 
 [[package]]
@@ -376,6 +415,10 @@ name = "edgerun-platform"
 version = "0.1.0"
 
 [[package]]
+name = "edgerun-pretty-assertions"
+version = "0.1.1"
+
+[[package]]
 name = "edgerun-protocols"
 version = "0.1.1"
 dependencies = [
@@ -456,6 +499,13 @@ name = "edgerun-strum-macros"
 version = "0.1.1"
 
 [[package]]
+name = "edgerun-tempfile"
+version = "0.1.1"
+dependencies = [
+ "edgerun-random",
+]
+
+[[package]]
 name = "edgerun-time"
 version = "0.1.1"
 dependencies = [
@@ -473,6 +523,10 @@ dependencies = [
 
 [[package]]
 name = "edgerun-tokio-macros"
+version = "0.1.1"
+
+[[package]]
+name = "edgerun-tokio-test"
 version = "0.1.1"
 
 [[package]]
@@ -536,6 +590,15 @@ version = "0.1.1"
 dependencies = [
  "edgerun-crypto",
  "rkyv",
+]
+
+[[package]]
+name = "edgerun-wiremock"
+version = "0.1.1"
+dependencies = [
+ "edgerun-http",
+ "edgerun-json",
+ "edgerun-serde",
 ]
 
 [[package]]

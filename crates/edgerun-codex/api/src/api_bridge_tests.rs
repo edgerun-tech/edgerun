@@ -208,8 +208,9 @@ fn map_api_error_extracts_identity_auth_details_from_headers() {
         X_OPENAI_AUTHORIZATION_ERROR_HEADER,
         edgerun_http::HeaderValue::from_static("missing_authorization_header"),
     );
-    let x_error_json =
-        edgerun_encoding::base64::standard_encode(r#"{"error":{"code":"token_expired"}}"#);
+    let x_error_json = edgerun_encoding::base64::standard_encode(
+        r#"{"error":{"code":"token_expired"}}"#.as_bytes(),
+    );
     headers.insert(
         X_ERROR_JSON_HEADER,
         edgerun_http::HeaderValue::from_str(&x_error_json).expect("valid x-error-json header"),

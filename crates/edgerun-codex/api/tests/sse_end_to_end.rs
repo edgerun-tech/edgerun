@@ -13,7 +13,6 @@ use codex_client::Response;
 use codex_client::StreamResponse;
 use codex_client::TransportError;
 use codex_protocol::models::ResponseItem;
-use edgerun_async_trait::async_trait;
 use edgerun_bytes::Bytes;
 use edgerun_futures::StreamExt;
 use edgerun_http::HeaderMap;
@@ -32,20 +31,45 @@ impl FixtureSseTransport {
     }
 }
 
-#[async_trait]
 impl HttpTransport for FixtureSseTransport {
-    async fn execute(&self, _req: Request) -> Result<Response, TransportError> {
-        Err(TransportError::Build("execute should not run".to_string()))
+    fn execute<'async_trait>(
+        &'async_trait self,
+        _req: Request,
+    ) -> core::pin::Pin<
+        Box<
+            dyn core::future::Future<Output = Result<Response, TransportError>>
+                + Send
+                + 'async_trait,
+        >,
+    >
+    where
+        Self: 'async_trait,
+    {
+        Box::pin(async move { Err(TransportError::Build("execute should not run".to_string())) })
     }
 
-    async fn stream(&self, _req: Request) -> Result<StreamResponse, TransportError> {
-        let stream = edgerun_futures::stream::iter(vec![Ok::<Bytes, TransportError>(Bytes::from(
-            self.body.clone(),
-        ))]);
-        Ok(StreamResponse {
-            status: StatusCode::OK,
-            headers: HeaderMap::new(),
-            bytes: Box::pin(stream),
+    fn stream<'async_trait>(
+        &'async_trait self,
+        _req: Request,
+    ) -> core::pin::Pin<
+        Box<
+            dyn core::future::Future<Output = Result<StreamResponse, TransportError>>
+                + Send
+                + 'async_trait,
+        >,
+    >
+    where
+        Self: 'async_trait,
+    {
+        Box::pin(async move {
+            let stream = edgerun_futures::stream::iter(vec![Ok::<Bytes, TransportError>(
+                Bytes::from(self.body.clone()),
+            )]);
+            Ok(StreamResponse {
+                status: StatusCode::OK,
+                headers: HeaderMap::new(),
+                bytes: Box::pin(stream),
+            })
         })
     }
 }

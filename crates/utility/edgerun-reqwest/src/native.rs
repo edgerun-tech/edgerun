@@ -63,6 +63,10 @@ impl Url {
     pub fn path(&self) -> &str {
         self.inner.path()
     }
+
+    pub fn query(&self) -> Option<&str> {
+        self.inner.query()
+    }
 }
 
 impl fmt::Display for Url {
@@ -450,6 +454,7 @@ pub struct Client {
     inner: edgerun_http_client::http::HttpClient,
     default_headers: HeaderMap,
     cookie_store: Option<Arc<dyn cookie::CookieStore>>,
+    proxy: Option<Proxy>,
 }
 
 impl Client {
@@ -508,6 +513,7 @@ impl fmt::Debug for Client {
         f.debug_struct("Client")
             .field("default_headers", &self.default_headers)
             .field("cookie_store", &self.cookie_store.is_some())
+            .field("proxy", &self.proxy)
             .finish_non_exhaustive()
     }
 }
@@ -530,6 +536,7 @@ pub struct ClientBuilder {
     roots_der: Vec<Vec<u8>>,
     default_headers: HeaderMap,
     cookie_store: Option<Arc<dyn cookie::CookieStore>>,
+    proxy: Option<Proxy>,
 }
 
 impl ClientBuilder {
@@ -545,6 +552,7 @@ impl ClientBuilder {
             roots_der: Vec::new(),
             default_headers: HeaderMap::new(),
             cookie_store: None,
+            proxy: None,
         }
     }
 
@@ -576,6 +584,7 @@ impl ClientBuilder {
             inner,
             default_headers: self.default_headers,
             cookie_store: self.cookie_store,
+            proxy: self.proxy,
         })
     }
 
@@ -614,7 +623,8 @@ impl ClientBuilder {
         self
     }
 
-    pub fn no_proxy(self) -> Self {
+    pub fn no_proxy(mut self) -> Self {
+        self.proxy = None;
         self
     }
 
@@ -657,8 +667,8 @@ impl ClientBuilder {
         self
     }
 
-    pub fn proxy(self, proxy: Proxy) -> Self {
-        let _ = proxy;
+    pub fn proxy(mut self, proxy: Proxy) -> Self {
+        self.proxy = Some(proxy);
         self
     }
 
@@ -1009,7 +1019,6 @@ async fn execute_edgerun(
     timeout: Option<Duration>,
 ) -> Result<Response, Error> {
     let response_url = request.url.clone();
-    let uri = request.url.to_string();
     let body = request.body.into_bytes().await?;
     let body = if body.is_empty() { None } else { Some(body) };
     let mut headers = request.headers;
@@ -1018,6 +1027,22 @@ async fn execute_edgerun(
     {
         headers.insert(header::COOKIE, cookies);
     }
+
+    if let Some(proxy) = client.proxy.as_ref()
+        && request.url.scheme() == "https"
+    {
+        return execute_https_via_connect_proxy(
+            proxy,
+            &request.method,
+            &request.url,
+            headers,
+            body,
+            response_url,
+        )
+        .await;
+    }
+
+    let uri = request.url.to_string();
     let headers = convert_headers(&headers)?;
     let mut builder = edgerun_http_client::http::Request::builder()
         .method(convert_method(&request.method))
@@ -1044,4 +1069,200 @@ async fn execute_edgerun(
         version: Version::HTTP_11,
         url: Some(response_url),
     })
+}
+
+async fn execute_https_via_connect_proxy(
+    proxy: &Proxy,
+    method: &Method,
+    url: &Url,
+    headers: HeaderMap,
+    body: Option<Vec<u8>>,
+    response_url: Url,
+) -> Result<Response, Error> {
+    use edgerun_http_client::rt::AsyncRead;
+    use edgerun_http_client::rt::AsyncReadExt;
+    use edgerun_http_client::rt::AsyncWrite;
+    use edgerun_http_client::rt::AsyncWriteExt;
+    use edgerun_http_client::rt::ConnectFuture;
+    use edgerun_http_client::tls::AsyncTlsStream;
+
+    let proxy_url = Url::parse(proxy.url()).map_err(|error| Error::url_error(error.to_string()))?;
+    if proxy_url.scheme() != "http" {
+        return Err(Error::builder(format!(
+            "unsupported HTTPS proxy transport scheme: {}",
+            proxy_url.scheme()
+        )));
+    }
+    let proxy_host = proxy_url
+        .host_str()
+        .ok_or_else(|| Error::url_error("proxy URL missing host"))?;
+    let proxy_port = proxy_url.port().unwrap_or(80);
+    let target_host = url
+        .host_str()
+        .ok_or_else(|| Error::url_error("target URL missing host"))?;
+    let target_port = url.port().unwrap_or(443);
+    let target_authority = format!("{target_host}:{target_port}");
+
+    let mut stream = ConnectFuture::new(format!("{proxy_host}:{proxy_port}"))
+        .await
+        .map_err(|error| Error::http(error.to_string()))?;
+    let connect_request = format!(
+        "CONNECT {target_authority} HTTP/1.1\r\nHost: {target_authority}\r\nProxy-Connection: Keep-Alive\r\n\r\n"
+    );
+    AsyncWriteExt::write_all(&mut stream, connect_request.as_bytes())
+        .await
+        .map_err(|error| Error::http(error.to_string()))?;
+    AsyncWriteExt::flush(&mut stream)
+        .await
+        .map_err(|error| Error::http(error.to_string()))?;
+    let connect_response = read_http_message_async(&mut stream)
+        .await
+        .map_err(Error::http)?;
+    let (connect_status, _, _) = parse_http_response(&connect_response)?;
+    if !(200..300).contains(&connect_status) {
+        return Err(Error::http(format!(
+            "proxy CONNECT failed with status {connect_status}"
+        )));
+    }
+
+    let mut tls = AsyncTlsStream::client(stream, target_host, &[], None)
+        .await
+        .map_err(|error| Error::http(error.to_string()))?;
+    let body = body.unwrap_or_default();
+    let request_target = request_target(url);
+    let host_header = if url.port().is_some() {
+        target_authority
+    } else {
+        target_host.to_string()
+    };
+    let mut request = format!(
+        "{} {request_target} HTTP/1.1\r\nHost: {host_header}\r\nConnection: close\r\nContent-Length: {}\r\n",
+        method.as_str(),
+        body.len()
+    );
+    for (name, value) in headers.iter() {
+        if name.as_str().eq_ignore_ascii_case("host")
+            || name.as_str().eq_ignore_ascii_case("content-length")
+            || name.as_str().eq_ignore_ascii_case("connection")
+        {
+            continue;
+        }
+        let value = value
+            .to_str()
+            .map_err(|error| Error::builder(error.to_string()))?;
+        request.push_str(name.as_str());
+        request.push_str(": ");
+        request.push_str(value);
+        request.push_str("\r\n");
+    }
+    request.push_str("\r\n");
+    AsyncWriteExt::write_all(&mut tls, request.as_bytes())
+        .await
+        .map_err(|error| Error::http(error.to_string()))?;
+    if !body.is_empty() {
+        AsyncWriteExt::write_all(&mut tls, &body)
+            .await
+            .map_err(|error| Error::http(error.to_string()))?;
+    }
+    AsyncWriteExt::flush(&mut tls)
+        .await
+        .map_err(|error| Error::http(error.to_string()))?;
+
+    let response = read_http_message_async(&mut tls)
+        .await
+        .map_err(Error::http)?;
+    let (status, headers, body) = parse_http_response(&response)?;
+    Ok(Response {
+        status: StatusCode::from_u16(status).map_err(|error| Error::http(error.to_string()))?,
+        headers,
+        body: Bytes::from(body),
+        version: Version::HTTP_11,
+        url: Some(response_url),
+    })
+}
+
+fn request_target(url: &Url) -> String {
+    let mut target = if url.path().is_empty() {
+        "/".to_string()
+    } else {
+        url.path().to_string()
+    };
+    if let Some(query) = url.query() {
+        target.push('?');
+        target.push_str(query);
+    }
+    target
+}
+
+async fn read_http_message_async<S>(stream: &mut S) -> Result<Vec<u8>, String>
+where
+    S: edgerun_http_client::rt::AsyncRead + Unpin,
+{
+    let mut buffer = Vec::new();
+    let mut chunk = [0; 1024];
+    loop {
+        let bytes_read = edgerun_http_client::rt::AsyncReadExt::read(stream, &mut chunk)
+            .await
+            .map_err(|error| error.to_string())?;
+        if bytes_read == 0 {
+            break;
+        }
+        buffer.extend_from_slice(&chunk[..bytes_read]);
+        if http_message_complete(&buffer) {
+            break;
+        }
+    }
+    Ok(buffer)
+}
+
+fn http_message_complete(buffer: &[u8]) -> bool {
+    if let Some(header_end) = buffer.windows(4).position(|window| window == b"\r\n\r\n") {
+        let body_start = header_end + 4;
+        let headers = String::from_utf8_lossy(&buffer[..body_start]);
+        let content_length = headers
+            .lines()
+            .filter_map(|line| line.split_once(':'))
+            .find_map(|(name, value)| {
+                name.eq_ignore_ascii_case("content-length")
+                    .then(|| value.trim().parse::<usize>().ok())
+                    .flatten()
+            })
+            .unwrap_or(0);
+        return buffer.len() >= body_start + content_length;
+    }
+    false
+}
+
+fn parse_http_response(buffer: &[u8]) -> Result<(u16, HeaderMap, Vec<u8>), Error> {
+    let header_end = buffer
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .ok_or_else(|| Error::http("HTTP response missing header terminator"))?;
+    let body_start = header_end + 4;
+    let header_text = String::from_utf8_lossy(&buffer[..header_end]);
+    let mut lines = header_text.lines();
+    let status_line = lines
+        .next()
+        .ok_or_else(|| Error::http("HTTP response missing status line"))?;
+    let mut status_parts = status_line.split_whitespace();
+    let _version = status_parts
+        .next()
+        .ok_or_else(|| Error::http("HTTP response missing version"))?;
+    let status = status_parts
+        .next()
+        .ok_or_else(|| Error::http("HTTP response missing status code"))?
+        .parse::<u16>()
+        .map_err(|error| Error::http(error.to_string()))?;
+    let mut headers = HeaderMap::new();
+    for line in lines {
+        let Some((name, value)) = line.split_once(':') else {
+            continue;
+        };
+        let name = HeaderName::from_bytes(name.trim().as_bytes())
+            .map_err(|error| Error::http(error.to_string()))?;
+        let value =
+            HeaderValue::from_str(value.trim()).map_err(|error| Error::http(error.to_string()))?;
+        headers.insert(name, value);
+    }
+    Ok((status, headers, buffer[body_start..].to_vec()))
 }

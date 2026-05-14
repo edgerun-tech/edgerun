@@ -1251,10 +1251,10 @@ impl SandboxPolicy {
                     Ok(cwd) => {
                         roots.push(cwd);
                     }
-                    Err(e) => {
+                    Err(_e) => {
                         error!(
                             "Ignoring invalid cwd {:?} for sandbox writable root: {}",
-                            cwd, e
+                            cwd, _e
                         );
                     }
                 }
@@ -1267,8 +1267,8 @@ impl SandboxPolicy {
                                 roots.push(slash_tmp);
                             }
                         }
-                        Err(e) => {
-                            error!("Ignoring invalid /tmp for sandbox writable root: {e}");
+                        Err(_e) => {
+                            error!("Ignoring invalid /tmp for sandbox writable root: {_e}");
                         }
                     }
                 }
@@ -1289,9 +1289,9 @@ impl SandboxPolicy {
                         Ok(tmpdir_path) => {
                             roots.push(tmpdir_path);
                         }
-                        Err(e) => {
+                        Err(_e) => {
                             error!(
-                                "Ignoring invalid TMPDIR value {tmpdir:?} for sandbox writable root: {e}",
+                                "Ignoring invalid TMPDIR value {tmpdir:?} for sandbox writable root: {_e}",
                             );
                         }
                     }

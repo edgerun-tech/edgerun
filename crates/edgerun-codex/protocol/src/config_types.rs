@@ -572,6 +572,8 @@ fn is_default_provider_auth_cwd(path: &AbsolutePathBuf) -> bool {
     path == &default_provider_auth_cwd()
 }
 
+const _: fn(&AbsolutePathBuf) -> bool = is_default_provider_auth_cwd;
+
 /// Represents the trust level for a project directory.
 /// This determines the approval policy and sandbox mode applied.
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Display, JsonSchema, TS)]
