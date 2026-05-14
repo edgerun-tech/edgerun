@@ -83,12 +83,15 @@ members = [
   "crates/utility/edgerun-litemap",
   "crates/utility/edgerun-locale",
   "crates/utility/edgerun-log",
+  "crates/utility/edgerun-log-upstream",
   "crates/utility/edgerun-log-macros",
   "crates/utility/edgerun-munge",
   "crates/utility/edgerun-munge-macro",
   "crates/utility/edgerun-opentelemetry",
   "crates/utility/edgerun-opentelemetry-sdk",
+  "crates/utility/edgerun-once-cell",
   "crates/utility/edgerun-percent-encoding-upstream",
+  "crates/utility/edgerun-pin-project-lite",
   "crates/utility/edgerun-pretty-assertions",
   "crates/utility/edgerun-proc-macro2",
   "crates/utility/edgerun-ptr-meta",
@@ -113,6 +116,7 @@ members = [
   "crates/utility/edgerun-shlex",
   "crates/utility/edgerun-similar",
   "crates/utility/edgerun-sixel",
+  "crates/utility/edgerun-slab",
   "crates/utility/edgerun-smallvec",
   "crates/utility/edgerun-stable-deref-trait",
   "crates/utility/edgerun-strum",
@@ -233,9 +237,12 @@ bytecheck_derive = { path = "crates/utility/edgerun-bytecheck-derive" }
 displaydoc = { path = "crates/utility/edgerun-displaydoc" }
 hashbrown = { path = "crates/utility/edgerun-hashbrown" }
 litemap = { path = "crates/utility/edgerun-litemap" }
+log = { path = "crates/utility/edgerun-log-upstream" }
 munge = { path = "crates/utility/edgerun-munge" }
 munge_macro = { path = "crates/utility/edgerun-munge-macro" }
+once_cell = { path = "crates/utility/edgerun-once-cell" }
 percent-encoding = { path = "crates/utility/edgerun-percent-encoding-upstream" }
+pin-project-lite = { path = "crates/utility/edgerun-pin-project-lite" }
 proc-macro2 = { path = "crates/utility/edgerun-proc-macro2" }
 ptr_meta = { path = "crates/utility/edgerun-ptr-meta" }
 ptr_meta_derive = { path = "crates/utility/edgerun-ptr-meta-derive" }
@@ -247,6 +254,7 @@ quote = { path = "crates/utility/edgerun-quote" }
 serde = { path = "crates/utility/edgerun-serde-upstream" }
 serde_core = { path = "crates/utility/edgerun-serde-core" }
 serde_derive = { path = "crates/utility/edgerun-serde-derive" }
+slab = { path = "crates/utility/edgerun-slab" }
 smallvec = { path = "crates/utility/edgerun-smallvec" }
 stable_deref_trait = { path = "crates/utility/edgerun-stable-deref-trait" }
 syn = { path = "crates/utility/edgerun-syn" }

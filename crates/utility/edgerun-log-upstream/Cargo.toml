@@ -1,0 +1,39 @@
+[package]
+name = "log"
+version = "0.4.29"
+edition = "2021"
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun-owned logging facade compatibility crate"
+
+[features]
+kv = []
+kv_serde = ["kv_std", "serde"]
+kv_std = ["std", "kv"]
+kv_sval = ["kv"]
+kv_unstable = ["kv"]
+kv_unstable_serde = ["kv_serde", "kv_unstable_std"]
+kv_unstable_std = ["kv_std", "kv_unstable"]
+kv_unstable_sval = ["kv_sval", "kv_unstable"]
+max_level_debug = []
+max_level_error = []
+max_level_info = []
+max_level_off = []
+max_level_trace = []
+max_level_warn = []
+release_max_level_debug = []
+release_max_level_error = []
+release_max_level_info = []
+release_max_level_off = []
+release_max_level_trace = []
+release_max_level_warn = []
+serde = ["dep:serde_core"]
+std = []
+
+[dependencies]
+serde_core = { path = "../edgerun-serde-core", optional = true, default-features = false }
+
+[lints]
+workspace = true
