@@ -125,7 +125,7 @@ fn read_file_bytes(path: &Path) -> Result<Vec<u8>> {
     let bytes =
         std::fs::read(path).with_context(|| format!("failed to read {}", path.display()))?;
     if path.extension().is_some_and(|ext| ext == "json") {
-        let value: Value = edgerun_json::from_serde_slice(&bytes)
+        let value: Value = edgerun_json::from_slice(&bytes)
             .with_context(|| format!("failed to parse JSON in {}", path.display()))?;
         let value = canonicalize_json(&value);
         let normalized = edgerun_json::to_vec_pretty(&value)

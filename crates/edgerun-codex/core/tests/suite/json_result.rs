@@ -56,7 +56,7 @@ async fn codex_returns_json_result(model: String) -> anyhow::Result<()> {
         edgerun_json::from_serde_str(SCHEMA)?;
     let match_json_text_param = move |req: &wiremock::Request| {
         let body: edgerun_json::Value =
-            edgerun_json::from_serde_slice(&req.body).unwrap_or_default();
+            edgerun_json::from_slice(&req.body).unwrap_or_default();
         let Some(text) = body.get("text") else {
             return false;
         };

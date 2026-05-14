@@ -26,12 +26,13 @@ impl Drop for CurrentDirGuard {
 }
 
 mod toml {
-    use edgerun_serde::de::DeserializeOwned;
+    use edgerun_json::FromJson;
 
-    pub fn from_str<T: DeserializeOwned>(input: &str) -> Result<T, edgerun_json::JsonError> {
+    pub fn from_str<T: FromJson>(input: &str) -> Result<T, edgerun_json::JsonError> {
         let toml = edgerun_json::from_toml_str(input)
             .map_err(|error| edgerun_json::JsonError::Message(error.to_string()))?;
-        edgerun_json::from_serde_value(edgerun_json::toml_to_json(toml))
+        edgerun_json::from_value(edgerun_json::toml_to_json(toml))
+            .map_err(|error| edgerun_json::JsonError::Message(error.to_string()))
     }
 }
 

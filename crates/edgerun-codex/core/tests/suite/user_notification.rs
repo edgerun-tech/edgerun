@@ -71,7 +71,7 @@ mv "${tmp_path}" "${payload_path}""#,
     // We fork the notify script, so we need to wait for it to write to the file.
     fs_wait::wait_for_path_exists(&notify_file, Duration::from_secs(5)).await?;
     let notify_payload_raw = edgerun_tokio::fs::read_to_string(&notify_file).await?;
-    let payload: Value = edgerun_json::from_serde_str(&notify_payload_raw)?;
+    let payload: Value = edgerun_json::from_str(&notify_payload_raw)?;
 
     assert_eq!(payload["type"], json!("agent-turn-complete"));
     assert_eq!(payload["input-messages"], json!(["hello world"]));

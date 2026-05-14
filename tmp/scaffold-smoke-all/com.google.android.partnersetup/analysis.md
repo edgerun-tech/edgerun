@@ -43,6 +43,13 @@
 - `sms_telephony`: 1 call sites; SMS, MMS, phone, carrier, or telephony behavior
 - `work_background`: 923 call sites; jobs, alarms, wake locks, services, or background work
 
+## Generated Capability Intent Plan
+
+- `com.google.android.partnersetup.BootReceiver` -> `onReceive` records:
+  - `app_events.send_or_receive_app_event` from `package_intents` evidence
+- `com.google.android.partnersetup.PhoneStateReceiver` -> `onReceive` records:
+  - `app_events.send_or_receive_app_event` from `package_intents` evidence
+
 ## UI And Resource Hints
 
 - Resource buckets: `xml`(1)

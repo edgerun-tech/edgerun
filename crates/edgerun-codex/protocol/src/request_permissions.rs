@@ -2,6 +2,11 @@ use crate::compat::absolute_path::AbsolutePathBuf;
 use crate::models::AdditionalPermissionProfile;
 use crate::models::FileSystemPermissions;
 use crate::models::NetworkPermissions;
+use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
+use edgerun_json::Map;
+use edgerun_json::ToJson;
+use edgerun_json::Value;
 use edgerun_serde::Deserialize;
 use edgerun_serde::Serialize;
 use schemars::JsonSchema;
@@ -20,6 +25,29 @@ pub enum PermissionGrantScope {
 pub struct RequestPermissionProfile {
     pub network: Option<NetworkPermissions>,
     pub file_system: Option<FileSystemPermissions>,
+}
+
+impl ToJson for RequestPermissionProfile {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        if let Some(network) = &self.network {
+            object.push_field("network", network.to_json());
+        }
+        if let Some(file_system) = &self.file_system {
+            object.push_field("file_system", file_system.to_json());
+        }
+        Value::Object(object)
+    }
+}
+
+impl FromJson for RequestPermissionProfile {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("RequestPermissionProfile")?;
+        Ok(Self {
+            network: object.take_optional("network")?,
+            file_system: object.take_optional("file_system")?,
+        })
+    }
 }
 
 impl RequestPermissionProfile {

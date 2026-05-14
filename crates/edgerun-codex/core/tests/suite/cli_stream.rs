@@ -393,7 +393,7 @@ async fn integration_creates_and_checks_session_file() -> anyhow::Result<()> {
         .next()
         .ok_or("missing session meta line")
         .unwrap_or_else(|_| panic!("missing session meta line"));
-    let meta: edgerun_json::Value = edgerun_json::from_serde_str(meta_line)
+    let meta: edgerun_json::Value = edgerun_json::from_str(meta_line)
         .unwrap_or_else(|_| panic!("Failed to parse session meta line as JSON"));
     assert_eq!(
         meta.get("type").and_then(|v| v.as_str()),
@@ -413,7 +413,7 @@ async fn integration_creates_and_checks_session_file() -> anyhow::Result<()> {
         if line.trim().is_empty() {
             continue;
         }
-        let Ok(item) = edgerun_json::from_serde_str::<edgerun_json::Value>(line)
+        let Ok(item) = edgerun_json::from_str(line)
         else {
             continue;
         };

@@ -832,8 +832,8 @@ impl Response {
     }
 
     #[cfg(feature = "json")]
-    pub async fn json<T: edgerun_json::serde_bridge::DeserializeOwned>(self) -> Result<T, Error> {
-        edgerun_json::from_serde_slice(&self.body).map_err(|error| Error::decode(error.to_string()))
+    pub async fn json<T: edgerun_json::FromJson>(self) -> Result<T, Error> {
+        self.json_edgerun().await
     }
 
     pub async fn json_edgerun<T: edgerun_json::FromJson>(self) -> Result<T, Error> {

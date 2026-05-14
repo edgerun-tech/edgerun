@@ -105,7 +105,7 @@ async fn models_client_hits_models_endpoint() {
         .respond_with(
             ResponseTemplate::new(200)
                 .insert_header("content-type", "application/json")
-                .set_body_json(&response),
+                .set_body_json(response.clone()),
         )
         .mount(&server)
         .await;

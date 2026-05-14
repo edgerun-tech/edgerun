@@ -9,6 +9,11 @@ use codex_protocol::protocol::SkillInterface as CoreSkillInterface;
 use codex_protocol::protocol::SkillMetadata as CoreSkillMetadata;
 use codex_protocol::protocol::SkillScope as CoreSkillScope;
 use codex_protocol::protocol::SkillToolDependency as CoreSkillToolDependency;
+use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
+use edgerun_json::Map;
+use edgerun_json::ToJson;
+use edgerun_json::Value as JsonValue;
 use edgerun_serde::Deserialize;
 use edgerun_serde::Serialize;
 use schemars::JsonSchema;
@@ -33,12 +38,38 @@ pub struct SkillsListParams {
     pub per_cwd_extra_user_roots: Option<Vec<SkillsListExtraRootsForCwd>>,
 }
 
+impl ToJson for SkillsListParams {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::new();
+        if !self.cwds.is_empty() {
+            object.push_field("cwds", path_bufs_json(&self.cwds));
+        }
+        if self.force_reload {
+            object.push_field("forceReload", true);
+        }
+        object.push_field(
+            "perCwdExtraUserRoots",
+            self.per_cwd_extra_user_roots.to_json(),
+        );
+        JsonValue::Object(object)
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct SkillsListExtraRootsForCwd {
     pub cwd: PathBuf,
     pub extra_user_roots: Vec<PathBuf>,
+}
+
+impl ToJson for SkillsListExtraRootsForCwd {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(2);
+        object.push_field("cwd", path_buf_json(&self.cwd));
+        object.push_field("extraUserRoots", path_bufs_json(&self.extra_user_roots));
+        JsonValue::Object(object)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
@@ -75,6 +106,16 @@ pub struct MarketplaceAddParams {
     pub sparse_paths: Option<Vec<String>>,
 }
 
+impl ToJson for MarketplaceAddParams {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(3);
+        object.push_field("source", self.source.clone());
+        object.push_field("refName", self.ref_name.to_json());
+        object.push_field("sparsePaths", self.sparse_paths.to_json());
+        JsonValue::Object(object)
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
@@ -99,12 +140,45 @@ pub struct MarketplaceRemoveResponse {
     pub installed_root: Option<AbsolutePathBuf>,
 }
 
+impl ToJson for MarketplaceRemoveResponse {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(2);
+        object.push_field("marketplaceName", self.marketplace_name.clone());
+        object.push_field(
+            "installedRoot",
+            self.installed_root
+                .as_ref()
+                .map(|path| path.as_path().display().to_string())
+                .map(JsonValue::from)
+                .unwrap_or(JsonValue::Null),
+        );
+        JsonValue::Object(object)
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct MarketplaceUpgradeParams {
     #[ts(optional = nullable)]
     pub marketplace_name: Option<String>,
+}
+
+impl ToJson for MarketplaceUpgradeParams {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(1);
+        object.push_field("marketplaceName", self.marketplace_name.to_json());
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for MarketplaceUpgradeParams {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object: Map = Map::try_from(value)?;
+        Ok(Self {
+            marketplace_name: object.take_optional("marketplaceName")?,
+        })
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
@@ -116,12 +190,39 @@ pub struct MarketplaceUpgradeResponse {
     pub errors: Vec<MarketplaceUpgradeErrorInfo>,
 }
 
+impl ToJson for MarketplaceUpgradeResponse {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(3);
+        object.push_field("selectedMarketplaces", self.selected_marketplaces.to_json());
+        object.push_field(
+            "upgradedRoots",
+            JsonValue::Array(
+                self.upgraded_roots
+                    .iter()
+                    .map(|path| JsonValue::from(path.as_path().display().to_string()))
+                    .collect(),
+            ),
+        );
+        object.push_field("errors", self.errors.to_json());
+        JsonValue::Object(object)
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct MarketplaceUpgradeErrorInfo {
     pub marketplace_name: String,
     pub message: String,
+}
+
+impl ToJson for MarketplaceUpgradeErrorInfo {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(2);
+        object.push_field("marketplaceName", self.marketplace_name.clone());
+        object.push_field("message", self.message.clone());
+        JsonValue::Object(object)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
@@ -138,6 +239,31 @@ pub struct PluginListParams {
     pub marketplace_kinds: Option<Vec<PluginListMarketplaceKind>>,
 }
 
+impl ToJson for PluginListParams {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(2);
+        object.push_field(
+            "cwds",
+            self.cwds
+                .as_ref()
+                .map(|paths| JsonValue::Array(paths.iter().map(absolute_path_json).collect()))
+                .unwrap_or(JsonValue::Null),
+        );
+        object.push_field("marketplaceKinds", self.marketplace_kinds.to_json());
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for PluginListParams {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object: Map = Map::try_from(value)?;
+        Ok(Self {
+            cwds: optional_absolute_paths(object.remove("cwds"))?,
+            marketplace_kinds: object.take_optional("marketplaceKinds")?,
+        })
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
 #[ts(export_to = "v2/")]
 pub enum PluginListMarketplaceKind {
@@ -150,6 +276,29 @@ pub enum PluginListMarketplaceKind {
     #[serde(rename = "shared-with-me")]
     #[ts(rename = "shared-with-me")]
     SharedWithMe,
+}
+
+impl ToJson for PluginListMarketplaceKind {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            Self::Local => "local",
+            Self::WorkspaceDirectory => "workspace-directory",
+            Self::SharedWithMe => "shared-with-me",
+        })
+    }
+}
+
+impl FromJson for PluginListMarketplaceKind {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "local" => Ok(Self::Local),
+            "workspace-directory" => Ok(Self::WorkspaceDirectory),
+            "shared-with-me" => Ok(Self::SharedWithMe),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown plugin marketplace kind `{other}`"
+            ))),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
@@ -182,6 +331,36 @@ pub struct PluginReadParams {
     pub plugin_name: String,
 }
 
+impl ToJson for PluginReadParams {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(3);
+        object.push_field(
+            "marketplacePath",
+            self.marketplace_path
+                .as_ref()
+                .map(absolute_path_json)
+                .unwrap_or(JsonValue::Null),
+        );
+        object.push_field(
+            "remoteMarketplaceName",
+            self.remote_marketplace_name.to_json(),
+        );
+        object.push_field("pluginName", self.plugin_name.clone());
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for PluginReadParams {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object: Map = Map::try_from(value)?;
+        Ok(Self {
+            marketplace_path: optional_absolute_path(object.remove("marketplacePath"))?,
+            remote_marketplace_name: object.take_optional("remoteMarketplaceName")?,
+            plugin_name: object.take_required("pluginName")?,
+        })
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
@@ -196,6 +375,19 @@ pub struct PluginSkillReadParams {
     pub remote_marketplace_name: String,
     pub remote_plugin_id: String,
     pub skill_name: String,
+}
+
+impl ToJson for PluginSkillReadParams {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(3);
+        object.push_field(
+            "remoteMarketplaceName",
+            self.remote_marketplace_name.clone(),
+        );
+        object.push_field("remotePluginId", self.remote_plugin_id.clone());
+        object.push_field("skillName", self.skill_name.clone());
+        JsonValue::Object(object)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
@@ -218,12 +410,32 @@ pub struct PluginShareSaveParams {
     pub share_targets: Option<Vec<PluginShareTarget>>,
 }
 
+impl ToJson for PluginShareSaveParams {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(4);
+        object.push_field("pluginPath", absolute_path_json(&self.plugin_path));
+        object.push_field("remotePluginId", self.remote_plugin_id.to_json());
+        object.push_field("discoverability", self.discoverability.to_json());
+        object.push_field("shareTargets", self.share_targets.to_json());
+        JsonValue::Object(object)
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct PluginShareSaveResponse {
     pub remote_plugin_id: String,
     pub share_url: String,
+}
+
+impl ToJson for PluginShareSaveResponse {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(2);
+        object.push_field("remotePluginId", self.remote_plugin_id.clone());
+        object.push_field("shareUrl", self.share_url.clone());
+        JsonValue::Object(object)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
@@ -234,6 +446,15 @@ pub struct PluginShareUpdateTargetsParams {
     pub share_targets: Vec<PluginShareTarget>,
 }
 
+impl ToJson for PluginShareUpdateTargetsParams {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(2);
+        object.push_field("remotePluginId", self.remote_plugin_id.clone());
+        object.push_field("shareTargets", self.share_targets.to_json());
+        JsonValue::Object(object)
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
@@ -241,10 +462,25 @@ pub struct PluginShareUpdateTargetsResponse {
     pub principals: Vec<PluginSharePrincipal>,
 }
 
+impl ToJson for PluginShareUpdateTargetsResponse {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(1);
+        object.push_field("principals", self.principals.to_json());
+        JsonValue::Object(object)
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct PluginShareListParams {}
+
+impl FromJson for PluginShareListParams {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let _object: Map = Map::try_from(value)?;
+        Ok(Self {})
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
@@ -253,11 +489,27 @@ pub struct PluginShareListResponse {
     pub data: Vec<PluginShareListItem>,
 }
 
+impl ToJson for PluginShareListResponse {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(1);
+        object.push_field("data", self.data.to_json());
+        JsonValue::Object(object)
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct PluginShareDeleteParams {
     pub remote_plugin_id: String,
+}
+
+impl ToJson for PluginShareDeleteParams {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(1);
+        object.push_field("remotePluginId", self.remote_plugin_id.clone());
+        JsonValue::Object(object)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
@@ -274,6 +526,22 @@ pub struct PluginShareListItem {
     pub local_plugin_path: Option<AbsolutePathBuf>,
 }
 
+impl ToJson for PluginShareListItem {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(3);
+        object.push_field("plugin", self.plugin.to_json());
+        object.push_field("shareUrl", self.share_url.clone());
+        object.push_field(
+            "localPluginPath",
+            self.local_plugin_path
+                .as_ref()
+                .map(absolute_path_json)
+                .unwrap_or(JsonValue::Null),
+        );
+        JsonValue::Object(object)
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
 #[ts(export_to = "v2/")]
 pub enum PluginShareDiscoverability {
@@ -286,6 +554,16 @@ pub enum PluginShareDiscoverability {
     #[serde(rename = "PRIVATE")]
     #[ts(rename = "PRIVATE")]
     Private,
+}
+
+impl ToJson for PluginShareDiscoverability {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            Self::Listed => "LISTED",
+            Self::Unlisted => "UNLISTED",
+            Self::Private => "PRIVATE",
+        })
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
@@ -302,12 +580,31 @@ pub enum PluginSharePrincipalType {
     Workspace,
 }
 
+impl ToJson for PluginSharePrincipalType {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            Self::User => "user",
+            Self::Group => "group",
+            Self::Workspace => "workspace",
+        })
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct PluginShareTarget {
     pub principal_type: PluginSharePrincipalType,
     pub principal_id: String,
+}
+
+impl ToJson for PluginShareTarget {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(2);
+        object.push_field("principalType", self.principal_type.to_json());
+        object.push_field("principalId", self.principal_id.clone());
+        JsonValue::Object(object)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
@@ -317,6 +614,40 @@ pub struct PluginSharePrincipal {
     pub principal_type: PluginSharePrincipalType,
     pub principal_id: String,
     pub name: String,
+}
+
+impl ToJson for PluginSharePrincipal {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(3);
+        object.push_field("principalType", self.principal_type.to_json());
+        object.push_field("principalId", self.principal_id.clone());
+        object.push_field("name", self.name.clone());
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for PluginSharePrincipal {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object: Map = Map::try_from(value)?;
+        Ok(Self {
+            principal_type: object.take_required("principalType")?,
+            principal_id: object.take_required("principalId")?,
+            name: object.take_required("name")?,
+        })
+    }
+}
+
+impl FromJson for PluginSharePrincipalType {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "user" => Ok(Self::User),
+            "group" => Ok(Self::Group),
+            "workspace" => Ok(Self::Workspace),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown plugin share principal type `{other}`"
+            ))),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
@@ -466,11 +797,36 @@ pub struct PluginMarketplaceEntry {
     pub plugins: Vec<PluginSummary>,
 }
 
+impl ToJson for PluginMarketplaceEntry {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(4);
+        object.push_field("name", self.name.clone());
+        object.push_field(
+            "path",
+            self.path
+                .as_ref()
+                .map(absolute_path_json)
+                .unwrap_or(JsonValue::Null),
+        );
+        object.push_field("interface", self.interface.to_json());
+        object.push_field("plugins", self.plugins.to_json());
+        JsonValue::Object(object)
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct MarketplaceInterface {
     pub display_name: Option<String>,
+}
+
+impl ToJson for MarketplaceInterface {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(1);
+        object.push_field("displayName", self.display_name.to_json());
+        JsonValue::Object(object)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
@@ -487,6 +843,29 @@ pub enum PluginInstallPolicy {
     InstalledByDefault,
 }
 
+impl ToJson for PluginInstallPolicy {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            Self::NotAvailable => "NOT_AVAILABLE",
+            Self::Available => "AVAILABLE",
+            Self::InstalledByDefault => "INSTALLED_BY_DEFAULT",
+        })
+    }
+}
+
+impl FromJson for PluginInstallPolicy {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "NOT_AVAILABLE" => Ok(Self::NotAvailable),
+            "AVAILABLE" => Ok(Self::Available),
+            "INSTALLED_BY_DEFAULT" => Ok(Self::InstalledByDefault),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown plugin install policy `{other}`"
+            ))),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
 #[ts(export_to = "v2/")]
 pub enum PluginAuthPolicy {
@@ -496,6 +875,27 @@ pub enum PluginAuthPolicy {
     #[serde(rename = "ON_USE")]
     #[ts(rename = "ON_USE")]
     OnUse,
+}
+
+impl ToJson for PluginAuthPolicy {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            Self::OnInstall => "ON_INSTALL",
+            Self::OnUse => "ON_USE",
+        })
+    }
+}
+
+impl FromJson for PluginAuthPolicy {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "ON_INSTALL" => Ok(Self::OnInstall),
+            "ON_USE" => Ok(Self::OnUse),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown plugin auth policy `{other}`"
+            ))),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default, JsonSchema, TS)]
@@ -511,6 +911,27 @@ pub enum PluginAvailability {
     #[serde(rename = "DISABLED_BY_ADMIN")]
     #[ts(rename = "DISABLED_BY_ADMIN")]
     DisabledByAdmin,
+}
+
+impl ToJson for PluginAvailability {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            Self::Available => "AVAILABLE",
+            Self::DisabledByAdmin => "DISABLED_BY_ADMIN",
+        })
+    }
+}
+
+impl FromJson for PluginAvailability {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "AVAILABLE" | "ENABLED" => Ok(Self::Available),
+            "DISABLED_BY_ADMIN" => Ok(Self::DisabledByAdmin),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown plugin availability `{other}`"
+            ))),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
@@ -534,6 +955,45 @@ pub struct PluginSummary {
     pub keywords: Vec<String>,
 }
 
+impl ToJson for PluginSummary {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(10);
+        object.push_field("id", self.id.clone());
+        object.push_field("name", self.name.clone());
+        object.push_field("shareContext", self.share_context.to_json());
+        object.push_field("source", self.source.to_json());
+        object.push_field("installed", self.installed);
+        object.push_field("enabled", self.enabled);
+        object.push_field("installPolicy", self.install_policy.to_json());
+        object.push_field("authPolicy", self.auth_policy.to_json());
+        object.push_field("availability", self.availability.to_json());
+        object.push_field("interface", self.interface.to_json());
+        object.push_field("keywords", self.keywords.to_json());
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for PluginSummary {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object: Map = Map::try_from(value)?;
+        Ok(Self {
+            id: object.take_required("id")?,
+            name: object.take_required("name")?,
+            share_context: object.take_optional("shareContext")?,
+            source: object.take_required("source")?,
+            installed: object.take_required("installed")?,
+            enabled: object.take_required("enabled")?,
+            install_policy: object.take_required("installPolicy")?,
+            auth_policy: object.take_required("authPolicy")?,
+            availability: object
+                .take_optional("availability")?
+                .unwrap_or(PluginAvailability::Available),
+            interface: object.take_optional("interface")?,
+            keywords: object.take_optional("keywords")?.unwrap_or_default(),
+        })
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
@@ -543,6 +1003,34 @@ pub struct PluginShareContext {
     pub creator_account_user_id: Option<String>,
     pub creator_name: Option<String>,
     pub share_targets: Option<Vec<PluginSharePrincipal>>,
+}
+
+impl ToJson for PluginShareContext {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(5);
+        object.push_field("remotePluginId", self.remote_plugin_id.clone());
+        object.push_field("shareUrl", self.share_url.to_json());
+        object.push_field(
+            "creatorAccountUserId",
+            self.creator_account_user_id.to_json(),
+        );
+        object.push_field("creatorName", self.creator_name.to_json());
+        object.push_field("shareTargets", self.share_targets.to_json());
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for PluginShareContext {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object: Map = Map::try_from(value)?;
+        Ok(Self {
+            remote_plugin_id: object.take_required("remotePluginId")?,
+            share_url: object.take_optional("shareUrl")?,
+            creator_account_user_id: object.take_optional("creatorAccountUserId")?,
+            creator_name: object.take_optional("creatorName")?,
+            share_targets: object.take_optional("shareTargets")?,
+        })
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
@@ -610,6 +1098,70 @@ pub struct PluginInterface {
     pub screenshot_urls: Vec<String>,
 }
 
+impl ToJson for PluginInterface {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(17);
+        object.push_field("displayName", self.display_name.to_json());
+        object.push_field("shortDescription", self.short_description.to_json());
+        object.push_field("longDescription", self.long_description.to_json());
+        object.push_field("developerName", self.developer_name.to_json());
+        object.push_field("category", self.category.to_json());
+        object.push_field("capabilities", self.capabilities.to_json());
+        object.push_field("websiteUrl", self.website_url.to_json());
+        object.push_field("privacyPolicyUrl", self.privacy_policy_url.to_json());
+        object.push_field("termsOfServiceUrl", self.terms_of_service_url.to_json());
+        object.push_field("defaultPrompt", self.default_prompt.to_json());
+        object.push_field("brandColor", self.brand_color.to_json());
+        object.push_field(
+            "composerIcon",
+            self.composer_icon
+                .as_ref()
+                .map(absolute_path_json)
+                .unwrap_or(JsonValue::Null),
+        );
+        object.push_field("composerIconUrl", self.composer_icon_url.to_json());
+        object.push_field(
+            "logo",
+            self.logo
+                .as_ref()
+                .map(absolute_path_json)
+                .unwrap_or(JsonValue::Null),
+        );
+        object.push_field("logoUrl", self.logo_url.to_json());
+        object.push_field(
+            "screenshots",
+            JsonValue::Array(self.screenshots.iter().map(absolute_path_json).collect()),
+        );
+        object.push_field("screenshotUrls", self.screenshot_urls.to_json());
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for PluginInterface {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object: Map = Map::try_from(value)?;
+        Ok(Self {
+            display_name: object.take_optional("displayName")?,
+            short_description: object.take_optional("shortDescription")?,
+            long_description: object.take_optional("longDescription")?,
+            developer_name: object.take_optional("developerName")?,
+            category: object.take_optional("category")?,
+            capabilities: object.take_optional("capabilities")?.unwrap_or_default(),
+            website_url: object.take_optional("websiteUrl")?,
+            privacy_policy_url: object.take_optional("privacyPolicyUrl")?,
+            terms_of_service_url: object.take_optional("termsOfServiceUrl")?,
+            default_prompt: object.take_optional("defaultPrompt")?,
+            brand_color: object.take_optional("brandColor")?,
+            composer_icon: optional_absolute_path(object.remove("composerIcon"))?,
+            composer_icon_url: object.take_optional("composerIconUrl")?,
+            logo: optional_absolute_path(object.remove("logo"))?,
+            logo_url: object.take_optional("logoUrl")?,
+            screenshots: optional_absolute_paths(object.remove("screenshots"))?.unwrap_or_default(),
+            screenshot_urls: object.take_optional("screenshotUrls")?.unwrap_or_default(),
+        })
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(tag = "type", rename_all = "camelCase")]
 #[ts(tag = "type")]
@@ -629,6 +1181,56 @@ pub enum PluginSource {
     /// The plugin is available in the remote catalog. Download metadata is
     /// kept server-side and is not exposed through the app-server API.
     Remote,
+}
+
+impl ToJson for PluginSource {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::new();
+        match self {
+            Self::Local { path } => {
+                object.push_field("type", "local");
+                object.push_field("path", absolute_path_json(path));
+            }
+            Self::Git {
+                url,
+                path,
+                ref_name,
+                sha,
+            } => {
+                object.push_field("type", "git");
+                object.push_field("url", url.clone());
+                object.push_field("path", path.to_json());
+                object.push_field("refName", ref_name.to_json());
+                object.push_field("sha", sha.to_json());
+            }
+            Self::Remote => {
+                object.push_field("type", "remote");
+            }
+        }
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for PluginSource {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object: Map = Map::try_from(value)?;
+        let ty: String = object.take_required("type")?;
+        match ty.as_str() {
+            "local" => Ok(Self::Local {
+                path: required_absolute_path(object.remove("path"), "path")?,
+            }),
+            "git" => Ok(Self::Git {
+                url: object.take_required("url")?,
+                path: object.take_optional("path")?,
+                ref_name: object.take_optional("refName")?,
+                sha: object.take_optional("sha")?,
+            }),
+            "remote" => Ok(Self::Remote),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown plugin source type `{other}`"
+            ))),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
@@ -662,6 +1264,36 @@ pub struct PluginInstallParams {
     pub plugin_name: String,
 }
 
+impl ToJson for PluginInstallParams {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(3);
+        object.push_field(
+            "marketplacePath",
+            self.marketplace_path
+                .as_ref()
+                .map(absolute_path_json)
+                .unwrap_or(JsonValue::Null),
+        );
+        object.push_field(
+            "remoteMarketplaceName",
+            self.remote_marketplace_name.to_json(),
+        );
+        object.push_field("pluginName", self.plugin_name.clone());
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for PluginInstallParams {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object: Map = Map::try_from(value)?;
+        Ok(Self {
+            marketplace_path: optional_absolute_path(object.remove("marketplacePath"))?,
+            remote_marketplace_name: object.take_optional("remoteMarketplaceName")?,
+            plugin_name: object.take_required("pluginName")?,
+        })
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
@@ -675,6 +1307,78 @@ pub struct PluginInstallResponse {
 #[ts(export_to = "v2/")]
 pub struct PluginUninstallParams {
     pub plugin_id: String,
+}
+
+impl ToJson for PluginUninstallParams {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(1);
+        object.push_field("pluginId", self.plugin_id.clone());
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for PluginUninstallParams {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object: Map = Map::try_from(value)?;
+        Ok(Self {
+            plugin_id: object.take_required("pluginId")?,
+        })
+    }
+}
+
+fn absolute_path_json(path: &AbsolutePathBuf) -> JsonValue {
+    JsonValue::from(path.as_path().display().to_string())
+}
+
+fn path_buf_json(path: &PathBuf) -> JsonValue {
+    JsonValue::from(path.display().to_string())
+}
+
+fn path_bufs_json(paths: &[PathBuf]) -> JsonValue {
+    JsonValue::Array(paths.iter().map(path_buf_json).collect())
+}
+
+fn optional_absolute_path(
+    value: Option<JsonValue>,
+) -> Result<Option<AbsolutePathBuf>, JsonValueError> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    if value.is_null() {
+        return Ok(None);
+    }
+    let path = String::from_json(value)?;
+    AbsolutePathBuf::try_from(PathBuf::from(&path))
+        .map(Some)
+        .map_err(|_| JsonValueError::WrongType(format!("expected absolute path, found `{path}`")))
+}
+
+fn required_absolute_path(
+    value: Option<JsonValue>,
+    field: &str,
+) -> Result<AbsolutePathBuf, JsonValueError> {
+    optional_absolute_path(value)?
+        .ok_or_else(|| JsonValueError::WrongType(format!("missing required field `{field}`")))
+}
+
+fn optional_absolute_paths(
+    value: Option<JsonValue>,
+) -> Result<Option<Vec<AbsolutePathBuf>>, JsonValueError> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    if value.is_null() {
+        return Ok(None);
+    }
+    Vec::<String>::from_json(value)?
+        .into_iter()
+        .map(|path| {
+            AbsolutePathBuf::try_from(PathBuf::from(&path)).map_err(|_| {
+                JsonValueError::WrongType(format!("expected absolute path, found `{path}`"))
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map(Some)
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]

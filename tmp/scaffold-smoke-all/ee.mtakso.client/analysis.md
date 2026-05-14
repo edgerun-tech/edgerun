@@ -45,6 +45,17 @@
 - `sms_telephony`: 53 call sites; SMS, MMS, phone, carrier, or telephony behavior
 - `work_background`: 13245 call sites; jobs, alarms, wake locks, services, or background work
 
+## Generated Capability Intent Plan
+
+- `ee.mtakso.client.newbase.RideHailingMapActivity` -> `onCreate` records:
+  - `background_tasks.schedule_or_handle_background_work` from `work_background` evidence
+  - `app_events.send_or_receive_app_event` from `package_intents` evidence
+- `ee.mtakso.client.newbase.RideHailingMapActivity` -> `onNewIntent` records:
+  - `app_events.send_or_receive_app_event` from `package_intents` evidence
+- `ee.mtakso.client.newbase.voip.VoipTrampolineActivity` -> `onCreate` records:
+  - `app_events.send_or_receive_app_event` from `package_intents` evidence
+  - `background_tasks.schedule_or_handle_background_work` from `work_background` evidence
+
 ## UI And Resource Hints
 
 - Resource buckets: `drawable`(1483) `layout`(1046)

@@ -22,6 +22,7 @@ fn oncreate(state: &mut AppState, capabilities: &Capabilities) {
     // Static call sites: platform=7, internal=10
     // Signal: activity_ui (7 call sites)
     // Signal: package_intents (1 call sites)
+    state.capability_intents.push(capabilities.app_events.request("send_or_receive_app_event", SOURCE_CLASS));
     // TODO: replace Android Intent behavior with typed Edgerun events
     // TODO: translate this lifecycle/body method into explicit Edgerun control flow
 }
@@ -49,6 +50,7 @@ fn s(state: &mut AppState, capabilities: &Capabilities) {
     // Source method: com.lineman.mart.feature.telemed.feature.videocall.TelemedVideoCallActivity->s
     // Static call sites: platform=1, internal=5
     // Signal: package_intents (1 call sites)
+    state.capability_intents.push(capabilities.app_events.request("send_or_receive_app_event", SOURCE_CLASS));
     // TODO: replace Android Intent behavior with typed Edgerun events
     // TODO: translate this lifecycle/body method into explicit Edgerun control flow
 }

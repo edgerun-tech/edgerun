@@ -43,6 +43,11 @@
 - `sms_telephony`: 106 call sites; SMS, MMS, phone, carrier, or telephony behavior
 - `work_background`: 20364 call sites; jobs, alarms, wake locks, services, or background work
 
+## Generated Capability Intent Plan
+
+- `com.twitter.android.AuthorizeAppActivity` -> `onActivityResult` records:
+  - `app_events.send_or_receive_app_event` from `package_intents` evidence
+
 ## UI And Resource Hints
 
 - Resource buckets: `drawable`(2362) `layout`(1734)

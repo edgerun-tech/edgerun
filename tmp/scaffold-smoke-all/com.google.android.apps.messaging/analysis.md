@@ -48,6 +48,13 @@
 - `sms_telephony`: 337 call sites; SMS, MMS, phone, carrier, or telephony behavior
 - `work_background`: 26860 call sites; jobs, alarms, wake locks, services, or background work
 
+## Generated Capability Intent Plan
+
+- `com.google.android.apps.messaging.main.MainActivity` -> `onResume` records:
+  - `app_events.send_or_receive_app_event` from `package_intents` evidence
+- `com.google.android.apps.messaging.main.MainActivity` -> `onNewIntent` records:
+  - `app_events.send_or_receive_app_event` from `package_intents` evidence
+
 ## UI And Resource Hints
 
 - Resource buckets: `color`(287) `color-v31`(58)

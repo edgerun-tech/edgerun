@@ -49,6 +49,11 @@
 - `sms_telephony`: 39 call sites; SMS, MMS, phone, carrier, or telephony behavior
 - `work_background`: 12487 call sites; jobs, alarms, wake locks, services, or background work
 
+## Generated Capability Intent Plan
+
+- `io.homeassistant.companion.android.matter.MatterCommissioningActivity` -> `onResume` records:
+  - `app_events.send_or_receive_app_event` from `package_intents` evidence
+
 ## UI And Resource Hints
 
 - Resource buckets: `layout`(607) `drawable`(327)

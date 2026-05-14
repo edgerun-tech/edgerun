@@ -3,18 +3,23 @@ use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int, c_void};
 use std::path::Path;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
+use std::time::Instant;
 
 use edgerun_ui_core::gpu::gl::GlRenderer;
 use edgerun_ui_core::gpu::{
-    Color4, FontAtlas, GpuScene, UiAction, UiEvent, UiIcon, UiKey, UiKeyModifiers, UiPainter,
-    UiRect, UiRuntimeState, UiShadcnActivity, UiShadcnButtonVariant, UiShadcnChatClientAction,
-    UiShadcnChatClientIconAction, UiShadcnChatClientSpec, UiShadcnChatRole,
-    UiShadcnConversationMessage, UiShadcnSessionRow, UiShadcnStatusTone, UiTextBuffer,
-    UiTextBufferAction, shadcn_chat_client, shadcn_chat_message_height,
+    Color4, FontAtlas, GpuScene, UiAction, UiEvent, UiIcon, UiKey, UiKeyModifiers, UiNode,
+    UiPainter, UiRect, UiRuntimeState, UiShadcnActivity, UiShadcnBadgeVariant,
+    UiShadcnButtonVariant, UiShadcnChatClientAction, UiShadcnChatClientIconAction,
+    UiShadcnChatClientSpec, UiShadcnChatRole, UiShadcnComposerNotice, UiShadcnConversationMessage,
+    UiShadcnSessionRow, UiShadcnSessionState, UiShadcnStatusTone, UiTextBuffer, UiTextBufferAction,
+    column, icon_button, row, shadcn_alert, shadcn_badge, shadcn_card, shadcn_chat_client,
+    shadcn_chat_message_height_for_role, shadcn_label, shadcn_progress, shadcn_separator,
+    shadcn_switch, shadcn_toggle_group, spacer,
 };
 
 use super::{AgentEvent, codex_home, provider, read_chatgpt_auth, run_agent_loop, user_item};
@@ -48,6 +53,13 @@ const SEND_ID: u32 = 81_000;
 const NEW_CHAT_ID: u32 = 81_001;
 const CLEAR_ID: u32 = 81_002;
 const TRANSCRIPT_SCROLL_ID: u32 = 81_003;
+const STOP_ID: u32 = 81_004;
+const SETTINGS_ID: u32 = 81_005;
+const INSPECTOR_ID: u32 = 81_006;
+const PANEL_TAB_BASE_ID: u32 = 81_020;
+const LOG_LEVEL_BASE_ID: u32 = 81_030;
+const CONFIRM_CLEAR_ID: u32 = 81_040;
+const DENSITY_BASE_ID: u32 = 81_050;
 const SESSION_ROW_BASE_ID: u32 = 88_000;
 const MAX_PROMPT_HISTORY: usize = 100;
 const MAX_DIFF_DISPLAY_BYTES: usize = 12 * 1024;
@@ -161,6 +173,103 @@ struct Message {
     text: String,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum InspectorPanel {
+    Usage,
+    Settings,
+    Logs,
+}
+
+impl InspectorPanel {
+    const LABELS: [&'static str; 3] = ["Usage", "Settings", "Logs"];
+
+    fn from_index(index: usize) -> Self {
+        match index {
+            1 => Self::Settings,
+            2 => Self::Logs,
+            _ => Self::Usage,
+        }
+    }
+
+    fn index(self) -> usize {
+        match self {
+            Self::Usage => 0,
+            Self::Settings => 1,
+            Self::Logs => 2,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        Self::LABELS[self.index()]
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum LogLevel {
+    Quiet,
+    Normal,
+    Debug,
+}
+
+impl LogLevel {
+    const LABELS: [&'static str; 3] = ["Quiet", "Normal", "Debug"];
+
+    fn from_index(index: usize) -> Self {
+        match index {
+            0 => Self::Quiet,
+            2 => Self::Debug,
+            _ => Self::Normal,
+        }
+    }
+
+    fn index(self) -> usize {
+        match self {
+            Self::Quiet => 0,
+            Self::Normal => 1,
+            Self::Debug => 2,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        Self::LABELS[self.index()]
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DensityMode {
+    Comfortable,
+    Compact,
+}
+
+impl DensityMode {
+    const LABELS: [&'static str; 2] = ["Comfort", "Compact"];
+
+    fn from_index(index: usize) -> Self {
+        if index == 1 {
+            Self::Compact
+        } else {
+            Self::Comfortable
+        }
+    }
+
+    fn index(self) -> usize {
+        match self {
+            Self::Comfortable => 0,
+            Self::Compact => 1,
+        }
+    }
+
+    fn label(self) -> &'static str {
+        Self::LABELS[self.index()]
+    }
+}
+
+#[derive(Clone, Debug)]
+struct RuntimeLog {
+    level: LogLevel,
+    text: String,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 struct UiSessionId(u64);
 
@@ -265,6 +374,18 @@ impl SessionStore {
         self.sessions.iter().any(|session| session.busy)
     }
 
+    fn active_count(&self) -> usize {
+        self.sessions.iter().filter(|session| session.busy).count()
+    }
+
+    fn aggregate_usage(&self) -> TokenUsage {
+        let mut total = TokenUsage::default();
+        for session in &self.sessions {
+            total.add_assign(&session.usage.total);
+        }
+        total
+    }
+
     fn create_session(&mut self) -> UiSessionId {
         let id = UiSessionId(self.next_id);
         self.next_id += 1;
@@ -282,6 +403,23 @@ impl SessionStore {
         self.selected = session.id;
         true
     }
+
+    fn selected_index(&self) -> usize {
+        self.sessions
+            .iter()
+            .position(|session| session.id == self.selected)
+            .unwrap_or(0)
+    }
+
+    fn select_relative(&mut self, delta: isize) -> bool {
+        if self.sessions.len() <= 1 {
+            return false;
+        }
+        let len = self.sessions.len() as isize;
+        let current = self.selected_index() as isize;
+        let next = (current + delta).rem_euclid(len) as usize;
+        self.select_by_sidebar_index(next)
+    }
 }
 
 #[derive(Debug)]
@@ -294,6 +432,12 @@ struct CodexUi {
     runtime: UiRuntimeState,
     sessions: SessionStore,
     clear_confirm_session: Option<UiSessionId>,
+    inspector_open: bool,
+    inspector_panel: InspectorPanel,
+    log_level: LogLevel,
+    confirm_clear_enabled: bool,
+    density: DensityMode,
+    logs: Vec<RuntimeLog>,
     prompt_history: Vec<String>,
     prompt_history_index: Option<usize>,
     prompt_history_path: Option<PathBuf>,
@@ -308,6 +452,9 @@ enum WorkerCommand {
         prompt: String,
     },
     Reset {
+        session_id: UiSessionId,
+    },
+    Cancel {
         session_id: UiSessionId,
     },
 }
@@ -337,6 +484,7 @@ enum SessionWorkerEvent {
         success: bool,
     },
     Error(String),
+    Cancelled,
     Done,
     Usage(TokenUsage),
     RateLimits(RateLimitSnapshot),
@@ -351,11 +499,13 @@ struct UsageState {
 #[derive(Clone, Debug, Default)]
 struct RateLimitState {
     latest: Option<RateLimitSnapshot>,
+    updated_at: Option<Instant>,
 }
 
 impl RateLimitState {
     fn record(&mut self, snapshot: RateLimitSnapshot) {
         self.latest = Some(snapshot);
+        self.updated_at = Some(Instant::now());
     }
 
     fn label(&self) -> String {
@@ -378,6 +528,61 @@ impl RateLimitState {
         } else {
             name.to_string()
         }
+    }
+
+    fn detail_lines(&self) -> Vec<String> {
+        let Some(snapshot) = &self.latest else {
+            return vec!["Rate limits have not been reported yet.".to_string()];
+        };
+        let mut lines = Vec::new();
+        if let Some(name) = snapshot.limit_name.as_deref() {
+            lines.push(format!("Window: {name}"));
+        }
+        if let Some(primary) = snapshot.primary.as_ref() {
+            lines.push(format!(
+                "Primary: {:.0}% used{}",
+                primary.used_percent.clamp(0.0, 100.0),
+                primary
+                    .window_minutes
+                    .map(|minutes| format!(" / {minutes}m"))
+                    .unwrap_or_default()
+            ));
+        }
+        if let Some(secondary) = snapshot.secondary.as_ref() {
+            lines.push(format!(
+                "Secondary: {:.0}% used",
+                secondary.used_percent.clamp(0.0, 100.0)
+            ));
+        }
+        if let Some(credits) = snapshot.credits.as_ref() {
+            let credit_line = if credits.unlimited {
+                "Credits: unlimited".to_string()
+            } else if let Some(balance) = credits.balance.as_deref() {
+                format!("Credits: {balance}")
+            } else if credits.has_credits {
+                "Credits: available".to_string()
+            } else {
+                "Credits: empty".to_string()
+            };
+            lines.push(credit_line);
+        }
+        if let Some(updated_at) = self.updated_at {
+            lines.push(format!(
+                "Refreshed: {}",
+                elapsed_label(updated_at.elapsed())
+            ));
+        }
+        if lines.is_empty() {
+            lines.push("Rate limit response had no visible windows.".to_string());
+        }
+        lines
+    }
+
+    fn primary_percent(&self) -> Option<f32> {
+        self.latest
+            .as_ref()
+            .and_then(|snapshot| snapshot.primary.as_ref())
+            .map(|primary| primary.used_percent.clamp(0.0, 100.0) as f32 / 100.0)
     }
 }
 
@@ -406,6 +611,28 @@ impl UsageState {
                 )
             })
             .unwrap_or_else(|| "awaiting usage".to_string())
+    }
+
+    fn detail_lines(&self) -> Vec<String> {
+        let mut lines = vec![format!(
+            "Session total: {}",
+            compact_i64(self.total.blended_total())
+        )];
+        lines.push(format!(
+            "Input: {} / output: {}",
+            compact_i64(self.total.input_tokens),
+            compact_i64(self.total.output_tokens)
+        ));
+        lines.push(format!(
+            "Reasoning: {}",
+            compact_i64(self.total.reasoning_output_tokens)
+        ));
+        if let Some(last) = self.last.as_ref() {
+            lines.push(format!("Last turn: {}", compact_i64(last.blended_total())));
+        } else {
+            lines.push("Last turn: pending".to_string());
+        }
+        lines
     }
 }
 
@@ -437,6 +664,12 @@ pub fn run(options: UiOptions) -> Result<(), String> {
         runtime,
         sessions: SessionStore::initial(),
         clear_confirm_session: None,
+        inspector_open: false,
+        inspector_panel: InspectorPanel::Usage,
+        log_level: LogLevel::Normal,
+        confirm_clear_enabled: true,
+        density: DensityMode::Comfortable,
+        logs: Vec::new(),
         prompt_history,
         prompt_history_index: None,
         prompt_history_path,
@@ -476,11 +709,18 @@ fn start_worker(
         };
         let histories: Arc<Mutex<HashMap<UiSessionId, Vec<codex_core::ResponseItem>>>> =
             Arc::new(Mutex::new(HashMap::new()));
+        let cancellations: Arc<Mutex<HashMap<UiSessionId, Arc<AtomicBool>>>> =
+            Arc::new(Mutex::new(HashMap::new()));
         let _ = event_tx.send(WorkerEvent::Ready);
 
         while let Ok(command) = command_rx.recv() {
             match command {
                 WorkerCommand::Reset { session_id } => {
+                    if let Ok(mut cancellations) = cancellations.lock()
+                        && let Some(cancel) = cancellations.remove(&session_id)
+                    {
+                        cancel.store(true, Ordering::Relaxed);
+                    }
                     if let Ok(mut histories) = histories.lock() {
                         histories.remove(&session_id);
                     }
@@ -489,6 +729,18 @@ fn start_worker(
                         session_id,
                         SessionWorkerEvent::Status("New chat".to_string()),
                     );
+                }
+                WorkerCommand::Cancel { session_id } => {
+                    if let Ok(cancellations) = cancellations.lock()
+                        && let Some(cancel) = cancellations.get(&session_id)
+                    {
+                        cancel.store(true, Ordering::Relaxed);
+                        send_session_event(
+                            &event_tx,
+                            session_id,
+                            SessionWorkerEvent::Status("Cancelling".to_string()),
+                        );
+                    }
                 }
                 WorkerCommand::Prompt { session_id, prompt } => {
                     let mut history = histories
@@ -502,8 +754,15 @@ fn start_worker(
                         session_id,
                         SessionWorkerEvent::Status("Thinking".to_string()),
                     );
+                    let cancel = Arc::new(AtomicBool::new(false));
+                    if let Ok(mut cancellations) = cancellations.lock() {
+                        if let Some(previous) = cancellations.insert(session_id, cancel.clone()) {
+                            previous.store(true, Ordering::Relaxed);
+                        }
+                    }
                     let tx = event_tx.clone();
                     let histories = histories.clone();
+                    let cancellations = cancellations.clone();
                     let auth = auth.clone();
                     let model = model.clone();
                     thread::spawn(move || {
@@ -578,7 +837,20 @@ fn start_worker(
                                 SessionWorkerEvent::RateLimits(snapshot),
                             ),
                         };
-                        match runtime.block_on(run_agent_loop(&client, history, Some(&mut emit))) {
+                        let result = runtime.block_on(run_agent_loop(
+                            &client,
+                            history,
+                            Some(&mut emit),
+                            Some(cancel.clone()),
+                        ));
+                        if let Ok(mut cancellations) = cancellations.lock()
+                            && cancellations
+                                .get(&session_id)
+                                .is_some_and(|existing| Arc::ptr_eq(existing, &cancel))
+                        {
+                            cancellations.remove(&session_id);
+                        }
+                        match result {
                             Ok((_, next_history)) => {
                                 if let Ok(mut histories) = histories.lock() {
                                     histories.insert(session_id, next_history);
@@ -586,6 +858,14 @@ fn start_worker(
                                 send_session_event(&tx, session_id, SessionWorkerEvent::Done);
                             }
                             Err(error) => {
+                                if cancel.load(Ordering::Relaxed) {
+                                    send_session_event(
+                                        &tx,
+                                        session_id,
+                                        SessionWorkerEvent::Cancelled,
+                                    );
+                                    return;
+                                }
                                 if let Ok(mut histories) = histories.lock() {
                                     histories.remove(&session_id);
                                 }
@@ -637,7 +917,7 @@ fn run_window(frames: Option<u32>, mut state: CodexUi) -> Result<(), String> {
         return Err(format!("SDL_CreateWindow failed: {}", sdl_error()));
     }
     unsafe {
-        SDL_SetWindowMinimumSize(window.0, 640, 480);
+        SDL_SetWindowMinimumSize(window.0, 420, 360);
     }
 
     let _context = GlContext(unsafe { SDL_GL_CreateContext(window.0) });
@@ -664,7 +944,12 @@ fn run_window(frames: Option<u32>, mut state: CodexUi) -> Result<(), String> {
         while unsafe { SDL_PollEvent(&mut event) } != 0 {
             match event.event_type() {
                 SDL_QUIT => running = false,
-                SDL_KEYDOWN if event.key_sym() == SDLK_ESCAPE => running = false,
+                SDL_KEYDOWN if event.key_sym() == SDLK_ESCAPE => {
+                    if !state.handle_escape() {
+                        running = false;
+                    }
+                    scene_dirty = true;
+                }
                 SDL_KEYDOWN => {
                     let key = sdl_key(event.key_sym());
                     let modifiers = UiKeyModifiers {
@@ -672,7 +957,10 @@ fn run_window(frames: Option<u32>, mut state: CodexUi) -> Result<(), String> {
                         ctrl: event.key_mod() & KMOD_CTRL != 0,
                         ..UiKeyModifiers::default()
                     };
-                    if !state.handle_history_key(key, modifiers) {
+                    if !state.handle_history_key(key, modifiers)
+                        && !state.handle_session_key(key, modifiers)
+                        && !state.handle_command_key(key, modifiers)
+                    {
                         let action = state.input.handle_key_with_modifiers(key, modifiers);
                         state.handle_text_action(action);
                         state.handle_navigation_key(key);
@@ -772,10 +1060,12 @@ impl CodexUi {
                 WorkerEvent::Ready => {
                     self.busy = false;
                     self.status = "Ready".to_string();
+                    self.record_log(LogLevel::Normal, "worker ready");
                 }
                 WorkerEvent::StartupError(error) => {
                     self.busy = false;
                     self.status = error.clone();
+                    self.record_log(LogLevel::Normal, format!("startup error: {error}"));
                     let session = self.sessions.selected_mut();
                     session.status = "Error".to_string();
                     session.failures += 1;
@@ -802,6 +1092,10 @@ impl CodexUi {
                 if selected {
                     self.status = status;
                 }
+                self.record_log(
+                    LogLevel::Debug,
+                    format!("session {} status updated", session_id.0),
+                );
             }
             SessionWorkerEvent::AssistantText(text) => {
                 if let Some(session) = self.sessions.session_mut(session_id) {
@@ -858,9 +1152,10 @@ impl CodexUi {
                     session.status = "Tool running".to_string();
                     session.messages.push(Message {
                         role: Role::ToolRunning,
-                        text: format!("Running {name}"),
+                        text: format!("Started\n{name}"),
                     });
                 }
+                self.record_log(LogLevel::Normal, format!("tool started: {name}"));
                 if selected {
                     self.status = "Tool running".to_string();
                     self.scroll_transcript_to_bottom();
@@ -885,7 +1180,10 @@ impl CodexUi {
                         } else {
                             Role::ToolError
                         },
-                        text: format!("{name}\n{summary}"),
+                        text: format!(
+                            "{}\n{name}\n{summary}",
+                            if success { "Completed" } else { "Failed" }
+                        ),
                     });
                     session.status = if success {
                         "Tool completed".to_string()
@@ -896,11 +1194,19 @@ impl CodexUi {
                         self.status = session.status.clone();
                     }
                 }
+                self.record_log(
+                    LogLevel::Normal,
+                    format!(
+                        "tool {}: {name}",
+                        if success { "completed" } else { "failed" }
+                    ),
+                );
                 if selected {
                     self.scroll_transcript_to_bottom();
                 }
             }
             SessionWorkerEvent::Error(error) => {
+                self.record_log(LogLevel::Normal, format!("session error: {error}"));
                 if let Some(session) = self.sessions.session_mut(session_id) {
                     session.busy = false;
                     session.failures += 1;
@@ -915,6 +1221,27 @@ impl CodexUi {
                 }
                 if selected {
                     self.status = "Error".to_string();
+                    self.scroll_transcript_to_bottom();
+                }
+            }
+            SessionWorkerEvent::Cancelled => {
+                self.record_log(
+                    LogLevel::Normal,
+                    format!("session {} stopped", session_id.0),
+                );
+                if let Some(session) = self.sessions.session_mut(session_id) {
+                    session.busy = false;
+                    session.active_tool = None;
+                    session.assistant_streaming = false;
+                    session.reasoning_streaming = false;
+                    session.status = "Stopped".to_string();
+                    session.messages.push(Message {
+                        role: Role::ToolError,
+                        text: "Turn stopped.".to_string(),
+                    });
+                }
+                if selected {
+                    self.status = "Stopped".to_string();
                     self.scroll_transcript_to_bottom();
                 }
             }
@@ -934,11 +1261,19 @@ impl CodexUi {
                 if let Some(session) = self.sessions.session_mut(session_id) {
                     session.usage.record(usage);
                 }
+                self.record_log(
+                    LogLevel::Debug,
+                    format!("usage updated for session {}", session_id.0),
+                );
             }
             SessionWorkerEvent::RateLimits(snapshot) => {
                 if let Some(session) = self.sessions.session_mut(session_id) {
                     session.rate_limits.record(snapshot);
                 }
+                self.record_log(
+                    LogLevel::Debug,
+                    format!("rate limits updated for session {}", session_id.0),
+                );
             }
         };
     }
@@ -965,6 +1300,63 @@ impl CodexUi {
             }
             _ => false,
         }
+    }
+
+    fn handle_session_key(&mut self, key: UiKey, modifiers: UiKeyModifiers) -> bool {
+        if !modifiers.ctrl {
+            return false;
+        }
+        match key {
+            UiKey::PageUp => self.switch_relative_session(-1),
+            UiKey::PageDown => self.switch_relative_session(1),
+            _ => false,
+        }
+    }
+
+    fn handle_command_key(&mut self, key: UiKey, modifiers: UiKeyModifiers) -> bool {
+        if !modifiers.ctrl {
+            return false;
+        }
+        match key {
+            UiKey::Other(code) if modifiers.shift && code_eq(code, b'n') => {
+                self.new_chat();
+                true
+            }
+            UiKey::Other(code) if code == b',' as u32 => {
+                self.open_inspector_panel(InspectorPanel::Settings);
+                true
+            }
+            UiKey::Other(code) if code == b'.' as u32 => {
+                self.open_inspector_panel(InspectorPanel::Usage);
+                true
+            }
+            UiKey::Other(code) if modifiers.shift && code_eq(code, b'l') => {
+                self.open_inspector_panel(InspectorPanel::Logs);
+                true
+            }
+            UiKey::Other(code) if code_eq(code, b'c') => {
+                self.cancel_selected_session();
+                true
+            }
+            UiKey::Backspace if modifiers.shift => {
+                self.request_clear_transcript();
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn handle_escape(&mut self) -> bool {
+        if self.clear_confirm_session == Some(self.sessions.selected) {
+            self.dismiss_clear_confirmation();
+            return true;
+        }
+        if self.inspector_open {
+            self.inspector_open = false;
+            self.record_log(LogLevel::Debug, "inspector closed");
+            return true;
+        }
+        false
     }
 
     fn previous_prompt(&mut self) {
@@ -1011,6 +1403,55 @@ impl CodexUi {
             UiAction::Activated(hit) if hit.id == SEND_ID => self.submit(),
             UiAction::Submitted { id } if id == 0 => self.submit(),
             UiAction::Activated(hit) if hit.id == NEW_CHAT_ID => self.new_chat(),
+            UiAction::Activated(hit) if hit.id == STOP_ID => self.cancel_selected_session(),
+            UiAction::Activated(hit) if hit.id == SETTINGS_ID => {
+                self.open_inspector_panel(InspectorPanel::Settings);
+            }
+            UiAction::Activated(hit) if hit.id == INSPECTOR_ID => {
+                self.inspector_open = !self.inspector_open;
+                if self.inspector_open {
+                    self.inspector_panel = InspectorPanel::Usage;
+                }
+            }
+            UiAction::Activated(hit)
+                if (PANEL_TAB_BASE_ID..PANEL_TAB_BASE_ID + 3).contains(&hit.id) =>
+            {
+                self.open_inspector_panel(InspectorPanel::from_index(
+                    (hit.id - PANEL_TAB_BASE_ID) as usize,
+                ));
+            }
+            UiAction::Activated(hit)
+                if (LOG_LEVEL_BASE_ID..LOG_LEVEL_BASE_ID + 3).contains(&hit.id) =>
+            {
+                self.log_level = LogLevel::from_index((hit.id - LOG_LEVEL_BASE_ID) as usize);
+                self.record_log(
+                    LogLevel::Normal,
+                    format!("log level set to {}", self.log_level.label()),
+                );
+            }
+            UiAction::Activated(hit) if hit.id == CONFIRM_CLEAR_ID => {
+                self.confirm_clear_enabled = !self.confirm_clear_enabled;
+                self.record_log(
+                    LogLevel::Normal,
+                    format!(
+                        "clear confirmation {}",
+                        if self.confirm_clear_enabled {
+                            "enabled"
+                        } else {
+                            "disabled"
+                        }
+                    ),
+                );
+            }
+            UiAction::Activated(hit)
+                if (DENSITY_BASE_ID..DENSITY_BASE_ID + 2).contains(&hit.id) =>
+            {
+                self.density = DensityMode::from_index((hit.id - DENSITY_BASE_ID) as usize);
+                self.record_log(
+                    LogLevel::Normal,
+                    format!("density set to {}", self.density.label()),
+                );
+            }
             UiAction::Activated(hit) if hit.id == CLEAR_ID => {
                 self.request_clear_transcript();
             }
@@ -1022,6 +1463,15 @@ impl CodexUi {
             }
             _ => {}
         }
+    }
+
+    fn open_inspector_panel(&mut self, panel: InspectorPanel) {
+        self.inspector_open = true;
+        self.inspector_panel = panel;
+        self.record_log(
+            LogLevel::Debug,
+            format!("{} opened", panel.label().to_ascii_lowercase()),
+        );
     }
 
     fn scroll_transcript_to_bottom(&mut self) {
@@ -1051,6 +1501,11 @@ impl CodexUi {
         {
             message.text.push_str(&text);
         } else {
+            let text = match role {
+                Role::Reasoning => format!("Thinking\n{text}"),
+                Role::Assistant => format!("Response\n{text}"),
+                _ => text,
+            };
             session.messages.push(Message { role, text });
             *streaming = true;
         }
@@ -1080,6 +1535,9 @@ impl CodexUi {
             if text.len() > MAX_DIFF_DISPLAY_BYTES {
                 text.truncate(char_boundary_at_or_before(&text, MAX_DIFF_DISPLAY_BYTES));
                 text.push_str("\n[diff preview truncated]");
+            }
+            if !text.starts_with("Patch") && !text.starts_with("Tool input") {
+                text = format!("Patch / tool input\n{text}");
             }
             session.messages.push(Message {
                 role: Role::Diff,
@@ -1121,10 +1579,14 @@ impl CodexUi {
             session.assistant_streaming = false;
             session.reasoning_streaming = false;
         }
-        self.clear_confirm_session = None;
+        self.clear_pending_clear_confirmation();
         self.remember_prompt(prompt.clone());
         self.input.clear();
         self.status = "Queued".to_string();
+        self.record_log(
+            LogLevel::Normal,
+            format!("queued session {} prompt", session_id.0),
+        );
         self.scroll_transcript_to_bottom();
         if self
             .command_tx
@@ -1140,8 +1602,8 @@ impl CodexUi {
     }
 
     fn new_chat(&mut self) {
+        self.clear_pending_clear_confirmation();
         let session_id = self.sessions.create_session();
-        self.clear_confirm_session = None;
         self.scroll_transcript_to_bottom();
         self.status = "New chat".to_string();
         self.prompt_history_index = None;
@@ -1152,7 +1614,7 @@ impl CodexUi {
         if !self.ensure_selected_idle("Wait for this session to finish before clearing it") {
             return;
         }
-        self.clear_confirm_session = None;
+        self.clear_pending_clear_confirmation();
         self.reset_visible_session("Transcript cleared.");
         self.status = "Transcript cleared".to_string();
         let _ = self.command_tx.send(WorkerCommand::Reset {
@@ -1162,6 +1624,10 @@ impl CodexUi {
 
     fn request_clear_transcript(&mut self) {
         let session_id = self.sessions.selected;
+        if !self.confirm_clear_enabled {
+            self.clear_transcript();
+            return;
+        }
         if self.clear_confirm_session == Some(session_id) {
             self.clear_transcript();
             return;
@@ -1174,6 +1640,36 @@ impl CodexUi {
         if let Some(session) = self.sessions.session_mut(session_id) {
             session.status = "Confirm clear".to_string();
         }
+    }
+
+    fn dismiss_clear_confirmation(&mut self) {
+        self.clear_pending_clear_confirmation();
+        self.status = "Clear cancelled".to_string();
+    }
+
+    fn clear_pending_clear_confirmation(&mut self) {
+        let Some(session_id) = self.clear_confirm_session.take() else {
+            return;
+        };
+        if let Some(session) = self.sessions.session_mut(session_id)
+            && session.status == "Confirm clear"
+        {
+            session.status = "Ready".to_string();
+        }
+    }
+
+    fn cancel_selected_session(&mut self) {
+        let session_id = self.sessions.selected;
+        if !self.sessions.selected().busy {
+            self.status = "Nothing running in this session".to_string();
+            return;
+        }
+        self.clear_pending_clear_confirmation();
+        self.status = "Cancelling".to_string();
+        if let Some(session) = self.sessions.session_mut(session_id) {
+            session.status = "Cancelling".to_string();
+        }
+        let _ = self.command_tx.send(WorkerCommand::Cancel { session_id });
     }
 
     fn ensure_selected_idle(&mut self, message: &str) -> bool {
@@ -1191,12 +1687,21 @@ impl CodexUi {
     }
 
     fn switch_session(&mut self, index: usize) {
+        self.clear_pending_clear_confirmation();
         if self.sessions.select_by_sidebar_index(index) {
             self.status = self.sessions.selected().status.clone();
-            if self.clear_confirm_session != Some(self.sessions.selected) {
-                self.clear_confirm_session = None;
-            }
             self.scroll_transcript_to_bottom();
+        }
+    }
+
+    fn switch_relative_session(&mut self, delta: isize) -> bool {
+        self.clear_pending_clear_confirmation();
+        if self.sessions.select_relative(delta) {
+            self.status = self.sessions.selected().status.clone();
+            self.scroll_transcript_to_bottom();
+            true
+        } else {
+            false
         }
     }
 
@@ -1215,39 +1720,71 @@ impl CodexUi {
         }
         self.prompt_history_index = None;
     }
+
+    fn record_log(&mut self, level: LogLevel, text: impl Into<String>) {
+        if level > self.log_level {
+            return;
+        }
+        self.logs.push(RuntimeLog {
+            level,
+            text: text.into(),
+        });
+        if self.logs.len() > 200 {
+            let remove = self.logs.len() - 200;
+            self.logs.drain(..remove);
+        }
+    }
 }
 
 fn build_scene(scene: &mut GpuScene, atlas: &FontAtlas, state: &CodexUi, width: f32, height: f32) {
     scene.clear = BG;
     scene.clear_rects();
 
-    let w = width.max(640.0);
-    let h = height.max(480.0);
+    let w = width.max(1.0);
+    let h = height.max(1.0);
     let selected = state.sessions.selected();
     let usage = selected.usage.total_label();
     let model = format!("model {}", state.model);
     let workspace = workspace_label();
-    let availability = if selected.busy {
-        "working"
-    } else if state.sessions.any_busy() {
-        "background"
-    } else {
-        "ready"
-    };
     let tone = header_tone(state);
     let (activity_title, activity_detail, activity_icon) = sidebar_activity(state);
-    let main_width = if w >= 980.0 { w - 260.0 } else { w };
+    let header_status = if state.busy {
+        state.status.as_str()
+    } else if selected.busy {
+        selected.status.as_str()
+    } else if state.sessions.any_busy() {
+        "Background session running"
+    } else {
+        selected.status.as_str()
+    };
+    let inspector_width = if state.inspector_open && w >= 900.0 {
+        320.0
+    } else {
+        0.0
+    };
+    let main_width = if w >= 980.0 {
+        w - 260.0 - inspector_width
+    } else {
+        w - inspector_width
+    };
     let messages = conversation_messages(atlas, state, main_width - 48.0);
     let composer_text = state.input.display_value(
         "Ask Codex to inspect, edit, run commands, or patch files...",
         '|',
     );
 
-    let actions = [UiShadcnChatClientAction::icon(
-        UiIcon::MessagePlus,
-        NEW_CHAT_ID,
-        UiShadcnButtonVariant::Default,
-    )];
+    let actions = [
+        UiShadcnChatClientAction::icon(
+            UiIcon::MessagePlus,
+            NEW_CHAT_ID,
+            UiShadcnButtonVariant::Default,
+        ),
+        UiShadcnChatClientAction::icon(
+            UiIcon::Settings,
+            SETTINGS_ID,
+            UiShadcnButtonVariant::Secondary,
+        ),
+    ];
     let session_details = state
         .sessions
         .sessions
@@ -1265,6 +1802,7 @@ fn build_scene(scene: &mut GpuScene, atlas: &FontAtlas, state: &CodexUi, width: 
                 detail.as_str(),
                 session.id == state.sessions.selected,
             )
+            .with_state(session_sidebar_state(session))
         })
         .collect::<Vec<_>>();
     let limits = selected.rate_limits.label();
@@ -1274,60 +1812,236 @@ fn build_scene(scene: &mut GpuScene, atlas: &FontAtlas, state: &CodexUi, width: 
         limits.as_str(),
         "shell, process, patch",
     ];
-    let header_badges = [state.model.as_str(), availability];
+    let log_badge = format!("log {}", state.log_level.label().to_ascii_lowercase());
+    let header_badges = if w < 520.0 {
+        vec![usage.as_str()]
+    } else if w < 700.0 {
+        vec![state.model.as_str(), usage.as_str()]
+    } else {
+        vec![state.model.as_str(), usage.as_str(), log_badge.as_str()]
+    };
+    let header_actions = [
+        UiShadcnChatClientIconAction::new(
+            UiIcon::Activity,
+            INSPECTOR_ID,
+            state.inspector_open && state.inspector_panel == InspectorPanel::Usage,
+        ),
+        UiShadcnChatClientIconAction::new(
+            UiIcon::Settings,
+            SETTINGS_ID,
+            state.inspector_open && state.inspector_panel == InspectorPanel::Settings,
+        ),
+    ];
     let hints: [&str; 0] = [];
-    let clear_action = Some(UiShadcnChatClientIconAction::new(
-        UiIcon::Trash,
-        CLEAR_ID,
-        state.clear_confirm_session == Some(state.sessions.selected),
-    ));
+    let composer_action = Some(if selected.busy {
+        UiShadcnChatClientIconAction::new(UiIcon::X, STOP_ID, true)
+    } else {
+        UiShadcnChatClientIconAction::new(
+            UiIcon::Trash,
+            CLEAR_ID,
+            state.clear_confirm_session == Some(state.sessions.selected),
+        )
+    });
+    let composer_notice = (state.clear_confirm_session == Some(state.sessions.selected)).then_some(
+        UiShadcnComposerNotice::new(
+            "Clear transcript?",
+            "Activate clear again to reset this session transcript.",
+            UiIcon::Warning,
+        ),
+    );
+
+    let client = shadcn_chat_client(UiShadcnChatClientSpec {
+        show_sidebar: w >= 980.0,
+        sidebar_title: "edgerun codex",
+        sidebar_detail: workspace.as_str(),
+        sidebar_actions: &actions,
+        session_rows: &session_rows,
+        activity: UiShadcnActivity::new(activity_title, activity_detail, activity_icon),
+        footer_lines: &footer_lines,
+        header_title: "Codex",
+        header_status,
+        header_badges: &header_badges,
+        header_action: (w < 980.0).then_some(UiShadcnChatClientIconAction::new(
+            UiIcon::MessagePlus,
+            NEW_CHAT_ID,
+            false,
+        )),
+        header_actions: &header_actions,
+        header_tone: tone,
+        activity_phase: (state.animation_tick / 8) as u8,
+        messages: &messages,
+        scroll_offset: state.runtime.scroll_offset(TRANSCRIPT_SCROLL_ID),
+        scroll_id: TRANSCRIPT_SCROLL_ID,
+        input_label: "",
+        input_value: &composer_text,
+        input_id: 0,
+        composer_action,
+        composer_notice,
+        composer_expanded: false,
+        send_label: "",
+        send_id: SEND_ID,
+        busy: state.busy || selected.busy,
+        hints: &hints,
+    });
+
+    let root = if state.inspector_open && w >= 900.0 {
+        row("h-full bg-bg")
+            .child(client.class("flex-1"))
+            .child(inspector_panel_node(state).class("w-80 h-full"))
+    } else if state.inspector_open {
+        inspector_panel_node(state).class("h-full")
+    } else {
+        client
+    };
 
     render_node(
         scene,
         atlas,
         UiRect::new(0.0, 0.0, w, h),
         &state.runtime,
-        shadcn_chat_client(UiShadcnChatClientSpec {
-            show_sidebar: w >= 980.0,
-            sidebar_title: "edgerun codex",
-            sidebar_detail: workspace.as_str(),
-            sidebar_actions: &actions,
-            session_rows: &session_rows,
-            activity: UiShadcnActivity::new(activity_title, activity_detail, activity_icon),
-            footer_lines: &footer_lines,
-            header_title: "Codex",
-            header_status: if state.busy {
-                &state.status
-            } else {
-                &selected.status
-            },
-            header_badges: &header_badges,
-            header_action: (w < 980.0).then_some(UiShadcnChatClientIconAction::new(
-                UiIcon::MessagePlus,
-                NEW_CHAT_ID,
-                false,
-            )),
-            header_tone: tone,
-            activity_phase: (state.animation_tick / 8) as u8,
-            messages: &messages,
-            scroll_offset: state.runtime.scroll_offset(TRANSCRIPT_SCROLL_ID),
-            scroll_id: TRANSCRIPT_SCROLL_ID,
-            input_label: "",
-            input_value: &composer_text,
-            input_id: 0,
-            composer_action: clear_action,
-            send_label: "",
-            send_id: SEND_ID,
-            busy: state.busy || selected.busy,
-            hints: &hints,
-        }),
+        root,
     );
+}
+
+fn inspector_panel_node(state: &CodexUi) -> UiNode {
+    let selected = state.sessions.selected();
+    let title = match state.inspector_panel {
+        InspectorPanel::Usage => "Usage",
+        InspectorPanel::Settings => "Settings",
+        InspectorPanel::Logs => "Runtime log",
+    };
+    let mut panel = column("h-full bg-panel border p-3 gap-3")
+        .child(
+            row("h-8 items-center justify-between")
+                .child(shadcn_label(title).class("h-5 text-text"))
+                .child(
+                    row("gap-2 items-center")
+                        .child(shadcn_badge(
+                            selected.status.as_str(),
+                            if selected.busy {
+                                UiShadcnBadgeVariant::Default
+                            } else {
+                                UiShadcnBadgeVariant::Secondary
+                            },
+                        ))
+                        .child(icon_button(UiIcon::X, INSPECTOR_ID).class("h-8 w-8")),
+                ),
+        )
+        .child(shadcn_toggle_group(
+            &InspectorPanel::LABELS,
+            state.inspector_panel.index(),
+            PANEL_TAB_BASE_ID,
+        ))
+        .child(shadcn_separator());
+
+    panel = match state.inspector_panel {
+        InspectorPanel::Usage => panel.child(usage_panel_node(selected, &state.sessions)),
+        InspectorPanel::Settings => panel.child(settings_panel_node(state)),
+        InspectorPanel::Logs => panel.child(log_panel_node(state)),
+    };
+    panel.child(spacer("flex-1"))
+}
+
+fn usage_panel_node(session: &UiSession, sessions: &SessionStore) -> UiNode {
+    let usage_lines = session.usage.detail_lines();
+    let rate_lines = session.rate_limits.detail_lines();
+    let total_label = session.usage.total_label();
+    let app_total = sessions.aggregate_usage();
+    let app_lines = [
+        format!("Sessions: {}", sessions.sessions.len()),
+        format!("Running: {}", sessions.active_count()),
+        format!("App total: {}", compact_i64(app_total.blended_total())),
+        format!(
+            "Reasoning total: {}",
+            compact_i64(app_total.reasoning_output_tokens)
+        ),
+    ];
+    let usage_rows = usage_lines.iter().map(String::as_str).collect::<Vec<_>>();
+    let rate_rows = rate_lines.iter().map(String::as_str).collect::<Vec<_>>();
+    let app_rows = app_lines.iter().map(String::as_str).collect::<Vec<_>>();
+
+    let mut node = column("gap-3")
+        .child(shadcn_alert(
+            "Session usage",
+            total_label.as_str(),
+            UiIcon::Activity,
+        ))
+        .child(label_stack("App usage", &app_rows))
+        .child(label_stack("Tokens", &usage_rows))
+        .child(label_stack("Rate limits", &rate_rows));
+    if let Some(percent) = session.rate_limits.primary_percent() {
+        node = node.child(shadcn_progress(percent).class("h-3"));
+    }
+    node
+}
+
+fn settings_panel_node(state: &CodexUi) -> UiNode {
+    column("gap-3")
+        .child(shadcn_card("Model", state.model.as_str()))
+        .child(shadcn_card(
+            "Logging",
+            "Controls which runtime events are shown in the local log.",
+        ))
+        .child(shadcn_toggle_group(
+            &LogLevel::LABELS,
+            state.log_level.index(),
+            LOG_LEVEL_BASE_ID,
+        ))
+        .child(shadcn_card(
+            "Session safety",
+            "Clear can require a second activation before transcript reset.",
+        ))
+        .child(
+            row("h-10 items-center justify-between gap-2")
+                .child(shadcn_label("Confirm clear").class("h-5 text-text"))
+                .child(shadcn_switch(state.confirm_clear_enabled, CONFIRM_CLEAR_ID)),
+        )
+        .child(shadcn_card("Density", "Adjusts timeline spacing."))
+        .child(shadcn_toggle_group(
+            &DensityMode::LABELS,
+            state.density.index(),
+            DENSITY_BASE_ID,
+        ))
+}
+
+fn log_panel_node(state: &CodexUi) -> UiNode {
+    let visible_logs = state
+        .logs
+        .iter()
+        .rev()
+        .filter(|entry| entry.level <= state.log_level)
+        .take(9)
+        .map(|entry| {
+            format!(
+                "{}: {}",
+                entry.level.label().to_ascii_lowercase(),
+                entry.text
+            )
+        })
+        .collect::<Vec<_>>();
+    if visible_logs.is_empty() {
+        return shadcn_alert(
+            "Runtime log",
+            "No runtime events at this level.",
+            UiIcon::Activity,
+        );
+    }
+    let log_rows = visible_logs.iter().map(String::as_str).collect::<Vec<_>>();
+    label_stack("Recent events", &log_rows)
+}
+
+fn label_stack(title: &str, rows: &[&str]) -> UiNode {
+    let mut node = column("gap-2").child(shadcn_label(title).class("h-5 text-muted-foreground"));
+    for row_text in rows {
+        node = node.child(shadcn_label(row_text).class("h-5 text-text"));
+    }
+    node
 }
 
 fn header_tone(state: &CodexUi) -> UiShadcnStatusTone {
     if state.sessions.selected().failures > 0 {
         UiShadcnStatusTone::Error
-    } else if state.busy || state.sessions.selected().busy {
+    } else if state.busy || state.sessions.any_busy() {
         UiShadcnStatusTone::Active
     } else {
         UiShadcnStatusTone::Success
@@ -1345,13 +2059,24 @@ fn conversation_messages<'a>(
         .messages
         .iter()
         .map(|message| {
+            let role = chat_role(message.role);
             UiShadcnConversationMessage::new(
-                chat_role(message.role),
+                role,
                 &message.text,
-                shadcn_chat_message_height(atlas, &message.text, width),
+                message_height_for_density(
+                    shadcn_chat_message_height_for_role(atlas, role, &message.text, width),
+                    state.density,
+                ),
             )
         })
         .collect()
+}
+
+fn message_height_for_density(height: f32, density: DensityMode) -> f32 {
+    match density {
+        DensityMode::Comfortable => height,
+        DensityMode::Compact => (height * 0.86).max(72.0),
+    }
 }
 
 fn chat_role(role: Role) -> UiShadcnChatRole {
@@ -1428,12 +2153,26 @@ fn session_sidebar_detail(session: &UiSession) -> String {
     format!("{turns} | {tools} | {}", session.usage.detail_label())
 }
 
+fn session_sidebar_state(session: &UiSession) -> UiShadcnSessionState {
+    if session.failures > 0 {
+        UiShadcnSessionState::Error
+    } else if session.busy {
+        UiShadcnSessionState::Running
+    } else {
+        UiShadcnSessionState::Idle
+    }
+}
+
 fn count_label(count: usize, unit: &str) -> String {
     if count == 1 {
         format!("1 {unit}")
     } else {
         format!("{count} {unit}s")
     }
+}
+
+fn code_eq(code: u32, ascii_lowercase: u8) -> bool {
+    code == ascii_lowercase as u32 || code == ascii_lowercase.to_ascii_uppercase() as u32
 }
 
 fn prompt_history_path() -> Result<PathBuf, String> {
@@ -1490,6 +2229,16 @@ fn compact_i64(value: i64) -> String {
         format!("{:.1}k", value as f64 / 1_000.0)
     } else {
         value.to_string()
+    }
+}
+
+fn elapsed_label(duration: Duration) -> String {
+    if duration.as_secs() < 60 {
+        "just now".to_string()
+    } else if duration.as_secs() < 3600 {
+        format!("{}m ago", duration.as_secs() / 60)
+    } else {
+        format!("{}h ago", duration.as_secs() / 3600)
     }
 }
 
@@ -1694,6 +2443,12 @@ mod tests {
                 sessions: vec![session],
             },
             clear_confirm_session: None,
+            inspector_open: false,
+            inspector_panel: InspectorPanel::Usage,
+            log_level: LogLevel::Normal,
+            confirm_clear_enabled: true,
+            density: DensityMode::Comfortable,
+            logs: Vec::new(),
             prompt_history: Vec::new(),
             prompt_history_index: None,
             prompt_history_path: None,
@@ -1809,9 +2564,9 @@ mod tests {
         let messages = &state.sessions.selected().messages;
         assert_eq!(messages.len(), 3);
         assert_eq!(messages[1].role, Role::Reasoning);
-        assert_eq!(messages[1].text, "checking files");
+        assert_eq!(messages[1].text, "Thinking\nchecking files");
         assert_eq!(messages[2].role, Role::Assistant);
-        assert_eq!(messages[2].text, "done.");
+        assert_eq!(messages[2].text, "Response\ndone.");
         assert_eq!(state.runtime.scroll_offset(TRANSCRIPT_SCROLL_ID), 1.0);
     }
 
@@ -1830,7 +2585,10 @@ mod tests {
         let messages = &state.sessions.selected().messages;
         assert_eq!(messages.len(), 1);
         assert_eq!(messages[0].role, Role::Diff);
-        assert_eq!(messages[0].text, "*** Begin Patch\n+new line\n");
+        assert_eq!(
+            messages[0].text,
+            "Patch / tool input\n*** Begin Patch\n+new line\n"
+        );
         assert_eq!(state.runtime.scroll_offset(TRANSCRIPT_SCROLL_ID), 1.0);
     }
 
@@ -1966,6 +2724,25 @@ mod tests {
     }
 
     #[test]
+    fn escape_dismisses_clear_confirmation_before_quitting() {
+        let runtime = UiRuntimeState::default();
+        let session = test_session(vec![Message {
+            role: Role::User,
+            text: "keep".to_string(),
+        }]);
+        let mut state = test_state("Ready", false, runtime, session);
+
+        state.request_clear_transcript();
+        assert_eq!(state.clear_confirm_session, Some(state.sessions.selected));
+
+        assert!(state.handle_escape());
+        assert_eq!(state.clear_confirm_session, None);
+        assert_eq!(state.status, "Clear cancelled");
+        assert_eq!(state.sessions.selected().status, "Ready");
+        assert_eq!(state.sessions.selected().messages.len(), 1);
+    }
+
+    #[test]
     fn clear_is_guarded_but_new_chat_keeps_busy_session_running() {
         let mut runtime = UiRuntimeState::default();
         runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, 0.25);
@@ -2077,6 +2854,131 @@ mod tests {
     }
 
     #[test]
+    fn switching_session_dismisses_pending_clear_confirmation() {
+        let mut state = test_state(
+            "Ready",
+            false,
+            UiRuntimeState::default(),
+            test_session(vec![]),
+        );
+        let first_id = state.sessions.selected;
+        let second = UiSession::new(UiSessionId(2), "Second", "second");
+        state.sessions.sessions.push(second);
+
+        state.request_clear_transcript();
+        assert_eq!(state.clear_confirm_session, Some(first_id));
+        assert_eq!(state.sessions.selected().status, "Confirm clear");
+
+        state.switch_session(1);
+
+        let first = state
+            .sessions
+            .sessions
+            .iter()
+            .find(|session| session.id == first_id)
+            .expect("first session exists");
+        assert_eq!(state.clear_confirm_session, None);
+        assert_eq!(first.status, "Ready");
+        assert_eq!(state.sessions.selected, UiSessionId(2));
+    }
+
+    #[test]
+    fn ctrl_page_keys_switch_sessions_without_pointer() {
+        let mut state = test_state(
+            "Ready",
+            false,
+            UiRuntimeState::default(),
+            test_session(vec![]),
+        );
+        state
+            .sessions
+            .sessions
+            .push(UiSession::new(UiSessionId(2), "Second", "second"));
+        state
+            .sessions
+            .sessions
+            .push(UiSession::new(UiSessionId(3), "Third", "third"));
+        let ctrl = UiKeyModifiers {
+            ctrl: true,
+            ..UiKeyModifiers::default()
+        };
+
+        assert!(state.handle_session_key(UiKey::PageDown, ctrl));
+        assert_eq!(state.sessions.selected, UiSessionId(2));
+        assert_eq!(state.status, "Ready");
+
+        assert!(state.handle_session_key(UiKey::PageDown, ctrl));
+        assert_eq!(state.sessions.selected, UiSessionId(3));
+
+        assert!(state.handle_session_key(UiKey::PageDown, ctrl));
+        assert_eq!(state.sessions.selected, UiSessionId(1));
+
+        assert!(state.handle_session_key(UiKey::PageUp, ctrl));
+        assert_eq!(state.sessions.selected, UiSessionId(3));
+    }
+
+    #[test]
+    fn command_keys_cover_main_chrome_actions() {
+        let (command_tx, command_rx) = std::sync::mpsc::channel();
+        let (_event_tx, event_rx) = std::sync::mpsc::channel();
+        let session_id = UiSessionId(1);
+        let mut state = CodexUi {
+            model: "gpt-5.5".to_string(),
+            input: UiTextBuffer::new(),
+            status: "Ready".to_string(),
+            busy: false,
+            animation_tick: 0,
+            runtime: UiRuntimeState::default(),
+            sessions: SessionStore {
+                sessions: vec![UiSession::new(session_id, "Work", "ready")],
+                selected: session_id,
+                next_id: 2,
+            },
+            clear_confirm_session: None,
+            inspector_open: false,
+            inspector_panel: InspectorPanel::Usage,
+            log_level: LogLevel::Normal,
+            confirm_clear_enabled: true,
+            density: DensityMode::Comfortable,
+            logs: Vec::new(),
+            prompt_history: Vec::new(),
+            prompt_history_index: None,
+            prompt_history_path: None,
+            command_tx,
+            event_rx,
+        };
+        let ctrl = UiKeyModifiers {
+            ctrl: true,
+            ..UiKeyModifiers::default()
+        };
+        let ctrl_shift = UiKeyModifiers {
+            ctrl: true,
+            shift: true,
+            ..UiKeyModifiers::default()
+        };
+
+        assert!(state.handle_command_key(UiKey::Other(b',' as u32), ctrl));
+        assert!(state.inspector_open);
+        assert_eq!(state.inspector_panel, InspectorPanel::Settings);
+
+        assert!(state.handle_command_key(UiKey::Other(b'.' as u32), ctrl));
+        assert_eq!(state.inspector_panel, InspectorPanel::Usage);
+
+        assert!(state.handle_command_key(UiKey::Other(b'L' as u32), ctrl_shift));
+        assert_eq!(state.inspector_panel, InspectorPanel::Logs);
+
+        assert!(state.handle_command_key(UiKey::Backspace, ctrl_shift));
+        assert_eq!(state.clear_confirm_session, Some(session_id));
+
+        assert!(state.handle_command_key(UiKey::Other(b'N' as u32), ctrl_shift));
+        match command_rx.recv().expect("new chat sends reset") {
+            WorkerCommand::Reset { session_id } => assert_eq!(session_id, state.sessions.selected),
+            command => panic!("unexpected command: {command:?}"),
+        }
+        assert_eq!(state.sessions.sessions.len(), 2);
+    }
+
+    #[test]
     fn background_session_events_update_their_own_transcript() {
         let mut runtime = UiRuntimeState::default();
         runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, 0.25);
@@ -2111,7 +3013,7 @@ mod tests {
             .expect("background session should exist");
         assert_eq!(background.messages.len(), 2);
         assert_eq!(background.messages[1].role, Role::Assistant);
-        assert_eq!(background.messages[1].text, "working");
+        assert_eq!(background.messages[1].text, "Response\nworking");
         assert_eq!(state.runtime.scroll_offset(TRANSCRIPT_SCROLL_ID), 0.25);
     }
 
@@ -2140,6 +3042,12 @@ mod tests {
                 next_id: 3,
             },
             clear_confirm_session: None,
+            inspector_open: false,
+            inspector_panel: InspectorPanel::Usage,
+            log_level: LogLevel::Normal,
+            confirm_clear_enabled: true,
+            density: DensityMode::Comfortable,
+            logs: Vec::new(),
             prompt_history: Vec::new(),
             prompt_history_index: None,
             prompt_history_path: None,
@@ -2170,7 +3078,80 @@ mod tests {
                 assert_eq!(prompt, "run this in foreground");
             }
             WorkerCommand::Reset { .. } => panic!("submit should not reset"),
+            WorkerCommand::Cancel { .. } => panic!("submit should not cancel"),
         }
+    }
+
+    #[test]
+    fn cancel_selected_session_sends_worker_cancel_and_marks_status() {
+        let (command_tx, command_rx) = std::sync::mpsc::channel();
+        let (_event_tx, event_rx) = std::sync::mpsc::channel();
+        let session_id = UiSessionId(1);
+        let mut session = UiSession::new(session_id, "Work", "Thinking");
+        session.busy = true;
+        let mut state = CodexUi {
+            model: "gpt-5.5".to_string(),
+            input: UiTextBuffer::new(),
+            status: "Thinking".to_string(),
+            busy: false,
+            animation_tick: 0,
+            runtime: UiRuntimeState::default(),
+            sessions: SessionStore {
+                sessions: vec![session],
+                selected: session_id,
+                next_id: 2,
+            },
+            clear_confirm_session: Some(session_id),
+            inspector_open: false,
+            inspector_panel: InspectorPanel::Usage,
+            log_level: LogLevel::Normal,
+            confirm_clear_enabled: true,
+            density: DensityMode::Comfortable,
+            logs: Vec::new(),
+            prompt_history: Vec::new(),
+            prompt_history_index: None,
+            prompt_history_path: None,
+            command_tx,
+            event_rx,
+        };
+
+        state.cancel_selected_session();
+
+        assert_eq!(state.status, "Cancelling");
+        assert_eq!(state.clear_confirm_session, None);
+        assert_eq!(state.sessions.selected().status, "Cancelling");
+        match command_rx
+            .recv()
+            .expect("cancel should send worker command")
+        {
+            WorkerCommand::Cancel { session_id: sent } => assert_eq!(sent, session_id),
+            command => panic!("unexpected command: {command:?}"),
+        }
+    }
+
+    #[test]
+    fn cancelled_event_marks_session_idle_without_counting_failure() {
+        let mut session = test_session(vec![Message {
+            role: Role::User,
+            text: "stop me".to_string(),
+        }]);
+        session.busy = true;
+        session.failures = 0;
+        session.active_tool = Some("shell".to_string());
+        let mut state = test_state("Thinking", false, UiRuntimeState::default(), session);
+
+        state.apply_session_event(UiSessionId(1), SessionWorkerEvent::Cancelled);
+
+        let session = state.sessions.selected();
+        assert!(!session.busy);
+        assert_eq!(session.failures, 0);
+        assert_eq!(session.active_tool, None);
+        assert_eq!(session.status, "Stopped");
+        assert_eq!(
+            session.messages.last().map(|message| message.role),
+            Some(Role::ToolError)
+        );
+        assert_eq!(state.status, "Stopped");
     }
 
     #[test]
@@ -2200,6 +3181,36 @@ mod tests {
             session_sidebar_detail(&session),
             "1 turn | 1 failure | usage pending"
         );
+        assert_eq!(session_sidebar_state(&session), UiShadcnSessionState::Error);
+    }
+
+    #[test]
+    fn session_store_aggregates_usage_and_running_sessions() {
+        let mut sessions = SessionStore::initial();
+        sessions.selected_mut().usage.record(TokenUsage {
+            input_tokens: 100,
+            cached_input_tokens: 20,
+            output_tokens: 30,
+            reasoning_output_tokens: 12,
+            total_tokens: 130,
+        });
+        let second_id = sessions.create_session();
+        {
+            let second = sessions.session_mut(second_id).expect("second session");
+            second.busy = true;
+            second.usage.record(TokenUsage {
+                input_tokens: 80,
+                cached_input_tokens: 0,
+                output_tokens: 20,
+                reasoning_output_tokens: 8,
+                total_tokens: 100,
+            });
+        }
+
+        let total = sessions.aggregate_usage();
+        assert_eq!(sessions.active_count(), 1);
+        assert_eq!(total.blended_total(), 210);
+        assert_eq!(total.reasoning_output_tokens, 20);
     }
 
     #[test]

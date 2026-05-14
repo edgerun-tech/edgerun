@@ -40,6 +40,11 @@
 - `sms_telephony`: 482 call sites; SMS, MMS, phone, carrier, or telephony behavior
 - `work_background`: 53940 call sites; jobs, alarms, wake locks, services, or background work
 
+## Generated Capability Intent Plan
+
+- `com.facebook.orca.threadview.ThreadViewBubblesActivity` -> `Cih` records:
+  - `app_events.send_or_receive_app_event` from `package_intents` evidence
+
 ## UI And Resource Hints
 
 - Resource buckets: `xml`(1)

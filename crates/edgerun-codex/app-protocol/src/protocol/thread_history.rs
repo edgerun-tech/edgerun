@@ -2150,7 +2150,7 @@ mod tests {
                 user_authorization: None,
                 rationale: None,
                 decision_source: None,
-                action: edgerun_json::from_serde_value(edgerun_json::json!({
+                action: edgerun_json::from_value(edgerun_json::json!({
                     "type": "command",
                     "source": "shell",
                     "command": "rm -rf /tmp/guardian",
@@ -2171,7 +2171,7 @@ mod tests {
                 decision_source: Some(
                     codex_protocol::protocol::GuardianAssessmentDecisionSource::Agent,
                 ),
-                action: edgerun_json::from_serde_value(edgerun_json::json!({
+                action: edgerun_json::from_value(edgerun_json::json!({
                     "type": "command",
                     "source": "shell",
                     "command": "rm -rf /tmp/guardian",
@@ -2233,7 +2233,7 @@ mod tests {
                 user_authorization: None,
                 rationale: None,
                 decision_source: None,
-                action: edgerun_json::from_serde_value(edgerun_json::json!({
+                action: edgerun_json::from_value(edgerun_json::json!({
                     "type": "execve",
                     "source": "shell",
                     "program": "/bin/rm",

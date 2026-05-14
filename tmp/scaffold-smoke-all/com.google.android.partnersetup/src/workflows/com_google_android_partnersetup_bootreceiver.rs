@@ -19,6 +19,7 @@ fn onreceive(state: &mut AppState, capabilities: &Capabilities) {
     // Source method: com.google.android.partnersetup.BootReceiver->onReceive
     // Static call sites: platform=20, internal=25
     // Signal: package_intents (12 call sites)
+    state.capability_intents.push(capabilities.app_events.request("send_or_receive_app_event", SOURCE_CLASS));
     // TODO: replace Android Intent behavior with typed Edgerun events
     // TODO: translate this lifecycle/body method into explicit Edgerun control flow
 }

@@ -29,6 +29,10 @@ use codex_protocol::protocol::GuardianRiskLevel as CoreGuardianRiskLevel;
 use codex_protocol::protocol::GuardianUserAuthorization as CoreGuardianUserAuthorization;
 use codex_protocol::protocol::PatchApplyStatus as CorePatchApplyStatus;
 use codex_protocol::protocol::ReviewDecision as CoreReviewDecision;
+use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
+use edgerun_json::Map;
+use edgerun_json::ToJson;
 use edgerun_json::Value as JsonValue;
 use edgerun_serde::Deserialize;
 use edgerun_serde::Serialize;
@@ -1224,6 +1228,30 @@ pub struct CommandExecutionOutputDeltaNotification {
     pub item_id: String,
     pub delta: String,
 }
+
+impl ToJson for CommandExecutionOutputDeltaNotification {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(4);
+        object.push_field("threadId", self.thread_id.clone());
+        object.push_field("turnId", self.turn_id.clone());
+        object.push_field("itemId", self.item_id.clone());
+        object.push_field("delta", self.delta.clone());
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for CommandExecutionOutputDeltaNotification {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object: Map = Map::try_from(value)?;
+        Ok(Self {
+            thread_id: object.take_required("threadId")?,
+            turn_id: object.take_required("turnId")?,
+            item_id: object.take_required("itemId")?,
+            delta: object.take_required("delta")?,
+        })
+    }
+}
+
 /// Deprecated legacy notification for `apply_patch` textual output.
 ///
 /// The server no longer emits this notification.
@@ -1375,6 +1403,32 @@ pub enum DynamicToolCallOutputContentItem {
     InputText { text: String },
     #[serde(rename_all = "camelCase")]
     InputImage { image_url: String },
+}
+
+impl ToJson for DynamicToolCallOutputContentItem {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::new();
+        match self {
+            Self::InputText { text } => {
+                object.push_field("type", "inputText");
+                object.push_field("text", text);
+            }
+            Self::InputImage { image_url } => {
+                object.push_field("type", "inputImage");
+                object.push_field("imageUrl", image_url);
+            }
+        }
+        JsonValue::Object(object)
+    }
+}
+
+impl ToJson for DynamicToolCallResponse {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::new();
+        object.push_field("contentItems", self.content_items.to_json());
+        object.push_field("success", self.success);
+        JsonValue::Object(object)
+    }
 }
 
 impl From<DynamicToolCallOutputContentItem>

@@ -1,4 +1,9 @@
 use codex_protocol::compat::absolute_path::AbsolutePathBuf;
+use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
+use edgerun_json::Map;
+use edgerun_json::ToJson;
+use edgerun_json::Value;
 use edgerun_serde::Deserialize;
 use edgerun_serde::Serialize;
 use schemars::JsonSchema;
@@ -14,6 +19,22 @@ pub struct ProcessTerminalSize {
     pub rows: u16,
     /// Terminal width in character cells.
     pub cols: u16,
+}
+
+impl ToJson for ProcessTerminalSize {
+    fn to_json(&self) -> Value {
+        object([("rows", self.rows.to_json()), ("cols", self.cols.to_json())])
+    }
+}
+
+impl FromJson for ProcessTerminalSize {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ProcessTerminalSize")?;
+        Ok(Self {
+            rows: object.take_required("rows")?,
+            cols: object.take_required("cols")?,
+        })
+    }
 }
 
 /// Spawn a standalone process (argv vector) without a Codex sandbox on the host
@@ -87,6 +108,51 @@ pub struct ProcessSpawnParams {
     pub size: Option<ProcessTerminalSize>,
 }
 
+impl ToJson for ProcessSpawnParams {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        object.push_field("command", self.command.to_json());
+        object.push_field("processHandle", &self.process_handle);
+        object.push_field("cwd", self.cwd.to_json());
+        if self.tty {
+            object.push_field("tty", true);
+        }
+        if self.stream_stdin {
+            object.push_field("streamStdin", true);
+        }
+        if self.stream_stdout_stderr {
+            object.push_field("streamStdoutStderr", true);
+        }
+        if let Some(output_bytes_cap) = self.output_bytes_cap {
+            object.push_field("outputBytesCap", output_bytes_cap.to_json());
+        }
+        if let Some(timeout_ms) = self.timeout_ms {
+            object.push_field("timeoutMs", timeout_ms.to_json());
+        }
+        object.push_field("env", self.env.to_json());
+        object.push_field("size", self.size.to_json());
+        Value::Object(object)
+    }
+}
+
+impl FromJson for ProcessSpawnParams {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ProcessSpawnParams")?;
+        Ok(Self {
+            command: object.take_required("command")?,
+            process_handle: object.take_required("processHandle")?,
+            cwd: object.take_required("cwd")?,
+            tty: object.take_optional("tty")?.unwrap_or(false),
+            stream_stdin: object.take_optional("streamStdin")?.unwrap_or(false),
+            stream_stdout_stderr: object.take_optional("streamStdoutStderr")?.unwrap_or(false),
+            output_bytes_cap: take_double_option(&mut object, "outputBytesCap")?,
+            timeout_ms: take_double_option(&mut object, "timeoutMs")?,
+            env: object.take_optional("env")?,
+            size: object.take_optional("size")?,
+        })
+    }
+}
+
 /// Successful response for `process/spawn`.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
@@ -109,6 +175,29 @@ pub struct ProcessWriteStdinParams {
     pub close_stdin: bool,
 }
 
+impl ToJson for ProcessWriteStdinParams {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        object.push_field("processHandle", &self.process_handle);
+        object.push_field("deltaBase64", self.delta_base64.to_json());
+        if self.close_stdin {
+            object.push_field("closeStdin", true);
+        }
+        Value::Object(object)
+    }
+}
+
+impl FromJson for ProcessWriteStdinParams {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ProcessWriteStdinParams")?;
+        Ok(Self {
+            process_handle: object.take_required("processHandle")?,
+            delta_base64: object.take_optional("deltaBase64")?,
+            close_stdin: object.take_optional("closeStdin")?.unwrap_or(false),
+        })
+    }
+}
+
 /// Empty success response for `process/writeStdin`.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
@@ -122,6 +211,21 @@ pub struct ProcessWriteStdinResponse {}
 pub struct ProcessKillParams {
     /// Client-supplied, connection-scoped `processHandle` from `process/spawn`.
     pub process_handle: String,
+}
+
+impl ToJson for ProcessKillParams {
+    fn to_json(&self) -> Value {
+        object([("processHandle", self.process_handle.to_json())])
+    }
+}
+
+impl FromJson for ProcessKillParams {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ProcessKillParams")?;
+        Ok(Self {
+            process_handle: object.take_required("processHandle")?,
+        })
+    }
 }
 
 /// Empty success response for `process/kill`.
@@ -141,6 +245,25 @@ pub struct ProcessResizePtyParams {
     pub size: ProcessTerminalSize,
 }
 
+impl ToJson for ProcessResizePtyParams {
+    fn to_json(&self) -> Value {
+        object([
+            ("processHandle", self.process_handle.to_json()),
+            ("size", self.size.to_json()),
+        ])
+    }
+}
+
+impl FromJson for ProcessResizePtyParams {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ProcessResizePtyParams")?;
+        Ok(Self {
+            process_handle: object.take_required("processHandle")?,
+            size: object.take_required("size")?,
+        })
+    }
+}
+
 /// Empty success response for `process/resizePty`.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
@@ -158,6 +281,28 @@ pub enum ProcessOutputStream {
     Stderr,
 }
 
+impl ToJson for ProcessOutputStream {
+    fn to_json(&self) -> Value {
+        match self {
+            Self::Stdout => "stdout",
+            Self::Stderr => "stderr",
+        }
+        .to_json()
+    }
+}
+
+impl FromJson for ProcessOutputStream {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "stdout" => Ok(Self::Stdout),
+            "stderr" => Ok(Self::Stderr),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown process output stream `{other}`"
+            ))),
+        }
+    }
+}
+
 /// Base64-encoded output chunk emitted for a streaming `process/spawn` request.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
@@ -172,6 +317,29 @@ pub struct ProcessOutputDeltaNotification {
     /// True on the final streamed chunk for this stream when output was
     /// truncated by `outputBytesCap`.
     pub cap_reached: bool,
+}
+
+impl ToJson for ProcessOutputDeltaNotification {
+    fn to_json(&self) -> Value {
+        object([
+            ("processHandle", self.process_handle.to_json()),
+            ("stream", self.stream.to_json()),
+            ("deltaBase64", self.delta_base64.to_json()),
+            ("capReached", self.cap_reached.to_json()),
+        ])
+    }
+}
+
+impl FromJson for ProcessOutputDeltaNotification {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ProcessOutputDeltaNotification")?;
+        Ok(Self {
+            process_handle: object.take_required("processHandle")?,
+            stream: object.take_required("stream")?,
+            delta_base64: object.take_required("deltaBase64")?,
+            cap_reached: object.take_required("capReached")?,
+        })
+    }
 }
 
 /// Final process exit notification for `process/spawn`.
@@ -201,4 +369,50 @@ pub struct ProcessExitedNotification {
     /// In streaming mode, stderr is empty and cap state is also reported on the
     /// final stderr `process/outputDelta` notification.
     pub stderr_cap_reached: bool,
+}
+
+impl ToJson for ProcessExitedNotification {
+    fn to_json(&self) -> Value {
+        object([
+            ("processHandle", self.process_handle.to_json()),
+            ("exitCode", self.exit_code.to_json()),
+            ("stdout", self.stdout.to_json()),
+            ("stdoutCapReached", self.stdout_cap_reached.to_json()),
+            ("stderr", self.stderr.to_json()),
+            ("stderrCapReached", self.stderr_cap_reached.to_json()),
+        ])
+    }
+}
+
+impl FromJson for ProcessExitedNotification {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ProcessExitedNotification")?;
+        Ok(Self {
+            process_handle: object.take_required("processHandle")?,
+            exit_code: object.take_required("exitCode")?,
+            stdout: object.take_required("stdout")?,
+            stdout_cap_reached: object.take_required("stdoutCapReached")?,
+            stderr: object.take_required("stderr")?,
+            stderr_cap_reached: object.take_required("stderrCapReached")?,
+        })
+    }
+}
+
+fn object<const N: usize>(fields: [(&str, Value); N]) -> Value {
+    let mut object = Map::with_capacity(N);
+    for (key, value) in fields {
+        object.push_field(key, value);
+    }
+    Value::Object(object)
+}
+
+fn take_double_option<T: FromJson>(
+    object: &mut Map,
+    field: &str,
+) -> Result<Option<Option<T>>, JsonValueError> {
+    match object.remove(field) {
+        Some(Value::Null) => Ok(Some(None)),
+        Some(value) => T::from_json(value).map(Some).map(Some),
+        None => Ok(None),
+    }
 }

@@ -2,7 +2,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::fs;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 
 #[derive(Clone, Debug)]
 struct Options {
@@ -14,6 +15,7 @@ struct Options {
     spec: bool,
     scaffold: bool,
     emit_scaffold: Option<String>,
+    external_tools: Option<String>,
     top: usize,
 }
 
@@ -56,6 +58,21 @@ struct MethodRef {
     return_type: String,
 }
 
+#[derive(Clone, Debug, Default)]
+struct CodeScan {
+    method_indices: Vec<u32>,
+    string_indices: Vec<u32>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+struct SourceNetworkFinding {
+    kind: String,
+    file: String,
+    line: usize,
+    detail: String,
+    context: String,
+}
+
 #[derive(Clone, Debug)]
 struct Signal {
     name: &'static str,
@@ -68,6 +85,9 @@ struct ApkProfile {
     manifest: ManifestProfile,
     native_libs: BTreeSet<String>,
     domains: BTreeSet<String>,
+    uris: BTreeSet<String>,
+    uri_schemes: BTreeMap<String, u64>,
+    urls: BTreeSet<String>,
     dex_packages: BTreeMap<String, u64>,
     dex_classes: BTreeSet<String>,
     class_summaries: BTreeMap<String, ClassSummary>,
@@ -77,6 +97,7 @@ struct ApkProfile {
     ui_elements: BTreeMap<String, u64>,
     ui_texts: BTreeSet<String>,
     asset_files: BTreeSet<String>,
+    uri_string_count: usize,
     url_count: usize,
 }
 
@@ -100,6 +121,8 @@ struct MethodSummary {
     callee_packages: BTreeMap<String, u64>,
     callee_classes: BTreeMap<String, u64>,
     signals: BTreeMap<&'static str, u64>,
+    string_constants: BTreeMap<String, u64>,
+    uri_constants: BTreeMap<String, u64>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -168,6 +191,11 @@ fn run() -> io::Result<()> {
         ));
     }
 
+    if let Some(out_dir) = opts.external_tools.as_deref() {
+        run_external_tools(&opts.apk, Path::new(out_dir))?;
+        eprintln!("wrote external tool output: {out_dir}");
+    }
+
     if let Some(out_dir) = opts.emit_scaffold.as_deref() {
         emit_edgerun_scaffold(Path::new(out_dir), &profile, &counts, opts.top)?;
         println!("wrote scaffold: {out_dir}");
@@ -205,6 +233,7 @@ fn parse_args() -> io::Result<Options> {
     let mut spec = false;
     let mut scaffold = false;
     let mut emit_scaffold = None;
+    let mut external_tools = None;
     let mut top = 20usize;
     let mut args = env::args().skip(1);
 
@@ -224,6 +253,15 @@ fn parse_args() -> io::Result<Options> {
                     )
                 })?;
                 emit_scaffold = Some(value);
+            }
+            "--external-tools" => {
+                let value = args.next().ok_or_else(|| {
+                    io::Error::new(
+                        io::ErrorKind::InvalidInput,
+                        "--external-tools requires a directory",
+                    )
+                })?;
+                external_tools = Some(value);
             }
             "--top" => {
                 let value = args.next().ok_or_else(|| {
@@ -274,13 +312,14 @@ fn parse_args() -> io::Result<Options> {
         spec,
         scaffold,
         emit_scaffold,
+        external_tools,
         top,
     })
 }
 
 fn print_usage() {
     eprintln!(
-        "usage: edgerun-apk-api-calls [--all] [--json] [--summary] [--profile] [--spec] [--scaffold] [--emit-scaffold DIR] [--top N] <app.apk>\n\
+        "usage: edgerun-apk-api-calls [--all] [--json] [--summary] [--profile] [--spec] [--scaffold] [--emit-scaffold DIR] [--external-tools DIR] [--top N] <app.apk>\n\
          \n\
          Lists DEX invoke targets with count, class, method, argument types, and return type.\n\
          Default output includes Android platform APIs only. Use --all for every invoke target.\n\
@@ -288,8 +327,680 @@ fn print_usage() {
          Use --profile to add manifest permissions, components, domains, and native libs.\n\
          Use --spec to emit an Edgerun app replacement skeleton.\n\
          Use --scaffold to emit a concrete Edgerun replacement blueprint.\n\
-         Use --emit-scaffold DIR to write draft replacement files."
+         Use --emit-scaffold DIR to write draft replacement files.\n\
+         Use --external-tools DIR to run installed external decompilers/extractors into DIR."
     );
+}
+
+fn run_external_tools(apk: &str, out_dir: &Path) -> io::Result<()> {
+    fs::create_dir_all(out_dir)?;
+    let mut report = String::new();
+    report.push_str("external_tools\n");
+    report.push_str(&format!("  apk: {apk}\n"));
+
+    let tools = [
+        ("androguard", &["--version"][..]),
+        ("jadx", &["--version"][..]),
+        ("apktool", &["--version"][..]),
+        ("strings", &["--version"][..]),
+        ("unzip", &["-v"][..]),
+    ];
+    for (tool, version_args) in tools {
+        match command_output(tool, version_args) {
+            Ok(output) => {
+                let first = first_output_line(&output);
+                report.push_str(&format!("  {tool}: available {first}\n"));
+            }
+            Err(_) => report.push_str(&format!("  {tool}: missing\n")),
+        }
+    }
+
+    if command_available("jadx") {
+        let jadx_dir = out_dir.join("jadx");
+        let args = vec![
+            "--show-bad-code".to_string(),
+            "--deobf".to_string(),
+            "-d".to_string(),
+            jadx_dir.display().to_string(),
+            apk.to_string(),
+        ];
+        run_external_command(out_dir, "jadx", &args)?;
+        report.push_str("  jadx_output: jadx/\n");
+        let findings = scan_jadx_network_findings(&jadx_dir)?;
+        fs::write(
+            out_dir.join("source-network.md"),
+            render_source_network_findings(&findings),
+        )?;
+        report.push_str("  source_network_output: source-network.md\n");
+    }
+
+    if command_available("apktool") {
+        let apktool_dir = out_dir.join("apktool");
+        let args = vec![
+            "d".to_string(),
+            "-f".to_string(),
+            "-o".to_string(),
+            apktool_dir.display().to_string(),
+            apk.to_string(),
+        ];
+        run_external_command(out_dir, "apktool", &args)?;
+        report.push_str("  apktool_output: apktool/\n");
+        let findings = scan_apktool_evidence(&apktool_dir)?;
+        fs::write(
+            out_dir.join("apktool-evidence.md"),
+            render_evidence_findings(
+                "Apktool Resource and Smali Evidence",
+                "These findings come from decoded resources and smali. They survive many Java decompiler failures, but are still static evidence.",
+                &findings,
+            ),
+        )?;
+        report.push_str("  apktool_evidence_output: apktool-evidence.md\n");
+    }
+
+    if command_available("androguard") {
+        let apkid_args = vec!["apkid".to_string(), apk.to_string()];
+        run_external_command_named(out_dir, "androguard", "androguard-apkid", &apkid_args)?;
+        report.push_str("  androguard_apkid_output: androguard-apkid.stdout.txt\n");
+
+        let axml_args = vec!["axml".to_string(), apk.to_string()];
+        run_external_command_named(out_dir, "androguard", "androguard-axml", &axml_args)?;
+        report.push_str("  androguard_axml_output: androguard-axml.stdout.txt\n");
+
+        if command_available("python3") || command_available("python") {
+            run_androguard_python_report(apk, out_dir)?;
+            report.push_str("  androguard_summary_output: androguard-summary.txt\n");
+        }
+    }
+
+    if command_available("strings") {
+        let output = command_output("strings", &["-a", apk])?;
+        fs::write(out_dir.join("strings.txt"), &output.stdout)?;
+        fs::write(out_dir.join("strings.stderr.txt"), &output.stderr)?;
+        report.push_str("  strings_output: strings.txt\n");
+    }
+
+    fs::write(out_dir.join("tools.txt"), report)?;
+    Ok(())
+}
+
+fn scan_apktool_evidence(apktool_dir: &Path) -> io::Result<Vec<SourceNetworkFinding>> {
+    let mut files = Vec::new();
+    collect_apktool_evidence_files(apktool_dir, &mut files)?;
+    let mut findings = BTreeSet::new();
+
+    for file in files {
+        let Ok(text) = fs::read_to_string(&file) else {
+            continue;
+        };
+        let relative = file
+            .strip_prefix(apktool_dir)
+            .unwrap_or(file.as_path())
+            .display()
+            .to_string();
+        let lines = text.lines().collect::<Vec<_>>();
+        let ext = file.extension().and_then(|ext| ext.to_str()).unwrap_or("");
+        for (idx, line) in lines.iter().enumerate() {
+            let trimmed = line.trim();
+            if ext == "smali" {
+                if let Some((kind, detail)) = smali_evidence_pattern(trimmed) {
+                    findings.insert(SourceNetworkFinding {
+                        kind: kind.to_string(),
+                        file: relative.clone(),
+                        line: idx + 1,
+                        detail,
+                        context: source_context(&lines, idx),
+                    });
+                }
+            } else if let Some((kind, detail)) = resource_evidence_pattern(&relative, trimmed) {
+                findings.insert(SourceNetworkFinding {
+                    kind: kind.to_string(),
+                    file: relative.clone(),
+                    line: idx + 1,
+                    detail,
+                    context: source_context(&lines, idx),
+                });
+            }
+        }
+    }
+
+    Ok(findings.into_iter().collect())
+}
+
+fn collect_apktool_evidence_files(dir: &Path, out: &mut Vec<PathBuf>) -> io::Result<()> {
+    if !dir.exists() {
+        return Ok(());
+    }
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_apktool_evidence_files(&path, out)?;
+        } else if path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| matches!(ext, "smali" | "xml"))
+        {
+            out.push(path);
+        }
+    }
+    Ok(())
+}
+
+fn smali_evidence_pattern(line: &str) -> Option<(&'static str, String)> {
+    let patterns = [
+        ("smali_http_client", "Lokhttp3/"),
+        ("smali_http_client", "Lretrofit2/"),
+        ("smali_url_connection", "Ljava/net/HttpURLConnection;"),
+        ("smali_url", "Ljava/net/URL;"),
+        ("smali_websocket", "WebSocket"),
+        ("smali_uri_parse", "Landroid/net/Uri;->parse"),
+        ("smali_webview", "Landroid/webkit/WebView;"),
+        ("smali_javascript_bridge", "addJavascriptInterface"),
+        ("smali_tls", "Ljavax/net/ssl/"),
+        ("smali_crypto", "Ljavax/crypto/"),
+        ("smali_keystore", "KeyStore"),
+        ("smali_reflection", "Ljava/lang/reflect/"),
+        ("smali_dynamic_load", "Ldalvik/system/DexClassLoader;"),
+        ("smali_dynamic_load", "Ldalvik/system/PathClassLoader;"),
+        ("smali_process", "Ljava/lang/Runtime;->exec"),
+        ("smali_process", "Ljava/lang/ProcessBuilder;"),
+        ("smali_file_io", "Ljava/io/File;"),
+        ("smali_preferences", "Landroid/content/SharedPreferences;"),
+        ("smali_sqlite", "Landroid/database/sqlite/"),
+        ("smali_clipboard", "Landroid/content/ClipboardManager;"),
+        ("smali_camera", "Landroid/hardware/Camera;"),
+        ("smali_camera", "Landroid/hardware/camera2/"),
+        ("smali_location", "Landroid/location/"),
+        ("smali_bluetooth", "Landroid/bluetooth/"),
+        ("smali_nfc", "Landroid/nfc/"),
+        ("smali_sms", "Landroid/telephony/SmsManager;"),
+        ("smali_contacts", "Landroid/provider/ContactsContract;"),
+        ("smali_calendar", "Landroid/provider/CalendarContract;"),
+        ("smali_biometric", "Landroid/hardware/biometrics/"),
+        ("smali_biometric", "Landroidx/biometric/"),
+        ("smali_firebase", "Lcom/google/firebase/"),
+        ("smali_play_services", "Lcom/google/android/gms/"),
+        ("smali_braze", "Lcom/braze/"),
+        ("smali_amplitude", "Lamplitude/"),
+        ("smali_segment", "Lcom/segment/analytics/"),
+        ("smali_sentry", "Lio/sentry/"),
+        ("smali_datadog", "Lcom/datadog/"),
+        ("smali_crashlytics", "Lcom/google/firebase/crashlytics/"),
+    ];
+    if let Some((kind, _)) = patterns.iter().find(|(_, pattern)| line.contains(pattern)) {
+        return Some((*kind, line.to_string()));
+    }
+    if line.starts_with("const-string") {
+        if let Some(value) = smali_const_string_value(line) {
+            let lower = value.to_ascii_lowercase();
+            if has_uri_scheme(&lower) {
+                return Some(("smali_uri_string", value));
+            }
+            if lower.contains("api")
+                || lower.contains("auth")
+                || lower.contains("login")
+                || lower.contains("token")
+                || lower.contains("graphql")
+                || lower.contains("socket")
+                || lower.contains("analytics")
+            {
+                return Some(("smali_interesting_string", value));
+            }
+        }
+    }
+    None
+}
+
+fn smali_const_string_value(line: &str) -> Option<String> {
+    let start = line.find('"')?;
+    let end = line.rfind('"')?;
+    (end > start).then(|| line[start + 1..end].to_string())
+}
+
+fn resource_evidence_pattern(relative: &str, line: &str) -> Option<(&'static str, String)> {
+    let lower = line.to_ascii_lowercase();
+    if relative == "AndroidManifest.xml" {
+        if lower.contains("<data ")
+            && (lower.contains("android:scheme") || lower.contains("android:host"))
+        {
+            return Some(("manifest_deep_link", line.to_string()));
+        }
+        if lower.contains("networksecurityconfig") {
+            return Some(("manifest_network_security_config", line.to_string()));
+        }
+        if lower.contains("usescleartexttraffic") {
+            return Some(("manifest_cleartext_traffic", line.to_string()));
+        }
+    }
+    if relative.contains("network_security") || lower.contains("cleartexttrafficpermitted") {
+        if lower.contains("<domain") {
+            return Some(("network_security_domain", line.to_string()));
+        }
+        if lower.contains("cleartexttrafficpermitted") {
+            return Some(("network_security_cleartext", line.to_string()));
+        }
+        if lower.contains("trust-anchors")
+            || lower.contains("certificates")
+            || lower.contains("pin-set")
+        {
+            return Some(("network_security_trust", line.to_string()));
+        }
+    }
+    if lower.contains("http://")
+        || lower.contains("https://")
+        || lower.contains("ws://")
+        || lower.contains("wss://")
+        || lower.contains("ftp://")
+        || lower.contains("sftp://")
+        || lower.contains("content://")
+        || lower.contains("intent://")
+    {
+        return Some(("resource_uri", line.to_string()));
+    }
+    if relative.contains("/res/values/") {
+        let interesting = [
+            "api",
+            "auth",
+            "login",
+            "token",
+            "client_id",
+            "redirect",
+            "graphql",
+            "socket",
+            "analytics",
+        ];
+        if interesting.iter().any(|token| lower.contains(token)) {
+            return Some(("resource_interesting_value", line.to_string()));
+        }
+    }
+    None
+}
+
+fn has_uri_scheme(value: &str) -> bool {
+    [
+        "http://",
+        "https://",
+        "ws://",
+        "wss://",
+        "ftp://",
+        "ftps://",
+        "sftp://",
+        "mqtt://",
+        "mqtts://",
+        "rtsp://",
+        "rtmp://",
+        "tcp://",
+        "udp://",
+        "content://",
+        "file://",
+        "android-app://",
+        "market://",
+        "intent://",
+        "geo:",
+        "mailto:",
+        "tel:",
+        "sms:",
+    ]
+    .iter()
+    .any(|scheme| value.contains(scheme))
+}
+
+fn scan_jadx_network_findings(jadx_dir: &Path) -> io::Result<Vec<SourceNetworkFinding>> {
+    let mut files = Vec::new();
+    collect_source_files(jadx_dir, &mut files)?;
+    let mut findings = BTreeSet::new();
+
+    for file in files {
+        let Ok(text) = fs::read_to_string(&file) else {
+            continue;
+        };
+        let relative = file
+            .strip_prefix(jadx_dir)
+            .unwrap_or(file.as_path())
+            .display()
+            .to_string();
+        let lines = text.lines().collect::<Vec<_>>();
+        let mut pending_annotations: Vec<(usize, String)> = Vec::new();
+        for (idx, line) in lines.iter().enumerate() {
+            let trimmed = line.trim();
+            if let Some(annotation) = retrofit_annotation(trimmed) {
+                pending_annotations.push((idx + 1, annotation));
+                findings.insert(SourceNetworkFinding {
+                    kind: "retrofit_annotation".to_string(),
+                    file: relative.clone(),
+                    line: idx + 1,
+                    detail: trimmed.to_string(),
+                    context: source_context(&lines, idx),
+                });
+                continue;
+            }
+
+            if !pending_annotations.is_empty()
+                && (trimmed.contains(")")
+                    || trimmed.contains("Call<")
+                    || trimmed.contains("suspend ")
+                    || trimmed.contains("Observable<")
+                    || trimmed.contains("Single<"))
+            {
+                for (line_no, annotation) in pending_annotations.drain(..) {
+                    findings.insert(SourceNetworkFinding {
+                        kind: "retrofit_route".to_string(),
+                        file: relative.clone(),
+                        line: line_no,
+                        detail: format!("{annotation} => {trimmed}"),
+                        context: source_context(&lines, idx),
+                    });
+                }
+            }
+
+            if let Some(detail) = network_source_pattern(trimmed) {
+                findings.insert(SourceNetworkFinding {
+                    kind: detail.0.to_string(),
+                    file: relative.clone(),
+                    line: idx + 1,
+                    detail: detail.1,
+                    context: source_context(&lines, idx),
+                });
+            }
+        }
+    }
+
+    Ok(findings.into_iter().collect())
+}
+
+fn collect_source_files(dir: &Path, out: &mut Vec<PathBuf>) -> io::Result<()> {
+    if !dir.exists() {
+        return Ok(());
+    }
+    for entry in fs::read_dir(dir)? {
+        let entry = entry?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_source_files(&path, out)?;
+        } else if path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| matches!(ext, "java" | "kt"))
+        {
+            out.push(path);
+        }
+    }
+    Ok(())
+}
+
+fn retrofit_annotation(line: &str) -> Option<String> {
+    let annotations = [
+        "@GET",
+        "@POST",
+        "@PUT",
+        "@PATCH",
+        "@DELETE",
+        "@HEAD",
+        "@OPTIONS",
+        "@HTTP",
+        "@Headers",
+        "@Url",
+        "@Body",
+        "@Query",
+        "@QueryMap",
+        "@Path",
+        "@Field",
+        "@FieldMap",
+        "@Part",
+        "@Multipart",
+        "@FormUrlEncoded",
+    ];
+    annotations
+        .iter()
+        .any(|annotation| line.starts_with(annotation))
+        .then(|| line.to_string())
+}
+
+fn network_source_pattern(line: &str) -> Option<(&'static str, String)> {
+    let patterns = [
+        ("okhttp_request", "Request.Builder"),
+        ("okhttp_url", ".url("),
+        ("okhttp_header", ".addHeader("),
+        ("okhttp_header", ".header("),
+        ("okhttp_client", "OkHttpClient"),
+        ("websocket", "newWebSocket"),
+        ("websocket", "WebSocketListener"),
+        ("retrofit_builder", "Retrofit.Builder"),
+        ("retrofit_base_url", ".baseUrl("),
+        ("url_connection", "openConnection("),
+        ("url_connection", "HttpURLConnection"),
+        ("uri_parse", "Uri.parse("),
+        ("json_key", "JSONObject"),
+        ("graphql", "graphql"),
+        ("graphql", "GraphQL"),
+    ];
+    patterns
+        .iter()
+        .find(|(_, pattern)| line.contains(pattern))
+        .map(|(kind, _)| (*kind, line.to_string()))
+}
+
+fn source_context(lines: &[&str], idx: usize) -> String {
+    let start = idx.saturating_sub(1);
+    let end = (idx + 2).min(lines.len());
+    lines[start..end]
+        .iter()
+        .map(|line| line.trim())
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn render_source_network_findings(findings: &[SourceNetworkFinding]) -> String {
+    render_evidence_findings(
+        "Decompiled Source Network Findings",
+        "These findings come from decompiled source and are static evidence, not runtime proof.",
+        findings,
+    )
+}
+
+fn render_evidence_findings(title: &str, note: &str, findings: &[SourceNetworkFinding]) -> String {
+    let mut out = String::new();
+    out.push_str(&format!("# {title}\n\n"));
+    out.push_str(note);
+    out.push_str("\n\n");
+    let mut by_kind: BTreeMap<&str, u64> = BTreeMap::new();
+    for finding in findings {
+        *by_kind.entry(&finding.kind).or_insert(0) += 1;
+    }
+    out.push_str("## Summary\n\n");
+    for (kind, count) in ranked_u64(&by_kind) {
+        out.push_str(&format!("- `{kind}`: {count}\n"));
+    }
+    out.push('\n');
+    out.push_str("## Findings\n\n");
+    for finding in findings.iter().take(1000) {
+        out.push_str(&format!(
+            "- `{}` [{}:{}] {}\n",
+            finding.kind,
+            markdown_escape_inline(&finding.file),
+            finding.line,
+            markdown_escape_inline(&finding.detail)
+        ));
+        if !finding.context.is_empty() {
+            out.push_str(&format!(
+                "  - context: `{}`\n",
+                markdown_escape_inline(&finding.context)
+            ));
+        }
+    }
+    if findings.len() > 1000 {
+        out.push_str(&format!("\n... {} more findings\n", findings.len() - 1000));
+    }
+    out
+}
+
+fn command_available(tool: &str) -> bool {
+    Command::new(tool).arg("--version").output().is_ok()
+}
+
+fn command_output(tool: &str, args: &[&str]) -> io::Result<std::process::Output> {
+    Command::new(tool).args(args).output()
+}
+
+fn run_external_command(out_dir: &Path, tool: &str, args: &[String]) -> io::Result<()> {
+    run_external_command_named(out_dir, tool, tool, args)
+}
+
+fn run_external_command_named(
+    out_dir: &Path,
+    command: &str,
+    label: &str,
+    args: &[String],
+) -> io::Result<()> {
+    let output = Command::new(command).args(args).output()?;
+    fs::write(
+        out_dir.join(format!("{label}.stdout.txt")),
+        output.stdout.as_slice(),
+    )?;
+    fs::write(
+        out_dir.join(format!("{label}.stderr.txt")),
+        output.stderr.as_slice(),
+    )?;
+    fs::write(
+        out_dir.join(format!("{label}.status.txt")),
+        format!(
+            "success={}\nstatus={:?}\n",
+            output.status.success(),
+            output.status
+        ),
+    )?;
+    Ok(())
+}
+
+fn run_androguard_python_report(apk: &str, out_dir: &Path) -> io::Result<()> {
+    let python = if command_available("python3") {
+        "python3"
+    } else {
+        "python"
+    };
+    let script = r#"
+import sys
+
+SCHEMES = (
+    "http://", "https://", "ws://", "wss://", "ftp://", "ftps://", "sftp://",
+    "mqtt://", "mqtts://", "rtsp://", "rtmp://", "tcp://", "udp://",
+    "content://", "file://", "android-app://", "market://", "intent://",
+    "geo:", "mailto:", "tel:", "sms:",
+)
+
+def safe_call(obj, name, default=None):
+    try:
+        value = getattr(obj, name)()
+        return value if value is not None else default
+    except Exception as exc:
+        return default
+
+def print_list(title, values, limit=500):
+    print(title)
+    values = sorted({str(value) for value in values if value is not None})
+    for value in values[:limit]:
+        print("  " + value)
+    if len(values) > limit:
+        print("  ... %d more" % (len(values) - limit))
+
+def string_value(value):
+    try:
+        if hasattr(value, "get_value"):
+            return value.get_value()
+    except Exception:
+        pass
+    return str(value)
+
+apk_path = sys.argv[1]
+try:
+    from loguru import logger
+    logger.remove()
+except Exception:
+    pass
+from androguard.core.apk import APK
+from androguard.core.dex import DEX
+
+a = APK(apk_path)
+print("package: %s" % safe_call(a, "get_package", ""))
+print("version_name: %s" % safe_call(a, "get_androidversion_name", ""))
+print("version_code: %s" % safe_call(a, "get_androidversion_code", ""))
+print("min_sdk: %s" % safe_call(a, "get_min_sdk_version", ""))
+print("target_sdk: %s" % safe_call(a, "get_target_sdk_version", ""))
+
+print_list("permissions:", safe_call(a, "get_permissions", []) or [])
+print_list("activities:", safe_call(a, "get_activities", []) or [])
+print_list("services:", safe_call(a, "get_services", []) or [])
+print_list("receivers:", safe_call(a, "get_receivers", []) or [])
+print_list("providers:", safe_call(a, "get_providers", []) or [])
+
+uri_strings = set()
+interesting_strings = set()
+class_count = 0
+method_count = 0
+for dex_bytes in a.get_all_dex():
+    dex = DEX(dex_bytes)
+    try:
+        class_count += len(dex.get_classes())
+    except Exception:
+        pass
+    try:
+        method_count += len(dex.get_methods())
+    except Exception:
+        pass
+    try:
+        strings = dex.get_strings()
+    except Exception:
+        strings = []
+    for raw in strings:
+        value = string_value(raw)
+        if any(scheme in value for scheme in SCHEMES):
+            uri_strings.add(value)
+        elif (
+            len(value) >= 5
+            and len(value) <= 180
+            and any(token in value.lower() for token in ("api", "auth", "login", "token", "event", "analytics", "graphql", "socket"))
+        ):
+            interesting_strings.add(value)
+
+print("dex_classes: %d" % class_count)
+print("dex_methods: %d" % method_count)
+print_list("uri_strings:", uri_strings, 2000)
+print_list("interesting_strings:", interesting_strings, 1000)
+"#;
+    let output = Command::new(python)
+        .arg("-c")
+        .arg(script)
+        .arg(apk)
+        .output()?;
+    fs::write(
+        out_dir.join("androguard-summary.txt"),
+        output.stdout.as_slice(),
+    )?;
+    fs::write(
+        out_dir.join("androguard-summary.stderr.txt"),
+        output.stderr.as_slice(),
+    )?;
+    fs::write(
+        out_dir.join("androguard-summary.status.txt"),
+        format!(
+            "success={}\nstatus={:?}\n",
+            output.status.success(),
+            output.status
+        ),
+    )?;
+    Ok(())
+}
+
+fn first_output_line(output: &std::process::Output) -> String {
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    stdout
+        .lines()
+        .chain(stderr.lines())
+        .next()
+        .unwrap_or("")
+        .trim()
+        .to_string()
 }
 
 fn is_classes_dex(name: &str) -> bool {
@@ -322,34 +1033,281 @@ fn is_native_lib(name: &str) -> bool {
 
 fn collect_domains(strings: &[String], profile: &mut ApkProfile) {
     for value in strings {
-        for domain in domains_from_string(value) {
-            profile.domains.insert(domain);
+        let uris = uris_from_string(value);
+        if !uris.is_empty() {
+            profile.uri_string_count += 1;
         }
-        if value.contains("http://") || value.contains("https://") {
+        if uris.iter().any(|uri| is_http_url(uri)) {
             profile.url_count += 1;
+        }
+        for uri in uris {
+            if let Some(scheme) = uri_scheme(&uri) {
+                *profile.uri_schemes.entry(scheme.to_string()).or_insert(0) += 1;
+            }
+            if is_http_url(&uri) {
+                profile.urls.insert(uri.clone());
+            }
+            if let Some(domain) = domain_from_uri(&uri) {
+                profile.domains.insert(domain);
+            }
+            profile.uris.insert(uri);
         }
     }
 }
 
-fn domains_from_string(value: &str) -> Vec<String> {
-    let mut domains = Vec::new();
-    for scheme in ["https://", "http://"] {
+fn uris_from_string(value: &str) -> Vec<String> {
+    let mut uris = Vec::new();
+    for scheme in uri_scheme_prefixes() {
         let mut rest = value;
         while let Some(idx) = rest.find(scheme) {
-            let after = &rest[idx + scheme.len()..];
-            let host_end = after
+            let after = &rest[idx..];
+            let url_end = after
                 .find(|ch: char| {
-                    matches!(ch, '/' | ':' | '?' | '#' | '"' | '\'' | '<' | '>' | '\\')
+                    ch.is_whitespace()
+                        || matches!(ch, '"' | '\'' | '<' | '>' | '\\' | ')' | '(' | '[' | ']')
                 })
+                .unwrap_or(after.len());
+            let uri = after[..url_end]
+                .trim_end_matches(|ch: char| matches!(ch, '.' | ',' | ';' | ':' | '!' | '?'))
+                .to_string();
+            if looks_like_uri(&uri) {
+                uris.push(uri);
+            }
+            rest = &after[url_end..];
+        }
+    }
+    uris
+}
+
+fn uri_scheme_prefixes() -> &'static [&'static str] {
+    &[
+        "https://",
+        "http://",
+        "wss://",
+        "ws://",
+        "ftps://",
+        "ftp://",
+        "sftp://",
+        "mqtts://",
+        "mqtt://",
+        "rtsp://",
+        "rtmp://",
+        "tcp://",
+        "udp://",
+        "mailto:",
+        "tel:",
+        "sms:",
+        "geo:",
+        "content://",
+        "file://",
+        "android-app://",
+        "market://",
+        "intent://",
+    ]
+}
+
+fn domain_from_uri(uri: &str) -> Option<String> {
+    for scheme in uri_scheme_prefixes()
+        .iter()
+        .copied()
+        .filter(|scheme| network_host_scheme_prefix(scheme))
+    {
+        if let Some(after) = uri.strip_prefix(scheme) {
+            let host_end = after
+                .find(|ch: char| matches!(ch, '/' | ':' | '?' | '#' | '"' | '\'' | '<' | '>'))
                 .unwrap_or(after.len());
             let host = after[..host_end].trim_matches('.');
             if looks_like_domain(host) {
-                domains.push(host.to_ascii_lowercase());
+                return Some(host.to_ascii_lowercase());
             }
-            rest = &after[host_end..];
         }
     }
-    domains
+    None
+}
+
+fn network_host_scheme_prefix(scheme_prefix: &str) -> bool {
+    matches!(
+        scheme_prefix,
+        "https://"
+            | "http://"
+            | "wss://"
+            | "ws://"
+            | "ftps://"
+            | "ftp://"
+            | "sftp://"
+            | "mqtts://"
+            | "mqtt://"
+            | "rtsp://"
+            | "rtmp://"
+            | "tcp://"
+            | "udp://"
+    )
+}
+
+fn looks_like_uri(uri: &str) -> bool {
+    if uri.len() > 2048 {
+        return false;
+    }
+    let Some(scheme) = uri_scheme(uri) else {
+        return false;
+    };
+    if matches!(
+        scheme,
+        "mailto" | "tel" | "sms" | "geo" | "content" | "file" | "android-app" | "market" | "intent"
+    ) {
+        return uri.len() > scheme.len() + 1;
+    }
+    domain_from_uri(uri).is_some()
+}
+
+fn is_http_url(uri: &str) -> bool {
+    uri.starts_with("https://") || uri.starts_with("http://")
+}
+
+fn uri_scheme(uri: &str) -> Option<&str> {
+    let split = uri.find(':')?;
+    let scheme = &uri[..split];
+    if scheme.is_empty()
+        || !scheme
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'-' | b'.'))
+    {
+        return None;
+    }
+    Some(scheme)
+}
+
+fn likely_endpoint_urls(profile: &ApkProfile) -> Vec<&String> {
+    let mut urls = profile
+        .urls
+        .iter()
+        .filter(|url| is_likely_endpoint_url(url))
+        .collect::<Vec<_>>();
+    urls.sort_by(|left, right| {
+        endpoint_url_score(right)
+            .cmp(&endpoint_url_score(left))
+            .then_with(|| left.cmp(right))
+    });
+    urls
+}
+
+fn likely_endpoint_uris(profile: &ApkProfile) -> Vec<&String> {
+    let mut uris = profile
+        .uris
+        .iter()
+        .filter(|uri| is_likely_endpoint_uri(uri))
+        .collect::<Vec<_>>();
+    uris.sort_by(|left, right| {
+        endpoint_uri_score(right)
+            .cmp(&endpoint_uri_score(left))
+            .then_with(|| left.cmp(right))
+    });
+    uris
+}
+
+fn is_likely_endpoint_url(url: &str) -> bool {
+    if !is_http_url(url) {
+        return false;
+    }
+    is_likely_endpoint_uri(url)
+}
+
+fn is_likely_endpoint_uri(uri: &str) -> bool {
+    let Some(scheme) = uri_scheme(uri) else {
+        return false;
+    };
+    if !matches!(
+        scheme,
+        "http"
+            | "https"
+            | "ws"
+            | "wss"
+            | "ftp"
+            | "ftps"
+            | "sftp"
+            | "mqtt"
+            | "mqtts"
+            | "rtsp"
+            | "rtmp"
+            | "tcp"
+            | "udp"
+    ) {
+        return false;
+    }
+    let Some(domain) = domain_from_uri(uri) else {
+        return false;
+    };
+    let lower = uri.to_ascii_lowercase();
+    !matches!(
+        domain.as_str(),
+        "schemas.android.com"
+            | "ns.adobe.com"
+            | "www.bouncycastle.org"
+            | "www.ccil.org"
+            | "www.w3.org"
+            | "www.slf4j.org"
+            | "xml.org"
+            | "xmlpull.org"
+            | "g.co"
+            | "goo.gl"
+            | "localhost"
+    ) && !uri.starts_with("http://schemas.")
+        && !uri.contains("/apk/res/")
+        && !uri.contains("/xap/")
+        && !uri.contains("/tagsoup/")
+        && !lower.contains("/codes.html")
+        && !lower.contains("/features/")
+        && !lower.contains("/properties/")
+        && !lower.contains("packagevisibility")
+        && !lower.ends_with(".dtd")
+        && !lower.ends_with(".xsd")
+}
+
+fn endpoint_url_score(url: &str) -> u64 {
+    endpoint_uri_score(url)
+}
+
+fn endpoint_uri_score(uri: &str) -> u64 {
+    let mut score = 0;
+    let lower = uri.to_ascii_lowercase();
+    if lower.starts_with("https://") || lower.starts_with("wss://") || lower.starts_with("mqtts://")
+    {
+        score += 100;
+    }
+    if lower.starts_with("ws://") || lower.starts_with("wss://") {
+        score += 75;
+    }
+    if lower.starts_with("ftp://") || lower.starts_with("ftps://") || lower.starts_with("sftp://") {
+        score += 55;
+    }
+    if lower.starts_with("mqtt://") || lower.starts_with("mqtts://") {
+        score += 55;
+    }
+    if let Some(domain) = domain_from_uri(uri) {
+        if domain.starts_with("api.") {
+            score += 80;
+        }
+        if domain.contains(".api.") || domain.contains("api-") || domain.contains("-api") {
+            score += 50;
+        }
+        if domain.starts_with("auth.") || domain.contains("login") || domain.contains("account") {
+            score += 35;
+        }
+        if domain.contains("usercentrics")
+            || domain.contains("onfido")
+            || domain.contains("adjust")
+            || domain.contains("app-measurement")
+            || domain.contains("deliveryhero")
+            || domain.contains("foodpanda")
+            || domain.contains("firebase")
+        {
+            score += 25;
+        }
+    }
+    if lower.contains("/api/") || lower.contains("graphql") || lower.contains("oauth") {
+        score += 30;
+    }
+    score
 }
 
 fn looks_like_domain(host: &str) -> bool {
@@ -478,7 +1436,15 @@ fn extract_dex_calls(data: &[u8], profile: &mut ApkProfile) -> io::Result<BTreeM
                 .get(defined_method_idx as usize)
                 .map(|method| method.method_name.as_str())
                 .unwrap_or("<unknown>");
-            for method_idx in read_invoke_method_indices(data, code_off)? {
+            let code_scan = scan_code_item(data, code_off)?;
+            record_method_string_constants(
+                profile,
+                &caller_class,
+                defined_method_name,
+                &strings,
+                &code_scan.string_indices,
+            );
+            for method_idx in code_scan.method_indices {
                 if let Some(method) = methods.get(method_idx as usize) {
                     let api = ApiCall {
                         class_name: method.class_name.clone(),
@@ -560,17 +1526,10 @@ fn record_method_call(
     if class_name.is_empty() {
         return;
     }
-    let key = method_key_for_class(class_name, method_name);
     let callee_package = package_name(&api.class_name);
     let is_platform = is_android_api(&api.class_name);
-    let summary = profile
-        .method_summaries
-        .entry(key)
-        .or_insert_with(|| MethodSummary {
-            class_name: class_name.to_string(),
-            method_name: method_name.to_string(),
-            ..MethodSummary::default()
-        });
+    let dex_classes = &profile.dex_classes;
+    let summary = method_summary_mut(&mut profile.method_summaries, class_name, method_name);
     if is_platform {
         summary.platform_calls += 1;
         for signal in signals() {
@@ -583,13 +1542,67 @@ fn record_method_call(
         if !callee_package.is_empty() {
             *summary.callee_packages.entry(callee_package).or_insert(0) += 1;
         }
-        if profile.dex_classes.contains(&api.class_name) {
+        if dex_classes.contains(&api.class_name) {
             *summary
                 .callee_classes
                 .entry(api.class_name.clone())
                 .or_insert(0) += 1;
         }
     }
+}
+
+fn record_method_string_constants(
+    profile: &mut ApkProfile,
+    class_name: &str,
+    method_name: &str,
+    strings: &[String],
+    string_indices: &[u32],
+) {
+    if class_name.is_empty() {
+        return;
+    }
+    let summary = method_summary_mut(&mut profile.method_summaries, class_name, method_name);
+    for string_idx in string_indices {
+        let Some(value) = strings.get(*string_idx as usize) else {
+            continue;
+        };
+        if !is_interesting_method_constant(value) {
+            continue;
+        }
+        *summary.string_constants.entry(value.clone()).or_insert(0) += 1;
+        for uri in uris_from_string(value) {
+            *summary.uri_constants.entry(uri).or_insert(0) += 1;
+        }
+    }
+}
+
+fn method_summary_mut<'a>(
+    method_summaries: &'a mut BTreeMap<String, MethodSummary>,
+    class_name: &str,
+    method_name: &str,
+) -> &'a mut MethodSummary {
+    let key = method_key_for_class(class_name, method_name);
+    method_summaries
+        .entry(key)
+        .or_insert_with(|| MethodSummary {
+            class_name: class_name.to_string(),
+            method_name: method_name.to_string(),
+            ..MethodSummary::default()
+        })
+}
+
+fn is_interesting_method_constant(value: &str) -> bool {
+    let trimmed = value.trim();
+    if trimmed.len() < 3 || trimmed.len() > 300 {
+        return false;
+    }
+    if !uris_from_string(trimmed).is_empty() {
+        return true;
+    }
+    trimmed.chars().any(|ch| ch.is_ascii_alphabetic())
+        && !trimmed.starts_with('L')
+        && !trimmed.ends_with(';')
+        && !trimmed.starts_with('[')
 }
 
 fn method_key_for_class(class_name: &str, method_name: &str) -> String {
@@ -1177,27 +2190,37 @@ fn read_class_methods(data: &[u8], class_data_off: usize) -> io::Result<Vec<(u32
     Ok(methods)
 }
 
-fn read_invoke_method_indices(data: &[u8], code_off: usize) -> io::Result<Vec<u32>> {
+fn scan_code_item(data: &[u8], code_off: usize) -> io::Result<CodeScan> {
     checked_range(data, code_off, 16)?;
     let insns_size = read_u32(data, code_off + 12)? as usize;
     let insns_off = code_off + 16;
     checked_range(data, insns_off, insns_size * 2)?;
     let mut cursor = 0usize;
-    let mut out = Vec::new();
+    let mut scan = CodeScan::default();
     while cursor < insns_size {
         let unit = read_u16(data, insns_off + cursor * 2)?;
         let opcode = (unit & 0x00ff) as u8;
         if matches!(opcode, 0x6e..=0x72 | 0x74..=0x78 | 0xfa | 0xfb) {
             if cursor + 1 < insns_size {
-                out.push(read_u16(data, insns_off + (cursor + 1) * 2)? as u32);
+                scan.method_indices
+                    .push(read_u16(data, insns_off + (cursor + 1) * 2)? as u32);
             }
+        } else if opcode == 0x1a {
+            if cursor + 1 < insns_size {
+                scan.string_indices
+                    .push(read_u16(data, insns_off + (cursor + 1) * 2)? as u32);
+            }
+        } else if opcode == 0x1b && cursor + 2 < insns_size {
+            let low = read_u16(data, insns_off + (cursor + 1) * 2)? as u32;
+            let high = read_u16(data, insns_off + (cursor + 2) * 2)? as u32;
+            scan.string_indices.push(low | (high << 16));
         }
         let Ok(width) = instruction_width(data, insns_off, insns_size, cursor) else {
             break;
         };
         cursor += width;
     }
-    Ok(out)
+    Ok(scan)
 }
 
 fn instruction_width(
@@ -1463,10 +2486,39 @@ fn print_profile(profile: &ApkProfile, counts: &BTreeMap<ApiCall, u64>, top: usi
     println!();
 
     println!("network_indicators");
+    let endpoint_urls = likely_endpoint_urls(profile);
+    let endpoint_uris = likely_endpoint_uris(profile);
+    println!("  uri_strings: {}", profile.uri_string_count);
+    println!("  uris: {}", profile.uris.len());
+    println!("  endpoint_uris: {}", endpoint_uris.len());
+    for uri in endpoint_uris.iter().take(top) {
+        println!("  endpoint_uri: {uri}");
+    }
+    if endpoint_uris.len() > top {
+        println!("  ... {} more endpoint uris", endpoint_uris.len() - top);
+    }
+    println!("  uri_schemes: {}", profile.uri_schemes.len());
+    for (scheme, count) in ranked_u64(&profile.uri_schemes).into_iter().take(top) {
+        println!("  scheme: {scheme} ({count})");
+    }
     println!("  url_strings: {}", profile.url_count);
+    println!("  endpoint_urls: {}", endpoint_urls.len());
+    for url in endpoint_urls.iter().take(top) {
+        println!("  endpoint_url: {url}");
+    }
+    if endpoint_urls.len() > top {
+        println!("  ... {} more endpoint urls", endpoint_urls.len() - top);
+    }
+    println!("  urls: {}", profile.urls.len());
+    for url in profile.urls.iter().take(top) {
+        println!("  url: {url}");
+    }
+    if profile.urls.len() > top {
+        println!("  ... {} more urls", profile.urls.len() - top);
+    }
     println!("  domains: {}", profile.domains.len());
     for domain in profile.domains.iter().take(top) {
-        println!("  {domain}");
+        println!("  domain: {domain}");
     }
     if profile.domains.len() > top {
         println!("  ... {} more", profile.domains.len() - top);
@@ -1740,8 +2792,15 @@ fn render_toml_capabilities(
             .map(|domain| format!("\"{}\"", toml_escape(domain)))
             .collect::<Vec<_>>()
             .join(", ");
+        let urls = profile
+            .urls
+            .iter()
+            .take(top)
+            .map(|url| format!("\"{}\"", toml_escape(url)))
+            .collect::<Vec<_>>()
+            .join(", ");
         out.push_str(&format!(
-            "network = {{ default = \"deny\", allow_domains = [{domains}] }}\n"
+            "network = {{ default = \"deny\", allow_domains = [{domains}], static_urls = [{urls}] }}\n"
         ));
     }
     if profile
@@ -1860,6 +2919,9 @@ fn render_events_rs(units: &[SelectedUnit<'_>]) -> String {
 fn render_capabilities_rs(profile: &ApkProfile, counts: &BTreeMap<ApiCall, u64>) -> String {
     let mut out = String::new();
     out.push_str("#[derive(Debug, Default)]\npub struct Capabilities {\n");
+    if signal_call_sites(counts, "accounts_identity") > 0 {
+        out.push_str("    pub accounts_identity: AccountsIdentityCapability,\n");
+    }
     if !profile.domains.is_empty() || signal_call_sites(counts, "network_web") > 0 {
         out.push_str("    pub network: NetworkCapability,\n");
     }
@@ -1884,7 +2946,32 @@ fn render_capabilities_rs(profile: &ApkProfile, counts: &BTreeMap<ApiCall, u64>)
     if signal_call_sites(counts, "crypto_security") > 0 {
         out.push_str("    pub secrets_crypto: SecretsCryptoCapability,\n");
     }
+    if signal_call_sites(counts, "contacts_calendar") > 0 {
+        out.push_str("    pub contacts_calendar: ContactsCalendarCapability,\n");
+    }
+    if signal_call_sites(counts, "package_intents") > 0 {
+        out.push_str("    pub app_events: AppEventsCapability,\n");
+    }
+    if signal_call_sites(counts, "sensors") > 0 {
+        out.push_str("    pub sensors: SensorsCapability,\n");
+    }
+    if signal_call_sites(counts, "sms_telephony") > 0 {
+        out.push_str("    pub sms_telephony: SmsTelephonyCapability,\n");
+    }
+    if signal_call_sites(counts, "work_background") > 0
+        || !profile.manifest.services.is_empty()
+        || !profile.manifest.receivers.is_empty()
+    {
+        out.push_str("    pub background_tasks: BackgroundTasksCapability,\n");
+    }
     out.push_str("}\n\n");
+    out.push_str("#[derive(Clone, Copy, Debug, Eq, PartialEq)]\n");
+    out.push_str("pub struct CapabilityIntent {\n");
+    out.push_str("    pub capability: &'static str,\n");
+    out.push_str("    pub operation: &'static str,\n");
+    out.push_str("    pub source: &'static str,\n");
+    out.push_str("}\n\n");
+    out.push_str("#[derive(Debug, Default)] pub struct AccountsIdentityCapability;\n");
     out.push_str("#[derive(Debug, Default)] pub struct NetworkCapability;\n");
     out.push_str("#[derive(Debug, Default)] pub struct LocationCapability;\n");
     out.push_str("#[derive(Debug, Default)] pub struct NotificationCapability;\n");
@@ -1893,15 +2980,57 @@ fn render_capabilities_rs(profile: &ApkProfile, counts: &BTreeMap<ApiCall, u64>)
     out.push_str("#[derive(Debug, Default)] pub struct CameraMediaCapability;\n");
     out.push_str("#[derive(Debug, Default)] pub struct BluetoothNearbyCapability;\n");
     out.push_str("#[derive(Debug, Default)] pub struct SecretsCryptoCapability;\n");
+    out.push_str("#[derive(Debug, Default)] pub struct ContactsCalendarCapability;\n");
+    out.push_str("#[derive(Debug, Default)] pub struct AppEventsCapability;\n");
+    out.push_str("#[derive(Debug, Default)] pub struct SensorsCapability;\n");
+    out.push_str("#[derive(Debug, Default)] pub struct SmsTelephonyCapability;\n");
+    out.push_str("#[derive(Debug, Default)] pub struct BackgroundTasksCapability;\n\n");
+    out.push_str("impl AccountsIdentityCapability { pub fn request(&self, operation: &'static str, source: &'static str) -> CapabilityIntent { intent(\"accounts_identity\", operation, source) } }\n");
+    out.push_str("impl NetworkCapability { pub fn request(&self, operation: &'static str, source: &'static str) -> CapabilityIntent { intent(\"network_web\", operation, source) } }\n");
+    out.push_str("impl LocationCapability { pub fn request(&self, operation: &'static str, source: &'static str) -> CapabilityIntent { intent(\"location\", operation, source) } }\n");
+    out.push_str("impl NotificationCapability { pub fn request(&self, operation: &'static str, source: &'static str) -> CapabilityIntent { intent(\"notifications\", operation, source) } }\n");
+    out.push_str("impl StorageCapability { pub fn request(&self, operation: &'static str, source: &'static str) -> CapabilityIntent { intent(\"files_storage\", operation, source) } }\n");
+    out.push_str("impl LocalStateCapability { pub fn request(&self, operation: &'static str, source: &'static str) -> CapabilityIntent { intent(\"database_preferences\", operation, source) } }\n");
+    out.push_str("impl CameraMediaCapability { pub fn request(&self, operation: &'static str, source: &'static str) -> CapabilityIntent { intent(\"camera_media_capture\", operation, source) } }\n");
+    out.push_str("impl BluetoothNearbyCapability { pub fn request(&self, operation: &'static str, source: &'static str) -> CapabilityIntent { intent(\"bluetooth_nearby\", operation, source) } }\n");
+    out.push_str("impl SecretsCryptoCapability { pub fn request(&self, operation: &'static str, source: &'static str) -> CapabilityIntent { intent(\"crypto_security\", operation, source) } }\n");
+    out.push_str("impl ContactsCalendarCapability { pub fn request(&self, operation: &'static str, source: &'static str) -> CapabilityIntent { intent(\"contacts_calendar\", operation, source) } }\n");
+    out.push_str("impl AppEventsCapability { pub fn request(&self, operation: &'static str, source: &'static str) -> CapabilityIntent { intent(\"package_intents\", operation, source) } }\n");
+    out.push_str("impl SensorsCapability { pub fn request(&self, operation: &'static str, source: &'static str) -> CapabilityIntent { intent(\"sensors\", operation, source) } }\n");
+    out.push_str("impl SmsTelephonyCapability { pub fn request(&self, operation: &'static str, source: &'static str) -> CapabilityIntent { intent(\"sms_telephony\", operation, source) } }\n");
+    out.push_str("impl BackgroundTasksCapability { pub fn request(&self, operation: &'static str, source: &'static str) -> CapabilityIntent { intent(\"work_background\", operation, source) } }\n\n");
+    out.push_str("fn intent(capability: &'static str, operation: &'static str, source: &'static str) -> CapabilityIntent {\n");
+    out.push_str("    CapabilityIntent { capability, operation, source }\n");
+    out.push_str("}\n");
     out
 }
 
 fn render_state_rs() -> String {
-    "#[derive(Debug, Default)]\npub struct AppState {\n    pub started_workflows: Vec<&'static str>,\n    pub handled_events: Vec<&'static str>,\n}\n".to_string()
+    "use crate::capabilities::CapabilityIntent;\n\n#[derive(Debug, Default)]\npub struct AppState {\n    pub started_workflows: Vec<&'static str>,\n    pub handled_events: Vec<&'static str>,\n    pub capability_intents: Vec<CapabilityIntent>,\n}\n".to_string()
 }
 
 fn render_network_rs(profile: &ApkProfile, top: usize) -> String {
     let mut out = String::new();
+    out.push_str("pub const STATIC_ENDPOINT_URIS: &[&str] = &[\n");
+    for uri in likely_endpoint_uris(profile).into_iter().take(top) {
+        out.push_str(&format!("    \"{}\",\n", rust_escape(uri)));
+    }
+    out.push_str("];\n\n");
+    out.push_str("pub const STATIC_URIS: &[&str] = &[\n");
+    for uri in profile.uris.iter().take(top) {
+        out.push_str(&format!("    \"{}\",\n", rust_escape(uri)));
+    }
+    out.push_str("];\n\n");
+    out.push_str("pub const STATIC_ENDPOINT_URLS: &[&str] = &[\n");
+    for url in likely_endpoint_urls(profile).into_iter().take(top) {
+        out.push_str(&format!("    \"{}\",\n", rust_escape(url)));
+    }
+    out.push_str("];\n\n");
+    out.push_str("pub const STATIC_URLS: &[&str] = &[\n");
+    for url in profile.urls.iter().take(top) {
+        out.push_str(&format!("    \"{}\",\n", rust_escape(url)));
+    }
+    out.push_str("];\n\n");
     out.push_str("pub const ALLOW_DOMAINS: &[&str] = &[\n");
     for domain in profile.domains.iter().take(top) {
         out.push_str(&format!("    \"{}\",\n", rust_escape(domain)));
@@ -2012,6 +3141,27 @@ fn render_workflow_rs(unit: &SelectedUnit<'_>, profile: &ApkProfile) -> String {
         ));
         for (signal, count) in ranked_u64(&method.signals).into_iter().take(4) {
             out.push_str(&format!("    // Signal: {signal} ({count} call sites)\n"));
+        }
+        for (uri, count) in ranked_u64(&method.uri_constants).into_iter().take(4) {
+            out.push_str(&format!(
+                "    // Method URI constant: {} ({count} refs)\n",
+                rust_escape(uri)
+            ));
+        }
+        for (constant, count) in ranked_u64(&method.string_constants).into_iter().take(4) {
+            if !method.uri_constants.contains_key(constant.as_str()) {
+                out.push_str(&format!(
+                    "    // Method string constant: {} ({count} refs)\n",
+                    rust_escape(constant)
+                ));
+            }
+        }
+        for (signal, _) in ranked_u64(&method.signals).into_iter().take(4) {
+            if let Some((field, operation)) = capability_intent_call(signal) {
+                out.push_str(&format!(
+                    "    state.capability_intents.push(capabilities.{field}.request(\"{operation}\", SOURCE_CLASS));\n"
+                ));
+            }
         }
         for task in scaffold_tasks_for_method(method) {
             out.push_str(&format!("    // TODO: {task}\n"));
@@ -2136,6 +3286,72 @@ fn render_analysis_md(
         out.push('\n');
     }
 
+    out.push_str("## Generated Capability Intent Plan\n\n");
+    let mut wrote_intents = false;
+    for unit in units {
+        for method in &unit.methods {
+            let intents = ranked_u64(&method.signals)
+                .into_iter()
+                .filter_map(|(signal, _)| {
+                    capability_intent_call(signal)
+                        .map(|(field, operation)| (*signal, field, operation))
+                })
+                .take(5)
+                .collect::<Vec<_>>();
+            if intents.is_empty() {
+                continue;
+            }
+            wrote_intents = true;
+            out.push_str(&format!(
+                "- `{}` -> `{}` records:\n",
+                unit.component.name, method.method_name
+            ));
+            for (signal, field, operation) in intents {
+                out.push_str(&format!(
+                    "  - `{field}.{operation}` from `{signal}` evidence\n"
+                ));
+            }
+        }
+    }
+    if !wrote_intents {
+        out.push_str("- No generated workflow method currently records capability intents.\n");
+    }
+    out.push('\n');
+
+    out.push_str("## Method Local Constants\n\n");
+    let mut wrote_constants = false;
+    for unit in units {
+        for method in &unit.methods {
+            if method.string_constants.is_empty() && method.uri_constants.is_empty() {
+                continue;
+            }
+            wrote_constants = true;
+            out.push_str(&format!(
+                "- `{}` -> `{}` constants:\n",
+                unit.component.name, method.method_name
+            ));
+            for (uri, count) in ranked_u64(&method.uri_constants).into_iter().take(5) {
+                out.push_str(&format!(
+                    "  - uri `{}` ({count})\n",
+                    markdown_escape_inline(uri)
+                ));
+            }
+            for (constant, count) in ranked_u64(&method.string_constants).into_iter().take(5) {
+                if method.uri_constants.contains_key(constant.as_str()) {
+                    continue;
+                }
+                out.push_str(&format!(
+                    "  - string `{}` ({count})\n",
+                    markdown_escape_inline(constant)
+                ));
+            }
+        }
+    }
+    if !wrote_constants {
+        out.push_str("- No selected workflow methods had static string constants.\n");
+    }
+    out.push('\n');
+
     out.push_str("## UI And Resource Hints\n\n");
     if profile.resource_files.is_empty()
         && profile.ui_elements.is_empty()
@@ -2174,6 +3390,47 @@ fn render_analysis_md(
     }
 
     out.push_str("## Network And Native Surface\n\n");
+    let endpoint_uris = likely_endpoint_uris(profile);
+    if endpoint_uris.is_empty() {
+        out.push_str("- Static endpoint URI candidates: none found\n");
+    } else {
+        out.push_str("- Static endpoint URI candidates:\n");
+        for uri in endpoint_uris.into_iter().take(top) {
+            out.push_str(&format!("  - `{}`\n", markdown_escape_inline(uri)));
+        }
+    }
+    if !profile.uri_schemes.is_empty() {
+        out.push_str("- Static URI schemes:");
+        for (scheme, count) in ranked_u64(&profile.uri_schemes).into_iter().take(top) {
+            out.push_str(&format!(" `{scheme}`({count})"));
+        }
+        out.push('\n');
+    }
+    if profile.uris.is_empty() {
+        out.push_str("- Static URI strings: none found\n");
+    } else {
+        out.push_str("- Static URI strings:\n");
+        for uri in profile.uris.iter().take(top) {
+            out.push_str(&format!("  - `{}`\n", markdown_escape_inline(uri)));
+        }
+    }
+    let endpoint_urls = likely_endpoint_urls(profile);
+    if endpoint_urls.is_empty() {
+        out.push_str("- Static endpoint URL candidates: none found\n");
+    } else {
+        out.push_str("- Static endpoint URL candidates:\n");
+        for url in endpoint_urls.into_iter().take(top) {
+            out.push_str(&format!("  - `{}`\n", markdown_escape_inline(url)));
+        }
+    }
+    if profile.urls.is_empty() {
+        out.push_str("- Static URL strings: none found\n");
+    } else {
+        out.push_str("- Static URL strings:\n");
+        for url in profile.urls.iter().take(top) {
+            out.push_str(&format!("  - `{}`\n", markdown_escape_inline(url)));
+        }
+    }
     if profile.domains.is_empty() {
         out.push_str("- Static domain strings: none found\n");
     } else {
@@ -2338,7 +3595,16 @@ fn print_toml_capabilities(profile: &ApkProfile, counts: &BTreeMap<ApiCall, u64>
             .map(|domain| format!("\"{domain}\""))
             .collect::<Vec<_>>()
             .join(", ");
-        println!("    network = {{ default = \"deny\", allow_domains = [{domains}] }}");
+        let urls = profile
+            .urls
+            .iter()
+            .take(top)
+            .map(|url| format!("\"{url}\""))
+            .collect::<Vec<_>>()
+            .join(", ");
+        println!(
+            "    network = {{ default = \"deny\", allow_domains = [{domains}], static_urls = [{urls}] }}"
+        );
     }
     if profile
         .manifest
@@ -2447,7 +3713,8 @@ fn third_party_decision(sdk: &str) -> ThirdPartyDecision {
         ThirdPartyDecision {
             default_action: "preserve_if_reachable",
             breakage_risk: "unknown",
-            rationale: "module appears in the app; dynamic trace should decide whether it is required",
+            rationale:
+                "module appears in the app; dynamic trace should decide whether it is required",
         }
     }
 }
@@ -3096,6 +4363,15 @@ fn print_spec_capabilities(profile: &ApkProfile, counts: &BTreeMap<ApiCall, u64>
         || signal_call_sites(counts, "network_web") > 0
     {
         println!("    network");
+        for uri in likely_endpoint_uris(profile).into_iter().take(top) {
+            println!("      static_endpoint_uri: {uri}");
+        }
+        for url in profile.urls.iter().take(top) {
+            println!("      static_url: {url}");
+        }
+        if profile.urls.len() > top {
+            println!("      more_urls: {}", profile.urls.len() - top);
+        }
         for domain in profile.domains.iter().take(top) {
             println!("      allow_domain: {domain}");
         }
@@ -3811,6 +5087,26 @@ fn signal_description(name: &str) -> &'static str {
         "sms_telephony" => "SMS, MMS, phone, carrier, or telephony behavior",
         "work_background" => "jobs, alarms, wake locks, services, or background work",
         _ => "matched Android API capability signal",
+    }
+}
+
+fn capability_intent_call(signal: &str) -> Option<(&'static str, &'static str)> {
+    match signal {
+        "accounts_identity" => Some(("accounts_identity", "authenticate_or_load_account")),
+        "network_web" => Some(("network", "request_network_or_webview")),
+        "location" => Some(("location", "request_location")),
+        "notifications" => Some(("notifications", "post_or_update_notification")),
+        "files_storage" => Some(("storage", "read_or_write_app_file")),
+        "database_preferences" => Some(("local_state", "read_or_write_local_state")),
+        "camera_media_capture" => Some(("camera_media", "capture_or_process_media")),
+        "bluetooth_nearby" => Some(("bluetooth_nearby", "scan_or_connect_device")),
+        "crypto_security" => Some(("secrets_crypto", "use_key_or_crypto_operation")),
+        "contacts_calendar" => Some(("contacts_calendar", "read_or_write_contact_calendar")),
+        "package_intents" => Some(("app_events", "send_or_receive_app_event")),
+        "sensors" => Some(("sensors", "read_sensor_or_biometric")),
+        "sms_telephony" => Some(("sms_telephony", "use_sms_or_phone_state")),
+        "work_background" => Some(("background_tasks", "schedule_or_handle_background_work")),
+        _ => None,
     }
 }
 

@@ -825,7 +825,7 @@ fn sse_event(event: Value) -> String {
 }
 
 fn request_message_input_texts(body: &[u8], role: &str) -> Vec<String> {
-    let body: Value = match edgerun_json::from_serde_slice(body) {
+    let body: Value = match edgerun_json::from_slice(body) {
         Ok(body) => body,
         Err(error) => panic!("parse request body: {error}"),
     };
@@ -3437,7 +3437,7 @@ async fn post_tool_use_records_additional_context_for_apply_patch() -> Result<()
     let tool_response = hook_inputs[0]["tool_response"]
         .as_str()
         .context("apply_patch tool_response should be a string")?;
-    let mut parsed_tool_response = edgerun_json::from_serde_str::<Value>(tool_response)?;
+    let mut parsed_tool_response = edgerun_json::from_str(tool_response)?;
     if let Some(metadata) = parsed_tool_response
         .get_mut("metadata")
         .and_then(Value::as_object_mut)

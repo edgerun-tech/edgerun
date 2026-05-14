@@ -2325,7 +2325,7 @@ async fn permission_request_hook_allows_mcp_tool_call() {
     let log = std::fs::read_to_string(log_path).expect("read MCP permission hook log");
     let inputs = log
         .lines()
-        .map(|line| edgerun_json::from_serde_str::<edgerun_json::Value>(line).expect("parse hook input"))
+        .map(|line| edgerun_json::from_str(line).expect("parse hook input"))
         .collect::<Vec<_>>();
     assert_eq!(
         inputs,
@@ -2385,7 +2385,7 @@ async fn permission_request_hook_uses_hook_tool_name_without_metadata() {
     let log = std::fs::read_to_string(log_path).expect("read MCP permission hook log");
     let inputs = log
         .lines()
-        .map(|line| edgerun_json::from_serde_str::<edgerun_json::Value>(line).expect("parse hook input"))
+        .map(|line| edgerun_json::from_str(line).expect("parse hook input"))
         .collect::<Vec<_>>();
     assert_eq!(
         inputs,

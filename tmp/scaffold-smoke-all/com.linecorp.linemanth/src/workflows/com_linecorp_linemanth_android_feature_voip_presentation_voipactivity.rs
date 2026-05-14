@@ -39,6 +39,7 @@ fn oncreate(state: &mut AppState, capabilities: &Capabilities) {
     // Static call sites: platform=1, internal=3
     // Signal: activity_ui (1 call sites)
     // Signal: package_intents (1 call sites)
+    state.capability_intents.push(capabilities.app_events.request("send_or_receive_app_event", SOURCE_CLASS));
     // TODO: replace Android Intent behavior with typed Edgerun events
     // TODO: translate this lifecycle/body method into explicit Edgerun control flow
 }
@@ -49,6 +50,7 @@ fn h(state: &mut AppState, capabilities: &Capabilities) {
     // Source method: com.linecorp.linemanth.android.feature.voip.presentation.VoipActivity->H
     // Static call sites: platform=2, internal=15
     // Signal: package_intents (2 call sites)
+    state.capability_intents.push(capabilities.app_events.request("send_or_receive_app_event", SOURCE_CLASS));
     // TODO: replace Android Intent behavior with typed Edgerun events
     // TODO: translate this lifecycle/body method into explicit Edgerun control flow
 }

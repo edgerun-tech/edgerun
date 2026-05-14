@@ -285,7 +285,7 @@ fn parse_arguments(raw_args: &str) -> Result<Option<Value>, FunctionCallError> {
     if raw_args.trim().is_empty() {
         Ok(None)
     } else {
-        let value: Value = edgerun_json::from_serde_str(raw_args).map_err(|err| {
+        let value: Value = edgerun_json::from_str(raw_args).map_err(|err| {
             FunctionCallError::RespondToModel(format!("failed to parse function arguments: {err}"))
         })?;
         if value.is_null() {

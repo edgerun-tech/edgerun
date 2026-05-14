@@ -809,7 +809,7 @@ mod tests {
 
     #[test]
     fn model_info_defaults_availability_nux_to_none_when_omitted() {
-        let model: ModelInfo = edgerun_json::from_serde_value(edgerun_json::json!({
+        let model: ModelInfo = edgerun_json::from_value(edgerun_json::json!({
             "slug": "test-model",
             "display_name": "Test Model",
             "description": null,

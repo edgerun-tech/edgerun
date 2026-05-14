@@ -7,6 +7,10 @@ use codex_protocol::protocol::SessionSource as CoreSessionSource;
 use codex_protocol::protocol::SubAgentSource as CoreSubAgentSource;
 use codex_protocol::protocol::ThreadSource as CoreThreadSource;
 use edgerun_error::Error;
+use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
+use edgerun_json::ToJson;
+use edgerun_json::Value as JsonValue;
 use edgerun_serde::Deserialize;
 use edgerun_serde::Serialize;
 use schemars::JsonSchema;
@@ -182,6 +186,29 @@ pub enum TurnItemsView {
     /// `items` contains every ThreadItem available from persisted app-server history for this turn.
     #[default]
     Full,
+}
+
+impl ToJson for TurnItemsView {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            Self::NotLoaded => "notLoaded",
+            Self::Summary => "summary",
+            Self::Full => "full",
+        })
+    }
+}
+
+impl FromJson for TurnItemsView {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "notLoaded" => Ok(Self::NotLoaded),
+            "summary" => Ok(Self::Summary),
+            "full" => Ok(Self::Full),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown turn items view `{other}`"
+            ))),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS, Error)]

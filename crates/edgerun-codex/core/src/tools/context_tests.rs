@@ -123,7 +123,7 @@ fn mcp_tool_output_response_item_includes_wall_time() {
             let Some(payload) = text.strip_prefix("Wall time: 1.2500 seconds\nOutput:\n") else {
                 panic!("MCP output should include wall-time header: {text}");
             };
-            let parsed: edgerun_json::Value = edgerun_json::from_serde_str(payload).unwrap_or_else(|err| {
+            let parsed: edgerun_json::Value = edgerun_json::from_str(payload).unwrap_or_else(|err| {
                 panic!("MCP output should serialize JSON content: {err}");
             });
             assert_eq!(

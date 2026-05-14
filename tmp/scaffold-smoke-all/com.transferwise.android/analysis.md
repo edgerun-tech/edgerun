@@ -49,6 +49,13 @@
 - `sms_telephony`: 158 call sites; SMS, MMS, phone, carrier, or telephony behavior
 - `work_background`: 21372 call sites; jobs, alarms, wake locks, services, or background work
 
+## Generated Capability Intent Plan
+
+- `com.wise.deeplink.DeepLinkProxyActivity` -> `onCreate` records:
+  - `app_events.send_or_receive_app_event` from `package_intents` evidence
+- `com.wise.deeplink.DeepLinkProxyActivity` -> `onResume` records:
+  - `app_events.send_or_receive_app_event` from `package_intents` evidence
+
 ## UI And Resource Hints
 
 - Resource buckets: `drawable`(2097) `layout`(385)

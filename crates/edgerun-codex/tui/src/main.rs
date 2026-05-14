@@ -6,9 +6,9 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
 use std::process::Stdio;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 use std::time::Instant;
@@ -378,7 +378,7 @@ async fn run_agent_loop(
                 }
                 emit(AgentEvent::ToolStarted(invocation.display_name.clone()));
             }
-            let result = execute_tool_invocation(&invocation).await;
+            let result = execute_tool_invocation(&invocation, cancel.as_deref()).await;
             if let Some(emit) = emit.as_deref_mut() {
                 emit(AgentEvent::ToolCompleted {
                     name: invocation.display_name.clone(),
@@ -412,11 +412,11 @@ async fn stream_turn_with_events(
             return Err("cancelled".into());
         }
         let Some(event) =
-            match edgerun_tokio::time::timeout(CANCEL_POLL_INTERVAL, stream.rx_event.recv()).await
+            (match edgerun_tokio::time::timeout(CANCEL_POLL_INTERVAL, stream.rx_event.recv()).await
             {
                 Ok(event) => event,
                 Err(_) => continue,
-            }
+            })
         else {
             break;
         };
@@ -568,18 +568,33 @@ fn custom_tool_invocation(name: &str, input: &str, call_id: &str) -> ToolInvocat
     }
 }
 
-async fn execute_tool_invocation(invocation: &ToolInvocation) -> ToolExecutionResult {
+async fn execute_tool_invocation(
+    invocation: &ToolInvocation,
+    cancel: Option<&AtomicBool>,
+) -> ToolExecutionResult {
     let result = match &invocation.kind {
-        ToolInvocationKind::ShellCommand(Ok(args)) => execute_shell_command(args).await,
+        ToolInvocationKind::ShellCommand(Ok(args)) => execute_shell_command(args, cancel).await,
         ToolInvocationKind::ShellCommand(Err(error))
         | ToolInvocationKind::Shell(Err(error))
         | ToolInvocationKind::ApplyPatch(Err(error)) => Err(error.clone()),
         ToolInvocationKind::Shell(Ok(args)) => {
-            execute_process(args.command.clone(), args.workdir.clone(), args.timeout_ms).await
+            execute_process(
+                args.command.clone(),
+                args.workdir.clone(),
+                args.timeout_ms,
+                cancel,
+            )
+            .await
         }
         ToolInvocationKind::ApplyPatch(Ok(args)) => execute_apply_patch(&args.input).await,
         ToolInvocationKind::LocalShell(args) => {
-            execute_process(args.command.clone(), args.workdir.clone(), args.timeout_ms).await
+            execute_process(
+                args.command.clone(),
+                args.workdir.clone(),
+                args.timeout_ms,
+                cancel,
+            )
+            .await
         }
         ToolInvocationKind::Unsupported(error) => Err(error.clone()),
     };
@@ -611,13 +626,17 @@ fn parse_shell_command_args(arguments: &str) -> Result<ShellCommandArgs, String>
     })
 }
 
-async fn execute_shell_command(args: &ShellCommandArgs) -> Result<String, String> {
+async fn execute_shell_command(
+    args: &ShellCommandArgs,
+    cancel: Option<&AtomicBool>,
+) -> Result<String, String> {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
     let shell_flag = if args.login { "-lc" } else { "-c" };
     execute_process(
         vec![shell, shell_flag.to_string(), args.command.clone()],
         args.workdir.clone(),
         args.timeout_ms,
+        cancel,
     )
     .await
 }
@@ -636,6 +655,7 @@ async fn execute_process(
     command: Vec<String>,
     workdir: Option<String>,
     timeout_ms: Option<u64>,
+    cancel: Option<&AtomicBool>,
 ) -> Result<String, String> {
     if command.is_empty() {
         return Err("command must not be empty".to_string());
@@ -655,6 +675,18 @@ async fn execute_process(
     let started = Instant::now();
 
     loop {
+        if is_cancelled(cancel) {
+            let _ = child.kill();
+            let output = child
+                .wait_with_output()
+                .map_err(|error| error.to_string())?;
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!(
+                "command cancelled\nstdout:\n{}\nstderr:\n{}",
+                stdout, stderr
+            ));
+        }
         if child
             .try_wait()
             .map_err(|error| error.to_string())?
@@ -991,10 +1023,13 @@ fn read_chatgpt_auth() -> Result<Arc<ChatGptAuth>, Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use super::ToolInvocationKind;
+    use super::execute_process;
     use super::function_tool_invocation;
     use super::json_required_string;
     use super::parse_tool_arguments;
     use super::patch_preview;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
 
     #[test]
     fn parse_tool_arguments_accepts_normal_json() {
@@ -1055,5 +1090,28 @@ mod tests {
         assert_eq!(args.workdir.as_deref(), Some("/tmp"));
         assert_eq!(args.timeout_ms, Some(1000));
         assert!(args.login);
+    }
+
+    #[test]
+    fn execute_process_honors_cancel_flag() {
+        let runtime = edgerun_tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("runtime");
+        let cancel = Arc::new(AtomicBool::new(true));
+
+        let result = runtime.block_on(execute_process(
+            vec!["sh".to_string(), "-c".to_string(), "sleep 5".to_string()],
+            None,
+            Some(30_000),
+            Some(cancel.as_ref()),
+        ));
+
+        assert!(
+            result
+                .expect_err("cancelled command should fail")
+                .contains("command cancelled")
+        );
+        assert!(cancel.load(Ordering::Relaxed));
     }
 }

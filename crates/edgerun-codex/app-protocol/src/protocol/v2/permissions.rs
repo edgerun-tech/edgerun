@@ -20,6 +20,11 @@ use codex_protocol::permissions::NetworkSandboxPolicy as CoreNetworkSandboxPolic
 use codex_protocol::protocol::NetworkAccess as CoreNetworkAccess;
 use codex_protocol::request_permissions::PermissionGrantScope as CorePermissionGrantScope;
 use codex_protocol::request_permissions::RequestPermissionProfile as CoreRequestPermissionProfile;
+use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
+use edgerun_json::Map;
+use edgerun_json::ToJson;
+use edgerun_json::Value;
 use edgerun_serde::Deserialize;
 use edgerun_serde::Serialize;
 use schemars::JsonSchema;
@@ -33,6 +38,31 @@ v2_enum_from_core! {
         Https,
         Socks5Tcp,
         Socks5Udp,
+    }
+}
+
+impl ToJson for NetworkApprovalProtocol {
+    fn to_json(&self) -> Value {
+        Value::from(match self {
+            Self::Http => "http",
+            Self::Https => "https",
+            Self::Socks5Tcp => "socks5Tcp",
+            Self::Socks5Udp => "socks5Udp",
+        })
+    }
+}
+
+impl FromJson for NetworkApprovalProtocol {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "http" => Ok(Self::Http),
+            "https" => Ok(Self::Https),
+            "socks5Tcp" => Ok(Self::Socks5Tcp),
+            "socks5Udp" => Ok(Self::Socks5Udp),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown network approval protocol `{other}`"
+            ))),
+        }
     }
 }
 
@@ -67,6 +97,33 @@ pub struct AdditionalFileSystemPermissions {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub entries: Option<Vec<FileSystemSandboxEntry>>,
+}
+
+impl ToJson for AdditionalFileSystemPermissions {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        object.push_field("read", absolute_paths_option_json(self.read.as_deref()));
+        object.push_field("write", absolute_paths_option_json(self.write.as_deref()));
+        if let Some(depth) = self.glob_scan_max_depth {
+            object.push_field("globScanMaxDepth", depth.get() as u64);
+        }
+        if let Some(entries) = &self.entries {
+            object.push_field("entries", entries.to_json());
+        }
+        Value::Object(object)
+    }
+}
+
+impl FromJson for AdditionalFileSystemPermissions {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("AdditionalFileSystemPermissions")?;
+        Ok(Self {
+            read: optional_absolute_paths(object.remove("read"))?,
+            write: optional_absolute_paths(object.remove("write"))?,
+            glob_scan_max_depth: optional_nonzero_usize(object.remove("globScanMaxDepth"))?,
+            entries: object.take_optional("entries")?,
+        })
+    }
 }
 
 impl From<CoreFileSystemPermissions> for AdditionalFileSystemPermissions {
@@ -135,11 +192,45 @@ pub struct AdditionalNetworkPermissions {
     pub enabled: Option<bool>,
 }
 
+impl ToJson for AdditionalNetworkPermissions {
+    fn to_json(&self) -> Value {
+        let mut object = Map::with_capacity(1);
+        object.push_field("enabled", self.enabled.to_json());
+        Value::Object(object)
+    }
+}
+
+impl FromJson for AdditionalNetworkPermissions {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("AdditionalNetworkPermissions")?;
+        Ok(Self {
+            enabled: object.take_optional("enabled")?,
+        })
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct PermissionProfileNetworkPermissions {
     pub enabled: bool,
+}
+
+impl ToJson for PermissionProfileNetworkPermissions {
+    fn to_json(&self) -> Value {
+        let mut object = Map::with_capacity(1);
+        object.push_field("enabled", self.enabled);
+        Value::Object(object)
+    }
+}
+
+impl FromJson for PermissionProfileNetworkPermissions {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("PermissionProfileNetworkPermissions")?;
+        Ok(Self {
+            enabled: object.take_required("enabled")?,
+        })
+    }
 }
 
 impl From<CoreNetworkPermissions> for AdditionalNetworkPermissions {
@@ -185,6 +276,25 @@ pub struct RequestPermissionProfile {
     pub file_system: Option<AdditionalFileSystemPermissions>,
 }
 
+impl ToJson for RequestPermissionProfile {
+    fn to_json(&self) -> Value {
+        let mut object = Map::with_capacity(2);
+        object.push_field("network", self.network.to_json());
+        object.push_field("fileSystem", self.file_system.to_json());
+        Value::Object(object)
+    }
+}
+
+impl FromJson for RequestPermissionProfile {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("RequestPermissionProfile")?;
+        Ok(Self {
+            network: object.take_optional("network")?,
+            file_system: object.take_optional("fileSystem")?,
+        })
+    }
+}
+
 impl From<CoreRequestPermissionProfile> for RequestPermissionProfile {
     fn from(value: CoreRequestPermissionProfile) -> Self {
         Self {
@@ -211,6 +321,29 @@ v2_enum_from_core!(
     }
 );
 
+impl ToJson for FileSystemAccessMode {
+    fn to_json(&self) -> Value {
+        Value::from(match self {
+            Self::Read => "read",
+            Self::Write => "write",
+            Self::None => "none",
+        })
+    }
+}
+
+impl FromJson for FileSystemAccessMode {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "read" => Ok(Self::Read),
+            "write" => Ok(Self::Write),
+            "none" => Ok(Self::None),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown file system access mode `{other}`"
+            ))),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 #[ts(tag = "kind")]
@@ -228,6 +361,65 @@ pub enum FileSystemSpecialPath {
         path: String,
         subpath: Option<PathBuf>,
     },
+}
+
+impl ToJson for FileSystemSpecialPath {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        match self {
+            Self::Root => object.push_field("kind", "root"),
+            Self::Minimal => object.push_field("kind", "minimal"),
+            Self::ProjectRoots { subpath } => {
+                object.push_field("kind", "project_roots");
+                object.push_field(
+                    "subpath",
+                    subpath
+                        .as_ref()
+                        .map(|path| path.to_string_lossy().into_owned())
+                        .to_json(),
+                );
+            }
+            Self::Tmpdir => object.push_field("kind", "tmpdir"),
+            Self::SlashTmp => object.push_field("kind", "slash_tmp"),
+            Self::Unknown { path, subpath } => {
+                object.push_field("kind", "unknown");
+                object.push_field("path", path);
+                object.push_field(
+                    "subpath",
+                    subpath
+                        .as_ref()
+                        .map(|path| path.to_string_lossy().into_owned())
+                        .to_json(),
+                );
+            }
+        }
+        Value::Object(object)
+    }
+}
+
+impl FromJson for FileSystemSpecialPath {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("FileSystemSpecialPath")?;
+        let kind: String = object.take_required("kind")?;
+        let subpath = object
+            .take_optional::<String>("subpath")?
+            .map(PathBuf::from);
+        match kind.as_str() {
+            "root" => Ok(Self::Root),
+            "minimal" => Ok(Self::Minimal),
+            "project_roots" | "current_working_directory" => Ok(Self::ProjectRoots { subpath }),
+            "tmpdir" => Ok(Self::Tmpdir),
+            "slash_tmp" => Ok(Self::SlashTmp),
+            "unknown" => Ok(Self::Unknown {
+                path: object.take_required("path")?,
+                subpath,
+            }),
+            other => Ok(Self::Unknown {
+                path: other.to_string(),
+                subpath,
+            }),
+        }
+    }
 }
 
 impl From<CoreFileSystemSpecialPath> for FileSystemSpecialPath {
@@ -266,6 +458,48 @@ pub enum FileSystemPath {
     Special { value: FileSystemSpecialPath },
 }
 
+impl ToJson for FileSystemPath {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        match self {
+            Self::Path { path } => {
+                object.push_field("type", "path");
+                object.push_field("path", absolute_path_json(path));
+            }
+            Self::GlobPattern { pattern } => {
+                object.push_field("type", "glob_pattern");
+                object.push_field("pattern", pattern.clone());
+            }
+            Self::Special { value } => {
+                object.push_field("type", "special");
+                object.push_field("value", value.to_json());
+            }
+        }
+        Value::Object(object)
+    }
+}
+
+impl FromJson for FileSystemPath {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("FileSystemPath")?;
+        let ty: String = object.take_required("type")?;
+        match ty.as_str() {
+            "path" => Ok(Self::Path {
+                path: required_absolute_path(object.remove("path"), "path")?,
+            }),
+            "glob_pattern" => Ok(Self::GlobPattern {
+                pattern: object.take_required("pattern")?,
+            }),
+            "special" => Ok(Self::Special {
+                value: object.take_required("value")?,
+            }),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown file system path type `{other}`"
+            ))),
+        }
+    }
+}
+
 impl From<CoreFileSystemPath> for FileSystemPath {
     fn from(value: CoreFileSystemPath) -> Self {
         match value {
@@ -296,6 +530,25 @@ impl From<FileSystemPath> for CoreFileSystemPath {
 pub struct FileSystemSandboxEntry {
     pub path: FileSystemPath,
     pub access: FileSystemAccessMode,
+}
+
+impl ToJson for FileSystemSandboxEntry {
+    fn to_json(&self) -> Value {
+        let mut object = Map::with_capacity(2);
+        object.push_field("path", self.path.to_json());
+        object.push_field("access", self.access.to_json());
+        Value::Object(object)
+    }
+}
+
+impl FromJson for FileSystemSandboxEntry {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("FileSystemSandboxEntry")?;
+        Ok(Self {
+            path: object.take_required("path")?,
+            access: object.take_required("access")?,
+        })
+    }
 }
 
 impl From<CoreFileSystemSandboxEntry> for FileSystemSandboxEntry {
@@ -330,6 +583,45 @@ pub enum PermissionProfileFileSystemPermissions {
         glob_scan_max_depth: Option<NonZeroUsize>,
     },
     Unrestricted,
+}
+
+impl ToJson for PermissionProfileFileSystemPermissions {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        match self {
+            Self::Restricted {
+                entries,
+                glob_scan_max_depth,
+            } => {
+                object.push_field("type", "restricted");
+                object.push_field("entries", entries.to_json());
+                if let Some(depth) = glob_scan_max_depth {
+                    object.push_field("globScanMaxDepth", depth.get() as u64);
+                }
+            }
+            Self::Unrestricted => {
+                object.push_field("type", "unrestricted");
+            }
+        }
+        Value::Object(object)
+    }
+}
+
+impl FromJson for PermissionProfileFileSystemPermissions {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("PermissionProfileFileSystemPermissions")?;
+        let ty: String = object.take_required("type")?;
+        match ty.as_str() {
+            "restricted" => Ok(Self::Restricted {
+                entries: object.take_required("entries")?,
+                glob_scan_max_depth: optional_nonzero_usize(object.remove("globScanMaxDepth"))?,
+            }),
+            "unrestricted" => Ok(Self::Unrestricted),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown permission profile file system type `{other}`"
+            ))),
+        }
+    }
 }
 
 impl From<CoreManagedFileSystemPermissions> for PermissionProfileFileSystemPermissions {
@@ -388,6 +680,50 @@ pub enum PermissionProfile {
     External {
         network: PermissionProfileNetworkPermissions,
     },
+}
+
+impl ToJson for PermissionProfile {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        match self {
+            Self::Managed {
+                network,
+                file_system,
+            } => {
+                object.push_field("type", "managed");
+                object.push_field("network", network.to_json());
+                object.push_field("fileSystem", file_system.to_json());
+            }
+            Self::Disabled => {
+                object.push_field("type", "disabled");
+            }
+            Self::External { network } => {
+                object.push_field("type", "external");
+                object.push_field("network", network.to_json());
+            }
+        }
+        Value::Object(object)
+    }
+}
+
+impl FromJson for PermissionProfile {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("PermissionProfile")?;
+        let ty: String = object.take_required("type")?;
+        match ty.as_str() {
+            "managed" => Ok(Self::Managed {
+                network: object.take_required("network")?,
+                file_system: object.take_required("fileSystem")?,
+            }),
+            "disabled" => Ok(Self::Disabled),
+            "external" => Ok(Self::External {
+                network: object.take_required("network")?,
+            }),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown permission profile type `{other}`"
+            ))),
+        }
+    }
 }
 
 impl From<CorePermissionProfile> for PermissionProfile {
@@ -586,6 +922,27 @@ pub enum NetworkAccess {
     Enabled,
 }
 
+impl ToJson for NetworkAccess {
+    fn to_json(&self) -> Value {
+        Value::from(match self {
+            Self::Restricted => "restricted",
+            Self::Enabled => "enabled",
+        })
+    }
+}
+
+impl FromJson for NetworkAccess {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "restricted" => Ok(Self::Restricted),
+            "enabled" => Ok(Self::Enabled),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown network access `{other}`"
+            ))),
+        }
+    }
+}
+
 #[derive(Serialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
 #[serde(tag = "type", rename_all = "camelCase")]
 #[ts(tag = "type")]
@@ -616,6 +973,116 @@ pub enum SandboxPolicy {
         #[serde(default)]
         exclude_slash_tmp: bool,
     },
+}
+
+impl ToJson for SandboxPolicy {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        match self {
+            Self::DangerFullAccess => {
+                object.push_field("type", "dangerFullAccess");
+            }
+            Self::ReadOnly { network_access } => {
+                object.push_field("type", "readOnly");
+                object.push_field("networkAccess", *network_access);
+            }
+            Self::ExternalSandbox { network_access } => {
+                object.push_field("type", "externalSandbox");
+                object.push_field("networkAccess", network_access.to_json());
+            }
+            Self::WorkspaceWrite {
+                writable_roots,
+                network_access,
+                exclude_tmpdir_env_var,
+                exclude_slash_tmp,
+            } => {
+                object.push_field("type", "workspaceWrite");
+                object.push_field(
+                    "writableRoots",
+                    Value::Array(
+                        writable_roots
+                            .iter()
+                            .map(|root| Value::from(root.as_path().display().to_string()))
+                            .collect(),
+                    ),
+                );
+                object.push_field("networkAccess", *network_access);
+                object.push_field("excludeTmpdirEnvVar", *exclude_tmpdir_env_var);
+                object.push_field("excludeSlashTmp", *exclude_slash_tmp);
+            }
+        }
+        Value::Object(object)
+    }
+}
+
+impl FromJson for SandboxPolicy {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("SandboxPolicy")?;
+        let ty: String = object.take_required("type")?;
+        match ty.as_str() {
+            "dangerFullAccess" => Ok(Self::DangerFullAccess),
+            "readOnly" => {
+                reject_restricted_legacy_access(object.remove("access"), "readOnly.access")?;
+                Ok(Self::ReadOnly {
+                    network_access: object.take_optional("networkAccess")?.unwrap_or(false),
+                })
+            }
+            "externalSandbox" => Ok(Self::ExternalSandbox {
+                network_access: object
+                    .take_optional("networkAccess")?
+                    .unwrap_or(NetworkAccess::Restricted),
+            }),
+            "workspaceWrite" => {
+                reject_restricted_legacy_access(
+                    object.remove("readOnlyAccess"),
+                    "workspaceWrite.readOnlyAccess",
+                )?;
+                Ok(Self::WorkspaceWrite {
+                    writable_roots: absolute_paths_from_json(
+                        object
+                            .remove("writableRoots")
+                            .unwrap_or_else(|| Value::Array(Vec::new())),
+                    )?,
+                    network_access: object.take_optional("networkAccess")?.unwrap_or(false),
+                    exclude_tmpdir_env_var: object
+                        .take_optional("excludeTmpdirEnvVar")?
+                        .unwrap_or(false),
+                    exclude_slash_tmp: object.take_optional("excludeSlashTmp")?.unwrap_or(false),
+                })
+            }
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown sandbox policy type `{other}`"
+            ))),
+        }
+    }
+}
+
+fn reject_restricted_legacy_access(
+    value: Option<Value>,
+    field: &str,
+) -> Result<(), JsonValueError> {
+    let Some(value) = value else {
+        return Ok(());
+    };
+    let mut object = value.into_object(field)?;
+    let ty: String = object.take_required("type")?;
+    if ty == "restricted" {
+        return Err(JsonValueError::WrongType(format!(
+            "{field} is no longer supported; use permissionProfile for restricted reads"
+        )));
+    }
+    Ok(())
+}
+
+fn absolute_paths_from_json(value: Value) -> Result<Vec<AbsolutePathBuf>, JsonValueError> {
+    Vec::<String>::from_json(value)?
+        .into_iter()
+        .map(|path| {
+            AbsolutePathBuf::try_from(PathBuf::from(&path)).map_err(|_| {
+                JsonValueError::WrongType(format!("expected absolute path, found `{path}`"))
+            })
+        })
+        .collect()
 }
 
 #[derive(Deserialize)]
@@ -764,6 +1231,68 @@ impl From<codex_protocol::protocol::SandboxPolicy> for SandboxPolicy {
             },
         }
     }
+}
+
+fn absolute_path_json(path: &AbsolutePathBuf) -> Value {
+    Value::from(path.as_path().display().to_string())
+}
+
+fn absolute_paths_option_json(paths: Option<&[AbsolutePathBuf]>) -> Value {
+    paths
+        .map(|paths| Value::Array(paths.iter().map(absolute_path_json).collect()))
+        .unwrap_or(Value::Null)
+}
+
+fn optional_absolute_path(value: Option<Value>) -> Result<Option<AbsolutePathBuf>, JsonValueError> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    if value.is_null() {
+        return Ok(None);
+    }
+    let path = String::from_json(value)?;
+    AbsolutePathBuf::try_from(PathBuf::from(&path))
+        .map(Some)
+        .map_err(|_| JsonValueError::WrongType(format!("expected absolute path, found `{path}`")))
+}
+
+fn required_absolute_path(
+    value: Option<Value>,
+    field: &str,
+) -> Result<AbsolutePathBuf, JsonValueError> {
+    optional_absolute_path(value)?
+        .ok_or_else(|| JsonValueError::WrongType(format!("missing required field `{field}`")))
+}
+
+fn optional_absolute_paths(value: Option<Value>) -> Result<Option<Vec<AbsolutePathBuf>>, JsonValueError> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    if value.is_null() {
+        return Ok(None);
+    }
+    Vec::<String>::from_json(value)?
+        .into_iter()
+        .map(|path| {
+            AbsolutePathBuf::try_from(PathBuf::from(&path)).map_err(|_| {
+                JsonValueError::WrongType(format!("expected absolute path, found `{path}`"))
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map(Some)
+}
+
+fn optional_nonzero_usize(value: Option<Value>) -> Result<Option<NonZeroUsize>, JsonValueError> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    if value.is_null() {
+        return Ok(None);
+    }
+    let value = usize::from_json(value)?;
+    NonZeroUsize::new(value)
+        .map(Some)
+        .ok_or_else(|| JsonValueError::WrongType("expected non-zero usize".to_string()))
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]

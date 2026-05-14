@@ -23,6 +23,8 @@ fn oncreate(state: &mut AppState, capabilities: &Capabilities) {
     // Signal: activity_ui (6 call sites)
     // Signal: network_web (3 call sites)
     // Signal: package_intents (2 call sites)
+    state.capability_intents.push(capabilities.network.request("request_network_or_webview", SOURCE_CLASS));
+    state.capability_intents.push(capabilities.app_events.request("send_or_receive_app_event", SOURCE_CLASS));
     // TODO: replace Android Intent behavior with typed Edgerun events
     // TODO: replace direct Android/JVM network access with crate::network allowlist checks
     // TODO: translate this lifecycle/body method into explicit Edgerun control flow

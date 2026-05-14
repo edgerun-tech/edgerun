@@ -1,6 +1,9 @@
 use crate::compat::absolute_path::AbsolutePathBuf;
 use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
+use edgerun_json::Map;
 use edgerun_json::ToJson;
+use edgerun_json::Value;
 use edgerun_serde::Deserialize;
 use edgerun_serde::Serialize;
 use edgerun_strum_macros::Display;
@@ -119,6 +122,28 @@ impl JsonSchema for ApprovalsReviewer {
             &["user", "auto_review", "guardian_subagent"],
             "Configures who approval requests are routed to for review. Examples include sandbox escapes, blocked network access, MCP approval prompts, and ARC escalations. Defaults to `user`. `auto_review` uses a carefully prompted subagent to gather relevant context and apply a risk-based decision framework before approving or denying the request. The legacy value `guardian_subagent` is accepted for compatibility.",
         )
+    }
+}
+
+impl ToJson for ApprovalsReviewer {
+    fn to_json(&self) -> Value {
+        match self {
+            Self::User => "user",
+            Self::AutoReview => "guardian_subagent",
+        }
+        .to_json()
+    }
+}
+
+impl FromJson for ApprovalsReviewer {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "user" => Ok(Self::User),
+            "auto_review" | "guardian_subagent" => Ok(Self::AutoReview),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown approvals reviewer `{other}`"
+            ))),
+        }
     }
 }
 
@@ -537,6 +562,41 @@ impl ModelProviderAuthInfo {
     }
 }
 
+impl ToJson for ModelProviderAuthInfo {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        object.push_field("command", self.command.to_json());
+        object.push_field("args", self.args.to_json());
+        object.push_field("timeout_ms", self.timeout_ms.get().to_json());
+        object.push_field("refresh_interval_ms", self.refresh_interval_ms.to_json());
+        if !is_default_provider_auth_cwd(&self.cwd) {
+            object.push_field("cwd", self.cwd.to_json());
+        }
+        Value::Object(object)
+    }
+}
+
+impl FromJson for ModelProviderAuthInfo {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ModelProviderAuthInfo")?;
+        let timeout_ms = object
+            .take_optional_any::<u64>(&["timeout_ms"])?
+            .map(|value| non_zero_u64(value, "model_providers.<id>.auth.timeout_ms"))
+            .unwrap_or_else(default_provider_auth_timeout_ms);
+        Ok(Self {
+            command: object.take_required_any(&["command"])?,
+            args: object.take_optional_any(&["args"])?.unwrap_or_default(),
+            timeout_ms,
+            refresh_interval_ms: object
+                .take_optional_any(&["refresh_interval_ms"])?
+                .unwrap_or_else(default_provider_auth_refresh_interval_ms),
+            cwd: object
+                .take_optional_any(&["cwd"])?
+                .unwrap_or_else(default_provider_auth_cwd),
+        })
+    }
+}
+
 fn default_provider_auth_timeout_ms() -> NonZeroU64 {
     non_zero_u64(
         DEFAULT_PROVIDER_AUTH_TIMEOUT_MS,
@@ -667,6 +727,28 @@ impl ModeKind {
     }
 }
 
+impl ToJson for ModeKind {
+    fn to_json(&self) -> Value {
+        match self {
+            Self::Plan => "plan",
+            Self::Default | Self::PairProgramming | Self::Execute => "default",
+        }
+        .to_json()
+    }
+}
+
+impl FromJson for ModeKind {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "plan" => Ok(Self::Plan),
+            "default" | "code" | "pair_programming" | "execute" | "custom" => Ok(Self::Default),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown collaboration mode `{other}`"
+            ))),
+        }
+    }
+}
+
 /// Collaboration mode for a Codex session.
 #[derive(Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize, JsonSchema, TS)]
 #[serde(rename_all = "lowercase")]
@@ -794,7 +876,7 @@ mod tests {
     fn mode_kind_deserializes_alias_values_to_default() {
         for alias in ["code", "pair_programming", "execute", "custom"] {
             let json = format!("\"{alias}\"");
-            let mode: ModeKind = edgerun_json::from_serde_str(&json).expect("deserialize mode");
+            let mode: ModeKind = edgerun_json::from_json_str(&json).expect("deserialize mode");
             assert_eq!(ModeKind::Default, mode);
         }
     }
@@ -814,7 +896,7 @@ mod tests {
         for value in ["user", "auto_review", "guardian_subagent"] {
             let json = format!("\"{value}\"");
             let reviewer: ApprovalsReviewer =
-                edgerun_json::from_serde_str(&json).expect("deserialize reviewer");
+                edgerun_json::from_json_str(&json).expect("deserialize reviewer");
             let expected = if value == "user" {
                 ApprovalsReviewer::User
             } else {

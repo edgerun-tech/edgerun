@@ -33,6 +33,10 @@
 - `sms_telephony`: 4 call sites; SMS, MMS, phone, carrier, or telephony behavior
 - `work_background`: 2150 call sites; jobs, alarms, wake locks, services, or background work
 
+## Generated Capability Intent Plan
+
+- No generated workflow method currently records capability intents.
+
 ## UI And Resource Hints
 
 - Resource buckets: `xml`(1)

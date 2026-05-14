@@ -21,6 +21,7 @@ fn onresume(state: &mut AppState, capabilities: &Capabilities) {
     // Source method: com.google.android.apps.messaging.main.MainActivity->onResume
     // Static call sites: platform=3, internal=37
     // Signal: package_intents (1 call sites)
+    state.capability_intents.push(capabilities.app_events.request("send_or_receive_app_event", SOURCE_CLASS));
     // TODO: replace Android Intent behavior with typed Edgerun events
     // TODO: translate this lifecycle/body method into explicit Edgerun control flow
 }
@@ -31,6 +32,7 @@ fn onnewintent(state: &mut AppState, capabilities: &Capabilities) {
     // Source method: com.google.android.apps.messaging.main.MainActivity->onNewIntent
     // Static call sites: platform=10, internal=26
     // Signal: package_intents (6 call sites)
+    state.capability_intents.push(capabilities.app_events.request("send_or_receive_app_event", SOURCE_CLASS));
     // TODO: replace Android Intent behavior with typed Edgerun events
     // TODO: translate this lifecycle/body method into explicit Edgerun control flow
 }

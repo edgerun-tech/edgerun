@@ -303,7 +303,7 @@ text(JSON.stringify(await tools.exec_command({ cmd: "printf code_mode_exec_marke
         ),
         text_item(&items, /*index*/ 0),
     );
-    let parsed: Value = edgerun_json::from_serde_str(text_item(&items, /*index*/ 1))?;
+    let parsed: Value = edgerun_json::from_str(text_item(&items, /*index*/ 1))?;
     assert!(
         parsed
             .get("chunk_id")
@@ -462,7 +462,7 @@ if (!tool) {
         Some(false),
         "code_mode_only deferred app tool call failed unexpectedly: {output}"
     );
-    let parsed: Value = edgerun_json::from_serde_str(&output)?;
+    let parsed: Value = edgerun_json::from_str(&output)?;
     assert_eq!(
         parsed,
         edgerun_json::json!({
@@ -551,7 +551,7 @@ text(JSON.stringify(result));
         "exec update_plan call failed unexpectedly: {output}"
     );
 
-    let parsed: Value = edgerun_json::from_serde_str(&output)?;
+    let parsed: Value = edgerun_json::from_str(&output)?;
     assert_eq!(parsed, edgerun_json::json!({}));
 
     Ok(())
@@ -2309,7 +2309,7 @@ text(JSON.stringify({
         "exec global tools inspection failed unexpectedly: {output}"
     );
 
-    let parsed: Value = edgerun_json::from_serde_str(&output)?;
+    let parsed: Value = edgerun_json::from_str(&output)?;
     assert_eq!(
         parsed,
         edgerun_json::json!({
@@ -2486,7 +2486,7 @@ text(JSON.stringify(tool));
         "exec ALL_TOOLS lookup failed unexpectedly: {output}"
     );
 
-    let parsed: Value = edgerun_json::from_serde_str(
+    let parsed: Value = edgerun_json::from_str(
         &custom_tool_output_last_non_empty_text(&req, "call-1")
             .expect("exec ALL_TOOLS lookup should emit JSON"),
     )?;
@@ -2524,7 +2524,7 @@ text(JSON.stringify(tool));
         "exec ALL_TOOLS MCP lookup failed unexpectedly: {output}"
     );
 
-    let parsed: Value = edgerun_json::from_serde_str(
+    let parsed: Value = edgerun_json::from_str(
         &custom_tool_output_last_non_empty_text(&req, "call-1")
             .expect("exec ALL_TOOLS MCP lookup should emit JSON"),
     )?;
@@ -2678,7 +2678,7 @@ text(
         "exec hidden dynamic tool call failed unexpectedly: {output}"
     );
 
-    let parsed: Value = edgerun_json::from_serde_str(
+    let parsed: Value = edgerun_json::from_str(
         &custom_tool_output_last_non_empty_text(&req, "call-1")
             .expect("exec hidden dynamic tool lookup should emit JSON"),
     )?;
@@ -2867,7 +2867,7 @@ text(JSON.stringify(load("nb")));
         Some(false),
         "exec load call failed unexpectedly: {second_output}"
     );
-    let loaded: Value = edgerun_json::from_serde_str(
+    let loaded: Value = edgerun_json::from_str(
         &custom_tool_output_last_non_empty_text(&second_request, "call-2")
             .expect("exec load call should emit JSON"),
     )?;
@@ -2910,7 +2910,7 @@ text(JSON.stringify({
         Some(false),
         "exec compare time call failed unexpectedly: {second_output}"
     );
-    let compared: Value = edgerun_json::from_serde_str(
+    let compared: Value = edgerun_json::from_str(
         &custom_tool_output_last_non_empty_text(&second_request, "call-1")
             .expect("exec compare time call should emit JSON"),
     )?;

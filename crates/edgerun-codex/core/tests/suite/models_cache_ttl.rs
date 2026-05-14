@@ -294,7 +294,7 @@ async fn rewrite_cache_timestamp(path: &Path, fetched_at: DateTime) -> Result<()
 
 async fn read_cache(path: &Path) -> Result<ModelsCache> {
     let contents = edgerun_tokio::fs::read(path).await?;
-    let cache = edgerun_json::from_serde_slice(&contents)?;
+    let cache = edgerun_json::from_slice(&contents)?;
     Ok(cache)
 }
 

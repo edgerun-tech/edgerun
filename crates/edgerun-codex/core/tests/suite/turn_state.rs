@@ -67,7 +67,7 @@ async fn responses_turn_state_persists_within_turn_and_resets_after() -> Result<
 
     let parse_turn_id = |header: Option<String>| {
         let value = header?;
-        let parsed: Value = edgerun_json::from_serde_str(&value).ok()?;
+        let parsed: Value = edgerun_json::from_str(&value).ok()?;
         parsed
             .get("turn_id")
             .and_then(Value::as_str)

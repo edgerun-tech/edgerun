@@ -22,6 +22,7 @@ fn oncreate(state: &mut AppState, capabilities: &Capabilities) {
     // Static call sites: platform=2, internal=7
     // Signal: package_intents (2 call sites)
     // Signal: activity_ui (1 call sites)
+    state.capability_intents.push(capabilities.app_events.request("send_or_receive_app_event", SOURCE_CLASS));
     // TODO: replace Android Intent behavior with typed Edgerun events
     // TODO: translate this lifecycle/body method into explicit Edgerun control flow
 }
@@ -33,6 +34,7 @@ fn onresume(state: &mut AppState, capabilities: &Capabilities) {
     // Static call sites: platform=2, internal=7
     // Signal: package_intents (2 call sites)
     // Signal: activity_ui (1 call sites)
+    state.capability_intents.push(capabilities.app_events.request("send_or_receive_app_event", SOURCE_CLASS));
     // TODO: replace Android Intent behavior with typed Edgerun events
     // TODO: translate this lifecycle/body method into explicit Edgerun control flow
 }

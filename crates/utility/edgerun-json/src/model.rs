@@ -1,6 +1,7 @@
 use crate::prelude::*;
 
 use alloc::collections::BTreeMap;
+use alloc::sync::Arc;
 #[cfg(feature = "std")]
 use std::collections::HashMap;
 
@@ -311,6 +312,24 @@ impl<T: ToJson + ?Sized> ToJson for Box<T> {
 impl<T: FromJson> FromJson for Box<T> {
     fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
         T::from_json(value).map(Box::new)
+    }
+}
+
+impl<T: ToJson + ?Sized> ToJson for Arc<T> {
+    fn to_json(&self) -> JsonValue {
+        self.as_ref().to_json()
+    }
+}
+
+impl<T: FromJson> FromJson for Arc<T> {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        T::from_json(value).map(Arc::new)
+    }
+}
+
+impl FromJson for Arc<str> {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        String::from_json(value).map(Arc::<str>::from)
     }
 }
 

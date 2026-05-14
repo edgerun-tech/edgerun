@@ -45,6 +45,17 @@
 - `sms_telephony`: 118 call sites; SMS, MMS, phone, carrier, or telephony behavior
 - `work_background`: 27521 call sites; jobs, alarms, wake locks, services, or background work
 
+## Generated Capability Intent Plan
+
+- `com.lineman.mart.feature.telemed.feature.videocall.TelemedVideoCallActivity` -> `onCreate` records:
+  - `app_events.send_or_receive_app_event` from `package_intents` evidence
+- `com.lineman.mart.feature.telemed.feature.videocall.TelemedVideoCallActivity` -> `s` records:
+  - `app_events.send_or_receive_app_event` from `package_intents` evidence
+- `com.linecorp.linemanth.android.feature.voip.presentation.VoipActivity` -> `onCreate` records:
+  - `app_events.send_or_receive_app_event` from `package_intents` evidence
+- `com.linecorp.linemanth.android.feature.voip.presentation.VoipActivity` -> `H` records:
+  - `app_events.send_or_receive_app_event` from `package_intents` evidence
+
 ## UI And Resource Hints
 
 - Resource buckets: `drawable`(1356) `layout`(1219)

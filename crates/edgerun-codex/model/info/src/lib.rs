@@ -18,6 +18,10 @@ use codex_protocol::error::Result as CodexResult;
 use edgerun_http::HeaderMap;
 use edgerun_http::header::HeaderName;
 use edgerun_http::header::HeaderValue;
+use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
+use edgerun_json::ToJson;
+use edgerun_json::Value;
 use edgerun_serde::Deserialize;
 use edgerun_serde::Serialize;
 use schemars::JsonSchema;
@@ -53,6 +57,30 @@ pub enum WireApi {
     Responses,
 }
 
+impl ToJson for WireApi {
+    fn to_json(&self) -> Value {
+        match self {
+            Self::Responses => "responses",
+        }
+        .to_json()
+    }
+}
+
+impl FromJson for WireApi {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let value = String::from_json(value)?;
+        match value.as_str() {
+            "responses" => Ok(Self::Responses),
+            "chat" => Err(JsonValueError::WrongType(
+                CHAT_WIRE_API_REMOVED_ERROR.to_string(),
+            )),
+            _ => Err(JsonValueError::WrongType(format!(
+                "unknown wire_api variant `{value}`"
+            ))),
+        }
+    }
+}
+
 impl fmt::Display for WireApi {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let value = match self {
@@ -82,11 +110,12 @@ impl<'de> Deserialize<'de> for WireApi {
 }
 
 /// Serializable representation of a provider definition.
-#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, JsonSchema)]
+#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, JsonSchema, ToJson, FromJson)]
 #[schemars(deny_unknown_fields)]
 pub struct ModelProviderInfo {
     /// Friendly display name.
     #[serde(default)]
+    #[json(default)]
     pub name: String,
     /// Base URL for the provider's OpenAI-compatible API.
     pub base_url: Option<String>,
@@ -106,6 +135,7 @@ pub struct ModelProviderInfo {
     pub aws: Option<ModelProviderAwsAuthInfo>,
     /// Which wire protocol this provider expects.
     #[serde(default)]
+    #[json(default)]
     pub wire_api: WireApi,
     /// Optional query parameters to append to the base URL.
     pub query_params: Option<HashMap<String, String>>,
@@ -132,14 +162,16 @@ pub struct ModelProviderInfo {
     /// are stored in auth.json. If false (which is the default), login screen is skipped,
     /// and API key (if needed) comes from the "env_key" environment variable.
     #[serde(default)]
+    #[json(default)]
     pub requires_openai_auth: bool,
     /// Whether this provider supports the Responses API WebSocket transport.
     #[serde(default)]
+    #[json(default)]
     pub supports_websockets: bool,
 }
 
 /// AWS SigV4 auth configuration for a model provider.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, ToJson, FromJson)]
 #[schemars(deny_unknown_fields)]
 pub struct ModelProviderAwsAuthInfo {
     /// AWS profile name to use. When unset, the AWS SDK default chain decides.

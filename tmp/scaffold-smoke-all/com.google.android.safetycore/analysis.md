@@ -43,6 +43,10 @@
 - `package_intents`: 1030 call sites; intent, package manager, broadcast, or cross-app behavior
 - `work_background`: 1731 call sites; jobs, alarms, wake locks, services, or background work
 
+## Generated Capability Intent Plan
+
+- No generated workflow method currently records capability intents.
+
 ## UI And Resource Hints
 
 - Resource buckets: `xml`(1)

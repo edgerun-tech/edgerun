@@ -6,6 +6,10 @@ use crate::parse_command::ParsedCommand;
 use crate::protocol::FileChange;
 use crate::protocol::ReviewDecision;
 use crate::request_permissions::RequestPermissionProfile;
+use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
+use edgerun_json::Map;
+use edgerun_json::ToJson;
 use edgerun_json::Value as JsonValue;
 use edgerun_serde::Deserialize;
 use edgerun_serde::Serialize;
@@ -67,6 +71,32 @@ pub enum NetworkApprovalProtocol {
     Https,
     Socks5Tcp,
     Socks5Udp,
+}
+
+impl ToJson for NetworkApprovalProtocol {
+    fn to_json(&self) -> JsonValue {
+        match self {
+            Self::Http => "http",
+            Self::Https => "https",
+            Self::Socks5Tcp => "socks5_tcp",
+            Self::Socks5Udp => "socks5_udp",
+        }
+        .to_json()
+    }
+}
+
+impl FromJson for NetworkApprovalProtocol {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "http" => Ok(Self::Http),
+            "https" | "https_connect" | "http-connect" => Ok(Self::Https),
+            "socks5_tcp" => Ok(Self::Socks5Tcp),
+            "socks5_udp" => Ok(Self::Socks5Udp),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown network approval protocol `{other}`"
+            ))),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
@@ -131,6 +161,28 @@ pub enum GuardianCommandSource {
     UnifiedExec,
 }
 
+impl ToJson for GuardianCommandSource {
+    fn to_json(&self) -> JsonValue {
+        match self {
+            Self::Shell => "shell",
+            Self::UnifiedExec => "unified_exec",
+        }
+        .to_json()
+    }
+}
+
+impl FromJson for GuardianCommandSource {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "shell" => Ok(Self::Shell),
+            "unified_exec" => Ok(Self::UnifiedExec),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown guardian command source `{other}`"
+            ))),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[ts(tag = "type", rename_all = "snake_case")]
@@ -167,6 +219,128 @@ pub enum GuardianAssessmentAction {
         reason: Option<String>,
         permissions: RequestPermissionProfile,
     },
+}
+
+impl ToJson for GuardianAssessmentAction {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::new();
+        match self {
+            Self::Command {
+                source,
+                command,
+                cwd,
+            } => {
+                object.push_field("type", "command");
+                object.push_field("source", source.to_json());
+                object.push_field("command", command);
+                object.push_field("cwd", cwd.to_json());
+            }
+            Self::Execve {
+                source,
+                program,
+                argv,
+                cwd,
+            } => {
+                object.push_field("type", "execve");
+                object.push_field("source", source.to_json());
+                object.push_field("program", program);
+                object.push_field("argv", argv.to_json());
+                object.push_field("cwd", cwd.to_json());
+            }
+            Self::ApplyPatch { cwd, files } => {
+                object.push_field("type", "apply_patch");
+                object.push_field("cwd", cwd.to_json());
+                object.push_field("files", files.to_json());
+            }
+            Self::NetworkAccess {
+                target,
+                host,
+                protocol,
+                port,
+            } => {
+                object.push_field("type", "network_access");
+                object.push_field("target", target);
+                object.push_field("host", host);
+                object.push_field("protocol", protocol.to_json());
+                object.push_field("port", *port as u64);
+            }
+            Self::McpToolCall {
+                server,
+                tool_name,
+                connector_id,
+                connector_name,
+                tool_title,
+            } => {
+                object.push_field("type", "mcp_tool_call");
+                object.push_field("server", server);
+                object.push_field("tool_name", tool_name);
+                if let Some(connector_id) = connector_id {
+                    object.push_field("connector_id", connector_id);
+                }
+                if let Some(connector_name) = connector_name {
+                    object.push_field("connector_name", connector_name);
+                }
+                if let Some(tool_title) = tool_title {
+                    object.push_field("tool_title", tool_title);
+                }
+            }
+            Self::RequestPermissions {
+                reason,
+                permissions,
+            } => {
+                object.push_field("type", "request_permissions");
+                if let Some(reason) = reason {
+                    object.push_field("reason", reason);
+                }
+                object.push_field("permissions", permissions.to_json());
+            }
+        }
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for GuardianAssessmentAction {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("GuardianAssessmentAction")?;
+        let kind: String = object.take_required("type")?;
+        match kind.as_str() {
+            "command" => Ok(Self::Command {
+                source: object.take_required("source")?,
+                command: object.take_required("command")?,
+                cwd: object.take_required("cwd")?,
+            }),
+            "execve" => Ok(Self::Execve {
+                source: object.take_required("source")?,
+                program: object.take_required("program")?,
+                argv: object.take_required("argv")?,
+                cwd: object.take_required("cwd")?,
+            }),
+            "apply_patch" => Ok(Self::ApplyPatch {
+                cwd: object.take_required("cwd")?,
+                files: object.take_required("files")?,
+            }),
+            "network_access" => Ok(Self::NetworkAccess {
+                target: object.take_required("target")?,
+                host: object.take_required("host")?,
+                protocol: object.take_required("protocol")?,
+                port: object.take_required("port")?,
+            }),
+            "mcp_tool_call" => Ok(Self::McpToolCall {
+                server: object.take_required("server")?,
+                tool_name: object.take_required("tool_name")?,
+                connector_id: object.take_optional("connector_id")?,
+                connector_name: object.take_optional("connector_name")?,
+                tool_title: object.take_optional("tool_title")?,
+            }),
+            "request_permissions" => Ok(Self::RequestPermissions {
+                reason: object.take_optional("reason")?,
+                permissions: object.take_required("permissions")?,
+            }),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown guardian assessment action `{other}`"
+            ))),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
@@ -399,7 +573,7 @@ mod tests {
     #[test]
     fn guardian_assessment_action_deserializes_command_shape() {
         let action: GuardianAssessmentAction =
-            edgerun_json::from_serde_value(edgerun_json::json!({
+            edgerun_json::from_value(edgerun_json::json!({
                 "type": "command",
                 "source": "shell",
                 "command": "rm -rf /tmp/guardian",
@@ -428,10 +602,10 @@ mod tests {
             "cwd": "/tmp",
         });
         let action: GuardianAssessmentAction =
-            edgerun_json::from_serde_value(value.clone()).expect("guardian action");
+            edgerun_json::from_value(value.clone()).expect("guardian action");
 
         assert_eq!(
-            edgerun_json::to_serde_value(&action).expect("serialize guardian action"),
+            edgerun_json::to_value(&action),
             value
         );
 

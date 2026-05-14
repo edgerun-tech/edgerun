@@ -158,17 +158,17 @@ mod tests {
             "\"prolite\""
         );
         assert_eq!(
-            edgerun_json::from_serde_str::<PlanType>("\"self_serve_business_usage_based\"")
+            edgerun_json::from_json_str::<PlanType>("\"self_serve_business_usage_based\"")
                 .expect("self-serve business usage based should deserialize"),
             PlanType::SelfServeBusinessUsageBased
         );
         assert_eq!(
-            edgerun_json::from_serde_str::<PlanType>("\"prolite\"")
+            edgerun_json::from_json_str::<PlanType>("\"prolite\"")
                 .expect("prolite should deserialize"),
             PlanType::ProLite
         );
         assert_eq!(
-            edgerun_json::from_serde_str::<PlanType>("\"enterprise_cbp_usage_based\"")
+            edgerun_json::from_json_str::<PlanType>("\"enterprise_cbp_usage_based\"")
                 .expect("enterprise cbp usage based should deserialize"),
             PlanType::EnterpriseCbpUsageBased
         );

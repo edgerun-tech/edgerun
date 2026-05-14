@@ -795,7 +795,6 @@ name = "edgerun-rmcp"
 version = "0.1.1"
 dependencies = [
  "edgerun-json",
- "edgerun-serde",
 ]
 
 [[package]]
@@ -1082,7 +1081,6 @@ version = "0.1.1"
 dependencies = [
  "edgerun-http",
  "edgerun-json",
- "edgerun-serde",
 ]
 
 [[package]]

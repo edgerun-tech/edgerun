@@ -9,6 +9,10 @@ use codex_protocol::config_types::Verbosity;
 use codex_protocol::config_types::WebSearchMode;
 use codex_protocol::config_types::WebSearchToolConfig;
 use codex_protocol::openai_models::ReasoningEffort;
+use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
+use edgerun_json::Map;
+use edgerun_json::ToJson;
 use edgerun_json::Value as JsonValue;
 use edgerun_serde::Deserialize;
 use edgerun_serde::Serialize;
@@ -443,6 +447,58 @@ pub struct NetworkRequirements {
     pub allow_local_binding: Option<bool>,
 }
 
+impl ToJson for NetworkRequirements {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(14);
+        object.push_field("enabled", self.enabled.to_json());
+        object.push_field("httpPort", self.http_port.to_json());
+        object.push_field("socksPort", self.socks_port.to_json());
+        object.push_field("allowUpstreamProxy", self.allow_upstream_proxy.to_json());
+        object.push_field(
+            "dangerouslyAllowNonLoopbackProxy",
+            self.dangerously_allow_non_loopback_proxy.to_json(),
+        );
+        object.push_field(
+            "dangerouslyAllowAllUnixSockets",
+            self.dangerously_allow_all_unix_sockets.to_json(),
+        );
+        object.push_field("domains", self.domains.to_json());
+        object.push_field(
+            "managedAllowedDomainsOnly",
+            self.managed_allowed_domains_only.to_json(),
+        );
+        object.push_field("allowedDomains", self.allowed_domains.to_json());
+        object.push_field("deniedDomains", self.denied_domains.to_json());
+        object.push_field("unixSockets", self.unix_sockets.to_json());
+        object.push_field("allowUnixSockets", self.allow_unix_sockets.to_json());
+        object.push_field("allowLocalBinding", self.allow_local_binding.to_json());
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for NetworkRequirements {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("NetworkRequirements")?;
+        Ok(Self {
+            enabled: object.take_optional("enabled")?,
+            http_port: object.take_optional("httpPort")?,
+            socks_port: object.take_optional("socksPort")?,
+            allow_upstream_proxy: object.take_optional("allowUpstreamProxy")?,
+            dangerously_allow_non_loopback_proxy: object
+                .take_optional("dangerouslyAllowNonLoopbackProxy")?,
+            dangerously_allow_all_unix_sockets: object
+                .take_optional("dangerouslyAllowAllUnixSockets")?,
+            domains: object.take_optional("domains")?,
+            managed_allowed_domains_only: object.take_optional("managedAllowedDomainsOnly")?,
+            allowed_domains: object.take_optional("allowedDomains")?,
+            denied_domains: object.take_optional("deniedDomains")?,
+            unix_sockets: object.take_optional("unixSockets")?,
+            allow_unix_sockets: object.take_optional("allowUnixSockets")?,
+            allow_local_binding: object.take_optional("allowLocalBinding")?,
+        })
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
 #[serde(rename_all = "lowercase")]
 #[ts(export_to = "v2/")]
@@ -451,12 +507,54 @@ pub enum NetworkDomainPermission {
     Deny,
 }
 
+impl ToJson for NetworkDomainPermission {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            Self::Allow => "allow",
+            Self::Deny => "deny",
+        })
+    }
+}
+
+impl FromJson for NetworkDomainPermission {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "allow" => Ok(Self::Allow),
+            "deny" => Ok(Self::Deny),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown network domain permission `{other}`"
+            ))),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
 #[serde(rename_all = "lowercase")]
 #[ts(export_to = "v2/")]
 pub enum NetworkUnixSocketPermission {
     Allow,
     None,
+}
+
+impl ToJson for NetworkUnixSocketPermission {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            Self::Allow => "allow",
+            Self::None => "none",
+        })
+    }
+}
+
+impl FromJson for NetworkUnixSocketPermission {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "allow" => Ok(Self::Allow),
+            "none" => Ok(Self::None),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown network unix socket permission `{other}`"
+            ))),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
@@ -506,6 +604,25 @@ pub enum ExternalAgentConfigMigrationItemType {
     Sessions,
 }
 
+impl FromJson for ExternalAgentConfigMigrationItemType {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "AGENTS_MD" => Ok(Self::AgentsMd),
+            "CONFIG" => Ok(Self::Config),
+            "SKILLS" => Ok(Self::Skills),
+            "PLUGINS" => Ok(Self::Plugins),
+            "MCP_SERVER_CONFIG" => Ok(Self::McpServerConfig),
+            "SUBAGENTS" => Ok(Self::Subagents),
+            "HOOKS" => Ok(Self::Hooks),
+            "COMMANDS" => Ok(Self::Commands),
+            "SESSIONS" => Ok(Self::Sessions),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown external agent migration item type `{other}`"
+            ))),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
@@ -518,6 +635,16 @@ pub struct PluginsMigration {
     pub plugin_names: Vec<String>,
 }
 
+impl FromJson for PluginsMigration {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("PluginsMigration")?;
+        Ok(Self {
+            marketplace_name: object.take_required("marketplaceName")?,
+            plugin_names: object.take_required("pluginNames")?,
+        })
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
@@ -527,11 +654,31 @@ pub struct SessionMigration {
     pub title: Option<String>,
 }
 
+impl FromJson for SessionMigration {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("SessionMigration")?;
+        Ok(Self {
+            path: json_path_buf(object.take_required("path")?),
+            cwd: json_path_buf(object.take_required("cwd")?),
+            title: object.take_optional("title")?,
+        })
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct McpServerMigration {
     pub name: String,
+}
+
+impl FromJson for McpServerMigration {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("McpServerMigration")?;
+        Ok(Self {
+            name: object.take_required("name")?,
+        })
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
@@ -541,6 +688,15 @@ pub struct HookMigration {
     pub name: String,
 }
 
+impl FromJson for HookMigration {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("HookMigration")?;
+        Ok(Self {
+            name: object.take_required("name")?,
+        })
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
@@ -548,11 +704,29 @@ pub struct SubagentMigration {
     pub name: String,
 }
 
+impl FromJson for SubagentMigration {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("SubagentMigration")?;
+        Ok(Self {
+            name: object.take_required("name")?,
+        })
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct CommandMigration {
     pub name: String,
+}
+
+impl FromJson for CommandMigration {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("CommandMigration")?;
+        Ok(Self {
+            name: object.take_required("name")?,
+        })
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq, JsonSchema, TS)]
@@ -573,6 +747,20 @@ pub struct MigrationDetails {
     pub commands: Vec<CommandMigration>,
 }
 
+impl FromJson for MigrationDetails {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("MigrationDetails")?;
+        Ok(Self {
+            plugins: object.take_optional("plugins")?.unwrap_or_default(),
+            sessions: object.take_optional("sessions")?.unwrap_or_default(),
+            mcp_servers: object.take_optional("mcpServers")?.unwrap_or_default(),
+            hooks: object.take_optional("hooks")?.unwrap_or_default(),
+            subagents: object.take_optional("subagents")?.unwrap_or_default(),
+            commands: object.take_optional("commands")?.unwrap_or_default(),
+        })
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
@@ -582,6 +770,21 @@ pub struct ExternalAgentConfigMigrationItem {
     /// Null or empty means home-scoped migration; non-empty means repo-scoped migration.
     pub cwd: Option<PathBuf>,
     pub details: Option<MigrationDetails>,
+}
+
+impl FromJson for ExternalAgentConfigMigrationItem {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ExternalAgentConfigMigrationItem")?;
+        Ok(Self {
+            item_type: object.take_required("itemType")?,
+            description: object.take_required("description")?,
+            cwd: match object.remove("cwd") {
+                Some(JsonValue::Null) | None => None,
+                Some(value) => Some(json_path_buf(String::from_json(value)?)),
+            },
+            details: object.take_optional("details")?,
+        })
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
@@ -608,6 +811,19 @@ pub struct ExternalAgentConfigDetectParams {
 #[ts(export_to = "v2/")]
 pub struct ExternalAgentConfigImportParams {
     pub migration_items: Vec<ExternalAgentConfigMigrationItem>,
+}
+
+impl FromJson for ExternalAgentConfigImportParams {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ExternalAgentConfigImportParams")?;
+        Ok(Self {
+            migration_items: object.take_required("migrationItems")?,
+        })
+    }
+}
+
+fn json_path_buf(value: String) -> PathBuf {
+    PathBuf::from(value)
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]

@@ -23,6 +23,8 @@ fn oncreate(state: &mut AppState, capabilities: &Capabilities) {
     // Signal: package_intents (29 call sites)
     // Signal: activity_ui (17 call sites)
     // Signal: work_background (7 call sites)
+    state.capability_intents.push(capabilities.app_events.request("send_or_receive_app_event", SOURCE_CLASS));
+    state.capability_intents.push(capabilities.background_tasks.request("schedule_or_handle_background_work", SOURCE_CLASS));
     // TODO: replace Android Intent behavior with typed Edgerun events
     // TODO: translate this lifecycle/body method into explicit Edgerun control flow
 }
@@ -43,6 +45,8 @@ fn checkalexacodesendevent(state: &mut AppState, capabilities: &Capabilities) {
     // Signal: activity_ui (2 call sites)
     // Signal: package_intents (2 call sites)
     // Signal: network_web (1 call sites)
+    state.capability_intents.push(capabilities.app_events.request("send_or_receive_app_event", SOURCE_CLASS));
+    state.capability_intents.push(capabilities.network.request("request_network_or_webview", SOURCE_CLASS));
     // TODO: replace Android Intent behavior with typed Edgerun events
     // TODO: replace direct Android/JVM network access with crate::network allowlist checks
     // TODO: translate this lifecycle/body method into explicit Edgerun control flow

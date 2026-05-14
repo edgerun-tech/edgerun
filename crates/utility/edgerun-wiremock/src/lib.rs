@@ -89,10 +89,10 @@ impl ResponseTemplate {
         self
     }
 
-    pub fn set_body_json<T: serde::Serialize>(mut self, value: T) -> Self {
+    pub fn set_body_json<T: edgerun_json::ToJson>(mut self, value: T) -> Self {
         self.headers
             .push(("content-type".to_string(), "application/json".to_string()));
-        self.body = edgerun_json::to_vec(&value).expect("serialize mock JSON body");
+        self.body = edgerun_json::to_json_vec(&value).expect("serialize mock JSON body");
         self
     }
 }

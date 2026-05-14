@@ -2927,17 +2927,17 @@ permissionProfile?: PermissionProfile | null};
             .expect("ServerNotification definition")
             .get("oneOf")
             .expect("ServerNotification oneOf")
-                .as_array()
-                .expect("flat v2 ServerNotification should remain a oneOf")
-                .iter()
-                .filter_map(|variant| {
-                    variant["properties"]["method"]["enum"]
-                        .as_array()
-                        .and_then(|values| values.first())
-                        .and_then(Value::as_str)
-                        .map(str::to_string)
-                })
-                .collect();
+            .as_array()
+            .expect("flat v2 ServerNotification should remain a oneOf")
+            .iter()
+            .filter_map(|variant| {
+                variant["properties"]["method"]["enum"]
+                    .as_array()
+                    .and_then(|values| values.first())
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            })
+            .collect();
         let missing_server_notification_methods: Vec<String> = [
             "fuzzyFileSearch/sessionCompleted",
             "fuzzyFileSearch/sessionUpdated",

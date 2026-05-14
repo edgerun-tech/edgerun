@@ -1526,7 +1526,7 @@ async fn responses_websocket_preserves_custom_turn_metadata_fields() {
         body["client_metadata"]["x-codex-turn-metadata"]
             .as_str()
             .map(
-                |value| edgerun_json::from_serde_str::<edgerun_json::Value>(
+                |value| edgerun_json::from_str(
                     value
                 )
                 .expect("valid json")

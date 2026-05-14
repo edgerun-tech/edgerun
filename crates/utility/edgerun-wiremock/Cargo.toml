@@ -14,7 +14,6 @@ name = "wiremock"
 [dependencies]
 edgerun-http = { path = "../edgerun-http" }
 edgerun-json = { workspace = true }
-serde = { package = "edgerun-serde", path = "../edgerun-serde", features = ["std"] }
 
 [lints]
 workspace = true

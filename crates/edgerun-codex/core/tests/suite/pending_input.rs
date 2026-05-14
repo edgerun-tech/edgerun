@@ -28,7 +28,7 @@ use core_test_support::test_codex::test_codex;
 use core_test_support::test_codex::turn_permission_fields;
 use core_test_support::wait_for_event;
 use edgerun_json::Value;
-use edgerun_json::from_serde_slice;
+use edgerun_json::from_slice;
 use edgerun_json::json;
 use pretty_assertions::assert_eq;
 use edgerun_tokio::sync::oneshot;
@@ -315,9 +315,9 @@ async fn injected_user_input_triggers_follow_up_request_with_deltas() {
     assert_eq!(requests.len(), 2);
 
     let first_body: Value =
-        edgerun_json::from_serde_slice(&requests[0]).expect("parse first request");
+        edgerun_json::from_slice(&requests[0]).expect("parse first request");
     let second_body: Value =
-        edgerun_json::from_serde_slice(&requests[1]).expect("parse second request");
+        edgerun_json::from_slice(&requests[1]).expect("parse second request");
 
     let first_texts = message_input_texts(&first_body, "user");
     assert!(first_texts.iter().any(|text| text == "first prompt"));

@@ -578,7 +578,7 @@ async fn tool_search_returns_deferred_tools_without_follow_up_tool_injection() -
         .unwrap_or_default()
         .into_iter()
         .find_map(|request| {
-            let body: Value = edgerun_json::from_serde_slice(&request.body).ok()?;
+            let body: Value = edgerun_json::from_slice(&request.body).ok()?;
             (request.url.path() == "/api/codex/apps"
                 && body.get("method").and_then(Value::as_str) == Some("tools/call"))
             .then_some(body)
@@ -634,7 +634,7 @@ async fn tool_search_returns_deferred_tools_without_follow_up_tool_injection() -
         "apps tools/call should include a positive turn_started_at_unix_ms: {apps_tool_call:?}"
     );
 
-    let first_request_turn_metadata: Value = edgerun_json::from_serde_str(
+    let first_request_turn_metadata: Value = edgerun_json::from_str(
         &requests[0]
             .header("x-codex-turn-metadata")
             .expect("first response request should include turn metadata"),

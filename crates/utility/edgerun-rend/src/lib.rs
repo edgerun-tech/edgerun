@@ -14,10 +14,6 @@
 //!
 //! - `bytecheck`: Enables support for validating types using `bytecheck`.
 //!
-//! ## Crates
-//!
-//! - `zerocopy-0_8`
-//!
 //! ## Example:
 #![doc = include_str!("../example.md")]
 #![no_std]
@@ -86,18 +82,7 @@ macro_rules! define_newtype {
 
 macro_rules! define_signed_integer {
     ($name:ident: $endian:ident $size_align:literal $prim:ident) => {
-        define_newtype!(
-            #[cfg_attr(
-                feature = "zerocopy-0_8",
-                derive(
-                    zerocopy_derive::FromBytes,
-                    zerocopy_derive::IntoBytes,
-                    zerocopy_derive::Immutable,
-                    zerocopy_derive::KnownLayout,
-                ),
-            )]
-            $name: $endian $size_align $prim
-        );
+        define_newtype!($name: $endian $size_align $prim);
         impl_integer!($name: $endian $prim);
         impl_signed_integer_traits!($name: $endian $prim);
     };
@@ -121,18 +106,7 @@ define_signed_integers! {
 
 macro_rules! define_unsigned_integer {
     ($name:ident: $endian:ident $size_align:literal $prim:ident) => {
-        define_newtype!(
-            #[cfg_attr(
-                feature = "zerocopy-0_8",
-                derive(
-                    zerocopy_derive::FromBytes,
-                    zerocopy_derive::IntoBytes,
-                    zerocopy_derive::Immutable,
-                    zerocopy_derive::KnownLayout,
-                ),
-            )]
-            $name: $endian $size_align $prim
-        );
+        define_newtype!($name: $endian $size_align $prim);
         impl_integer!($name: $endian $prim);
         impl_unsigned_integer_traits!($name: $endian $prim);
     }
@@ -159,18 +133,7 @@ macro_rules! define_float {
         $name:ident:
         $endian:ident $size_align:literal $prim:ty as $prim_int:ty
     ) => {
-        define_newtype!(
-            #[cfg_attr(
-                feature = "zerocopy-0_8",
-                derive(
-                    zerocopy_derive::FromBytes,
-                    zerocopy_derive::IntoBytes,
-                    zerocopy_derive::Immutable,
-                    zerocopy_derive::KnownLayout,
-                ),
-            )]
-            $name: $endian $size_align $prim
-        );
+        define_newtype!($name: $endian $size_align $prim);
         impl_float!($name: $endian $prim as $prim_int);
     };
 }
@@ -194,25 +157,7 @@ define_floats! {
 
 macro_rules! define_char {
     ($name:ident: $endian:ident) => {
-        define_newtype!(
-            #[cfg_attr(
-                feature = "zerocopy-0_8",
-                derive(
-                    // The generated impl for `zerocopy::TryFromBytes` is overly
-                    // permissive. The derive macro doesn't understand that even
-                    // though this struct only contains a `u32`, it still has a
-                    // restricted set of valid bit patterns. Because
-                    // `zerocopy::TryFromBytes` has hidden, semver-breaking
-                    // members, I can't write a manual impl. So no impl for you.
-                    //
-                    // zerocopy_derive::TryFromBytes,
-                    zerocopy_derive::IntoBytes,
-                    zerocopy_derive::Immutable,
-                    zerocopy_derive::KnownLayout,
-                ),
-            )]
-            $name: $endian 4 u32
-        );
+        define_newtype!($name: $endian 4 u32);
         impl_char!($name: $endian);
     };
 }
@@ -225,18 +170,7 @@ macro_rules! define_nonzero {
         $name:ident:
         $endian:ident $size_align:literal $prim:ty as $prim_int:ty
     ) => {
-        define_newtype!(
-            #[cfg_attr(
-                feature = "zerocopy-0_8",
-                derive(
-                    zerocopy_derive::TryFromBytes,
-                    zerocopy_derive::IntoBytes,
-                    zerocopy_derive::Immutable,
-                    zerocopy_derive::KnownLayout,
-                ),
-            )]
-            $name: $endian $size_align $prim
-        );
+        define_newtype!($name: $endian $size_align $prim);
         impl_nonzero!($name: $endian $prim as $prim_int);
 
         #[cfg(feature = "bytecheck")]
@@ -316,17 +250,7 @@ macro_rules! define_atomic {
         $name:ident:
         $endian:ident $size_align:literal $prim:ty as $prim_int:ty
     ) => {
-        define_newtype!(
-            #[cfg_attr(
-                feature = "zerocopy-0_8",
-                derive(
-                    zerocopy_derive::FromBytes,
-                    zerocopy_derive::IntoBytes,
-                    zerocopy_derive::KnownLayout,
-                ),
-            )]
-            $name: $endian $size_align $prim
-        );
+        define_newtype!($name: $endian $size_align $prim);
 
         impl $name {
             #[doc = concat!(

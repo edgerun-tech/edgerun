@@ -59,7 +59,7 @@ async fn request_body_is_zstd_compressed_for_codex_backend_when_enabled() -> any
     let decompressed =
         edgerun_zstd::stream::decode_all(std::io::Cursor::new(request.body_bytes()))?;
     let json: edgerun_json::Value =
-        edgerun_json::from_serde_slice(&decompressed)?;
+        edgerun_json::from_slice(&decompressed)?;
     assert!(
         json.get("input").is_some(),
         "expected request body to decode as Responses API JSON"
@@ -110,7 +110,7 @@ async fn request_body_is_not_compressed_for_api_key_auth_even_when_enabled() -> 
     );
 
     let json: edgerun_json::Value =
-        edgerun_json::from_serde_slice(&request.body_bytes())?;
+        edgerun_json::from_slice(&request.body_bytes())?;
     assert!(
         json.get("input").is_some(),
         "expected request body to be plain Responses API JSON"

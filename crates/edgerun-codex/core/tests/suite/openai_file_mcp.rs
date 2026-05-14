@@ -200,7 +200,7 @@ async fn codex_apps_file_params_upload_local_paths_before_mcp_tool_call() -> Res
         .unwrap_or_default()
         .into_iter()
         .find_map(|request| {
-            let body: Value = edgerun_json::from_serde_slice(&request.body).ok()?;
+            let body: Value = edgerun_json::from_slice(&request.body).ok()?;
             (request.url.path() == "/api/codex/apps"
                 && body.get("method").and_then(Value::as_str) == Some("tools/call")
                 && body.pointer("/params/name").and_then(Value::as_str)

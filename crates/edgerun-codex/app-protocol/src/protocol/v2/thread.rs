@@ -19,6 +19,10 @@ use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::protocol::ThreadGoalStatus as CoreThreadGoalStatus;
 use codex_protocol::protocol::TokenUsage as CoreTokenUsage;
 use codex_protocol::protocol::TokenUsageInfo as CoreTokenUsageInfo;
+use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
+use edgerun_json::Map;
+use edgerun_json::ToJson;
 use edgerun_json::Value as JsonValue;
 use edgerun_serde::Deserialize;
 use edgerun_serde::Serialize;
@@ -80,6 +84,42 @@ impl<'de> Deserialize<'de> for DynamicToolSpec {
             input_schema,
             defer_loading: defer_loading
                 .unwrap_or_else(|| expose_to_context.map(|visible| !visible).unwrap_or(false)),
+        })
+    }
+}
+
+impl ToJson for DynamicToolSpec {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::new();
+        if let Some(namespace) = &self.namespace {
+            object.push_field("namespace", namespace);
+        }
+        object.push_field("name", &self.name);
+        object.push_field("description", &self.description);
+        object.push_field("inputSchema", self.input_schema.clone());
+        if self.defer_loading {
+            object.push_field("deferLoading", true);
+        }
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for DynamicToolSpec {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("DynamicToolSpec")?;
+        let defer_loading = match object.take_optional("deferLoading")? {
+            Some(value) => value,
+            None => object
+                .take_optional::<bool>("exposeToContext")?
+                .map(|visible| !visible)
+                .unwrap_or(false),
+        };
+        Ok(Self {
+            namespace: object.take_optional("namespace")?,
+            name: object.take_required("name")?,
+            description: object.take_required("description")?,
+            input_schema: object.take_required("inputSchema")?,
+            defer_loading,
         })
     }
 }
@@ -729,10 +769,42 @@ pub struct ThreadShellCommandParams {
     pub command: String,
 }
 
+impl ToJson for ThreadShellCommandParams {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::new();
+        object.push_field("threadId", &self.thread_id);
+        object.push_field("command", &self.command);
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for ThreadShellCommandParams {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ThreadShellCommandParams")?;
+        Ok(Self {
+            thread_id: object.take_required("threadId")?,
+            command: object.take_required("command")?,
+        })
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct ThreadShellCommandResponse {}
+
+impl ToJson for ThreadShellCommandResponse {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::Object(Map::new())
+    }
+}
+
+impl FromJson for ThreadShellCommandResponse {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let _ = value.into_object("ThreadShellCommandResponse")?;
+        Ok(Self {})
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
@@ -826,11 +898,38 @@ pub struct ThreadListParams {
     pub search_term: Option<String>,
 }
 
+impl FromJson for ThreadListParams {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ThreadListParams")?;
+        Ok(Self {
+            cursor: object.take_optional("cursor")?,
+            limit: object.take_optional("limit")?,
+            sort_key: object.take_optional("sortKey")?,
+            sort_direction: object.take_optional("sortDirection")?,
+            model_providers: object.take_optional("modelProviders")?,
+            source_kinds: object.take_optional("sourceKinds")?,
+            archived: object.take_optional("archived")?,
+            cwd: object.take_optional("cwd")?,
+            use_state_db_only: object.take_optional("useStateDbOnly")?.unwrap_or(false),
+            search_term: object.take_optional("searchTerm")?,
+        })
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
 #[serde(untagged)]
 pub enum ThreadListCwdFilter {
     One(String),
     Many(Vec<String>),
+}
+
+impl FromJson for ThreadListCwdFilter {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        if let Some(value) = value.as_str() {
+            return Ok(Self::One(value.to_string()));
+        }
+        Ok(Self::Many(Vec::<String>::from_json(value)?))
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
@@ -851,6 +950,26 @@ pub enum ThreadSourceKind {
     Unknown,
 }
 
+impl FromJson for ThreadSourceKind {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "cli" => Ok(Self::Cli),
+            "vscode" => Ok(Self::VsCode),
+            "exec" => Ok(Self::Exec),
+            "appServer" => Ok(Self::AppServer),
+            "subAgent" => Ok(Self::SubAgent),
+            "subAgentReview" => Ok(Self::SubAgentReview),
+            "subAgentCompact" => Ok(Self::SubAgentCompact),
+            "subAgentThreadSpawn" => Ok(Self::SubAgentThreadSpawn),
+            "subAgentOther" => Ok(Self::SubAgentOther),
+            "unknown" => Ok(Self::Unknown),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown thread source kind `{other}`"
+            ))),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export_to = "v2/")]
@@ -859,12 +978,45 @@ pub enum ThreadSortKey {
     UpdatedAt,
 }
 
+impl FromJson for ThreadSortKey {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "created_at" => Ok(Self::CreatedAt),
+            "updated_at" => Ok(Self::UpdatedAt),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown thread sort key `{other}`"
+            ))),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(export_to = "v2/")]
 pub enum SortDirection {
     Asc,
     Desc,
+}
+
+impl ToJson for SortDirection {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            Self::Asc => "asc",
+            Self::Desc => "desc",
+        })
+    }
+}
+
+impl FromJson for SortDirection {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "asc" => Ok(Self::Asc),
+            "desc" => Ok(Self::Desc),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown sort direction `{other}`"
+            ))),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
@@ -976,6 +1128,19 @@ pub struct ThreadTurnsListParams {
     /// How much item detail to include for each returned turn; defaults to summary.
     #[ts(optional = nullable)]
     pub items_view: Option<TurnItemsView>,
+}
+
+impl FromJson for ThreadTurnsListParams {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ThreadTurnsListParams")?;
+        Ok(Self {
+            thread_id: object.take_required("threadId")?,
+            cursor: object.take_optional("cursor")?,
+            limit: object.take_optional("limit")?,
+            sort_direction: object.take_optional("sortDirection")?,
+            items_view: object.take_optional("itemsView")?,
+        })
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]

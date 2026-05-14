@@ -672,7 +672,7 @@ fn parse_result(item: &Value) -> CommandResult {
         .get("output")
         .and_then(Value::as_str)
         .expect("shell output payload");
-    match edgerun_json::from_serde_str::<Value>(output_str) {
+    match edgerun_json::from_str(output_str) {
         Ok(parsed) => {
             let exit_code = parsed["metadata"]["exit_code"].as_i64();
             let stdout = parsed["output"].as_str().unwrap_or_default().to_string();

@@ -1,4 +1,5 @@
 use edgerun_json::Value as JsonValue;
+use edgerun_json::{FromJson, JsonValueError, ToJson};
 use edgerun_serde::Deserialize;
 use edgerun_serde::Deserializer;
 use edgerun_serde::Serialize;
@@ -83,6 +84,71 @@ impl<'de> Deserialize<'de> for DynamicToolSpec {
     }
 }
 
+impl ToJson for DynamicToolSpec {
+    fn to_json(&self) -> JsonValue {
+        edgerun_json::json!({
+            "namespace": self.namespace.clone(),
+            "name": self.name.clone(),
+            "description": self.description.clone(),
+            "inputSchema": self.input_schema.clone(),
+            "deferLoading": self.defer_loading,
+        })
+    }
+}
+
+impl FromJson for DynamicToolSpec {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = match value {
+            JsonValue::Object(object) => object,
+            other => {
+                return Err(JsonValueError::WrongType(format!(
+                    "expected object, found {}",
+                    other.variant_name()
+                )));
+            }
+        };
+
+        let namespace = match object.remove("namespace") {
+            Some(value) => Option::<String>::from_json(value)?,
+            None => None,
+        };
+        let name = take_required_string(&mut object, "name")?;
+        let description = take_required_string(&mut object, "description")?;
+        let input_schema = object
+            .remove("inputSchema")
+            .ok_or_else(|| missing_field("inputSchema"))?;
+        let defer_loading = match object.remove("deferLoading") {
+            Some(value) => bool::from_json(value)?,
+            None => match object.remove("exposeToContext") {
+                Some(value) => !bool::from_json(value)?,
+                None => false,
+            },
+        };
+
+        Ok(Self {
+            namespace,
+            name,
+            description,
+            input_schema,
+            defer_loading,
+        })
+    }
+}
+
+fn take_required_string(
+    object: &mut edgerun_json::Map,
+    field: &'static str,
+) -> Result<String, JsonValueError> {
+    let value = object
+        .remove(field)
+        .ok_or_else(|| missing_field(field))?;
+    String::from_json(value)
+}
+
+fn missing_field(field: &str) -> JsonValueError {
+    JsonValueError::WrongType(format!("missing required field `{field}`"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::DynamicToolSpec;
@@ -103,7 +169,7 @@ mod tests {
             "deferLoading": true,
         });
 
-        let actual: DynamicToolSpec = edgerun_json::from_serde_value(value).expect("deserialize");
+        let actual: DynamicToolSpec = edgerun_json::from_value(value).expect("deserialize");
 
         assert_eq!(
             actual,
@@ -134,7 +200,7 @@ mod tests {
             "exposeToContext": false,
         });
 
-        let actual: DynamicToolSpec = edgerun_json::from_serde_value(value).expect("deserialize");
+        let actual: DynamicToolSpec = edgerun_json::from_value(value).expect("deserialize");
 
         assert!(actual.defer_loading);
     }

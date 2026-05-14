@@ -8,6 +8,8 @@ use codex_protocol::mcp::ResourceTemplate as McpResourceTemplate;
 use codex_protocol::mcp::Tool as McpTool;
 use edgerun_json::FromJson;
 use edgerun_json::JsonValueError;
+use edgerun_json::Map;
+use edgerun_json::ToJson;
 use edgerun_json::Value as JsonValue;
 use edgerun_serde::Deserialize;
 use edgerun_serde::Serialize;
@@ -248,6 +250,16 @@ pub enum McpServerElicitationAction {
     Cancel,
 }
 
+impl ToJson for McpServerElicitationAction {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            Self::Accept => "accept",
+            Self::Decline => "decline",
+            Self::Cancel => "cancel",
+        })
+    }
+}
+
 impl McpServerElicitationAction {
     pub fn to_core(self) -> codex_protocol::approvals::ElicitationAction {
         match self {
@@ -316,6 +328,12 @@ pub struct McpElicitationSchema {
     #[serde(skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub required: Option<Vec<String>>,
+}
+
+impl FromJson for McpElicitationSchema {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        parse_mcp_elicitation_schema(value)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
@@ -890,6 +908,16 @@ pub struct McpServerElicitationRequestResponse {
     #[serde(rename = "_meta")]
     #[ts(rename = "_meta")]
     pub meta: Option<JsonValue>,
+}
+
+impl ToJson for McpServerElicitationRequestResponse {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(3);
+        object.push_field("action", self.action.to_json());
+        object.push_field("content", self.content.clone().unwrap_or(JsonValue::Null));
+        object.push_field("_meta", self.meta.clone().unwrap_or(JsonValue::Null));
+        JsonValue::Object(object)
+    }
 }
 
 impl From<McpServerElicitationRequestResponse> for rmcp::model::CreateElicitationResult {

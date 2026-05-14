@@ -199,7 +199,7 @@ pub fn parse_toml_value(s: &str) -> Result<TomlValue, TomlError> {
 fn parse_toml_simple(s: &str) -> Result<TomlValue, TomlError> {
     let s = s.trim();
 
-    if s.starts_with('"') && s.matches('"').count() >= 3 {
+    if s.starts_with('"') && s.ends_with('"') && s.matches('"').count() >= 2 {
         let inner = &s[1..s.len() - 1];
         return Ok(TomlValue::String(unescape_toml_string(inner)));
     }

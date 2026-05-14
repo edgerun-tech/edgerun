@@ -152,24 +152,25 @@ pub use shadcn_events::{
     shadcn_event_from_action_with_context,
 };
 #[cfg(feature = "fontdue-text")]
-pub use shadcn_exact::shadcn_chat_message_height;
+pub use shadcn_exact::{shadcn_chat_message_height, shadcn_chat_message_height_for_role};
 pub use shadcn_exact::{
     UiShadcnActivity, UiShadcnBadgeVariant, UiShadcnButtonSize, UiShadcnButtonVariant,
     UiShadcnChatClientAction, UiShadcnChatClientIconAction, UiShadcnChatClientSpec,
-    UiShadcnChatRole, UiShadcnConversationMessage, UiShadcnSessionRow, UiShadcnStatusTone,
-    shadcn_accordion, shadcn_alert, shadcn_alert_dialog, shadcn_aspect_ratio, shadcn_avatar,
-    shadcn_badge, shadcn_breadcrumb, shadcn_button, shadcn_button_group, shadcn_calendar,
-    shadcn_card, shadcn_carousel, shadcn_chart, shadcn_chat_client, shadcn_chat_client_shell,
-    shadcn_chat_message, shadcn_checkbox, shadcn_collapsible, shadcn_combobox, shadcn_command,
-    shadcn_context_menu, shadcn_conversation, shadcn_data_table, shadcn_date_picker, shadcn_dialog,
-    shadcn_direction, shadcn_drawer, shadcn_dropdown_menu, shadcn_empty, shadcn_field,
-    shadcn_hover_card, shadcn_input, shadcn_input_group, shadcn_input_otp, shadcn_item, shadcn_kbd,
-    shadcn_label, shadcn_menubar, shadcn_native_select, shadcn_navigation_menu, shadcn_pagination,
-    shadcn_popover, shadcn_progress, shadcn_prompt_composer, shadcn_radio_group, shadcn_resizable,
-    shadcn_scroll_area, shadcn_select, shadcn_separator, shadcn_session_sidebar, shadcn_sheet,
-    shadcn_sidebar, shadcn_skeleton, shadcn_slider, shadcn_sonner, shadcn_status_header,
-    shadcn_switch, shadcn_table, shadcn_tabs, shadcn_textarea, shadcn_toast, shadcn_toggle,
-    shadcn_toggle_group, shadcn_tooltip,
+    UiShadcnChatRole, UiShadcnComposerNotice, UiShadcnConversationMessage, UiShadcnSessionRow,
+    UiShadcnSessionState, UiShadcnStatusTone, shadcn_accordion, shadcn_alert,
+    shadcn_alert_dialog, shadcn_aspect_ratio, shadcn_avatar, shadcn_badge, shadcn_breadcrumb,
+    shadcn_button, shadcn_button_group, shadcn_calendar, shadcn_card, shadcn_carousel,
+    shadcn_chart, shadcn_chat_client, shadcn_chat_client_shell, shadcn_chat_message,
+    shadcn_checkbox, shadcn_collapsible, shadcn_combobox, shadcn_command, shadcn_context_menu,
+    shadcn_conversation, shadcn_data_table, shadcn_date_picker, shadcn_dialog, shadcn_direction,
+    shadcn_drawer, shadcn_dropdown_menu, shadcn_empty, shadcn_field, shadcn_hover_card,
+    shadcn_input, shadcn_input_group, shadcn_input_otp, shadcn_item, shadcn_kbd, shadcn_label,
+    shadcn_menubar, shadcn_native_select, shadcn_navigation_menu, shadcn_pagination,
+    shadcn_popover, shadcn_progress, shadcn_prompt_composer, shadcn_radio_group,
+    shadcn_resizable, shadcn_scroll_area, shadcn_select, shadcn_separator, shadcn_session_sidebar,
+    shadcn_sheet, shadcn_sidebar, shadcn_skeleton, shadcn_slider, shadcn_sonner,
+    shadcn_status_header, shadcn_switch, shadcn_table, shadcn_tabs, shadcn_textarea,
+    shadcn_toast, shadcn_toggle, shadcn_toggle_group, shadcn_tooltip,
 };
 pub use shadcn_props::{
     SHADCN_PROPS_SURFACE_MANIFEST, SHADCN_PROPS_SURFACES, UiShadcnAccordionProps,

@@ -2084,7 +2084,7 @@ async fn guardian_parallel_reviews_fork_from_last_committed_trunk_history() -> a
         assert_eq!(third_decision, ReviewDecision::Approved);
         let requests = server.requests().await;
         assert_eq!(requests.len(), 3);
-        let third_request_body = edgerun_json::from_serde_slice::<edgerun_json::Value>(&requests[2])?;
+        let third_request_body = edgerun_json::from_slice(&requests[2])?;
         let third_request_body_text = third_request_body.to_string();
         assert!(
             third_request_body_text.contains("first guardian rationale"),

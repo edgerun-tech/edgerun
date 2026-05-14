@@ -548,7 +548,7 @@ async fn stdio_server_round_trip() -> anyhow::Result<()> {
         .and_then(Value::as_str)
         .expect("function_call_output output should be a string");
     let wrapped_payload = split_wall_time_wrapped_output(output_text);
-    let output_json: Value = edgerun_json::from_serde_str(wrapped_payload)
+    let output_json: Value = edgerun_json::from_str(wrapped_payload)
         .expect("wrapped MCP output should preserve structured JSON");
     assert_eq!(output_json["echo"], "ECHOING: ping");
     assert_eq!(output_json["env"], expected_env_value);
@@ -799,7 +799,7 @@ async fn stdio_mcp_tool_call_includes_sandbox_state_meta() -> anyhow::Result<()>
         .and_then(Value::as_str)
         .expect("function_call_output output should be a string");
     let wrapped_payload = split_wall_time_wrapped_output(output_text);
-    let output_json: Value = edgerun_json::from_serde_str(wrapped_payload)
+    let output_json: Value = edgerun_json::from_str(wrapped_payload)
         .expect("wrapped MCP output should preserve sandbox metadata JSON");
     let Value::Object(meta) = output_json else {
         panic!("sandbox_meta should return metadata object: {output_json:?}");
@@ -925,7 +925,7 @@ async fn stdio_mcp_parallel_tool_calls_default_false_runs_serially() -> anyhow::
             .function_call_output_text(call_id)
             .expect("function_call_output present for rmcp sync call");
         let wrapped_payload = split_wall_time_wrapped_output(&output_text);
-        let output_json: Value = edgerun_json::from_serde_str(wrapped_payload)
+        let output_json: Value = edgerun_json::from_str(wrapped_payload)
             .expect("wrapped MCP output should preserve structured JSON");
         assert_eq!(output_json, json!({ "result": "ok" }));
     }
@@ -1007,7 +1007,7 @@ async fn stdio_mcp_parallel_tool_calls_opt_in_runs_concurrently() -> anyhow::Res
             .function_call_output_text(call_id)
             .expect("function_call_output present for rmcp sync call");
         let wrapped_payload = split_wall_time_wrapped_output(&output_text);
-        let output_json: Value = edgerun_json::from_serde_str(wrapped_payload)
+        let output_json: Value = edgerun_json::from_str(wrapped_payload)
             .expect("wrapped MCP output should preserve structured JSON");
         assert_eq!(output_json, json!({ "result": "ok" }));
     }
@@ -1372,7 +1372,7 @@ async fn stdio_image_responses_are_sanitized_for_text_only_model() -> anyhow::Re
         .and_then(Value::as_str)
         .expect("function_call_output output should be a JSON string");
     let wrapped_payload = split_wall_time_wrapped_output(output_text);
-    let output_json: Value = edgerun_json::from_serde_str(wrapped_payload)
+    let output_json: Value = edgerun_json::from_str(wrapped_payload)
         .expect("function_call_output output should be valid JSON");
     assert_eq!(
         output_json,

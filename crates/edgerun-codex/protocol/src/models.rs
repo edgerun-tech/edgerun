@@ -204,9 +204,79 @@ impl<'de> Deserialize<'de> for FileSystemPermissions {
     }
 }
 
+impl ToJson for FileSystemPermissions {
+    fn to_json(&self) -> Value {
+        if let Some(legacy) = self.as_legacy_permissions() {
+            let mut object = Map::new();
+            if let Some(read) = legacy.read {
+                object.push_field("read", read.to_json());
+            }
+            if let Some(write) = legacy.write {
+                object.push_field("write", write.to_json());
+            }
+            return Value::Object(object);
+        }
+
+        let mut object = Map::new();
+        if !self.entries.is_empty() {
+            object.push_field("entries", self.entries.to_json());
+        }
+        if let Some(depth) = self.glob_scan_max_depth {
+            object.push_field("glob_scan_max_depth", depth.get());
+        }
+        Value::Object(object)
+    }
+}
+
+impl FromJson for FileSystemPermissions {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("FileSystemPermissions")?;
+        if object.get("entries").is_some() || object.get("glob_scan_max_depth").is_some() {
+            let entries = object.take_optional("entries")?.unwrap_or_default();
+            let glob_scan_max_depth = object
+                .take_optional::<usize>("glob_scan_max_depth")?
+                .map(|depth| {
+                    NonZeroUsize::new(depth).ok_or_else(|| {
+                        JsonValueError::WrongType(
+                            "glob_scan_max_depth must be greater than zero".to_string(),
+                        )
+                    })
+                })
+                .transpose()?;
+            return Ok(Self {
+                entries,
+                glob_scan_max_depth,
+            });
+        }
+
+        let read = object.take_optional("read")?;
+        let write = object.take_optional("write")?;
+        Ok(Self::from_read_write_roots(read, write))
+    }
+}
+
 #[derive(Debug, Clone, Default, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
 pub struct NetworkPermissions {
     pub enabled: Option<bool>,
+}
+
+impl ToJson for NetworkPermissions {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        if let Some(enabled) = self.enabled {
+            object.push_field("enabled", enabled);
+        }
+        Value::Object(object)
+    }
+}
+
+impl FromJson for NetworkPermissions {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("NetworkPermissions")?;
+        Ok(Self {
+            enabled: object.take_optional("enabled")?,
+        })
+    }
 }
 
 impl NetworkPermissions {
@@ -2756,7 +2826,7 @@ mod tests {
         };
 
         let json = edgerun_json::to_string(&item)?;
-        let v: edgerun_json::Value = edgerun_json::from_serde_str(&json)?;
+        let v: edgerun_json::Value = edgerun_json::from_str(&json)?;
 
         // Success case -> output should be a plain string
         assert_eq!(v.get("output").unwrap().as_str().unwrap(), "ok");
@@ -2774,7 +2844,7 @@ mod tests {
         };
 
         let json = edgerun_json::to_string(&item)?;
-        let v: edgerun_json::Value = edgerun_json::from_serde_str(&json)?;
+        let v: edgerun_json::Value = edgerun_json::from_str(&json)?;
 
         assert_eq!(v.get("output").unwrap().as_str().unwrap(), "bad");
         Ok(())
@@ -2817,7 +2887,7 @@ mod tests {
         };
 
         let json = edgerun_json::to_string(&item)?;
-        let v: edgerun_json::Value = edgerun_json::from_serde_str(&json)?;
+        let v: edgerun_json::Value = edgerun_json::from_str(&json)?;
 
         let output = v.get("output").expect("output field");
         assert!(output.is_array(), "expected array output");
@@ -2839,7 +2909,7 @@ mod tests {
         };
 
         let json = edgerun_json::to_string(&item)?;
-        let v: edgerun_json::Value = edgerun_json::from_serde_str(&json)?;
+        let v: edgerun_json::Value = edgerun_json::from_str(&json)?;
 
         let output = v.get("output").expect("output field");
         assert!(output.is_array(), "expected array output");

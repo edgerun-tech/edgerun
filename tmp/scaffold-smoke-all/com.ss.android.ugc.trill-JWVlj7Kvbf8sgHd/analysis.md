@@ -48,6 +48,13 @@
 - `sms_telephony`: 152 call sites; SMS, MMS, phone, carrier, or telephony behavior
 - `work_background`: 95757 call sites; jobs, alarms, wake locks, services, or background work
 
+## Generated Capability Intent Plan
+
+- `net.openid.appauth.RedirectUriReceiverActivity` -> `onCreate` records:
+  - `app_events.send_or_receive_app_event` from `package_intents` evidence
+- `com.ss.android.ugc.aweme.music.addtodsp.auth.RedirectUriReceiverActivity` -> `setTheme` records:
+  - `app_events.send_or_receive_app_event` from `package_intents` evidence
+
 ## UI And Resource Hints
 
 - Resource buckets: `b`(11198) `a`(4394)

@@ -8,6 +8,8 @@ use crate::compat::absolute_path::AbsolutePathBuf;
 use crate::compat::absolute_path::canonicalize_preserving_symlinks;
 use edgerun_json::FromJson;
 use edgerun_json::JsonValueError;
+use edgerun_json::Map;
+use edgerun_json::ToJson;
 use edgerun_json::Value;
 use edgerun_serde::Deserialize;
 use edgerun_serde::Serialize;
@@ -257,6 +259,17 @@ impl FileSystemAccessMode {
     }
 }
 
+impl ToJson for FileSystemAccessMode {
+    fn to_json(&self) -> Value {
+        match self {
+            Self::Read => "read",
+            Self::Write => "write",
+            Self::None => "none",
+        }
+        .to_json()
+    }
+}
+
 impl FromJson for FileSystemAccessMode {
     fn from_json(value: Value) -> Result<Self, JsonValueError> {
         match String::from_json(value)?.as_str() {
@@ -338,6 +351,40 @@ impl FromJson for FileSystemSpecialPath {
     }
 }
 
+impl ToJson for FileSystemSpecialPath {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        match self {
+            Self::Root => {
+                object.push_field("kind", "root");
+            }
+            Self::Minimal => {
+                object.push_field("kind", "minimal");
+            }
+            Self::ProjectRoots { subpath } => {
+                object.push_field("kind", "project_roots");
+                if let Some(subpath) = subpath {
+                    object.push_field("subpath", subpath.to_string_lossy().into_owned());
+                }
+            }
+            Self::Tmpdir => {
+                object.push_field("kind", "tmpdir");
+            }
+            Self::SlashTmp => {
+                object.push_field("kind", "slash_tmp");
+            }
+            Self::Unknown { path, subpath } => {
+                object.push_field("kind", "unknown");
+                object.push_field("path", path);
+                if let Some(subpath) = subpath {
+                    object.push_field("subpath", subpath.to_string_lossy().into_owned());
+                }
+            }
+        }
+        Value::Object(object)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, TS)]
 pub struct FileSystemSandboxEntry {
     pub path: FileSystemPath,
@@ -369,6 +416,17 @@ impl FromJson for FileSystemSandboxKind {
     }
 }
 
+impl ToJson for FileSystemSandboxKind {
+    fn to_json(&self) -> Value {
+        match self {
+            Self::Restricted => "restricted",
+            Self::Unrestricted => "unrestricted",
+            Self::ExternalSandbox => "external-sandbox",
+        }
+        .to_json()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
 pub struct FileSystemSandboxPolicy {
     pub kind: FileSystemSandboxKind,
@@ -389,6 +447,15 @@ impl FromJson for FileSystemSandboxEntry {
     }
 }
 
+impl ToJson for FileSystemSandboxEntry {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        object.push_field("path", self.path.to_json());
+        object.push_field("access", self.access.to_json());
+        Value::Object(object)
+    }
+}
+
 impl FromJson for FileSystemSandboxPolicy {
     fn from_json(value: Value) -> Result<Self, JsonValueError> {
         let mut object = value.into_object("FileSystemSandboxPolicy")?;
@@ -397,6 +464,20 @@ impl FromJson for FileSystemSandboxPolicy {
             glob_scan_max_depth: object.take_optional("glob_scan_max_depth")?,
             entries: object.take_optional("entries")?.unwrap_or_default(),
         })
+    }
+}
+
+impl ToJson for FileSystemSandboxPolicy {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        object.push_field("kind", self.kind.to_json());
+        if let Some(depth) = self.glob_scan_max_depth {
+            object.push_field("glob_scan_max_depth", depth);
+        }
+        if !self.entries.is_empty() {
+            object.push_field("entries", self.entries.to_json());
+        }
+        Value::Object(object)
     }
 }
 
@@ -541,6 +622,27 @@ impl FromJson for FileSystemPath {
                 "unknown filesystem path `{other}`"
             ))),
         }
+    }
+}
+
+impl ToJson for FileSystemPath {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        match self {
+            Self::Path { path } => {
+                object.push_field("type", "path");
+                object.push_field("path", path.to_json());
+            }
+            Self::GlobPattern { pattern } => {
+                object.push_field("type", "glob_pattern");
+                object.push_field("pattern", pattern);
+            }
+            Self::Special { value } => {
+                object.push_field("type", "special");
+                object.push_field("value", value.to_json());
+            }
+        }
+        Value::Object(object)
     }
 }
 
@@ -2083,13 +2185,13 @@ mod tests {
             "kind": "current_working_directory",
         });
 
-        let special_path = edgerun_json::from_serde_value::<FileSystemSpecialPath>(value)?;
+        let special_path = edgerun_json::from_value::<FileSystemSpecialPath>(value)?;
         assert_eq!(
             special_path,
             FileSystemSpecialPath::project_roots(/*subpath*/ None)
         );
         assert_eq!(
-            edgerun_json::to_serde_value(&special_path)?,
+            edgerun_json::to_value(&special_path),
             edgerun_json::json!({
                 "kind": "project_roots",
             })

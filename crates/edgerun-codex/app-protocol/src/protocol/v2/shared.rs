@@ -4,6 +4,11 @@ use codex_protocol::protocol::AskForApproval as CoreAskForApproval;
 use codex_protocol::protocol::CodexErrorInfo as CoreCodexErrorInfo;
 use codex_protocol::protocol::GranularApprovalConfig as CoreGranularApprovalConfig;
 use codex_protocol::protocol::NonSteerableTurnKind as CoreNonSteerableTurnKind;
+use edgerun_json::FromJson;
+use edgerun_json::JsonValue;
+use edgerun_json::JsonValueError;
+use edgerun_json::Map;
+use edgerun_json::ToJson;
 use edgerun_serde::Deserialize;
 use edgerun_serde::Serialize;
 use schemars::JsonSchema;
@@ -59,6 +64,15 @@ pub enum NonSteerableTurnKind {
     Compact,
 }
 
+impl ToJson for NonSteerableTurnKind {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            Self::Review => "review",
+            Self::Compact => "compact",
+        })
+    }
+}
+
 /// This translation layer make sure that we expose codex error code in camel case.
 ///
 /// When an upstream HTTP status is available (for example, from the Responses API or a provider),
@@ -107,6 +121,50 @@ pub enum CodexErrorInfo {
         turn_kind: NonSteerableTurnKind,
     },
     Other,
+}
+
+impl ToJson for CodexErrorInfo {
+    fn to_json(&self) -> JsonValue {
+        match self {
+            Self::ContextWindowExceeded => JsonValue::from("contextWindowExceeded"),
+            Self::UsageLimitExceeded => JsonValue::from("usageLimitExceeded"),
+            Self::ServerOverloaded => JsonValue::from("serverOverloaded"),
+            Self::CyberPolicy => JsonValue::from("cyberPolicy"),
+            Self::InternalServerError => JsonValue::from("internalServerError"),
+            Self::Unauthorized => JsonValue::from("unauthorized"),
+            Self::BadRequest => JsonValue::from("badRequest"),
+            Self::ThreadRollbackFailed => JsonValue::from("threadRollbackFailed"),
+            Self::SandboxError => JsonValue::from("sandboxError"),
+            Self::Other => JsonValue::from("other"),
+            Self::HttpConnectionFailed { http_status_code } => {
+                http_status_error("httpConnectionFailed", *http_status_code)
+            }
+            Self::ResponseStreamConnectionFailed { http_status_code } => {
+                http_status_error("responseStreamConnectionFailed", *http_status_code)
+            }
+            Self::ResponseStreamDisconnected { http_status_code } => {
+                http_status_error("responseStreamDisconnected", *http_status_code)
+            }
+            Self::ResponseTooManyFailedAttempts { http_status_code } => {
+                http_status_error("responseTooManyFailedAttempts", *http_status_code)
+            }
+            Self::ActiveTurnNotSteerable { turn_kind } => {
+                let mut payload = Map::with_capacity(1);
+                payload.push_field("turnKind", turn_kind.to_json());
+                let mut object = Map::with_capacity(1);
+                object.push_field("activeTurnNotSteerable", JsonValue::Object(payload));
+                JsonValue::Object(object)
+            }
+        }
+    }
+}
+
+fn http_status_error(variant: &str, http_status_code: Option<u16>) -> JsonValue {
+    let mut payload = Map::with_capacity(1);
+    payload.push_field("httpStatusCode", http_status_code.to_json());
+    let mut object = Map::with_capacity(1);
+    object.push_field(variant, JsonValue::Object(payload));
+    JsonValue::Object(object)
 }
 
 impl From<CoreCodexErrorInfo> for CodexErrorInfo {
@@ -171,6 +229,63 @@ pub enum AskForApproval {
         mcp_elicitations: bool,
     },
     Never,
+}
+
+impl ToJson for AskForApproval {
+    fn to_json(&self) -> JsonValue {
+        match self {
+            Self::UnlessTrusted => JsonValue::from("untrusted"),
+            Self::OnFailure => JsonValue::from("on-failure"),
+            Self::OnRequest => JsonValue::from("on-request"),
+            Self::Never => JsonValue::from("never"),
+            Self::Granular {
+                sandbox_approval,
+                rules,
+                skill_approval,
+                request_permissions,
+                mcp_elicitations,
+            } => {
+                let mut granular = Map::with_capacity(5);
+                granular.push_field("sandbox_approval", *sandbox_approval);
+                granular.push_field("rules", *rules);
+                granular.push_field("skill_approval", *skill_approval);
+                granular.push_field("request_permissions", *request_permissions);
+                granular.push_field("mcp_elicitations", *mcp_elicitations);
+
+                let mut object = Map::with_capacity(1);
+                object.push_field("granular", JsonValue::Object(granular));
+                JsonValue::Object(object)
+            }
+        }
+    }
+}
+
+impl FromJson for AskForApproval {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        if let Some(value) = value.as_str() {
+            return match value {
+                "untrusted" => Ok(Self::UnlessTrusted),
+                "on-failure" => Ok(Self::OnFailure),
+                "on-request" => Ok(Self::OnRequest),
+                "never" => Ok(Self::Never),
+                other => Err(JsonValueError::WrongType(format!(
+                    "unknown approval policy `{other}`"
+                ))),
+            };
+        }
+
+        let mut object = value.into_object("AskForApproval")?;
+        let mut granular: Map = object.take_required("granular")?;
+        Ok(Self::Granular {
+            sandbox_approval: granular.take_required("sandbox_approval")?,
+            rules: granular.take_required("rules")?,
+            skill_approval: granular.take_optional("skill_approval")?.unwrap_or(false),
+            request_permissions: granular
+                .take_optional("request_permissions")?
+                .unwrap_or(false),
+            mcp_elicitations: granular.take_required("mcp_elicitations")?,
+        })
+    }
 }
 
 impl AskForApproval {
@@ -242,6 +357,30 @@ impl JsonSchema for ApprovalsReviewer {
             &["user", "auto_review", "guardian_subagent"],
             "Configures who approval requests are routed to for review. Examples include sandbox escapes, blocked network access, MCP approval prompts, and ARC escalations. Defaults to `user`. `auto_review` uses a carefully prompted subagent to gather relevant context and apply a risk-based decision framework before approving or denying the request. The legacy value `guardian_subagent` is accepted for compatibility.",
         )
+    }
+}
+
+impl ToJson for ApprovalsReviewer {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::String(
+            match self {
+                Self::User => "user",
+                Self::AutoReview => "guardian_subagent",
+            }
+            .to_string(),
+        )
+    }
+}
+
+impl FromJson for ApprovalsReviewer {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "user" => Ok(Self::User),
+            "auto_review" | "guardian_subagent" => Ok(Self::AutoReview),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown approvals reviewer `{other}`"
+            ))),
+        }
     }
 }
 

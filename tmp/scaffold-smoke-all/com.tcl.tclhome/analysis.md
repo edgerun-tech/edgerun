@@ -50,6 +50,24 @@
 - `sms_telephony`: 48 call sites; SMS, MMS, phone, carrier, or telephony behavior
 - `work_background`: 22034 call sites; jobs, alarms, wake locks, services, or background work
 
+## Generated Capability Intent Plan
+
+- `com.tcl.bmmain.SplashActivity` -> `onCreate` records:
+  - `app_events.send_or_receive_app_event` from `package_intents` evidence
+  - `background_tasks.schedule_or_handle_background_work` from `work_background` evidence
+- `com.tcl.bmmain.SplashActivity` -> `checkAlexaCodeSendEvent` records:
+  - `app_events.send_or_receive_app_event` from `package_intents` evidence
+  - `network.request_network_or_webview` from `network_web` evidence
+- `com.tcl.bmloginui.ui.appflip.THAppFlipTCLHomeActivity` -> `loadData` records:
+  - `app_events.send_or_receive_app_event` from `package_intents` evidence
+  - `background_tasks.schedule_or_handle_background_work` from `work_background` evidence
+- `com.tcl.bmloginui.ui.appflip.THAppFlipTCLHomeActivity` -> `initTips` records:
+  - `app_events.send_or_receive_app_event` from `package_intents` evidence
+- `com.tcl.bmloginui.ui.appflip.THAppFlipTCLHomeActivity` -> `initFlipUnLinkGoogleAccount` records:
+  - `app_events.send_or_receive_app_event` from `package_intents` evidence
+- `com.tcl.bmloginui.ui.appflip.THAppFlipTCLHomeActivity` -> `initReviewGooglePolicy` records:
+  - `app_events.send_or_receive_app_event` from `package_intents` evidence
+
 ## UI And Resource Hints
 
 - Resource buckets: `mipmap-xxhdpi-v4`(1134) `layout`(1038)

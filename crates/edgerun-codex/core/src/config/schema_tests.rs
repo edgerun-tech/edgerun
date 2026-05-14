@@ -19,7 +19,7 @@ fn config_schema_matches_fixture() {
         edgerun_json::from_serde_str(&fixture).expect("parse config schema fixture");
     let schema_json = config_schema_json().expect("serialize config schema");
     let schema_value: edgerun_json::Value =
-        edgerun_json::from_serde_slice(&schema_json).expect("decode schema json");
+        edgerun_json::from_slice(&schema_json).expect("decode schema json");
     let fixture_value = canonicalize(&fixture_value);
     let schema_value = canonicalize(&schema_value);
     if fixture_value != schema_value {
@@ -58,7 +58,7 @@ Run `just write-config-schema` to overwrite with your changes.\n\n{diff}"
 fn config_schema_hides_unsupported_inline_mcp_bearer_token() {
     let schema_json = config_schema_json().expect("serialize config schema");
     let schema_value: edgerun_json::Value =
-        edgerun_json::from_serde_slice(&schema_json).expect("decode schema json");
+        edgerun_json::from_slice(&schema_json).expect("decode schema json");
     let properties = schema_value
         .pointer("/definitions/RawMcpServerConfig/properties")
         .expect("RawMcpServerConfig properties should exist")
