@@ -53,8 +53,6 @@ mod rfc6979;
 
 #[cfg(feature = "p256_ecdsa_der")]
 pub mod der;
-#[cfg(feature = "p256_ecdsa_internal_tests")]
-pub mod dev;
 #[cfg(feature = "p256_ecdsa_hazmat")]
 pub mod hazmat;
 #[cfg(feature = "p256_ecdsa_signing")]
@@ -103,9 +101,6 @@ use crate::const_oid::{AssociatedOid, ObjectIdentifier};
 use crate::elliptic_curve::pkcs8::spki::{
     AlgorithmIdentifierRef, AssociatedAlgorithmIdentifier, der::AnyRef,
 };
-
-#[cfg(feature = "p256_ecdsa_serde")]
-use serdect::serde::{Deserialize, Serialize, de, ser};
 
 #[cfg(all(feature = "p256_ecdsa_alloc", feature = "p256_ecdsa_pkcs8"))]
 use crate::elliptic_curve::pkcs8::spki::{
@@ -485,35 +480,6 @@ where
     };
 }
 
-#[cfg(feature = "p256_ecdsa_serde")]
-impl<C> Serialize for Signature<C>
-where
-    C: PrimeCurve,
-    SignatureSize<C>: ArrayLength<u8>,
-{
-    fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
-    where
-        S: ser::Serializer,
-    {
-        serdect::array::serialize_hex_upper_or_bin(&self.to_bytes(), serializer)
-    }
-}
-
-#[cfg(feature = "p256_ecdsa_serde")]
-impl<'de, C> Deserialize<'de> for Signature<C>
-where
-    C: PrimeCurve,
-    SignatureSize<C>: ArrayLength<u8>,
-{
-    fn deserialize<D>(deserializer: D) -> core::result::Result<Self, D::Error>
-    where
-        D: de::Deserializer<'de>,
-    {
-        let mut bytes = SignatureBytes::<C>::default();
-        serdect::array::deserialize_hex_or_bin(&mut bytes, deserializer)?;
-        Self::try_from(bytes.as_slice()).map_err(de::Error::custom)
-    }
-}
 
 /// An extended [`Signature`] type which is parameterized by an
 /// `ObjectIdentifier` which identifies the ECDSA variant used by a

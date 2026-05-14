@@ -29,17 +29,11 @@ pub use crate::sec1::{
 #[cfg(feature = "elliptic_curve_alloc")]
 pub use crate::sec1::traits::EncodeEcPrivateKey;
 
-#[cfg(feature = "elliptic_curve_pem")]
-pub use crate::der::pem::{self, LineEnding};
-
 #[cfg(feature = "elliptic_curve_pkcs8")]
 pub use crate::pkcs8;
 
 #[cfg(feature = "elliptic_curve_pkcs8")]
 use crate::pkcs8::ObjectIdentifier;
-
-#[cfg(all(doc, feature = "elliptic_curve_serde"))]
-use serdect::serde;
 
 /// Algorithm [`ObjectIdentifier`] for elliptic curve public key cryptography
 /// (`id-ecPublicKey`).

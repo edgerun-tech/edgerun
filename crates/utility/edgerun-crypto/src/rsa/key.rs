@@ -7,8 +7,6 @@ use crate::rand_core::CryptoRngCore;
 use crate::zeroize::{Zeroize, ZeroizeOnDrop};
 use alloc::vec::Vec;
 use core::hash::{Hash, Hasher};
-#[cfg(feature = "rsa_serde")]
-use serde::{Deserialize, Serialize};
 
 use crate::rsa::algorithms::generate::generate_multi_prime_key_with_exp;
 use crate::rsa::algorithms::rsa::{
@@ -23,7 +21,6 @@ use crate::rsa::traits::{PaddingScheme, PrivateKeyParts, PublicKeyParts, Signatu
 
 /// Represents the public part of an RSA key.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
-#[cfg_attr(feature = "rsa_serde", derive(Serialize, Deserialize))]
 pub struct RsaPublicKey {
     /// Modulus: product of prime numbers `p` and `q`
     n: BigUint,
@@ -36,7 +33,6 @@ pub struct RsaPublicKey {
 
 /// Represents a whole RSA key, public and private parts.
 #[derive(Debug, Clone)]
-#[cfg_attr(feature = "rsa_serde", derive(Serialize, Deserialize))]
 pub struct RsaPrivateKey {
     /// Public components of the private key.
     pubkey_components: RsaPublicKey,
@@ -45,7 +41,6 @@ pub struct RsaPrivateKey {
     /// Prime factors of N, contains >= 2 elements.
     pub(crate) primes: Vec<BigUint>,
     /// precomputed values to speed up private operations
-    #[cfg_attr(feature = "rsa_serde", serde(skip))]
     pub(crate) precomputed: Option<PrecomputedValues>,
 }
 
@@ -635,72 +630,6 @@ mod tests {
         for _ in 0..1000 {
             test_key_basics(&private_key);
         }
-    }
-
-    #[test]
-    #[cfg(feature = "rsa_serde")]
-    fn test_serde() {
-        use crate::test_rng::ChaCha8Rng;
-        use serde_test::{Token, assert_tokens};
-
-        let mut rng = ChaCha8Rng::from_seed([42; 32]);
-        let priv_key = RsaPrivateKey::new(&mut rng, 64).expect("failed to generate key");
-
-        let priv_tokens = [
-            Token::Struct {
-                name: "RsaPrivateKey",
-                len: 3,
-            },
-            Token::Str("pubkey_components"),
-            Token::Struct {
-                name: "RsaPublicKey",
-                len: 2,
-            },
-            Token::Str("n"),
-            Token::Seq { len: Some(2) },
-            Token::U32(3814409919),
-            Token::U32(3429654832),
-            Token::SeqEnd,
-            Token::Str("e"),
-            Token::Seq { len: Some(1) },
-            Token::U32(65537),
-            Token::SeqEnd,
-            Token::StructEnd,
-            Token::Str("d"),
-            Token::Seq { len: Some(2) },
-            Token::U32(1482162201),
-            Token::U32(1675500232),
-            Token::SeqEnd,
-            Token::Str("primes"),
-            Token::Seq { len: Some(2) },
-            Token::Seq { len: Some(1) },
-            Token::U32(4133289821),
-            Token::SeqEnd,
-            Token::Seq { len: Some(1) },
-            Token::U32(3563808971),
-            Token::SeqEnd,
-            Token::SeqEnd,
-            Token::StructEnd,
-        ];
-        assert_tokens(&priv_key, &priv_tokens);
-
-        let priv_tokens = [
-            Token::Struct {
-                name: "RsaPublicKey",
-                len: 2,
-            },
-            Token::Str("n"),
-            Token::Seq { len: Some(2) },
-            Token::U32(3814409919),
-            Token::U32(3429654832),
-            Token::SeqEnd,
-            Token::Str("e"),
-            Token::Seq { len: Some(1) },
-            Token::U32(65537),
-            Token::SeqEnd,
-            Token::StructEnd,
-        ];
-        assert_tokens(&RsaPublicKey::from(priv_key), &priv_tokens);
     }
 
     #[test]

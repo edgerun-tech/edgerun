@@ -6,14 +6,8 @@ use crate::elliptic_curve::{
 use crate::group::{Curve, Group};
 use core::fmt::Debug;
 
-#[cfg(feature = "elliptic_curve_jwk")]
-use crate::elliptic_curve::{JwkEcKey, JwkParameters};
-
 #[cfg(feature = "elliptic_curve_pkcs8")]
 use crate::pkcs8::spki::{AlgorithmIdentifier, AssociatedAlgorithmIdentifier, ObjectIdentifier};
-
-#[cfg(feature = "elliptic_curve_pem")]
-use core::str::FromStr;
 
 #[cfg(feature = "elliptic_curve_sec1")]
 use {
@@ -31,15 +25,6 @@ use crate::pkcs8::EncodePublicKey;
 
 #[cfg(all(feature = "elliptic_curve_alloc", feature = "elliptic_curve_sec1"))]
 use alloc::boxed::Box;
-
-#[cfg(any(feature = "elliptic_curve_jwk", feature = "elliptic_curve_pem"))]
-use alloc::string::{String, ToString};
-
-#[cfg(feature = "elliptic_curve_serde")]
-use serdect::serde::{Deserialize, Serialize, de, ser};
-
-#[cfg(any(feature = "elliptic_curve_pem", feature = "elliptic_curve_serde"))]
-use crate::pkcs8::DecodePublicKey;
 
 #[cfg(all(feature = "elliptic_curve_sec1", feature = "elliptic_curve_pkcs8"))]
 use {
@@ -163,49 +148,6 @@ where
         NonIdentity::new_unchecked(self.point)
     }
 
-    /// Parse a [`JwkEcKey`] JSON Web Key (JWK) into a [`PublicKey`].
-    #[cfg(feature = "elliptic_curve_jwk")]
-    pub fn from_jwk(jwk: &JwkEcKey) -> Result<Self>
-    where
-        C: JwkParameters,
-        AffinePoint<C>: FromEncodedPoint<C> + ToEncodedPoint<C>,
-        FieldBytesSize<C>: ModulusSize,
-    {
-        jwk.to_public_key::<C>()
-    }
-
-    /// Parse a string containing a JSON Web Key (JWK) into a [`PublicKey`].
-    #[cfg(feature = "elliptic_curve_jwk")]
-    pub fn from_jwk_str(jwk: &str) -> Result<Self>
-    where
-        C: JwkParameters,
-        AffinePoint<C>: FromEncodedPoint<C> + ToEncodedPoint<C>,
-        FieldBytesSize<C>: ModulusSize,
-    {
-        jwk.parse::<JwkEcKey>().and_then(|jwk| Self::from_jwk(&jwk))
-    }
-
-    /// Serialize this public key as [`JwkEcKey`] JSON Web Key (JWK).
-    #[cfg(feature = "elliptic_curve_jwk")]
-    pub fn to_jwk(&self) -> JwkEcKey
-    where
-        C: JwkParameters,
-        AffinePoint<C>: FromEncodedPoint<C> + ToEncodedPoint<C>,
-        FieldBytesSize<C>: ModulusSize,
-    {
-        self.into()
-    }
-
-    /// Serialize this public key as JSON Web Key (JWK) string.
-    #[cfg(feature = "elliptic_curve_jwk")]
-    pub fn to_jwk_string(&self) -> String
-    where
-        C: JwkParameters,
-        AffinePoint<C>: FromEncodedPoint<C> + ToEncodedPoint<C>,
-        FieldBytesSize<C>: ModulusSize,
-    {
-        self.to_jwk().to_string()
-    }
 }
 
 impl<C> AsRef<AffinePoint<C>> for PublicKey<C>
@@ -491,80 +433,5 @@ where
             subject_public_key,
         }
         .try_into()
-    }
-}
-
-#[cfg(feature = "elliptic_curve_pem")]
-impl<C> FromStr for PublicKey<C>
-where
-    C: AssociatedOid + CurveArithmetic,
-    AffinePoint<C>: FromEncodedPoint<C> + ToEncodedPoint<C>,
-    FieldBytesSize<C>: ModulusSize,
-{
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self> {
-        Self::from_public_key_pem(s).map_err(|_| Error)
-    }
-}
-
-#[cfg(feature = "elliptic_curve_pem")]
-impl<C> ToString for PublicKey<C>
-where
-    C: AssociatedOid + CurveArithmetic,
-    AffinePoint<C>: FromEncodedPoint<C> + ToEncodedPoint<C>,
-    FieldBytesSize<C>: ModulusSize,
-{
-    fn to_string(&self) -> String {
-        self.to_public_key_pem(Default::default())
-            .expect("PEM encoding error")
-    }
-}
-
-#[cfg(feature = "elliptic_curve_serde")]
-impl<C> Serialize for PublicKey<C>
-where
-    C: AssociatedOid + CurveArithmetic,
-    AffinePoint<C>: FromEncodedPoint<C> + ToEncodedPoint<C>,
-    FieldBytesSize<C>: ModulusSize,
-{
-    fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
-    where
-        S: ser::Serializer,
-    {
-        let der = self.to_public_key_der().map_err(ser::Error::custom)?;
-        serdect::slice::serialize_hex_upper_or_bin(&der, serializer)
-    }
-}
-
-#[cfg(feature = "elliptic_curve_serde")]
-impl<'de, C> Deserialize<'de> for PublicKey<C>
-where
-    C: AssociatedOid + CurveArithmetic,
-    AffinePoint<C>: FromEncodedPoint<C> + ToEncodedPoint<C>,
-    FieldBytesSize<C>: ModulusSize,
-{
-    fn deserialize<D>(deserializer: D) -> core::result::Result<Self, D::Error>
-    where
-        D: de::Deserializer<'de>,
-    {
-        let der_bytes = serdect::slice::deserialize_hex_or_bin_vec(deserializer)?;
-        Self::from_public_key_der(&der_bytes).map_err(de::Error::custom)
-    }
-}
-
-#[cfg(all(feature = "elliptic_curve_dev", test))]
-mod tests {
-    use crate::elliptic_curve::{dev::MockCurve, sec1::FromEncodedPoint};
-
-    type EncodedPoint = crate::elliptic_curve::sec1::EncodedPoint<MockCurve>;
-    type PublicKey = super::PublicKey<MockCurve>;
-
-    #[test]
-    fn from_encoded_point_rejects_identity() {
-        let identity = EncodedPoint::identity();
-        assert!(bool::from(
-            PublicKey::from_encoded_point(&identity).is_none()
-        ));
     }
 }

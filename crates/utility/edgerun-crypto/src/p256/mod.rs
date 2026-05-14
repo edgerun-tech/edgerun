@@ -18,16 +18,10 @@ pub mod ecdh;
 #[cfg(feature = "p256_ecdsa_core")]
 pub mod ecdsa;
 
-#[cfg(feature = "p256_test_vectors")]
-pub mod test_vectors;
-
 pub use crate::elliptic_curve::{self, bigint::U256, consts::U32};
 
 #[cfg(feature = "p256_arithmetic")]
 pub use arithmetic::{AffinePoint, ProjectivePoint, scalar::Scalar};
-
-#[cfg(feature = "p256_expose_field")]
-pub use arithmetic::field::FieldElement;
 
 #[cfg(feature = "p256_pkcs8")]
 pub use crate::elliptic_curve::pkcs8;
@@ -103,11 +97,6 @@ impl crate::elliptic_curve::point::PointCompaction for NistP256 {
     const COMPACT_POINTS: bool = false;
 }
 
-#[cfg(feature = "p256_jwk")]
-impl crate::elliptic_curve::JwkParameters for NistP256 {
-    const CRV: &'static str = "P-256";
-}
-
 #[cfg(feature = "p256_pkcs8")]
 impl crate::pkcs8::AssociatedOid for NistP256 {
     const OID: crate::pkcs8::ObjectIdentifier =
@@ -152,16 +141,3 @@ pub type SecretKey = crate::elliptic_curve::SecretKey<NistP256>;
 
 #[cfg(not(feature = "p256_arithmetic"))]
 impl crate::elliptic_curve::sec1::ValidatePublicKey for NistP256 {}
-
-/// Bit representation of a NIST P-256 scalar field element.
-#[cfg(feature = "p256_bits")]
-pub type ScalarBits = crate::elliptic_curve::scalar::ScalarBits<NistP256>;
-
-#[cfg(feature = "p256_voprf")]
-impl crate::elliptic_curve::VoprfParameters for NistP256 {
-    /// See <https://www.ietf.org/archive/id/draft-irtf-cfrg-voprf-19.html#section-4.3>.
-    const ID: &'static str = "P256-SHA256";
-
-    /// See <https://www.ietf.org/archive/id/draft-irtf-cfrg-voprf-08.html#section-4.3-1.2>.
-    type Hash = crate::sha2::Sha256;
-}

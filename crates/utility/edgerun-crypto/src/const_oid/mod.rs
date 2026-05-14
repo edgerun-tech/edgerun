@@ -8,10 +8,6 @@ mod encoder;
 mod error;
 mod parser;
 
-#[cfg(feature = "db")]
-#[cfg_attr(docsrs, doc(cfg(feature = "db")))]
-pub mod db;
-
 pub use crate::const_oid::{
     arcs::{Arc, Arcs},
     error::{Error, Result},

@@ -2,9 +2,6 @@
 
 use core::fmt;
 
-#[cfg(feature = "elliptic_curve_pem")]
-use crate::der::pem;
-
 /// Result type with `sec1` crate's [`Error`] type.
 pub type Result<T> = core::result::Result<T, Error>;
 
@@ -51,13 +48,6 @@ impl fmt::Display for Error {
 impl From<crate::der::Error> for Error {
     fn from(err: crate::der::Error) -> Error {
         Error::Asn1(err)
-    }
-}
-
-#[cfg(feature = "elliptic_curve_pem")]
-impl From<pem::Error> for Error {
-    fn from(err: pem::Error) -> Error {
-        crate::der::Error::from(err).into()
     }
 }
 

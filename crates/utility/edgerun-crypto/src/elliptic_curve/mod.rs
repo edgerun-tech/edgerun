@@ -51,8 +51,6 @@
 pub mod point;
 pub mod scalar;
 
-#[cfg(feature = "elliptic_curve_dev")]
-pub mod dev;
 #[cfg(feature = "elliptic_curve_ecdh")]
 pub mod ecdh;
 #[cfg(feature = "elliptic_curve_hash2curve")]
@@ -72,9 +70,6 @@ mod secret_key;
 mod arithmetic;
 #[cfg(feature = "elliptic_curve_arithmetic")]
 mod public_key;
-
-#[cfg(feature = "elliptic_curve_jwk")]
-mod jwk;
 
 #[cfg(feature = "elliptic_curve_voprf")]
 mod voprf;
@@ -102,9 +97,6 @@ pub use {
     crate::ff::{self, Field, PrimeField},
     crate::group::{self, Group},
 };
-
-#[cfg(feature = "elliptic_curve_jwk")]
-pub use crate::elliptic_curve::jwk::{JwkEcKey, JwkParameters};
 
 #[cfg(feature = "elliptic_curve_pkcs8")]
 pub use crate::pkcs8;

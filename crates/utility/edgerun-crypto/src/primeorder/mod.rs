@@ -1,8 +1,6 @@
 pub mod point_arithmetic;
 
 mod affine;
-#[cfg(feature = "primeorder_dev")]
-mod dev;
 mod field;
 mod projective;
 

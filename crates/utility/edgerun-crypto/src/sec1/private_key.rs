@@ -16,9 +16,6 @@ use core::fmt;
 #[cfg(feature = "elliptic_curve_alloc")]
 use crate::der::SecretDocument;
 
-#[cfg(feature = "elliptic_curve_pem")]
-use crate::der::pem::PemLabel;
-
 /// `ECPrivateKey` version.
 ///
 /// From [RFC5913 Section 3]:
@@ -169,9 +166,4 @@ impl TryFrom<&EcPrivateKey<'_>> for SecretDocument {
     fn try_from(private_key: &EcPrivateKey<'_>) -> Result<Self> {
         Ok(Self::encode_msg(private_key)?)
     }
-}
-
-#[cfg(feature = "elliptic_curve_pem")]
-impl PemLabel for EcPrivateKey<'_> {
-    const PEM_LABEL: &'static str = "EC PRIVATE KEY";
 }

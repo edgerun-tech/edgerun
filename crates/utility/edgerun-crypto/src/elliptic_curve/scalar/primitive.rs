@@ -24,9 +24,6 @@ use generic_array::{GenericArray, typenum::Unsigned};
 #[cfg(feature = "elliptic_curve_arithmetic")]
 use super::{CurveArithmetic, Scalar};
 
-#[cfg(feature = "elliptic_curve_serde")]
-use serdect::serde::{Deserialize, Serialize, de, ser};
-
 /// Generic scalar type with primitive functionality.
 ///
 /// This type provides a baseline level of scalar arithmetic functionality
@@ -402,33 +399,5 @@ where
         let mut bytes = FieldBytes::<C>::default();
         base16ct::lower::decode(hex, &mut bytes)?;
         Self::from_slice(&bytes)
-    }
-}
-
-#[cfg(feature = "elliptic_curve_serde")]
-impl<C> Serialize for ScalarPrimitive<C>
-where
-    C: Curve,
-{
-    fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
-    where
-        S: ser::Serializer,
-    {
-        serdect::array::serialize_hex_upper_or_bin(&self.to_bytes(), serializer)
-    }
-}
-
-#[cfg(feature = "elliptic_curve_serde")]
-impl<'de, C> Deserialize<'de> for ScalarPrimitive<C>
-where
-    C: Curve,
-{
-    fn deserialize<D>(deserializer: D) -> core::result::Result<Self, D::Error>
-    where
-        D: de::Deserializer<'de>,
-    {
-        let mut bytes = FieldBytes::<C>::default();
-        serdect::array::deserialize_hex_or_bin(&mut bytes, deserializer)?;
-        Self::from_slice(&bytes).map_err(|_| de::Error::custom("scalar out of range"))
     }
 }

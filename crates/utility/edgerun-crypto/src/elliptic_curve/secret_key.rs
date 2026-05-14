@@ -17,12 +17,6 @@ use generic_array::typenum::Unsigned;
 #[cfg(feature = "elliptic_curve_arithmetic")]
 use crate::elliptic_curve::{CurveArithmetic, NonZeroScalar, PublicKey};
 
-#[cfg(feature = "elliptic_curve_jwk")]
-use crate::elliptic_curve::jwk::{JwkEcKey, JwkParameters};
-
-#[cfg(feature = "elliptic_curve_pem")]
-use pem_rfc7468::{self as pem, PemLabel};
-
 #[cfg(feature = "elliptic_curve_sec1")]
 use {
     crate::elliptic_curve::{
@@ -46,15 +40,6 @@ use {
     crate::sec1::der::Encode,
     alloc::vec::Vec,
 };
-
-#[cfg(all(
-    feature = "elliptic_curve_arithmetic",
-    any(feature = "elliptic_curve_jwk", feature = "elliptic_curve_pem")
-))]
-use alloc::string::String;
-
-#[cfg(all(feature = "elliptic_curve_arithmetic", feature = "elliptic_curve_jwk"))]
-use alloc::string::ToString;
 
 #[cfg(all(doc, feature = "elliptic_curve_pkcs8"))]
 use {crate::elliptic_curve::pkcs8::DecodePrivateKey, core::str::FromStr};
@@ -223,89 +208,6 @@ where
         Ok(ec_private_key)
     }
 
-    /// Parse [`SecretKey`] from PEM-encoded SEC1 `ECPrivateKey` format.
-    ///
-    /// PEM-encoded SEC1 keys can be identified by the leading delimiter:
-    ///
-    /// ```text
-    /// -----BEGIN EC PRIVATE KEY-----
-    /// ```
-    #[cfg(feature = "elliptic_curve_pem")]
-    pub fn from_sec1_pem(s: &str) -> Result<Self>
-    where
-        C: Curve + ValidatePublicKey,
-        FieldBytesSize<C>: ModulusSize,
-    {
-        let (label, der_bytes) = pem::decode_vec(s.as_bytes()).map_err(|_| Error)?;
-
-        if label != sec1::EcPrivateKey::PEM_LABEL {
-            return Err(Error);
-        }
-
-        Self::from_sec1_der(&der_bytes).map_err(|_| Error)
-    }
-
-    /// Serialize private key as self-zeroizing PEM-encoded SEC1 `ECPrivateKey`
-    /// with the given [`pem::LineEnding`].
-    ///
-    /// Pass `Default::default()` to use the OS's native line endings.
-    #[cfg(feature = "elliptic_curve_pem")]
-    pub fn to_sec1_pem(&self, line_ending: pem::LineEnding) -> Result<Zeroizing<String>>
-    where
-        C: CurveArithmetic,
-        AffinePoint<C>: FromEncodedPoint<C> + ToEncodedPoint<C>,
-        FieldBytesSize<C>: ModulusSize,
-    {
-        self.to_sec1_der()
-            .ok()
-            .and_then(|der| {
-                pem::encode_string(sec1::EcPrivateKey::PEM_LABEL, line_ending, &der).ok()
-            })
-            .map(Zeroizing::new)
-            .ok_or(Error)
-    }
-
-    /// Parse a [`JwkEcKey`] JSON Web Key (JWK) into a [`SecretKey`].
-    #[cfg(feature = "elliptic_curve_jwk")]
-    pub fn from_jwk(jwk: &JwkEcKey) -> Result<Self>
-    where
-        C: JwkParameters + ValidatePublicKey,
-        FieldBytesSize<C>: ModulusSize,
-    {
-        Self::try_from(jwk)
-    }
-
-    /// Parse a string containing a JSON Web Key (JWK) into a [`SecretKey`].
-    #[cfg(feature = "elliptic_curve_jwk")]
-    pub fn from_jwk_str(jwk: &str) -> Result<Self>
-    where
-        C: JwkParameters + ValidatePublicKey,
-        FieldBytesSize<C>: ModulusSize,
-    {
-        jwk.parse::<JwkEcKey>().and_then(|jwk| Self::from_jwk(&jwk))
-    }
-
-    /// Serialize this secret key as [`JwkEcKey`] JSON Web Key (JWK).
-    #[cfg(all(feature = "elliptic_curve_arithmetic", feature = "elliptic_curve_jwk"))]
-    pub fn to_jwk(&self) -> JwkEcKey
-    where
-        C: CurveArithmetic + JwkParameters,
-        AffinePoint<C>: FromEncodedPoint<C> + ToEncodedPoint<C>,
-        FieldBytesSize<C>: ModulusSize,
-    {
-        self.into()
-    }
-
-    /// Serialize this secret key as JSON Web Key (JWK) string.
-    #[cfg(all(feature = "elliptic_curve_arithmetic", feature = "elliptic_curve_jwk"))]
-    pub fn to_jwk_string(&self) -> Zeroizing<String>
-    where
-        C: CurveArithmetic + JwkParameters,
-        AffinePoint<C>: FromEncodedPoint<C> + ToEncodedPoint<C>,
-        FieldBytesSize<C>: ModulusSize,
-    {
-        Zeroizing::new(self.to_jwk().to_string())
-    }
 }
 
 impl<C> ConstantTimeEq for SecretKey<C>
