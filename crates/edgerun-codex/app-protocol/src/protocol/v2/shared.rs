@@ -1,8 +1,5 @@
 use codex_protocol::config_types::ApprovalsReviewer as CoreApprovalsReviewer;
-use codex_protocol::config_types::SandboxMode as CoreSandboxMode;
-use codex_protocol::protocol::AskForApproval as CoreAskForApproval;
 use codex_protocol::protocol::CodexErrorInfo as CoreCodexErrorInfo;
-use codex_protocol::protocol::GranularApprovalConfig as CoreGranularApprovalConfig;
 use codex_protocol::protocol::NonSteerableTurnKind as CoreNonSteerableTurnKind;
 use edgerun_json::FromJson;
 use edgerun_json::JsonValue;
@@ -210,109 +207,6 @@ impl From<CoreNonSteerableTurnKind> for NonSteerableTurnKind {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "kebab-case")]
-#[ts(rename_all = "kebab-case", export_to = "v2/")]
-pub enum AskForApproval {
-    #[serde(rename = "untrusted")]
-    #[ts(rename = "untrusted")]
-    UnlessTrusted,
-    OnFailure,
-    OnRequest,
-    Granular {
-        rules: bool,
-        #[serde(default)]
-        skill_approval: bool,
-        mcp_elicitations: bool,
-    },
-    Never,
-}
-
-impl ToJson for AskForApproval {
-    fn to_json(&self) -> JsonValue {
-        match self {
-            Self::UnlessTrusted => JsonValue::from("untrusted"),
-            Self::OnFailure => JsonValue::from("on-failure"),
-            Self::OnRequest => JsonValue::from("on-request"),
-            Self::Never => JsonValue::from("never"),
-            Self::Granular {
-                rules,
-                skill_approval,
-                mcp_elicitations,
-            } => {
-                let mut granular = Map::with_capacity(3);
-                granular.push_field("rules", *rules);
-                granular.push_field("skill_approval", *skill_approval);
-                granular.push_field("mcp_elicitations", *mcp_elicitations);
-
-                let mut object = Map::with_capacity(1);
-                object.push_field("granular", JsonValue::Object(granular));
-                JsonValue::Object(object)
-            }
-        }
-    }
-}
-
-impl FromJson for AskForApproval {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        if let Some(value) = value.as_str() {
-            return match value {
-                "untrusted" => Ok(Self::UnlessTrusted),
-                "on-failure" => Ok(Self::OnFailure),
-                "on-request" => Ok(Self::OnRequest),
-                "never" => Ok(Self::Never),
-                other => Err(JsonValueError::WrongType(format!(
-                    "unknown approval policy `{other}`"
-                ))),
-            };
-        }
-
-        let mut object = value.into_object("AskForApproval")?;
-        let mut granular: Map = object.take_required("granular")?;
-        Ok(Self::Granular {
-            rules: granular.take_required("rules")?,
-            skill_approval: granular.take_optional("skill_approval")?.unwrap_or(false),
-            mcp_elicitations: granular.take_required("mcp_elicitations")?,
-        })
-    }
-}
-
-impl AskForApproval {
-    pub fn to_core(self) -> CoreAskForApproval {
-        match self {
-            AskForApproval::UnlessTrusted => CoreAskForApproval::UnlessTrusted,
-            AskForApproval::OnFailure => CoreAskForApproval::OnFailure,
-            AskForApproval::OnRequest => CoreAskForApproval::OnRequest,
-            AskForApproval::Granular {
-                rules,
-                skill_approval,
-                mcp_elicitations,
-            } => CoreAskForApproval::Granular(CoreGranularApprovalConfig {
-                rules,
-                skill_approval,
-                mcp_elicitations,
-            }),
-            AskForApproval::Never => CoreAskForApproval::Never,
-        }
-    }
-}
-
-impl From<CoreAskForApproval> for AskForApproval {
-    fn from(value: CoreAskForApproval) -> Self {
-        match value {
-            CoreAskForApproval::UnlessTrusted => AskForApproval::UnlessTrusted,
-            CoreAskForApproval::OnFailure => AskForApproval::OnFailure,
-            CoreAskForApproval::OnRequest => AskForApproval::OnRequest,
-            CoreAskForApproval::Granular(granular_config) => AskForApproval::Granular {
-                rules: granular_config.rules,
-                skill_approval: granular_config.skill_approval,
-                mcp_elicitations: granular_config.mcp_elicitations,
-            },
-            CoreAskForApproval::Never => AskForApproval::Never,
-        }
-    }
-}
-
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, TS)]
 #[ts(
     type = r#""user" | "auto_review" | "guardian_subagent""#,
@@ -399,58 +293,6 @@ impl From<CoreApprovalsReviewer> for ApprovalsReviewer {
         match value {
             CoreApprovalsReviewer::User => ApprovalsReviewer::User,
             CoreApprovalsReviewer::AutoReview => ApprovalsReviewer::AutoReview,
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "kebab-case")]
-#[ts(rename_all = "kebab-case", export_to = "v2/")]
-pub enum SandboxMode {
-    ReadOnly,
-    WorkspaceWrite,
-    DangerFullAccess,
-}
-
-impl SandboxMode {
-    pub fn to_core(self) -> CoreSandboxMode {
-        match self {
-            SandboxMode::ReadOnly => CoreSandboxMode::ReadOnly,
-            SandboxMode::WorkspaceWrite => CoreSandboxMode::WorkspaceWrite,
-            SandboxMode::DangerFullAccess => CoreSandboxMode::DangerFullAccess,
-        }
-    }
-}
-
-impl From<CoreSandboxMode> for SandboxMode {
-    fn from(value: CoreSandboxMode) -> Self {
-        match value {
-            CoreSandboxMode::ReadOnly => SandboxMode::ReadOnly,
-            CoreSandboxMode::WorkspaceWrite => SandboxMode::WorkspaceWrite,
-            CoreSandboxMode::DangerFullAccess => SandboxMode::DangerFullAccess,
-        }
-    }
-}
-
-impl ToJson for SandboxMode {
-    fn to_json(&self) -> JsonValue {
-        JsonValue::from(match self {
-            SandboxMode::ReadOnly => "read-only",
-            SandboxMode::WorkspaceWrite => "workspace-write",
-            SandboxMode::DangerFullAccess => "danger-full-access",
-        })
-    }
-}
-
-impl FromJson for SandboxMode {
-    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
-        match String::from_json(value)?.as_str() {
-            "read-only" => Ok(SandboxMode::ReadOnly),
-            "workspace-write" => Ok(SandboxMode::WorkspaceWrite),
-            "danger-full-access" => Ok(SandboxMode::DangerFullAccess),
-            other => Err(JsonValueError::WrongType(format!(
-                "unknown sandbox mode `{other}`"
-            ))),
         }
     }
 }

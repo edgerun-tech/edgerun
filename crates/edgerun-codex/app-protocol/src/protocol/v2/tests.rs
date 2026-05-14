@@ -17,7 +17,6 @@ use codex_protocol::mcp::CallToolResult;
 use codex_protocol::memory_citation::MemoryCitation as CoreMemoryCitation;
 use codex_protocol::memory_citation::MemoryCitationEntry as CoreMemoryCitationEntry;
 use codex_protocol::models::FileSystemPermissions as CoreFileSystemPermissions;
-use codex_protocol::models::ManagedFileSystemPermissions as CoreManagedFileSystemPermissions;
 use codex_protocol::models::MessagePhase;
 use codex_protocol::models::NetworkPermissions as CoreNetworkPermissions;
 use codex_protocol::models::WebSearchAction as CoreWebSearchAction;
@@ -26,9 +25,6 @@ use codex_protocol::permissions::FileSystemPath as CoreFileSystemPath;
 use codex_protocol::permissions::FileSystemSandboxEntry as CoreFileSystemSandboxEntry;
 use codex_protocol::permissions::FileSystemSpecialPath as CoreFileSystemSpecialPath;
 use codex_protocol::protocol::AgentStatus as CoreAgentStatus;
-use codex_protocol::protocol::AskForApproval as CoreAskForApproval;
-use codex_protocol::protocol::GranularApprovalConfig as CoreGranularApprovalConfig;
-use codex_protocol::protocol::NetworkAccess as CoreNetworkAccess;
 use codex_protocol::user_input::UserInput as CoreUserInput;
 use edgerun_json::Value as JsonValue;
 use edgerun_json::json;
@@ -56,11 +52,12 @@ fn test_absolute_path() -> AbsolutePathBuf {
 #[test]
 fn approvals_reviewer_serializes_auto_review_and_accepts_legacy_guardian_subagent() {
     assert_eq!(
-        edgerun_json::to_string(&ApprovalsReviewer::User).expect("serialize reviewer"),
+        edgerun_json::to_json_string(&ApprovalsReviewer::User).expect("serialize reviewer"),
         "\"user\""
     );
     assert_eq!(
-        edgerun_json::to_string(&ApprovalsReviewer::AutoReview).expect("serialize reviewer"),
+        edgerun_json::to_json_string(&ApprovalsReviewer::AutoReview)
+            .expect("serialize reviewer"),
         "\"guardian_subagent\""
     );
 
@@ -364,48 +361,6 @@ fn additional_file_system_permissions_rejects_zero_glob_scan_depth() {
         "write": null,
         "globScanMaxDepth": 0,
         "entries": [],
-    }))
-    .expect_err("zero glob scan depth should fail deserialization");
-}
-
-#[test]
-fn permission_profile_file_system_permissions_preserves_glob_scan_depth() {
-    let core_permissions = CoreManagedFileSystemPermissions::Restricted {
-        entries: vec![CoreFileSystemSandboxEntry {
-            path: CoreFileSystemPath::GlobPattern {
-                pattern: "**/*.env".to_string(),
-            },
-            access: CoreFileSystemAccessMode::None,
-        }],
-        glob_scan_max_depth: NonZeroUsize::new(2),
-    };
-
-    let permissions = PermissionProfileFileSystemPermissions::from(core_permissions.clone());
-
-    assert_eq!(
-        permissions,
-        PermissionProfileFileSystemPermissions::Restricted {
-            entries: vec![FileSystemSandboxEntry {
-                path: FileSystemPath::GlobPattern {
-                    pattern: "**/*.env".to_string(),
-                },
-                access: FileSystemAccessMode::None,
-            }],
-            glob_scan_max_depth: NonZeroUsize::new(2),
-        }
-    );
-    assert_eq!(
-        CoreManagedFileSystemPermissions::from(permissions),
-        core_permissions
-    );
-}
-
-#[test]
-fn permission_profile_file_system_permissions_rejects_zero_glob_scan_depth() {
-    edgerun_json::from_value::<PermissionProfileFileSystemPermissions>(json!({
-        "type": "restricted",
-        "entries": [],
-        "globScanMaxDepth": 0,
     }))
     .expect_err("zero glob scan depth should fail deserialization");
 }
@@ -1125,78 +1080,6 @@ fn command_execution_output_delta_round_trips() {
 }
 
 #[test]
-fn sandbox_policy_round_trips_external_sandbox_network_access() {
-    let v2_policy = SandboxPolicy::ExternalSandbox {
-        network_access: NetworkAccess::Enabled,
-    };
-
-    let core_policy = v2_policy.to_core();
-    assert_eq!(
-        core_policy,
-        codex_protocol::protocol::SandboxPolicy::ExternalSandbox {
-            network_access: CoreNetworkAccess::Enabled,
-        }
-    );
-
-    let back_to_v2 = SandboxPolicy::from(core_policy);
-    assert_eq!(back_to_v2, v2_policy);
-}
-
-#[test]
-fn sandbox_policy_round_trips_read_only_network_access() {
-    let v2_policy = SandboxPolicy::ReadOnly {
-        network_access: true,
-    };
-
-    let core_policy = v2_policy.to_core();
-    assert_eq!(
-        core_policy,
-        codex_protocol::protocol::SandboxPolicy::ReadOnly {
-            network_access: true,
-        }
-    );
-
-    let back_to_v2 = SandboxPolicy::from(core_policy);
-    assert_eq!(back_to_v2, v2_policy);
-}
-
-#[test]
-fn ask_for_approval_granular_defaults_missing_optional_flags_to_false() {
-    let decoded = edgerun_json::from_value::<AskForApproval>(edgerun_json::json!({
-        "granular": {
-            "rules": false,
-            "mcp_elicitations": true,
-        }
-    }))
-    .expect("granular approval policy should deserialize");
-
-    assert_eq!(
-        decoded,
-        AskForApproval::Granular {
-            rules: false,
-            skill_approval: false,
-            mcp_elicitations: true,
-        }
-    );
-}
-
-#[test]
-fn ask_for_approval_granular_is_marked_experimental() {
-    let reason =
-        crate::experimental_api::ExperimentalApi::experimental_reason(&AskForApproval::Granular {
-            rules: false,
-            skill_approval: false,
-            mcp_elicitations: true,
-        });
-
-    assert_eq!(reason, Some("askForApproval.granular"));
-    assert_eq!(
-        crate::experimental_api::ExperimentalApi::experimental_reason(&AskForApproval::OnRequest,),
-        None
-    );
-}
-
-#[test]
 fn config_approvals_reviewer_is_marked_experimental() {
     let reason = crate::experimental_api::ExperimentalApi::experimental_reason(&Config {
         model: None,
@@ -1501,105 +1384,6 @@ fn mcp_server_elicitation_response_serializes_nullable_content() {
             "_meta": null,
         })
     );
-}
-
-#[test]
-fn sandbox_policy_round_trips_workspace_write_access() {
-    let v2_policy = SandboxPolicy::WorkspaceWrite {
-        writable_roots: vec![],
-        network_access: true,
-        exclude_tmpdir_env_var: false,
-        exclude_slash_tmp: false,
-    };
-
-    let core_policy = v2_policy.to_core();
-    assert_eq!(
-        core_policy,
-        codex_protocol::protocol::SandboxPolicy::WorkspaceWrite {
-            writable_roots: vec![],
-            network_access: true,
-            exclude_tmpdir_env_var: false,
-            exclude_slash_tmp: false,
-        }
-    );
-
-    let back_to_v2 = SandboxPolicy::from(core_policy);
-    assert_eq!(back_to_v2, v2_policy);
-}
-
-#[test]
-fn sandbox_policy_deserializes_legacy_read_only_full_access_field() {
-    let policy = edgerun_json::from_value::<SandboxPolicy>(json!({
-        "type": "readOnly",
-        "access": {
-            "type": "fullAccess"
-        },
-        "networkAccess": true
-    }))
-    .expect("read-only policy should ignore legacy fullAccess field");
-    assert_eq!(
-        policy,
-        SandboxPolicy::ReadOnly {
-            network_access: true
-        }
-    );
-}
-
-#[test]
-fn sandbox_policy_deserializes_legacy_workspace_write_full_access_field() {
-    let writable_root = absolute_path("/workspace");
-    let policy = edgerun_json::from_value::<SandboxPolicy>(json!({
-        "type": "workspaceWrite",
-        "writableRoots": [writable_root.as_path()],
-        "readOnlyAccess": {
-            "type": "fullAccess"
-        },
-        "networkAccess": true,
-        "excludeTmpdirEnvVar": true,
-        "excludeSlashTmp": true
-    }))
-    .expect("workspace-write policy should ignore legacy fullAccess field");
-    assert_eq!(
-        policy,
-        SandboxPolicy::WorkspaceWrite {
-            writable_roots: vec![absolute_path("/workspace")],
-            network_access: true,
-            exclude_tmpdir_env_var: true,
-            exclude_slash_tmp: true,
-        }
-    );
-}
-
-#[test]
-fn sandbox_policy_rejects_legacy_read_only_restricted_access_field() {
-    let err = edgerun_json::from_value::<SandboxPolicy>(json!({
-        "type": "readOnly",
-        "access": {
-            "type": "restricted",
-            "includePlatformDefaults": false,
-            "readableRoots": []
-        }
-    }))
-    .expect_err("read-only policy should reject removed restricted access field");
-    assert!(err.to_string().contains("readOnly.access"));
-}
-
-#[test]
-fn sandbox_policy_rejects_legacy_workspace_write_restricted_read_access_field() {
-    let err = edgerun_json::from_value::<SandboxPolicy>(json!({
-        "type": "workspaceWrite",
-        "writableRoots": [],
-        "readOnlyAccess": {
-            "type": "restricted",
-            "includePlatformDefaults": false,
-            "readableRoots": []
-        },
-        "networkAccess": false,
-        "excludeTmpdirEnvVar": false,
-        "excludeSlashTmp": false
-    }))
-    .expect_err("workspace-write policy should reject removed restricted readOnlyAccess field");
-    assert!(err.to_string().contains("workspaceWrite.readOnlyAccess"));
 }
 
 #[test]
