@@ -77,6 +77,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-anyhow"
+version = "0.1.1"
+
+[[package]]
+name = "edgerun-assert-cmd"
+version = "0.1.1"
+
+[[package]]
+name = "edgerun-assert-matches"
+version = "0.1.1"
+
+[[package]]
 name = "edgerun-async-channel"
 version = "0.1.1"
 dependencies = [
@@ -122,6 +134,14 @@ dependencies = [
  "edgerun-log",
  "rkyv",
 ]
+
+[[package]]
+name = "edgerun-codex-utils-absolute-path"
+version = "0.1.1"
+
+[[package]]
+name = "edgerun-codex-utils-cargo-bin"
+version = "0.1.1"
 
 [[package]]
 name = "edgerun-compositor"
@@ -239,6 +259,10 @@ dependencies = [
  "edgerun-url",
  "edgerun-wallet",
 ]
+
+[[package]]
+name = "edgerun-fontdue"
+version = "0.1.1"
 
 [[package]]
 name = "edgerun-futures"
@@ -499,6 +523,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-pretty-assertions"
+version = "0.1.1"
+
+[[package]]
 name = "edgerun-protocols"
 version = "0.1.1"
 dependencies = [
@@ -655,6 +683,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-tempfile"
+version = "0.1.1"
+dependencies = [
+ "edgerun-random",
+]
+
+[[package]]
 name = "edgerun-term-core"
 version = "0.1.0"
 dependencies = [
@@ -689,6 +724,10 @@ dependencies = [
 
 [[package]]
 name = "edgerun-tokio-macros"
+version = "0.1.1"
+
+[[package]]
+name = "edgerun-tokio-test"
 version = "0.1.1"
 
 [[package]]
@@ -762,7 +801,7 @@ dependencies = [
 name = "edgerun-ui-core"
 version = "0.1.1"
 dependencies = [
- "fontdue",
+ "edgerun-fontdue",
 ]
 
 [[package]]
@@ -822,6 +861,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "edgerun-wiremock"
+version = "0.1.1"
+dependencies = [
+ "edgerun-http",
+ "edgerun-json",
+ "edgerun-serde",
+]
+
+[[package]]
 name = "edgerun-work"
 version = "0.1.1"
 dependencies = [
@@ -864,15 +912,6 @@ dependencies = [
  "displaydoc",
  "smallvec",
  "writeable",
-]
-
-[[package]]
-name = "fontdue"
-version = "0.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e57e16b3fe8ff4364c0661fdaac543fb38b29ea9bc9c2f45612d90adf931d2b"
-dependencies = [
- "ttf-parser",
 ]
 
 [[package]]
@@ -1603,12 +1642,6 @@ dependencies = [
  "thread_local",
  "tracing-core",
 ]
-
-[[package]]
-name = "ttf-parser"
-version = "0.21.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c591d83f69777866b9126b24c6dd9a18351f177e49d625920d19f989fd31cf8"
 
 [[package]]
 name = "unicode-ident"

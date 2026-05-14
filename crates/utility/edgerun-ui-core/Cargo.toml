@@ -17,7 +17,7 @@ tabler-icons = []
 tabler-svg-atlas = []
 
 [dependencies]
-fontdue = { version = "0.9", default-features = false, optional = true }
+fontdue = { package = "edgerun-fontdue", path = "../edgerun-fontdue", optional = true }
 
 [[bin]]
 name = "ui-preview-sdl-font-icons"
