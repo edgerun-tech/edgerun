@@ -117,6 +117,7 @@ members = [
   "crates/utility/edgerun-runtime",
   "crates/utility/edgerun-rkyv",
   "crates/utility/edgerun-rkyv-derive",
+  "crates/utility/edgerun-same-file",
   "crates/utility/edgerun-schemars",
   "crates/utility/edgerun-schemars-derive",
   "crates/utility/edgerun-seccompiler",
@@ -157,6 +158,7 @@ members = [
   "crates/utility/edgerun-unicode-ident",
   "crates/utility/edgerun-unit-macros",
   "crates/utility/edgerun-url",
+  "crates/utility/edgerun-walkdir",
   "crates/utility/edgerun-wiremock",
   "crates/utility/edgerun-writeable",
   "crates/utility/edgerun-zeroize",
@@ -278,6 +280,7 @@ quote = { path = "crates/utility/edgerun-quote" }
 serde = { path = "crates/utility/edgerun-serde-upstream" }
 serde_core = { path = "crates/utility/edgerun-serde-core" }
 serde_derive = { path = "crates/utility/edgerun-serde-derive" }
+same-file = { path = "crates/utility/edgerun-same-file" }
 sharded-slab = { path = "crates/utility/edgerun-sharded-slab" }
 slab = { path = "crates/utility/edgerun-slab" }
 smallvec = { path = "crates/utility/edgerun-smallvec" }
@@ -290,4 +293,5 @@ thread_local = { path = "crates/utility/edgerun-thread_local" }
 tinyvec = { path = "crates/utility/edgerun-tinyvec" }
 tinyvec_macros = { path = "crates/utility/edgerun-tinyvec-macros" }
 unicode-ident = { path = "crates/utility/edgerun-unicode-ident" }
+walkdir = { path = "crates/utility/edgerun-walkdir" }
 writeable = { path = "crates/utility/edgerun-writeable" }

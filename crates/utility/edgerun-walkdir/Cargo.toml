@@ -1,0 +1,15 @@
+[package]
+name = "walkdir"
+version = "2.5.0"
+edition = "2018"
+license = "Unlicense/MIT"
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun-owned recursive directory traversal compatibility crate"
+
+[dependencies]
+same-file = { path = "../edgerun-same-file" }
+
+[lints]
+workspace = true
