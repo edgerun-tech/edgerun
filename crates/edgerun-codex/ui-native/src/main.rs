@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use edgerun_ui_core::gpu::gl::GlRenderer;
 use edgerun_ui_core::gpu::{
-    Color4, FontAtlas, GpuHit, GpuRect, GpuScene, HitKind, UiAppSurface, UiColorScheme, UiEvent, UiKey,
+    FontAtlas, GpuHit, GpuScene, HitKind, UiAppSurface, UiColorScheme, UiEvent, UiKey,
     UiShellAction, UiShellState, UiWorkspace, UnifiedChatState,
     build_edgerun_workspace_with_shell_with_font, palette,
 };
@@ -76,11 +76,16 @@ impl SdlEvent {
 
     fn text_input(&self) -> Option<String> {
         let bytes = &self.data[12..44];
-        let len = bytes.iter().position(|byte| *byte == 0).unwrap_or(bytes.len());
+        let len = bytes
+            .iter()
+            .position(|byte| *byte == 0)
+            .unwrap_or(bytes.len());
         if len == 0 {
             None
         } else {
-            std::str::from_utf8(&bytes[..len]).ok().map(ToString::to_string)
+            std::str::from_utf8(&bytes[..len])
+                .ok()
+                .map(ToString::to_string)
         }
     }
 }
@@ -124,16 +129,13 @@ fn run() -> Result<(), String> {
         let atlas = FontAtlas::load_inter(18.0)?;
         let mut workspace = args.surface.workspace();
         let mut shell = UiShellState::default();
-        let codex = CodexUiState::default();
         build_surface(
             &mut scene,
             &atlas,
             &mut workspace,
             &mut shell,
-            &codex,
             1120.0,
             720.0,
-            args.surface,
             args.scheme,
         );
         println!(
@@ -183,7 +185,6 @@ fn run() -> Result<(), String> {
     let mut scene = GpuScene::new(palette::BG);
     let mut workspace = args.surface.workspace();
     let mut shell = UiShellState::default();
-    let mut codex = CodexUiState::default();
     let mut running = true;
     let mut frames = 0u32;
     let mut scene_dirty = true;
@@ -197,27 +198,19 @@ fn run() -> Result<(), String> {
                     let _ = workspace.handle_event(&scene, UiEvent::KeyDown { key: UiKey::Escape });
                 }
                 SDL_KEYDOWN => {
-                    if args.surface == PreviewSurface::Codex {
-                        codex.handle_key(sdl_key(event.key_sym()));
-                    } else {
-                        handle_shell_then_workspace(
-                            &scene,
-                            &mut shell,
-                            &mut workspace,
-                            &scene,
-                            UiEvent::KeyDown {
-                                key: sdl_key(event.key_sym()),
-                            },
-                        );
-                    }
+                    handle_shell_then_workspace(
+                        &scene,
+                        &mut shell,
+                        &mut workspace,
+                        &scene,
+                        UiEvent::KeyDown {
+                            key: sdl_key(event.key_sym()),
+                        },
+                    );
                     scene_dirty = true;
                 }
                 SDL_TEXTINPUT => {
-                    if args.surface == PreviewSurface::Codex {
-                        if let Some(text) = event.text_input() {
-                            codex.input.push_str(&text);
-                        }
-                    } else if let Some(text) = event.text_input() {
+                    if let Some(text) = event.text_input() {
                         workspace.handle_event(&scene, UiEvent::TextInput(text));
                     }
                     scene_dirty = true;
@@ -227,11 +220,7 @@ fn run() -> Result<(), String> {
                         x: event.mouse_x(),
                         y: event.mouse_y(),
                     };
-                    if args.surface == PreviewSurface::Codex {
-                        codex.handle_pointer_down(&scene, event);
-                    } else {
-                        handle_shell_then_workspace(&scene, &mut shell, &mut workspace, &scene, event);
-                    }
+                    handle_shell_then_workspace(&scene, &mut shell, &mut workspace, &scene, event);
                     scene_dirty = true;
                 }
                 SDL_MOUSEMOTION => {
@@ -247,11 +236,7 @@ fn run() -> Result<(), String> {
                         x: event.mouse_x(),
                         y: event.mouse_y(),
                     };
-                    if args.surface == PreviewSurface::Codex {
-                        codex.handle_pointer_up(&scene, event);
-                    } else {
-                        handle_shell_then_workspace(&scene, &mut shell, &mut workspace, &scene, event);
-                    }
+                    handle_shell_then_workspace(&scene, &mut shell, &mut workspace, &scene, event);
                     scene_dirty = true;
                 }
                 SDL_MOUSEWHEEL => {
@@ -284,10 +269,8 @@ fn run() -> Result<(), String> {
                 &atlas,
                 &mut workspace,
                 &mut shell,
-                &codex,
                 width as f32,
                 height as f32,
-                args.surface,
                 args.scheme,
             );
             renderer.render(width, height, &scene);
@@ -329,20 +312,14 @@ fn build_surface(
     atlas: &FontAtlas,
     workspace: &mut UiWorkspace,
     shell: &mut UiShellState,
-    codex: &CodexUiState,
     width: f32,
     height: f32,
-    surface: PreviewSurface,
     scheme: UiColorScheme,
 ) {
-    if surface == PreviewSurface::Codex {
-        build_codex_client_surface(scene, atlas, codex, width, height);
-    } else {
-        let state = UnifiedChatState::empty();
-        build_edgerun_workspace_with_shell_with_font(
-            scene, atlas, width, height, workspace, shell, &state,
-        );
-    }
+    let state = UnifiedChatState::empty();
+    build_edgerun_workspace_with_shell_with_font(
+        scene, atlas, width, height, workspace, shell, &state,
+    );
     scene.apply_color_scheme(scheme);
 }
 
@@ -406,7 +383,7 @@ impl PreviewSurface {
     fn workspace(self) -> UiWorkspace {
         match self {
             Self::Workspace => default_workspace(),
-            Self::Codex => UiWorkspace::default(),
+            Self::Codex => default_workspace(),
             Self::Lock => UiWorkspace::full_screen(UiAppSurface::lock_screen(10)),
             Self::Capability => UiWorkspace::full_screen(UiAppSurface::capability_request(11)),
             Self::Gallery => UiWorkspace::single(UiAppSurface::component_gallery(5)),
@@ -446,9 +423,9 @@ impl Args {
                     parsed.scheme = parse_scheme(&value)?;
                 }
                 "--surface" => {
-                    let value = args
-                        .next()
-                        .ok_or("--surface requires codex, workspace, lock, capability, or gallery")?;
+                    let value = args.next().ok_or(
+                        "--surface requires codex, workspace, lock, capability, or gallery",
+                    )?;
                     parsed.surface = parse_surface(&value)?;
                 }
                 "--help" | "-h" => {

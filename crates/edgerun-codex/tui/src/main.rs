@@ -31,6 +31,8 @@ use edgerun_http::HeaderValue;
 use edgerun_http::header::AUTHORIZATION;
 use edgerun_json::Value;
 
+mod ui;
+
 const MAX_TOOL_ROUNDS: usize = 16;
 const MAX_TOOL_OUTPUT_BYTES: usize = 24 * 1024;
 
@@ -58,7 +60,11 @@ impl AuthProvider for ChatGptAuth {
 enum AgentEvent {
     AssistantText(String),
     ToolStarted(String),
-    ToolCompleted(String),
+    ToolCompleted {
+        name: String,
+        summary: String,
+        success: bool,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -91,14 +97,35 @@ impl ToolCall {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let auth = read_chatgpt_auth()?;
+    let args = AppArgs::parse()?;
     let model = std::env::var("CODEX_TUI_MODEL").unwrap_or_else(|_| "gpt-5.5".to_string());
+    if args.dump_ui_scene {
+        ui::run(ui::UiOptions {
+            model,
+            frames: args.frames,
+            dump_scene: true,
+        })
+        .map_err(|error| -> Box<dyn Error> { error.into() })?;
+        return Ok(());
+    }
+
+    if args.ui {
+        ui::run(ui::UiOptions {
+            model,
+            frames: args.frames,
+            dump_scene: false,
+        })
+        .map_err(|error| -> Box<dyn Error> { error.into() })?;
+        return Ok(());
+    }
+
+    let auth = read_chatgpt_auth()?;
     let client = codex_core::ModelClient::new_native(model, provider(), auth);
     let runtime = edgerun_tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
 
-    if let Some(prompt) = prompt_arg()? {
+    if let Some(prompt) = args.prompt {
         runtime.block_on(run_prompt(&client, vec![user_item(prompt)]))?;
         return Ok(());
     }
@@ -138,7 +165,7 @@ async fn run_prompt(
         AgentEvent::ToolStarted(name) => {
             println!("\n[tool] {name}");
         }
-        AgentEvent::ToolCompleted(summary) => {
+        AgentEvent::ToolCompleted { summary, .. } => {
             println!("[tool result] {summary}");
         }
     };
@@ -147,6 +174,65 @@ async fn run_prompt(
     Ok(history)
 }
 
+#[derive(Debug, Default)]
+struct AppArgs {
+    prompt: Option<String>,
+    ui: bool,
+    dump_ui_scene: bool,
+    frames: Option<u32>,
+}
+
+impl AppArgs {
+    fn parse() -> Result<Self, Box<dyn Error>> {
+        let mut args = std::env::args().skip(1);
+        let mut parsed = Self {
+            ui: true,
+            ..Self::default()
+        };
+        while let Some(arg) = args.next() {
+            match arg.as_str() {
+                "--prompt" | "-p" => {
+                    let value = args
+                        .next()
+                        .ok_or("--prompt requires a prompt string argument")?;
+                    parsed.prompt = Some(value);
+                    parsed.ui = false;
+                }
+                "--cli" => parsed.ui = false,
+                "--ui" => parsed.ui = true,
+                "--dump-ui-scene" => {
+                    parsed.dump_ui_scene = true;
+                    parsed.ui = true;
+                }
+                "--frames" => {
+                    parsed.frames = Some(
+                        args.next()
+                            .ok_or("--frames requires a frame count")?
+                            .parse::<u32>()?,
+                    );
+                }
+                "--help" | "-h" => {
+                    let program = std::env::args()
+                        .next()
+                        .and_then(|path| {
+                            PathBuf::from(path)
+                                .file_name()
+                                .map(|name| name.to_string_lossy().into_owned())
+                        })
+                        .unwrap_or_else(|| "edgerun-codex".to_string());
+                    println!(
+                        "Usage: {program} [--ui|--cli] [--prompt TEXT] [--dump-ui-scene] [--frames N]"
+                    );
+                    std::process::exit(0);
+                }
+                other => return Err(format!("unknown argument: {other}").into()),
+            }
+        }
+        Ok(parsed)
+    }
+}
+
+#[allow(dead_code)]
 fn prompt_arg() -> Result<Option<String>, Box<dyn Error>> {
     let mut args = std::env::args().skip(1);
     let mut prompt = None;
@@ -218,7 +304,11 @@ async fn run_agent_loop(
             }
             let output = execute_tool_call(&call).await;
             if let Some(emit) = emit.as_deref_mut() {
-                emit(AgentEvent::ToolCompleted(tool_summary(&call, &output)));
+                emit(AgentEvent::ToolCompleted {
+                    name: call.display_name(),
+                    summary: tool_summary(&call, &output),
+                    success: output.success.unwrap_or(false),
+                });
             }
             history.push(tool_output_item(call, output));
         }
@@ -409,19 +499,16 @@ async fn execute_apply_patch_json(arguments: &str) -> Result<String, String> {
 fn parse_tool_arguments(arguments: &str) -> Result<Value, String> {
     match edgerun_json::from_str(arguments) {
         Ok(Value::String(inner)) => {
-            return edgerun_json::from_str(&inner).map_err(|error| error.to_string());
+            edgerun_json::from_str(&inner).map_err(|error| error.to_string())
         }
-        Ok(value) => return Ok(value),
+        Ok(value) => Ok(value),
         Err(error) => {
             let trimmed = arguments.trim();
             if (trimmed.starts_with('{') || trimmed.starts_with('[')) && trimmed.contains("\\\"") {
                 let wrapped = format!("\"{trimmed}\"");
                 if let Ok(Value::String(inner)) = edgerun_json::from_str(&wrapped) {
                     return edgerun_json::from_str(&inner).map_err(|inner_error| {
-                        format!(
-                            "{}; also failed to parse escaped arguments after unwrapping: {}",
-                            error, inner_error
-                        )
+                        format!("{error}; also failed to parse escaped arguments after unwrapping: {inner_error}")
                     });
                 }
             }
@@ -466,8 +553,7 @@ fn json_required_string_array(value: &Value, key: &str) -> Result<Vec<String>, S
 
 async fn execute_apply_patch(input: &str) -> Result<String, String> {
     let cwd = std::env::current_dir().map_err(|error| error.to_string())?;
-    let cwd =
-        apply_patch::AbsolutePathBuf::from_absolute_path(cwd).map_err(|error| error.to_string())?;
+    let cwd = apply_patch::AbsolutePathBuf::from_absolute_path(cwd)?;
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
     match apply_patch::apply_patch(
@@ -646,15 +732,15 @@ fn provider() -> Provider {
     }
 }
 
-fn codex_home() -> PathBuf {
+fn codex_home() -> Result<PathBuf, String> {
     std::env::var_os("CODEX_HOME")
         .map(PathBuf::from)
         .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".codex")))
-        .expect("CODEX_HOME or HOME must be set")
+        .ok_or_else(|| "CODEX_HOME or HOME must be set".to_string())
 }
 
 fn read_chatgpt_auth() -> Result<Arc<ChatGptAuth>, Box<dyn Error>> {
-    let auth_path = codex_home().join("auth.json");
+    let auth_path = codex_home()?.join("auth.json");
     let auth = edgerun_json::from_slice(&std::fs::read(&auth_path)?)?;
     let access_token = auth
         .get("tokens")

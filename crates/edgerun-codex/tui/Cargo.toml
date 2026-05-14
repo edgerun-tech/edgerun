@@ -17,6 +17,7 @@ codex-core = { workspace = true, features = ["native-transport"] }
 edgerun-http = { workspace = true }
 edgerun-json = { workspace = true }
 edgerun-tokio = { workspace = true, features = ["rt", "sync"] }
+edgerun-ui-core = { workspace = true, features = ["fontdue-text", "gpu-gl"] }
 
 [lints]
 workspace = true

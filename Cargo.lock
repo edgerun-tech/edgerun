@@ -43,6 +43,249 @@ name = "cfg-if"
 version = "1.0.4"
 
 [[package]]
+name = "codex-api"
+version = "0.1.1"
+dependencies = [
+ "codex-client",
+ "codex-protocol",
+ "edgerun-anyhow",
+ "edgerun-assert-matches",
+ "edgerun-async-channel",
+ "edgerun-async-trait",
+ "edgerun-bytes",
+ "edgerun-encoding",
+ "edgerun-error",
+ "edgerun-eventsource-stream",
+ "edgerun-futures",
+ "edgerun-http",
+ "edgerun-json",
+ "edgerun-log",
+ "edgerun-pretty-assertions",
+ "edgerun-reqwest",
+ "edgerun-tempfile",
+ "edgerun-time",
+ "edgerun-tokio",
+ "edgerun-tokio-test",
+ "edgerun-tokio-tungstenite",
+ "edgerun-tokio-util",
+ "edgerun-tungstenite",
+ "edgerun-url",
+ "edgerun-wiremock",
+]
+
+[[package]]
+name = "codex-app-server-protocol"
+version = "0.1.1"
+dependencies = [
+ "codex-protocol",
+ "codex-shell-command",
+ "edgerun-error",
+ "edgerun-inventory",
+ "edgerun-json",
+ "edgerun-log",
+ "edgerun-rmcp",
+ "edgerun-schemars",
+ "edgerun-serde",
+ "edgerun-similar",
+ "edgerun-strum-macros",
+ "edgerun-ts-rs",
+]
+
+[[package]]
+name = "codex-apply-patch"
+version = "0.1.1"
+dependencies = [
+ "edgerun-assert-cmd",
+ "edgerun-assert-matches",
+ "edgerun-async-trait",
+ "edgerun-codex-utils-absolute-path",
+ "edgerun-codex-utils-cargo-bin",
+ "edgerun-error",
+ "edgerun-pretty-assertions",
+ "edgerun-similar",
+ "edgerun-tempfile",
+ "edgerun-tokio",
+]
+
+[[package]]
+name = "codex-client"
+version = "0.1.1"
+dependencies = [
+ "edgerun-async-trait",
+ "edgerun-bytes",
+ "edgerun-codex-utils-cargo-bin",
+ "edgerun-encoding",
+ "edgerun-error",
+ "edgerun-eventsource-stream",
+ "edgerun-futures",
+ "edgerun-http",
+ "edgerun-http-client",
+ "edgerun-json",
+ "edgerun-log",
+ "edgerun-pretty-assertions",
+ "edgerun-random",
+ "edgerun-reqwest",
+ "edgerun-tempfile",
+ "edgerun-tokio",
+]
+
+[[package]]
+name = "codex-code-mode"
+version = "0.1.1"
+dependencies = [
+ "codex-protocol",
+ "edgerun-async-channel",
+ "edgerun-async-trait",
+ "edgerun-json",
+ "edgerun-log",
+ "edgerun-tokio",
+ "edgerun-tokio-util",
+]
+
+[[package]]
+name = "codex-core"
+version = "0.1.1"
+dependencies = [
+ "codex-api",
+ "codex-apply-patch",
+ "codex-client",
+ "codex-model-provider",
+ "codex-model-provider-info",
+ "codex-models-manager",
+ "codex-protocol",
+ "codex-shell-command",
+ "codex-tools",
+ "edgerun-async-trait",
+ "edgerun-bytes",
+ "edgerun-futures",
+ "edgerun-http",
+ "edgerun-json",
+ "edgerun-tokio",
+]
+
+[[package]]
+name = "codex-host"
+version = "0.1.1"
+dependencies = [
+ "codex-core",
+ "edgerun-crypto",
+ "edgerun-http",
+ "edgerun-json",
+ "edgerun-tokio",
+ "edgerun-work",
+]
+
+[[package]]
+name = "codex-model-provider"
+version = "0.1.1"
+dependencies = [
+ "codex-api",
+ "codex-client",
+ "codex-model-provider-info",
+ "codex-models-manager",
+ "codex-protocol",
+ "codex-response-debug-context",
+ "edgerun-async-trait",
+ "edgerun-http",
+ "edgerun-json",
+ "edgerun-log",
+ "edgerun-tokio",
+]
+
+[[package]]
+name = "codex-model-provider-info"
+version = "0.1.1"
+dependencies = [
+ "codex-api",
+ "codex-app-server-protocol",
+ "codex-protocol",
+ "edgerun-http",
+ "edgerun-schemars",
+ "edgerun-serde",
+]
+
+[[package]]
+name = "codex-models-manager"
+version = "0.1.1"
+dependencies = [
+ "codex-app-server-protocol",
+ "codex-protocol",
+ "edgerun-async-trait",
+ "edgerun-json",
+ "edgerun-log",
+ "edgerun-time",
+ "edgerun-tokio",
+]
+
+[[package]]
+name = "codex-protocol"
+version = "0.1.1"
+dependencies = [
+ "edgerun-anyhow",
+ "edgerun-encoding",
+ "edgerun-error",
+ "edgerun-http",
+ "edgerun-json",
+ "edgerun-landlock",
+ "edgerun-locale",
+ "edgerun-log",
+ "edgerun-pretty-assertions",
+ "edgerun-schemars",
+ "edgerun-seccompiler",
+ "edgerun-serde",
+ "edgerun-strum",
+ "edgerun-strum-macros",
+ "edgerun-tempfile",
+ "edgerun-time",
+ "edgerun-tokio",
+ "edgerun-ts-rs",
+]
+
+[[package]]
+name = "codex-response-debug-context"
+version = "0.1.1"
+dependencies = [
+ "codex-api",
+ "edgerun-encoding",
+ "edgerun-http",
+ "edgerun-json",
+]
+
+[[package]]
+name = "codex-shell-command"
+version = "0.1.1"
+dependencies = [
+ "codex-protocol",
+ "edgerun-encoding",
+ "edgerun-json",
+ "edgerun-shlex",
+ "edgerun-url",
+]
+
+[[package]]
+name = "codex-tools"
+version = "0.1.1"
+dependencies = [
+ "codex-app-server-protocol",
+ "codex-code-mode",
+ "codex-protocol",
+ "edgerun-json",
+ "edgerun-log",
+ "edgerun-rmcp",
+]
+
+[[package]]
+name = "codex-tui"
+version = "0.1.1"
+dependencies = [
+ "codex-core",
+ "edgerun-http",
+ "edgerun-json",
+ "edgerun-tokio",
+ "edgerun-ui-core",
+]
+
+[[package]]
 name = "combine"
 version = "4.6.7"
 dependencies = [
@@ -244,6 +487,20 @@ dependencies = [
 [[package]]
 name = "edgerun-fontdue"
 version = "0.1.1"
+
+[[package]]
+name = "edgerun-frontend-native"
+version = "0.1.1"
+dependencies = [
+ "edgerun-ui-core",
+]
+
+[[package]]
+name = "edgerun-frontend-web"
+version = "0.1.1"
+dependencies = [
+ "edgerun-ui-core",
+]
 
 [[package]]
 name = "edgerun-futures"
@@ -1170,13 +1427,6 @@ dependencies = [
  "serde_core",
  "writeable",
  "zerovec",
-]
-
-[[package]]
-name = "ppv-lite86"
-version = "0.2.21"
-dependencies = [
- "zerocopy",
 ]
 
 [[package]]
