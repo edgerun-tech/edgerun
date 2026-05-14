@@ -131,17 +131,17 @@ mod kv_support {
         Value::from_display(v)
     }
 
-    #[cfg(feature = "kv_std")]
+    #[cfg(any())]
     pub fn capture_error<'a>(v: &'a (dyn std::error::Error + 'static)) -> Value<'a> {
         Value::from_dyn_error(v)
     }
 
-    #[cfg(feature = "kv_sval")]
+    #[cfg(any())]
     pub fn capture_sval<'a, V: sval::Value + ?Sized>(v: &'a &'a V) -> Value<'a> {
         Value::from_sval(v)
     }
 
-    #[cfg(feature = "kv_serde")]
+    #[cfg(any())]
     pub fn capture_serde<'a, V: serde_core::Serialize + ?Sized>(v: &'a &'a V) -> Value<'a> {
         Value::from_serde(v)
     }

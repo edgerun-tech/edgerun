@@ -2,7 +2,7 @@ use super::DEFAULT_BUF_SIZE;
 use futures_core::future::Future;
 use futures_core::ready;
 use futures_core::task::{Context, Poll};
-use futures_io::{AsyncBufRead, AsyncRead, AsyncSeek, AsyncWrite, IoSliceMut, SeekFrom};
+use crate::io::{AsyncBufRead, AsyncRead, AsyncSeek, AsyncWrite, IoSliceMut, SeekFrom};
 use pin_project_lite::pin_project;
 use std::boxed::Box;
 use std::io::{self, Read};
@@ -27,7 +27,7 @@ pin_project! {
     /// discarded. Creating multiple instances of a `BufReader` on the same
     /// stream can cause data loss.
     ///
-    /// [`AsyncRead`]: futures_io::AsyncRead
+    /// [`AsyncRead`]: crate::io::AsyncRead
     ///
     // TODO: Examples
     pub struct BufReader<R> {
@@ -195,7 +195,7 @@ impl<R: AsyncRead + AsyncSeek> AsyncSeek for BufReader<R> {
     /// [`BufReader::seek_relative`](BufReader::seek_relative) or
     /// [`BufReader::poll_seek_relative`](BufReader::poll_seek_relative).
     ///
-    /// See [`AsyncSeek`](futures_io::AsyncSeek) for more details.
+    /// See [`AsyncSeek`](crate::io::AsyncSeek) for more details.
     ///
     /// Note: In the edge case where you're seeking with `SeekFrom::Current(n)`
     /// where `n` minus the internal buffer length overflows an `i64`, two

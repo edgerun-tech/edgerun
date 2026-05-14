@@ -20,6 +20,17 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
+#[cfg(feature = "io")]
+mod memchr_fallback {
+    pub(crate) fn memchr(needle: u8, haystack: &[u8]) -> Option<usize> {
+        haystack.iter().position(|byte| *byte == needle)
+    }
+
+    pub(crate) fn memrchr(needle: u8, haystack: &[u8]) -> Option<usize> {
+        haystack.iter().rposition(|byte| *byte == needle)
+    }
+}
+
 // Macro re-exports
 pub use futures_core::ready;
 
@@ -304,8 +315,8 @@ pub mod task;
 
 pub mod never;
 
-#[cfg(feature = "compat")]
-#[cfg_attr(docsrs, doc(cfg(feature = "compat")))]
+#[cfg(any())]
+#[cfg_attr(any(), doc(cfg(feature = "compat")))]
 pub mod compat;
 
 #[cfg(feature = "io")]

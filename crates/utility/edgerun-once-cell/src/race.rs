@@ -27,10 +27,7 @@
 // on another thread) using `Ordering::Release`, so we must use
 // `Ordering::Acquire` to ensure that store "happens-before" this load.
 
-#[cfg(not(feature = "portable-atomic"))]
 use core::sync::atomic;
-#[cfg(feature = "portable-atomic")]
-use portable_atomic as atomic;
 
 use atomic::{AtomicPtr, AtomicUsize, Ordering};
 use core::cell::UnsafeCell;

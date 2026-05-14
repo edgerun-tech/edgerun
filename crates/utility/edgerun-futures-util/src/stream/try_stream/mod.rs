@@ -3,7 +3,7 @@
 //! This module contains a number of functions for working with `Streams`s
 //! that return `Result`s, allowing for short-circuiting computations.
 
-#[cfg(feature = "compat")]
+#[cfg(any())]
 use crate::compat::Compat;
 use crate::fns::{
     inspect_err_fn, inspect_ok_fn, into_fn, map_err_fn, map_ok_fn, InspectErrFn, InspectOkFn,
@@ -1154,8 +1154,8 @@ pub trait TryStreamExt: TryStream {
     /// tokio::run(future01);
     /// # assert_eq!(42, futures::executor::block_on(rx).unwrap());
     /// ```
-    #[cfg(feature = "compat")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "compat")))]
+    #[cfg(any())]
+    #[cfg_attr(any(), doc(cfg(feature = "compat")))]
     fn compat(self) -> Compat<Self>
     where
         Self: Sized + Unpin,

@@ -1,6 +1,6 @@
 use futures_task::{LocalSpawn, Spawn};
 
-#[cfg(feature = "compat")]
+#[cfg(any())]
 use crate::compat::Compat;
 
 #[cfg(feature = "channel")]
@@ -89,8 +89,8 @@ pub trait SpawnExt: Spawn {
 
     /// Wraps a [`Spawn`] and makes it usable as a futures 0.1 `Executor`.
     /// Requires the `compat` feature to enable.
-    #[cfg(feature = "compat")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "compat")))]
+    #[cfg(any())]
+    #[cfg_attr(any(), doc(cfg(feature = "compat")))]
     fn compat(self) -> Compat<Self>
     where
         Self: Sized,

@@ -12,7 +12,7 @@ use futures_core::future::Future;
 use futures_core::stream::{Stream, TryStream};
 use futures_core::task::{Context, Poll};
 
-#[cfg(feature = "compat")]
+#[cfg(any())]
 use crate::compat::CompatSink;
 
 pub use futures_sink::Sink;
@@ -288,8 +288,8 @@ pub trait SinkExt<Item>: Sink<Item> {
 
     /// Wraps a [`Sink`] into a sink compatible with libraries using
     /// futures 0.1 `Sink`. Requires the `compat` feature to be enabled.
-    #[cfg(feature = "compat")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "compat")))]
+    #[cfg(any())]
+    #[cfg_attr(any(), doc(cfg(feature = "compat")))]
     fn compat(self) -> CompatSink<Self, Item>
     where
         Self: Sized + Unpin,

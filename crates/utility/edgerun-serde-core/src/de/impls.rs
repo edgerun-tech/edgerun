@@ -37,8 +37,8 @@ impl<'de> Deserialize<'de> for () {
     }
 }
 
-#[cfg(feature = "unstable")]
-#[cfg_attr(docsrs, doc(cfg(feature = "unstable")))]
+#[cfg(any())]
+#[cfg_attr(any(), doc(cfg(feature = "unstable")))]
 impl<'de> Deserialize<'de> for ! {
     fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
     where

@@ -321,7 +321,6 @@
     all(feature = "simd-nightly", any(target_arch = "powerpc", target_arch = "powerpc64")),
     feature(stdarch_powerpc)
 )]
-#![cfg_attr(feature = "float-nightly", feature(f16, f128))]
 #![cfg_attr(doc_cfg, feature(doc_cfg))]
 #![cfg_attr(__ZEROCOPY_INTERNAL_USE_ONLY_NIGHTLY_FEATURES_IN_TESTS, feature(coverage_attribute))]
 #![cfg_attr(
@@ -1051,11 +1050,11 @@ impl_known_layout!(
     NonZeroU64, NonZeroI64, NonZeroU128, NonZeroI128, NonZeroUsize, NonZeroIsize
 );
 #[rustfmt::skip]
-#[cfg(feature = "float-nightly")]
+#[cfg(any())]
 impl_known_layout!(
-    #[cfg_attr(doc_cfg, doc(cfg(feature = "float-nightly")))]
+
     f16,
-    #[cfg_attr(doc_cfg, doc(cfg(feature = "float-nightly")))]
+
     f128
 );
 #[rustfmt::skip]

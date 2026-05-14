@@ -1,6 +1,6 @@
 use futures_core::ready;
 use futures_core::task::{Context, Poll};
-use futures_io::AsyncWrite;
+use crate::io::AsyncWrite;
 use futures_sink::Sink;
 use pin_project_lite::pin_project;
 use std::io;

@@ -268,8 +268,8 @@ pub use crate::{
 
 // Check endianness feature flag settings
 
-#[cfg(all(feature = "little_endian", feature = "big_endian"))]
-core::compiler_error!(
+#[cfg(any())]
+core::compile_error!(
     "\"little_endian\" and \"big_endian\" are mutually-exclusive features. \
      You may need to set `default-features = false` or compile with \
      `--no-default-features`."
@@ -277,8 +277,8 @@ core::compiler_error!(
 
 // Check alignment feature flag settings
 
-#[cfg(all(feature = "aligned", feature = "unaligned"))]
-core::compiler_error!(
+#[cfg(any())]
+core::compile_error!(
     "\"aligned\" and \"unaligned\" are mutually-exclusive features. You may \
      need to set `default-features = false` or compile with \
      `--no-default-features`."
@@ -286,41 +286,25 @@ core::compiler_error!(
 
 // Check pointer width feature flag settings
 
-#[cfg(all(
-    feature = "pointer_width_16",
-    feature = "pointer_width_32",
-    not(feature = "pointer_width_64")
-))]
+#[cfg(any())]
 core::compile_error!(
     "\"pointer_width_16\" and \"pointer_width_32\" are mutually-exclusive \
      features. You may need to set `default-features = false` or compile with \
      `--no-default-features`."
 );
-#[cfg(all(
-    feature = "pointer_width_16",
-    feature = "pointer_width_64",
-    not(feature = "pointer_width_32")
-))]
+#[cfg(any())]
 core::compile_error!(
     "\"pointer_width_16\" and \"pointer_width_64\" are mutually-exclusive \
      features. You may need to set `default-features = false` or compile with \
      `--no-default-features`."
 );
-#[cfg(all(
-    feature = "pointer_width_32",
-    feature = "pointer_width_64",
-    not(feature = "pointer_width_16")
-))]
+#[cfg(any())]
 core::compile_error!(
     "\"pointer_width_32\" and \"pointer_width_64\" are mutually-exclusive \
      features. You may need to set `default-features = false` or compile with \
      `--no-default-features`."
 );
-#[cfg(all(
-    feature = "pointer_width_16",
-    feature = "pointer_width_32",
-    feature = "pointer_width_64"
-))]
+#[cfg(any())]
 core::compile_error!(
     "\"pointer_width_16\", \"pointer_width_32\", and \"pointer_width_64\" are \
      mutually-exclusive features. You may need to set `default-features = \

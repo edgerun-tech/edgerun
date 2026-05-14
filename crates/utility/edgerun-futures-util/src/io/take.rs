@@ -1,6 +1,6 @@
 use futures_core::ready;
 use futures_core::task::{Context, Poll};
-use futures_io::{AsyncBufRead, AsyncRead};
+use crate::io::{AsyncBufRead, AsyncRead};
 use pin_project_lite::pin_project;
 use std::pin::Pin;
 use std::{cmp, io};

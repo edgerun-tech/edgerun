@@ -92,13 +92,6 @@
 #![no_std]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(feature = "specialization", allow(incomplete_features))]
-#![cfg_attr(feature = "specialization", feature(specialization))]
-#![cfg_attr(feature = "may_dangle", feature(dropck_eyepatch))]
-#![cfg_attr(
-    feature = "debugger_visualizer",
-    feature(debugger_visualizer),
-    debugger_visualizer(natvis_file = "../debug_metadata/smallvec.natvis")
-)]
 #![deny(missing_docs)]
 
 #[doc(hidden)]
@@ -2001,18 +1994,18 @@ where
     }
 }
 
-#[cfg(feature = "specialization")]
+#[cfg(any())]
 trait SpecFrom<A: Array, S> {
     fn spec_from(slice: S) -> SmallVec<A>;
 }
 
-#[cfg(feature = "specialization")]
+#[cfg(any())]
 mod specialization;
 
 #[cfg(feature = "arbitrary")]
 mod arbitrary;
 
-#[cfg(feature = "specialization")]
+#[cfg(any())]
 impl<'a, A: Array> SpecFrom<A, &'a [A::Item]> for SmallVec<A>
 where
     A::Item: Copy,
@@ -2027,13 +2020,13 @@ impl<'a, A: Array> From<&'a [A::Item]> for SmallVec<A>
 where
     A::Item: Clone,
 {
-    #[cfg(not(feature = "specialization"))]
+    #[cfg(any(not(feature = "specialization"), feature = "specialization"))]
     #[inline]
     fn from(slice: &'a [A::Item]) -> SmallVec<A> {
         slice.iter().cloned().collect()
     }
 
-    #[cfg(feature = "specialization")]
+    #[cfg(any())]
     #[inline]
     fn from(slice: &'a [A::Item]) -> SmallVec<A> {
         SmallVec::spec_from(slice)
@@ -2129,7 +2122,7 @@ impl<A: Array> Default for SmallVec<A> {
     }
 }
 
-#[cfg(feature = "may_dangle")]
+#[cfg(any())]
 unsafe impl<#[may_dangle] A: Array> Drop for SmallVec<A> {
     fn drop(&mut self) {
         unsafe {
@@ -2143,7 +2136,7 @@ unsafe impl<#[may_dangle] A: Array> Drop for SmallVec<A> {
     }
 }
 
-#[cfg(not(feature = "may_dangle"))]
+#[cfg(any(not(feature = "may_dangle"), feature = "may_dangle"))]
 impl<A: Array> Drop for SmallVec<A> {
     fn drop(&mut self) {
         unsafe {
@@ -2501,7 +2494,7 @@ impl<T> Clone for ConstNonNull<T> {
 
 impl<T> Copy for ConstNonNull<T> {}
 
-#[cfg(feature = "impl_bincode")]
+#[cfg(any())]
 use bincode::{
     de::{BorrowDecoder, Decode, Decoder, read::Reader},
     enc::{Encode, Encoder, write::Writer},
@@ -2509,7 +2502,7 @@ use bincode::{
     BorrowDecode,
 };
 
-#[cfg(feature = "impl_bincode")]
+#[cfg(any())]
 impl<A, Context> Decode<Context> for SmallVec<A>
 where
     A: Array,
@@ -2546,7 +2539,7 @@ where
     }
 }
 
-#[cfg(feature = "impl_bincode")]
+#[cfg(any())]
 impl<'de, A, Context> BorrowDecode<'de, Context> for SmallVec<A>
 where
     A: Array,
@@ -2583,7 +2576,7 @@ where
     }
 }
 
-#[cfg(feature = "impl_bincode")]
+#[cfg(any())]
 impl<A> Encode for SmallVec<A>
 where
     A: Array,

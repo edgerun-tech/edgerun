@@ -1,8 +1,8 @@
 use super::buf_writer::BufWriter;
 use futures_core::ready;
 use futures_core::task::{Context, Poll};
-use futures_io::AsyncWrite;
-use futures_io::IoSlice;
+use crate::io::AsyncWrite;
+use crate::io::IoSlice;
 use pin_project_lite::pin_project;
 use std::io;
 use std::pin::Pin;
@@ -62,7 +62,7 @@ impl<W: AsyncWrite> AsyncWrite for LineWriter<W> {
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
         let mut this = self.as_mut().project();
-        let newline_index = match memchr::memrchr(b'\n', buf) {
+        let newline_index = match crate::memchr_fallback::memrchr(b'\n', buf) {
             None => {
                 ready!(self.as_mut().flush_if_completed_line(cx)?);
                 return self.project().buf_writer.poll_write(cx, buf);
@@ -87,7 +87,7 @@ impl<W: AsyncWrite> AsyncWrite for LineWriter<W> {
         } else {
             let scan_area = &buf[flushed..];
             let scan_area = &scan_area[..this.buf_writer.capacity()];
-            match memchr::memrchr(b'\n', scan_area) {
+            match crate::memchr_fallback::memrchr(b'\n', scan_area) {
                 Some(newline_index) => &scan_area[..newline_index + 1],
                 None => scan_area,
             }
@@ -110,7 +110,7 @@ impl<W: AsyncWrite> AsyncWrite for LineWriter<W> {
             .iter()
             .enumerate()
             .rev()
-            .find_map(|(i, buf)| memchr::memchr(b'\n', buf).map(|_| i));
+            .find_map(|(i, buf)| crate::memchr_fallback::memchr(b'\n', buf).map(|_| i));
         let last_newline_buf_idx = match last_newline_buf_idx {
             None => {
                 ready!(self.as_mut().flush_if_completed_line(cx)?);

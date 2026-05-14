@@ -10,29 +10,6 @@
 //! [CppCon talk]: https://www.youtube.com/watch?v=ncHmEUmJZf4
 
 #![cfg_attr(not(doc), no_std)]
-#![cfg_attr(
-    feature = "nightly",
-    feature(
-        core_intrinsics,
-        dropck_eyepatch,
-        min_specialization,
-        trivial_clone,
-        extend_one,
-        allocator_api,
-        strict_provenance_lints
-    )
-)]
-#![cfg_attr(feature = "nightly", warn(fuzzy_provenance_casts))]
-#![cfg_attr(feature = "rustc-dep-of-std", feature(rustc_attrs))]
-#![cfg_attr(feature = "nightly", expect(internal_features))]
-#![cfg_attr(
-    all(feature = "nightly", target_arch = "loongarch64"),
-    feature(stdarch_loongarch)
-)]
-#![cfg_attr(
-    all(feature = "nightly", feature = "default-hasher"),
-    feature(hasher_prefixfree_extras)
-)]
 
 #[cfg(test)]
 #[macro_use]

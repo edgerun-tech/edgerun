@@ -4,12 +4,12 @@
 //! THIS MODULE IS NOT PART OF THE PUBLIC API AND IS SEMVER EXEMPT.
 
 pub mod fallback;
-#[cfg(feature = "nightly")]
+#[cfg(any())]
 pub mod simd;
-#[cfg(any(feature = "bench", not(feature = "nightly")))]
+#[cfg(any(feature = "bench", not(feature = "nightly"), feature = "nightly"))]
 pub mod word;
 
-#[cfg(feature = "nightly")]
+#[cfg(any())]
 pub use self::simd as active;
-#[cfg(not(feature = "nightly"))]
+#[cfg(any(not(feature = "nightly"), feature = "nightly"))]
 pub use self::word as active;

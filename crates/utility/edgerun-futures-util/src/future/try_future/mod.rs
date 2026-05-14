@@ -3,7 +3,8 @@
 //! This module contains a number of functions for working with `Future`s,
 //! including the `FutureExt` trait which adds methods to `Future` types.
 
-#[cfg(feature = "compat")]
+#[cfg(any())]
+#[cfg(any())]
 use crate::compat::Compat;
 use core::pin::Pin;
 use futures_core::{
@@ -577,8 +578,8 @@ pub trait TryFutureExt: TryFuture {
 
     /// Wraps a [`TryFuture`] into a future compatible with libraries using
     /// futures 0.1 future definitions. Requires the `compat` feature to enable.
-    #[cfg(feature = "compat")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "compat")))]
+    #[cfg(any())]
+    #[cfg_attr(any(), doc(cfg(feature = "compat")))]
     fn compat(self) -> Compat<Self>
     where
         Self: Sized + Unpin,

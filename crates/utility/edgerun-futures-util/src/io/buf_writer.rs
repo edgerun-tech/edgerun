@@ -1,7 +1,7 @@
 use super::DEFAULT_BUF_SIZE;
 use futures_core::ready;
 use futures_core::task::{Context, Poll};
-use futures_io::{AsyncBufRead, AsyncRead, AsyncSeek, AsyncWrite, IoSlice, SeekFrom};
+use crate::io::{AsyncBufRead, AsyncRead, AsyncSeek, AsyncWrite, IoSlice, SeekFrom};
 use pin_project_lite::pin_project;
 use std::fmt;
 use std::io::{self, Write};
@@ -27,7 +27,7 @@ pin_project! {
     /// stream can cause data loss. If you need to write out the contents of its
     /// buffer, you must manually call flush before the writer is dropped.
     ///
-    /// [`AsyncWrite`]: futures_io::AsyncWrite
+    /// [`AsyncWrite`]: crate::io::AsyncWrite
     /// [`flush`]: super::AsyncWriteExt::flush
     ///
     // TODO: Examples

@@ -2192,12 +2192,28 @@ impl UnsignedDecimal {
         if !float.is_finite() || float.is_sign_negative() {
             return Err(LimitError);
         }
-        // note: this does not heap allocate
-        let mut buf = ryu::Buffer::new();
-        let formatted = buf.format_finite(float);
+        struct StackString {
+            bytes: [u8; 64],
+            len: usize,
+        }
+
+        impl fmt::Write for StackString {
+            fn write_str(&mut self, s: &str) -> fmt::Result {
+                if self.len + s.len() > self.bytes.len() {
+                    return Err(fmt::Error);
+                }
+                self.bytes[self.len..self.len + s.len()].copy_from_slice(s.as_bytes());
+                self.len += s.len();
+                Ok(())
+            }
+        }
+
+        let mut formatted = StackString { bytes: [0; 64], len: 0 };
+        fmt::Write::write_fmt(&mut formatted, format_args!("{float}")).map_err(|_| LimitError)?;
+        let formatted = core::str::from_utf8(&formatted.bytes[..formatted.len]).map_err(|_| LimitError)?;
         Self::from_str(formatted).map_err(|e| match e {
             ParseError::Limit => LimitError,
-            ParseError::Syntax => unreachable!("ryu produces correct syntax"),
+            ParseError::Syntax => unreachable!("core float formatting produces correct syntax"),
         })
     }
 }

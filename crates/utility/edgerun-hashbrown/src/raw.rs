@@ -584,7 +584,7 @@ impl<T> RawTable<T, Global> {
     /// leave the data pointer dangling since that bucket is never written to
     /// due to our load factor forcing us to always have at least 1 free bucket.
     #[inline]
-    #[cfg_attr(feature = "rustc-dep-of-std", rustc_const_stable_indirect)]
+    #[cfg_attr(any(), rustc_const_stable_indirect)]
     pub(crate) const fn new() -> Self {
         Self {
             table: RawTableInner::NEW,
@@ -610,7 +610,7 @@ impl<T, A: Allocator> RawTable<T, A> {
     /// leave the data pointer dangling since that bucket is never written to
     /// due to our load factor forcing us to always have at least 1 free bucket.
     #[inline]
-    #[cfg_attr(feature = "rustc-dep-of-std", rustc_const_stable_indirect)]
+    #[cfg_attr(any(), rustc_const_stable_indirect)]
     pub(crate) const fn new_in(alloc: A) -> Self {
         Self {
             table: RawTableInner::NEW,
@@ -686,7 +686,7 @@ impl<T, A: Allocator> RawTable<T, A> {
 
     /// Returns pointer to start of data table.
     #[inline]
-    #[cfg(feature = "nightly")]
+    #[cfg(any())]
     pub(crate) unsafe fn data_start(&self) -> NonNull<T> {
         unsafe { NonNull::new_unchecked(self.data_end().as_ptr().wrapping_sub(self.num_buckets())) }
     }
@@ -3402,7 +3402,7 @@ impl<T: Clone, A: Allocator + Clone> RawTableClone for RawTable<T, A> {
         }
     }
 }
-#[cfg(feature = "nightly")]
+#[cfg(any())]
 impl<T: core::clone::TrivialClone, A: Allocator + Clone> RawTableClone for RawTable<T, A> {
     #[cfg_attr(feature = "inline-more", inline)]
     unsafe fn clone_from_spec(&mut self, source: &Self) {
@@ -3478,7 +3478,7 @@ impl<T, A: Allocator + Default> Default for RawTable<T, A> {
     }
 }
 
-#[cfg(feature = "nightly")]
+#[cfg(any())]
 unsafe impl<#[may_dangle] T, A: Allocator> Drop for RawTable<T, A> {
     #[cfg_attr(feature = "inline-more", inline)]
     fn drop(&mut self) {
@@ -3495,7 +3495,7 @@ unsafe impl<#[may_dangle] T, A: Allocator> Drop for RawTable<T, A> {
         }
     }
 }
-#[cfg(not(feature = "nightly"))]
+#[cfg(any(not(feature = "nightly"), feature = "nightly"))]
 impl<T, A: Allocator> Drop for RawTable<T, A> {
     #[cfg_attr(feature = "inline-more", inline)]
     fn drop(&mut self) {
@@ -4038,7 +4038,7 @@ where
 {
 }
 
-#[cfg(feature = "nightly")]
+#[cfg(any())]
 unsafe impl<#[may_dangle] T, A: Allocator> Drop for RawIntoIter<T, A> {
     #[cfg_attr(feature = "inline-more", inline)]
     fn drop(&mut self) {
@@ -4053,7 +4053,7 @@ unsafe impl<#[may_dangle] T, A: Allocator> Drop for RawIntoIter<T, A> {
         }
     }
 }
-#[cfg(not(feature = "nightly"))]
+#[cfg(any(not(feature = "nightly"), feature = "nightly"))]
 impl<T, A: Allocator> Drop for RawIntoIter<T, A> {
     #[cfg_attr(feature = "inline-more", inline)]
     fn drop(&mut self) {

@@ -1,14 +1,5 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![forbid(unsafe_code)]
-#![cfg_attr(
-  feature = "nightly_slice_partition_dedup",
-  feature(slice_partition_dedup)
-)]
-#![cfg_attr(
-  feature = "debugger_visualizer",
-  feature(debugger_visualizer),
-  debugger_visualizer(natvis_file = "../debug_metadata/tinyvec.natvis")
-)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![warn(clippy::missing_inline_in_public_items)]
 #![warn(clippy::must_use_candidate)]

@@ -89,7 +89,7 @@ mod tests {
     use crate::{VarZeroVec, ZeroMap, ZeroSlice, ZeroVec};
 
     #[test]
-    #[cfg(feature = "schemars")]
+    #[cfg(any())]
     fn schema_zerovec_u32() {
         let generator = schemars::SchemaGenerator::default();
         let schema = generator.into_root_schema_for::<ZeroVec<u32>>();
@@ -98,7 +98,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "schemars")]
+    #[cfg(any())]
     fn schema_zerovec_char() {
         let generator = schemars::SchemaGenerator::default();
         let schema = generator.into_root_schema_for::<ZeroVec<char>>();
@@ -107,7 +107,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "schemars")]
+    #[cfg(any())]
     fn schema_varzerovec_str() {
         let generator = schemars::SchemaGenerator::default();
         let schema = generator.into_root_schema_for::<VarZeroVec<str>>();
@@ -116,7 +116,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "schemars")]
+    #[cfg(any())]
     fn schema_varzerovec_zeroslice() {
         let generator = schemars::SchemaGenerator::default();
         let schema = generator.into_root_schema_for::<VarZeroVec<ZeroSlice<u32>>>();

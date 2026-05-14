@@ -2,7 +2,7 @@ use core::pin::Pin;
 use futures_core::ready;
 use futures_core::stream::TryStream;
 use futures_core::task::{Context, Poll};
-use futures_io::{AsyncBufRead, AsyncRead, AsyncWrite};
+use crate::io::{AsyncBufRead, AsyncRead, AsyncWrite};
 use pin_project_lite::pin_project;
 use std::cmp;
 use std::io::{Error, Result};

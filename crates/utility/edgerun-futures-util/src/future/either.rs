@@ -201,7 +201,7 @@ where
 mod if_std {
     use super::*;
 
-    use futures_io::{
+    use crate::io::{
         AsyncBufRead, AsyncRead, AsyncSeek, AsyncWrite, IoSlice, IoSliceMut, Result, SeekFrom,
     };
 

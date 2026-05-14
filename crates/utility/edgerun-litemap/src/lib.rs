@@ -64,7 +64,7 @@ extern crate std;
 #[cfg(feature = "alloc")]
 extern crate alloc;
 
-#[cfg(feature = "databake")]
+#[cfg(any())]
 #[path = "databake.rs"] // to not conflict with `databake` as used in the docs
 mod databake_impls;
 mod map;

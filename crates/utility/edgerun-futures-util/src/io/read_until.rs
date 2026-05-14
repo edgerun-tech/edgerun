@@ -1,7 +1,7 @@
 use futures_core::future::Future;
 use futures_core::ready;
 use futures_core::task::{Context, Poll};
-use futures_io::AsyncBufRead;
+use crate::io::AsyncBufRead;
 use std::io;
 use std::pin::Pin;
 use std::vec::Vec;
@@ -34,7 +34,7 @@ pub(super) fn read_until_internal<R: AsyncBufRead + ?Sized>(
     loop {
         let (done, used) = {
             let available = ready!(reader.as_mut().poll_fill_buf(cx))?;
-            if let Some(i) = memchr::memchr(byte, available) {
+            if let Some(i) = crate::memchr_fallback::memchr(byte, available) {
                 buf.extend_from_slice(&available[..=i]);
                 (true, i + 1)
             } else {

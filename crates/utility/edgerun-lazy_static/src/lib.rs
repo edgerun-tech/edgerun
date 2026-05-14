@@ -104,8 +104,7 @@ extern crate doc_comment;
 #[cfg(doctest)]
 doctest!("../README.md");
 
-#[cfg_attr(feature = "spin_no_std", path = "core_lazy.rs")]
-#[cfg_attr(not(feature = "spin_no_std"), path = "inline_lazy.rs")]
+#[path = "inline_lazy.rs"]
 #[doc(hidden)]
 pub mod lazy;
 

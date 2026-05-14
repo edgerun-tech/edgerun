@@ -355,7 +355,7 @@ unsafe impl UnsafeNotify01 for NotifyWaker {
 #[cfg_attr(docsrs, doc(cfg(feature = "io-compat")))]
 mod io {
     use super::*;
-    use futures_io::{AsyncRead as AsyncRead03, AsyncWrite as AsyncWrite03};
+    use crate::io::{AsyncRead as AsyncRead03, AsyncWrite as AsyncWrite03};
     use std::io::Error;
     use tokio_io::{AsyncRead as AsyncRead01, AsyncWrite as AsyncWrite01};
 
@@ -363,7 +363,7 @@ mod io {
     #[cfg_attr(docsrs, doc(cfg(feature = "io-compat")))]
     pub trait AsyncRead01CompatExt: AsyncRead01 {
         /// Converts a tokio-io [`AsyncRead`](tokio_io::AsyncRead) into a futures-io 0.3
-        /// [`AsyncRead`](futures_io::AsyncRead).
+        /// [`AsyncRead`](crate::io::AsyncRead).
         ///
         /// ```
         /// # if cfg!(miri) { return; } // https://github.com/rust-lang/futures-rs/issues/2514
@@ -393,7 +393,7 @@ mod io {
     #[cfg_attr(docsrs, doc(cfg(feature = "io-compat")))]
     pub trait AsyncWrite01CompatExt: AsyncWrite01 {
         /// Converts a tokio-io [`AsyncWrite`](tokio_io::AsyncWrite) into a futures-io 0.3
-        /// [`AsyncWrite`](futures_io::AsyncWrite).
+        /// [`AsyncWrite`](crate::io::AsyncWrite).
         ///
         /// ```
         /// # if cfg!(miri) { return; } // https://github.com/rust-lang/futures-rs/issues/2514

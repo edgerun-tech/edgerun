@@ -1,8 +1,5 @@
 #[cfg(feature = "default-hasher")]
-use {
-    core::hash::{BuildHasher, Hasher},
-    foldhash::fast::RandomState,
-};
+use core::hash::{BuildHasher, Hasher};
 
 /// Default hash builder for the `S` type parameter of
 /// [`HashMap`](crate::HashMap) and [`HashSet`](crate::HashSet).
@@ -13,7 +10,7 @@ use {
 #[derive(Clone, Debug, Default)]
 pub struct DefaultHashBuilder {
     #[cfg(feature = "default-hasher")]
-    inner: RandomState,
+    seed: u64,
 }
 
 #[cfg(feature = "default-hasher")]
@@ -23,7 +20,7 @@ impl BuildHasher for DefaultHashBuilder {
     #[inline(always)]
     fn build_hasher(&self) -> Self::Hasher {
         DefaultHasher {
-            inner: self.inner.build_hasher(),
+            hash: self.seed ^ 0xcbf2_9ce4_8422_2325,
         }
     }
 }
@@ -32,46 +29,56 @@ impl BuildHasher for DefaultHashBuilder {
 #[cfg(feature = "default-hasher")]
 #[derive(Clone)]
 pub struct DefaultHasher {
-    inner: <RandomState as BuildHasher>::Hasher,
-}
-
-#[cfg(feature = "default-hasher")]
-macro_rules! forward_writes {
-    ($( $write:ident ( $ty:ty ) , )*) => {$(
-        #[inline(always)]
-        fn $write(&mut self, arg: $ty) {
-            self.inner.$write(arg);
-        }
-    )*}
+    hash: u64,
 }
 
 #[cfg(feature = "default-hasher")]
 impl Hasher for DefaultHasher {
-    forward_writes! {
-        write(&[u8]),
-        write_u8(u8),
-        write_u16(u16),
-        write_u32(u32),
-        write_u64(u64),
-        write_u128(u128),
-        write_usize(usize),
-        write_i8(i8),
-        write_i16(i16),
-        write_i32(i32),
-        write_i64(i64),
-        write_i128(i128),
-        write_isize(isize),
-    }
-
-    // feature(hasher_prefixfree_extras)
-    #[cfg(feature = "nightly")]
-    forward_writes! {
-        write_length_prefix(usize),
-        write_str(&str),
+    #[inline(always)]
+    fn write(&mut self, bytes: &[u8]) {
+        for byte in bytes {
+            self.hash ^= u64::from(*byte);
+            self.hash = self.hash.wrapping_mul(0x0000_0100_0000_01b3);
+        }
     }
 
     #[inline(always)]
+    fn write_u8(&mut self, arg: u8) { self.write(&arg.to_ne_bytes()); }
+
+    #[inline(always)]
+    fn write_u16(&mut self, arg: u16) { self.write(&arg.to_ne_bytes()); }
+
+    #[inline(always)]
+    fn write_u32(&mut self, arg: u32) { self.write(&arg.to_ne_bytes()); }
+
+    #[inline(always)]
+    fn write_u64(&mut self, arg: u64) { self.write(&arg.to_ne_bytes()); }
+
+    #[inline(always)]
+    fn write_u128(&mut self, arg: u128) { self.write(&arg.to_ne_bytes()); }
+
+    #[inline(always)]
+    fn write_usize(&mut self, arg: usize) { self.write(&arg.to_ne_bytes()); }
+
+    #[inline(always)]
+    fn write_i8(&mut self, arg: i8) { self.write(&arg.to_ne_bytes()); }
+
+    #[inline(always)]
+    fn write_i16(&mut self, arg: i16) { self.write(&arg.to_ne_bytes()); }
+
+    #[inline(always)]
+    fn write_i32(&mut self, arg: i32) { self.write(&arg.to_ne_bytes()); }
+
+    #[inline(always)]
+    fn write_i64(&mut self, arg: i64) { self.write(&arg.to_ne_bytes()); }
+
+    #[inline(always)]
+    fn write_i128(&mut self, arg: i128) { self.write(&arg.to_ne_bytes()); }
+
+    #[inline(always)]
+    fn write_isize(&mut self, arg: isize) { self.write(&arg.to_ne_bytes()); }
+    #[inline(always)]
     fn finish(&self) -> u64 {
-        self.inner.finish()
+        self.hash
     }
 }

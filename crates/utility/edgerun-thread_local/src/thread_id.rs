@@ -78,7 +78,7 @@ impl Thread {
 }
 
 cfg_if::cfg_if! {
-    if #[cfg(feature = "nightly")] {
+    if #[cfg(any())] {
         // This is split into 2 thread-local variables so that we can check whether the
         // thread is initialized without having to register a thread-local destructor.
         //

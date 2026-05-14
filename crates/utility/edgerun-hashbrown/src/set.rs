@@ -461,7 +461,7 @@ impl<T, S> HashSet<T, S, Global> {
     /// ```
     #[must_use]
     #[cfg_attr(feature = "inline-more", inline)]
-    #[cfg_attr(feature = "rustc-dep-of-std", rustc_const_stable_indirect)]
+    #[cfg_attr(any(), rustc_const_stable_indirect)]
     pub const fn with_hasher(hasher: S) -> Self {
         Self {
             map: HashMap::with_hasher(hasher),
@@ -547,7 +547,7 @@ where
     /// ```
     #[must_use]
     #[cfg_attr(feature = "inline-more", inline)]
-    #[cfg_attr(feature = "rustc-dep-of-std", rustc_const_stable_indirect)]
+    #[cfg_attr(any(), rustc_const_stable_indirect)]
     pub const fn with_hasher_in(hasher: S, alloc: A) -> Self {
         Self {
             map: HashMap::with_hasher_in(hasher, alloc),
@@ -1293,13 +1293,13 @@ where
     }
 
     #[inline]
-    #[cfg(feature = "nightly")]
+    #[cfg(any())]
     fn extend_one(&mut self, k: T) {
         self.map.insert(k, ());
     }
 
     #[inline]
-    #[cfg(feature = "nightly")]
+    #[cfg(any())]
     fn extend_reserve(&mut self, additional: usize) {
         Extend::<(T, ())>::extend_reserve(&mut self.map, additional);
     }
@@ -1317,13 +1317,13 @@ where
     }
 
     #[inline]
-    #[cfg(feature = "nightly")]
+    #[cfg(any())]
     fn extend_one(&mut self, k: &'a T) {
         self.map.insert(*k, ());
     }
 
     #[inline]
-    #[cfg(feature = "nightly")]
+    #[cfg(any())]
     fn extend_reserve(&mut self, additional: usize) {
         Extend::<(T, ())>::extend_reserve(&mut self.map, additional);
     }

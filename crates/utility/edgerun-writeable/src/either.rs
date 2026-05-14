@@ -3,7 +3,13 @@
 // (online at: https://github.com/unicode-org/icu4x/blob/main/LICENSE ).
 
 use crate::*;
-use ::either::Either;
+
+/// EdgeRun-owned replacement for the upstream `either::Either` integration.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Either<L, R> {
+    Left(L),
+    Right(R),
+}
 
 /// A [`Writeable`] impl that delegates to one type or another type.
 impl<W0, W1> Writeable for Either<W0, W1>

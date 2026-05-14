@@ -1236,10 +1236,7 @@ impl<A: Array> ArrayVec<A> {
   where
     F: FnMut(&mut A::Item, &mut A::Item) -> bool,
   {
-    let len = {
-      let (dedup, _) = self.as_mut_slice().partition_dedup_by(same_bucket);
-      dedup.len()
-    };
+    let len = stable_partition_dedup_by(self.as_mut_slice(), same_bucket);
     self.truncate(len);
   }
 
@@ -1252,6 +1249,30 @@ impl<A: Array> ArrayVec<A> {
   {
     self.dedup_by(|a, b| key(a) == key(b))
   }
+}
+
+#[cfg(feature = "nightly_slice_partition_dedup")]
+fn stable_partition_dedup_by<T, F>(slice: &mut [T], mut same_bucket: F) -> usize
+where
+  F: FnMut(&mut T, &mut T) -> bool,
+{
+  if slice.len() <= 1 {
+    return slice.len();
+  }
+  let mut write = 1;
+  for read in 1..slice.len() {
+    let same = {
+      let (left, right) = slice.split_at_mut(read);
+      same_bucket(&mut left[write - 1], &mut right[0])
+    };
+    if !same {
+      if read != write {
+        slice.swap(read, write);
+      }
+      write += 1;
+    }
+  }
+  write
 }
 
 impl<A> ArrayVec<A> {

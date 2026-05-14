@@ -1,7 +1,7 @@
 use super::{copy_buf, BufReader, CopyBuf};
 use futures_core::future::Future;
 use futures_core::task::{Context, Poll};
-use futures_io::{AsyncRead, AsyncWrite};
+use crate::io::{AsyncRead, AsyncWrite};
 use pin_project_lite::pin_project;
 use std::io;
 use std::pin::Pin;

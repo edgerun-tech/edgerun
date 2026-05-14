@@ -106,7 +106,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use bumpalo::Bump;
     /// use hashbrown::{HashTable, DefaultHashBuilder};
@@ -131,7 +131,7 @@ where
     /// assert!(table.capacity() > 1);
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -150,7 +150,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use bumpalo::Bump;
     /// use hashbrown::{HashTable, DefaultHashBuilder};
@@ -180,7 +180,7 @@ where
     /// assert_eq!(table.capacity(), empty_map_capacity)
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -206,7 +206,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -221,7 +221,7 @@ where
     /// assert_eq!(table.find(hasher(&4), |&val| val == 4), None);
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -243,7 +243,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -259,7 +259,7 @@ where
     /// assert_eq!(table.find(hasher(&2), |val| val.0 == 2), None);
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -281,7 +281,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -296,7 +296,7 @@ where
     /// assert_eq!(table.find(hasher(&1), |val| val.0 == 1), None);
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -328,7 +328,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -352,7 +352,7 @@ where
     /// assert_eq!(table.get_bucket(index), Some(&(2, 22)));
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -383,7 +383,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::hash_table::Entry;
     /// use hashbrown::{HashTable, DefaultHashBuilder};
@@ -404,7 +404,7 @@ where
     /// assert_eq!(table.find(hasher(&2), |val| val.0 == 2), Some(&(2, "b")));
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -434,7 +434,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -457,7 +457,7 @@ where
     /// assert!(table.find(hasher(&2), |val| val.0 == 2).is_none());
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -490,7 +490,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -509,7 +509,7 @@ where
     /// ));
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -527,7 +527,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -543,7 +543,7 @@ where
     /// assert_eq!(table.get_bucket(index), Some(&(2, 'b')));
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -567,7 +567,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -586,7 +586,7 @@ where
     /// ));
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -601,7 +601,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -621,7 +621,7 @@ where
     /// assert_eq!(table.get_bucket(index), Some(&(2, 'B')));
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -645,7 +645,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -664,7 +664,7 @@ where
     /// ));
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -683,7 +683,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -694,7 +694,7 @@ where
     /// v.insert_unique(hasher(&1), 1, hasher);
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -716,7 +716,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -729,7 +729,7 @@ where
     /// assert!(v.is_empty());
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -747,7 +747,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -762,7 +762,7 @@ where
     /// assert!(table.capacity() >= 2);
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -783,7 +783,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -800,7 +800,7 @@ where
     /// assert!(table.capacity() >= 2);
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -826,7 +826,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -838,7 +838,7 @@ where
     /// assert!(table.capacity() >= 10);
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -861,7 +861,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -874,7 +874,7 @@ where
     ///     .expect("why is the test harness OOMing on 10 bytes?");
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -895,7 +895,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -916,7 +916,7 @@ where
     /// assert_eq!(table.get_bucket(table.num_buckets()), None);
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -942,7 +942,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -955,7 +955,7 @@ where
     /// assert_eq!(v.len(), 1);
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -968,7 +968,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -981,7 +981,7 @@ where
     /// assert!(!v.is_empty());
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -995,7 +995,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -1012,7 +1012,7 @@ where
     /// }
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -1030,7 +1030,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -1063,7 +1063,7 @@ where
     /// assert_eq!(table.len(), 3);
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -1105,7 +1105,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -1122,7 +1122,7 @@ where
     /// }
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -1143,7 +1143,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -1161,7 +1161,7 @@ where
     /// }
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -1182,7 +1182,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -1214,7 +1214,7 @@ where
     /// assert_eq!(table.len(), 3);
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -1237,7 +1237,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -1255,7 +1255,7 @@ where
     /// }
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -1273,7 +1273,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -1288,7 +1288,7 @@ where
     /// assert_eq!(table.len(), 3);
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -1308,7 +1308,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -1329,7 +1329,7 @@ where
     /// assert!(table.is_empty());
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -1354,7 +1354,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -1376,7 +1376,7 @@ where
     /// assert_eq!(odds, vec![1, 3, 5, 7]);
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -1408,7 +1408,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::hash_table::Entry;
     /// use hashbrown::{HashTable, DefaultHashBuilder};
@@ -1439,13 +1439,13 @@ where
     /// assert_eq!(got, [Some(&mut ("Athenæum", 1807)), None]);
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
     ///
     /// ```should_panic
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// # use hashbrown::{HashTable, DefaultHashBuilder};
     /// # use std::hash::BuildHasher;
@@ -1465,9 +1465,9 @@ where
     /// let got = libraries.get_disjoint_mut(keys.map(|k| hasher(&k)), |i, val| keys[i] == val.0);
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test();
-    /// #     #[cfg(not(feature = "nightly"))]
+    /// #     #[cfg(any(not(feature = "nightly"), feature = "nightly"))]
     /// #     panic!();
     /// # }
     /// ```
@@ -1510,7 +1510,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::hash_table::Entry;
     /// use hashbrown::{HashTable, DefaultHashBuilder};
@@ -1541,7 +1541,7 @@ where
     /// assert_eq!(got, [Some(&mut ("Athenæum", 1807)), None]);
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -1659,7 +1659,7 @@ where
 /// # Examples
 ///
 /// ```
-/// # #[cfg(feature = "nightly")]
+/// # #[cfg(any())]
 /// # fn test() {
 /// use hashbrown::hash_table::{Entry, OccupiedEntry};
 /// use hashbrown::{HashTable, DefaultHashBuilder};
@@ -1698,7 +1698,7 @@ where
 /// assert_eq!(vec, ["a", "b", "c", "d", "e"]);
 /// # }
 /// # fn main() {
-/// #     #[cfg(feature = "nightly")]
+/// #     #[cfg(any())]
 /// #     test()
 /// # }
 /// ```
@@ -1711,7 +1711,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::hash_table::{Entry, OccupiedEntry};
     /// use hashbrown::{HashTable, DefaultHashBuilder};
@@ -1730,7 +1730,7 @@ where
     /// }
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -1741,7 +1741,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::hash_table::{Entry, OccupiedEntry};
     /// use hashbrown::{HashTable, DefaultHashBuilder};
@@ -1757,7 +1757,7 @@ where
     /// }
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -1783,7 +1783,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -1799,7 +1799,7 @@ where
     /// assert_eq!(entry.get(), &"horseyland");
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -1820,7 +1820,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -1847,7 +1847,7 @@ where
     /// assert_eq!(table.len(), 1);
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -1865,7 +1865,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -1883,7 +1883,7 @@ where
     ///     .is_some());
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -1900,7 +1900,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -1936,7 +1936,7 @@ where
     /// );
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -1965,7 +1965,7 @@ where
 /// # Examples
 ///
 /// ```
-/// # #[cfg(feature = "nightly")]
+/// # #[cfg(any())]
 /// # fn test() {
 /// use hashbrown::hash_table::{Entry, OccupiedEntry};
 /// use hashbrown::{HashTable, DefaultHashBuilder};
@@ -2003,7 +2003,7 @@ where
 /// assert_eq!(table.len(), 2);
 /// # }
 /// # fn main() {
-/// #     #[cfg(feature = "nightly")]
+/// #     #[cfg(any())]
 /// #     test()
 /// # }
 /// ```
@@ -2047,7 +2047,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::hash_table::Entry;
     /// use hashbrown::{HashTable, DefaultHashBuilder};
@@ -2073,7 +2073,7 @@ where
     /// assert!(table.len() == 0 && table.capacity() == capacity_before_remove);
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -2095,7 +2095,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::hash_table::Entry;
     /// use hashbrown::{HashTable, DefaultHashBuilder};
@@ -2112,7 +2112,7 @@ where
     /// }
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -2131,7 +2131,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::hash_table::Entry;
     /// use hashbrown::{HashTable, DefaultHashBuilder};
@@ -2165,7 +2165,7 @@ where
     /// );
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -2184,7 +2184,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::hash_table::Entry;
     /// use hashbrown::{HashTable, DefaultHashBuilder};
@@ -2217,7 +2217,7 @@ where
     /// );
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -2243,7 +2243,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use std::hash::BuildHasher;
@@ -2270,7 +2270,7 @@ where
     /// assert_eq!(table.get_bucket(index), Some(&(2, 22)));
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -2286,7 +2286,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::{HashTable, DefaultHashBuilder};
     /// use hashbrown::hash_table::Entry;
@@ -2330,7 +2330,7 @@ where
     /// assert!(table.is_empty());
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -2358,7 +2358,7 @@ where
 /// # Examples
 ///
 /// ```
-/// # #[cfg(feature = "nightly")]
+/// # #[cfg(any())]
 /// # fn test() {
 /// use hashbrown::hash_table::{Entry, VacantEntry};
 /// use hashbrown::{HashTable, DefaultHashBuilder};
@@ -2385,7 +2385,7 @@ where
 /// assert!(table.find(hasher(&"b"), |&x| x == "b").is_some() && table.len() == 2);
 /// # }
 /// # fn main() {
-/// #     #[cfg(feature = "nightly")]
+/// #     #[cfg(any())]
 /// #     test()
 /// # }
 /// ```
@@ -2416,7 +2416,7 @@ where
     /// # Examples
     ///
     /// ```
-    /// # #[cfg(feature = "nightly")]
+    /// # #[cfg(any())]
     /// # fn test() {
     /// use hashbrown::hash_table::Entry;
     /// use hashbrown::{HashTable, DefaultHashBuilder};
@@ -2435,7 +2435,7 @@ where
     /// );
     /// # }
     /// # fn main() {
-    /// #     #[cfg(feature = "nightly")]
+    /// #     #[cfg(any())]
     /// #     test()
     /// # }
     /// ```
@@ -2471,7 +2471,7 @@ where
 /// # Examples
 ///
 /// ```
-/// # #[cfg(feature = "nightly")]
+/// # #[cfg(any())]
 /// # fn test() {
 /// use hashbrown::hash_table::{AbsentEntry, Entry};
 /// use hashbrown::{HashTable, DefaultHashBuilder};
@@ -2497,7 +2497,7 @@ where
 /// assert!(table.find(hasher(&"b"), |&x| x == "b").is_some() && table.len() == 2);
 /// # }
 /// # fn main() {
-/// #     #[cfg(feature = "nightly")]
+/// #     #[cfg(any())]
 /// #     test()
 /// # }
 /// ```

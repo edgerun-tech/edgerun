@@ -109,7 +109,7 @@ mod std_support {
     }
 }
 
-#[cfg(feature = "kv_sval")]
+#[cfg(any())]
 mod sval_support {
     use super::*;
 
@@ -132,7 +132,7 @@ mod sval_support {
     }
 }
 
-#[cfg(feature = "kv_serde")]
+#[cfg(any())]
 mod serde_support {
     use super::*;
 

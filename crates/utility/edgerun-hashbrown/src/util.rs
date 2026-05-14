@@ -1,13 +1,13 @@
 // FIXME: Replace with `core::hint::{likely, unlikely}` once they are stable.
-#[cfg(feature = "nightly")]
+#[cfg(any())]
 pub(crate) use core::intrinsics::{likely, unlikely};
 
-#[cfg(not(feature = "nightly"))]
+#[cfg(any(not(feature = "nightly"), feature = "nightly"))]
 #[inline(always)]
 #[cold]
 fn cold_path() {}
 
-#[cfg(not(feature = "nightly"))]
+#[cfg(any(not(feature = "nightly"), feature = "nightly"))]
 #[inline(always)]
 pub(crate) fn likely(b: bool) -> bool {
     if b {
@@ -18,7 +18,7 @@ pub(crate) fn likely(b: bool) -> bool {
     }
 }
 
-#[cfg(not(feature = "nightly"))]
+#[cfg(any(not(feature = "nightly"), feature = "nightly"))]
 #[inline(always)]
 pub(crate) fn unlikely(b: bool) -> bool {
     if b {

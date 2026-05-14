@@ -162,7 +162,7 @@ pub enum DataFormat {
     Raw,
 }
 
-#[cfg(not(feature = "rustc-dep-of-std"))]
+#[cfg(any(not(feature = "rustc-dep-of-std"), feature = "rustc-dep-of-std"))]
 impl DataFormat {
     pub fn from_window_bits(window_bits: i32) -> DataFormat {
         if window_bits > 0 {
@@ -184,7 +184,7 @@ impl DataFormat {
 pub type MZResult = Result<MZStatus, MZError>;
 
 /// A structure containing the result of a call to the inflate or deflate streaming functions.
-#[cfg(not(feature = "rustc-dep-of-std"))]
+#[cfg(any(not(feature = "rustc-dep-of-std"), feature = "rustc-dep-of-std"))]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
 pub struct StreamResult {
     /// The number of bytes consumed from the input slice.
@@ -195,7 +195,7 @@ pub struct StreamResult {
     pub status: MZResult,
 }
 
-#[cfg(not(feature = "rustc-dep-of-std"))]
+#[cfg(any(not(feature = "rustc-dep-of-std"), feature = "rustc-dep-of-std"))]
 impl StreamResult {
     #[inline]
     pub const fn error(error: MZError) -> StreamResult {
@@ -207,14 +207,14 @@ impl StreamResult {
     }
 }
 
-#[cfg(not(feature = "rustc-dep-of-std"))]
+#[cfg(any(not(feature = "rustc-dep-of-std"), feature = "rustc-dep-of-std"))]
 impl core::convert::From<StreamResult> for MZResult {
     fn from(res: StreamResult) -> Self {
         res.status
     }
 }
 
-#[cfg(not(feature = "rustc-dep-of-std"))]
+#[cfg(any(not(feature = "rustc-dep-of-std"), feature = "rustc-dep-of-std"))]
 impl core::convert::From<&StreamResult> for MZResult {
     fn from(res: &StreamResult) -> Self {
         res.status

@@ -16,8 +16,8 @@
 //! This module is only available when the `std` feature of this
 //! library is activated, and it is activated by default.
 
-#[cfg(feature = "io-compat")]
-#[cfg_attr(docsrs, doc(cfg(feature = "io-compat")))]
+#[cfg(any())]
+#[cfg_attr(any(), doc(cfg(feature = "io-compat")))]
 use crate::compat::Compat;
 use crate::future::assert_future;
 use crate::stream::assert_stream;
@@ -28,7 +28,155 @@ use std::{pin::Pin, string::String, vec::Vec};
 #[doc(no_inline)]
 pub use std::io::{Error, ErrorKind, IoSlice, IoSliceMut, Result, SeekFrom};
 
-pub use futures_io::{AsyncBufRead, AsyncRead, AsyncSeek, AsyncWrite};
+/// Asynchronous read trait owned by EdgeRun for the local futures stack.
+pub trait AsyncRead {
+    /// Attempt to read bytes into `buf`.
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut [u8],
+    ) -> std::task::Poll<Result<usize>>;
+
+    /// Attempt to read bytes into vectored buffers.
+    fn poll_read_vectored(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        bufs: &mut [IoSliceMut<'_>],
+    ) -> std::task::Poll<Result<usize>> {
+        for buf in bufs {
+            if !buf.is_empty() {
+                return self.poll_read(cx, buf);
+            }
+        }
+        self.poll_read(cx, &mut [])
+    }
+}
+
+impl<R: AsyncRead + Unpin + ?Sized> AsyncRead for &mut R {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut [u8],
+    ) -> std::task::Poll<Result<usize>> {
+        Pin::new(&mut **self).poll_read(cx, buf)
+    }
+
+    fn poll_read_vectored(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        bufs: &mut [IoSliceMut<'_>],
+    ) -> std::task::Poll<Result<usize>> {
+        Pin::new(&mut **self).poll_read_vectored(cx, bufs)
+    }
+}
+
+/// Asynchronous buffered read trait owned by EdgeRun for the local futures stack.
+pub trait AsyncBufRead: AsyncRead {
+    /// Attempt to fill the internal read buffer.
+    fn poll_fill_buf(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<&[u8]>>;
+
+    /// Mark bytes as consumed from the internal buffer.
+    fn consume(self: Pin<&mut Self>, amt: usize);
+}
+
+impl<R: AsyncBufRead + Unpin + ?Sized> AsyncBufRead for &mut R {
+    fn poll_fill_buf(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<&[u8]>> {
+        let inner = unsafe { self.as_mut().map_unchecked_mut(|value| &mut **value) };
+        let poll = inner.poll_fill_buf(cx);
+        unsafe {
+            core::mem::transmute::<
+                std::task::Poll<Result<&[u8]>>,
+                std::task::Poll<Result<&[u8]>>,
+            >(poll)
+        }
+    }
+
+    fn consume(mut self: Pin<&mut Self>, amt: usize) {
+        Pin::new(&mut **self).consume(amt)
+    }
+}
+
+/// Asynchronous write trait owned by EdgeRun for the local futures stack.
+pub trait AsyncWrite {
+    /// Attempt to write bytes from `buf`.
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<Result<usize>>;
+
+    /// Attempt to write vectored buffers.
+    fn poll_write_vectored(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        bufs: &[IoSlice<'_>],
+    ) -> std::task::Poll<Result<usize>> {
+        for buf in bufs {
+            if !buf.is_empty() {
+                return self.poll_write(cx, buf);
+            }
+        }
+        self.poll_write(cx, &[])
+    }
+
+    /// Attempt to flush buffered output.
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<()>>;
+
+    /// Attempt to close output.
+    fn poll_close(self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<()>>;
+}
+
+impl<W: AsyncWrite + Unpin + ?Sized> AsyncWrite for &mut W {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<Result<usize>> {
+        Pin::new(&mut **self).poll_write(cx, buf)
+    }
+
+    fn poll_write_vectored(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        bufs: &[IoSlice<'_>],
+    ) -> std::task::Poll<Result<usize>> {
+        Pin::new(&mut **self).poll_write_vectored(cx, bufs)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<()>> {
+        Pin::new(&mut **self).poll_flush(cx)
+    }
+
+    fn poll_close(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<()>> {
+        Pin::new(&mut **self).poll_close(cx)
+    }
+}
+
+/// Asynchronous seek trait owned by EdgeRun for the local futures stack.
+pub trait AsyncSeek {
+    /// Attempt to seek to `position`.
+    fn poll_seek(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        position: SeekFrom,
+    ) -> std::task::Poll<Result<u64>>;
+}
+
+impl<S: AsyncSeek + Unpin + ?Sized> AsyncSeek for &mut S {
+    fn poll_seek(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        position: SeekFrom,
+    ) -> std::task::Poll<Result<u64>> {
+        Pin::new(&mut **self).poll_seek(cx, position)
+    }
+}
 
 // used by `BufReader` and `BufWriter`
 // https://github.com/rust-lang/rust/blob/master/src/libstd/sys_common/io.rs#L1
@@ -377,8 +525,8 @@ pub trait AsyncReadExt: AsyncRead {
     /// futures 0.1 / tokio 0.1 `AsyncWrite` trait.
     ///
     /// Requires the `io-compat` feature to enable.
-    #[cfg(feature = "io-compat")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "io-compat")))]
+    #[cfg(any())]
+    #[cfg_attr(any(), doc(cfg(feature = "io-compat")))]
     fn compat(self) -> Compat<Self>
     where
         Self: Sized + Unpin,
@@ -536,8 +684,8 @@ pub trait AsyncWriteExt: AsyncWrite {
     /// Wraps an [`AsyncWrite`] in a compatibility wrapper that allows it to be
     /// used as a futures 0.1 / tokio-io 0.1 `AsyncWrite`.
     /// Requires the `io-compat` feature to enable.
-    #[cfg(feature = "io-compat")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "io-compat")))]
+    #[cfg(any())]
+    #[cfg_attr(any(), doc(cfg(feature = "io-compat")))]
     fn compat_write(self) -> Compat<Self>
     where
         Self: Sized + Unpin,

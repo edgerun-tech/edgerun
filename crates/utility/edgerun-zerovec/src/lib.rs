@@ -214,7 +214,7 @@
 extern crate alloc;
 
 mod cow;
-#[cfg(feature = "hashmap")]
+#[cfg(any())]
 pub mod hashmap;
 #[cfg(feature = "alloc")]
 mod map;
@@ -222,7 +222,7 @@ mod map;
 mod map2d;
 #[cfg(test)]
 pub mod samples;
-#[cfg(feature = "schemars")]
+#[cfg(any())]
 mod schemars;
 mod varzerovec;
 mod zerovec;
@@ -235,7 +235,7 @@ mod yoke_impls;
 mod zerofrom_impls;
 
 pub use crate::cow::VarZeroCow;
-#[cfg(feature = "hashmap")]
+#[cfg(any())]
 pub use crate::hashmap::ZeroHashMap;
 #[cfg(feature = "alloc")]
 pub use crate::map::map::ZeroMap;

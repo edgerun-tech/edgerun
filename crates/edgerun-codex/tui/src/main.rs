@@ -416,7 +416,7 @@ fn parse_tool_arguments(arguments: &str) -> Result<Value, String> {
             let trimmed = arguments.trim();
             if (trimmed.starts_with('{') || trimmed.starts_with('[')) && trimmed.contains("\\\"") {
                 let wrapped = format!("\"{trimmed}\"");
-                if let Ok(inner) = edgerun_json::from_str::<String>(&wrapped) {
+                if let Ok(Value::String(inner)) = edgerun_json::from_str(&wrapped) {
                     return edgerun_json::from_str(&inner).map_err(|inner_error| {
                         format!(
                             "{}; also failed to parse escaped arguments after unwrapping: {}",
@@ -673,4 +673,40 @@ fn read_chatgpt_auth() -> Result<Arc<ChatGptAuth>, Box<dyn Error>> {
         access_token,
         account_id,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::json_required_string;
+    use super::parse_tool_arguments;
+
+    #[test]
+    fn parse_tool_arguments_accepts_normal_json() {
+        let args = parse_tool_arguments(r#"{"command":"echo ok"}"#).expect("parse args");
+
+        assert_eq!(
+            json_required_string(&args, "command").expect("command"),
+            "echo ok"
+        );
+    }
+
+    #[test]
+    fn parse_tool_arguments_accepts_json_string_wrapped_object() {
+        let args = parse_tool_arguments(r#""{\"command\":\"echo ok\"}""#).expect("parse args");
+
+        assert_eq!(
+            json_required_string(&args, "command").expect("command"),
+            "echo ok"
+        );
+    }
+
+    #[test]
+    fn parse_tool_arguments_accepts_escaped_object_without_outer_quotes() {
+        let args = parse_tool_arguments(r#"{\"command\":\"echo ok\"}"#).expect("parse args");
+
+        assert_eq!(
+            json_required_string(&args, "command").expect("command"),
+            "echo ok"
+        );
+    }
 }
