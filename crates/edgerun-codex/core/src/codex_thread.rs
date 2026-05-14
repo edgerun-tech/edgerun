@@ -38,12 +38,12 @@ use codex_thread_store::ThreadMetadataPatch;
 use codex_thread_store::ThreadStoreError;
 use codex_thread_store::ThreadStoreResult;
 use codex_utils_absolute_path::AbsolutePathBuf;
+use edgerun_tokio::sync::Mutex;
+use edgerun_tokio::sync::watch;
 use rmcp::model::ReadResourceRequestParams;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use edgerun_tokio::sync::Mutex;
-use edgerun_tokio::sync::watch;
 
 use codex_rollout::state_db::StateDbHandle;
 

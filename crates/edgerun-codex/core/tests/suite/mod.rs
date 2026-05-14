@@ -60,7 +60,6 @@ mod models_etag_responses;
 mod openai_file_mcp;
 mod otel;
 mod pending_input;
-mod permissions_messages;
 mod personality;
 mod personality_migration;
 mod plugins;

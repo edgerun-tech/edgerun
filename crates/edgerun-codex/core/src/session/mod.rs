@@ -26,7 +26,6 @@ use crate::context::AvailableSkillsInstructions;
 use crate::context::CollaborationModeInstructions;
 use crate::context::ContextualUserFragment;
 use crate::context::NetworkRuleSaved;
-use crate::context::PermissionsInstructions;
 use crate::context::PersonalitySpecInstructions;
 use crate::default_skill_metadata_budget;
 use crate::environment_selection::ResolvedTurnEnvironments;
@@ -2309,19 +2308,6 @@ impl Session {
             )
         {
             developer_sections.push(model_switch_message);
-        }
-        if turn_context.config.include_permissions_instructions {
-            developer_sections.push(
-                PermissionsInstructions::from_permission_profile(
-                    &turn_context.permission_profile,
-                    turn_context.approval_policy.value(),
-                    turn_context.config.approvals_reviewer,
-                    self.services.exec_policy.current().as_ref(),
-                    &turn_context.cwd,
-                    false,
-                )
-                .render(),
-            );
         }
         let separate_guardian_developer_message =
             crate::guardian::is_guardian_reviewer_source(&session_source);

@@ -810,7 +810,7 @@ fn truncate_mcp_tool_result_for_event(
         Ok(call_tool_result) => {
             // The app-server rebuilds `ThreadItem::McpToolCall` from this item,
             // so avoid persisting multi-megabyte results in rollout storage.
-            let Ok(serialized) = edgerun_json::to_string(call_tool_result) else {
+            let Ok(serialized) = edgerun_json::to_json_string(call_tool_result) else {
                 return Ok(call_tool_result.clone());
             };
             if serialized.len() <= MCP_TOOL_CALL_EVENT_RESULT_MAX_BYTES {

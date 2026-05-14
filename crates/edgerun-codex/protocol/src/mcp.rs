@@ -4,6 +4,9 @@
 //! We intentionally keep these types TS/JSON-schema friendly (via `ts-rs` and
 //! `schemars`) so they can be embedded in Codex's own protocol structures.
 use edgerun_json::FromJson;
+use edgerun_json::Map;
+use edgerun_json::ToJson;
+use edgerun_json::Value;
 use edgerun_serde::Deserialize;
 use edgerun_serde::Serialize;
 use schemars::JsonSchema;
@@ -149,6 +152,17 @@ pub struct CallToolResult {
     #[serde(rename = "_meta", default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub meta: Option<edgerun_json::Value>,
+}
+
+impl ToJson for CallToolResult {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        object.push_field("content", self.content.clone());
+        object.push_opt_field("structuredContent", self.structured_content.clone());
+        object.push_opt_field("isError", self.is_error);
+        object.push_opt_field("_meta", self.meta.clone());
+        Value::Object(object)
+    }
 }
 
 // === Adapter helpers ===

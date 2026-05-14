@@ -130,9 +130,7 @@ impl ToolOutput for CallToolResult {
     }
 
     fn code_mode_result(&self, _payload: &ToolPayload) -> JsonValue {
-        edgerun_json::to_serde_value(self).unwrap_or_else(|err| {
-            JsonValue::String(format!("failed to serialize mcp result: {err}"))
-        })
+        edgerun_json::ToJson::to_json(self)
     }
 }
 
@@ -149,7 +147,7 @@ impl ToolOutput for McpToolOutput {
     fn log_preview(&self) -> String {
         let payload = self.response_payload();
         let preview = payload.body.to_text().unwrap_or_else(|| {
-            edgerun_json::to_string(&self.result.content)
+            edgerun_json::to_json_string(&self.result.content)
                 .unwrap_or_else(|err| format!("failed to serialize mcp result: {err}"))
         });
         telemetry_preview(&preview)
@@ -167,13 +165,11 @@ impl ToolOutput for McpToolOutput {
     }
 
     fn code_mode_result(&self, _payload: &ToolPayload) -> JsonValue {
-        edgerun_json::to_serde_value(&self.result).unwrap_or_else(|err| {
-            JsonValue::String(format!("failed to serialize mcp result: {err}"))
-        })
+        edgerun_json::ToJson::to_json(&self.result)
     }
 
     fn post_tool_use_response(&self, _call_id: &str, _payload: &ToolPayload) -> Option<JsonValue> {
-        edgerun_json::to_serde_value(&self.result).ok()
+        Some(edgerun_json::ToJson::to_json(&self.result))
     }
 }
 
