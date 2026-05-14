@@ -175,9 +175,7 @@ impl FromJson for CommandExecParams {
             process_id: object.take_optional("processId")?,
             tty: object.take_optional("tty")?.unwrap_or(false),
             stream_stdin: object.take_optional("streamStdin")?.unwrap_or(false),
-            stream_stdout_stderr: object
-                .take_optional("streamStdoutStderr")?
-                .unwrap_or(false),
+            stream_stdout_stderr: object.take_optional("streamStdoutStderr")?.unwrap_or(false),
             output_bytes_cap: object.take_optional("outputBytesCap")?,
             disable_output_cap: object.take_optional("disableOutputCap")?.unwrap_or(false),
             disable_timeout: object.take_optional("disableTimeout")?.unwrap_or(false),

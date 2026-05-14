@@ -25,21 +25,17 @@ use crate::guardian::guardian_timeout_message;
 use crate::guardian::new_guardian_review_id;
 use crate::guardian::review_approval_request;
 use crate::guardian::routes_approval_to_guardian;
-use crate::hook_runtime::run_permission_request_hooks;
 use crate::mcp_openai_file::rewrite_mcp_tool_arguments_for_openai_files;
 use crate::mcp_tool_approval_templates::RenderedMcpToolApprovalParam;
 use crate::mcp_tool_approval_templates::render_mcp_tool_approval_template;
 use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;
-use crate::tools::hook_names::HookToolName;
-use crate::tools::sandboxing::PermissionRequestPayload;
 use crate::turn_metadata::McpTurnMetadataContext;
 use codex_analytics::AppInvocation;
 use codex_analytics::InvocationType;
 use codex_analytics::build_track_events_context;
 use codex_config::types::AppToolApproval;
 use codex_features::Feature;
-use codex_hooks::PermissionRequestDecision;
 use codex_mcp::CODEX_APPS_MCP_SERVER_NAME;
 use codex_mcp::MCP_TOOL_CODEX_APPS_META_KEY;
 use codex_mcp::McpPermissionPromptAutoApproveContext;
@@ -1212,31 +1208,6 @@ async fn maybe_request_mcp_tool_approval(
         return Some(McpToolApprovalDecision::Accept);
     }
 
-    match run_permission_request_hooks(
-        sess,
-        turn_context,
-        call_id,
-        PermissionRequestPayload {
-            tool_name: HookToolName::new(hook_tool_name),
-            tool_input: invocation
-                .arguments
-                .clone()
-                .unwrap_or_else(|| edgerun_json::Value::Object(edgerun_json::Map::new())),
-        },
-    )
-    .await
-    {
-        Some(PermissionRequestDecision::Allow) => {
-            return Some(McpToolApprovalDecision::Accept);
-        }
-        Some(PermissionRequestDecision::Deny { message }) => {
-            return Some(McpToolApprovalDecision::Decline {
-                message: Some(message),
-            });
-        }
-        None => {}
-    }
-
     let tool_call_mcp_elicitation_enabled = turn_context
         .config
         .features
@@ -2208,7 +2179,3 @@ async fn notify_mcp_tool_call_skip(
     .await;
     Err(message)
 }
-
-#[cfg(test)]
-#[path = "mcp_tool_call_tests.rs"]
-mod tests;

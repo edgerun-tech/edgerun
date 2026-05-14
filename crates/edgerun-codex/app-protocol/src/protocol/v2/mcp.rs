@@ -135,11 +135,29 @@ pub struct McpToolCallResult {
     pub meta: Option<JsonValue>,
 }
 
+impl ToJson for McpToolCallResult {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(3);
+        object.push_field("content", self.content.to_json());
+        object.push_field("structuredContent", self.structured_content.to_json());
+        object.push_field("_meta", self.meta.to_json());
+        JsonValue::Object(object)
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct McpToolCallError {
     pub message: String,
+}
+
+impl ToJson for McpToolCallError {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(1);
+        object.push_field("message", self.message.clone());
+        JsonValue::Object(object)
+    }
 }
 
 impl From<CoreMcpCallToolResult> for McpServerToolCallResponse {

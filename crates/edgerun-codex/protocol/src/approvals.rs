@@ -1,11 +1,9 @@
 use crate::compat::absolute_path::AbsolutePathBuf;
 use crate::mcp::RequestId;
-use crate::models::AdditionalPermissionProfile;
 use crate::models::PermissionProfile;
 use crate::parse_command::ParsedCommand;
 use crate::protocol::FileChange;
 use crate::protocol::ReviewDecision;
-use crate::request_permissions::RequestPermissionProfile;
 use edgerun_json::FromJson;
 use edgerun_json::JsonValueError;
 use edgerun_json::Map;
@@ -17,21 +15,6 @@ use schemars::JsonSchema;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use ts_rs::TS;
-
-/// Fully resolved permissions for rerunning an intercepted child process.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ResolvedPermissionProfile {
-    pub permission_profile: PermissionProfile,
-}
-
-#[allow(clippy::large_enum_variant)]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum EscalationPermissions {
-    /// Permissions to merge with the active turn permissions.
-    AdditionalPermissionProfile(AdditionalPermissionProfile),
-    /// Fully resolved permissions that should replace the active turn permissions.
-    ResolvedPermissionProfile(ResolvedPermissionProfile),
-}
 
 /// Proposed execpolicy change to allow commands starting with this prefix.
 ///
@@ -215,10 +198,6 @@ pub enum GuardianAssessmentAction {
         connector_name: Option<String>,
         tool_title: Option<String>,
     },
-    RequestPermissions {
-        reason: Option<String>,
-        permissions: RequestPermissionProfile,
-    },
 }
 
 impl ToJson for GuardianAssessmentAction {
@@ -284,16 +263,6 @@ impl ToJson for GuardianAssessmentAction {
                     object.push_field("tool_title", tool_title);
                 }
             }
-            Self::RequestPermissions {
-                reason,
-                permissions,
-            } => {
-                object.push_field("type", "request_permissions");
-                if let Some(reason) = reason {
-                    object.push_field("reason", reason);
-                }
-                object.push_field("permissions", permissions.to_json());
-            }
         }
         JsonValue::Object(object)
     }
@@ -331,10 +300,6 @@ impl FromJson for GuardianAssessmentAction {
                 connector_id: object.take_optional("connector_id")?,
                 connector_name: object.take_optional("connector_name")?,
                 tool_title: object.take_optional("tool_title")?,
-            }),
-            "request_permissions" => Ok(Self::RequestPermissions {
-                reason: object.take_optional("reason")?,
-                permissions: object.take_required("permissions")?,
             }),
             other => Err(JsonValueError::WrongType(format!(
                 "unknown guardian assessment action `{other}`"
@@ -424,10 +389,6 @@ pub struct ExecApprovalRequestEvent {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub proposed_network_policy_amendments: Option<Vec<NetworkPolicyAmendment>>,
-    /// Optional additional filesystem permissions requested for this command.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub additional_permissions: Option<AdditionalPermissionProfile>,
     /// Ordered list of decisions the client may present for this prompt.
     ///
     /// When absent, clients should derive the legacy default set from the
@@ -454,7 +415,6 @@ impl ExecApprovalRequestEvent {
                 self.network_approval_context.as_ref(),
                 self.proposed_execpolicy_amendment.as_ref(),
                 self.proposed_network_policy_amendments.as_deref(),
-                self.additional_permissions.as_ref(),
             ),
         }
     }
@@ -463,7 +423,6 @@ impl ExecApprovalRequestEvent {
         network_approval_context: Option<&NetworkApprovalContext>,
         proposed_execpolicy_amendment: Option<&ExecPolicyAmendment>,
         proposed_network_policy_amendments: Option<&[NetworkPolicyAmendment]>,
-        additional_permissions: Option<&AdditionalPermissionProfile>,
     ) -> Vec<ReviewDecision> {
         if network_approval_context.is_some() {
             let mut decisions = vec![ReviewDecision::Approved, ReviewDecision::ApprovedForSession];
@@ -478,10 +437,6 @@ impl ExecApprovalRequestEvent {
             }
             decisions.push(ReviewDecision::Abort);
             return decisions;
-        }
-
-        if additional_permissions.is_some() {
-            return vec![ReviewDecision::Approved, ReviewDecision::Abort];
         }
 
         let mut decisions = vec![ReviewDecision::Approved];
@@ -572,14 +527,13 @@ mod tests {
 
     #[test]
     fn guardian_assessment_action_deserializes_command_shape() {
-        let action: GuardianAssessmentAction =
-            edgerun_json::from_value(edgerun_json::json!({
-                "type": "command",
-                "source": "shell",
-                "command": "rm -rf /tmp/guardian",
-                "cwd": test_path_buf("/tmp"),
-            }))
-            .expect("guardian action");
+        let action: GuardianAssessmentAction = edgerun_json::from_value(edgerun_json::json!({
+            "type": "command",
+            "source": "shell",
+            "command": "rm -rf /tmp/guardian",
+            "cwd": test_path_buf("/tmp"),
+        }))
+        .expect("guardian action");
 
         assert_eq!(
             action,
@@ -604,10 +558,7 @@ mod tests {
         let action: GuardianAssessmentAction =
             edgerun_json::from_value(value.clone()).expect("guardian action");
 
-        assert_eq!(
-            edgerun_json::to_value(&action),
-            value
-        );
+        assert_eq!(edgerun_json::to_value(&action), value);
 
         assert_eq!(
             action,

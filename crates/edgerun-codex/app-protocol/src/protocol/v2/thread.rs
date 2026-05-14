@@ -1,4 +1,3 @@
-use super::ActivePermissionProfile;
 use super::ApprovalsReviewer;
 use super::AskForApproval;
 use super::PermissionProfile;
@@ -37,6 +36,27 @@ use ts_rs::TS;
 pub enum ThreadStartSource {
     Startup,
     Clear,
+}
+
+impl ToJson for ThreadStartSource {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            ThreadStartSource::Startup => "startup",
+            ThreadStartSource::Clear => "clear",
+        })
+    }
+}
+
+impl FromJson for ThreadStartSource {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "startup" => Ok(ThreadStartSource::Startup),
+            "clear" => Ok(ThreadStartSource::Clear),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown thread start source `{other}`"
+            ))),
+        }
+    }
 }
 
 #[derive(Serialize, Debug, Clone, PartialEq, JsonSchema, TS)]
@@ -153,8 +173,7 @@ pub struct ThreadStartParams {
     #[ts(optional = nullable)]
     pub sandbox: Option<SandboxMode>,
     /// Named profile selection for this thread. Cannot be combined with
-    /// `sandbox`. Use bounded `modifications` for supported turn/thread
-    /// adjustments instead of replacing the full permissions profile.
+    /// `sandbox`.
     #[ts(optional = nullable)]
     pub permissions: Option<PermissionProfileSelectionParams>,
     #[ts(optional = nullable)]
@@ -199,6 +218,104 @@ pub struct ThreadStartParams {
     pub persist_extended_history: bool,
 }
 
+impl ToJson for ThreadStartParams {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(23);
+        object.push_opt_field("model", self.model.clone());
+        object.push_opt_field("modelProvider", self.model_provider.clone());
+        if let Some(service_tier) = &self.service_tier {
+            object.push_field(
+                "serviceTier",
+                service_tier
+                    .as_ref()
+                    .map_or(JsonValue::Null, |tier| JsonValue::String(tier.clone())),
+            );
+        }
+        object.push_opt_field("cwd", self.cwd.clone());
+        object.push_opt_field(
+            "approvalPolicy",
+            self.approval_policy.map(|value| value.to_json()),
+        );
+        object.push_opt_field(
+            "approvalsReviewer",
+            self.approvals_reviewer.map(|value| value.to_json()),
+        );
+        object.push_opt_field("sandbox", self.sandbox.map(|value| value.to_json()));
+        object.push_opt_field(
+            "permissions",
+            self.permissions.as_ref().map(ToJson::to_json),
+        );
+        object.push_opt_field("config", self.config.as_ref().map(ToJson::to_json));
+        object.push_opt_field("serviceName", self.service_name.clone());
+        object.push_opt_field("baseInstructions", self.base_instructions.clone());
+        object.push_opt_field("developerInstructions", self.developer_instructions.clone());
+        object.push_opt_field("personality", self.personality.map(|value| value.to_json()));
+        object.push_opt_field("ephemeral", self.ephemeral);
+        object.push_opt_field(
+            "sessionStartSource",
+            self.session_start_source.map(|value| value.to_json()),
+        );
+        object.push_opt_field(
+            "threadSource",
+            self.thread_source.map(|value| value.to_json()),
+        );
+        object.push_opt_field(
+            "environments",
+            self.environments.as_ref().map(ToJson::to_json),
+        );
+        object.push_opt_field(
+            "dynamicTools",
+            self.dynamic_tools.as_ref().map(ToJson::to_json),
+        );
+        object.push_opt_field(
+            "mockExperimentalField",
+            self.mock_experimental_field.clone(),
+        );
+        object.push_field("experimentalRawEvents", self.experimental_raw_events);
+        object.push_field("persistExtendedHistory", self.persist_extended_history);
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for ThreadStartParams {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ThreadStartParams")?;
+        let service_tier = match object.remove("serviceTier") {
+            Some(JsonValue::Null) => Some(None),
+            Some(value) => Some(Some(String::from_json(value)?)),
+            None => None,
+        };
+
+        Ok(Self {
+            model: object.take_optional("model")?,
+            model_provider: object.take_optional("modelProvider")?,
+            service_tier,
+            cwd: object.take_optional("cwd")?,
+            approval_policy: object.take_optional("approvalPolicy")?,
+            approvals_reviewer: object.take_optional("approvalsReviewer")?,
+            sandbox: object.take_optional("sandbox")?,
+            permissions: object.take_optional("permissions")?,
+            config: object.take_optional("config")?,
+            service_name: object.take_optional("serviceName")?,
+            base_instructions: object.take_optional("baseInstructions")?,
+            developer_instructions: object.take_optional("developerInstructions")?,
+            personality: object.take_optional("personality")?,
+            ephemeral: object.take_optional("ephemeral")?,
+            session_start_source: object.take_optional("sessionStartSource")?,
+            thread_source: object.take_optional("threadSource")?,
+            environments: object.take_optional("environments")?,
+            dynamic_tools: object.take_optional("dynamicTools")?,
+            mock_experimental_field: object.take_optional("mockExperimentalField")?,
+            experimental_raw_events: object
+                .take_optional("experimentalRawEvents")?
+                .unwrap_or(false),
+            persist_extended_history: object
+                .take_optional("persistExtendedHistory")?
+                .unwrap_or(false),
+        })
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Default, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
@@ -239,11 +356,39 @@ pub struct ThreadStartResponse {
     /// carries display/provenance metadata for this runtime profile.
     #[serde(default)]
     pub permission_profile: Option<PermissionProfile>,
-    /// Named or implicit built-in profile that produced the active
-    /// permissions, when known.
-    #[serde(default)]
-    pub active_permission_profile: Option<ActivePermissionProfile>,
     pub reasoning_effort: Option<ReasoningEffort>,
+}
+
+impl FromJson for ThreadStartResponse {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        thread_lifecycle_response_from_json(value).map(
+            |ThreadLifecycleResponse {
+                 thread,
+                 model,
+                 model_provider,
+                 service_tier,
+                 cwd,
+                 instruction_sources,
+                 approval_policy,
+                 approvals_reviewer,
+                 sandbox,
+                 permission_profile,
+                 reasoning_effort,
+             }| Self {
+                thread,
+                model,
+                model_provider,
+                service_tier,
+                cwd,
+                instruction_sources,
+                approval_policy,
+                approvals_reviewer,
+                sandbox,
+                permission_profile,
+                reasoning_effort,
+            },
+        )
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone, PartialEq, JsonSchema, TS)]
@@ -296,8 +441,7 @@ pub struct ThreadResumeParams {
     #[ts(optional = nullable)]
     pub sandbox: Option<SandboxMode>,
     /// Named profile selection for the resumed thread. Cannot be combined
-    /// with `sandbox`. Use bounded `modifications` for supported thread
-    /// adjustments instead of replacing the full permissions profile.
+    /// with `sandbox`.
     #[ts(optional = nullable)]
     pub permissions: Option<PermissionProfileSelectionParams>,
     #[ts(optional = nullable)]
@@ -343,11 +487,39 @@ pub struct ThreadResumeResponse {
     /// carries display/provenance metadata for this runtime profile.
     #[serde(default)]
     pub permission_profile: Option<PermissionProfile>,
-    /// Named or implicit built-in profile that produced the active
-    /// permissions, when known.
-    #[serde(default)]
-    pub active_permission_profile: Option<ActivePermissionProfile>,
     pub reasoning_effort: Option<ReasoningEffort>,
+}
+
+impl FromJson for ThreadResumeResponse {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        thread_lifecycle_response_from_json(value).map(
+            |ThreadLifecycleResponse {
+                 thread,
+                 model,
+                 model_provider,
+                 service_tier,
+                 cwd,
+                 instruction_sources,
+                 approval_policy,
+                 approvals_reviewer,
+                 sandbox,
+                 permission_profile,
+                 reasoning_effort,
+             }| Self {
+                thread,
+                model,
+                model_provider,
+                service_tier,
+                cwd,
+                instruction_sources,
+                approval_policy,
+                approvals_reviewer,
+                sandbox,
+                permission_profile,
+                reasoning_effort,
+            },
+        )
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone, PartialEq, JsonSchema, TS)]
@@ -392,8 +564,7 @@ pub struct ThreadForkParams {
     #[ts(optional = nullable)]
     pub sandbox: Option<SandboxMode>,
     /// Named profile selection for the forked thread. Cannot be combined with
-    /// `sandbox`. Use bounded `modifications` for supported thread
-    /// adjustments instead of replacing the full permissions profile.
+    /// `sandbox`.
     #[ts(optional = nullable)]
     pub permissions: Option<PermissionProfileSelectionParams>,
     #[ts(optional = nullable)]
@@ -442,11 +613,74 @@ pub struct ThreadForkResponse {
     /// carries display/provenance metadata for this runtime profile.
     #[serde(default)]
     pub permission_profile: Option<PermissionProfile>,
-    /// Named or implicit built-in profile that produced the active
-    /// permissions, when known.
-    #[serde(default)]
-    pub active_permission_profile: Option<ActivePermissionProfile>,
     pub reasoning_effort: Option<ReasoningEffort>,
+}
+
+impl FromJson for ThreadForkResponse {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        thread_lifecycle_response_from_json(value).map(
+            |ThreadLifecycleResponse {
+                 thread,
+                 model,
+                 model_provider,
+                 service_tier,
+                 cwd,
+                 instruction_sources,
+                 approval_policy,
+                 approvals_reviewer,
+                 sandbox,
+                 permission_profile,
+                 reasoning_effort,
+             }| Self {
+                thread,
+                model,
+                model_provider,
+                service_tier,
+                cwd,
+                instruction_sources,
+                approval_policy,
+                approvals_reviewer,
+                sandbox,
+                permission_profile,
+                reasoning_effort,
+            },
+        )
+    }
+}
+
+struct ThreadLifecycleResponse {
+    thread: Thread,
+    model: String,
+    model_provider: String,
+    service_tier: Option<String>,
+    cwd: AbsolutePathBuf,
+    instruction_sources: Vec<AbsolutePathBuf>,
+    approval_policy: AskForApproval,
+    approvals_reviewer: ApprovalsReviewer,
+    sandbox: SandboxPolicy,
+    permission_profile: Option<PermissionProfile>,
+    reasoning_effort: Option<ReasoningEffort>,
+}
+
+fn thread_lifecycle_response_from_json(
+    value: JsonValue,
+) -> Result<ThreadLifecycleResponse, JsonValueError> {
+    let mut object = value.into_object("ThreadLifecycleResponse")?;
+    Ok(ThreadLifecycleResponse {
+        thread: object.take_required("thread")?,
+        model: object.take_required("model")?,
+        model_provider: object.take_required("modelProvider")?,
+        service_tier: object.take_optional("serviceTier")?,
+        cwd: object.take_required("cwd")?,
+        instruction_sources: object
+            .take_optional("instructionSources")?
+            .unwrap_or_default(),
+        approval_policy: object.take_required("approvalPolicy")?,
+        approvals_reviewer: object.take_required("approvalsReviewer")?,
+        sandbox: object.take_required("sandbox")?,
+        permission_profile: object.take_optional("permissionProfile")?,
+        reasoning_effort: object.take_optional("reasoningEffort")?,
+    })
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
@@ -1072,12 +1306,66 @@ pub enum ThreadStatus {
     },
 }
 
+impl ToJson for ThreadStatus {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(2);
+        match self {
+            ThreadStatus::NotLoaded => object.push_field("type", "notLoaded"),
+            ThreadStatus::Idle => object.push_field("type", "idle"),
+            ThreadStatus::SystemError => object.push_field("type", "systemError"),
+            ThreadStatus::Active { active_flags } => {
+                object.push_field("type", "active");
+                object.push_field("activeFlags", active_flags.to_json());
+            }
+        }
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for ThreadStatus {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ThreadStatus")?;
+        match String::from_json(object.take_required("type")?)?.as_str() {
+            "notLoaded" => Ok(ThreadStatus::NotLoaded),
+            "idle" => Ok(ThreadStatus::Idle),
+            "systemError" => Ok(ThreadStatus::SystemError),
+            "active" => Ok(ThreadStatus::Active {
+                active_flags: object.take_optional("activeFlags")?.unwrap_or_default(),
+            }),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown thread status `{other}`"
+            ))),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub enum ThreadActiveFlag {
     WaitingOnApproval,
     WaitingOnUserInput,
+}
+
+impl ToJson for ThreadActiveFlag {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            ThreadActiveFlag::WaitingOnApproval => "waitingOnApproval",
+            ThreadActiveFlag::WaitingOnUserInput => "waitingOnUserInput",
+        })
+    }
+}
+
+impl FromJson for ThreadActiveFlag {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "waitingOnApproval" => Ok(ThreadActiveFlag::WaitingOnApproval),
+            "waitingOnUserInput" => Ok(ThreadActiveFlag::WaitingOnUserInput),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown thread active flag `{other}`"
+            ))),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
@@ -1175,6 +1463,37 @@ pub struct ThreadTurnsItemsListParams {
     pub sort_direction: Option<SortDirection>,
 }
 
+impl ToJson for ThreadTurnsItemsListParams {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(5);
+        object.push_field("threadId", self.thread_id.clone());
+        object.push_field("turnId", self.turn_id.clone());
+        if let Some(cursor) = &self.cursor {
+            object.push_field("cursor", cursor.clone());
+        }
+        if let Some(limit) = self.limit {
+            object.push_field("limit", limit as u64);
+        }
+        if let Some(sort_direction) = self.sort_direction {
+            object.push_field("sortDirection", sort_direction.to_json());
+        }
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for ThreadTurnsItemsListParams {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ThreadTurnsItemsListParams")?;
+        Ok(Self {
+            thread_id: object.take_required("threadId")?,
+            turn_id: object.take_required("turnId")?,
+            cursor: object.take_optional("cursor")?,
+            limit: object.take_optional("limit")?,
+            sort_direction: object.take_optional("sortDirection")?,
+        })
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
@@ -1186,6 +1505,16 @@ pub struct ThreadTurnsItemsListResponse {
     /// Opaque cursor to pass as `cursor` when reversing `sortDirection`.
     /// This is only populated when the page contains at least one item.
     pub backwards_cursor: Option<String>,
+}
+
+impl ToJson for ThreadTurnsItemsListResponse {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(3);
+        object.push_field("data", self.data.to_json());
+        object.push_field("nextCursor", self.next_cursor.to_json());
+        object.push_field("backwardsCursor", self.backwards_cursor.to_json());
+        JsonValue::Object(object)
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]

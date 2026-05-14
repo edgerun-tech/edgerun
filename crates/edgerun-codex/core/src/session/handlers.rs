@@ -44,7 +44,6 @@ use codex_protocol::protocol::ThreadMemoryMode;
 use codex_protocol::protocol::ThreadRolledBackEvent;
 use codex_protocol::protocol::TurnAbortReason;
 use codex_protocol::protocol::WarningEvent;
-use codex_protocol::request_permissions::RequestPermissionsResponse;
 use codex_protocol::request_user_input::RequestUserInputResponse;
 
 use crate::context_manager::is_user_turn_boundary;
@@ -147,7 +146,6 @@ pub(super) async fn user_input_or_turn_inner(
                     approvals_reviewer,
                     sandbox_policy: Some(sandbox_policy),
                     permission_profile,
-                    active_permission_profile: None,
                     windows_sandbox_level: None,
                     collaboration_mode,
                     reasoning_summary: summary,
@@ -167,7 +165,6 @@ pub(super) async fn user_input_or_turn_inner(
             approvals_reviewer,
             sandbox_policy,
             permission_profile,
-            active_permission_profile,
             windows_sandbox_level,
             model,
             effort,
@@ -199,7 +196,6 @@ pub(super) async fn user_input_or_turn_inner(
                     approvals_reviewer,
                     sandbox_policy,
                     permission_profile,
-                    active_permission_profile,
                     windows_sandbox_level,
                     collaboration_mode,
                     reasoning_summary: summary,
@@ -448,15 +444,6 @@ pub async fn request_user_input_response(
     response: RequestUserInputResponse,
 ) {
     sess.notify_user_input_response(&id, response).await;
-}
-
-pub async fn request_permissions_response(
-    sess: &Arc<Session>,
-    id: String,
-    response: RequestPermissionsResponse,
-) {
-    sess.notify_request_permissions_response(&id, response)
-        .await;
 }
 
 pub async fn dynamic_tool_response(sess: &Arc<Session>, id: String, response: DynamicToolResponse) {
@@ -828,10 +815,6 @@ pub(super) async fn submission_loop(
                 }
                 Op::UserInputAnswer { id, response } => {
                     request_user_input_response(&sess, id, response).await;
-                    false
-                }
-                Op::RequestPermissionsResponse { id, response } => {
-                    request_permissions_response(&sess, id, response).await;
                     false
                 }
                 Op::DynamicToolResponse { id, response } => {

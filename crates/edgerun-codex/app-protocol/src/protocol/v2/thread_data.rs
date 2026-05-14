@@ -9,6 +9,7 @@ use codex_protocol::protocol::ThreadSource as CoreThreadSource;
 use edgerun_error::Error;
 use edgerun_json::FromJson;
 use edgerun_json::JsonValueError;
+use edgerun_json::Map;
 use edgerun_json::ToJson;
 use edgerun_json::Value as JsonValue;
 use edgerun_serde::Deserialize;
@@ -65,6 +66,42 @@ impl From<SessionSource> for CoreSessionSource {
     }
 }
 
+impl ToJson for SessionSource {
+    fn to_json(&self) -> JsonValue {
+        match self {
+            SessionSource::Cli => JsonValue::from("cli"),
+            SessionSource::VsCode => JsonValue::from("vscode"),
+            SessionSource::Exec => JsonValue::from("exec"),
+            SessionSource::AppServer => JsonValue::from("appServer"),
+            SessionSource::Custom(source) => JsonValue::from(source.clone()),
+            SessionSource::SubAgent(_) => JsonValue::from("subAgent"),
+            SessionSource::Unknown => JsonValue::from("unknown"),
+        }
+    }
+}
+
+impl FromJson for SessionSource {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match value {
+            JsonValue::String(source) => Ok(match source.as_str() {
+                "cli" => SessionSource::Cli,
+                "vscode" => SessionSource::VsCode,
+                "exec" => SessionSource::Exec,
+                "appServer" => SessionSource::AppServer,
+                "unknown" => SessionSource::Unknown,
+                _ => SessionSource::Custom(source),
+            }),
+            JsonValue::Object(_) => Err(JsonValueError::WrongType(
+                "native SessionSource parsing expects a string source".to_string(),
+            )),
+            other => Err(JsonValueError::WrongType(format!(
+                "expected session source string or object, found {}",
+                other.variant_name()
+            ))),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
 #[serde(rename_all = "snake_case")]
 #[ts(rename_all = "snake_case", export_to = "v2/")]
@@ -94,6 +131,29 @@ impl From<ThreadSource> for CoreThreadSource {
     }
 }
 
+impl ToJson for ThreadSource {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            ThreadSource::User => "user",
+            ThreadSource::Subagent => "subagent",
+            ThreadSource::MemoryConsolidation => "memory_consolidation",
+        })
+    }
+}
+
+impl FromJson for ThreadSource {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "user" => Ok(ThreadSource::User),
+            "subagent" => Ok(ThreadSource::Subagent),
+            "memory_consolidation" => Ok(ThreadSource::MemoryConsolidation),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown thread source `{other}`"
+            ))),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
@@ -101,6 +161,27 @@ pub struct GitInfo {
     pub sha: Option<String>,
     pub branch: Option<String>,
     pub origin_url: Option<String>,
+}
+
+impl ToJson for GitInfo {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(3);
+        object.push_field("sha", self.sha.to_json());
+        object.push_field("branch", self.branch.to_json());
+        object.push_field("originUrl", self.origin_url.to_json());
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for GitInfo {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("GitInfo")?;
+        Ok(Self {
+            sha: object.take_optional("sha")?,
+            branch: object.take_optional("branch")?,
+            origin_url: object.take_optional("originUrl")?,
+        })
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
@@ -151,6 +232,33 @@ pub struct Thread {
     pub turns: Vec<Turn>,
 }
 
+impl FromJson for Thread {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("Thread")?;
+        Ok(Self {
+            id: object.take_required("id")?,
+            session_id: object.take_required("sessionId")?,
+            forked_from_id: object.take_optional("forkedFromId")?,
+            preview: object.take_required("preview")?,
+            ephemeral: object.take_required("ephemeral")?,
+            model_provider: object.take_required("modelProvider")?,
+            created_at: object.take_required("createdAt")?,
+            updated_at: object.take_required("updatedAt")?,
+            status: object.take_required("status")?,
+            path: take_optional_path_buf(&mut object, "path")?,
+            cwd: object.take_required("cwd")?,
+            cli_version: object.take_required("cliVersion")?,
+            source: object.take_required("source")?,
+            thread_source: object.take_optional("threadSource")?,
+            agent_nickname: object.take_optional("agentNickname")?,
+            agent_role: object.take_optional("agentRole")?,
+            git_info: object.take_optional("gitInfo")?,
+            name: object.take_optional("name")?,
+            turns: object.take_optional("turns")?.unwrap_or_default(),
+        })
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
@@ -173,6 +281,43 @@ pub struct Turn {
     /// Duration between turn start and completion in milliseconds, if known.
     #[ts(type = "number | null")]
     pub duration_ms: Option<i64>,
+}
+
+impl FromJson for Turn {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("Turn")?;
+        Ok(Self {
+            id: object.take_required("id")?,
+            items: thread_items_from_json(object.remove("items"))?,
+            items_view: object.take_optional("itemsView")?.unwrap_or_default(),
+            status: object.take_required("status")?,
+            error: object.take_optional("error")?,
+            started_at: object.take_optional("startedAt")?,
+            completed_at: object.take_optional("completedAt")?,
+            duration_ms: object.take_optional("durationMs")?,
+        })
+    }
+}
+
+fn thread_items_from_json(value: Option<JsonValue>) -> Result<Vec<ThreadItem>, JsonValueError> {
+    match value {
+        None | Some(JsonValue::Null) => Ok(Vec::new()),
+        Some(JsonValue::Array(items)) if items.is_empty() => Ok(Vec::new()),
+        Some(JsonValue::Array(_)) => Err(JsonValueError::WrongType(
+            "native ThreadItem parsing is not implemented for non-empty turn items".to_string(),
+        )),
+        Some(other) => Err(JsonValueError::WrongType(format!(
+            "expected turn items array, found {}",
+            other.variant_name()
+        ))),
+    }
+}
+
+fn take_optional_path_buf(object: &mut Map, key: &str) -> Result<Option<PathBuf>, JsonValueError> {
+    match object.remove(key) {
+        Some(JsonValue::Null) | None => Ok(None),
+        Some(value) => String::from_json(value).map(PathBuf::from).map(Some),
+    }
 }
 
 #[derive(Default, Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
@@ -220,4 +365,24 @@ pub struct TurnError {
     pub codex_error_info: Option<CodexErrorInfo>,
     #[serde(default)]
     pub additional_details: Option<String>,
+}
+
+impl FromJson for TurnError {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("TurnError")?;
+        let codex_error_info = match object.remove("codexErrorInfo") {
+            Some(JsonValue::Null) | None => None,
+            Some(_) => {
+                return Err(JsonValueError::WrongType(
+                    "native TurnError parsing does not support codexErrorInfo yet".to_string(),
+                ));
+            }
+        };
+
+        Ok(Self {
+            message: object.take_required("message")?,
+            codex_error_info,
+            additional_details: object.take_optional("additionalDetails")?,
+        })
+    }
 }

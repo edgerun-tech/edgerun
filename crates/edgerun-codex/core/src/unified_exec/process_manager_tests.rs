@@ -182,9 +182,6 @@ async fn failed_initial_end_for_unstored_process_uses_fallback_output() {
             .expect("primary environment"),
         network: None,
         tty: true,
-        sandbox_permissions: crate::sandboxing::SandboxPermissions::UseDefault,
-        additional_permissions: None,
-        additional_permissions_preapproved: false,
         justification: None,
         prefix_rule: None,
     };

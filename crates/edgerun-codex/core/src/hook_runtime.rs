@@ -5,9 +5,6 @@ use std::time::Duration;
 use codex_analytics::CompactionTrigger;
 use codex_analytics::HookRunFact;
 use codex_analytics::build_track_events_context;
-use codex_hooks::PermissionRequestDecision;
-use codex_hooks::PermissionRequestOutcome;
-use codex_hooks::PermissionRequestRequest;
 use codex_hooks::PostToolUseOutcome;
 use codex_hooks::PostToolUseRequest;
 use codex_hooks::PreToolUseOutcome;
@@ -37,7 +34,6 @@ use crate::event_mapping::parse_turn_item;
 use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;
 use crate::tools::hook_names::HookToolName;
-use crate::tools::sandboxing::PermissionRequestPayload;
 
 pub(crate) struct HookRuntimeOutcome {
     pub should_stop: bool,
@@ -183,40 +179,6 @@ pub(crate) async fn run_pre_tool_use_hooks(
     } else {
         None
     }
-}
-
-// PermissionRequest hooks share the same preview/start/completed event flow as
-// other hook types, but they return an optional decision instead of mutating
-// tool input or post-run state.
-pub(crate) async fn run_permission_request_hooks(
-    sess: &Arc<Session>,
-    turn_context: &Arc<TurnContext>,
-    run_id_suffix: &str,
-    payload: PermissionRequestPayload,
-) -> Option<PermissionRequestDecision> {
-    let request = PermissionRequestRequest {
-        session_id: sess.conversation_id,
-        turn_id: turn_context.sub_id.clone(),
-        cwd: turn_context.cwd.to_path_buf(),
-        transcript_path: sess.hook_transcript_path().await,
-        model: turn_context.model_info.slug.clone(),
-        permission_mode: hook_permission_mode(turn_context),
-        tool_name: payload.tool_name.name().to_string(),
-        matcher_aliases: payload.tool_name.matcher_aliases().to_vec(),
-        run_id_suffix: run_id_suffix.to_string(),
-        tool_input: payload.tool_input,
-    };
-    let hooks = sess.hooks();
-    let preview_runs = hooks.preview_permission_request(&request);
-    emit_hook_started_events(sess, turn_context, preview_runs).await;
-
-    let PermissionRequestOutcome {
-        hook_events,
-        decision,
-    } = hooks.run_permission_request(request).await;
-    emit_hook_completed_events(sess, turn_context, hook_events).await;
-
-    decision
 }
 
 /// Runs matching `PostToolUse` hooks after a tool has produced a successful output.
@@ -530,7 +492,6 @@ fn hook_run_analytics_payload(
 fn hook_run_metric_tags(run: &HookRunSummary) -> [(&'static str, &'static str); 3] {
     let hook_name = match run.event_name {
         HookEventName::PreToolUse => "PreToolUse",
-        HookEventName::PermissionRequest => "PermissionRequest",
         HookEventName::PostToolUse => "PostToolUse",
         HookEventName::PreCompact => "PreCompact",
         HookEventName::PostCompact => "PostCompact",

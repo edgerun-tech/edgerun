@@ -16,9 +16,6 @@ use codex_protocol::protocol::RawResponseItemEvent;
 use codex_protocol::protocol::ReviewDecision;
 use codex_protocol::protocol::TurnAbortReason;
 use codex_protocol::protocol::TurnAbortedEvent;
-use codex_protocol::request_permissions::RequestPermissionProfile;
-use codex_protocol::request_permissions::RequestPermissionsEvent;
-use codex_protocol::request_permissions::RequestPermissionsResponse;
 use codex_protocol::request_user_input::RequestUserInputAnswer;
 use codex_protocol::request_user_input::RequestUserInputEvent;
 use codex_protocol::request_user_input::RequestUserInputQuestion;
@@ -180,100 +177,6 @@ async fn run_codex_thread_interactive_respects_pre_cancelled_spawn() {
 }
 
 #[edgerun_tokio::test]
-async fn handle_request_permissions_uses_tool_call_id_for_round_trip() {
-    let (parent_session, parent_ctx, rx_events) =
-        crate::session::tests::make_session_and_context_with_rx().await;
-    *parent_session.active_turn.lock().await = Some(crate::state::ActiveTurn::default());
-
-    let (tx_sub, rx_sub) = bounded(SUBMISSION_CHANNEL_CAPACITY);
-    let (_tx_events, rx_events_child) = bounded(SUBMISSION_CHANNEL_CAPACITY);
-    let (_agent_status_tx, agent_status) = watch::channel(AgentStatus::PendingInit);
-    let codex = Arc::new(Codex {
-        tx_sub,
-        rx_event: rx_events_child,
-        agent_status,
-        session: Arc::clone(&parent_session),
-        session_loop_termination: completed_session_loop_termination(),
-    });
-
-    let call_id = "tool-call-1".to_string();
-    let expected_response = RequestPermissionsResponse {
-        permissions: RequestPermissionProfile {
-            network: Some(NetworkPermissions {
-                enabled: Some(true),
-            }),
-            ..RequestPermissionProfile::default()
-        },
-        scope: PermissionGrantScope::Turn,
-        strict_auto_review: false,
-    };
-    let delegated_cwd = parent_ctx.cwd.join("delegated-cwd");
-    let cancel_token = CancellationToken::new();
-    let request_call_id = call_id.clone();
-    let request_cwd = delegated_cwd.clone();
-
-    let handle = edgerun_tokio::spawn({
-        let codex = Arc::clone(&codex);
-        let parent_session = Arc::clone(&parent_session);
-        let parent_ctx = Arc::clone(&parent_ctx);
-        let cancel_token = cancel_token.clone();
-        async move {
-            handle_request_permissions(
-                codex.as_ref(),
-                &parent_session,
-                &parent_ctx,
-                RequestPermissionsEvent {
-                    call_id: request_call_id,
-                    turn_id: "child-turn-1".to_string(),
-                    started_at_ms: 0,
-                    reason: Some("need access".to_string()),
-                    permissions: RequestPermissionProfile {
-                        network: Some(NetworkPermissions {
-                            enabled: Some(true),
-                        }),
-                        ..RequestPermissionProfile::default()
-                    },
-                    cwd: Some(request_cwd),
-                },
-                &cancel_token,
-            )
-            .await;
-        }
-    });
-
-    let request_event = timeout(Duration::from_secs(1), rx_events.recv())
-        .await
-        .expect("request_permissions event timed out")
-        .expect("request_permissions event missing");
-    let EventMsg::RequestPermissions(request) = request_event.msg else {
-        panic!("expected RequestPermissions event");
-    };
-    assert_eq!(request.call_id, call_id.clone());
-    assert_eq!(request.cwd, Some(delegated_cwd));
-
-    parent_session
-        .notify_request_permissions_response(&call_id, expected_response.clone())
-        .await;
-
-    timeout(Duration::from_secs(1), handle)
-        .await
-        .expect("handle_request_permissions hung")
-        .expect("handle_request_permissions join error");
-
-    let submission = timeout(Duration::from_secs(1), rx_sub.recv())
-        .await
-        .expect("request_permissions response timed out")
-        .expect("request_permissions response missing");
-    assert_eq!(
-        submission.op,
-        Op::RequestPermissionsResponse {
-            id: call_id,
-            response: expected_response,
-        }
-    );
-}
-
-#[edgerun_tokio::test]
 async fn handle_exec_approval_uses_call_id_for_guardian_review_and_approval_id_for_reply() {
     let (parent_session, parent_ctx, rx_events) =
         crate::session::tests::make_session_and_context_with_rx().await;
@@ -321,7 +224,6 @@ async fn handle_exec_approval_uses_call_id_for_guardian_review_and_approval_id_f
                     network_approval_context: None,
                     proposed_execpolicy_amendment: None,
                     proposed_network_policy_amendments: None,
-                    additional_permissions: None,
                     available_decisions: Some(vec![
                         ReviewDecision::Approved,
                         ReviewDecision::Abort,

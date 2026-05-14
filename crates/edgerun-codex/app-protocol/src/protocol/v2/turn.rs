@@ -13,6 +13,10 @@ use codex_protocol::plan_tool::StepStatus as CorePlanStepStatus;
 use codex_protocol::user_input::ByteRange as CoreByteRange;
 use codex_protocol::user_input::TextElement as CoreTextElement;
 use codex_protocol::user_input::UserInput as CoreUserInput;
+use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
+use edgerun_json::Map;
+use edgerun_json::ToJson;
 use edgerun_json::Value as JsonValue;
 use edgerun_serde::Deserialize;
 use edgerun_serde::Serialize;
@@ -31,6 +35,31 @@ pub enum TurnStatus {
     InProgress,
 }
 
+impl ToJson for TurnStatus {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            TurnStatus::Completed => "completed",
+            TurnStatus::Interrupted => "interrupted",
+            TurnStatus::Failed => "failed",
+            TurnStatus::InProgress => "inProgress",
+        })
+    }
+}
+
+impl FromJson for TurnStatus {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "completed" => Ok(TurnStatus::Completed),
+            "interrupted" => Ok(TurnStatus::Interrupted),
+            "failed" => Ok(TurnStatus::Failed),
+            "inProgress" => Ok(TurnStatus::InProgress),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown turn status `{other}`"
+            ))),
+        }
+    }
+}
+
 // Turn APIs
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
@@ -38,6 +67,25 @@ pub enum TurnStatus {
 pub struct TurnEnvironmentParams {
     pub environment_id: String,
     pub cwd: AbsolutePathBuf,
+}
+
+impl ToJson for TurnEnvironmentParams {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(2);
+        object.push_field("environmentId", self.environment_id.clone());
+        object.push_field("cwd", self.cwd.to_json());
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for TurnEnvironmentParams {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("TurnEnvironmentParams")?;
+        Ok(Self {
+            environment_id: object.take_required("environmentId")?,
+            cwd: object.take_required("cwd")?,
+        })
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Default, Clone, PartialEq, JsonSchema, TS)]
@@ -70,9 +118,7 @@ pub struct TurnStartParams {
     #[ts(optional = nullable)]
     pub sandbox_policy: Option<SandboxPolicy>,
     /// Select a named permissions profile for this turn and subsequent turns.
-    /// Cannot be combined with `sandboxPolicy`. Use bounded `modifications`
-    /// for supported turn adjustments instead of replacing the full
-    /// permissions profile.
+    /// Cannot be combined with `sandboxPolicy`.
     #[ts(optional = nullable)]
     pub permissions: Option<PermissionProfileSelectionParams>,
     /// Override the model for this turn and subsequent turns.
@@ -108,6 +154,130 @@ pub struct TurnStartParams {
     /// "use the built-in instructions for the selected mode".
     #[ts(optional = nullable)]
     pub collaboration_mode: Option<CollaborationMode>,
+}
+
+impl ToJson for TurnStartParams {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(17);
+        object.push_field("threadId", self.thread_id.clone());
+        object.push_field("input", self.input.to_json());
+        object.push_opt_field(
+            "responsesapiClientMetadata",
+            self.responsesapi_client_metadata
+                .as_ref()
+                .map(ToJson::to_json),
+        );
+        object.push_opt_field(
+            "environments",
+            self.environments.as_ref().map(ToJson::to_json),
+        );
+        object.push_opt_field(
+            "cwd",
+            self.cwd
+                .as_ref()
+                .map(|path| JsonValue::String(path.as_path().to_string_lossy().into_owned())),
+        );
+        object.push_opt_field(
+            "approvalPolicy",
+            self.approval_policy.map(|value| value.to_json()),
+        );
+        object.push_opt_field(
+            "approvalsReviewer",
+            self.approvals_reviewer.map(|value| value.to_json()),
+        );
+        object.push_opt_field(
+            "sandboxPolicy",
+            self.sandbox_policy.as_ref().map(ToJson::to_json),
+        );
+        object.push_opt_field(
+            "permissions",
+            self.permissions.as_ref().map(ToJson::to_json),
+        );
+        object.push_opt_field("model", self.model.clone());
+        if let Some(service_tier) = &self.service_tier {
+            object.push_field(
+                "serviceTier",
+                service_tier
+                    .as_ref()
+                    .map_or(JsonValue::Null, |tier| JsonValue::String(tier.clone())),
+            );
+        }
+        object.push_opt_field("effort", self.effort.map(|value| value.to_json()));
+        object.push_opt_field("summary", self.summary.map(|value| value.to_json()));
+        object.push_opt_field("personality", self.personality.map(|value| value.to_json()));
+        object.push_opt_field("outputSchema", self.output_schema.clone());
+        object.push_opt_field(
+            "collaborationMode",
+            self.collaboration_mode
+                .as_ref()
+                .map(collaboration_mode_to_json),
+        );
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for TurnStartParams {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("TurnStartParams")?;
+        let service_tier = match object.remove("serviceTier") {
+            Some(JsonValue::Null) => Some(None),
+            Some(value) => Some(Some(String::from_json(value)?)),
+            None => None,
+        };
+
+        Ok(Self {
+            thread_id: object.take_required("threadId")?,
+            input: object.take_required("input")?,
+            responsesapi_client_metadata: object.take_optional("responsesapiClientMetadata")?,
+            environments: object.take_optional("environments")?,
+            cwd: take_optional_path_buf(&mut object, "cwd")?,
+            approval_policy: object.take_optional("approvalPolicy")?,
+            approvals_reviewer: object.take_optional("approvalsReviewer")?,
+            sandbox_policy: object.take_optional("sandboxPolicy")?,
+            permissions: object.take_optional("permissions")?,
+            model: object.take_optional("model")?,
+            service_tier,
+            effort: object.take_optional("effort")?,
+            summary: object.take_optional("summary")?,
+            personality: object.take_optional("personality")?,
+            output_schema: object.take_optional("outputSchema")?,
+            collaboration_mode: object
+                .take_optional("collaborationMode")?
+                .map(collaboration_mode_from_json)
+                .transpose()?,
+        })
+    }
+}
+
+fn collaboration_mode_to_json(value: &CollaborationMode) -> JsonValue {
+    let mut settings = Map::with_capacity(3);
+    settings.push_field("model", value.settings.model.clone());
+    if let Some(reasoning_effort) = value.settings.reasoning_effort {
+        settings.push_field("reasoningEffort", reasoning_effort.to_json());
+    }
+    if let Some(developer_instructions) = &value.settings.developer_instructions {
+        settings.push_field("developerInstructions", developer_instructions.clone());
+    }
+
+    let mut object = Map::with_capacity(2);
+    object.push_field("mode", value.mode.to_json());
+    object.push_field("settings", JsonValue::Object(settings));
+    JsonValue::Object(object)
+}
+
+fn collaboration_mode_from_json(value: JsonValue) -> Result<CollaborationMode, JsonValueError> {
+    let mut object = value.into_object("CollaborationMode")?;
+    let mut settings = object
+        .take_required::<JsonValue>("settings")?
+        .into_object("CollaborationMode.settings")?;
+    Ok(CollaborationMode {
+        mode: object.take_required("mode")?,
+        settings: codex_protocol::config_types::Settings {
+            model: settings.take_required("model")?,
+            reasoning_effort: settings.take_optional("reasoningEffort")?,
+            developer_instructions: settings.take_optional("developerInstructions")?,
+        },
+    })
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
@@ -160,6 +330,25 @@ pub struct ByteRange {
     pub end: usize,
 }
 
+impl ToJson for ByteRange {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(2);
+        object.push_field("start", self.start as u64);
+        object.push_field("end", self.end as u64);
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for ByteRange {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ByteRange")?;
+        Ok(Self {
+            start: object.take_required("start")?,
+            end: object.take_required("end")?,
+        })
+    }
+}
+
 impl From<CoreByteRange> for ByteRange {
     fn from(value: CoreByteRange) -> Self {
         Self {
@@ -186,6 +375,25 @@ pub struct TextElement {
     pub byte_range: ByteRange,
     /// Optional human-readable placeholder for the element, displayed in the UI.
     placeholder: Option<String>,
+}
+
+impl ToJson for TextElement {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(2);
+        object.push_field("byteRange", self.byte_range.to_json());
+        object.push_opt_field("placeholder", self.placeholder.clone());
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for TextElement {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("TextElement")?;
+        Ok(Self {
+            byte_range: object.take_required("byteRange")?,
+            placeholder: object.take_optional("placeholder")?,
+        })
+    }
 }
 
 impl TextElement {
@@ -245,6 +453,88 @@ pub enum UserInput {
         name: String,
         path: String,
     },
+}
+
+impl ToJson for UserInput {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(4);
+        match self {
+            UserInput::Text {
+                text,
+                text_elements,
+            } => {
+                object.push_field("type", "text");
+                object.push_field("text", text.clone());
+                object.push_field("textElements", text_elements.to_json());
+            }
+            UserInput::Image { url } => {
+                object.push_field("type", "image");
+                object.push_field("url", url.clone());
+            }
+            UserInput::LocalImage { path } => {
+                object.push_field("type", "localImage");
+                object.push_field("path", path.as_path().to_string_lossy().into_owned());
+            }
+            UserInput::Skill { name, path } => {
+                object.push_field("type", "skill");
+                object.push_field("name", name.clone());
+                object.push_field("path", path.as_path().to_string_lossy().into_owned());
+            }
+            UserInput::Mention { name, path } => {
+                object.push_field("type", "mention");
+                object.push_field("name", name.clone());
+                object.push_field("path", path.clone());
+            }
+        }
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for UserInput {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("UserInput")?;
+        match String::from_json(object.take_required("type")?)?.as_str() {
+            "text" => Ok(UserInput::Text {
+                text: object.take_required("text")?,
+                text_elements: object.take_optional("textElements")?.unwrap_or_default(),
+            }),
+            "image" => Ok(UserInput::Image {
+                url: object.take_required("url")?,
+            }),
+            "localImage" => Ok(UserInput::LocalImage {
+                path: take_required_path_buf(&mut object, "path")?,
+            }),
+            "skill" => Ok(UserInput::Skill {
+                name: object.take_required("name")?,
+                path: take_required_path_buf(&mut object, "path")?,
+            }),
+            "mention" => Ok(UserInput::Mention {
+                name: object.take_required("name")?,
+                path: object.take_required("path")?,
+            }),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown user input type `{other}`"
+            ))),
+        }
+    }
+}
+
+fn take_optional_path_buf(object: &mut Map, key: &str) -> Result<Option<PathBuf>, JsonValueError> {
+    match object.remove(key) {
+        Some(JsonValue::Null) | None => Ok(None),
+        Some(value) => take_path_buf_value(value).map(Some),
+    }
+}
+
+fn take_required_path_buf(object: &mut Map, key: &str) -> Result<PathBuf, JsonValueError> {
+    let value = object
+        .remove(key)
+        .ok_or_else(|| JsonValueError::WrongType(format!("missing required field `{key}`")))?;
+    take_path_buf_value(value)
+}
+
+fn take_path_buf_value(value: JsonValue) -> Result<PathBuf, JsonValueError> {
+    String::from_json(value).map(PathBuf::from)
 }
 
 impl UserInput {

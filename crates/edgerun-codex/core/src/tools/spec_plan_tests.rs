@@ -19,9 +19,7 @@ use crate::tools::handlers::request_user_input_spec::create_request_user_input_t
 use crate::tools::handlers::request_user_input_spec::request_user_input_tool_description;
 use crate::tools::handlers::shell_spec::CommandToolOptions;
 use crate::tools::handlers::shell_spec::create_exec_command_tool;
-use crate::tools::handlers::shell_spec::create_request_permissions_tool;
 use crate::tools::handlers::shell_spec::create_write_stdin_tool;
-use crate::tools::handlers::shell_spec::request_permissions_tool_description;
 use crate::tools::handlers::view_image_spec::ViewImageToolOptions;
 use crate::tools::handlers::view_image_spec::create_view_image_tool;
 use crate::tools::registry::ToolRegistry;
@@ -163,11 +161,6 @@ fn test_full_toolset_specs_for_gpt5_codex_unified_exec_web_search() {
     }
     if !config.multi_agent_v2 {
         let spec = create_resume_agent_tool();
-        expected.insert(spec.name().to_string(), spec);
-    }
-
-    if config.exec_permission_approvals_enabled {
-        let spec = create_request_permissions_tool(request_permissions_tool_description());
         expected.insert(spec.name().to_string(), spec);
     }
 
@@ -762,80 +755,6 @@ fn request_user_input_description_reflects_default_mode_feature_flag() {
         request_user_input_tool.spec,
         request_user_input_tool_spec(&request_user_input_available_modes(&features))
     );
-}
-
-#[test]
-fn request_permissions_requires_feature_flag() {
-    let model_info = model_info();
-    let features = Features::with_defaults();
-    let available_models = Vec::new();
-    let tools_config = ToolsConfig::new(&ToolsConfigParams {
-        model_info: &model_info,
-        available_models: &available_models,
-        features: &features,
-        image_generation_tool_auth_allowed: true,
-        web_search_mode: Some(WebSearchMode::Cached),
-        session_source: SessionSource::Cli,
-        permission_profile: &PermissionProfile::Disabled,
-        windows_sandbox_level: WindowsSandboxLevel::Disabled,
-    });
-    let (tools, _) = build_specs(
-        &tools_config,
-        /*mcp_tools*/ None,
-        /*deferred_mcp_tools*/ None,
-        &[],
-    );
-    assert_lacks_tool_name(&tools, "request_permissions");
-
-    let mut features = Features::with_defaults();
-    features.enable(Feature::RequestPermissionsTool);
-    let tools_config = ToolsConfig::new(&ToolsConfigParams {
-        model_info: &model_info,
-        available_models: &available_models,
-        features: &features,
-        image_generation_tool_auth_allowed: true,
-        web_search_mode: Some(WebSearchMode::Cached),
-        session_source: SessionSource::Cli,
-        permission_profile: &PermissionProfile::Disabled,
-        windows_sandbox_level: WindowsSandboxLevel::Disabled,
-    });
-    let (tools, _) = build_specs(
-        &tools_config,
-        /*mcp_tools*/ None,
-        /*deferred_mcp_tools*/ None,
-        &[],
-    );
-    let request_permissions_tool = find_tool(&tools, "request_permissions");
-    assert_eq!(
-        request_permissions_tool.spec,
-        create_request_permissions_tool(request_permissions_tool_description())
-    );
-}
-
-#[test]
-fn request_permissions_tool_is_independent_from_additional_permissions() {
-    let model_info = model_info();
-    let mut features = Features::with_defaults();
-    features.enable(Feature::ExecPermissionApprovals);
-    let available_models = Vec::new();
-    let tools_config = ToolsConfig::new(&ToolsConfigParams {
-        model_info: &model_info,
-        available_models: &available_models,
-        features: &features,
-        image_generation_tool_auth_allowed: true,
-        web_search_mode: Some(WebSearchMode::Cached),
-        session_source: SessionSource::Cli,
-        permission_profile: &PermissionProfile::Disabled,
-        windows_sandbox_level: WindowsSandboxLevel::Disabled,
-    });
-    let (tools, _) = build_specs(
-        &tools_config,
-        /*mcp_tools*/ None,
-        /*deferred_mcp_tools*/ None,
-        &[],
-    );
-
-    assert_lacks_tool_name(&tools, "request_permissions");
 }
 
 #[test]

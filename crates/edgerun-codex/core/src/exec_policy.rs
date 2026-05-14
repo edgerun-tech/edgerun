@@ -33,7 +33,6 @@ use edgerun_tokio::task::spawn_blocking;
 use tracing::instrument;
 
 use crate::config::Config;
-use crate::sandboxing::SandboxPermissions;
 use crate::tools::sandboxing::ExecApprovalRequirement;
 use codex_shell_command::bash::parse_shell_lc_plain_commands;
 use codex_shell_command::bash::parse_shell_lc_single_command_prefix;
@@ -42,8 +41,6 @@ use edgerun_shlex::try_join as shlex_try_join;
 
 const PROMPT_CONFLICT_REASON: &str =
     "approval required by policy, but AskForApproval is set to Never";
-const REJECT_SANDBOX_APPROVAL_REASON: &str =
-    "approval required by policy, but AskForApproval::Granular.sandbox_approval is false";
 const REJECT_RULES_APPROVAL_REASON: &str =
     "approval required by policy rule, but AskForApproval::Granular.rules is false";
 const RULES_DIR_NAME: &str = "rules";
@@ -123,7 +120,6 @@ pub(crate) struct UnmatchedCommandContext<'a> {
     pub(crate) permission_profile: &'a PermissionProfile,
     pub(crate) file_system_sandbox_policy: &'a FileSystemSandboxPolicy,
     pub(crate) sandbox_cwd: &'a Path,
-    pub(crate) sandbox_permissions: SandboxPermissions,
     pub(crate) used_complex_parsing: bool,
     pub(crate) command_origin: ExecPolicyCommandOrigin,
 }
@@ -170,8 +166,7 @@ fn is_policy_match(rule_match: &RuleMatch) -> bool {
 /// current prompt to the user.
 ///
 /// `prompt_is_rule` distinguishes policy-rule prompts from sandbox/escalation
-/// prompts so granular `rules` and `sandbox_approval` settings are honored
-/// independently. When both are present, policy-rule prompts take precedence.
+/// prompts so granular `rules` settings are honored when present.
 pub(crate) fn prompt_is_rejected_by_policy(
     approval_policy: AskForApproval,
     prompt_is_rule: bool,
@@ -188,8 +183,6 @@ pub(crate) fn prompt_is_rejected_by_policy(
                 } else {
                     None
                 }
-            } else if !granular_config.allows_sandbox_approval() {
-                Some(REJECT_SANDBOX_APPROVAL_REASON)
             } else {
                 None
             }
@@ -244,7 +237,6 @@ pub(crate) struct ExecApprovalRequest<'a> {
     pub(crate) permission_profile: PermissionProfile,
     pub(crate) file_system_sandbox_policy: &'a FileSystemSandboxPolicy,
     pub(crate) sandbox_cwd: &'a Path,
-    pub(crate) sandbox_permissions: SandboxPermissions,
     pub(crate) prefix_rule: Option<Vec<String>>,
 }
 
@@ -279,7 +271,6 @@ impl ExecPolicyManager {
             permission_profile,
             file_system_sandbox_policy,
             sandbox_cwd,
-            sandbox_permissions,
             prefix_rule,
         } = req;
         let exec_policy = self.current();
@@ -300,7 +291,6 @@ impl ExecPolicyManager {
                     permission_profile: &permission_profile,
                     file_system_sandbox_policy,
                     sandbox_cwd,
-                    sandbox_permissions,
                     used_complex_parsing,
                     command_origin,
                 },
@@ -638,7 +628,6 @@ pub(crate) fn render_decision_for_unmatched_command(
         permission_profile,
         file_system_sandbox_policy,
         sandbox_cwd,
-        sandbox_permissions,
         used_complex_parsing,
         command_origin,
     } = context;
@@ -719,11 +708,7 @@ pub(crate) fn render_decision_for_unmatched_command(
                     // In restricted sandboxes, do not prompt for non-escalated,
                     // non-dangerous commands; let the sandbox enforce
                     // restrictions without a user prompt.
-                    if sandbox_permissions.requests_sandbox_override() {
-                        Decision::Prompt
-                    } else {
-                        Decision::Allow
-                    }
+                    Decision::Allow
                 }
             }
         }
@@ -734,11 +719,7 @@ pub(crate) fn render_decision_for_unmatched_command(
                 Decision::Allow
             }
             FileSystemSandboxKind::Restricted => {
-                if sandbox_permissions.requests_sandbox_override() {
-                    Decision::Prompt
-                } else {
-                    Decision::Allow
-                }
+                Decision::Allow
             }
         },
     }
@@ -1036,7 +1017,3 @@ async fn collect_policy_files(dir: impl AsRef<Path>) -> Result<Vec<PathBuf>, Exe
     );
     Ok(policy_paths)
 }
-
-#[cfg(test)]
-#[path = "exec_policy_tests.rs"]
-mod tests;

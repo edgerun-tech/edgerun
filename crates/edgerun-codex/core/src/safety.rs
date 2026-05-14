@@ -58,11 +58,7 @@ pub fn assess_patch_safety(
         }
     }
 
-    let rejects_sandbox_approval = matches!(policy, AskForApproval::Never)
-        || matches!(
-            policy,
-            AskForApproval::Granular(granular_config) if !granular_config.sandbox_approval
-        );
+    let rejects_user_approval = matches!(policy, AskForApproval::Never);
 
     // Even though the patch appears to be constrained to writable paths, it is
     // possible that paths in the patch are hard links to files outside the
@@ -90,7 +86,7 @@ pub fn assess_patch_safety(
                     user_explicitly_approved: false,
                 },
                 None => {
-                    if rejects_sandbox_approval {
+                    if rejects_user_approval {
                         SafetyCheck::Reject {
                             reason: patch_rejection_reason(
                                 permission_profile,
@@ -105,7 +101,7 @@ pub fn assess_patch_safety(
                 }
             }
         }
-    } else if rejects_sandbox_approval {
+    } else if rejects_user_approval {
         SafetyCheck::Reject {
             reason: patch_rejection_reason(permission_profile, file_system_sandbox_policy, cwd)
                 .to_string(),
@@ -191,7 +187,3 @@ fn is_write_patch_constrained_to_writable_paths(
 
     true
 }
-
-#[cfg(test)]
-#[path = "safety_tests.rs"]
-mod tests;

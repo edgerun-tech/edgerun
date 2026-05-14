@@ -5,12 +5,9 @@ use crate::guardian::guardian_timeout_message;
 use crate::guardian::new_guardian_review_id;
 use crate::guardian::review_approval_request;
 use crate::guardian::routes_approval_to_guardian;
-use crate::hook_runtime::run_permission_request_hooks;
 use crate::network_policy_decision::denied_network_policy_message;
 use crate::session::session::Session;
-use crate::tools::sandboxing::PermissionRequestPayload;
 use crate::tools::sandboxing::ToolError;
-use codex_hooks::PermissionRequestDecision;
 use codex_network_proxy::BlockedRequest;
 use codex_network_proxy::BlockedRequestObserver;
 use codex_network_proxy::NetworkDecision;
@@ -461,41 +458,6 @@ impl NetworkApprovalService {
         };
         let guardian_approval_id = Self::approval_id_for_key(&key);
         let prompt_command = vec!["network-access".to_string(), target.clone()];
-        let command = owner_call
-            .as_ref()
-            .map_or_else(|| prompt_command.join(" "), |call| call.command.clone());
-        if let Some(permission_request_decision) = run_permission_request_hooks(
-            &session,
-            &turn_context,
-            &guardian_approval_id,
-            PermissionRequestPayload::bash(command, Some(format!("network-access {target}"))),
-        )
-        .await
-        {
-            match permission_request_decision {
-                PermissionRequestDecision::Allow => {
-                    pending
-                        .set_decision(PendingApprovalDecision::AllowOnce)
-                        .await;
-                    let mut pending_approvals = self.pending_host_approvals.lock().await;
-                    pending_approvals.remove(&key);
-                    return NetworkDecision::Allow;
-                }
-                PermissionRequestDecision::Deny { message } => {
-                    if let Some(owner_call) = owner_call.as_ref() {
-                        self.record_call_outcome(
-                            &owner_call.registration_id,
-                            NetworkApprovalOutcome::DeniedByPolicy(message),
-                        )
-                        .await;
-                    }
-                    pending.set_decision(PendingApprovalDecision::Deny).await;
-                    let mut pending_approvals = self.pending_host_approvals.lock().await;
-                    pending_approvals.remove(&key);
-                    return NetworkDecision::deny(REASON_NOT_ALLOWED);
-                }
-            }
-        }
         let use_guardian = routes_approval_to_guardian(&turn_context);
         let guardian_review_id = use_guardian.then(new_guardian_review_id);
         let approval_decision = if let Some(review_id) = guardian_review_id.clone() {
@@ -529,7 +491,6 @@ impl NetworkApprovalService {
                     Some(prompt_reason),
                     Some(network_approval_context.clone()),
                     /*proposed_execpolicy_amendment*/ None,
-                    /*additional_permissions*/ None,
                     available_decisions,
                 )
                 .await
@@ -760,7 +721,3 @@ pub(crate) async fn finish_deferred_network_approval(
     };
     deferred.finish(&session.services.network_approval).await
 }
-
-#[cfg(test)]
-#[path = "network_approval_tests.rs"]
-mod tests;

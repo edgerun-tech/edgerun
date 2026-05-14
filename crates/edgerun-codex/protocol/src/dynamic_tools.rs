@@ -139,9 +139,7 @@ fn take_required_string(
     object: &mut edgerun_json::Map,
     field: &'static str,
 ) -> Result<String, JsonValueError> {
-    let value = object
-        .remove(field)
-        .ok_or_else(|| missing_field(field))?;
+    let value = object.remove(field).ok_or_else(|| missing_field(field))?;
     String::from_json(value)
 }
 

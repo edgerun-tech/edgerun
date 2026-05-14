@@ -48,12 +48,10 @@ fn body_contains(req: &wiremock::Request, text: &str) -> bool {
                 .split(',')
                 .any(|entry| entry.trim().eq_ignore_ascii_case("zstd"))
         });
-    let bytes = if is_zstd {
-        edgerun_zstd::stream::decode_all(std::io::Cursor::new(&req.body)).ok()
-    } else {
-        Some(req.body.clone())
-    };
-    bytes
+    if is_zstd {
+        return false;
+    }
+    Some(req.body.clone())
         .and_then(|body| String::from_utf8(body).ok())
         .is_some_and(|body| body.contains(text))
 }

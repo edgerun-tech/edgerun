@@ -145,10 +145,8 @@ async fn shell_zsh_fork_skill_scripts_ignore_declared_permissions() -> Result<()
     };
 
     let approval_policy = AskForApproval::Granular(GranularApprovalConfig {
-        sandbox_approval: true,
         rules: true,
         skill_approval: false,
-        request_permissions: true,
         mcp_elicitations: true,
     });
     let workspace_write_profile = restrictive_workspace_write_profile();

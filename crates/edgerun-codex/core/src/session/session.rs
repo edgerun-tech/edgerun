@@ -65,9 +65,6 @@ pub(crate) struct SessionConfiguration {
     pub(super) approvals_reviewer: ApprovalsReviewer,
     /// Canonical permission profile for the session.
     pub(super) permission_profile: Constrained<PermissionProfile>,
-    /// Named or implicit built-in permissions profile selected from config, if
-    /// any.
-    pub(super) active_permission_profile: Option<ActivePermissionProfile>,
     pub(super) windows_sandbox_level: WindowsSandboxLevel,
 
     /// Absolute working directory that should be treated as the *root* of the
@@ -107,10 +104,6 @@ impl SessionConfiguration {
         self.permission_profile.get().clone()
     }
 
-    pub(super) fn active_permission_profile(&self) -> Option<ActivePermissionProfile> {
-        self.active_permission_profile.clone()
-    }
-
     pub(super) fn sandbox_policy(&self) -> SandboxPolicy {
         self.permission_profile()
             .to_legacy_sandbox_policy(&self.cwd)
@@ -141,7 +134,6 @@ impl SessionConfiguration {
             approval_policy: self.approval_policy.value(),
             approvals_reviewer: self.approvals_reviewer,
             permission_profile: self.permission_profile(),
-            active_permission_profile: self.active_permission_profile(),
             cwd: self.cwd.clone(),
             ephemeral: self.original_config_do_not_use.ephemeral,
             reasoning_effort: self.collaboration_mode.reasoning_effort(),
@@ -224,19 +216,10 @@ impl SessionConfiguration {
         next_configuration.cwd = absolute_cwd;
 
         if let Some(permission_profile) = updates.permission_profile.clone() {
-            let active_permission_profile =
-                updates.active_permission_profile.clone().or_else(|| {
-                    if permission_profile == self.permission_profile() {
-                        self.active_permission_profile.clone()
-                    } else {
-                        None
-                    }
-                });
             next_configuration.set_permission_profile_projection(
                 permission_profile,
                 Some(&current_file_system_sandbox_policy),
             )?;
-            next_configuration.active_permission_profile = active_permission_profile;
         } else if let Some(sandbox_policy) = updates.sandbox_policy.clone() {
             let file_system_sandbox_policy =
                 FileSystemSandboxPolicy::from_legacy_sandbox_policy_preserving_deny_entries(
@@ -252,7 +235,6 @@ impl SessionConfiguration {
                     network_sandbox_policy,
                 ),
             )?;
-            next_configuration.active_permission_profile = None;
         } else if cwd_changed
             && file_system_policy_matches_legacy
             && file_system_policy_has_rebindable_project_root_write
@@ -313,7 +295,6 @@ pub(crate) struct SessionSettingsUpdate {
     pub(crate) approvals_reviewer: Option<ApprovalsReviewer>,
     pub(crate) sandbox_policy: Option<SandboxPolicy>,
     pub(crate) permission_profile: Option<PermissionProfile>,
-    pub(crate) active_permission_profile: Option<ActivePermissionProfile>,
     pub(crate) windows_sandbox_level: Option<WindowsSandboxLevel>,
     pub(crate) collaboration_mode: Option<CollaborationMode>,
     pub(crate) reasoning_summary: Option<ReasoningSummaryConfig>,
@@ -915,7 +896,6 @@ impl Session {
                     approval_policy: session_configuration.approval_policy.value(),
                     approvals_reviewer: session_configuration.approvals_reviewer,
                     permission_profile: session_configuration.permission_profile(),
-                    active_permission_profile: session_configuration.active_permission_profile(),
                     cwd: session_configuration.cwd.clone(),
                     reasoning_effort: session_configuration.collaboration_mode.reasoning_effort(),
                     initial_messages,

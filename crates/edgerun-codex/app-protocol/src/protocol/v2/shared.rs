@@ -220,12 +220,9 @@ pub enum AskForApproval {
     OnFailure,
     OnRequest,
     Granular {
-        sandbox_approval: bool,
         rules: bool,
         #[serde(default)]
         skill_approval: bool,
-        #[serde(default)]
-        request_permissions: bool,
         mcp_elicitations: bool,
     },
     Never,
@@ -239,17 +236,13 @@ impl ToJson for AskForApproval {
             Self::OnRequest => JsonValue::from("on-request"),
             Self::Never => JsonValue::from("never"),
             Self::Granular {
-                sandbox_approval,
                 rules,
                 skill_approval,
-                request_permissions,
                 mcp_elicitations,
             } => {
-                let mut granular = Map::with_capacity(5);
-                granular.push_field("sandbox_approval", *sandbox_approval);
+                let mut granular = Map::with_capacity(3);
                 granular.push_field("rules", *rules);
                 granular.push_field("skill_approval", *skill_approval);
-                granular.push_field("request_permissions", *request_permissions);
                 granular.push_field("mcp_elicitations", *mcp_elicitations);
 
                 let mut object = Map::with_capacity(1);
@@ -277,12 +270,8 @@ impl FromJson for AskForApproval {
         let mut object = value.into_object("AskForApproval")?;
         let mut granular: Map = object.take_required("granular")?;
         Ok(Self::Granular {
-            sandbox_approval: granular.take_required("sandbox_approval")?,
             rules: granular.take_required("rules")?,
             skill_approval: granular.take_optional("skill_approval")?.unwrap_or(false),
-            request_permissions: granular
-                .take_optional("request_permissions")?
-                .unwrap_or(false),
             mcp_elicitations: granular.take_required("mcp_elicitations")?,
         })
     }
@@ -295,16 +284,12 @@ impl AskForApproval {
             AskForApproval::OnFailure => CoreAskForApproval::OnFailure,
             AskForApproval::OnRequest => CoreAskForApproval::OnRequest,
             AskForApproval::Granular {
-                sandbox_approval,
                 rules,
                 skill_approval,
-                request_permissions,
                 mcp_elicitations,
             } => CoreAskForApproval::Granular(CoreGranularApprovalConfig {
-                sandbox_approval,
                 rules,
                 skill_approval,
-                request_permissions,
                 mcp_elicitations,
             }),
             AskForApproval::Never => CoreAskForApproval::Never,
@@ -319,10 +304,8 @@ impl From<CoreAskForApproval> for AskForApproval {
             CoreAskForApproval::OnFailure => AskForApproval::OnFailure,
             CoreAskForApproval::OnRequest => AskForApproval::OnRequest,
             CoreAskForApproval::Granular(granular_config) => AskForApproval::Granular {
-                sandbox_approval: granular_config.sandbox_approval,
                 rules: granular_config.rules,
                 skill_approval: granular_config.skill_approval,
-                request_permissions: granular_config.request_permissions,
                 mcp_elicitations: granular_config.mcp_elicitations,
             },
             CoreAskForApproval::Never => AskForApproval::Never,
@@ -445,6 +428,29 @@ impl From<CoreSandboxMode> for SandboxMode {
             CoreSandboxMode::ReadOnly => SandboxMode::ReadOnly,
             CoreSandboxMode::WorkspaceWrite => SandboxMode::WorkspaceWrite,
             CoreSandboxMode::DangerFullAccess => SandboxMode::DangerFullAccess,
+        }
+    }
+}
+
+impl ToJson for SandboxMode {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            SandboxMode::ReadOnly => "read-only",
+            SandboxMode::WorkspaceWrite => "workspace-write",
+            SandboxMode::DangerFullAccess => "danger-full-access",
+        })
+    }
+}
+
+impl FromJson for SandboxMode {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "read-only" => Ok(SandboxMode::ReadOnly),
+            "workspace-write" => Ok(SandboxMode::WorkspaceWrite),
+            "danger-full-access" => Ok(SandboxMode::DangerFullAccess),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown sandbox mode `{other}`"
+            ))),
         }
     }
 }

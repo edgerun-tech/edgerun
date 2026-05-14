@@ -9,14 +9,14 @@ use codex_protocol::models::ResponseInputItem;
 use codex_protocol::openai_models::InputModality;
 use codex_utils_image::PromptImageMode;
 use codex_utils_image::load_for_prompt_bytes;
-use serde::Deserialize;
+use edgerun_json::FromJson;
 
 use crate::function_tool::FunctionCallError;
 use crate::original_image_detail::can_request_original_image_detail;
 use crate::tools::context::ToolInvocation;
 use crate::tools::context::ToolOutput;
 use crate::tools::context::ToolPayload;
-use crate::tools::handlers::parse_arguments;
+use crate::tools::handlers::parse_json_arguments;
 use crate::tools::handlers::resolve_tool_environment;
 use crate::tools::handlers::view_image_spec::ViewImageToolOptions;
 use crate::tools::handlers::view_image_spec::create_view_image_tool;
@@ -49,10 +49,10 @@ impl ViewImageHandler {
 const VIEW_IMAGE_UNSUPPORTED_MESSAGE: &str =
     "view_image is not allowed because you do not support image inputs";
 
-#[derive(Deserialize)]
+#[derive(FromJson)]
 struct ViewImageArgs {
     path: String,
-    #[serde(default)]
+    #[json(default)]
     environment_id: Option<String>,
     detail: Option<String>,
 }
@@ -114,7 +114,7 @@ impl ToolHandler for ViewImageHandler {
             path,
             environment_id,
             detail,
-        } = parse_arguments(&arguments)?;
+        } = parse_json_arguments(&arguments)?;
         // `view_image` accepts only its documented detail values: omit
         // `detail` for the default path or set it to `original`.
         // Other string values remain invalid rather than being silently
@@ -140,7 +140,7 @@ impl ToolHandler for ViewImageHandler {
         let abs_path = cwd.join(path);
         let sandbox = turn_environment.environment.is_remote().then(|| {
             let mut sandbox =
-                turn.file_system_sandbox_context(/*additional_permissions*/ None);
+                turn.file_system_sandbox_context();
             sandbox.cwd = Some(cwd.clone());
             sandbox
         });

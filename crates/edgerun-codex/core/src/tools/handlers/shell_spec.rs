@@ -8,13 +8,10 @@ use std::collections::BTreeMap;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct CommandToolOptions {
     pub allow_login_shell: bool,
-    pub exec_permission_approvals_enabled: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ShellToolOptions {
-    pub exec_permission_approvals_enabled: bool,
-}
+pub struct ShellToolOptions;
 
 #[cfg(test)]
 pub fn create_exec_command_tool(options: CommandToolOptions) -> ToolSpec {
@@ -83,10 +80,6 @@ pub(crate) fn create_exec_command_tool_with_environment_id(
             )),
         );
     }
-    properties.extend(create_approval_parameters(
-        options.exec_permission_approvals_enabled,
-    ));
-
     ToolSpec::Function(ResponsesApiTool {
         name: "exec_command".to_string(),
         description: if cfg!(windows) {
@@ -153,8 +146,8 @@ pub fn create_write_stdin_tool() -> ToolSpec {
     })
 }
 
-pub fn create_shell_tool(options: ShellToolOptions) -> ToolSpec {
-    let mut properties = BTreeMap::from([
+pub fn create_shell_tool(_options: ShellToolOptions) -> ToolSpec {
+    let properties = BTreeMap::from([
         (
             "command".to_string(),
             JsonSchema::array(
@@ -175,10 +168,6 @@ pub fn create_shell_tool(options: ShellToolOptions) -> ToolSpec {
             )),
         ),
     ]);
-    properties.extend(create_approval_parameters(
-        options.exec_permission_approvals_enabled,
-    ));
-
     let description = if cfg!(windows) {
         format!(
             r#"Runs a Powershell command (Windows) and returns its output. Arguments to `shell` will be passed to CreateProcessW(). Most commands should be prefixed with ["powershell.exe", "-Command"].
@@ -246,10 +235,6 @@ pub fn create_shell_command_tool(options: CommandToolOptions) -> ToolSpec {
             )),
         );
     }
-    properties.extend(create_approval_parameters(
-        options.exec_permission_approvals_enabled,
-    ));
-
     let description = if cfg!(windows) {
         format!(
             r#"Runs a Powershell command (Windows) and returns its output.
@@ -286,36 +271,6 @@ Examples of valid command strings:
     })
 }
 
-pub fn create_request_permissions_tool(description: String) -> ToolSpec {
-    let properties = BTreeMap::from([
-        (
-            "reason".to_string(),
-            JsonSchema::string(Some(
-                "Optional short explanation for why additional permissions are needed.".to_string(),
-            )),
-        ),
-        ("permissions".to_string(), permission_profile_schema()),
-    ]);
-
-    ToolSpec::Function(ResponsesApiTool {
-        name: "request_permissions".to_string(),
-        description,
-        strict: false,
-        defer_loading: None,
-        parameters: JsonSchema::object(
-            properties,
-            Some(vec!["permissions".to_string()]),
-            Some(false.into()),
-        ),
-        output_schema: None,
-    })
-}
-
-pub fn request_permissions_tool_description() -> String {
-    "Request additional filesystem or network permissions from the user and wait for the client to grant a subset of the requested permission profile. Granted permissions apply automatically to later shell-like commands in the current turn, or for the rest of the session if the client approves them at session scope."
-        .to_string()
-}
-
 fn unified_exec_output_schema() -> Value {
     json!({
         "type": "object",
@@ -348,97 +303,6 @@ fn unified_exec_output_schema() -> Value {
         "required": ["wall_time_seconds", "output"],
         "additionalProperties": false
     })
-}
-
-fn create_approval_parameters(
-    exec_permission_approvals_enabled: bool,
-) -> BTreeMap<String, JsonSchema> {
-    let mut properties = BTreeMap::from([
-        (
-            "sandbox_permissions".to_string(),
-            JsonSchema::string(Some(
-                if exec_permission_approvals_enabled {
-                    "Sandbox permissions for the command. Use \"with_additional_permissions\" to request additional sandboxed filesystem or network permissions (preferred), or \"require_escalated\" to request running without sandbox restrictions; defaults to \"use_default\"."
-                } else {
-                    "Sandbox permissions for the command. Set to \"require_escalated\" to request running without sandbox restrictions; defaults to \"use_default\"."
-                }
-                .to_string(),
-            )),
-        ),
-        (
-            "justification".to_string(),
-            JsonSchema::string(Some(
-                r#"Only set if sandbox_permissions is \"require_escalated\".
-                    Request approval from the user to run this command outside the sandbox.
-                    Phrased as a simple question that summarizes the purpose of the
-                    command as it relates to the task at hand - e.g. 'Do you want to
-                    fetch and pull the latest version of this git branch?'"#
-                    .to_string(),
-            )),
-        ),
-        (
-            "prefix_rule".to_string(),
-            JsonSchema::array(JsonSchema::string(/*description*/ None), Some(
-                    r#"Only specify when sandbox_permissions is `require_escalated`.
-                        Suggest a prefix command pattern that will allow you to fulfill similar requests from the user in the future.
-                        Should be a short but reasonable prefix, e.g. [\"git\", \"pull\"] or [\"uv\", \"run\"] or [\"pytest\"]."#.to_string(),
-                )),
-        ),
-    ]);
-
-    if exec_permission_approvals_enabled {
-        properties.insert(
-            "additional_permissions".to_string(),
-            permission_profile_schema(),
-        );
-    }
-
-    properties
-}
-
-fn permission_profile_schema() -> JsonSchema {
-    JsonSchema::object(
-        BTreeMap::from([
-            ("network".to_string(), network_permissions_schema()),
-            ("file_system".to_string(), file_system_permissions_schema()),
-        ]),
-        /*required*/ None,
-        Some(false.into()),
-    )
-}
-
-fn network_permissions_schema() -> JsonSchema {
-    JsonSchema::object(
-        BTreeMap::from([(
-            "enabled".to_string(),
-            JsonSchema::boolean(Some("Set to true to request network access.".to_string())),
-        )]),
-        /*required*/ None,
-        Some(false.into()),
-    )
-}
-
-fn file_system_permissions_schema() -> JsonSchema {
-    JsonSchema::object(
-        BTreeMap::from([
-            (
-                "read".to_string(),
-                JsonSchema::array(
-                    JsonSchema::string(/*description*/ None),
-                    Some("Absolute paths to grant read access to.".to_string()),
-                ),
-            ),
-            (
-                "write".to_string(),
-                JsonSchema::array(
-                    JsonSchema::string(/*description*/ None),
-                    Some("Absolute paths to grant write access to.".to_string()),
-                ),
-            ),
-        ]),
-        /*required*/ None,
-        Some(false.into()),
-    )
 }
 
 fn windows_shell_guidance() -> &'static str {

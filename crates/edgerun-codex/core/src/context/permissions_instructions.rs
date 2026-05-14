@@ -49,7 +49,6 @@ struct PermissionsPromptConfig<'a> {
     approvals_reviewer: ApprovalsReviewer,
     exec_policy: &'a Policy,
     exec_permission_approvals_enabled: bool,
-    request_permissions_tool_enabled: bool,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -67,7 +66,6 @@ impl PermissionsInstructions {
         exec_policy: &Policy,
         cwd: &Path,
         exec_permission_approvals_enabled: bool,
-        request_permissions_tool_enabled: bool,
     ) -> Self {
         let (sandbox_mode, writable_roots) = sandbox_prompt_from_profile(permission_profile, cwd);
 
@@ -79,7 +77,6 @@ impl PermissionsInstructions {
                 approvals_reviewer,
                 exec_policy,
                 exec_permission_approvals_enabled,
-                request_permissions_tool_enabled,
             },
             writable_roots,
         )
@@ -93,7 +90,6 @@ impl PermissionsInstructions {
         exec_policy: &Policy,
         cwd: &Path,
         exec_permission_approvals_enabled: bool,
-        request_permissions_tool_enabled: bool,
     ) -> Self {
         Self::from_permission_profile(
             &PermissionProfile::from_legacy_sandbox_policy(sandbox_policy),
@@ -102,7 +98,6 @@ impl PermissionsInstructions {
             exec_policy,
             cwd,
             exec_permission_approvals_enabled,
-            request_permissions_tool_enabled,
         )
     }
 
@@ -121,7 +116,6 @@ impl PermissionsInstructions {
                 config.approvals_reviewer,
                 config.exec_policy,
                 config.exec_permission_approvals_enabled,
-                config.request_permissions_tool_enabled,
             ),
         );
         if let Some(writable_roots) = writable_roots_text(writable_roots) {
@@ -188,15 +182,7 @@ fn approval_text(
     approvals_reviewer: ApprovalsReviewer,
     exec_policy: &Policy,
     exec_permission_approvals_enabled: bool,
-    request_permissions_tool_enabled: bool,
 ) -> String {
-    let with_request_permissions_tool = |text: &str| {
-        if request_permissions_tool_enabled {
-            format!("{text}\n\n{}", request_permissions_tool_prompt_section())
-        } else {
-            text.to_string()
-        }
-    };
     let on_request_instructions = || {
         let on_request_rule = if exec_permission_approvals_enabled {
             APPROVAL_POLICY_ON_REQUEST_RULE_REQUEST_PERMISSION.to_string()
@@ -204,9 +190,6 @@ fn approval_text(
             APPROVAL_POLICY_ON_REQUEST_RULE.to_string()
         };
         let mut sections = vec![on_request_rule];
-        if request_permissions_tool_enabled {
-            sections.push(request_permissions_tool_prompt_section().to_string());
-        }
         if let Some(prefixes) = approved_command_prefixes_text(exec_policy) {
             sections.push(format!(
                 "## Approved command prefixes\nThe following prefix rules have already been approved: {prefixes}"
@@ -216,16 +199,13 @@ fn approval_text(
     };
     let text = match approval_policy {
         AskForApproval::Never => APPROVAL_POLICY_NEVER.to_string(),
-        AskForApproval::UnlessTrusted => {
-            with_request_permissions_tool(APPROVAL_POLICY_UNLESS_TRUSTED)
-        }
-        AskForApproval::OnFailure => with_request_permissions_tool(APPROVAL_POLICY_ON_FAILURE),
+        AskForApproval::UnlessTrusted => APPROVAL_POLICY_UNLESS_TRUSTED.to_string(),
+        AskForApproval::OnFailure => APPROVAL_POLICY_ON_FAILURE.to_string(),
         AskForApproval::OnRequest => on_request_instructions(),
         AskForApproval::Granular(granular_config) => granular_instructions(
             granular_config,
             exec_policy,
             exec_permission_approvals_enabled,
-            request_permissions_tool_enabled,
         ),
     };
 
@@ -276,32 +256,15 @@ fn granular_prompt_intro_text() -> &'static str {
     "# Approval Requests\n\nApproval policy is `granular`. Categories set to `false` are automatically rejected instead of prompting the user."
 }
 
-fn request_permissions_tool_prompt_section() -> &'static str {
-    "# request_permissions Tool\n\nThe built-in `request_permissions` tool is available in this session. Invoke it when you need to request additional `network` or `file_system` permissions before later shell-like commands need them. Request only the specific permissions required for the task."
-}
-
 fn granular_instructions(
     granular_config: GranularApprovalConfig,
     exec_policy: &Policy,
     exec_permission_approvals_enabled: bool,
-    request_permissions_tool_enabled: bool,
 ) -> String {
-    let sandbox_approval_prompts_allowed = granular_config.allows_sandbox_approval();
-    let shell_permission_requests_available =
-        exec_permission_approvals_enabled && sandbox_approval_prompts_allowed;
-    let request_permissions_tool_prompts_allowed =
-        request_permissions_tool_enabled && granular_config.allows_request_permissions();
+    let shell_permission_requests_available = exec_permission_approvals_enabled;
     let categories = [
-        Some((
-            granular_config.allows_sandbox_approval(),
-            "`sandbox_approval`",
-        )),
         Some((granular_config.allows_rules_approval(), "`rules`")),
         Some((granular_config.allows_skill_approval(), "`skill_approval`")),
-        request_permissions_tool_enabled.then_some((
-            granular_config.allows_request_permissions(),
-            "`request_permissions`",
-        )),
         Some((
             granular_config.allows_mcp_elicitations(),
             "`mcp_elicitations`",
@@ -339,10 +302,6 @@ fn granular_instructions(
         sections.push(APPROVAL_POLICY_ON_REQUEST_RULE_REQUEST_PERMISSION.to_string());
     }
 
-    if request_permissions_tool_prompts_allowed {
-        sections.push(request_permissions_tool_prompt_section().to_string());
-    }
-
     if let Some(prefixes) = approved_command_prefixes_text(exec_policy) {
         sections.push(format!(
             "## Approved command prefixes\nThe following prefix rules have already been approved: {prefixes}"
@@ -351,7 +310,3 @@ fn granular_instructions(
 
     sections.join("\n\n")
 }
-
-#[cfg(test)]
-#[path = "permissions_instructions_tests.rs"]
-mod permissions_instructions_tests;

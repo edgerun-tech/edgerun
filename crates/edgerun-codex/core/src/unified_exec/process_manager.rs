@@ -1009,11 +1009,6 @@ impl UnifiedExecProcessManager {
                 permission_profile: context.turn.permission_profile(),
                 file_system_sandbox_policy: &file_system_sandbox_policy,
                 sandbox_cwd: cwd.as_path(),
-                sandbox_permissions: if request.additional_permissions_preapproved {
-                    crate::sandboxing::SandboxPermissions::UseDefault
-                } else {
-                    request.sandbox_permissions
-                },
                 prefix_rule: request.prefix_rule.clone(),
             })
             .await;
@@ -1028,10 +1023,6 @@ impl UnifiedExecProcessManager {
             explicit_env_overrides: context.turn.shell_environment_policy.r#set.clone(),
             network: request.network.clone(),
             tty: request.tty,
-            sandbox_permissions: request.sandbox_permissions,
-            additional_permissions: request.additional_permissions.clone(),
-            #[cfg(unix)]
-            additional_permissions_preapproved: request.additional_permissions_preapproved,
             justification: request.justification.clone(),
             exec_approval_requirement,
         };

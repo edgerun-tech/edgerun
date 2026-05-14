@@ -1,5 +1,4 @@
 use crate::function_tool::FunctionCallError;
-use crate::sandboxing::SandboxPermissions;
 use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;
 use crate::tools::context::SharedTurnDiffTracker;
@@ -248,10 +247,7 @@ impl ToolRouter {
                             command: exec.command,
                             workdir: exec.working_directory,
                             timeout_ms: exec.timeout_ms,
-                            sandbox_permissions: Some(SandboxPermissions::UseDefault),
-                            additional_permissions: None,
                             prefix_rule: None,
-                            justification: None,
                         };
                         Ok(Some(ToolCall {
                             tool_name: ToolName::plain("local_shell"),

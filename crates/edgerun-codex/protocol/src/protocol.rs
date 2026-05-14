@@ -32,7 +32,6 @@ use crate::items::TurnItem;
 use crate::mcp::CallToolResult;
 use crate::mcp::RequestId;
 use crate::memory_citation::MemoryCitation;
-use crate::models::ActivePermissionProfile;
 use crate::models::BaseInstructions;
 use crate::models::ContentItem;
 use crate::models::MessagePhase;
@@ -45,8 +44,6 @@ use crate::num_format::format_with_separators;
 use crate::openai_models::ReasoningEffort as ReasoningEffortConfig;
 use crate::parse_command::ParsedCommand;
 use crate::plan_tool::UpdatePlanArgs;
-use crate::request_permissions::RequestPermissionsEvent;
-use crate::request_permissions::RequestPermissionsResponse;
 use crate::request_user_input::RequestUserInputResponse;
 use crate::user_input::UserInput;
 use edgerun_json::FromJson;
@@ -85,7 +82,6 @@ pub use crate::permissions::FileSystemSandboxPolicy;
 pub use crate::permissions::FileSystemSpecialPath;
 pub use crate::permissions::NetworkSandboxPolicy;
 use crate::permissions::default_read_only_subpaths_for_writable_root;
-pub use crate::request_permissions::RequestPermissionsArgs;
 pub use crate::request_user_input::RequestUserInputEvent;
 
 /// Open/close tags for special user-input blocks. Used across crates to avoid
@@ -486,12 +482,6 @@ pub enum Op {
         #[serde(skip_serializing_if = "Option::is_none")]
         permission_profile: Option<PermissionProfile>,
 
-        /// Named or built-in profile that produced `permission_profile`, if
-        /// the update selected a profile rather than supplying raw
-        /// permissions.
-        #[serde(skip_serializing_if = "Option::is_none")]
-        active_permission_profile: Option<ActivePermissionProfile>,
-
         /// Updated Windows sandbox mode for tool execution.
         #[serde(skip_serializing_if = "Option::is_none")]
         windows_sandbox_level: Option<WindowsSandboxLevel>,
@@ -711,14 +701,6 @@ pub enum Op {
         response: RequestUserInputResponse,
     },
 
-    /// Resolve a request_permissions tool call.
-    RequestPermissionsResponse {
-        /// Call id for the in-flight request.
-        id: String,
-        /// User-granted permissions.
-        response: RequestPermissionsResponse,
-    },
-
     /// Resolve a dynamic tool call request.
     DynamicToolResponse {
         /// Call id for the in-flight request.
@@ -888,7 +870,6 @@ impl Op {
             Self::PatchApproval { .. } => "patch_approval",
             Self::ResolveElicitation { .. } => "resolve_elicitation",
             Self::UserInputAnswer { .. } => "user_input_answer",
-            Self::RequestPermissionsResponse { .. } => "request_permissions_response",
             Self::DynamicToolResponse { .. } => "dynamic_tool_response",
             Self::RefreshMcpServers { .. } => "refresh_mcp_servers",
             Self::ReloadUserConfig => "reload_user_config",
@@ -956,26 +937,16 @@ pub enum AskForApproval {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, TS)]
 pub struct GranularApprovalConfig {
-    /// Whether to allow shell command approval requests, including inline
-    /// `with_additional_permissions` and `require_escalated` requests.
-    pub sandbox_approval: bool,
     /// Whether to allow prompts triggered by execpolicy `prompt` rules.
     pub rules: bool,
     /// Whether to allow approval prompts triggered by skill script execution.
     #[serde(default)]
     pub skill_approval: bool,
-    /// Whether to allow prompts triggered by the `request_permissions` tool.
-    #[serde(default)]
-    pub request_permissions: bool,
     /// Whether to allow MCP elicitation prompts.
     pub mcp_elicitations: bool,
 }
 
 impl GranularApprovalConfig {
-    pub const fn allows_sandbox_approval(self) -> bool {
-        self.sandbox_approval
-    }
-
     pub const fn allows_rules_approval(self) -> bool {
         self.rules
     }
@@ -984,12 +955,29 @@ impl GranularApprovalConfig {
         self.skill_approval
     }
 
-    pub const fn allows_request_permissions(self) -> bool {
-        self.request_permissions
-    }
-
     pub const fn allows_mcp_elicitations(self) -> bool {
         self.mcp_elicitations
+    }
+}
+
+impl ToJson for GranularApprovalConfig {
+    fn to_json(&self) -> Value {
+        let mut object = Map::with_capacity(4);
+        object.push_field("rules", self.rules);
+        object.push_field("skill_approval", self.skill_approval);
+        object.push_field("mcp_elicitations", self.mcp_elicitations);
+        Value::Object(object)
+    }
+}
+
+impl FromJson for GranularApprovalConfig {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("GranularApprovalConfig")?;
+        Ok(Self {
+            rules: object.take_required("rules")?,
+            skill_approval: object.take_optional("skill_approval")?.unwrap_or(false),
+            mcp_elicitations: object.take_required("mcp_elicitations")?,
+        })
     }
 }
 
@@ -1439,8 +1427,6 @@ pub enum EventMsg {
 
     ExecApprovalRequest(ExecApprovalRequestEvent),
 
-    RequestPermissions(RequestPermissionsEvent),
-
     RequestUserInput(RequestUserInputEvent),
 
     DynamicToolCallRequest(DynamicToolCallRequest),
@@ -1531,7 +1517,6 @@ pub enum EventMsg {
 #[serde(rename_all = "snake_case")]
 pub enum HookEventName {
     PreToolUse,
-    PermissionRequest,
     PostToolUse,
     PreCompact,
     PostCompact,
@@ -3542,12 +3527,6 @@ pub struct SessionConfiguredEvent {
     /// Canonical effective permissions for commands executed in the session.
     pub permission_profile: PermissionProfile,
 
-    /// Named or implicit built-in profile that produced `permission_profile`,
-    /// when known.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub active_permission_profile: Option<ActivePermissionProfile>,
-
     /// Working directory that should be treated as the *root* of the
     /// session.
     pub cwd: AbsolutePathBuf,
@@ -3597,8 +3576,6 @@ impl<'de> Deserialize<'de> for SessionConfiguredEvent {
             // and immediately project it into the canonical `permission_profile`.
             sandbox_policy: Option<SandboxPolicy>,
             permission_profile: Option<PermissionProfile>,
-            #[serde(default)]
-            active_permission_profile: Option<ActivePermissionProfile>,
             cwd: AbsolutePathBuf,
             reasoning_effort: Option<ReasoningEffortConfig>,
             initial_messages: Option<Vec<EventMsg>>,
@@ -3632,7 +3609,6 @@ impl<'de> Deserialize<'de> for SessionConfiguredEvent {
             approval_policy: wire.approval_policy,
             approvals_reviewer: wire.approvals_reviewer,
             permission_profile,
-            active_permission_profile: wire.active_permission_profile,
             cwd: wire.cwd,
             reasoning_effort: wire.reasoning_effort,
             initial_messages: wire.initial_messages,
@@ -4268,20 +4244,16 @@ mod tests {
     fn granular_approval_config_mcp_elicitation_flag_is_field_driven() {
         assert!(
             GranularApprovalConfig {
-                sandbox_approval: false,
                 rules: false,
                 skill_approval: false,
-                request_permissions: false,
                 mcp_elicitations: true,
             }
             .allows_mcp_elicitations()
         );
         assert!(
             !GranularApprovalConfig {
-                sandbox_approval: false,
                 rules: false,
                 skill_approval: false,
-                request_permissions: false,
                 mcp_elicitations: false,
             }
             .allows_mcp_elicitations()
@@ -4292,67 +4264,35 @@ mod tests {
     fn granular_approval_config_skill_approval_flag_is_field_driven() {
         assert!(
             GranularApprovalConfig {
-                sandbox_approval: false,
                 rules: false,
                 skill_approval: true,
-                request_permissions: false,
                 mcp_elicitations: false,
             }
             .allows_skill_approval()
         );
         assert!(
             !GranularApprovalConfig {
-                sandbox_approval: false,
                 rules: false,
                 skill_approval: false,
-                request_permissions: false,
                 mcp_elicitations: false,
             }
             .allows_skill_approval()
-        );
-    }
-
-    #[test]
-    fn granular_approval_config_request_permissions_flag_is_field_driven() {
-        assert!(
-            GranularApprovalConfig {
-                sandbox_approval: false,
-                rules: false,
-                skill_approval: false,
-                request_permissions: true,
-                mcp_elicitations: false,
-            }
-            .allows_request_permissions()
-        );
-        assert!(
-            !GranularApprovalConfig {
-                sandbox_approval: false,
-                rules: false,
-                skill_approval: false,
-                request_permissions: false,
-                mcp_elicitations: false,
-            }
-            .allows_request_permissions()
         );
     }
 
     #[test]
     fn granular_approval_config_defaults_missing_optional_flags_to_false() {
-        let decoded =
-            edgerun_json::from_serde_value::<GranularApprovalConfig>(edgerun_json::json!({
-                "sandbox_approval": true,
-                "rules": false,
-                "mcp_elicitations": true,
-            }))
-            .expect("granular approval config should deserialize");
+        let decoded = edgerun_json::from_value::<GranularApprovalConfig>(edgerun_json::json!({
+            "rules": false,
+            "mcp_elicitations": true,
+        }))
+        .expect("granular approval config should deserialize");
 
         assert_eq!(
             decoded,
             GranularApprovalConfig {
-                sandbox_approval: true,
                 rules: false,
                 skill_approval: false,
-                request_permissions: false,
                 mcp_elicitations: true,
             }
         );
@@ -5370,7 +5310,6 @@ mod tests {
                 approval_policy: AskForApproval::Never,
                 approvals_reviewer: ApprovalsReviewer::User,
                 permission_profile: permission_profile.clone(),
-                active_permission_profile: None,
                 cwd: test_path_buf("/home/user/project").abs(),
                 reasoning_effort: Some(ReasoningEffortConfig::default()),
                 initial_messages: None,

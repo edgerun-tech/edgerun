@@ -1,4 +1,3 @@
-use crate::sandboxing::SandboxPermissions;
 use crate::shell::Shell;
 use crate::shell::get_shell_by_model_provided_path;
 use crate::tools::context::ExecCommandToolOutput;
@@ -8,15 +7,14 @@ use crate::tools::context::ToolPayload;
 use crate::tools::hook_names::HookToolName;
 use crate::tools::registry::PostToolUsePayload;
 use crate::unified_exec::resolve_max_tokens;
-use codex_protocol::models::AdditionalPermissionProfile;
 use codex_tools::UnifiedExecShellMode;
 use codex_utils_output_truncation::TruncationPolicy;
-use serde::Deserialize;
+use edgerun_json::FromJson;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 #[cfg(test)]
-use crate::tools::handlers::parse_arguments;
+use crate::tools::handlers::parse_json_arguments;
 
 mod exec_command;
 mod write_stdin;
@@ -25,38 +23,30 @@ pub use exec_command::ExecCommandHandler;
 pub(crate) use exec_command::ExecCommandHandlerOptions;
 pub use write_stdin::WriteStdinHandler;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, FromJson)]
 pub(crate) struct ExecCommandArgs {
     cmd: String,
-    #[serde(default)]
+    #[json(default)]
     pub(crate) workdir: Option<String>,
-    #[serde(default)]
+    #[json(default)]
     shell: Option<String>,
-    #[serde(default)]
+    #[json(default)]
     login: Option<bool>,
-    #[serde(default = "default_tty")]
+    #[json(default = "default_tty")]
     tty: bool,
-    #[serde(default = "default_exec_yield_time_ms")]
+    #[json(default = "default_exec_yield_time_ms")]
     yield_time_ms: u64,
-    #[serde(default)]
+    #[json(default)]
     max_output_tokens: Option<usize>,
-    #[serde(default)]
-    sandbox_permissions: SandboxPermissions,
-    #[serde(default)]
-    additional_permissions: Option<AdditionalPermissionProfile>,
-    #[serde(default)]
-    justification: Option<String>,
-    #[serde(default)]
-    prefix_rule: Option<Vec<String>>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, FromJson)]
 struct ExecCommandEnvironmentArgs {
-    #[serde(default)]
+    #[json(default)]
     environment_id: Option<String>,
     // Keep this raw until after environment selection; relative paths must be
     // resolved against the selected environment cwd, not the process cwd.
-    #[serde(default)]
+    #[json(default)]
     workdir: Option<String>,
 }
 

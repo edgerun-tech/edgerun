@@ -52,13 +52,12 @@ impl ShellHandler {
             capture_policy: ExecCapturePolicy::ShellTool,
             env: create_env(&turn_context.shell_environment_policy, Some(thread_id)),
             network: turn_context.network.clone(),
-            sandbox_permissions: params.sandbox_permissions.unwrap_or_default(),
             windows_sandbox_level: turn_context.windows_sandbox_level,
             windows_sandbox_private_desktop: turn_context
                 .config
                 .permissions
                 .windows_sandbox_private_desktop,
-            justification: params.justification.clone(),
+            justification: None,
             arg0: None,
         }
     }
@@ -137,7 +136,6 @@ impl ToolHandler for ShellHandler {
             tool_name: "shell".to_string(),
             exec_params,
             hook_command: codex_shell_command::parse_command::shlex_join(&params.command),
-            additional_permissions: params.additional_permissions.clone(),
             prefix_rule,
             session,
             turn,

@@ -15,10 +15,6 @@ use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
 use codex_protocol::protocol::Submission;
 use codex_protocol::protocol::ThreadSource;
-use codex_protocol::request_permissions::PermissionGrantScope;
-use codex_protocol::request_permissions::RequestPermissionsArgs;
-use codex_protocol::request_permissions::RequestPermissionsEvent;
-use codex_protocol::request_permissions::RequestPermissionsResponse;
 use codex_protocol::request_user_input::RequestUserInputArgs;
 use codex_protocol::request_user_input::RequestUserInputResponse;
 use codex_protocol::user_input::UserInput;
@@ -298,19 +294,6 @@ async fn forward_events(
                         .await;
                     }
                     Event {
-                        msg: EventMsg::RequestPermissions(event),
-                        ..
-                    } => {
-                        handle_request_permissions(
-                            &codex,
-                            &parent_session,
-                            &parent_ctx,
-                            event,
-                            &cancel_token,
-                        )
-                        .await;
-                    }
-                    Event {
                         id,
                         msg: EventMsg::RequestUserInput(event),
                     } => {
@@ -444,7 +427,6 @@ async fn handle_exec_approval(
         reason,
         network_approval_context,
         proposed_execpolicy_amendment,
-        additional_permissions,
         available_decisions,
         ..
     } = event;
@@ -458,12 +440,6 @@ async fn handle_exec_approval(
                 id: call_id.clone(),
                 command,
                 cwd,
-                sandbox_permissions: if additional_permissions.is_some() {
-                    crate::sandboxing::SandboxPermissions::WithAdditionalPermissions
-                } else {
-                    crate::sandboxing::SandboxPermissions::UseDefault
-                },
-                additional_permissions,
                 justification: None,
             },
             reason,
@@ -489,7 +465,6 @@ async fn handle_exec_approval(
                 reason,
                 network_approval_context,
                 proposed_execpolicy_amendment,
-                additional_permissions,
                 available_decisions,
             ),
             parent_session,
@@ -726,37 +701,6 @@ async fn maybe_auto_review_mcp_request_user_input(
     })
 }
 
-async fn handle_request_permissions(
-    codex: &Codex,
-    parent_session: &Arc<Session>,
-    parent_ctx: &Arc<TurnContext>,
-    event: RequestPermissionsEvent,
-    cancel_token: &CancellationToken,
-) {
-    let call_id = event.call_id;
-    let args = RequestPermissionsArgs {
-        reason: event.reason,
-        permissions: event.permissions,
-    };
-    let cwd = event.cwd.unwrap_or_else(|| parent_ctx.cwd.clone());
-    let response_fut = parent_session.request_permissions_for_cwd(
-        parent_ctx,
-        call_id.clone(),
-        args,
-        cwd,
-        cancel_token.clone(),
-    );
-    let response =
-        await_request_permissions_with_cancel(response_fut, parent_session, &call_id, cancel_token)
-            .await;
-    let _ = codex
-        .submit(Op::RequestPermissionsResponse {
-            id: call_id,
-            response,
-        })
-        .await;
-}
-
 async fn await_user_input_with_cancel<F>(
     fut: F,
     parent_session: &Session,
@@ -779,36 +723,6 @@ where
         }
         response = fut => response.unwrap_or_else(|| RequestUserInputResponse {
             answers: HashMap::new(),
-        }),
-    }
-}
-
-async fn await_request_permissions_with_cancel<F>(
-    fut: F,
-    parent_session: &Session,
-    call_id: &str,
-    cancel_token: &CancellationToken,
-) -> RequestPermissionsResponse
-where
-    F: core::future::Future<Output = Option<RequestPermissionsResponse>>,
-{
-    edgerun_tokio::select! {
-        biased;
-        _ = cancel_token.cancelled() => {
-            let empty = RequestPermissionsResponse {
-                permissions: Default::default(),
-                scope: PermissionGrantScope::Turn,
-                strict_auto_review: false,
-            };
-            parent_session
-                .notify_request_permissions_response(call_id, empty.clone())
-                .await;
-            empty
-        }
-        response = fut => response.unwrap_or_else(|| RequestPermissionsResponse {
-            permissions: Default::default(),
-            scope: PermissionGrantScope::Turn,
-            strict_auto_review: false,
         }),
     }
 }

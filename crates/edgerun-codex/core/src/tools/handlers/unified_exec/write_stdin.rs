@@ -2,7 +2,7 @@ use crate::function_tool::FunctionCallError;
 use crate::tools::context::ExecCommandToolOutput;
 use crate::tools::context::ToolInvocation;
 use crate::tools::context::ToolPayload;
-use crate::tools::handlers::parse_arguments;
+use crate::tools::handlers::parse_json_arguments;
 use crate::tools::registry::PostToolUsePayload;
 use crate::tools::registry::ToolHandler;
 use crate::tools::registry::ToolKind;
@@ -11,21 +11,21 @@ use codex_protocol::protocol::EventMsg;
 use codex_protocol::protocol::TerminalInteractionEvent;
 use codex_tools::ToolName;
 use codex_tools::ToolSpec;
-use serde::Deserialize;
+use edgerun_json::FromJson;
 
 use super::super::shell_spec::create_write_stdin_tool;
 use super::effective_max_output_tokens;
 use super::post_unified_exec_tool_use_payload;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, FromJson)]
 struct WriteStdinArgs {
     // The model is trained on `session_id`.
     session_id: i32,
-    #[serde(default)]
+    #[json(default)]
     chars: String,
-    #[serde(default = "super::default_write_stdin_yield_time_ms")]
+    #[json(default = "super::default_write_stdin_yield_time_ms")]
     yield_time_ms: u64,
-    #[serde(default)]
+    #[json(default)]
     max_output_tokens: Option<usize>,
 }
 
@@ -79,7 +79,7 @@ impl ToolHandler for WriteStdinHandler {
             }
         };
 
-        let args: WriteStdinArgs = parse_arguments(&arguments)?;
+        let args: WriteStdinArgs = parse_json_arguments(&arguments)?;
         let max_output_tokens =
             effective_max_output_tokens(args.max_output_tokens, turn.truncation_policy);
         let response = session

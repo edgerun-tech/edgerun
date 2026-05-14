@@ -115,10 +115,8 @@ fn tool_dispatch_payload(payload: &ToolPayload) -> ToolDispatchPayload {
             command: params.command.clone(),
             workdir: params.workdir.clone(),
             timeout_ms: params.timeout_ms,
-            sandbox_permissions: params.sandbox_permissions,
             prefix_rule: params.prefix_rule.clone(),
-            additional_permissions: params.additional_permissions.clone(),
-            justification: params.justification.clone(),
+            justification: None,
         },
         ToolPayload::Mcp {
             server,

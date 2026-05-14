@@ -5,9 +5,6 @@ use codex_protocol::approvals::NetworkApprovalProtocol as CoreNetworkApprovalPro
 use codex_protocol::approvals::NetworkPolicyAmendment as CoreNetworkPolicyAmendment;
 use codex_protocol::approvals::NetworkPolicyRuleAction as CoreNetworkPolicyRuleAction;
 use codex_protocol::compat::absolute_path::AbsolutePathBuf;
-use codex_protocol::models::ActivePermissionProfile as CoreActivePermissionProfile;
-use codex_protocol::models::ActivePermissionProfileModification as CoreActivePermissionProfileModification;
-use codex_protocol::models::AdditionalPermissionProfile as CoreAdditionalPermissionProfile;
 use codex_protocol::models::FileSystemPermissions as CoreFileSystemPermissions;
 use codex_protocol::models::ManagedFileSystemPermissions as CoreManagedFileSystemPermissions;
 use codex_protocol::models::NetworkPermissions as CoreNetworkPermissions;
@@ -18,8 +15,6 @@ use codex_protocol::permissions::FileSystemSandboxEntry as CoreFileSystemSandbox
 use codex_protocol::permissions::FileSystemSpecialPath as CoreFileSystemSpecialPath;
 use codex_protocol::permissions::NetworkSandboxPolicy as CoreNetworkSandboxPolicy;
 use codex_protocol::protocol::NetworkAccess as CoreNetworkAccess;
-use codex_protocol::request_permissions::PermissionGrantScope as CorePermissionGrantScope;
-use codex_protocol::request_permissions::RequestPermissionProfile as CoreRequestPermissionProfile;
 use edgerun_json::FromJson;
 use edgerun_json::JsonValueError;
 use edgerun_json::Map;
@@ -72,6 +67,16 @@ impl FromJson for NetworkApprovalProtocol {
 pub struct NetworkApprovalContext {
     pub host: String,
     pub protocol: NetworkApprovalProtocol,
+}
+
+impl FromJson for NetworkApprovalContext {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("NetworkApprovalContext")?;
+        Ok(Self {
+            host: object.take_required("host")?,
+            protocol: object.take_required("protocol")?,
+        })
+    }
 }
 
 impl From<CoreNetworkApprovalContext> for NetworkApprovalContext {
@@ -263,52 +268,6 @@ impl From<PermissionProfileNetworkPermissions> for CoreNetworkSandboxPolicy {
             Self::Enabled
         } else {
             Self::Restricted
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[serde(deny_unknown_fields)]
-#[ts(export_to = "v2/")]
-pub struct RequestPermissionProfile {
-    pub network: Option<AdditionalNetworkPermissions>,
-    pub file_system: Option<AdditionalFileSystemPermissions>,
-}
-
-impl ToJson for RequestPermissionProfile {
-    fn to_json(&self) -> Value {
-        let mut object = Map::with_capacity(2);
-        object.push_field("network", self.network.to_json());
-        object.push_field("fileSystem", self.file_system.to_json());
-        Value::Object(object)
-    }
-}
-
-impl FromJson for RequestPermissionProfile {
-    fn from_json(value: Value) -> Result<Self, JsonValueError> {
-        let mut object = value.into_object("RequestPermissionProfile")?;
-        Ok(Self {
-            network: object.take_optional("network")?,
-            file_system: object.take_optional("fileSystem")?,
-        })
-    }
-}
-
-impl From<CoreRequestPermissionProfile> for RequestPermissionProfile {
-    fn from(value: CoreRequestPermissionProfile) -> Self {
-        Self {
-            network: value.network.map(AdditionalNetworkPermissions::from),
-            file_system: value.file_system.map(AdditionalFileSystemPermissions::from),
-        }
-    }
-}
-
-impl From<RequestPermissionProfile> for CoreRequestPermissionProfile {
-    fn from(value: RequestPermissionProfile) -> Self {
-        Self {
-            network: value.network.map(CoreNetworkPermissions::from),
-            file_system: value.file_system.map(CoreFileSystemPermissions::from),
         }
     }
 }
@@ -763,152 +722,39 @@ impl From<PermissionProfile> for CorePermissionProfile {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
-pub struct ActivePermissionProfile {
-    /// Identifier from `default_permissions` or the implicit built-in default,
-    /// such as `:workspace` or a user-defined `[permissions.<id>]` profile.
-    pub id: String,
-    /// Parent profile identifier once permissions profiles support
-    /// inheritance. This is currently always `null`.
-    #[serde(default)]
-    pub extends: Option<String>,
-    /// Bounded user-requested modifications applied on top of the named
-    /// profile, if any.
-    #[serde(default)]
-    pub modifications: Vec<ActivePermissionProfileModification>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(tag = "type", rename_all = "camelCase")]
-#[ts(tag = "type")]
-#[ts(export_to = "v2/")]
-pub enum ActivePermissionProfileModification {
-    /// Additional concrete directory that should be writable.
-    #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
-    AdditionalWritableRoot { path: AbsolutePathBuf },
-}
-
-impl From<CoreActivePermissionProfileModification> for ActivePermissionProfileModification {
-    fn from(value: CoreActivePermissionProfileModification) -> Self {
-        match value {
-            CoreActivePermissionProfileModification::AdditionalWritableRoot { path } => {
-                Self::AdditionalWritableRoot { path }
-            }
-        }
-    }
-}
-
-impl From<ActivePermissionProfileModification> for CoreActivePermissionProfileModification {
-    fn from(value: ActivePermissionProfileModification) -> Self {
-        match value {
-            ActivePermissionProfileModification::AdditionalWritableRoot { path } => {
-                Self::AdditionalWritableRoot { path }
-            }
-        }
-    }
-}
-
-impl From<CoreActivePermissionProfile> for ActivePermissionProfile {
-    fn from(value: CoreActivePermissionProfile) -> Self {
-        Self {
-            id: value.id,
-            extends: value.extends,
-            modifications: value
-                .modifications
-                .into_iter()
-                .map(ActivePermissionProfileModification::from)
-                .collect(),
-        }
-    }
-}
-
-impl From<ActivePermissionProfile> for CoreActivePermissionProfile {
-    fn from(value: ActivePermissionProfile) -> Self {
-        Self {
-            id: value.id,
-            extends: value.extends,
-            modifications: value
-                .modifications
-                .into_iter()
-                .map(CoreActivePermissionProfileModification::from)
-                .collect(),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
 #[serde(tag = "type", rename_all = "camelCase")]
 #[ts(tag = "type")]
 #[ts(export_to = "v2/")]
 pub enum PermissionProfileSelectionParams {
-    /// Select a named built-in or user-defined profile and optionally apply
-    /// bounded modifications that Codex knows how to validate.
+    /// Select a named built-in or user-defined profile.
     #[serde(rename_all = "camelCase")]
     #[ts(rename_all = "camelCase")]
-    Profile {
-        id: String,
-        #[ts(optional = nullable)]
-        modifications: Option<Vec<PermissionProfileModificationParams>>,
-    },
+    Profile { id: String },
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(tag = "type", rename_all = "camelCase")]
-#[ts(tag = "type")]
-#[ts(export_to = "v2/")]
-pub enum PermissionProfileModificationParams {
-    /// Additional concrete directory that should be writable.
-    #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
-    AdditionalWritableRoot { path: AbsolutePathBuf },
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
-pub struct AdditionalPermissionProfile {
-    /// Partial overlay used for per-command permission requests.
-    pub network: Option<AdditionalNetworkPermissions>,
-    pub file_system: Option<AdditionalFileSystemPermissions>,
-}
-
-impl From<CoreAdditionalPermissionProfile> for AdditionalPermissionProfile {
-    fn from(value: CoreAdditionalPermissionProfile) -> Self {
-        Self {
-            network: value.network.map(AdditionalNetworkPermissions::from),
-            file_system: value.file_system.map(AdditionalFileSystemPermissions::from),
+impl ToJson for PermissionProfileSelectionParams {
+    fn to_json(&self) -> Value {
+        match self {
+            PermissionProfileSelectionParams::Profile { id } => {
+                let mut object = Map::with_capacity(2);
+                object.push_field("type", "profile");
+                object.push_field("id", id.clone());
+                Value::Object(object)
+            }
         }
     }
 }
 
-impl From<AdditionalPermissionProfile> for CoreAdditionalPermissionProfile {
-    fn from(value: AdditionalPermissionProfile) -> Self {
-        Self {
-            network: value.network.map(CoreNetworkPermissions::from),
-            file_system: value.file_system.map(CoreFileSystemPermissions::from),
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
-pub struct GrantedPermissionProfile {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub network: Option<AdditionalNetworkPermissions>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub file_system: Option<AdditionalFileSystemPermissions>,
-}
-
-impl From<GrantedPermissionProfile> for CoreAdditionalPermissionProfile {
-    fn from(value: GrantedPermissionProfile) -> Self {
-        Self {
-            network: value.network.map(CoreNetworkPermissions::from),
-            file_system: value.file_system.map(CoreFileSystemPermissions::from),
+impl FromJson for PermissionProfileSelectionParams {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("PermissionProfileSelectionParams")?;
+        match String::from_json(object.take_required("type")?)?.as_str() {
+            "profile" => Ok(Self::Profile {
+                id: object.take_required("id")?,
+            }),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown permission profile selection type `{other}`"
+            ))),
         }
     }
 }
@@ -1264,7 +1110,9 @@ fn required_absolute_path(
         .ok_or_else(|| JsonValueError::WrongType(format!("missing required field `{field}`")))
 }
 
-fn optional_absolute_paths(value: Option<Value>) -> Result<Option<Vec<AbsolutePathBuf>>, JsonValueError> {
+fn optional_absolute_paths(
+    value: Option<Value>,
+) -> Result<Option<Vec<AbsolutePathBuf>>, JsonValueError> {
     let Some(value) = value else {
         return Ok(None);
     };
@@ -1302,6 +1150,20 @@ pub struct ExecPolicyAmendment {
     pub command: Vec<String>,
 }
 
+impl ToJson for ExecPolicyAmendment {
+    fn to_json(&self) -> Value {
+        self.command.to_json()
+    }
+}
+
+impl FromJson for ExecPolicyAmendment {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        Ok(Self {
+            command: Vec::<String>::from_json(value)?,
+        })
+    }
+}
+
 impl ExecPolicyAmendment {
     pub fn into_core(self) -> CoreExecPolicyAmendment {
         CoreExecPolicyAmendment::new(self.command)
@@ -1322,12 +1184,52 @@ v2_enum_from_core!(
     }
 );
 
+impl ToJson for NetworkPolicyRuleAction {
+    fn to_json(&self) -> Value {
+        Value::from(match self {
+            Self::Allow => "allow",
+            Self::Deny => "deny",
+        })
+    }
+}
+
+impl FromJson for NetworkPolicyRuleAction {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "allow" => Ok(Self::Allow),
+            "deny" => Ok(Self::Deny),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown network policy rule action `{other}`"
+            ))),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct NetworkPolicyAmendment {
     pub host: String,
     pub action: NetworkPolicyRuleAction,
+}
+
+impl ToJson for NetworkPolicyAmendment {
+    fn to_json(&self) -> Value {
+        let mut object = Map::with_capacity(2);
+        object.push_field("host", self.host.clone());
+        object.push_field("action", self.action.to_json());
+        Value::Object(object)
+    }
+}
+
+impl FromJson for NetworkPolicyAmendment {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("NetworkPolicyAmendment")?;
+        Ok(Self {
+            host: object.take_required("host")?,
+            action: object.take_required("action")?,
+        })
+    }
 }
 
 impl NetworkPolicyAmendment {
@@ -1346,41 +1248,4 @@ impl From<CoreNetworkPolicyAmendment> for NetworkPolicyAmendment {
             action: NetworkPolicyRuleAction::from(value.action),
         }
     }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
-pub struct PermissionsRequestApprovalParams {
-    pub thread_id: String,
-    pub turn_id: String,
-    pub item_id: String,
-    /// Unix timestamp (in milliseconds) when this approval request started.
-    #[ts(type = "number")]
-    pub started_at_ms: i64,
-    pub cwd: AbsolutePathBuf,
-    pub reason: Option<String>,
-    pub permissions: RequestPermissionProfile,
-}
-
-v2_enum_from_core!(
-    #[derive(Default)]
-    pub enum PermissionGrantScope from CorePermissionGrantScope {
-        #[default]
-        Turn,
-        Session
-    }
-);
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
-pub struct PermissionsRequestApprovalResponse {
-    pub permissions: GrantedPermissionProfile,
-    #[serde(default)]
-    pub scope: PermissionGrantScope,
-    /// Review every subsequent command in this turn before normal sandboxed execution.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub strict_auto_review: Option<bool>,
 }

@@ -583,7 +583,6 @@ async fn permissions_message_includes_writable_roots() -> Result<()> {
         &exec_policy,
         test.config.cwd.as_path(),
         /*exec_permission_approvals_enabled*/ false,
-        /*request_permissions_tool_enabled*/ false,
     )
     .render();
     let expected_normalized = normalize_line_endings(&expected);

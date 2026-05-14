@@ -16,7 +16,6 @@ use codex_protocol::items::WebSearchItem;
 use codex_protocol::mcp::CallToolResult;
 use codex_protocol::memory_citation::MemoryCitation as CoreMemoryCitation;
 use codex_protocol::memory_citation::MemoryCitationEntry as CoreMemoryCitationEntry;
-use codex_protocol::models::AdditionalPermissionProfile as CoreAdditionalPermissionProfile;
 use codex_protocol::models::FileSystemPermissions as CoreFileSystemPermissions;
 use codex_protocol::models::ManagedFileSystemPermissions as CoreManagedFileSystemPermissions;
 use codex_protocol::models::MessagePhase;
@@ -30,7 +29,6 @@ use codex_protocol::protocol::AgentStatus as CoreAgentStatus;
 use codex_protocol::protocol::AskForApproval as CoreAskForApproval;
 use codex_protocol::protocol::GranularApprovalConfig as CoreGranularApprovalConfig;
 use codex_protocol::protocol::NetworkAccess as CoreNetworkAccess;
-use codex_protocol::request_permissions::RequestPermissionProfile as CoreRequestPermissionProfile;
 use codex_protocol::user_input::UserInput as CoreUserInput;
 use edgerun_json::Value as JsonValue;
 use edgerun_json::json;
@@ -81,7 +79,7 @@ fn approvals_reviewer_serializes_auto_review_and_accepts_legacy_guardian_subagen
 
 #[test]
 fn turn_defaults_legacy_missing_items_view_to_full() {
-    let turn: Turn = edgerun_json::from_serde_value(json!({
+    let turn: Turn = edgerun_json::from_value(json!({
         "id": "turn_123",
         "items": [],
         "status": "completed",
@@ -121,7 +119,7 @@ fn thread_turns_items_list_round_trips() {
     };
 
     assert_eq!(
-        edgerun_json::to_serde_value(&params).expect("serialize params"),
+        edgerun_json::to_value(&params),
         json!({
             "threadId": "thr_123",
             "turnId": "turn_456",
@@ -139,7 +137,7 @@ fn thread_turns_items_list_round_trips() {
     };
 
     assert_eq!(
-        edgerun_json::to_serde_value(&response).expect("serialize response"),
+        edgerun_json::to_value(&response),
         json!({
             "data": [{"type": "contextCompaction", "id": "item_1"}],
             "nextCursor": null,
@@ -272,141 +270,6 @@ fn external_agent_config_import_params_accept_legacy_plugin_details() {
 }
 
 #[test]
-fn command_execution_request_approval_rejects_relative_additional_permission_paths() {
-    let err = edgerun_json::from_serde_value::<CommandExecutionRequestApprovalParams>(json!({
-        "threadId": "thr_123",
-        "turnId": "turn_123",
-        "itemId": "call_123",
-        "startedAtMs": 1,
-        "command": "cat file",
-        "cwd": absolute_path_string("tmp"),
-        "commandActions": null,
-        "reason": null,
-        "networkApprovalContext": null,
-        "additionalPermissions": {
-            "network": null,
-            "fileSystem": {
-                "read": ["relative/path"],
-                "write": null
-            }
-        },
-        "proposedExecpolicyAmendment": null,
-        "proposedNetworkPolicyAmendments": null,
-        "availableDecisions": null
-    }))
-    .expect_err("relative additional permission paths should fail");
-    assert!(
-        err.to_string()
-            .contains("AbsolutePathBuf deserialized without a base path"),
-        "unexpected error: {err}"
-    );
-}
-
-#[test]
-fn permissions_request_approval_uses_request_permission_profile() {
-    let read_only_path = if cfg!(windows) {
-        r"C:\tmp\read-only"
-    } else {
-        "/tmp/read-only"
-    };
-    let read_write_path = if cfg!(windows) {
-        r"C:\tmp\read-write"
-    } else {
-        "/tmp/read-write"
-    };
-    let params = edgerun_json::from_serde_value::<PermissionsRequestApprovalParams>(json!({
-        "threadId": "thr_123",
-        "turnId": "turn_123",
-        "itemId": "call_123",
-        "startedAtMs": 1,
-        "cwd": absolute_path_string("repo"),
-        "reason": "Select a workspace root",
-        "permissions": {
-            "network": {
-                "enabled": true,
-            },
-            "fileSystem": {
-                "read": [read_only_path],
-                "write": [read_write_path],
-            },
-        },
-    }))
-    .expect("permissions request should deserialize");
-
-    assert_eq!(params.cwd, absolute_path("repo"));
-    assert_eq!(
-        params.permissions,
-        RequestPermissionProfile {
-            network: Some(AdditionalNetworkPermissions {
-                enabled: Some(true),
-            }),
-            file_system: Some(AdditionalFileSystemPermissions {
-                read: Some(vec![
-                    AbsolutePathBuf::try_from(PathBuf::from(read_only_path))
-                        .expect("path must be absolute"),
-                ]),
-                write: Some(vec![
-                    AbsolutePathBuf::try_from(PathBuf::from(read_write_path))
-                        .expect("path must be absolute"),
-                ]),
-                glob_scan_max_depth: None,
-                entries: None,
-            }),
-        }
-    );
-
-    assert_eq!(
-        CoreRequestPermissionProfile::from(params.permissions),
-        CoreRequestPermissionProfile {
-            network: Some(CoreNetworkPermissions {
-                enabled: Some(true),
-            }),
-            file_system: Some(CoreFileSystemPermissions::from_read_write_roots(
-                Some(vec![
-                    AbsolutePathBuf::try_from(PathBuf::from(read_only_path))
-                        .expect("path must be absolute"),
-                ]),
-                Some(vec![
-                    AbsolutePathBuf::try_from(PathBuf::from(read_write_path))
-                        .expect("path must be absolute"),
-                ]),
-            )),
-        }
-    );
-}
-
-#[test]
-fn permissions_request_approval_rejects_macos_permissions() {
-    let err = edgerun_json::from_serde_value::<PermissionsRequestApprovalParams>(json!({
-        "threadId": "thr_123",
-        "turnId": "turn_123",
-        "itemId": "call_123",
-        "startedAtMs": 1,
-        "cwd": absolute_path_string("repo"),
-        "reason": "Select a workspace root",
-        "permissions": {
-            "network": null,
-            "fileSystem": null,
-            "macos": {
-                "preferences": "read_only",
-                "automations": "none",
-                "launchServices": false,
-                "accessibility": false,
-                "calendar": false,
-                "reminders": false,
-                "contacts": "none",
-            },
-        },
-    }))
-    .expect_err("permissions request should reject macos permissions");
-
-    assert!(
-        err.to_string().contains("unknown field `macos`"),
-        "unexpected error: {err}"
-    );
-}
-
-#[test]
 fn additional_file_system_permissions_preserves_canonical_entries() {
     let core_permissions = CoreFileSystemPermissions {
         entries: vec![
@@ -496,7 +359,7 @@ fn additional_file_system_permissions_populates_entries_for_legacy_roots() {
 
 #[test]
 fn additional_file_system_permissions_rejects_zero_glob_scan_depth() {
-    edgerun_json::from_serde_value::<AdditionalFileSystemPermissions>(json!({
+    edgerun_json::from_value::<AdditionalFileSystemPermissions>(json!({
         "read": null,
         "write": null,
         "globScanMaxDepth": 0,
@@ -539,7 +402,7 @@ fn permission_profile_file_system_permissions_preserves_glob_scan_depth() {
 
 #[test]
 fn permission_profile_file_system_permissions_rejects_zero_glob_scan_depth() {
-    edgerun_json::from_serde_value::<PermissionProfileFileSystemPermissions>(json!({
+    edgerun_json::from_value::<PermissionProfileFileSystemPermissions>(json!({
         "type": "restricted",
         "entries": [],
         "globScanMaxDepth": 0,
@@ -565,94 +428,6 @@ fn legacy_current_working_directory_special_path_deserializes_as_project_roots()
             "subpath": null,
         })
     );
-}
-
-#[test]
-fn permissions_request_approval_response_uses_granted_permission_profile_without_macos() {
-    let read_only_path = if cfg!(windows) {
-        r"C:\tmp\read-only"
-    } else {
-        "/tmp/read-only"
-    };
-    let read_write_path = if cfg!(windows) {
-        r"C:\tmp\read-write"
-    } else {
-        "/tmp/read-write"
-    };
-    let response = edgerun_json::from_serde_value::<PermissionsRequestApprovalResponse>(json!({
-        "permissions": {
-            "network": {
-                "enabled": true,
-            },
-            "fileSystem": {
-                "read": [read_only_path],
-                "write": [read_write_path],
-            },
-        },
-    }))
-    .expect("permissions response should deserialize");
-
-    assert_eq!(
-        response.permissions,
-        GrantedPermissionProfile {
-            network: Some(AdditionalNetworkPermissions {
-                enabled: Some(true),
-            }),
-            file_system: Some(AdditionalFileSystemPermissions {
-                read: Some(vec![
-                    AbsolutePathBuf::try_from(PathBuf::from(read_only_path))
-                        .expect("path must be absolute"),
-                ]),
-                write: Some(vec![
-                    AbsolutePathBuf::try_from(PathBuf::from(read_write_path))
-                        .expect("path must be absolute"),
-                ]),
-                glob_scan_max_depth: None,
-                entries: None,
-            }),
-        }
-    );
-
-    assert_eq!(
-        CoreAdditionalPermissionProfile::from(response.permissions),
-        CoreAdditionalPermissionProfile {
-            network: Some(CoreNetworkPermissions {
-                enabled: Some(true),
-            }),
-            file_system: Some(CoreFileSystemPermissions::from_read_write_roots(
-                Some(vec![
-                    AbsolutePathBuf::try_from(PathBuf::from(read_only_path))
-                        .expect("path must be absolute"),
-                ]),
-                Some(vec![
-                    AbsolutePathBuf::try_from(PathBuf::from(read_write_path))
-                        .expect("path must be absolute"),
-                ]),
-            )),
-        }
-    );
-}
-
-#[test]
-fn permissions_request_approval_response_defaults_scope_to_turn() {
-    let response = edgerun_json::from_serde_value::<PermissionsRequestApprovalResponse>(json!({
-        "permissions": {},
-    }))
-    .expect("response should deserialize");
-
-    assert_eq!(response.scope, PermissionGrantScope::Turn);
-    assert_eq!(response.strict_auto_review, None);
-}
-
-#[test]
-fn permissions_request_approval_response_accepts_strict_auto_review() {
-    let response = edgerun_json::from_serde_value::<PermissionsRequestApprovalResponse>(json!({
-        "permissions": {},
-        "strictAutoReview": true,
-    }))
-    .expect("response should deserialize");
-
-    assert_eq!(response.strict_auto_review, Some(true));
 }
 
 #[test]
@@ -1404,36 +1179,9 @@ fn sandbox_policy_round_trips_read_only_network_access() {
 }
 
 #[test]
-fn ask_for_approval_granular_round_trips_request_permissions_flag() {
-    let v2_policy = AskForApproval::Granular {
-        sandbox_approval: true,
-        rules: false,
-        skill_approval: false,
-        request_permissions: true,
-        mcp_elicitations: false,
-    };
-
-    let core_policy = v2_policy.to_core();
-    assert_eq!(
-        core_policy,
-        CoreAskForApproval::Granular(CoreGranularApprovalConfig {
-            sandbox_approval: true,
-            rules: false,
-            skill_approval: false,
-            request_permissions: true,
-            mcp_elicitations: false,
-        })
-    );
-
-    let back_to_v2 = AskForApproval::from(core_policy);
-    assert_eq!(back_to_v2, v2_policy);
-}
-
-#[test]
 fn ask_for_approval_granular_defaults_missing_optional_flags_to_false() {
     let decoded = edgerun_json::from_value::<AskForApproval>(edgerun_json::json!({
         "granular": {
-            "sandbox_approval": true,
             "rules": false,
             "mcp_elicitations": true,
         }
@@ -1443,10 +1191,8 @@ fn ask_for_approval_granular_defaults_missing_optional_flags_to_false() {
     assert_eq!(
         decoded,
         AskForApproval::Granular {
-            sandbox_approval: true,
             rules: false,
             skill_approval: false,
-            request_permissions: false,
             mcp_elicitations: true,
         }
     );
@@ -1456,10 +1202,8 @@ fn ask_for_approval_granular_defaults_missing_optional_flags_to_false() {
 fn ask_for_approval_granular_is_marked_experimental() {
     let reason =
         crate::experimental_api::ExperimentalApi::experimental_reason(&AskForApproval::Granular {
-            sandbox_approval: true,
             rules: false,
             skill_approval: false,
-            request_permissions: false,
             mcp_elicitations: true,
         });
 
@@ -1476,10 +1220,8 @@ fn profile_v2_granular_approval_policy_is_marked_experimental() {
         model: None,
         model_provider: None,
         approval_policy: Some(AskForApproval::Granular {
-            sandbox_approval: true,
             rules: false,
             skill_approval: false,
-            request_permissions: true,
             mcp_elicitations: false,
         }),
         approvals_reviewer: None,
@@ -1505,10 +1247,8 @@ fn config_granular_approval_policy_is_marked_experimental() {
         model_auto_compact_token_limit: None,
         model_provider: None,
         approval_policy: Some(AskForApproval::Granular {
-            sandbox_approval: false,
             rules: true,
             skill_approval: false,
-            request_permissions: false,
             mcp_elicitations: true,
         }),
         approvals_reviewer: None,
@@ -1591,10 +1331,8 @@ fn config_nested_profile_granular_approval_policy_is_marked_experimental() {
                 model: None,
                 model_provider: None,
                 approval_policy: Some(AskForApproval::Granular {
-                    sandbox_approval: true,
                     rules: false,
                     skill_approval: false,
-                    request_permissions: false,
                     mcp_elicitations: true,
                 }),
                 approvals_reviewer: None,
@@ -1677,10 +1415,8 @@ fn config_requirements_granular_allowed_approval_policy_is_marked_experimental()
     let reason =
         crate::experimental_api::ExperimentalApi::experimental_reason(&ConfigRequirements {
             allowed_approval_policies: Some(vec![AskForApproval::Granular {
-                sandbox_approval: true,
                 rules: true,
                 skill_approval: false,
-                request_permissions: false,
                 mcp_elicitations: false,
             }]),
             allowed_approvals_reviewers: None,
@@ -1702,10 +1438,8 @@ fn client_request_thread_start_granular_approval_policy_is_marked_experimental()
             request_id: crate::RequestId::Integer(1),
             params: ThreadStartParams {
                 approval_policy: Some(AskForApproval::Granular {
-                    sandbox_approval: true,
                     rules: false,
                     skill_approval: false,
-                    request_permissions: true,
                     mcp_elicitations: false,
                 }),
                 ..Default::default()
@@ -1724,10 +1458,8 @@ fn client_request_thread_resume_granular_approval_policy_is_marked_experimental(
             params: ThreadResumeParams {
                 thread_id: "thr_123".to_string(),
                 approval_policy: Some(AskForApproval::Granular {
-                    sandbox_approval: false,
                     rules: true,
                     skill_approval: false,
-                    request_permissions: false,
                     mcp_elicitations: true,
                 }),
                 ..Default::default()
@@ -1746,10 +1478,8 @@ fn client_request_thread_fork_granular_approval_policy_is_marked_experimental() 
             params: ThreadForkParams {
                 thread_id: "thr_456".to_string(),
                 approval_policy: Some(AskForApproval::Granular {
-                    sandbox_approval: true,
                     rules: false,
                     skill_approval: false,
-                    request_permissions: false,
                     mcp_elicitations: true,
                 }),
                 ..Default::default()
@@ -1769,10 +1499,8 @@ fn client_request_turn_start_granular_approval_policy_is_marked_experimental() {
                 thread_id: "thr_123".to_string(),
                 input: Vec::new(),
                 approval_policy: Some(AskForApproval::Granular {
-                    sandbox_approval: false,
                     rules: true,
                     skill_approval: false,
-                    request_permissions: false,
                     mcp_elicitations: true,
                 }),
                 ..Default::default()
@@ -2116,7 +1844,7 @@ fn sandbox_policy_rejects_legacy_workspace_write_restricted_read_access_field() 
 
 #[test]
 fn automatic_approval_review_deserializes_aborted_status() {
-    let review: GuardianApprovalReview = edgerun_json::from_serde_value(json!({
+    let review: GuardianApprovalReview = edgerun_json::from_value(json!({
         "status": "aborted",
         "riskLevel": null,
         "userAuthorization": null,
@@ -2143,7 +1871,7 @@ fn guardian_approval_review_action_round_trips_command_shape() {
         "cwd": absolute_path_string("tmp"),
     });
     let action: GuardianApprovalReviewAction =
-        edgerun_json::from_serde_value(value.clone()).expect("guardian review action");
+        edgerun_json::from_value(value.clone()).expect("guardian review action");
 
     assert_eq!(
         action,
@@ -2153,10 +1881,7 @@ fn guardian_approval_review_action_round_trips_command_shape() {
             cwd: absolute_path("tmp"),
         }
     );
-    assert_eq!(
-        edgerun_json::to_serde_value(&action).expect("serialize guardian review action"),
-        value
-    );
+    assert_eq!(edgerun_json::to_value(&action), value);
 }
 
 #[test]
@@ -3301,18 +3026,17 @@ fn dynamic_tool_spec_legacy_expose_to_context_inverts_to_defer_loading() {
 
 #[test]
 fn thread_start_params_preserve_explicit_null_service_tier() {
-    let params: ThreadStartParams = edgerun_json::from_serde_value(json!({ "serviceTier": null }))
+    let params: ThreadStartParams = edgerun_json::from_value(json!({ "serviceTier": null }))
         .expect("params should deserialize");
     assert_eq!(params.service_tier, Some(None));
 
-    let serialized = edgerun_json::to_serde_value(&params).expect("params should serialize");
+    let serialized = edgerun_json::to_value(&params);
     assert_eq!(
         serialized.get("serviceTier"),
         Some(&edgerun_json::Value::Null)
     );
 
-    let serialized_without_override = edgerun_json::to_serde_value(ThreadStartParams::default())
-        .expect("params should serialize");
+    let serialized_without_override = edgerun_json::to_value(&ThreadStartParams::default());
     assert_eq!(serialized_without_override.get("serviceTier"), None);
 }
 
@@ -3350,11 +3074,11 @@ fn thread_lifecycle_responses_default_missing_optional_fields() {
     });
 
     let start: ThreadStartResponse =
-        edgerun_json::from_serde_value(response.clone()).expect("thread/start response");
+        edgerun_json::from_value(response.clone()).expect("thread/start response");
     let resume: ThreadResumeResponse =
-        edgerun_json::from_serde_value(response.clone()).expect("thread/resume response");
+        edgerun_json::from_value(response.clone()).expect("thread/resume response");
     let fork: ThreadForkResponse =
-        edgerun_json::from_serde_value(response).expect("thread/fork response");
+        edgerun_json::from_value(response).expect("thread/fork response");
 
     assert_eq!(start.instruction_sources, Vec::<AbsolutePathBuf>::new());
     assert_eq!(resume.instruction_sources, Vec::<AbsolutePathBuf>::new());
@@ -3362,14 +3086,11 @@ fn thread_lifecycle_responses_default_missing_optional_fields() {
     assert_eq!(start.permission_profile, None);
     assert_eq!(resume.permission_profile, None);
     assert_eq!(fork.permission_profile, None);
-    assert_eq!(start.active_permission_profile, None);
-    assert_eq!(resume.active_permission_profile, None);
-    assert_eq!(fork.active_permission_profile, None);
 }
 
 #[test]
 fn turn_start_params_preserve_explicit_null_service_tier() {
-    let params: TurnStartParams = edgerun_json::from_serde_value(json!({
+    let params: TurnStartParams = edgerun_json::from_value(json!({
         "threadId": "thread_123",
         "input": [],
         "serviceTier": null
@@ -3377,7 +3098,7 @@ fn turn_start_params_preserve_explicit_null_service_tier() {
     .expect("params should deserialize");
     assert_eq!(params.service_tier, Some(None));
 
-    let serialized = edgerun_json::to_serde_value(&params).expect("params should serialize");
+    let serialized = edgerun_json::to_value(&params);
     assert_eq!(
         serialized.get("serviceTier"),
         Some(&edgerun_json::Value::Null)
@@ -3401,15 +3122,14 @@ fn turn_start_params_preserve_explicit_null_service_tier() {
         collaboration_mode: None,
         personality: None,
     };
-    let serialized_without_override =
-        edgerun_json::to_serde_value(&without_override).expect("params should serialize");
+    let serialized_without_override = edgerun_json::to_value(&without_override);
     assert_eq!(serialized_without_override.get("serviceTier"), None);
 }
 
 #[test]
 fn turn_start_params_round_trip_environments() {
     let cwd = test_absolute_path();
-    let params: TurnStartParams = edgerun_json::from_serde_value(json!({
+    let params: TurnStartParams = edgerun_json::from_value(json!({
         "threadId": "thread_123",
         "input": [],
         "environments": [
@@ -3433,7 +3153,7 @@ fn turn_start_params_round_trip_environments() {
         Some("turn/start.environments")
     );
 
-    let serialized = edgerun_json::to_serde_value(&params).expect("params should serialize");
+    let serialized = edgerun_json::to_value(&params);
     assert_eq!(
         serialized.get("environments"),
         Some(&json!([
@@ -3447,7 +3167,7 @@ fn turn_start_params_round_trip_environments() {
 
 #[test]
 fn turn_start_params_preserve_empty_environments() {
-    let params: TurnStartParams = edgerun_json::from_serde_value(json!({
+    let params: TurnStartParams = edgerun_json::from_value(json!({
         "threadId": "thread_123",
         "input": [],
         "environments": [],
@@ -3460,19 +3180,19 @@ fn turn_start_params_preserve_empty_environments() {
         Some("turn/start.environments")
     );
 
-    let serialized = edgerun_json::to_serde_value(&params).expect("params should serialize");
+    let serialized = edgerun_json::to_value(&params);
     assert_eq!(serialized.get("environments"), Some(&json!([])));
 }
 
 #[test]
 fn turn_start_params_treat_null_or_omitted_environments_as_default() {
-    let null_environments: TurnStartParams = edgerun_json::from_serde_value(json!({
+    let null_environments: TurnStartParams = edgerun_json::from_value(json!({
         "threadId": "thread_123",
         "input": [],
         "environments": null,
     }))
     .expect("params should deserialize");
-    let omitted_environments: TurnStartParams = edgerun_json::from_serde_value(json!({
+    let omitted_environments: TurnStartParams = edgerun_json::from_value(json!({
         "threadId": "thread_123",
         "input": [],
     }))
@@ -3492,7 +3212,7 @@ fn turn_start_params_treat_null_or_omitted_environments_as_default() {
 
 #[test]
 fn turn_start_params_reject_relative_environment_cwd() {
-    let err = edgerun_json::from_serde_value::<TurnStartParams>(json!({
+    let err = edgerun_json::from_value::<TurnStartParams>(json!({
         "threadId": "thread_123",
         "input": [],
         "environments": [

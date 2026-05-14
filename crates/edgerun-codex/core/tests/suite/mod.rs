@@ -33,24 +33,18 @@ mod agent_jobs;
 mod agent_websocket;
 mod agents_md;
 mod apply_patch_cli;
-#[cfg(not(target_os = "windows"))]
-mod approvals;
 mod cli_stream;
 mod client;
 mod client_websockets;
 mod code_mode;
-mod codex_delegate;
 mod collaboration_instructions;
 mod compact;
 mod compact_remote;
 mod compact_resume_fork;
 mod deprecation_notice;
-mod exec;
 mod exec_policy;
 mod fork_thread;
 mod hierarchical_agents;
-#[cfg(not(target_os = "windows"))]
-mod hooks;
 #[cfg(not(target_os = "windows"))]
 mod hooks_mcp;
 mod image_rollout;
@@ -77,10 +71,6 @@ mod realtime_conversation;
 mod remote_env;
 mod remote_models;
 mod request_compression;
-#[cfg(not(target_os = "windows"))]
-mod request_permissions;
-#[cfg(not(target_os = "windows"))]
-mod request_permissions_tool;
 mod request_plugin_install;
 mod request_user_input;
 mod responses_api_proxy_headers;
@@ -103,7 +93,6 @@ mod stream_no_completed;
 mod subagent_notifications;
 mod tool_harness;
 mod tool_parallelism;
-mod tools;
 mod truncation;
 mod turn_state;
 mod unified_exec;

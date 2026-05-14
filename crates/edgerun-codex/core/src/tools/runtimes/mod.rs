@@ -6,16 +6,13 @@ small and focused and reuses the orchestrator for approvals + sandbox + retry.
 */
 use crate::exec_env::CODEX_THREAD_ID_ENV_VAR;
 use crate::path_utils;
-use crate::sandboxing::SandboxPermissions;
 use crate::shell::Shell;
 use crate::tools::sandboxing::ToolError;
 #[cfg(target_os = "macos")]
 use codex_network_proxy::CODEX_PROXY_GIT_SSH_COMMAND_MARKER;
 use codex_network_proxy::PROXY_ACTIVE_ENV_KEY;
-use codex_network_proxy::PROXY_ENV_KEYS;
 #[cfg(target_os = "macos")]
 use codex_network_proxy::PROXY_GIT_SSH_COMMAND_ENV_KEY;
-use codex_protocol::models::AdditionalPermissionProfile;
 use codex_sandboxing::SandboxCommand;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use std::collections::HashMap;
@@ -30,7 +27,6 @@ pub(crate) fn build_sandbox_command(
     command: &[String],
     cwd: &AbsolutePathBuf,
     env: &HashMap<String, String>,
-    additional_permissions: Option<AdditionalPermissionProfile>,
 ) -> Result<SandboxCommand, ToolError> {
     let (program, args) = command
         .split_first()
@@ -40,31 +36,7 @@ pub(crate) fn build_sandbox_command(
         args: args.to_vec(),
         cwd: cwd.clone(),
         env: env.clone(),
-        additional_permissions,
     })
-}
-
-pub(crate) fn exec_env_for_sandbox_permissions(
-    env: &HashMap<String, String>,
-    sandbox_permissions: SandboxPermissions,
-) -> HashMap<String, String> {
-    let mut env = env.clone();
-    if sandbox_permissions.requires_escalated_permissions()
-        && env.contains_key(PROXY_ACTIVE_ENV_KEY)
-    {
-        for key in PROXY_ENV_KEYS {
-            env.remove(*key);
-        }
-        // Only macOS injects a Codex-owned SSH wrapper for the managed SOCKS proxy.
-        #[cfg(target_os = "macos")]
-        if env
-            .get(PROXY_GIT_SSH_COMMAND_ENV_KEY)
-            .is_some_and(|command| command.starts_with(CODEX_PROXY_GIT_SSH_COMMAND_MARKER))
-        {
-            env.remove(PROXY_GIT_SSH_COMMAND_ENV_KEY);
-        }
-    }
-    env
 }
 
 /// POSIX-only helper: for commands produced by `Shell::derive_exec_args`
@@ -256,7 +228,3 @@ fn is_valid_shell_variable_name(name: &str) -> bool {
 fn shell_single_quote(input: &str) -> String {
     input.replace('\'', r#"'"'"'"#)
 }
-
-#[cfg(all(test, unix))]
-#[path = "mod_tests.rs"]
-mod tests;

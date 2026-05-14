@@ -19,7 +19,6 @@ use edgerun_tokio_util::sync::CancellationToken;
 
 use crate::sandboxing::ExecOptions;
 use crate::sandboxing::ExecRequest;
-use crate::sandboxing::SandboxPermissions;
 use crate::spawn::SpawnChildRequest;
 use crate::spawn::StdioPolicy;
 use crate::spawn::spawn_child_async;
@@ -88,7 +87,6 @@ pub struct ExecParams {
     pub capture_policy: ExecCapturePolicy,
     pub env: HashMap<String, String>,
     pub network: Option<NetworkProxy>,
-    pub sandbox_permissions: SandboxPermissions,
     pub windows_sandbox_level: codex_protocol::config_types::WindowsSandboxLevel,
     pub windows_sandbox_private_desktop: bool,
     pub justification: Option<String>,
@@ -331,9 +329,8 @@ pub fn build_exec_request(
 
         // TODO: Should arg0 be set on the ExecRequest that is returned?
         arg0: _,
-        // These fields are related to approvals, so can be ignored here.
+        // This field is related to approvals, so can be ignored here.
         justification: _,
-        sandbox_permissions: _,
     } = params;
 
     let enforce_managed_network = network.is_some();
@@ -363,7 +360,6 @@ pub fn build_exec_request(
         args: args.to_vec(),
         cwd,
         env,
-        additional_permissions: None,
     };
     let options = ExecOptions {
         expiration,
@@ -448,7 +444,6 @@ pub(crate) async fn execute_exec_request(
         capture_policy,
         env,
         network: network.clone(),
-        sandbox_permissions: SandboxPermissions::UseDefault,
         windows_sandbox_level,
         windows_sandbox_private_desktop,
         justification: None,
@@ -931,8 +926,7 @@ async fn exec(
         // this exec call.
         windows_sandbox_level: _,
         windows_sandbox_private_desktop: _,
-        // These fields are related to approvals, so can be ignored here.
-        sandbox_permissions: _,
+        // This field is related to approvals, so can be ignored here.
         justification: _,
     } = params;
     if let Some(network) = network.as_ref() {
@@ -1485,7 +1479,3 @@ fn synthetic_exit_status(code: i32) -> ExitStatus {
 fn synthetic_exit_status_for_code(code: i32) -> ExitStatus {
     synthetic_exit_status(code)
 }
-
-#[cfg(test)]
-#[path = "exec_tests.rs"]
-mod tests;

@@ -92,12 +92,9 @@ fn is_zstd_encoding(value: &str) -> bool {
 
 fn decode_body_bytes(body: &[u8], content_encoding: Option<&str>) -> Vec<u8> {
     if content_encoding.is_some_and(is_zstd_encoding) {
-        edgerun_zstd::stream::decode_all(std::io::Cursor::new(body)).unwrap_or_else(|err| {
-            panic!("failed to decode zstd request body: {err}");
-        })
-    } else {
-        body.to_vec()
+        panic!("zstd request body decoding is unavailable");
     }
+    body.to_vec()
 }
 
 impl ResponsesRequest {

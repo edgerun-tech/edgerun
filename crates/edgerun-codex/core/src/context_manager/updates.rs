@@ -62,8 +62,7 @@ fn build_permissions_update_item(
             next.config.approvals_reviewer,
             exec_policy,
             &next.cwd,
-            next.features.enabled(Feature::ExecPermissionApprovals),
-            next.features.enabled(Feature::RequestPermissionsTool),
+            false,
         )
         .render(),
     )

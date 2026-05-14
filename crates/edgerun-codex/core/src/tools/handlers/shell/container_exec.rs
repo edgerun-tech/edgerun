@@ -88,7 +88,6 @@ impl ToolHandler for ContainerExecHandler {
             tool_name: "container.exec".to_string(),
             exec_params,
             hook_command: codex_shell_command::parse_command::shlex_join(&params.command),
-            additional_permissions: params.additional_permissions.clone(),
             prefix_rule,
             session,
             turn,

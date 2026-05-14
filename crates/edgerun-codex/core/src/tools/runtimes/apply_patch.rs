@@ -6,11 +6,9 @@
 use crate::exec::is_likely_sandbox_denied;
 use crate::guardian::GuardianApprovalRequest;
 use crate::guardian::review_approval_request;
-use crate::tools::hook_names::HookToolName;
 use crate::tools::sandboxing::Approvable;
 use crate::tools::sandboxing::ApprovalCtx;
 use crate::tools::sandboxing::ExecApprovalRequirement;
-use crate::tools::sandboxing::PermissionRequestPayload;
 use crate::tools::sandboxing::SandboxAttempt;
 use crate::tools::sandboxing::Sandboxable;
 use crate::tools::sandboxing::ToolCtx;
@@ -24,7 +22,6 @@ use codex_protocol::error::CodexErr;
 use codex_protocol::error::SandboxErr;
 use codex_protocol::exec_output::ExecToolCallOutput;
 use codex_protocol::exec_output::StreamOutput;
-use codex_protocol::models::AdditionalPermissionProfile;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::FileChange;
 use codex_protocol::protocol::ReviewDecision;
@@ -42,8 +39,6 @@ pub struct ApplyPatchRequest {
     pub file_paths: Vec<AbsolutePathBuf>,
     pub changes: std::collections::HashMap<PathBuf, FileChange>,
     pub exec_approval_requirement: ExecApprovalRequirement,
-    pub additional_permissions: Option<AdditionalPermissionProfile>,
-    pub permissions_preapproved: bool,
 }
 
 #[derive(Default)]
@@ -86,8 +81,7 @@ impl ApplyPatchRuntime {
             return None;
         }
 
-        let permissions =
-            effective_permission_profile(attempt.permissions, req.additional_permissions.as_ref());
+        let permissions = effective_permission_profile(attempt.permissions, None);
         Some(FileSystemSandboxContext {
             permissions,
             cwd: Some(attempt.sandbox_cwd.clone()),
@@ -132,9 +126,6 @@ impl Approvable<ApplyPatchRequest> for ApplyPatchRuntime {
                 return review_approval_request(session, turn, review_id, action, retry_reason)
                     .await;
             }
-            if req.permissions_preapproved && retry_reason.is_none() {
-                return ReviewDecision::Approved;
-            }
             if let Some(reason) = retry_reason {
                 let rx_approve = session
                     .request_patch_approval(
@@ -165,10 +156,10 @@ impl Approvable<ApplyPatchRequest> for ApplyPatchRuntime {
         })
     }
 
-    fn wants_no_sandbox_approval(&self, policy: AskForApproval) -> bool {
+    fn allows_unsandboxed_retry_prompt(&self, policy: AskForApproval) -> bool {
         match policy {
             AskForApproval::Never => false,
-            AskForApproval::Granular(granular_config) => granular_config.allows_sandbox_approval(),
+            AskForApproval::Granular(_) => false,
             AskForApproval::OnFailure => true,
             AskForApproval::OnRequest => true,
             AskForApproval::UnlessTrusted => true,
@@ -186,15 +177,6 @@ impl Approvable<ApplyPatchRequest> for ApplyPatchRuntime {
         Some(req.exec_approval_requirement.clone())
     }
 
-    fn permission_request_payload(
-        &self,
-        req: &ApplyPatchRequest,
-    ) -> Option<PermissionRequestPayload> {
-        Some(PermissionRequestPayload {
-            tool_name: HookToolName::apply_patch(),
-            tool_input: edgerun_json::json!({ "command": req.action.patch }),
-        })
-    }
 }
 
 impl ToolRuntime<ApplyPatchRequest, ApplyPatchRuntimeOutput> for ApplyPatchRuntime {
@@ -250,7 +232,3 @@ impl ToolRuntime<ApplyPatchRequest, ApplyPatchRuntimeOutput> for ApplyPatchRunti
         })
     }
 }
-
-#[cfg(test)]
-#[path = "apply_patch_tests.rs"]
-mod tests;

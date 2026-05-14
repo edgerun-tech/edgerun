@@ -5,12 +5,9 @@ use crate::maybe_emit_implicit_skill_invocation;
 use crate::tools::context::ExecCommandToolOutput;
 use crate::tools::context::ToolInvocation;
 use crate::tools::context::ToolPayload;
-use crate::tools::handlers::apply_granted_turn_permissions;
 use crate::tools::handlers::apply_patch::intercept_apply_patch;
-use crate::tools::handlers::implicit_granted_permissions;
-use crate::tools::handlers::normalize_and_validate_additional_permissions;
-use crate::tools::handlers::parse_arguments;
-use crate::tools::handlers::parse_arguments_with_base_path;
+use crate::tools::handlers::parse_json_arguments;
+use crate::tools::handlers::parse_json_arguments_with_base_path;
 use crate::tools::handlers::resolve_tool_environment;
 use crate::tools::hook_names::HookToolName;
 use crate::tools::registry::PostToolUsePayload;
@@ -22,7 +19,6 @@ use crate::unified_exec::UnifiedExecContext;
 use crate::unified_exec::UnifiedExecError;
 use crate::unified_exec::UnifiedExecProcessManager;
 use crate::unified_exec::generate_chunk_id;
-use codex_features::Feature;
 use codex_otel::SessionTelemetry;
 use codex_otel::TOOL_CALL_UNIFIED_EXEC_METRIC;
 use codex_shell_command::is_safe_command::is_known_safe_command;
@@ -41,7 +37,6 @@ use super::post_unified_exec_tool_use_payload;
 #[derive(Clone, Copy)]
 pub(crate) struct ExecCommandHandlerOptions {
     pub(crate) allow_login_shell: bool,
-    pub(crate) exec_permission_approvals_enabled: bool,
     pub(crate) include_environment_id: bool,
 }
 
@@ -54,7 +49,6 @@ impl Default for ExecCommandHandler {
         Self {
             options: ExecCommandHandlerOptions {
                 allow_login_shell: false,
-                exec_permission_approvals_enabled: false,
                 include_environment_id: false,
             },
         }
@@ -78,7 +72,6 @@ impl ToolHandler for ExecCommandHandler {
         Some(create_exec_command_tool_with_environment_id(
             CommandToolOptions {
                 allow_login_shell: self.options.allow_login_shell,
-                exec_permission_approvals_enabled: self.options.exec_permission_approvals_enabled,
             },
             self.options.include_environment_id,
         ))
@@ -105,7 +98,7 @@ impl ToolHandler for ExecCommandHandler {
             return true;
         };
 
-        let Ok(params) = parse_arguments::<ExecCommandArgs>(arguments) else {
+        let Ok(params) = parse_json_arguments::<ExecCommandArgs>(arguments) else {
             return true;
         };
         let command = match get_command(
@@ -125,7 +118,7 @@ impl ToolHandler for ExecCommandHandler {
             return None;
         };
 
-        parse_arguments::<ExecCommandArgs>(arguments)
+        parse_json_arguments::<ExecCommandArgs>(arguments)
             .ok()
             .map(|args| PreToolUsePayload {
                 tool_name: HookToolName::bash(),
@@ -162,7 +155,7 @@ impl ToolHandler for ExecCommandHandler {
 
         let manager: &UnifiedExecProcessManager = &session.services.unified_exec_manager;
         let context = UnifiedExecContext::new(session.clone(), turn.clone(), call_id.clone());
-        let environment_args: ExecCommandEnvironmentArgs = parse_arguments(&arguments)?;
+        let environment_args: ExecCommandEnvironmentArgs = parse_json_arguments(&arguments)?;
         let Some(turn_environment) =
             resolve_tool_environment(turn.as_ref(), environment_args.environment_id.as_deref())?
         else {
@@ -180,7 +173,7 @@ impl ToolHandler for ExecCommandHandler {
             );
         let environment = Arc::clone(&turn_environment.environment);
         let fs = environment.get_filesystem();
-        let args: ExecCommandArgs = parse_arguments_with_base_path(&arguments, &cwd)?;
+        let args: ExecCommandArgs = parse_json_arguments_with_base_path(&arguments, &cwd)?;
         let hook_command = args.cmd.clone();
         maybe_emit_implicit_skill_invocation(
             session.as_ref(),
@@ -203,71 +196,10 @@ impl ToolHandler for ExecCommandHandler {
             tty,
             yield_time_ms,
             max_output_tokens,
-            sandbox_permissions,
-            additional_permissions,
-            justification,
-            prefix_rule,
             ..
         } = args;
         let max_output_tokens =
             effective_max_output_tokens(max_output_tokens, turn.truncation_policy);
-
-        let exec_permission_approvals_enabled =
-            session.features().enabled(Feature::ExecPermissionApprovals);
-        let requested_additional_permissions = additional_permissions.clone();
-        let effective_additional_permissions = apply_granted_turn_permissions(
-            context.session.as_ref(),
-            cwd.as_path(),
-            sandbox_permissions,
-            additional_permissions,
-        )
-        .await;
-        let additional_permissions_allowed = exec_permission_approvals_enabled
-            || (session.features().enabled(Feature::RequestPermissionsTool)
-                && effective_additional_permissions.permissions_preapproved);
-
-        // Sticky turn permissions have already been approved, so they should
-        // continue through the normal exec approval flow for the command.
-        if effective_additional_permissions
-            .sandbox_permissions
-            .requests_sandbox_override()
-            && !effective_additional_permissions.permissions_preapproved
-            && !matches!(
-                context.turn.approval_policy.value(),
-                codex_protocol::protocol::AskForApproval::OnRequest
-            )
-        {
-            let approval_policy = context.turn.approval_policy.value();
-            manager.release_process_id(process_id).await;
-            return Err(FunctionCallError::RespondToModel(format!(
-                "approval policy is {approval_policy:?}; reject command — you cannot ask for escalated permissions if the approval policy is {approval_policy:?}"
-            )));
-        }
-
-        let normalized_additional_permissions = match implicit_granted_permissions(
-            sandbox_permissions,
-            requested_additional_permissions.as_ref(),
-            &effective_additional_permissions,
-        )
-        .map_or_else(
-            || {
-                normalize_and_validate_additional_permissions(
-                    additional_permissions_allowed,
-                    context.turn.approval_policy.value(),
-                    effective_additional_permissions.sandbox_permissions,
-                    effective_additional_permissions.additional_permissions,
-                    effective_additional_permissions.permissions_preapproved,
-                    &cwd,
-                )
-            },
-            |permissions| Ok(Some(permissions)),
-        ) {
-            Ok(normalized) => normalized,
-            Err(err) => {
-                manager.release_process_id(process_id).await;
-                return Err(FunctionCallError::RespondToModel(err));
-            }
-        };
 
         if let Some(output) = intercept_apply_patch(
             &command,
@@ -308,12 +240,8 @@ impl ToolHandler for ExecCommandHandler {
                     environment,
                     network: context.turn.network.clone(),
                     tty,
-                    sandbox_permissions: effective_additional_permissions.sandbox_permissions,
-                    additional_permissions: normalized_additional_permissions,
-                    additional_permissions_preapproved: effective_additional_permissions
-                        .permissions_preapproved,
-                    justification,
-                    prefix_rule,
+                    justification: None,
+                    prefix_rule: None,
                 },
                 &context,
             )

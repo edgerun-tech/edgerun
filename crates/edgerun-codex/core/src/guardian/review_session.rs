@@ -1103,8 +1103,6 @@ mod tests {
                 id: "shell-1".to_string(),
                 command: vec!["git".to_string(), "status".to_string()],
                 cwd,
-                sandbox_permissions: crate::sandboxing::SandboxPermissions::UseDefault,
-                additional_permissions: None,
                 justification: Some("Inspect repo state.".to_string()),
             },
             retry_reason: None,

@@ -159,8 +159,7 @@ fn decode_body_bytes(request: &wiremock::Request) -> Vec<u8> {
         .split(',')
         .any(|entry| entry.trim().eq_ignore_ascii_case("zstd"))
     {
-        edgerun_zstd::stream::decode_all(std::io::Cursor::new(&request.body))
-            .unwrap_or_else(|_| request.body.clone())
+        request.body.clone()
     } else {
         request.body.clone()
     }

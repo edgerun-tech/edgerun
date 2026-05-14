@@ -31,41 +31,6 @@ use schemars::JsonSchema;
 
 use crate::mcp::CallToolResult;
 
-/// Controls the per-command sandbox override requested by a shell-like tool call.
-#[derive(
-    Debug, Clone, Copy, Default, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema, TS,
-)]
-#[serde(rename_all = "snake_case")]
-pub enum SandboxPermissions {
-    /// Run with the turn's configured sandbox policy unchanged.
-    #[default]
-    UseDefault,
-    /// Request to run outside the sandbox.
-    RequireEscalated,
-    /// Request to stay in the sandbox while widening permissions for this
-    /// command only.
-    WithAdditionalPermissions,
-}
-
-impl SandboxPermissions {
-    /// True if SandboxPermissions requires full unsandboxed execution (i.e. RequireEscalated)
-    pub fn requires_escalated_permissions(self) -> bool {
-        matches!(self, SandboxPermissions::RequireEscalated)
-    }
-
-    /// True if SandboxPermissions requests any explicit per-command override
-    /// beyond `UseDefault`.
-    pub fn requests_sandbox_override(self) -> bool {
-        !matches!(self, SandboxPermissions::UseDefault)
-    }
-
-    /// True if SandboxPermissions uses the sandboxed per-command permission
-    /// widening flow.
-    pub fn uses_additional_permissions(self) -> bool {
-        matches!(self, SandboxPermissions::WithAdditionalPermissions)
-    }
-}
-
 #[derive(Debug, Clone, Default, Eq, Hash, PartialEq, JsonSchema, TS)]
 pub struct FileSystemPermissions {
     pub entries: Vec<FileSystemSandboxEntry>,
@@ -285,20 +250,6 @@ impl NetworkPermissions {
     }
 }
 
-/// Partial permission overlay used for per-command requests and approved
-/// session/turn grants.
-#[derive(Debug, Clone, Default, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
-pub struct AdditionalPermissionProfile {
-    pub network: Option<NetworkPermissions>,
-    pub file_system: Option<FileSystemPermissions>,
-}
-
-impl AdditionalPermissionProfile {
-    pub fn is_empty(&self) -> bool {
-        self.network.is_none() && self.file_system.is_none()
-    }
-}
-
 #[derive(
     Debug, Clone, Copy, Default, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema, TS,
 )]
@@ -390,59 +341,6 @@ pub enum PermissionProfile {
     #[serde(rename_all = "snake_case")]
     #[ts(rename_all = "snake_case")]
     External { network: NetworkSandboxPolicy },
-}
-
-/// Metadata for the named or implicit built-in permissions profile that
-/// produced the active `PermissionProfile`.
-///
-/// The runtime must honor `PermissionProfile`; this sidecar exists so clients
-/// can display stable profile identity without trying to reverse-engineer a
-/// name from the compiled permissions.
-#[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize, JsonSchema, TS)]
-pub struct ActivePermissionProfile {
-    /// Profile identifier from `default_permissions` or the implicit built-in
-    /// default, such as `:workspace` or a user-defined `[permissions.<id>]`
-    /// profile.
-    pub id: String,
-
-    /// Optional parent profile identifier once permissions profiles support
-    /// inheritance. This is always `None` until that config feature exists.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub extends: Option<String>,
-
-    /// Bounded user-requested modifications applied on top of the named
-    /// profile, if any.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub modifications: Vec<ActivePermissionProfileModification>,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize, JsonSchema, TS)]
-#[serde(tag = "type", rename_all = "snake_case")]
-#[ts(tag = "type")]
-pub enum ActivePermissionProfileModification {
-    /// Additional concrete directory that should be writable.
-    #[serde(rename_all = "snake_case")]
-    #[ts(rename_all = "snake_case")]
-    AdditionalWritableRoot { path: AbsolutePathBuf },
-}
-
-impl ActivePermissionProfile {
-    pub fn new(id: impl Into<String>) -> Self {
-        Self {
-            id: id.into(),
-            extends: None,
-            modifications: Vec::new(),
-        }
-    }
-
-    pub fn with_modifications(
-        mut self,
-        modifications: Vec<ActivePermissionProfileModification>,
-    ) -> Self {
-        self.modifications = modifications;
-        self
-    }
 }
 
 impl Default for PermissionProfile {
@@ -767,6 +665,66 @@ pub enum ResponseInputItem {
         #[ts(type = "unknown[]")]
         tools: Vec<edgerun_json::Value>,
     },
+}
+
+impl ToJson for ResponseInputItem {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        match self {
+            Self::Message {
+                role,
+                content,
+                phase,
+            } => {
+                object.push_field("type", "message");
+                object.push_field("role", role.clone());
+                object.push_field("content", content.to_json());
+                object.push_opt_field("phase", phase.as_ref().map(ToJson::to_json));
+            }
+            Self::FunctionCallOutput { call_id, output } => {
+                object.push_field("type", "function_call_output");
+                object.push_field("call_id", call_id.clone());
+                object.push_field("output", output.to_json());
+            }
+            Self::McpToolCallOutput { call_id, output } => {
+                object.push_field("type", "mcp_tool_call_output");
+                object.push_field("call_id", call_id.clone());
+                object.push_field("output", call_tool_result_to_json(output));
+            }
+            Self::CustomToolCallOutput {
+                call_id,
+                name,
+                output,
+            } => {
+                object.push_field("type", "custom_tool_call_output");
+                object.push_field("call_id", call_id.clone());
+                object.push_opt_field("name", name.clone());
+                object.push_field("output", output.to_json());
+            }
+            Self::ToolSearchOutput {
+                call_id,
+                status,
+                execution,
+                tools,
+            } => {
+                object.push_field("type", "tool_search_output");
+                object.push_field("call_id", call_id.clone());
+                object.push_field("status", status.clone());
+                object.push_field("execution", execution.clone());
+                object.push_field("tools", tools.to_json());
+            }
+        }
+        Value::Object(object)
+    }
+}
+
+fn call_tool_result_to_json(output: &CallToolResult) -> Value {
+    let mut object = Map::with_capacity(5);
+    object.push_field("content", output.content.to_json());
+    object.push_opt_field("structuredContent", output.structured_content.clone());
+    object.push_opt_field("isError", output.is_error);
+    object.push_opt_field("_meta", output.meta.clone());
+    Value::Object(object)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema, TS)]
@@ -1923,18 +1881,26 @@ pub struct ShellToolCallParams {
     /// This is the maximum time in milliseconds that the command is allowed to run.
     #[serde(alias = "timeout")]
     pub timeout_ms: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub sandbox_permissions: Option<SandboxPermissions>,
     /// Suggests a command prefix to persist for future sessions
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub prefix_rule: Option<Vec<String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub additional_permissions: Option<AdditionalPermissionProfile>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub justification: Option<String>,
+}
+
+impl FromJson for ShellToolCallParams {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ShellToolCallParams")?;
+        let timeout_ms = match object.remove("timeout_ms") {
+            Some(Value::Null) | None => object.take_optional("timeout")?,
+            Some(value) => Some(u64::from_json(value)?),
+        };
+        Ok(Self {
+            command: object.take_required("command")?,
+            workdir: object.take_optional("workdir")?,
+            timeout_ms,
+            prefix_rule: object.take_optional("prefix_rule")?,
+        })
+    }
 }
 
 /// If the `name` of a `ResponseItem::FunctionCall` is `shell_command`, the
@@ -1952,15 +1918,7 @@ pub struct ShellCommandToolCallParams {
     pub timeout_ms: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
-    pub sandbox_permissions: Option<SandboxPermissions>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub prefix_rule: Option<Vec<String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub additional_permissions: Option<AdditionalPermissionProfile>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub justification: Option<String>,
 }
 
 /// Responses API compatible content items that can be returned by a tool call.
@@ -2302,6 +2260,11 @@ mod tests {
     use std::path::PathBuf;
     use tempfile::tempdir;
 
+    fn from_json_str<T: FromJson>(json: &str) -> T {
+        edgerun_json::from_value(edgerun_json::from_str(json).expect("parse json"))
+            .expect("deserialize json value")
+    }
+
     #[test]
     fn response_input_message_conversion_preserves_phase() {
         let item = ResponseItem::from(ResponseInputItem::Message {
@@ -2326,41 +2289,6 @@ mod tests {
     }
 
     #[test]
-    fn sandbox_permissions_helpers_match_documented_semantics() {
-        let cases = [
-            (SandboxPermissions::UseDefault, false, false, false),
-            (SandboxPermissions::RequireEscalated, true, true, false),
-            (
-                SandboxPermissions::WithAdditionalPermissions,
-                false,
-                true,
-                true,
-            ),
-        ];
-
-        for (
-            sandbox_permissions,
-            requires_escalated_permissions,
-            requests_sandbox_override,
-            uses_additional_permissions,
-        ) in cases
-        {
-            assert_eq!(
-                sandbox_permissions.requires_escalated_permissions(),
-                requires_escalated_permissions
-            );
-            assert_eq!(
-                sandbox_permissions.requests_sandbox_override(),
-                requests_sandbox_override
-            );
-            assert_eq!(
-                sandbox_permissions.uses_additional_permissions(),
-                uses_additional_permissions
-            );
-        }
-    }
-
-    #[test]
     fn convert_mcp_content_to_items_preserves_data_urls() {
         let contents = vec![edgerun_json::json!({
             "type": "image",
@@ -2380,7 +2308,7 @@ mod tests {
 
     #[test]
     fn response_item_parses_image_generation_call() {
-        let item = edgerun_json::from_serde_value::<ResponseItem>(edgerun_json::json!({
+        let item = edgerun_json::from_value::<ResponseItem>(edgerun_json::json!({
             "id": "ig_123",
             "type": "image_generation_call",
             "status": "completed",
@@ -2402,7 +2330,7 @@ mod tests {
 
     #[test]
     fn response_item_parses_image_generation_call_without_revised_prompt() {
-        let item = edgerun_json::from_serde_value::<ResponseItem>(edgerun_json::json!({
+        let item = edgerun_json::from_value::<ResponseItem>(edgerun_json::json!({
             "id": "ig_123",
             "type": "image_generation_call",
             "status": "completed",
@@ -2419,20 +2347,6 @@ mod tests {
                 result: "Zm9v".to_string(),
             }
         );
-    }
-
-    #[test]
-    fn additional_permission_profile_is_empty_when_all_fields_are_none() {
-        assert_eq!(AdditionalPermissionProfile::default().is_empty(), true);
-    }
-
-    #[test]
-    fn additional_permission_profile_is_not_empty_when_field_is_present_but_nested_empty() {
-        let permission_profile = AdditionalPermissionProfile {
-            network: Some(NetworkPermissions { enabled: None }),
-            file_system: None,
-        };
-        assert_eq!(permission_profile.is_empty(), false);
     }
 
     #[test]
@@ -2635,7 +2549,7 @@ mod tests {
             glob_scan_max_depth: NonZeroUsize::new(2),
         };
 
-        let serialized = edgerun_json::to_serde_value(&file_system_permissions)?;
+        let serialized = edgerun_json::to_value(&file_system_permissions);
 
         assert_eq!(serialized.get("read"), None);
         assert_eq!(serialized.get("write"), None);
@@ -2645,7 +2559,8 @@ mod tests {
         );
         assert!(serialized.get("entries").is_some());
         assert_eq!(
-            edgerun_json::from_serde_value::<FileSystemPermissions>(serialized)?,
+            edgerun_json::from_value::<FileSystemPermissions>(serialized)
+                .expect("filesystem permissions"),
             file_system_permissions
         );
         Ok(())
@@ -2653,7 +2568,7 @@ mod tests {
 
     #[test]
     fn file_system_permissions_rejects_zero_glob_scan_depth() {
-        edgerun_json::from_serde_value::<FileSystemPermissions>(edgerun_json::json!({
+        edgerun_json::from_value::<FileSystemPermissions>(edgerun_json::json!({
             "entries": [],
             "glob_scan_max_depth": 0,
         }))
@@ -3017,7 +2932,7 @@ mod tests {
             {"type": "input_image", "image_url": "data:image/png;base64,XYZ"}
         ]"#;
 
-        let payload: FunctionCallOutputPayload = edgerun_json::from_serde_str(json)?;
+        let payload: FunctionCallOutputPayload = from_json_str(json);
 
         assert_eq!(payload.success, None);
         let expected_items = vec![
@@ -3045,7 +2960,7 @@ mod tests {
     fn deserializes_compaction_alias() -> Result<()> {
         let json = r#"{"type":"compaction_summary","encrypted_content":"abc"}"#;
 
-        let item: ResponseItem = edgerun_json::from_serde_str(json)?;
+        let item: ResponseItem = from_json_str(json);
 
         assert_eq!(
             item,
@@ -3060,7 +2975,7 @@ mod tests {
     fn deserializes_context_compaction() -> Result<()> {
         let json = r#"{"type":"context_compaction","encrypted_content":"abc"}"#;
 
-        let item: ResponseItem = edgerun_json::from_serde_str(json)?;
+        let item: ResponseItem = from_json_str(json);
 
         assert_eq!(
             item,
@@ -3078,7 +2993,7 @@ mod tests {
         };
 
         assert_eq!(
-            edgerun_json::to_serde_value(item)?,
+            edgerun_json::to_value(&item),
             edgerun_json::json!({
                 "type": "context_compaction",
             })
@@ -3098,7 +3013,7 @@ mod tests {
             }
         }"#;
 
-        let item: ResponseItem = edgerun_json::from_serde_str(json)?;
+        let item: ResponseItem = from_json_str(json);
 
         assert_eq!(item, ResponseItem::Other);
         Ok(())
@@ -3174,7 +3089,7 @@ mod tests {
 
         for (json_literal, expected_id, expected_action, expected_status, expect_roundtrip) in cases
         {
-            let parsed: ResponseItem = edgerun_json::from_serde_str(json_literal)?;
+            let parsed: ResponseItem = from_json_str(json_literal);
             let expected = ResponseItem::WebSearchCall {
                 id: expected_id.clone(),
                 status: expected_status.clone(),
@@ -3182,7 +3097,7 @@ mod tests {
             };
             assert_eq!(parsed, expected);
 
-            let serialized = edgerun_json::to_serde_value(&parsed)?;
+            let serialized = edgerun_json::to_value(&parsed);
             let mut expected_serialized: edgerun_json::Value =
                 edgerun_json::from_str(json_literal)?;
             if !expect_roundtrip && let Some(obj) = expected_serialized.as_object_mut() {
@@ -3202,16 +3117,13 @@ mod tests {
             "timeout": 1000
         }"#;
 
-        let params: ShellToolCallParams = edgerun_json::from_serde_str(json)?;
+        let params: ShellToolCallParams = from_json_str(json);
         assert_eq!(
             ShellToolCallParams {
                 command: vec!["ls".to_string(), "-l".to_string()],
                 workdir: Some("/tmp".to_string()),
                 timeout_ms: Some(1000),
-                sandbox_permissions: None,
                 prefix_rule: None,
-                additional_permissions: None,
-                justification: None,
             },
             params
         );
@@ -3250,7 +3162,7 @@ mod tests {
 
     #[test]
     fn tool_search_call_roundtrips() -> Result<()> {
-        let parsed: ResponseItem = edgerun_json::from_serde_str(
+        let parsed: ResponseItem = from_json_str(
             r#"{
                 "type": "tool_search_call",
                 "call_id": "search-1",
@@ -3260,7 +3172,7 @@ mod tests {
                     "limit": 1
                 }
             }"#,
-        )?;
+        );
 
         assert_eq!(
             parsed,
@@ -3277,7 +3189,7 @@ mod tests {
         );
 
         assert_eq!(
-            edgerun_json::to_serde_value(&parsed)?,
+            edgerun_json::to_value(&parsed),
             edgerun_json::json!({
                 "type": "tool_search_call",
                 "call_id": "search-1",
@@ -3337,7 +3249,7 @@ mod tests {
         );
 
         assert_eq!(
-            edgerun_json::to_serde_value(input)?,
+            edgerun_json::to_value(&input),
             edgerun_json::json!({
                 "type": "tool_search_output",
                 "call_id": "search-1",
@@ -3365,7 +3277,7 @@ mod tests {
 
     #[test]
     fn tool_search_server_items_allow_null_call_id() -> Result<()> {
-        let parsed_call: ResponseItem = edgerun_json::from_serde_str(
+        let parsed_call: ResponseItem = from_json_str(
             r#"{
                 "type": "tool_search_call",
                 "execution": "server",
@@ -3375,7 +3287,7 @@ mod tests {
                     "paths": ["crm"]
                 }
             }"#,
-        )?;
+        );
         assert_eq!(
             parsed_call,
             ResponseItem::ToolSearchCall {
@@ -3389,7 +3301,7 @@ mod tests {
             }
         );
 
-        let parsed_output: ResponseItem = edgerun_json::from_serde_str(
+        let parsed_output: ResponseItem = from_json_str(
             r#"{
                 "type": "tool_search_output",
                 "execution": "server",
@@ -3397,7 +3309,7 @@ mod tests {
                 "status": "completed",
                 "tools": []
             }"#,
-        )?;
+        );
         assert_eq!(
             parsed_output,
             ResponseItem::ToolSearchOutput {

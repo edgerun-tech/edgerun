@@ -5,11 +5,9 @@
 //! and helpers (`Sandboxable`, `ToolRuntime`, `SandboxAttempt`, etc.).
 
 use crate::sandboxing::ExecOptions;
-use crate::sandboxing::SandboxPermissions;
 use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;
 use crate::state::SessionServices;
-use crate::tools::hook_names::HookToolName;
 use crate::tools::network_approval::NetworkApprovalSpec;
 use codex_network_proxy::NetworkProxy;
 use codex_protocol::approvals::ExecPolicyAmendment;
@@ -132,30 +130,6 @@ pub(crate) struct ApprovalCtx<'a> {
     pub network_approval_context: Option<NetworkApprovalContext>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct PermissionRequestPayload {
-    pub tool_name: HookToolName,
-    pub tool_input: edgerun_json::Value,
-}
-
-impl PermissionRequestPayload {
-    pub(crate) fn bash(command: String, description: Option<String>) -> Self {
-        let mut tool_input = edgerun_json::Map::new();
-        tool_input.insert("command".to_string(), edgerun_json::Value::String(command));
-        if let Some(description) = description {
-            tool_input.insert(
-                "description".to_string(),
-                edgerun_json::Value::String(description),
-            );
-        }
-
-        Self {
-            tool_name: HookToolName::bash(),
-            tool_input: edgerun_json::Value::Object(tool_input),
-        }
-    }
-}
-
 // Specifies what tool orchestrator should do with a given tool call.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum ExecApprovalRequirement {
@@ -197,8 +171,7 @@ impl ExecApprovalRequirement {
 
 /// - Never, OnFailure: do not ask
 /// - OnRequest: ask unless filesystem access is unrestricted
-/// - Granular: ask unless filesystem access is unrestricted, but auto-reject
-///   when granular sandbox approval is disabled.
+/// - Granular: ask unless filesystem access is unrestricted.
 /// - UnlessTrusted: always ask
 pub(crate) fn default_exec_approval_requirement(
     policy: AskForApproval,
@@ -215,17 +188,7 @@ pub(crate) fn default_exec_approval_requirement(
         AskForApproval::UnlessTrusted => true,
     };
 
-    if needs_approval
-        && matches!(
-            policy,
-            AskForApproval::Granular(granular_config)
-                if !granular_config.allows_sandbox_approval()
-        )
-    {
-        ExecApprovalRequirement::Forbidden {
-            reason: "approval policy disallowed sandbox approval prompt".to_string(),
-        }
-    } else if needs_approval {
+    if needs_approval {
         ExecApprovalRequirement::NeedsApproval {
             reason: None,
             proposed_execpolicy_amendment: None,
@@ -245,34 +208,18 @@ pub(crate) enum SandboxOverride {
 }
 
 pub(crate) fn sandbox_override_for_first_attempt(
-    sandbox_permissions: SandboxPermissions,
     exec_approval_requirement: &ExecApprovalRequirement,
 ) -> SandboxOverride {
-    // ExecPolicy `Allow` can intentionally imply full trust (Skip + bypass_sandbox=true),
-    // which supersedes `with_additional_permissions` sandboxed execution hints.
-    if sandbox_permissions.requires_escalated_permissions()
-        || matches!(
-            exec_approval_requirement,
-            ExecApprovalRequirement::Skip {
-                bypass_sandbox: true,
-                ..
-            }
-        )
-    {
+    if matches!(
+        exec_approval_requirement,
+        ExecApprovalRequirement::Skip {
+            bypass_sandbox: true,
+            ..
+        }
+    ) {
         SandboxOverride::BypassSandboxFirstAttempt
     } else {
         SandboxOverride::NoOverride
-    }
-}
-
-pub(crate) fn managed_network_for_sandbox_permissions(
-    network: Option<&NetworkProxy>,
-    sandbox_permissions: SandboxPermissions,
-) -> Option<&NetworkProxy> {
-    if sandbox_permissions.requires_escalated_permissions() {
-        None
-    } else {
-        network
     }
 }
 
@@ -309,20 +256,14 @@ pub(crate) trait Approvable<Req> {
         None
     }
 
-    /// Return hook input for approval-time policy hooks when this runtime wants
-    /// hook evaluation to run before guardian or user approval.
-    fn permission_request_payload(&self, _req: &Req) -> Option<PermissionRequestPayload> {
-        None
-    }
-
     /// Decide we can request an approval for no-sandbox execution.
-    fn wants_no_sandbox_approval(&self, policy: AskForApproval) -> bool {
+    fn allows_unsandboxed_retry_prompt(&self, policy: AskForApproval) -> bool {
         match policy {
             AskForApproval::OnFailure => true,
             AskForApproval::UnlessTrusted => true,
             AskForApproval::Never => false,
             AskForApproval::OnRequest => false,
-            AskForApproval::Granular(granular_config) => granular_config.sandbox_approval,
+            AskForApproval::Granular(_) => false,
         }
     }
 
@@ -419,7 +360,3 @@ impl<'a> SandboxAttempt<'a> {
             })
     }
 }
-
-#[cfg(test)]
-#[path = "sandboxing_tests.rs"]
-mod tests;

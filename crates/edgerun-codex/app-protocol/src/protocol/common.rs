@@ -1240,12 +1240,6 @@ server_request_definitions! {
         response: v2::McpServerElicitationRequestResponse,
     },
 
-    /// Request approval for additional permissions from the user.
-    PermissionsRequestApproval => "item/permissions/requestApproval" {
-        params: v2::PermissionsRequestApprovalParams,
-        response: v2::PermissionsRequestApprovalResponse,
-    },
-
     /// Execute a dynamic tool call on the client.
     DynamicToolCall => "item/tool/call" {
         params: v2::DynamicToolCallParams,
@@ -2161,7 +2155,6 @@ mod tests {
                 approvals_reviewer: v2::ApprovalsReviewer::User,
                 sandbox: v2::SandboxPolicy::DangerFullAccess,
                 permission_profile: None,
-                active_permission_profile: None,
                 reasoning_effort: None,
             },
         };
@@ -2893,39 +2886,6 @@ mod tests {
         );
         let reason = crate::experimental_api::ExperimentalApi::experimental_reason(&notification);
         assert_eq!(reason, Some("thread/realtime/outputAudio/delta"));
-    }
-
-    #[test]
-    fn command_execution_request_approval_additional_permissions_is_marked_experimental() {
-        let params = v2::CommandExecutionRequestApprovalParams {
-            thread_id: "thr_123".to_string(),
-            turn_id: "turn_123".to_string(),
-            item_id: "call_123".to_string(),
-            started_at_ms: 0,
-            approval_id: None,
-            reason: None,
-            network_approval_context: None,
-            command: Some("cat file".to_string()),
-            cwd: None,
-            command_actions: None,
-            additional_permissions: Some(v2::AdditionalPermissionProfile {
-                network: None,
-                file_system: Some(v2::AdditionalFileSystemPermissions {
-                    read: Some(vec![absolute_path("/tmp/allowed")]),
-                    write: None,
-                    glob_scan_max_depth: None,
-                    entries: None,
-                }),
-            }),
-            proposed_execpolicy_amendment: None,
-            proposed_network_policy_amendments: None,
-            available_decisions: None,
-        };
-        let reason = crate::experimental_api::ExperimentalApi::experimental_reason(&params);
-        assert_eq!(
-            reason,
-            Some("item/commandExecution/requestApproval.additionalPermissions")
-        );
     }
 }
 

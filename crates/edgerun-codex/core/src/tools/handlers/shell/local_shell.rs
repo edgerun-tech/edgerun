@@ -107,7 +107,6 @@ impl ToolHandler for LocalShellHandler {
             tool_name: "local_shell".to_string(),
             exec_params,
             hook_command: codex_shell_command::parse_command::shlex_join(&params.command),
-            additional_permissions: None,
             prefix_rule: None,
             session,
             turn,
