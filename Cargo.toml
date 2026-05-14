@@ -132,6 +132,8 @@ members = [
   "crates/utility/edgerun-sharded-slab",
   "crates/utility/edgerun-shlex",
   "crates/utility/edgerun-similar",
+  "crates/utility/edgerun-simd-cesu8",
+  "crates/utility/edgerun-simdutf8",
   "crates/utility/edgerun-sixel",
   "crates/utility/edgerun-slab",
   "crates/utility/edgerun-smallvec",
@@ -290,6 +292,8 @@ serde_core = { path = "crates/utility/edgerun-serde-core" }
 serde_derive = { path = "crates/utility/edgerun-serde-derive" }
 same-file = { path = "crates/utility/edgerun-same-file" }
 sharded-slab = { path = "crates/utility/edgerun-sharded-slab" }
+simd_cesu8 = { path = "crates/utility/edgerun-simd-cesu8" }
+simdutf8 = { path = "crates/utility/edgerun-simdutf8" }
 slab = { path = "crates/utility/edgerun-slab" }
 smallvec = { path = "crates/utility/edgerun-smallvec" }
 stable_deref_trait = { path = "crates/utility/edgerun-stable-deref-trait" }

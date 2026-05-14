@@ -21,7 +21,7 @@ combine = "4.1.0"
 jni-macros = { path = "../edgerun-jni-macros" }
 jni-sys = { path = "../edgerun-jni-sys" }
 log = { path = "../edgerun-log-upstream" }
-simd_cesu8 = "1.1.1"
+simd_cesu8 = { path = "../edgerun-simd-cesu8" }
 thiserror = { path = "../edgerun-thiserror" }
 
 [build-dependencies]
