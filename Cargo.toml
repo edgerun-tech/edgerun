@@ -87,6 +87,9 @@ members = [
   "crates/utility/edgerun-icu-provider",
   "crates/utility/edgerun-inventory",
   "crates/utility/edgerun-jni",
+  "crates/utility/edgerun-jni-macros",
+  "crates/utility/edgerun-jni-sys",
+  "crates/utility/edgerun-jni-sys-macros",
   "crates/utility/edgerun-json",
   "crates/utility/edgerun-json-derive",
   "crates/utility/edgerun-landlock",
@@ -262,6 +265,9 @@ futures-task = { path = "crates/utility/edgerun-futures-task" }
 futures-util = { path = "crates/utility/edgerun-futures-util" }
 hashbrown = { path = "crates/utility/edgerun-hashbrown" }
 jni = { path = "crates/utility/edgerun-jni" }
+jni-macros = { path = "crates/utility/edgerun-jni-macros" }
+jni-sys = { path = "crates/utility/edgerun-jni-sys" }
+jni-sys-macros = { path = "crates/utility/edgerun-jni-sys-macros" }
 lazy_static = { path = "crates/utility/edgerun-lazy_static" }
 litemap = { path = "crates/utility/edgerun-litemap" }
 log = { path = "crates/utility/edgerun-log-upstream" }

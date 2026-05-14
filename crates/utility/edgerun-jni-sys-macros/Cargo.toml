@@ -1,0 +1,21 @@
+[package]
+name = "jni-sys-macros"
+version = "0.4.1"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun-owned macros for the jni-sys crate"
+
+[lib]
+name = "jni_sys_macros"
+path = "src/lib.rs"
+proc-macro = true
+
+[dependencies]
+quote = { path = "../edgerun-quote" }
+syn = { path = "../edgerun-syn", features = ["full"] }
+
+[lints]
+workspace = true

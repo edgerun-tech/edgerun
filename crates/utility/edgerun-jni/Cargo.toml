@@ -18,8 +18,8 @@ invocation = []
 [dependencies]
 cfg-if = { path = "../edgerun-cfg-if" }
 combine = "4.1.0"
-jni-macros = "=0.22.4"
-jni-sys = "0.4.1"
+jni-macros = { path = "../edgerun-jni-macros" }
+jni-sys = { path = "../edgerun-jni-sys" }
 log = { path = "../edgerun-log-upstream" }
 simd_cesu8 = "1.1.1"
 thiserror = { path = "../edgerun-thiserror" }
