@@ -107,7 +107,9 @@ members = [
   "crates/utility/edgerun-munge",
   "crates/utility/edgerun-munge-macro",
   "crates/utility/edgerun-opentelemetry",
+  "crates/utility/edgerun-opentelemetry-upstream",
   "crates/utility/edgerun-opentelemetry-sdk",
+  "crates/utility/edgerun-opentelemetry-sdk-upstream",
   "crates/utility/edgerun-once-cell",
   "crates/utility/edgerun-percent-encoding-upstream",
   "crates/utility/edgerun-pin-project-lite",
@@ -298,6 +300,8 @@ miniz_oxide = { path = "crates/utility/edgerun-miniz-oxide" }
 munge = { path = "crates/utility/edgerun-munge" }
 munge_macro = { path = "crates/utility/edgerun-munge-macro" }
 once_cell = { path = "crates/utility/edgerun-once-cell" }
+opentelemetry = { path = "crates/utility/edgerun-opentelemetry-upstream" }
+opentelemetry_sdk = { path = "crates/utility/edgerun-opentelemetry-sdk-upstream" }
 percent-encoding = { path = "crates/utility/edgerun-percent-encoding-upstream" }
 pin-project-lite = { path = "crates/utility/edgerun-pin-project-lite" }
 ppv-lite86 = { path = "crates/utility/edgerun-ppv-lite86" }
