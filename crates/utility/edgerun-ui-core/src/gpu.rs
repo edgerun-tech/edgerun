@@ -124,7 +124,8 @@ pub use primitives::{
     UnifiedContactKind, UnifiedMessage,
 };
 pub use runtime::{
-    GpuHit, HitKind, UiAction, UiEvent, UiKey, UiRuntimeState, UiTextBuffer, UiTextBufferAction,
+    GpuHit, HitKind, UiAction, UiEvent, UiKey, UiKeyModifiers, UiRuntimeState, UiTextBuffer,
+    UiTextBufferAction,
 };
 pub use scene::{Color4, GpuClip, GpuRect, GpuScene, RectMode, UiColorScheme};
 pub use shadcn_demo_catalog::{

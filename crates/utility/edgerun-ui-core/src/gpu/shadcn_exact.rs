@@ -98,6 +98,8 @@ pub enum UiShadcnChatRole {
     User,
     #[default]
     Assistant,
+    Reasoning,
+    Diff,
     ToolRunning,
     ToolSuccess,
     ToolError,
@@ -109,6 +111,8 @@ impl UiShadcnChatRole {
         match self {
             Self::User => "user",
             Self::Assistant => "assistant",
+            Self::Reasoning => "reasoning",
+            Self::Diff => "diff",
             Self::ToolRunning => "tool running",
             Self::ToolSuccess => "tool ok",
             Self::ToolError => "tool failed",
@@ -120,7 +124,7 @@ impl UiShadcnChatRole {
         match self {
             Self::ToolError | Self::Error => UiShadcnBadgeVariant::Destructive,
             Self::ToolRunning => UiShadcnBadgeVariant::Default,
-            Self::ToolSuccess => UiShadcnBadgeVariant::Secondary,
+            Self::Diff | Self::Reasoning | Self::ToolSuccess => UiShadcnBadgeVariant::Secondary,
             Self::User | Self::Assistant => UiShadcnBadgeVariant::Outline,
         }
     }
@@ -233,6 +237,7 @@ pub struct UiShadcnChatClientSpec<'a> {
     pub header_status: &'a str,
     pub header_badges: &'a [&'a str],
     pub header_tone: UiShadcnStatusTone,
+    pub activity_phase: u8,
     pub messages: &'a [UiShadcnConversationMessage<'a>],
     pub scroll_offset: f32,
     pub scroll_id: u32,
@@ -397,15 +402,40 @@ pub fn shadcn_card(title: &str, detail: &str) -> UiNode {
 }
 
 pub fn shadcn_chat_message(role: UiShadcnChatRole, body: &str) -> UiNode {
-    shadcn_card(role.label(), "")
-        .child(shadcn_badge(role.label(), role.badge_variant()).class("h-6"))
-        .child(shadcn_label(body).class("h-full text-text"))
+    let node = shadcn_card(role.label(), "")
+        .child(shadcn_badge(role.label(), role.badge_variant()).class("h-6"));
+    if role == UiShadcnChatRole::Diff {
+        node.child(shadcn_diff_body(body))
+    } else {
+        node.child(shadcn_label(body).class("h-full text-text"))
+    }
 }
 
 #[cfg(feature = "fontdue-text")]
 pub fn shadcn_chat_message_height(atlas: &FontAtlas, body: &str, card_width: f32) -> f32 {
     let body_width = (card_width - 32.0).max(1.0);
     58.0 + atlas.wrapped_line_count(body, body_width) as f32 * 22.0
+}
+
+pub fn shadcn_diff_body(body: &str) -> UiNode {
+    let mut node = column("h-full gap-1");
+    for line in body.lines().take(240) {
+        let class = if line.starts_with('+') && !line.starts_with("+++") {
+            "h-5 text-green"
+        } else if line.starts_with('-') && !line.starts_with("---") {
+            "h-5 text-danger"
+        } else if line.starts_with("@@") || line.starts_with("***") {
+            "h-5 text-muted-foreground"
+        } else {
+            "h-5 text-text"
+        };
+        node = node.child(shadcn_label(line).class(class));
+    }
+    if body.lines().count() > 240 {
+        node =
+            node.child(shadcn_label("[diff preview truncated]").class("h-5 text-muted-foreground"));
+    }
+    node
 }
 
 pub fn shadcn_conversation(
@@ -506,6 +536,7 @@ pub fn shadcn_chat_client(spec: UiShadcnChatClientSpec<'_>) -> UiNode {
             spec.header_status,
             spec.header_badges,
             spec.header_tone,
+            spec.activity_phase,
         ),
         shadcn_conversation(spec.messages, spec.scroll_offset, spec.scroll_id),
         shadcn_prompt_composer(
@@ -525,6 +556,7 @@ pub fn shadcn_status_header(
     status: &str,
     badges: &[&str],
     tone: UiShadcnStatusTone,
+    activity_phase: u8,
 ) -> UiNode {
     let mut badge_row = row("gap-2 items-center");
     for badge_label in badges {
@@ -532,13 +564,26 @@ pub fn shadcn_status_header(
             .child(shadcn_badge(badge_label, UiShadcnBadgeVariant::Secondary).class("h-7"));
     }
 
+    let mut status_row = row("gap-2 items-center flex-1")
+        .child(shadcn_badge("", tone.badge_variant()).class("size-3"))
+        .child(shadcn_label(title).class("h-5 text-text"))
+        .child(shadcn_label(status).class("h-5 text-muted-foreground flex-1"));
+    if tone == UiShadcnStatusTone::Active {
+        let active = activity_phase as usize % 4;
+        let mut shine = row("gap-1 items-center h-2");
+        for index in 0..4 {
+            let variant = if index == active {
+                UiShadcnBadgeVariant::Default
+            } else {
+                UiShadcnBadgeVariant::Secondary
+            };
+            shine = shine.child(shadcn_badge("", variant).class("h-1 w-5"));
+        }
+        status_row = status_row.child(shine);
+    }
+
     row("h-full items-center justify-between gap-4")
-        .child(
-            row("gap-2 items-center flex-1")
-                .child(shadcn_badge("", tone.badge_variant()).class("size-3"))
-                .child(shadcn_label(title).class("h-5 text-text"))
-                .child(shadcn_label(status).class("h-5 text-muted-foreground flex-1")),
-        )
+        .child(status_row)
         .child(badge_row)
 }
 
@@ -1054,7 +1099,8 @@ mod tests {
                 "Codex",
                 "Ready",
                 &["gpt-5.5", "ready"],
-                UiShadcnStatusTone::Success
+                UiShadcnStatusTone::Success,
+                0
             )
             .kind,
             UiNodeKind::Row
@@ -1083,7 +1129,7 @@ mod tests {
         assert!(matches!(
             shadcn_chat_client_shell(
                 None,
-                shadcn_status_header("Codex", "Ready", &["ready"], UiShadcnStatusTone::Success),
+                shadcn_status_header("Codex", "Ready", &["ready"], UiShadcnStatusTone::Success, 0),
                 shadcn_conversation(&[], 1.0, 7),
                 shadcn_prompt_composer("Prompt", "Hi", 11, "Send", 12, false, &[])
             )
@@ -1107,6 +1153,7 @@ mod tests {
                 header_status: "Ready",
                 header_badges: &["ready"],
                 header_tone: UiShadcnStatusTone::Success,
+                activity_phase: 0,
                 messages: &[UiShadcnConversationMessage::new(
                     UiShadcnChatRole::Assistant,
                     "Hello",
@@ -1208,5 +1255,80 @@ mod tests {
             shadcn_tooltip("Help").kind,
             UiNodeKind::Tooltip { .. }
         ));
+    }
+
+    #[test]
+    fn shadcn_chat_client_renders_semantic_hits() {
+        let mut scene = GpuScene::new(Color4::rgba(0.0, 0.0, 0.0, 1.0));
+        let mut ui = UiPainter::new(&mut scene);
+        shadcn_chat_client(UiShadcnChatClientSpec {
+            show_sidebar: true,
+            sidebar_title: "edgerun codex",
+            sidebar_detail: "workspace",
+            sidebar_actions: &[
+                UiShadcnChatClientAction::new("New", 1, UiShadcnButtonVariant::Default),
+                UiShadcnChatClientAction::new("Clear", 2, UiShadcnButtonVariant::Secondary),
+            ],
+            session_rows: &[UiShadcnSessionRow::new("1 turn", "", true)],
+            activity: UiShadcnActivity::new("Ready", "idle", UiIcon::Check),
+            footer_lines: &["model gpt-5.5"],
+            header_title: "Codex",
+            header_status: "Ready",
+            header_badges: &["ready"],
+            header_tone: UiShadcnStatusTone::Success,
+            activity_phase: 0,
+            messages: &[UiShadcnConversationMessage::new(
+                UiShadcnChatRole::Assistant,
+                "Hello",
+                88.0,
+            )],
+            scroll_offset: 1.0,
+            scroll_id: 77,
+            input_label: "Prompt",
+            input_value: "Hi",
+            input_id: 11,
+            send_label: "Send",
+            send_id: 12,
+            busy: false,
+            hints: &["Enter sends"],
+        })
+        .render(&mut ui, UiRect::new(0.0, 0.0, 1120.0, 720.0));
+
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Button && hit.id == 1),
+            "scene hits: {:?}",
+            scene.hits()
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Button && hit.id == 2)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::TextArea && hit.id == 11)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Button && hit.id == 12)
+        );
+    }
+
+    #[test]
+    fn shadcn_diff_body_renders_line_nodes() {
+        let node = shadcn_diff_body("@@ hunk\n-old\n+new\n context");
+
+        match node.kind {
+            UiNodeKind::Column => assert_eq!(node.children.len(), 4),
+            other => panic!("expected diff column, got {other:?}"),
+        }
     }
 }

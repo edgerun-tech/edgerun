@@ -7,12 +7,16 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::process::Stdio;
 use std::sync::Arc;
+use std::sync::OnceLock;
 use std::thread;
 use std::time::Duration;
 use std::time::Instant;
 
 use codex_core::Prompt;
 use codex_core::Provider;
+use codex_core::ResponseEvent;
+use codex_core::TokenUsage;
+use codex_core::TurnOutput;
 use codex_core::TurnRequest;
 use codex_core::api::AuthProvider;
 use codex_core::api::RetryConfig;
@@ -60,40 +64,80 @@ impl AuthProvider for ChatGptAuth {
 #[derive(Debug)]
 enum AgentEvent {
     AssistantText(String),
+    AssistantTextDelta(String),
+    ReasoningDelta(String),
+    ToolDiff(String),
+    ToolInputDelta(String),
     ToolStarted(String),
     ToolCompleted {
         name: String,
         summary: String,
         success: bool,
     },
+    Usage(TokenUsage),
 }
 
-#[derive(Debug, Clone)]
-enum ToolCall {
-    Function {
-        name: String,
-        arguments: String,
-        call_id: String,
-    },
-    Custom {
-        name: String,
-        input: String,
-        call_id: String,
-    },
-    LocalShell {
-        command: Vec<String>,
-        workdir: Option<String>,
-        timeout_ms: Option<u64>,
-        call_id: String,
-    },
+#[derive(Debug)]
+enum ToolResponseTarget {
+    Function { call_id: String },
+    Custom { call_id: String, name: String },
 }
 
-impl ToolCall {
-    fn display_name(&self) -> String {
-        match self {
-            ToolCall::Function { name, .. } | ToolCall::Custom { name, .. } => name.clone(),
-            ToolCall::LocalShell { command, .. } => format!("local_shell {}", command.join(" ")),
-        }
+#[derive(Debug)]
+struct ToolInvocation {
+    display_name: String,
+    response: ToolResponseTarget,
+    kind: ToolInvocationKind,
+}
+
+#[derive(Debug)]
+enum ToolInvocationKind {
+    ShellCommand(Result<ShellCommandArgs, String>),
+    Shell(Result<ShellArgs, String>),
+    ApplyPatch(Result<ApplyPatchArgs, String>),
+    LocalShell(LocalShellArgs),
+    Unsupported(String),
+}
+
+#[derive(Debug)]
+struct ShellCommandArgs {
+    command: String,
+    workdir: Option<String>,
+    timeout_ms: Option<u64>,
+    login: bool,
+}
+
+#[derive(Debug)]
+struct ShellArgs {
+    command: Vec<String>,
+    workdir: Option<String>,
+    timeout_ms: Option<u64>,
+}
+
+#[derive(Debug)]
+struct ApplyPatchArgs {
+    input: String,
+}
+
+#[derive(Debug)]
+struct LocalShellArgs {
+    command: Vec<String>,
+    workdir: Option<String>,
+    timeout_ms: Option<u64>,
+}
+
+#[derive(Debug)]
+struct ToolExecutionResult {
+    success: bool,
+    text: String,
+    summary: String,
+}
+
+impl ToolExecutionResult {
+    fn into_payload(self) -> FunctionCallOutputPayload {
+        let mut payload = FunctionCallOutputPayload::from_text(truncate_tool_output(self.text));
+        payload.success = Some(self.success);
+        payload
     }
 }
 
@@ -163,12 +207,25 @@ async fn run_prompt(
             print!("{text}");
             let _ = io::stdout().flush();
         }
+        AgentEvent::AssistantTextDelta(text) => {
+            print!("{text}");
+            let _ = io::stdout().flush();
+        }
+        AgentEvent::ReasoningDelta(_) => {}
+        AgentEvent::ToolDiff(diff) => {
+            println!("\n[diff]\n{diff}");
+        }
+        AgentEvent::ToolInputDelta(delta) => {
+            print!("{delta}");
+            let _ = io::stdout().flush();
+        }
         AgentEvent::ToolStarted(name) => {
             println!("\n[tool] {name}");
         }
         AgentEvent::ToolCompleted { summary, .. } => {
             println!("[tool result] {summary}");
         }
+        AgentEvent::Usage(_) => {}
     };
     let (_, history) = run_agent_loop(client, input, Some(&mut printer)).await?;
     println!();
@@ -267,7 +324,7 @@ fn turn_request(input: Vec<ResponseItem>) -> TurnRequest {
     TurnRequest {
         prompt: Prompt {
             input,
-            tools: native_agent_tools(),
+            tools: cached_native_agent_tools(),
             parallel_tool_calls: true,
             base_instructions: codex_core::protocol::models::BaseInstructions {
                 text: include_str!("../../core/gpt_5_codex_prompt.md").to_string(),
@@ -285,36 +342,112 @@ async fn run_agent_loop(
     mut emit: Option<&mut dyn FnMut(AgentEvent)>,
 ) -> Result<(Option<String>, Vec<ResponseItem>), Box<dyn Error>> {
     for _ in 0..MAX_TOOL_ROUNDS {
-        let output = client.collect_turn(turn_request(history.clone())).await?;
+        let streamed =
+            stream_turn_with_events(client, turn_request(history.clone()), &mut emit).await?;
+        let output = streamed.output;
         let last_response_id = output.response_id.clone();
-        if !output.output_text.is_empty()
-            && let Some(emit) = emit.as_deref_mut()
-        {
-            emit(AgentEvent::AssistantText(output.output_text.clone()));
-        }
 
-        let tool_calls = collect_tool_calls(&output.output_items);
+        let tool_calls = collect_tool_invocations(&output.output_items);
         history.extend(output.output_items);
         if tool_calls.is_empty() {
             return Ok((last_response_id, history));
         }
 
-        for call in tool_calls {
+        for invocation in tool_calls {
             if let Some(emit) = emit.as_deref_mut() {
-                emit(AgentEvent::ToolStarted(call.display_name()));
+                if !streamed.streamed_tool_input
+                    && let Some(diff) = patch_preview(&invocation)
+                {
+                    emit(AgentEvent::ToolDiff(diff));
+                }
+                emit(AgentEvent::ToolStarted(invocation.display_name.clone()));
             }
-            let output = execute_tool_call(&call).await;
+            let result = execute_tool_invocation(&invocation).await;
             if let Some(emit) = emit.as_deref_mut() {
                 emit(AgentEvent::ToolCompleted {
-                    name: call.display_name(),
-                    summary: tool_summary(&call, &output),
-                    success: output.success.unwrap_or(false),
+                    name: invocation.display_name.clone(),
+                    summary: result.summary.clone(),
+                    success: result.success,
                 });
             }
-            history.push(tool_output_item(call, output));
+            history.push(tool_output_item(invocation, result.into_payload()));
         }
     }
     Err(format!("model exceeded {MAX_TOOL_ROUNDS} tool rounds").into())
+}
+
+struct StreamedTurnOutput {
+    output: TurnOutput,
+    streamed_tool_input: bool,
+}
+
+async fn stream_turn_with_events(
+    client: &codex_core::ModelClient,
+    request: TurnRequest,
+    emit: &mut Option<&mut dyn FnMut(AgentEvent)>,
+) -> Result<StreamedTurnOutput, Box<dyn Error>> {
+    let mut stream = client.stream_turn(request).await?;
+    let mut output = TurnOutput::default();
+    let mut streamed_tool_input = false;
+
+    while let Some(event) = stream.rx_event.recv().await {
+        match event? {
+            ResponseEvent::Created => {}
+            ResponseEvent::OutputItemAdded(_) => {}
+            ResponseEvent::OutputItemDone(item) => output.output_items.push(item),
+            ResponseEvent::OutputTextDelta(delta) => {
+                output.output_text.push_str(&delta);
+                if let Some(emit) = emit.as_deref_mut() {
+                    emit(AgentEvent::AssistantTextDelta(delta));
+                }
+            }
+            ResponseEvent::ReasoningSummaryDelta { delta, .. } => {
+                output.reasoning_summary_text.push_str(&delta);
+                if let Some(emit) = emit.as_deref_mut() {
+                    emit(AgentEvent::ReasoningDelta(delta));
+                }
+            }
+            ResponseEvent::ReasoningContentDelta { delta, .. } => {
+                output.reasoning_content_text.push_str(&delta);
+                if let Some(emit) = emit.as_deref_mut() {
+                    emit(AgentEvent::ReasoningDelta(delta));
+                }
+            }
+            ResponseEvent::Completed {
+                response_id,
+                token_usage,
+                end_turn,
+            } => {
+                output.response_id = Some(response_id);
+                if let Some(usage) = token_usage {
+                    if let Some(emit) = emit.as_deref_mut() {
+                        emit(AgentEvent::Usage(usage.clone()));
+                    }
+                    output.token_usage = Some(usage);
+                }
+                output.end_turn = end_turn;
+            }
+            ResponseEvent::ServerModel(model) => output.server_model = Some(model),
+            ResponseEvent::ServerReasoningIncluded(included) => {
+                output.server_reasoning_included = included;
+            }
+            ResponseEvent::ToolCallInputDelta { delta, .. } => {
+                streamed_tool_input = true;
+                if let Some(emit) = emit.as_deref_mut() {
+                    emit(AgentEvent::ToolInputDelta(delta));
+                }
+            }
+            ResponseEvent::ReasoningSummaryPartAdded { .. }
+            | ResponseEvent::RateLimits(_)
+            | ResponseEvent::ModelVerifications(_)
+            | ResponseEvent::ModelsEtag(_) => {}
+        }
+    }
+
+    Ok(StreamedTurnOutput {
+        output,
+        streamed_tool_input,
+    })
 }
 
 fn user_item(text: String) -> ResponseItem {
@@ -326,7 +459,7 @@ fn user_item(text: String) -> ResponseItem {
     }
 }
 
-fn collect_tool_calls(items: &[ResponseItem]) -> Vec<ToolCall> {
+fn collect_tool_invocations(items: &[ResponseItem]) -> Vec<ToolInvocation> {
     items
         .iter()
         .filter_map(|item| match item {
@@ -335,95 +468,129 @@ fn collect_tool_calls(items: &[ResponseItem]) -> Vec<ToolCall> {
                 arguments,
                 call_id,
                 ..
-            } => Some(ToolCall::Function {
-                name: name.clone(),
-                arguments: arguments.clone(),
-                call_id: call_id.clone(),
-            }),
+            } => Some(function_tool_invocation(name, arguments, call_id)),
             ResponseItem::CustomToolCall {
                 name,
                 input,
                 call_id,
                 ..
-            } => Some(ToolCall::Custom {
-                name: name.clone(),
-                input: input.clone(),
-                call_id: call_id.clone(),
-            }),
+            } => Some(custom_tool_invocation(name, input, call_id)),
             ResponseItem::LocalShellCall {
                 call_id: Some(call_id),
                 status: LocalShellStatus::Completed | LocalShellStatus::InProgress,
                 action: LocalShellAction::Exec(action),
                 ..
-            } => Some(ToolCall::LocalShell {
-                command: action.command.clone(),
-                workdir: action.working_directory.clone(),
-                timeout_ms: action.timeout_ms,
-                call_id: call_id.clone(),
+            } => Some(ToolInvocation {
+                display_name: format!("local_shell {}", action.command.join(" ")),
+                response: ToolResponseTarget::Function {
+                    call_id: call_id.clone(),
+                },
+                kind: ToolInvocationKind::LocalShell(LocalShellArgs {
+                    command: action.command.clone(),
+                    workdir: action.working_directory.clone(),
+                    timeout_ms: action.timeout_ms,
+                }),
             }),
             _ => None,
         })
         .collect()
 }
 
-async fn execute_tool_call(call: &ToolCall) -> FunctionCallOutputPayload {
-    let result = match call {
-        ToolCall::Function {
-            name, arguments, ..
-        } if name == "shell_command" => execute_shell_command(arguments).await,
-        ToolCall::Function {
-            name, arguments, ..
-        } if name == "shell" || name == "container.exec" => execute_shell(arguments).await,
-        ToolCall::Function {
-            name, arguments, ..
-        } if name == "apply_patch" => execute_apply_patch_json(arguments).await,
-        ToolCall::Custom { name, input, .. } if name == "apply_patch" => {
-            execute_apply_patch(input).await
-        }
-        ToolCall::LocalShell {
-            command,
-            workdir,
-            timeout_ms,
-            ..
-        } => execute_process(command.clone(), workdir.clone(), *timeout_ms).await,
-        ToolCall::Function { name, .. } | ToolCall::Custom { name, .. } => {
-            Err(format!("unsupported tool call: {name}"))
-        }
+fn function_tool_invocation(name: &str, arguments: &str, call_id: &str) -> ToolInvocation {
+    let kind = match name {
+        "shell_command" => ToolInvocationKind::ShellCommand(parse_shell_command_args(arguments)),
+        "shell" | "container.exec" => ToolInvocationKind::Shell(parse_shell_args(arguments)),
+        "apply_patch" => ToolInvocationKind::ApplyPatch(parse_apply_patch_args(arguments)),
+        other => ToolInvocationKind::Unsupported(format!("unsupported tool call: {other}")),
     };
-
-    let success = result.is_ok();
-    let mut payload = FunctionCallOutputPayload::from_text(match result {
-        Ok(text) => truncate_tool_output(text),
-        Err(error) => truncate_tool_output(format!("tool error: {error}")),
-    });
-    payload.success = Some(success);
-    payload
+    ToolInvocation {
+        display_name: name.to_string(),
+        response: ToolResponseTarget::Function {
+            call_id: call_id.to_string(),
+        },
+        kind,
+    }
 }
 
-async fn execute_shell_command(arguments: &str) -> Result<String, String> {
+fn custom_tool_invocation(name: &str, input: &str, call_id: &str) -> ToolInvocation {
+    let kind = match name {
+        "apply_patch" => ToolInvocationKind::ApplyPatch(Ok(ApplyPatchArgs {
+            input: input.to_string(),
+        })),
+        other => ToolInvocationKind::Unsupported(format!("unsupported tool call: {other}")),
+    };
+    ToolInvocation {
+        display_name: name.to_string(),
+        response: ToolResponseTarget::Custom {
+            call_id: call_id.to_string(),
+            name: name.to_string(),
+        },
+        kind,
+    }
+}
+
+async fn execute_tool_invocation(invocation: &ToolInvocation) -> ToolExecutionResult {
+    let result = match &invocation.kind {
+        ToolInvocationKind::ShellCommand(Ok(args)) => execute_shell_command(args).await,
+        ToolInvocationKind::ShellCommand(Err(error))
+        | ToolInvocationKind::Shell(Err(error))
+        | ToolInvocationKind::ApplyPatch(Err(error)) => Err(error.clone()),
+        ToolInvocationKind::Shell(Ok(args)) => {
+            execute_process(args.command.clone(), args.workdir.clone(), args.timeout_ms).await
+        }
+        ToolInvocationKind::ApplyPatch(Ok(args)) => execute_apply_patch(&args.input).await,
+        ToolInvocationKind::LocalShell(args) => {
+            execute_process(args.command.clone(), args.workdir.clone(), args.timeout_ms).await
+        }
+        ToolInvocationKind::Unsupported(error) => Err(error.clone()),
+    };
+    match result {
+        Ok(text) => ToolExecutionResult {
+            success: true,
+            summary: tool_summary(&invocation.display_name, &text),
+            text,
+        },
+        Err(error) => {
+            let text = format!("tool error: {error}");
+            ToolExecutionResult {
+                success: false,
+                summary: tool_summary(&invocation.display_name, &text),
+                text,
+            }
+        }
+    }
+}
+
+fn parse_shell_command_args(arguments: &str) -> Result<ShellCommandArgs, String> {
     let params = parse_tool_arguments(arguments)?;
-    let command = json_required_string(&params, "command")?.to_string();
-    let workdir = json_optional_string(&params, "workdir").map(ToString::to_string);
-    let timeout_ms =
-        json_optional_u64(&params, "timeout_ms").or_else(|| json_optional_u64(&params, "timeout"));
-    let login = json_optional_bool(&params, "login").unwrap_or(false);
+    Ok(ShellCommandArgs {
+        command: json_required_string(&params, "command")?.to_string(),
+        workdir: json_optional_string(&params, "workdir").map(ToString::to_string),
+        timeout_ms: json_optional_u64(&params, "timeout_ms")
+            .or_else(|| json_optional_u64(&params, "timeout")),
+        login: json_optional_bool(&params, "login").unwrap_or(false),
+    })
+}
+
+async fn execute_shell_command(args: &ShellCommandArgs) -> Result<String, String> {
     let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
-    let shell_flag = if login { "-lc" } else { "-c" };
+    let shell_flag = if args.login { "-lc" } else { "-c" };
     execute_process(
-        vec![shell, shell_flag.to_string(), command],
-        workdir,
-        timeout_ms,
+        vec![shell, shell_flag.to_string(), args.command.clone()],
+        args.workdir.clone(),
+        args.timeout_ms,
     )
     .await
 }
 
-async fn execute_shell(arguments: &str) -> Result<String, String> {
+fn parse_shell_args(arguments: &str) -> Result<ShellArgs, String> {
     let params = parse_tool_arguments(arguments)?;
-    let command = json_required_string_array(&params, "command")?;
-    let workdir = json_optional_string(&params, "workdir").map(ToString::to_string);
-    let timeout_ms =
-        json_optional_u64(&params, "timeout_ms").or_else(|| json_optional_u64(&params, "timeout"));
-    execute_process(command, workdir, timeout_ms).await
+    Ok(ShellArgs {
+        command: json_required_string_array(&params, "command")?,
+        workdir: json_optional_string(&params, "workdir").map(ToString::to_string),
+        timeout_ms: json_optional_u64(&params, "timeout_ms")
+            .or_else(|| json_optional_u64(&params, "timeout")),
+    })
 }
 
 async fn execute_process(
@@ -491,10 +658,11 @@ async fn execute_process(
     }
 }
 
-async fn execute_apply_patch_json(arguments: &str) -> Result<String, String> {
+fn parse_apply_patch_args(arguments: &str) -> Result<ApplyPatchArgs, String> {
     let args = parse_tool_arguments(arguments)?;
-    let input = json_required_string(&args, "input")?;
-    execute_apply_patch(input).await
+    Ok(ApplyPatchArgs {
+        input: json_required_string(&args, "input")?.to_string(),
+    })
 }
 
 fn parse_tool_arguments(arguments: &str) -> Result<Value, String> {
@@ -579,23 +747,40 @@ async fn execute_apply_patch(input: &str) -> Result<String, String> {
     }
 }
 
-fn tool_output_item(call: ToolCall, output: FunctionCallOutputPayload) -> ResponseItem {
-    match call {
-        ToolCall::Custom { call_id, name, .. } => ResponseItem::CustomToolCallOutput {
+fn tool_output_item(invocation: ToolInvocation, output: FunctionCallOutputPayload) -> ResponseItem {
+    match invocation.response {
+        ToolResponseTarget::Custom { call_id, name } => ResponseItem::CustomToolCallOutput {
             call_id,
             name: Some(name),
             output,
         },
-        ToolCall::Function { call_id, .. } | ToolCall::LocalShell { call_id, .. } => {
+        ToolResponseTarget::Function { call_id } => {
             ResponseItem::FunctionCallOutput { call_id, output }
         }
     }
 }
 
-fn tool_summary(call: &ToolCall, output: &FunctionCallOutputPayload) -> String {
-    let text = output.to_string();
+fn tool_summary(display_name: &str, text: &str) -> String {
     let first_line = text.lines().next().unwrap_or("");
-    format!("{} -> {}", call.display_name(), first_line)
+    format!("{display_name} -> {first_line}")
+}
+
+fn patch_preview(invocation: &ToolInvocation) -> Option<String> {
+    match &invocation.kind {
+        ToolInvocationKind::ApplyPatch(Ok(args)) => Some(args.input.clone()),
+        _ => None,
+    }
+    .map(truncate_diff_preview)
+}
+
+fn truncate_diff_preview(mut text: String) -> String {
+    const MAX_DIFF_PREVIEW_BYTES: usize = 12 * 1024;
+    if text.len() <= MAX_DIFF_PREVIEW_BYTES {
+        return text;
+    }
+    text.truncate(MAX_DIFF_PREVIEW_BYTES);
+    text.push_str("\n[diff preview truncated]");
+    text
 }
 
 fn truncate_tool_output(mut text: String) -> String {
@@ -605,6 +790,11 @@ fn truncate_tool_output(mut text: String) -> String {
     text.truncate(MAX_TOOL_OUTPUT_BYTES);
     text.push_str("\n[output truncated]");
     text
+}
+
+fn cached_native_agent_tools() -> Vec<ToolSpec> {
+    static TOOLS: OnceLock<Vec<ToolSpec>> = OnceLock::new();
+    TOOLS.get_or_init(native_agent_tools).clone()
 }
 
 fn native_agent_tools() -> Vec<ToolSpec> {
@@ -761,8 +951,11 @@ fn read_chatgpt_auth() -> Result<Arc<ChatGptAuth>, Box<dyn Error>> {
 
 #[cfg(test)]
 mod tests {
+    use super::ToolInvocationKind;
+    use super::function_tool_invocation;
     use super::json_required_string;
     use super::parse_tool_arguments;
+    use super::patch_preview;
 
     #[test]
     fn parse_tool_arguments_accepts_normal_json() {
@@ -792,5 +985,36 @@ mod tests {
             json_required_string(&args, "command").expect("command"),
             "echo ok"
         );
+    }
+
+    #[test]
+    fn patch_preview_extracts_apply_patch_input() {
+        let invocation = function_tool_invocation(
+            "apply_patch",
+            r#"{"input":"*** Begin Patch\n*** End Patch\n"}"#,
+            "call-1",
+        );
+
+        assert_eq!(
+            patch_preview(&invocation).as_deref(),
+            Some("*** Begin Patch\n*** End Patch\n")
+        );
+    }
+
+    #[test]
+    fn function_tool_invocation_parses_typed_shell_args_once() {
+        let invocation = function_tool_invocation(
+            "shell_command",
+            r#"{"command":"echo ok","workdir":"/tmp","timeout_ms":1000,"login":true}"#,
+            "call-1",
+        );
+
+        let ToolInvocationKind::ShellCommand(Ok(args)) = invocation.kind else {
+            panic!("expected shell_command args");
+        };
+        assert_eq!(args.command, "echo ok");
+        assert_eq!(args.workdir.as_deref(), Some("/tmp"));
+        assert_eq!(args.timeout_ms, Some(1000));
+        assert!(args.login);
     }
 }

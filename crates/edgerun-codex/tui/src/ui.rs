@@ -1,19 +1,22 @@
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int, c_void};
+use std::path::Path;
+use std::path::PathBuf;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 
 use edgerun_ui_core::gpu::gl::GlRenderer;
 use edgerun_ui_core::gpu::{
-    Color4, FontAtlas, GpuScene, UiAction, UiEvent, UiIcon, UiKey, UiPainter, UiRect,
-    UiRuntimeState, UiShadcnActivity, UiShadcnButtonVariant, UiShadcnChatClientAction,
+    Color4, FontAtlas, GpuScene, UiAction, UiEvent, UiIcon, UiKey, UiKeyModifiers, UiPainter,
+    UiRect, UiRuntimeState, UiShadcnActivity, UiShadcnButtonVariant, UiShadcnChatClientAction,
     UiShadcnChatClientSpec, UiShadcnChatRole, UiShadcnConversationMessage, UiShadcnSessionRow,
     UiShadcnStatusTone, UiTextBuffer, UiTextBufferAction, shadcn_chat_client,
     shadcn_chat_message_height,
 };
 
-use super::{AgentEvent, provider, read_chatgpt_auth, run_agent_loop, user_item};
+use super::{AgentEvent, codex_home, provider, read_chatgpt_auth, run_agent_loop, user_item};
+use codex_core::TokenUsage;
 
 const SDL_INIT_VIDEO: u32 = 0x0000_0020;
 const SDL_WINDOWPOS_CENTERED: c_int = 0x2fff_0000u32 as c_int;
@@ -35,11 +38,14 @@ const SDL_GL_CONTEXT_PROFILE_CORE: c_int = 0x0001;
 const SDL_GL_DOUBLEBUFFER: c_int = 5;
 const SDLK_ESCAPE: i32 = 27;
 const KMOD_SHIFT: u16 = 0x0003;
+const KMOD_CTRL: u16 = 0x00c0;
 
 const SEND_ID: u32 = 81_000;
 const NEW_CHAT_ID: u32 = 81_001;
 const CLEAR_ID: u32 = 81_002;
 const TRANSCRIPT_SCROLL_ID: u32 = 81_003;
+const MAX_PROMPT_HISTORY: usize = 100;
+const MAX_DIFF_DISPLAY_BYTES: usize = 12 * 1024;
 
 const BG: Color4 = Color4::rgba(0.035, 0.039, 0.047, 1.0);
 
@@ -135,6 +141,8 @@ unsafe extern "C" {
 enum Role {
     User,
     Assistant,
+    Reasoning,
+    Diff,
     ToolRunning,
     ToolSuccess,
     ToolError,
@@ -153,12 +161,19 @@ struct CodexUi {
     input: UiTextBuffer,
     status: String,
     busy: bool,
+    animation_tick: u32,
     runtime: UiRuntimeState,
     turns: usize,
     tools_run: usize,
     failures: usize,
+    usage: UsageState,
     active_tool: Option<String>,
+    prompt_history: Vec<String>,
+    prompt_history_index: Option<usize>,
+    prompt_history_path: Option<PathBuf>,
     messages: Vec<Message>,
+    assistant_streaming: bool,
+    reasoning_streaming: bool,
     command_tx: mpsc::Sender<WorkerCommand>,
     event_rx: mpsc::Receiver<WorkerEvent>,
 }
@@ -174,6 +189,10 @@ enum WorkerEvent {
     Ready,
     Status(String),
     AssistantText(String),
+    AssistantTextDelta(String),
+    ReasoningDelta(String),
+    ToolDiff(String),
+    ToolInputDelta(String),
     ToolStarted(String),
     ToolCompleted {
         name: String,
@@ -182,6 +201,41 @@ enum WorkerEvent {
     },
     Error(String),
     Done,
+    Usage(TokenUsage),
+}
+
+#[derive(Clone, Debug, Default)]
+struct UsageState {
+    total: TokenUsage,
+    last: Option<TokenUsage>,
+}
+
+impl UsageState {
+    fn record(&mut self, usage: TokenUsage) {
+        self.total.add_assign(&usage);
+        self.last = Some(usage);
+    }
+
+    fn total_label(&self) -> String {
+        if self.total.total_tokens <= 0 {
+            "usage pending".to_string()
+        } else {
+            format!("{} tokens", compact_i64(self.total.blended_total()))
+        }
+    }
+
+    fn detail_label(&self) -> String {
+        self.last
+            .as_ref()
+            .map(|usage| {
+                format!(
+                    "last {} / reasoning {}",
+                    compact_i64(usage.blended_total()),
+                    compact_i64(usage.reasoning_output_tokens)
+                )
+            })
+            .unwrap_or_else(|| "awaiting usage".to_string())
+    }
 }
 
 pub struct UiOptions {
@@ -197,21 +251,33 @@ pub fn run(options: UiOptions) -> Result<(), String> {
 
     let mut runtime = UiRuntimeState::default();
     runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, 1.0);
+    let prompt_history_path = prompt_history_path().ok();
+    let prompt_history = prompt_history_path
+        .as_deref()
+        .map(load_prompt_history)
+        .unwrap_or_default();
 
     let mut state = CodexUi {
         model: options.model,
         input: UiTextBuffer::new(),
         status: "Starting Codex worker".to_string(),
         busy: true,
+        animation_tick: 0,
         runtime,
         turns: 0,
         tools_run: 0,
         failures: 0,
+        usage: UsageState::default(),
         active_tool: None,
+        prompt_history,
+        prompt_history_index: None,
+        prompt_history_path,
         messages: vec![Message {
             role: Role::Assistant,
             text: "EdgeRun Codex UI is ready for local workspace work.".to_string(),
         }],
+        assistant_streaming: false,
+        reasoning_streaming: false,
         command_tx,
         event_rx,
     };
@@ -273,6 +339,18 @@ fn start_worker(
                         AgentEvent::AssistantText(text) => {
                             let _ = tx.send(WorkerEvent::AssistantText(text));
                         }
+                        AgentEvent::AssistantTextDelta(text) => {
+                            let _ = tx.send(WorkerEvent::AssistantTextDelta(text));
+                        }
+                        AgentEvent::ReasoningDelta(text) => {
+                            let _ = tx.send(WorkerEvent::ReasoningDelta(text));
+                        }
+                        AgentEvent::ToolDiff(diff) => {
+                            let _ = tx.send(WorkerEvent::ToolDiff(diff));
+                        }
+                        AgentEvent::ToolInputDelta(delta) => {
+                            let _ = tx.send(WorkerEvent::ToolInputDelta(delta));
+                        }
                         AgentEvent::ToolStarted(name) => {
                             let _ = tx.send(WorkerEvent::ToolStarted(name));
                         }
@@ -286,6 +364,9 @@ fn start_worker(
                                 summary,
                                 success,
                             });
+                        }
+                        AgentEvent::Usage(usage) => {
+                            let _ = tx.send(WorkerEvent::Usage(usage));
                         }
                     };
                     match runtime.block_on(run_agent_loop(&client, history, Some(&mut emit))) {
@@ -357,11 +438,16 @@ fn run_window(frames: Option<u32>, mut state: CodexUi) -> Result<(), String> {
                 SDL_KEYDOWN if event.key_sym() == SDLK_ESCAPE => running = false,
                 SDL_KEYDOWN => {
                     let key = sdl_key(event.key_sym());
-                    let action = state
-                        .input
-                        .handle_key(key, event.key_mod() & KMOD_SHIFT != 0);
-                    state.handle_text_action(action);
-                    state.handle_navigation_key(key);
+                    let modifiers = UiKeyModifiers {
+                        shift: event.key_mod() & KMOD_SHIFT != 0,
+                        ctrl: event.key_mod() & KMOD_CTRL != 0,
+                        ..UiKeyModifiers::default()
+                    };
+                    if !state.handle_history_key(key, modifiers) {
+                        let action = state.input.handle_key_with_modifiers(key, modifiers);
+                        state.handle_text_action(action);
+                        state.handle_navigation_key(key);
+                    }
                     scene_dirty = true;
                 }
                 SDL_TEXTINPUT => {
@@ -419,6 +505,9 @@ fn run_window(frames: Option<u32>, mut state: CodexUi) -> Result<(), String> {
         }
 
         if scene_dirty {
+            if state.busy {
+                state.animation_tick = state.animation_tick.wrapping_add(1);
+            }
             build_scene(&mut scene, &atlas, &state, width as f32, height as f32);
             renderer.render(width, height, &scene);
             unsafe {
@@ -456,9 +545,34 @@ impl CodexUi {
                         role: Role::Assistant,
                         text,
                     });
+                    self.assistant_streaming = false;
+                    self.reasoning_streaming = false;
                     self.scroll_transcript_to_bottom();
                 }
+                WorkerEvent::AssistantTextDelta(text) => {
+                    self.append_streaming_message(Role::Assistant, text);
+                    self.status = "Responding".to_string();
+                }
+                WorkerEvent::ReasoningDelta(text) => {
+                    self.append_streaming_message(Role::Reasoning, text);
+                    self.status = "Reasoning".to_string();
+                    self.scroll_transcript_to_bottom();
+                }
+                WorkerEvent::ToolDiff(diff) => {
+                    self.assistant_streaming = false;
+                    self.reasoning_streaming = false;
+                    self.append_diff_message(diff);
+                    self.status = "Reviewing patch".to_string();
+                }
+                WorkerEvent::ToolInputDelta(delta) => {
+                    self.assistant_streaming = false;
+                    self.reasoning_streaming = false;
+                    self.append_diff_message(delta);
+                    self.status = "Drafting patch".to_string();
+                }
                 WorkerEvent::ToolStarted(name) => {
+                    self.assistant_streaming = false;
+                    self.reasoning_streaming = false;
                     self.active_tool = Some(name.clone());
                     self.messages.push(Message {
                         role: Role::ToolRunning,
@@ -472,6 +586,8 @@ impl CodexUi {
                     summary,
                     success,
                 } => {
+                    self.assistant_streaming = false;
+                    self.reasoning_streaming = false;
                     self.tools_run += 1;
                     if !success {
                         self.failures += 1;
@@ -496,17 +612,24 @@ impl CodexUi {
                     self.busy = false;
                     self.failures += 1;
                     self.active_tool = None;
+                    self.assistant_streaming = false;
+                    self.reasoning_streaming = false;
                     self.status = "Error".to_string();
                     self.messages.push(Message {
                         role: Role::Error,
-                        text: error,
+                        text: normalize_error_message(&error),
                     });
                     self.scroll_transcript_to_bottom();
                 }
                 WorkerEvent::Done => {
                     self.busy = false;
                     self.active_tool = None;
+                    self.assistant_streaming = false;
+                    self.reasoning_streaming = false;
                     self.status = "Ready".to_string();
+                }
+                WorkerEvent::Usage(usage) => {
+                    self.usage.record(usage);
                 }
             }
         }
@@ -518,6 +641,52 @@ impl CodexUi {
             UiTextBufferAction::Submit => self.submit(),
             UiTextBufferAction::Changed | UiTextBufferAction::None => {}
         }
+    }
+
+    fn handle_history_key(&mut self, key: UiKey, modifiers: UiKeyModifiers) -> bool {
+        if !modifiers.ctrl {
+            return false;
+        }
+        match key {
+            UiKey::Other(code) if code == b'p' as u32 || code == b'P' as u32 => {
+                self.previous_prompt();
+                true
+            }
+            UiKey::Other(code) if code == b'n' as u32 || code == b'N' as u32 => {
+                self.next_prompt();
+                true
+            }
+            _ => false,
+        }
+    }
+
+    fn previous_prompt(&mut self) {
+        if self.prompt_history.is_empty() {
+            self.status = "No prompt history".to_string();
+            return;
+        }
+        let next = self
+            .prompt_history_index
+            .map(|index| index.saturating_sub(1))
+            .unwrap_or_else(|| self.prompt_history.len() - 1);
+        self.prompt_history_index = Some(next);
+        self.input.set_text(self.prompt_history[next].clone());
+        self.status = "Prompt history".to_string();
+    }
+
+    fn next_prompt(&mut self) {
+        let Some(index) = self.prompt_history_index else {
+            return;
+        };
+        if index + 1 < self.prompt_history.len() {
+            let next = index + 1;
+            self.prompt_history_index = Some(next);
+            self.input.set_text(self.prompt_history[next].clone());
+        } else {
+            self.prompt_history_index = None;
+            self.input.clear();
+        }
+        self.status = "Prompt history".to_string();
     }
 
     fn handle_navigation_key(&mut self, key: UiKey) {
@@ -536,8 +705,7 @@ impl CodexUi {
             UiAction::Submitted { id } if id == 0 => self.submit(),
             UiAction::Activated(hit) if hit.id == NEW_CHAT_ID => self.new_chat(),
             UiAction::Activated(hit) if hit.id == CLEAR_ID => {
-                self.messages.clear();
-                self.status = "Transcript cleared".to_string();
+                self.clear_transcript();
             }
             UiAction::ScrollChanged { id, offset } if id == TRANSCRIPT_SCROLL_ID => {
                 self.runtime.set_scroll_offset(id, offset);
@@ -555,6 +723,54 @@ impl CodexUi {
         self.runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, next);
     }
 
+    fn append_streaming_message(&mut self, role: Role, text: String) {
+        if text.is_empty() {
+            return;
+        }
+        let streaming = match role {
+            Role::Assistant => &mut self.assistant_streaming,
+            Role::Reasoning => &mut self.reasoning_streaming,
+            _ => return,
+        };
+        if *streaming
+            && let Some(message) = self.messages.last_mut()
+            && message.role == role
+        {
+            message.text.push_str(&text);
+        } else {
+            self.messages.push(Message { role, text });
+            *streaming = true;
+        }
+        match role {
+            Role::Assistant => self.reasoning_streaming = false,
+            Role::Reasoning => self.assistant_streaming = false,
+            _ => {}
+        }
+        self.scroll_transcript_to_bottom();
+    }
+
+    fn append_diff_message(&mut self, text: String) {
+        if text.is_empty() {
+            return;
+        }
+        if let Some(message) = self.messages.last_mut()
+            && message.role == Role::Diff
+        {
+            append_capped(&mut message.text, &text, MAX_DIFF_DISPLAY_BYTES);
+        } else {
+            let mut text = text;
+            if text.len() > MAX_DIFF_DISPLAY_BYTES {
+                text.truncate(char_boundary_at_or_before(&text, MAX_DIFF_DISPLAY_BYTES));
+                text.push_str("\n[diff preview truncated]");
+            }
+            self.messages.push(Message {
+                role: Role::Diff,
+                text,
+            });
+        }
+        self.scroll_transcript_to_bottom();
+    }
+
     fn submit(&mut self) {
         if self.busy {
             self.status = "Codex is still working".to_string();
@@ -569,9 +785,12 @@ impl CodexUi {
             role: Role::User,
             text: prompt.clone(),
         });
+        self.remember_prompt(prompt.clone());
         self.turns += 1;
         self.input.clear();
         self.busy = true;
+        self.assistant_streaming = false;
+        self.reasoning_streaming = false;
         self.status = "Queued".to_string();
         self.scroll_transcript_to_bottom();
         if self.command_tx.send(WorkerCommand::Prompt(prompt)).is_err() {
@@ -581,17 +800,61 @@ impl CodexUi {
     }
 
     fn new_chat(&mut self) {
+        if !self.ensure_idle("Wait for Codex to finish before starting a new chat") {
+            return;
+        }
+        self.reset_visible_session("New chat started.");
+        self.prompt_history_index = None;
+        let _ = self.command_tx.send(WorkerCommand::Reset);
+    }
+
+    fn clear_transcript(&mut self) {
+        if !self.ensure_idle("Wait for Codex to finish before clearing the transcript") {
+            return;
+        }
+        self.reset_visible_session("Transcript cleared.");
+        self.status = "Transcript cleared".to_string();
+    }
+
+    fn ensure_idle(&mut self, message: &str) -> bool {
+        if self.busy {
+            self.status = message.to_string();
+            false
+        } else {
+            true
+        }
+    }
+
+    fn reset_visible_session(&mut self, message: &str) {
         self.messages.clear();
         self.messages.push(Message {
             role: Role::Assistant,
-            text: "New chat started.".to_string(),
+            text: message.to_string(),
         });
         self.turns = 0;
         self.tools_run = 0;
         self.failures = 0;
+        self.usage = UsageState::default();
         self.active_tool = None;
+        self.assistant_streaming = false;
+        self.reasoning_streaming = false;
         self.scroll_transcript_to_bottom();
-        let _ = self.command_tx.send(WorkerCommand::Reset);
+    }
+
+    fn remember_prompt(&mut self, prompt: String) {
+        if let Some(index) = self
+            .prompt_history
+            .iter()
+            .position(|saved| saved == &prompt)
+        {
+            self.prompt_history.remove(index);
+        }
+        self.prompt_history.push(prompt);
+        trim_prompt_history(&mut self.prompt_history);
+        if let Some(path) = self.prompt_history_path.as_deref() {
+            let _ = save_prompt_history(path, &self.prompt_history);
+        }
+        self.prompt_history_index = None;
     }
 }
 
@@ -604,6 +867,8 @@ fn build_scene(scene: &mut GpuScene, atlas: &FontAtlas, state: &CodexUi, width: 
     let turns = format!("{} turns", state.turns);
     let tools = format!("{} tools", state.tools_run);
     let issues = format!("{} issues", state.failures);
+    let usage = state.usage.total_label();
+    let usage_detail = state.usage.detail_label();
     let model = format!("model {}", state.model);
     let workspace = workspace_label();
     let availability = if state.busy { "working" } else { "ready" };
@@ -624,12 +889,13 @@ fn build_scene(scene: &mut GpuScene, atlas: &FontAtlas, state: &CodexUi, width: 
         UiShadcnSessionRow::new(turns.as_str(), "selected", true),
         UiShadcnSessionRow::new(tools.as_str(), "", false),
         UiShadcnSessionRow::new(issues.as_str(), "", state.failures > 0),
+        UiShadcnSessionRow::new(usage.as_str(), usage_detail.as_str(), false),
     ];
     let footer_lines = [model.as_str(), "shell, process, patch"];
     let header_badges = [state.model.as_str(), availability];
     let hints = [
         "Enter sends. Wheel, arrows, PgUp/PgDn scroll.",
-        "Shift+Enter inserts a newline. Left/right move the cursor.",
+        "Shift+Enter newline. Ctrl+P/N history. Ctrl+A/E/U/K/W edit.",
     ];
 
     render_node(
@@ -649,6 +915,7 @@ fn build_scene(scene: &mut GpuScene, atlas: &FontAtlas, state: &CodexUi, width: 
             header_status: &state.status,
             header_badges: &header_badges,
             header_tone: tone,
+            activity_phase: (state.animation_tick / 8) as u8,
             messages: &messages,
             scroll_offset: state.runtime.scroll_offset(TRANSCRIPT_SCROLL_ID),
             scroll_id: TRANSCRIPT_SCROLL_ID,
@@ -695,6 +962,8 @@ fn chat_role(role: Role) -> UiShadcnChatRole {
     match role {
         Role::User => UiShadcnChatRole::User,
         Role::Assistant => UiShadcnChatRole::Assistant,
+        Role::Reasoning => UiShadcnChatRole::Reasoning,
+        Role::Diff => UiShadcnChatRole::Diff,
         Role::ToolRunning => UiShadcnChatRole::ToolRunning,
         Role::ToolSuccess => UiShadcnChatRole::ToolSuccess,
         Role::ToolError => UiShadcnChatRole::ToolError,
@@ -720,6 +989,155 @@ fn workspace_label() -> String {
                 .map(|name| name.to_string_lossy().into_owned())
         })
         .unwrap_or_else(|| "workspace".to_string())
+}
+
+fn prompt_history_path() -> Result<PathBuf, String> {
+    Ok(codex_home()?.join("edgerun-codex-history.json"))
+}
+
+fn load_prompt_history(path: &Path) -> Vec<String> {
+    let Ok(bytes) = std::fs::read(path) else {
+        return Vec::new();
+    };
+    let Ok(value) = edgerun_json::from_slice(&bytes) else {
+        return Vec::new();
+    };
+    let Some(values) = value.as_array() else {
+        return Vec::new();
+    };
+    let mut history = values
+        .iter()
+        .filter_map(edgerun_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+        .collect::<Vec<_>>();
+    trim_prompt_history(&mut history);
+    history
+}
+
+fn save_prompt_history(path: &Path, history: &[String]) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    let value = edgerun_json::JsonValue::Array(
+        history
+            .iter()
+            .map(|prompt| edgerun_json::JsonValue::String(prompt.clone()))
+            .collect(),
+    );
+    let text = edgerun_json::to_string(&value).map_err(|error| error.to_string())?;
+    std::fs::write(path, text).map_err(|error| error.to_string())
+}
+
+fn trim_prompt_history(history: &mut Vec<String>) {
+    if history.len() > MAX_PROMPT_HISTORY {
+        let remove = history.len() - MAX_PROMPT_HISTORY;
+        history.drain(..remove);
+    }
+}
+
+fn compact_i64(value: i64) -> String {
+    let value = value.max(0);
+    if value >= 1_000_000 {
+        format!("{:.1}m", value as f64 / 1_000_000.0)
+    } else if value >= 1_000 {
+        format!("{:.1}k", value as f64 / 1_000.0)
+    } else {
+        value.to_string()
+    }
+}
+
+fn append_capped(target: &mut String, text: &str, max_len: usize) {
+    if target.len() >= max_len {
+        return;
+    }
+    let remaining = max_len - target.len();
+    if text.len() <= remaining {
+        target.push_str(text);
+    } else {
+        let end = char_boundary_at_or_before(text, remaining);
+        target.push_str(&text[..end]);
+        target.push_str("\n[diff preview truncated]");
+    }
+}
+
+fn char_boundary_at_or_before(text: &str, mut index: usize) -> usize {
+    index = index.min(text.len());
+    while index > 0 && !text.is_char_boundary(index) {
+        index -= 1;
+    }
+    index
+}
+
+fn normalize_error_message(raw: &str) -> String {
+    let trimmed = raw.trim();
+    let status = error_status_prefix(trimmed);
+    if let Some(detail) = error_json_detail(trimmed) {
+        if let Some(status) = status {
+            format!("{status}\n{detail}")
+        } else {
+            detail
+        }
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn error_status_prefix(raw: &str) -> Option<String> {
+    let first = raw.split(';').next()?.trim();
+    let lower = first.to_ascii_lowercase();
+    lower.starts_with("http ").then(|| {
+        let status = first.get(5..).unwrap_or(first).trim();
+        format!("HTTP {status}")
+    })
+}
+
+fn error_json_detail(raw: &str) -> Option<String> {
+    let candidates = error_json_candidates(raw);
+    for candidate in candidates {
+        if let Some(detail) = parse_error_detail(&candidate) {
+            return Some(detail);
+        }
+    }
+    None
+}
+
+fn error_json_candidates(raw: &str) -> Vec<String> {
+    let mut candidates = Vec::new();
+    candidates.push(raw.trim().to_string());
+
+    if let Some(inner) = raw
+        .split_once("Some(")
+        .and_then(|(_, rest)| rest.rsplit_once(')').map(|(inner, _)| inner.trim()))
+    {
+        candidates.push(inner.to_string());
+    }
+
+    if let (Some(start), Some(end)) = (raw.find('{'), raw.rfind('}'))
+        && start <= end
+    {
+        candidates.push(raw[start..=end].to_string());
+    }
+
+    candidates
+}
+
+fn parse_error_detail(candidate: &str) -> Option<String> {
+    let value = edgerun_json::from_str(candidate).ok()?;
+    if let Some(text) = value.as_str() {
+        return parse_error_detail(text).or_else(|| Some(text.to_string()));
+    }
+    ["detail", "error", "message"]
+        .into_iter()
+        .find_map(|key| value.get(key).and_then(error_value_text))
+}
+
+fn error_value_text(value: &edgerun_json::Value) -> Option<String> {
+    value
+        .as_str()
+        .map(ToString::to_string)
+        .or_else(|| Some(edgerun_json::to_string(value).ok()?))
 }
 
 fn render_node(
@@ -821,11 +1239,16 @@ mod tests {
             input: UiTextBuffer::new(),
             status: "Ready".to_string(),
             busy: false,
+            animation_tick: 0,
             runtime,
             turns: 1,
             tools_run: 1,
             failures: 0,
+            usage: UsageState::default(),
             active_tool: None,
+            prompt_history: Vec::new(),
+            prompt_history_index: None,
+            prompt_history_path: None,
             messages: vec![
                 Message {
                     role: Role::Assistant,
@@ -836,6 +1259,8 @@ mod tests {
                     text: "Summarize the project.".to_string(),
                 },
             ],
+            assistant_streaming: false,
+            reasoning_streaming: false,
             command_tx,
             event_rx,
         };
@@ -865,5 +1290,321 @@ mod tests {
                 .iter()
                 .any(|hit| hit.kind == HitKind::Button && hit.id == CLEAR_ID)
         );
+    }
+
+    #[test]
+    fn streaming_deltas_append_to_current_transcript_rows() {
+        let (command_tx, _command_rx) = std::sync::mpsc::channel();
+        let (_event_tx, event_rx) = std::sync::mpsc::channel();
+        let mut runtime = UiRuntimeState::default();
+        runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, 0.0);
+        let mut state = CodexUi {
+            model: "gpt-5.5".to_string(),
+            input: UiTextBuffer::new(),
+            status: "Thinking".to_string(),
+            busy: true,
+            animation_tick: 0,
+            runtime,
+            turns: 1,
+            tools_run: 0,
+            failures: 0,
+            usage: UsageState::default(),
+            active_tool: None,
+            prompt_history: Vec::new(),
+            prompt_history_index: None,
+            prompt_history_path: None,
+            messages: vec![Message {
+                role: Role::User,
+                text: "stream".to_string(),
+            }],
+            assistant_streaming: false,
+            reasoning_streaming: false,
+            command_tx,
+            event_rx,
+        };
+
+        state.append_streaming_message(Role::Reasoning, "checking".to_string());
+        state.append_streaming_message(Role::Reasoning, " files".to_string());
+        state.append_streaming_message(Role::Assistant, "done".to_string());
+        state.append_streaming_message(Role::Assistant, ".".to_string());
+
+        assert_eq!(state.messages.len(), 3);
+        assert_eq!(state.messages[1].role, Role::Reasoning);
+        assert_eq!(state.messages[1].text, "checking files");
+        assert_eq!(state.messages[2].role, Role::Assistant);
+        assert_eq!(state.messages[2].text, "done.");
+        assert_eq!(state.runtime.scroll_offset(TRANSCRIPT_SCROLL_ID), 1.0);
+    }
+
+    #[test]
+    fn tool_input_deltas_append_to_diff_row() {
+        let (command_tx, _command_rx) = std::sync::mpsc::channel();
+        let (_event_tx, event_rx) = std::sync::mpsc::channel();
+        let mut runtime = UiRuntimeState::default();
+        runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, 0.0);
+        let mut state = CodexUi {
+            model: "gpt-5.5".to_string(),
+            input: UiTextBuffer::new(),
+            status: "Thinking".to_string(),
+            busy: true,
+            animation_tick: 0,
+            runtime,
+            turns: 1,
+            tools_run: 0,
+            failures: 0,
+            usage: UsageState::default(),
+            active_tool: None,
+            prompt_history: Vec::new(),
+            prompt_history_index: None,
+            prompt_history_path: None,
+            messages: Vec::new(),
+            assistant_streaming: false,
+            reasoning_streaming: false,
+            command_tx,
+            event_rx,
+        };
+
+        state.append_diff_message("*** Begin Patch\n".to_string());
+        state.append_diff_message("+new line\n".to_string());
+
+        assert_eq!(state.messages.len(), 1);
+        assert_eq!(state.messages[0].role, Role::Diff);
+        assert_eq!(state.messages[0].text, "*** Begin Patch\n+new line\n");
+        assert_eq!(state.runtime.scroll_offset(TRANSCRIPT_SCROLL_ID), 1.0);
+    }
+
+    #[test]
+    fn normalize_error_message_extracts_escaped_detail_payloads() {
+        let raw =
+            r#"http 400 Bad Request; Some("{\"detail\":\"The model requires a newer Codex.\"}")"#;
+
+        assert_eq!(
+            normalize_error_message(raw),
+            "HTTP 400 Bad Request\nThe model requires a newer Codex."
+        );
+    }
+
+    #[test]
+    fn normalize_error_message_handles_uppercase_http_prefix() {
+        let raw = r#"HTTP 401 Unauthorized; {"detail":"session expired"}"#;
+
+        assert_eq!(
+            normalize_error_message(raw),
+            "HTTP 401 Unauthorized\nsession expired"
+        );
+    }
+
+    #[test]
+    fn normalize_error_message_extracts_direct_message_payloads() {
+        assert_eq!(
+            normalize_error_message(r#"{"message":"auth token expired"}"#),
+            "auth token expired"
+        );
+    }
+
+    #[test]
+    fn normalize_error_message_leaves_plain_errors_unchanged() {
+        assert_eq!(
+            normalize_error_message("auth: missing tokens.access_token"),
+            "auth: missing tokens.access_token"
+        );
+    }
+
+    #[test]
+    fn prompt_history_uses_ctrl_p_and_ctrl_n() {
+        let (command_tx, _command_rx) = std::sync::mpsc::channel();
+        let (_event_tx, event_rx) = std::sync::mpsc::channel();
+        let mut runtime = UiRuntimeState::default();
+        runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, 1.0);
+        let mut state = CodexUi {
+            model: "gpt-5.5".to_string(),
+            input: UiTextBuffer::new(),
+            status: "Ready".to_string(),
+            busy: false,
+            animation_tick: 0,
+            runtime,
+            turns: 0,
+            tools_run: 0,
+            failures: 0,
+            usage: UsageState::default(),
+            active_tool: None,
+            prompt_history: vec!["first prompt".to_string(), "second prompt".to_string()],
+            prompt_history_index: None,
+            prompt_history_path: None,
+            messages: Vec::new(),
+            assistant_streaming: false,
+            reasoning_streaming: false,
+            command_tx,
+            event_rx,
+        };
+        let ctrl = UiKeyModifiers {
+            ctrl: true,
+            ..UiKeyModifiers::default()
+        };
+
+        assert!(state.handle_history_key(UiKey::Other(b'p' as u32), ctrl));
+        assert_eq!(state.input.as_str(), "second prompt");
+        assert!(state.handle_history_key(UiKey::Other(b'p' as u32), ctrl));
+        assert_eq!(state.input.as_str(), "first prompt");
+        assert!(state.handle_history_key(UiKey::Other(b'n' as u32), ctrl));
+        assert_eq!(state.input.as_str(), "second prompt");
+        assert!(state.handle_history_key(UiKey::Other(b'n' as u32), ctrl));
+        assert_eq!(state.input.as_str(), "");
+        assert_eq!(state.prompt_history_index, None);
+    }
+
+    #[test]
+    fn prompt_history_moves_repeated_prompts_to_most_recent() {
+        let (command_tx, _command_rx) = std::sync::mpsc::channel();
+        let (_event_tx, event_rx) = std::sync::mpsc::channel();
+        let mut runtime = UiRuntimeState::default();
+        runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, 1.0);
+        let mut state = CodexUi {
+            model: "gpt-5.5".to_string(),
+            input: UiTextBuffer::new(),
+            status: "Ready".to_string(),
+            busy: false,
+            animation_tick: 0,
+            runtime,
+            turns: 0,
+            tools_run: 0,
+            failures: 0,
+            usage: UsageState::default(),
+            active_tool: None,
+            prompt_history: vec!["first".to_string(), "second".to_string()],
+            prompt_history_index: Some(0),
+            prompt_history_path: None,
+            messages: Vec::new(),
+            assistant_streaming: false,
+            reasoning_streaming: false,
+            command_tx,
+            event_rx,
+        };
+
+        state.remember_prompt("first".to_string());
+
+        assert_eq!(state.prompt_history, vec!["second", "first"]);
+        assert_eq!(state.prompt_history_index, None);
+    }
+
+    #[test]
+    fn clear_transcript_resets_visible_metrics_without_dropping_history() {
+        let (command_tx, _command_rx) = std::sync::mpsc::channel();
+        let (_event_tx, event_rx) = std::sync::mpsc::channel();
+        let mut runtime = UiRuntimeState::default();
+        runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, 0.0);
+        let mut state = CodexUi {
+            model: "gpt-5.5".to_string(),
+            input: UiTextBuffer::new(),
+            status: "Error".to_string(),
+            busy: false,
+            animation_tick: 0,
+            runtime,
+            turns: 4,
+            tools_run: 3,
+            failures: 2,
+            usage: UsageState::default(),
+            active_tool: Some("shell".to_string()),
+            prompt_history: vec!["keep this".to_string()],
+            prompt_history_index: Some(0),
+            prompt_history_path: None,
+            messages: vec![Message {
+                role: Role::Error,
+                text: "broken".to_string(),
+            }],
+            assistant_streaming: false,
+            reasoning_streaming: false,
+            command_tx,
+            event_rx,
+        };
+
+        state.clear_transcript();
+
+        assert_eq!(state.turns, 0);
+        assert_eq!(state.tools_run, 0);
+        assert_eq!(state.failures, 0);
+        assert_eq!(state.active_tool, None);
+        assert_eq!(state.prompt_history, vec!["keep this"]);
+        assert_eq!(state.prompt_history_index, Some(0));
+        assert_eq!(state.runtime.scroll_offset(TRANSCRIPT_SCROLL_ID), 1.0);
+        assert_eq!(state.messages.len(), 1);
+        assert_eq!(state.messages[0].role, Role::Assistant);
+    }
+
+    #[test]
+    fn clear_and_new_chat_are_guarded_while_busy() {
+        let (command_tx, _command_rx) = std::sync::mpsc::channel();
+        let (_event_tx, event_rx) = std::sync::mpsc::channel();
+        let mut runtime = UiRuntimeState::default();
+        runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, 0.25);
+        let mut state = CodexUi {
+            model: "gpt-5.5".to_string(),
+            input: UiTextBuffer::new(),
+            status: "Tool running".to_string(),
+            busy: true,
+            animation_tick: 0,
+            runtime,
+            turns: 2,
+            tools_run: 1,
+            failures: 0,
+            usage: UsageState::default(),
+            active_tool: Some("shell".to_string()),
+            prompt_history: vec!["keep this".to_string()],
+            prompt_history_index: Some(0),
+            prompt_history_path: None,
+            messages: vec![Message {
+                role: Role::ToolRunning,
+                text: "Running shell".to_string(),
+            }],
+            assistant_streaming: false,
+            reasoning_streaming: false,
+            command_tx,
+            event_rx,
+        };
+
+        state.clear_transcript();
+
+        assert_eq!(
+            state.status,
+            "Wait for Codex to finish before clearing the transcript"
+        );
+        assert_eq!(state.turns, 2);
+        assert_eq!(state.tools_run, 1);
+        assert_eq!(state.active_tool.as_deref(), Some("shell"));
+        assert_eq!(state.messages.len(), 1);
+
+        state.new_chat();
+
+        assert_eq!(
+            state.status,
+            "Wait for Codex to finish before starting a new chat"
+        );
+        assert_eq!(state.turns, 2);
+        assert_eq!(state.prompt_history, vec!["keep this"]);
+        assert_eq!(state.runtime.scroll_offset(TRANSCRIPT_SCROLL_ID), 0.25);
+    }
+
+    #[test]
+    fn prompt_history_loads_saves_and_caps_recent_entries() {
+        let dir =
+            std::env::temp_dir().join(format!("edgerun-codex-history-test-{}", std::process::id()));
+        let path = dir.join("history.json");
+        let mut history = (0..(MAX_PROMPT_HISTORY + 3))
+            .map(|index| format!("prompt {index}"))
+            .collect::<Vec<_>>();
+        history.push(String::new());
+
+        save_prompt_history(&path, &history).expect("save prompt history");
+        let loaded = load_prompt_history(&path);
+
+        assert_eq!(loaded.len(), MAX_PROMPT_HISTORY);
+        assert_eq!(loaded.first().map(String::as_str), Some("prompt 3"));
+        let expected_last = format!("prompt {}", MAX_PROMPT_HISTORY + 2);
+        assert_eq!(
+            loaded.last().map(String::as_str),
+            Some(expected_last.as_str())
+        );
+
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

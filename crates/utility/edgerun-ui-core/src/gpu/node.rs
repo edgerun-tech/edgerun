@@ -1985,7 +1985,7 @@ fn render_children(
     let mut fixed = 0.0;
     let mut grow_count = 0usize;
     for child in children {
-        if child.style.grow {
+        if child.style.grow || child_main_fills_parent(child, style.direction) {
             grow_count += 1;
             continue;
         }
@@ -1999,11 +1999,13 @@ fn render_children(
     };
     let mut main_sizes = Vec::with_capacity(children.len());
     for child in children {
-        main_sizes.push(if child.style.grow {
-            grow_size
-        } else {
-            child_main_size(child, style.direction)
-        });
+        main_sizes.push(
+            if child.style.grow || child_main_fills_parent(child, style.direction) {
+                grow_size
+            } else {
+                child_main_size(child, style.direction)
+            },
+        );
     }
     let main_sum: f32 = main_sizes.iter().sum();
     let mut gap = style.gap;
@@ -2192,6 +2194,13 @@ fn child_main_size(child: &UiNode, axis: Axis) -> f32 {
             .style
             .height
             .unwrap_or_else(|| intrinsic_height(child)),
+    }
+}
+
+fn child_main_fills_parent(child: &UiNode, axis: Axis) -> bool {
+    match axis {
+        Axis::Horizontal => child.style.width.is_some_and(|value| value < 0.0),
+        Axis::Vertical => child.style.height.is_some_and(|value| value < 0.0),
     }
 }
 

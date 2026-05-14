@@ -108,6 +108,25 @@ pub enum UiTextBufferAction {
     Submit,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct UiKeyModifiers {
+    pub shift: bool,
+    pub ctrl: bool,
+    pub alt: bool,
+    pub meta: bool,
+}
+
+impl UiKeyModifiers {
+    pub const fn shift(shift: bool) -> Self {
+        Self {
+            shift,
+            ctrl: false,
+            alt: false,
+            meta: false,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct UiTextBuffer {
     value: String,
@@ -132,6 +151,11 @@ impl UiTextBuffer {
         self.cursor = 0;
     }
 
+    pub fn set_text(&mut self, text: impl Into<String>) {
+        self.value = text.into();
+        self.cursor = self.value.chars().count();
+    }
+
     pub fn insert(&mut self, text: &str) {
         let byte_index = self.cursor_byte_index();
         self.value.insert_str(byte_index, text);
@@ -154,7 +178,60 @@ impl UiTextBuffer {
     }
 
     pub fn handle_key(&mut self, key: UiKey, shift: bool) -> UiTextBufferAction {
+        self.handle_key_with_modifiers(key, UiKeyModifiers::shift(shift))
+    }
+
+    pub fn handle_key_with_modifiers(
+        &mut self,
+        key: UiKey,
+        modifiers: UiKeyModifiers,
+    ) -> UiTextBufferAction {
         match key {
+            UiKey::Other(code)
+                if modifiers.ctrl && (code == b'a' as u32 || code == b'A' as u32) =>
+            {
+                self.move_cursor_to_start();
+                UiTextBufferAction::Changed
+            }
+            UiKey::Other(code)
+                if modifiers.ctrl && (code == b'e' as u32 || code == b'E' as u32) =>
+            {
+                self.move_cursor_to_end();
+                UiTextBufferAction::Changed
+            }
+            UiKey::Other(code)
+                if modifiers.ctrl && (code == b'u' as u32 || code == b'U' as u32) =>
+            {
+                let before = self.value.len();
+                self.delete_before_cursor_all();
+                if self.value.len() == before {
+                    UiTextBufferAction::None
+                } else {
+                    UiTextBufferAction::Changed
+                }
+            }
+            UiKey::Other(code)
+                if modifiers.ctrl && (code == b'k' as u32 || code == b'K' as u32) =>
+            {
+                let before = self.value.len();
+                self.delete_after_cursor_all();
+                if self.value.len() == before {
+                    UiTextBufferAction::None
+                } else {
+                    UiTextBufferAction::Changed
+                }
+            }
+            UiKey::Other(code)
+                if modifiers.ctrl && (code == b'w' as u32 || code == b'W' as u32) =>
+            {
+                let before = self.value.len();
+                self.delete_word_before_cursor();
+                if self.value.len() == before {
+                    UiTextBufferAction::None
+                } else {
+                    UiTextBufferAction::Changed
+                }
+            }
             UiKey::Backspace => {
                 let before = self.value.len();
                 self.delete_before_cursor();
@@ -173,7 +250,7 @@ impl UiTextBuffer {
                     UiTextBufferAction::Changed
                 }
             }
-            UiKey::Enter if shift => {
+            UiKey::Enter if modifiers.shift => {
                 self.insert("\n");
                 UiTextBufferAction::Changed
             }
@@ -216,6 +293,35 @@ impl UiTextBuffer {
         self.cursor += 1;
         let end = self.cursor_byte_index();
         self.cursor -= 1;
+        self.value.replace_range(start..end, "");
+    }
+
+    pub fn delete_before_cursor_all(&mut self) {
+        let end = self.cursor_byte_index();
+        self.value.replace_range(..end, "");
+        self.cursor = 0;
+    }
+
+    pub fn delete_after_cursor_all(&mut self) {
+        let start = self.cursor_byte_index();
+        self.value.truncate(start);
+    }
+
+    pub fn delete_word_before_cursor(&mut self) {
+        if self.cursor == 0 {
+            return;
+        }
+        let chars = self.value.chars().collect::<Vec<_>>();
+        let end = self.cursor_byte_index();
+        let mut start_cursor = self.cursor.min(chars.len());
+        while start_cursor > 0 && chars[start_cursor - 1].is_whitespace() {
+            start_cursor -= 1;
+        }
+        while start_cursor > 0 && !chars[start_cursor - 1].is_whitespace() {
+            start_cursor -= 1;
+        }
+        self.cursor = start_cursor;
+        let start = self.cursor_byte_index();
         self.value.replace_range(start..end, "");
     }
 
@@ -789,6 +895,10 @@ mod tests {
     #[test]
     fn text_buffer_edits_at_cursor_with_utf8() {
         let mut buffer = UiTextBuffer::new();
+        buffer.set_text("hello");
+
+        assert_eq!(buffer.value_with_cursor('|'), "hello|");
+        buffer.clear();
         buffer.insert("hé");
         buffer.move_cursor_left();
         buffer.insert("!");
@@ -834,5 +944,54 @@ mod tests {
             buffer.handle_key(UiKey::Enter, false),
             UiTextBufferAction::Submit
         );
+    }
+
+    #[test]
+    fn text_buffer_supports_terminal_editing_shortcuts() {
+        let ctrl = UiKeyModifiers {
+            ctrl: true,
+            ..UiKeyModifiers::default()
+        };
+        let mut buffer = UiTextBuffer::new();
+        buffer.insert("alpha beta gamma");
+
+        assert_eq!(
+            buffer.handle_key_with_modifiers(UiKey::Other(b'a' as u32), ctrl),
+            UiTextBufferAction::Changed
+        );
+        assert_eq!(buffer.value_with_cursor('|'), "|alpha beta gamma");
+        assert_eq!(
+            buffer.handle_key_with_modifiers(UiKey::Other(b'e' as u32), ctrl),
+            UiTextBufferAction::Changed
+        );
+        assert_eq!(buffer.value_with_cursor('|'), "alpha beta gamma|");
+
+        buffer.move_cursor_left();
+        buffer.move_cursor_left();
+        assert_eq!(
+            buffer.handle_key_with_modifiers(UiKey::Other(b'u' as u32), ctrl),
+            UiTextBufferAction::Changed
+        );
+        assert_eq!(buffer.value_with_cursor('|'), "|ma");
+
+        buffer.insert("delta ");
+        buffer.move_cursor_left();
+        assert_eq!(
+            buffer.handle_key_with_modifiers(UiKey::Other(b'k' as u32), ctrl),
+            UiTextBufferAction::Changed
+        );
+        assert_eq!(buffer.value_with_cursor('|'), "delta|");
+
+        buffer.insert(" beta gamma");
+        assert_eq!(
+            buffer.handle_key_with_modifiers(UiKey::Other(b'w' as u32), ctrl),
+            UiTextBufferAction::Changed
+        );
+        assert_eq!(buffer.value_with_cursor('|'), "delta beta |");
+        assert_eq!(
+            buffer.handle_key_with_modifiers(UiKey::Other(b'w' as u32), ctrl),
+            UiTextBufferAction::Changed
+        );
+        assert_eq!(buffer.value_with_cursor('|'), "delta |");
     }
 }

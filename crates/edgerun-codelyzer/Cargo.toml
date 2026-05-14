@@ -11,6 +11,10 @@ autobins = false
 [lib]
 crate-type = ["rlib", "cdylib"]
 
+[[bin]]
+name = "edgerun-apk-api-calls"
+path = "src/bin/apk_api_calls.rs"
+
 [features]
 default = ["lang-rust"]
 lang-rust = []
@@ -27,4 +31,5 @@ vfs = []
 edgerun-crypto = { workspace = true, default-features = false, features = ["sha1"] }
 edgerun-json = { workspace = true, features = ["toml"] }
 edgerun-log.workspace = true
+miniz_oxide = { path = "../utility/edgerun-miniz-oxide", default-features = false, features = ["with-alloc"] }
 rkyv.workspace = true
