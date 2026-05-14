@@ -12,8 +12,7 @@ use crate::{
 /// pointer.
 #[derive(Debug, Default)]
 pub struct Share {
-    shared_address_to_pos:
-        HashMap<usize, Option<usize>, BuildHasherDefault<FxHasher64>>,
+    shared_address_to_pos: HashMap<usize, Option<usize>, BuildHasherDefault<FxHasher64>>,
 }
 
 impl Share {
@@ -27,10 +26,7 @@ impl Share {
     #[inline]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            shared_address_to_pos: HashMap::with_capacity_and_hasher(
-                capacity,
-                Default::default(),
-            ),
+            shared_address_to_pos: HashMap::with_capacity_and_hasher(capacity, Default::default()),
         }
     }
 

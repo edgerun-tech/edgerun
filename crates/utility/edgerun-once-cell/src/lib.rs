@@ -474,12 +474,16 @@ pub mod unsync {
     impl<T> OnceCell<T> {
         /// Creates a new empty cell.
         pub const fn new() -> OnceCell<T> {
-            OnceCell { inner: UnsafeCell::new(None) }
+            OnceCell {
+                inner: UnsafeCell::new(None),
+            }
         }
 
         /// Creates a new initialized cell.
         pub const fn with_value(value: T) -> OnceCell<T> {
-            OnceCell { inner: UnsafeCell::new(Some(value)) }
+            OnceCell {
+                inner: UnsafeCell::new(Some(value)),
+            }
         }
 
         /// Gets a reference to the underlying value.
@@ -726,7 +730,10 @@ pub mod unsync {
 
     impl<T: fmt::Debug, F> fmt::Debug for Lazy<T, F> {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            f.debug_struct("Lazy").field("cell", &self.cell).field("init", &"..").finish()
+            f.debug_struct("Lazy")
+                .field("cell", &self.cell)
+                .field("init", &"..")
+                .finish()
         }
     }
 
@@ -746,7 +753,10 @@ pub mod unsync {
         /// # }
         /// ```
         pub const fn new(init: F) -> Lazy<T, F> {
-            Lazy { cell: OnceCell::new(), init: Cell::new(Some(init)) }
+            Lazy {
+                cell: OnceCell::new(),
+                init: Cell::new(Some(init)),
+            }
         }
 
         /// Consumes this `Lazy` returning the stored value.
@@ -756,7 +766,8 @@ pub mod unsync {
             let cell = this.cell;
             let init = this.init;
             cell.into_inner().ok_or_else(|| {
-                init.take().unwrap_or_else(|| panic!("Lazy instance has previously been poisoned"))
+                init.take()
+                    .unwrap_or_else(|| panic!("Lazy instance has previously been poisoned"))
             })
         }
     }
@@ -1265,7 +1276,10 @@ pub mod sync {
 
     impl<T: fmt::Debug, F> fmt::Debug for Lazy<T, F> {
         fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            f.debug_struct("Lazy").field("cell", &self.cell).field("init", &"..").finish()
+            f.debug_struct("Lazy")
+                .field("cell", &self.cell)
+                .field("init", &"..")
+                .finish()
         }
     }
 
@@ -1282,7 +1296,10 @@ pub mod sync {
         /// Creates a new lazy value with the given initializing
         /// function.
         pub const fn new(f: F) -> Lazy<T, F> {
-            Lazy { cell: OnceCell::new(), init: Cell::new(Some(f)) }
+            Lazy {
+                cell: OnceCell::new(),
+                init: Cell::new(Some(f)),
+            }
         }
 
         /// Consumes this `Lazy` returning the stored value.
@@ -1292,7 +1309,8 @@ pub mod sync {
             let cell = this.cell;
             let init = this.init;
             cell.into_inner().ok_or_else(|| {
-                init.take().unwrap_or_else(|| panic!("Lazy instance has previously been poisoned"))
+                init.take()
+                    .unwrap_or_else(|| panic!("Lazy instance has previously been poisoned"))
             })
         }
     }

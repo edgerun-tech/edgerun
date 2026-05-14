@@ -24,24 +24,17 @@ where
     T: Serialize<S>,
     S: Allocator + Writer + Fallible + ?Sized,
 {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
         ArchivedVec::serialize_from_slice(self.as_slice(), serializer)
     }
 }
 
-impl<T, D: Fallible + ?Sized> Deserialize<ThinVec<T>, D>
-    for ArchivedVec<Archived<T>>
+impl<T, D: Fallible + ?Sized> Deserialize<ThinVec<T>, D> for ArchivedVec<Archived<T>>
 where
     T: Archive,
     Archived<T>: Deserialize<T, D>,
 {
-    fn deserialize(
-        &self,
-        deserializer: &mut D,
-    ) -> Result<ThinVec<T>, D::Error> {
+    fn deserialize(&self, deserializer: &mut D) -> Result<ThinVec<T>, D::Error> {
         let mut result = ThinVec::with_capacity(self.len());
         for item in self.as_slice() {
             result.push(item.deserialize(deserializer)?);
@@ -64,10 +57,7 @@ where
     T: PartialOrd<U>,
 {
     fn partial_cmp(&self, other: &ThinVec<U>) -> Option<::core::cmp::Ordering> {
-        crate::impls::lexicographical_partial_ord(
-            self.as_slice(),
-            other.as_slice(),
-        )
+        crate::impls::lexicographical_partial_ord(self.as_slice(), other.as_slice())
     }
 }
 

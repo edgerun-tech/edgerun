@@ -1,8 +1,8 @@
+use crate::io::{AsyncRead, AsyncWrite, IoSlice, IoSliceMut};
 use crate::lock::BiLock;
 use core::fmt;
 use futures_core::ready;
 use futures_core::task::{Context, Poll};
-use crate::io::{AsyncRead, AsyncWrite, IoSlice, IoSliceMut};
 use std::io;
 use std::pin::Pin;
 
@@ -121,7 +121,10 @@ impl<T> fmt::Debug for ReuniteError<T> {
 
 impl<T> fmt::Display for ReuniteError<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "tried to reunite a ReadHalf and WriteHalf that don't form a pair")
+        write!(
+            f,
+            "tried to reunite a ReadHalf and WriteHalf that don't form a pair"
+        )
     }
 }
 

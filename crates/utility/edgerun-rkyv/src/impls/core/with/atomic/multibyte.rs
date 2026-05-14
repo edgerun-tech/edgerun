@@ -11,11 +11,7 @@ macro_rules! impl_multi_byte_atomic {
             type Archived = $archived;
             type Resolver = ();
 
-            fn resolve_with(
-                field: &$atomic,
-                _: Self::Resolver,
-                out: Place<Self::Archived>,
-            ) {
+            fn resolve_with(field: &$atomic, _: Self::Resolver, out: Place<Self::Archived>) {
                 out.write(<$archived>::from_native(field.load(SO::ORDERING)));
             }
         }
@@ -26,10 +22,7 @@ macro_rules! impl_multi_byte_atomic {
         where
             D: Fallible + ?Sized,
         {
-            fn deserialize_with(
-                field: &$archived,
-                _: &mut D,
-            ) -> Result<$atomic, D::Error> {
+            fn deserialize_with(field: &$archived, _: &mut D) -> Result<$atomic, D::Error> {
                 Ok(<$atomic>::new(field.to_native()))
             }
         }
@@ -80,14 +73,8 @@ macro_rules! impl_atomic_size_type {
             type Archived = $archived;
             type Resolver = ();
 
-            fn resolve_with(
-                field: &$atomic,
-                _: Self::Resolver,
-                out: Place<Self::Archived>,
-            ) {
-                out.write(<$archived>::from_native(
-                    field.load(SO::ORDERING) as _
-                ));
+            fn resolve_with(field: &$atomic, _: Self::Resolver, out: Place<Self::Archived>) {
+                out.write(<$archived>::from_native(field.load(SO::ORDERING) as _));
             }
         }
 
@@ -97,10 +84,7 @@ macro_rules! impl_atomic_size_type {
         where
             D: Fallible + ?Sized,
         {
-            fn deserialize_with(
-                field: &$archived,
-                _: &mut D,
-            ) -> Result<$atomic, D::Error> {
+            fn deserialize_with(field: &$archived, _: &mut D) -> Result<$atomic, D::Error> {
                 Ok(<$atomic>::new(field.to_native() as _))
             }
         }
@@ -150,8 +134,7 @@ mod tests {
 
         impl PartialEq for Test {
             fn eq(&self, other: &Self) -> bool {
-                self.a.load(Ordering::Relaxed)
-                    == other.a.load(Ordering::Relaxed)
+                self.a.load(Ordering::Relaxed) == other.a.load(Ordering::Relaxed)
             }
         }
 

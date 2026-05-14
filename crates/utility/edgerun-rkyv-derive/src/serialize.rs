@@ -1,8 +1,8 @@
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::{
-    parse_quote, punctuated::Punctuated, spanned::Spanned, Data, DeriveInput,
-    Error, Fields, Generics, Ident, Index, Path, WhereClause,
+    parse_quote, punctuated::Punctuated, spanned::Spanned, Data, DeriveInput, Error, Fields,
+    Generics, Ident, Index, Path, WhereClause,
 };
 
 use crate::{
@@ -34,8 +34,7 @@ fn derive_serialize_impl(
     }
 
     let mut impl_input_params = Punctuated::default();
-    impl_input_params
-        .push(parse_quote! { __S: #rkyv_path::rancor::Fallible + ?Sized });
+    impl_input_params.push(parse_quote! { __S: #rkyv_path::rancor::Fallible + ?Sized });
     for param in input.generics.params.iter() {
         impl_input_params.push(param.clone());
     }
@@ -133,16 +132,14 @@ fn generate_serialize_body(
                     .named
                     .iter()
                     .map(|field| {
-                        let field_attrs =
-                            FieldAttributes::parse(attributes, field)?;
+                        let field_attrs = FieldAttributes::parse(attributes, field)?;
 
-                        serialize_where.predicates.extend(
-                            field_attrs.serialize_bound(rkyv_path, field),
-                        );
+                        serialize_where
+                            .predicates
+                            .extend(field_attrs.serialize_bound(rkyv_path, field));
 
                         let name = &field.ident;
-                        let access_field =
-                            field_attrs.access_field(&this, name);
+                        let access_field = field_attrs.access_field(&this, name);
                         let serialize = field_attrs.serialize(rkyv_path, field);
                         Ok(quote! {
                             #name: #serialize(#access_field, serializer)?
@@ -158,16 +155,14 @@ fn generate_serialize_body(
                     .iter()
                     .enumerate()
                     .map(|(i, field)| {
-                        let field_attrs =
-                            FieldAttributes::parse(attributes, field)?;
+                        let field_attrs = FieldAttributes::parse(attributes, field)?;
 
-                        serialize_where.predicates.extend(
-                            field_attrs.serialize_bound(rkyv_path, field),
-                        );
+                        serialize_where
+                            .predicates
+                            .extend(field_attrs.serialize_bound(rkyv_path, field));
 
                         let index = Index::from(i);
-                        let access_field =
-                            field_attrs.access_field(&this, &index);
+                        let access_field = field_attrs.access_field(&this, &index);
                         let serialize = field_attrs.serialize(rkyv_path, field);
                         Ok(quote! { #serialize(#access_field, serializer)? })
                     })
@@ -190,29 +185,23 @@ fn generate_serialize_body(
                              `#[rkyv(other)]`",
                         ));
                     }
-                    let variant_attrs =
-                        VariantAttributes::parse(attributes, v)?;
+                    let variant_attrs = VariantAttributes::parse(attributes, v)?;
                     let variant = &v.ident;
                     match v.fields {
                         Fields::Named(ref fields) => {
-                            let bindings =
-                                fields.named.iter().map(|f| &f.ident);
+                            let bindings = fields.named.iter().map(|f| &f.ident);
                             let fields = fields
                                 .named
                                 .iter()
                                 .map(|field| {
-                                    let field_attrs = FieldAttributes::parse(
-                                        attributes, field,
-                                    )?;
+                                    let field_attrs = FieldAttributes::parse(attributes, field)?;
 
-                                    serialize_where.predicates.extend(
-                                        field_attrs
-                                            .serialize_bound(rkyv_path, field),
-                                    );
+                                    serialize_where
+                                        .predicates
+                                        .extend(field_attrs.serialize_bound(rkyv_path, field));
 
                                     let name = &field.ident;
-                                    let serialize =
-                                        field_attrs.serialize(rkyv_path, field);
+                                    let serialize = field_attrs.serialize(rkyv_path, field);
                                     Ok(quote! {
                                         #name: #serialize(#name, serializer)?
                                     })
@@ -227,33 +216,25 @@ fn generate_serialize_body(
                             })
                         }
                         Fields::Unnamed(ref fields) => {
-                            let bindings =
-                                fields.unnamed.iter().enumerate().map(
-                                    |(i, f)| {
-                                        Ident::new(&format!("_{i}"), f.span())
-                                    },
-                                );
+                            let bindings = fields
+                                .unnamed
+                                .iter()
+                                .enumerate()
+                                .map(|(i, f)| Ident::new(&format!("_{i}"), f.span()));
 
                             let fields = fields
                                 .unnamed
                                 .iter()
                                 .enumerate()
                                 .map(|(i, field)| {
-                                    let field_attrs = FieldAttributes::parse(
-                                        attributes, field,
-                                    )?;
+                                    let field_attrs = FieldAttributes::parse(attributes, field)?;
 
-                                    serialize_where.predicates.extend(
-                                        field_attrs
-                                            .serialize_bound(rkyv_path, field),
-                                    );
+                                    serialize_where
+                                        .predicates
+                                        .extend(field_attrs.serialize_bound(rkyv_path, field));
 
-                                    let binding = Ident::new(
-                                        &format!("_{i}"),
-                                        field.span(),
-                                    );
-                                    let serialize =
-                                        field_attrs.serialize(rkyv_path, field);
+                                    let binding = Ident::new(&format!("_{i}"), field.span());
+                                    let serialize = field_attrs.serialize(rkyv_path, field);
                                     Ok(quote! {
                                         #serialize(#binding, serializer)?
                                     })

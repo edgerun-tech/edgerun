@@ -1,9 +1,6 @@
 use core::{
     hint::unreachable_unchecked,
-    ops::{
-        Bound, Range, RangeFrom, RangeFull, RangeInclusive, RangeTo,
-        RangeToInclusive,
-    },
+    ops::{Bound, Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive},
 };
 
 use munge::munge;
@@ -11,8 +8,8 @@ use rancor::Fallible;
 
 use crate::{
     ops::{
-        ArchivedBound, ArchivedRange, ArchivedRangeFrom, ArchivedRangeFull,
-        ArchivedRangeInclusive, ArchivedRangeTo, ArchivedRangeToInclusive,
+        ArchivedBound, ArchivedRange, ArchivedRangeFrom, ArchivedRangeFull, ArchivedRangeInclusive,
+        ArchivedRangeTo, ArchivedRangeToInclusive,
     },
     traits::{CopyOptimization, NoUndef},
     Archive, Deserialize, Place, Serialize,
@@ -21,8 +18,7 @@ use crate::{
 // RangeFull
 
 impl Archive for RangeFull {
-    const COPY_OPTIMIZATION: CopyOptimization<Self> =
-        unsafe { CopyOptimization::enable() };
+    const COPY_OPTIMIZATION: CopyOptimization<Self> = unsafe { CopyOptimization::enable() };
 
     type Archived = ArchivedRangeFull;
     type Resolver = ();
@@ -63,10 +59,7 @@ impl<T: Archive> Archive for Range<T> {
 }
 
 impl<T: Serialize<S>, S: Fallible + ?Sized> Serialize<S> for Range<T> {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
         Ok(Range {
             start: self.start.serialize(serializer)?,
             end: self.end.serialize(serializer)?,
@@ -108,10 +101,7 @@ impl<T: Archive> Archive for RangeInclusive<T> {
 }
 
 impl<T: Serialize<S>, S: Fallible + ?Sized> Serialize<S> for RangeInclusive<T> {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
         Ok(Range {
             start: self.start().serialize(serializer)?,
             end: self.end().serialize(serializer)?,
@@ -119,17 +109,13 @@ impl<T: Serialize<S>, S: Fallible + ?Sized> Serialize<S> for RangeInclusive<T> {
     }
 }
 
-impl<T, D> Deserialize<RangeInclusive<T>, D>
-    for ArchivedRangeInclusive<T::Archived>
+impl<T, D> Deserialize<RangeInclusive<T>, D> for ArchivedRangeInclusive<T::Archived>
 where
     T: Archive,
     T::Archived: Deserialize<T, D>,
     D: Fallible + ?Sized,
 {
-    fn deserialize(
-        &self,
-        deserializer: &mut D,
-    ) -> Result<RangeInclusive<T>, D::Error> {
+    fn deserialize(&self, deserializer: &mut D) -> Result<RangeInclusive<T>, D::Error> {
         Ok(RangeInclusive::new(
             self.start.deserialize(deserializer)?,
             self.end.deserialize(deserializer)?,
@@ -159,10 +145,7 @@ impl<T: Archive> Archive for RangeFrom<T> {
 }
 
 impl<T: Serialize<S>, S: Fallible + ?Sized> Serialize<S> for RangeFrom<T> {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
         Ok(RangeFrom {
             start: self.start.serialize(serializer)?,
         })
@@ -175,10 +158,7 @@ where
     D: Fallible + ?Sized,
     T::Archived: Deserialize<T, D>,
 {
-    fn deserialize(
-        &self,
-        deserializer: &mut D,
-    ) -> Result<RangeFrom<T>, D::Error> {
+    fn deserialize(&self, deserializer: &mut D) -> Result<RangeFrom<T>, D::Error> {
         Ok(RangeFrom {
             start: self.start.deserialize(deserializer)?,
         })
@@ -204,10 +184,7 @@ impl<T: Archive> Archive for RangeTo<T> {
 }
 
 impl<T: Serialize<S>, S: Fallible + ?Sized> Serialize<S> for RangeTo<T> {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
         Ok(RangeTo {
             end: self.end.serialize(serializer)?,
         })
@@ -220,10 +197,7 @@ where
     D: Fallible + ?Sized,
     T::Archived: Deserialize<T, D>,
 {
-    fn deserialize(
-        &self,
-        deserializer: &mut D,
-    ) -> Result<RangeTo<T>, D::Error> {
+    fn deserialize(&self, deserializer: &mut D) -> Result<RangeTo<T>, D::Error> {
         Ok(RangeTo {
             end: self.end.deserialize(deserializer)?,
         })
@@ -253,27 +227,20 @@ where
     T: Serialize<S>,
     S: Fallible + ?Sized,
 {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
         Ok(RangeToInclusive {
             end: self.end.serialize(serializer)?,
         })
     }
 }
 
-impl<T, D> Deserialize<RangeToInclusive<T>, D>
-    for ArchivedRangeToInclusive<T::Archived>
+impl<T, D> Deserialize<RangeToInclusive<T>, D> for ArchivedRangeToInclusive<T::Archived>
 where
     T: Archive,
     T::Archived: Deserialize<T, D>,
     D: Fallible + ?Sized,
 {
-    fn deserialize(
-        &self,
-        deserializer: &mut D,
-    ) -> Result<RangeToInclusive<T>, D::Error> {
+    fn deserialize(&self, deserializer: &mut D) -> Result<RangeToInclusive<T>, D::Error> {
         Ok(RangeToInclusive {
             end: self.end.deserialize(deserializer)?,
         })
@@ -319,11 +286,8 @@ impl<T: Archive> Archive for Bound<T> {
     fn resolve(&self, resolver: Self::Resolver, out: Place<Self::Archived>) {
         match resolver {
             Bound::Included(resolver) => {
-                let out = unsafe {
-                    out.cast_unchecked::<
-                    ArchivedBoundVariantIncluded<T::Archived>
-                >()
-                };
+                let out =
+                    unsafe { out.cast_unchecked::<ArchivedBoundVariantIncluded<T::Archived>>() };
                 munge!(let ArchivedBoundVariantIncluded(tag, out_value) = out);
                 tag.write(ArchivedBoundTag::Included);
 
@@ -338,11 +302,8 @@ impl<T: Archive> Archive for Bound<T> {
                 value.resolve(resolver, out_value);
             }
             Bound::Excluded(resolver) => {
-                let out = unsafe {
-                    out.cast_unchecked::<
-                    ArchivedBoundVariantExcluded<T::Archived>
-                >()
-                };
+                let out =
+                    unsafe { out.cast_unchecked::<ArchivedBoundVariantExcluded<T::Archived>>() };
                 munge!(let ArchivedBoundVariantExcluded(tag, out_value) = out);
                 tag.write(ArchivedBoundTag::Excluded);
 
@@ -357,9 +318,7 @@ impl<T: Archive> Archive for Bound<T> {
                 value.resolve(resolver, out_value);
             }
             Bound::Unbounded => {
-                let out = unsafe {
-                    out.cast_unchecked::<ArchivedBoundVariantUnbounded>()
-                };
+                let out = unsafe { out.cast_unchecked::<ArchivedBoundVariantUnbounded>() };
                 munge!(let ArchivedBoundVariantUnbounded(tag) = out);
                 tag.write(ArchivedBoundTag::Unbounded);
             }
@@ -368,10 +327,7 @@ impl<T: Archive> Archive for Bound<T> {
 }
 
 impl<T: Serialize<S>, S: Fallible + ?Sized> Serialize<S> for Bound<T> {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
         match self.as_ref() {
             Bound::Included(x) => x.serialize(serializer).map(Bound::Included),
             Bound::Excluded(x) => x.serialize(serializer).map(Bound::Excluded),
@@ -386,17 +342,10 @@ where
     T::Archived: Deserialize<T, D>,
     D: Fallible + ?Sized,
 {
-    fn deserialize(
-        &self,
-        deserializer: &mut D,
-    ) -> Result<Bound<T>, <D as Fallible>::Error> {
+    fn deserialize(&self, deserializer: &mut D) -> Result<Bound<T>, <D as Fallible>::Error> {
         Ok(match self {
-            ArchivedBound::Included(value) => {
-                Bound::Included(value.deserialize(deserializer)?)
-            }
-            ArchivedBound::Excluded(value) => {
-                Bound::Excluded(value.deserialize(deserializer)?)
-            }
+            ArchivedBound::Included(value) => Bound::Included(value.deserialize(deserializer)?),
+            ArchivedBound::Excluded(value) => Bound::Excluded(value.deserialize(deserializer)?),
             ArchivedBound::Unbounded => Bound::Unbounded,
         })
     }
@@ -409,9 +358,7 @@ where
     fn eq(&self, other: &Bound<T>) -> bool {
         match (self, other) {
             (ArchivedBound::Included(this), Bound::Included(other))
-            | (ArchivedBound::Excluded(this), Bound::Excluded(other)) => {
-                this.eq(other)
-            }
+            | (ArchivedBound::Excluded(this), Bound::Excluded(other)) => this.eq(other),
             (ArchivedBound::Unbounded, Bound::Unbounded) => true,
             _ => false,
         }

@@ -7,10 +7,7 @@ use core::{
     cmp,
     error::Error,
     fmt, hash,
-    ops::{
-        Deref, Index, Range, RangeFrom, RangeFull, RangeInclusive, RangeTo,
-        RangeToInclusive,
-    },
+    ops::{Deref, Index, Range, RangeFrom, RangeFull, RangeInclusive, RangeTo, RangeToInclusive},
     str,
 };
 
@@ -18,9 +15,7 @@ use munge::munge;
 use rancor::{fail, Fallible, Source};
 use repr::{ArchivedStringRepr, INLINE_CAPACITY};
 
-use crate::{
-    primitive::FixedUsize, seal::Seal, Place, Portable, SerializeUnsized,
-};
+use crate::{primitive::FixedUsize, seal::Seal, Place, Portable, SerializeUnsized};
 
 /// An archived [`String`].
 ///
@@ -56,11 +51,7 @@ impl ArchivedString {
 
     /// Resolves an archived string from a given `str`.
     #[inline]
-    pub fn resolve_from_str(
-        value: &str,
-        resolver: StringResolver,
-        out: Place<Self>,
-    ) {
+    pub fn resolve_from_str(value: &str, resolver: StringResolver, out: Place<Self>) {
         munge!(let ArchivedString { repr } = out);
         if value.len() <= repr::INLINE_CAPACITY {
             unsafe {
@@ -68,11 +59,7 @@ impl ArchivedString {
             }
         } else {
             unsafe {
-                ArchivedStringRepr::emplace_out_of_line(
-                    value,
-                    resolver.pos as usize,
-                    repr,
-                );
+                ArchivedStringRepr::emplace_out_of_line(value, resolver.pos as usize, repr);
             }
         }
     }
@@ -94,10 +81,7 @@ impl ArchivedString {
 
             impl fmt::Display for StringTooLongError {
                 fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                    write!(
-                        f,
-                        "String was too long for the archived representation",
-                    )
+                    write!(f, "String was too long for the archived representation",)
                 }
             }
 
@@ -282,8 +266,7 @@ mod verify {
                     str::check_bytes(self.repr.as_str_ptr(), context)?;
                 }
             } else {
-                let base =
-                    (&self.repr as *const ArchivedStringRepr).cast::<u8>();
+                let base = (&self.repr as *const ArchivedStringRepr).cast::<u8>();
                 let offset = unsafe { self.repr.out_of_line_offset() };
                 let metadata = self.repr.len();
 

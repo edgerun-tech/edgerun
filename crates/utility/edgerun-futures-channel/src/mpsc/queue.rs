@@ -80,7 +80,10 @@ unsafe impl<T: Send> Sync for Queue<T> {}
 
 impl<T> Node<T> {
     unsafe fn new(v: Option<T>) -> *mut Self {
-        Box::into_raw(Box::new(Self { next: AtomicPtr::new(ptr::null_mut()), value: v }))
+        Box::into_raw(Box::new(Self {
+            next: AtomicPtr::new(ptr::null_mut()),
+            value: v,
+        }))
     }
 }
 
@@ -89,7 +92,10 @@ impl<T> Queue<T> {
     /// one consumer.
     pub(super) fn new() -> Self {
         let stub = unsafe { Node::new(None) };
-        Self { head: AtomicPtr::new(stub), tail: UnsafeCell::new(stub) }
+        Self {
+            head: AtomicPtr::new(stub),
+            tail: UnsafeCell::new(stub),
+        }
     }
 
     /// Pushes a new value onto this queue.

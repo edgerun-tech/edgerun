@@ -25,7 +25,11 @@ impl<St: Stream, FromA: Default, FromB: Default> Unzip<St, FromA, FromB> {
     }
 
     pub(super) fn new(stream: St) -> Self {
-        Self { stream, left: Default::default(), right: Default::default() }
+        Self {
+            stream,
+            left: Default::default(),
+            right: Default::default(),
+        }
     }
 }
 

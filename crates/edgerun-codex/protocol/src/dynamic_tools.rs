@@ -103,7 +103,7 @@ mod tests {
             "deferLoading": true,
         });
 
-        let actual: DynamicToolSpec = edgerun_json::from_value(value).expect("deserialize");
+        let actual: DynamicToolSpec = edgerun_json::from_serde_value(value).expect("deserialize");
 
         assert_eq!(
             actual,
@@ -134,7 +134,7 @@ mod tests {
             "exposeToContext": false,
         });
 
-        let actual: DynamicToolSpec = edgerun_json::from_value(value).expect("deserialize");
+        let actual: DynamicToolSpec = edgerun_json::from_serde_value(value).expect("deserialize");
 
         assert!(actual.defer_loading);
     }

@@ -131,9 +131,7 @@ impl<T: DerefMut, E> ArchivedResult<T, E> {
     ///
     /// Coerces the `Ok` variant of the original `ArchivedResult` via `DerefMut`
     /// and returns the new `Result`.
-    pub fn as_deref_mut(
-        &mut self,
-    ) -> Result<&mut <T as Deref>::Target, &mut E> {
+    pub fn as_deref_mut(&mut self) -> Result<&mut <T as Deref>::Target, &mut E> {
         match self {
             ArchivedResult::Ok(value) => Ok(value.deref_mut()),
             ArchivedResult::Err(err) => Err(err),

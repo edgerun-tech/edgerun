@@ -147,20 +147,14 @@ impl<K, V, H: Hasher + Default> ArchivedHashMap<K, V, H> {
         C: Fn(&Q, &K) -> bool,
     {
         munge!(let Self { table, .. } = this);
-        let entry = ArchivedHashTable::get_seal_with(
-            table,
-            hash_value::<Q, H>(key),
-            |e| cmp(key, &e.key),
-        )?;
+        let entry =
+            ArchivedHashTable::get_seal_with(table, hash_value::<Q, H>(key), |e| cmp(key, &e.key))?;
         munge!(let Entry { key, value } = entry);
         Some((key.unseal_ref(), value))
     }
 
     /// Returns the mutable key-value pair corresponding to the supplied key.
-    pub fn get_key_value_seal<'a, Q>(
-        this: Seal<'a, Self>,
-        key: &Q,
-    ) -> Option<(&'a K, Seal<'a, V>)>
+    pub fn get_key_value_seal<'a, Q>(this: Seal<'a, Self>, key: &Q) -> Option<(&'a K, Seal<'a, V>)>
     where
         K: Borrow<Q>,
         Q: Hash + Eq + ?Sized,
@@ -170,11 +164,7 @@ impl<K, V, H: Hasher + Default> ArchivedHashMap<K, V, H> {
 
     /// Returns a mutable reference to the value corresponding to the supplied
     /// key using the given comparison function.
-    pub fn get_seal_with<'a, Q, C>(
-        this: Seal<'a, Self>,
-        key: &Q,
-        cmp: C,
-    ) -> Option<Seal<'a, V>>
+    pub fn get_seal_with<'a, Q, C>(this: Seal<'a, Self>, key: &Q, cmp: C) -> Option<Seal<'a, V>>
     where
         K: Borrow<Q>,
         Q: Hash + Eq + ?Sized,
@@ -235,12 +225,7 @@ impl<K, V, H: Hasher + Default> ArchivedHashMap<K, V, H> {
         out: Place<Self>,
     ) {
         munge!(let ArchivedHashMap { table, _phantom: _ } = out);
-        ArchivedHashTable::<Entry<K, V>>::resolve_from_len(
-            len,
-            load_factor,
-            resolver.0,
-            table,
-        )
+        ArchivedHashTable::<Entry<K, V>>::resolve_from_len(len, load_factor, resolver.0, table)
     }
 }
 
@@ -272,9 +257,8 @@ where
         if self.len() != other.len() {
             false
         } else {
-            self.iter().all(|(key, value)| {
-                other.get(key).is_some_and(|v| *value == *v)
-            })
+            self.iter()
+                .all(|(key, value)| other.get(key).is_some_and(|v| *value == *v))
         }
     }
 }

@@ -26,10 +26,11 @@ lang-java = []
 lang-javascript = []
 mount = ["vfs"]
 vfs = []
+wire-rkyv = ["dep:rkyv"]
 
 [dependencies]
 edgerun-crypto = { workspace = true, default-features = false, features = ["sha1"] }
 edgerun-json = { workspace = true, features = ["toml"] }
+edgerun-encoding = { workspace = true, features = ["compression"] }
 edgerun-log.workspace = true
-miniz_oxide = { path = "../utility/edgerun-miniz-oxide", default-features = false, features = ["with-alloc"] }
-rkyv.workspace = true
+rkyv = { workspace = true, features = ["std", "bytecheck"], optional = true }

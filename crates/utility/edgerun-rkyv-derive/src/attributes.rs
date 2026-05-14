@@ -1,9 +1,8 @@
 use proc_macro2::{Span, TokenStream, TokenTree};
 use quote::{quote, ToTokens};
 use syn::{
-    meta::ParseNestedMeta, parenthesized, parse::Parse, parse_quote,
-    punctuated::Punctuated, DeriveInput, Error, Field, Fields, Ident, Meta,
-    Path, Token, Type, Variant, WherePredicate,
+    meta::ParseNestedMeta, parenthesized, parse::Parse, parse_quote, punctuated::Punctuated,
+    DeriveInput, Error, Field, Fields, Ident, Meta, Path, Token, Type, Variant, WherePredicate,
 };
 
 fn try_set_attribute<T: ToTokens>(
@@ -41,9 +40,7 @@ impl Attributes {
     fn parse_meta(&mut self, meta: ParseNestedMeta<'_>) -> Result<(), Error> {
         if meta.path.is_ident("bytecheck") {
             let tokens = meta.input.step(|cursor| {
-                if let Some((TokenTree::Group(group), rest)) =
-                    cursor.token_tree()
-                {
+                if let Some((TokenTree::Group(group), rest)) = cursor.token_tree() {
                     Ok((group.stream(), rest))
                 } else {
                     Err(cursor.error("expected bytecheck attributes"))
@@ -63,62 +60,31 @@ impl Attributes {
         } else if meta.path.is_ident("archive_bounds") {
             let bounds;
             parenthesized!(bounds in meta.input);
-            let clauses =
-                bounds.parse_terminated(WherePredicate::parse, Token![,])?;
-            try_set_attribute(
-                &mut self.archive_bounds,
-                clauses,
-                "archive_bounds",
-            )
+            let clauses = bounds.parse_terminated(WherePredicate::parse, Token![,])?;
+            try_set_attribute(&mut self.archive_bounds, clauses, "archive_bounds")
         } else if meta.path.is_ident("serialize_bounds") {
             let bounds;
             parenthesized!(bounds in meta.input);
-            let clauses =
-                bounds.parse_terminated(WherePredicate::parse, Token![,])?;
-            try_set_attribute(
-                &mut self.serialize_bounds,
-                clauses,
-                "serialize_bounds",
-            )
+            let clauses = bounds.parse_terminated(WherePredicate::parse, Token![,])?;
+            try_set_attribute(&mut self.serialize_bounds, clauses, "serialize_bounds")
         } else if meta.path.is_ident("deserialize_bounds") {
             let bounds;
             parenthesized!(bounds in meta.input);
-            let clauses =
-                bounds.parse_terminated(WherePredicate::parse, Token![,])?;
-            try_set_attribute(
-                &mut self.deserialize_bounds,
-                clauses,
-                "deserialize_bounds",
-            )
+            let clauses = bounds.parse_terminated(WherePredicate::parse, Token![,])?;
+            try_set_attribute(&mut self.deserialize_bounds, clauses, "deserialize_bounds")
         } else if meta.path.is_ident("archived") {
-            try_set_attribute(
-                &mut self.archived,
-                meta.value()?.parse()?,
-                "archived",
-            )
+            try_set_attribute(&mut self.archived, meta.value()?.parse()?, "archived")
         } else if meta.path.is_ident("resolver") {
-            try_set_attribute(
-                &mut self.resolver,
-                meta.value()?.parse()?,
-                "resolver",
-            )
+            try_set_attribute(&mut self.resolver, meta.value()?.parse()?, "resolver")
         } else if meta.path.is_ident("as") {
             meta.input.parse::<Token![=]>()?;
-            try_set_attribute(
-                &mut self.as_type,
-                meta.input.parse::<Type>()?,
-                "as",
-            )
+            try_set_attribute(&mut self.as_type, meta.input.parse::<Type>()?, "as")
         } else if meta.path.is_ident("crate") {
             if meta.input.parse::<Token![=]>().is_ok() {
                 let path = meta.input.parse::<Path>()?;
                 try_set_attribute(&mut self.crate_path, path, "crate")
             } else if meta.input.is_empty() || meta.input.peek(Token![,]) {
-                try_set_attribute(
-                    &mut self.crate_path,
-                    parse_quote! { crate },
-                    "crate",
-                )
+                try_set_attribute(&mut self.crate_path, parse_quote! { crate }, "crate")
             } else {
                 Err(meta.error("expected `crate` or `crate = ...`"))
             }
@@ -139,11 +105,7 @@ impl Attributes {
                 .extend(metas.parse_terminated(Meta::parse, Token![,])?);
             Ok(())
         } else if meta.path.is_ident("remote") {
-            try_set_attribute(
-                &mut self.remote,
-                meta.value()?.parse()?,
-                "remote",
-            )
+            try_set_attribute(&mut self.remote, meta.value()?.parse()?, "remote")
         } else {
             Err(meta.error("unrecognized rkyv argument"))
         }
@@ -238,10 +200,7 @@ impl FieldAttributes {
         }
     }
 
-    pub fn parse(
-        attributes: &Attributes,
-        input: &Field,
-    ) -> Result<Self, Error> {
+    pub fn parse(attributes: &Attributes, input: &Field) -> Result<Self, Error> {
         let mut result = Self::default();
 
         for attr in input.attrs.iter() {
@@ -260,11 +219,7 @@ impl FieldAttributes {
         Ok(result)
     }
 
-    pub fn archive_bound(
-        &self,
-        rkyv_path: &Path,
-        field: &Field,
-    ) -> Option<WherePredicate> {
+    pub fn archive_bound(&self, rkyv_path: &Path, field: &Field) -> Option<WherePredicate> {
         if self.omit_bounds.is_some() {
             return None;
         }
@@ -281,11 +236,7 @@ impl FieldAttributes {
         }
     }
 
-    pub fn serialize_bound(
-        &self,
-        rkyv_path: &Path,
-        field: &Field,
-    ) -> Option<WherePredicate> {
+    pub fn serialize_bound(&self, rkyv_path: &Path, field: &Field) -> Option<WherePredicate> {
         if self.omit_bounds.is_some() {
             return None;
         }
@@ -302,11 +253,7 @@ impl FieldAttributes {
         }
     }
 
-    pub fn deserialize_bound(
-        &self,
-        rkyv_path: &Path,
-        field: &Field,
-    ) -> Option<WherePredicate> {
+    pub fn deserialize_bound(&self, rkyv_path: &Path, field: &Field) -> Option<WherePredicate> {
         if self.omit_bounds.is_some() {
             return None;
         }
@@ -394,11 +341,7 @@ impl FieldAttributes {
         }
     }
 
-    pub fn access_field(
-        &self,
-        this: &Ident,
-        member: &impl ToTokens,
-    ) -> TokenStream {
+    pub fn access_field(&self, this: &Ident, member: &impl ToTokens) -> TokenStream {
         if let Some(ref getter) = self.getter {
             quote! { ::core::borrow::Borrow::borrow(&#getter(#this)) }
         } else {
@@ -437,10 +380,7 @@ impl VariantAttributes {
         }
     }
 
-    pub fn parse(
-        attributes: &Attributes,
-        input: &Variant,
-    ) -> Result<Self, Error> {
+    pub fn parse(attributes: &Attributes, input: &Variant) -> Result<Self, Error> {
         let mut result = Self::default();
 
         for attr in input.attrs.iter() {
@@ -493,8 +433,7 @@ impl PartialEq for Niche {
                     false
                 }
             }
-            (Niche::Type(ty), Niche::Default)
-            | (Niche::Default, Niche::Type(ty)) => {
+            (Niche::Type(ty), Niche::Default) | (Niche::Default, Niche::Type(ty)) => {
                 if let Type::Path(ty) = &**ty {
                     match ty.path.get_ident() {
                         Some(ident) => ident == "DefaultNiche",

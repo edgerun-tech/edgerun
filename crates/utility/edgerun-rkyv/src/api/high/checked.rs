@@ -13,17 +13,14 @@ use crate::{
     },
     de::pooling::Pool,
     seal::Seal,
-    validation::{
-        archive::ArchiveValidator, shared::SharedValidator, Validator,
-    },
+    validation::{archive::ArchiveValidator, shared::SharedValidator, Validator},
     Archive, Deserialize, Portable,
 };
 
 /// A high-level validator.
 ///
 /// This is part of the [high-level API](crate::api::high).
-pub type HighValidator<'a, E> =
-    Strategy<Validator<ArchiveValidator<'a>, SharedValidator>, E>;
+pub type HighValidator<'a, E> = Strategy<Validator<ArchiveValidator<'a>, SharedValidator>, E>;
 
 fn validator(bytes: &[u8]) -> Validator<ArchiveValidator<'_>, SharedValidator> {
     Validator::new(ArchiveValidator::new(bytes), SharedValidator::new())
@@ -153,10 +150,7 @@ where
 /// *value = 12345.into();
 /// assert_eq!(*value, 12345);
 /// ```
-pub fn access_pos_mut<T, E>(
-    bytes: &mut [u8],
-    pos: usize,
-) -> Result<Seal<'_, T>, E>
+pub fn access_pos_mut<T, E>(bytes: &mut [u8], pos: usize) -> Result<Seal<'_, T>, E>
 where
     T: Portable + for<'a> CheckBytes<HighValidator<'a, E>>,
     E: Source,
@@ -249,8 +243,7 @@ where
 pub fn from_bytes<T, E>(bytes: &[u8]) -> Result<T, E>
 where
     T: Archive,
-    T::Archived: for<'a> CheckBytes<HighValidator<'a, E>>
-        + Deserialize<T, Strategy<Pool, E>>,
+    T::Archived: for<'a> CheckBytes<HighValidator<'a, E>> + Deserialize<T, Strategy<Pool, E>>,
     E: Source,
 {
     let mut deserializer = Pool::default();

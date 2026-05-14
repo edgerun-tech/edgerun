@@ -1,8 +1,6 @@
 //! A niched archived `Option<Box<T>>` that uses less space.
 
-use core::{
-    cmp, fmt, hash, hint::unreachable_unchecked, mem::ManuallyDrop, ops::Deref,
-};
+use core::{cmp, fmt, hash, hint::unreachable_unchecked, mem::ManuallyDrop, ops::Deref};
 
 use munge::munge;
 use rancor::Fallible;
@@ -56,10 +54,7 @@ const _: () = {
         RelPtr<T>: CheckBytes<C>,
         Self: Verify<C>,
     {
-        unsafe fn check_bytes(
-            value: *const Self,
-            context: &mut C,
-        ) -> Result<(), C::Error> {
+        unsafe fn check_bytes(value: *const Self, context: &mut C) -> Result<(), C::Error> {
             // SAFETY: `Repr<T>` is a `#[repr(C)]` union of an `ArchivedBox<T>`
             // and a `RelPtr<T>`, and so is guaranteed to be aligned and point
             // to enough bytes for a `RelPtr<T>`.
@@ -160,14 +155,13 @@ impl<T: ArchivePointee + ?Sized> ArchivedOptionBox<T> {
     ) {
         munge!(let Self { repr } = out);
         if let Some(value) = field {
-            let resolver =
-                if let OptionBoxResolver::Some(metadata_resolver) = resolver {
-                    metadata_resolver
-                } else {
-                    unsafe {
-                        unreachable_unchecked();
-                    }
-                };
+            let resolver = if let OptionBoxResolver::Some(metadata_resolver) = resolver {
+                metadata_resolver
+            } else {
+                unsafe {
+                    unreachable_unchecked();
+                }
+            };
 
             let out = unsafe { repr.cast_unchecked::<ArchivedBox<T>>() };
             ArchivedBox::resolve_from_ref(value, resolver, out)
@@ -210,9 +204,7 @@ where
 
 impl<T: ArchivePointee + Eq + ?Sized> Eq for ArchivedOptionBox<T> {}
 
-impl<T: ArchivePointee + hash::Hash + ?Sized> hash::Hash
-    for ArchivedOptionBox<T>
-{
+impl<T: ArchivePointee + hash::Hash + ?Sized> hash::Hash for ArchivedOptionBox<T> {
     fn hash<H: hash::Hasher>(&self, state: &mut H) {
         self.as_ref().hash(state)
     }
@@ -224,17 +216,13 @@ impl<T: ArchivePointee + Ord + ?Sized> Ord for ArchivedOptionBox<T> {
     }
 }
 
-impl<T: ArchivePointee + PartialEq + ?Sized> PartialEq
-    for ArchivedOptionBox<T>
-{
+impl<T: ArchivePointee + PartialEq + ?Sized> PartialEq for ArchivedOptionBox<T> {
     fn eq(&self, other: &Self) -> bool {
         self.as_ref().eq(&other.as_ref())
     }
 }
 
-impl<T: ArchivePointee + PartialOrd + ?Sized> PartialOrd
-    for ArchivedOptionBox<T>
-{
+impl<T: ArchivePointee + PartialOrd + ?Sized> PartialOrd for ArchivedOptionBox<T> {
     fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
         self.as_ref().partial_cmp(&other.as_ref())
     }

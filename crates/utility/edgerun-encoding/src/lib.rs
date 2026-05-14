@@ -13,6 +13,8 @@ pub mod base64;
 pub mod buf;
 pub mod byteorder;
 pub mod chunked;
+#[cfg(feature = "compression")]
+pub mod compression;
 pub mod crc32;
 pub mod cstring;
 pub mod frame;

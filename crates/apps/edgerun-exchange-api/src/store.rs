@@ -14,9 +14,9 @@ use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU64, Ordering};
 use edgerun_exchange::projection::{is_terminal_status, terminal_event_for_status};
 use edgerun_exchange::provider::{ProviderQuote, ProviderStatus};
-use edgerun_exchange::{project_order_events, ExchangeEvent, ExchangeOrderProjection};
+use edgerun_exchange::{ExchangeEvent, ExchangeOrderProjection, project_order_events};
 use edgerun_protocols::core_protocol::protocol::edgerun_wallet_v0::PaymentRequest;
-use edgerun_wallet::{can_transition, canonical_asset_id, CanonicalOrderStatus};
+use edgerun_wallet::{CanonicalOrderStatus, can_transition, canonical_asset_id};
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 

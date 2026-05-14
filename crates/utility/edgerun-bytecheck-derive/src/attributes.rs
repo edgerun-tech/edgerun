@@ -1,8 +1,7 @@
 use quote::ToTokens;
 use syn::{
-    meta::ParseNestedMeta, parenthesized, parse::Parse, parse_quote,
-    punctuated::Punctuated, AttrStyle, DeriveInput, Error, Field, Path, Token,
-    WherePredicate,
+    AttrStyle, DeriveInput, Error, Field, Path, Token, WherePredicate, meta::ParseNestedMeta,
+    parenthesized, parse::Parse, parse_quote, punctuated::Punctuated,
 };
 
 fn try_set_attribute<T: ToTokens>(
@@ -29,26 +28,18 @@ pub struct Attributes {
 }
 
 impl Attributes {
-    fn parse_check_bytes_attributes(
-        &mut self,
-        meta: ParseNestedMeta<'_>,
-    ) -> Result<(), Error> {
+    fn parse_check_bytes_attributes(&mut self, meta: ParseNestedMeta<'_>) -> Result<(), Error> {
         if meta.path.is_ident("bounds") {
             let bounds;
             parenthesized!(bounds in meta.input);
-            let bounds =
-                bounds.parse_terminated(WherePredicate::parse, Token![,])?;
+            let bounds = bounds.parse_terminated(WherePredicate::parse, Token![,])?;
             try_set_attribute(&mut self.bounds, bounds, "bounds")
         } else if meta.path.is_ident("crate") {
             if meta.input.parse::<Token![=]>().is_ok() {
                 let path = meta.input.parse::<Path>()?;
                 try_set_attribute(&mut self.crate_path, path, "crate")
             } else if meta.input.is_empty() || meta.input.peek(Token![,]) {
-                try_set_attribute(
-                    &mut self.crate_path,
-                    parse_quote! { crate },
-                    "crate",
-                )
+                try_set_attribute(&mut self.crate_path, parse_quote! { crate }, "crate")
             } else {
                 Err(meta.error("expected `crate` or `crate = ...`"))
             }
@@ -72,9 +63,7 @@ impl Attributes {
             }
 
             if attr.path().is_ident("bytecheck") {
-                attr.parse_nested_meta(|nested| {
-                    result.parse_check_bytes_attributes(nested)
-                })?;
+                attr.parse_nested_meta(|nested| result.parse_check_bytes_attributes(nested))?;
             }
         }
 

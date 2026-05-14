@@ -219,6 +219,20 @@ fn parse_toml_simple(s: &str) -> Result<TomlValue, TomlError> {
         return Ok(TomlValue::Array(arr));
     }
 
+    if s.starts_with('{') && s.ends_with('}') {
+        let inner = &s[1..s.len() - 1];
+        let mut fields = Vec::new();
+        for item in split_toml_items(inner) {
+            let Some(eq_pos) = item.find('=') else {
+                return Err(TomlError::InvalidValue);
+            };
+            let key = item[..eq_pos].trim().trim_matches('"').to_string();
+            let value = parse_toml_simple(item[eq_pos + 1..].trim())?;
+            fields.push((key, value));
+        }
+        return Ok(TomlValue::Table(fields));
+    }
+
     if s == "true" {
         return Ok(TomlValue::Boolean(true));
     }
@@ -234,6 +248,37 @@ fn parse_toml_simple(s: &str) -> Result<TomlValue, TomlError> {
     }
 
     Ok(TomlValue::String(s.to_owned()))
+}
+
+fn split_toml_items(s: &str) -> Vec<&str> {
+    let mut items = Vec::new();
+    let mut start = 0;
+    let mut in_string = false;
+    let mut quote = '\0';
+    for (idx, ch) in s.char_indices() {
+        match ch {
+            '"' | '\'' if !in_string => {
+                in_string = true;
+                quote = ch;
+            }
+            ch if in_string && ch == quote => {
+                in_string = false;
+            }
+            ',' if !in_string => {
+                let item = s[start..idx].trim();
+                if !item.is_empty() {
+                    items.push(item);
+                }
+                start = idx + ch.len_utf8();
+            }
+            _ => {}
+        }
+    }
+    let item = s[start..].trim();
+    if !item.is_empty() {
+        items.push(item);
+    }
+    items
 }
 
 fn unescape_toml_string(s: &str) -> String {

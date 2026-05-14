@@ -746,8 +746,7 @@ mod test {
     fn test_strategy() {
         let mut inner = Inner { value: 10 };
         let address = &inner.value as *const u64;
-        let strategy: &mut Strategy<Inner, Failure> =
-            Strategy::wrap(&mut inner);
+        let strategy: &mut Strategy<Inner, Failure> = Strategy::wrap(&mut inner);
         let s_address = (&strategy.inner.value) as *const u64;
         assert_eq!(address, s_address);
 

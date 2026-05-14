@@ -3,10 +3,7 @@ use core::hint::unreachable_unchecked;
 use munge::munge;
 use rancor::Fallible;
 
-use crate::{
-    result::ArchivedResult, traits::NoUndef, Archive, Deserialize, Place,
-    Serialize,
-};
+use crate::{result::ArchivedResult, traits::NoUndef, Archive, Deserialize, Place, Serialize};
 
 #[allow(dead_code)]
 #[repr(u8)]
@@ -32,9 +29,7 @@ impl<T: Archive, U: Archive> Archive for Result<T, U> {
     fn resolve(&self, resolver: Self::Resolver, out: Place<Self::Archived>) {
         match resolver {
             Ok(resolver) => {
-                let out = unsafe {
-                    out.cast_unchecked::<ArchivedResultVariantOk<T::Archived>>()
-                };
+                let out = unsafe { out.cast_unchecked::<ArchivedResultVariantOk<T::Archived>>() };
                 munge!(let ArchivedResultVariantOk(tag, out_value) = out);
                 tag.write(ArchivedResultTag::Ok);
 
@@ -44,10 +39,7 @@ impl<T: Archive, U: Archive> Archive for Result<T, U> {
                 }
             }
             Err(resolver) => {
-                let out = unsafe {
-                    out.cast_unchecked::<ArchivedResultVariantErr<U::Archived>>(
-                    )
-                };
+                let out = unsafe { out.cast_unchecked::<ArchivedResultVariantErr<U::Archived>>() };
                 munge!(let ArchivedResultVariantErr(tag, out_err) = out);
                 tag.write(ArchivedResultTag::Err);
 
@@ -66,10 +58,7 @@ where
     U: Serialize<S>,
     S: Fallible + ?Sized,
 {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
         Ok(match self.as_ref() {
             Ok(value) => Ok(value.serialize(serializer)?),
             Err(value) => Err(value.serialize(serializer)?),
@@ -77,8 +66,7 @@ where
     }
 }
 
-impl<T, U, D> Deserialize<Result<T, U>, D>
-    for ArchivedResult<T::Archived, U::Archived>
+impl<T, U, D> Deserialize<Result<T, U>, D> for ArchivedResult<T::Archived, U::Archived>
 where
     T: Archive,
     U: Archive,
@@ -86,14 +74,9 @@ where
     T::Archived: Deserialize<T, D>,
     U::Archived: Deserialize<U, D>,
 {
-    fn deserialize(
-        &self,
-        deserializer: &mut D,
-    ) -> Result<Result<T, U>, D::Error> {
+    fn deserialize(&self, deserializer: &mut D) -> Result<Result<T, U>, D::Error> {
         match self {
-            ArchivedResult::Ok(value) => {
-                Ok(Ok(value.deserialize(deserializer)?))
-            }
+            ArchivedResult::Ok(value) => Ok(Ok(value.deserialize(deserializer)?)),
             ArchivedResult::Err(err) => Ok(Err(err.deserialize(deserializer)?)),
         }
     }

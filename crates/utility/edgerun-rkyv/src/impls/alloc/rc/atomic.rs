@@ -13,8 +13,7 @@ use crate::{
     rc::{ArcFlavor, ArchivedRc, ArchivedRcWeak, RcResolver, RcWeakResolver},
     ser::{Sharing, Writer},
     traits::{ArchivePointee, LayoutRaw},
-    Archive, ArchiveUnsized, Deserialize, DeserializeUnsized, Place, Serialize,
-    SerializeUnsized,
+    Archive, ArchiveUnsized, Deserialize, DeserializeUnsized, Place, Serialize, SerializeUnsized,
 };
 
 // Arc
@@ -34,14 +33,8 @@ where
     S: Fallible + Writer + Sharing + ?Sized,
     S::Error: Source,
 {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
-        ArchivedRc::<T::Archived, ArcFlavor>::serialize_from_ref(
-            self.as_ref(),
-            serializer,
-        )
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+        ArchivedRc::<T::Archived, ArcFlavor>::serialize_from_ref(self.as_ref(), serializer)
     }
 }
 
@@ -79,12 +72,8 @@ where
     D: Fallible + Pooling + ?Sized,
     D::Error: Source,
 {
-    fn deserialize(
-        &self,
-        deserializer: &mut D,
-    ) -> Result<sync::Arc<T>, D::Error> {
-        let raw_shared_ptr =
-            deserializer.deserialize_shared::<_, sync::Arc<T>>(self.get())?;
+    fn deserialize(&self, deserializer: &mut D) -> Result<sync::Arc<T>, D::Error> {
+        let raw_shared_ptr = deserializer.deserialize_shared::<_, sync::Arc<T>>(self.get())?;
         unsafe {
             sync::Arc::<T>::increment_strong_count(raw_shared_ptr);
         }
@@ -123,10 +112,7 @@ where
     S: Fallible + Writer + Sharing + ?Sized,
     S::Error: Source,
 {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
         ArchivedRcWeak::<T::Archived, ArcFlavor>::serialize_from_ref(
             self.upgrade().as_ref().map(|v| v.as_ref()),
             serializer,
@@ -136,8 +122,7 @@ where
 
 // Deserialize can only be implemented for sized types because weak pointers
 // don't have from/into raw functions.
-impl<T, D> Deserialize<sync::Weak<T>, D>
-    for ArchivedRcWeak<T::Archived, ArcFlavor>
+impl<T, D> Deserialize<sync::Weak<T>, D> for ArchivedRcWeak<T::Archived, ArcFlavor>
 where
     // Deserialize can only be implemented for sized types because weak pointers
     // to unsized types don't have `new` functions.
@@ -150,10 +135,7 @@ where
     D: Fallible + Pooling + ?Sized,
     D::Error: Source,
 {
-    fn deserialize(
-        &self,
-        deserializer: &mut D,
-    ) -> Result<sync::Weak<T>, D::Error> {
+    fn deserialize(&self, deserializer: &mut D) -> Result<sync::Weak<T>, D::Error> {
         Ok(match self.upgrade() {
             None => sync::Weak::new(),
             Some(r) => sync::Arc::downgrade(&r.deserialize(deserializer)?),

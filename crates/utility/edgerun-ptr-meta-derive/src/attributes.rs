@@ -1,8 +1,5 @@
 use quote::ToTokens;
-use syn::{
-    meta::ParseNestedMeta, parse_quote, AttrStyle, Attribute, Error, Path,
-    Token,
-};
+use syn::{AttrStyle, Attribute, Error, Path, Token, meta::ParseNestedMeta, parse_quote};
 
 fn try_set_attribute<T: ToTokens>(
     attribute: &mut Option<T>,
@@ -26,20 +23,13 @@ pub struct Attributes {
 }
 
 impl Attributes {
-    pub fn parse_meta(
-        &mut self,
-        meta: ParseNestedMeta<'_>,
-    ) -> Result<(), Error> {
+    pub fn parse_meta(&mut self, meta: ParseNestedMeta<'_>) -> Result<(), Error> {
         if meta.path.is_ident("crate") {
             if meta.input.parse::<Token![=]>().is_ok() {
                 let path = meta.input.parse::<Path>()?;
                 try_set_attribute(&mut self.crate_path, path, "crate")
             } else if meta.input.is_empty() || meta.input.peek(Token![,]) {
-                try_set_attribute(
-                    &mut self.crate_path,
-                    parse_quote! { crate },
-                    "crate",
-                )
+                try_set_attribute(&mut self.crate_path, parse_quote! { crate }, "crate")
             } else {
                 Err(meta.error("expected `crate` or `crate = ...`"))
             }

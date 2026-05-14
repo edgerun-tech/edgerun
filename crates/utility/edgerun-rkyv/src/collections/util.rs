@@ -61,10 +61,7 @@ where
     K: Serialize<S>,
     V: Serialize<S>,
 {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
         Ok(EntryResolver {
             key: self.key.borrow().serialize(serializer)?,
             value: self.value.borrow().serialize(serializer)?,

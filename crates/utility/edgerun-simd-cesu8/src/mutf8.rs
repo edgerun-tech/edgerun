@@ -106,10 +106,13 @@ use crate::internal::{DecodeOptions, Flavor};
 #[inline]
 pub fn decode_lossy_strict(bytes: &[u8]) -> Cow<'_, str> {
     if contains_null_or_utf8_4_byte_char_header(bytes) || from_utf8(bytes).is_err() {
-        let result = internal::decode(bytes, DecodeOptions {
-            flavor: Flavor::Mutf8,
-            lossy: true,
-        });
+        let result = internal::decode(
+            bytes,
+            DecodeOptions {
+                flavor: Flavor::Mutf8,
+                lossy: true,
+            },
+        );
 
         // SAFETY: When `lossy` is `true`, the function will always return a
         // valid string.
@@ -217,10 +220,13 @@ pub fn decode_lossy(bytes: &[u8]) -> Cow<'_, str> {
     if let Ok(string) = from_utf8(bytes) {
         Cow::Borrowed(string)
     } else {
-        let result = internal::decode(bytes, DecodeOptions {
-            flavor: Flavor::Mutf8,
-            lossy: true,
-        });
+        let result = internal::decode(
+            bytes,
+            DecodeOptions {
+                flavor: Flavor::Mutf8,
+                lossy: true,
+            },
+        );
 
         // SAFETY: When `lossy` is `true`, the function will always return a
         // valid string.
@@ -302,10 +308,13 @@ pub fn decode_lossy(bytes: &[u8]) -> Cow<'_, str> {
 #[inline]
 pub fn decode_strict(bytes: &[u8]) -> Result<Cow<'_, str>, DecodingError> {
     if contains_null_or_utf8_4_byte_char_header(bytes) || from_utf8(bytes).is_err() {
-        let string = internal::decode(bytes, DecodeOptions {
-            flavor: Flavor::Mutf8,
-            lossy: false,
-        })?;
+        let string = internal::decode(
+            bytes,
+            DecodeOptions {
+                flavor: Flavor::Mutf8,
+                lossy: false,
+            },
+        )?;
 
         Ok(Cow::Owned(string))
     } else {
@@ -400,10 +409,13 @@ pub fn decode(bytes: &[u8]) -> Result<Cow<'_, str>, DecodingError> {
     if let Ok(value) = from_utf8(bytes) {
         Ok(Cow::Borrowed(value))
     } else {
-        let string = internal::decode(bytes, DecodeOptions {
-            flavor: Flavor::Mutf8,
-            lossy: false,
-        })?;
+        let string = internal::decode(
+            bytes,
+            DecodeOptions {
+                flavor: Flavor::Mutf8,
+                lossy: false,
+            },
+        )?;
 
         Ok(Cow::Owned(string))
     }

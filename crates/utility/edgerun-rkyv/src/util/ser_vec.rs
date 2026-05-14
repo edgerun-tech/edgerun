@@ -363,8 +363,7 @@ impl<T> Iterator for Drain<'_, T> {
         if self.remaining > 0 {
             self.remaining -= 1;
             let result = unsafe { self.current.as_ptr().read() };
-            self.current =
-                unsafe { NonNull::new_unchecked(self.current.as_ptr().add(1)) };
+            self.current = unsafe { NonNull::new_unchecked(self.current.as_ptr().add(1)) };
             Some(result)
         } else {
             None

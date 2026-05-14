@@ -40,3 +40,18 @@ pub fn repo_root() -> std::io::Result<PathBuf> {
         }
     }
 }
+
+#[macro_export]
+macro_rules! find_resource {
+    ($path:literal) => {{
+        let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join($path);
+        if path.exists() {
+            Ok(path)
+        } else {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("resource not found: {}", path.display()),
+            ))
+        }
+    }};
+}

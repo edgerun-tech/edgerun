@@ -1,5 +1,5 @@
-use futures_core::task::{Context, Poll};
 use crate::io::{AsyncBufRead, AsyncRead};
+use futures_core::task::{Context, Poll};
 use std::fmt;
 use std::io;
 use std::pin::Pin;

@@ -51,15 +51,10 @@ fn derive_archive_impl(
     }
 
     let mut result = match &input.data {
-        Data::Struct(DataStruct { fields, .. }) => r#struct::impl_struct(
-            &printing,
-            &input.generics,
-            attributes,
-            fields,
-        )?,
-        Data::Enum(enm) => {
-            r#enum::impl_enum(&printing, &input.generics, attributes, enm)?
+        Data::Struct(DataStruct { fields, .. }) => {
+            r#struct::impl_struct(&printing, &input.generics, attributes, fields)?
         }
+        Data::Enum(enm) => r#enum::impl_enum(&printing, &input.generics, attributes, enm)?,
         Data::Union(_) => {
             return Err(Error::new_spanned(
                 input,
@@ -69,8 +64,7 @@ fn derive_archive_impl(
     };
 
     if attributes.as_type.is_none() {
-        result
-            .extend(impl_auto_trait(input, &printing, attributes, "Portable")?);
+        result.extend(impl_auto_trait(input, &printing, attributes, "Portable")?);
     }
 
     Ok(result)

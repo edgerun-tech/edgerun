@@ -36,6 +36,8 @@ pub use codex_protocol as protocol;
 pub use codex_shell_command as shell_command;
 pub use codex_tools as tools;
 
+pub use codex_protocol::SessionId;
+pub use codex_protocol::ThreadId;
 pub use codex_protocol::config_types::ModelProviderAuthInfo;
 pub use codex_protocol::config_types::Personality;
 pub use codex_protocol::config_types::ReasoningSummary;
@@ -45,11 +47,9 @@ pub use codex_protocol::models::ResponseItem;
 pub use codex_protocol::openai_models::ReasoningEffort;
 pub use codex_protocol::protocol::SessionSource;
 pub use codex_protocol::protocol::TokenUsage;
-pub use codex_protocol::SessionId;
-pub use codex_protocol::ThreadId;
 pub use codex_tools::ToolSpec;
-pub use edgerun_json::JsonValue;
 use edgerun_http::HeaderValue;
+pub use edgerun_json::JsonValue;
 
 /// Review thread system prompt placeholder.
 pub const REVIEW_PROMPT: &str = "";
@@ -514,9 +514,9 @@ mod tests {
         where
             Self: 'async_trait,
         {
-            Box::pin(async move {
-                Err(TransportError::Build("execute should not run".to_string()))
-            })
+            Box::pin(
+                async move { Err(TransportError::Build("execute should not run".to_string())) },
+            )
         }
 
         fn stream<'async_trait>(
@@ -677,7 +677,8 @@ mod tests {
             Some(codex_client::RequestBody::Json(body)) => body,
             other => panic!("expected json request body, got {other:?}"),
         };
-        let request_json: Value = edgerun_json::from_str(&request_body.to_string()).expect("request json");
+        let request_json: Value =
+            edgerun_json::from_str(&request_body.to_string()).expect("request json");
 
         assert_eq!(request_json["model"], "gpt-test");
         assert_eq!(request_json["instructions"], "Use concise answers.");

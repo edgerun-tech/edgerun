@@ -7,28 +7,6 @@ use crate::rand_core::CryptoRngCore;
 use crate::rsa::errors::Result;
 use crate::rsa::key::{RsaPrivateKey, RsaPublicKey};
 
-/// Padding scheme used for encryption.
-pub trait PaddingScheme {
-    /// Decrypt the given message using the given private key.
-    ///
-    /// If an `rng` is passed, it uses RSA blinding to help mitigate timing
-    /// side-channel attacks.
-    fn decrypt<Rng: CryptoRngCore>(
-        self,
-        rng: Option<&mut Rng>,
-        priv_key: &RsaPrivateKey,
-        ciphertext: &[u8],
-    ) -> Result<Vec<u8>>;
-
-    /// Encrypt the given message using the given public key.
-    fn encrypt<Rng: CryptoRngCore>(
-        self,
-        rng: &mut Rng,
-        pub_key: &RsaPublicKey,
-        msg: &[u8],
-    ) -> Result<Vec<u8>>;
-}
-
 /// Digital signature scheme.
 pub trait SignatureScheme {
     /// Sign the given digest.

@@ -421,6 +421,7 @@ impl UiIconA11y for UiIcon {
             UiIcon::Chat => "chat",
             UiIcon::Key => "key",
             UiIcon::Menu => "menu",
+            UiIcon::MessagePlus => "new session",
             UiIcon::Route => "route",
             UiIcon::Send => "send",
             UiIcon::Server => "server",
@@ -428,6 +429,7 @@ impl UiIconA11y for UiIcon {
             UiIcon::Storage => "storage",
             UiIcon::Terminal => "terminal",
             UiIcon::Trust => "trust",
+            UiIcon::Trash => "clear session",
             UiIcon::X => "close",
         }
     }

@@ -354,7 +354,6 @@
 #![deny(missing_debug_implementations, unconditional_recursion)]
 #![cfg_attr(all(not(feature = "std"), not(test)), no_std)]
 
-
 #[rustfmt::skip]
 
 #[cfg(all(not(feature = "std"), not(test)))]

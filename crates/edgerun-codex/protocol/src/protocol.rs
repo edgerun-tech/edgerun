@@ -4338,12 +4338,13 @@ mod tests {
 
     #[test]
     fn granular_approval_config_defaults_missing_optional_flags_to_false() {
-        let decoded = edgerun_json::from_value::<GranularApprovalConfig>(edgerun_json::json!({
-            "sandbox_approval": true,
-            "rules": false,
-            "mcp_elicitations": true,
-        }))
-        .expect("granular approval config should deserialize");
+        let decoded =
+            edgerun_json::from_serde_value::<GranularApprovalConfig>(edgerun_json::json!({
+                "sandbox_approval": true,
+                "rules": false,
+                "mcp_elicitations": true,
+            }))
+            .expect("granular approval config should deserialize");
 
         assert_eq!(
             decoded,
@@ -4870,7 +4871,7 @@ mod tests {
 
     #[test]
     fn item_started_event_requires_started_at_ms() {
-        let mut value = edgerun_json::to_value(ItemStartedEvent {
+        let mut value = edgerun_json::to_serde_value(ItemStartedEvent {
             thread_id: ThreadId::new(),
             turn_id: "turn-1".into(),
             item: TurnItem::UserMessage(UserMessageItem::new(&[])),
@@ -4879,12 +4880,12 @@ mod tests {
         .unwrap();
         value.as_object_mut().unwrap().remove("started_at_ms");
 
-        assert!(edgerun_json::from_value::<ItemStartedEvent>(value).is_err());
+        assert!(edgerun_json::from_serde_value::<ItemStartedEvent>(value).is_err());
     }
 
     #[test]
     fn item_completed_event_defaults_missing_completed_at_ms() {
-        let mut value = edgerun_json::to_value(ItemCompletedEvent {
+        let mut value = edgerun_json::to_serde_value(ItemCompletedEvent {
             thread_id: ThreadId::new(),
             turn_id: "turn-1".into(),
             item: TurnItem::UserMessage(UserMessageItem::new(&[])),
@@ -4893,7 +4894,7 @@ mod tests {
         .unwrap();
         value.as_object_mut().unwrap().remove("completed_at_ms");
 
-        let event = edgerun_json::from_value::<ItemCompletedEvent>(value).unwrap();
+        let event = edgerun_json::from_serde_value::<ItemCompletedEvent>(value).unwrap();
         assert_eq!(event.completed_at_ms, 0);
     }
     #[test]
@@ -4973,7 +4974,7 @@ mod tests {
         let list_voices = Op::RealtimeConversationListVoices;
 
         assert_eq!(
-            edgerun_json::to_value(&start).unwrap(),
+            edgerun_json::to_serde_value(&start).unwrap(),
             json!({
                 "type": "realtime_conversation_start",
                 "output_modality": "audio",
@@ -4982,14 +4983,14 @@ mod tests {
             })
         );
         assert_eq!(
-            edgerun_json::to_value(&default_prompt_start).unwrap(),
+            edgerun_json::to_serde_value(&default_prompt_start).unwrap(),
             json!({
                 "type": "realtime_conversation_start",
                 "output_modality": "audio"
             })
         );
         assert_eq!(
-            edgerun_json::to_value(&null_prompt_start).unwrap(),
+            edgerun_json::to_serde_value(&null_prompt_start).unwrap(),
             json!({
                 "type": "realtime_conversation_start",
                 "output_modality": "audio",
@@ -4997,7 +4998,7 @@ mod tests {
             })
         );
         assert_eq!(
-            edgerun_json::from_value::<Op>(json!({
+            edgerun_json::from_serde_value::<Op>(json!({
                 "type": "realtime_conversation_start",
                 "output_modality": "audio"
             }))
@@ -5005,7 +5006,7 @@ mod tests {
             default_prompt_start
         );
         assert_eq!(
-            edgerun_json::from_value::<Op>(json!({
+            edgerun_json::from_serde_value::<Op>(json!({
                 "type": "realtime_conversation_start",
                 "output_modality": "audio",
                 "prompt": null
@@ -5014,7 +5015,7 @@ mod tests {
             null_prompt_start
         );
         assert_eq!(
-            edgerun_json::to_value(&audio).unwrap(),
+            edgerun_json::to_serde_value(&audio).unwrap(),
             json!({
                 "type": "realtime_conversation_audio",
                 "frame": {
@@ -5026,31 +5027,36 @@ mod tests {
             })
         );
         assert_eq!(
-            edgerun_json::from_value::<Op>(edgerun_json::to_value(&text).unwrap()).unwrap(),
+            edgerun_json::from_serde_value::<Op>(edgerun_json::to_serde_value(&text).unwrap())
+                .unwrap(),
             text
         );
         assert_eq!(
-            edgerun_json::to_value(&close).unwrap(),
+            edgerun_json::to_serde_value(&close).unwrap(),
             json!({
                 "type": "realtime_conversation_close"
             })
         );
         assert_eq!(
-            edgerun_json::from_value::<Op>(edgerun_json::to_value(&close).unwrap()).unwrap(),
+            edgerun_json::from_serde_value::<Op>(edgerun_json::to_serde_value(&close).unwrap())
+                .unwrap(),
             close
         );
         assert_eq!(
-            edgerun_json::to_value(&list_voices).unwrap(),
+            edgerun_json::to_serde_value(&list_voices).unwrap(),
             json!({
                 "type": "realtime_conversation_list_voices"
             })
         );
         assert_eq!(
-            edgerun_json::from_value::<Op>(edgerun_json::to_value(&list_voices).unwrap()).unwrap(),
+            edgerun_json::from_serde_value::<Op>(
+                edgerun_json::to_serde_value(&list_voices).unwrap()
+            )
+            .unwrap(),
             list_voices
         );
         assert_eq!(
-            edgerun_json::to_value(&webrtc_start).unwrap(),
+            edgerun_json::to_serde_value(&webrtc_start).unwrap(),
             json!({
                 "type": "realtime_conversation_start",
                 "output_modality": "audio",
@@ -5073,7 +5079,7 @@ mod tests {
         };
 
         assert_eq!(
-            edgerun_json::to_value(&event).unwrap(),
+            edgerun_json::to_serde_value(&event).unwrap(),
             json!({
                 "realtime_session_id": "conv_1",
                 "version": "v2"
@@ -5124,7 +5130,7 @@ mod tests {
             responsesapi_client_metadata: None,
         };
 
-        let json_op = edgerun_json::to_value(op)?;
+        let json_op = edgerun_json::to_serde_value(op)?;
         assert_eq!(json_op, json!({ "type": "user_input", "items": [] }));
 
         Ok(())
@@ -5132,7 +5138,7 @@ mod tests {
 
     #[test]
     fn user_input_deserializes_without_final_output_json_schema_field() -> Result<()> {
-        let op: Op = edgerun_json::from_value(json!({ "type": "user_input", "items": [] }))?;
+        let op: Op = edgerun_json::from_serde_value(json!({ "type": "user_input", "items": [] }))?;
 
         assert_eq!(
             op,
@@ -5164,7 +5170,7 @@ mod tests {
             responsesapi_client_metadata: None,
         };
 
-        let json_op = edgerun_json::to_value(op)?;
+        let json_op = edgerun_json::to_serde_value(op)?;
         assert_eq!(
             json_op,
             json!({
@@ -5189,7 +5195,7 @@ mod tests {
             )])),
         };
 
-        let json_op = edgerun_json::to_value(&op)?;
+        let json_op = edgerun_json::to_serde_value(&op)?;
         assert_eq!(
             json_op,
             json!({
@@ -5200,7 +5206,7 @@ mod tests {
                 }
             })
         );
-        assert_eq!(edgerun_json::from_value::<Op>(json_op)?, op);
+        assert_eq!(edgerun_json::from_serde_value::<Op>(json_op)?, op);
 
         Ok(())
     }
@@ -5212,7 +5218,7 @@ mod tests {
             text_elements: Vec::new(),
         };
 
-        let json_input = edgerun_json::to_value(input)?;
+        let json_input = edgerun_json::to_serde_value(input)?;
         assert_eq!(
             json_input,
             json!({
@@ -5234,7 +5240,7 @@ mod tests {
             text_elements: Vec::new(),
         };
 
-        let json_event = edgerun_json::to_value(event)?;
+        let json_event = edgerun_json::to_serde_value(event)?;
         assert_eq!(
             json_event,
             json!({
@@ -5249,7 +5255,7 @@ mod tests {
 
     #[test]
     fn turn_aborted_event_deserializes_without_turn_id() -> Result<()> {
-        let event: EventMsg = edgerun_json::from_value(json!({
+        let event: EventMsg = edgerun_json::from_serde_value(json!({
             "type": "turn_aborted",
             "reason": "interrupted",
         }))?;
@@ -5269,7 +5275,7 @@ mod tests {
 
     #[test]
     fn turn_context_item_deserializes_without_network() -> Result<()> {
-        let item: TurnContextItem = edgerun_json::from_value(json!({
+        let item: TurnContextItem = edgerun_json::from_serde_value(json!({
             "cwd": test_path_buf("/tmp"),
             "approval_policy": "never",
             "sandbox_policy": { "type": "danger-full-access" },
@@ -5318,7 +5324,7 @@ mod tests {
             truncation_policy: None,
         };
 
-        let value = edgerun_json::to_value(item)?;
+        let value = edgerun_json::to_serde_value(item)?;
         assert_eq!(
             value["network"],
             json!({
@@ -5373,6 +5379,7 @@ mod tests {
             }),
         };
 
+        let expected_permission_profile = edgerun_json::to_serde_value(&permission_profile)?;
         let expected = json!({
             "id": "1234",
             "msg": {
@@ -5383,13 +5390,13 @@ mod tests {
                 "model_provider_id": "openai",
                 "approval_policy": "never",
                 "approvals_reviewer": "user",
-                "permission_profile": permission_profile,
+                "permission_profile": expected_permission_profile,
                 "cwd": test_path_buf("/home/user/project"),
                 "reasoning_effort": "medium",
                 "rollout_path": format!("{}", rollout_file.path().display()),
             }
         });
-        assert_eq!(expected, edgerun_json::to_value(&event)?);
+        assert_eq!(expected, edgerun_json::to_serde_value(&event)?);
         Ok(())
     }
 
@@ -5408,7 +5415,7 @@ mod tests {
             "cwd": cwd,
         });
 
-        let event: SessionConfiguredEvent = edgerun_json::from_value(value)?;
+        let event: SessionConfiguredEvent = edgerun_json::from_serde_value(value)?;
         assert_eq!(event.permission_profile, PermissionProfile::read_only());
         Ok(())
     }
@@ -5426,7 +5433,7 @@ mod tests {
             serialized,
         );
 
-        let deserialized: ExecCommandOutputDeltaEvent = edgerun_json::from_str(&serialized)?;
+        let deserialized: ExecCommandOutputDeltaEvent = edgerun_json::from_serde_str(&serialized)?;
         assert_eq!(deserialized, event);
         Ok(())
     }
@@ -5443,7 +5450,7 @@ mod tests {
             }),
         };
 
-        let value = edgerun_json::to_value(&event)?;
+        let value = edgerun_json::to_serde_value(&event)?;
         assert_eq!(value["msg"]["type"], "mcp_startup_update");
         assert_eq!(value["msg"]["server"], "srv");
         assert_eq!(value["msg"]["status"]["state"], "failed");
@@ -5465,7 +5472,7 @@ mod tests {
             }),
         };
 
-        let value = edgerun_json::to_value(&event)?;
+        let value = edgerun_json::to_serde_value(&event)?;
         assert_eq!(value["msg"]["type"], "mcp_startup_complete");
         assert_eq!(value["msg"]["ready"][0], "a");
         assert_eq!(value["msg"]["failed"][0]["server"], "b");

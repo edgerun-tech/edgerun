@@ -151,10 +151,7 @@ macro_rules! impl_fmt {
     ($trait:ident for $name:ident) => {
         impl ::core::fmt::$trait for $name {
             #[inline]
-            fn fmt(
-                &self,
-                f: &mut ::core::fmt::Formatter<'_>,
-            ) -> ::core::fmt::Result {
+            fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
                 ::core::fmt::$trait::fmt(&self.to_native(), f)
             }
         }
@@ -261,20 +258,14 @@ macro_rules! impl_partial_ord_and_ord {
     (for $name:ident : $prim:ty) => {
         impl PartialOrd for $name {
             #[inline]
-            fn partial_cmp(
-                &self,
-                other: &Self,
-            ) -> Option<::core::cmp::Ordering> {
+            fn partial_cmp(&self, other: &Self) -> Option<::core::cmp::Ordering> {
                 Some(self.cmp(other))
             }
         }
 
         impl PartialOrd<$prim> for $name {
             #[inline]
-            fn partial_cmp(
-                &self,
-                other: &$prim,
-            ) -> Option<::core::cmp::Ordering> {
+            fn partial_cmp(&self, other: &$prim) -> Option<::core::cmp::Ordering> {
                 self.to_native().partial_cmp(other)
             }
         }
@@ -321,20 +312,14 @@ macro_rules! impl_partial_ord {
     (for $name:ident : $prim:ty) => {
         impl PartialOrd for $name {
             #[inline]
-            fn partial_cmp(
-                &self,
-                other: &Self,
-            ) -> Option<::core::cmp::Ordering> {
+            fn partial_cmp(&self, other: &Self) -> Option<::core::cmp::Ordering> {
                 self.to_native().partial_cmp(&other.to_native())
             }
         }
 
         impl PartialOrd<$prim> for $name {
             #[inline]
-            fn partial_cmp(
-                &self,
-                other: &$prim,
-            ) -> Option<::core::cmp::Ordering> {
+            fn partial_cmp(&self, other: &$prim) -> Option<::core::cmp::Ordering> {
                 self.to_native().partial_cmp(other)
             }
         }
@@ -374,10 +359,7 @@ macro_rules! unsafe_impl_check_bytes_noop {
             C: bytecheck::rancor::Fallible + ?Sized,
         {
             #[inline]
-            unsafe fn check_bytes(
-                _: *const Self,
-                _: &mut C,
-            ) -> Result<(), C::Error> {
+            unsafe fn check_bytes(_: *const Self, _: &mut C) -> Result<(), C::Error> {
                 // SAFETY: The invoker of this macro has guaranteed that an impl
                 // of `CheckBytes` with a `check_bytes` function that is a no-op
                 // is sound.

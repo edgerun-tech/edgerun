@@ -1794,9 +1794,10 @@ fn client_request_turn_start_granular_approval_policy_is_marked_experimental() {
 fn mcp_server_elicitation_response_round_trips_rmcp_result() {
     let rmcp_result = rmcp::model::CreateElicitationResult {
         action: rmcp::model::ElicitationAction::Accept,
-        content: Some(json!({
+        content: Some(rmcp::model::object(json!({
             "confirmed": true,
-        })),
+        }))),
+        meta: None,
     };
 
     let v2_response = McpServerElicitationRequestResponse::from(rmcp_result.clone());
@@ -2068,7 +2069,7 @@ fn sandbox_policy_deserializes_legacy_workspace_write_full_access_field() {
     let writable_root = absolute_path("/workspace");
     let policy = edgerun_json::from_serde_value::<SandboxPolicy>(json!({
         "type": "workspaceWrite",
-        "writableRoots": [writable_root],
+        "writableRoots": [writable_root.as_path()],
         "readOnlyAccess": {
             "type": "fullAccess"
         },
@@ -2776,7 +2777,7 @@ fn plugin_read_params_serialization_uses_install_source_fields() {
         })
         .unwrap(),
         json!({
-            "marketplacePath": marketplace_path_json,
+            "marketplacePath": marketplace_path_json.clone(),
             "remoteMarketplaceName": null,
             "pluginName": "gmail",
         }),
@@ -2784,7 +2785,7 @@ fn plugin_read_params_serialization_uses_install_source_fields() {
 
     assert_eq!(
         edgerun_json::from_serde_value::<PluginReadParams>(json!({
-            "marketplacePath": marketplace_path_json,
+            "marketplacePath": marketplace_path_json.clone(),
             "pluginName": "gmail",
             "forceRemoteSync": true,
         }))
@@ -2827,7 +2828,7 @@ fn plugin_install_params_serialization_omits_force_remote_sync() {
         })
         .unwrap(),
         json!({
-            "marketplacePath": marketplace_path_json,
+            "marketplacePath": marketplace_path_json.clone(),
             "remoteMarketplaceName": null,
             "pluginName": "gmail",
         }),
@@ -2835,7 +2836,7 @@ fn plugin_install_params_serialization_omits_force_remote_sync() {
 
     assert_eq!(
         edgerun_json::from_serde_value::<PluginInstallParams>(json!({
-            "marketplacePath": marketplace_path_json,
+            "marketplacePath": marketplace_path_json.clone(),
             "pluginName": "gmail",
             "forceRemoteSync": true,
         }))
@@ -2898,7 +2899,7 @@ fn plugin_share_params_and_response_serialization_use_camel_case_fields() {
         })
         .unwrap(),
         json!({
-            "pluginPath": plugin_path_json,
+            "pluginPath": plugin_path_json.clone(),
             "remotePluginId": null,
             "discoverability": null,
             "shareTargets": null,
@@ -2923,7 +2924,7 @@ fn plugin_share_params_and_response_serialization_use_camel_case_fields() {
         })
         .unwrap(),
         json!({
-            "pluginPath": plugin_path_json,
+            "pluginPath": plugin_path_json.clone(),
             "remotePluginId": "plugins~Plugin_00000000000000000000000000000000",
             "discoverability": "PRIVATE",
             "shareTargets": [
@@ -3451,7 +3452,7 @@ fn turn_start_params_round_trip_environments() {
         "environments": [
             {
                 "environmentId": "local",
-                "cwd": cwd
+                "cwd": cwd.as_path()
             }
         ],
     }))
@@ -3475,7 +3476,7 @@ fn turn_start_params_round_trip_environments() {
         Some(&json!([
             {
                 "environmentId": "local",
-                "cwd": cwd
+                "cwd": cwd.as_path()
             }
         ]))
     );

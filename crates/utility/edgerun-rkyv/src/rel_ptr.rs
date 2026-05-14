@@ -11,10 +11,7 @@ use munge::munge;
 use rancor::{fail, Panic, ResultExt as _, Source};
 
 use crate::{
-    primitive::{
-        ArchivedI16, ArchivedI32, ArchivedI64, ArchivedU16, ArchivedU32,
-        ArchivedU64,
-    },
+    primitive::{ArchivedI16, ArchivedI32, ArchivedI64, ArchivedU16, ArchivedU32, ArchivedU64},
     seal::Seal,
     traits::{ArchivePointee, NoUndef},
     Place, Portable,
@@ -170,10 +167,7 @@ impl<O: Offset> RawRelPtr<O> {
 
     /// Attempts to create a new `RawRelPtr` in-place between the given `from`
     /// and `to` positions.
-    pub fn try_emplace<E: Source>(
-        to: usize,
-        out: Place<Self>,
-    ) -> Result<(), E> {
+    pub fn try_emplace<E: Source>(to: usize, out: Place<Self>) -> Result<(), E> {
         let offset = O::from_isize(signed_offset(out.pos(), to)?)?;
         munge!(let Self { offset: out_offset, _phantom: _ } = out);
         out_offset.write(offset);
@@ -392,10 +386,7 @@ pub struct RelPtr<T: ArchivePointee + ?Sized, O> {
 
 impl<T, O: Offset> RelPtr<T, O> {
     /// Attempts to create a relative pointer from one position to another.
-    pub fn try_emplace<E: Source>(
-        to: usize,
-        out: Place<Self>,
-    ) -> Result<(), E> {
+    pub fn try_emplace<E: Source>(to: usize, out: Place<Self>) -> Result<(), E> {
         munge!(let RelPtr { raw_ptr, metadata: _, _phantom: _ } = out);
         // Skip metadata since sized T is guaranteed to be ()
         RawRelPtr::try_emplace(to, raw_ptr)
@@ -449,11 +440,7 @@ impl<T: ArchivePointee + ?Sized, O: Offset> RelPtr<T, O> {
     ///
     /// - If the offset between `from` and `to` does not fit in an `isize`
     /// - If the offset between `from` and `to` exceeds the offset storage
-    pub fn emplace_unsized(
-        to: usize,
-        metadata: T::ArchivedMetadata,
-        out: Place<Self>,
-    ) {
+    pub fn emplace_unsized(to: usize, metadata: T::ArchivedMetadata, out: Place<Self>) {
         Self::try_emplace_unsized::<Panic>(to, metadata, out).always_ok()
     }
 
@@ -517,8 +504,7 @@ impl<T: ArchivePointee + ?Sized, O: Offset> RelPtr<T, O> {
         // is non-null, properly-aligned, and points to a valid `RelPtr`, a
         // pointer to its first field will also be non-null, properly-aligned,
         // and point to a valid `RawRelPtr`.
-        let data_address =
-            unsafe { RawRelPtr::<O>::as_ptr_wrapping_raw(this.cast()) };
+        let data_address = unsafe { RawRelPtr::<O>::as_ptr_wrapping_raw(this.cast()) };
         // SAFETY: The caller has guaranteed that `this` points to a valid
         // `RelPtr`.
         let metadata = unsafe { T::pointer_metadata(&(*this).metadata) };
@@ -617,10 +603,7 @@ impl<T: ArchivePointee + ?Sized, O: Offset> RelPtr<T, O> {
     pub fn as_mut_ptr_wrapping(this: Seal<'_, Self>) -> *mut T {
         munge!(let Self { raw_ptr, metadata, _phantom: _ } = this);
         let metadata = T::pointer_metadata(&*metadata);
-        ptr_meta::from_raw_parts_mut(
-            RawRelPtr::as_mut_ptr_wrapping(raw_ptr),
-            metadata,
-        )
+        ptr_meta::from_raw_parts_mut(RawRelPtr::as_mut_ptr_wrapping(raw_ptr), metadata)
     }
 }
 

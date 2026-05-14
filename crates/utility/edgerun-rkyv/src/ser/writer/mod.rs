@@ -150,10 +150,7 @@ pub trait WriterExt<E>: Writer<E> {
         to: usize,
     ) -> Result<usize, E> {
         let from = self.pos();
-        debug_assert_eq!(
-            from & (mem::align_of::<RelPtr<T::Archived>>() - 1),
-            0
-        );
+        debug_assert_eq!(from & (mem::align_of::<RelPtr<T::Archived>>() - 1), 0);
 
         let mut resolved = mem::MaybeUninit::<RelPtr<T::Archived>>::uninit();
         // SAFETY: `resolved` is properly aligned and valid for writes of
@@ -185,17 +182,11 @@ mod tests {
 
         let mut writer = AlignedVec::<16>::new();
 
-        _ = to_bytes_in::<_, rancor::Error>(
-            &u32_le::from_native(42),
-            &mut writer,
-        );
+        _ = to_bytes_in::<_, rancor::Error>(&u32_le::from_native(42), &mut writer);
         assert_eq!(&writer[..], &[42, 0, 0, 0]);
         writer.clear(); // keeps capacity of 4
 
-        _ = to_bytes_in::<_, rancor::Error>(
-            &u16_le::from_native(1337),
-            &mut writer,
-        );
+        _ = to_bytes_in::<_, rancor::Error>(&u16_le::from_native(1337), &mut writer);
         assert_eq!(&writer[..], &[57, 5]);
         writer.clear();
 

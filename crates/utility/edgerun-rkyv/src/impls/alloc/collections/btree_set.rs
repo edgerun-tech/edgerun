@@ -17,11 +17,7 @@ where
     type Resolver = BTreeSetResolver;
 
     fn resolve(&self, resolver: Self::Resolver, out: Place<Self::Archived>) {
-        ArchivedBTreeSet::<K::Archived>::resolve_from_len(
-            self.len(),
-            resolver,
-            out,
-        );
+        ArchivedBTreeSet::<K::Archived>::resolve_from_len(self.len(), resolver, out);
     }
 }
 
@@ -32,14 +28,8 @@ where
     S: Fallible + Allocator + Writer + ?Sized,
     S::Error: Source,
 {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
-        Self::Archived::serialize_from_ordered_iter::<_, K, _>(
-            self.iter(),
-            serializer,
-        )
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+        Self::Archived::serialize_from_ordered_iter::<_, K, _>(self.iter(), serializer)
     }
 }
 
@@ -49,10 +39,7 @@ where
     K::Archived: Deserialize<K, D> + Ord,
     D: Fallible + ?Sized,
 {
-    fn deserialize(
-        &self,
-        deserializer: &mut D,
-    ) -> Result<BTreeSet<K>, D::Error> {
+    fn deserialize(&self, deserializer: &mut D) -> Result<BTreeSet<K>, D::Error> {
         let mut result = BTreeSet::new();
         let r = self.visit(|ak| {
             let k = match ak.deserialize(deserializer) {

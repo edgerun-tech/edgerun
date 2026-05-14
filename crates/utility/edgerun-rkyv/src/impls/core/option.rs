@@ -3,10 +3,7 @@ use core::hint::unreachable_unchecked;
 use munge::munge;
 use rancor::Fallible;
 
-use crate::{
-    option::ArchivedOption, traits::NoUndef, Archive, Deserialize, Place,
-    Serialize,
-};
+use crate::{option::ArchivedOption, traits::NoUndef, Archive, Deserialize, Place, Serialize};
 
 #[allow(dead_code)]
 #[repr(u8)]
@@ -32,17 +29,12 @@ impl<T: Archive> Archive for Option<T> {
     fn resolve(&self, resolver: Self::Resolver, out: Place<Self::Archived>) {
         match resolver {
             None => {
-                let out = unsafe {
-                    out.cast_unchecked::<ArchivedOptionVariantNone>()
-                };
+                let out = unsafe { out.cast_unchecked::<ArchivedOptionVariantNone>() };
                 munge!(let ArchivedOptionVariantNone(tag) = out);
                 tag.write(ArchivedOptionTag::None);
             }
             Some(resolver) => {
-                let out = unsafe {
-                    out
-                    .cast_unchecked::<ArchivedOptionVariantSome<T::Archived>>()
-                };
+                let out = unsafe { out.cast_unchecked::<ArchivedOptionVariantSome<T::Archived>>() };
                 munge!(let ArchivedOptionVariantSome(tag, out_value) = out);
                 tag.write(ArchivedOptionTag::Some);
 
@@ -61,10 +53,7 @@ impl<T: Archive> Archive for Option<T> {
 }
 
 impl<T: Serialize<S>, S: Fallible + ?Sized> Serialize<S> for Option<T> {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
         self.as_ref()
             .map(|value| value.serialize(serializer))
             .transpose()
@@ -79,9 +68,7 @@ where
 {
     fn deserialize(&self, deserializer: &mut D) -> Result<Option<T>, D::Error> {
         Ok(match self {
-            ArchivedOption::Some(value) => {
-                Some(value.deserialize(deserializer)?)
-            }
+            ArchivedOption::Some(value) => Some(value.deserialize(deserializer)?),
             ArchivedOption::None => None,
         })
     }

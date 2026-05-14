@@ -163,7 +163,6 @@ where
     }
 }
 
-
 #[cfg(all(test, feature = "elliptic_curve_dev"))]
 mod tests {
     use super::NonIdentity;

@@ -64,10 +64,7 @@ unsafe impl<E> Allocator<E> for SubAllocator<'_>
 where
     E: Source,
 {
-    unsafe fn push_alloc(
-        &mut self,
-        layout: Layout,
-    ) -> Result<NonNull<[u8]>, E> {
+    unsafe fn push_alloc(&mut self, layout: Layout) -> Result<NonNull<[u8]>, E> {
         let pos = self.bytes.as_ptr() as usize + self.used;
         let pad = 0usize.wrapping_sub(pos) % layout.align();
         if pad + layout.size() <= self.size - self.used {
@@ -87,11 +84,7 @@ where
         Ok(result)
     }
 
-    unsafe fn pop_alloc(
-        &mut self,
-        ptr: NonNull<u8>,
-        _: Layout,
-    ) -> Result<(), E> {
+    unsafe fn pop_alloc(&mut self, ptr: NonNull<u8>, _: Layout) -> Result<(), E> {
         let bytes = self.bytes.as_ptr();
         self.used = ptr.as_ptr() as usize - bytes as usize;
 

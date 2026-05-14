@@ -20,7 +20,10 @@ where
     St: Clone + Stream,
 {
     pub(super) fn new(stream: St) -> Self {
-        Self { orig: stream.clone(), stream }
+        Self {
+            orig: stream.clone(),
+            stream,
+        }
     }
 }
 

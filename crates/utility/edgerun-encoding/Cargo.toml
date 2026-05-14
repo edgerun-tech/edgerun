@@ -12,10 +12,12 @@ description = "Consolidated encoding utilities for the edgerun workspace"
 default = []
 std = []
 hpack = ["dep:edgerun-hpack"]
+compression = ["dep:miniz_oxide"]
 text-encoding = []
 
 [dependencies]
 edgerun-hpack = { version = "0.1", path = "../edgerun-hpack", optional = true }
+miniz_oxide = { workspace = true, features = ["with-alloc"], optional = true }
 
 [lints]
 workspace = true

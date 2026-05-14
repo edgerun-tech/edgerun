@@ -480,7 +480,6 @@ where
     };
 }
 
-
 /// An extended [`Signature`] type which is parameterized by an
 /// `ObjectIdentifier` which identifies the ECDSA variant used by a
 /// particular signature.

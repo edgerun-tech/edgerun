@@ -90,10 +90,9 @@ impl<R: AsyncBufRead + Unpin + ?Sized> AsyncBufRead for &mut R {
         let inner = unsafe { self.as_mut().map_unchecked_mut(|value| &mut **value) };
         let poll = inner.poll_fill_buf(cx);
         unsafe {
-            core::mem::transmute::<
-                std::task::Poll<Result<&[u8]>>,
-                std::task::Poll<Result<&[u8]>>,
-            >(poll)
+            core::mem::transmute::<std::task::Poll<Result<&[u8]>>, std::task::Poll<Result<&[u8]>>>(
+                poll,
+            )
         }
     }
 
@@ -126,10 +125,16 @@ pub trait AsyncWrite {
     }
 
     /// Attempt to flush buffered output.
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<()>>;
+    fn poll_flush(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<()>>;
 
     /// Attempt to close output.
-    fn poll_close(self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<()>>;
+    fn poll_close(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<()>>;
 }
 
 impl<W: AsyncWrite + Unpin + ?Sized> AsyncWrite for &mut W {
@@ -149,11 +154,17 @@ impl<W: AsyncWrite + Unpin + ?Sized> AsyncWrite for &mut W {
         Pin::new(&mut **self).poll_write_vectored(cx, bufs)
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<()>> {
+    fn poll_flush(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<()>> {
         Pin::new(&mut **self).poll_flush(cx)
     }
 
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<()>> {
+    fn poll_close(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<()>> {
         Pin::new(&mut **self).poll_close(cx)
     }
 }

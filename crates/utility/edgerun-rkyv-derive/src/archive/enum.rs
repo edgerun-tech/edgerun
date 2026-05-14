@@ -3,15 +3,12 @@ use core::fmt::Display;
 use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote};
 use syn::{
-    parse_quote, spanned::Spanned as _, DataEnum, Error, Field, Fields,
-    Generics, Ident, Index, Member, Path,
+    parse_quote, spanned::Spanned as _, DataEnum, Error, Field, Fields, Generics, Ident, Index,
+    Member, Path,
 };
 
 use crate::{
-    archive::{
-        archived_doc, printing::Printing, resolver_doc, resolver_variant_doc,
-        variant_doc,
-    },
+    archive::{archived_doc, printing::Printing, resolver_doc, resolver_variant_doc, variant_doc},
     attributes::{Attributes, FieldAttributes},
     util::{strip_generics_from_path, strip_raw},
 };
@@ -130,13 +127,8 @@ pub fn impl_enum(
             }
         }
     } else {
-        let resolve_arms = generate_resolve_arms(
-            printing,
-            attributes,
-            generics,
-            data,
-            &parse_quote!(#name),
-        )?;
+        let resolve_arms =
+            generate_resolve_arms(printing, attributes, generics, data, &parse_quote!(#name))?;
 
         quote! {
             impl #impl_generics #rkyv_path::Archive for #name #ty_generics
@@ -214,10 +206,9 @@ fn generate_archived_type(
                 "The archived counterpart of [`{}::{}::{}`]",
                 name,
                 variant_name,
-                ident.as_ref().map_or_else(
-                    || &i as &dyn Display,
-                    |name| name as &dyn Display
-                )
+                ident
+                    .as_ref()
+                    .map_or_else(|| &i as &dyn Display, |name| name as &dyn Display)
             );
 
             let field_ty = field_attrs.archived(rkyv_path, field);
@@ -345,8 +336,7 @@ fn generate_resolve_arms(
     let mut result = TokenStream::new();
     for variant in &data.variants {
         let variant_name = &variant.ident;
-        let archived_variant_name =
-            format_ident!("ArchivedVariant{}", strip_raw(variant_name),);
+        let archived_variant_name = format_ident!("ArchivedVariant{}", strip_raw(variant_name),);
 
         let members = variant
             .fields
@@ -502,8 +492,7 @@ fn generate_variant_structs(
 
     let mut result = TokenStream::new();
     for variant in &data.variants {
-        let archived_variant_name =
-            format_ident!("ArchivedVariant{}", strip_raw(&variant.ident),);
+        let archived_variant_name = format_ident!("ArchivedVariant{}", strip_raw(&variant.ident),);
 
         let mut archived_fields = TokenStream::new();
         for field in variant.fields.iter() {
@@ -589,8 +578,7 @@ fn generate_partial_eq_impl(
 
         match v.fields {
             Fields::Named(ref fields) => {
-                let field_names =
-                    fields.named.iter().map(|f| &f.ident).collect::<Vec<_>>();
+                let field_names = fields.named.iter().map(|f| &f.ident).collect::<Vec<_>>();
 
                 quote! {
                     #name::#variant {
@@ -718,8 +706,7 @@ fn generate_partial_ord_impl(
 
         match v.fields {
             Fields::Named(ref fields) => {
-                let field_names =
-                    fields.named.iter().map(|f| &f.ident).collect::<Vec<_>>();
+                let field_names = fields.named.iter().map(|f| &f.ident).collect::<Vec<_>>();
 
                 quote! {
                     #name::#variant {
@@ -835,8 +822,7 @@ fn generate_niching_impls(
 
     for variant in data.variants.iter() {
         let variant_name = &variant.ident;
-        let archived_variant_name =
-            format_ident!("ArchivedVariant{}", strip_raw(variant_name));
+        let archived_variant_name = format_ident!("ArchivedVariant{}", strip_raw(variant_name));
 
         for (i, field) in variant.fields.iter().enumerate() {
             let field_attrs = FieldAttributes::parse(attributes, field)?;

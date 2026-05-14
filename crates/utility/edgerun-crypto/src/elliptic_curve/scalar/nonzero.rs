@@ -351,7 +351,6 @@ where
     }
 }
 
-
 #[cfg(all(test, feature = "elliptic_curve_dev"))]
 mod tests {
     use crate::elliptic_curve::dev::{NonZeroScalar, Scalar};

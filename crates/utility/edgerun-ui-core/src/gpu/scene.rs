@@ -1,3 +1,5 @@
+#[cfg(feature = "tabler-svg-atlas")]
+use super::UiIconAtlasRect;
 use super::runtime::GpuHit;
 #[cfg(feature = "fontdue-text")]
 use super::{FontAtlas, TextQuad};
@@ -64,6 +66,20 @@ pub struct GpuClip {
     pub y: f32,
     pub w: f32,
     pub h: f32,
+}
+
+#[cfg(feature = "tabler-svg-atlas")]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct IconQuad {
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    pub u0: f32,
+    pub v0: f32,
+    pub u1: f32,
+    pub v1: f32,
+    pub color: Color4,
 }
 
 impl GpuClip {
@@ -137,6 +153,8 @@ pub struct GpuScene {
     rects: Vec<GpuRect>,
     hits: Vec<GpuHit>,
     clip_stack: Vec<GpuClip>,
+    #[cfg(feature = "tabler-svg-atlas")]
+    icon_quads: Vec<IconQuad>,
     #[cfg(feature = "fontdue-text")]
     text_quads: Vec<TextQuad>,
 }
@@ -148,6 +166,8 @@ impl GpuScene {
             rects: Vec::new(),
             hits: Vec::new(),
             clip_stack: Vec::new(),
+            #[cfg(feature = "tabler-svg-atlas")]
+            icon_quads: Vec::new(),
             #[cfg(feature = "fontdue-text")]
             text_quads: Vec::new(),
         }
@@ -157,6 +177,8 @@ impl GpuScene {
         self.rects.clear();
         self.hits.clear();
         self.clip_stack.clear();
+        #[cfg(feature = "tabler-svg-atlas")]
+        self.icon_quads.clear();
         #[cfg(feature = "fontdue-text")]
         self.text_quads.clear();
     }
@@ -290,10 +312,64 @@ impl GpuScene {
         for rect in &mut self.rects {
             rect.color = remap_scheme_color(rect.color, from, to);
         }
+        #[cfg(feature = "tabler-svg-atlas")]
+        for quad in &mut self.icon_quads {
+            quad.color = remap_scheme_color(quad.color, from, to);
+        }
         #[cfg(feature = "fontdue-text")]
         for quad in &mut self.text_quads {
             quad.color = remap_scheme_color(quad.color, from, to);
         }
+    }
+
+    #[cfg(feature = "tabler-svg-atlas")]
+    pub fn push_icon_quad(&mut self, rect: super::UiRect, atlas: UiIconAtlasRect, color: Color4) {
+        let quad = IconQuad {
+            x: rect.x,
+            y: rect.y,
+            w: rect.w,
+            h: rect.h,
+            u0: atlas.u0,
+            v0: atlas.v0,
+            u1: atlas.u1,
+            v1: atlas.v1,
+            color,
+        };
+        if let Some(quad) = self.clip_icon_quad(quad) {
+            self.icon_quads.push(quad);
+        }
+    }
+
+    #[cfg(feature = "tabler-svg-atlas")]
+    fn clip_icon_quad(&self, mut quad: IconQuad) -> Option<IconQuad> {
+        let Some(clip) = self.current_clip() else {
+            return (quad.w > 0.0 && quad.h > 0.0).then_some(quad);
+        };
+        let x0 = quad.x;
+        let y0 = quad.y;
+        let x1 = quad.x + quad.w;
+        let y1 = quad.y + quad.h;
+        let clipped = GpuClip::new(quad.x, quad.y, quad.w, quad.h).intersect(clip)?;
+        let u_span = quad.u1 - quad.u0;
+        let v_span = quad.v1 - quad.v0;
+        let left = ((clipped.x - x0) / (x1 - x0)).clamp(0.0, 1.0);
+        let top = ((clipped.y - y0) / (y1 - y0)).clamp(0.0, 1.0);
+        let right = ((clipped.x + clipped.w - x0) / (x1 - x0)).clamp(0.0, 1.0);
+        let bottom = ((clipped.y + clipped.h - y0) / (y1 - y0)).clamp(0.0, 1.0);
+        quad.x = clipped.x;
+        quad.y = clipped.y;
+        quad.w = clipped.w;
+        quad.h = clipped.h;
+        quad.u1 = quad.u0 + u_span * right;
+        quad.v1 = quad.v0 + v_span * bottom;
+        quad.u0 += u_span * left;
+        quad.v0 += v_span * top;
+        Some(quad)
+    }
+
+    #[cfg(feature = "tabler-svg-atlas")]
+    pub fn icon_quads(&self) -> &[IconQuad] {
+        &self.icon_quads
     }
 
     #[cfg(feature = "fontdue-text")]

@@ -11,8 +11,7 @@ use crate::{
     de::{FromMetadata, Metadata, Pooling, PoolingExt, SharedPointer},
     rc::{ArchivedRc, Flavor, RcResolver},
     ser::{Sharing, Writer},
-    Archive, ArchiveUnsized, Deserialize, DeserializeUnsized, Place, Serialize,
-    SerializeUnsized,
+    Archive, ArchiveUnsized, Deserialize, DeserializeUnsized, Place, Serialize, SerializeUnsized,
 };
 
 pub struct TriompheArcFlavor;
@@ -52,14 +51,8 @@ where
     S: Writer + Sharing + Fallible + ?Sized,
     S::Error: Source,
 {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
-        ArchivedRc::<T::Archived, TriompheArcFlavor>::serialize_from_ref(
-            self.as_ref(),
-            serializer,
-        )
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+        ArchivedRc::<T::Archived, TriompheArcFlavor>::serialize_from_ref(self.as_ref(), serializer)
     }
 }
 
@@ -72,8 +65,7 @@ where
     D::Error: Source,
 {
     fn deserialize(&self, deserializer: &mut D) -> Result<Arc<T>, D::Error> {
-        let raw_shared_ptr =
-            deserializer.deserialize_shared::<_, Arc<T>>(self.get())?;
+        let raw_shared_ptr = deserializer.deserialize_shared::<_, Arc<T>>(self.get())?;
         let shared_ptr = unsafe { Arc::<T>::from_raw(raw_shared_ptr) };
         forget(shared_ptr.clone());
         Ok(shared_ptr)

@@ -49,11 +49,7 @@ use crate::{
 /// )
 /// .unwrap();
 /// ```
-pub fn check_pos_with_context<T, C, E>(
-    bytes: &[u8],
-    pos: usize,
-    context: &mut C,
-) -> Result<(), E>
+pub fn check_pos_with_context<T, C, E>(bytes: &[u8], pos: usize, context: &mut C) -> Result<(), E>
 where
     T: CheckBytes<Strategy<C, E>> + Pointee<Metadata = ()>,
     C: ArchiveContext<E> + ?Sized,
@@ -175,18 +171,11 @@ where
 /// assert_eq!(archived.name.as_str(), "pi");
 /// assert_eq!(archived.value.to_native(), 31415926);
 /// ```
-pub fn access_with_context<'a, T, C, E>(
-    bytes: &'a [u8],
-    context: &mut C,
-) -> Result<&'a T, E>
+pub fn access_with_context<'a, T, C, E>(bytes: &'a [u8], context: &mut C) -> Result<&'a T, E>
 where
     T: Portable + CheckBytes<Strategy<C, E>> + Pointee<Metadata = ()>,
     C: ArchiveContext<E> + ?Sized,
     E: Source,
 {
-    access_pos_with_context::<T, C, E>(
-        bytes,
-        root_position::<T>(bytes.len()),
-        context,
-    )
+    access_pos_with_context::<T, C, E>(bytes, root_position::<T>(bytes.len()), context)
 }

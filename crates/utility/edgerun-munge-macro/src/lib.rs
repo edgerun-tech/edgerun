@@ -12,19 +12,16 @@
 use proc_macro2::TokenStream;
 use quote::{quote, quote_spanned};
 use syn::{
-    parse, parse_macro_input,
+    Error, Expr, FieldPat, Index, Pat, PatIdent, PatRest, PatSlice, PatStruct, PatTuple,
+    PatTupleStruct, Path, parse, parse_macro_input,
     punctuated::Punctuated,
     spanned::Spanned,
     token::{Eq, FatArrow, Let, Semi},
-    Error, Expr, FieldPat, Index, Pat, PatIdent, PatRest, PatSlice, PatStruct,
-    PatTuple, PatTupleStruct, Path,
 };
 
 /// Destructures a value by projecting pointers.
 #[proc_macro]
-pub fn munge_with_path(
-    input: proc_macro::TokenStream,
-) -> proc_macro::TokenStream {
+pub fn munge_with_path(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as Input);
     destructure(input)
         .unwrap_or_else(|e| e.to_compile_error())
@@ -80,10 +77,7 @@ fn make_rest_check(crate_path: &Path, rest: &PatRest) -> TokenStream {
     } }
 }
 
-fn parse_pat(
-    crate_path: &Path,
-    pat: &Pat,
-) -> Result<(TokenStream, TokenStream), Error> {
+fn parse_pat(crate_path: &Path, pat: &Pat) -> Result<(TokenStream, TokenStream), Error> {
     let test_ident = quote_spanned!(pat.span() => test);
     let test_ident_ref = quote_spanned!(pat.span() => &test);
     let test = quote! {
@@ -126,8 +120,7 @@ fn parse_pat(
                 },
             )
         }
-        Pat::Tuple(PatTuple { elems, .. })
-        | Pat::TupleStruct(PatTupleStruct { elems, .. }) => {
+        Pat::Tuple(PatTuple { elems, .. }) | Pat::TupleStruct(PatTupleStruct { elems, .. }) => {
             let rest_check = elems.iter().find_map(|e| {
                 if let Pat::Rest(rest) = e {
                     Some(make_rest_check(crate_path, rest))
@@ -204,9 +197,7 @@ fn parse_pat(
             let parsed = pat_struct
                 .fields
                 .iter()
-                .map(|fp| {
-                    parse_pat(crate_path, &fp.pat).map(|ie| (&fp.member, ie))
-                })
+                .map(|fp| parse_pat(crate_path, &fp.pat).map(|ie| (&fp.member, ie)))
                 .collect::<Result<Vec<_>, Error>>()?;
             let (members, (bindings, exprs)) =
                 parsed.into_iter().unzip::<_, _, Vec<_>, (Vec<_>, Vec<_>)>();
@@ -236,9 +227,9 @@ fn parse_pat(
                 } },
             )
         }
-        Pat::Rest(_) => unreachable!(
-            "rest patterns only occur in tuples, tuple structs, and slices"
-        ),
+        Pat::Rest(_) => {
+            unreachable!("rest patterns only occur in tuples, tuple structs, and slices")
+        }
         Pat::Wild(pat_wild) => {
             let token = &pat_wild.underscore_token;
             (
@@ -258,10 +249,7 @@ fn parse_pat(
             )
         }
         _ => {
-            return Err(Error::new_spanned(
-                pat,
-                "expected a destructuring pattern",
-            ));
+            return Err(Error::new_spanned(pat, "expected a destructuring pattern"));
         }
     })
 }

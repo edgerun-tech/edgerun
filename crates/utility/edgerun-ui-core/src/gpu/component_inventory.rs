@@ -768,6 +768,13 @@ pub const EXTRACTED_SOURCE_ICONS: &[UiExtractedIconSpec] = &[
         "verified package, identity, or policy marker",
     ),
     icon_spec(
+        "message plus",
+        Some(UiIcon::MessagePlus),
+        "message-circle-plus",
+        "message-plus",
+        "new chat or session action",
+    ),
+    icon_spec(
         "arrow up",
         Some(UiIcon::Send),
         "arrow-up",
@@ -780,6 +787,13 @@ pub const EXTRACTED_SOURCE_ICONS: &[UiExtractedIconSpec] = &[
         "arrow-right",
         "arrow-right",
         "continue, next, and outbound navigation",
+    ),
+    icon_spec(
+        "trash",
+        Some(UiIcon::Trash),
+        "trash-2",
+        "trash",
+        "clear or remove action",
     ),
     icon_spec("x", Some(UiIcon::X), "x", "x", "close or dismiss action"),
 ];

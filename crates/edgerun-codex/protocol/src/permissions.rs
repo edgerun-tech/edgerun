@@ -2083,13 +2083,13 @@ mod tests {
             "kind": "current_working_directory",
         });
 
-        let special_path = edgerun_json::from_value::<FileSystemSpecialPath>(value)?;
+        let special_path = edgerun_json::from_serde_value::<FileSystemSpecialPath>(value)?;
         assert_eq!(
             special_path,
             FileSystemSpecialPath::project_roots(/*subpath*/ None)
         );
         assert_eq!(
-            edgerun_json::to_value(&special_path)?,
+            edgerun_json::to_serde_value(&special_path)?,
             edgerun_json::json!({
                 "kind": "project_roots",
             })

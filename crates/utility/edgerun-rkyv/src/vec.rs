@@ -60,9 +60,7 @@ impl<T> ArchivedVec<T> {
     pub fn as_slice_seal(this: Seal<'_, Self>) -> Seal<'_, [T]> {
         let len = this.len();
         munge!(let Self { ptr, .. } = this);
-        let slice = unsafe {
-            core::slice::from_raw_parts_mut(RelPtr::as_mut_ptr(ptr), len)
-        };
+        let slice = unsafe { core::slice::from_raw_parts_mut(RelPtr::as_mut_ptr(ptr), len) };
         Seal::new(slice)
     }
 
@@ -76,11 +74,7 @@ impl<T> ArchivedVec<T> {
     }
 
     /// Resolves an archived `Vec` from a given length.
-    pub fn resolve_from_len(
-        len: usize,
-        resolver: VecResolver,
-        out: Place<Self>,
-    ) {
+    pub fn resolve_from_len(len: usize, resolver: VecResolver, out: Place<Self>) {
         munge!(let ArchivedVec { ptr, len: out_len } = out);
         RelPtr::emplace(resolver.pos as usize, ptr);
         usize::resolve(&len, (), out_len);
@@ -116,27 +110,23 @@ impl<T> ArchivedVec<T> {
     {
         use crate::util::SerVec;
 
-        SerVec::with_capacity(
-            serializer,
-            iter.len(),
-            |resolvers, serializer| {
-                for value in iter.clone() {
-                    let resolver = value.borrow().serialize(serializer)?;
-                    resolvers.push(resolver);
-                }
+        SerVec::with_capacity(serializer, iter.len(), |resolvers, serializer| {
+            for value in iter.clone() {
+                let resolver = value.borrow().serialize(serializer)?;
+                resolvers.push(resolver);
+            }
 
-                let pos = serializer.align_for::<T>()?;
-                for (value, resolver) in iter.zip(resolvers.drain()) {
-                    unsafe {
-                        serializer.resolve_aligned(value.borrow(), resolver)?;
-                    }
+            let pos = serializer.align_for::<T>()?;
+            for (value, resolver) in iter.zip(resolvers.drain()) {
+                unsafe {
+                    serializer.resolve_aligned(value.borrow(), resolver)?;
                 }
+            }
 
-                Ok(VecResolver {
-                    pos: pos as FixedUsize,
-                })
-            },
-        )?
+            Ok(VecResolver {
+                pos: pos as FixedUsize,
+            })
+        })?
     }
 
     /// Serializes an archived `Vec` from a given iterator. Compared to
@@ -307,9 +297,7 @@ mod verify {
                 self.len.to_native() as usize,
             );
 
-            context.in_subtree(ptr, |context| unsafe {
-                <[T]>::check_bytes(ptr, context)
-            })
+            context.in_subtree(ptr, |context| unsafe { <[T]>::check_bytes(ptr, context) })
         }
     }
 }

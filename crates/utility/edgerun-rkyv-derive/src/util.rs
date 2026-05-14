@@ -2,8 +2,7 @@ use core::iter::FlatMap;
 
 use proc_macro2::Ident;
 use syn::{
-    punctuated::Iter, Data, DataEnum, DataStruct, DataUnion, Field, Path,
-    PathArguments, Variant,
+    punctuated::Iter, Data, DataEnum, DataStruct, DataUnion, Field, Path, PathArguments, Variant,
 };
 
 pub fn strip_raw(ident: &Ident) -> String {
@@ -38,15 +37,11 @@ impl<'a> Iterator for FieldsIter<'a> {
 
 pub fn iter_fields(data: &Data) -> FieldsIter<'_> {
     match data {
-        Data::Struct(DataStruct { fields, .. }) => {
-            FieldsIter::Struct(fields.iter())
-        }
+        Data::Struct(DataStruct { fields, .. }) => FieldsIter::Struct(fields.iter()),
         Data::Enum(DataEnum { variants, .. }) => {
             FieldsIter::Enum(variants.iter().flat_map(variant_fields))
         }
-        Data::Union(DataUnion { fields, .. }) => {
-            FieldsIter::Struct(fields.named.iter())
-        }
+        Data::Union(DataUnion { fields, .. }) => FieldsIter::Struct(fields.named.iter()),
     }
 }
 

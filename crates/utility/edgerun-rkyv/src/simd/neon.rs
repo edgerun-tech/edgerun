@@ -54,41 +54,26 @@ impl Group {
     #[inline]
     fn unpack(cmp: Word) -> Bitmask {
         // 0xFF_FF_FF_00_00_FF_00_00 => 0xFF_F0_0F_00
-        let nibbles = unsafe {
-            aarch64::vshrn_n_u16(aarch64::vreinterpretq_u16_u8(cmp), 4)
-        };
+        let nibbles = unsafe { aarch64::vshrn_n_u16(aarch64::vreinterpretq_u16_u8(cmp), 4) };
         // 0xFF_F0_0F_00 => 0x88_80_08_00
-        let bits =
-            unsafe { aarch64::vand_u8(nibbles, aarch64::vdup_n_u8(0x88)) };
+        let bits = unsafe { aarch64::vand_u8(nibbles, aarch64::vdup_n_u8(0x88)) };
         // 0x88_80_08_00 => 0x88800800
-        let result = unsafe {
-            aarch64::vget_lane_u64(aarch64::vreinterpret_u64_u8(bits), 0)
-        };
+        let result = unsafe { aarch64::vget_lane_u64(aarch64::vreinterpret_u64_u8(bits), 0) };
         Bitmask(result)
     }
 
     #[inline]
     pub fn match_byte(self, byte: u8) -> Bitmask {
-        unsafe {
-            Self::unpack(aarch64::vceqq_u8(self.0, aarch64::vdupq_n_u8(byte)))
-        }
+        unsafe { Self::unpack(aarch64::vceqq_u8(self.0, aarch64::vdupq_n_u8(byte))) }
     }
 
     #[inline]
     pub fn match_empty(self) -> Bitmask {
-        unsafe {
-            Self::unpack(aarch64::vcltzq_s8(aarch64::vreinterpretq_s8_u8(
-                self.0,
-            )))
-        }
+        unsafe { Self::unpack(aarch64::vcltzq_s8(aarch64::vreinterpretq_s8_u8(self.0))) }
     }
 
     #[inline]
     pub fn match_full(self) -> Bitmask {
-        unsafe {
-            Self::unpack(aarch64::vcgezq_s8(aarch64::vreinterpretq_s8_u8(
-                self.0,
-            )))
-        }
+        unsafe { Self::unpack(aarch64::vcgezq_s8(aarch64::vreinterpretq_s8_u8(self.0))) }
     }
 }

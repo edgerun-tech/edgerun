@@ -18,10 +18,7 @@ impl Archive for Bytes {
 }
 
 impl<S: Fallible + Allocator + Writer + ?Sized> Serialize<S> for Bytes {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
         ArchivedVec::serialize_from_slice(self, serializer)
     }
 }

@@ -334,7 +334,6 @@ impl Pow10SignificandsTable {
             }
         }
     }
-
 }
 
 static POW10_SIGNIFICANDS: Pow10SignificandsTable = Pow10SignificandsTable::new();
@@ -1133,7 +1132,7 @@ impl Buffer {
     /// This is a cheap operation; you don't need to worry about reusing buffers
     /// for efficiency.
     #[inline]
-        pub fn new() -> Self {
+    pub fn new() -> Self {
         let bytes = [MaybeUninit::<u8>::uninit(); BUFFER_SIZE];
         Buffer { bytes }
     }
@@ -1149,7 +1148,7 @@ impl Buffer {
     /// If your input is known to be finite, you may get better performance by
     /// calling the `format_finite` method instead of `format` to avoid the
     /// checks for special cases.
-        pub fn format<F: Float>(&mut self, f: F) -> &str {
+    pub fn format<F: Float>(&mut self, f: F) -> &str {
         if f.is_nonfinite() {
             f.format_nonfinite()
         } else {
@@ -1172,7 +1171,7 @@ impl Buffer {
     /// [`is_finite`]: f64::is_finite
     /// [`is_nan`]: f64::is_nan
     /// [`is_infinite`]: f64::is_infinite
-        pub fn format_finite<F: Float>(&mut self, f: F) -> &str {
+    pub fn format_finite<F: Float>(&mut self, f: F) -> &str {
         unsafe {
             let end = f.write_to_zmij_buffer(self.bytes.as_mut_ptr().cast::<u8>());
             let len = end.offset_from(self.bytes.as_ptr().cast::<u8>()) as usize;
@@ -1261,7 +1260,7 @@ mod private {
 
 impl Default for Buffer {
     #[inline]
-        fn default() -> Self {
+    fn default() -> Self {
         Buffer::new()
     }
 }

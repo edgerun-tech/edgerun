@@ -25,23 +25,16 @@ where
     S: Fallible + Allocator + Writer + ?Sized,
     S::Error: Source,
 {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<IndexMapResolver, S::Error> {
-        ArchivedIndexMap::<K::Archived, V::Archived>::serialize_from_iter::<
-            _,
-            _,
-            _,
-            K,
-            V,
-            _,
-        >(self.iter(), (7, 8), serializer)
+    fn serialize(&self, serializer: &mut S) -> Result<IndexMapResolver, S::Error> {
+        ArchivedIndexMap::<K::Archived, V::Archived>::serialize_from_iter::<_, _, _, K, V, _>(
+            self.iter(),
+            (7, 8),
+            serializer,
+        )
     }
 }
 
-impl<K, V, D, S> Deserialize<IndexMap<K, V, S>, D>
-    for ArchivedIndexMap<K::Archived, V::Archived>
+impl<K, V, D, S> Deserialize<IndexMap<K, V, S>, D> for ArchivedIndexMap<K::Archived, V::Archived>
 where
     K: Archive + Hash + Eq,
     K::Archived: Deserialize<K, D>,
@@ -50,17 +43,10 @@ where
     D: Fallible + ?Sized,
     S: Default + BuildHasher,
 {
-    fn deserialize(
-        &self,
-        deserializer: &mut D,
-    ) -> Result<IndexMap<K, V, S>, D::Error> {
-        let mut result =
-            IndexMap::with_capacity_and_hasher(self.len(), S::default());
+    fn deserialize(&self, deserializer: &mut D) -> Result<IndexMap<K, V, S>, D::Error> {
+        let mut result = IndexMap::with_capacity_and_hasher(self.len(), S::default());
         for (k, v) in self.iter() {
-            result.insert(
-                k.deserialize(deserializer)?,
-                v.deserialize(deserializer)?,
-            );
+            result.insert(k.deserialize(deserializer)?, v.deserialize(deserializer)?);
         }
         Ok(result)
     }
@@ -85,14 +71,11 @@ mod tests {
 
     use indexmap_2::IndexMap;
 
-    use crate::{
-        alloc::string::String, api::test::roundtrip_with, hash::FxHasher64,
-    };
+    use crate::{alloc::string::String, api::test::roundtrip_with, hash::FxHasher64};
 
     #[test]
     fn index_map() {
-        let mut value =
-            IndexMap::with_hasher(BuildHasherDefault::<FxHasher64>::default());
+        let mut value = IndexMap::with_hasher(BuildHasherDefault::<FxHasher64>::default());
         value.insert(String::from("foo"), 10);
         value.insert(String::from("bar"), 20);
         value.insert(String::from("baz"), 40);

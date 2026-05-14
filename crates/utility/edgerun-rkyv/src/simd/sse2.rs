@@ -58,8 +58,7 @@ impl Group {
     #[inline]
     pub fn match_byte(self, byte: u8) -> Bitmask {
         unsafe {
-            let cmp =
-                x86::_mm_cmpeq_epi8(self.0, x86::_mm_set1_epi8(byte as i8));
+            let cmp = x86::_mm_cmpeq_epi8(self.0, x86::_mm_set1_epi8(byte as i8));
             Bitmask(x86::_mm_movemask_epi8(cmp) as u16)
         }
     }

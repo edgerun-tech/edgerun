@@ -95,13 +95,10 @@ impl From<std::process::ExitStatus> for ExitStatus {
         }
 
         Self {
-            code: status.code().map(|code| code as u32).unwrap_or_else(|| {
-                if status.success() {
-                    0
-                } else {
-                    1
-                }
-            }),
+            code: status
+                .code()
+                .map(|code| code as u32)
+                .unwrap_or_else(|| if status.success() { 0 } else { 1 }),
             signal: None,
         }
     }

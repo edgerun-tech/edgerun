@@ -174,7 +174,10 @@ impl fmt::Debug for ConfiguredModelProvider {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ConfiguredModelProvider")
             .field("info", &self.info)
-            .field("auth_manager", &self.auth_manager.as_ref().map(|_| "<auth-manager>"))
+            .field(
+                "auth_manager",
+                &self.auth_manager.as_ref().map(|_| "<auth-manager>"),
+            )
             .field("models_transport", &"<http-transport>")
             .finish()
     }
@@ -278,10 +281,10 @@ impl ModelProvider for ConfiguredModelProvider {
 mod tests {
     use std::num::NonZeroU64;
 
+    use codex_api::TransportError;
     use codex_client::Request;
     use codex_client::Response;
     use codex_client::StreamResponse;
-    use codex_api::TransportError;
     use codex_model_provider_info::ModelProviderAwsAuthInfo;
     use codex_model_provider_info::WireApi;
     use codex_models_manager::manager::RefreshStrategy;

@@ -1,16 +1,6 @@
-use rkyv::{Archive, Deserialize, Serialize};
-
-#[derive(Clone, PartialEq, Debug, Archive, Serialize, Deserialize)]
-pub struct SourceBlob {
-    pub path: String,
-    pub source: String,
-}
-
-#[derive(Clone, PartialEq, Debug, Archive, Serialize, Deserialize)]
-pub struct SourceSnapshot {
-    pub files: Vec<SourceBlob>,
-    pub total_bytes: u64,
-}
+use crate::graph_types::{
+    ArchivedConnectionsEnvelope, ArchivedSourceSnapshot, ConnectionsEnvelope, SourceSnapshot,
+};
 
 impl SourceSnapshot {
     pub fn encode_rkyv(&self) -> Result<Vec<u8>, rkyv::rancor::Error> {
@@ -21,22 +11,6 @@ impl SourceSnapshot {
         let archived = rkyv::access::<ArchivedSourceSnapshot, rkyv::rancor::Error>(bytes)?;
         rkyv::deserialize::<SourceSnapshot, rkyv::rancor::Error>(archived)
     }
-}
-
-#[derive(Clone, PartialEq, Debug, Archive, Serialize, Deserialize)]
-pub struct LocalConnection {
-    pub network_transport: String,
-    pub local_address: String,
-    pub local_port: u16,
-    pub remote_address: String,
-    pub remote_port: u16,
-    pub state: String,
-}
-
-#[derive(Clone, PartialEq, Debug, Archive, Serialize, Deserialize)]
-pub struct ConnectionsEnvelope {
-    pub connections: Vec<LocalConnection>,
-    pub connection_count: u32,
 }
 
 impl ConnectionsEnvelope {

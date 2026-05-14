@@ -149,10 +149,7 @@ pub fn root_position<T: Portable>(size: usize) -> usize {
 /// assert_eq!(archived.name, "pi");
 /// assert_eq!(archived.value, 31415926);
 /// ```
-pub unsafe fn access_pos_unchecked<T: Portable>(
-    bytes: &[u8],
-    pos: usize,
-) -> &T {
+pub unsafe fn access_pos_unchecked<T: Portable>(bytes: &[u8], pos: usize) -> &T {
     #[cfg(debug_assertions)]
     sanity_check_buffer::<T>(bytes.as_ptr(), pos, bytes.len());
 
@@ -215,10 +212,7 @@ pub unsafe fn access_pos_unchecked<T: Portable>(
 /// *value = 12345.into();
 /// assert_eq!(*value, 12345);
 /// ```
-pub unsafe fn access_pos_unchecked_mut<T: Portable>(
-    bytes: &mut [u8],
-    pos: usize,
-) -> Seal<'_, T> {
+pub unsafe fn access_pos_unchecked_mut<T: Portable>(bytes: &mut [u8], pos: usize) -> Seal<'_, T> {
     #[cfg(debug_assertions)]
     sanity_check_buffer::<T>(bytes.as_ptr(), pos, bytes.len());
 
@@ -314,14 +308,10 @@ pub unsafe fn access_unchecked<T: Portable>(bytes: &[u8]) -> &T {
 /// *value = 12345.into();
 /// assert_eq!(*value, 12345);
 /// ```
-pub unsafe fn access_unchecked_mut<T: Portable>(
-    bytes: &mut [u8],
-) -> Seal<'_, T> {
+pub unsafe fn access_unchecked_mut<T: Portable>(bytes: &mut [u8]) -> Seal<'_, T> {
     // SAFETY: The caller has guaranteed that the given bytes pass validation
     // when passed to `access_mut`.
-    unsafe {
-        access_pos_unchecked_mut::<T>(bytes, root_position::<T>(bytes.len()))
-    }
+    unsafe { access_pos_unchecked_mut::<T>(bytes, root_position::<T>(bytes.len())) }
 }
 
 /// Serialize a value using the given serializer.

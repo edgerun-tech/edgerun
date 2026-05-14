@@ -1,0 +1,14 @@
+pub const ALLOW_DOMAINS: &[&str] = &[
+    "4everland.io",
+    "apt.izzysoft.de",
+    "archive.newpipe.net",
+    "briarproject.org",
+    "developer.android.com",
+    "en.wikipedia.org",
+    "example.com",
+    "example.org",
+];
+
+pub fn is_allowed_domain(domain: &str) -> bool {
+    ALLOW_DOMAINS.iter().any(|allowed| *allowed == domain)
+}

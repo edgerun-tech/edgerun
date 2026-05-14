@@ -29,11 +29,7 @@ unsafe impl<A, S, E> ArchiveContext<E> for Validator<A, S>
 where
     A: ArchiveContext<E>,
 {
-    fn check_subtree_ptr(
-        &mut self,
-        ptr: *const u8,
-        layout: &core::alloc::Layout,
-    ) -> Result<(), E> {
+    fn check_subtree_ptr(&mut self, ptr: *const u8, layout: &core::alloc::Layout) -> Result<(), E> {
         self.archive.check_subtree_ptr(ptr, layout)
     }
 
@@ -47,10 +43,7 @@ where
         unsafe { self.archive.push_subtree_range(root, end) }
     }
 
-    unsafe fn pop_subtree_range(
-        &mut self,
-        range: Range<usize>,
-    ) -> Result<(), E> {
+    unsafe fn pop_subtree_range(&mut self, range: Range<usize>) -> Result<(), E> {
         // SAFETY: This just forwards the call to the underlying `CoreValidator`
         // which has the same safety requirements.
         unsafe { self.archive.pop_subtree_range(range) }
@@ -69,11 +62,7 @@ where
         self.shared.start_shared(address, type_id)
     }
 
-    fn finish_shared(
-        &mut self,
-        address: usize,
-        type_id: TypeId,
-    ) -> Result<(), E> {
+    fn finish_shared(&mut self, address: usize, type_id: TypeId) -> Result<(), E> {
         self.shared.finish_shared(address, type_id)
     }
 }
@@ -115,10 +104,7 @@ mod tests {
         ]);
 
         #[cfg(all(
-            not(any(
-                feature = "pointer_width_16",
-                feature = "pointer_width_64",
-            )),
+            not(any(feature = "pointer_width_16", feature = "pointer_width_64",)),
             not(feature = "big_endian"),
         ))]
         // Synthetic archive (correct)
@@ -132,10 +118,7 @@ mod tests {
         ]);
 
         #[cfg(all(
-            not(any(
-                feature = "pointer_width_16",
-                feature = "pointer_width_64",
-            )),
+            not(any(feature = "pointer_width_16", feature = "pointer_width_64",)),
             feature = "big_endian",
         ))]
         // Synthetic archive (correct)
@@ -152,31 +135,26 @@ mod tests {
         // Synthetic archive (correct)
         let synthetic_buf = Align([
             // "Hello world"
-            0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x77, 0x6f, 0x72, 0x6c, 0x64,
-            0u8, 0u8, 0u8, 0u8, 0u8, // padding to 8-alignment
+            0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x77, 0x6f, 0x72, 0x6c, 0x64, 0u8, 0u8, 0u8, 0u8,
+            0u8, // padding to 8-alignment
             1u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, // Some + padding
             // points 24 bytes backward
-            0xe8u8, 0xffu8, 0xffu8, 0xffu8, 0xffu8, 0xffu8, 0xffu8, 0xffu8,
-            11u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8,
-            0u8, // string is 11 characters long
+            0xe8u8, 0xffu8, 0xffu8, 0xffu8, 0xffu8, 0xffu8, 0xffu8, 0xffu8, 11u8, 0u8, 0u8, 0u8,
+            0u8, 0u8, 0u8, 0u8, // string is 11 characters long
         ]);
 
         #[cfg(all(feature = "pointer_width_64", feature = "big_endian"))]
         // Synthetic archive (correct)
         let synthetic_buf = Align([
             // "Hello world!!!!!" because otherwise the string will get inlined
-            0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x77, 0x6f, 0x72, 0x6c, 0x64,
-            0x21, 0x21, 0x21, 0x21, 0x21, 1u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8,
-            0u8, // Some + padding
+            0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x77, 0x6f, 0x72, 0x6c, 0x64, 0x21, 0x21, 0x21,
+            0x21, 0x21, 1u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, 0u8, // Some + padding
             // points 24 bytes backward
-            0xffu8, 0xffu8, 0xffu8, 0xffu8, 0xffu8, 0xffu8, 0xffu8, 0xe8u8, 0u8,
-            0u8, 0u8, 0u8, 0u8, 0u8, 0u8,
-            11u8, // string is 11 characters long
+            0xffu8, 0xffu8, 0xffu8, 0xffu8, 0xffu8, 0xffu8, 0xffu8, 0xe8u8, 0u8, 0u8, 0u8, 0u8, 0u8,
+            0u8, 0u8, 11u8, // string is 11 characters long
         ]);
 
-        let result = access::<ArchivedOption<ArchivedBox<[u8]>>, Failure>(
-            &*synthetic_buf,
-        );
+        let result = access::<ArchivedOption<ArchivedBox<[u8]>>, Failure>(&*synthetic_buf);
         result.unwrap();
 
         // Out of bounds
@@ -192,8 +170,7 @@ mod tests {
         access_pos::<Archived<u32>, Failure>(&Align([0, 1, 2, 3, 4])[1..], 0)
             .expect_err("expected underaligned error");
         // Undersized
-        access::<Archived<u32>, Failure>(&*Align([]))
-            .expect_err("expected out of bounds error");
+        access::<Archived<u32>, Failure>(&*Align([])).expect_err("expected out of bounds error");
     }
 
     #[cfg(feature = "pointer_width_32")]
@@ -208,10 +185,7 @@ mod tests {
             0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x77, 0x6f, 0x72, 0x6c, 0x64,
         ]);
 
-        let result = access_pos::<Archived<Option<Box<[u8]>>>, Failure>(
-            &*synthetic_buf,
-            0,
-        );
+        let result = access_pos::<Archived<Option<Box<[u8]>>>, Failure>(&*synthetic_buf, 0);
         result.unwrap_err();
     }
 
@@ -230,8 +204,6 @@ mod tests {
             0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x20, 0x77, 0x6f, 0x72, 0x6c, 0x64,
         ]);
 
-        access_pos::<Archived<[Box<[u8]>; 2]>, Failure>(&*synthetic_buf, 0)
-            .unwrap_err();
+        access_pos::<Archived<[Box<[u8]>; 2]>, Failure>(&*synthetic_buf, 0).unwrap_err();
     }
-
 }

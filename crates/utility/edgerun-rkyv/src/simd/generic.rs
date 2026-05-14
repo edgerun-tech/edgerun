@@ -86,9 +86,7 @@ impl Group {
     #[inline]
     pub fn match_byte(self, byte: u8) -> Bitmask {
         let zero_mask = self.0 ^ Self::repeat(byte);
-        let bits = zero_mask.wrapping_sub(Self::repeat(0x01))
-            & !zero_mask
-            & Self::repeat(0x80);
+        let bits = zero_mask.wrapping_sub(Self::repeat(0x01)) & !zero_mask & Self::repeat(0x80);
         Bitmask(bits)
     }
 

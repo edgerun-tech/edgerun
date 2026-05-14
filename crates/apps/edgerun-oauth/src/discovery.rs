@@ -28,12 +28,17 @@ pub struct OidcDiscoveryDocument {
 impl OidcDiscoveryDocument {
     /// Parse from JSON string.
     pub fn from_json(json_str: &str) -> Result<Self, String> {
-        let tape = edgerun_json::parse_json_tape(json_str).map_err(|e| format!("JSON parse: {e}"))?;
+        let tape =
+            edgerun_json::parse_json_tape(json_str).map_err(|e| format!("JSON parse: {e}"))?;
         let root = tape
             .root(json_str)
             .ok_or_else(|| "JSON parse: missing root value".to_string())?;
 
-        let str_field = |key: &str| root.get(key).and_then(|x| x.as_str()).map(|s| s.to_string());
+        let str_field = |key: &str| {
+            root.get(key)
+                .and_then(|x| x.as_str())
+                .map(|s| s.to_string())
+        };
         let str_array = |key: &str| -> Vec<String> {
             root.get(key)
                 .and_then(|x| x.array_items())
@@ -76,7 +81,7 @@ impl OidcDiscoveryDocument {
 
     /// Serialize to JSON string.
     pub fn to_json(&self) -> String {
-        use edgerun_json::{to_string, JsonValue, Map};
+        use edgerun_json::{JsonValue, Map, to_string};
         let mut obj: Vec<(String, JsonValue)> = Vec::new();
         obj.push(("issuer".into(), JsonValue::String(self.issuer.clone())));
         obj.push((
@@ -195,7 +200,8 @@ pub struct Jwk {
 impl JwksDocument {
     /// Parse from JSON string.
     pub fn from_json(json_str: &str) -> Result<Self, String> {
-        let tape = edgerun_json::parse_json_tape(json_str).map_err(|e| format!("JSON parse: {e}"))?;
+        let tape =
+            edgerun_json::parse_json_tape(json_str).map_err(|e| format!("JSON parse: {e}"))?;
         let root = tape
             .root(json_str)
             .ok_or_else(|| "JSON parse: missing root value".to_string())?;
@@ -230,7 +236,7 @@ impl JwksDocument {
 
     /// Serialize to JSON string.
     pub fn to_json(&self) -> String {
-        use edgerun_json::{to_string, JsonValue, Map};
+        use edgerun_json::{JsonValue, Map, to_string};
         let keys_arr: Vec<JsonValue> = self.keys.iter().map(|k| k.raw.clone()).collect();
         let obj: Vec<(String, JsonValue)> = vec![("keys".into(), JsonValue::Array(keys_arr))];
         let val = JsonValue::Object(Map::from_iter(obj));

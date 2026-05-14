@@ -61,7 +61,11 @@ where
     F: FnMut(T) -> Fut,
     Fut: TryFuture<Ok = Option<(Item, T)>>,
 {
-    assert_stream::<Result<Item, Fut::Error>, _>(TryUnfold { f, state: Some(init), fut: None })
+    assert_stream::<Result<Item, Fut::Error>, _>(TryUnfold {
+        f,
+        state: Some(init),
+        fut: None,
+    })
 }
 
 pin_project! {
@@ -81,7 +85,10 @@ where
     Fut: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("TryUnfold").field("state", &self.state).field("fut", &self.fut).finish()
+        f.debug_struct("TryUnfold")
+            .field("state", &self.state)
+            .field("fut", &self.fut)
+            .finish()
     }
 }
 

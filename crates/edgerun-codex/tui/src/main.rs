@@ -6,6 +6,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
 use std::process::Stdio;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::thread;
@@ -26,6 +27,7 @@ use codex_core::protocol::models::FunctionCallOutputPayload;
 use codex_core::protocol::models::LocalShellAction;
 use codex_core::protocol::models::LocalShellStatus;
 use codex_core::protocol::models::ResponseItem;
+use codex_core::protocol::protocol::RateLimitSnapshot;
 use codex_core::tools::AdditionalProperties;
 use codex_core::tools::JsonSchema;
 use codex_core::tools::ResponsesApiTool;
@@ -40,6 +42,7 @@ mod ui;
 const MAX_TOOL_ROUNDS: usize = 16;
 const MAX_TOOL_OUTPUT_BYTES: usize = 24 * 1024;
 const CODEX_BACKEND_VERSION: &str = "0.130.0";
+const CANCEL_POLL_INTERVAL: Duration = Duration::from_millis(100);
 
 #[derive(Debug)]
 struct ChatGptAuth {
@@ -75,6 +78,7 @@ enum AgentEvent {
         success: bool,
     },
     Usage(TokenUsage),
+    RateLimits(RateLimitSnapshot),
 }
 
 #[derive(Debug)]
@@ -225,9 +229,9 @@ async fn run_prompt(
         AgentEvent::ToolCompleted { summary, .. } => {
             println!("[tool result] {summary}");
         }
-        AgentEvent::Usage(_) => {}
+        AgentEvent::Usage(_) | AgentEvent::RateLimits(_) => {}
     };
-    let (_, history) = run_agent_loop(client, input, Some(&mut printer)).await?;
+    let (_, history) = run_agent_loop(client, input, Some(&mut printer), None).await?;
     println!();
     Ok(history)
 }
@@ -340,10 +344,19 @@ async fn run_agent_loop(
     client: &codex_core::ModelClient,
     mut history: Vec<ResponseItem>,
     mut emit: Option<&mut dyn FnMut(AgentEvent)>,
+    cancel: Option<Arc<AtomicBool>>,
 ) -> Result<(Option<String>, Vec<ResponseItem>), Box<dyn Error>> {
     for _ in 0..MAX_TOOL_ROUNDS {
-        let streamed =
-            stream_turn_with_events(client, turn_request(history.clone()), &mut emit).await?;
+        if is_cancelled(cancel.as_deref()) {
+            return Err("cancelled".into());
+        }
+        let streamed = stream_turn_with_events(
+            client,
+            turn_request(history.clone()),
+            &mut emit,
+            cancel.as_deref(),
+        )
+        .await?;
         let output = streamed.output;
         let last_response_id = output.response_id.clone();
 
@@ -354,6 +367,9 @@ async fn run_agent_loop(
         }
 
         for invocation in tool_calls {
+            if is_cancelled(cancel.as_deref()) {
+                return Err("cancelled".into());
+            }
             if let Some(emit) = emit.as_deref_mut() {
                 if !streamed.streamed_tool_input
                     && let Some(diff) = patch_preview(&invocation)
@@ -385,12 +401,25 @@ async fn stream_turn_with_events(
     client: &codex_core::ModelClient,
     request: TurnRequest,
     emit: &mut Option<&mut dyn FnMut(AgentEvent)>,
+    cancel: Option<&AtomicBool>,
 ) -> Result<StreamedTurnOutput, Box<dyn Error>> {
     let mut stream = client.stream_turn(request).await?;
     let mut output = TurnOutput::default();
     let mut streamed_tool_input = false;
 
-    while let Some(event) = stream.rx_event.recv().await {
+    loop {
+        if is_cancelled(cancel) {
+            return Err("cancelled".into());
+        }
+        let Some(event) =
+            match edgerun_tokio::time::timeout(CANCEL_POLL_INTERVAL, stream.rx_event.recv()).await
+            {
+                Ok(event) => event,
+                Err(_) => continue,
+            }
+        else {
+            break;
+        };
         match event? {
             ResponseEvent::Created => {}
             ResponseEvent::OutputItemAdded(_) => {}
@@ -437,8 +466,12 @@ async fn stream_turn_with_events(
                     emit(AgentEvent::ToolInputDelta(delta));
                 }
             }
+            ResponseEvent::RateLimits(snapshot) => {
+                if let Some(emit) = emit.as_deref_mut() {
+                    emit(AgentEvent::RateLimits(snapshot));
+                }
+            }
             ResponseEvent::ReasoningSummaryPartAdded { .. }
-            | ResponseEvent::RateLimits(_)
             | ResponseEvent::ModelVerifications(_)
             | ResponseEvent::ModelsEtag(_) => {}
         }
@@ -448,6 +481,12 @@ async fn stream_turn_with_events(
         output,
         streamed_tool_input,
     })
+}
+
+fn is_cancelled(cancel: Option<&AtomicBool>) -> bool {
+    cancel
+        .map(|cancel| cancel.load(Ordering::Relaxed))
+        .unwrap_or(false)
 }
 
 fn user_item(text: String) -> ResponseItem {

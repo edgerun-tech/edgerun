@@ -116,10 +116,15 @@ pub mod chrono {
     }
 
     pub fn unix_seconds_to_chrono(value: i64) -> Result<ChronoUtcDateTime, ChronoTimeError> {
-        ChronoUtc.timestamp_opt(value, 0).single().ok_or(ChronoTimeError::OutOfRange)
+        ChronoUtc
+            .timestamp_opt(value, 0)
+            .single()
+            .ok_or(ChronoTimeError::OutOfRange)
     }
 
-    pub fn datetime_utc_to_chrono(value: DateTimeUtc) -> Result<ChronoUtcDateTime, ChronoTimeError> {
+    pub fn datetime_utc_to_chrono(
+        value: DateTimeUtc,
+    ) -> Result<ChronoUtcDateTime, ChronoTimeError> {
         Ok(ChronoUtcDateTime { inner: value })
     }
 
@@ -127,7 +132,11 @@ pub mod chrono {
         value.inner
     }
 
-    pub fn is_fresh_since(now: ChronoUtcDateTime, fetched_at: ChronoUtcDateTime, ttl: Duration) -> bool {
+    pub fn is_fresh_since(
+        now: ChronoUtcDateTime,
+        fetched_at: ChronoUtcDateTime,
+        ttl: Duration,
+    ) -> bool {
         if ttl.is_zero() {
             return false;
         }
@@ -203,7 +212,10 @@ pub mod chrono {
 
     impl ChronoDuration {
         pub fn seconds(value: i64) -> Self {
-            Self { secs: value, nanos: 0 }
+            Self {
+                secs: value,
+                nanos: 0,
+            }
         }
 
         pub fn minutes(value: i64) -> Self {
@@ -377,7 +389,8 @@ pub mod chrono {
 
     impl core::fmt::Display for FormattedDateTime {
         fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-            let (year, month, day, hour, minute, _second) = unix_secs_to_parts(self.inner.unix_secs);
+            let (year, month, day, hour, minute, _second) =
+                unix_secs_to_parts(self.inner.unix_secs);
             let mut text = self.pattern.clone();
             text = text.replace("%Y", &format!("{year:04}"));
             text = text.replace("%m", &format!("{month:02}"));
@@ -436,7 +449,14 @@ pub mod chrono {
         }
     }
 
-    fn date_to_unix_secs(year: u32, month: u32, day: u32, hour: u32, minute: u32, second: u32) -> i64 {
+    fn date_to_unix_secs(
+        year: u32,
+        month: u32,
+        day: u32,
+        hour: u32,
+        minute: u32,
+        second: u32,
+    ) -> i64 {
         let mut days: i64 = 0;
         for y in 1970..year {
             days += if is_leap_year(y) { 366 } else { 365 };

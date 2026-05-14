@@ -154,11 +154,7 @@ impl<E: Source> Writer<E> for Buffer<'_> {
             });
         } else {
             unsafe {
-                copy_nonoverlapping(
-                    bytes.as_ptr(),
-                    self.ptr.as_ptr().add(self.len),
-                    bytes.len(),
-                );
+                copy_nonoverlapping(bytes.as_ptr(), self.ptr.as_ptr().add(self.len), bytes.len());
             }
             self.len += bytes.len();
             Ok(())
@@ -192,11 +188,7 @@ mod tests {
 
         let mut bytes = [MaybeUninit::<u8>::new(0xcc); 256];
         let mut serializer = Serializer::new(Buffer::from(&mut bytes), (), ());
-        serialize_using::<_, Panic>(
-            &PaddedExample { a: 0u8, b: 0u64 },
-            &mut serializer,
-        )
-        .unwrap();
+        serialize_using::<_, Panic>(&PaddedExample { a: 0u8, b: 0u64 }, &mut serializer).unwrap();
         let buffer = serializer.into_writer();
         assert!(&buffer[0..size_of::<ArchivedPaddedExample>()]
             .iter()

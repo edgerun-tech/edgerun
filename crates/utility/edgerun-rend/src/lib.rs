@@ -55,8 +55,8 @@ use core::sync::atomic::{AtomicI32, AtomicU32};
 use core::sync::atomic::{AtomicI64, AtomicU64};
 use core::{
     num::{
-        NonZeroI128, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroU128,
-        NonZeroU16, NonZeroU32, NonZeroU64,
+        NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI128, NonZeroU16, NonZeroU32, NonZeroU64,
+        NonZeroU128,
     },
     sync::atomic::Ordering,
 };
@@ -804,35 +804,27 @@ mod tests {
             // i64
             assert_eq!(
                 [0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01],
-                transmute::<_, [u8; 8]>(i64_le::from_native(
-                    0x0102030405060708
-                )),
+                transmute::<_, [u8; 8]>(i64_le::from_native(0x0102030405060708)),
             );
             assert_eq!(
                 [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08],
-                transmute::<_, [u8; 8]>(i64_be::from_native(
-                    0x0102030405060708
-                )),
+                transmute::<_, [u8; 8]>(i64_be::from_native(0x0102030405060708)),
             );
 
             // i128
             assert_eq!(
                 [
-                    0x10, 0x0f, 0x0e, 0x0d, 0x0c, 0x0b, 0x0a, 0x09, 0x08, 0x07,
-                    0x06, 0x05, 0x04, 0x03, 0x02, 0x01
+                    0x10, 0x0f, 0x0e, 0x0d, 0x0c, 0x0b, 0x0a, 0x09, 0x08, 0x07, 0x06, 0x05, 0x04,
+                    0x03, 0x02, 0x01
                 ],
-                transmute::<_, [u8; 16]>(i128_le::from_native(
-                    0x0102030405060708090a0b0c0d0e0f10
-                )),
+                transmute::<_, [u8; 16]>(i128_le::from_native(0x0102030405060708090a0b0c0d0e0f10)),
             );
             assert_eq!(
                 [
-                    0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
-                    0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10
+                    0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
+                    0x0e, 0x0f, 0x10
                 ],
-                transmute::<_, [u8; 16]>(i128_be::from_native(
-                    0x0102030405060708090a0b0c0d0e0f10
-                )),
+                transmute::<_, [u8; 16]>(i128_be::from_native(0x0102030405060708090a0b0c0d0e0f10)),
             );
         }
     }
@@ -874,35 +866,27 @@ mod tests {
             // u64
             assert_eq!(
                 [0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01],
-                transmute::<_, [u8; 8]>(u64_le::from_native(
-                    0x0102030405060708
-                )),
+                transmute::<_, [u8; 8]>(u64_le::from_native(0x0102030405060708)),
             );
             assert_eq!(
                 [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08],
-                transmute::<_, [u8; 8]>(u64_be::from_native(
-                    0x0102030405060708
-                )),
+                transmute::<_, [u8; 8]>(u64_be::from_native(0x0102030405060708)),
             );
 
             // u128
             assert_eq!(
                 [
-                    0x10, 0x0f, 0x0e, 0x0d, 0x0c, 0x0b, 0x0a, 0x09, 0x08, 0x07,
-                    0x06, 0x05, 0x04, 0x03, 0x02, 0x01
+                    0x10, 0x0f, 0x0e, 0x0d, 0x0c, 0x0b, 0x0a, 0x09, 0x08, 0x07, 0x06, 0x05, 0x04,
+                    0x03, 0x02, 0x01
                 ],
-                transmute::<_, [u8; 16]>(u128_le::from_native(
-                    0x0102030405060708090a0b0c0d0e0f10
-                )),
+                transmute::<_, [u8; 16]>(u128_le::from_native(0x0102030405060708090a0b0c0d0e0f10)),
             );
             assert_eq!(
                 [
-                    0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
-                    0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10
+                    0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
+                    0x0e, 0x0f, 0x10
                 ],
-                transmute::<_, [u8; 16]>(u128_be::from_native(
-                    0x0102030405060708090a0b0c0d0e0f10
-                )),
+                transmute::<_, [u8; 16]>(u128_be::from_native(0x0102030405060708090a0b0c0d0e0f10)),
             );
         }
     }
@@ -920,29 +904,21 @@ mod tests {
             // f32
             assert_eq!(
                 [0xdb, 0x0f, 0x49, 0x40],
-                transmute::<_, [u8; 4]>(f32_le::from_native(
-                    core::f32::consts::PI
-                )),
+                transmute::<_, [u8; 4]>(f32_le::from_native(core::f32::consts::PI)),
             );
             assert_eq!(
                 [0x40, 0x49, 0x0f, 0xdb],
-                transmute::<_, [u8; 4]>(f32_be::from_native(
-                    core::f32::consts::PI
-                )),
+                transmute::<_, [u8; 4]>(f32_be::from_native(core::f32::consts::PI)),
             );
 
             // f64
             assert_eq!(
                 [0x18, 0x2d, 0x44, 0x54, 0xfb, 0x21, 0x09, 0x40],
-                transmute::<_, [u8; 8]>(f64_le::from_native(
-                    core::f64::consts::PI
-                )),
+                transmute::<_, [u8; 8]>(f64_le::from_native(core::f64::consts::PI)),
             );
             assert_eq!(
                 [0x40, 0x09, 0x21, 0xfb, 0x54, 0x44, 0x2d, 0x18],
-                transmute::<_, [u8; 8]>(f64_be::from_native(
-                    core::f64::consts::PI
-                )),
+                transmute::<_, [u8; 8]>(f64_be::from_native(core::f64::consts::PI)),
             );
 
             // char
@@ -984,36 +960,28 @@ mod tests {
             // NonZeroI32
             assert_eq!(
                 [0x04, 0x03, 0x02, 0x01],
-                transmute::<_, [u8; 4]>(NonZeroI32_le::new_unchecked(
-                    0x01020304
-                )),
+                transmute::<_, [u8; 4]>(NonZeroI32_le::new_unchecked(0x01020304)),
             );
             assert_eq!(
                 [0x01, 0x02, 0x03, 0x04],
-                transmute::<_, [u8; 4]>(NonZeroI32_be::new_unchecked(
-                    0x01020304
-                )),
+                transmute::<_, [u8; 4]>(NonZeroI32_be::new_unchecked(0x01020304)),
             );
 
             // NonZeroI64
             assert_eq!(
                 [0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01],
-                transmute::<_, [u8; 8]>(NonZeroI64_le::new_unchecked(
-                    0x0102030405060708
-                )),
+                transmute::<_, [u8; 8]>(NonZeroI64_le::new_unchecked(0x0102030405060708)),
             );
             assert_eq!(
                 [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08],
-                transmute::<_, [u8; 8]>(NonZeroI64_be::new_unchecked(
-                    0x0102030405060708
-                )),
+                transmute::<_, [u8; 8]>(NonZeroI64_be::new_unchecked(0x0102030405060708)),
             );
 
             // NonZeroI128
             assert_eq!(
                 [
-                    0x10, 0x0f, 0x0e, 0x0d, 0x0c, 0x0b, 0x0a, 0x09, 0x08, 0x07,
-                    0x06, 0x05, 0x04, 0x03, 0x02, 0x01
+                    0x10, 0x0f, 0x0e, 0x0d, 0x0c, 0x0b, 0x0a, 0x09, 0x08, 0x07, 0x06, 0x05, 0x04,
+                    0x03, 0x02, 0x01
                 ],
                 transmute::<_, [u8; 16]>(NonZeroI128_le::new_unchecked(
                     0x0102030405060708090a0b0c0d0e0f10
@@ -1021,8 +989,8 @@ mod tests {
             );
             assert_eq!(
                 [
-                    0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
-                    0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10
+                    0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
+                    0x0e, 0x0f, 0x10
                 ],
                 transmute::<_, [u8; 16]>(NonZeroI128_be::new_unchecked(
                     0x0102030405060708090a0b0c0d0e0f10
@@ -1058,36 +1026,28 @@ mod tests {
             // NonZeroU32
             assert_eq!(
                 [0x04, 0x03, 0x02, 0x01],
-                transmute::<_, [u8; 4]>(NonZeroU32_le::new_unchecked(
-                    0x01020304
-                )),
+                transmute::<_, [u8; 4]>(NonZeroU32_le::new_unchecked(0x01020304)),
             );
             assert_eq!(
                 [0x01, 0x02, 0x03, 0x04],
-                transmute::<_, [u8; 4]>(NonZeroU32_be::new_unchecked(
-                    0x01020304
-                )),
+                transmute::<_, [u8; 4]>(NonZeroU32_be::new_unchecked(0x01020304)),
             );
 
             // NonZeroU64
             assert_eq!(
                 [0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01],
-                transmute::<_, [u8; 8]>(NonZeroU64_le::new_unchecked(
-                    0x0102030405060708
-                )),
+                transmute::<_, [u8; 8]>(NonZeroU64_le::new_unchecked(0x0102030405060708)),
             );
             assert_eq!(
                 [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08],
-                transmute::<_, [u8; 8]>(NonZeroU64_be::new_unchecked(
-                    0x0102030405060708
-                )),
+                transmute::<_, [u8; 8]>(NonZeroU64_be::new_unchecked(0x0102030405060708)),
             );
 
             // NonZeroU128
             assert_eq!(
                 [
-                    0x10, 0x0f, 0x0e, 0x0d, 0x0c, 0x0b, 0x0a, 0x09, 0x08, 0x07,
-                    0x06, 0x05, 0x04, 0x03, 0x02, 0x01
+                    0x10, 0x0f, 0x0e, 0x0d, 0x0c, 0x0b, 0x0a, 0x09, 0x08, 0x07, 0x06, 0x05, 0x04,
+                    0x03, 0x02, 0x01
                 ],
                 transmute::<_, [u8; 16]>(NonZeroU128_le::new_unchecked(
                     0x0102030405060708090a0b0c0d0e0f10
@@ -1095,8 +1055,8 @@ mod tests {
             );
             assert_eq!(
                 [
-                    0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a,
-                    0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10
+                    0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
+                    0x0e, 0x0f, 0x10
                 ],
                 transmute::<_, [u8; 16]>(NonZeroU128_be::new_unchecked(
                     0x0102030405060708090a0b0c0d0e0f10
@@ -1109,20 +1069,18 @@ mod tests {
     #[test]
     fn unaligned_non_zero() {
         use bytecheck::{
-            rancor::{Failure, Strategy},
             CheckBytes,
+            rancor::{Failure, Strategy},
         };
-        use unaligned::{u32_ule, NonZeroU32_ule};
+        use unaligned::{NonZeroU32_ule, u32_ule};
 
         let zero = u32_ule::from_native(0);
         let ptr = (&zero as *const u32_ule).cast::<NonZeroU32_ule>();
         let mut unit = ();
         let context = Strategy::<_, Failure>::wrap(&mut unit);
         unsafe {
-            <NonZeroU32_ule as CheckBytes<Strategy<(), Failure>>>::check_bytes(
-                ptr, context,
-            )
-            .unwrap_err();
+            <NonZeroU32_ule as CheckBytes<Strategy<(), Failure>>>::check_bytes(ptr, context)
+                .unwrap_err();
         }
     }
 

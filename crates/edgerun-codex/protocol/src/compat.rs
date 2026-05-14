@@ -174,7 +174,6 @@ pub mod absolute_path {
         out
     }
 
-    #[cfg(test)]
     pub mod test_support {
         use super::AbsolutePathBuf;
         use std::path::PathBuf;

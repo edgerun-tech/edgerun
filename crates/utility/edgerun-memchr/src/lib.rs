@@ -209,7 +209,6 @@ pub use crate::memchr::{
 #[macro_use]
 mod macros;
 
-
 pub mod arch;
 mod cow;
 mod ext;

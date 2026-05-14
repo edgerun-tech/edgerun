@@ -40,8 +40,7 @@ pub fn derive(mut input: DeriveInput) -> Result<TokenStream, Error> {
     }
 
     let name = &input.ident;
-    let (impl_generics, ty_generics, where_clause) =
-        input.generics.split_for_impl();
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
     Ok(quote! {
         unsafe impl #impl_generics #rkyv_path::Portable for #name #ty_generics

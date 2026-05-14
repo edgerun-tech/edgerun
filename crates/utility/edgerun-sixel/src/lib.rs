@@ -272,7 +272,7 @@ fn default_palette() -> [Rgba; 256] {
 
 #[cfg(test)]
 mod tests {
-    use super::{sixel_decode_from_dcs, DcsSettings};
+    use super::{DcsSettings, sixel_decode_from_dcs};
 
     #[test]
     fn decodes_basic_sixel_payload() {

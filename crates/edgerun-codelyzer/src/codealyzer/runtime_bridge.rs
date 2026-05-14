@@ -6,9 +6,11 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use crate::codealyzer::crate_model::{CallGraphEdge, Confidence};
+#[cfg(feature = "wire-rkyv")]
 use rkyv::{Archive, Deserialize as RkyvDeserialize, Serialize as RkyvSerialize};
 
-#[derive(Debug, Clone, Archive, RkyvSerialize, RkyvDeserialize)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "wire-rkyv", derive(Archive, RkyvSerialize, RkyvDeserialize))]
 pub struct RuntimeCallEvent {
     pub caller_id: String,
     pub callee_id: String,
@@ -81,6 +83,7 @@ fn function_matches_crate_path(function_id: &str, crate_dir: &Path) -> bool {
 }
 
 /// Load runtime event observations from a rkyv payload.
+#[cfg(feature = "wire-rkyv")]
 pub fn load_runtime_events(path: &Path) -> Result<Vec<RuntimeCallEvent>, String> {
     let bytes = std::fs::read(path).map_err(|err| err.to_string())?;
     if bytes.is_empty() {

@@ -1,9 +1,39 @@
 use super::*;
-use codex_utils_absolute_path::AbsolutePathBuf;
-use codex_utils_absolute_path::AbsolutePathBufGuard;
+use codex_protocol::compat::absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
+use std::collections::HashMap;
 use std::num::NonZeroU64;
+use std::path::Path;
+use std::path::PathBuf;
 use tempfile::tempdir;
+
+struct CurrentDirGuard {
+    original: PathBuf,
+}
+
+impl CurrentDirGuard {
+    fn new(path: &Path) -> Self {
+        let original = std::env::current_dir().expect("current dir");
+        std::env::set_current_dir(path).expect("set current dir");
+        Self { original }
+    }
+}
+
+impl Drop for CurrentDirGuard {
+    fn drop(&mut self) {
+        std::env::set_current_dir(&self.original).expect("restore current dir");
+    }
+}
+
+mod toml {
+    use edgerun_serde::de::DeserializeOwned;
+
+    pub fn from_str<T: DeserializeOwned>(input: &str) -> Result<T, edgerun_json::JsonError> {
+        let toml = edgerun_json::from_toml_str(input)
+            .map_err(|error| edgerun_json::JsonError::Message(error.to_string()))?;
+        edgerun_json::from_serde_value(edgerun_json::toml_to_json(toml))
+    }
+}
 
 #[test]
 fn test_deserialize_ollama_model_provider_toml() {
@@ -52,9 +82,10 @@ query_params = { api-version = "2025-04-01-preview" }
         auth: None,
         aws: None,
         wire_api: WireApi::Responses,
-        query_params: Some(maplit::hashmap! {
-            "api-version".to_string() => "2025-04-01-preview".to_string(),
-        }),
+        query_params: Some(HashMap::from([(
+            "api-version".to_string(),
+            "2025-04-01-preview".to_string(),
+        )])),
         http_headers: None,
         env_http_headers: None,
         request_max_retries: None,
@@ -88,12 +119,14 @@ env_http_headers = { "X-Example-Env-Header" = "EXAMPLE_ENV_VAR" }
         aws: None,
         wire_api: WireApi::Responses,
         query_params: None,
-        http_headers: Some(maplit::hashmap! {
-            "X-Example-Header".to_string() => "example-value".to_string(),
-        }),
-        env_http_headers: Some(maplit::hashmap! {
-            "X-Example-Env-Header".to_string() => "EXAMPLE_ENV_VAR".to_string(),
-        }),
+        http_headers: Some(HashMap::from([(
+            "X-Example-Header".to_string(),
+            "example-value".to_string(),
+        )])),
+        env_http_headers: Some(HashMap::from([(
+            "X-Example-Env-Header".to_string(),
+            "EXAMPLE_ENV_VAR".to_string(),
+        )])),
         request_max_retries: None,
         stream_max_retries: None,
         stream_idle_timeout_ms: None,
@@ -201,7 +234,7 @@ args = ["--format=text"]
         "#;
 
     let provider: ModelProviderInfo = {
-        let _guard = AbsolutePathBufGuard::new(base_dir.path());
+        let _guard = CurrentDirGuard::new(base_dir.path());
         toml::from_str(provider_toml).unwrap()
     };
 
@@ -430,7 +463,7 @@ refresh_interval_ms = 0
         "#;
 
     let provider: ModelProviderInfo = {
-        let _guard = AbsolutePathBufGuard::new(base_dir.path());
+        let _guard = CurrentDirGuard::new(base_dir.path());
         toml::from_str(provider_toml).unwrap()
     };
 

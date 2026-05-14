@@ -313,7 +313,9 @@ fn parse_item(input: TokenStream) -> Result<Item, String> {
             TokenTree::Ident(ident) if ident.to_string() == "struct" => {
                 let name = next_ident(&mut tokens)?;
                 let body = tokens.find_map(named_body_group);
-                let fields = body.map(|group| parse_named_fields(group.stream())).transpose()?;
+                let fields = body
+                    .map(|group| parse_named_fields(group.stream()))
+                    .transpose()?;
                 return Ok(Item {
                     kind: ItemKind::Struct,
                     name,
@@ -325,7 +327,9 @@ fn parse_item(input: TokenStream) -> Result<Item, String> {
             TokenTree::Ident(ident) if ident.to_string() == "enum" => {
                 let name = next_ident(&mut tokens)?;
                 let body = tokens.find_map(named_body_group);
-                let variants = body.map(|group| parse_variants(group.stream())).transpose()?;
+                let variants = body
+                    .map(|group| parse_variants(group.stream()))
+                    .transpose()?;
                 return Ok(Item {
                     kind: ItemKind::Enum,
                     name,
@@ -474,9 +478,11 @@ fn tokens_to_string(tokens: Vec<TokenTree>) -> String {
 }
 
 fn field_json_key(field: &Field, container: &ContainerAttrs) -> String {
-    FieldAttrs::from_attrs(&field.attrs).rename.unwrap_or_else(|| {
-        apply_rename_all(&json_ident(&field.name), container.rename_all.as_deref())
-    })
+    FieldAttrs::from_attrs(&field.attrs)
+        .rename
+        .unwrap_or_else(|| {
+            apply_rename_all(&json_ident(&field.name), container.rename_all.as_deref())
+        })
 }
 
 fn field_json_keys(field: &Field, container: &ContainerAttrs) -> Vec<String> {
@@ -612,7 +618,8 @@ impl FieldAttrs {
                 if let Some(skip) = pairs.value("skip_serializing_if") {
                     out.skip_serializing_if = Some(unquote_string(skip));
                 }
-                out.skip_serializing |= pairs.has_flag("skip_serializing") || pairs.has_flag("skip");
+                out.skip_serializing |=
+                    pairs.has_flag("skip_serializing") || pairs.has_flag("skip");
                 out.skip_deserializing |=
                     pairs.has_flag("skip_deserializing") || pairs.has_flag("skip");
             }
@@ -674,7 +681,8 @@ fn parse_attr_pairs(input: TokenStream) -> AttrPairs {
             continue;
         };
         let key = ident.to_string();
-        let value = if matches!(tokens.peek(), Some(TokenTree::Punct(punct)) if punct.as_char() == '=') {
+        let value = if matches!(tokens.peek(), Some(TokenTree::Punct(punct)) if punct.as_char() == '=')
+        {
             tokens.next();
             let mut value = Vec::new();
             while let Some(next) = tokens.peek() {

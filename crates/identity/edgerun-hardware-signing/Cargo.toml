@@ -34,7 +34,7 @@ edgerun-yubikey = { version = "0.1", path = "../edgerun-yubikey", optional = tru
 edgerun-crypto = { workspace = true, default-features = false, features = ["p256"] }
 
 [target.'cfg(target_os = "android")'.dependencies]
-jni = { version = "0.22", optional = true }
+jni = { workspace = true, optional = true }
 
 [lints]
 workspace = true

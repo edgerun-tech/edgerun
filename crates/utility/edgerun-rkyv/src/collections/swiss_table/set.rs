@@ -87,14 +87,11 @@ impl<K, H: Hasher + Default> ArchivedHashSet<K, H> {
         S::Error: Source,
     {
         Ok(HashSetResolver(
-            ArchivedHashMap::<K, (), H>::serialize_from_iter::<
-                _,
-                _,
-                (),
-                _,
-                _,
-                _,
-            >(iter.map(|x| (x, ())), load_factor, serializer)?,
+            ArchivedHashMap::<K, (), H>::serialize_from_iter::<_, _, (), _, _, _>(
+                iter.map(|x| (x, ())),
+                load_factor,
+                serializer,
+            )?,
         ))
     }
 }

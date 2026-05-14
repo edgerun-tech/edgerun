@@ -1,8 +1,10 @@
+use std::collections::HashMap;
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int, c_void};
 use std::path::Path;
 use std::path::PathBuf;
 use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
@@ -10,13 +12,14 @@ use edgerun_ui_core::gpu::gl::GlRenderer;
 use edgerun_ui_core::gpu::{
     Color4, FontAtlas, GpuScene, UiAction, UiEvent, UiIcon, UiKey, UiKeyModifiers, UiPainter,
     UiRect, UiRuntimeState, UiShadcnActivity, UiShadcnButtonVariant, UiShadcnChatClientAction,
-    UiShadcnChatClientSpec, UiShadcnChatRole, UiShadcnConversationMessage, UiShadcnSessionRow,
-    UiShadcnStatusTone, UiTextBuffer, UiTextBufferAction, shadcn_chat_client,
-    shadcn_chat_message_height,
+    UiShadcnChatClientIconAction, UiShadcnChatClientSpec, UiShadcnChatRole,
+    UiShadcnConversationMessage, UiShadcnSessionRow, UiShadcnStatusTone, UiTextBuffer,
+    UiTextBufferAction, shadcn_chat_client, shadcn_chat_message_height,
 };
 
 use super::{AgentEvent, codex_home, provider, read_chatgpt_auth, run_agent_loop, user_item};
 use codex_core::TokenUsage;
+use codex_core::protocol::protocol::RateLimitSnapshot;
 
 const SDL_INIT_VIDEO: u32 = 0x0000_0020;
 const SDL_WINDOWPOS_CENTERED: c_int = 0x2fff_0000u32 as c_int;
@@ -31,6 +34,7 @@ const SDL_MOUSEBUTTONUP: u32 = 0x402;
 const SDL_MOUSEWHEEL: u32 = 0x403;
 const SDL_WINDOWEVENT: u32 = 0x200;
 const SDL_WINDOWEVENT_RESIZED: u8 = 0x05;
+const SDL_WINDOWEVENT_SIZE_CHANGED: u8 = 0x06;
 const SDL_GL_CONTEXT_MAJOR_VERSION: c_int = 17;
 const SDL_GL_CONTEXT_MINOR_VERSION: c_int = 18;
 const SDL_GL_CONTEXT_PROFILE_MASK: c_int = 21;
@@ -44,6 +48,7 @@ const SEND_ID: u32 = 81_000;
 const NEW_CHAT_ID: u32 = 81_001;
 const CLEAR_ID: u32 = 81_002;
 const TRANSCRIPT_SCROLL_ID: u32 = 81_003;
+const SESSION_ROW_BASE_ID: u32 = 88_000;
 const MAX_PROMPT_HISTORY: usize = 100;
 const MAX_DIFF_DISPLAY_BYTES: usize = 12 * 1024;
 
@@ -131,6 +136,7 @@ unsafe extern "C" {
     fn SDL_GL_DeleteContext(context: SdlGlContext);
     fn SDL_GL_SetSwapInterval(interval: c_int) -> c_int;
     fn SDL_GL_SwapWindow(window: *mut SDL_Window);
+    fn SDL_SetWindowMinimumSize(window: *mut SDL_Window, min_w: c_int, min_h: c_int);
     fn SDL_PollEvent(event: *mut SdlEvent) -> c_int;
     fn SDL_Delay(ms: u32);
     fn SDL_StartTextInput();
@@ -155,6 +161,129 @@ struct Message {
     text: String,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct UiSessionId(u64);
+
+#[derive(Clone, Debug)]
+struct UiSession {
+    id: UiSessionId,
+    title: String,
+    status: String,
+    busy: bool,
+    turns: usize,
+    tools_run: usize,
+    failures: usize,
+    usage: UsageState,
+    rate_limits: RateLimitState,
+    active_tool: Option<String>,
+    messages: Vec<Message>,
+    assistant_streaming: bool,
+    reasoning_streaming: bool,
+}
+
+impl UiSession {
+    fn new(id: UiSessionId, title: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            id,
+            title: title.into(),
+            status: "Ready".to_string(),
+            busy: false,
+            turns: 0,
+            tools_run: 0,
+            failures: 0,
+            usage: UsageState::default(),
+            rate_limits: RateLimitState::default(),
+            active_tool: None,
+            messages: vec![Message {
+                role: Role::Assistant,
+                text: message.into(),
+            }],
+            assistant_streaming: false,
+            reasoning_streaming: false,
+        }
+    }
+
+    fn reset(&mut self, message: &str) {
+        self.messages.clear();
+        self.messages.push(Message {
+            role: Role::Assistant,
+            text: message.to_string(),
+        });
+        self.turns = 0;
+        self.tools_run = 0;
+        self.failures = 0;
+        self.usage = UsageState::default();
+        self.rate_limits = RateLimitState::default();
+        self.active_tool = None;
+        self.status = "Ready".to_string();
+        self.busy = false;
+        self.assistant_streaming = false;
+        self.reasoning_streaming = false;
+    }
+}
+
+#[derive(Debug)]
+struct SessionStore {
+    sessions: Vec<UiSession>,
+    selected: UiSessionId,
+    next_id: u64,
+}
+
+impl SessionStore {
+    fn initial() -> Self {
+        let selected = UiSessionId(1);
+        Self {
+            sessions: vec![UiSession::new(
+                selected,
+                "Current workspace",
+                "EdgeRun Codex UI is ready for local workspace work.",
+            )],
+            selected,
+            next_id: 2,
+        }
+    }
+
+    fn selected(&self) -> &UiSession {
+        self.sessions
+            .iter()
+            .find(|session| session.id == self.selected)
+            .expect("selected session must exist")
+    }
+
+    fn selected_mut(&mut self) -> &mut UiSession {
+        self.sessions
+            .iter_mut()
+            .find(|session| session.id == self.selected)
+            .expect("selected session must exist")
+    }
+
+    fn session_mut(&mut self, id: UiSessionId) -> Option<&mut UiSession> {
+        self.sessions.iter_mut().find(|session| session.id == id)
+    }
+
+    fn any_busy(&self) -> bool {
+        self.sessions.iter().any(|session| session.busy)
+    }
+
+    fn create_session(&mut self) -> UiSessionId {
+        let id = UiSessionId(self.next_id);
+        self.next_id += 1;
+        let title = format!("Session {}", id.0);
+        self.sessions
+            .insert(0, UiSession::new(id, title, "New chat started."));
+        self.selected = id;
+        id
+    }
+
+    fn select_by_sidebar_index(&mut self, index: usize) -> bool {
+        let Some(session) = self.sessions.get(index) else {
+            return false;
+        };
+        self.selected = session.id;
+        true
+    }
+}
+
 #[derive(Debug)]
 struct CodexUi {
     model: String,
@@ -163,30 +292,38 @@ struct CodexUi {
     busy: bool,
     animation_tick: u32,
     runtime: UiRuntimeState,
-    turns: usize,
-    tools_run: usize,
-    failures: usize,
-    usage: UsageState,
-    active_tool: Option<String>,
+    sessions: SessionStore,
+    clear_confirm_session: Option<UiSessionId>,
     prompt_history: Vec<String>,
     prompt_history_index: Option<usize>,
     prompt_history_path: Option<PathBuf>,
-    messages: Vec<Message>,
-    assistant_streaming: bool,
-    reasoning_streaming: bool,
     command_tx: mpsc::Sender<WorkerCommand>,
     event_rx: mpsc::Receiver<WorkerEvent>,
 }
 
 #[derive(Debug)]
 enum WorkerCommand {
-    Prompt(String),
-    Reset,
+    Prompt {
+        session_id: UiSessionId,
+        prompt: String,
+    },
+    Reset {
+        session_id: UiSessionId,
+    },
 }
 
 #[derive(Debug)]
 enum WorkerEvent {
     Ready,
+    StartupError(String),
+    Session {
+        session_id: UiSessionId,
+        event: SessionWorkerEvent,
+    },
+}
+
+#[derive(Debug)]
+enum SessionWorkerEvent {
     Status(String),
     AssistantText(String),
     AssistantTextDelta(String),
@@ -202,12 +339,46 @@ enum WorkerEvent {
     Error(String),
     Done,
     Usage(TokenUsage),
+    RateLimits(RateLimitSnapshot),
 }
 
 #[derive(Clone, Debug, Default)]
 struct UsageState {
     total: TokenUsage,
     last: Option<TokenUsage>,
+}
+
+#[derive(Clone, Debug, Default)]
+struct RateLimitState {
+    latest: Option<RateLimitSnapshot>,
+}
+
+impl RateLimitState {
+    fn record(&mut self, snapshot: RateLimitSnapshot) {
+        self.latest = Some(snapshot);
+    }
+
+    fn label(&self) -> String {
+        let Some(snapshot) = &self.latest else {
+            return "limits pending".to_string();
+        };
+        let name = snapshot.limit_name.as_deref().unwrap_or("limits");
+        if let Some(primary) = snapshot.primary.as_ref() {
+            format!("{name} {:.0}% used", primary.used_percent.clamp(0.0, 100.0))
+        } else if let Some(credits) = snapshot.credits.as_ref() {
+            if credits.unlimited {
+                "credits unlimited".to_string()
+            } else if let Some(balance) = credits.balance.as_deref() {
+                format!("credits {balance}")
+            } else if credits.has_credits {
+                "credits available".to_string()
+            } else {
+                "credits empty".to_string()
+            }
+        } else {
+            name.to_string()
+        }
+    }
 }
 
 impl UsageState {
@@ -264,20 +435,11 @@ pub fn run(options: UiOptions) -> Result<(), String> {
         busy: true,
         animation_tick: 0,
         runtime,
-        turns: 0,
-        tools_run: 0,
-        failures: 0,
-        usage: UsageState::default(),
-        active_tool: None,
+        sessions: SessionStore::initial(),
+        clear_confirm_session: None,
         prompt_history,
         prompt_history_index: None,
         prompt_history_path,
-        messages: vec![Message {
-            role: Role::Assistant,
-            text: "EdgeRun Codex UI is ready for local workspace work.".to_string(),
-        }],
-        assistant_streaming: false,
-        reasoning_streaming: false,
         command_tx,
         event_rx,
     };
@@ -288,8 +450,9 @@ pub fn run(options: UiOptions) -> Result<(), String> {
         state.drain_events();
         build_scene(&mut scene, &atlas, &state, 1120.0, 720.0);
         println!(
-            "edgerun-codex ui scene rects={} text_quads={}",
+            "edgerun-codex ui scene rects={} icon_quads={} text_quads={}",
             scene.rects().len(),
+            scene.icon_quads().len(),
             scene.text_quads().len()
         );
         return Ok(());
@@ -304,85 +467,148 @@ fn start_worker(
     event_tx: mpsc::Sender<WorkerEvent>,
 ) {
     thread::spawn(move || {
-        let runtime = match edgerun_tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-        {
-            Ok(runtime) => runtime,
-            Err(error) => {
-                let _ = event_tx.send(WorkerEvent::Error(format!("runtime: {error}")));
-                return;
-            }
-        };
         let auth = match read_chatgpt_auth() {
             Ok(auth) => auth,
             Err(error) => {
-                let _ = event_tx.send(WorkerEvent::Error(format!("auth: {error}")));
+                let _ = event_tx.send(WorkerEvent::StartupError(format!("auth: {error}")));
                 return;
             }
         };
-        let client = codex_core::ModelClient::new_native(model, provider(), auth);
-        let mut history = Vec::new();
+        let histories: Arc<Mutex<HashMap<UiSessionId, Vec<codex_core::ResponseItem>>>> =
+            Arc::new(Mutex::new(HashMap::new()));
         let _ = event_tx.send(WorkerEvent::Ready);
 
         while let Ok(command) = command_rx.recv() {
             match command {
-                WorkerCommand::Reset => {
-                    history.clear();
-                    let _ = event_tx.send(WorkerEvent::Status("New chat".to_string()));
+                WorkerCommand::Reset { session_id } => {
+                    if let Ok(mut histories) = histories.lock() {
+                        histories.remove(&session_id);
+                    }
+                    send_session_event(
+                        &event_tx,
+                        session_id,
+                        SessionWorkerEvent::Status("New chat".to_string()),
+                    );
                 }
-                WorkerCommand::Prompt(prompt) => {
+                WorkerCommand::Prompt { session_id, prompt } => {
+                    let mut history = histories
+                        .lock()
+                        .ok()
+                        .and_then(|mut histories| histories.remove(&session_id))
+                        .unwrap_or_default();
                     history.push(user_item(prompt));
-                    let _ = event_tx.send(WorkerEvent::Status("Thinking".to_string()));
+                    send_session_event(
+                        &event_tx,
+                        session_id,
+                        SessionWorkerEvent::Status("Thinking".to_string()),
+                    );
                     let tx = event_tx.clone();
-                    let mut emit = move |event: AgentEvent| match event {
-                        AgentEvent::AssistantText(text) => {
-                            let _ = tx.send(WorkerEvent::AssistantText(text));
-                        }
-                        AgentEvent::AssistantTextDelta(text) => {
-                            let _ = tx.send(WorkerEvent::AssistantTextDelta(text));
-                        }
-                        AgentEvent::ReasoningDelta(text) => {
-                            let _ = tx.send(WorkerEvent::ReasoningDelta(text));
-                        }
-                        AgentEvent::ToolDiff(diff) => {
-                            let _ = tx.send(WorkerEvent::ToolDiff(diff));
-                        }
-                        AgentEvent::ToolInputDelta(delta) => {
-                            let _ = tx.send(WorkerEvent::ToolInputDelta(delta));
-                        }
-                        AgentEvent::ToolStarted(name) => {
-                            let _ = tx.send(WorkerEvent::ToolStarted(name));
-                        }
-                        AgentEvent::ToolCompleted {
-                            name,
-                            summary,
-                            success,
-                        } => {
-                            let _ = tx.send(WorkerEvent::ToolCompleted {
+                    let histories = histories.clone();
+                    let auth = auth.clone();
+                    let model = model.clone();
+                    thread::spawn(move || {
+                        let runtime = match edgerun_tokio::runtime::Builder::new_current_thread()
+                            .enable_all()
+                            .build()
+                        {
+                            Ok(runtime) => runtime,
+                            Err(error) => {
+                                send_session_event(
+                                    &tx,
+                                    session_id,
+                                    SessionWorkerEvent::Error(format!("runtime: {error}")),
+                                );
+                                return;
+                            }
+                        };
+                        let client = codex_core::ModelClient::new_native(model, provider(), auth);
+                        let tx_for_emit = tx.clone();
+                        let mut emit = move |event: AgentEvent| match event {
+                            AgentEvent::AssistantText(text) => send_session_event(
+                                &tx_for_emit,
+                                session_id,
+                                SessionWorkerEvent::AssistantText(text),
+                            ),
+                            AgentEvent::AssistantTextDelta(text) => send_session_event(
+                                &tx_for_emit,
+                                session_id,
+                                SessionWorkerEvent::AssistantTextDelta(text),
+                            ),
+                            AgentEvent::ReasoningDelta(text) => send_session_event(
+                                &tx_for_emit,
+                                session_id,
+                                SessionWorkerEvent::ReasoningDelta(text),
+                            ),
+                            AgentEvent::ToolDiff(diff) => send_session_event(
+                                &tx_for_emit,
+                                session_id,
+                                SessionWorkerEvent::ToolDiff(diff),
+                            ),
+                            AgentEvent::ToolInputDelta(delta) => send_session_event(
+                                &tx_for_emit,
+                                session_id,
+                                SessionWorkerEvent::ToolInputDelta(delta),
+                            ),
+                            AgentEvent::ToolStarted(name) => send_session_event(
+                                &tx_for_emit,
+                                session_id,
+                                SessionWorkerEvent::ToolStarted(name),
+                            ),
+                            AgentEvent::ToolCompleted {
                                 name,
                                 summary,
                                 success,
-                            });
+                            } => send_session_event(
+                                &tx_for_emit,
+                                session_id,
+                                SessionWorkerEvent::ToolCompleted {
+                                    name,
+                                    summary,
+                                    success,
+                                },
+                            ),
+                            AgentEvent::Usage(usage) => send_session_event(
+                                &tx_for_emit,
+                                session_id,
+                                SessionWorkerEvent::Usage(usage),
+                            ),
+                            AgentEvent::RateLimits(snapshot) => send_session_event(
+                                &tx_for_emit,
+                                session_id,
+                                SessionWorkerEvent::RateLimits(snapshot),
+                            ),
+                        };
+                        match runtime.block_on(run_agent_loop(&client, history, Some(&mut emit))) {
+                            Ok((_, next_history)) => {
+                                if let Ok(mut histories) = histories.lock() {
+                                    histories.insert(session_id, next_history);
+                                }
+                                send_session_event(&tx, session_id, SessionWorkerEvent::Done);
+                            }
+                            Err(error) => {
+                                if let Ok(mut histories) = histories.lock() {
+                                    histories.remove(&session_id);
+                                }
+                                send_session_event(
+                                    &tx,
+                                    session_id,
+                                    SessionWorkerEvent::Error(error.to_string()),
+                                );
+                            }
                         }
-                        AgentEvent::Usage(usage) => {
-                            let _ = tx.send(WorkerEvent::Usage(usage));
-                        }
-                    };
-                    match runtime.block_on(run_agent_loop(&client, history, Some(&mut emit))) {
-                        Ok((_, next_history)) => {
-                            history = next_history;
-                            let _ = event_tx.send(WorkerEvent::Done);
-                        }
-                        Err(error) => {
-                            history = Vec::new();
-                            let _ = event_tx.send(WorkerEvent::Error(error.to_string()));
-                        }
-                    }
+                    });
                 }
             }
         }
     });
+}
+
+fn send_session_event(
+    tx: &mpsc::Sender<WorkerEvent>,
+    session_id: UiSessionId,
+    event: SessionWorkerEvent,
+) {
+    let _ = tx.send(WorkerEvent::Session { session_id, event });
 }
 
 fn run_window(frames: Option<u32>, mut state: CodexUi) -> Result<(), String> {
@@ -409,6 +635,9 @@ fn run_window(frames: Option<u32>, mut state: CodexUi) -> Result<(), String> {
     });
     if window.0.is_null() {
         return Err(format!("SDL_CreateWindow failed: {}", sdl_error()));
+    }
+    unsafe {
+        SDL_SetWindowMinimumSize(window.0, 640, 480);
     }
 
     let _context = GlContext(unsafe { SDL_GL_CreateContext(window.0) });
@@ -495,8 +724,13 @@ fn run_window(frames: Option<u32>, mut state: CodexUi) -> Result<(), String> {
                     }
                     scene_dirty = true;
                 }
-                SDL_WINDOWEVENT if event.window_event() == SDL_WINDOWEVENT_RESIZED => {
-                    width = event.data1().max(720);
+                SDL_WINDOWEVENT
+                    if matches!(
+                        event.window_event(),
+                        SDL_WINDOWEVENT_RESIZED | SDL_WINDOWEVENT_SIZE_CHANGED
+                    ) =>
+                {
+                    width = event.data1().max(640);
                     height = event.data2().max(480);
                     scene_dirty = true;
                 }
@@ -505,7 +739,7 @@ fn run_window(frames: Option<u32>, mut state: CodexUi) -> Result<(), String> {
         }
 
         if scene_dirty {
-            if state.busy {
+            if state.busy || state.sessions.any_busy() {
                 state.animation_tick = state.animation_tick.wrapping_add(1);
             }
             build_scene(&mut scene, &atlas, &state, width as f32, height as f32);
@@ -518,7 +752,7 @@ fn run_window(frames: Option<u32>, mut state: CodexUi) -> Result<(), String> {
         }
         if frames.is_some_and(|limit| rendered_frames >= limit) {
             running = false;
-        } else if frames.is_some() || state.busy {
+        } else if frames.is_some() || state.busy || state.sessions.any_busy() {
             scene_dirty = true;
         }
         unsafe {
@@ -539,61 +773,113 @@ impl CodexUi {
                     self.busy = false;
                     self.status = "Ready".to_string();
                 }
-                WorkerEvent::Status(status) => self.status = status,
-                WorkerEvent::AssistantText(text) => {
-                    self.messages.push(Message {
+                WorkerEvent::StartupError(error) => {
+                    self.busy = false;
+                    self.status = error.clone();
+                    let session = self.sessions.selected_mut();
+                    session.status = "Error".to_string();
+                    session.failures += 1;
+                    session.messages.push(Message {
+                        role: Role::Error,
+                        text: normalize_error_message(&error),
+                    });
+                }
+                WorkerEvent::Session { session_id, event } => {
+                    self.apply_session_event(session_id, event);
+                }
+            }
+        }
+        changed
+    }
+
+    fn apply_session_event(&mut self, session_id: UiSessionId, event: SessionWorkerEvent) {
+        let selected = self.sessions.selected == session_id;
+        match event {
+            SessionWorkerEvent::Status(status) => {
+                if let Some(session) = self.sessions.session_mut(session_id) {
+                    session.status = status.clone();
+                }
+                if selected {
+                    self.status = status;
+                }
+            }
+            SessionWorkerEvent::AssistantText(text) => {
+                if let Some(session) = self.sessions.session_mut(session_id) {
+                    session.messages.push(Message {
                         role: Role::Assistant,
                         text,
                     });
-                    self.assistant_streaming = false;
-                    self.reasoning_streaming = false;
+                    session.assistant_streaming = false;
+                    session.reasoning_streaming = false;
+                }
+                if selected {
                     self.scroll_transcript_to_bottom();
                 }
-                WorkerEvent::AssistantTextDelta(text) => {
-                    self.append_streaming_message(Role::Assistant, text);
+            }
+            SessionWorkerEvent::AssistantTextDelta(text) => {
+                self.append_streaming_message(session_id, Role::Assistant, text);
+                if selected {
                     self.status = "Responding".to_string();
+                    self.scroll_transcript_to_bottom();
                 }
-                WorkerEvent::ReasoningDelta(text) => {
-                    self.append_streaming_message(Role::Reasoning, text);
+            }
+            SessionWorkerEvent::ReasoningDelta(text) => {
+                self.append_streaming_message(session_id, Role::Reasoning, text);
+                if selected {
                     self.status = "Reasoning".to_string();
                     self.scroll_transcript_to_bottom();
                 }
-                WorkerEvent::ToolDiff(diff) => {
-                    self.assistant_streaming = false;
-                    self.reasoning_streaming = false;
-                    self.append_diff_message(diff);
+            }
+            SessionWorkerEvent::ToolDiff(diff) => {
+                if let Some(session) = self.sessions.session_mut(session_id) {
+                    session.assistant_streaming = false;
+                    session.reasoning_streaming = false;
+                }
+                self.append_diff_message(session_id, diff);
+                if selected {
                     self.status = "Reviewing patch".to_string();
                 }
-                WorkerEvent::ToolInputDelta(delta) => {
-                    self.assistant_streaming = false;
-                    self.reasoning_streaming = false;
-                    self.append_diff_message(delta);
+            }
+            SessionWorkerEvent::ToolInputDelta(delta) => {
+                if let Some(session) = self.sessions.session_mut(session_id) {
+                    session.assistant_streaming = false;
+                    session.reasoning_streaming = false;
+                }
+                self.append_diff_message(session_id, delta);
+                if selected {
                     self.status = "Drafting patch".to_string();
                 }
-                WorkerEvent::ToolStarted(name) => {
-                    self.assistant_streaming = false;
-                    self.reasoning_streaming = false;
-                    self.active_tool = Some(name.clone());
-                    self.messages.push(Message {
+            }
+            SessionWorkerEvent::ToolStarted(name) => {
+                if let Some(session) = self.sessions.session_mut(session_id) {
+                    session.assistant_streaming = false;
+                    session.reasoning_streaming = false;
+                    session.active_tool = Some(name.clone());
+                    session.status = "Tool running".to_string();
+                    session.messages.push(Message {
                         role: Role::ToolRunning,
                         text: format!("Running {name}"),
                     });
+                }
+                if selected {
                     self.status = "Tool running".to_string();
                     self.scroll_transcript_to_bottom();
                 }
-                WorkerEvent::ToolCompleted {
-                    name,
-                    summary,
-                    success,
-                } => {
-                    self.assistant_streaming = false;
-                    self.reasoning_streaming = false;
-                    self.tools_run += 1;
+            }
+            SessionWorkerEvent::ToolCompleted {
+                name,
+                summary,
+                success,
+            } => {
+                if let Some(session) = self.sessions.session_mut(session_id) {
+                    session.assistant_streaming = false;
+                    session.reasoning_streaming = false;
+                    session.tools_run += 1;
                     if !success {
-                        self.failures += 1;
+                        session.failures += 1;
                     }
-                    self.active_tool = None;
-                    self.messages.push(Message {
+                    session.active_tool = None;
+                    session.messages.push(Message {
                         role: if success {
                             Role::ToolSuccess
                         } else {
@@ -601,39 +887,60 @@ impl CodexUi {
                         },
                         text: format!("{name}\n{summary}"),
                     });
-                    self.status = if success {
+                    session.status = if success {
                         "Tool completed".to_string()
                     } else {
                         "Tool failed".to_string()
                     };
+                    if selected {
+                        self.status = session.status.clone();
+                    }
+                }
+                if selected {
                     self.scroll_transcript_to_bottom();
                 }
-                WorkerEvent::Error(error) => {
-                    self.busy = false;
-                    self.failures += 1;
-                    self.active_tool = None;
-                    self.assistant_streaming = false;
-                    self.reasoning_streaming = false;
-                    self.status = "Error".to_string();
-                    self.messages.push(Message {
+            }
+            SessionWorkerEvent::Error(error) => {
+                if let Some(session) = self.sessions.session_mut(session_id) {
+                    session.busy = false;
+                    session.failures += 1;
+                    session.active_tool = None;
+                    session.assistant_streaming = false;
+                    session.reasoning_streaming = false;
+                    session.status = "Error".to_string();
+                    session.messages.push(Message {
                         role: Role::Error,
                         text: normalize_error_message(&error),
                     });
+                }
+                if selected {
+                    self.status = "Error".to_string();
                     self.scroll_transcript_to_bottom();
                 }
-                WorkerEvent::Done => {
-                    self.busy = false;
-                    self.active_tool = None;
-                    self.assistant_streaming = false;
-                    self.reasoning_streaming = false;
+            }
+            SessionWorkerEvent::Done => {
+                if let Some(session) = self.sessions.session_mut(session_id) {
+                    session.busy = false;
+                    session.active_tool = None;
+                    session.assistant_streaming = false;
+                    session.reasoning_streaming = false;
+                    session.status = "Ready".to_string();
+                }
+                if selected {
                     self.status = "Ready".to_string();
                 }
-                WorkerEvent::Usage(usage) => {
-                    self.usage.record(usage);
+            }
+            SessionWorkerEvent::Usage(usage) => {
+                if let Some(session) = self.sessions.session_mut(session_id) {
+                    session.usage.record(usage);
                 }
             }
-        }
-        changed
+            SessionWorkerEvent::RateLimits(snapshot) => {
+                if let Some(session) = self.sessions.session_mut(session_id) {
+                    session.rate_limits.record(snapshot);
+                }
+            }
+        };
     }
 
     fn handle_text_action(&mut self, action: UiTextBufferAction) {
@@ -705,10 +1012,13 @@ impl CodexUi {
             UiAction::Submitted { id } if id == 0 => self.submit(),
             UiAction::Activated(hit) if hit.id == NEW_CHAT_ID => self.new_chat(),
             UiAction::Activated(hit) if hit.id == CLEAR_ID => {
-                self.clear_transcript();
+                self.request_clear_transcript();
             }
             UiAction::ScrollChanged { id, offset } if id == TRANSCRIPT_SCROLL_ID => {
                 self.runtime.set_scroll_offset(id, offset);
+            }
+            UiAction::Activated(hit) if hit.id >= SESSION_ROW_BASE_ID => {
+                self.switch_session((hit.id - SESSION_ROW_BASE_ID) as usize);
             }
             _ => {}
         }
@@ -723,37 +1033,45 @@ impl CodexUi {
         self.runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, next);
     }
 
-    fn append_streaming_message(&mut self, role: Role, text: String) {
+    fn append_streaming_message(&mut self, session_id: UiSessionId, role: Role, text: String) {
         if text.is_empty() {
             return;
         }
+        let Some(session) = self.sessions.session_mut(session_id) else {
+            return;
+        };
         let streaming = match role {
-            Role::Assistant => &mut self.assistant_streaming,
-            Role::Reasoning => &mut self.reasoning_streaming,
+            Role::Assistant => &mut session.assistant_streaming,
+            Role::Reasoning => &mut session.reasoning_streaming,
             _ => return,
         };
         if *streaming
-            && let Some(message) = self.messages.last_mut()
+            && let Some(message) = session.messages.last_mut()
             && message.role == role
         {
             message.text.push_str(&text);
         } else {
-            self.messages.push(Message { role, text });
+            session.messages.push(Message { role, text });
             *streaming = true;
         }
         match role {
-            Role::Assistant => self.reasoning_streaming = false,
-            Role::Reasoning => self.assistant_streaming = false,
+            Role::Assistant => session.reasoning_streaming = false,
+            Role::Reasoning => session.assistant_streaming = false,
             _ => {}
         }
-        self.scroll_transcript_to_bottom();
+        if self.sessions.selected == session_id {
+            self.scroll_transcript_to_bottom();
+        }
     }
 
-    fn append_diff_message(&mut self, text: String) {
+    fn append_diff_message(&mut self, session_id: UiSessionId, text: String) {
         if text.is_empty() {
             return;
         }
-        if let Some(message) = self.messages.last_mut()
+        let Some(session) = self.sessions.session_mut(session_id) else {
+            return;
+        };
+        if let Some(message) = session.messages.last_mut()
             && message.role == Role::Diff
         {
             append_capped(&mut message.text, &text, MAX_DIFF_DISPLAY_BYTES);
@@ -763,17 +1081,23 @@ impl CodexUi {
                 text.truncate(char_boundary_at_or_before(&text, MAX_DIFF_DISPLAY_BYTES));
                 text.push_str("\n[diff preview truncated]");
             }
-            self.messages.push(Message {
+            session.messages.push(Message {
                 role: Role::Diff,
                 text,
             });
         }
-        self.scroll_transcript_to_bottom();
+        if self.sessions.selected == session_id {
+            self.scroll_transcript_to_bottom();
+        }
     }
 
     fn submit(&mut self) {
         if self.busy {
-            self.status = "Codex is still working".to_string();
+            self.status = "Codex worker is starting".to_string();
+            return;
+        }
+        if self.sessions.selected().busy {
+            self.status = "This session is still working".to_string();
             return;
         }
         let prompt = self.input.as_str().trim().to_string();
@@ -781,43 +1105,79 @@ impl CodexUi {
             self.status = "Type a prompt before sending".to_string();
             return;
         }
-        self.messages.push(Message {
-            role: Role::User,
-            text: prompt.clone(),
-        });
+        let session_id = self.sessions.selected;
+        {
+            let session = self.sessions.selected_mut();
+            if session.turns == 0 {
+                session.title = session_title_from_prompt(&prompt);
+            }
+            session.messages.push(Message {
+                role: Role::User,
+                text: prompt.clone(),
+            });
+            session.turns += 1;
+            session.busy = true;
+            session.status = "Queued".to_string();
+            session.assistant_streaming = false;
+            session.reasoning_streaming = false;
+        }
+        self.clear_confirm_session = None;
         self.remember_prompt(prompt.clone());
-        self.turns += 1;
         self.input.clear();
-        self.busy = true;
-        self.assistant_streaming = false;
-        self.reasoning_streaming = false;
         self.status = "Queued".to_string();
         self.scroll_transcript_to_bottom();
-        if self.command_tx.send(WorkerCommand::Prompt(prompt)).is_err() {
-            self.busy = false;
+        if self
+            .command_tx
+            .send(WorkerCommand::Prompt { session_id, prompt })
+            .is_err()
+        {
+            if let Some(session) = self.sessions.session_mut(session_id) {
+                session.busy = false;
+                session.status = "Worker disconnected".to_string();
+            }
             self.status = "Worker disconnected".to_string();
         }
     }
 
     fn new_chat(&mut self) {
-        if !self.ensure_idle("Wait for Codex to finish before starting a new chat") {
-            return;
-        }
-        self.reset_visible_session("New chat started.");
+        let session_id = self.sessions.create_session();
+        self.clear_confirm_session = None;
+        self.scroll_transcript_to_bottom();
+        self.status = "New chat".to_string();
         self.prompt_history_index = None;
-        let _ = self.command_tx.send(WorkerCommand::Reset);
+        let _ = self.command_tx.send(WorkerCommand::Reset { session_id });
     }
 
     fn clear_transcript(&mut self) {
-        if !self.ensure_idle("Wait for Codex to finish before clearing the transcript") {
+        if !self.ensure_selected_idle("Wait for this session to finish before clearing it") {
             return;
         }
+        self.clear_confirm_session = None;
         self.reset_visible_session("Transcript cleared.");
         self.status = "Transcript cleared".to_string();
+        let _ = self.command_tx.send(WorkerCommand::Reset {
+            session_id: self.sessions.selected,
+        });
     }
 
-    fn ensure_idle(&mut self, message: &str) -> bool {
-        if self.busy {
+    fn request_clear_transcript(&mut self) {
+        let session_id = self.sessions.selected;
+        if self.clear_confirm_session == Some(session_id) {
+            self.clear_transcript();
+            return;
+        }
+        if !self.ensure_selected_idle("Wait for this session to finish before clearing it") {
+            return;
+        }
+        self.clear_confirm_session = Some(session_id);
+        self.status = "Press clear again to confirm".to_string();
+        if let Some(session) = self.sessions.session_mut(session_id) {
+            session.status = "Confirm clear".to_string();
+        }
+    }
+
+    fn ensure_selected_idle(&mut self, message: &str) -> bool {
+        if self.busy || self.sessions.selected().busy {
             self.status = message.to_string();
             false
         } else {
@@ -826,19 +1186,18 @@ impl CodexUi {
     }
 
     fn reset_visible_session(&mut self, message: &str) {
-        self.messages.clear();
-        self.messages.push(Message {
-            role: Role::Assistant,
-            text: message.to_string(),
-        });
-        self.turns = 0;
-        self.tools_run = 0;
-        self.failures = 0;
-        self.usage = UsageState::default();
-        self.active_tool = None;
-        self.assistant_streaming = false;
-        self.reasoning_streaming = false;
+        self.sessions.selected_mut().reset(message);
         self.scroll_transcript_to_bottom();
+    }
+
+    fn switch_session(&mut self, index: usize) {
+        if self.sessions.select_by_sidebar_index(index) {
+            self.status = self.sessions.selected().status.clone();
+            if self.clear_confirm_session != Some(self.sessions.selected) {
+                self.clear_confirm_session = None;
+            }
+            self.scroll_transcript_to_bottom();
+        }
     }
 
     fn remember_prompt(&mut self, prompt: String) {
@@ -862,16 +1221,19 @@ fn build_scene(scene: &mut GpuScene, atlas: &FontAtlas, state: &CodexUi, width: 
     scene.clear = BG;
     scene.clear_rects();
 
-    let w = width.max(720.0);
+    let w = width.max(640.0);
     let h = height.max(480.0);
-    let turns = format!("{} turns", state.turns);
-    let tools = format!("{} tools", state.tools_run);
-    let issues = format!("{} issues", state.failures);
-    let usage = state.usage.total_label();
-    let usage_detail = state.usage.detail_label();
+    let selected = state.sessions.selected();
+    let usage = selected.usage.total_label();
     let model = format!("model {}", state.model);
     let workspace = workspace_label();
-    let availability = if state.busy { "working" } else { "ready" };
+    let availability = if selected.busy {
+        "working"
+    } else if state.sessions.any_busy() {
+        "background"
+    } else {
+        "ready"
+    };
     let tone = header_tone(state);
     let (activity_title, activity_detail, activity_icon) = sidebar_activity(state);
     let main_width = if w >= 980.0 { w - 260.0 } else { w };
@@ -881,22 +1243,44 @@ fn build_scene(scene: &mut GpuScene, atlas: &FontAtlas, state: &CodexUi, width: 
         '|',
     );
 
-    let actions = [
-        UiShadcnChatClientAction::new("New", NEW_CHAT_ID, UiShadcnButtonVariant::Default),
-        UiShadcnChatClientAction::new("Clear", CLEAR_ID, UiShadcnButtonVariant::Secondary),
+    let actions = [UiShadcnChatClientAction::icon(
+        UiIcon::MessagePlus,
+        NEW_CHAT_ID,
+        UiShadcnButtonVariant::Default,
+    )];
+    let session_details = state
+        .sessions
+        .sessions
+        .iter()
+        .map(session_sidebar_detail)
+        .collect::<Vec<_>>();
+    let session_rows = state
+        .sessions
+        .sessions
+        .iter()
+        .zip(session_details.iter())
+        .map(|(session, detail)| {
+            UiShadcnSessionRow::new(
+                session.title.as_str(),
+                detail.as_str(),
+                session.id == state.sessions.selected,
+            )
+        })
+        .collect::<Vec<_>>();
+    let limits = selected.rate_limits.label();
+    let footer_lines = [
+        model.as_str(),
+        usage.as_str(),
+        limits.as_str(),
+        "shell, process, patch",
     ];
-    let session_rows = [
-        UiShadcnSessionRow::new(turns.as_str(), "selected", true),
-        UiShadcnSessionRow::new(tools.as_str(), "", false),
-        UiShadcnSessionRow::new(issues.as_str(), "", state.failures > 0),
-        UiShadcnSessionRow::new(usage.as_str(), usage_detail.as_str(), false),
-    ];
-    let footer_lines = [model.as_str(), "shell, process, patch"];
     let header_badges = [state.model.as_str(), availability];
-    let hints = [
-        "Enter sends. Wheel, arrows, PgUp/PgDn scroll.",
-        "Shift+Enter newline. Ctrl+P/N history. Ctrl+A/E/U/K/W edit.",
-    ];
+    let hints: [&str; 0] = [];
+    let clear_action = Some(UiShadcnChatClientIconAction::new(
+        UiIcon::Trash,
+        CLEAR_ID,
+        state.clear_confirm_session == Some(state.sessions.selected),
+    ));
 
     render_node(
         scene,
@@ -912,28 +1296,38 @@ fn build_scene(scene: &mut GpuScene, atlas: &FontAtlas, state: &CodexUi, width: 
             activity: UiShadcnActivity::new(activity_title, activity_detail, activity_icon),
             footer_lines: &footer_lines,
             header_title: "Codex",
-            header_status: &state.status,
+            header_status: if state.busy {
+                &state.status
+            } else {
+                &selected.status
+            },
             header_badges: &header_badges,
+            header_action: (w < 980.0).then_some(UiShadcnChatClientIconAction::new(
+                UiIcon::MessagePlus,
+                NEW_CHAT_ID,
+                false,
+            )),
             header_tone: tone,
             activity_phase: (state.animation_tick / 8) as u8,
             messages: &messages,
             scroll_offset: state.runtime.scroll_offset(TRANSCRIPT_SCROLL_ID),
             scroll_id: TRANSCRIPT_SCROLL_ID,
-            input_label: "Prompt",
+            input_label: "",
             input_value: &composer_text,
             input_id: 0,
-            send_label: "Send",
+            composer_action: clear_action,
+            send_label: "",
             send_id: SEND_ID,
-            busy: state.busy,
+            busy: state.busy || selected.busy,
             hints: &hints,
         }),
     );
 }
 
 fn header_tone(state: &CodexUi) -> UiShadcnStatusTone {
-    if state.failures > 0 {
+    if state.sessions.selected().failures > 0 {
         UiShadcnStatusTone::Error
-    } else if state.busy {
+    } else if state.busy || state.sessions.selected().busy {
         UiShadcnStatusTone::Active
     } else {
         UiShadcnStatusTone::Success
@@ -946,6 +1340,8 @@ fn conversation_messages<'a>(
     width: f32,
 ) -> Vec<UiShadcnConversationMessage<'a>> {
     state
+        .sessions
+        .selected()
         .messages
         .iter()
         .map(|message| {
@@ -972,12 +1368,16 @@ fn chat_role(role: Role) -> UiShadcnChatRole {
 }
 
 fn sidebar_activity(state: &CodexUi) -> (&str, &str, UiIcon) {
-    if let Some(tool) = state.active_tool.as_deref() {
+    if let Some(tool) = state.sessions.selected().active_tool.as_deref() {
         ("Running", tool, UiIcon::Terminal)
-    } else if state.busy {
-        ("Thinking", state.status.as_str(), UiIcon::Code)
+    } else if state.busy || state.sessions.selected().busy {
+        (
+            "Thinking",
+            state.sessions.selected().status.as_str(),
+            UiIcon::Code,
+        )
     } else {
-        ("Ready", state.status.as_str(), UiIcon::Check)
+        ("Idle", "No active tool", UiIcon::Check)
     }
 }
 
@@ -989,6 +1389,51 @@ fn workspace_label() -> String {
                 .map(|name| name.to_string_lossy().into_owned())
         })
         .unwrap_or_else(|| "workspace".to_string())
+}
+
+fn session_title_from_prompt(prompt: &str) -> String {
+    let trimmed = prompt.split_whitespace().collect::<Vec<_>>().join(" ");
+    let mut title = trimmed.chars().take(32).collect::<String>();
+    if trimmed.chars().count() > 32 {
+        title.push_str("...");
+    }
+    if title.is_empty() {
+        "Untitled session".to_string()
+    } else {
+        title
+    }
+}
+
+fn session_sidebar_detail(session: &UiSession) -> String {
+    let turns = count_label(session.turns, "turn");
+    let tools = count_label(session.tools_run, "tool");
+    if session.busy {
+        let running = session
+            .active_tool
+            .as_deref()
+            .unwrap_or(session.status.as_str());
+        return format!("running {running} | {turns} | {tools}");
+    }
+    if session.failures > 0 {
+        return format!(
+            "{} | {} | {}",
+            turns,
+            count_label(session.failures, "failure"),
+            session.usage.total_label()
+        );
+    }
+    if session.turns == 0 {
+        return "new | usage pending".to_string();
+    }
+    format!("{turns} | {tools} | {}", session.usage.detail_label())
+}
+
+fn count_label(count: usize, unit: &str) -> String {
+    if count == 1 {
+        format!("1 {unit}")
+    } else {
+        format!("{count} {unit}s")
+    }
 }
 
 fn prompt_history_path() -> Result<PathBuf, String> {
@@ -1228,48 +1673,65 @@ mod tests {
     use super::*;
     use edgerun_ui_core::gpu::HitKind;
 
-    #[test]
-    fn build_scene_renders_shadcn_chat_client_controls() {
+    fn test_state(
+        status: &str,
+        busy: bool,
+        runtime: UiRuntimeState,
+        session: UiSession,
+    ) -> CodexUi {
         let (command_tx, _command_rx) = std::sync::mpsc::channel();
         let (_event_tx, event_rx) = std::sync::mpsc::channel();
-        let mut runtime = UiRuntimeState::default();
-        runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, 1.0);
-        let state = CodexUi {
+        CodexUi {
             model: "gpt-5.5".to_string(),
             input: UiTextBuffer::new(),
-            status: "Ready".to_string(),
-            busy: false,
+            status: status.to_string(),
+            busy,
             animation_tick: 0,
             runtime,
-            turns: 1,
-            tools_run: 1,
-            failures: 0,
-            usage: UsageState::default(),
-            active_tool: None,
+            sessions: SessionStore {
+                selected: session.id,
+                next_id: session.id.0 + 1,
+                sessions: vec![session],
+            },
+            clear_confirm_session: None,
             prompt_history: Vec::new(),
             prompt_history_index: None,
             prompt_history_path: None,
-            messages: vec![
-                Message {
-                    role: Role::Assistant,
-                    text: "Ready for local workspace work.".to_string(),
-                },
-                Message {
-                    role: Role::User,
-                    text: "Summarize the project.".to_string(),
-                },
-            ],
-            assistant_streaming: false,
-            reasoning_streaming: false,
             command_tx,
             event_rx,
-        };
+        }
+    }
+
+    fn test_session(messages: Vec<Message>) -> UiSession {
+        let mut session = UiSession::new(UiSessionId(1), "Current workspace", "ready");
+        session.messages = messages;
+        session
+    }
+
+    #[test]
+    fn build_scene_renders_shadcn_chat_client_controls() {
+        let mut runtime = UiRuntimeState::default();
+        runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, 1.0);
+        let mut session = test_session(vec![
+            Message {
+                role: Role::Assistant,
+                text: "Ready for local workspace work.".to_string(),
+            },
+            Message {
+                role: Role::User,
+                text: "Summarize the project.".to_string(),
+            },
+        ]);
+        session.turns = 1;
+        session.tools_run = 1;
+        let state = test_state("Ready", false, runtime, session);
         let atlas = FontAtlas::load_inter(18.0).expect("load UI font");
         let mut scene = GpuScene::new(BG);
 
         build_scene(&mut scene, &atlas, &state, 1120.0, 720.0);
 
         assert!(scene.text_quads().len() > 80);
+        assert!(scene.icon_quads().len() >= 2);
         assert!(
             scene
                 .hits()
@@ -1288,88 +1750,87 @@ mod tests {
             scene
                 .hits()
                 .iter()
-                .any(|hit| hit.kind == HitKind::Button && hit.id == CLEAR_ID)
+                .any(|hit| hit.kind == HitKind::Button && hit.id == CLEAR_ID),
+            "scene hits: {:?}",
+            scene.hits()
         );
     }
 
     #[test]
+    fn compact_scene_keeps_primary_actions_inside_viewport() {
+        let mut runtime = UiRuntimeState::default();
+        runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, 1.0);
+        let mut session = test_session(vec![Message {
+            role: Role::Assistant,
+            text: "Ready for local workspace work.".to_string(),
+        }]);
+        session.turns = 1;
+        let state = test_state("Ready", false, runtime, session);
+        let atlas = FontAtlas::load_inter(18.0).expect("load UI font");
+        let mut scene = GpuScene::new(BG);
+
+        build_scene(&mut scene, &atlas, &state, 640.0, 520.0);
+
+        for id in [NEW_CHAT_ID, CLEAR_ID, SEND_ID] {
+            let hit = scene
+                .hits()
+                .iter()
+                .find(|hit| hit.kind == HitKind::Button && hit.id == id)
+                .unwrap_or_else(|| panic!("missing button hit {id}; hits: {:?}", scene.hits()));
+            assert!(
+                hit.x >= 0.0 && hit.y >= 0.0,
+                "hit outside top-left: {hit:?}"
+            );
+            assert!(
+                hit.x + hit.w <= 640.0 && hit.y + hit.h <= 520.0,
+                "hit outside compact viewport: {hit:?}"
+            );
+        }
+        assert!(scene.icon_quads().len() >= 3);
+    }
+
+    #[test]
     fn streaming_deltas_append_to_current_transcript_rows() {
-        let (command_tx, _command_rx) = std::sync::mpsc::channel();
-        let (_event_tx, event_rx) = std::sync::mpsc::channel();
         let mut runtime = UiRuntimeState::default();
         runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, 0.0);
-        let mut state = CodexUi {
-            model: "gpt-5.5".to_string(),
-            input: UiTextBuffer::new(),
-            status: "Thinking".to_string(),
-            busy: true,
-            animation_tick: 0,
-            runtime,
-            turns: 1,
-            tools_run: 0,
-            failures: 0,
-            usage: UsageState::default(),
-            active_tool: None,
-            prompt_history: Vec::new(),
-            prompt_history_index: None,
-            prompt_history_path: None,
-            messages: vec![Message {
-                role: Role::User,
-                text: "stream".to_string(),
-            }],
-            assistant_streaming: false,
-            reasoning_streaming: false,
-            command_tx,
-            event_rx,
-        };
+        let mut session = test_session(vec![Message {
+            role: Role::User,
+            text: "stream".to_string(),
+        }]);
+        session.turns = 1;
+        let mut state = test_state("Thinking", true, runtime, session);
 
-        state.append_streaming_message(Role::Reasoning, "checking".to_string());
-        state.append_streaming_message(Role::Reasoning, " files".to_string());
-        state.append_streaming_message(Role::Assistant, "done".to_string());
-        state.append_streaming_message(Role::Assistant, ".".to_string());
+        let session_id = state.sessions.selected;
+        state.append_streaming_message(session_id, Role::Reasoning, "checking".to_string());
+        state.append_streaming_message(session_id, Role::Reasoning, " files".to_string());
+        state.append_streaming_message(session_id, Role::Assistant, "done".to_string());
+        state.append_streaming_message(session_id, Role::Assistant, ".".to_string());
 
-        assert_eq!(state.messages.len(), 3);
-        assert_eq!(state.messages[1].role, Role::Reasoning);
-        assert_eq!(state.messages[1].text, "checking files");
-        assert_eq!(state.messages[2].role, Role::Assistant);
-        assert_eq!(state.messages[2].text, "done.");
+        let messages = &state.sessions.selected().messages;
+        assert_eq!(messages.len(), 3);
+        assert_eq!(messages[1].role, Role::Reasoning);
+        assert_eq!(messages[1].text, "checking files");
+        assert_eq!(messages[2].role, Role::Assistant);
+        assert_eq!(messages[2].text, "done.");
         assert_eq!(state.runtime.scroll_offset(TRANSCRIPT_SCROLL_ID), 1.0);
     }
 
     #[test]
     fn tool_input_deltas_append_to_diff_row() {
-        let (command_tx, _command_rx) = std::sync::mpsc::channel();
-        let (_event_tx, event_rx) = std::sync::mpsc::channel();
         let mut runtime = UiRuntimeState::default();
         runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, 0.0);
-        let mut state = CodexUi {
-            model: "gpt-5.5".to_string(),
-            input: UiTextBuffer::new(),
-            status: "Thinking".to_string(),
-            busy: true,
-            animation_tick: 0,
-            runtime,
-            turns: 1,
-            tools_run: 0,
-            failures: 0,
-            usage: UsageState::default(),
-            active_tool: None,
-            prompt_history: Vec::new(),
-            prompt_history_index: None,
-            prompt_history_path: None,
-            messages: Vec::new(),
-            assistant_streaming: false,
-            reasoning_streaming: false,
-            command_tx,
-            event_rx,
-        };
+        let mut session = test_session(Vec::new());
+        session.turns = 1;
+        let mut state = test_state("Thinking", true, runtime, session);
 
-        state.append_diff_message("*** Begin Patch\n".to_string());
-        state.append_diff_message("+new line\n".to_string());
+        let session_id = state.sessions.selected;
+        state.append_diff_message(session_id, "*** Begin Patch\n".to_string());
+        state.append_diff_message(session_id, "+new line\n".to_string());
 
-        assert_eq!(state.messages.len(), 1);
-        assert_eq!(state.messages[0].role, Role::Diff);
-        assert_eq!(state.messages[0].text, "*** Begin Patch\n+new line\n");
+        let messages = &state.sessions.selected().messages;
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].role, Role::Diff);
+        assert_eq!(messages[0].text, "*** Begin Patch\n+new line\n");
         assert_eq!(state.runtime.scroll_offset(TRANSCRIPT_SCROLL_ID), 1.0);
     }
 
@@ -1412,31 +1873,10 @@ mod tests {
 
     #[test]
     fn prompt_history_uses_ctrl_p_and_ctrl_n() {
-        let (command_tx, _command_rx) = std::sync::mpsc::channel();
-        let (_event_tx, event_rx) = std::sync::mpsc::channel();
         let mut runtime = UiRuntimeState::default();
         runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, 1.0);
-        let mut state = CodexUi {
-            model: "gpt-5.5".to_string(),
-            input: UiTextBuffer::new(),
-            status: "Ready".to_string(),
-            busy: false,
-            animation_tick: 0,
-            runtime,
-            turns: 0,
-            tools_run: 0,
-            failures: 0,
-            usage: UsageState::default(),
-            active_tool: None,
-            prompt_history: vec!["first prompt".to_string(), "second prompt".to_string()],
-            prompt_history_index: None,
-            prompt_history_path: None,
-            messages: Vec::new(),
-            assistant_streaming: false,
-            reasoning_streaming: false,
-            command_tx,
-            event_rx,
-        };
+        let mut state = test_state("Ready", false, runtime, test_session(Vec::new()));
+        state.prompt_history = vec!["first prompt".to_string(), "second prompt".to_string()];
         let ctrl = UiKeyModifiers {
             ctrl: true,
             ..UiKeyModifiers::default()
@@ -1455,31 +1895,11 @@ mod tests {
 
     #[test]
     fn prompt_history_moves_repeated_prompts_to_most_recent() {
-        let (command_tx, _command_rx) = std::sync::mpsc::channel();
-        let (_event_tx, event_rx) = std::sync::mpsc::channel();
         let mut runtime = UiRuntimeState::default();
         runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, 1.0);
-        let mut state = CodexUi {
-            model: "gpt-5.5".to_string(),
-            input: UiTextBuffer::new(),
-            status: "Ready".to_string(),
-            busy: false,
-            animation_tick: 0,
-            runtime,
-            turns: 0,
-            tools_run: 0,
-            failures: 0,
-            usage: UsageState::default(),
-            active_tool: None,
-            prompt_history: vec!["first".to_string(), "second".to_string()],
-            prompt_history_index: Some(0),
-            prompt_history_path: None,
-            messages: Vec::new(),
-            assistant_streaming: false,
-            reasoning_streaming: false,
-            command_tx,
-            event_rx,
-        };
+        let mut state = test_state("Ready", false, runtime, test_session(Vec::new()));
+        state.prompt_history = vec!["first".to_string(), "second".to_string()];
+        state.prompt_history_index = Some(0);
 
         state.remember_prompt("first".to_string());
 
@@ -1489,99 +1909,333 @@ mod tests {
 
     #[test]
     fn clear_transcript_resets_visible_metrics_without_dropping_history() {
-        let (command_tx, _command_rx) = std::sync::mpsc::channel();
+        let mut runtime = UiRuntimeState::default();
+        runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, 0.0);
+        let mut session = test_session(vec![Message {
+            role: Role::Error,
+            text: "broken".to_string(),
+        }]);
+        session.turns = 4;
+        session.tools_run = 3;
+        session.failures = 2;
+        session.active_tool = Some("shell".to_string());
+        let mut state = test_state("Error", false, runtime, session);
+        state.prompt_history = vec!["keep this".to_string()];
+        state.prompt_history_index = Some(0);
+
+        state.clear_transcript();
+
+        let session = state.sessions.selected();
+        assert_eq!(session.turns, 0);
+        assert_eq!(session.tools_run, 0);
+        assert_eq!(session.failures, 0);
+        assert_eq!(session.active_tool, None);
+        assert_eq!(state.prompt_history, vec!["keep this"]);
+        assert_eq!(state.prompt_history_index, Some(0));
+        assert_eq!(state.runtime.scroll_offset(TRANSCRIPT_SCROLL_ID), 1.0);
+        assert_eq!(session.messages.len(), 1);
+        assert_eq!(session.messages[0].role, Role::Assistant);
+    }
+
+    #[test]
+    fn request_clear_requires_second_activation() {
+        let mut runtime = UiRuntimeState::default();
+        runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, 0.0);
+        let mut session = test_session(vec![Message {
+            role: Role::User,
+            text: "keep until confirmed".to_string(),
+        }]);
+        session.turns = 1;
+        let mut state = test_state("Ready", false, runtime, session);
+
+        state.request_clear_transcript();
+
+        assert_eq!(state.status, "Press clear again to confirm");
+        assert_eq!(state.clear_confirm_session, Some(state.sessions.selected));
+        assert_eq!(state.sessions.selected().status, "Confirm clear");
+        assert_eq!(state.sessions.selected().turns, 1);
+        assert_eq!(state.sessions.selected().messages.len(), 1);
+
+        state.request_clear_transcript();
+
+        assert_eq!(state.clear_confirm_session, None);
+        assert_eq!(state.status, "Transcript cleared");
+        assert_eq!(state.sessions.selected().turns, 0);
+        assert_eq!(state.sessions.selected().messages.len(), 1);
+        assert_eq!(state.sessions.selected().messages[0].role, Role::Assistant);
+    }
+
+    #[test]
+    fn clear_is_guarded_but_new_chat_keeps_busy_session_running() {
+        let mut runtime = UiRuntimeState::default();
+        runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, 0.25);
+        let mut session = test_session(vec![Message {
+            role: Role::ToolRunning,
+            text: "Running shell".to_string(),
+        }]);
+        session.turns = 2;
+        session.tools_run = 1;
+        session.active_tool = Some("shell".to_string());
+        session.busy = true;
+        let mut state = test_state("Tool running", false, runtime, session);
+        state.prompt_history = vec!["keep this".to_string()];
+        state.prompt_history_index = Some(0);
+
+        state.clear_transcript();
+
+        assert_eq!(
+            state.status,
+            "Wait for this session to finish before clearing it"
+        );
+        let busy_session_id = state.sessions.selected;
+        let busy_session = state.sessions.selected();
+        assert_eq!(busy_session.turns, 2);
+        assert_eq!(busy_session.tools_run, 1);
+        assert_eq!(busy_session.active_tool.as_deref(), Some("shell"));
+        assert_eq!(busy_session.messages.len(), 1);
+
+        state.new_chat();
+
+        assert_eq!(state.status, "New chat");
+        assert_eq!(state.sessions.sessions.len(), 2);
+        assert_ne!(state.sessions.selected, busy_session_id);
+        assert_eq!(state.sessions.selected().turns, 0);
+        assert_eq!(
+            state.sessions.selected().messages[0].text,
+            "New chat started."
+        );
+        let background = state
+            .sessions
+            .sessions
+            .iter()
+            .find(|session| session.id == busy_session_id)
+            .expect("busy session should remain available");
+        assert!(background.busy);
+        assert_eq!(background.turns, 2);
+        assert_eq!(background.tools_run, 1);
+        assert_eq!(background.active_tool.as_deref(), Some("shell"));
+        assert_eq!(background.messages.len(), 1);
+        assert_eq!(state.prompt_history, vec!["keep this"]);
+        assert_eq!(state.runtime.scroll_offset(TRANSCRIPT_SCROLL_ID), 1.0);
+    }
+
+    #[test]
+    fn new_chat_creates_selected_session_without_dropping_existing_one() {
+        let mut runtime = UiRuntimeState::default();
+        runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, 0.0);
+        let mut session = test_session(vec![Message {
+            role: Role::User,
+            text: "existing".to_string(),
+        }]);
+        session.turns = 1;
+        let mut state = test_state("Ready", false, runtime, session);
+
+        state.new_chat();
+
+        assert_eq!(state.sessions.sessions.len(), 2);
+        assert_eq!(state.sessions.selected().turns, 0);
+        assert_eq!(
+            state.sessions.selected().messages[0].text,
+            "New chat started."
+        );
+        assert!(state.sessions.sessions.iter().any(|session| {
+            session
+                .messages
+                .iter()
+                .any(|message| message.text == "existing")
+        }));
+    }
+
+    #[test]
+    fn sidebar_session_selection_switches_when_idle() {
+        let mut runtime = UiRuntimeState::default();
+        runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, 0.0);
+        let mut state = test_state(
+            "Ready",
+            false,
+            runtime,
+            test_session(vec![Message {
+                role: Role::Assistant,
+                text: "first".to_string(),
+            }]),
+        );
+        let second = UiSession::new(UiSessionId(2), "Second", "second");
+        state.sessions.sessions.push(second);
+
+        state.handle_ui_action(UiAction::Activated(edgerun_ui_core::gpu::GpuHit::new(
+            HitKind::Button,
+            SESSION_ROW_BASE_ID + 1,
+            0.0,
+            0.0,
+            1.0,
+            1.0,
+        )));
+
+        assert_eq!(state.sessions.selected, UiSessionId(2));
+        assert_eq!(state.sessions.selected().title, "Second");
+        assert_eq!(state.runtime.scroll_offset(TRANSCRIPT_SCROLL_ID), 1.0);
+    }
+
+    #[test]
+    fn background_session_events_update_their_own_transcript() {
+        let mut runtime = UiRuntimeState::default();
+        runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, 0.25);
+        let mut state = test_state(
+            "Ready",
+            false,
+            runtime,
+            test_session(vec![Message {
+                role: Role::Assistant,
+                text: "foreground".to_string(),
+            }]),
+        );
+        let background_id = UiSessionId(2);
+        state
+            .sessions
+            .sessions
+            .push(UiSession::new(background_id, "Background", "background"));
+
+        state.apply_session_event(
+            background_id,
+            SessionWorkerEvent::AssistantTextDelta("working".to_string()),
+        );
+
+        assert_eq!(state.sessions.selected, UiSessionId(1));
+        assert_eq!(state.status, "Ready");
+        assert_eq!(state.sessions.selected().messages[0].text, "foreground");
+        let background = state
+            .sessions
+            .sessions
+            .iter()
+            .find(|session| session.id == background_id)
+            .expect("background session should exist");
+        assert_eq!(background.messages.len(), 2);
+        assert_eq!(background.messages[1].role, Role::Assistant);
+        assert_eq!(background.messages[1].text, "working");
+        assert_eq!(state.runtime.scroll_offset(TRANSCRIPT_SCROLL_ID), 0.25);
+    }
+
+    #[test]
+    fn submit_targets_selected_idle_session_while_background_session_runs() {
+        let (command_tx, command_rx) = std::sync::mpsc::channel();
         let (_event_tx, event_rx) = std::sync::mpsc::channel();
+        let foreground_id = UiSessionId(1);
+        let background_id = UiSessionId(2);
+        let mut foreground = UiSession::new(foreground_id, "Foreground", "ready");
+        let mut background = UiSession::new(background_id, "Background", "busy");
+        background.busy = true;
+        background.status = "Thinking".to_string();
         let mut runtime = UiRuntimeState::default();
         runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, 0.0);
         let mut state = CodexUi {
             model: "gpt-5.5".to_string(),
             input: UiTextBuffer::new(),
-            status: "Error".to_string(),
+            status: "Ready".to_string(),
             busy: false,
             animation_tick: 0,
             runtime,
-            turns: 4,
-            tools_run: 3,
-            failures: 2,
-            usage: UsageState::default(),
-            active_tool: Some("shell".to_string()),
-            prompt_history: vec!["keep this".to_string()],
-            prompt_history_index: Some(0),
+            sessions: SessionStore {
+                sessions: vec![foreground.clone(), background],
+                selected: foreground_id,
+                next_id: 3,
+            },
+            clear_confirm_session: None,
+            prompt_history: Vec::new(),
+            prompt_history_index: None,
             prompt_history_path: None,
-            messages: vec![Message {
-                role: Role::Error,
-                text: "broken".to_string(),
-            }],
-            assistant_streaming: false,
-            reasoning_streaming: false,
             command_tx,
             event_rx,
         };
+        state.input.set_text("run this in foreground");
 
-        state.clear_transcript();
+        state.submit();
 
-        assert_eq!(state.turns, 0);
-        assert_eq!(state.tools_run, 0);
-        assert_eq!(state.failures, 0);
-        assert_eq!(state.active_tool, None);
-        assert_eq!(state.prompt_history, vec!["keep this"]);
-        assert_eq!(state.prompt_history_index, Some(0));
-        assert_eq!(state.runtime.scroll_offset(TRANSCRIPT_SCROLL_ID), 1.0);
-        assert_eq!(state.messages.len(), 1);
-        assert_eq!(state.messages[0].role, Role::Assistant);
+        foreground = state.sessions.selected().clone();
+        assert!(foreground.busy);
+        assert_eq!(foreground.turns, 1);
+        assert_eq!(foreground.title, "run this in foreground");
+        let background = state
+            .sessions
+            .sessions
+            .iter()
+            .find(|session| session.id == background_id)
+            .expect("background session should remain");
+        assert!(background.busy);
+        let command = command_rx
+            .recv()
+            .expect("submit should send worker command");
+        match command {
+            WorkerCommand::Prompt { session_id, prompt } => {
+                assert_eq!(session_id, foreground_id);
+                assert_eq!(prompt, "run this in foreground");
+            }
+            WorkerCommand::Reset { .. } => panic!("submit should not reset"),
+        }
     }
 
     #[test]
-    fn clear_and_new_chat_are_guarded_while_busy() {
-        let (command_tx, _command_rx) = std::sync::mpsc::channel();
-        let (_event_tx, event_rx) = std::sync::mpsc::channel();
-        let mut runtime = UiRuntimeState::default();
-        runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, 0.25);
-        let mut state = CodexUi {
-            model: "gpt-5.5".to_string(),
-            input: UiTextBuffer::new(),
-            status: "Tool running".to_string(),
-            busy: true,
-            animation_tick: 0,
-            runtime,
-            turns: 2,
-            tools_run: 1,
-            failures: 0,
-            usage: UsageState::default(),
-            active_tool: Some("shell".to_string()),
-            prompt_history: vec!["keep this".to_string()],
-            prompt_history_index: Some(0),
-            prompt_history_path: None,
-            messages: vec![Message {
-                role: Role::ToolRunning,
-                text: "Running shell".to_string(),
-            }],
-            assistant_streaming: false,
-            reasoning_streaming: false,
-            command_tx,
-            event_rx,
-        };
+    fn session_sidebar_detail_surfaces_running_and_usage_state() {
+        let mut session = UiSession::new(UiSessionId(1), "Work", "ready");
+        assert_eq!(session_sidebar_detail(&session), "new | usage pending");
 
-        state.clear_transcript();
-
+        session.turns = 1;
+        session.tools_run = 2;
         assert_eq!(
-            state.status,
-            "Wait for Codex to finish before clearing the transcript"
+            session_sidebar_detail(&session),
+            "1 turn | 2 tools | awaiting usage"
         );
-        assert_eq!(state.turns, 2);
-        assert_eq!(state.tools_run, 1);
-        assert_eq!(state.active_tool.as_deref(), Some("shell"));
-        assert_eq!(state.messages.len(), 1);
 
-        state.new_chat();
-
+        session.busy = true;
+        session.status = "Reasoning".to_string();
+        session.active_tool = Some("shell".to_string());
         assert_eq!(
-            state.status,
-            "Wait for Codex to finish before starting a new chat"
+            session_sidebar_detail(&session),
+            "running shell | 1 turn | 2 tools"
         );
-        assert_eq!(state.turns, 2);
-        assert_eq!(state.prompt_history, vec!["keep this"]);
-        assert_eq!(state.runtime.scroll_offset(TRANSCRIPT_SCROLL_ID), 0.25);
+
+        session.busy = false;
+        session.active_tool = None;
+        session.failures = 1;
+        assert_eq!(
+            session_sidebar_detail(&session),
+            "1 turn | 1 failure | usage pending"
+        );
+    }
+
+    #[test]
+    fn rate_limit_state_surfaces_primary_window_and_credits() {
+        let mut state = RateLimitState::default();
+        assert_eq!(state.label(), "limits pending");
+
+        state.record(RateLimitSnapshot {
+            limit_id: None,
+            limit_name: Some("daily".to_string()),
+            primary: Some(codex_core::protocol::protocol::RateLimitWindow {
+                used_percent: 42.4,
+                window_minutes: Some(1440),
+                resets_at: None,
+            }),
+            secondary: None,
+            credits: None,
+            plan_type: None,
+            rate_limit_reached_type: None,
+        });
+        assert_eq!(state.label(), "daily 42% used");
+
+        state.record(RateLimitSnapshot {
+            limit_id: None,
+            limit_name: None,
+            primary: None,
+            secondary: None,
+            credits: Some(codex_core::protocol::protocol::CreditsSnapshot {
+                has_credits: true,
+                unlimited: false,
+                balance: Some("12.50".to_string()),
+            }),
+            plan_type: None,
+            rate_limit_reached_type: None,
+        });
+        assert_eq!(state.label(), "credits 12.50");
     }
 
     #[test]

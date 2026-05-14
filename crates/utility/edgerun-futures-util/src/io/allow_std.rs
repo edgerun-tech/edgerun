@@ -1,5 +1,5 @@
-use futures_core::task::{Context, Poll};
 use crate::io::{AsyncBufRead, AsyncRead, AsyncSeek, AsyncWrite, IoSlice, IoSliceMut, SeekFrom};
+use futures_core::task::{Context, Poll};
 use std::pin::Pin;
 use std::string::String;
 use std::vec::Vec;

@@ -65,10 +65,7 @@ impl<W: io::Write, E: Source> Writer<E> for IoWriter<W> {
 mod tests {
     use rancor::Failure;
 
-    use crate::{
-        api::serialize_using, ser::writer::IoWriter, util::Align, Archive,
-        Serialize,
-    };
+    use crate::{api::serialize_using, ser::writer::IoWriter, util::Align, Archive, Serialize};
 
     #[test]
     fn write_serializer() {

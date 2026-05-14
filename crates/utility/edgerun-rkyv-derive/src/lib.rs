@@ -21,9 +21,7 @@ use syn::{parse_macro_input, DeriveInput};
 
 /// Derives `Portable` for the labeled type.
 #[proc_macro_derive(Portable, attributes(rkyv))]
-pub fn derive_portable(
-    input: proc_macro::TokenStream,
-) -> proc_macro::TokenStream {
+pub fn derive_portable(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let mut derive_input = parse_macro_input!(input as DeriveInput);
     serde::receiver::replace_receiver(&mut derive_input);
 
@@ -94,9 +92,7 @@ pub fn derive_portable(
 /// struct. Wrappers can be applied to fields using the `#[rkyv_with = ..]`
 /// attribute.
 #[proc_macro_derive(Archive, attributes(rkyv))]
-pub fn derive_archive(
-    input: proc_macro::TokenStream,
-) -> proc_macro::TokenStream {
+pub fn derive_archive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let mut derive_input = parse_macro_input!(input as DeriveInput);
     serde::receiver::replace_receiver(&mut derive_input);
 
@@ -111,9 +107,7 @@ pub fn derive_archive(
 /// This macro also supports the `#[rkyv]` attribute. See [`Archive`] for more
 /// information.
 #[proc_macro_derive(Serialize, attributes(rkyv))]
-pub fn derive_serialize(
-    input: proc_macro::TokenStream,
-) -> proc_macro::TokenStream {
+pub fn derive_serialize(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let mut derive_input = parse_macro_input!(input as DeriveInput);
     serde::receiver::replace_receiver(&mut derive_input);
 
@@ -128,9 +122,7 @@ pub fn derive_serialize(
 /// This macro also supports the `#[rkyv]` attribute. See [`Archive`] for more
 /// information.
 #[proc_macro_derive(Deserialize, attributes(rkyv))]
-pub fn derive_deserialize(
-    input: proc_macro::TokenStream,
-) -> proc_macro::TokenStream {
+pub fn derive_deserialize(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let mut derive_input = parse_macro_input!(input as DeriveInput);
     serde::receiver::replace_receiver(&mut derive_input);
 

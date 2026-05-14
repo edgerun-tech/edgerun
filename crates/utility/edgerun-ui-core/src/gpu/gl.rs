@@ -1,6 +1,8 @@
 use super::{Color4, GpuRect, GpuScene, RectMode};
 #[cfg(feature = "fontdue-text")]
 use super::{FontAtlas, TextQuad};
+#[cfg(all(feature = "fontdue-text", feature = "tabler-svg-atlas"))]
+use super::{IconQuad, tabler_svg_icon_atlas};
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int, c_void};
 use std::ptr;
@@ -203,6 +205,8 @@ pub struct GlRenderer {
     u_radius: c_int,
     u_mode: c_int,
     u_shadow: c_int,
+    #[cfg(all(feature = "fontdue-text", feature = "tabler-svg-atlas"))]
+    icons: Option<IconRenderer>,
     #[cfg(feature = "fontdue-text")]
     text: Option<TextRenderer>,
 }
@@ -253,6 +257,8 @@ impl GlRenderer {
             u_radius: uniform(program, "u_radius"),
             u_mode: uniform(program, "u_mode"),
             u_shadow: uniform(program, "u_shadow"),
+            #[cfg(all(feature = "fontdue-text", feature = "tabler-svg-atlas"))]
+            icons: Some(IconRenderer::new()?),
             #[cfg(feature = "fontdue-text")]
             text: None,
         })
@@ -280,6 +286,10 @@ impl GlRenderer {
         for rect in scene.rects() {
             self.draw_rect(*rect);
         }
+        #[cfg(all(feature = "fontdue-text", feature = "tabler-svg-atlas"))]
+        if let Some(icons) = &self.icons {
+            icons.render(width, height, scene.icon_quads());
+        }
         #[cfg(feature = "fontdue-text")]
         if let Some(text) = &self.text {
             text.render(width, height, scene.text_quads());
@@ -300,6 +310,149 @@ impl GlRenderer {
             glUniform1i(self.u_mode, mode);
             glUniform1f(self.u_shadow, rect.shadow);
             glDrawArrays(GL_TRIANGLES, 0, 6);
+        }
+    }
+}
+
+#[cfg(all(feature = "fontdue-text", feature = "tabler-svg-atlas"))]
+struct IconRenderer {
+    program: u32,
+    vao: u32,
+    vbo: u32,
+    texture: u32,
+    u_screen: c_int,
+    u_color: c_int,
+    u_tex: c_int,
+}
+
+#[cfg(all(feature = "fontdue-text", feature = "tabler-svg-atlas"))]
+impl IconRenderer {
+    fn new() -> Result<Self, String> {
+        let atlas = tabler_svg_icon_atlas();
+        let program = unsafe { glCreateProgram() };
+        let vs = compile_shader(GL_VERTEX_SHADER, TEXT_VERT)?;
+        let fs = compile_shader(GL_FRAGMENT_SHADER, TEXT_FRAG)?;
+        unsafe {
+            glAttachShader(program, vs);
+            glAttachShader(program, fs);
+            glLinkProgram(program);
+            glDeleteShader(vs);
+            glDeleteShader(fs);
+        }
+        check_program(program)?;
+
+        let mut vao = 0;
+        let mut vbo = 0;
+        unsafe {
+            glGenVertexArrays(1, &mut vao);
+            glBindVertexArray(vao);
+            glGenBuffers(1, &mut vbo);
+            glBindBuffer(GL_ARRAY_BUFFER, vbo);
+            glEnableVertexAttribArray(0);
+            glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * 4, ptr::null());
+        }
+
+        let mut texture = 0;
+        let mut rgba = Vec::with_capacity(atlas.alpha.len() * 4);
+        for alpha in atlas.alpha {
+            rgba.extend_from_slice(&[255, 255, 255, *alpha]);
+        }
+        unsafe {
+            glGenTextures(1, &mut texture);
+            glBindTexture(GL_TEXTURE_2D, texture);
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            glTexImage2D(
+                GL_TEXTURE_2D,
+                0,
+                GL_RGBA8 as i32,
+                atlas.width as i32,
+                atlas.height as i32,
+                0,
+                GL_RGBA,
+                GL_UNSIGNED_BYTE,
+                rgba.as_ptr().cast(),
+            );
+        }
+
+        Ok(Self {
+            program,
+            vao,
+            vbo,
+            texture,
+            u_screen: uniform(program, "u_screen"),
+            u_color: uniform(program, "u_color"),
+            u_tex: uniform(program, "u_tex"),
+        })
+    }
+
+    fn render(&self, width: i32, height: i32, quads: &[IconQuad]) {
+        unsafe {
+            glUseProgram(self.program);
+            glBindVertexArray(self.vao);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, self.texture);
+            glUniform1i(self.u_tex, 0);
+            glUniform2f(self.u_screen, width as f32, height as f32);
+        }
+        for quad in quads {
+            self.draw_quad(*quad);
+        }
+    }
+
+    fn draw_quad(&self, q: IconQuad) {
+        let verts: [f32; 24] = [
+            q.x,
+            q.y,
+            q.u0,
+            q.v0,
+            q.x + q.w,
+            q.y,
+            q.u1,
+            q.v0,
+            q.x + q.w,
+            q.y + q.h,
+            q.u1,
+            q.v1,
+            q.x,
+            q.y,
+            q.u0,
+            q.v0,
+            q.x + q.w,
+            q.y + q.h,
+            q.u1,
+            q.v1,
+            q.x,
+            q.y + q.h,
+            q.u0,
+            q.v1,
+        ];
+        let Color4 { r, g, b, a } = q.color;
+        unsafe {
+            glUniform4f(self.u_color, r, g, b, a);
+            glBindBuffer(GL_ARRAY_BUFFER, self.vbo);
+            glBufferData(
+                GL_ARRAY_BUFFER,
+                (verts.len() * 4) as isize,
+                verts.as_ptr().cast(),
+                GL_DYNAMIC_DRAW,
+            );
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+        }
+    }
+}
+
+#[cfg(all(feature = "fontdue-text", feature = "tabler-svg-atlas"))]
+impl Drop for IconRenderer {
+    fn drop(&mut self) {
+        unsafe {
+            glDeleteTextures(1, &self.texture);
+            glDeleteBuffers(1, &self.vbo);
+            glDeleteVertexArrays(1, &self.vao);
+            glDeleteProgram(self.program);
         }
     }
 }

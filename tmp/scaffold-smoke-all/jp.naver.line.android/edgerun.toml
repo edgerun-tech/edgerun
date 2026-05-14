@@ -1,0 +1,20 @@
+[app]
+id = "jp-naver-line-android"
+source_android_package = "jp.naver.line.android"
+status = "draft_static_analysis"
+
+[capabilities]
+network = { default = "deny", allow_domains = ["1176-ti.cloud.v-key.com", "1176-tla.cloud.v-key.com"] }
+location = { mode = "precise_or_coarse", prompt = "per_use" }
+storage = { app_private = true, document_grants = "prompt" }
+local_state = { backend = "structured_store" }
+notifications = { channel = "app_scoped", prompt = true }
+background_tasks = { scheduler = "explicit", event_subscriptions = "review" }
+camera_media = { sessions = "explicit_prompt" }
+bluetooth_nearby = { scan = "prompt", connect = "allowlist" }
+secrets_crypto = { keystore = "edgerun", certificates = "review" }
+
+[analysis]
+unique_signatures = 10537
+total_call_sites = 1140159
+confidence = "medium_static_needs_dynamic_trace"

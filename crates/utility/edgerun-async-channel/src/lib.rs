@@ -1,8 +1,8 @@
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use edgerun_tokio::task;
 use edgerun_tokio::sync::mpsc;
+use edgerun_tokio::task;
 
 pub use mpsc::SendError;
 pub use mpsc::TryRecvError;
@@ -92,10 +92,16 @@ impl<T> Receiver<T> {
     }
 
     pub fn try_recv(&self) -> Result<T, TryRecvError> {
-        self.inner.lock().expect("channel receiver poisoned").try_recv()
+        self.inner
+            .lock()
+            .expect("channel receiver poisoned")
+            .try_recv()
     }
 
     pub fn close(&self) {
-        self.inner.lock().expect("channel receiver poisoned").close();
+        self.inner
+            .lock()
+            .expect("channel receiver poisoned")
+            .close();
     }
 }

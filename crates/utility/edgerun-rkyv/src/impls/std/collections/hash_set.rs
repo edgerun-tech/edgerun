@@ -21,12 +21,7 @@ where
     type Resolver = HashSetResolver;
 
     fn resolve(&self, resolver: Self::Resolver, out: Place<Self::Archived>) {
-        ArchivedHashSet::<K::Archived>::resolve_from_len(
-            self.len(),
-            (7, 8),
-            resolver,
-            out,
-        );
+        ArchivedHashSet::<K::Archived>::resolve_from_len(self.len(), (7, 8), resolver, out);
     }
 }
 
@@ -37,10 +32,7 @@ where
     S: Fallible + Allocator + Writer + ?Sized,
     S::Error: Source,
 {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
         ArchivedHashSet::<K::Archived>::serialize_from_iter::<_, K, _>(
             self.iter(),
             (7, 8),
@@ -56,10 +48,7 @@ where
     D: Fallible + ?Sized,
     S: Default + BuildHasher,
 {
-    fn deserialize(
-        &self,
-        deserializer: &mut D,
-    ) -> Result<HashSet<K, S>, D::Error> {
+    fn deserialize(&self, deserializer: &mut D) -> Result<HashSet<K, S>, D::Error> {
         let mut result = HashSet::with_hasher(S::default());
         for k in self.iter() {
             result.insert(k.deserialize(deserializer)?);
@@ -68,8 +57,8 @@ where
     }
 }
 
-impl<K: Hash + Eq + Borrow<AK>, AK: Hash + Eq, S: BuildHasher>
-    PartialEq<HashSet<K, S>> for ArchivedHashSet<AK>
+impl<K: Hash + Eq + Borrow<AK>, AK: Hash + Eq, S: BuildHasher> PartialEq<HashSet<K, S>>
+    for ArchivedHashSet<AK>
 {
     fn eq(&self, other: &HashSet<K, S>) -> bool {
         if self.len() != other.len() {
@@ -80,8 +69,8 @@ impl<K: Hash + Eq + Borrow<AK>, AK: Hash + Eq, S: BuildHasher>
     }
 }
 
-impl<K: Hash + Eq + Borrow<AK>, AK: Hash + Eq, S: BuildHasher>
-    PartialEq<ArchivedHashSet<AK>> for HashSet<K, S>
+impl<K: Hash + Eq + Borrow<AK>, AK: Hash + Eq, S: BuildHasher> PartialEq<ArchivedHashSet<AK>>
+    for HashSet<K, S>
 {
     fn eq(&self, other: &ArchivedHashSet<AK>) -> bool {
         other.eq(self)

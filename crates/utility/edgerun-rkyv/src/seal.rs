@@ -109,10 +109,7 @@ impl<'a, T> Seal<'a, [T]> {
     /// # Panics
     ///
     /// May panic if the index is out of bounds.
-    pub fn index<I: SliceIndex<[T]>>(
-        self,
-        index: I,
-    ) -> Seal<'a, <I as SliceIndex<[T]>>::Output> {
+    pub fn index<I: SliceIndex<[T]>>(self, index: I) -> Seal<'a, <I as SliceIndex<[T]>>::Output> {
         let ptr = unsafe { Seal::unseal_unchecked(self) };
         Seal::new(&mut ptr[index])
     }

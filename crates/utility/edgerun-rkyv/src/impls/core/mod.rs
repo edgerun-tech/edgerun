@@ -14,8 +14,8 @@ use crate::{
     ser::{Allocator, Writer, WriterExt as _},
     traits::{ArchivePointee, CopyOptimization, LayoutRaw, NoUndef},
     tuple::*,
-    Archive, ArchiveUnsized, ArchivedMetadata, Deserialize, DeserializeUnsized,
-    Place, Portable, Serialize, SerializeUnsized,
+    Archive, ArchiveUnsized, ArchivedMetadata, Deserialize, DeserializeUnsized, Place, Portable,
+    Serialize, SerializeUnsized,
 };
 
 mod ffi;
@@ -28,26 +28,20 @@ mod time;
 pub(crate) mod with;
 
 impl<T> LayoutRaw for T {
-    fn layout_raw(
-        _: <Self as Pointee>::Metadata,
-    ) -> Result<Layout, LayoutError> {
+    fn layout_raw(_: <Self as Pointee>::Metadata) -> Result<Layout, LayoutError> {
         Ok(Layout::new::<T>())
     }
 }
 
 impl<T> LayoutRaw for [T] {
-    fn layout_raw(
-        metadata: <Self as Pointee>::Metadata,
-    ) -> Result<Layout, LayoutError> {
+    fn layout_raw(metadata: <Self as Pointee>::Metadata) -> Result<Layout, LayoutError> {
         Layout::array::<T>(metadata)
     }
 }
 
 impl LayoutRaw for str {
     #[inline]
-    fn layout_raw(
-        metadata: <Self as Pointee>::Metadata,
-    ) -> Result<Layout, LayoutError> {
+    fn layout_raw(metadata: <Self as Pointee>::Metadata) -> Result<Layout, LayoutError> {
         Layout::array::<u8>(metadata)
     }
 }
@@ -55,10 +49,7 @@ impl LayoutRaw for str {
 impl<T> ArchivePointee for T {
     type ArchivedMetadata = ();
 
-    fn pointer_metadata(
-        _: &Self::ArchivedMetadata,
-    ) -> <Self as Pointee>::Metadata {
-    }
+    fn pointer_metadata(_: &Self::ArchivedMetadata) -> <Self as Pointee>::Metadata {}
 }
 
 impl<T: Archive> ArchiveUnsized for T {
@@ -203,9 +194,8 @@ impl_tuple!(
 unsafe impl<T: Portable, const N: usize> Portable for [T; N] {}
 
 impl<T: Archive, const N: usize> Archive for [T; N] {
-    const COPY_OPTIMIZATION: CopyOptimization<Self> = unsafe {
-        CopyOptimization::enable_if(T::COPY_OPTIMIZATION.is_enabled())
-    };
+    const COPY_OPTIMIZATION: CopyOptimization<Self> =
+        unsafe { CopyOptimization::enable_if(T::COPY_OPTIMIZATION.is_enabled()) };
 
     type Archived = [T::Archived; N];
     type Resolver = [T::Resolver; N];
@@ -223,10 +213,7 @@ where
     T: Serialize<S>,
     S: Fallible + ?Sized,
 {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
         let mut result = core::mem::MaybeUninit::<Self::Resolver>::uninit();
         let result_ptr = result.as_mut_ptr().cast::<T::Resolver>();
         for (i, value) in self.iter().enumerate() {
@@ -273,9 +260,7 @@ impl<T: Archive> ArchiveUnsized for [T] {
 impl<T> ArchivePointee for [T] {
     type ArchivedMetadata = ArchivedUsize;
 
-    fn pointer_metadata(
-        archived: &Self::ArchivedMetadata,
-    ) -> <Self as Pointee>::Metadata {
+    fn pointer_metadata(archived: &Self::ArchivedMetadata) -> <Self as Pointee>::Metadata {
         archived.to_native() as usize
     }
 }
@@ -300,29 +285,23 @@ where
         } else {
             use crate::util::SerVec;
 
-            SerVec::with_capacity(
-                serializer,
-                self.len(),
-                |resolvers, serializer| {
-                    for value in self.iter() {
-                        unsafe {
-                            resolvers
-                                .push_unchecked(value.serialize(serializer)?);
-                        }
+            SerVec::with_capacity(serializer, self.len(), |resolvers, serializer| {
+                for value in self.iter() {
+                    unsafe {
+                        resolvers.push_unchecked(value.serialize(serializer)?);
                     }
+                }
 
-                    let result = serializer.align_for::<T::Archived>()?;
+                let result = serializer.align_for::<T::Archived>()?;
 
-                    for (value, resolver) in self.iter().zip(resolvers.drain())
-                    {
-                        unsafe {
-                            serializer.resolve_aligned(value, resolver)?;
-                        }
+                for (value, resolver) in self.iter().zip(resolvers.drain()) {
+                    unsafe {
+                        serializer.resolve_aligned(value, resolver)?;
                     }
+                }
 
-                    Ok(result)
-                },
-            )?
+                Ok(result)
+            })?
         }
     }
 }
@@ -380,9 +359,7 @@ impl ArchivePointee for str {
     type ArchivedMetadata = ArchivedUsize;
 
     #[inline]
-    fn pointer_metadata(
-        archived: &Self::ArchivedMetadata,
-    ) -> <Self as Pointee>::Metadata {
+    fn pointer_metadata(archived: &Self::ArchivedMetadata) -> <Self as Pointee>::Metadata {
         <[u8]>::pointer_metadata(archived)
     }
 }
@@ -396,11 +373,7 @@ impl<S: Fallible + Writer + ?Sized> SerializeUnsized<S> for str {
 }
 
 impl<D: Fallible + ?Sized> DeserializeUnsized<str, D> for str {
-    unsafe fn deserialize_unsized(
-        &self,
-        _: &mut D,
-        out: *mut str,
-    ) -> Result<(), D::Error> {
+    unsafe fn deserialize_unsized(&self, _: &mut D, out: *mut str) -> Result<(), D::Error> {
         // SAFETY: The caller has guaranteed that `out` is non-null, properly
         // aligned, valid for writes, and points to memory allocated according
         // to the layout for the metadata returned from `deserialize_metadata`.
@@ -408,11 +381,7 @@ impl<D: Fallible + ?Sized> DeserializeUnsized<str, D> for str {
         // `self.as_ptr()` is valid for reads and points to the bytes of `self`
         // which are also at least `self.len()` bytes.
         unsafe {
-            ptr::copy_nonoverlapping(
-                self.as_ptr(),
-                out.cast::<u8>(),
-                self.len(),
-            );
+            ptr::copy_nonoverlapping(self.as_ptr(), out.cast::<u8>(), self.len());
         }
         Ok(())
     }
@@ -429,8 +398,7 @@ impl<D: Fallible + ?Sized> DeserializeUnsized<str, D> for str {
 unsafe impl<T: ?Sized> Portable for PhantomData<T> {}
 
 impl<T: ?Sized> Archive for PhantomData<T> {
-    const COPY_OPTIMIZATION: CopyOptimization<Self> =
-        unsafe { CopyOptimization::enable() };
+    const COPY_OPTIMIZATION: CopyOptimization<Self> = unsafe { CopyOptimization::enable() };
 
     type Archived = PhantomData<T>;
     type Resolver = ();
@@ -444,9 +412,7 @@ impl<T: ?Sized, S: Fallible + ?Sized> Serialize<S> for PhantomData<T> {
     }
 }
 
-impl<T: ?Sized, D: Fallible + ?Sized> Deserialize<PhantomData<T>, D>
-    for PhantomData<T>
-{
+impl<T: ?Sized, D: Fallible + ?Sized> Deserialize<PhantomData<T>, D> for PhantomData<T> {
     fn deserialize(&self, _: &mut D) -> Result<PhantomData<T>, D::Error> {
         Ok(PhantomData)
     }
@@ -459,8 +425,7 @@ impl<T: ?Sized, D: Fallible + ?Sized> Deserialize<PhantomData<T>, D>
 unsafe impl Portable for PhantomPinned {}
 
 impl Archive for PhantomPinned {
-    const COPY_OPTIMIZATION: CopyOptimization<Self> =
-        unsafe { CopyOptimization::enable() };
+    const COPY_OPTIMIZATION: CopyOptimization<Self> = unsafe { CopyOptimization::enable() };
 
     type Archived = PhantomPinned;
     type Resolver = ();
@@ -488,9 +453,8 @@ impl<D: Fallible + ?Sized> Deserialize<PhantomPinned, D> for PhantomPinned {
 unsafe impl<T: Portable> Portable for ManuallyDrop<T> {}
 
 impl<T: Archive> Archive for ManuallyDrop<T> {
-    const COPY_OPTIMIZATION: CopyOptimization<Self> = unsafe {
-        CopyOptimization::enable_if(T::COPY_OPTIMIZATION.is_enabled())
-    };
+    const COPY_OPTIMIZATION: CopyOptimization<Self> =
+        unsafe { CopyOptimization::enable_if(T::COPY_OPTIMIZATION.is_enabled()) };
 
     type Archived = ManuallyDrop<T::Archived>;
     type Resolver = T::Resolver;
@@ -502,10 +466,7 @@ impl<T: Archive> Archive for ManuallyDrop<T> {
 }
 
 impl<T: Serialize<S>, S: Fallible + ?Sized> Serialize<S> for ManuallyDrop<T> {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
         T::serialize(self, serializer)
     }
 }
@@ -516,10 +477,7 @@ where
     T::Archived: Deserialize<T, D>,
     D: Fallible + ?Sized,
 {
-    fn deserialize(
-        &self,
-        deserializer: &mut D,
-    ) -> Result<ManuallyDrop<T>, D::Error> {
+    fn deserialize(&self, deserializer: &mut D) -> Result<ManuallyDrop<T>, D::Error> {
         T::Archived::deserialize(self, deserializer).map(ManuallyDrop::new)
     }
 }
@@ -544,14 +502,11 @@ mod tests {
 
     #[test]
     fn roundtrip_tuple() {
-        roundtrip_with(
-            &(24, true, 16f32),
-            |(a, b, c), ArchivedTuple3(d, e, f)| {
-                assert_eq!(a, d);
-                assert_eq!(b, e);
-                assert_eq!(c, f);
-            },
-        );
+        roundtrip_with(&(24, true, 16f32), |(a, b, c), ArchivedTuple3(d, e, f)| {
+            assert_eq!(a, d);
+            assert_eq!(b, e);
+            assert_eq!(c, f);
+        });
     }
 
     #[test]

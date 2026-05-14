@@ -14,9 +14,7 @@ use crate::{
     access_unchecked,
     api::{deserialize_using, serialize_using},
     de::Pool,
-    ser::{
-        allocator::ArenaHandle, sharing::Share, Allocator, Serializer, Writer,
-    },
+    ser::{allocator::ArenaHandle, sharing::Share, Allocator, Serializer, Writer},
     util::{with_arena, AlignedVec},
     Archive, Deserialize, Serialize,
 };
@@ -63,9 +61,7 @@ pub type HighDeserializer<E> = Strategy<Pool, E>;
 pub fn to_bytes<E>(
     // rustfmt insists on inlining this parameter even though it exceeds the
     // max line length
-    #[rustfmt::skip] value: &impl for<'a> Serialize<
-        HighSerializer<AlignedVec, ArenaHandle<'a>, E>,
-    >,
+    #[rustfmt::skip] value: &impl for<'a> Serialize<HighSerializer<AlignedVec, ArenaHandle<'a>, E>>,
 ) -> Result<AlignedVec, E>
 where
     E: rancor::Source,
@@ -289,9 +285,7 @@ where
 ///
 /// assert_eq!(deserialized, value);
 /// ```
-pub fn deserialize<T, E>(
-    value: &impl Deserialize<T, HighDeserializer<E>>,
-) -> Result<T, E> {
+pub fn deserialize<T, E>(value: &impl Deserialize<T, HighDeserializer<E>>) -> Result<T, E> {
     deserialize_using(value, &mut Pool::new())
 }
 

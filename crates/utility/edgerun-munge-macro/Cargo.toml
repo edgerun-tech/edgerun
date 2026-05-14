@@ -12,9 +12,9 @@ description = "EdgeRun-owned proc macro for custom destructuring"
 proc-macro = true
 
 [dependencies]
-proc-macro2 = { version = "1", default-features = false }
-quote = { version = "1", default-features = false }
-syn = { version = "2", features = ["clone-impls", "full", "parsing", "printing", "proc-macro"], default-features = false }
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+syn = { workspace = true, features = ["clone-impls", "full", "parsing", "printing", "proc-macro"] }
 
 [lints]
 workspace = true

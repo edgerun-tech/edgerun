@@ -1,8 +1,8 @@
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::{
-    parse_quote, punctuated::Punctuated, spanned::Spanned, Data, DeriveInput,
-    Error, Fields, Generics, Ident, Index, Path, WhereClause,
+    parse_quote, punctuated::Punctuated, spanned::Spanned, Data, DeriveInput, Error, Fields,
+    Generics, Ident, Index, Path, WhereClause,
 };
 
 use crate::{
@@ -34,8 +34,7 @@ fn derive_deserialize_impl(
     }
 
     let mut impl_input_params = Punctuated::default();
-    impl_input_params
-        .push(parse_quote! { __D: #rkyv_path::rancor::Fallible + ?Sized });
+    impl_input_params.push(parse_quote! { __D: #rkyv_path::rancor::Fallible + ?Sized });
     for param in input.generics.params.iter() {
         impl_input_params.push(param.clone());
     }
@@ -141,19 +140,17 @@ fn generate_deserialize_body(
                     .named
                     .iter()
                     .map(|field| {
-                        let field_attrs =
-                            FieldAttributes::parse(attributes, field)?;
+                        let field_attrs = FieldAttributes::parse(attributes, field)?;
 
-                        deserialize_where.predicates.extend(
-                            field_attrs.archive_bound(rkyv_path, field),
-                        );
-                        deserialize_where.predicates.extend(
-                            field_attrs.deserialize_bound(rkyv_path, field),
-                        );
+                        deserialize_where
+                            .predicates
+                            .extend(field_attrs.archive_bound(rkyv_path, field));
+                        deserialize_where
+                            .predicates
+                            .extend(field_attrs.deserialize_bound(rkyv_path, field));
 
                         let name = &field.ident;
-                        let deserialize =
-                            field_attrs.deserialize(rkyv_path, field);
+                        let deserialize = field_attrs.deserialize(rkyv_path, field);
                         Ok(quote! {
                             #name: #deserialize(&#this.#name, deserializer)?
                         })
@@ -168,19 +165,17 @@ fn generate_deserialize_body(
                     .iter()
                     .enumerate()
                     .map(|(i, field)| {
-                        let field_attrs =
-                            FieldAttributes::parse(attributes, field)?;
+                        let field_attrs = FieldAttributes::parse(attributes, field)?;
 
-                        deserialize_where.predicates.extend(
-                            field_attrs.archive_bound(rkyv_path, field),
-                        );
-                        deserialize_where.predicates.extend(
-                            field_attrs.deserialize_bound(rkyv_path, field),
-                        );
+                        deserialize_where
+                            .predicates
+                            .extend(field_attrs.archive_bound(rkyv_path, field));
+                        deserialize_where
+                            .predicates
+                            .extend(field_attrs.deserialize_bound(rkyv_path, field));
 
                         let index = Index::from(i);
-                        let deserialize =
-                            field_attrs.deserialize(rkyv_path, field);
+                        let deserialize = field_attrs.deserialize(rkyv_path, field);
                         Ok(quote! {
                             #deserialize(&#this.#index, deserializer)?
                         })
@@ -207,23 +202,17 @@ fn generate_deserialize_body(
                                 .named
                                 .iter()
                                 .map(|field| {
-                                    let field_attrs = FieldAttributes::parse(
-                                        attributes, field,
-                                    )?;
+                                    let field_attrs = FieldAttributes::parse(attributes, field)?;
 
-                                    deserialize_where.predicates.extend(
-                                        field_attrs
-                                            .archive_bound(rkyv_path, field),
-                                    );
-                                    deserialize_where.predicates.extend(
-                                        field_attrs.deserialize_bound(
-                                            rkyv_path, field,
-                                        ),
-                                    );
+                                    deserialize_where
+                                        .predicates
+                                        .extend(field_attrs.archive_bound(rkyv_path, field));
+                                    deserialize_where
+                                        .predicates
+                                        .extend(field_attrs.deserialize_bound(rkyv_path, field));
 
                                     let name = &field.ident;
-                                    let deserialize = field_attrs
-                                        .deserialize(rkyv_path, field);
+                                    let deserialize = field_attrs.deserialize(rkyv_path, field);
                                     Ok(quote! {
                                         #name: #deserialize(
                                             #name,
@@ -239,37 +228,27 @@ fn generate_deserialize_body(
                             })
                         }
                         Fields::Unnamed(ref fields) => {
-                            let bindings =
-                                fields.unnamed.iter().enumerate().map(
-                                    |(i, f)| {
-                                        Ident::new(&format!("_{i}"), f.span())
-                                    },
-                                );
+                            let bindings = fields
+                                .unnamed
+                                .iter()
+                                .enumerate()
+                                .map(|(i, f)| Ident::new(&format!("_{i}"), f.span()));
                             let fields = fields
                                 .unnamed
                                 .iter()
                                 .enumerate()
                                 .map(|(i, field)| {
-                                    let field_attrs = FieldAttributes::parse(
-                                        attributes, field,
-                                    )?;
+                                    let field_attrs = FieldAttributes::parse(attributes, field)?;
 
-                                    deserialize_where.predicates.extend(
-                                        field_attrs
-                                            .archive_bound(rkyv_path, field),
-                                    );
-                                    deserialize_where.predicates.extend(
-                                        field_attrs.deserialize_bound(
-                                            rkyv_path, field,
-                                        ),
-                                    );
+                                    deserialize_where
+                                        .predicates
+                                        .extend(field_attrs.archive_bound(rkyv_path, field));
+                                    deserialize_where
+                                        .predicates
+                                        .extend(field_attrs.deserialize_bound(rkyv_path, field));
 
-                                    let binding = Ident::new(
-                                        &format!("_{i}"),
-                                        field.span(),
-                                    );
-                                    let deserialize = field_attrs
-                                        .deserialize(rkyv_path, field);
+                                    let binding = Ident::new(&format!("_{i}"), field.span());
+                                    let deserialize = field_attrs.deserialize(rkyv_path, field);
                                     Ok(quote! {
                                         #deserialize(
                                             #binding,

@@ -100,8 +100,7 @@ impl<T> ArchivedHashTable<T> {
         // empty then `self.ptr` is a valid relative pointer. Since `index` is
         // at least 0 and strictly less than `len()`, this table must not be
         // empty.
-        let ptr =
-            unsafe { RawRelPtr::as_ptr_raw(ptr::addr_of_mut!((*this).ptr)) };
+        let ptr = unsafe { RawRelPtr::as_ptr_raw(ptr::addr_of_mut!((*this).ptr)) };
         // SAFETY: The caller has guaranteed that `index` is less than `len()`,
         // and the first `len()` bytes following `ptr` are the control bytes of
         // the hash table.
@@ -129,11 +128,7 @@ impl<T> ArchivedHashTable<T> {
     /// # Safety
     ///
     /// `this` must point to a valid `ArchivedHashTable`
-    unsafe fn get_entry_raw<C>(
-        this: *mut Self,
-        hash: u64,
-        cmp: C,
-    ) -> Option<NonNull<T>>
+    unsafe fn get_entry_raw<C>(this: *mut Self, hash: u64, cmp: C) -> Option<NonNull<T>>
     where
         C: Fn(&T) -> bool,
     {
@@ -157,8 +152,7 @@ impl<T> ArchivedHashTable<T> {
             for i in 0..MAX_GROUP_WIDTH / Group::WIDTH {
                 let pos = probe_seq.pos + i * Group::WIDTH;
 
-                let group =
-                    unsafe { Group::read(Self::control_raw(this, pos)) };
+                let group = unsafe { Group::read(Self::control_raw(this, pos)) };
 
                 for bit in group.match_byte(h2_hash) {
                     let index = (pos + bit) % capacity;
@@ -199,17 +193,11 @@ impl<T> ArchivedHashTable<T> {
     }
 
     /// Returns the mutable key-value pair corresponding to the supplied key.
-    pub fn get_seal_with<C>(
-        this: Seal<'_, Self>,
-        hash: u64,
-        cmp: C,
-    ) -> Option<Seal<'_, T>>
+    pub fn get_seal_with<C>(this: Seal<'_, Self>, hash: u64, cmp: C) -> Option<Seal<'_, T>>
     where
         C: Fn(&T) -> bool,
     {
-        let mut ptr = unsafe {
-            Self::get_entry_raw(this.unseal_unchecked(), hash, |e| cmp(e))?
-        };
+        let mut ptr = unsafe { Self::get_entry_raw(this.unseal_unchecked(), hash, |e| cmp(e))? };
         Some(Seal::new(unsafe { ptr.as_mut() }))
     }
 
@@ -233,9 +221,7 @@ impl<T> ArchivedHashTable<T> {
     /// This hash table must not be empty.
     unsafe fn control_iter(this: *mut Self) -> ControlIter {
         ControlIter {
-            current_mask: unsafe {
-                Group::read(Self::control_raw(this, 0)).match_full()
-            },
+            current_mask: unsafe { Group::read(Self::control_raw(this, 0)).match_full() },
             next_group: unsafe { Self::control_raw(this, Group::WIDTH) },
         }
     }
@@ -249,9 +235,7 @@ impl<T> ArchivedHashTable<T> {
             RawIter {
                 // SAFETY: We have checked that `self` is not empty.
                 controls: unsafe { Self::control_iter(this) },
-                entries: unsafe {
-                    NonNull::new_unchecked(self.ptr.as_ptr().cast_mut().cast())
-                },
+                entries: unsafe { NonNull::new_unchecked(self.ptr.as_ptr().cast_mut().cast()) },
                 items_left: self.len(),
             }
         }
@@ -263,15 +247,12 @@ impl<T> ArchivedHashTable<T> {
             RawIter::empty()
         } else {
             // SAFETY: We have checked that `this` is not empty.
-            let controls =
-                unsafe { Self::control_iter(this.as_mut().unseal_unchecked()) };
+            let controls = unsafe { Self::control_iter(this.as_mut().unseal_unchecked()) };
             let items_left = this.len();
             munge!(let Self { ptr, .. } = this);
             RawIter {
                 controls,
-                entries: unsafe {
-                    NonNull::new_unchecked(RawRelPtr::as_mut_ptr(ptr).cast())
-                },
+                entries: unsafe { NonNull::new_unchecked(RawRelPtr::as_mut_ptr(ptr).cast()) },
                 items_left,
             }
         }
@@ -337,10 +318,7 @@ impl<T> ArchivedHashTable<T> {
 
         impl Error for InvalidLoadFactor {}
 
-        if load_factor.0 == 0
-            || load_factor.1 == 0
-            || load_factor.0 > load_factor.1
-        {
+        if load_factor.0 == 0 || load_factor.1 == 0 || load_factor.0 > load_factor.1 {
             fail!(InvalidLoadFactor {
                 numerator: load_factor.0,
                 denominator: load_factor.1,
@@ -366,123 +344,92 @@ impl<T> ArchivedHashTable<T> {
         let control_count = Self::control_count(probe_cap);
 
         // Determine hash locations for all items
-        SerVec::with_capacity(
-            serializer,
-            capacity,
-            |ordered_items, serializer| {
-                for _ in 0..capacity {
-                    unsafe {
-                        ordered_items.push_unchecked(None);
-                    }
+        SerVec::with_capacity(serializer, capacity, |ordered_items, serializer| {
+            for _ in 0..capacity {
+                unsafe {
+                    ordered_items.push_unchecked(None);
+                }
+            }
+
+            SerVec::<u8>::with_capacity(serializer, control_count, |control_bytes, serializer| {
+                // Initialize all control bytes to EMPTY (0xFF)
+                unsafe {
+                    control_bytes
+                        .as_mut_ptr()
+                        .write_bytes(0xff, control_bytes.capacity());
+                    control_bytes.set_len(control_bytes.capacity());
                 }
 
-                SerVec::<u8>::with_capacity(
-                    serializer,
-                    control_count,
-                    |control_bytes, serializer| {
-                        // Initialize all control bytes to EMPTY (0xFF)
-                        unsafe {
-                            control_bytes
-                                .as_mut_ptr()
-                                .write_bytes(0xff, control_bytes.capacity());
-                            control_bytes.set_len(control_bytes.capacity());
-                        }
+                let bucket_mask = Self::bucket_mask(control_count);
 
-                        let bucket_mask = Self::bucket_mask(control_count);
+                for (item, hash) in items.zip(hashes) {
+                    let h2_hash = h2(hash);
+                    let mut probe_seq = Self::probe_seq(hash, capacity);
 
-                        for (item, hash) in items.zip(hashes) {
-                            let h2_hash = h2(hash);
-                            let mut probe_seq = Self::probe_seq(hash, capacity);
+                    'insert: loop {
+                        for i in 0..MAX_GROUP_WIDTH / Group::WIDTH {
+                            let pos = probe_seq.pos + i * Group::WIDTH;
+                            let group = unsafe { Group::read(control_bytes.as_ptr().add(pos)) };
 
-                            'insert: loop {
-                                for i in 0..MAX_GROUP_WIDTH / Group::WIDTH {
-                                    let pos = probe_seq.pos + i * Group::WIDTH;
-                                    let group = unsafe {
-                                        Group::read(
-                                            control_bytes.as_ptr().add(pos),
-                                        )
-                                    };
+                            if let Some(bit) = group.match_empty().lowest_set_bit() {
+                                let index = (pos + bit) % capacity;
 
-                                    if let Some(bit) =
-                                        group.match_empty().lowest_set_bit()
-                                    {
-                                        let index = (pos + bit) % capacity;
-
-                                        // Update control byte
-                                        control_bytes[index] = h2_hash;
-                                        // If it's near the beginning of the
-                                        // control bytes,
-                                        // update the wraparound control byte
-                                        if index < (control_count - capacity) {
-                                            control_bytes[capacity + index] =
-                                                h2_hash;
-                                        }
-
-                                        ordered_items[index] = Some(item);
-                                        break 'insert;
-                                    }
+                                // Update control byte
+                                control_bytes[index] = h2_hash;
+                                // If it's near the beginning of the
+                                // control bytes,
+                                // update the wraparound control byte
+                                if index < (control_count - capacity) {
+                                    control_bytes[capacity + index] = h2_hash;
                                 }
 
-                                loop {
-                                    probe_seq.move_next(bucket_mask);
-                                    if probe_seq.pos < probe_cap {
-                                        break;
-                                    }
-                                }
+                                ordered_items[index] = Some(item);
+                                break 'insert;
                             }
                         }
 
-                        let mut zeros = MaybeUninit::<T>::uninit();
-                        unsafe {
-                            zeros.as_mut_ptr().write_bytes(0, 1);
+                        loop {
+                            probe_seq.move_next(bucket_mask);
+                            if probe_seq.pos < probe_cap {
+                                break;
+                            }
                         }
-                        let zeros = unsafe {
-                            from_raw_parts(
-                                zeros.as_ptr().cast::<u8>(),
-                                size_of::<T>(),
-                            )
-                        };
-                        SerVec::with_capacity(
-                            serializer,
-                            len,
-                            |resolvers, serializer| {
-                                for item in ordered_items
-                                    .iter()
-                                    .filter_map(|x| x.as_ref())
-                                {
-                                    resolvers.push(
-                                        item.borrow().serialize(serializer)?,
-                                    );
-                                }
+                    }
+                }
 
-                                serializer.align_for::<T>()?;
+                let mut zeros = MaybeUninit::<T>::uninit();
+                unsafe {
+                    zeros.as_mut_ptr().write_bytes(0, 1);
+                }
+                let zeros = unsafe { from_raw_parts(zeros.as_ptr().cast::<u8>(), size_of::<T>()) };
+                SerVec::with_capacity(serializer, len, |resolvers, serializer| {
+                    for item in ordered_items.iter().filter_map(|x| x.as_ref()) {
+                        resolvers.push(item.borrow().serialize(serializer)?);
+                    }
 
-                                let mut resolvers = resolvers.drain().rev();
-                                for item in ordered_items.iter().rev() {
-                                    if let Some(item) = item {
-                                        unsafe {
-                                            serializer.resolve_aligned(
-                                                item.borrow(),
-                                                resolvers.next().unwrap(),
-                                            )?;
-                                        }
-                                    } else {
-                                        serializer.write(zeros)?;
-                                    }
-                                }
+                    serializer.align_for::<T>()?;
 
-                                let pos = serializer.pos();
-                                serializer.write(control_bytes)?;
+                    let mut resolvers = resolvers.drain().rev();
+                    for item in ordered_items.iter().rev() {
+                        if let Some(item) = item {
+                            unsafe {
+                                serializer
+                                    .resolve_aligned(item.borrow(), resolvers.next().unwrap())?;
+                            }
+                        } else {
+                            serializer.write(zeros)?;
+                        }
+                    }
 
-                                Ok(HashTableResolver {
-                                    pos: pos as FixedUsize,
-                                })
-                            },
-                        )?
-                    },
-                )?
-            },
-        )?
+                    let pos = serializer.pos();
+                    serializer.write(control_bytes)?;
+
+                    Ok(HashTableResolver {
+                        pos: pos as FixedUsize,
+                    })
+                })?
+            })?
+        })?
     }
 
     /// Resolves an archived hash table from a given length and parameters.
@@ -539,8 +486,7 @@ impl ControlIter {
 
     #[inline]
     fn move_next(&mut self) {
-        self.current_mask =
-            unsafe { Group::read(self.next_group).match_full() };
+        self.current_mask = unsafe { Group::read(self.next_group).match_full() };
         self.next_group = unsafe { self.next_group.add(Group::WIDTH) };
     }
 }
@@ -575,16 +521,11 @@ impl<T> Iterator for RawIter<T> {
                     break bit;
                 }
                 self.controls.move_next();
-                self.entries = unsafe {
-                    NonNull::new_unchecked(
-                        self.entries.as_ptr().sub(Group::WIDTH),
-                    )
-                };
+                self.entries =
+                    unsafe { NonNull::new_unchecked(self.entries.as_ptr().sub(Group::WIDTH)) };
             };
             self.items_left -= 1;
-            let entry = unsafe {
-                NonNull::new_unchecked(self.entries.as_ptr().sub(bit + 1))
-            };
+            let entry = unsafe { NonNull::new_unchecked(self.entries.as_ptr().sub(bit + 1)) };
             Some(entry)
         }
     }
@@ -662,8 +603,7 @@ mod verify {
             // Check memory allocation
             let probe_cap = Self::probe_cap(cap);
             let control_count = Self::control_count(probe_cap);
-            let (layout, control_offset) =
-                Self::memory_layout(cap, control_count)?;
+            let (layout, control_offset) = Self::memory_layout(cap, control_count)?;
             let ptr = self
                 .ptr
                 .as_ptr_wrapping()
@@ -685,10 +625,7 @@ mod verify {
                         }
 
                         unsafe {
-                            T::check_bytes(
-                                Self::bucket_raw(this, index).as_ptr(),
-                                context,
-                            )?;
+                            T::check_bytes(Self::bucket_raw(this, index).as_ptr(), context)?;
                         }
                     }
 

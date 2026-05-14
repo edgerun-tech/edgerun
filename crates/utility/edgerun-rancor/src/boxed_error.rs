@@ -1,14 +1,11 @@
 use core::{error, fmt};
 
-use crate::{thin_box::ThinBox, Source, Trace};
+use crate::{Source, Trace, thin_box::ThinBox};
 
 #[ptr_meta::pointee]
 trait ErrorTrace: fmt::Debug + fmt::Display + Send + Sync + 'static {}
 
-impl<T> ErrorTrace for T where
-    T: fmt::Debug + fmt::Display + Send + Sync + 'static + ?Sized
-{
-}
+impl<T> ErrorTrace for T where T: fmt::Debug + fmt::Display + Send + Sync + 'static + ?Sized {}
 
 #[derive(Debug)]
 struct ErrorWithTrace {
@@ -59,9 +56,7 @@ impl Trace for BoxedError {
             error: self,
             // SAFETY: The provided closure returns the same pointer unsized to
             // a `dyn ErrorTrace`.
-            trace: unsafe {
-                ThinBox::new_unchecked(trace, |ptr| ptr as *mut _)
-            },
+            trace: unsafe { ThinBox::new_unchecked(trace, |ptr| ptr as *mut _) },
         })
     }
 }
@@ -71,9 +66,7 @@ impl Source for BoxedError {
         Self {
             // SAFETY: The provided closure returns the same pointer unsized to
             // a `dyn Error`.
-            inner: unsafe {
-                ThinBox::new_unchecked(source, |ptr| ptr as *mut _)
-            },
+            inner: unsafe { ThinBox::new_unchecked(source, |ptr| ptr as *mut _) },
         }
     }
 }

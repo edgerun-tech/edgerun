@@ -1,18 +1,17 @@
 use core::num::{
-    NonZeroI128, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI8, NonZeroIsize,
-    NonZeroU128, NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU8, NonZeroUsize,
+    NonZeroI128, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI8, NonZeroIsize, NonZeroU128,
+    NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU8, NonZeroUsize,
 };
 
 use rancor::Fallible;
 
 use crate::{
     primitive::{
-        ArchivedChar, ArchivedF32, ArchivedF64, ArchivedI128, ArchivedI16,
-        ArchivedI32, ArchivedI64, ArchivedIsize, ArchivedNonZeroI128,
-        ArchivedNonZeroI16, ArchivedNonZeroI32, ArchivedNonZeroI64,
-        ArchivedNonZeroIsize, ArchivedNonZeroU128, ArchivedNonZeroU16,
-        ArchivedNonZeroU32, ArchivedNonZeroU64, ArchivedNonZeroUsize,
-        ArchivedU128, ArchivedU16, ArchivedU32, ArchivedU64, ArchivedUsize,
+        ArchivedChar, ArchivedF32, ArchivedF64, ArchivedI128, ArchivedI16, ArchivedI32,
+        ArchivedI64, ArchivedIsize, ArchivedNonZeroI128, ArchivedNonZeroI16, ArchivedNonZeroI32,
+        ArchivedNonZeroI64, ArchivedNonZeroIsize, ArchivedNonZeroU128, ArchivedNonZeroU16,
+        ArchivedNonZeroU32, ArchivedNonZeroU64, ArchivedNonZeroUsize, ArchivedU128, ArchivedU16,
+        ArchivedU32, ArchivedU64, ArchivedUsize,
     },
     traits::{CopyOptimization, NoUndef},
     Archive, Deserialize, Place, Portable, Serialize,
@@ -125,8 +124,7 @@ macro_rules! impl_serialize_noop {
 macro_rules! impl_archive_self_primitive {
     ($type:ty) => {
         impl Archive for $type {
-            const COPY_OPTIMIZATION: CopyOptimization<Self> =
-                unsafe { CopyOptimization::enable() };
+            const COPY_OPTIMIZATION: CopyOptimization<Self> = unsafe { CopyOptimization::enable() };
 
             type Archived = Self;
             type Resolver = ();
@@ -178,11 +176,8 @@ const MULTIBYTE_PRIMITIVES_ARE_TRIVIALLY_COPYABLE: bool = false;
 macro_rules! impl_multibyte_primitive {
     ($archived:ident : $type:ty) => {
         impl Archive for $type {
-            const COPY_OPTIMIZATION: CopyOptimization<Self> = unsafe {
-                CopyOptimization::enable_if(
-                    MULTIBYTE_PRIMITIVES_ARE_TRIVIALLY_COPYABLE,
-                )
-            };
+            const COPY_OPTIMIZATION: CopyOptimization<Self> =
+                unsafe { CopyOptimization::enable_if(MULTIBYTE_PRIMITIVES_ARE_TRIVIALLY_COPYABLE) };
 
             type Archived = $archived;
             type Resolver = ();
@@ -329,8 +324,7 @@ impl Archive for NonZeroUsize {
 
     #[inline]
     fn resolve(&self, _: Self::Resolver, out: Place<Self::Archived>) {
-        let value =
-            unsafe { ArchivedNonZeroUsize::new_unchecked(self.get() as _) };
+        let value = unsafe { ArchivedNonZeroUsize::new_unchecked(self.get() as _) };
         out.write(value);
     }
 }
@@ -365,8 +359,7 @@ impl Archive for NonZeroIsize {
 
     #[inline]
     fn resolve(&self, _: Self::Resolver, out: Place<Self::Archived>) {
-        let value =
-            unsafe { ArchivedNonZeroIsize::new_unchecked(self.get() as _) };
+        let value = unsafe { ArchivedNonZeroIsize::new_unchecked(self.get() as _) };
         out.write(value);
     }
 }
@@ -389,9 +382,8 @@ where
 #[cfg(test)]
 mod tests {
     use core::num::{
-        NonZeroI128, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI8,
-        NonZeroIsize, NonZeroU128, NonZeroU16, NonZeroU32, NonZeroU64,
-        NonZeroU8, NonZeroUsize,
+        NonZeroI128, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI8, NonZeroIsize, NonZeroU128,
+        NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU8, NonZeroUsize,
     };
 
     use crate::api::test::{roundtrip, roundtrip_with};
@@ -427,17 +419,11 @@ mod tests {
         roundtrip(&NonZeroI16::new(12345i16).unwrap());
         roundtrip(&NonZeroI32::new(1234567890i32).unwrap());
         roundtrip(&NonZeroI64::new(1234567890123456789i64).unwrap());
-        roundtrip(
-            &NonZeroI128::new(123456789012345678901234567890123456789i128)
-                .unwrap(),
-        );
+        roundtrip(&NonZeroI128::new(123456789012345678901234567890123456789i128).unwrap());
         roundtrip(&NonZeroU16::new(12345u16).unwrap());
         roundtrip(&NonZeroU32::new(1234567890u32).unwrap());
         roundtrip(&NonZeroU64::new(12345678901234567890u64).unwrap());
-        roundtrip(
-            &NonZeroU128::new(123456789012345678901234567890123456789u128)
-                .unwrap(),
-        );
+        roundtrip(&NonZeroU128::new(123456789012345678901234567890123456789u128).unwrap());
     }
 
     #[test]

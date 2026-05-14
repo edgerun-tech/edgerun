@@ -8,7 +8,9 @@ pub fn async_trait(_attr: TokenStream, item: TokenStream) -> TokenStream {
 fn expand_async_trait(item: TokenStream) -> Result<TokenStream, String> {
     let source = item.to_string();
     let Some(open) = source.find('{') else {
-        return Ok(source.parse().map_err(|_| "failed to parse item".to_string())?);
+        return Ok(source
+            .parse()
+            .map_err(|_| "failed to parse item".to_string())?);
     };
     let close = find_matching(&source, open, '{', '}')
         .ok_or_else(|| "async_trait expected matching item body".to_string())?;
@@ -81,9 +83,7 @@ fn rewrite_method(source: &str, start: usize) -> Result<(String, usize), String>
     let where_clause = merge_where_clause(&where_clause);
 
     if source[idx..].starts_with(';') {
-        let replacement = format!(
-            "{fn_prefix}<'async_trait>({args}) -> {future} {where_clause};"
-        );
+        let replacement = format!("{fn_prefix}<'async_trait>({args}) -> {future} {where_clause};");
         return Ok((replacement, idx + 1));
     }
 

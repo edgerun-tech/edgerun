@@ -107,10 +107,7 @@ impl Repr {
                     }
                     Ok(())
                 } else {
-                    Err(Error::new_spanned(
-                        meta.path,
-                        "unrecognized repr argument",
-                    ))
+                    Err(Error::new_spanned(meta.path, "unrecognized repr argument"))
                 }
             })?;
         }

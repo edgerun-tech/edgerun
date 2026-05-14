@@ -186,8 +186,6 @@ where
 /// let deserialized = deserialize::<Example, Failure>(archived).unwrap();
 /// assert_eq!(value, deserialized);
 /// ```
-pub fn deserialize<T, E>(
-    value: &impl Deserialize<T, LowDeserializer<E>>,
-) -> Result<T, E> {
+pub fn deserialize<T, E>(value: &impl Deserialize<T, LowDeserializer<E>>) -> Result<T, E> {
     deserialize_using(value, &mut ())
 }

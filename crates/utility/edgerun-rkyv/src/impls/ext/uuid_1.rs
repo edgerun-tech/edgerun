@@ -1,17 +1,14 @@
 use rancor::Fallible;
 use uuid_1::Uuid;
 
-use crate::{
-    traits::CopyOptimization, Archive, Deserialize, Place, Portable, Serialize,
-};
+use crate::{traits::CopyOptimization, Archive, Deserialize, Place, Portable, Serialize};
 
 // SAFETY: `Uuid` has the same ABI has `Bytes`, and so is `Portable` when
 // `Bytes` is.
 unsafe impl Portable for Uuid where uuid_1::Bytes: Portable {}
 
 impl Archive for Uuid {
-    const COPY_OPTIMIZATION: CopyOptimization<Self> =
-        unsafe { CopyOptimization::enable() };
+    const COPY_OPTIMIZATION: CopyOptimization<Self> = unsafe { CopyOptimization::enable() };
 
     type Archived = Uuid;
     type Resolver = ();
@@ -44,8 +41,6 @@ mod tests {
 
     #[test]
     fn roundtrip_uuid() {
-        roundtrip(
-            &Uuid::parse_str("f9168c5e-ceb2-4faa-b6bf-329bf39fa1e4").unwrap(),
-        )
+        roundtrip(&Uuid::parse_str("f9168c5e-ceb2-4faa-b6bf-329bf39fa1e4").unwrap())
     }
 }

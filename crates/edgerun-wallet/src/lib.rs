@@ -15,6 +15,6 @@ pub mod status;
 
 // Re-exports
 pub use amount::DecimalAmount;
-pub use asset::{canonical_asset_id, Asset, AssetRef};
+pub use asset::{Asset, AssetRef, canonical_asset_id};
 pub use errors::WalletError;
-pub use status::{can_transition, is_terminal, CanonicalOrderStatus};
+pub use status::{CanonicalOrderStatus, can_transition, is_terminal};

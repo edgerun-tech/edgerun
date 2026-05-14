@@ -2228,7 +2228,6 @@ impl std::fmt::Display for FunctionCallOutputPayload {
 mod tests {
     use super::*;
     use anyhow::Result;
-    use codex_execpolicy::Policy;
     use pretty_assertions::assert_eq;
     use std::path::PathBuf;
     use tempfile::tempdir;
@@ -2311,7 +2310,7 @@ mod tests {
 
     #[test]
     fn response_item_parses_image_generation_call() {
-        let item = edgerun_json::from_value::<ResponseItem>(edgerun_json::json!({
+        let item = edgerun_json::from_serde_value::<ResponseItem>(edgerun_json::json!({
             "id": "ig_123",
             "type": "image_generation_call",
             "status": "completed",
@@ -2333,7 +2332,7 @@ mod tests {
 
     #[test]
     fn response_item_parses_image_generation_call_without_revised_prompt() {
-        let item = edgerun_json::from_value::<ResponseItem>(edgerun_json::json!({
+        let item = edgerun_json::from_serde_value::<ResponseItem>(edgerun_json::json!({
             "id": "ig_123",
             "type": "image_generation_call",
             "status": "completed",
@@ -2408,7 +2407,7 @@ mod tests {
             },
         });
 
-        let permission_profile: PermissionProfile = edgerun_json::from_value(legacy)?;
+        let permission_profile: PermissionProfile = edgerun_json::from_serde_value(legacy)?;
 
         assert_eq!(
             permission_profile,
@@ -2566,7 +2565,7 @@ mod tests {
             glob_scan_max_depth: NonZeroUsize::new(2),
         };
 
-        let serialized = edgerun_json::to_value(&file_system_permissions)?;
+        let serialized = edgerun_json::to_serde_value(&file_system_permissions)?;
 
         assert_eq!(serialized.get("read"), None);
         assert_eq!(serialized.get("write"), None);
@@ -2576,7 +2575,7 @@ mod tests {
         );
         assert!(serialized.get("entries").is_some());
         assert_eq!(
-            edgerun_json::from_value::<FileSystemPermissions>(serialized)?,
+            edgerun_json::from_serde_value::<FileSystemPermissions>(serialized)?,
             file_system_permissions
         );
         Ok(())
@@ -2584,7 +2583,7 @@ mod tests {
 
     #[test]
     fn file_system_permissions_rejects_zero_glob_scan_depth() {
-        edgerun_json::from_value::<FileSystemPermissions>(edgerun_json::json!({
+        edgerun_json::from_serde_value::<FileSystemPermissions>(edgerun_json::json!({
             "entries": [],
             "glob_scan_max_depth": 0,
         }))
@@ -2679,7 +2678,7 @@ mod tests {
 
     #[test]
     fn function_call_deserializes_optional_namespace() {
-        let item: ResponseItem = edgerun_json::from_value(edgerun_json::json!({
+        let item: ResponseItem = edgerun_json::from_serde_value(edgerun_json::json!({
             "type": "function_call",
             "name": "mcp__codex_apps__gmail_get_recent_emails",
             "namespace": "mcp__codex_apps__gmail",
@@ -2738,18 +2737,11 @@ mod tests {
 
     #[test]
     fn format_allow_prefixes_limits_output() {
-        let mut exec_policy = Policy::empty();
-        for i in 0..200 {
-            exec_policy
-                .add_prefix_rule(
-                    &[format!("tool-{i:03}"), "x".repeat(500)],
-                    codex_execpolicy::Decision::Allow,
-                )
-                .expect("add rule");
-        }
+        let prefixes = (0..200)
+            .map(|i| vec![format!("tool-{i:03}"), "x".repeat(500)])
+            .collect();
 
-        let output =
-            format_allow_prefixes(exec_policy.get_allowed_prefixes()).expect("formatted prefixes");
+        let output = format_allow_prefixes(prefixes).expect("formatted prefixes");
         assert!(
             output.len() <= MAX_ALLOW_PREFIX_TEXT_BYTES + TRUNCATED_MARKER.len(),
             "output length exceeds expected limit: {output}",
@@ -2764,7 +2756,7 @@ mod tests {
         };
 
         let json = edgerun_json::to_string(&item)?;
-        let v: edgerun_json::Value = edgerun_json::from_str(&json)?;
+        let v: edgerun_json::Value = edgerun_json::from_serde_str(&json)?;
 
         // Success case -> output should be a plain string
         assert_eq!(v.get("output").unwrap().as_str().unwrap(), "ok");
@@ -2782,7 +2774,7 @@ mod tests {
         };
 
         let json = edgerun_json::to_string(&item)?;
-        let v: edgerun_json::Value = edgerun_json::from_str(&json)?;
+        let v: edgerun_json::Value = edgerun_json::from_serde_str(&json)?;
 
         assert_eq!(v.get("output").unwrap().as_str().unwrap(), "bad");
         Ok(())
@@ -2825,7 +2817,7 @@ mod tests {
         };
 
         let json = edgerun_json::to_string(&item)?;
-        let v: edgerun_json::Value = edgerun_json::from_str(&json)?;
+        let v: edgerun_json::Value = edgerun_json::from_serde_str(&json)?;
 
         let output = v.get("output").expect("output field");
         assert!(output.is_array(), "expected array output");
@@ -2847,7 +2839,7 @@ mod tests {
         };
 
         let json = edgerun_json::to_string(&item)?;
-        let v: edgerun_json::Value = edgerun_json::from_str(&json)?;
+        let v: edgerun_json::Value = edgerun_json::from_serde_str(&json)?;
 
         let output = v.get("output").expect("output field");
         assert!(output.is_array(), "expected array output");
@@ -2955,7 +2947,7 @@ mod tests {
             {"type": "input_image", "image_url": "data:image/png;base64,XYZ"}
         ]"#;
 
-        let payload: FunctionCallOutputPayload = edgerun_json::from_str(json)?;
+        let payload: FunctionCallOutputPayload = edgerun_json::from_serde_str(json)?;
 
         assert_eq!(payload.success, None);
         let expected_items = vec![
@@ -2983,7 +2975,7 @@ mod tests {
     fn deserializes_compaction_alias() -> Result<()> {
         let json = r#"{"type":"compaction_summary","encrypted_content":"abc"}"#;
 
-        let item: ResponseItem = edgerun_json::from_str(json)?;
+        let item: ResponseItem = edgerun_json::from_serde_str(json)?;
 
         assert_eq!(
             item,
@@ -2998,7 +2990,7 @@ mod tests {
     fn deserializes_context_compaction() -> Result<()> {
         let json = r#"{"type":"context_compaction","encrypted_content":"abc"}"#;
 
-        let item: ResponseItem = edgerun_json::from_str(json)?;
+        let item: ResponseItem = edgerun_json::from_serde_str(json)?;
 
         assert_eq!(
             item,
@@ -3016,7 +3008,7 @@ mod tests {
         };
 
         assert_eq!(
-            edgerun_json::to_value(item)?,
+            edgerun_json::to_serde_value(item)?,
             edgerun_json::json!({
                 "type": "context_compaction",
             })
@@ -3036,7 +3028,7 @@ mod tests {
             }
         }"#;
 
-        let item: ResponseItem = edgerun_json::from_str(json)?;
+        let item: ResponseItem = edgerun_json::from_serde_str(json)?;
 
         assert_eq!(item, ResponseItem::Other);
         Ok(())
@@ -3112,7 +3104,7 @@ mod tests {
 
         for (json_literal, expected_id, expected_action, expected_status, expect_roundtrip) in cases
         {
-            let parsed: ResponseItem = edgerun_json::from_str(json_literal)?;
+            let parsed: ResponseItem = edgerun_json::from_serde_str(json_literal)?;
             let expected = ResponseItem::WebSearchCall {
                 id: expected_id.clone(),
                 status: expected_status.clone(),
@@ -3120,7 +3112,7 @@ mod tests {
             };
             assert_eq!(parsed, expected);
 
-            let serialized = edgerun_json::to_value(&parsed)?;
+            let serialized = edgerun_json::to_serde_value(&parsed)?;
             let mut expected_serialized: edgerun_json::Value =
                 edgerun_json::from_str(json_literal)?;
             if !expect_roundtrip && let Some(obj) = expected_serialized.as_object_mut() {
@@ -3140,7 +3132,7 @@ mod tests {
             "timeout": 1000
         }"#;
 
-        let params: ShellToolCallParams = edgerun_json::from_str(json)?;
+        let params: ShellToolCallParams = edgerun_json::from_serde_str(json)?;
         assert_eq!(
             ShellToolCallParams {
                 command: vec!["ls".to_string(), "-l".to_string()],
@@ -3188,7 +3180,7 @@ mod tests {
 
     #[test]
     fn tool_search_call_roundtrips() -> Result<()> {
-        let parsed: ResponseItem = edgerun_json::from_str(
+        let parsed: ResponseItem = edgerun_json::from_serde_str(
             r#"{
                 "type": "tool_search_call",
                 "call_id": "search-1",
@@ -3215,7 +3207,7 @@ mod tests {
         );
 
         assert_eq!(
-            edgerun_json::to_value(&parsed)?,
+            edgerun_json::to_serde_value(&parsed)?,
             edgerun_json::json!({
                 "type": "tool_search_call",
                 "call_id": "search-1",
@@ -3275,7 +3267,7 @@ mod tests {
         );
 
         assert_eq!(
-            edgerun_json::to_value(input)?,
+            edgerun_json::to_serde_value(input)?,
             edgerun_json::json!({
                 "type": "tool_search_output",
                 "call_id": "search-1",
@@ -3303,7 +3295,7 @@ mod tests {
 
     #[test]
     fn tool_search_server_items_allow_null_call_id() -> Result<()> {
-        let parsed_call: ResponseItem = edgerun_json::from_str(
+        let parsed_call: ResponseItem = edgerun_json::from_serde_str(
             r#"{
                 "type": "tool_search_call",
                 "execution": "server",
@@ -3327,7 +3319,7 @@ mod tests {
             }
         );
 
-        let parsed_output: ResponseItem = edgerun_json::from_str(
+        let parsed_output: ResponseItem = edgerun_json::from_serde_str(
             r#"{
                 "type": "tool_search_output",
                 "execution": "server",

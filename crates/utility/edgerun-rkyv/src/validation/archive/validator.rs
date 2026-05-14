@@ -1,7 +1,4 @@
-use core::{
-    alloc::Layout, error::Error, fmt, marker::PhantomData, num::NonZeroUsize,
-    ops::Range,
-};
+use core::{alloc::Layout, error::Error, fmt, marker::PhantomData, num::NonZeroUsize, ops::Range};
 
 use rancor::{fail, OptionExt, Source};
 
@@ -112,10 +109,7 @@ impl<'a> ArchiveValidator<'a> {
     /// Crates a new bounds validator for the given bytes with a maximum
     /// validation depth.
     #[inline]
-    pub fn with_max_depth(
-        bytes: &'a [u8],
-        max_subtree_depth: Option<NonZeroUsize>,
-    ) -> Self {
+    pub fn with_max_depth(bytes: &'a [u8], max_subtree_depth: Option<NonZeroUsize>) -> Self {
         let Range { start, end } = bytes.as_ptr_range();
         Self {
             subtree_range: Range {
@@ -129,17 +123,10 @@ impl<'a> ArchiveValidator<'a> {
 }
 
 unsafe impl<E: Source> ArchiveContext<E> for ArchiveValidator<'_> {
-    fn check_subtree_ptr(
-        &mut self,
-        ptr: *const u8,
-        layout: &Layout,
-    ) -> Result<(), E> {
+    fn check_subtree_ptr(&mut self, ptr: *const u8, layout: &Layout) -> Result<(), E> {
         let start = ptr as usize;
         let end = ptr.wrapping_add(layout.size()) as usize;
-        if end < start
-            || start < self.subtree_range.start
-            || end > self.subtree_range.end
-        {
+        if end < start || start < self.subtree_range.start || end > self.subtree_range.end {
             fail!(InvalidSubtreePointer {
                 address: start,
                 size: layout.size(),
@@ -173,10 +160,7 @@ unsafe impl<E: Source> ArchiveContext<E> for ArchiveValidator<'_> {
         Ok(result)
     }
 
-    unsafe fn pop_subtree_range(
-        &mut self,
-        range: Range<usize>,
-    ) -> Result<(), E> {
+    unsafe fn pop_subtree_range(&mut self, range: Range<usize>) -> Result<(), E> {
         if range.start < self.subtree_range.end {
             fail!(RangePoppedOutOfOrder);
         }

@@ -7,17 +7,18 @@ use core::option::Option::{None, Some};
 use core::result::Result::{Err, Ok};
 #[cfg(target_os = "none")]
 use edgerun_bluetooth_gatt::sync::RwLock;
-use edgerun_bluetooth_gatt::{format_gatt_uuid, AttProtocol, GattError, L2capSocket};
+use edgerun_bluetooth_gatt::{AttProtocol, GattError, L2capSocket, format_gatt_uuid};
 use edgerun_capabilities::{CapabilityError, CapabilityProvider};
 use edgerun_crypto::OsRng;
-use edgerun_protocols::tcl_ac::{
-    build_protocol_packet, calculate_crc8, decrypt_payload as decrypt_protocol_payload,
-    derive_session_key, encrypt_payload as encrypt_protocol_payload, expected_protocol_packet_len,
-    full_control_payload, legacy_provision_payload_with_hosts, parse_protocol_packet,
-    parse_state_response, CMD_GET_DEVICE_INFO, CMD_GET_DEVICE_INFO_RESPONSE, CMD_SEND_APP_RANDOM,
-    CMD_SEND_DEVICE_RANDOM, CMD_SEND_WIFI_INFO, CMD_STATUS_REPORT_RESPONSE, PROTOCOL_HEAD,
-};
 pub use edgerun_protocols::tcl_ac::{AcMode, AcState, FanSpeed, WindDirection};
+use edgerun_protocols::tcl_ac::{
+    CMD_GET_DEVICE_INFO, CMD_GET_DEVICE_INFO_RESPONSE, CMD_SEND_APP_RANDOM, CMD_SEND_DEVICE_RANDOM,
+    CMD_SEND_WIFI_INFO, CMD_STATUS_REPORT_RESPONSE, PROTOCOL_HEAD, build_protocol_packet,
+    calculate_crc8, decrypt_payload as decrypt_protocol_payload, derive_session_key,
+    encrypt_payload as encrypt_protocol_payload, expected_protocol_packet_len,
+    full_control_payload, legacy_provision_payload_with_hosts, parse_protocol_packet,
+    parse_state_response,
+};
 #[cfg(not(target_os = "none"))]
 use std::sync::RwLock;
 
@@ -829,7 +830,7 @@ mod tests {
     #[test]
     fn aes_cbc_roundtrips_payloads() {
         use edgerun_protocols::tcl_ac::{
-            decrypt_payload_with_key, encrypt_payload_with_key, BASE_KEY,
+            BASE_KEY, decrypt_payload_with_key, encrypt_payload_with_key,
         };
         for payload in [
             b"".as_slice(),
@@ -848,7 +849,7 @@ mod tests {
     #[test]
     fn aes_cbc_rejects_bad_padding() {
         use edgerun_protocols::tcl_ac::{
-            decrypt_payload_with_key, encrypt_payload_with_key, BASE_KEY,
+            BASE_KEY, decrypt_payload_with_key, encrypt_payload_with_key,
         };
         let mut encrypted = encrypt_payload_with_key(BASE_KEY, b"payload");
         let last = encrypted.len() - 1;

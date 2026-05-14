@@ -111,24 +111,15 @@ pub trait ArchiveWith<F: ?Sized> {
     type Resolver;
 
     /// Resolves the archived type using a reference to the field type `F`.
-    fn resolve_with(
-        field: &F,
-        resolver: Self::Resolver,
-        out: Place<Self::Archived>,
-    );
+    fn resolve_with(field: &F, resolver: Self::Resolver, out: Place<Self::Archived>);
 }
 
 /// A variant of `Serialize` for "with" types.
 ///
 /// See [ArchiveWith] for more details.
-pub trait SerializeWith<F: ?Sized, S: Fallible + ?Sized>:
-    ArchiveWith<F>
-{
+pub trait SerializeWith<F: ?Sized, S: Fallible + ?Sized>: ArchiveWith<F> {
     /// Serializes the field type `F` using the given serializer.
-    fn serialize_with(
-        field: &F,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error>;
+    fn serialize_with(field: &F, serializer: &mut S) -> Result<Self::Resolver, S::Error>;
 }
 
 /// A variant of `Deserialize` for "with" types.
@@ -136,8 +127,7 @@ pub trait SerializeWith<F: ?Sized, S: Fallible + ?Sized>:
 /// See [ArchiveWith] for more details.
 pub trait DeserializeWith<F: ?Sized, T, D: Fallible + ?Sized> {
     /// Deserializes the field type `F` using the given deserializer.
-    fn deserialize_with(field: &F, deserializer: &mut D)
-        -> Result<T, D::Error>;
+    fn deserialize_with(field: &F, deserializer: &mut D) -> Result<T, D::Error>;
 }
 
 /// A transparent wrapper which applies a "with" type.
@@ -174,10 +164,7 @@ where
     F: ?Sized,
     W: SerializeWith<F, S>,
 {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, <S as Fallible>::Error> {
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, <S as Fallible>::Error> {
         W::serialize_with(&self.field, serializer)
     }
 }
@@ -188,10 +175,7 @@ where
     F: ?Sized,
     W: DeserializeWith<F, T, D>,
 {
-    fn deserialize(
-        &self,
-        deserializer: &mut D,
-    ) -> Result<T, <D as Fallible>::Error> {
+    fn deserialize(&self, deserializer: &mut D) -> Result<T, <D as Fallible>::Error> {
         W::deserialize_with(&self.field, deserializer)
     }
 }

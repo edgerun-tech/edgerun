@@ -48,8 +48,7 @@ impl<K, V, H> ArchivedIndexMap<K, V, H> {
     fn entries_seal(this: Seal<'_, Self>) -> Seal<'_, [Entry<K, V>]> {
         let len = this.len();
         munge!(let Self { entries, .. } = this);
-        let slice =
-            unsafe { from_raw_parts_mut(RelPtr::as_mut_ptr(entries), len) };
+        let slice = unsafe { from_raw_parts_mut(RelPtr::as_mut_ptr(entries), len) };
         Seal::new(slice)
     }
 
@@ -92,11 +91,7 @@ impl<K, V, H> ArchivedIndexMap<K, V, H> {
 impl<K, V, H: Hasher + Default> ArchivedIndexMap<K, V, H> {
     /// Gets the index, key, and value corresponding to the supplied key using
     /// the given comparison function.
-    pub fn get_full_with<Q, C>(
-        &self,
-        key: &Q,
-        cmp: C,
-    ) -> Option<(usize, &K, &V)>
+    pub fn get_full_with<Q, C>(&self, key: &Q, cmp: C) -> Option<(usize, &K, &V)>
     where
         Q: Hash + Eq + ?Sized,
         C: Fn(&Q, &K) -> bool,
@@ -203,10 +198,7 @@ impl<K, V, H: Hasher + Default> ArchivedIndexMap<K, V, H> {
     }
 
     /// Returns the mutable key-value pair corresponding to the supplied key.
-    pub fn get_key_value_seal<'a, Q>(
-        this: Seal<'a, Self>,
-        key: &Q,
-    ) -> Option<(&'a K, Seal<'a, V>)>
+    pub fn get_key_value_seal<'a, Q>(this: Seal<'a, Self>, key: &Q) -> Option<(&'a K, Seal<'a, V>)>
     where
         K: Borrow<Q>,
         Q: Hash + Eq + ?Sized,
@@ -217,11 +209,7 @@ impl<K, V, H: Hasher + Default> ArchivedIndexMap<K, V, H> {
 
     /// Returns a mutable reference to the value corresponding to the supplied
     /// key using the given comparison function.
-    pub fn get_seal_with<'a, Q, C>(
-        this: Seal<'a, Self>,
-        key: &Q,
-        cmp: C,
-    ) -> Option<Seal<'a, V>>
+    pub fn get_seal_with<'a, Q, C>(this: Seal<'a, Self>, key: &Q, cmp: C) -> Option<Seal<'a, V>>
     where
         K: Borrow<Q>,
         Q: Hash + Eq + ?Sized,
@@ -290,12 +278,7 @@ impl<K, V, H: Hasher + Default> ArchivedIndexMap<K, V, H> {
         out: Place<Self>,
     ) {
         munge!(let ArchivedIndexMap { table, entries, _phantom: _ } = out);
-        ArchivedHashTable::resolve_from_len(
-            len,
-            load_factor,
-            resolver.table_resolver,
-            table,
-        );
+        ArchivedHashTable::resolve_from_len(len, load_factor, resolver.table_resolver, table);
         RelPtr::emplace(resolver.entries_pos as usize, entries);
     }
 
@@ -317,45 +300,35 @@ impl<K, V, H: Hasher + Default> ArchivedIndexMap<K, V, H> {
         use crate::util::SerVec;
 
         // Serialize hash table
-        let table_resolver =
-            ArchivedHashTable::<ArchivedUsize>::serialize_from_iter(
-                0..iter.len(),
-                iter.clone()
-                    .map(|(key, _)| hash_value::<KU, H>(key.borrow())),
-                load_factor,
-                serializer,
-            )?;
+        let table_resolver = ArchivedHashTable::<ArchivedUsize>::serialize_from_iter(
+            0..iter.len(),
+            iter.clone()
+                .map(|(key, _)| hash_value::<KU, H>(key.borrow())),
+            load_factor,
+            serializer,
+        )?;
 
         // Serialize entries
-        SerVec::with_capacity(
-            serializer,
-            iter.len(),
-            |resolvers, serializer| {
-                for (key, value) in iter.clone() {
-                    resolvers.push(EntryResolver {
-                        key: key.borrow().serialize(serializer)?,
-                        value: value.borrow().serialize(serializer)?,
-                    });
-                }
+        SerVec::with_capacity(serializer, iter.len(), |resolvers, serializer| {
+            for (key, value) in iter.clone() {
+                resolvers.push(EntryResolver {
+                    key: key.borrow().serialize(serializer)?,
+                    value: value.borrow().serialize(serializer)?,
+                });
+            }
 
-                let entries_pos = serializer.align_for::<Entry<K, V>>()?;
-                for ((key, value), resolver) in
-                    iter.clone().zip(resolvers.drain())
-                {
-                    unsafe {
-                        serializer.resolve_aligned(
-                            &EntryAdapter::new(key, value),
-                            resolver,
-                        )?;
-                    }
+            let entries_pos = serializer.align_for::<Entry<K, V>>()?;
+            for ((key, value), resolver) in iter.clone().zip(resolvers.drain()) {
+                unsafe {
+                    serializer.resolve_aligned(&EntryAdapter::new(key, value), resolver)?;
                 }
+            }
 
-                Ok(IndexMapResolver {
-                    table_resolver,
-                    entries_pos: entries_pos as FixedUsize,
-                })
-            },
-        )?
+            Ok(IndexMapResolver {
+                table_resolver,
+                entries_pos: entries_pos as FixedUsize,
+            })
+        })?
     }
 }
 
@@ -509,14 +482,9 @@ mod verify {
         K: CheckBytes<C>,
         V: CheckBytes<C>,
     {
-        fn verify(
-            &self,
-            context: &mut C,
-        ) -> Result<(), <C as Fallible>::Error> {
-            let ptr = core::ptr::slice_from_raw_parts(
-                self.entries.as_ptr_wrapping(),
-                self.table.len(),
-            );
+        fn verify(&self, context: &mut C) -> Result<(), <C as Fallible>::Error> {
+            let ptr =
+                core::ptr::slice_from_raw_parts(self.entries.as_ptr_wrapping(), self.table.len());
 
             context.in_subtree(ptr, |context| {
                 // SAFETY: `in_subtree` has checked that `ptr` is aligned and

@@ -22,10 +22,7 @@ where
     S: Fallible + Allocator + Writer + ?Sized,
     S::Error: Source,
 {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
         ArchivedString::serialize_from_str(self, serializer)
     }
 }

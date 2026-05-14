@@ -19,3 +19,8 @@ codex-protocol = { workspace = true }
 edgerun-http = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+
+[dev-dependencies]
+edgerun-json = { workspace = true, features = ["toml"] }
+pretty_assertions = { package = "edgerun-pretty-assertions", path = "../../../utility/edgerun-pretty-assertions" }
+tempfile = { package = "edgerun-tempfile", path = "../../../utility/edgerun-tempfile" }

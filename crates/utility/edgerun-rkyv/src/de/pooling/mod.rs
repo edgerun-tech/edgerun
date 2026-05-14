@@ -4,9 +4,7 @@
 mod alloc;
 mod core;
 
-use ::core::{
-    alloc::LayoutError, error::Error, fmt, mem::transmute, ptr::NonNull,
-};
+use ::core::{alloc::LayoutError, error::Error, fmt, mem::transmute, ptr::NonNull};
 use ptr_meta::{from_raw_parts_mut, metadata, DynMetadata, Pointee};
 use rancor::{fail, Fallible, ResultExt as _, Source, Strategy};
 
@@ -44,9 +42,7 @@ impl From<usize> for Metadata {
 impl<T: ?Sized> From<DynMetadata<T>> for Metadata {
     fn from(value: DynMetadata<T>) -> Self {
         Self {
-            vtable: unsafe {
-                transmute::<DynMetadata<T>, DynMetadata<()>>(value)
-            },
+            vtable: unsafe { transmute::<DynMetadata<T>, DynMetadata<()>>(value) },
         }
     }
 }
@@ -230,10 +226,7 @@ pub trait PoolingExt<E>: Pooling<E> {
     /// Checks whether the given reference has been deserialized and either uses
     /// the existing shared pointer to it, or deserializes it and converts
     /// it to a shared pointer with `to_shared`.
-    fn deserialize_shared<T, P>(
-        &mut self,
-        value: &T::Archived,
-    ) -> Result<*mut T, Self::Error>
+    fn deserialize_shared<T, P>(&mut self, value: &T::Archived) -> Result<*mut T, Self::Error>
     where
         T: ArchiveUnsized + Pointee + LayoutRaw + ?Sized,
         T::Metadata: Into<Metadata> + FromMetadata,
@@ -261,11 +254,7 @@ pub trait PoolingExt<E>: Pooling<E> {
                 let ptr = unsafe { NonNull::new_unchecked(P::from_value(out)) };
 
                 unsafe {
-                    self.finish_pooling(
-                        address,
-                        ErasedPtr::new(ptr),
-                        drop_shared::<T, P>,
-                    )?;
+                    self.finish_pooling(address, ErasedPtr::new(ptr), drop_shared::<T, P>)?;
                 }
 
                 Ok(ptr.as_ptr())

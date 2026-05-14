@@ -294,6 +294,11 @@ impl<'a, 'font> UiPainter<'a, 'font> {
     }
 
     pub fn icon(&mut self, rect: UiRect, icon: UiIcon, color: Color4) {
+        #[cfg(feature = "tabler-svg-atlas")]
+        if let Some(atlas_rect) = icon.tabler_svg_atlas_rect() {
+            self.scene.push_icon_quad(rect, atlas_rect, color);
+            return;
+        }
         draw_canonical_icon(self.scene, rect, icon, color);
     }
 

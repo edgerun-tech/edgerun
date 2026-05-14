@@ -29,19 +29,12 @@ where
     S: Allocator + Fallible + Writer + ?Sized,
     S::Error: Source,
 {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
-        Self::Archived::serialize_from_ordered_iter::<_, _, _, K, V, _>(
-            self.iter(),
-            serializer,
-        )
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+        Self::Archived::serialize_from_ordered_iter::<_, _, _, K, V, _>(self.iter(), serializer)
     }
 }
 
-impl<K, V, D> Deserialize<BTreeMap<K, V>, D>
-    for ArchivedBTreeMap<K::Archived, V::Archived>
+impl<K, V, D> Deserialize<BTreeMap<K, V>, D> for ArchivedBTreeMap<K::Archived, V::Archived>
 where
     K: Archive + Ord,
     K::Archived: Deserialize<K, D> + Ord,
@@ -49,10 +42,7 @@ where
     V::Archived: Deserialize<V, D>,
     D: Fallible + ?Sized,
 {
-    fn deserialize(
-        &self,
-        deserializer: &mut D,
-    ) -> Result<BTreeMap<K, V>, D::Error> {
+    fn deserialize(&self, deserializer: &mut D) -> Result<BTreeMap<K, V>, D::Error> {
         let mut result = BTreeMap::new();
         let r = self.visit(|ak, av| {
             let k = match ak.deserialize(deserializer) {
@@ -184,9 +174,7 @@ mod tests {
 
     #[test]
     fn roundtrip_btree_map_with_struct_member() {
-        #[derive(
-            Archive, Serialize, Deserialize, Debug, Default, PartialEq,
-        )]
+        #[derive(Archive, Serialize, Deserialize, Debug, Default, PartialEq)]
         #[rkyv(crate, compare(PartialEq), derive(Debug))]
         pub struct MyType {
             pub some_list: BTreeMap<String, Vec<f32>>,
@@ -213,13 +201,10 @@ mod tests {
         value.insert("bat".to_string(), 80);
 
         to_archived(&value, |mut archived| {
-            ArchivedBTreeMap::visit_seal(
-                archived.as_mut(),
-                |_, mut v: Seal<'_, ArchivedI32>| {
-                    *v = ArchivedI32::from_native(v.to_native() + 10);
-                    ControlFlow::<(), ()>::Continue(())
-                },
-            );
+            ArchivedBTreeMap::visit_seal(archived.as_mut(), |_, mut v: Seal<'_, ArchivedI32>| {
+                *v = ArchivedI32::from_native(v.to_native() + 10);
+                ControlFlow::<(), ()>::Continue(())
+            });
             assert_eq!(archived.get("foo").map(|x| x.to_native()), Some(20));
             assert_eq!(archived.get("bar").map(|x| x.to_native()), Some(30));
             assert_eq!(archived.get("baz").map(|x| x.to_native()), Some(50));
@@ -244,8 +229,7 @@ mod tests {
         value.insert("bat".to_string(), 80);
 
         to_archived(&value, |archived| {
-            let mut i =
-                archived.iter().map(|(k, v)| (k.as_str(), v.to_native()));
+            let mut i = archived.iter().map(|(k, v)| (k.as_str(), v.to_native()));
             assert_eq!(i.next(), Some(("bar", 20)));
             assert_eq!(i.next(), Some(("bat", 80)));
             assert_eq!(i.next(), Some(("baz", 40)));
@@ -263,8 +247,7 @@ mod tests {
         value.insert("bat".to_string(), 80);
 
         to_archived(&value, |archived| {
-            let mut i =
-                archived.iter().map(|(k, v)| (k.as_str(), v.to_native()));
+            let mut i = archived.iter().map(|(k, v)| (k.as_str(), v.to_native()));
             assert_eq!(i.next(), Some(("bar", 20)));
             assert_eq!(i.next(), Some(("bat", 80)));
             assert_eq!(i.next(), Some(("baz", 40)));

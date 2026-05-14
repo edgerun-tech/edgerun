@@ -17,6 +17,7 @@ pub mod filesystem;
 #[allow(dead_code)]
 pub mod git;
 pub mod glob;
+pub mod graph_types;
 #[cfg(not(target_arch = "wasm32"))]
 #[allow(dead_code)]
 pub mod mcp_permission;
@@ -38,7 +39,7 @@ pub mod source_analysis;
 #[cfg(all(feature = "vfs", not(target_arch = "wasm32")))]
 #[allow(dead_code, unused_imports, unused_variables)]
 pub mod vfs;
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", feature = "wire-rkyv"))]
 pub mod wasm;
 
 /// Returns a current timestamp string (Unix seconds) without chrono.
@@ -49,11 +50,13 @@ pub fn timestamp_now() -> String {
         .unwrap_or_default()
 }
 
-// rkyv-normalized wire protocol only.
+#[cfg(feature = "wire-rkyv")]
 pub const WIRE_PROTOCOL: &str = "rkyv";
 
+#[cfg(feature = "wire-rkyv")]
 pub mod xray_wire;
 
+#[cfg(feature = "wire-rkyv")]
 pub mod generated {
     #[allow(dead_code)]
     pub mod codeanalyzer;

@@ -2,10 +2,7 @@ use core::fmt::Display;
 
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
-use syn::{
-    parse_quote, punctuated::Punctuated, Error, Field, Fields, Generics, Index,
-    Member,
-};
+use syn::{parse_quote, punctuated::Punctuated, Error, Field, Fields, Generics, Index, Member};
 
 use crate::{
     archive::{archived_doc, printing::Printing, resolver_doc},
@@ -80,8 +77,7 @@ pub fn impl_struct(
             Ident::new("self", Span::call_site()),
         )?;
 
-        let copy_optimization =
-            generate_copy_optimization(printing, generics, attributes, fields)?;
+        let copy_optimization = generate_copy_optimization(printing, generics, attributes, fields)?;
 
         quote! {
             impl #impl_generics #rkyv_path::Archive for #name #ty_generics
@@ -181,10 +177,9 @@ fn generate_archived_type(
         let field_doc = format!(
             "The archived counterpart of [`{}::{}`]",
             name,
-            ident.as_ref().map_or_else(
-                || &i as &dyn Display,
-                |name| name as &dyn Display
-            )
+            ident
+                .as_ref()
+                .map_or_else(|| &i as &dyn Display, |name| name as &dyn Display)
         );
         let field_attrs = FieldAttributes::parse(attributes, field)?;
         let field_metas = field_attrs.metas();

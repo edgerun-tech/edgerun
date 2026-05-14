@@ -6,13 +6,11 @@ macro_rules! impl_hashbrown {
                 hash::{BuildHasher, Hash},
             };
 
-            use $hashbrown::HashMap;
             use rancor::{Fallible, Source};
+            use $hashbrown::HashMap;
 
             use crate::{
-                collections::swiss_table::map::{
-                    ArchivedHashMap, HashMapResolver,
-                },
+                collections::swiss_table::map::{ArchivedHashMap, HashMapResolver},
                 ser::{Allocator, Writer},
                 Archive, Deserialize, Place, Serialize,
             };
@@ -25,22 +23,12 @@ macro_rules! impl_hashbrown {
                 type Archived = ArchivedHashMap<K::Archived, V::Archived>;
                 type Resolver = HashMapResolver;
 
-                fn resolve(
-                    &self,
-                    resolver: Self::Resolver,
-                    out: Place<Self::Archived>,
-                ) {
-                    ArchivedHashMap::resolve_from_len(
-                        self.len(),
-                        (7, 8),
-                        resolver,
-                        out,
-                    );
+                fn resolve(&self, resolver: Self::Resolver, out: Place<Self::Archived>) {
+                    ArchivedHashMap::resolve_from_len(self.len(), (7, 8), resolver, out);
                 }
             }
 
-            impl<K, V, S, RandomState> Serialize<S>
-                for HashMap<K, V, RandomState>
+            impl<K, V, S, RandomState> Serialize<S> for HashMap<K, V, RandomState>
             where
                 K: Serialize<S> + Hash + Eq,
                 K::Archived: Hash + Eq,
@@ -48,16 +36,15 @@ macro_rules! impl_hashbrown {
                 S: Fallible + Writer + Allocator + ?Sized,
                 S::Error: Source,
             {
-                fn serialize(
-                    &self,
-                    serializer: &mut S,
-                ) -> Result<Self::Resolver, S::Error> {
-                    ArchivedHashMap::<K::Archived, V::Archived>::
-                        serialize_from_iter::<_, _, _, K, V, _>(
-                            self.iter(),
-                            (7, 8),
-                            serializer,
-                        )
+                fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+                    ArchivedHashMap::<K::Archived, V::Archived>::serialize_from_iter::<
+                        _,
+                        _,
+                        _,
+                        K,
+                        V,
+                        _,
+                    >(self.iter(), (7, 8), serializer)
                 }
             }
 
@@ -71,26 +58,16 @@ macro_rules! impl_hashbrown {
                 D: Fallible + ?Sized,
                 S: Default + BuildHasher,
             {
-                fn deserialize(
-                    &self,
-                    deserializer: &mut D,
-                ) -> Result<HashMap<K, V, S>, D::Error> {
-                    let mut result = HashMap::with_capacity_and_hasher(
-                        self.len(),
-                        S::default(),
-                    );
+                fn deserialize(&self, deserializer: &mut D) -> Result<HashMap<K, V, S>, D::Error> {
+                    let mut result = HashMap::with_capacity_and_hasher(self.len(), S::default());
                     for (k, v) in self.iter() {
-                        result.insert(
-                            k.deserialize(deserializer)?,
-                            v.deserialize(deserializer)?,
-                        );
+                        result.insert(k.deserialize(deserializer)?, v.deserialize(deserializer)?);
                     }
                     Ok(result)
                 }
             }
 
-            impl<K, V, AK, AV, S> PartialEq<HashMap<K, V, S>>
-                for ArchivedHashMap<AK, AV>
+            impl<K, V, AK, AV, S> PartialEq<HashMap<K, V, S>> for ArchivedHashMap<AK, AV>
             where
                 K: Hash + Eq + Borrow<AK>,
                 AK: Hash + Eq,
@@ -101,9 +78,8 @@ macro_rules! impl_hashbrown {
                     if self.len() != other.len() {
                         false
                     } else {
-                        self.iter().all(|(key, value)| {
-                            other.get(key).map_or(false, |v| value.eq(v))
-                        })
+                        self.iter()
+                            .all(|(key, value)| other.get(key).map_or(false, |v| value.eq(v)))
                     }
                 }
             }
@@ -113,17 +89,12 @@ macro_rules! impl_hashbrown {
                 use core::hash::BuildHasherDefault;
 
                 use super::HashMap;
-                use crate::{
-                    alloc::string::String,
-                    api::test::roundtrip_with,
-                    hash::FxHasher64,
-                };
+                use crate::{alloc::string::String, api::test::roundtrip_with, hash::FxHasher64};
 
                 #[test]
                 fn index_map() {
-                    let mut value = HashMap::with_hasher(
-                        BuildHasherDefault::<FxHasher64>::default(),
-                    );
+                    let mut value =
+                        HashMap::with_hasher(BuildHasherDefault::<FxHasher64>::default());
                     value.insert(String::from("foo"), 10);
                     value.insert(String::from("bar"), 20);
                     value.insert(String::from("baz"), 40);
@@ -147,13 +118,11 @@ macro_rules! impl_hashbrown {
                 hash::{BuildHasher, Hash},
             };
 
-            use $hashbrown::HashSet;
             use rancor::{Fallible, Source};
+            use $hashbrown::HashSet;
 
             use crate::{
-                collections::swiss_table::set::{
-                    ArchivedHashSet, HashSetResolver,
-                },
+                collections::swiss_table::set::{ArchivedHashSet, HashSetResolver},
                 ser::{Allocator, Writer},
                 Archive, Deserialize, Place, Serialize,
             };
@@ -166,11 +135,7 @@ macro_rules! impl_hashbrown {
                 type Archived = ArchivedHashSet<K::Archived>;
                 type Resolver = HashSetResolver;
 
-                fn resolve(
-                    &self,
-                    resolver: Self::Resolver,
-                    out: Place<Self::Archived>,
-                ) {
+                fn resolve(&self, resolver: Self::Resolver, out: Place<Self::Archived>) {
                     ArchivedHashSet::<K::Archived>::resolve_from_len(
                         self.len(),
                         (7, 8),
@@ -187,30 +152,23 @@ macro_rules! impl_hashbrown {
                 S: Fallible + Allocator + Writer + ?Sized,
                 S::Error: Source,
             {
-                fn serialize(
-                    &self,
-                    serializer: &mut S,
-                ) -> Result<Self::Resolver, S::Error> {
-                    ArchivedHashSet::<K::Archived>::serialize_from_iter::<
-                        _,
-                        K,
-                        _,
-                    >(self.iter(), (7, 8), serializer)
+                fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+                    ArchivedHashSet::<K::Archived>::serialize_from_iter::<_, K, _>(
+                        self.iter(),
+                        (7, 8),
+                        serializer,
+                    )
                 }
             }
 
-            impl<K, D, S> Deserialize<HashSet<K, S>, D>
-                for ArchivedHashSet<K::Archived>
+            impl<K, D, S> Deserialize<HashSet<K, S>, D> for ArchivedHashSet<K::Archived>
             where
                 K: Archive + Hash + Eq,
                 K::Archived: Deserialize<K, D> + Hash + Eq,
                 D: Fallible + ?Sized,
                 S: Default + BuildHasher,
             {
-                fn deserialize(
-                    &self,
-                    deserializer: &mut D,
-                ) -> Result<HashSet<K, S>, D::Error> {
+                fn deserialize(&self, deserializer: &mut D) -> Result<HashSet<K, S>, D::Error> {
                     let mut result = HashSet::with_hasher(S::default());
                     for k in self.iter() {
                         result.insert(k.deserialize(deserializer)?);
@@ -219,8 +177,8 @@ macro_rules! impl_hashbrown {
                 }
             }
 
-            impl<K: Hash + Eq + Borrow<AK>, AK: Hash + Eq, S: BuildHasher>
-                PartialEq<HashSet<K, S>> for ArchivedHashSet<AK>
+            impl<K: Hash + Eq + Borrow<AK>, AK: Hash + Eq, S: BuildHasher> PartialEq<HashSet<K, S>>
+                for ArchivedHashSet<AK>
             {
                 fn eq(&self, other: &HashSet<K, S>) -> bool {
                     if self.len() != other.len() {
@@ -244,17 +202,12 @@ macro_rules! impl_hashbrown {
                 use core::hash::BuildHasherDefault;
 
                 use super::HashSet;
-                use crate::{
-                    alloc::string::String,
-                    api::test::roundtrip_with,
-                    hash::FxHasher64,
-                };
+                use crate::{alloc::string::String, api::test::roundtrip_with, hash::FxHasher64};
 
                 #[test]
                 fn index_set() {
-                    let mut value = HashSet::with_hasher(
-                        BuildHasherDefault::<FxHasher64>::default(),
-                    );
+                    let mut value =
+                        HashSet::with_hasher(BuildHasherDefault::<FxHasher64>::default());
                     value.insert(String::from("foo"));
                     value.insert(String::from("bar"));
                     value.insert(String::from("baz"));
@@ -277,8 +230,8 @@ macro_rules! impl_hashbrown {
                 marker::PhantomData,
             };
 
-            use $hashbrown::HashMap;
             use rancor::{Fallible, Source};
+            use $hashbrown::HashMap;
 
             use crate::{
                 collections::swiss_table::{ArchivedHashMap, HashMapResolver},
@@ -305,17 +258,11 @@ macro_rules! impl_hashbrown {
                     resolver: Self::Resolver,
                     out: Place<Self::Archived>,
                 ) {
-                    ArchivedHashMap::resolve_from_len(
-                        field.len(),
-                        (7, 8),
-                        resolver,
-                        out,
-                    )
+                    ArchivedHashMap::resolve_from_len(field.len(), (7, 8), resolver, out)
                 }
             }
 
-            impl<A, B, K, V, H, S> SerializeWith<HashMap<K, V, H>, S>
-                for MapKV<A, B>
+            impl<A, B, K, V, H, S> SerializeWith<HashMap<K, V, H>, S> for MapKV<A, B>
             where
                 A: ArchiveWith<K> + SerializeWith<K, S>,
                 B: ArchiveWith<V> + SerializeWith<V, S>,
@@ -353,10 +300,8 @@ macro_rules! impl_hashbrown {
                     D,
                 > for MapKV<A, B>
             where
-                A: ArchiveWith<K>
-                    + DeserializeWith<<A as ArchiveWith<K>>::Archived, K, D>,
-                B: ArchiveWith<V>
-                    + DeserializeWith<<B as ArchiveWith<V>>::Archived, V, D>,
+                A: ArchiveWith<K> + DeserializeWith<<A as ArchiveWith<K>>::Archived, K, D>,
+                B: ArchiveWith<V> + DeserializeWith<<B as ArchiveWith<V>>::Archived, V, D>,
                 K: Ord + Hash + Eq,
                 D: Fallible + ?Sized,
                 S: Default + BuildHasher,
@@ -368,10 +313,7 @@ macro_rules! impl_hashbrown {
                     >,
                     deserializer: &mut D,
                 ) -> Result<HashMap<K, V, S>, <D as Fallible>::Error> {
-                    let mut result = HashMap::with_capacity_and_hasher(
-                        field.len(),
-                        S::default(),
-                    );
+                    let mut result = HashMap::with_capacity_and_hasher(field.len(), S::default());
                     for (k, v) in field.iter() {
                         result.insert(
                             A::deserialize_with(k, deserializer)?,
@@ -401,16 +343,10 @@ macro_rules! impl_hashbrown {
                     #[rkyv(crate)]
                     struct Test<'a> {
                         #[rkyv(with = MapKV<InlineAsBox, InlineAsBox>)]
-                        a: HashMap<
-                            &'a str,
-                            &'a str,
-                            BuildHasherDefault<FxHasher64>,
-                        >,
+                        a: HashMap<&'a str, &'a str, BuildHasherDefault<FxHasher64>>,
                     }
 
-                    let mut a = HashMap::with_hasher(
-                        BuildHasherDefault::<FxHasher64>::default(),
-                    );
+                    let mut a = HashMap::with_hasher(BuildHasherDefault::<FxHasher64>::default());
                     a.insert("foo", "bar");
                     a.insert("woo", "roo");
 

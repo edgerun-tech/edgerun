@@ -29,10 +29,7 @@ where
     A::Item: Serialize<S>,
     S: Fallible + Allocator + Writer + ?Sized,
 {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
         ArchivedVec::serialize_from_slice(self.as_slice(), serializer)
     }
 }
@@ -44,10 +41,7 @@ where
     Archived<A::Item>: Deserialize<A::Item, D>,
     D: Fallible + ?Sized,
 {
-    fn deserialize(
-        &self,
-        deserializer: &mut D,
-    ) -> Result<ArrayVec<A>, D::Error> {
+    fn deserialize(&self, deserializer: &mut D) -> Result<ArrayVec<A>, D::Error> {
         let mut result = ArrayVec::new();
         for item in self.as_slice() {
             result.push(item.deserialize(deserializer)?);
@@ -72,10 +66,7 @@ where
     T: Serialize<S>,
     S: Fallible + Allocator + Writer + ?Sized,
 {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
         ArchivedVec::serialize_from_slice(self.as_slice(), serializer)
     }
 }
@@ -104,10 +95,7 @@ where
     A::Item: Serialize<S>,
     S: Fallible + Allocator + Writer + ?Sized,
 {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
         ArchivedVec::serialize_from_slice(self.as_slice(), serializer)
     }
 }
@@ -120,10 +108,7 @@ where
     Archived<A::Item>: Deserialize<A::Item, D>,
     D: Fallible + ?Sized,
 {
-    fn deserialize(
-        &self,
-        deserializer: &mut D,
-    ) -> Result<TinyVec<A>, D::Error> {
+    fn deserialize(&self, deserializer: &mut D) -> Result<TinyVec<A>, D::Error> {
         let mut result = TinyVec::new();
         for item in self.as_slice() {
             result.push(item.deserialize(deserializer)?);
@@ -147,14 +132,8 @@ where
     A: Array,
     T: PartialOrd<A::Item>,
 {
-    fn partial_cmp(
-        &self,
-        other: &ArrayVec<A>,
-    ) -> Option<::core::cmp::Ordering> {
-        crate::impls::lexicographical_partial_ord(
-            self.as_slice(),
-            other.as_slice(),
-        )
+    fn partial_cmp(&self, other: &ArrayVec<A>) -> Option<::core::cmp::Ordering> {
+        crate::impls::lexicographical_partial_ord(self.as_slice(), other.as_slice())
     }
 }
 
@@ -171,14 +150,8 @@ impl<T, U> PartialOrd<SliceVec<'_, U>> for ArchivedVec<T>
 where
     T: PartialOrd<U>,
 {
-    fn partial_cmp(
-        &self,
-        other: &SliceVec<'_, U>,
-    ) -> Option<::core::cmp::Ordering> {
-        crate::impls::lexicographical_partial_ord(
-            self.as_slice(),
-            other.as_slice(),
-        )
+    fn partial_cmp(&self, other: &SliceVec<'_, U>) -> Option<::core::cmp::Ordering> {
+        crate::impls::lexicographical_partial_ord(self.as_slice(), other.as_slice())
     }
 }
 

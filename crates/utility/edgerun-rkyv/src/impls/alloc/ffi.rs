@@ -27,10 +27,7 @@ impl Archive for CString {
 }
 
 impl<S: Fallible + Writer + ?Sized> Serialize<S> for CString {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
         ArchivedCString::serialize_from_c_str(self.as_c_str(), serializer)
     }
 }
@@ -85,11 +82,8 @@ mod tests {
 
     #[test]
     fn roundtrip_c_string() {
-        let value = unsafe {
-            CString::from_vec_unchecked(
-                String::from("hello world").into_bytes(),
-            )
-        };
+        let value =
+            unsafe { CString::from_vec_unchecked(String::from("hello world").into_bytes()) };
         roundtrip(&value);
     }
 }

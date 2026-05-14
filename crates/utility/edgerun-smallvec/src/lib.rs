@@ -448,27 +448,28 @@ where
 }
 
 #[cfg(feature = "drain_filter")]
-impl <T, F> fmt::Debug for DrainFilter<'_, T, F>
+impl<T, F> fmt::Debug for DrainFilter<'_, T, F>
 where
     F: FnMut(&mut T::Item) -> bool,
     T: Array,
     T::Item: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("DrainFilter").field(&self.vec.as_slice()).finish()
+        f.debug_tuple("DrainFilter")
+            .field(&self.vec.as_slice())
+            .finish()
     }
 }
 
 #[cfg(feature = "drain_filter")]
-impl <T, F> Iterator for DrainFilter<'_, T, F>
+impl<T, F> Iterator for DrainFilter<'_, T, F>
 where
     F: FnMut(&mut T::Item) -> bool,
     T: Array,
 {
     type Item = T::Item;
 
-    fn next(&mut self) -> Option<T::Item>
-    {
+    fn next(&mut self) -> Option<T::Item> {
         unsafe {
             while self.idx < self.old_len {
                 let i = self.idx;
@@ -500,7 +501,7 @@ where
 }
 
 #[cfg(feature = "drain_filter")]
-impl <T, F> Drop for DrainFilter<'_, T, F>
+impl<T, F> Drop for DrainFilter<'_, T, F>
 where
     F: FnMut(&mut T::Item) -> bool,
     T: Array,
@@ -509,7 +510,7 @@ where
         struct BackshiftOnDrop<'a, 'b, T, F>
         where
             F: FnMut(&mut T::Item) -> bool,
-            T: Array
+            T: Array,
         {
             drain: &'b mut DrainFilter<'a, T, F>,
         }
@@ -517,7 +518,7 @@ where
         impl<'a, 'b, T, F> Drop for BackshiftOnDrop<'a, 'b, T, F>
         where
             F: FnMut(&mut T::Item) -> bool,
-            T: Array
+            T: Array,
         {
             fn drop(&mut self) {
                 unsafe {
@@ -551,10 +552,10 @@ where
 }
 
 #[cfg(feature = "drain_keep_rest")]
-impl <T, F> DrainFilter<'_, T, F>
+impl<T, F> DrainFilter<'_, T, F>
 where
     F: FnMut(&mut T::Item) -> bool,
-    T: Array
+    T: Array,
 {
     /// Keep unyielded elements in the source `Vec`.
     ///
@@ -575,8 +576,7 @@ where
     /// // `vec` would be empty.
     /// assert_eq!(vec, SmallVec::<[char; 2]>::from_slice(&['b', 'c']));
     /// ```
-    pub fn keep_rest(self)
-    {
+    pub fn keep_rest(self) {
         // At this moment layout looks like this:
         //
         //  _____________________/-- old_len
@@ -1092,7 +1092,7 @@ impl<A: Array> SmallVec<A> {
     /// assert_eq!(evens, SmallVec::<[i32; 16]>::from_slice(&[2i32, 4, 6, 8, 14]));
     /// assert_eq!(odds, SmallVec::<[i32; 16]>::from_slice(&[1i32, 3, 5, 9, 11, 13, 15]));
     /// ```
-    pub fn drain_filter<F>(&mut self, filter: F) -> DrainFilter<'_, A, F,>
+    pub fn drain_filter<F>(&mut self, filter: F) -> DrainFilter<'_, A, F>
     where
         F: FnMut(&mut A::Item) -> bool,
     {
@@ -1103,7 +1103,14 @@ impl<A: Array> SmallVec<A> {
             self.set_len(0);
         }
 
-        DrainFilter { vec: self, idx: 0, del: 0, old_len, pred: filter, panic_flag: false }
+        DrainFilter {
+            vec: self,
+            idx: 0,
+            del: 0,
+            old_len,
+            pred: filter,
+            panic_flag: false,
+        }
     }
 
     /// Append an item to the vector.
@@ -1221,7 +1228,8 @@ impl<A: Array> SmallVec<A> {
     #[cold]
     fn reserve_one_unchecked(&mut self) {
         debug_assert_eq!(self.len(), self.capacity());
-        let new_cap = self.len()
+        let new_cap = self
+            .len()
             .checked_add(1)
             .and_then(usize::checked_next_power_of_two)
             .expect("capacity overflow");
@@ -2496,8 +2504,8 @@ impl<T> Copy for ConstNonNull<T> {}
 
 #[cfg(any())]
 use bincode::{
-    de::{BorrowDecoder, Decode, Decoder, read::Reader},
-    enc::{Encode, Encoder, write::Writer},
+    de::{read::Reader, BorrowDecoder, Decode, Decoder},
+    enc::{write::Writer, Encode, Encoder},
     error::{DecodeError, EncodeError},
     BorrowDecode,
 };
@@ -2511,7 +2519,9 @@ where
     fn decode<D: Decoder<Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
         use core::convert::TryInto;
         let len = u64::decode(decoder)?;
-        let len = len.try_into().map_err(|_| DecodeError::OutsideUsizeRange(len))?;
+        let len = len
+            .try_into()
+            .map_err(|_| DecodeError::OutsideUsizeRange(len))?;
         decoder.claim_container_read::<A::Item>(len)?;
 
         let mut vec = SmallVec::with_capacity(len);
@@ -2545,10 +2555,14 @@ where
     A: Array,
     A::Item: BorrowDecode<'de, Context>,
 {
-    fn borrow_decode<D: BorrowDecoder<'de, Context = Context>>(decoder: &mut D) -> Result<Self, DecodeError> {
+    fn borrow_decode<D: BorrowDecoder<'de, Context = Context>>(
+        decoder: &mut D,
+    ) -> Result<Self, DecodeError> {
         use core::convert::TryInto;
         let len = u64::decode(decoder)?;
-        let len = len.try_into().map_err(|_| DecodeError::OutsideUsizeRange(len))?;
+        let len = len
+            .try_into()
+            .map_err(|_| DecodeError::OutsideUsizeRange(len))?;
         decoder.claim_container_read::<A::Item>(len)?;
 
         let mut vec = SmallVec::with_capacity(len);

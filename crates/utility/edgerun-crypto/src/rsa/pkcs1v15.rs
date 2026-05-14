@@ -6,22 +6,16 @@
 //!
 //! [RFC8017 § 8.2]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.2
 
-mod decrypting_key;
-mod encrypting_key;
 mod signature;
 mod signing_key;
 mod verifying_key;
 
-pub use self::{
-    decrypting_key::DecryptingKey, encrypting_key::EncryptingKey, signature::Signature,
-    signing_key::SigningKey, verifying_key::VerifyingKey,
-};
+pub use self::{signature::Signature, signing_key::SigningKey, verifying_key::VerifyingKey};
 
 use crate::digest::Digest;
 use crate::num_bigint::BigUint;
 use crate::pkcs8::AssociatedOid;
 use crate::rand_core::CryptoRngCore;
-use crate::zeroize::Zeroizing;
 use alloc::{boxed::Box, vec::Vec};
 use core::fmt::Debug;
 
@@ -29,32 +23,8 @@ use crate::rsa::algorithms::pad::{uint_to_be_pad, uint_to_zeroizing_be_pad};
 use crate::rsa::algorithms::pkcs1v15::*;
 use crate::rsa::algorithms::rsa::{rsa_decrypt_and_check, rsa_encrypt};
 use crate::rsa::errors::{Error, Result};
-use crate::rsa::key::{self, RsaPrivateKey, RsaPublicKey};
-use crate::rsa::traits::{PaddingScheme, PublicKeyParts, SignatureScheme};
-
-/// Encryption using PKCS#1 v1.5 padding.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub struct Pkcs1v15Encrypt;
-
-impl PaddingScheme for Pkcs1v15Encrypt {
-    fn decrypt<Rng: CryptoRngCore>(
-        self,
-        rng: Option<&mut Rng>,
-        priv_key: &RsaPrivateKey,
-        ciphertext: &[u8],
-    ) -> Result<Vec<u8>> {
-        decrypt(rng, priv_key, ciphertext)
-    }
-
-    fn encrypt<Rng: CryptoRngCore>(
-        self,
-        rng: &mut Rng,
-        pub_key: &RsaPublicKey,
-        msg: &[u8],
-    ) -> Result<Vec<u8>> {
-        encrypt(rng, pub_key, msg)
-    }
-}
+use crate::rsa::key::{RsaPrivateKey, RsaPublicKey};
+use crate::rsa::traits::{PublicKeyParts, SignatureScheme};
 
 /// `RSASSA-PKCS1-v1_5`: digital signatures using PKCS#1 v1.5 padding.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -131,45 +101,6 @@ impl SignatureScheme for Pkcs1v15Sign {
             sig.len(),
         )
     }
-}
-
-/// Encrypts the given message with RSA and the padding
-/// scheme from PKCS#1 v1.5.  The message must be no longer than the
-/// length of the public modulus minus 11 bytes.
-#[inline]
-fn encrypt<R: CryptoRngCore + ?Sized>(
-    rng: &mut R,
-    pub_key: &RsaPublicKey,
-    msg: &[u8],
-) -> Result<Vec<u8>> {
-    key::check_public(pub_key)?;
-
-    let em = pkcs1v15_encrypt_pad(rng, msg, pub_key.size())?;
-    let int = Zeroizing::new(BigUint::from_bytes_be(&em));
-    uint_to_be_pad(rsa_encrypt(pub_key, &int)?, pub_key.size())
-}
-
-/// Decrypts a plaintext using RSA and the padding scheme from PKCS#1 v1.5.
-///
-/// If an `rng` is passed, it uses RSA blinding to avoid timing side-channel attacks.
-///
-/// Note that whether this function returns an error or not discloses secret
-/// information. If an attacker can cause this function to run repeatedly and
-/// learn whether each instance returned an error then they can decrypt and
-/// forge signatures as if they had the private key. See
-/// `decrypt_session_key` for a way of solving this problem.
-#[inline]
-fn decrypt<R: CryptoRngCore + ?Sized>(
-    rng: Option<&mut R>,
-    priv_key: &RsaPrivateKey,
-    ciphertext: &[u8],
-) -> Result<Vec<u8>> {
-    key::check_public(priv_key)?;
-
-    let em = rsa_decrypt_and_check(priv_key, rng, &BigUint::from_bytes_be(ciphertext))?;
-    let em = uint_to_zeroizing_be_pad(em, priv_key.size())?;
-
-    pkcs1v15_encrypt_unpad(em, priv_key.size())
 }
 
 /// Calculates the signature of hashed using

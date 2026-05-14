@@ -1,0 +1,3 @@
+pub mod com_stagnationlab_sk_mainactivity;
+pub mod io_flutter_plugins_firebase_messaging_flutterfirebasemessagingservice;
+pub mod com_huawei_hms_flutter_push_hms_flutterhmsmessageservice;

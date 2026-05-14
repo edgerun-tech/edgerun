@@ -11,9 +11,7 @@ use munge::munge;
 use rancor::{Fallible, Source};
 
 use crate::{
-    collections::swiss_table::{
-        index_map::Keys, ArchivedIndexMap, IndexMapResolver,
-    },
+    collections::swiss_table::{index_map::Keys, ArchivedIndexMap, IndexMapResolver},
     hash::FxHasher64,
     ser::{Allocator, Writer},
     Place, Portable, Serialize,
@@ -112,14 +110,11 @@ impl<K, H: Default + Hasher> ArchivedIndexSet<K, H> {
         S::Error: Source,
     {
         Ok(IndexSetResolver(
-            ArchivedIndexMap::<K, (), H>::serialize_from_iter::<
-                _,
-                _,
-                (),
-                _,
-                _,
-                _,
-            >(iter.map(|x| (x, ())), load_factor, serializer)?,
+            ArchivedIndexMap::<K, (), H>::serialize_from_iter::<_, _, (), _, _, _>(
+                iter.map(|x| (x, ())),
+                load_factor,
+                serializer,
+            )?,
         ))
     }
 }

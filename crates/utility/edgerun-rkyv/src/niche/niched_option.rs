@@ -32,10 +32,7 @@ const _: () = {
         N: Niching<T> + ?Sized,
         C: Fallible + ?Sized,
     {
-        unsafe fn check_bytes(
-            value: *const Self,
-            context: &mut C,
-        ) -> Result<(), C::Error> {
+        unsafe fn check_bytes(value: *const Self, context: &mut C) -> Result<(), C::Error> {
             let ptr = unsafe { addr_of!((*value).repr).cast::<T>() };
             let is_niched = unsafe { N::is_niched(ptr) };
 

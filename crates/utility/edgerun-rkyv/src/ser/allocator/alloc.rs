@@ -35,9 +35,8 @@ impl Block {
     }
 
     unsafe fn dealloc(ptr: NonNull<Self>, size: usize) {
-        let layout = unsafe {
-            Layout::from_size_align(size, align_of::<Self>()).unwrap_unchecked()
-        };
+        let layout =
+            unsafe { Layout::from_size_align(size, align_of::<Self>()).unwrap_unchecked() };
         unsafe {
             dealloc(ptr.as_ptr().cast(), layout);
         }
@@ -47,10 +46,7 @@ impl Block {
     ///
     /// `tail_ptr` and `new_ptr` must point to valid `Block`s and `new_ptr` must
     /// be the only block in its loop.
-    unsafe fn push_next(
-        mut tail_ptr: NonNull<Self>,
-        mut new_ptr: NonNull<Self>,
-    ) {
+    unsafe fn push_next(mut tail_ptr: NonNull<Self>, mut new_ptr: NonNull<Self>) {
         let tail = unsafe { tail_ptr.as_mut() };
         let new = unsafe { new_ptr.as_mut() };
 
@@ -211,10 +207,7 @@ pub struct ArenaHandle<'a> {
 unsafe impl Send for ArenaHandle<'_> {}
 
 unsafe impl<E> Allocator<E> for ArenaHandle<'_> {
-    unsafe fn push_alloc(
-        &mut self,
-        layout: Layout,
-    ) -> Result<NonNull<[u8]>, E> {
+    unsafe fn push_alloc(&mut self, layout: Layout) -> Result<NonNull<[u8]>, E> {
         let pos = self.tail_ptr.as_ptr() as usize + self.used;
         let pad = 0usize.wrapping_sub(pos) % layout.align();
         if pad + layout.size() <= self.tail_size - self.used {
@@ -223,8 +216,7 @@ unsafe impl<E> Allocator<E> for ArenaHandle<'_> {
             // Allocation request is too large, allocate a new block
             let size = usize::max(
                 2 * self.tail_size,
-                (size_of::<Block>() + layout.size() + layout.align())
-                    .next_power_of_two(),
+                (size_of::<Block>() + layout.size() + layout.align()).next_power_of_two(),
             );
             let next = Block::alloc(size);
             unsafe {
@@ -248,11 +240,7 @@ unsafe impl<E> Allocator<E> for ArenaHandle<'_> {
         Ok(result)
     }
 
-    unsafe fn pop_alloc(
-        &mut self,
-        ptr: NonNull<u8>,
-        _: Layout,
-    ) -> Result<(), E> {
+    unsafe fn pop_alloc(&mut self, ptr: NonNull<u8>, _: Layout) -> Result<(), E> {
         // If the popped allocation was in the current tail block, then we can
         // reduce the amount of used space.
         let start = self.tail_ptr.as_ptr() as usize;
@@ -292,12 +280,8 @@ mod tests {
         ];
 
         for _ in 0..10 {
-            to_bytes_in_with_alloc::<_, _, Panic>(
-                &value,
-                AlignedVec::<16>::new(),
-                arena.acquire(),
-            )
-            .unwrap();
+            to_bytes_in_with_alloc::<_, _, Panic>(&value, AlignedVec::<16>::new(), arena.acquire())
+                .unwrap();
         }
     }
 
@@ -306,18 +290,13 @@ mod tests {
         let mut arena = Arena::new();
         let mut handle = arena.acquire();
 
-        let layout =
-            Layout::from_size_align(Arena::DEFAULT_CAPACITY, 1).unwrap();
+        let layout = Layout::from_size_align(Arena::DEFAULT_CAPACITY, 1).unwrap();
 
         unsafe {
-            let a =
-                Allocator::<Panic>::push_alloc(&mut handle, layout).always_ok();
-            let b =
-                Allocator::<Panic>::push_alloc(&mut handle, layout).always_ok();
-            Allocator::<Panic>::pop_alloc(&mut handle, b.cast(), layout)
-                .always_ok();
-            Allocator::<Panic>::pop_alloc(&mut handle, a.cast(), layout)
-                .always_ok();
+            let a = Allocator::<Panic>::push_alloc(&mut handle, layout).always_ok();
+            let b = Allocator::<Panic>::push_alloc(&mut handle, layout).always_ok();
+            Allocator::<Panic>::pop_alloc(&mut handle, b.cast(), layout).always_ok();
+            Allocator::<Panic>::pop_alloc(&mut handle, a.cast(), layout).always_ok();
         }
     }
 }

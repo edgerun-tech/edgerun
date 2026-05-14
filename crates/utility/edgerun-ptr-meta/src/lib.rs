@@ -98,7 +98,7 @@ use core::{
 };
 
 #[cfg(feature = "derive")]
-pub use ptr_meta_derive::{pointee, Pointee};
+pub use ptr_meta_derive::{Pointee, pointee};
 
 /// A trait which associates pointer metadata with a pointee type.
 ///
@@ -179,9 +179,7 @@ unsafe impl Pointee for std::ffi::OsStr {
 /// assert_eq!(ptr_meta::metadata("foo"), 3_usize);
 /// ```
 #[inline]
-pub const fn metadata<T: Pointee + ?Sized>(
-    ptr: *const T,
-) -> <T as Pointee>::Metadata {
+pub const fn metadata<T: Pointee + ?Sized>(ptr: *const T) -> <T as Pointee>::Metadata {
     // SAFETY: Accessing the value from the `PtrRepr` union is safe since
     // *const T and PtrComponents<T> have the same memory layouts. Only std can
     // make this guarantee.
@@ -323,9 +321,7 @@ impl<Dyn: ?Sized> DynMetadata<Dyn> {
             // `Send` part!
             // SAFETY: DynMetadata always contains a valid vtable pointer
             return unsafe {
-                core::intrinsics::vtable_size(
-                    self.vtable_ptr as *const VTable as *const (),
-                )
+                core::intrinsics::vtable_size(self.vtable_ptr as *const VTable as *const ())
             };
         }
         #[cfg(not(miri))]
@@ -348,9 +344,7 @@ impl<Dyn: ?Sized> DynMetadata<Dyn> {
         {
             // SAFETY: DynMetadata always contains a valid vtable pointer
             return unsafe {
-                core::intrinsics::vtable_align(
-                    self.vtable_ptr as *const VTable as *const (),
-                )
+                core::intrinsics::vtable_align(self.vtable_ptr as *const VTable as *const ())
             };
         }
         #[cfg(not(miri))]
@@ -372,12 +366,7 @@ impl<Dyn: ?Sized> DynMetadata<Dyn> {
         // SAFETY: the compiler emitted this vtable for a concrete Rust type
         // which is known to have a valid layout. Same rationale as in
         // `Layout::for_value`.
-        unsafe {
-            core::alloc::Layout::from_size_align_unchecked(
-                self.size_of(),
-                self.align_of(),
-            )
-        }
+        unsafe { core::alloc::Layout::from_size_align_unchecked(self.size_of(), self.align_of()) }
     }
 }
 
@@ -419,8 +408,7 @@ impl<Dyn: ?Sized> PartialEq for DynMetadata<Dyn> {
 impl<Dyn: ?Sized> Ord for DynMetadata<Dyn> {
     #[inline]
     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
-        (self.vtable_ptr as *const VTable)
-            .cmp(&(other.vtable_ptr as *const VTable))
+        (self.vtable_ptr as *const VTable).cmp(&(other.vtable_ptr as *const VTable))
     }
 }
 
@@ -495,7 +483,7 @@ mod tests {
 mod derive_tests {
     use core::any::Any;
 
-    use super::{test_pointee, Pointee};
+    use super::{Pointee, test_pointee};
 
     #[test]
     fn trait_objects() {

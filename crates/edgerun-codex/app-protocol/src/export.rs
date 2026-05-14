@@ -2105,7 +2105,7 @@ mod tests {
     use crate::schema_fixtures::read_schema_fixture_subtree;
     use codex_protocol::local_uuid::Uuid;
     use edgerun_error::Context;
-    use edgerun_error::Result;
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
     use pretty_assertions::assert_eq;
     use std::collections::BTreeSet;
     use std::path::Path;
@@ -2615,7 +2615,11 @@ mod tests {
             definitions.contains_key("ServerRequestResolvedNotificationPayload"),
             true
         );
-        let client_request_titles: BTreeSet<String> = definitions["ClientRequest"]["oneOf"]
+        let client_request_titles: BTreeSet<String> = definitions
+            .get("ClientRequest")
+            .expect("ClientRequest definition")
+            .get("oneOf")
+            .expect("ClientRequest oneOf")
             .as_array()
             .expect("ClientRequest should remain a oneOf")
             .iter()
@@ -2634,7 +2638,11 @@ mod tests {
                 "StartRequest".to_string(),
             ])
         );
-        let notification_titles: BTreeSet<String> = definitions["ServerNotification"]["oneOf"]
+        let notification_titles: BTreeSet<String> = definitions
+            .get("ServerNotification")
+            .expect("ServerNotification definition")
+            .get("oneOf")
+            .expect("ServerNotification oneOf")
             .as_array()
             .expect("ServerNotification should remain a oneOf")
             .iter()
@@ -2885,7 +2893,11 @@ permissionProfile?: PermissionProfile | null};
         let definitions = flat_v2_bundle["definitions"]
             .as_object()
             .expect("flat v2 bundle should include definitions");
-        let client_request_methods: BTreeSet<String> = definitions["ClientRequest"]["oneOf"]
+        let client_request_methods: BTreeSet<String> = definitions
+            .get("ClientRequest")
+            .expect("ClientRequest definition")
+            .get("oneOf")
+            .expect("ClientRequest oneOf")
             .as_array()
             .expect("flat v2 ClientRequest should remain a oneOf")
             .iter()
@@ -2910,8 +2922,11 @@ permissionProfile?: PermissionProfile | null};
         .map(str::to_string)
         .collect();
         assert_eq!(missing_client_request_methods, Vec::<String>::new());
-        let server_notification_methods: BTreeSet<String> =
-            definitions["ServerNotification"]["oneOf"]
+        let server_notification_methods: BTreeSet<String> = definitions
+            .get("ServerNotification")
+            .expect("ServerNotification definition")
+            .get("oneOf")
+            .expect("ServerNotification oneOf")
                 .as_array()
                 .expect("flat v2 ServerNotification should remain a oneOf")
                 .iter()

@@ -21,17 +21,9 @@ impl<T: Archive> Archive for Vec<T> {
     }
 }
 
-impl<T: Serialize<S>, S: Fallible + Allocator + Writer + ?Sized> Serialize<S>
-    for Vec<T>
-{
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
-        ArchivedVec::<T::Archived>::serialize_from_slice(
-            self.as_slice(),
-            serializer,
-        )
+impl<T: Serialize<S>, S: Fallible + Allocator + Writer + ?Sized> Serialize<S> for Vec<T> {
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+        ArchivedVec::<T::Archived>::serialize_from_slice(self.as_slice(), serializer)
     }
 }
 
@@ -70,10 +62,7 @@ impl<T: PartialEq<U>, U> PartialEq<Vec<U>> for ArchivedVec<T> {
 
 impl<T: PartialOrd<U>, U> PartialOrd<Vec<U>> for ArchivedVec<T> {
     fn partial_cmp(&self, other: &Vec<U>) -> Option<::core::cmp::Ordering> {
-        crate::impls::lexicographical_partial_ord(
-            self.as_slice(),
-            other.as_slice(),
-        )
+        crate::impls::lexicographical_partial_ord(self.as_slice(), other.as_slice())
     }
 }
 

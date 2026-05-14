@@ -1,0 +1,20 @@
+[app]
+id = "com-snapchat-android"
+source_android_package = "com.snapchat.android"
+status = "draft_static_analysis"
+
+[capabilities]
+network = { default = "deny", allow_domains = ["accounts.google.com", "accounts.snapchat.com"] }
+location = { mode = "precise_or_coarse", prompt = "per_use" }
+storage = { app_private = true, document_grants = "prompt" }
+local_state = { backend = "structured_store" }
+notifications = { channel = "app_scoped", prompt = true }
+background_tasks = { scheduler = "explicit", event_subscriptions = "review" }
+camera_media = { sessions = "explicit_prompt" }
+bluetooth_nearby = { scan = "prompt", connect = "allowlist" }
+secrets_crypto = { keystore = "edgerun", certificates = "review" }
+
+[analysis]
+unique_signatures = 9593
+total_call_sites = 762726
+confidence = "medium_static_needs_dynamic_trace"

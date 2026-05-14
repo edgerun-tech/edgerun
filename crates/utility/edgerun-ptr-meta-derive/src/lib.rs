@@ -2,9 +2,7 @@ mod attributes;
 
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{
-    meta, parse_macro_input, parse_quote, Data, DeriveInput, Error, ItemTrait,
-};
+use syn::{Data, DeriveInput, Error, ItemTrait, meta, parse_macro_input, parse_quote};
 
 use self::attributes::Attributes;
 
@@ -18,9 +16,7 @@ use self::attributes::Attributes;
 ///
 /// - `crate = ...`: Chooses an alternative crate path to import ptr_meta from.
 #[proc_macro_derive(Pointee, attributes(ptr_meta))]
-pub fn derive_pointee(
-    input: proc_macro::TokenStream,
-) -> proc_macro::TokenStream {
+pub fn derive_pointee(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let derive_input = parse_macro_input!(input as DeriveInput);
 
     match derive_pointee_impl(derive_input) {
@@ -41,14 +37,14 @@ fn derive_pointee_impl(mut input: DeriveInput) -> Result<TokenStream, Error> {
                 ident.span(),
                 "enums always have a provided `Pointee` impl because they \
                  cannot be dynamically-sized",
-            ))
+            ));
         }
         Data::Union(_) => {
             return Err(Error::new(
                 ident.span(),
                 "unions always have an provided `Pointee` impl because they \
                  cannot be dynamically-sized",
-            ))
+            ));
         }
     };
 
@@ -66,8 +62,7 @@ fn derive_pointee_impl(mut input: DeriveInput) -> Result<TokenStream, Error> {
         .predicates
         .push(parse_quote! { #last_field_ty: #crate_path::Pointee });
 
-    let (impl_generics, ty_generics, where_clause) =
-        input.generics.split_for_impl();
+    let (impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
     Ok(quote! {
         unsafe impl #impl_generics #crate_path::Pointee for #ident #ty_generics
@@ -102,15 +97,11 @@ pub fn pointee(
     }
 }
 
-fn pointee_impl(
-    attributes: Attributes,
-    item: ItemTrait,
-) -> Result<TokenStream, Error> {
+fn pointee_impl(attributes: Attributes, item: ItemTrait) -> Result<TokenStream, Error> {
     let ident = &item.ident;
     let crate_path = attributes.crate_path();
 
-    let (impl_generics, ty_generics, where_clause) =
-        item.generics.split_for_impl();
+    let (impl_generics, ty_generics, where_clause) = item.generics.split_for_impl();
 
     Ok(quote! {
         #item

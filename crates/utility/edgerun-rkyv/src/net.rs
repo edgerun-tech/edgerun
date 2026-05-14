@@ -1,8 +1,6 @@
 //! Archived versions of network types.
 
-use core::net::{
-    IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6,
-};
+use core::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 
 use munge::munge;
 
@@ -290,9 +288,7 @@ impl ArchivedIpAddr {
 }
 
 /// An archived [`SocketAddrV4`].
-#[derive(
-    Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, Portable, PartialOrd,
-)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, Portable, PartialOrd)]
 #[cfg_attr(feature = "bytecheck", derive(bytecheck::CheckBytes))]
 #[rkyv(crate)]
 #[repr(C)]
@@ -330,9 +326,7 @@ impl ArchivedSocketAddrV4 {
 }
 
 /// An archived [`SocketAddrV6`].
-#[derive(
-    Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, Portable, PartialOrd,
-)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, Portable, PartialOrd)]
 #[cfg_attr(feature = "bytecheck", derive(bytecheck::CheckBytes))]
 #[rkyv(crate)]
 #[repr(C)]
@@ -439,12 +433,8 @@ impl ArchivedSocketAddr {
     #[inline]
     pub fn as_socket_addr(&self) -> SocketAddr {
         match self {
-            ArchivedSocketAddr::V4(addr) => {
-                SocketAddr::V4(addr.as_socket_addr_v4())
-            }
-            ArchivedSocketAddr::V6(addr) => {
-                SocketAddr::V6(addr.as_socket_addr_v6())
-            }
+            ArchivedSocketAddr::V4(addr) => SocketAddr::V4(addr.as_socket_addr_v4()),
+            ArchivedSocketAddr::V6(addr) => SocketAddr::V6(addr.as_socket_addr_v6()),
         }
     }
 

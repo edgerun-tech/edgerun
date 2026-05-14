@@ -5,8 +5,7 @@ use rancor::{Fallible, Source};
 use crate::{
     alloc::string::{String, ToString},
     string::{ArchivedString, StringResolver},
-    Archive, Deserialize, DeserializeUnsized, Place, Serialize,
-    SerializeUnsized,
+    Archive, Deserialize, DeserializeUnsized, Place, Serialize, SerializeUnsized,
 };
 
 impl Archive for String {
@@ -24,10 +23,7 @@ where
     S::Error: Source,
     str: SerializeUnsized<S>,
 {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
         ArchivedString::serialize_from_str(self.as_str(), serializer)
     }
 }

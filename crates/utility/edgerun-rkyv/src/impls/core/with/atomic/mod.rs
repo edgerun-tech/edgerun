@@ -14,9 +14,7 @@ use core::sync::atomic::{AtomicBool, AtomicI8, AtomicU8};
 use rancor::Fallible;
 
 use crate::{
-    with::{
-        Acquire, ArchiveWith, AtomicLoad, DeserializeWith, Relaxed, SeqCst,
-    },
+    with::{Acquire, ArchiveWith, AtomicLoad, DeserializeWith, Relaxed, SeqCst},
     Place,
 };
 
@@ -42,11 +40,7 @@ macro_rules! impl_single_byte_atomic {
             type Archived = $non_atomic;
             type Resolver = ();
 
-            fn resolve_with(
-                field: &$atomic,
-                _: Self::Resolver,
-                out: Place<Self::Archived>,
-            ) {
+            fn resolve_with(field: &$atomic, _: Self::Resolver, out: Place<Self::Archived>) {
                 out.write(field.load(SO::ORDERING));
             }
         }
@@ -57,10 +51,7 @@ macro_rules! impl_single_byte_atomic {
         where
             D: Fallible + ?Sized,
         {
-            fn deserialize_with(
-                field: &$non_atomic,
-                _: &mut D,
-            ) -> Result<$atomic, D::Error> {
+            fn deserialize_with(field: &$non_atomic, _: &mut D) -> Result<$atomic, D::Error> {
                 Ok(<$atomic>::new(*field))
             }
         }

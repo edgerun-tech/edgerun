@@ -1,9 +1,7 @@
 use core::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::{io, net::ToSocketAddrs};
 
-use crate::net::{
-    ArchivedSocketAddr, ArchivedSocketAddrV4, ArchivedSocketAddrV6,
-};
+use crate::net::{ArchivedSocketAddr, ArchivedSocketAddrV4, ArchivedSocketAddrV6};
 
 impl ToSocketAddrs for ArchivedSocketAddrV4 {
     type Iter = <SocketAddrV4 as ToSocketAddrs>::Iter;

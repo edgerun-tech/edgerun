@@ -189,10 +189,7 @@ where
 /// *inner = 12345.into();
 /// assert_eq!(*inner, 12345);
 /// ```
-pub fn access_pos_mut<T, E>(
-    bytes: &mut [u8],
-    pos: usize,
-) -> Result<Seal<'_, T>, E>
+pub fn access_pos_mut<T, E>(bytes: &mut [u8], pos: usize) -> Result<Seal<'_, T>, E>
 where
     T: Portable + for<'a> CheckBytes<LowValidator<'a, E>>,
     E: Source,
@@ -305,8 +302,7 @@ where
 pub fn from_bytes<T, E>(bytes: &[u8]) -> Result<T, E>
 where
     T: Archive,
-    T::Archived: for<'a> CheckBytes<LowValidator<'a, E>>
-        + Deserialize<T, Strategy<Unpool, E>>,
+    T::Archived: for<'a> CheckBytes<LowValidator<'a, E>> + Deserialize<T, Strategy<Unpool, E>>,
     E: Source,
 {
     deserialize_using(access::<T::Archived, E>(bytes)?, &mut Unpool)

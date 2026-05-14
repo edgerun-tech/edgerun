@@ -1,6 +1,6 @@
 use uuid_1::Uuid;
 
-use crate::{rancor::Fallible, CheckBytes};
+use crate::{CheckBytes, rancor::Fallible};
 
 // SAFETY: `Uuid` is `#[repr(transparent)]` around an inner `Bytes`, which is a
 // simple byte array. Byte arrays are always valid.

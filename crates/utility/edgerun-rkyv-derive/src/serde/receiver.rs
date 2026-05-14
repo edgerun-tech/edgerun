@@ -7,9 +7,8 @@ use std::mem;
 use proc_macro2::Span;
 use quote::ToTokens;
 use syn::{
-    parse_quote, Data, DeriveInput, Expr, ExprPath, GenericArgument,
-    GenericParam, Generics, Macro, Path, PathArguments, QSelf, ReturnType,
-    Token, Type, TypeParamBound, TypePath, WherePredicate,
+    parse_quote, Data, DeriveInput, Expr, ExprPath, GenericArgument, GenericParam, Generics, Macro,
+    Path, PathArguments, QSelf, ReturnType, Token, Type, TypeParamBound, TypePath, WherePredicate,
 };
 
 use super::respan::respan;
@@ -53,8 +52,7 @@ impl ReplaceReceiver<'_> {
             gt_token: Token![>](span),
         });
 
-        path.leading_colon =
-            Some(**path.segments.pairs().next().unwrap().punct().unwrap());
+        path.leading_colon = Some(**path.segments.pairs().next().unwrap().punct().unwrap());
 
         let segments = mem::take(&mut path.segments);
         path.segments = segments.into_pairs().skip(1).collect();
@@ -64,12 +62,8 @@ impl ReplaceReceiver<'_> {
         let self_ty = self.self_ty(path.segments[0].ident.span());
         let variant = mem::replace(path, self_ty.path);
         for segment in &mut path.segments {
-            if let PathArguments::AngleBracketed(bracketed) =
-                &mut segment.arguments
-            {
-                if bracketed.colon2_token.is_none()
-                    && !bracketed.args.is_empty()
-                {
+            if let PathArguments::AngleBracketed(bracketed) = &mut segment.arguments {
+                if bracketed.colon2_token.is_none() && !bracketed.args.is_empty() {
                     bracketed.colon2_token = Some(<Token![::]>::default());
                 }
             }
@@ -189,9 +183,7 @@ impl ReplaceReceiver<'_> {
                 for arg in &mut arguments.args {
                     match arg {
                         GenericArgument::Type(arg) => self.visit_type_mut(arg),
-                        GenericArgument::AssocType(arg) => {
-                            self.visit_type_mut(&mut arg.ty)
-                        }
+                        GenericArgument::AssocType(arg) => self.visit_type_mut(&mut arg.ty),
                         _ => {}
                     }
                 }

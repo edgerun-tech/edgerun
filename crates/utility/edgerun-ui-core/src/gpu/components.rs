@@ -552,8 +552,12 @@ pub fn field(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: Field<'_>) {
 pub fn text_area(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: TextArea<'_>) {
     let theme = ui.theme();
     let colors = theme.colors;
-    ui.bounded_label(rect.x, rect.y, rect.w, spec.label, 2.0, colors.muted);
-    let field_rect = UiRect::new(rect.x, rect.y + 25.0, rect.w, rect.h - 25.0);
+    let field_rect = if spec.label.is_empty() {
+        rect
+    } else {
+        ui.bounded_label(rect.x, rect.y, rect.w, spec.label, 2.0, colors.muted);
+        UiRect::new(rect.x, rect.y + 25.0, rect.w, rect.h - 25.0)
+    };
     if let Some(id) = spec.id {
         ui.hit(
             HitKind::TextArea,

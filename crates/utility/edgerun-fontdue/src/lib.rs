@@ -386,11 +386,7 @@ impl Font {
             let delta = if flag & 0x02 != 0 {
                 let v = *self.data.get(pos)? as i16;
                 pos += 1;
-                if flag & 0x10 != 0 {
-                    v
-                } else {
-                    -v
-                }
+                if flag & 0x10 != 0 { v } else { -v }
             } else if flag & 0x10 != 0 {
                 0
             } else {
@@ -408,11 +404,7 @@ impl Font {
             let delta = if flag & 0x04 != 0 {
                 let v = *self.data.get(pos)? as i16;
                 pos += 1;
-                if flag & 0x20 != 0 {
-                    v
-                } else {
-                    -v
-                }
+                if flag & 0x20 != 0 { v } else { -v }
             } else if flag & 0x20 != 0 {
                 0
             } else {

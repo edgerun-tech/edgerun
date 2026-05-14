@@ -31,16 +31,16 @@ pub mod ffio;
 // Re-exports
 pub use audit::AuditLogger;
 pub use events::ExchangeEvent;
-pub use projection::{project_order, project_order_events, ExchangeOrderProjection};
+pub use projection::{ExchangeOrderProjection, project_order, project_order_events};
 pub use provider::ExchangeProvider;
 pub use router::route_quote;
 pub use settlement_intent::{
-    archive_order_intent, archive_payment_request_intent, archive_quote_intent,
-    archive_quote_request_intent, archive_receipt_intent, build_app_intent,
-    build_identity_routed_settlement_command, encode_app_intent, SettlementCommandDraft,
+    SettlementCommandDraft, archive_order_intent, archive_payment_request_intent,
+    archive_quote_intent, archive_quote_request_intent, archive_receipt_intent, build_app_intent,
+    build_identity_routed_settlement_command, encode_app_intent,
 };
 pub use status_machine::StatusMachine;
 pub use stream_codec::{
-    build_exchange_event_envelope, decode_exchange_event, encode_exchange_event,
-    exchange_event_type, exchange_payload_object_kind, ExchangeStreamPayload,
+    ExchangeStreamPayload, build_exchange_event_envelope, decode_exchange_event,
+    encode_exchange_event, exchange_event_type, exchange_payload_object_kind,
 };

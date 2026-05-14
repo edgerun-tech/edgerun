@@ -26,7 +26,6 @@ pub trait DecodeEcPrivateKey: Sized {
     fn read_sec1_der_file(path: impl AsRef<Path>) -> Result<Self> {
         Self::from_sec1_der(SecretDocument::read_der_file(path)?.as_bytes())
     }
-
 }
 
 /// Serialize a [`EcPrivateKey`] to a SEC1 encoded document.
@@ -40,7 +39,6 @@ pub trait EncodeEcPrivateKey {
     fn write_sec1_der_file(&self, path: impl AsRef<Path>) -> Result<()> {
         Ok(self.to_sec1_der()?.write_der_file(path)?)
     }
-
 }
 
 #[cfg(feature = "elliptic_curve_pkcs8")]

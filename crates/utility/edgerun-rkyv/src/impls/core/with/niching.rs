@@ -4,15 +4,12 @@ use crate::{
     boxed::ArchivedBox,
     niche::{
         niched_option::NichedOption,
-        niching::{
-            Bool, DefaultNiche, NaN, Niching, Null, SharedNiching, Zero,
-        },
+        niching::{Bool, DefaultNiche, NaN, Niching, Null, SharedNiching, Zero},
     },
     primitive::{
-        ArchivedF32, ArchivedF64, ArchivedI128, ArchivedI16, ArchivedI32,
-        ArchivedI64, ArchivedNonZeroI128, ArchivedNonZeroI16,
-        ArchivedNonZeroI32, ArchivedNonZeroI64, ArchivedNonZeroU128,
-        ArchivedNonZeroU16, ArchivedNonZeroU32, ArchivedNonZeroU64,
+        ArchivedF32, ArchivedF64, ArchivedI128, ArchivedI16, ArchivedI32, ArchivedI64,
+        ArchivedNonZeroI128, ArchivedNonZeroI16, ArchivedNonZeroI32, ArchivedNonZeroI64,
+        ArchivedNonZeroU128, ArchivedNonZeroU16, ArchivedNonZeroU32, ArchivedNonZeroU64,
         ArchivedU128, ArchivedU16, ArchivedU32, ArchivedU64,
     },
     traits::ArchivePointee,
@@ -149,10 +146,7 @@ mod tests {
     use core::num::NonZeroU32;
 
     use crate::{
-        api::test::{
-            deserialize, roundtrip_with, to_archived, to_archived_from_bytes,
-            to_bytes,
-        },
+        api::test::{deserialize, roundtrip_with, to_archived, to_archived_from_bytes, to_bytes},
         boxed::ArchivedBox,
         niche::niching::{DefaultNiche, NaN, Zero},
         with::{AsBox, MapNiche, NicheInto},
@@ -355,10 +349,7 @@ mod tests {
         ];
 
         to_bytes(&values[0], |bytes| {
-            assert_eq!(
-                bytes.len(),
-                size_of::<ArchivedBox<ArchivedNotNichable>>()
-            );
+            assert_eq!(bytes.len(), size_of::<ArchivedBox<ArchivedNotNichable>>());
             to_archived_from_bytes::<Outer>(bytes, |archived| {
                 assert!(archived.opt.as_ref().is_none());
                 let deserialized: Outer = deserialize(&*archived);

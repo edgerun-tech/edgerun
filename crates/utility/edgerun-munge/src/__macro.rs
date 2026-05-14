@@ -1,6 +1,6 @@
 use core::{hint::unreachable_unchecked, marker::PhantomData};
 
-use crate::{internal, Borrow, Destructure, Restructure};
+use crate::{Borrow, Destructure, Restructure, internal};
 
 pub fn make_destructurer<T: Destructure>(
     value: T,
@@ -20,9 +20,7 @@ pub fn destructurer_ptr<T: internal::Destructurer>(
 /// # Safety
 ///
 /// `test_destructurer` may not be called.
-pub unsafe fn test_destructurer<'a, T: internal::Test<'a>>(
-    _: &'a mut T,
-) -> T::Test {
+pub unsafe fn test_destructurer<'a, T: internal::Test<'a>>(_: &'a mut T) -> T::Test {
     // SAFETY: `test_destructurer` may not be called.
     unsafe { unreachable_unchecked() }
 }
@@ -41,12 +39,7 @@ where
     // SAFETY: The caller has guaranteed that `ptr` is a properly-aligned
     // pointer to a subfield of the pointer underlying the inner value of
     // `destructurer`.
-    unsafe {
-        Restructure::restructure(
-            internal::Destructurer::inner(destructurer),
-            ptr,
-        )
-    }
+    unsafe { Restructure::restructure(internal::Destructurer::inner(destructurer), ptr) }
 }
 
 #[diagnostic::on_unimplemented(
@@ -58,9 +51,7 @@ pub trait MustBeBorrow {}
 #[diagnostic::do_not_recommend]
 impl MustBeBorrow for Borrow {}
 
-pub fn get_destructuring_ptr<T>(
-    _: &T,
-) -> *const <T::Inner as Destructure>::Destructuring
+pub fn get_destructuring_ptr<T>(_: &T) -> *const <T::Inner as Destructure>::Destructuring
 where
     T: internal::Destructurer,
     T::Inner: Destructure,

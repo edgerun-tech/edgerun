@@ -28,7 +28,7 @@ use edgerun_exchange::policy::RoutingPolicy;
 use edgerun_exchange::provider::{ExchangeProvider, ProviderContext};
 use edgerun_node::http::{Handler, Request, Response};
 use edgerun_sdk::runtime_api::{
-    self, HttpRouteSpec, RuntimeAppInstall, RuntimeHttpRoute, ROUTE_SCHEME_HTTPS,
+    self, HttpRouteSpec, ROUTE_SCHEME_HTTPS, RuntimeAppInstall, RuntimeHttpRoute,
 };
 
 pub mod config;

@@ -46,9 +46,7 @@ where
     Self: Pointee,
 {
     /// Returns the layout of the type.
-    fn layout_raw(
-        metadata: <Self as Pointee>::Metadata,
-    ) -> Result<Layout, LayoutError>;
+    fn layout_raw(metadata: <Self as Pointee>::Metadata) -> Result<Layout, LayoutError>;
 }
 
 /// An optimization hint about whether `T` is trivially copyable.
@@ -224,8 +222,7 @@ pub trait Archive {
     /// This optimization is disabled by default. To enable this optimization,
     /// you must unsafely attest that `Self` is trivially copyable using
     /// [`CopyOptimization::enable`] or [`CopyOptimization::enable_if`].
-    const COPY_OPTIMIZATION: CopyOptimization<Self> =
-        CopyOptimization::disable();
+    const COPY_OPTIMIZATION: CopyOptimization<Self> = CopyOptimization::disable();
 
     /// The archived representation of this type.
     ///
@@ -262,8 +259,7 @@ pub trait Archive {
 pub trait Serialize<S: Fallible + ?Sized>: Archive {
     /// Writes the dependencies for the object and returns a resolver that can
     /// create the archived type.
-    fn serialize(&self, serializer: &mut S)
-        -> Result<Self::Resolver, S::Error>;
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error>;
 }
 
 /// Converts a type back from its archived form.
@@ -442,20 +438,10 @@ pub trait ArchiveUnsized: Pointee {
 /// is implemented for all sized types by default.
 pub trait ArchivePointee: Pointee {
     /// The archived version of the pointer metadata for this type.
-    type ArchivedMetadata: Copy
-        + Send
-        + Sync
-        + Ord
-        + Hash
-        + Unpin
-        + Portable
-        + NoUndef
-        + Default;
+    type ArchivedMetadata: Copy + Send + Sync + Ord + Hash + Unpin + Portable + NoUndef + Default;
 
     /// Converts some archived metadata to the pointer metadata for itself.
-    fn pointer_metadata(
-        archived: &Self::ArchivedMetadata,
-    ) -> <Self as Pointee>::Metadata;
+    fn pointer_metadata(archived: &Self::ArchivedMetadata) -> <Self as Pointee>::Metadata;
 }
 
 /// A counterpart of [`Serialize`] that's suitable for unsized types.
@@ -467,20 +453,15 @@ pub trait SerializeUnsized<S: Fallible + ?Sized>: ArchiveUnsized {
 }
 
 /// A counterpart of [`Deserialize`] that's suitable for unsized types.
-pub trait DeserializeUnsized<T: Pointee + ?Sized, D: Fallible + ?Sized>:
-    ArchivePointee
-{
+pub trait DeserializeUnsized<T: Pointee + ?Sized, D: Fallible + ?Sized>: ArchivePointee {
     /// Deserializes a reference to the given value.
     ///
     /// # Safety
     ///
     /// `out` must be non-null, properly-aligned, and valid for writes. It must
     /// be allocated according to the layout of the deserialized metadata.
-    unsafe fn deserialize_unsized(
-        &self,
-        deserializer: &mut D,
-        out: *mut T,
-    ) -> Result<(), D::Error>;
+    unsafe fn deserialize_unsized(&self, deserializer: &mut D, out: *mut T)
+        -> Result<(), D::Error>;
 
     /// Deserializes the metadata for the given type.
     fn deserialize_metadata(&self) -> T::Metadata;

@@ -26,8 +26,7 @@ impl Drop for SharedPointer {
 /// shared pointer.
 #[derive(Default)]
 pub struct Pool {
-    shared_pointers:
-        HashMap<usize, Option<SharedPointer>, BuildHasherDefault<FxHasher64>>,
+    shared_pointers: HashMap<usize, Option<SharedPointer>, BuildHasherDefault<FxHasher64>>,
 }
 
 impl Pool {
@@ -41,10 +40,7 @@ impl Pool {
     #[inline]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            shared_pointers: HashMap::with_capacity_and_hasher(
-                capacity,
-                Default::default(),
-            ),
+            shared_pointers: HashMap::with_capacity_and_hasher(capacity, Default::default()),
         }
     }
 }

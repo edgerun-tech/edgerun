@@ -2059,6 +2059,7 @@ fn aligned_cross(
     };
     let size = match explicit {
         Some(value) if value >= 0.0 => value.min(content_size),
+        Some(_) => content_size,
         _ if matches!(align, AlignItems::Stretch) => content_size,
         _ => child_cross_size(child, parent_axis).min(content_size),
     }

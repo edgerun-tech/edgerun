@@ -79,15 +79,18 @@ version = "0.1.1"
 dependencies = [
  "codex-protocol",
  "codex-shell-command",
+ "edgerun-codex-utils-cargo-bin",
  "edgerun-error",
  "edgerun-inventory",
  "edgerun-json",
  "edgerun-log",
+ "edgerun-pretty-assertions",
  "edgerun-rmcp",
  "edgerun-schemars",
  "edgerun-serde",
  "edgerun-similar",
  "edgerun-strum-macros",
+ "edgerun-tempfile",
  "edgerun-ts-rs",
 ]
 
@@ -191,7 +194,9 @@ dependencies = [
  "edgerun-http",
  "edgerun-json",
  "edgerun-log",
+ "edgerun-pretty-assertions",
  "edgerun-tokio",
+ "edgerun-wiremock",
 ]
 
 [[package]]
@@ -202,8 +207,11 @@ dependencies = [
  "codex-app-server-protocol",
  "codex-protocol",
  "edgerun-http",
+ "edgerun-json",
+ "edgerun-pretty-assertions",
  "edgerun-schemars",
  "edgerun-serde",
+ "edgerun-tempfile",
 ]
 
 [[package]]
@@ -215,6 +223,8 @@ dependencies = [
  "edgerun-async-trait",
  "edgerun-json",
  "edgerun-log",
+ "edgerun-pretty-assertions",
+ "edgerun-tempfile",
  "edgerun-time",
  "edgerun-tokio",
 ]
@@ -251,6 +261,7 @@ dependencies = [
  "edgerun-encoding",
  "edgerun-http",
  "edgerun-json",
+ "edgerun-pretty-assertions",
 ]
 
 [[package]]
@@ -271,8 +282,10 @@ dependencies = [
  "codex-app-server-protocol",
  "codex-code-mode",
  "codex-protocol",
+ "edgerun-codex-utils-absolute-path",
  "edgerun-json",
  "edgerun-log",
+ "edgerun-pretty-assertions",
  "edgerun-rmcp",
 ]
 
@@ -293,15 +306,6 @@ version = "4.6.7"
 dependencies = [
  "bytes",
  "memchr",
-]
-
-[[package]]
-name = "displaydoc"
-version = "0.2.5"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]
@@ -358,9 +362,9 @@ name = "edgerun-codelyzer"
 version = "0.1.1"
 dependencies = [
  "edgerun-crypto",
+ "edgerun-encoding",
  "edgerun-json",
  "edgerun-log",
- "miniz_oxide",
  "rkyv",
 ]
 
@@ -431,6 +435,7 @@ name = "edgerun-encoding"
 version = "0.1.1"
 dependencies = [
  "edgerun-hpack",
+ "miniz_oxide",
 ]
 
 [[package]]
@@ -543,27 +548,6 @@ dependencies = [
  "edgerun-platform",
  "edgerun-protocols",
  "edgerun-runtime",
-]
-
-[[package]]
-name = "edgerun-icu-decimal"
-version = "0.1.1"
-dependencies = [
- "icu_decimal",
-]
-
-[[package]]
-name = "edgerun-icu-locale-core"
-version = "0.1.1"
-dependencies = [
- "icu_locale_core",
-]
-
-[[package]]
-name = "edgerun-icu-provider"
-version = "0.1.1"
-dependencies = [
- "icu_provider",
 ]
 
 [[package]]
@@ -737,7 +721,6 @@ dependencies = [
  "edgerun-protocols",
  "edgerun-secret-service",
  "edgerun-storage",
- "miniz_oxide",
 ]
 
 [[package]]
@@ -776,7 +759,6 @@ dependencies = [
  "edgerun-json",
  "edgerun-url",
  "edgerun-wire",
- "miniz_oxide",
 ]
 
 [[package]]
@@ -1132,15 +1114,6 @@ name = "edgerun-zstd"
 version = "0.1.1"
 
 [[package]]
-name = "fixed_decimal"
-version = "0.7.2"
-dependencies = [
- "displaydoc",
- "smallvec",
- "writeable",
-]
-
-[[package]]
 name = "futures-channel"
 version = "0.3.32"
 dependencies = [
@@ -1194,85 +1167,6 @@ dependencies = [
 [[package]]
 name = "hashbrown"
 version = "0.17.1"
-
-[[package]]
-name = "icu_collections"
-version = "2.1.1"
-dependencies = [
- "displaydoc",
- "potential_utf",
- "serde",
- "yoke",
- "zerofrom",
- "zerovec",
-]
-
-[[package]]
-name = "icu_decimal"
-version = "2.1.1"
-dependencies = [
- "fixed_decimal",
- "icu_decimal_data",
- "icu_locale",
- "icu_locale_core",
- "icu_provider",
- "serde",
- "writeable",
- "zerovec",
-]
-
-[[package]]
-name = "icu_decimal_data"
-version = "2.1.1"
-
-[[package]]
-name = "icu_locale"
-version = "2.1.1"
-dependencies = [
- "icu_collections",
- "icu_locale_core",
- "icu_locale_data",
- "icu_provider",
- "potential_utf",
- "serde",
- "tinystr",
- "writeable",
- "zerovec",
-]
-
-[[package]]
-name = "icu_locale_core"
-version = "2.1.1"
-dependencies = [
- "displaydoc",
- "edgerun-json",
- "litemap",
- "serde",
- "tinystr",
- "writeable",
- "zerovec",
-]
-
-[[package]]
-name = "icu_locale_data"
-version = "2.1.2"
-
-[[package]]
-name = "icu_provider"
-version = "2.1.1"
-dependencies = [
- "displaydoc",
- "edgerun-json",
- "icu_locale_core",
- "log",
- "serde",
- "stable_deref_trait",
- "writeable",
- "yoke",
- "zerofrom",
- "zerotrie",
- "zerovec",
-]
 
 [[package]]
 name = "itoa"
@@ -1332,15 +1226,6 @@ dependencies = [
 [[package]]
 name = "lazy_static"
 version = "1.5.0"
-
-[[package]]
-name = "litemap"
-version = "0.8.2"
-dependencies = [
- "edgerun-json",
- "serde_core",
- "yoke",
-]
 
 [[package]]
 name = "log"
@@ -1417,15 +1302,6 @@ version = "2.3.2"
 [[package]]
 name = "pin-project-lite"
 version = "0.2.17"
-
-[[package]]
-name = "potential_utf"
-version = "0.1.5"
-dependencies = [
- "serde_core",
- "writeable",
- "zerovec",
-]
 
 [[package]]
 name = "proc-macro2"
@@ -1598,15 +1474,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tinystr"
-version = "0.8.3"
-dependencies = [
- "displaydoc",
- "serde_core",
- "zerovec",
-]
-
-[[package]]
 name = "tinyvec"
 version = "1.11.0"
 dependencies = [
@@ -1740,95 +1607,6 @@ dependencies = [
  "js-sys",
  "serde",
  "wasm-bindgen",
-]
-
-[[package]]
-name = "writeable"
-version = "0.6.3"
-
-[[package]]
-name = "yoke"
-version = "0.8.2"
-dependencies = [
- "stable_deref_trait",
- "yoke-derive",
- "zerofrom",
-]
-
-[[package]]
-name = "yoke-derive"
-version = "0.8.2"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
- "synstructure",
-]
-
-[[package]]
-name = "zerocopy"
-version = "0.8.48"
-dependencies = [
- "zerocopy-derive",
-]
-
-[[package]]
-name = "zerocopy-derive"
-version = "0.8.48"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "zerofrom"
-version = "0.1.8"
-dependencies = [
- "zerofrom-derive",
-]
-
-[[package]]
-name = "zerofrom-derive"
-version = "0.1.7"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
- "synstructure",
-]
-
-[[package]]
-name = "zerotrie"
-version = "0.2.4"
-dependencies = [
- "displaydoc",
- "edgerun-json",
- "litemap",
- "serde_core",
- "yoke",
- "zerofrom",
- "zerovec",
-]
-
-[[package]]
-name = "zerovec"
-version = "0.11.6"
-dependencies = [
- "edgerun-json",
- "serde",
- "yoke",
- "zerofrom",
- "zerovec-derive",
-]
-
-[[package]]
-name = "zerovec-derive"
-version = "0.11.3"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
 ]
 
 [[package]]

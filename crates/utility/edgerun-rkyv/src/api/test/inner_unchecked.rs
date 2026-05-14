@@ -19,10 +19,8 @@ where
 }
 
 /// Accesses the archived version and calls the given function with it.
-pub fn to_archived_from_bytes<T>(
-    bytes: &mut [u8],
-    f: impl FnOnce(Seal<'_, T::Archived>),
-) where
+pub fn to_archived_from_bytes<T>(bytes: &mut [u8], f: impl FnOnce(Seal<'_, T::Archived>))
+where
     T: Archive,
 {
     let archived_value = unsafe { access_unchecked_mut::<T::Archived>(bytes) };

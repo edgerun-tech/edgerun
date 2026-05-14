@@ -1,6 +1,6 @@
 use proc_macro2::{Span, TokenStream};
-use quote::{quote, ToTokens};
-use syn::{parenthesized, token, Attribute, Error, Ident, LitInt};
+use quote::{ToTokens, quote};
+use syn::{Attribute, Error, Ident, LitInt, parenthesized, token};
 
 #[derive(Clone, Copy)]
 pub enum Primitive {
@@ -113,10 +113,7 @@ impl Repr {
                     }
                     Ok(())
                 } else {
-                    Err(Error::new_spanned(
-                        meta.path,
-                        "unrecognized repr argument",
-                    ))
+                    Err(Error::new_spanned(meta.path, "unrecognized repr argument"))
                 }
             })?;
         }

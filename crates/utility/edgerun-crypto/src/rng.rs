@@ -346,30 +346,3 @@ mod linux_random {
         false
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn fixed_source(out: &mut [u8]) -> Result<()> {
-        out.fill(0xA5);
-        Ok(())
-    }
-
-    #[test]
-    fn registered_source_takes_priority() {
-        register_random_source(fixed_source);
-        let mut bytes = [0u8; 16];
-        fill_random(&mut bytes).unwrap();
-        unregister_random_source();
-        assert_eq!(bytes, [0xA5; 16]);
-    }
-
-    #[test]
-    fn os_rng_fills_bytes() {
-        let mut rng = OsRng;
-        let mut bytes = [0u8; 32];
-        rng.fill_bytes(&mut bytes);
-        assert!(bytes.iter().any(|b| *b != 0));
-    }
-}

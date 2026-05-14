@@ -1,7 +1,5 @@
 use std::{borrow::Cow, fs};
 
-use rkyv::{Archive, Deserialize as RkyvDeserialize, Serialize as RkyvSerialize};
-
 use crate::uir::CallKind;
 
 /// A raw function definition found in source code.
@@ -16,7 +14,7 @@ pub struct RawFunction<'a> {
 }
 
 /// Owned version of RawFunction for caching.
-#[derive(Debug, Clone, Archive, RkyvSerialize, RkyvDeserialize)]
+#[derive(Debug, Clone)]
 pub struct RawFunctionOwned {
     pub name: String,
     pub start_byte: usize,
@@ -35,7 +33,7 @@ pub struct RawCall<'a> {
 }
 
 /// Owned version of RawCall for caching.
-#[derive(Debug, Clone, Archive, RkyvSerialize, RkyvDeserialize)]
+#[derive(Debug, Clone)]
 pub struct RawCallOwned {
     pub callee_name: String,
     pub start_byte: usize,
@@ -67,7 +65,7 @@ impl<'a> From<&RawCall<'a>> for RawCallOwned {
 }
 
 /// Cached parse result that can be serialized.
-#[derive(Debug, Clone, Archive, RkyvSerialize, RkyvDeserialize)]
+#[derive(Debug, Clone)]
 pub struct CachedParseResult {
     pub functions: Vec<RawFunctionOwned>,
     pub calls: Vec<RawCallOwned>,

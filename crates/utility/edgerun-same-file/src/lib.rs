@@ -75,7 +75,9 @@ use std::path::Path;
 #[cfg(any(target_os = "redox", unix))]
 use crate::unix as imp;
 #[cfg(windows)]
-compile_error!("EdgeRun's vendored same-file crate does not support Windows targets");
+compile_error!(
+    "EdgeRun's vendored same-file crate does not support Windows targets"
+);
 
 #[cfg(not(any(target_os = "redox", unix, windows)))]
 use unknown as imp;

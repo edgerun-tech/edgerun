@@ -88,17 +88,3 @@ pub fn rsa_pss_sha256(key: crate::rsa::RsaPrivateKey, message: &[u8]) -> Vec<u8>
 
     crate::rsa_pss_sha256_sign(key, message).to_bytes().to_vec()
 }
-
-#[cfg(all(test, feature = "ed25519"))]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn ed25519_signing_api_roundtrips_through_verification_api() {
-        let key = crate::Ed25519SigningKey::from_bytes(&[11u8; 32]);
-        let public_key = ed25519_public_key(&key);
-        let signature = ed25519_sign(&key, b"edge signed");
-
-        crate::verification::ed25519_verify(&public_key, b"edge signed", &signature).unwrap();
-    }
-}

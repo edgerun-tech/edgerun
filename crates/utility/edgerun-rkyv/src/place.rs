@@ -44,10 +44,7 @@ impl<T: ?Sized> Place<T> {
     /// - `ptr` must point to a field of `parent`
     /// - `ptr` must be properly aligned, dereferenceable, and all of its bytes
     ///   must be initialized
-    pub unsafe fn from_field_unchecked<U: ?Sized>(
-        parent: Place<U>,
-        ptr: *mut T,
-    ) -> Self {
+    pub unsafe fn from_field_unchecked<U: ?Sized>(parent: Place<U>, ptr: *mut T) -> Self {
         // SAFETY: We won't write anything to the parent pointer, so we
         // definitely won't write any uninitialized bytes.
         let parent_ptr = unsafe { parent.ptr() };

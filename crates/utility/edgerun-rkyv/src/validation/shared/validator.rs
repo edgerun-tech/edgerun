@@ -17,11 +17,7 @@ use crate::{
 /// A validator that can verify shared pointers.
 #[derive(Debug, Default)]
 pub struct SharedValidator {
-    shared: hash_map::HashMap<
-        usize,
-        (TypeId, bool),
-        BuildHasherDefault<FxHasher64>,
-    >,
+    shared: hash_map::HashMap<usize, (TypeId, bool), BuildHasherDefault<FxHasher64>>,
 }
 
 impl SharedValidator {
@@ -35,10 +31,7 @@ impl SharedValidator {
     #[inline]
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
-            shared: hash_map::HashMap::with_capacity_and_hasher(
-                capacity,
-                Default::default(),
-            ),
+            shared: hash_map::HashMap::with_capacity_and_hasher(capacity, Default::default()),
         }
     }
 }
@@ -85,11 +78,7 @@ impl fmt::Display for AlreadyFinished {
 impl Error for AlreadyFinished {}
 
 impl<E: Source> SharedContext<E> for SharedValidator {
-    fn start_shared(
-        &mut self,
-        address: usize,
-        type_id: TypeId,
-    ) -> Result<ValidationState, E> {
+    fn start_shared(&mut self, address: usize, type_id: TypeId) -> Result<ValidationState, E> {
         match self.shared.entry(address) {
             hash_map::Entry::Vacant(vacant) => {
                 vacant.insert((type_id, false));
@@ -111,11 +100,7 @@ impl<E: Source> SharedContext<E> for SharedValidator {
         }
     }
 
-    fn finish_shared(
-        &mut self,
-        address: usize,
-        type_id: TypeId,
-    ) -> Result<(), E> {
+    fn finish_shared(&mut self, address: usize, type_id: TypeId) -> Result<(), E> {
         match self.shared.entry(address) {
             hash_map::Entry::Vacant(_) => fail!(NotStarted),
             hash_map::Entry::Occupied(mut occupied) => {

@@ -4,32 +4,30 @@
 // Unaligned big-endian
 #[cfg(all(feature = "unaligned", feature = "big_endian"))]
 use crate::rend::unaligned::{
-    char_ube, f32_ube, f64_ube, i128_ube, i16_ube, i32_ube, i64_ube, u128_ube,
-    u16_ube, u32_ube, u64_ube, NonZeroI128_ube, NonZeroI16_ube, NonZeroI32_ube,
-    NonZeroI64_ube, NonZeroU128_ube, NonZeroU16_ube, NonZeroU32_ube,
-    NonZeroU64_ube,
+    char_ube, f32_ube, f64_ube, i128_ube, i16_ube, i32_ube, i64_ube, u128_ube, u16_ube, u32_ube,
+    u64_ube, NonZeroI128_ube, NonZeroI16_ube, NonZeroI32_ube, NonZeroI64_ube, NonZeroU128_ube,
+    NonZeroU16_ube, NonZeroU32_ube, NonZeroU64_ube,
 };
 // Unaligned little-endian
 #[cfg(all(feature = "unaligned", not(feature = "big_endian")))]
 use crate::rend::unaligned::{
-    char_ule, f32_ule, f64_ule, i128_ule, i16_ule, i32_ule, i64_ule, u128_ule,
-    u16_ule, u32_ule, u64_ule, NonZeroI128_ule, NonZeroI16_ule, NonZeroI32_ule,
-    NonZeroI64_ule, NonZeroU128_ule, NonZeroU16_ule, NonZeroU32_ule,
-    NonZeroU64_ule,
+    char_ule, f32_ule, f64_ule, i128_ule, i16_ule, i32_ule, i64_ule, u128_ule, u16_ule, u32_ule,
+    u64_ule, NonZeroI128_ule, NonZeroI16_ule, NonZeroI32_ule, NonZeroI64_ule, NonZeroU128_ule,
+    NonZeroU16_ule, NonZeroU32_ule, NonZeroU64_ule,
 };
 // Aligned big-endian
 #[cfg(all(not(feature = "unaligned"), feature = "big_endian"))]
 use crate::rend::{
-    char_be, f32_be, f64_be, i128_be, i16_be, i32_be, i64_be, u128_be, u16_be,
-    u32_be, u64_be, NonZeroI128_be, NonZeroI16_be, NonZeroI32_be,
-    NonZeroI64_be, NonZeroU128_be, NonZeroU16_be, NonZeroU32_be, NonZeroU64_be,
+    char_be, f32_be, f64_be, i128_be, i16_be, i32_be, i64_be, u128_be, u16_be, u32_be, u64_be,
+    NonZeroI128_be, NonZeroI16_be, NonZeroI32_be, NonZeroI64_be, NonZeroU128_be, NonZeroU16_be,
+    NonZeroU32_be, NonZeroU64_be,
 };
 // Aligned little-endian
 #[cfg(all(not(feature = "unaligned"), not(feature = "big_endian")))]
 use crate::rend::{
-    char_le, f32_le, f64_le, i128_le, i16_le, i32_le, i64_le, u128_le, u16_le,
-    u32_le, u64_le, NonZeroI128_le, NonZeroI16_le, NonZeroI32_le,
-    NonZeroI64_le, NonZeroU128_le, NonZeroU16_le, NonZeroU32_le, NonZeroU64_le,
+    char_le, f32_le, f64_le, i128_le, i16_le, i32_le, i64_le, u128_le, u16_le, u32_le, u64_le,
+    NonZeroI128_le, NonZeroI16_le, NonZeroI32_le, NonZeroI64_le, NonZeroU128_le, NonZeroU16_le,
+    NonZeroU32_le, NonZeroU64_le,
 };
 
 #[rustfmt::skip]
@@ -96,8 +94,7 @@ pub type FixedIsize = match_pointer_width!(i16, i32, i64);
 
 /// The archived version of `isize` chosen based on the currently-enabled
 /// `pointer_width_*` feature.
-pub type ArchivedIsize =
-    match_pointer_width!(ArchivedI16, ArchivedI32, ArchivedI64);
+pub type ArchivedIsize = match_pointer_width!(ArchivedI16, ArchivedI32, ArchivedI64);
 
 /// The native type that `usize` is converted to for archiving.
 ///
@@ -108,8 +105,7 @@ pub type FixedUsize = match_pointer_width!(u16, u32, u64);
 
 /// The archived version of `isize` chosen based on the currently-enabled
 /// `pointer_width_*` feature.
-pub type ArchivedUsize =
-    match_pointer_width!(ArchivedU16, ArchivedU32, ArchivedU64);
+pub type ArchivedUsize = match_pointer_width!(ArchivedU16, ArchivedU32, ArchivedU64);
 
 define_multibyte_primitives! {
     ArchivedNonZeroI16:
@@ -183,11 +179,8 @@ pub type FixedNonZeroIsize = match_pointer_width!(
 
 /// The archived version of `NonZeroIsize` chosen based on the currently-enabled
 /// `pointer_width_*` feature.
-pub type ArchivedNonZeroIsize = match_pointer_width!(
-    ArchivedNonZeroI16,
-    ArchivedNonZeroI32,
-    ArchivedNonZeroI64
-);
+pub type ArchivedNonZeroIsize =
+    match_pointer_width!(ArchivedNonZeroI16, ArchivedNonZeroI32, ArchivedNonZeroI64);
 
 /// The native type that `NonZeroUsize` is converted to for archiving.
 ///
@@ -203,8 +196,5 @@ pub type FixedNonZeroUsize = match_pointer_width!(
 
 /// The archived version of `NonZeroUsize` chosen based on the currently-enabled
 /// `pointer_width_*` feature.
-pub type ArchivedNonZeroUsize = match_pointer_width!(
-    ArchivedNonZeroU16,
-    ArchivedNonZeroU32,
-    ArchivedNonZeroU64
-);
+pub type ArchivedNonZeroUsize =
+    match_pointer_width!(ArchivedNonZeroU16, ArchivedNonZeroU32, ArchivedNonZeroU64);

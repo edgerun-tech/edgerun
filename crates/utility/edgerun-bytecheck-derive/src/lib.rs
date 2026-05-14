@@ -16,8 +16,8 @@ mod util;
 use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{
-    parse_macro_input, parse_quote, spanned::Spanned, Data, DeriveInput, Error,
-    Field, Fields, Ident, Index, Path,
+    Data, DeriveInput, Error, Field, Fields, Ident, Index, Path, parse_macro_input, parse_quote,
+    spanned::Spanned,
 };
 
 use crate::{
@@ -59,9 +59,7 @@ use crate::{
 /// - `omit_bounds`: Omits trait bounds for the annotated field in the generated
 ///   impl.
 #[proc_macro_derive(CheckBytes, attributes(bytecheck))]
-pub fn check_bytes_derive(
-    input: proc_macro::TokenStream,
-) -> proc_macro::TokenStream {
+pub fn check_bytes_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     match derive_check_bytes(parse_macro_input!(input as DeriveInput)) {
         Ok(result) => result.into(),
         Err(e) => e.to_compile_error().into(),
@@ -79,8 +77,7 @@ fn derive_check_bytes(mut input: DeriveInput) -> Result<TokenStream, Error> {
 
     // Split type generics for use later
     input.generics.make_where_clause();
-    let (type_impl_generics, type_ty_generics, type_where_clause) =
-        input.generics.split_for_impl();
+    let (type_impl_generics, type_ty_generics, type_where_clause) = input.generics.split_for_impl();
     let type_where_clause = type_where_clause.unwrap();
 
     // Trait generics are created by modifying the type generics.
@@ -143,8 +140,7 @@ fn derive_check_bytes(mut input: DeriveInput) -> Result<TokenStream, Error> {
     }
 
     // Split trait generics for use later
-    let (trait_impl_generics, _, trait_where_clause) =
-        trait_generics.split_for_impl();
+    let (trait_impl_generics, _, trait_where_clause) = trait_generics.split_for_impl();
     let trait_where_clause = trait_where_clause.unwrap();
 
     // Build CheckBytes impl
@@ -198,33 +194,32 @@ fn derive_check_bytes(mut input: DeriveInput) -> Result<TokenStream, Error> {
                 }
             }
             Fields::Unnamed(ref fields) => {
-                let field_checks =
-                    fields.unnamed.iter().enumerate().map(|(i, f)| {
-                        let ty = &f.ty;
-                        let index = Index::from(i);
-                        quote! {
+                let field_checks = fields.unnamed.iter().enumerate().map(|(i, f)| {
+                    let ty = &f.ty;
+                    let index = Index::from(i);
+                    quote! {
+                        <
+                            #ty as #crate_path::CheckBytes<__C>
+                        >::check_bytes(
+                            ::core::ptr::addr_of!((*value).#index),
+                            context
+                        ).map_err(|e| {
                             <
-                                #ty as #crate_path::CheckBytes<__C>
-                            >::check_bytes(
-                                ::core::ptr::addr_of!((*value).#index),
-                                context
-                            ).map_err(|e| {
                                 <
-                                    <
-                                        __C as #crate_path::rancor::Fallible
-                                    >::Error as #crate_path::rancor::Trace
-                                >::trace(
-                                    e,
-                                    #crate_path::TupleStructCheckContext {
-                                        tuple_struct_name: ::core::stringify!(
-                                            #name
-                                        ),
-                                        field_index: #i,
-                                    },
-                                )
-                            })?;
-                        }
-                    });
+                                    __C as #crate_path::rancor::Fallible
+                                >::Error as #crate_path::rancor::Trace
+                            >::trace(
+                                e,
+                                #crate_path::TupleStructCheckContext {
+                                    tuple_struct_name: ::core::stringify!(
+                                        #name
+                                    ),
+                                    field_index: #i,
+                                },
+                            )
+                        })?;
+                    }
+                });
 
                 quote! {
                     #[automatically_derived]
@@ -279,21 +274,21 @@ fn derive_check_bytes(mut input: DeriveInput) -> Result<TokenStream, Error> {
                     return Err(Error::new_spanned(
                         name,
                         "enums cannot be repr(transparent)",
-                    ))
+                    ));
                 }
                 Repr::Primitive(i) => i,
                 Repr::C { .. } => {
                     return Err(Error::new_spanned(
                         name,
                         "repr(C) enums are not currently supported",
-                    ))
+                    ));
                 }
                 Repr::Rust { .. } => {
                     return Err(Error::new_spanned(
                         name,
                         "enums implementing CheckBytes must have an explicit \
                          repr",
-                    ))
+                    ));
                 }
             };
 
@@ -321,10 +316,7 @@ fn derive_check_bytes(mut input: DeriveInput) -> Result<TokenStream, Error> {
 
             let variant_structs = data.variants.iter().map(|v| {
                 let variant = &v.ident;
-                let variant_name = Ident::new(
-                    &format!("Variant{}", strip_raw(variant)),
-                    v.span(),
-                );
+                let variant_name = Ident::new(&format!("Variant{}", strip_raw(variant)), v.span());
                 match v.fields {
                     Fields::Named(ref fields) => {
                         let fields = fields.named.iter().map(|f| {
@@ -367,15 +359,13 @@ fn derive_check_bytes(mut input: DeriveInput) -> Result<TokenStream, Error> {
 
             let check_arms = data.variants.iter().map(|v| {
                 let variant = &v.ident;
-                let variant_name = Ident::new(
-                    &format!("Variant{}", strip_raw(variant)),
-                    v.span(),
-                );
+                let variant_name = Ident::new(&format!("Variant{}", strip_raw(variant)), v.span());
                 match v.fields {
                     Fields::Named(ref fields) => {
-                        let checks = fields.named.iter().map(|f| {
-                            check_arm_named_field(f, &crate_path, name, variant)
-                        });
+                        let checks = fields
+                            .named
+                            .iter()
+                            .map(|f| check_arm_named_field(f, &crate_path, name, variant));
                         quote! { {
                             let value =
                                 value.cast::<#variant_name #type_ty_generics>();
@@ -383,16 +373,9 @@ fn derive_check_bytes(mut input: DeriveInput) -> Result<TokenStream, Error> {
                         } }
                     }
                     Fields::Unnamed(ref fields) => {
-                        let checks =
-                            fields.unnamed.iter().enumerate().map(|(i, f)| {
-                                check_arm_unnamed_field(
-                                    i,
-                                    f,
-                                    &crate_path,
-                                    name,
-                                    variant,
-                                )
-                            });
+                        let checks = fields.unnamed.iter().enumerate().map(|(i, f)| {
+                            check_arm_unnamed_field(i, f, &crate_path, name, variant)
+                        });
                         quote! { {
                             let value =
                                 value.cast::<#variant_name #type_ty_generics>();

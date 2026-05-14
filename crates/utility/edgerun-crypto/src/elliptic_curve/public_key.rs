@@ -147,7 +147,6 @@ where
     pub fn to_nonidentity(&self) -> NonIdentity<AffinePoint<C>> {
         NonIdentity::new_unchecked(self.point)
     }
-
 }
 
 impl<C> AsRef<AffinePoint<C>> for PublicKey<C>

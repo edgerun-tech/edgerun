@@ -60,20 +60,13 @@ impl<W: Writer<E>, A, S, E> Writer<E> for Serializer<W, A, S> {
 }
 
 unsafe impl<W, A: Allocator<E>, S, E> Allocator<E> for Serializer<W, A, S> {
-    unsafe fn push_alloc(
-        &mut self,
-        layout: Layout,
-    ) -> Result<NonNull<[u8]>, E> {
+    unsafe fn push_alloc(&mut self, layout: Layout) -> Result<NonNull<[u8]>, E> {
         // SAFETY: The safety requirements for `A::push_alloc()` are the same as
         // the safety requirements for `push_alloc()`.
         unsafe { self.allocator.push_alloc(layout) }
     }
 
-    unsafe fn pop_alloc(
-        &mut self,
-        ptr: NonNull<u8>,
-        layout: Layout,
-    ) -> Result<(), E> {
+    unsafe fn pop_alloc(&mut self, ptr: NonNull<u8>, layout: Layout) -> Result<(), E> {
         // SAFETY: The safety requirements for `A::pop_alloc()` are the same as
         // the safety requirements for `pop_alloc()`.
         unsafe { self.allocator.pop_alloc(ptr, layout) }

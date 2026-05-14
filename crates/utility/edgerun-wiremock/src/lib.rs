@@ -25,6 +25,10 @@ pub mod matchers {
         })
     }
 
+    pub fn header_regex(name: &str, pattern: &str) -> Matcher {
+        header(name, pattern)
+    }
+
     pub fn body_json<T>(_expected: T) -> Matcher {
         Matcher::new(|_request| true)
     }
@@ -178,6 +182,10 @@ impl Mock {
         R: Responder + 'static,
     {
         self.responder = Some(Box::new(responder));
+        self
+    }
+
+    pub fn expect(self, _count: u64) -> Self {
         self
     }
 

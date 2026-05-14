@@ -1,6 +1,6 @@
+use crate::io::{AsyncBufRead, AsyncRead, IoSliceMut};
 use futures_core::ready;
 use futures_core::task::{Context, Poll};
-use crate::io::{AsyncBufRead, AsyncRead, IoSliceMut};
 use pin_project_lite::pin_project;
 use std::fmt;
 use std::io;
@@ -24,7 +24,11 @@ where
     U: AsyncRead,
 {
     pub(super) fn new(first: T, second: U) -> Self {
-        Self { first, second, done_first: false }
+        Self {
+            first,
+            second,
+            done_first: false,
+        }
     }
 
     /// Gets references to the underlying readers in this `Chain`.

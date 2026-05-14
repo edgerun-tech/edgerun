@@ -139,8 +139,7 @@ impl ArchivedStringRepr {
     #[inline]
     pub fn as_bytes_seal(this: Seal<'_, Self>) -> Seal<'_, [u8]> {
         let len = this.len();
-        let slice =
-            unsafe { slice::from_raw_parts_mut(Self::as_mut_ptr(this), len) };
+        let slice = unsafe { slice::from_raw_parts_mut(Self::as_mut_ptr(this), len) };
         Seal::new(slice)
     }
 
@@ -153,8 +152,7 @@ impl ArchivedStringRepr {
     /// Returns a mutable reference to the string as a `str`.
     #[inline]
     pub fn as_str_seal(this: Seal<'_, Self>) -> Seal<'_, str> {
-        let bytes =
-            unsafe { Seal::unseal_unchecked(Self::as_bytes_seal(this)) };
+        let bytes = unsafe { Seal::unseal_unchecked(Self::as_bytes_seal(this)) };
         Seal::new(unsafe { str::from_utf8_unchecked_mut(bytes) })
     }
 
@@ -183,11 +181,7 @@ impl ArchivedStringRepr {
         // caller has guaranteed points to a valid location.
         unsafe {
             write_bytes(out_bytes, 0xff, 1);
-            copy_nonoverlapping(
-                value.as_bytes().as_ptr(),
-                out_bytes.cast(),
-                value.len(),
-            );
+            copy_nonoverlapping(value.as_bytes().as_ptr(), out_bytes.cast(), value.len());
         }
     }
 
@@ -238,17 +232,10 @@ impl ArchivedStringRepr {
     /// The length of `str` must be greater than [`INLINE_CAPACITY`] and less
     /// than or equal to [`OUT_OF_LINE_CAPACITY`].
     #[inline]
-    pub unsafe fn emplace_out_of_line(
-        value: &str,
-        target: usize,
-        out: Place<Self>,
-    ) {
+    pub unsafe fn emplace_out_of_line(value: &str, target: usize, out: Place<Self>) {
         // SAFETY: The safety conditions for `emplace_out_of_line()` are the
         // same as the safety conditions for `try_emplace_out_of_line()`.
-        unsafe {
-            Self::try_emplace_out_of_line::<Panic>(value, target, out)
-                .always_ok()
-        }
+        unsafe { Self::try_emplace_out_of_line::<Panic>(value, target, out).always_ok() }
     }
 }
 
@@ -283,10 +270,7 @@ const _: () = {
         C: Fallible + ?Sized,
         C::Error: Source,
     {
-        unsafe fn check_bytes(
-            value: *const Self,
-            _: &mut C,
-        ) -> Result<(), C::Error> {
+        unsafe fn check_bytes(value: *const Self, _: &mut C) -> Result<(), C::Error> {
             // SAFETY: The fields of `ArchivedStringRepr` are always valid for
             // every bit pattern.
             let repr = unsafe { &*value };

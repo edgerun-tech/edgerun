@@ -1,7 +1,7 @@
 use crate::abortable::{AbortHandle, AbortInner, Aborted};
+use crate::io::{AsyncBufRead, AsyncWrite};
 use futures_core::future::Future;
 use futures_core::task::{Context, Poll};
-use crate::io::{AsyncBufRead, AsyncWrite};
 use pin_project_lite::pin_project;
 use std::io;
 use std::pin::Pin;
@@ -53,7 +53,15 @@ where
     W: AsyncWrite + Unpin + ?Sized,
 {
     let (handle, reg) = AbortHandle::new_pair();
-    (CopyBufAbortable { reader, writer, amt: 0, inner: reg.inner }, handle)
+    (
+        CopyBufAbortable {
+            reader,
+            writer,
+            amt: 0,
+            inner: reg.inner,
+        },
+        handle,
+    )
 }
 
 pin_project! {

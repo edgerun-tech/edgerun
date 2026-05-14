@@ -106,9 +106,7 @@ impl<T, const N: usize> InlineVec<T, N> {
 
     #[cold]
     fn out_of_space() -> ! {
-        panic!(
-            "reserve requested more capacity than the InlineVec has available"
-        );
+        panic!("reserve requested more capacity than the InlineVec has available");
     }
 
     /// Returns `true` if the vector contains no elements.
@@ -230,15 +228,9 @@ impl<T, const N: usize> InlineVec<MaybeUninit<T>, N> {
     /// really are in an initialized state. Calling this when the content is
     /// not yet fully initialized causes undefined behavior.
     pub fn assume_init(self) -> InlineVec<T, N> {
-        let mut elements = unsafe {
-            MaybeUninit::<[MaybeUninit<T>; N]>::uninit().assume_init()
-        };
+        let mut elements = unsafe { MaybeUninit::<[MaybeUninit<T>; N]>::uninit().assume_init() };
         unsafe {
-            ptr::copy_nonoverlapping(
-                self.elements.as_ptr().cast(),
-                elements.as_mut_ptr(),
-                N,
-            );
+            ptr::copy_nonoverlapping(self.elements.as_ptr().cast(), elements.as_mut_ptr(), N);
         }
         InlineVec {
             elements,
@@ -297,9 +289,7 @@ impl<T, const N: usize> ops::DerefMut for InlineVec<T, N> {
     }
 }
 
-impl<T, I: slice::SliceIndex<[T]>, const N: usize> ops::Index<I>
-    for InlineVec<T, N>
-{
+impl<T, I: slice::SliceIndex<[T]>, const N: usize> ops::Index<I> for InlineVec<T, N> {
     type Output = <I as slice::SliceIndex<[T]>>::Output;
 
     fn index(&self, index: I) -> &Self::Output {
@@ -307,9 +297,7 @@ impl<T, I: slice::SliceIndex<[T]>, const N: usize> ops::Index<I>
     }
 }
 
-impl<T, I: slice::SliceIndex<[T]>, const N: usize> ops::IndexMut<I>
-    for InlineVec<T, N>
-{
+impl<T, I: slice::SliceIndex<[T]>, const N: usize> ops::IndexMut<I> for InlineVec<T, N> {
     fn index_mut(&mut self, index: I) -> &mut Self::Output {
         &mut self.as_mut_slice()[index]
     }
@@ -351,8 +339,7 @@ impl<T, const N: usize> Iterator for Drain<'_, T, N> {
         if self.remaining > 0 {
             self.remaining -= 1;
             let result = unsafe { self.current.as_ptr().read() };
-            self.current =
-                unsafe { NonNull::new_unchecked(self.current.as_ptr().add(1)) };
+            self.current = unsafe { NonNull::new_unchecked(self.current.as_ptr().add(1)) };
             Some(result)
         } else {
             None

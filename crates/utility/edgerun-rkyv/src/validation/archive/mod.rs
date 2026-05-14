@@ -19,11 +19,7 @@ use crate::traits::LayoutRaw;
 pub unsafe trait ArchiveContext<E = <Self as Fallible>::Error> {
     /// Checks that the given data address and layout is located completely
     /// within the subtree range.
-    fn check_subtree_ptr(
-        &mut self,
-        ptr: *const u8,
-        layout: &Layout,
-    ) -> Result<(), E>;
+    fn check_subtree_ptr(&mut self, ptr: *const u8, layout: &Layout) -> Result<(), E>;
 
     /// Pushes a new subtree range onto the validator and starts validating it.
     ///
@@ -49,21 +45,14 @@ pub unsafe trait ArchiveContext<E = <Self as Fallible>::Error> {
     /// # Safety
     ///
     /// `range` must be a range returned from this validator.
-    unsafe fn pop_subtree_range(
-        &mut self,
-        range: Range<usize>,
-    ) -> Result<(), E>;
+    unsafe fn pop_subtree_range(&mut self, range: Range<usize>) -> Result<(), E>;
 }
 
 unsafe impl<T, E> ArchiveContext<E> for Strategy<T, E>
 where
     T: ArchiveContext<E> + ?Sized,
 {
-    fn check_subtree_ptr(
-        &mut self,
-        ptr: *const u8,
-        layout: &Layout,
-    ) -> Result<(), E> {
+    fn check_subtree_ptr(&mut self, ptr: *const u8, layout: &Layout) -> Result<(), E> {
         T::check_subtree_ptr(self, ptr, layout)
     }
 
@@ -77,10 +66,7 @@ where
         unsafe { T::push_subtree_range(self, root, end) }
     }
 
-    unsafe fn pop_subtree_range(
-        &mut self,
-        range: Range<usize>,
-    ) -> Result<(), E> {
+    unsafe fn pop_subtree_range(&mut self, range: Range<usize>) -> Result<(), E> {
         // SAFETY: This just forwards the call to the underlying context, which
         // has the same safety requirements.
         unsafe { T::pop_subtree_range(self, range) }
@@ -121,8 +107,7 @@ impl<C: ArchiveContext<E> + ?Sized, E: Source> ArchiveContextExt<E> for C {
 
         // SAFETY: We checked that the entire range from `ptr` to
         // `ptr + layout.size()` is located within the buffer.
-        let range =
-            unsafe { self.push_subtree_range(ptr, ptr.add(layout.size()))? };
+        let range = unsafe { self.push_subtree_range(ptr, ptr.add(layout.size()))? };
 
         let result = f(self)?;
 

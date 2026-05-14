@@ -1,14 +1,11 @@
 use rancor::Fallible;
 
-use crate::{
-    rend::*, traits::CopyOptimization, Archive, Deserialize, Place, Serialize,
-};
+use crate::{rend::*, traits::CopyOptimization, Archive, Deserialize, Place, Serialize};
 
 macro_rules! impl_rend_primitive {
     ($type:ty) => {
         impl Archive for $type {
-            const COPY_OPTIMIZATION: CopyOptimization<Self> =
-                unsafe { CopyOptimization::enable() };
+            const COPY_OPTIMIZATION: CopyOptimization<Self> = unsafe { CopyOptimization::enable() };
 
             type Archived = Self;
             type Resolver = ();
@@ -138,32 +135,20 @@ mod tests {
         roundtrip(&NonZeroI16_be::new(12345).unwrap());
         roundtrip(&NonZeroI32_be::new(1234567890).unwrap());
         roundtrip(&NonZeroI64_be::new(1234567890123456789).unwrap());
-        roundtrip(
-            &NonZeroI128_be::new(123456789012345678901234567890123456789)
-                .unwrap(),
-        );
+        roundtrip(&NonZeroI128_be::new(123456789012345678901234567890123456789).unwrap());
         roundtrip(&NonZeroU16_be::new(12345).unwrap());
         roundtrip(&NonZeroU32_be::new(1234567890).unwrap());
         roundtrip(&NonZeroU64_be::new(1234567890123456789).unwrap());
-        roundtrip(
-            &NonZeroU128_be::new(123456789012345678901234567890123456789)
-                .unwrap(),
-        );
+        roundtrip(&NonZeroU128_be::new(123456789012345678901234567890123456789).unwrap());
 
         roundtrip(&NonZeroI16_le::new(12345).unwrap());
         roundtrip(&NonZeroI32_le::new(1234567890).unwrap());
         roundtrip(&NonZeroI64_le::new(1234567890123456789).unwrap());
-        roundtrip(
-            &NonZeroI128_le::new(123456789012345678901234567890123456789)
-                .unwrap(),
-        );
+        roundtrip(&NonZeroI128_le::new(123456789012345678901234567890123456789).unwrap());
         roundtrip(&NonZeroU16_le::new(12345).unwrap());
         roundtrip(&NonZeroU32_le::new(1234567890).unwrap());
         roundtrip(&NonZeroU64_le::new(1234567890123456789).unwrap());
-        roundtrip(
-            &NonZeroU128_le::new(123456789012345678901234567890123456789)
-                .unwrap(),
-        );
+        roundtrip(&NonZeroU128_le::new(123456789012345678901234567890123456789).unwrap());
     }
 
     #[test]

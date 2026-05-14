@@ -6,8 +6,8 @@ use std::io;
 use std::marker::PhantomData;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 use std::num::{
-    NonZeroI128, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI8, NonZeroIsize, NonZeroU128,
-    NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU8, NonZeroUsize,
+    NonZeroI8, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI128, NonZeroIsize, NonZeroU8,
+    NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU128, NonZeroUsize,
 };
 use std::ops::{Range, RangeInclusive};
 use std::path::{Path, PathBuf};
@@ -434,10 +434,19 @@ impl<T: TS, E: TS> TS for Result<T, E> {
 impl<K: TS, V: TS> TS for BTreeMap<K, V> {
     type WithoutGenerics = HashMap<Dummy, Dummy>;
     type OptionInnerType = Self;
-    fn name() -> String { <HashMap<K, V> as TS>::name() }
-    fn inline() -> String { <HashMap<K, V> as TS>::inline() }
-    fn decl() -> String { panic!("{} cannot be declared", Self::name()) }
-    fn visit_dependencies(v: &mut impl TypeVisitor) where Self: 'static {
+    fn name() -> String {
+        <HashMap<K, V> as TS>::name()
+    }
+    fn inline() -> String {
+        <HashMap<K, V> as TS>::inline()
+    }
+    fn decl() -> String {
+        panic!("{} cannot be declared", Self::name())
+    }
+    fn visit_dependencies(v: &mut impl TypeVisitor)
+    where
+        Self: 'static,
+    {
         <HashMap<K, V> as TS>::visit_dependencies(v);
     }
 }
@@ -445,10 +454,19 @@ impl<K: TS, V: TS> TS for BTreeMap<K, V> {
 impl<T: TS, H> TS for HashSet<T, H> {
     type WithoutGenerics = Vec<Dummy>;
     type OptionInnerType = Self;
-    fn name() -> String { <Vec<T> as TS>::name() }
-    fn inline() -> String { <Vec<T> as TS>::inline() }
-    fn decl() -> String { panic!("{} cannot be declared", Self::name()) }
-    fn visit_dependencies(v: &mut impl TypeVisitor) where Self: 'static {
+    fn name() -> String {
+        <Vec<T> as TS>::name()
+    }
+    fn inline() -> String {
+        <Vec<T> as TS>::inline()
+    }
+    fn decl() -> String {
+        panic!("{} cannot be declared", Self::name())
+    }
+    fn visit_dependencies(v: &mut impl TypeVisitor)
+    where
+        Self: 'static,
+    {
         <Vec<T> as TS>::visit_dependencies(v);
     }
 }
@@ -458,10 +476,19 @@ macro_rules! vec_like_ts {
         impl<T: TS> TS for $ty {
             type WithoutGenerics = Self;
             type OptionInnerType = Self;
-            fn name() -> String { <Vec<T> as TS>::name() }
-            fn inline() -> String { <Vec<T> as TS>::inline() }
-            fn decl() -> String { panic!("{} cannot be declared", Self::name()) }
-            fn visit_dependencies(v: &mut impl TypeVisitor) where Self: 'static {
+            fn name() -> String {
+                <Vec<T> as TS>::name()
+            }
+            fn inline() -> String {
+                <Vec<T> as TS>::inline()
+            }
+            fn decl() -> String {
+                panic!("{} cannot be declared", Self::name())
+            }
+            fn visit_dependencies(v: &mut impl TypeVisitor)
+            where
+                Self: 'static,
+            {
                 <Vec<T> as TS>::visit_dependencies(v);
             }
         }
@@ -478,13 +505,28 @@ macro_rules! transparent_ts {
         impl<T: TS> TS for $ty {
             type WithoutGenerics = Self;
             type OptionInnerType = T;
-            fn ident() -> String { T::ident() }
-            fn name() -> String { T::name() }
-            fn inline() -> String { T::inline() }
-            fn inline_flattened() -> String { T::inline_flattened() }
-            fn decl() -> String { T::decl() }
-            fn output_path() -> Option<PathBuf> { T::output_path() }
-            fn visit_dependencies(v: &mut impl TypeVisitor) where Self: 'static {
+            fn ident() -> String {
+                T::ident()
+            }
+            fn name() -> String {
+                T::name()
+            }
+            fn inline() -> String {
+                T::inline()
+            }
+            fn inline_flattened() -> String {
+                T::inline_flattened()
+            }
+            fn decl() -> String {
+                T::decl()
+            }
+            fn output_path() -> Option<PathBuf> {
+                T::output_path()
+            }
+            fn visit_dependencies(v: &mut impl TypeVisitor)
+            where
+                Self: 'static,
+            {
                 T::visit_dependencies(v);
             }
         }
@@ -503,37 +545,73 @@ transparent_ts!(PhantomData<T>);
 impl<T: TS + ?Sized> TS for &T {
     type WithoutGenerics = Self;
     type OptionInnerType = T;
-    fn ident() -> String { T::ident() }
-    fn name() -> String { T::name() }
-    fn inline() -> String { T::inline() }
-    fn decl() -> String { T::decl() }
-    fn output_path() -> Option<PathBuf> { T::output_path() }
+    fn ident() -> String {
+        T::ident()
+    }
+    fn name() -> String {
+        T::name()
+    }
+    fn inline() -> String {
+        T::inline()
+    }
+    fn decl() -> String {
+        T::decl()
+    }
+    fn output_path() -> Option<PathBuf> {
+        T::output_path()
+    }
 }
 
 impl<'a, T: TS + ToOwned + ?Sized> TS for std::borrow::Cow<'a, T> {
     type WithoutGenerics = Self;
     type OptionInnerType = T;
-    fn ident() -> String { T::ident() }
-    fn name() -> String { T::name() }
-    fn inline() -> String { T::inline() }
-    fn decl() -> String { T::decl() }
-    fn output_path() -> Option<PathBuf> { T::output_path() }
+    fn ident() -> String {
+        T::ident()
+    }
+    fn name() -> String {
+        T::name()
+    }
+    fn inline() -> String {
+        T::inline()
+    }
+    fn decl() -> String {
+        T::decl()
+    }
+    fn output_path() -> Option<PathBuf> {
+        T::output_path()
+    }
 }
 
 impl<T: TS + ?Sized> TS for std::sync::Weak<T> {
     type WithoutGenerics = Self;
     type OptionInnerType = T;
-    fn ident() -> String { T::ident() }
-    fn name() -> String { T::name() }
-    fn inline() -> String { T::inline() }
-    fn decl() -> String { T::decl() }
-    fn output_path() -> Option<PathBuf> { T::output_path() }
+    fn ident() -> String {
+        T::ident()
+    }
+    fn name() -> String {
+        T::name()
+    }
+    fn inline() -> String {
+        T::inline()
+    }
+    fn decl() -> String {
+        T::decl()
+    }
+    fn output_path() -> Option<PathBuf> {
+        T::output_path()
+    }
 }
 
 impl<A: TS, B: TS> TS for (A, B) {
     type WithoutGenerics = (Dummy, Dummy);
     type OptionInnerType = Self;
-    fn name() -> String { format!("[{}, {}]", A::name(), B::name()) }
-    fn inline() -> String { format!("[{}, {}]", A::inline(), B::inline()) }
-    fn decl() -> String { panic!("{} cannot be declared", Self::name()) }
+    fn name() -> String {
+        format!("[{}, {}]", A::name(), B::name())
+    }
+    fn inline() -> String {
+        format!("[{}, {}]", A::inline(), B::inline())
+    }
+    fn decl() -> String {
+        panic!("{} cannot be declared", Self::name())
+    }
 }

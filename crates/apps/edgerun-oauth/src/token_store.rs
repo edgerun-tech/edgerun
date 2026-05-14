@@ -2,7 +2,7 @@
 
 use crate::prelude::*;
 use crate::types::Credentials;
-use edgerun_json::{to_string, JsonValue, Map};
+use edgerun_json::{JsonValue, Map, to_string};
 use edgerun_secret_service::Backend;
 #[cfg(not(target_os = "none"))]
 use std::eprintln;

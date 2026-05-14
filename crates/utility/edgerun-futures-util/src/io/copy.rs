@@ -1,7 +1,7 @@
 use super::{copy_buf, BufReader, CopyBuf};
+use crate::io::{AsyncRead, AsyncWrite};
 use futures_core::future::Future;
 use futures_core::task::{Context, Poll};
-use crate::io::{AsyncRead, AsyncWrite};
 use pin_project_lite::pin_project;
 use std::io;
 use std::pin::Pin;
@@ -36,7 +36,9 @@ where
     R: AsyncRead,
     W: AsyncWrite + Unpin + ?Sized,
 {
-    Copy { inner: copy_buf(BufReader::new(reader), writer) }
+    Copy {
+        inner: copy_buf(BufReader::new(reader), writer),
+    }
 }
 
 pin_project! {

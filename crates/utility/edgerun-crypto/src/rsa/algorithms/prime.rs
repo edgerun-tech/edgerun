@@ -1,8 +1,8 @@
 //! Probabilistic primality checks used by RSA key generation.
 
+use crate::num_bigint::BigUint;
 use crate::num_bigint::Integer;
-use crate::num_bigint::{BigInt, BigUint, Sign};
-use crate::num_bigint::{FromPrimitive, One, Signed, ToPrimitive, Zero};
+use crate::num_bigint::{FromPrimitive, One, ToPrimitive, Zero};
 
 const PRIMES_A: u64 = 3 * 5 * 7 * 11 * 13 * 17 * 19 * 23 * 37;
 const PRIMES_B: u64 = 29 * 31 * 41 * 43 * 47 * 53;
@@ -111,21 +111,20 @@ fn probably_prime_lucas(n: &BigUint) -> bool {
     let one = BigUint::one();
     let two = big(2);
     let mut p = 3u64;
-    let n_int = BigInt::from_biguint(Sign::Plus, n.clone());
 
     loop {
         if p > 10000 {
             panic!("internal error: cannot find (D/n) = -1 for {:?}", n)
         }
 
-        let d_int = BigInt::from_u64(p * p - 4).unwrap();
-        let j = jacobi(&d_int, &n_int);
+        let d = BigUint::from_u64(p * p - 4).unwrap();
+        let j = jacobi_positive(&d, n);
 
         if j == -1 {
             break;
         }
         if j == 0 {
-            return n_int.to_i64() == Some(p as i64 + 2);
+            return n.to_u64() == Some(p + 2);
         }
         if p == 40 {
             let t1 = n.sqrt();
@@ -191,34 +190,22 @@ fn probably_prime_lucas(n: &BigUint) -> bool {
     false
 }
 
-fn jacobi(x: &BigInt, y: &BigInt) -> isize {
+fn jacobi_positive(x: &BigUint, y: &BigUint) -> isize {
     if !y.is_odd() {
         panic!(
-            "invalid arguments, y must be an odd integer, but got {:?}",
+            "invalid arguments, y must be an odd positive integer, but got {:?}",
             y
         );
     }
 
-    let mut a = x.clone();
+    let mut a = x % y;
     let mut b = y.clone();
     let mut j = 1;
-
-    if b.is_negative() {
-        if a.is_negative() {
-            j = -1;
-        }
-        b = -b;
-    }
 
     loop {
         if b.is_one() {
             return j;
         }
-        if a.is_zero() {
-            return 0;
-        }
-
-        a = a.mod_floor(&b);
         if a.is_zero() {
             return 0;
         }
@@ -236,7 +223,7 @@ fn jacobi(x: &BigInt, y: &BigInt) -> isize {
             j = -j
         }
 
-        a = b;
+        a = b % &c;
         b = c;
     }
 }

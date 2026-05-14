@@ -88,15 +88,15 @@ use core::{
     marker::{PhantomData, PhantomPinned},
     mem::ManuallyDrop,
     num::{
-        NonZeroI128, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI8,
-        NonZeroU128, NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU8,
+        NonZeroI8, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI128, NonZeroU8, NonZeroU16,
+        NonZeroU32, NonZeroU64, NonZeroU128,
     },
     ops, ptr,
 };
 
 pub use bytecheck_derive::CheckBytes;
 pub use rancor;
-use rancor::{fail, Fallible, ResultExt as _, Source, Strategy, Trace};
+use rancor::{Fallible, ResultExt as _, Source, Strategy, Trace, fail};
 
 /// A type that can check whether a pointer points to a valid value.
 ///
@@ -159,10 +159,7 @@ pub unsafe trait CheckBytes<C: Fallible + ?Sized> {
     ///
     /// The passed pointer must be aligned and point to enough initialized bytes
     /// to represent the type.
-    unsafe fn check_bytes(
-        value: *const Self,
-        context: &mut C,
-    ) -> Result<(), C::Error>;
+    unsafe fn check_bytes(value: *const Self, context: &mut C) -> Result<(), C::Error>;
 }
 
 /// A type that can check whether its invariants are upheld.
@@ -332,10 +329,7 @@ where
 ///     .unwrap_err();
 /// }
 /// ```
-pub unsafe fn check_bytes_with_context<T, C, E>(
-    value: *const T,
-    context: &mut C,
-) -> Result<(), E>
+pub unsafe fn check_bytes_with_context<T, C, E>(value: *const T, context: &mut C) -> Result<(), E>
 where
     T: CheckBytes<Strategy<C, E>> + ?Sized,
 {
@@ -349,10 +343,7 @@ macro_rules! impl_primitive {
         // SAFETY: All bit patterns are valid for these primitive types.
         unsafe impl<C: Fallible + ?Sized> CheckBytes<C> for $type {
             #[inline]
-            unsafe fn check_bytes(
-                _: *const Self,
-                _: &mut C,
-            ) -> Result<(), C::Error> {
+            unsafe fn check_bytes(_: *const Self, _: &mut C) -> Result<(), C::Error> {
                 Ok(())
             }
         }
@@ -409,24 +400,19 @@ where
     C::Error: Trace,
 {
     #[inline]
-    unsafe fn check_bytes(
-        value: *const Self,
-        c: &mut C,
-    ) -> Result<(), C::Error> {
+    unsafe fn check_bytes(value: *const Self, c: &mut C) -> Result<(), C::Error> {
         // SAFETY: Because `ManuallyDrop<T>` is `#[repr(transparent)]`, a
         // pointer to a `ManuallyDrop<T>` is guaranteed to be the same as a
         // pointer to `T`. We can't call `.cast()` here because `T` may be
         // an unsized type.
-        let inner_ptr =
-            unsafe { core::mem::transmute::<*const Self, *const T>(value) };
+        let inner_ptr = unsafe { core::mem::transmute::<*const Self, *const T>(value) };
         // SAFETY: The caller has guaranteed that `value` is aligned for
         // `ManuallyDrop<T>` and points to enough bytes to represent
         // `ManuallyDrop<T>`. Since `ManuallyDrop<T>` is `#[repr(transparent)]`,
         // `inner_ptr` is also aligned for `T` and points to enough bytes to
         // represent it.
         unsafe {
-            T::check_bytes(inner_ptr, c)
-                .trace("while checking inner value of `ManuallyDrop`")
+            T::check_bytes(inner_ptr, c).trace("while checking inner value of `ManuallyDrop`")
         }
     }
 }
@@ -440,25 +426,18 @@ where
     C::Error: Trace,
 {
     #[inline]
-    unsafe fn check_bytes(
-        value: *const Self,
-        c: &mut C,
-    ) -> Result<(), C::Error> {
+    unsafe fn check_bytes(value: *const Self, c: &mut C) -> Result<(), C::Error> {
         // SAFETY: Because `UnsafeCell<T>` has the same memory layout as
         // `T`, a pointer to an `UnsafeCell<T>` is guaranteed to be the same
         // as a pointer to `T`. We can't call `.cast()` here because `T` may
         // be an unsized type.
-        let inner_ptr =
-            unsafe { core::mem::transmute::<*const Self, *const T>(value) };
+        let inner_ptr = unsafe { core::mem::transmute::<*const Self, *const T>(value) };
         // SAFETY: The caller has guaranteed that `value` is aligned for
         // `UnsafeCell<T>` and points to enough bytes to represent
         // `UnsafeCell<T>`. Since `UnsafeCell<T>` has the same layout `T`,
         // `inner_ptr` is also aligned for `T` and points to enough bytes to
         // represent it.
-        unsafe {
-            T::check_bytes(inner_ptr, c)
-                .trace("while checking inner value of `UnsafeCell`")
-        }
+        unsafe { T::check_bytes(inner_ptr, c).trace("while checking inner value of `UnsafeCell`") }
     }
 }
 
@@ -472,25 +451,18 @@ where
     C::Error: Trace,
 {
     #[inline]
-    unsafe fn check_bytes(
-        value: *const Self,
-        c: &mut C,
-    ) -> Result<(), C::Error> {
+    unsafe fn check_bytes(value: *const Self, c: &mut C) -> Result<(), C::Error> {
         // SAFETY: Because `Cell<T>` has the same memory layout as
         // `UnsafeCell<T>` (and therefore `T` itself), a pointer to a
         // `Cell<T>` is guaranteed to be the same as a pointer to `T`. We
         // can't call `.cast()` here because `T` may be an unsized type.
-        let inner_ptr =
-            unsafe { core::mem::transmute::<*const Self, *const T>(value) };
+        let inner_ptr = unsafe { core::mem::transmute::<*const Self, *const T>(value) };
         // SAFETY: The caller has guaranteed that `value` is aligned for
         // `Cell<T>` and points to enough bytes to represent `Cell<T>`. Since
         // `Cell<T>` has the same layout as `UnsafeCell<T>` ( and therefore `T`
         // itself), `inner_ptr` is also aligned for `T` and points to enough
         // bytes to represent it.
-        unsafe {
-            T::check_bytes(inner_ptr, c)
-                .trace("while checking inner value of `Cell`")
-        }
+        unsafe { T::check_bytes(inner_ptr, c).trace("while checking inner value of `Cell`") }
     }
 }
 
@@ -519,10 +491,7 @@ where
     C::Error: Source,
 {
     #[inline]
-    unsafe fn check_bytes(
-        value: *const Self,
-        _: &mut C,
-    ) -> Result<(), C::Error> {
+    unsafe fn check_bytes(value: *const Self, _: &mut C) -> Result<(), C::Error> {
         // SAFETY: `value` is a pointer to a `bool`, which has a size and
         // alignment of one. `u8` also has a size and alignment of one, and all
         // bit patterns are valid for `u8`. So we can cast `value` to a `u8`
@@ -544,10 +513,7 @@ where
     C::Error: Source,
 {
     #[inline]
-    unsafe fn check_bytes(
-        value: *const Self,
-        context: &mut C,
-    ) -> Result<(), C::Error> {
+    unsafe fn check_bytes(value: *const Self, context: &mut C) -> Result<(), C::Error> {
         // SAFETY: `AtomicBool` has the same ABI as `bool`, so a pointer that is
         // aligned for `AtomicBool` and points to enough bytes for `AtomicBool`
         // is also aligned for `bool` and points to enough bytes for `bool`.
@@ -659,10 +625,7 @@ where
     C::Error: Trace,
 {
     #[inline]
-    unsafe fn check_bytes(
-        value: *const Self,
-        context: &mut C,
-    ) -> Result<(), C::Error> {
+    unsafe fn check_bytes(value: *const Self, context: &mut C) -> Result<(), C::Error> {
         let base = value.cast::<T>();
         for index in 0..N {
             // SAFETY: The caller has guaranteed that `value` points to enough
@@ -698,10 +661,7 @@ where
     C::Error: Trace,
 {
     #[inline]
-    unsafe fn check_bytes(
-        value: *const Self,
-        context: &mut C,
-    ) -> Result<(), C::Error> {
+    unsafe fn check_bytes(value: *const Self, context: &mut C) -> Result<(), C::Error> {
         let (data_address, len) = ptr_meta::to_raw_parts(value);
         let base = data_address.cast::<T>();
         for index in 0..len {
@@ -725,10 +685,7 @@ where
     C::Error: Source,
 {
     #[inline]
-    unsafe fn check_bytes(
-        value: *const Self,
-        _: &mut C,
-    ) -> Result<(), C::Error> {
+    unsafe fn check_bytes(value: *const Self, _: &mut C) -> Result<(), C::Error> {
         #[derive(Debug)]
         struct Utf8Error;
 
@@ -766,10 +723,7 @@ where
     C::Error: Source,
 {
     #[inline]
-    unsafe fn check_bytes(
-        value: *const Self,
-        _: &mut C,
-    ) -> Result<(), C::Error> {
+    unsafe fn check_bytes(value: *const Self, _: &mut C) -> Result<(), C::Error> {
         let slice_ptr = value as *const [u8];
         // SAFETY: The caller has guaranteed that `value` is properly-aligned
         // and points to enough bytes for its `CStr`. Because a `u8` slice has
@@ -848,10 +802,7 @@ impl<T: fmt::Display> fmt::Display for InvalidEnumDiscriminantError<T> {
     }
 }
 
-impl<T> Error for InvalidEnumDiscriminantError<T> where
-    T: fmt::Debug + fmt::Display
-{
-}
+impl<T> Error for InvalidEnumDiscriminantError<T> where T: fmt::Debug + fmt::Display {}
 
 /// Context for errors resulting from checking enum variants with named fields.
 ///
@@ -914,30 +865,27 @@ where
     C::Error: Trace,
 {
     #[inline]
-    unsafe fn check_bytes(
-        value: *const Self,
-        context: &mut C,
-    ) -> Result<(), C::Error> {
+    unsafe fn check_bytes(value: *const Self, context: &mut C) -> Result<(), C::Error> {
         // SAFETY: The caller has guaranteed that `value` is aligned for a
         // `Range<T>` and points to enough initialized bytes for one, so a
         // pointer projected to the `start` field will be properly aligned for
         // a `T` and point to enough initialized bytes for one too.
         unsafe {
-            T::check_bytes(ptr::addr_of!((*value).start), context).with_trace(
-                || StructCheckContext {
+            T::check_bytes(ptr::addr_of!((*value).start), context).with_trace(|| {
+                StructCheckContext {
                     struct_name: "Range",
                     field_name: "start",
-                },
-            )?;
+                }
+            })?;
         }
         // SAFETY: Same reasoning as above, but for `end`.
         unsafe {
-            T::check_bytes(ptr::addr_of!((*value).end), context).with_trace(
-                || StructCheckContext {
+            T::check_bytes(ptr::addr_of!((*value).end), context).with_trace(|| {
+                StructCheckContext {
                     struct_name: "Range",
                     field_name: "end",
-                },
-            )?;
+                }
+            })?;
         }
         Ok(())
     }
@@ -952,21 +900,18 @@ where
     C::Error: Trace,
 {
     #[inline]
-    unsafe fn check_bytes(
-        value: *const Self,
-        context: &mut C,
-    ) -> Result<(), C::Error> {
+    unsafe fn check_bytes(value: *const Self, context: &mut C) -> Result<(), C::Error> {
         // SAFETY: The caller has guaranteed that `value` is aligned for a
         // `RangeFrom<T>` and points to enough initialized bytes for one, so a
         // pointer projected to the `start` field will be properly aligned for
         // a `T` and point to enough initialized bytes for one too.
         unsafe {
-            T::check_bytes(ptr::addr_of!((*value).start), context).with_trace(
-                || StructCheckContext {
+            T::check_bytes(ptr::addr_of!((*value).start), context).with_trace(|| {
+                StructCheckContext {
                     struct_name: "RangeFrom",
                     field_name: "start",
-                },
-            )?;
+                }
+            })?;
         }
         Ok(())
     }
@@ -989,21 +934,18 @@ where
     C::Error: Trace,
 {
     #[inline]
-    unsafe fn check_bytes(
-        value: *const Self,
-        context: &mut C,
-    ) -> Result<(), C::Error> {
+    unsafe fn check_bytes(value: *const Self, context: &mut C) -> Result<(), C::Error> {
         // SAFETY: The caller has guaranteed that `value` is aligned for a
         // `RangeTo<T>` and points to enough initialized bytes for one, so a
         // pointer projected to the `end` field will be properly aligned for
         // a `T` and point to enough initialized bytes for one too.
         unsafe {
-            T::check_bytes(ptr::addr_of!((*value).end), context).with_trace(
-                || StructCheckContext {
+            T::check_bytes(ptr::addr_of!((*value).end), context).with_trace(|| {
+                StructCheckContext {
                     struct_name: "RangeTo",
                     field_name: "end",
-                },
-            )?;
+                }
+            })?;
         }
         Ok(())
     }
@@ -1018,21 +960,18 @@ where
     C::Error: Trace,
 {
     #[inline]
-    unsafe fn check_bytes(
-        value: *const Self,
-        context: &mut C,
-    ) -> Result<(), C::Error> {
+    unsafe fn check_bytes(value: *const Self, context: &mut C) -> Result<(), C::Error> {
         // SAFETY: The caller has guaranteed that `value` is aligned for a
         // `RangeToInclusive<T>` and points to enough initialized bytes for one,
         // so a pointer projected to the `end` field will be properly aligned
         // for a `T` and point to enough initialized bytes for one too.
         unsafe {
-            T::check_bytes(ptr::addr_of!((*value).end), context).with_trace(
-                || StructCheckContext {
+            T::check_bytes(ptr::addr_of!((*value).end), context).with_trace(|| {
+                StructCheckContext {
                     struct_name: "RangeToInclusive",
                     field_name: "end",
-                },
-            )?;
+                }
+            })?;
         }
         Ok(())
     }
@@ -1060,10 +999,7 @@ macro_rules! impl_nonzero {
             C::Error: Source,
         {
             #[inline]
-            unsafe fn check_bytes(
-                value: *const Self,
-                _: &mut C,
-            ) -> Result<(), C::Error> {
+            unsafe fn check_bytes(value: *const Self, _: &mut C) -> Result<(), C::Error> {
                 // SAFETY: Non-zero integer types are guaranteed to have the
                 // same ABI as their corresponding integer types. Those integers
                 // have no validity requirements, so we can cast and dereference
@@ -1096,7 +1032,7 @@ mod tests {
 
     use rancor::{Failure, Fallible, Infallible, Source, Strategy};
 
-    use crate::{check_bytes, check_bytes_with_context, CheckBytes, Verify};
+    use crate::{CheckBytes, Verify, check_bytes, check_bytes_with_context};
 
     #[derive(Debug)]
     #[repr(transparent)]
@@ -1120,10 +1056,7 @@ mod tests {
         C: Fallible + ?Sized,
         C::Error: Source,
     {
-        unsafe fn check_bytes(
-            value: *const Self,
-            context: &mut C,
-        ) -> Result<(), C::Error> {
+        unsafe fn check_bytes(value: *const Self, context: &mut C) -> Result<(), C::Error> {
             #[cfg(target_endian = "little")]
             unsafe {
                 char::check_bytes(value.cast(), context)
@@ -1159,48 +1092,48 @@ mod tests {
             // These tests assume the tuple is packed (u32, bool, char)
             check_bytes::<(u32, bool, CharLE), Failure>(
                 bytes![
-                    0u8, 0u8, 0u8, 0u8, 1u8, 255u8, 255u8, 255u8, 0x78u8, 0u8,
-                    0u8, 0u8, 255u8, 255u8, 255u8, 255u8,
+                    0u8, 0u8, 0u8, 0u8, 1u8, 255u8, 255u8, 255u8, 0x78u8, 0u8, 0u8, 0u8, 255u8,
+                    255u8, 255u8, 255u8,
                 ]
                 .cast(),
             )
             .unwrap();
             check_bytes::<(u32, bool, CharLE), Failure>(
                 bytes![
-                    42u8, 16u8, 20u8, 3u8, 1u8, 255u8, 255u8, 255u8, 0x78u8,
-                    0u8, 0u8, 0u8, 255u8, 255u8, 255u8, 255u8,
+                    42u8, 16u8, 20u8, 3u8, 1u8, 255u8, 255u8, 255u8, 0x78u8, 0u8, 0u8, 0u8, 255u8,
+                    255u8, 255u8, 255u8,
                 ]
                 .cast(),
             )
             .unwrap();
             check_bytes::<(u32, bool, CharLE), Failure>(
                 bytes![
-                    0u8, 0u8, 0u8, 0u8, 1u8, 255u8, 255u8, 255u8, 0x00u8,
-                    0xd8u8, 0u8, 0u8, 255u8, 255u8, 255u8, 255u8,
+                    0u8, 0u8, 0u8, 0u8, 1u8, 255u8, 255u8, 255u8, 0x00u8, 0xd8u8, 0u8, 0u8, 255u8,
+                    255u8, 255u8, 255u8,
                 ]
                 .cast(),
             )
             .unwrap_err();
             check_bytes::<(u32, bool, CharLE), Failure>(
                 bytes![
-                    0u8, 0u8, 0u8, 0u8, 1u8, 255u8, 255u8, 255u8, 0x00u8,
-                    0x00u8, 0x11u8, 0u8, 255u8, 255u8, 255u8, 255u8,
+                    0u8, 0u8, 0u8, 0u8, 1u8, 255u8, 255u8, 255u8, 0x00u8, 0x00u8, 0x11u8, 0u8,
+                    255u8, 255u8, 255u8, 255u8,
                 ]
                 .cast(),
             )
             .unwrap_err();
             check_bytes::<(u32, bool, CharLE), Failure>(
                 bytes![
-                    0u8, 0u8, 0u8, 0u8, 0u8, 255u8, 255u8, 255u8, 0x78u8, 0u8,
-                    0u8, 0u8, 255u8, 255u8, 255u8, 255u8,
+                    0u8, 0u8, 0u8, 0u8, 0u8, 255u8, 255u8, 255u8, 0x78u8, 0u8, 0u8, 0u8, 255u8,
+                    255u8, 255u8, 255u8,
                 ]
                 .cast(),
             )
             .unwrap();
             check_bytes::<(u32, bool, CharLE), Failure>(
                 bytes![
-                    0u8, 0u8, 0u8, 0u8, 2u8, 255u8, 255u8, 255u8, 0x78u8, 0u8,
-                    0u8, 0u8, 255u8, 255u8, 255u8, 255u8,
+                    0u8, 0u8, 0u8, 0u8, 2u8, 255u8, 255u8, 255u8, 0x78u8, 0u8, 0u8, 0u8, 255u8,
+                    255u8, 255u8, 255u8,
                 ]
                 .cast(),
             )
@@ -1218,36 +1151,18 @@ mod tests {
         }
 
         unsafe {
-            check_bytes::<[bool; 4], Failure>(
-                bytes![1u8, 0u8, 1u8, 0u8].cast(),
-            )
-            .unwrap();
-            check_bytes::<[bool; 4], Failure>(
-                bytes![1u8, 2u8, 1u8, 0u8].cast(),
-            )
-            .unwrap_err();
-            check_bytes::<[bool; 4], Failure>(
-                bytes![2u8, 0u8, 1u8, 0u8].cast(),
-            )
-            .unwrap_err();
-            check_bytes::<[bool; 4], Failure>(
-                bytes![1u8, 0u8, 1u8, 2u8].cast(),
-            )
-            .unwrap_err();
-            check_bytes::<[bool; 4], Failure>(
-                bytes![1u8, 0u8, 1u8, 0u8, 2u8].cast(),
-            )
-            .unwrap();
+            check_bytes::<[bool; 4], Failure>(bytes![1u8, 0u8, 1u8, 0u8].cast()).unwrap();
+            check_bytes::<[bool; 4], Failure>(bytes![1u8, 2u8, 1u8, 0u8].cast()).unwrap_err();
+            check_bytes::<[bool; 4], Failure>(bytes![2u8, 0u8, 1u8, 0u8].cast()).unwrap_err();
+            check_bytes::<[bool; 4], Failure>(bytes![1u8, 0u8, 1u8, 2u8].cast()).unwrap_err();
+            check_bytes::<[bool; 4], Failure>(bytes![1u8, 0u8, 1u8, 0u8, 2u8].cast()).unwrap();
         }
     }
 
     #[test]
     fn test_unsized() {
         unsafe {
-            check_bytes::<[i32], Infallible>(
-                &[1, 2, 3, 4] as &[i32] as *const [i32]
-            )
-            .unwrap();
+            check_bytes::<[i32], Infallible>(&[1, 2, 3, 4] as &[i32] as *const [i32]).unwrap();
             check_bytes::<str, Failure>("hello world" as *const str).unwrap();
         }
     }
@@ -1308,48 +1223,48 @@ mod tests {
             // These tests assume the struct is packed (u32, char, bool)
             check_bytes::<Test, Failure>(
                 bytes![
-                    0u8, 0u8, 0u8, 0u8, 0x78u8, 0u8, 0u8, 0u8, 1u8, 255u8,
-                    255u8, 255u8, 255u8, 255u8, 255u8, 255u8,
+                    0u8, 0u8, 0u8, 0u8, 0x78u8, 0u8, 0u8, 0u8, 1u8, 255u8, 255u8, 255u8, 255u8,
+                    255u8, 255u8, 255u8,
                 ]
                 .cast(),
             )
             .unwrap();
             check_bytes::<Test, Failure>(
                 bytes![
-                    42u8, 16u8, 20u8, 3u8, 0x78u8, 0u8, 0u8, 0u8, 1u8, 255u8,
-                    255u8, 255u8, 255u8, 255u8, 255u8, 255u8,
+                    42u8, 16u8, 20u8, 3u8, 0x78u8, 0u8, 0u8, 0u8, 1u8, 255u8, 255u8, 255u8, 255u8,
+                    255u8, 255u8, 255u8,
                 ]
                 .cast(),
             )
             .unwrap();
             check_bytes::<Test, Failure>(
                 bytes![
-                    0u8, 0u8, 0u8, 0u8, 0x00u8, 0xd8u8, 0u8, 0u8, 1u8, 255u8,
-                    255u8, 255u8, 255u8, 255u8, 255u8, 255u8,
+                    0u8, 0u8, 0u8, 0u8, 0x00u8, 0xd8u8, 0u8, 0u8, 1u8, 255u8, 255u8, 255u8, 255u8,
+                    255u8, 255u8, 255u8,
                 ]
                 .cast(),
             )
             .unwrap_err();
             check_bytes::<Test, Failure>(
                 bytes![
-                    0u8, 0u8, 0u8, 0u8, 0x00u8, 0x00u8, 0x11u8, 0u8, 1u8,
-                    255u8, 255u8, 255u8, 255u8, 255u8, 255u8, 255u8,
+                    0u8, 0u8, 0u8, 0u8, 0x00u8, 0x00u8, 0x11u8, 0u8, 1u8, 255u8, 255u8, 255u8,
+                    255u8, 255u8, 255u8, 255u8,
                 ]
                 .cast(),
             )
             .unwrap_err();
             check_bytes::<Test, Failure>(
                 bytes![
-                    0u8, 0u8, 0u8, 0u8, 0x78u8, 0u8, 0u8, 0u8, 0u8, 255u8,
-                    255u8, 255u8, 255u8, 255u8, 255u8, 255u8,
+                    0u8, 0u8, 0u8, 0u8, 0x78u8, 0u8, 0u8, 0u8, 0u8, 255u8, 255u8, 255u8, 255u8,
+                    255u8, 255u8, 255u8,
                 ]
                 .cast(),
             )
             .unwrap();
             check_bytes::<Test, Failure>(
                 bytes![
-                    0u8, 0u8, 0u8, 0u8, 0x78u8, 0u8, 0u8, 0u8, 2u8, 255u8,
-                    255u8, 255u8, 255u8, 255u8, 255u8, 255u8,
+                    0u8, 0u8, 0u8, 0u8, 0x78u8, 0u8, 0u8, 0u8, 2u8, 255u8, 255u8, 255u8, 255u8,
+                    255u8, 255u8, 255u8,
                 ]
                 .cast(),
             )
@@ -1381,48 +1296,48 @@ mod tests {
             // These tests assume the struct is packed (u32, char, bool)
             check_bytes::<Test, Failure>(
                 bytes![
-                    0u8, 0u8, 0u8, 0u8, 0x78u8, 0u8, 0u8, 0u8, 1u8, 255u8,
-                    255u8, 255u8, 255u8, 255u8, 255u8, 255u8,
+                    0u8, 0u8, 0u8, 0u8, 0x78u8, 0u8, 0u8, 0u8, 1u8, 255u8, 255u8, 255u8, 255u8,
+                    255u8, 255u8, 255u8,
                 ]
                 .cast(),
             )
             .unwrap();
             check_bytes::<Test, Failure>(
                 bytes![
-                    42u8, 16u8, 20u8, 3u8, 0x78u8, 0u8, 0u8, 0u8, 1u8, 255u8,
-                    255u8, 255u8, 255u8, 255u8, 255u8, 255u8,
+                    42u8, 16u8, 20u8, 3u8, 0x78u8, 0u8, 0u8, 0u8, 1u8, 255u8, 255u8, 255u8, 255u8,
+                    255u8, 255u8, 255u8,
                 ]
                 .cast(),
             )
             .unwrap();
             check_bytes::<Test, Failure>(
                 bytes![
-                    0u8, 0u8, 0u8, 0u8, 0x00u8, 0xd8u8, 0u8, 0u8, 1u8, 255u8,
-                    255u8, 255u8, 255u8, 255u8, 255u8, 255u8,
+                    0u8, 0u8, 0u8, 0u8, 0x00u8, 0xd8u8, 0u8, 0u8, 1u8, 255u8, 255u8, 255u8, 255u8,
+                    255u8, 255u8, 255u8,
                 ]
                 .cast(),
             )
             .unwrap_err();
             check_bytes::<Test, Failure>(
                 bytes![
-                    0u8, 0u8, 0u8, 0u8, 0x00u8, 0x00u8, 0x11u8, 0u8, 1u8,
-                    255u8, 255u8, 255u8, 255u8, 255u8, 255u8, 255u8,
+                    0u8, 0u8, 0u8, 0u8, 0x00u8, 0x00u8, 0x11u8, 0u8, 1u8, 255u8, 255u8, 255u8,
+                    255u8, 255u8, 255u8, 255u8,
                 ]
                 .cast(),
             )
             .unwrap_err();
             check_bytes::<Test, Failure>(
                 bytes![
-                    0u8, 0u8, 0u8, 0u8, 0x78u8, 0u8, 0u8, 0u8, 0u8, 255u8,
-                    255u8, 255u8, 255u8, 255u8, 255u8, 255u8,
+                    0u8, 0u8, 0u8, 0u8, 0x78u8, 0u8, 0u8, 0u8, 0u8, 255u8, 255u8, 255u8, 255u8,
+                    255u8, 255u8, 255u8,
                 ]
                 .cast(),
             )
             .unwrap();
             check_bytes::<Test, Failure>(
                 bytes![
-                    0u8, 0u8, 0u8, 0u8, 0x78u8, 0u8, 0u8, 0u8, 2u8, 255u8,
-                    255u8, 255u8, 255u8, 255u8, 255u8, 255u8,
+                    0u8, 0u8, 0u8, 0u8, 0x78u8, 0u8, 0u8, 0u8, 2u8, 255u8, 255u8, 255u8, 255u8,
+                    255u8, 255u8, 255u8,
                 ]
                 .cast(),
             )
@@ -1502,32 +1417,32 @@ mod tests {
         unsafe {
             check_bytes::<Test, Failure>(
                 bytes![
-                    0u8, 0u8, 0u8, 0u8, 12u8, 34u8, 56u8, 78u8, 1u8, 255u8,
-                    255u8, 255u8, 120u8, 0u8, 0u8, 0u8,
+                    0u8, 0u8, 0u8, 0u8, 12u8, 34u8, 56u8, 78u8, 1u8, 255u8, 255u8, 255u8, 120u8,
+                    0u8, 0u8, 0u8,
                 ]
                 .cast(),
             )
             .unwrap();
             check_bytes::<Test, Failure>(
                 bytes![
-                    1u8, 0u8, 0u8, 0u8, 12u8, 34u8, 56u8, 78u8, 1u8, 255u8,
-                    255u8, 255u8, 120u8, 0u8, 0u8, 0u8,
+                    1u8, 0u8, 0u8, 0u8, 12u8, 34u8, 56u8, 78u8, 1u8, 255u8, 255u8, 255u8, 120u8,
+                    0u8, 0u8, 0u8,
                 ]
                 .cast(),
             )
             .unwrap();
             check_bytes::<Test, Failure>(
                 bytes![
-                    2u8, 255u8, 255u8, 255u8, 255u8, 255u8, 255u8, 255u8,
-                    255u8, 255u8, 255u8, 255u8, 25u8, 255u8, 255u8, 255u8,
+                    2u8, 255u8, 255u8, 255u8, 255u8, 255u8, 255u8, 255u8, 255u8, 255u8, 255u8,
+                    255u8, 25u8, 255u8, 255u8, 255u8,
                 ]
                 .cast(),
             )
             .unwrap();
             check_bytes::<Test, Failure>(
                 bytes![
-                    3u8, 255u8, 255u8, 255u8, 255u8, 255u8, 255u8, 255u8,
-                    255u8, 255u8, 255u8, 255u8, 25u8, 255u8, 255u8, 255u8,
+                    3u8, 255u8, 255u8, 255u8, 255u8, 255u8, 255u8, 255u8, 255u8, 255u8, 255u8,
+                    255u8, 25u8, 255u8, 255u8, 255u8,
                 ]
                 .cast(),
             )
@@ -1585,10 +1500,7 @@ mod tests {
             T: CheckBytes<C>,
             C: Fallible + ?Sized,
         {
-            unsafe fn check_bytes(
-                value: *const Self,
-                context: &mut C,
-            ) -> Result<(), C::Error> {
+            unsafe fn check_bytes(value: *const Self, context: &mut C) -> Result<(), C::Error> {
                 unsafe { T::check_bytes((*value).inner, context) }
             }
         }
@@ -1670,11 +1582,7 @@ mod tests {
 
         let mut context = FooContext { value: 0 };
         unsafe {
-            check_bytes_with_context::<_, _, Infallible>(
-                &UnitStruct,
-                &mut context,
-            )
-            .unwrap();
+            check_bytes_with_context::<_, _, Infallible>(&UnitStruct, &mut context).unwrap();
         }
 
         assert_eq!(context.value, 1);
@@ -1697,11 +1605,8 @@ mod tests {
 
         let mut context = FooContext { value: 0 };
         unsafe {
-            check_bytes_with_context::<_, _, Infallible>(
-                &Struct { value: 4 },
-                &mut context,
-            )
-            .unwrap();
+            check_bytes_with_context::<_, _, Infallible>(&Struct { value: 4 }, &mut context)
+                .unwrap();
         }
 
         assert_eq!(context.value, 4);
@@ -1725,11 +1630,7 @@ mod tests {
 
         let mut context = FooContext { value: 0 };
         unsafe {
-            check_bytes_with_context::<_, _, Infallible>(
-                &TupleStruct(10),
-                &mut context,
-            )
-            .unwrap();
+            check_bytes_with_context::<_, _, Infallible>(&TupleStruct(10), &mut context).unwrap();
         }
 
         assert_eq!(context.value, 10);
@@ -1760,8 +1661,7 @@ mod tests {
         // Unit variant
         let mut context = FooContext { value: 0 };
         unsafe {
-            check_bytes_with_context::<_, _, Failure>(&Enum::A, &mut context)
-                .unwrap();
+            check_bytes_with_context::<_, _, Failure>(&Enum::A, &mut context).unwrap();
         }
 
         assert_eq!(context.value, 2);
@@ -1769,11 +1669,7 @@ mod tests {
         // Tuple variant
         let mut context = FooContext { value: 0 };
         unsafe {
-            check_bytes_with_context::<_, _, Failure>(
-                &Enum::B(5),
-                &mut context,
-            )
-            .unwrap();
+            check_bytes_with_context::<_, _, Failure>(&Enum::B(5), &mut context).unwrap();
         }
 
         assert_eq!(context.value, 5);
@@ -1781,11 +1677,7 @@ mod tests {
         // Struct variant
         let mut context = FooContext { value: 0 };
         unsafe {
-            check_bytes_with_context::<_, _, Failure>(
-                &Enum::C { value: 7 },
-                &mut context,
-            )
-            .unwrap();
+            check_bytes_with_context::<_, _, Failure>(&Enum::C { value: 7 }, &mut context).unwrap();
         }
 
         assert_eq!(context.value, 7);

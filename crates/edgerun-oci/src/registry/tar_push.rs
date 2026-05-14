@@ -184,12 +184,7 @@ fn write_checksum(field: &mut [u8], value: u32) {
 
 #[cfg(feature = "gzip")]
 fn gzip_bytes(data: &[u8]) -> io::Result<Vec<u8>> {
-    let mut out = Vec::new();
-    out.extend_from_slice(&[0x1f, 0x8b, 8, 0, 0, 0, 0, 0, 0, 255]);
-    out.extend_from_slice(&miniz_oxide::deflate::compress_to_vec(data, 6));
-    out.extend_from_slice(&edgerun_encoding::crc32::crc32(data).to_le_bytes());
-    out.extend_from_slice(&(data.len() as u32).to_le_bytes());
-    Ok(out)
+    Ok(edgerun_encoding::compression::gzip_compress(data, 6))
 }
 
 #[cfg(not(feature = "gzip"))]

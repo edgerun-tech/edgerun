@@ -4,13 +4,13 @@
 
 extern crate alloc;
 
-use alloc::vec::Vec;
 use alloc::string::String;
 use alloc::vec;
+use alloc::vec::Vec;
 use core::fmt;
 use core::iter::FromIterator;
-use core::ops::{Bound, Deref, DerefMut, RangeBounds};
 use core::mem;
+use core::ops::{Bound, Deref, DerefMut, RangeBounds};
 
 #[derive(Clone, Default, Eq, PartialEq)]
 pub struct Bytes(Vec<u8>);

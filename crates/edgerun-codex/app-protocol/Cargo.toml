@@ -28,3 +28,8 @@ rmcp = { workspace = true, default-features = false, features = [
 ts-rs = { workspace = true }
 edgerun-inventory = { workspace = true }
 tracing = { workspace = true }
+
+[dev-dependencies]
+codex_utils_cargo_bin = { package = "edgerun-codex-utils-cargo-bin", path = "../../utility/edgerun-codex-utils-cargo-bin" }
+pretty_assertions = { package = "edgerun-pretty-assertions", path = "../../utility/edgerun-pretty-assertions" }
+tempfile = { package = "edgerun-tempfile", path = "../../utility/edgerun-tempfile" }

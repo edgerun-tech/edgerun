@@ -1,5 +1,5 @@
-use futures_core::task::{Context, Poll};
 use crate::io::{AsyncBufRead, AsyncRead, AsyncSeek, AsyncWrite, IoSlice, IoSliceMut, SeekFrom};
+use futures_core::task::{Context, Poll};
 use std::boxed::Box;
 use std::io;
 use std::pin::Pin;
@@ -43,7 +43,9 @@ impl<T> Cursor<T> {
     /// # force_inference(&buff);
     /// ```
     pub fn new(inner: T) -> Self {
-        Self { inner: io::Cursor::new(inner) }
+        Self {
+            inner: io::Cursor::new(inner),
+        }
     }
 
     /// Consumes this cursor, returning the underlying value.

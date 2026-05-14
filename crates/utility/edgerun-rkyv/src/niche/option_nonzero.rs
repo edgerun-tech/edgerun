@@ -3,8 +3,8 @@
 use core::{
     cmp, fmt, hash,
     num::{
-        NonZeroI128, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI8,
-        NonZeroU128, NonZeroU16, NonZeroU32, NonZeroU64, NonZeroU8,
+        NonZeroI128, NonZeroI16, NonZeroI32, NonZeroI64, NonZeroI8, NonZeroU128, NonZeroU16,
+        NonZeroU32, NonZeroU64, NonZeroU8,
     },
 };
 

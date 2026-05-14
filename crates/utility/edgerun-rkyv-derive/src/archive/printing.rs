@@ -1,7 +1,5 @@
 use quote::format_ident;
-use syn::{
-    parse_quote, DeriveInput, Error, Ident, Meta, Path, Type, Visibility,
-};
+use syn::{parse_quote, DeriveInput, Error, Ident, Meta, Path, Type, Visibility};
 
 use crate::{attributes::Attributes, util::strip_raw};
 
@@ -16,10 +14,7 @@ pub struct Printing {
 }
 
 impl Printing {
-    pub fn new(
-        input: &DeriveInput,
-        attributes: &Attributes,
-    ) -> Result<Self, Error> {
+    pub fn new(input: &DeriveInput, attributes: &Attributes) -> Result<Self, Error> {
         let name = input.ident.clone();
         let (_, ty_generics, _) = input.generics.split_for_impl();
 

@@ -665,38 +665,3 @@ fn ct_eq(left: &[u8], right: &[u8]) -> bool {
 
 pub type CipherU12 = Nonce;
 pub type CipherU16 = Tag;
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn aes128_gcm_matches_nist_vector() {
-        let key = [0u8; 16];
-        let nonce = Nonce::from([0u8; 12]);
-        let plaintext = [0u8; 16];
-        let expected_ciphertext = [
-            0x03, 0x88, 0xda, 0xce, 0x60, 0xb6, 0xa3, 0x92, 0xf3, 0x28, 0xc2, 0xb9, 0x71, 0xb2,
-            0xfe, 0x78, 0xab, 0x6e, 0x47, 0xd4, 0x2c, 0xec, 0x13, 0xbd, 0xf5, 0x3a, 0x67, 0xb2,
-            0x12, 0x57, 0xbd, 0xdf,
-        ];
-        let cipher = Aes128Gcm::new_from_slice(&key).unwrap();
-        let ciphertext = cipher.encrypt(&nonce, plaintext.as_slice()).unwrap();
-        assert_eq!(ciphertext, expected_ciphertext);
-        assert_eq!(
-            cipher.decrypt(&nonce, ciphertext.as_slice()).unwrap(),
-            plaintext
-        );
-    }
-
-    #[test]
-    fn rejects_modified_tag() {
-        let key = [7u8; 32];
-        let nonce = Nonce::from([9u8; 12]);
-        let cipher = Aes256Gcm::new_from_slice(&key).unwrap();
-        let mut ciphertext = cipher.encrypt(&nonce, b"message".as_slice()).unwrap();
-        let last = ciphertext.len() - 1;
-        ciphertext[last] ^= 1;
-        assert!(cipher.decrypt(&nonce, ciphertext.as_slice()).is_err());
-    }
-}

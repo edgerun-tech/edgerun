@@ -794,7 +794,7 @@ mod tests {
     fn mode_kind_deserializes_alias_values_to_default() {
         for alias in ["code", "pair_programming", "execute", "custom"] {
             let json = format!("\"{alias}\"");
-            let mode: ModeKind = edgerun_json::from_str(&json).expect("deserialize mode");
+            let mode: ModeKind = edgerun_json::from_serde_str(&json).expect("deserialize mode");
             assert_eq!(ModeKind::Default, mode);
         }
     }
@@ -814,7 +814,7 @@ mod tests {
         for value in ["user", "auto_review", "guardian_subagent"] {
             let json = format!("\"{value}\"");
             let reviewer: ApprovalsReviewer =
-                edgerun_json::from_str(&json).expect("deserialize reviewer");
+                edgerun_json::from_serde_str(&json).expect("deserialize reviewer");
             let expected = if value == "user" {
                 ApprovalsReviewer::User
             } else {

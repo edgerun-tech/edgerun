@@ -55,11 +55,7 @@ impl<K, const E: usize> ArchivedBTreeSet<K, E> {
     }
 
     /// Resolves a B-tree set from its length.
-    pub fn resolve_from_len(
-        len: usize,
-        resolver: BTreeSetResolver,
-        out: Place<Self>,
-    ) {
+    pub fn resolve_from_len(len: usize, resolver: BTreeSetResolver, out: Place<Self>) {
         munge!(let ArchivedBTreeSet(inner) = out);
         ArchivedBTreeMap::<K, (), E>::resolve_from_len(len, resolver.0, inner);
     }
@@ -76,14 +72,10 @@ impl<K, const E: usize> ArchivedBTreeSet<K, E> {
         S: Fallible + Allocator + Writer + ?Sized,
         S::Error: Source,
     {
-        ArchivedBTreeMap::<K, (), E>::serialize_from_ordered_iter::<
-            _,
-            _,
-            _,
-            _,
-            (),
-            _,
-        >(iter.map(|k| (k, &())), serializer)
+        ArchivedBTreeMap::<K, (), E>::serialize_from_ordered_iter::<_, _, _, _, (), _>(
+            iter.map(|k| (k, &())),
+            serializer,
+        )
         .map(BTreeSetResolver)
     }
 
@@ -92,10 +84,7 @@ impl<K, const E: usize> ArchivedBTreeSet<K, E> {
     /// If `f` returns `ControlFlow::Break`, `visit` will return `Some` with the
     /// broken value. If `f` returns `Continue` for every key in the tree,
     /// `visit` will return `None`.
-    pub fn visit<T>(
-        &self,
-        mut f: impl FnMut(&K) -> ControlFlow<T>,
-    ) -> Option<T> {
+    pub fn visit<T>(&self, mut f: impl FnMut(&K) -> ControlFlow<T>) -> Option<T> {
         self.0.visit(|k, _| f(k))
     }
 }

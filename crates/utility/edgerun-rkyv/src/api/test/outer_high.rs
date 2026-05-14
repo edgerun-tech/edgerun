@@ -9,8 +9,7 @@ use crate::{
 };
 
 /// The serializer type for tests.
-pub type TestSerializer<'a> =
-    HighSerializer<AlignedVec, ArenaHandle<'a>, Panic>;
+pub type TestSerializer<'a> = HighSerializer<AlignedVec, ArenaHandle<'a>, Panic>;
 /// The deserializer type for tests.
 pub type TestDeserializer = HighDeserializer<Panic>;
 
@@ -20,8 +19,7 @@ pub fn to_bytes<T>(value: &T, f: impl FnOnce(&mut [u8]))
 where
     T: for<'a> Serialize<TestSerializer<'a>>,
 {
-    let mut bytes =
-        crate::api::high::to_bytes(value).expect("failed to serialize value");
+    let mut bytes = crate::api::high::to_bytes(value).expect("failed to serialize value");
     f(&mut bytes);
 }
 

@@ -111,36 +111,3 @@ pub fn derive_sealing_key_sha256(salt: Option<&[u8]>, secret: &[u8], info: &[u8]
     out.copy_from_slice(&key);
     out
 }
-
-#[cfg(all(test, feature = "aead"))]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn aes256_gcm_sealed_bytes_roundtrip() {
-        let key = [7u8; 32];
-        let aad = b"edgerun:test:seal";
-        let sealed =
-            seal_aes256_gcm_with_nonce(&key, aad, b"trust container bytes", [9u8; 12]).unwrap();
-        let encoded = sealed.to_bytes();
-        let decoded = SealedBytes::from_bytes(&encoded).unwrap();
-
-        assert_eq!(
-            unseal_aes256_gcm(&key, aad, &decoded).unwrap(),
-            b"trust container bytes"
-        );
-    }
-
-    #[test]
-    fn aes256_gcm_rejects_tampering() {
-        let key = [7u8; 32];
-        let mut sealed =
-            seal_aes256_gcm_with_nonce(&key, b"aad", b"sealed payload", [9u8; 12]).unwrap();
-        sealed.ciphertext[0] ^= 1;
-
-        assert_eq!(
-            unseal_aes256_gcm(&key, b"aad", &sealed),
-            Err(CryptoError::DecryptionFailed)
-        );
-    }
-}

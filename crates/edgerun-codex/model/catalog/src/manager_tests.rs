@@ -1,13 +1,11 @@
 use super::*;
 use crate::ModelsManagerConfig;
+use crate::auth::AuthManager;
+use crate::auth::CodexAuth;
+use crate::auth::ExternalAuth;
+use crate::auth::ExternalAuthRefreshContext;
+use crate::auth::ExternalAuthTokens;
 use codex_app_server_protocol::AuthMode;
-use codex_login::AuthCredentialsStoreMode;
-use codex_login::AuthManager;
-use codex_login::CodexAuth;
-use codex_login::ExternalAuth;
-use codex_login::ExternalAuthRefreshContext;
-use codex_login::ExternalAuthTokens;
-use codex_login::TokenData;
 use codex_protocol::openai_models::ModelsResponse;
 use edgerun_json::json;
 use edgerun_time::chrono::ChronoDuration;
@@ -126,6 +124,12 @@ impl ExternalAuth for TestExternalApiKeyAuth {
             "test-external-api-key",
         ))
     }
+
+    fn resolve_blocking(&self) -> std::io::Result<Option<ExternalAuthTokens>> {
+        Ok(Some(ExternalAuthTokens::access_token_only(
+            "test-external-api-key",
+        )))
+    }
 }
 
 #[derive(Debug)]
@@ -141,6 +145,10 @@ impl ExternalAuth for TestUnresolvedExternalApiKeyAuth {
         &self,
         _context: ExternalAuthRefreshContext,
     ) -> std::io::Result<ExternalAuthTokens> {
+        Err(std::io::Error::other("unresolved test auth"))
+    }
+
+    fn resolve_blocking(&self) -> std::io::Result<Option<ExternalAuthTokens>> {
         Err(std::io::Error::other("unresolved test auth"))
     }
 }
@@ -196,38 +204,14 @@ fn static_manager_for_tests(model_catalog: ModelsResponse) -> StaticModelsManage
 }
 
 async fn chatgpt_auth_tokens_for_tests(codex_home: &Path) -> CodexAuth {
-    let auth_dot_json = codex_login::AuthDotJson {
-        auth_mode: Some(AuthMode::ChatgptAuthTokens),
-        openai_api_key: None,
-        tokens: Some(TokenData {
-            id_token: codex_login::token_data::parse_chatgpt_jwt_claims(
-                "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.\
-eyJlbWFpbCI6InVzZXJAZXhhbXBsZS5jb20iLCJodHRwczovL2FwaS5vcGVuYWkuY29tL2F1dGgiOnsiY2hhdGdwdF9wbGFuX3R5cGUiOiJwcm8iLCJjaGF0Z3B0X3VzZXJfaWQiOiJ1c2VyLWlkIiwiY2hhdGdwdF9hY2NvdW50X2lkIjoiYWNjb3VudC1pZCJ9fQ.\
-c2ln",
-            )
-            .expect("fake id token should parse"),
-            access_token: "Access Token".to_string(),
-            refresh_token: "test".to_string(),
-            account_id: Some("account_id".to_string()),
-        }),
-        last_refresh: Some(Utc::now()),
-        agent_identity: None,
-    };
     std::fs::create_dir_all(codex_home).expect("codex home should be created");
-    std::fs::write(
-        codex_home.join("auth.json"),
-        edgerun_json::to_string(&auth_dot_json).expect("auth should serialize"),
-    )
-    .expect("auth.json should be written");
-
-    CodexAuth::from_auth_storage(
-        codex_home,
-        AuthCredentialsStoreMode::File,
-        /*chatgpt_base_url*/ None,
-    )
-    .await
-    .expect("auth should load")
-    .expect("auth should be present")
+    CodexAuth::ChatgptAuthTokens {
+        token: "Access Token".to_string(),
+        account_id: Some("account_id".to_string()),
+        email: Some("user@example.com".to_string()),
+        plan_type: Some(codex_protocol::account::PlanType::Pro),
+        fedramp: false,
+    }
 }
 
 #[edgerun_tokio::test]
@@ -770,8 +754,8 @@ fn bundled_models_json_roundtrips() {
     let response = crate::bundled_models_response()
         .unwrap_or_else(|err| panic!("bundled models.json should parse: {err}"));
 
-    let serialized = edgerun_json::to_string(&response)
-        .expect("bundled models.json should serialize");
+    let serialized =
+        edgerun_json::to_string(&response).expect("bundled models.json should serialize");
     let roundtripped: ModelsResponse = edgerun_json::from_serde_str(&serialized)
         .expect("serialized models.json should deserialize");
 

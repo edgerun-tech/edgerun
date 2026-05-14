@@ -23,8 +23,7 @@ pub unsafe trait Allocator<E = <Self as Fallible>::Error> {
     /// # Safety
     ///
     /// `layout` must have non-zero size.
-    unsafe fn push_alloc(&mut self, layout: Layout)
-        -> Result<NonNull<[u8]>, E>;
+    unsafe fn push_alloc(&mut self, layout: Layout) -> Result<NonNull<[u8]>, E>;
 
     /// Deallocates previously allocated scratch space.
     ///
@@ -34,28 +33,17 @@ pub unsafe trait Allocator<E = <Self as Fallible>::Error> {
     ///   popped after calling `pop_alloc`.
     /// - `layout` must be the same layout that was used to allocate the block
     ///   of memory for the given pointer.
-    unsafe fn pop_alloc(
-        &mut self,
-        ptr: NonNull<u8>,
-        layout: Layout,
-    ) -> Result<(), E>;
+    unsafe fn pop_alloc(&mut self, ptr: NonNull<u8>, layout: Layout) -> Result<(), E>;
 }
 
 unsafe impl<T: Allocator<E>, E> Allocator<E> for Strategy<T, E> {
-    unsafe fn push_alloc(
-        &mut self,
-        layout: Layout,
-    ) -> Result<NonNull<[u8]>, E> {
+    unsafe fn push_alloc(&mut self, layout: Layout) -> Result<NonNull<[u8]>, E> {
         // SAFETY: The safety requirements for `push_alloc()` are the same as
         // the requirements for `T::push_alloc`.
         unsafe { T::push_alloc(self, layout) }
     }
 
-    unsafe fn pop_alloc(
-        &mut self,
-        ptr: NonNull<u8>,
-        layout: Layout,
-    ) -> Result<(), E> {
+    unsafe fn pop_alloc(&mut self, ptr: NonNull<u8>, layout: Layout) -> Result<(), E> {
         // SAFETY: The safety requirements for `pop_alloc()` are the same as
         // the requirements for `T::pop_alloc`.
         unsafe { T::pop_alloc(self, ptr, layout) }
@@ -100,10 +88,8 @@ impl AllocationStats {
     fn push(&mut self, layout: Layout) {
         self.bytes_allocated += layout.size();
         self.allocations += 1;
-        self.max_bytes_allocated =
-            usize::max(self.bytes_allocated, self.max_bytes_allocated);
-        self.max_allocations =
-            usize::max(self.allocations, self.max_allocations);
+        self.max_bytes_allocated = usize::max(self.bytes_allocated, self.max_bytes_allocated);
+        self.max_allocations = usize::max(self.allocations, self.max_allocations);
         self.max_alignment = usize::max(self.max_alignment, layout.align());
     }
 
@@ -142,21 +128,14 @@ impl<T> AllocationTracker<T> {
 }
 
 unsafe impl<T: Allocator<E>, E> Allocator<E> for AllocationTracker<T> {
-    unsafe fn push_alloc(
-        &mut self,
-        layout: Layout,
-    ) -> Result<NonNull<[u8]>, E> {
+    unsafe fn push_alloc(&mut self, layout: Layout) -> Result<NonNull<[u8]>, E> {
         self.stats.push(layout);
         // SAFETY: The safety requirements for `push_alloc` are the same as the
         // requirements for `inner.push_alloc`.
         unsafe { self.inner.push_alloc(layout) }
     }
 
-    unsafe fn pop_alloc(
-        &mut self,
-        ptr: NonNull<u8>,
-        layout: Layout,
-    ) -> Result<(), E> {
+    unsafe fn pop_alloc(&mut self, ptr: NonNull<u8>, layout: Layout) -> Result<(), E> {
         self.stats.pop(layout);
         // SAFETY: The safety requirements for `pop_alloc` are the same as the
         // requirements for `inner.pop_alloc`.
@@ -188,10 +167,8 @@ mod tests {
         Serialize,
     };
 
-    type TrackerSerializer<'a> = Strategy<
-        Serializer<Buffer<'a>, AllocationTracker<SubAllocator<'a>>, Unshare>,
-        Panic,
-    >;
+    type TrackerSerializer<'a> =
+        Strategy<Serializer<Buffer<'a>, AllocationTracker<SubAllocator<'a>>, Unshare>, Panic>;
 
     fn track_serialize<T>(value: &T) -> AllocationStats
     where

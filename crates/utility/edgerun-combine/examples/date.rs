@@ -8,8 +8,7 @@ use std::{
 };
 
 use combine::{
-    choice,
-    many, optional,
+    choice, many, optional,
     parser::char::{char, digit},
     stream::position,
     Parser, Stream,

@@ -319,7 +319,6 @@ where
     }
 }
 
-
 /// Decode the `r` and `s` components of a DER-encoded ECDSA signature.
 fn decode_der(der_bytes: &[u8]) -> crate::der::Result<(UintRef<'_>, UintRef<'_>)> {
     let mut reader = crate::der::SliceReader::new(der_bytes)?;

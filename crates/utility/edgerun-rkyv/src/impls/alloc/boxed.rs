@@ -10,8 +10,7 @@ use crate::{
     boxed::{ArchivedBox, BoxResolver},
     niche::option_box::ArchivedOptionBox,
     traits::{ArchivePointee, LayoutRaw},
-    Archive, ArchiveUnsized, Deserialize, DeserializeUnsized, Place, Serialize,
-    SerializeUnsized,
+    Archive, ArchiveUnsized, Deserialize, DeserializeUnsized, Place, Serialize, SerializeUnsized,
 };
 
 impl<T: ArchiveUnsized + ?Sized> Archive for Box<T> {
@@ -28,10 +27,7 @@ where
     T: SerializeUnsized<S> + ?Sized,
     S: Fallible + ?Sized,
 {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
         ArchivedBox::serialize_from_ref(self.as_ref(), serializer)
     }
 }

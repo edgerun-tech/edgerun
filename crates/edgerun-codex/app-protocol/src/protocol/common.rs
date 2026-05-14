@@ -1452,7 +1452,7 @@ mod tests {
     use codex_protocol::protocol::RealtimeConversationVersion;
     use codex_protocol::protocol::RealtimeOutputModality;
     use codex_protocol::protocol::RealtimeVoice;
-    use edgerun_error::Result;
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
     use edgerun_json::json;
     use pretty_assertions::assert_eq;
     use std::path::PathBuf;

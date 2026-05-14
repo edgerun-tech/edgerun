@@ -398,13 +398,14 @@ mod tests {
 
     #[test]
     fn guardian_assessment_action_deserializes_command_shape() {
-        let action: GuardianAssessmentAction = edgerun_json::from_value(edgerun_json::json!({
-            "type": "command",
-            "source": "shell",
-            "command": "rm -rf /tmp/guardian",
-            "cwd": test_path_buf("/tmp"),
-        }))
-        .expect("guardian action");
+        let action: GuardianAssessmentAction =
+            edgerun_json::from_serde_value(edgerun_json::json!({
+                "type": "command",
+                "source": "shell",
+                "command": "rm -rf /tmp/guardian",
+                "cwd": test_path_buf("/tmp"),
+            }))
+            .expect("guardian action");
 
         assert_eq!(
             action,
@@ -427,10 +428,10 @@ mod tests {
             "cwd": "/tmp",
         });
         let action: GuardianAssessmentAction =
-            edgerun_json::from_value(value.clone()).expect("guardian action");
+            edgerun_json::from_serde_value(value.clone()).expect("guardian action");
 
         assert_eq!(
-            edgerun_json::to_value(&action).expect("serialize guardian action"),
+            edgerun_json::to_serde_value(&action).expect("serialize guardian action"),
             value
         );
 

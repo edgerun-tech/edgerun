@@ -16,8 +16,7 @@ use crate::{
     rc::{ArchivedRc, ArchivedRcWeak, RcFlavor, RcResolver, RcWeakResolver},
     ser::{Sharing, Writer},
     traits::{ArchivePointee, LayoutRaw},
-    Archive, ArchiveUnsized, Deserialize, DeserializeUnsized, Place, Serialize,
-    SerializeUnsized,
+    Archive, ArchiveUnsized, Deserialize, DeserializeUnsized, Place, Serialize, SerializeUnsized,
 };
 
 // Rc
@@ -37,14 +36,8 @@ where
     S: Fallible + Writer + Sharing + ?Sized,
     S::Error: Source,
 {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
-        ArchivedRc::<T::Archived, RcFlavor>::serialize_from_ref(
-            self.as_ref(),
-            serializer,
-        )
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
+        ArchivedRc::<T::Archived, RcFlavor>::serialize_from_ref(self.as_ref(), serializer)
     }
 }
 
@@ -83,8 +76,7 @@ where
     D::Error: Source,
 {
     fn deserialize(&self, deserializer: &mut D) -> Result<rc::Rc<T>, D::Error> {
-        let raw_shared_ptr =
-            deserializer.deserialize_shared::<_, rc::Rc<T>>(self.get())?;
+        let raw_shared_ptr = deserializer.deserialize_shared::<_, rc::Rc<T>>(self.get())?;
         unsafe {
             rc::Rc::<T>::increment_strong_count(raw_shared_ptr);
         }
@@ -123,10 +115,7 @@ where
     S: Fallible + Writer + Sharing + ?Sized,
     S::Error: Source,
 {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
         ArchivedRcWeak::<T::Archived, RcFlavor>::serialize_from_ref(
             self.upgrade().as_ref().map(|v| v.as_ref()),
             serializer,
@@ -147,10 +136,7 @@ where
     D: Fallible + Pooling + ?Sized,
     D::Error: Source,
 {
-    fn deserialize(
-        &self,
-        deserializer: &mut D,
-    ) -> Result<rc::Weak<T>, D::Error> {
+    fn deserialize(&self, deserializer: &mut D) -> Result<rc::Weak<T>, D::Error> {
         Ok(match self.upgrade() {
             None => rc::Weak::new(),
             Some(r) => rc::Rc::downgrade(&r.deserialize(deserializer)?),
@@ -214,11 +200,8 @@ mod tests {
             assert_eq!(*archived.b, 17);
 
             let mut deserializer = Pool::new();
-            let deserialized = deserialize_using::<Test, _, Panic>(
-                &*archived,
-                &mut deserializer,
-            )
-            .unwrap();
+            let deserialized =
+                deserialize_using::<Test, _, Panic>(&*archived, &mut deserializer).unwrap();
 
             assert_eq!(*deserialized.a, 17);
             assert_eq!(*deserialized.b, 17);
@@ -271,9 +254,8 @@ mod tests {
             b: Rc<[String]>,
         }
 
-        let rc_slice = Rc::<[String]>::from(
-            vec!["hello".to_string(), "world".to_string()].into_boxed_slice(),
-        );
+        let rc_slice =
+            Rc::<[String]>::from(vec!["hello".to_string(), "world".to_string()].into_boxed_slice());
         let value = Test {
             a: rc_slice.clone(),
             b: rc_slice,
@@ -318,45 +300,38 @@ mod tests {
 
         let mut buf = to_bytes::<Panic>(&value).unwrap();
 
-        let archived =
-            unsafe { access_unchecked::<ArchivedTest>(buf.as_ref()) };
+        let archived = unsafe { access_unchecked::<ArchivedTest>(buf.as_ref()) };
         assert_eq!(*archived.a, 10);
         assert!(archived.b.upgrade().is_some());
         assert_eq!(**archived.b.upgrade().unwrap(), 10);
 
-        let mut mutable_archived =
-            unsafe { access_unchecked_mut::<ArchivedTest>(buf.as_mut()) };
+        let mut mutable_archived = unsafe { access_unchecked_mut::<ArchivedTest>(buf.as_mut()) };
 
         munge!(let ArchivedTest { a, .. } = mutable_archived.as_mut());
         unsafe {
             *ArchivedRc::get_seal_unchecked(a) = 42u32.into();
         }
 
-        let archived =
-            unsafe { access_unchecked::<ArchivedTest>(buf.as_ref()) };
+        let archived = unsafe { access_unchecked::<ArchivedTest>(buf.as_ref()) };
         assert_eq!(*archived.a, 42);
         assert!(archived.b.upgrade().is_some());
         assert_eq!(**archived.b.upgrade().unwrap(), 42);
 
-        let mut mutable_archived =
-            unsafe { access_unchecked_mut::<ArchivedTest>(buf.as_mut()) };
+        let mut mutable_archived = unsafe { access_unchecked_mut::<ArchivedTest>(buf.as_mut()) };
         munge!(let ArchivedTest { b, .. } = mutable_archived.as_mut());
         unsafe {
-            *ArchivedRc::get_seal_unchecked(
-                ArchivedRcWeak::upgrade_seal(b).unwrap(),
-            ) = 17u32.into();
+            *ArchivedRc::get_seal_unchecked(ArchivedRcWeak::upgrade_seal(b).unwrap()) =
+                17u32.into();
         }
 
-        let archived =
-            unsafe { access_unchecked::<ArchivedTest>(buf.as_ref()) };
+        let archived = unsafe { access_unchecked::<ArchivedTest>(buf.as_ref()) };
         assert_eq!(*archived.a, 17);
         assert!(archived.b.upgrade().is_some());
         assert_eq!(**archived.b.upgrade().unwrap(), 17);
 
         let mut deserializer = Pool::new();
         let deserialized =
-            deserialize_using::<Test, _, Panic>(archived, &mut deserializer)
-                .unwrap();
+            deserialize_using::<Test, _, Panic>(archived, &mut deserializer).unwrap();
 
         assert_eq!(*deserialized.a, 17);
         assert!(deserialized.b.upgrade().is_some());

@@ -31,39 +31,23 @@ pub trait SharedContext<E = <Self as Fallible>::Error> {
     ///
     /// Returns an error if the value associated with the given address was
     /// started with a different type ID.
-    fn start_shared(
-        &mut self,
-        address: usize,
-        type_id: TypeId,
-    ) -> Result<ValidationState, E>;
+    fn start_shared(&mut self, address: usize, type_id: TypeId) -> Result<ValidationState, E>;
 
     /// Finishes validating the value associated with the given address.
     ///
     /// Returns an error if the given address was not pending.
-    fn finish_shared(
-        &mut self,
-        address: usize,
-        type_id: TypeId,
-    ) -> Result<(), E>;
+    fn finish_shared(&mut self, address: usize, type_id: TypeId) -> Result<(), E>;
 }
 
 impl<T, E> SharedContext<E> for Strategy<T, E>
 where
     T: SharedContext<E>,
 {
-    fn start_shared(
-        &mut self,
-        address: usize,
-        type_id: TypeId,
-    ) -> Result<ValidationState, E> {
+    fn start_shared(&mut self, address: usize, type_id: TypeId) -> Result<ValidationState, E> {
         T::start_shared(self, address, type_id)
     }
 
-    fn finish_shared(
-        &mut self,
-        address: usize,
-        type_id: TypeId,
-    ) -> Result<(), E> {
+    fn finish_shared(&mut self, address: usize, type_id: TypeId) -> Result<(), E> {
         T::finish_shared(self, address, type_id)
     }
 }

@@ -1,6 +1,6 @@
+use crate::io::AsyncWrite;
 use futures_core::ready;
 use futures_core::task::{Context, Poll};
-use crate::io::AsyncWrite;
 use futures_sink::Sink;
 use pin_project_lite::pin_project;
 use std::io;
@@ -28,7 +28,10 @@ pin_project! {
 
 impl<W: AsyncWrite, Item: AsRef<[u8]>> IntoSink<W, Item> {
     pub(super) fn new(writer: W) -> Self {
-        Self { writer, buffer: None }
+        Self {
+            writer,
+            buffer: None,
+        }
     }
 
     /// If we have an outstanding block in `buffer` attempt to push it into the writer, does _not_
@@ -64,7 +67,10 @@ impl<W: AsyncWrite, Item: AsRef<[u8]>> Sink<Item> for IntoSink<W, Item> {
 
     fn start_send(self: Pin<&mut Self>, item: Item) -> Result<(), Self::Error> {
         debug_assert!(self.buffer.is_none());
-        *self.project().buffer = Some(Block { offset: 0, bytes: item });
+        *self.project().buffer = Some(Block {
+            offset: 0,
+            bytes: item,
+        });
         Ok(())
     }
 

@@ -127,6 +127,8 @@ pub use runtime::{
     GpuHit, HitKind, UiAction, UiEvent, UiKey, UiKeyModifiers, UiRuntimeState, UiTextBuffer,
     UiTextBufferAction,
 };
+#[cfg(feature = "tabler-svg-atlas")]
+pub use scene::IconQuad;
 pub use scene::{Color4, GpuClip, GpuRect, GpuScene, RectMode, UiColorScheme};
 pub use shadcn_demo_catalog::{
     SHADCN_DEMO_CATEGORIES, SHADCN_DEMO_COMPONENTS, SHADCN_DEMO_STATUSES, UiShadcnDemoCategory,
@@ -153,11 +155,11 @@ pub use shadcn_events::{
 pub use shadcn_exact::shadcn_chat_message_height;
 pub use shadcn_exact::{
     UiShadcnActivity, UiShadcnBadgeVariant, UiShadcnButtonSize, UiShadcnButtonVariant,
-    UiShadcnChatClientAction, UiShadcnChatClientSpec, UiShadcnChatRole,
-    UiShadcnConversationMessage, UiShadcnSessionRow, UiShadcnStatusTone, shadcn_accordion,
-    shadcn_alert, shadcn_alert_dialog, shadcn_aspect_ratio, shadcn_avatar, shadcn_badge,
-    shadcn_breadcrumb, shadcn_button, shadcn_button_group, shadcn_calendar, shadcn_card,
-    shadcn_carousel, shadcn_chart, shadcn_chat_client, shadcn_chat_client_shell,
+    UiShadcnChatClientAction, UiShadcnChatClientIconAction, UiShadcnChatClientSpec,
+    UiShadcnChatRole, UiShadcnConversationMessage, UiShadcnSessionRow, UiShadcnStatusTone,
+    shadcn_accordion, shadcn_alert, shadcn_alert_dialog, shadcn_aspect_ratio, shadcn_avatar,
+    shadcn_badge, shadcn_breadcrumb, shadcn_button, shadcn_button_group, shadcn_calendar,
+    shadcn_card, shadcn_carousel, shadcn_chart, shadcn_chat_client, shadcn_chat_client_shell,
     shadcn_chat_message, shadcn_checkbox, shadcn_collapsible, shadcn_combobox, shadcn_command,
     shadcn_context_menu, shadcn_conversation, shadcn_data_table, shadcn_date_picker, shadcn_dialog,
     shadcn_direction, shadcn_drawer, shadcn_dropdown_menu, shadcn_empty, shadcn_field,
@@ -1356,6 +1358,29 @@ mod tests {
     }
 
     #[test]
+    fn full_cross_axis_size_survives_non_stretch_alignment() {
+        let mut scene = GpuScene::new(palette::BG);
+        {
+            let mut ui = UiPainter::new(&mut scene);
+            row("bg-panel border rounded-md p-2 items-end")
+                .children([
+                    text_area_node("", "full height")
+                        .hit_id(82)
+                        .class("h-full flex-1"),
+                    icon_button(UiIcon::Send, 83).class("size-9"),
+                ])
+                .render(&mut ui, UiRect::new(0.0, 0.0, 360.0, 96.0));
+        }
+
+        let hit = scene
+            .hits()
+            .iter()
+            .find(|hit| hit.kind == HitKind::TextArea && hit.id == 82)
+            .expect("textarea hit");
+        assert!(hit.h > 70.0, "hit: {hit:?}");
+    }
+
+    #[test]
     fn column_children_stretch_by_default() {
         let mut scene = GpuScene::new(palette::BG);
         {
@@ -1406,6 +1431,79 @@ mod tests {
             UiIcon::Terminal.provider_name(UiIconSet::Lucide),
             "square-terminal"
         );
+        assert_eq!(
+            UiIcon::MessagePlus.provider_name(UiIconSet::Tabler),
+            "message-plus"
+        );
+        assert_eq!(UiIcon::Trash.provider_name(UiIconSet::Tabler), "trash");
+        assert_eq!(UiIcon::Send.provider_name(UiIconSet::Tabler), "arrow-up");
+    }
+
+    #[cfg(feature = "tabler-svg-atlas")]
+    #[test]
+    fn canonical_tabler_icons_have_svg_atlas_entries() {
+        let icons = [
+            UiIcon::Activity,
+            UiIcon::App,
+            UiIcon::Bell,
+            UiIcon::Chat,
+            UiIcon::Check,
+            UiIcon::ChevronRight,
+            UiIcon::Code,
+            UiIcon::Cpu,
+            UiIcon::Database,
+            UiIcon::Eye,
+            UiIcon::File,
+            UiIcon::Key,
+            UiIcon::Lock,
+            UiIcon::Menu,
+            UiIcon::MessagePlus,
+            UiIcon::Network,
+            UiIcon::Route,
+            UiIcon::Search,
+            UiIcon::Send,
+            UiIcon::Server,
+            UiIcon::Settings,
+            UiIcon::Shield,
+            UiIcon::Sparkles,
+            UiIcon::Storage,
+            UiIcon::Terminal,
+            UiIcon::Trust,
+            UiIcon::Trash,
+            UiIcon::User,
+            UiIcon::Wallet,
+            UiIcon::Warning,
+            UiIcon::X,
+        ];
+        for icon in icons {
+            assert!(
+                icon.tabler_svg_atlas_rect().is_some(),
+                "missing Tabler atlas entry for {} ({})",
+                icon.name(),
+                icon.provider_name(UiIconSet::Tabler)
+            );
+        }
+    }
+
+    #[cfg(feature = "tabler-svg-atlas")]
+    #[test]
+    fn icon_node_prefers_tabler_svg_atlas_quads() {
+        let mut scene = GpuScene::new(palette::BG);
+        {
+            let mut ui = UiPainter::new(&mut scene);
+            row("row gap-2")
+                .child(icon(UiIcon::MessagePlus).class("size-8"))
+                .child(icon_button(UiIcon::Trash, 91).class("size-8"))
+                .render(&mut ui, UiRect::new(0.0, 0.0, 120.0, 48.0));
+        }
+
+        assert!(scene.icon_quads().len() >= 2);
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Button && hit.id == 91)
+        );
     }
 
     #[test]
@@ -1419,6 +1517,9 @@ mod tests {
                 .render(&mut ui, UiRect::new(0.0, 0.0, 120.0, 48.0));
         }
 
+        #[cfg(feature = "tabler-svg-atlas")]
+        assert!(scene.icon_quads().len() >= 2);
+        #[cfg(not(feature = "tabler-svg-atlas"))]
         assert!(scene.rects().len() > 8);
         assert!(
             scene

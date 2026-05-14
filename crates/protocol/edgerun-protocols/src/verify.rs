@@ -513,7 +513,7 @@ mod tests {
     #[test]
     fn verifies_event_envelope_signature_using_protocol_domains() {
         let signing = test_signing_key();
-        let writer = edgerun_core::crypto::verifying_key_to_node_id(signing.verifying_key());
+        let writer = edgerun_core::crypto::verifying_key_to_node_id(&signing.verifying_key());
         let mut event = EventEnvelope {
             envelope_version: 1,
             stream_id: writer.to_vec(),
@@ -539,7 +539,7 @@ mod tests {
     #[test]
     fn rejects_wrong_signature_domain() {
         let signing = test_signing_key();
-        let writer = edgerun_core::crypto::verifying_key_to_node_id(signing.verifying_key());
+        let writer = edgerun_core::crypto::verifying_key_to_node_id(&signing.verifying_key());
         let mut event = EventEnvelope {
             envelope_version: 1,
             stream_id: writer.to_vec(),

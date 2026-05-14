@@ -1,6 +1,6 @@
+use crate::io::AsyncBufRead;
 use futures_core::future::Future;
 use futures_core::task::{Context, Poll};
-use crate::io::AsyncBufRead;
 use std::io;
 use std::pin::Pin;
 use std::slice;
@@ -16,7 +16,9 @@ impl<R: ?Sized> Unpin for FillBuf<'_, R> {}
 
 impl<'a, R: AsyncBufRead + ?Sized + Unpin> FillBuf<'a, R> {
     pub(super) fn new(reader: &'a mut R) -> Self {
-        Self { reader: Some(reader) }
+        Self {
+            reader: Some(reader),
+        }
     }
 }
 

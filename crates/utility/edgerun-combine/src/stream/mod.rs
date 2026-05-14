@@ -162,11 +162,7 @@ clone_resetable! {(T: Clone) IteratorStream<T>}
 /// implemented automatically.
 pub trait Stream: StreamOnce + ResetStream + Positioned {}
 
-impl<Input> Stream for Input
-where
-    Input: StreamOnce + Positioned + ResetStream,
-{
-}
+impl<Input> Stream for Input where Input: StreamOnce + Positioned + ResetStream {}
 
 #[inline]
 pub fn uncons<Input>(input: &mut Input) -> ParseResult<Input::Token, Input::Error>

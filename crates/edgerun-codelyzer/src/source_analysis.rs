@@ -2,10 +2,9 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{
     edit::{ChangeSet, FunctionId},
-    generated::codeanalyzer::{GraphData, GraphEdge, GraphNode},
+    graph_types::{GraphData, GraphEdge, GraphNode, SourceSnapshot},
     parser::{self, ParserPool},
     uir::{CallEdge, CallKind, Function, Program},
-    xray_wire::SourceSnapshot,
 };
 
 /// Browser/WASM-friendly source entry. The caller owns discovery and file
@@ -278,17 +277,15 @@ mod tests {
     }
 
     #[test]
-    fn emits_graph_data_from_rkyv_snapshot() {
+    fn emits_graph_data_from_snapshot() {
         let snapshot = SourceSnapshot {
-            files: vec![crate::xray_wire::SourceBlob {
+            files: vec![crate::graph_types::SourceBlob {
                 path: "src/lib.rs".into(),
                 source: "pub fn a() { b(); }\nfn b() {}".into(),
             }],
             total_bytes: 32,
         };
-        let encoded = snapshot.encode_rkyv().expect("encode snapshot");
-        let decoded = SourceSnapshot::decode_rkyv(&encoded).expect("decode snapshot");
-        let graph = graph_data_from_snapshot(&decoded);
+        let graph = graph_data_from_snapshot(&snapshot);
         assert_eq!(graph.node_count, 2);
         assert!(
             graph

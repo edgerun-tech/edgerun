@@ -24,10 +24,7 @@ where
     S: Fallible + Allocator + Writer + ?Sized,
     S::Error: Source,
 {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<IndexSetResolver, S::Error> {
+    fn serialize(&self, serializer: &mut S) -> Result<IndexSetResolver, S::Error> {
         ArchivedIndexSet::<K::Archived>::serialize_from_iter::<_, K, _>(
             self.iter(),
             (7, 8),
@@ -43,12 +40,8 @@ where
     D: Fallible + ?Sized,
     S: Default + BuildHasher,
 {
-    fn deserialize(
-        &self,
-        deserializer: &mut D,
-    ) -> Result<IndexSet<K, S>, D::Error> {
-        let mut result =
-            IndexSet::with_capacity_and_hasher(self.len(), S::default());
+    fn deserialize(&self, deserializer: &mut D) -> Result<IndexSet<K, S>, D::Error> {
+        let mut result = IndexSet::with_capacity_and_hasher(self.len(), S::default());
         for k in self.iter() {
             result.insert(k.deserialize(deserializer)?);
         }
@@ -56,9 +49,7 @@ where
     }
 }
 
-impl<UK, K: PartialEq<UK>, S: BuildHasher> PartialEq<IndexSet<UK, S>>
-    for ArchivedIndexSet<K>
-{
+impl<UK, K: PartialEq<UK>, S: BuildHasher> PartialEq<IndexSet<UK, S>> for ArchivedIndexSet<K> {
     fn eq(&self, other: &IndexSet<UK, S>) -> bool {
         self.iter().eq(other.iter())
     }
@@ -70,14 +61,11 @@ mod tests {
 
     use indexmap_2::IndexSet;
 
-    use crate::{
-        alloc::string::String, api::test::roundtrip_with, hash::FxHasher64,
-    };
+    use crate::{alloc::string::String, api::test::roundtrip_with, hash::FxHasher64};
 
     #[test]
     fn index_set() {
-        let mut value =
-            IndexSet::with_hasher(BuildHasherDefault::<FxHasher64>::default());
+        let mut value = IndexSet::with_hasher(BuildHasherDefault::<FxHasher64>::default());
         value.insert(String::from("foo"));
         value.insert(String::from("bar"));
         value.insert(String::from("baz"));

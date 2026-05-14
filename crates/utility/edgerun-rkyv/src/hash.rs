@@ -32,16 +32,12 @@ fn hash_bytes(mut hash: u64, bytes: &[u8]) -> u64 {
     }
 
     if bytes.len() & 4 != 0 {
-        let bytes = unsafe {
-            ptr.add(bytes.len() & !7).cast::<[u8; 4]>().read_unaligned()
-        };
+        let bytes = unsafe { ptr.add(bytes.len() & !7).cast::<[u8; 4]>().read_unaligned() };
         hash = hash_word(hash, u32::from_le_bytes(bytes).into());
     }
 
     if bytes.len() & 2 != 0 {
-        let bytes = unsafe {
-            ptr.add(bytes.len() & !3).cast::<[u8; 2]>().read_unaligned()
-        };
+        let bytes = unsafe { ptr.add(bytes.len() & !3).cast::<[u8; 2]>().read_unaligned() };
         hash = hash_word(hash, u16::from_le_bytes(bytes).into());
     }
 
@@ -93,10 +89,9 @@ impl Hasher for FxHasher64 {
             ptr.add(1).read_unaligned()
         });
         #[cfg(target_endian = "big")]
-        let (first, second) =
-            (unsafe { ptr.add(1).read_unaligned() }, unsafe {
-                ptr.read_unaligned()
-            });
+        let (first, second) = (unsafe { ptr.add(1).read_unaligned() }, unsafe {
+            ptr.read_unaligned()
+        });
         self.hash = hash_word(
             hash_word(self.hash, u64::from_ne_bytes(first)),
             u64::from_ne_bytes(second),

@@ -261,8 +261,8 @@ pub use crate::{
     api::{access_unchecked, access_unchecked_mut},
     place::Place,
     traits::{
-        Archive, ArchiveUnsized, Deserialize, DeserializeUnsized, Portable,
-        Serialize, SerializeUnsized,
+        Archive, ArchiveUnsized, Deserialize, DeserializeUnsized, Portable, Serialize,
+        SerializeUnsized,
     },
 };
 

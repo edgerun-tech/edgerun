@@ -78,18 +78,11 @@ impl<T: ArchivePointee + ?Sized, F> ArchivedRc<T, F> {
         out: Place<Self>,
     ) {
         munge!(let ArchivedRc { ptr, .. } = out);
-        RelPtr::emplace_unsized(
-            resolver.pos as usize,
-            value.archived_metadata(),
-            ptr,
-        );
+        RelPtr::emplace_unsized(resolver.pos as usize, value.archived_metadata(), ptr);
     }
 
     /// Serializes an archived `Rc` from a given reference.
-    pub fn serialize_from_ref<U, S>(
-        value: &U,
-        serializer: &mut S,
-    ) -> Result<RcResolver, S::Error>
+    pub fn serialize_from_ref<U, S>(value: &U, serializer: &mut S) -> Result<RcResolver, S::Error>
     where
         U: SerializeUnsized<S> + ?Sized,
         S: Fallible + Writer + Sharing + ?Sized,
@@ -248,9 +241,7 @@ impl<T: ArchivePointee + ?Sized, F> ArchivedRcWeak<T, F> {
     }
 
     /// Attempts to upgrade a sealed weak pointer.
-    pub fn upgrade_seal(
-        this: Seal<'_, Self>,
-    ) -> Option<Seal<'_, ArchivedRc<T, F>>> {
+    pub fn upgrade_seal(this: Seal<'_, Self>) -> Option<Seal<'_, ArchivedRc<T, F>>> {
         let this = unsafe { this.unseal_unchecked() };
         if this.ptr.is_invalid() {
             None
@@ -298,9 +289,7 @@ impl<T: ArchivePointee + ?Sized, F> ArchivedRcWeak<T, F> {
     }
 }
 
-impl<T: ArchivePointee + fmt::Debug + ?Sized, F> fmt::Debug
-    for ArchivedRcWeak<T, F>
-{
+impl<T: ArchivePointee + fmt::Debug + ?Sized, F> fmt::Debug for ArchivedRcWeak<T, F> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "(Weak)")
     }
@@ -324,10 +313,7 @@ mod verify {
     use crate::{
         rc::{ArchivedRc, ArchivedRcWeak, Flavor},
         traits::{ArchivePointee, LayoutRaw},
-        validation::{
-            shared::ValidationState, ArchiveContext, ArchiveContextExt,
-            SharedContext,
-        },
+        validation::{shared::ValidationState, ArchiveContext, ArchiveContextExt, SharedContext},
     };
 
     #[derive(Debug)]
@@ -356,9 +342,7 @@ mod verify {
             let addr = ptr as *const u8 as usize;
             match context.start_shared(addr, type_id)? {
                 ValidationState::Started => {
-                    context.in_subtree(ptr, |context| unsafe {
-                        T::check_bytes(ptr, context)
-                    })?;
+                    context.in_subtree(ptr, |context| unsafe { T::check_bytes(ptr, context) })?;
                     context.finish_shared(addr, type_id)?;
                 }
                 ValidationState::Pending => {
@@ -388,9 +372,7 @@ mod verify {
                 // SAFETY: `ArchivedRc` and `ArchivedRcWeak` are
                 // `repr(transparent)` and so have the same layout as each
                 // other.
-                let rc = unsafe {
-                    &*(self as *const Self).cast::<ArchivedRc<T, F>>()
-                };
+                let rc = unsafe { &*(self as *const Self).cast::<ArchivedRc<T, F>>() };
                 rc.verify(context)
             }
         }

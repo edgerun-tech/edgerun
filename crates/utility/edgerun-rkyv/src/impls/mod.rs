@@ -11,10 +11,7 @@ use ::core::cmp::Ordering;
 
 #[allow(dead_code)]
 #[inline]
-pub(crate) fn lexicographical_partial_ord<T, U>(
-    a: &[T],
-    b: &[U],
-) -> Option<Ordering>
+pub(crate) fn lexicographical_partial_ord<T, U>(a: &[T], b: &[U]) -> Option<Ordering>
 where
     T: PartialOrd<U>,
 {
@@ -199,12 +196,8 @@ mod core_tests {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 match self {
                     Test::A => f.debug_tuple("Test::A").finish(),
-                    Test::B(value) => {
-                        f.debug_tuple("Test::B").field(value).finish()
-                    }
-                    Test::C { inner } => {
-                        f.debug_struct("Test::C").field("inner", inner).finish()
-                    }
+                    Test::B(value) => f.debug_tuple("Test::B").field(value).finish(),
+                    Test::C { inner } => f.debug_struct("Test::C").field("inner", inner).finish(),
                 }
             }
         }
@@ -216,9 +209,7 @@ mod core_tests {
         {
             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
                 match self {
-                    ArchivedTest::A => {
-                        f.debug_tuple("ArchivedTest::A").finish()
-                    }
+                    ArchivedTest::A => f.debug_tuple("ArchivedTest::A").finish(),
                     ArchivedTest::B(value) => {
                         f.debug_tuple("ArchivedTest::B").field(value).finish()
                     }
@@ -415,10 +406,7 @@ mod core_tests {
             ArchivedI32: Deserialize<i32, D>,
             ArchivedOption<ArchivedU32>: Deserialize<Option<u32>, D>,
         {
-            fn deserialize(
-                &self,
-                deserializer: &mut D,
-            ) -> Result<Test, D::Error> {
+            fn deserialize(&self, deserializer: &mut D) -> Result<Test, D::Error> {
                 Ok(Test {
                     a: self.a.deserialize(deserializer)?,
                     b: self.b.deserialize(deserializer)?,
@@ -538,9 +526,7 @@ mod core_tests {
 
     #[test]
     fn archive_as_unit_struct() {
-        #[derive(
-            Archive, Serialize, Deserialize, Debug, Portable, PartialEq,
-        )]
+        #[derive(Archive, Serialize, Deserialize, Debug, Portable, PartialEq)]
         #[cfg_attr(feature = "bytecheck", derive(bytecheck::CheckBytes))]
         #[rkyv(crate, as = ExampleUnitStruct)]
         #[repr(C)]
@@ -557,9 +543,7 @@ mod core_tests {
         #[repr(transparent)]
         struct ExampleTupleStruct<T>(T);
 
-        impl<T: PartialEq<U>, U> PartialEq<ExampleTupleStruct<U>>
-            for ExampleTupleStruct<T>
-        {
+        impl<T: PartialEq<U>, U> PartialEq<ExampleTupleStruct<U>> for ExampleTupleStruct<T> {
             fn eq(&self, other: &ExampleTupleStruct<U>) -> bool {
                 self.0.eq(&other.0)
             }
@@ -627,9 +611,7 @@ mod core_tests {
 
     #[test]
     fn archive_as_self() {
-        #[derive(
-            Clone, Debug, Default, Archive, Deserialize, Portable, Serialize,
-        )]
+        #[derive(Clone, Debug, Default, Archive, Deserialize, Portable, Serialize)]
         #[rkyv(crate, as = Self)]
         #[repr(C)]
         struct Example {
@@ -646,9 +628,7 @@ mod core_tests {
             inner: T,
         }
 
-        #[derive(
-            Clone, Debug, Default, Archive, Deserialize, Portable, Serialize,
-        )]
+        #[derive(Clone, Debug, Default, Archive, Deserialize, Portable, Serialize)]
         #[rkyv(crate, as = Wrapper<bool>)]
         #[repr(C)]
         struct Example {
@@ -671,18 +651,14 @@ mod core_tests {
 
     #[test]
     fn pass_thru_derive_with_option() {
-        #[derive(
-            Clone, Copy, Debug, PartialEq, Archive, Serialize, Deserialize,
-        )]
+        #[derive(Clone, Copy, Debug, PartialEq, Archive, Serialize, Deserialize)]
         #[rkyv(crate, compare(PartialEq), derive(Clone, Copy, Debug))]
         enum ExampleEnum {
             Foo,
             Bar(u64),
         }
 
-        #[derive(
-            Clone, Copy, Debug, PartialEq, Archive, Serialize, Deserialize,
-        )]
+        #[derive(Clone, Copy, Debug, PartialEq, Archive, Serialize, Deserialize)]
         #[rkyv(crate, compare(PartialEq), derive(Clone, Copy, Debug))]
         struct Example {
             x: i32,
@@ -715,9 +691,7 @@ mod alloc_tests {
 
     #[test]
     fn struct_container_mutable_refs() {
-        use crate::{
-            boxed::ArchivedBox, string::ArchivedString, vec::ArchivedVec,
-        };
+        use crate::{boxed::ArchivedBox, string::ArchivedString, vec::ArchivedVec};
 
         #[derive(Archive, Serialize)]
         #[rkyv(crate)]
@@ -743,10 +717,8 @@ mod alloc_tests {
             assert_eq!(**a, 50);
 
             let mut slice = ArchivedVec::as_slice_seal(b.as_mut());
-            ArchivedString::as_str_seal(slice.as_mut().index(0))
-                .make_ascii_uppercase();
-            ArchivedString::as_str_seal(slice.as_mut().index(1))
-                .make_ascii_uppercase();
+            ArchivedString::as_str_seal(slice.as_mut().index(0)).make_ascii_uppercase();
+            ArchivedString::as_str_seal(slice.as_mut().index(1)).make_ascii_uppercase();
             assert_eq!(b[0], "HELLO");
             assert_eq!(b[1], "WORLD");
         });

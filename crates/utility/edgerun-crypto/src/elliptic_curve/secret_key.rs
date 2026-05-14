@@ -207,7 +207,6 @@ where
 
         Ok(ec_private_key)
     }
-
 }
 
 impl<C> ConstantTimeEq for SecretKey<C>

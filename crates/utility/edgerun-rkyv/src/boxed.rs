@@ -6,8 +6,8 @@ use munge::munge;
 use rancor::Fallible;
 
 use crate::{
-    primitive::FixedUsize, seal::Seal, traits::ArchivePointee, ArchiveUnsized,
-    Place, Portable, RelPtr, SerializeUnsized,
+    primitive::FixedUsize, seal::Seal, traits::ArchivePointee, ArchiveUnsized, Place, Portable,
+    RelPtr, SerializeUnsized,
 };
 
 /// An archived [`Box`].
@@ -48,10 +48,7 @@ impl<T: ArchivePointee + ?Sized> ArchivedBox<T> {
     }
 
     /// Serializes an archived box from the given value and serializer.
-    pub fn serialize_from_ref<U, S>(
-        value: &U,
-        serializer: &mut S,
-    ) -> Result<BoxResolver, S::Error>
+    pub fn serialize_from_ref<U, S>(value: &U, serializer: &mut S) -> Result<BoxResolver, S::Error>
     where
         U: SerializeUnsized<S, Archived = T> + ?Sized,
         S: Fallible + ?Sized,
@@ -102,9 +99,7 @@ impl<T: ArchivePointee + ?Sized> Deref for ArchivedBox<T> {
     }
 }
 
-impl<T: ArchivePointee + fmt::Display + ?Sized> fmt::Display
-    for ArchivedBox<T>
-{
+impl<T: ArchivePointee + fmt::Display + ?Sized> fmt::Display for ArchivedBox<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.get().fmt(f)
     }
@@ -184,9 +179,7 @@ mod verify {
     {
         fn verify(&self, context: &mut C) -> Result<(), C::Error> {
             let ptr = self.ptr.as_ptr_wrapping();
-            context.in_subtree(ptr, |context| unsafe {
-                T::check_bytes(ptr, context)
-            })
+            context.in_subtree(ptr, |context| unsafe { T::check_bytes(ptr, context) })
         }
     }
 }

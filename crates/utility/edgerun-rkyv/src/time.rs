@@ -6,9 +6,7 @@ use crate::{
 };
 
 /// An archived [`Duration`](core::time::Duration).
-#[derive(
-    Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Portable,
-)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, Ord, PartialEq, PartialOrd, Portable)]
 #[cfg_attr(
     feature = "bytecheck",
     derive(bytecheck::CheckBytes),
@@ -92,8 +90,7 @@ impl ArchivedDuration {
     /// `ArchivedDuration`.
     #[inline]
     pub const fn as_nanos(&self) -> u128 {
-        self.as_secs() as u128 * NANOS_PER_SEC as u128
-            + self.subsec_nanos() as u128
+        self.as_secs() as u128 * NANOS_PER_SEC as u128 + self.subsec_nanos() as u128
     }
 
     /// Returns the number of seconds contained by this `ArchivedDuration` as
@@ -103,8 +100,7 @@ impl ArchivedDuration {
     /// duration.
     #[inline]
     pub fn as_secs_f64(&self) -> f64 {
-        (self.as_secs() as f64)
-            + (self.subsec_nanos() as f64) / (NANOS_PER_SEC as f64)
+        (self.as_secs() as f64) + (self.subsec_nanos() as f64) / (NANOS_PER_SEC as f64)
     }
 
     /// Returns the number of seconds contained by this `ArchivedDuration` as
@@ -114,8 +110,7 @@ impl ArchivedDuration {
     /// duration.
     #[inline]
     pub fn as_secs_f32(&self) -> f32 {
-        (self.as_secs() as f32)
-            + (self.subsec_nanos() as f32) / (NANOS_PER_SEC as f32)
+        (self.as_secs() as f32) + (self.subsec_nanos() as f32) / (NANOS_PER_SEC as f32)
     }
 
     /// Constructs an archived duration at the given position.

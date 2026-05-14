@@ -180,13 +180,41 @@ impl<'a> UiShadcnConversationMessage<'a> {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct UiShadcnChatClientAction<'a> {
     pub label: &'a str,
+    pub icon: Option<UiIcon>,
     pub id: u32,
     pub variant: UiShadcnButtonVariant,
 }
 
 impl<'a> UiShadcnChatClientAction<'a> {
     pub const fn new(label: &'a str, id: u32, variant: UiShadcnButtonVariant) -> Self {
-        Self { label, id, variant }
+        Self {
+            label,
+            icon: None,
+            id,
+            variant,
+        }
+    }
+
+    pub const fn icon(icon: UiIcon, id: u32, variant: UiShadcnButtonVariant) -> Self {
+        Self {
+            label: "",
+            icon: Some(icon),
+            id,
+            variant,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct UiShadcnChatClientIconAction {
+    pub icon: UiIcon,
+    pub id: u32,
+    pub active: bool,
+}
+
+impl UiShadcnChatClientIconAction {
+    pub const fn new(icon: UiIcon, id: u32, active: bool) -> Self {
+        Self { icon, id, active }
     }
 }
 
@@ -236,6 +264,7 @@ pub struct UiShadcnChatClientSpec<'a> {
     pub header_title: &'a str,
     pub header_status: &'a str,
     pub header_badges: &'a [&'a str],
+    pub header_action: Option<UiShadcnChatClientIconAction>,
     pub header_tone: UiShadcnStatusTone,
     pub activity_phase: u8,
     pub messages: &'a [UiShadcnConversationMessage<'a>],
@@ -244,6 +273,7 @@ pub struct UiShadcnChatClientSpec<'a> {
     pub input_label: &'a str,
     pub input_value: &'a str,
     pub input_id: u32,
+    pub composer_action: Option<UiShadcnChatClientIconAction>,
     pub send_label: &'a str,
     pub send_id: u32,
     pub busy: bool,
@@ -457,35 +487,52 @@ pub fn shadcn_prompt_composer(
     label: &str,
     value: &str,
     input_id: u32,
+    action: Option<UiShadcnChatClientIconAction>,
     send_label: &str,
     send_id: u32,
     busy: bool,
     hints: &[&str],
 ) -> UiNode {
-    let mut hint_row = row("gap-4 items-center h-6");
+    let mut hint_row = row("gap-4 items-center h-5");
     for hint in hints {
         hint_row = hint_row.child(shadcn_label(hint).class("h-5 text-muted-foreground"));
     }
 
-    column("h-full gap-2")
+    let send = if send_label.is_empty() {
+        icon_button(UiIcon::Send, send_id)
+            .class("size-9")
+            .disabled(busy)
+    } else {
+        shadcn_button(
+            send_label,
+            send_id,
+            UiShadcnButtonVariant::Default,
+            UiShadcnButtonSize::Sm,
+        )
+        .disabled(busy)
+    };
+
+    let mut input_row = row("h-full gap-2 items-end");
+    if let Some(action) = action {
+        input_row = input_row.child(
+            icon_button(action.icon, action.id)
+                .class("size-9")
+                .active(action.active),
+        );
+    }
+    input_row = input_row
         .child(
             shadcn_textarea(label, value)
                 .hit_id(input_id)
-                .class("h-full"),
+                .class("h-full flex-1"),
         )
-        .child(
-            row("h-8 items-center justify-between gap-3")
-                .child(hint_row)
-                .child(
-                    shadcn_button(
-                        send_label,
-                        send_id,
-                        UiShadcnButtonVariant::Default,
-                        UiShadcnButtonSize::Sm,
-                    )
-                    .disabled(busy),
-                ),
-        )
+        .child(send);
+
+    let mut node = column("h-full gap-2").child(input_row);
+    if !hints.is_empty() {
+        node = node.child(hint_row);
+    }
+    node
 }
 
 pub fn shadcn_chat_client_shell(
@@ -495,9 +542,9 @@ pub fn shadcn_chat_client_shell(
     composer: UiNode,
 ) -> UiNode {
     let main = column("h-full flex-1 bg-bg")
-        .child(column("h-14 bg-panel border").child(header))
+        .child(column("h-11 bg-panel border").child(header))
         .child(column("flex-1 h-full").child(conversation))
-        .child(column("h-39 bg-panel border p-4").child(composer));
+        .child(column("h-28 bg-bg border p-4").child(composer));
 
     let mut shell = row("h-full bg-bg");
     if let Some(sidebar) = sidebar {
@@ -511,7 +558,7 @@ pub fn shadcn_chat_client(spec: UiShadcnChatClientSpec<'_>) -> UiNode {
         let actions = spec
             .sidebar_actions
             .iter()
-            .map(|action| (action.label, action.id, action.variant))
+            .map(|action| (action.label, action.icon, action.id, action.variant))
             .collect::<Vec<_>>();
         let session_rows = spec
             .session_rows
@@ -535,6 +582,7 @@ pub fn shadcn_chat_client(spec: UiShadcnChatClientSpec<'_>) -> UiNode {
             spec.header_title,
             spec.header_status,
             spec.header_badges,
+            spec.header_action,
             spec.header_tone,
             spec.activity_phase,
         ),
@@ -543,6 +591,7 @@ pub fn shadcn_chat_client(spec: UiShadcnChatClientSpec<'_>) -> UiNode {
             spec.input_label,
             spec.input_value,
             spec.input_id,
+            spec.composer_action,
             spec.send_label,
             spec.send_id,
             spec.busy,
@@ -555,6 +604,7 @@ pub fn shadcn_status_header(
     title: &str,
     status: &str,
     badges: &[&str],
+    action: Option<UiShadcnChatClientIconAction>,
     tone: UiShadcnStatusTone,
     activity_phase: u8,
 ) -> UiNode {
@@ -582,15 +632,23 @@ pub fn shadcn_status_header(
         status_row = status_row.child(shine);
     }
 
-    row("h-full items-center justify-between gap-4")
+    let mut header = row("h-full items-center justify-between gap-3")
         .child(status_row)
-        .child(badge_row)
+        .child(badge_row);
+    if let Some(action) = action {
+        header = header.child(
+            icon_button(action.icon, action.id)
+                .class("h-8 w-8")
+                .active(action.active),
+        );
+    }
+    header
 }
 
 pub fn shadcn_session_sidebar(
     title: &str,
-    detail: &str,
-    actions: &[(&str, u32, UiShadcnButtonVariant)],
+    _detail: &str,
+    actions: &[(&str, Option<UiIcon>, u32, UiShadcnButtonVariant)],
     session_rows: &[(&str, &str, bool)],
     activity_title: &str,
     activity_detail: &str,
@@ -598,8 +656,13 @@ pub fn shadcn_session_sidebar(
     footer_lines: &[&str],
 ) -> UiNode {
     let mut action_row = row("gap-2 items-center h-9");
-    for (label, id, variant) in actions {
-        action_row = action_row.child(shadcn_button(label, *id, *variant, UiShadcnButtonSize::Sm));
+    for (label, icon, id, variant) in actions {
+        let action = if let Some(icon) = icon {
+            icon_button(*icon, *id).class("h-9 w-9")
+        } else {
+            shadcn_button(label, *id, *variant, UiShadcnButtonSize::Sm)
+        };
+        action_row = action_row.child(action);
     }
 
     let mut session_group =
@@ -616,7 +679,7 @@ pub fn shadcn_session_sidebar(
                     palette::MUTED
                 },
             )
-            .class("h-8"),
+            .class("h-14"),
         );
     }
 
@@ -626,10 +689,9 @@ pub fn shadcn_session_sidebar(
     }
 
     column("h-full gap-4 p-4")
-        .child(header(title).detail(detail))
+        .child(shadcn_label(title).class("h-5 text-text"))
         .child(action_row)
         .child(session_group)
-        .child(shadcn_label("Activity").class("h-5 text-muted-foreground"))
         .child(shadcn_alert(activity_title, activity_detail, activity_icon).class("h-14"))
         .child(spacer("flex-1"))
         .child(footer)
@@ -1099,6 +1161,7 @@ mod tests {
                 "Codex",
                 "Ready",
                 &["gpt-5.5", "ready"],
+                None,
                 UiShadcnStatusTone::Success,
                 0
             )
@@ -1110,8 +1173,13 @@ mod tests {
                 "edgerun codex",
                 "workspace",
                 &[
-                    ("New", 1, UiShadcnButtonVariant::Default),
-                    ("Clear", 2, UiShadcnButtonVariant::Secondary)
+                    (
+                        "",
+                        Some(UiIcon::MessagePlus),
+                        1,
+                        UiShadcnButtonVariant::Default
+                    ),
+                    ("", Some(UiIcon::Trash), 2, UiShadcnButtonVariant::Secondary)
                 ],
                 &[("1 turn", "", true), ("0 tools", "", false)],
                 "Ready",
@@ -1123,15 +1191,22 @@ mod tests {
             UiNodeKind::Column
         ));
         assert!(matches!(
-            shadcn_prompt_composer("Prompt", "Hi", 11, "Send", 12, false, &["Enter sends"]).kind,
+            shadcn_prompt_composer("", "Hi", 11, None, "Send", 12, false, &["Enter sends"]).kind,
             UiNodeKind::Column
         ));
         assert!(matches!(
             shadcn_chat_client_shell(
                 None,
-                shadcn_status_header("Codex", "Ready", &["ready"], UiShadcnStatusTone::Success, 0),
+                shadcn_status_header(
+                    "Codex",
+                    "Ready",
+                    &["ready"],
+                    None,
+                    UiShadcnStatusTone::Success,
+                    0
+                ),
                 shadcn_conversation(&[], 1.0, 7),
-                shadcn_prompt_composer("Prompt", "Hi", 11, "Send", 12, false, &[])
+                shadcn_prompt_composer("", "Hi", 11, None, "Send", 12, false, &[])
             )
             .kind,
             UiNodeKind::Row
@@ -1141,8 +1216,8 @@ mod tests {
                 show_sidebar: true,
                 sidebar_title: "edgerun codex",
                 sidebar_detail: "workspace",
-                sidebar_actions: &[UiShadcnChatClientAction::new(
-                    "New",
+                sidebar_actions: &[UiShadcnChatClientAction::icon(
+                    UiIcon::MessagePlus,
                     1,
                     UiShadcnButtonVariant::Default
                 )],
@@ -1152,6 +1227,7 @@ mod tests {
                 header_title: "Codex",
                 header_status: "Ready",
                 header_badges: &["ready"],
+                header_action: None,
                 header_tone: UiShadcnStatusTone::Success,
                 activity_phase: 0,
                 messages: &[UiShadcnConversationMessage::new(
@@ -1161,9 +1237,10 @@ mod tests {
                 )],
                 scroll_offset: 1.0,
                 scroll_id: 77,
-                input_label: "Prompt",
+                input_label: "",
                 input_value: "Hi",
                 input_id: 11,
+                composer_action: None,
                 send_label: "Send",
                 send_id: 12,
                 busy: false,
@@ -1265,16 +1342,18 @@ mod tests {
             show_sidebar: true,
             sidebar_title: "edgerun codex",
             sidebar_detail: "workspace",
-            sidebar_actions: &[
-                UiShadcnChatClientAction::new("New", 1, UiShadcnButtonVariant::Default),
-                UiShadcnChatClientAction::new("Clear", 2, UiShadcnButtonVariant::Secondary),
-            ],
+            sidebar_actions: &[UiShadcnChatClientAction::icon(
+                UiIcon::MessagePlus,
+                1,
+                UiShadcnButtonVariant::Default,
+            )],
             session_rows: &[UiShadcnSessionRow::new("1 turn", "", true)],
             activity: UiShadcnActivity::new("Ready", "idle", UiIcon::Check),
             footer_lines: &["model gpt-5.5"],
             header_title: "Codex",
             header_status: "Ready",
             header_badges: &["ready"],
+            header_action: Some(UiShadcnChatClientIconAction::new(UiIcon::Trash, 2, true)),
             header_tone: UiShadcnStatusTone::Success,
             activity_phase: 0,
             messages: &[UiShadcnConversationMessage::new(
@@ -1284,9 +1363,10 @@ mod tests {
             )],
             scroll_offset: 1.0,
             scroll_id: 77,
-            input_label: "Prompt",
+            input_label: "",
             input_value: "Hi",
             input_id: 11,
+            composer_action: None,
             send_label: "Send",
             send_id: 12,
             busy: false,
@@ -1312,7 +1392,9 @@ mod tests {
             scene
                 .hits()
                 .iter()
-                .any(|hit| hit.kind == HitKind::TextArea && hit.id == 11)
+                .any(|hit| hit.kind == HitKind::TextArea && hit.id == 11),
+            "scene hits: {:?}",
+            scene.hits()
         );
         assert!(
             scene

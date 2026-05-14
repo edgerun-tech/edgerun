@@ -12,8 +12,7 @@ use munge::munge;
 use rancor::Fallible;
 
 use crate::{
-    primitive::FixedUsize, ser::Writer, ArchiveUnsized, Place, Portable,
-    RelPtr, SerializeUnsized,
+    primitive::FixedUsize, ser::Writer, ArchiveUnsized, Place, Portable, RelPtr, SerializeUnsized,
 };
 
 /// An archived [`CString`](crate::alloc::ffi::CString).
@@ -58,17 +57,9 @@ impl ArchivedCString {
 
     /// Resolves an archived C string from the given C string and parameters.
     #[inline]
-    pub fn resolve_from_c_str(
-        c_str: &CStr,
-        resolver: CStringResolver,
-        out: Place<Self>,
-    ) {
+    pub fn resolve_from_c_str(c_str: &CStr, resolver: CStringResolver, out: Place<Self>) {
         munge!(let ArchivedCString { ptr } = out);
-        RelPtr::emplace_unsized(
-            resolver.pos as usize,
-            c_str.archived_metadata(),
-            ptr,
-        );
+        RelPtr::emplace_unsized(resolver.pos as usize, c_str.archived_metadata(), ptr);
     }
 
     /// Serializes a C string.
@@ -189,9 +180,7 @@ mod verify {
     {
         fn verify(&self, context: &mut C) -> Result<(), C::Error> {
             let ptr = self.ptr.as_ptr_wrapping();
-            context.in_subtree(ptr, |context| unsafe {
-                CStr::check_bytes(ptr, context)
-            })
+            context.in_subtree(ptr, |context| unsafe { CStr::check_bytes(ptr, context) })
         }
     }
 }

@@ -24,10 +24,8 @@ where
 }
 
 /// Accesses the archived version and calls the given function with it.
-pub fn to_archived_from_bytes<T>(
-    bytes: &mut [u8],
-    f: impl FnOnce(Seal<'_, T::Archived>),
-) where
+pub fn to_archived_from_bytes<T>(bytes: &mut [u8], f: impl FnOnce(Seal<'_, T::Archived>))
+where
     T: Archive,
     T::Archived: for<'a> CheckBytes<TestValidator<'a, Panic>>,
 {
@@ -40,9 +38,8 @@ pub fn to_archived_from_bytes<T>(
 pub fn roundtrip_with<T>(value: &T, cmp: impl Fn(&T, &T::Archived))
 where
     T: Debug + PartialEq + for<'a> Serialize<TestSerializer<'a>>,
-    T::Archived: Debug
-        + Deserialize<T, TestDeserializer>
-        + for<'a> CheckBytes<TestValidator<'a, Panic>>,
+    T::Archived:
+        Debug + Deserialize<T, TestDeserializer> + for<'a> CheckBytes<TestValidator<'a, Panic>>,
 {
     to_archived(value, |archived_value| {
         cmp(value, &*archived_value);

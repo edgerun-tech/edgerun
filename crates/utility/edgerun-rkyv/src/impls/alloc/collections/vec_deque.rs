@@ -29,20 +29,14 @@ where
     T: Serialize<S>,
     S: Fallible + Allocator + Writer + ?Sized,
 {
-    fn serialize(
-        &self,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
+    fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
         let (a, b) = self.as_slices();
         if b.is_empty() {
             ArchivedVec::<T::Archived>::serialize_from_slice(a, serializer)
         } else if a.is_empty() {
             ArchivedVec::<T::Archived>::serialize_from_slice(b, serializer)
         } else {
-            ArchivedVec::<T::Archived>::serialize_from_iter::<T, _, _>(
-                self.iter(),
-                serializer,
-            )
+            ArchivedVec::<T::Archived>::serialize_from_iter::<T, _, _>(self.iter(), serializer)
         }
     }
 }
@@ -54,10 +48,7 @@ where
     D: Fallible + ?Sized,
     D::Error: Source,
 {
-    fn deserialize(
-        &self,
-        deserializer: &mut D,
-    ) -> Result<VecDeque<T>, D::Error> {
+    fn deserialize(&self, deserializer: &mut D) -> Result<VecDeque<T>, D::Error> {
         let metadata = self.as_slice().deserialize_metadata();
         let layout = <[T] as LayoutRaw>::layout_raw(metadata).into_error()?;
         let data_address = if layout.size() > 0 {
@@ -93,8 +84,8 @@ impl<T: PartialOrd> PartialOrd<VecDeque<T>> for ArchivedVec<T> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        access_unchecked, alloc::collections::VecDeque, api::test::deserialize,
-        rancor::Error, to_bytes, vec::ArchivedVec, Archived,
+        access_unchecked, alloc::collections::VecDeque, api::test::deserialize, rancor::Error,
+        to_bytes, vec::ArchivedVec, Archived,
     };
 
     #[test]
@@ -113,9 +104,7 @@ mod tests {
                 // Now serialize and deserialize and verify that the
                 // deserialized version contains `0..n`.
                 let bytes = to_bytes::<Error>(&deque).unwrap();
-                let archived = unsafe {
-                    access_unchecked::<ArchivedVec<Archived<i32>>>(&bytes)
-                };
+                let archived = unsafe { access_unchecked::<ArchivedVec<Archived<i32>>>(&bytes) };
                 assert!(archived.iter().copied().eq(0..n));
 
                 let deserialized = deserialize::<VecDeque<i32>>(archived);

@@ -1,7 +1,4 @@
-use crate::{
-    primitive::ArchivedIsize, rel_ptr, traits::ArchivePointee, Archive,
-    ArchiveUnsized,
-};
+use crate::{primitive::ArchivedIsize, rel_ptr, traits::ArchivePointee, Archive, ArchiveUnsized};
 
 /// The default raw relative pointer.
 ///

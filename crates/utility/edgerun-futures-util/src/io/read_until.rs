@@ -1,7 +1,7 @@
+use crate::io::AsyncBufRead;
 use futures_core::future::Future;
 use futures_core::ready;
 use futures_core::task::{Context, Poll};
-use crate::io::AsyncBufRead;
 use std::io;
 use std::pin::Pin;
 use std::vec::Vec;
@@ -20,7 +20,12 @@ impl<R: ?Sized + Unpin> Unpin for ReadUntil<'_, R> {}
 
 impl<'a, R: AsyncBufRead + ?Sized + Unpin> ReadUntil<'a, R> {
     pub(super) fn new(reader: &'a mut R, byte: u8, buf: &'a mut Vec<u8>) -> Self {
-        Self { reader, byte, buf, read: 0 }
+        Self {
+            reader,
+            byte,
+            buf,
+            read: 0,
+        }
     }
 }
 
@@ -54,7 +59,12 @@ impl<R: AsyncBufRead + ?Sized + Unpin> Future for ReadUntil<'_, R> {
     type Output = io::Result<usize>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let Self { reader, byte, buf, read } = &mut *self;
+        let Self {
+            reader,
+            byte,
+            buf,
+            read,
+        } = &mut *self;
         read_until_internal(Pin::new(reader), cx, *byte, buf, read)
     }
 }

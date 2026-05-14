@@ -121,10 +121,7 @@ impl<const ALIGNMENT: usize> AlignedVec<ALIGNMENT> {
             );
 
             let ptr = unsafe {
-                let layout = Layout::from_size_align_unchecked(
-                    capacity,
-                    Self::ALIGNMENT,
-                );
+                let layout = Layout::from_size_align_unchecked(capacity, Self::ALIGNMENT);
                 let ptr = alloc(layout);
                 if ptr.is_null() {
                     handle_alloc_error(layout);
@@ -192,21 +189,15 @@ impl<const ALIGNMENT: usize> AlignedVec<ALIGNMENT> {
                 // - `self.layout()` always matches the layout used to allocate
                 //   the current block of memory.
                 // - We checked that `new_cap` is greater than zero.
-                let new_ptr = unsafe {
-                    realloc(self.ptr.as_ptr(), self.layout(), new_cap)
-                };
+                let new_ptr = unsafe { realloc(self.ptr.as_ptr(), self.layout(), new_cap) };
                 if new_ptr.is_null() {
                     // SAFETY:
                     // - `ALIGNMENT` is always guaranteed to be a nonzero power
                     //   of two.
                     // - We checked that `new_cap` doesn't overflow `isize` when
                     //   rounded up to the nearest power of two.
-                    let layout = unsafe {
-                        Layout::from_size_align_unchecked(
-                            new_cap,
-                            Self::ALIGNMENT,
-                        )
-                    };
+                    let layout =
+                        unsafe { Layout::from_size_align_unchecked(new_cap, Self::ALIGNMENT) };
                     handle_alloc_error(layout);
                 }
                 new_ptr
@@ -216,9 +207,7 @@ impl<const ALIGNMENT: usize> AlignedVec<ALIGNMENT> {
                 //   two.
                 // - We checked that `new_cap` doesn't overflow `isize` when
                 //   rounded up to the nearest power of two.
-                let layout = unsafe {
-                    Layout::from_size_align_unchecked(new_cap, Self::ALIGNMENT)
-                };
+                let layout = unsafe { Layout::from_size_align_unchecked(new_cap, Self::ALIGNMENT) };
                 // SAFETY: We checked that `new_cap` has non-zero size.
                 let new_ptr = unsafe { alloc(layout) };
                 if new_ptr.is_null() {
@@ -508,11 +497,7 @@ impl<const ALIGNMENT: usize> AlignedVec<ALIGNMENT> {
             let additional = new_len - self.len;
             self.reserve(additional);
             unsafe {
-                core::ptr::write_bytes(
-                    self.ptr.as_ptr().add(self.len),
-                    value,
-                    additional,
-                );
+                core::ptr::write_bytes(self.ptr.as_ptr().add(self.len), value, additional);
             }
         }
         unsafe {
@@ -850,10 +835,7 @@ const _: () = {
         /// assert_eq!(bytes[100], 100);
         /// assert_eq!(bytes[2945], 129);
         /// ```
-        pub fn extend_from_reader<R: io::Read + ?Sized>(
-            &mut self,
-            r: &mut R,
-        ) -> io::Result<usize> {
+        pub fn extend_from_reader<R: io::Read + ?Sized>(&mut self, r: &mut R) -> io::Result<usize> {
             let start_len = self.len();
             let start_cap = self.capacity();
 
@@ -882,12 +864,8 @@ const _: () = {
 
                 // The entire read buffer is now initialized, so we can create a
                 // mutable slice of it.
-                let read_buf = unsafe {
-                    core::slice::from_raw_parts_mut(
-                        read_buf_start,
-                        read_buf_len,
-                    )
-                };
+                let read_buf =
+                    unsafe { core::slice::from_raw_parts_mut(read_buf_start, read_buf_len) };
 
                 match r.read(read_buf) {
                     Ok(read) => {
@@ -901,14 +879,11 @@ const _: () = {
                             return Ok(self.len() - start_len);
                         }
                     }
-                    Err(e) if e.kind() == io::ErrorKind::Interrupted => {
-                        continue
-                    }
+                    Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
                     Err(e) => return Err(e),
                 }
 
-                if self.len() == self.capacity() && self.capacity() == start_cap
-                {
+                if self.len() == self.capacity() && self.capacity() == start_cap {
                     // The buffer might be an exact fit. Let's read into a probe
                     // buffer and see if it returns `Ok(0)`.
                     // If so, we've avoided an unnecessary
@@ -924,11 +899,7 @@ const _: () = {
                                 self.extend_from_slice(&probe[..n]);
                                 break;
                             }
-                            Err(ref e)
-                                if e.kind() == io::ErrorKind::Interrupted =>
-                            {
-                                continue
-                            }
+                            Err(ref e) if e.kind() == io::ErrorKind::Interrupted => continue,
                             Err(e) => return Err(e),
                         }
                     }
@@ -943,10 +914,7 @@ const _: () = {
             Ok(buf.len())
         }
 
-        fn write_vectored(
-            &mut self,
-            bufs: &[io::IoSlice<'_>],
-        ) -> io::Result<usize> {
+        fn write_vectored(&mut self, bufs: &[io::IoSlice<'_>]) -> io::Result<usize> {
             let len = bufs.iter().map(|b| b.len()).sum();
             self.reserve(len);
             for buf in bufs {
@@ -1001,11 +969,7 @@ impl<const A: usize> Clone for AlignedVec<A> {
         unsafe {
             let mut result = Self::with_capacity(self.len);
             result.len = self.len;
-            core::ptr::copy_nonoverlapping(
-                self.as_ptr(),
-                result.as_mut_ptr(),
-                self.len,
-            );
+            core::ptr::copy_nonoverlapping(self.as_ptr(), result.as_mut_ptr(), self.len);
             result
         }
     }
@@ -1063,11 +1027,7 @@ impl<const A: usize> ArchiveWith<AlignedVec<A>> for AsVec {
     type Archived = ArchivedVec<u8>;
     type Resolver = VecResolver;
 
-    fn resolve_with(
-        field: &AlignedVec<A>,
-        resolver: Self::Resolver,
-        out: Place<Self::Archived>,
-    ) {
+    fn resolve_with(field: &AlignedVec<A>, resolver: Self::Resolver, out: Place<Self::Archived>) {
         ArchivedVec::resolve_from_len(field.len(), resolver, out)
     }
 }
@@ -1084,15 +1044,11 @@ where
     }
 }
 
-impl<D, const A: usize> DeserializeWith<ArchivedVec<u8>, AlignedVec<A>, D>
-    for AsVec
+impl<D, const A: usize> DeserializeWith<ArchivedVec<u8>, AlignedVec<A>, D> for AsVec
 where
     D: Fallible + ?Sized,
 {
-    fn deserialize_with(
-        field: &ArchivedVec<u8>,
-        _: &mut D,
-    ) -> Result<AlignedVec<A>, D::Error> {
+    fn deserialize_with(field: &ArchivedVec<u8>, _: &mut D) -> Result<AlignedVec<A>, D::Error> {
         let mut result = AlignedVec::with_capacity(field.len());
         result.extend_from_slice(field.as_slice());
         Ok(result)

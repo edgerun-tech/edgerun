@@ -195,7 +195,8 @@ fn enum_impl_body(item: &Item) -> String {
     let variants = parse_enum_variants(body);
     let rename_all = attr_value(&item.attrs, "ts", "rename_all")
         .or_else(|| attr_value(&item.attrs, "serde", "rename_all"));
-    let tag = attr_value(&item.attrs, "ts", "tag").or_else(|| attr_value(&item.attrs, "serde", "tag"));
+    let tag =
+        attr_value(&item.attrs, "ts", "tag").or_else(|| attr_value(&item.attrs, "serde", "tag"));
     let untagged = has_attr_flag(&item.attrs, "ts", "untagged")
         || has_attr_flag(&item.attrs, "serde", "untagged");
 
