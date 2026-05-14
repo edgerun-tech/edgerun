@@ -114,10 +114,7 @@ pub(super) async fn user_input_or_turn_inner(
     let (items, updates, responsesapi_client_metadata) = match op {
         Op::UserTurn {
             cwd,
-            approval_policy,
             approvals_reviewer,
-            sandbox_policy,
-            permission_profile,
             model,
             effort,
             summary,
@@ -142,10 +139,7 @@ pub(super) async fn user_input_or_turn_inner(
                 items,
                 SessionSettingsUpdate {
                     cwd: Some(cwd),
-                    approval_policy: Some(approval_policy),
                     approvals_reviewer,
-                    sandbox_policy: Some(sandbox_policy),
-                    permission_profile,
                     windows_sandbox_level: None,
                     collaboration_mode,
                     reasoning_summary: summary,
@@ -161,10 +155,7 @@ pub(super) async fn user_input_or_turn_inner(
         }
         Op::UserInputWithTurnContext {
             cwd,
-            approval_policy,
             approvals_reviewer,
-            sandbox_policy,
-            permission_profile,
             windows_sandbox_level,
             model,
             effort,
@@ -192,10 +183,7 @@ pub(super) async fn user_input_or_turn_inner(
                 items,
                 SessionSettingsUpdate {
                     cwd,
-                    approval_policy,
                     approvals_reviewer,
-                    sandbox_policy,
-                    permission_profile,
                     windows_sandbox_level,
                     collaboration_mode,
                     reasoning_summary: summary,

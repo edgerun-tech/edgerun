@@ -46,7 +46,6 @@ fn read_only_user_turn(test: &TestCodex, items: Vec<UserInput>, model: String) -
         items,
         final_output_json_schema: None,
         cwd: test.cwd_path().to_path_buf(),
-        approval_policy: AskForApproval::Never,
         approvals_reviewer: None,
         sandbox_policy,
         permission_profile,
