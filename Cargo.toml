@@ -81,6 +81,8 @@ members = [
   "crates/utility/edgerun-locale",
   "crates/utility/edgerun-log",
   "crates/utility/edgerun-log-macros",
+  "crates/utility/edgerun-munge",
+  "crates/utility/edgerun-munge-macro",
   "crates/utility/edgerun-opentelemetry",
   "crates/utility/edgerun-opentelemetry-sdk",
   "crates/utility/edgerun-pretty-assertions",
@@ -209,6 +211,8 @@ libc = "0.2"
 [patch.crates-io]
 bytecheck = { path = "crates/utility/edgerun-bytecheck" }
 bytecheck_derive = { path = "crates/utility/edgerun-bytecheck-derive" }
+munge = { path = "crates/utility/edgerun-munge" }
+munge_macro = { path = "crates/utility/edgerun-munge-macro" }
 ptr_meta = { path = "crates/utility/edgerun-ptr-meta" }
 ptr_meta_derive = { path = "crates/utility/edgerun-ptr-meta-derive" }
 rancor = { path = "crates/utility/edgerun-rancor" }
