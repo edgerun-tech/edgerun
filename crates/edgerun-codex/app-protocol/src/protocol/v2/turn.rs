@@ -1,7 +1,4 @@
 use super::ApprovalsReviewer;
-use super::AskForApproval;
-use super::PermissionProfileSelectionParams;
-use super::SandboxPolicy;
 use super::Turn;
 use codex_protocol::compat::absolute_path::AbsolutePathBuf;
 use codex_protocol::config_types::CollaborationMode;
@@ -107,20 +104,10 @@ pub struct TurnStartParams {
     /// Override the working directory for this turn and subsequent turns.
     #[ts(optional = nullable)]
     pub cwd: Option<PathBuf>,
-    /// Override the approval policy for this turn and subsequent turns.
-    #[ts(optional = nullable)]
-    pub approval_policy: Option<AskForApproval>,
     /// Override where approval requests are routed for review on this turn and
     /// subsequent turns.
     #[ts(optional = nullable)]
     pub approvals_reviewer: Option<ApprovalsReviewer>,
-    /// Override the sandbox policy for this turn and subsequent turns.
-    #[ts(optional = nullable)]
-    pub sandbox_policy: Option<SandboxPolicy>,
-    /// Select a named permissions profile for this turn and subsequent turns.
-    /// Cannot be combined with `sandboxPolicy`.
-    #[ts(optional = nullable)]
-    pub permissions: Option<PermissionProfileSelectionParams>,
     /// Override the model for this turn and subsequent turns.
     #[ts(optional = nullable)]
     pub model: Option<String>,
@@ -178,20 +165,8 @@ impl ToJson for TurnStartParams {
                 .map(|path| JsonValue::String(path.as_path().to_string_lossy().into_owned())),
         );
         object.push_opt_field(
-            "approvalPolicy",
-            self.approval_policy.map(|value| value.to_json()),
-        );
-        object.push_opt_field(
             "approvalsReviewer",
             self.approvals_reviewer.map(|value| value.to_json()),
-        );
-        object.push_opt_field(
-            "sandboxPolicy",
-            self.sandbox_policy.as_ref().map(ToJson::to_json),
-        );
-        object.push_opt_field(
-            "permissions",
-            self.permissions.as_ref().map(ToJson::to_json),
         );
         object.push_opt_field("model", self.model.clone());
         if let Some(service_tier) = &self.service_tier {
@@ -231,10 +206,7 @@ impl FromJson for TurnStartParams {
             responsesapi_client_metadata: object.take_optional("responsesapiClientMetadata")?,
             environments: object.take_optional("environments")?,
             cwd: take_optional_path_buf(&mut object, "cwd")?,
-            approval_policy: object.take_optional("approvalPolicy")?,
             approvals_reviewer: object.take_optional("approvalsReviewer")?,
-            sandbox_policy: object.take_optional("sandboxPolicy")?,
-            permissions: object.take_optional("permissions")?,
             model: object.take_optional("model")?,
             service_tier,
             effort: object.take_optional("effort")?,

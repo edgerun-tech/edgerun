@@ -1414,86 +1414,6 @@ fn config_requirements_granular_allowed_approval_policy_is_marked_experimental()
 }
 
 #[test]
-fn client_request_thread_start_granular_approval_policy_is_marked_experimental() {
-    let reason = crate::experimental_api::ExperimentalApi::experimental_reason(
-        &crate::ClientRequest::ThreadStart {
-            request_id: crate::RequestId::Integer(1),
-            params: ThreadStartParams {
-                approval_policy: Some(AskForApproval::Granular {
-                    rules: false,
-                    skill_approval: false,
-                    mcp_elicitations: false,
-                }),
-                ..Default::default()
-            },
-        },
-    );
-
-    assert_eq!(reason, Some("askForApproval.granular"));
-}
-
-#[test]
-fn client_request_thread_resume_granular_approval_policy_is_marked_experimental() {
-    let reason = crate::experimental_api::ExperimentalApi::experimental_reason(
-        &crate::ClientRequest::ThreadResume {
-            request_id: crate::RequestId::Integer(2),
-            params: ThreadResumeParams {
-                thread_id: "thr_123".to_string(),
-                approval_policy: Some(AskForApproval::Granular {
-                    rules: true,
-                    skill_approval: false,
-                    mcp_elicitations: true,
-                }),
-                ..Default::default()
-            },
-        },
-    );
-
-    assert_eq!(reason, Some("askForApproval.granular"));
-}
-
-#[test]
-fn client_request_thread_fork_granular_approval_policy_is_marked_experimental() {
-    let reason = crate::experimental_api::ExperimentalApi::experimental_reason(
-        &crate::ClientRequest::ThreadFork {
-            request_id: crate::RequestId::Integer(3),
-            params: ThreadForkParams {
-                thread_id: "thr_456".to_string(),
-                approval_policy: Some(AskForApproval::Granular {
-                    rules: false,
-                    skill_approval: false,
-                    mcp_elicitations: true,
-                }),
-                ..Default::default()
-            },
-        },
-    );
-
-    assert_eq!(reason, Some("askForApproval.granular"));
-}
-
-#[test]
-fn client_request_turn_start_granular_approval_policy_is_marked_experimental() {
-    let reason = crate::experimental_api::ExperimentalApi::experimental_reason(
-        &crate::ClientRequest::TurnStart {
-            request_id: crate::RequestId::Integer(4),
-            params: TurnStartParams {
-                thread_id: "thr_123".to_string(),
-                input: Vec::new(),
-                approval_policy: Some(AskForApproval::Granular {
-                    rules: true,
-                    skill_approval: false,
-                    mcp_elicitations: true,
-                }),
-                ..Default::default()
-            },
-        },
-    );
-
-    assert_eq!(reason, Some("askForApproval.granular"));
-}
-
-#[test]
 fn mcp_server_elicitation_response_round_trips_rmcp_result() {
     let rmcp_result = rmcp::model::CreateElicitationResult {
         action: rmcp::model::ElicitationAction::Accept,
@@ -3092,10 +3012,7 @@ fn turn_start_params_preserve_explicit_null_service_tier() {
         responsesapi_client_metadata: None,
         environments: None,
         cwd: None,
-        approval_policy: None,
         approvals_reviewer: None,
-        sandbox_policy: None,
-        permissions: None,
         model: None,
         service_tier: None,
         effort: None,

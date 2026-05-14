@@ -1,8 +1,6 @@
 use super::ApprovalsReviewer;
 use super::AskForApproval;
 use super::PermissionProfile;
-use super::PermissionProfileSelectionParams;
-use super::SandboxMode;
 use super::SandboxPolicy;
 use super::Thread;
 use super::ThreadItem;
@@ -164,18 +162,10 @@ pub struct ThreadStartParams {
     pub service_tier: Option<Option<String>>,
     #[ts(optional = nullable)]
     pub cwd: Option<String>,
-    #[ts(optional = nullable)]
-    pub approval_policy: Option<AskForApproval>,
     /// Override where approval requests are routed for review on this thread
     /// and subsequent turns.
     #[ts(optional = nullable)]
     pub approvals_reviewer: Option<ApprovalsReviewer>,
-    #[ts(optional = nullable)]
-    pub sandbox: Option<SandboxMode>,
-    /// Named profile selection for this thread. Cannot be combined with
-    /// `sandbox`.
-    #[ts(optional = nullable)]
-    pub permissions: Option<PermissionProfileSelectionParams>,
     #[ts(optional = nullable)]
     pub config: Option<HashMap<String, JsonValue>>,
     #[ts(optional = nullable)]
@@ -233,17 +223,8 @@ impl ToJson for ThreadStartParams {
         }
         object.push_opt_field("cwd", self.cwd.clone());
         object.push_opt_field(
-            "approvalPolicy",
-            self.approval_policy.map(|value| value.to_json()),
-        );
-        object.push_opt_field(
             "approvalsReviewer",
             self.approvals_reviewer.map(|value| value.to_json()),
-        );
-        object.push_opt_field("sandbox", self.sandbox.map(|value| value.to_json()));
-        object.push_opt_field(
-            "permissions",
-            self.permissions.as_ref().map(ToJson::to_json),
         );
         object.push_opt_field("config", self.config.as_ref().map(ToJson::to_json));
         object.push_opt_field("serviceName", self.service_name.clone());
@@ -291,10 +272,7 @@ impl FromJson for ThreadStartParams {
             model_provider: object.take_optional("modelProvider")?,
             service_tier,
             cwd: object.take_optional("cwd")?,
-            approval_policy: object.take_optional("approvalPolicy")?,
             approvals_reviewer: object.take_optional("approvalsReviewer")?,
-            sandbox: object.take_optional("sandbox")?,
-            permissions: object.take_optional("permissions")?,
             config: object.take_optional("config")?,
             service_name: object.take_optional("serviceName")?,
             base_instructions: object.take_optional("baseInstructions")?,
@@ -432,18 +410,10 @@ pub struct ThreadResumeParams {
     pub service_tier: Option<Option<String>>,
     #[ts(optional = nullable)]
     pub cwd: Option<String>,
-    #[ts(optional = nullable)]
-    pub approval_policy: Option<AskForApproval>,
     /// Override where approval requests are routed for review on this thread
     /// and subsequent turns.
     #[ts(optional = nullable)]
     pub approvals_reviewer: Option<ApprovalsReviewer>,
-    #[ts(optional = nullable)]
-    pub sandbox: Option<SandboxMode>,
-    /// Named profile selection for the resumed thread. Cannot be combined
-    /// with `sandbox`.
-    #[ts(optional = nullable)]
-    pub permissions: Option<PermissionProfileSelectionParams>,
     #[ts(optional = nullable)]
     pub config: Option<HashMap<String, edgerun_json::Value>>,
     #[ts(optional = nullable)]
@@ -555,18 +525,10 @@ pub struct ThreadForkParams {
     pub service_tier: Option<Option<String>>,
     #[ts(optional = nullable)]
     pub cwd: Option<String>,
-    #[ts(optional = nullable)]
-    pub approval_policy: Option<AskForApproval>,
     /// Override where approval requests are routed for review on this thread
     /// and subsequent turns.
     #[ts(optional = nullable)]
     pub approvals_reviewer: Option<ApprovalsReviewer>,
-    #[ts(optional = nullable)]
-    pub sandbox: Option<SandboxMode>,
-    /// Named profile selection for the forked thread. Cannot be combined with
-    /// `sandbox`.
-    #[ts(optional = nullable)]
-    pub permissions: Option<PermissionProfileSelectionParams>,
     #[ts(optional = nullable)]
     pub config: Option<HashMap<String, edgerun_json::Value>>,
     #[ts(optional = nullable)]
