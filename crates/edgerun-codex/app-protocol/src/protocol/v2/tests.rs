@@ -56,8 +56,7 @@ fn approvals_reviewer_serializes_auto_review_and_accepts_legacy_guardian_subagen
         "\"user\""
     );
     assert_eq!(
-        edgerun_json::to_json_string(&ApprovalsReviewer::AutoReview)
-            .expect("serialize reviewer"),
+        edgerun_json::to_json_string(&ApprovalsReviewer::AutoReview).expect("serialize reviewer"),
         "\"guardian_subagent\""
     );
 

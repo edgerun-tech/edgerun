@@ -26,7 +26,6 @@ unstable-public-internals = []
 full = [
     "aead",
     "aes",
-    "des",
     "ed25519",
     "hmac",
     "p256",
@@ -36,7 +35,6 @@ full = [
 ]
 aead = ["aes"]
 aes = []
-des = []
 ed25519 = ["curve25519", "digest", "sha2", "signature_alloc", "signature_digest"]
 hmac = []
 p256 = ["p256_arithmetic", "p256_ecdh", "p256_ecdsa", "p256_pkcs8"]

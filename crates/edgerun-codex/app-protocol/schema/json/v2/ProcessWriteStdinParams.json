@@ -1,0 +1,15 @@
+{
+  "title": "ProcessWriteStdinParams",
+  "type": "object",
+  "properties": {
+    "deltaBase64": {
+      "type": "string"
+    },
+    "processHandle": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "processHandle"
+  ]
+}

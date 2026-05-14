@@ -388,11 +388,6 @@ impl_uint_concat_split_mixed! {
     (U1024, [1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15]),
 }
 
-#[cfg(feature = "extra-sizes")]
-mod extra_sizes;
-#[cfg(feature = "extra-sizes")]
-pub use extra_sizes::*;
-
 #[cfg(all(test, crypto_bigint_internal_tests))]
 #[allow(clippy::unwrap_used)]
 mod tests {

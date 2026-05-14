@@ -1,7 +1,4 @@
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
 use schemars::JsonSchema;
-use ts_rs::TS;
 
 use edgerun_json::FromJson;
 use edgerun_json::JsonValue;
@@ -11,9 +8,8 @@ use edgerun_json::ToJson;
 use crate::auth::KnownPlan;
 use crate::auth::PlanType as AuthPlanType;
 
-#[derive(Serialize, Deserialize, Copy, Clone, Debug, PartialEq, Eq, JsonSchema, TS, Default)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, JsonSchema, Default)]
 #[serde(rename_all = "lowercase")]
-#[ts(rename_all = "lowercase")]
 pub enum PlanType {
     #[default]
     Free,
@@ -23,11 +19,9 @@ pub enum PlanType {
     ProLite,
     Team,
     #[serde(rename = "self_serve_business_usage_based")]
-    #[ts(rename = "self_serve_business_usage_based")]
     SelfServeBusinessUsageBased,
     Business,
     #[serde(rename = "enterprise_cbp_usage_based")]
-    #[ts(rename = "enterprise_cbp_usage_based")]
     EnterpriseCbpUsageBased,
     Enterprise,
     Edu,

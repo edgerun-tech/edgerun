@@ -10,10 +10,7 @@ use codex_protocol::protocol::HookRunSummary as CoreHookRunSummary;
 use codex_protocol::protocol::HookScope as CoreHookScope;
 use codex_protocol::protocol::HookSource as CoreHookSource;
 use codex_protocol::protocol::HookTrustStatus as CoreHookTrustStatus;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
 use schemars::JsonSchema;
-use ts_rs::TS;
 
 v2_enum_from_core!(
     pub enum HookEventName from CoreHookEventName {
@@ -76,9 +73,8 @@ v2_enum_from_core!(
     }
 );
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct HookOutputEntry {
     pub kind: HookOutputEntryKind,
     pub text: String,
@@ -93,9 +89,8 @@ impl From<CoreHookOutputEntry> for HookOutputEntry {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct HookRunSummary {
     pub id: String,
     pub event_name: HookEventName,
@@ -135,18 +130,16 @@ impl From<CoreHookRunSummary> for HookRunSummary {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct HookStartedNotification {
     pub thread_id: String,
     pub turn_id: Option<String>,
     pub run: HookRunSummary,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct HookCompletedNotification {
     pub thread_id: String,
     pub turn_id: Option<String>,

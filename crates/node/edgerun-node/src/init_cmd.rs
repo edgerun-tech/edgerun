@@ -9,6 +9,7 @@ use edgerun_protocols::sign::ProtocolSigner;
 use edgerun_protocols::sign_p256::P256ProtocolSigner;
 use edgerun_storage::DurableStreamWriter;
 use edgerun_storage::fs::FsEventLog;
+#[cfg(all(feature = "all-hardware", target_os = "linux"))]
 use edgerun_yubikey::YubiKeySigningKey;
 
 use crate::protocol_signer::MeshProtocolSigner;
@@ -37,8 +38,10 @@ where
 }
 
 pub fn cmd_init(path: &PathBuf, name: Option<String>, software: bool) {
-    let has_tpm = PathBuf::from("/dev/tpmrm0").exists();
-    let has_yubikey = check_yubikey_available();
+    let has_tpm = cfg!(all(feature = "all-hardware", target_os = "linux"))
+        && PathBuf::from("/dev/tpmrm0").exists();
+    let has_yubikey =
+        cfg!(all(feature = "all-hardware", target_os = "linux")) && check_yubikey_available();
 
     if !software && !has_tpm && !has_yubikey {
         eprintln!("error: no secure hardware found.");
@@ -85,116 +88,132 @@ pub fn cmd_init(path: &PathBuf, name: Option<String>, software: bool) {
         create_stream_or_exit(path, node_id, P256ProtocolSigner::new(signing_key));
         (node_id, "software")
     } else if has_tpm {
-        eprintln!("Provisioning ECDSA P-256 signing key in TPM 2.0...");
-        eprintln!("  TPM device: /dev/tpmrm0");
+        #[cfg(all(feature = "all-hardware", target_os = "linux"))]
+        {
+            eprintln!("Provisioning ECDSA P-256 signing key in TPM 2.0...");
+            eprintln!("  TPM device: /dev/tpmrm0");
 
-        // Find an available persistent handle
-        let persistent_handle =
-            find_available_tpm_handle(0x8100_0001, 0x8100_00FF).unwrap_or_else(|e| {
-                eprintln!("error: failed to scan TPM handles: {}", e);
-                std::process::exit(1);
-            });
-
-        // Create and persist the TPM key using native TPM commands
-        let provisioned_key = {
-            let mut tpm =
-                edgerun_tpm::TpmDevice::new(edgerun_tpm::LinuxTpmDevice::new("/dev/tpmrm0"));
-            tpm.create_ecdsa_p256_signing_key(persistent_handle)
+            // Find an available persistent handle
+            let persistent_handle = find_available_tpm_handle(0x8100_0001, 0x8100_00FF)
                 .unwrap_or_else(|e| {
-                    eprintln!("error: failed to create TPM signing key: {}", e);
+                    eprintln!("error: failed to scan TPM handles: {}", e);
                     std::process::exit(1);
-                })
-        };
+                });
 
-        let x_bytes = &provisioned_key.public_key_bytes[..32];
-        let y_bytes = &provisioned_key.public_key_bytes[32..];
+            // Create and persist the TPM key using native TPM commands
+            let provisioned_key = {
+                let mut tpm =
+                    edgerun_tpm::TpmDevice::new(edgerun_tpm::LinuxTpmDevice::new("/dev/tpmrm0"));
+                tpm.create_ecdsa_p256_signing_key(persistent_handle)
+                    .unwrap_or_else(|e| {
+                        eprintln!("error: failed to create TPM signing key: {}", e);
+                        std::process::exit(1);
+                    })
+            };
 
-        let mut pub_bytes = [0u8; 64];
-        pub_bytes[..32].copy_from_slice(x_bytes);
-        pub_bytes[32..].copy_from_slice(y_bytes);
-        let node_id = NodeID(pub_bytes);
+            let x_bytes = &provisioned_key.public_key_bytes[..32];
+            let y_bytes = &provisioned_key.public_key_bytes[32..];
 
-        eprintln!(
-            "  Persistent handle: 0x{:08X}",
-            provisioned_key.persistent_handle
-        );
-        eprintln!("  Public key: {}", node_id.to_hex());
+            let mut pub_bytes = [0u8; 64];
+            pub_bytes[..32].copy_from_slice(x_bytes);
+            pub_bytes[32..].copy_from_slice(y_bytes);
+            let node_id = NodeID(pub_bytes);
 
-        let tpm_key = edgerun_tpm::LinuxTpmSigningKey::new(
-            "/dev/tpmrm0",
-            edgerun_tpm::TpmHandle(provisioned_key.persistent_handle),
-        );
-        let adapter = edgerun_hardware_signing::TpmHardwareKeyAdapter::new(tpm_key);
-        let mesh_signer = edgerun_hardware_signing::HardwareMeshSigner::new(adapter)
-            .unwrap_or_else(|e| {
-                eprintln!("error: failed to initialize TPM signer: {}", e);
-                std::process::exit(1);
-            });
-        create_stream_or_exit(
-            path,
-            node_id,
-            MeshProtocolSigner::new(Arc::new(mesh_signer)),
-        );
-        (node_id, "tpm")
-    } else {
-        // YubiKey: scan for an existing ECDSA P-256 key in slot 9a (authentication)
-        eprintln!("Scanning YubiKey for ECDSA P-256 key in slot 9a...");
-
-        let device = detect_yubikey_device().unwrap_or_else(|e| {
-            eprintln!("error: {}", e);
-            std::process::exit(1);
-        });
-        let device_display = format!("{:03}:{:03}", device.bus, device.device);
-
-        let yubikey = edgerun_yubikey::LinuxPcscYubiKey::new(
-            device,
-            edgerun_yubikey::YubiKeyPivSlot::Authentication,
-        );
-        let yubi_key_info = yubikey.key_info().unwrap_or_else(|e| {
-            eprintln!("error: failed to read YubiKey key info: {}", e);
-            eprintln!();
-            eprintln!("Make sure a YubiKey with PIV applet is inserted.");
-            eprintln!("Use yubico-piv-tool to generate an ECDSA P-256 key in slot 9a:");
-            eprintln!("  yubico-piv-tool -a generate -s 9a -A ECCP256");
-            eprintln!("  yubico-piv-tool -a verify -a selfsign-certificate -s 9a");
-            eprintln!("  yubico-piv-tool -a import-certificate -s 9a");
-            std::process::exit(1);
-        });
-
-        if yubi_key_info.algorithm != edgerun_yubikey::YubiKeySignatureAlgorithm::EcdsaP256Sha256 {
-            eprintln!("error: YubiKey slot 9a does not contain an ECDSA P-256 key.");
-            eprintln!("Found algorithm: {:?}", yubi_key_info.algorithm);
-            std::process::exit(1);
-        }
-
-        if yubi_key_info.public_key.len() != 64 {
             eprintln!(
-                "error: YubiKey public key is not 64 bytes (got {})",
-                yubi_key_info.public_key.len()
+                "  Persistent handle: 0x{:08X}",
+                provisioned_key.persistent_handle
             );
-            std::process::exit(1);
+            eprintln!("  Public key: {}", node_id.to_hex());
+
+            let tpm_key = edgerun_tpm::LinuxTpmSigningKey::new(
+                "/dev/tpmrm0",
+                edgerun_tpm::TpmHandle(provisioned_key.persistent_handle),
+            );
+            let adapter = edgerun_hardware_signing::TpmHardwareKeyAdapter::new(tpm_key);
+            let mesh_signer = edgerun_hardware_signing::HardwareMeshSigner::new(adapter)
+                .unwrap_or_else(|e| {
+                    eprintln!("error: failed to initialize TPM signer: {}", e);
+                    std::process::exit(1);
+                });
+            create_stream_or_exit(
+                path,
+                node_id,
+                MeshProtocolSigner::new(Arc::new(mesh_signer)),
+            );
+            (node_id, "tpm")
         }
+        #[cfg(not(all(feature = "all-hardware", target_os = "linux")))]
+        {
+            hardware_init_not_compiled()
+        }
+    } else {
+        #[cfg(all(feature = "all-hardware", target_os = "linux"))]
+        {
+            // YubiKey: scan for an existing ECDSA P-256 key in slot 9a (authentication)
+            eprintln!("Scanning YubiKey for ECDSA P-256 key in slot 9a...");
 
-        let mut pub_bytes = [0u8; 64];
-        pub_bytes.copy_from_slice(&yubi_key_info.public_key);
-        let node_id = NodeID(pub_bytes);
-
-        eprintln!("  USB Device: {}", device_display);
-        eprintln!("  Slot: 9a");
-        eprintln!("  Public key: {}", node_id.to_hex());
-
-        let adapter = edgerun_hardware_signing::YubiKeyHardwareKeyAdapter::new(yubikey);
-        let mesh_signer = edgerun_hardware_signing::HardwareMeshSigner::new(adapter)
-            .unwrap_or_else(|e| {
-                eprintln!("error: failed to initialize YubiKey signer: {}", e);
+            let device = detect_yubikey_device().unwrap_or_else(|e| {
+                eprintln!("error: {}", e);
                 std::process::exit(1);
             });
-        create_stream_or_exit(
-            path,
-            node_id,
-            MeshProtocolSigner::new(Arc::new(mesh_signer)),
-        );
-        (node_id, "yubikey")
+            let device_display = format!("{:03}:{:03}", device.bus, device.device);
+
+            let yubikey = edgerun_yubikey::LinuxPcscYubiKey::new(
+                device,
+                edgerun_yubikey::YubiKeyPivSlot::Authentication,
+            );
+            let yubi_key_info = yubikey.key_info().unwrap_or_else(|e| {
+                eprintln!("error: failed to read YubiKey key info: {}", e);
+                eprintln!();
+                eprintln!("Make sure a YubiKey with PIV applet is inserted.");
+                eprintln!("Use yubico-piv-tool to generate an ECDSA P-256 key in slot 9a:");
+                eprintln!("  yubico-piv-tool -a generate -s 9a -A ECCP256");
+                eprintln!("  yubico-piv-tool -a verify -a selfsign-certificate -s 9a");
+                eprintln!("  yubico-piv-tool -a import-certificate -s 9a");
+                std::process::exit(1);
+            });
+
+            if yubi_key_info.algorithm
+                != edgerun_yubikey::YubiKeySignatureAlgorithm::EcdsaP256Sha256
+            {
+                eprintln!("error: YubiKey slot 9a does not contain an ECDSA P-256 key.");
+                eprintln!("Found algorithm: {:?}", yubi_key_info.algorithm);
+                std::process::exit(1);
+            }
+
+            if yubi_key_info.public_key.len() != 64 {
+                eprintln!(
+                    "error: YubiKey public key is not 64 bytes (got {})",
+                    yubi_key_info.public_key.len()
+                );
+                std::process::exit(1);
+            }
+
+            let mut pub_bytes = [0u8; 64];
+            pub_bytes.copy_from_slice(&yubi_key_info.public_key);
+            let node_id = NodeID(pub_bytes);
+
+            eprintln!("  USB Device: {}", device_display);
+            eprintln!("  Slot: 9a");
+            eprintln!("  Public key: {}", node_id.to_hex());
+
+            let adapter = edgerun_hardware_signing::YubiKeyHardwareKeyAdapter::new(yubikey);
+            let mesh_signer = edgerun_hardware_signing::HardwareMeshSigner::new(adapter)
+                .unwrap_or_else(|e| {
+                    eprintln!("error: failed to initialize YubiKey signer: {}", e);
+                    std::process::exit(1);
+                });
+            create_stream_or_exit(
+                path,
+                node_id,
+                MeshProtocolSigner::new(Arc::new(mesh_signer)),
+            );
+            (node_id, "yubikey")
+        }
+        #[cfg(not(all(feature = "all-hardware", target_os = "linux")))]
+        {
+            hardware_init_not_compiled()
+        }
     };
 
     let node_name = name.unwrap_or_else(|| format!("edgerun-{}", node_id.short()));
@@ -232,6 +251,13 @@ pub fn cmd_init(path: &PathBuf, name: Option<String>, software: bool) {
     // ...
 }
 
+#[cfg(not(all(feature = "all-hardware", target_os = "linux")))]
+fn hardware_init_not_compiled() -> ! {
+    eprintln!("error: secure hardware init requires the all-hardware feature on Linux.");
+    eprintln!("For development only, you can generate a software key with --software.");
+    std::process::exit(1);
+}
+
 pub fn check_yubikey_available() -> bool {
     fs::read_dir("/sys/bus/usb/devices/")
         .map(|entries| {
@@ -249,6 +275,7 @@ pub fn check_yubikey_available() -> bool {
 }
 
 /// Finds the first YubiKey USB device info.
+#[cfg(all(feature = "all-hardware", target_os = "linux"))]
 pub fn detect_yubikey_device() -> Result<edgerun_yubikey::LinuxUsbYubiKeyInfo, String> {
     let devices = edgerun_yubikey::LinuxUsbYubiKey::discover()
         .map_err(|e| format!("YubiKey USB discovery failed: {}", e))?;
@@ -421,6 +448,7 @@ fn provision_sync(target: &str, pin: &str, node_id: &str) -> Result<(), String> 
 }
 
 /// Scans TPM persistent handles to find the first unused one.
+#[cfg(all(feature = "all-hardware", target_os = "linux"))]
 pub fn find_available_tpm_handle(start: u32, end: u32) -> Result<u32, String> {
     let mut tpm = edgerun_tpm::TpmDevice::new(edgerun_tpm::LinuxTpmDevice::new("/dev/tpmrm0"));
     for h in (start..=end).step_by(1) {

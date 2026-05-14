@@ -1,0 +1,16 @@
+{
+  "title": "FuzzyFileSearchSessionUpdateParams",
+  "type": "object",
+  "properties": {
+    "query": {
+      "type": "string"
+    },
+    "sessionId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "sessionId",
+    "query"
+  ]
+}

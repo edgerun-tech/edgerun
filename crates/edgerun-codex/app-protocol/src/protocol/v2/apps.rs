@@ -1,32 +1,24 @@
 use super::shared::default_enabled;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
 use schemars::JsonSchema;
 use std::collections::HashMap;
-use ts_rs::TS;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Default, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 /// EXPERIMENTAL - list available apps/connectors.
 pub struct AppsListParams {
     /// Opaque pagination cursor returned by a previous call.
-    #[ts(optional = nullable)]
     pub cursor: Option<String>,
     /// Optional page size; defaults to a reasonable server-side value.
-    #[ts(optional = nullable)]
     pub limit: Option<u32>,
     /// Optional thread id used to evaluate app feature gating from that thread's config.
-    #[ts(optional = nullable)]
     pub thread_id: Option<String>,
     /// When true, bypass app caches and fetch the latest data from sources.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub force_refetch: bool,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 /// EXPERIMENTAL - app metadata returned by app-list APIs.
 pub struct AppBranding {
     pub category: Option<String>,
@@ -37,16 +29,14 @@ pub struct AppBranding {
     pub is_discoverable_app: bool,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct AppReview {
     pub status: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct AppScreenshot {
     pub url: Option<String>,
     #[serde(alias = "file_id")]
@@ -55,9 +45,8 @@ pub struct AppScreenshot {
     pub user_prompt: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct AppMetadata {
     pub review: Option<AppReview>,
     pub categories: Option<Vec<String>>,
@@ -73,9 +62,8 @@ pub struct AppMetadata {
     pub show_in_composer_when_unlinked: Option<bool>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 /// EXPERIMENTAL - app metadata returned by app-list APIs.
 pub struct AppInfo {
     pub id: String,
@@ -102,9 +90,8 @@ pub struct AppInfo {
     pub plugin_display_names: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 /// EXPERIMENTAL - app metadata summary for plugin responses.
 pub struct AppSummary {
     pub id: String,
@@ -126,9 +113,8 @@ impl From<AppInfo> for AppSummary {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 /// EXPERIMENTAL - app list response.
 pub struct AppsListResponse {
     pub data: Vec<AppInfo>,
@@ -137,9 +123,8 @@ pub struct AppsListResponse {
     pub next_cursor: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 /// EXPERIMENTAL - notification emitted when the app list changes.
 pub struct AppListUpdatedNotification {
     pub data: Vec<AppInfo>,

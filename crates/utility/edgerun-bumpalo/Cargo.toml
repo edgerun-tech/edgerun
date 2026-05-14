@@ -46,15 +46,9 @@ all-features = true
 boxed = []
 collections = []
 default = []
-serde = ["dep:serde"]
 std = []
 
 [lib]
 name = "bumpalo"
 path = "src/lib.rs"
 bench = false
-
-[dependencies.serde]
-version = "1.0.171"
-path = "../edgerun-serde-upstream"
-optional = true

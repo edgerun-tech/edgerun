@@ -19,7 +19,6 @@ codex-protocol = { workspace = true }
 edgerun-http = { workspace = true }
 edgerun-json = { workspace = true, features = ["derive", "std"] }
 schemars = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
 
 [dev-dependencies]
 edgerun-json = { workspace = true, features = ["toml"] }

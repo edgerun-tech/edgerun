@@ -1,9 +1,6 @@
 use super::Turn;
 use super::shared::v2_enum_from_core;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
 use schemars::JsonSchema;
-use ts_rs::TS;
 
 v2_enum_from_core!(
     pub enum ReviewDelivery from codex_protocol::protocol::ReviewDelivery {
@@ -11,9 +8,8 @@ v2_enum_from_core!(
     }
 );
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ReviewStartParams {
     pub thread_id: String,
     pub target: ReviewTarget,
@@ -21,13 +17,11 @@ pub struct ReviewStartParams {
     /// Where to run the review: inline (default) on the current thread or
     /// detached on a new thread (returned in `reviewThreadId`).
     #[serde(default)]
-    #[ts(optional = nullable)]
     pub delivery: Option<ReviewDelivery>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ReviewStartResponse {
     pub turn: Turn,
     /// Identifies the thread where the review runs.
@@ -37,21 +31,18 @@ pub struct ReviewStartResponse {
     pub review_thread_id: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(tag = "type", rename_all = "camelCase")]
-#[ts(tag = "type", export_to = "v2/")]
 pub enum ReviewTarget {
     /// Review the working tree: staged, unstaged, and untracked files.
     UncommittedChanges,
 
     /// Review changes between the current branch and the given base branch.
     #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
     BaseBranch { branch: String },
 
     /// Review the changes introduced by a specific commit.
     #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
     Commit {
         sha: String,
         /// Optional human-readable label (e.g., commit subject) for UIs.
@@ -60,6 +51,5 @@ pub enum ReviewTarget {
 
     /// Arbitrary instructions, equivalent to the old free-form prompt.
     #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
     Custom { instructions: String },
 }

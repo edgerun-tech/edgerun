@@ -53,8 +53,6 @@ pub mod int;
 pub mod ops;
 #[path = "num_traits_impl/pow.rs"]
 pub mod pow;
-#[path = "num_traits_impl/real.rs"]
-pub mod real;
 #[path = "num_traits_impl/sign.rs"]
 pub mod sign;
 

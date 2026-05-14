@@ -1,20 +1,15 @@
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
 use schemars::JsonSchema;
-use ts_rs::TS;
 
 /// Current remote-control connection status and environment id exposed to clients.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct RemoteControlStatusChangedNotification {
     pub status: RemoteControlConnectionStatus,
     pub environment_id: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase", export_to = "v2/")]
 pub enum RemoteControlConnectionStatus {
     Disabled,
     Connecting,

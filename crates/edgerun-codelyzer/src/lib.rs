@@ -10,6 +10,8 @@ pub mod analyzer;
 #[cfg(all(feature = "std", not(target_arch = "wasm32")))]
 pub mod codealyzer;
 #[cfg(all(feature = "std", not(target_arch = "wasm32")))]
+pub mod dead_code;
+#[cfg(all(feature = "std", not(target_arch = "wasm32")))]
 #[allow(dead_code)]
 pub mod diagnostics;
 #[cfg(feature = "std")]

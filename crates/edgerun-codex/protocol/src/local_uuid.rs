@@ -1,7 +1,6 @@
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
-use ts_rs::TS;
 
 static COUNTER: AtomicU64 = AtomicU64::new(1);
 
@@ -84,23 +83,6 @@ impl fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
-
-impl TS for Uuid {
-    type WithoutGenerics = Self;
-    type OptionInnerType = Self;
-
-    fn decl() -> String {
-        "type Uuid = string;".to_string()
-    }
-
-    fn name() -> String {
-        "string".to_string()
-    }
-
-    fn inline() -> String {
-        "string".to_string()
-    }
-}
 
 fn entropy_bytes() -> [u8; 16] {
     let counter = COUNTER.fetch_add(1, Ordering::Relaxed);

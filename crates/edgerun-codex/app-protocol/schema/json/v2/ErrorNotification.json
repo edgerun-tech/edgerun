@@ -1,166 +1,262 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "definitions": {
-    "CodexErrorInfo": {
-      "description": "This translation layer make sure that we expose codex error code in camel case.\n\nWhen an upstream HTTP status is available (for example, from the Responses API or a provider), it is forwarded in `httpStatusCode` on the relevant `codexErrorInfo` variant.",
-      "oneOf": [
-        {
-          "enum": [
-            "contextWindowExceeded",
-            "usageLimitExceeded",
-            "serverOverloaded",
-            "cyberPolicy",
-            "internalServerError",
-            "unauthorized",
-            "badRequest",
-            "threadRollbackFailed",
-            "sandboxError",
-            "other"
-          ],
+  "title": "ErrorNotification",
+  "type": "object",
+  "properties": {
+    "error": {
+      "title": "TurnError",
+      "type": "object",
+      "properties": {
+        "additionalDetails": {
           "type": "string"
         },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "httpConnectionFailed": {
+        "codexErrorInfo": {
+          "title": "CodexErrorInfo",
+          "oneOf": [
+            {
+              "type": "object",
               "properties": {
-                "httpStatusCode": {
-                  "format": "uint16",
-                  "minimum": 0.0,
-                  "type": [
-                    "integer",
-                    "null"
-                  ]
-                }
-              },
-              "type": "object"
-            }
-          },
-          "required": [
-            "httpConnectionFailed"
-          ],
-          "title": "HttpConnectionFailedCodexErrorInfo",
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "Failed to connect to the response SSE stream.",
-          "properties": {
-            "responseStreamConnectionFailed": {
-              "properties": {
-                "httpStatusCode": {
-                  "format": "uint16",
-                  "minimum": 0.0,
-                  "type": [
-                    "integer",
-                    "null"
-                  ]
-                }
-              },
-              "type": "object"
-            }
-          },
-          "required": [
-            "responseStreamConnectionFailed"
-          ],
-          "title": "ResponseStreamConnectionFailedCodexErrorInfo",
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "The response SSE stream disconnected in the middle of a turn before completion.",
-          "properties": {
-            "responseStreamDisconnected": {
-              "properties": {
-                "httpStatusCode": {
-                  "format": "uint16",
-                  "minimum": 0.0,
-                  "type": [
-                    "integer",
-                    "null"
-                  ]
-                }
-              },
-              "type": "object"
-            }
-          },
-          "required": [
-            "responseStreamDisconnected"
-          ],
-          "title": "ResponseStreamDisconnectedCodexErrorInfo",
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "Reached the retry limit for responses.",
-          "properties": {
-            "responseTooManyFailedAttempts": {
-              "properties": {
-                "httpStatusCode": {
-                  "format": "uint16",
-                  "minimum": 0.0,
-                  "type": [
-                    "integer",
-                    "null"
-                  ]
-                }
-              },
-              "type": "object"
-            }
-          },
-          "required": [
-            "responseTooManyFailedAttempts"
-          ],
-          "title": "ResponseTooManyFailedAttemptsCodexErrorInfo",
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "Returned when `turn/start` or `turn/steer` is submitted while the current active turn cannot accept same-turn steering, for example `/review` or manual `/compact`.",
-          "properties": {
-            "activeTurnNotSteerable": {
-              "properties": {
-                "turnKind": {
-                  "$ref": "#/definitions/NonSteerableTurnKind"
+                "type": {
+                  "type": "string",
+                  "const": "ContextWindowExceeded",
+                  "title": "ContextWindowExceededv2::ErrorNotificationType"
                 }
               },
               "required": [
-                "turnKind"
+                "type"
               ],
-              "type": "object"
-            }
-          },
-          "required": [
-            "activeTurnNotSteerable"
-          ],
-          "title": "ActiveTurnNotSteerableCodexErrorInfo",
-          "type": "object"
-        }
-      ]
-    },
-    "NonSteerableTurnKind": {
-      "enum": [
-        "review",
-        "compact"
-      ],
-      "type": "string"
-    },
-    "TurnError": {
-      "properties": {
-        "additionalDetails": {
-          "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "codexErrorInfo": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/CodexErrorInfo"
+              "additionalProperties": false,
+              "title": "ContextWindowExceededv2::ErrorNotification"
             },
             {
-              "type": "null"
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "UsageLimitExceeded",
+                  "title": "UsageLimitExceededv2::ErrorNotificationType"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "title": "UsageLimitExceededv2::ErrorNotification"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "ServerOverloaded",
+                  "title": "ServerOverloadedv2::ErrorNotificationType"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "title": "ServerOverloadedv2::ErrorNotification"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "CyberPolicy",
+                  "title": "CyberPolicyv2::ErrorNotificationType"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "title": "CyberPolicyv2::ErrorNotification"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "httpStatusCode": {
+                  "type": "integer"
+                },
+                "type": {
+                  "type": "string",
+                  "const": "HttpConnectionFailed",
+                  "title": "HttpConnectionFailedv2::ErrorNotificationType"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "title": "HttpConnectionFailedv2::ErrorNotification"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "httpStatusCode": {
+                  "type": "integer"
+                },
+                "type": {
+                  "type": "string",
+                  "const": "ResponseStreamConnectionFailed",
+                  "title": "ResponseStreamConnectionFailedv2::ErrorNotificationType"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "title": "ResponseStreamConnectionFailedv2::ErrorNotification"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "InternalServerError",
+                  "title": "InternalServerErrorv2::ErrorNotificationType"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "title": "InternalServerErrorv2::ErrorNotification"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "Unauthorized",
+                  "title": "Unauthorizedv2::ErrorNotificationType"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "title": "Unauthorizedv2::ErrorNotification"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "BadRequest",
+                  "title": "BadRequestv2::ErrorNotificationType"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "title": "BadRequestv2::ErrorNotification"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "ThreadRollbackFailed",
+                  "title": "ThreadRollbackFailedv2::ErrorNotificationType"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "title": "ThreadRollbackFailedv2::ErrorNotification"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "SandboxError",
+                  "title": "SandboxErrorv2::ErrorNotificationType"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "title": "SandboxErrorv2::ErrorNotification"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "httpStatusCode": {
+                  "type": "integer"
+                },
+                "type": {
+                  "type": "string",
+                  "const": "ResponseStreamDisconnected",
+                  "title": "ResponseStreamDisconnectedv2::ErrorNotificationType"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "title": "ResponseStreamDisconnectedv2::ErrorNotification"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "httpStatusCode": {
+                  "type": "integer"
+                },
+                "type": {
+                  "type": "string",
+                  "const": "ResponseTooManyFailedAttempts",
+                  "title": "ResponseTooManyFailedAttemptsv2::ErrorNotificationType"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "title": "ResponseTooManyFailedAttemptsv2::ErrorNotification"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "turnKind": {
+                  "title": "NonSteerableTurnKind",
+                  "type": "string",
+                  "enum": [
+                    "Review",
+                    "Compact"
+                  ]
+                },
+                "type": {
+                  "type": "string",
+                  "const": "ActiveTurnNotSteerable",
+                  "title": "ActiveTurnNotSteerablev2::ErrorNotificationType"
+                }
+              },
+              "required": [
+                "type",
+                "turnKind"
+              ],
+              "additionalProperties": false,
+              "title": "ActiveTurnNotSteerablev2::ErrorNotification"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "Other",
+                  "title": "Otherv2::ErrorNotificationType"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "title": "Otherv2::ErrorNotification"
             }
           ]
         },
@@ -170,13 +266,7 @@
       },
       "required": [
         "message"
-      ],
-      "type": "object"
-    }
-  },
-  "properties": {
-    "error": {
-      "$ref": "#/definitions/TurnError"
+      ]
     },
     "threadId": {
       "type": "string"
@@ -190,10 +280,8 @@
   },
   "required": [
     "error",
+    "willRetry",
     "threadId",
-    "turnId",
-    "willRetry"
-  ],
-  "title": "ErrorNotification",
-  "type": "object"
+    "turnId"
+  ]
 }

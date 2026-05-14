@@ -1,61 +1,48 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "definitions": {
-    "FuzzyFileSearchMatchType": {
-      "enum": [
-        "file",
-        "directory"
-      ],
-      "type": "string"
-    },
-    "FuzzyFileSearchResult": {
-      "description": "Superset of [`codex_file_search::FileMatch`]",
-      "properties": {
-        "file_name": {
-          "type": "string"
-        },
-        "indices": {
-          "items": {
-            "format": "uint32",
-            "minimum": 0.0,
-            "type": "integer"
-          },
-          "type": [
-            "array",
-            "null"
-          ]
-        },
-        "match_type": {
-          "$ref": "#/definitions/FuzzyFileSearchMatchType"
-        },
-        "path": {
-          "type": "string"
-        },
-        "root": {
-          "type": "string"
-        },
-        "score": {
-          "format": "uint32",
-          "minimum": 0.0,
-          "type": "integer"
-        }
-      },
-      "required": [
-        "file_name",
-        "match_type",
-        "path",
-        "root",
-        "score"
-      ],
-      "type": "object"
-    }
-  },
+  "title": "FuzzyFileSearchSessionUpdatedNotification",
+  "type": "object",
   "properties": {
     "files": {
+      "type": "array",
       "items": {
-        "$ref": "#/definitions/FuzzyFileSearchResult"
-      },
-      "type": "array"
+        "title": "FuzzyFileSearchResult",
+        "type": "object",
+        "properties": {
+          "file_name": {
+            "type": "string"
+          },
+          "indices": {
+            "type": "array",
+            "items": {
+              "type": "integer"
+            }
+          },
+          "match_type": {
+            "title": "FuzzyFileSearchMatchType",
+            "type": "string",
+            "enum": [
+              "File",
+              "Directory"
+            ]
+          },
+          "path": {
+            "type": "string"
+          },
+          "root": {
+            "type": "string"
+          },
+          "score": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "root",
+          "path",
+          "match_type",
+          "file_name",
+          "score"
+        ]
+      }
     },
     "query": {
       "type": "string"
@@ -65,10 +52,8 @@
     }
   },
   "required": [
-    "files",
+    "sessionId",
     "query",
-    "sessionId"
-  ],
-  "title": "FuzzyFileSearchSessionUpdatedNotification",
-  "type": "object"
+    "files"
+  ]
 }

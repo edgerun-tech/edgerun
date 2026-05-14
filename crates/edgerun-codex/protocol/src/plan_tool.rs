@@ -1,13 +1,10 @@
 use edgerun_json::FromJson;
 use edgerun_json::JsonValueError;
 use edgerun_json::Value;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
 use schemars::JsonSchema;
-use ts_rs::TS;
 
 // Types for the TODO tool arguments matching codex-vscode/todo-mcp/src/main.rs
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson)]
 #[serde(rename_all = "snake_case")]
 pub enum StepStatus {
     Pending,
@@ -28,7 +25,7 @@ impl FromJson for StepStatus {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson)]
 #[serde(deny_unknown_fields)]
 pub struct PlanItemArg {
     pub step: String,
@@ -45,7 +42,7 @@ impl FromJson for PlanItemArg {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson)]
 #[serde(deny_unknown_fields)]
 pub struct UpdatePlanArgs {
     /// Arguments for the `update_plan` todo/checklist tool (not plan mode).

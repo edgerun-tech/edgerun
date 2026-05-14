@@ -1,95 +1,80 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "LoginAccountParams",
   "oneOf": [
     {
+      "type": "object",
       "properties": {
         "apiKey": {
           "type": "string"
         },
         "type": {
-          "enum": [
-            "apiKey"
-          ],
-          "title": "ApiKeyv2::LoginAccountParamsType",
-          "type": "string"
+          "type": "string",
+          "const": "apiKey",
+          "title": "ApiKeyv2::LoginAccountParamsType"
         }
       },
       "required": [
-        "apiKey",
-        "type"
+        "type",
+        "apiKey"
       ],
-      "title": "ApiKeyv2::LoginAccountParams",
-      "type": "object"
+      "additionalProperties": false,
+      "title": "ApiKeyv2::LoginAccountParams"
     },
     {
-      "properties": {
-        "codexStreamlinedLogin": {
-          "type": "boolean"
-        },
-        "type": {
-          "enum": [
-            "chatgpt"
-          ],
-          "title": "Chatgptv2::LoginAccountParamsType",
-          "type": "string"
-        }
-      },
-      "required": [
-        "type"
-      ],
-      "title": "Chatgptv2::LoginAccountParams",
-      "type": "object"
-    },
-    {
+      "type": "object",
       "properties": {
         "type": {
-          "enum": [
-            "chatgptDeviceCode"
-          ],
-          "title": "ChatgptDeviceCodev2::LoginAccountParamsType",
-          "type": "string"
+          "type": "string",
+          "const": "chatgpt",
+          "title": "Chatgptv2::LoginAccountParamsType"
         }
       },
       "required": [
         "type"
       ],
-      "title": "ChatgptDeviceCodev2::LoginAccountParams",
-      "type": "object"
+      "additionalProperties": false,
+      "title": "Chatgptv2::LoginAccountParams"
     },
     {
-      "description": "[UNSTABLE] FOR OPENAI INTERNAL USE ONLY - DO NOT USE. The access token must contain the same scopes that Codex-managed ChatGPT auth tokens have.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "chatgptDeviceCode",
+          "title": "ChatgptDeviceCodev2::LoginAccountParamsType"
+        }
+      },
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "title": "ChatgptDeviceCodev2::LoginAccountParams"
+    },
+    {
+      "type": "object",
       "properties": {
         "accessToken": {
-          "description": "Access token (JWT) supplied by the client. This token is used for backend API requests and email extraction.",
           "type": "string"
         },
         "chatgptAccountId": {
-          "description": "Workspace/account identifier supplied by the client.",
           "type": "string"
         },
         "chatgptPlanType": {
-          "description": "Optional plan type supplied by the client.\n\nWhen `null`, Codex attempts to derive the plan type from access-token claims. If unavailable, the plan defaults to `unknown`.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": "string"
         },
         "type": {
-          "enum": [
-            "chatgptAuthTokens"
-          ],
-          "title": "ChatgptAuthTokensv2::LoginAccountParamsType",
-          "type": "string"
+          "type": "string",
+          "const": "chatgptAuthTokens",
+          "title": "ChatgptAuthTokensv2::LoginAccountParamsType"
         }
       },
       "required": [
+        "type",
         "accessToken",
-        "chatgptAccountId",
-        "type"
+        "chatgptAccountId"
       ],
-      "title": "ChatgptAuthTokensv2::LoginAccountParams",
-      "type": "object"
+      "additionalProperties": false,
+      "title": "ChatgptAuthTokensv2::LoginAccountParams"
     }
-  ],
-  "title": "LoginAccountParams"
+  ]
 }

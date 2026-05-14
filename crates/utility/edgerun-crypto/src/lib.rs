@@ -141,8 +141,6 @@ pub mod crypto_bigint;
 pub mod curve25519_dalek;
 #[cfg(any(feature = "p256", feature = "rsa"))]
 pub mod der;
-#[cfg(feature = "des")]
-pub mod des;
 #[cfg(feature = "digest")]
 pub mod digest;
 pub mod error;

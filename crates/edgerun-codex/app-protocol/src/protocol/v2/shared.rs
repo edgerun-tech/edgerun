@@ -6,15 +6,12 @@ use edgerun_json::JsonValue;
 use edgerun_json::JsonValueError;
 use edgerun_json::Map;
 use edgerun_json::ToJson;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
 use schemars::JsonSchema;
 use schemars::r#gen::SchemaGenerator;
 use schemars::schema::InstanceType;
 use schemars::schema::Metadata;
 use schemars::schema::Schema;
 use schemars::schema::SchemaObject;
-use ts_rs::TS;
 
 // Macro to declare a camelCased API v2 enum mirroring a core enum which
 // tends to use either snake_case or kebab-case.
@@ -25,10 +22,9 @@ macro_rules! v2_enum_from_core {
             $( $(#[$variant_meta:meta])* $Variant:ident ),+ $(,)?
         }
     ) => {
-        #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
         $(#[$enum_meta])*
         #[serde(rename_all = "camelCase")]
-        #[ts(export_to = "v2/")]
         pub enum $Name {
             $( $(#[$variant_meta])* $Variant ),+
         }
@@ -53,9 +49,8 @@ pub(super) const fn default_enabled() -> bool {
     true
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub enum NonSteerableTurnKind {
     Review,
     Compact,
@@ -74,9 +69,8 @@ impl ToJson for NonSteerableTurnKind {
 ///
 /// When an upstream HTTP status is available (for example, from the Responses API or a provider),
 /// it is forwarded in `httpStatusCode` on the relevant `codexErrorInfo` variant.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub enum CodexErrorInfo {
     ContextWindowExceeded,
     UsageLimitExceeded,
@@ -84,13 +78,11 @@ pub enum CodexErrorInfo {
     CyberPolicy,
     HttpConnectionFailed {
         #[serde(rename = "httpStatusCode")]
-        #[ts(rename = "httpStatusCode")]
         http_status_code: Option<u16>,
     },
     /// Failed to connect to the response SSE stream.
     ResponseStreamConnectionFailed {
         #[serde(rename = "httpStatusCode")]
-        #[ts(rename = "httpStatusCode")]
         http_status_code: Option<u16>,
     },
     InternalServerError,
@@ -101,20 +93,17 @@ pub enum CodexErrorInfo {
     /// The response SSE stream disconnected in the middle of a turn before completion.
     ResponseStreamDisconnected {
         #[serde(rename = "httpStatusCode")]
-        #[ts(rename = "httpStatusCode")]
         http_status_code: Option<u16>,
     },
     /// Reached the retry limit for responses.
     ResponseTooManyFailedAttempts {
         #[serde(rename = "httpStatusCode")]
-        #[ts(rename = "httpStatusCode")]
         http_status_code: Option<u16>,
     },
     /// Returned when `turn/start` or `turn/steer` is submitted while the current active turn
     /// cannot accept same-turn steering, for example `/review` or manual `/compact`.
     ActiveTurnNotSteerable {
         #[serde(rename = "turnKind")]
-        #[ts(rename = "turnKind")]
         turn_kind: NonSteerableTurnKind,
     },
     Other,
@@ -207,11 +196,7 @@ impl From<CoreNonSteerableTurnKind> for NonSteerableTurnKind {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, TS)]
-#[ts(
-    type = r#""user" | "auto_review" | "guardian_subagent""#,
-    export_to = "v2/"
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, edgerun_json::ToJson, edgerun_json::FromJson)]
 /// Configures who approval requests are routed to for review. Examples
 /// include sandbox escapes, blocked network access, MCP approval prompts, and
 /// ARC escalations. Defaults to `user`. `auto_review` uses a carefully

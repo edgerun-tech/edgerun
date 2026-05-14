@@ -4,16 +4,12 @@ use edgerun_json::JsonValueError;
 use edgerun_json::Map;
 use edgerun_json::ToJson;
 use edgerun_json::Value;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
 use schemars::JsonSchema;
 use std::collections::HashMap;
-use ts_rs::TS;
 
 /// PTY size in character cells for `process/spawn` PTY sessions.
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ProcessTerminalSize {
     /// Terminal height in character cells.
     pub rows: u16,
@@ -43,9 +39,8 @@ impl FromJson for ProcessTerminalSize {
 /// `process/spawn` returns after the process has started and the connection-scoped
 /// `processHandle` has been registered. Process output and exit are reported via
 /// `process/outputDelta` and `process/exited` notifications.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ProcessSpawnParams {
     /// Command argv vector. Empty arrays are rejected.
     pub command: Vec<String>,
@@ -79,8 +74,6 @@ pub struct ProcessSpawnParams {
         serialize_with = "crate::protocol::serde_helpers::serialize_double_option",
         skip_serializing_if = "Option::is_none"
     )]
-    #[ts(type = "number | null")]
-    #[ts(optional = nullable)]
     pub output_bytes_cap: Option<Option<usize>>,
     /// Optional timeout in milliseconds.
     ///
@@ -92,19 +85,15 @@ pub struct ProcessSpawnParams {
         serialize_with = "crate::protocol::serde_helpers::serialize_double_option",
         skip_serializing_if = "Option::is_none"
     )]
-    #[ts(type = "number | null")]
-    #[ts(optional = nullable)]
     pub timeout_ms: Option<Option<i64>>,
     /// Optional environment overrides merged into the app-server process
     /// environment.
     ///
     /// Matching names override inherited values. Set a key to `null` to unset
     /// an inherited variable.
-    #[ts(optional = nullable)]
     pub env: Option<HashMap<String, Option<String>>>,
     /// Optional initial PTY size in character cells. Only valid when `tty` is
     /// true.
-    #[ts(optional = nullable)]
     pub size: Option<ProcessTerminalSize>,
 }
 
@@ -154,21 +143,18 @@ impl FromJson for ProcessSpawnParams {
 }
 
 /// Successful response for `process/spawn`.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ProcessSpawnResponse {}
 
 /// Write stdin bytes to a running `process/spawn` session, close stdin, or
 /// both.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ProcessWriteStdinParams {
     /// Client-supplied, connection-scoped `processHandle` from `process/spawn`.
     pub process_handle: String,
     /// Optional base64-encoded stdin bytes to write.
-    #[ts(optional = nullable)]
     pub delta_base64: Option<String>,
     /// Close stdin after writing `deltaBase64`, if present.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
@@ -199,15 +185,13 @@ impl FromJson for ProcessWriteStdinParams {
 }
 
 /// Empty success response for `process/writeStdin`.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ProcessWriteStdinResponse {}
 
 /// Terminate a running `process/spawn` session.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ProcessKillParams {
     /// Client-supplied, connection-scoped `processHandle` from `process/spawn`.
     pub process_handle: String,
@@ -229,15 +213,13 @@ impl FromJson for ProcessKillParams {
 }
 
 /// Empty success response for `process/kill`.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ProcessKillResponse {}
 
 /// Resize a running PTY-backed `process/spawn` session.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ProcessResizePtyParams {
     /// Client-supplied, connection-scoped `processHandle` from `process/spawn`.
     pub process_handle: String,
@@ -265,15 +247,13 @@ impl FromJson for ProcessResizePtyParams {
 }
 
 /// Empty success response for `process/resizePty`.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ProcessResizePtyResponse {}
 
 /// Stream label for `process/outputDelta` notifications.
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub enum ProcessOutputStream {
     /// stdout stream. PTY mode multiplexes terminal output here.
     Stdout,
@@ -304,9 +284,8 @@ impl FromJson for ProcessOutputStream {
 }
 
 /// Base64-encoded output chunk emitted for a streaming `process/spawn` request.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ProcessOutputDeltaNotification {
     /// Client-supplied, connection-scoped `processHandle` from `process/spawn`.
     pub process_handle: String,
@@ -343,9 +322,8 @@ impl FromJson for ProcessOutputDeltaNotification {
 }
 
 /// Final process exit notification for `process/spawn`.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ProcessExitedNotification {
     /// Client-supplied, connection-scoped `processHandle` from `process/spawn`.
     pub process_handle: String,

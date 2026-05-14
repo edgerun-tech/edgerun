@@ -3,9 +3,6 @@
 #[cfg(all(feature = "der", feature = "p256_arithmetic"))]
 mod der;
 
-#[cfg(feature = "rlp")]
-mod rlp;
-
 use super::Uint;
 use crate::crypto_bigint::{Encoding, Limb, Word};
 

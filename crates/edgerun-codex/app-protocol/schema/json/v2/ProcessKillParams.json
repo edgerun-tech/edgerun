@@ -1,0 +1,12 @@
+{
+  "title": "ProcessKillParams",
+  "type": "object",
+  "properties": {
+    "processHandle": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "processHandle"
+  ]
+}

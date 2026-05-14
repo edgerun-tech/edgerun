@@ -12,20 +12,15 @@ use edgerun_json::JsonValueError;
 use edgerun_json::Map;
 use edgerun_json::ToJson;
 use edgerun_json::Value as JsonValue;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
 use schemars::JsonSchema;
 use std::path::PathBuf;
-use ts_rs::TS;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase", export_to = "v2/")]
 #[derive(Default)]
 pub enum SessionSource {
     Cli,
     #[serde(rename = "vscode")]
-    #[ts(rename = "vscode")]
     #[default]
     VsCode,
     Exec,
@@ -102,9 +97,8 @@ impl FromJson for SessionSource {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "snake_case")]
-#[ts(rename_all = "snake_case", export_to = "v2/")]
 pub enum ThreadSource {
     User,
     Subagent,
@@ -154,9 +148,8 @@ impl FromJson for ThreadSource {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct GitInfo {
     pub sha: Option<String>,
     pub branch: Option<String>,
@@ -184,9 +177,8 @@ impl FromJson for GitInfo {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct Thread {
     pub id: String,
     /// Session id shared by threads that belong to the same session tree.
@@ -200,10 +192,8 @@ pub struct Thread {
     /// Model provider used for this thread (for example, 'openai').
     pub model_provider: String,
     /// Unix timestamp (in seconds) when the thread was created.
-    #[ts(type = "number")]
     pub created_at: i64,
     /// Unix timestamp (in seconds) when the thread was last updated.
-    #[ts(type = "number")]
     pub updated_at: i64,
     /// Current runtime status for the thread.
     pub status: ThreadStatus,
@@ -259,9 +249,8 @@ impl FromJson for Thread {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct Turn {
     pub id: String,
     /// Thread items currently included in this turn payload.
@@ -273,13 +262,10 @@ pub struct Turn {
     /// Only populated when the Turn's status is failed.
     pub error: Option<TurnError>,
     /// Unix timestamp (in seconds) when the turn started.
-    #[ts(type = "number | null")]
     pub started_at: Option<i64>,
     /// Unix timestamp (in seconds) when the turn completed.
-    #[ts(type = "number | null")]
     pub completed_at: Option<i64>,
     /// Duration between turn start and completion in milliseconds, if known.
-    #[ts(type = "number | null")]
     pub duration_ms: Option<i64>,
 }
 
@@ -320,9 +306,8 @@ fn take_optional_path_buf(object: &mut Map, key: &str) -> Result<Option<PathBuf>
     }
 }
 
-#[derive(Default, Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub enum TurnItemsView {
     /// `items` was not loaded for this turn. The field is intentionally empty.
     NotLoaded,
@@ -356,9 +341,8 @@ impl FromJson for TurnItemsView {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS, Error)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, Error, edgerun_json::ToJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 #[error("{message}")]
 pub struct TurnError {
     pub message: String,

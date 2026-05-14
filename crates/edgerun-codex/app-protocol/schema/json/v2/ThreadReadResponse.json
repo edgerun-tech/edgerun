@@ -1,2030 +1,1789 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "definitions": {
-    "AbsolutePathBuf": {
-      "description": "A path that is guaranteed to be absolute and normalized (though it is not guaranteed to be canonicalized or exist on the filesystem).\n\nIMPORTANT: When deserializing an `AbsolutePathBuf`, a base path must be set using [AbsolutePathBufGuard::new]. If no base path is set, the deserialization will fail unless the path being deserialized is already absolute.",
-      "type": "string"
-    },
-    "AgentPath": {
-      "type": "string"
-    },
-    "ByteRange": {
-      "properties": {
-        "end": {
-          "format": "uint",
-          "minimum": 0.0,
-          "type": "integer"
-        },
-        "start": {
-          "format": "uint",
-          "minimum": 0.0,
-          "type": "integer"
-        }
-      },
-      "required": [
-        "end",
-        "start"
-      ],
-      "type": "object"
-    },
-    "CodexErrorInfo": {
-      "description": "This translation layer make sure that we expose codex error code in camel case.\n\nWhen an upstream HTTP status is available (for example, from the Responses API or a provider), it is forwarded in `httpStatusCode` on the relevant `codexErrorInfo` variant.",
-      "oneOf": [
-        {
-          "enum": [
-            "contextWindowExceeded",
-            "usageLimitExceeded",
-            "serverOverloaded",
-            "cyberPolicy",
-            "internalServerError",
-            "unauthorized",
-            "badRequest",
-            "threadRollbackFailed",
-            "sandboxError",
-            "other"
-          ],
-          "type": "string"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "httpConnectionFailed": {
-              "properties": {
-                "httpStatusCode": {
-                  "format": "uint16",
-                  "minimum": 0.0,
-                  "type": [
-                    "integer",
-                    "null"
-                  ]
-                }
-              },
-              "type": "object"
-            }
-          },
-          "required": [
-            "httpConnectionFailed"
-          ],
-          "title": "HttpConnectionFailedCodexErrorInfo",
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "Failed to connect to the response SSE stream.",
-          "properties": {
-            "responseStreamConnectionFailed": {
-              "properties": {
-                "httpStatusCode": {
-                  "format": "uint16",
-                  "minimum": 0.0,
-                  "type": [
-                    "integer",
-                    "null"
-                  ]
-                }
-              },
-              "type": "object"
-            }
-          },
-          "required": [
-            "responseStreamConnectionFailed"
-          ],
-          "title": "ResponseStreamConnectionFailedCodexErrorInfo",
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "The response SSE stream disconnected in the middle of a turn before completion.",
-          "properties": {
-            "responseStreamDisconnected": {
-              "properties": {
-                "httpStatusCode": {
-                  "format": "uint16",
-                  "minimum": 0.0,
-                  "type": [
-                    "integer",
-                    "null"
-                  ]
-                }
-              },
-              "type": "object"
-            }
-          },
-          "required": [
-            "responseStreamDisconnected"
-          ],
-          "title": "ResponseStreamDisconnectedCodexErrorInfo",
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "Reached the retry limit for responses.",
-          "properties": {
-            "responseTooManyFailedAttempts": {
-              "properties": {
-                "httpStatusCode": {
-                  "format": "uint16",
-                  "minimum": 0.0,
-                  "type": [
-                    "integer",
-                    "null"
-                  ]
-                }
-              },
-              "type": "object"
-            }
-          },
-          "required": [
-            "responseTooManyFailedAttempts"
-          ],
-          "title": "ResponseTooManyFailedAttemptsCodexErrorInfo",
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "Returned when `turn/start` or `turn/steer` is submitted while the current active turn cannot accept same-turn steering, for example `/review` or manual `/compact`.",
-          "properties": {
-            "activeTurnNotSteerable": {
-              "properties": {
-                "turnKind": {
-                  "$ref": "#/definitions/NonSteerableTurnKind"
-                }
-              },
-              "required": [
-                "turnKind"
-              ],
-              "type": "object"
-            }
-          },
-          "required": [
-            "activeTurnNotSteerable"
-          ],
-          "title": "ActiveTurnNotSteerableCodexErrorInfo",
-          "type": "object"
-        }
-      ]
-    },
-    "CollabAgentState": {
-      "properties": {
-        "message": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "status": {
-          "$ref": "#/definitions/CollabAgentStatus"
-        }
-      },
-      "required": [
-        "status"
-      ],
-      "type": "object"
-    },
-    "CollabAgentStatus": {
-      "enum": [
-        "pendingInit",
-        "running",
-        "interrupted",
-        "completed",
-        "errored",
-        "shutdown",
-        "notFound"
-      ],
-      "type": "string"
-    },
-    "CollabAgentTool": {
-      "enum": [
-        "spawnAgent",
-        "sendInput",
-        "resumeAgent",
-        "wait",
-        "closeAgent"
-      ],
-      "type": "string"
-    },
-    "CollabAgentToolCallStatus": {
-      "enum": [
-        "inProgress",
-        "completed",
-        "failed"
-      ],
-      "type": "string"
-    },
-    "CommandAction": {
-      "oneOf": [
-        {
-          "properties": {
-            "command": {
-              "type": "string"
-            },
-            "name": {
-              "type": "string"
-            },
-            "path": {
-              "$ref": "#/definitions/AbsolutePathBuf"
-            },
-            "type": {
-              "enum": [
-                "read"
-              ],
-              "title": "ReadCommandActionType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "command",
-            "name",
-            "path",
-            "type"
-          ],
-          "title": "ReadCommandAction",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "command": {
-              "type": "string"
-            },
-            "path": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "type": {
-              "enum": [
-                "listFiles"
-              ],
-              "title": "ListFilesCommandActionType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "command",
-            "type"
-          ],
-          "title": "ListFilesCommandAction",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "command": {
-              "type": "string"
-            },
-            "path": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "query": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "type": {
-              "enum": [
-                "search"
-              ],
-              "title": "SearchCommandActionType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "command",
-            "type"
-          ],
-          "title": "SearchCommandAction",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "command": {
-              "type": "string"
-            },
-            "type": {
-              "enum": [
-                "unknown"
-              ],
-              "title": "UnknownCommandActionType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "command",
-            "type"
-          ],
-          "title": "UnknownCommandAction",
-          "type": "object"
-        }
-      ]
-    },
-    "CommandExecutionSource": {
-      "enum": [
-        "agent",
-        "userShell",
-        "unifiedExecStartup",
-        "unifiedExecInteraction"
-      ],
-      "type": "string"
-    },
-    "CommandExecutionStatus": {
-      "enum": [
-        "inProgress",
-        "completed",
-        "failed",
-        "declined"
-      ],
-      "type": "string"
-    },
-    "DynamicToolCallOutputContentItem": {
-      "oneOf": [
-        {
-          "properties": {
-            "text": {
-              "type": "string"
-            },
-            "type": {
-              "enum": [
-                "inputText"
-              ],
-              "title": "InputTextDynamicToolCallOutputContentItemType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "text",
-            "type"
-          ],
-          "title": "InputTextDynamicToolCallOutputContentItem",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "imageUrl": {
-              "type": "string"
-            },
-            "type": {
-              "enum": [
-                "inputImage"
-              ],
-              "title": "InputImageDynamicToolCallOutputContentItemType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "imageUrl",
-            "type"
-          ],
-          "title": "InputImageDynamicToolCallOutputContentItem",
-          "type": "object"
-        }
-      ]
-    },
-    "DynamicToolCallStatus": {
-      "enum": [
-        "inProgress",
-        "completed",
-        "failed"
-      ],
-      "type": "string"
-    },
-    "FileUpdateChange": {
-      "properties": {
-        "diff": {
-          "type": "string"
-        },
-        "kind": {
-          "$ref": "#/definitions/PatchChangeKind"
-        },
-        "path": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "diff",
-        "kind",
-        "path"
-      ],
-      "type": "object"
-    },
-    "GitInfo": {
-      "properties": {
-        "branch": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "originUrl": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "sha": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "type": "object"
-    },
-    "HookPromptFragment": {
-      "properties": {
-        "hookRunId": {
-          "type": "string"
-        },
-        "text": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "hookRunId",
-        "text"
-      ],
-      "type": "object"
-    },
-    "McpToolCallError": {
-      "properties": {
-        "message": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "message"
-      ],
-      "type": "object"
-    },
-    "McpToolCallResult": {
-      "properties": {
-        "_meta": true,
-        "content": {
-          "items": true,
-          "type": "array"
-        },
-        "structuredContent": true
-      },
-      "required": [
-        "content"
-      ],
-      "type": "object"
-    },
-    "McpToolCallStatus": {
-      "enum": [
-        "inProgress",
-        "completed",
-        "failed"
-      ],
-      "type": "string"
-    },
-    "MemoryCitation": {
-      "properties": {
-        "entries": {
-          "items": {
-            "$ref": "#/definitions/MemoryCitationEntry"
-          },
-          "type": "array"
-        },
-        "threadIds": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "entries",
-        "threadIds"
-      ],
-      "type": "object"
-    },
-    "MemoryCitationEntry": {
-      "properties": {
-        "lineEnd": {
-          "format": "uint32",
-          "minimum": 0.0,
-          "type": "integer"
-        },
-        "lineStart": {
-          "format": "uint32",
-          "minimum": 0.0,
-          "type": "integer"
-        },
-        "note": {
-          "type": "string"
-        },
-        "path": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "lineEnd",
-        "lineStart",
-        "note",
-        "path"
-      ],
-      "type": "object"
-    },
-    "MessagePhase": {
-      "description": "Classifies an assistant message as interim commentary or final answer text.\n\nProviders do not emit this consistently, so callers must treat `None` as \"phase unknown\" and keep compatibility behavior for legacy models.",
-      "oneOf": [
-        {
-          "description": "Mid-turn assistant text (for example preamble/progress narration).\n\nAdditional tool calls or assistant output may follow before turn completion.",
-          "enum": [
-            "commentary"
-          ],
-          "type": "string"
-        },
-        {
-          "description": "The assistant's terminal answer text for the current turn.",
-          "enum": [
-            "final_answer"
-          ],
-          "type": "string"
-        }
-      ]
-    },
-    "NonSteerableTurnKind": {
-      "enum": [
-        "review",
-        "compact"
-      ],
-      "type": "string"
-    },
-    "PatchApplyStatus": {
-      "enum": [
-        "inProgress",
-        "completed",
-        "failed",
-        "declined"
-      ],
-      "type": "string"
-    },
-    "PatchChangeKind": {
-      "oneOf": [
-        {
-          "properties": {
-            "type": {
-              "enum": [
-                "add"
-              ],
-              "title": "AddPatchChangeKindType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "title": "AddPatchChangeKind",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "type": {
-              "enum": [
-                "delete"
-              ],
-              "title": "DeletePatchChangeKindType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "title": "DeletePatchChangeKind",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "move_path": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "type": {
-              "enum": [
-                "update"
-              ],
-              "title": "UpdatePatchChangeKindType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "title": "UpdatePatchChangeKind",
-          "type": "object"
-        }
-      ]
-    },
-    "ReasoningEffort": {
-      "description": "See https://platform.openai.com/docs/guides/reasoning?api-mode=responses#get-started-with-reasoning",
-      "enum": [
-        "none",
-        "minimal",
-        "low",
-        "medium",
-        "high",
-        "xhigh"
-      ],
-      "type": "string"
-    },
-    "SessionSource": {
-      "oneOf": [
-        {
-          "enum": [
-            "cli",
-            "vscode",
-            "exec",
-            "appServer",
-            "unknown"
-          ],
-          "type": "string"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "custom": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "custom"
-          ],
-          "title": "CustomSessionSource",
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "subAgent": {
-              "$ref": "#/definitions/SubAgentSource"
-            }
-          },
-          "required": [
-            "subAgent"
-          ],
-          "title": "SubAgentSessionSource",
-          "type": "object"
-        }
-      ]
-    },
-    "SubAgentSource": {
-      "oneOf": [
-        {
-          "enum": [
-            "review",
-            "compact",
-            "memory_consolidation"
-          ],
-          "type": "string"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "thread_spawn": {
-              "properties": {
-                "agent_nickname": {
-                  "default": null,
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                },
-                "agent_path": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/definitions/AgentPath"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ],
-                  "default": null
-                },
-                "agent_role": {
-                  "default": null,
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                },
-                "depth": {
-                  "format": "int32",
-                  "type": "integer"
-                },
-                "parent_thread_id": {
-                  "$ref": "#/definitions/ThreadId"
-                }
-              },
-              "required": [
-                "depth",
-                "parent_thread_id"
-              ],
-              "type": "object"
-            }
-          },
-          "required": [
-            "thread_spawn"
-          ],
-          "title": "ThreadSpawnSubAgentSource",
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "other": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "other"
-          ],
-          "title": "OtherSubAgentSource",
-          "type": "object"
-        }
-      ]
-    },
-    "TextElement": {
-      "properties": {
-        "byteRange": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/ByteRange"
-            }
-          ],
-          "description": "Byte range in the parent `text` buffer that this element occupies."
-        },
-        "placeholder": {
-          "description": "Optional human-readable placeholder for the element, displayed in the UI.",
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "byteRange"
-      ],
-      "type": "object"
-    },
-    "Thread": {
+  "title": "ThreadReadResponse",
+  "type": "object",
+  "properties": {
+    "thread": {
+      "title": "Thread",
+      "type": "object",
       "properties": {
         "agentNickname": {
-          "description": "Optional random unique nickname assigned to an AgentControl-spawned sub-agent.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": "string"
         },
         "agentRole": {
-          "description": "Optional role (agent_role) assigned to an AgentControl-spawned sub-agent.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": "string"
         },
         "cliVersion": {
-          "description": "Version of the CLI that created the thread.",
           "type": "string"
         },
         "createdAt": {
-          "description": "Unix timestamp (in seconds) when the thread was created.",
-          "format": "int64",
           "type": "integer"
         },
         "cwd": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/AbsolutePathBuf"
-            }
-          ],
-          "description": "Working directory captured for the thread."
+          "title": "AbsolutePathBuf",
+          "type": "object"
         },
         "ephemeral": {
-          "description": "Whether the thread is ephemeral and should not be materialized on disk.",
           "type": "boolean"
         },
         "forkedFromId": {
-          "description": "Source thread id when this thread was created by forking another thread.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": "string"
         },
         "gitInfo": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/GitInfo"
+          "title": "GitInfo",
+          "type": "object",
+          "properties": {
+            "branch": {
+              "type": "string"
             },
-            {
-              "type": "null"
+            "originUrl": {
+              "type": "string"
+            },
+            "sha": {
+              "type": "string"
             }
-          ],
-          "description": "Optional Git metadata captured when the thread was created."
+          }
         },
         "id": {
           "type": "string"
         },
         "modelProvider": {
-          "description": "Model provider used for this thread (for example, 'openai').",
           "type": "string"
         },
         "name": {
-          "description": "Optional user-facing thread title.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": "string"
         },
         "path": {
-          "description": "[UNSTABLE] Path to the thread on disk.",
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": "string"
         },
         "preview": {
-          "description": "Usually the first user message in the thread, if available.",
           "type": "string"
         },
         "sessionId": {
-          "description": "Session id shared by threads that belong to the same session tree.",
           "type": "string"
         },
         "source": {
-          "allOf": [
+          "title": "SessionSource",
+          "oneOf": [
             {
-              "$ref": "#/definitions/SessionSource"
-            }
-          ],
-          "description": "Origin of the thread (CLI, VSCode, codex exec, codex app-server, etc.)."
-        },
-        "status": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/ThreadStatus"
-            }
-          ],
-          "description": "Current runtime status for the thread."
-        },
-        "threadSource": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/ThreadSource"
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "Cli",
+                  "title": "Cliv2::ThreadReadResponseType"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "title": "Cliv2::ThreadReadResponse"
             },
             {
-              "type": "null"
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "vscode",
+                  "title": "Vscodev2::ThreadReadResponseType"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "title": "Vscodev2::ThreadReadResponse"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "Exec",
+                  "title": "Execv2::ThreadReadResponseType"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "title": "Execv2::ThreadReadResponse"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "AppServer",
+                  "title": "AppServerv2::ThreadReadResponseType"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "title": "AppServerv2::ThreadReadResponse"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "field0": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "const": "Custom",
+                  "title": "Customv2::ThreadReadResponseType"
+                }
+              },
+              "required": [
+                "type",
+                "field0"
+              ],
+              "additionalProperties": false,
+              "title": "Customv2::ThreadReadResponse"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "field0": {
+                  "title": "SubAgentSource",
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "Review",
+                          "title": "Reviewv2::ThreadReadResponseType"
+                        }
+                      },
+                      "required": [
+                        "type"
+                      ],
+                      "additionalProperties": false,
+                      "title": "Reviewv2::ThreadReadResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "Compact",
+                          "title": "Compactv2::ThreadReadResponseType"
+                        }
+                      },
+                      "required": [
+                        "type"
+                      ],
+                      "additionalProperties": false,
+                      "title": "Compactv2::ThreadReadResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "agentNickname": {
+                          "type": "string"
+                        },
+                        "agentPath": {
+                          "title": "AgentPath",
+                          "type": "object"
+                        },
+                        "agentRole": {
+                          "type": "string"
+                        },
+                        "depth": {
+                          "type": "integer"
+                        },
+                        "parentThreadId": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "ThreadSpawn",
+                          "title": "ThreadSpawnv2::ThreadReadResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "parentThreadId",
+                        "depth"
+                      ],
+                      "additionalProperties": false,
+                      "title": "ThreadSpawnv2::ThreadReadResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "const": "MemoryConsolidation",
+                          "title": "MemoryConsolidationv2::ThreadReadResponseType"
+                        }
+                      },
+                      "required": [
+                        "type"
+                      ],
+                      "additionalProperties": false,
+                      "title": "MemoryConsolidationv2::ThreadReadResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "field0": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "Other",
+                          "title": "Otherv2::ThreadReadResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "field0"
+                      ],
+                      "additionalProperties": false,
+                      "title": "Otherv2::ThreadReadResponse"
+                    }
+                  ]
+                },
+                "type": {
+                  "type": "string",
+                  "const": "SubAgent",
+                  "title": "SubAgentv2::ThreadReadResponseType"
+                }
+              },
+              "required": [
+                "type",
+                "field0"
+              ],
+              "additionalProperties": false,
+              "title": "SubAgentv2::ThreadReadResponse"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "Unknown",
+                  "title": "Unknownv2::ThreadReadResponseType"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "title": "Unknownv2::ThreadReadResponse"
             }
-          ],
-          "description": "Optional analytics source classification for this thread."
+          ]
+        },
+        "status": {
+          "title": "ThreadStatus",
+          "oneOf": [
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "NotLoaded",
+                  "title": "NotLoadedv2::ThreadReadResponseType"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "title": "NotLoadedv2::ThreadReadResponse"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "Idle",
+                  "title": "Idlev2::ThreadReadResponseType"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "title": "Idlev2::ThreadReadResponse"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "SystemError",
+                  "title": "SystemErrorv2::ThreadReadResponseType"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "additionalProperties": false,
+              "title": "SystemErrorv2::ThreadReadResponse"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "activeFlags": {
+                  "type": "array",
+                  "items": {
+                    "title": "ThreadActiveFlag",
+                    "type": "string",
+                    "enum": [
+                      "WaitingOnApproval",
+                      "WaitingOnUserInput"
+                    ]
+                  }
+                },
+                "type": {
+                  "type": "string",
+                  "const": "Active",
+                  "title": "Activev2::ThreadReadResponseType"
+                }
+              },
+              "required": [
+                "type",
+                "activeFlags"
+              ],
+              "additionalProperties": false,
+              "title": "Activev2::ThreadReadResponse"
+            }
+          ]
+        },
+        "threadSource": {
+          "title": "ThreadSource",
+          "type": "string",
+          "enum": [
+            "User",
+            "Subagent",
+            "MemoryConsolidation"
+          ]
         },
         "turns": {
-          "description": "Only populated on `thread/resume`, `thread/rollback`, `thread/fork`, and `thread/read` (when `includeTurns` is true) responses. For all other responses and notifications returning a Thread, the turns field will be an empty list.",
+          "type": "array",
           "items": {
-            "$ref": "#/definitions/Turn"
-          },
-          "type": "array"
+            "title": "Turn",
+            "type": "object",
+            "properties": {
+              "completedAt": {
+                "type": "integer"
+              },
+              "durationMs": {
+                "type": "integer"
+              },
+              "error": {
+                "title": "TurnError",
+                "type": "object",
+                "properties": {
+                  "additionalDetails": {
+                    "type": "string"
+                  },
+                  "codexErrorInfo": {
+                    "title": "CodexErrorInfo",
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "ContextWindowExceeded",
+                            "title": "ContextWindowExceededv2::ThreadReadResponseType"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false,
+                        "title": "ContextWindowExceededv2::ThreadReadResponse"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "UsageLimitExceeded",
+                            "title": "UsageLimitExceededv2::ThreadReadResponseType"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false,
+                        "title": "UsageLimitExceededv2::ThreadReadResponse"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "ServerOverloaded",
+                            "title": "ServerOverloadedv2::ThreadReadResponseType"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false,
+                        "title": "ServerOverloadedv2::ThreadReadResponse"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "CyberPolicy",
+                            "title": "CyberPolicyv2::ThreadReadResponseType"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false,
+                        "title": "CyberPolicyv2::ThreadReadResponse"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "httpStatusCode": {
+                            "type": "integer"
+                          },
+                          "type": {
+                            "type": "string",
+                            "const": "HttpConnectionFailed",
+                            "title": "HttpConnectionFailedv2::ThreadReadResponseType"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false,
+                        "title": "HttpConnectionFailedv2::ThreadReadResponse"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "httpStatusCode": {
+                            "type": "integer"
+                          },
+                          "type": {
+                            "type": "string",
+                            "const": "ResponseStreamConnectionFailed",
+                            "title": "ResponseStreamConnectionFailedv2::ThreadReadResponseType"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false,
+                        "title": "ResponseStreamConnectionFailedv2::ThreadReadResponse"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "InternalServerError",
+                            "title": "InternalServerErrorv2::ThreadReadResponseType"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false,
+                        "title": "InternalServerErrorv2::ThreadReadResponse"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "Unauthorized",
+                            "title": "Unauthorizedv2::ThreadReadResponseType"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false,
+                        "title": "Unauthorizedv2::ThreadReadResponse"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "BadRequest",
+                            "title": "BadRequestv2::ThreadReadResponseType"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false,
+                        "title": "BadRequestv2::ThreadReadResponse"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "ThreadRollbackFailed",
+                            "title": "ThreadRollbackFailedv2::ThreadReadResponseType"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false,
+                        "title": "ThreadRollbackFailedv2::ThreadReadResponse"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "SandboxError",
+                            "title": "SandboxErrorv2::ThreadReadResponseType"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false,
+                        "title": "SandboxErrorv2::ThreadReadResponse"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "httpStatusCode": {
+                            "type": "integer"
+                          },
+                          "type": {
+                            "type": "string",
+                            "const": "ResponseStreamDisconnected",
+                            "title": "ResponseStreamDisconnectedv2::ThreadReadResponseType"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false,
+                        "title": "ResponseStreamDisconnectedv2::ThreadReadResponse"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "httpStatusCode": {
+                            "type": "integer"
+                          },
+                          "type": {
+                            "type": "string",
+                            "const": "ResponseTooManyFailedAttempts",
+                            "title": "ResponseTooManyFailedAttemptsv2::ThreadReadResponseType"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false,
+                        "title": "ResponseTooManyFailedAttemptsv2::ThreadReadResponse"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "turnKind": {
+                            "title": "NonSteerableTurnKind",
+                            "type": "string",
+                            "enum": [
+                              "Review",
+                              "Compact"
+                            ]
+                          },
+                          "type": {
+                            "type": "string",
+                            "const": "ActiveTurnNotSteerable",
+                            "title": "ActiveTurnNotSteerablev2::ThreadReadResponseType"
+                          }
+                        },
+                        "required": [
+                          "type",
+                          "turnKind"
+                        ],
+                        "additionalProperties": false,
+                        "title": "ActiveTurnNotSteerablev2::ThreadReadResponse"
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string",
+                            "const": "Other",
+                            "title": "Otherv2::ThreadReadResponseType"
+                          }
+                        },
+                        "required": [
+                          "type"
+                        ],
+                        "additionalProperties": false,
+                        "title": "Otherv2::ThreadReadResponse"
+                      }
+                    ]
+                  },
+                  "message": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "message"
+                ]
+              },
+              "id": {
+                "type": "string"
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "title": "ThreadItem",
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "content": {
+                          "type": "array",
+                          "items": {
+                            "title": "UserInput",
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "text": {
+                                    "type": "string"
+                                  },
+                                  "textElements": {
+                                    "type": "array",
+                                    "items": {
+                                      "title": "TextElement",
+                                      "type": "object",
+                                      "properties": {
+                                        "byteRange": {
+                                          "title": "ByteRange",
+                                          "type": "object",
+                                          "properties": {
+                                            "end": {
+                                              "type": "integer"
+                                            },
+                                            "start": {
+                                              "type": "integer"
+                                            }
+                                          },
+                                          "required": [
+                                            "start",
+                                            "end"
+                                          ]
+                                        },
+                                        "placeholder": {
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "byteRange"
+                                      ]
+                                    }
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "const": "Text",
+                                    "title": "Textv2::ThreadReadResponseType"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "text"
+                                ],
+                                "additionalProperties": false,
+                                "title": "Textv2::ThreadReadResponse"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "const": "Image",
+                                    "title": "Imagev2::ThreadReadResponseType"
+                                  },
+                                  "url": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "url"
+                                ],
+                                "additionalProperties": false,
+                                "title": "Imagev2::ThreadReadResponse"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "const": "LocalImage",
+                                    "title": "LocalImagev2::ThreadReadResponseType"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "path"
+                                ],
+                                "additionalProperties": false,
+                                "title": "LocalImagev2::ThreadReadResponse"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "const": "Skill",
+                                    "title": "Skillv2::ThreadReadResponseType"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "name",
+                                  "path"
+                                ],
+                                "additionalProperties": false,
+                                "title": "Skillv2::ThreadReadResponse"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "const": "Mention",
+                                    "title": "Mentionv2::ThreadReadResponseType"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "name",
+                                  "path"
+                                ],
+                                "additionalProperties": false,
+                                "title": "Mentionv2::ThreadReadResponse"
+                              }
+                            ]
+                          }
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "UserMessage",
+                          "title": "UserMessagev2::ThreadReadResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "content"
+                      ],
+                      "additionalProperties": false,
+                      "title": "UserMessagev2::ThreadReadResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "fragments": {
+                          "type": "array",
+                          "items": {
+                            "title": "HookPromptFragment",
+                            "type": "object",
+                            "properties": {
+                              "hookRunId": {
+                                "type": "string"
+                              },
+                              "text": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "text",
+                              "hookRunId"
+                            ]
+                          }
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "HookPrompt",
+                          "title": "HookPromptv2::ThreadReadResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "fragments"
+                      ],
+                      "additionalProperties": false,
+                      "title": "HookPromptv2::ThreadReadResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "memoryCitation": {
+                          "title": "MemoryCitation",
+                          "type": "object",
+                          "properties": {
+                            "entries": {
+                              "type": "array",
+                              "items": {
+                                "title": "MemoryCitationEntry",
+                                "type": "object",
+                                "properties": {
+                                  "lineEnd": {
+                                    "type": "integer"
+                                  },
+                                  "lineStart": {
+                                    "type": "integer"
+                                  },
+                                  "note": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "path",
+                                  "lineStart",
+                                  "lineEnd",
+                                  "note"
+                                ]
+                              }
+                            },
+                            "threadIds": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            }
+                          },
+                          "required": [
+                            "entries",
+                            "threadIds"
+                          ]
+                        },
+                        "phase": {
+                          "title": "MessagePhase",
+                          "type": "string",
+                          "enum": [
+                            "Commentary",
+                            "FinalAnswer"
+                          ]
+                        },
+                        "text": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "AgentMessage",
+                          "title": "AgentMessagev2::ThreadReadResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "text"
+                      ],
+                      "additionalProperties": false,
+                      "title": "AgentMessagev2::ThreadReadResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "text": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "Plan",
+                          "title": "Planv2::ThreadReadResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "text"
+                      ],
+                      "additionalProperties": false,
+                      "title": "Planv2::ThreadReadResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "content": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "summary": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "Reasoning",
+                          "title": "Reasoningv2::ThreadReadResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id"
+                      ],
+                      "additionalProperties": false,
+                      "title": "Reasoningv2::ThreadReadResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "aggregatedOutput": {
+                          "type": "string"
+                        },
+                        "command": {
+                          "type": "string"
+                        },
+                        "commandActions": {
+                          "type": "array",
+                          "items": {
+                            "title": "CommandAction",
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "command": {
+                                    "type": "string"
+                                  },
+                                  "name": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "title": "AbsolutePathBuf",
+                                    "type": "object"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "const": "Read",
+                                    "title": "Readv2::ThreadReadResponseType"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "command",
+                                  "name",
+                                  "path"
+                                ],
+                                "additionalProperties": false,
+                                "title": "Readv2::ThreadReadResponse"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "command": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "const": "ListFiles",
+                                    "title": "ListFilesv2::ThreadReadResponseType"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "command"
+                                ],
+                                "additionalProperties": false,
+                                "title": "ListFilesv2::ThreadReadResponse"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "command": {
+                                    "type": "string"
+                                  },
+                                  "path": {
+                                    "type": "string"
+                                  },
+                                  "query": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "const": "Search",
+                                    "title": "Searchv2::ThreadReadResponseType"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "command"
+                                ],
+                                "additionalProperties": false,
+                                "title": "Searchv2::ThreadReadResponse"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "command": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "const": "Unknown",
+                                    "title": "Unknownv2::ThreadReadResponseType"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "command"
+                                ],
+                                "additionalProperties": false,
+                                "title": "Unknownv2::ThreadReadResponse"
+                              }
+                            ]
+                          }
+                        },
+                        "cwd": {
+                          "title": "AbsolutePathBuf",
+                          "type": "object"
+                        },
+                        "durationMs": {
+                          "type": "integer"
+                        },
+                        "exitCode": {
+                          "type": "integer"
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "processId": {
+                          "type": "string"
+                        },
+                        "source": {
+                          "title": "CommandExecutionSource",
+                          "type": "string",
+                          "enum": [
+                            "Agent",
+                            "UserShell",
+                            "UnifiedExecStartup",
+                            "UnifiedExecInteraction"
+                          ]
+                        },
+                        "status": {
+                          "title": "CommandExecutionStatus",
+                          "type": "string",
+                          "enum": [
+                            "InProgress",
+                            "Completed",
+                            "Failed",
+                            "Declined"
+                          ]
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "CommandExecution",
+                          "title": "CommandExecutionv2::ThreadReadResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "command",
+                        "cwd",
+                        "status",
+                        "commandActions"
+                      ],
+                      "additionalProperties": false,
+                      "title": "CommandExecutionv2::ThreadReadResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "changes": {
+                          "type": "array",
+                          "items": {
+                            "title": "FileUpdateChange",
+                            "type": "object",
+                            "properties": {
+                              "diff": {
+                                "type": "string"
+                              },
+                              "kind": {
+                                "title": "PatchChangeKind",
+                                "oneOf": [
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "const": "Add",
+                                        "title": "Addv2::ThreadReadResponseType"
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ],
+                                    "additionalProperties": false,
+                                    "title": "Addv2::ThreadReadResponse"
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "const": "Delete",
+                                        "title": "Deletev2::ThreadReadResponseType"
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ],
+                                    "additionalProperties": false,
+                                    "title": "Deletev2::ThreadReadResponse"
+                                  },
+                                  {
+                                    "type": "object",
+                                    "properties": {
+                                      "movePath": {
+                                        "type": "string"
+                                      },
+                                      "type": {
+                                        "type": "string",
+                                        "const": "Update",
+                                        "title": "Updatev2::ThreadReadResponseType"
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ],
+                                    "additionalProperties": false,
+                                    "title": "Updatev2::ThreadReadResponse"
+                                  }
+                                ]
+                              },
+                              "path": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "kind",
+                              "diff"
+                            ]
+                          }
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "title": "PatchApplyStatus",
+                          "type": "string",
+                          "enum": [
+                            "InProgress",
+                            "Completed",
+                            "Failed",
+                            "Declined"
+                          ]
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "FileChange",
+                          "title": "FileChangev2::ThreadReadResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "changes",
+                        "status"
+                      ],
+                      "additionalProperties": false,
+                      "title": "FileChangev2::ThreadReadResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "arguments": true,
+                        "durationMs": {
+                          "type": "integer"
+                        },
+                        "error": {
+                          "title": "McpToolCallError",
+                          "type": "object",
+                          "properties": {
+                            "message": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "message"
+                          ]
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "result": {
+                          "title": "McpToolCallResult",
+                          "type": "object",
+                          "properties": {
+                            "_meta": true,
+                            "content": {
+                              "type": "array",
+                              "items": true
+                            },
+                            "structuredContent": true
+                          },
+                          "required": [
+                            "content"
+                          ]
+                        },
+                        "server": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "title": "McpToolCallStatus",
+                          "type": "string",
+                          "enum": [
+                            "InProgress",
+                            "Completed",
+                            "Failed"
+                          ]
+                        },
+                        "tool": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "McpToolCall",
+                          "title": "McpToolCallv2::ThreadReadResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "server",
+                        "tool",
+                        "status",
+                        "arguments"
+                      ],
+                      "additionalProperties": false,
+                      "title": "McpToolCallv2::ThreadReadResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "arguments": true,
+                        "contentItems": {
+                          "type": "array",
+                          "items": {
+                            "title": "DynamicToolCallOutputContentItem",
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "text": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "const": "InputText",
+                                    "title": "InputTextv2::ThreadReadResponseType"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "text"
+                                ],
+                                "additionalProperties": false,
+                                "title": "InputTextv2::ThreadReadResponse"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "imageUrl": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "const": "InputImage",
+                                    "title": "InputImagev2::ThreadReadResponseType"
+                                  }
+                                },
+                                "required": [
+                                  "type",
+                                  "imageUrl"
+                                ],
+                                "additionalProperties": false,
+                                "title": "InputImagev2::ThreadReadResponse"
+                              }
+                            ]
+                          }
+                        },
+                        "durationMs": {
+                          "type": "integer"
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "namespace": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "title": "DynamicToolCallStatus",
+                          "type": "string",
+                          "enum": [
+                            "InProgress",
+                            "Completed",
+                            "Failed"
+                          ]
+                        },
+                        "success": {
+                          "type": "boolean"
+                        },
+                        "tool": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "DynamicToolCall",
+                          "title": "DynamicToolCallv2::ThreadReadResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "tool",
+                        "arguments",
+                        "status"
+                      ],
+                      "additionalProperties": false,
+                      "title": "DynamicToolCallv2::ThreadReadResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "agentsStates": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "title": "CollabAgentState",
+                            "type": "object",
+                            "properties": {
+                              "message": {
+                                "type": "string"
+                              },
+                              "status": {
+                                "title": "CollabAgentStatus",
+                                "type": "string",
+                                "enum": [
+                                  "PendingInit",
+                                  "Running",
+                                  "Interrupted",
+                                  "Completed",
+                                  "Errored",
+                                  "Shutdown",
+                                  "NotFound"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "status"
+                            ]
+                          }
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "model": {
+                          "type": "string"
+                        },
+                        "prompt": {
+                          "type": "string"
+                        },
+                        "reasoningEffort": {
+                          "title": "ReasoningEffort",
+                          "type": "string",
+                          "enum": [
+                            "none",
+                            "minimal",
+                            "low",
+                            "medium",
+                            "high",
+                            "xhigh"
+                          ]
+                        },
+                        "receiverThreadIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "senderThreadId": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "title": "CollabAgentToolCallStatus",
+                          "type": "string",
+                          "enum": [
+                            "InProgress",
+                            "Completed",
+                            "Failed"
+                          ]
+                        },
+                        "tool": {
+                          "title": "CollabAgentTool",
+                          "type": "string",
+                          "enum": [
+                            "SpawnAgent",
+                            "SendInput",
+                            "ResumeAgent",
+                            "Wait",
+                            "CloseAgent"
+                          ]
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "CollabAgentToolCall",
+                          "title": "CollabAgentToolCallv2::ThreadReadResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "tool",
+                        "status",
+                        "senderThreadId",
+                        "receiverThreadIds",
+                        "agentsStates"
+                      ],
+                      "additionalProperties": false,
+                      "title": "CollabAgentToolCallv2::ThreadReadResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "action": {
+                          "title": "WebSearchAction",
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "queries": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                },
+                                "query": {
+                                  "type": "string"
+                                },
+                                "type": {
+                                  "type": "string",
+                                  "const": "Search",
+                                  "title": "Searchv2::ThreadReadResponseType"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "additionalProperties": false,
+                              "title": "Searchv2::ThreadReadResponse"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "const": "OpenPage",
+                                  "title": "OpenPagev2::ThreadReadResponseType"
+                                },
+                                "url": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "additionalProperties": false,
+                              "title": "OpenPagev2::ThreadReadResponse"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "pattern": {
+                                  "type": "string"
+                                },
+                                "type": {
+                                  "type": "string",
+                                  "const": "FindInPage",
+                                  "title": "FindInPagev2::ThreadReadResponseType"
+                                },
+                                "url": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "additionalProperties": false,
+                              "title": "FindInPagev2::ThreadReadResponse"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "const": "Other",
+                                  "title": "Otherv2::ThreadReadResponseType"
+                                }
+                              },
+                              "required": [
+                                "type"
+                              ],
+                              "additionalProperties": false,
+                              "title": "Otherv2::ThreadReadResponse"
+                            }
+                          ]
+                        },
+                        "id": {
+                          "type": "string"
+                        },
+                        "query": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "WebSearch",
+                          "title": "WebSearchv2::ThreadReadResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "query"
+                      ],
+                      "additionalProperties": false,
+                      "title": "WebSearchv2::ThreadReadResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "path": {
+                          "title": "AbsolutePathBuf",
+                          "type": "object"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "ImageView",
+                          "title": "ImageViewv2::ThreadReadResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "path"
+                      ],
+                      "additionalProperties": false,
+                      "title": "ImageViewv2::ThreadReadResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "result": {
+                          "type": "string"
+                        },
+                        "revisedPrompt": {
+                          "type": "string"
+                        },
+                        "status": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "ImageGeneration",
+                          "title": "ImageGenerationv2::ThreadReadResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "status",
+                        "result"
+                      ],
+                      "additionalProperties": false,
+                      "title": "ImageGenerationv2::ThreadReadResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "review": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "EnteredReviewMode",
+                          "title": "EnteredReviewModev2::ThreadReadResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "review"
+                      ],
+                      "additionalProperties": false,
+                      "title": "EnteredReviewModev2::ThreadReadResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "review": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "ExitedReviewMode",
+                          "title": "ExitedReviewModev2::ThreadReadResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id",
+                        "review"
+                      ],
+                      "additionalProperties": false,
+                      "title": "ExitedReviewModev2::ThreadReadResponse"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "const": "ContextCompaction",
+                          "title": "ContextCompactionv2::ThreadReadResponseType"
+                        }
+                      },
+                      "required": [
+                        "type",
+                        "id"
+                      ],
+                      "additionalProperties": false,
+                      "title": "ContextCompactionv2::ThreadReadResponse"
+                    }
+                  ]
+                }
+              },
+              "itemsView": {
+                "title": "TurnItemsView",
+                "type": "string",
+                "enum": [
+                  "NotLoaded",
+                  "Summary",
+                  "Full"
+                ]
+              },
+              "startedAt": {
+                "type": "integer"
+              },
+              "status": {
+                "title": "TurnStatus",
+                "type": "string",
+                "enum": [
+                  "Completed",
+                  "Interrupted",
+                  "Failed",
+                  "InProgress"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "items",
+              "status"
+            ]
+          }
         },
         "updatedAt": {
-          "description": "Unix timestamp (in seconds) when the thread was last updated.",
-          "format": "int64",
           "type": "integer"
         }
       },
       "required": [
-        "cliVersion",
-        "createdAt",
-        "cwd",
-        "ephemeral",
         "id",
-        "modelProvider",
-        "preview",
         "sessionId",
-        "source",
+        "preview",
+        "ephemeral",
+        "modelProvider",
+        "createdAt",
+        "updatedAt",
         "status",
-        "turns",
-        "updatedAt"
-      ],
-      "type": "object"
-    },
-    "ThreadActiveFlag": {
-      "enum": [
-        "waitingOnApproval",
-        "waitingOnUserInput"
-      ],
-      "type": "string"
-    },
-    "ThreadId": {
-      "type": "string"
-    },
-    "ThreadItem": {
-      "oneOf": [
-        {
-          "properties": {
-            "content": {
-              "items": {
-                "$ref": "#/definitions/UserInput"
-              },
-              "type": "array"
-            },
-            "id": {
-              "type": "string"
-            },
-            "type": {
-              "enum": [
-                "userMessage"
-              ],
-              "title": "UserMessageThreadItemType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "content",
-            "id",
-            "type"
-          ],
-          "title": "UserMessageThreadItem",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "fragments": {
-              "items": {
-                "$ref": "#/definitions/HookPromptFragment"
-              },
-              "type": "array"
-            },
-            "id": {
-              "type": "string"
-            },
-            "type": {
-              "enum": [
-                "hookPrompt"
-              ],
-              "title": "HookPromptThreadItemType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "fragments",
-            "id",
-            "type"
-          ],
-          "title": "HookPromptThreadItem",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "id": {
-              "type": "string"
-            },
-            "memoryCitation": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/MemoryCitation"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null
-            },
-            "phase": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/MessagePhase"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "default": null
-            },
-            "text": {
-              "type": "string"
-            },
-            "type": {
-              "enum": [
-                "agentMessage"
-              ],
-              "title": "AgentMessageThreadItemType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "id",
-            "text",
-            "type"
-          ],
-          "title": "AgentMessageThreadItem",
-          "type": "object"
-        },
-        {
-          "description": "EXPERIMENTAL - proposed plan item content. The completed plan item is authoritative and may not match the concatenation of `PlanDelta` text.",
-          "properties": {
-            "id": {
-              "type": "string"
-            },
-            "text": {
-              "type": "string"
-            },
-            "type": {
-              "enum": [
-                "plan"
-              ],
-              "title": "PlanThreadItemType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "id",
-            "text",
-            "type"
-          ],
-          "title": "PlanThreadItem",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "content": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "id": {
-              "type": "string"
-            },
-            "summary": {
-              "default": [],
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "type": {
-              "enum": [
-                "reasoning"
-              ],
-              "title": "ReasoningThreadItemType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "id",
-            "type"
-          ],
-          "title": "ReasoningThreadItem",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "aggregatedOutput": {
-              "description": "The command's output, aggregated from stdout and stderr.",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "command": {
-              "description": "The command to be executed.",
-              "type": "string"
-            },
-            "commandActions": {
-              "description": "A best-effort parsing of the command to understand the action(s) it will perform. This returns a list of CommandAction objects because a single shell command may be composed of many commands piped together.",
-              "items": {
-                "$ref": "#/definitions/CommandAction"
-              },
-              "type": "array"
-            },
-            "cwd": {
-              "allOf": [
-                {
-                  "$ref": "#/definitions/AbsolutePathBuf"
-                }
-              ],
-              "description": "The command's working directory."
-            },
-            "durationMs": {
-              "description": "The duration of the command execution in milliseconds.",
-              "format": "int64",
-              "type": [
-                "integer",
-                "null"
-              ]
-            },
-            "exitCode": {
-              "description": "The command's exit code.",
-              "format": "int32",
-              "type": [
-                "integer",
-                "null"
-              ]
-            },
-            "id": {
-              "type": "string"
-            },
-            "processId": {
-              "description": "Identifier for the underlying PTY process (when available).",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "source": {
-              "allOf": [
-                {
-                  "$ref": "#/definitions/CommandExecutionSource"
-                }
-              ],
-              "default": "agent"
-            },
-            "status": {
-              "$ref": "#/definitions/CommandExecutionStatus"
-            },
-            "type": {
-              "enum": [
-                "commandExecution"
-              ],
-              "title": "CommandExecutionThreadItemType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "command",
-            "commandActions",
-            "cwd",
-            "id",
-            "status",
-            "type"
-          ],
-          "title": "CommandExecutionThreadItem",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "changes": {
-              "items": {
-                "$ref": "#/definitions/FileUpdateChange"
-              },
-              "type": "array"
-            },
-            "id": {
-              "type": "string"
-            },
-            "status": {
-              "$ref": "#/definitions/PatchApplyStatus"
-            },
-            "type": {
-              "enum": [
-                "fileChange"
-              ],
-              "title": "FileChangeThreadItemType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "changes",
-            "id",
-            "status",
-            "type"
-          ],
-          "title": "FileChangeThreadItem",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "arguments": true,
-            "durationMs": {
-              "description": "The duration of the MCP tool call in milliseconds.",
-              "format": "int64",
-              "type": [
-                "integer",
-                "null"
-              ]
-            },
-            "error": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/McpToolCallError"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "id": {
-              "type": "string"
-            },
-            "mcpAppResourceUri": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "result": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/McpToolCallResult"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "server": {
-              "type": "string"
-            },
-            "status": {
-              "$ref": "#/definitions/McpToolCallStatus"
-            },
-            "tool": {
-              "type": "string"
-            },
-            "type": {
-              "enum": [
-                "mcpToolCall"
-              ],
-              "title": "McpToolCallThreadItemType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "arguments",
-            "id",
-            "server",
-            "status",
-            "tool",
-            "type"
-          ],
-          "title": "McpToolCallThreadItem",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "arguments": true,
-            "contentItems": {
-              "items": {
-                "$ref": "#/definitions/DynamicToolCallOutputContentItem"
-              },
-              "type": [
-                "array",
-                "null"
-              ]
-            },
-            "durationMs": {
-              "description": "The duration of the dynamic tool call in milliseconds.",
-              "format": "int64",
-              "type": [
-                "integer",
-                "null"
-              ]
-            },
-            "id": {
-              "type": "string"
-            },
-            "namespace": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "status": {
-              "$ref": "#/definitions/DynamicToolCallStatus"
-            },
-            "success": {
-              "type": [
-                "boolean",
-                "null"
-              ]
-            },
-            "tool": {
-              "type": "string"
-            },
-            "type": {
-              "enum": [
-                "dynamicToolCall"
-              ],
-              "title": "DynamicToolCallThreadItemType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "arguments",
-            "id",
-            "status",
-            "tool",
-            "type"
-          ],
-          "title": "DynamicToolCallThreadItem",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "agentsStates": {
-              "additionalProperties": {
-                "$ref": "#/definitions/CollabAgentState"
-              },
-              "description": "Last known status of the target agents, when available.",
-              "type": "object"
-            },
-            "id": {
-              "description": "Unique identifier for this collab tool call.",
-              "type": "string"
-            },
-            "model": {
-              "description": "Model requested for the spawned agent, when applicable.",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "prompt": {
-              "description": "Prompt text sent as part of the collab tool call, when available.",
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "reasoningEffort": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/ReasoningEffort"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "description": "Reasoning effort requested for the spawned agent, when applicable."
-            },
-            "receiverThreadIds": {
-              "description": "Thread ID of the receiving agent, when applicable. In case of spawn operation, this corresponds to the newly spawned agent.",
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "senderThreadId": {
-              "description": "Thread ID of the agent issuing the collab request.",
-              "type": "string"
-            },
-            "status": {
-              "allOf": [
-                {
-                  "$ref": "#/definitions/CollabAgentToolCallStatus"
-                }
-              ],
-              "description": "Current status of the collab tool call."
-            },
-            "tool": {
-              "allOf": [
-                {
-                  "$ref": "#/definitions/CollabAgentTool"
-                }
-              ],
-              "description": "Name of the collab tool that was invoked."
-            },
-            "type": {
-              "enum": [
-                "collabAgentToolCall"
-              ],
-              "title": "CollabAgentToolCallThreadItemType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "agentsStates",
-            "id",
-            "receiverThreadIds",
-            "senderThreadId",
-            "status",
-            "tool",
-            "type"
-          ],
-          "title": "CollabAgentToolCallThreadItem",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "action": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/WebSearchAction"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "id": {
-              "type": "string"
-            },
-            "query": {
-              "type": "string"
-            },
-            "type": {
-              "enum": [
-                "webSearch"
-              ],
-              "title": "WebSearchThreadItemType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "id",
-            "query",
-            "type"
-          ],
-          "title": "WebSearchThreadItem",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "id": {
-              "type": "string"
-            },
-            "path": {
-              "$ref": "#/definitions/AbsolutePathBuf"
-            },
-            "type": {
-              "enum": [
-                "imageView"
-              ],
-              "title": "ImageViewThreadItemType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "id",
-            "path",
-            "type"
-          ],
-          "title": "ImageViewThreadItem",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "id": {
-              "type": "string"
-            },
-            "result": {
-              "type": "string"
-            },
-            "revisedPrompt": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "savedPath": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/AbsolutePathBuf"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "status": {
-              "type": "string"
-            },
-            "type": {
-              "enum": [
-                "imageGeneration"
-              ],
-              "title": "ImageGenerationThreadItemType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "id",
-            "result",
-            "status",
-            "type"
-          ],
-          "title": "ImageGenerationThreadItem",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "id": {
-              "type": "string"
-            },
-            "review": {
-              "type": "string"
-            },
-            "type": {
-              "enum": [
-                "enteredReviewMode"
-              ],
-              "title": "EnteredReviewModeThreadItemType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "id",
-            "review",
-            "type"
-          ],
-          "title": "EnteredReviewModeThreadItem",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "id": {
-              "type": "string"
-            },
-            "review": {
-              "type": "string"
-            },
-            "type": {
-              "enum": [
-                "exitedReviewMode"
-              ],
-              "title": "ExitedReviewModeThreadItemType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "id",
-            "review",
-            "type"
-          ],
-          "title": "ExitedReviewModeThreadItem",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "id": {
-              "type": "string"
-            },
-            "type": {
-              "enum": [
-                "contextCompaction"
-              ],
-              "title": "ContextCompactionThreadItemType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "id",
-            "type"
-          ],
-          "title": "ContextCompactionThreadItem",
-          "type": "object"
-        }
+        "cwd",
+        "cliVersion",
+        "source",
+        "turns"
       ]
-    },
-    "ThreadSource": {
-      "enum": [
-        "user",
-        "subagent",
-        "memory_consolidation"
-      ],
-      "type": "string"
-    },
-    "ThreadStatus": {
-      "oneOf": [
-        {
-          "properties": {
-            "type": {
-              "enum": [
-                "notLoaded"
-              ],
-              "title": "NotLoadedThreadStatusType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "title": "NotLoadedThreadStatus",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "type": {
-              "enum": [
-                "idle"
-              ],
-              "title": "IdleThreadStatusType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "title": "IdleThreadStatus",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "type": {
-              "enum": [
-                "systemError"
-              ],
-              "title": "SystemErrorThreadStatusType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "title": "SystemErrorThreadStatus",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "activeFlags": {
-              "items": {
-                "$ref": "#/definitions/ThreadActiveFlag"
-              },
-              "type": "array"
-            },
-            "type": {
-              "enum": [
-                "active"
-              ],
-              "title": "ActiveThreadStatusType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "activeFlags",
-            "type"
-          ],
-          "title": "ActiveThreadStatus",
-          "type": "object"
-        }
-      ]
-    },
-    "Turn": {
-      "properties": {
-        "completedAt": {
-          "description": "Unix timestamp (in seconds) when the turn completed.",
-          "format": "int64",
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "durationMs": {
-          "description": "Duration between turn start and completion in milliseconds, if known.",
-          "format": "int64",
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "error": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/TurnError"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "Only populated when the Turn's status is failed."
-        },
-        "id": {
-          "type": "string"
-        },
-        "items": {
-          "description": "Thread items currently included in this turn payload.",
-          "items": {
-            "$ref": "#/definitions/ThreadItem"
-          },
-          "type": "array"
-        },
-        "itemsView": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/TurnItemsView"
-            }
-          ],
-          "default": "full",
-          "description": "Describes how much of `items` has been loaded for this turn."
-        },
-        "startedAt": {
-          "description": "Unix timestamp (in seconds) when the turn started.",
-          "format": "int64",
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "status": {
-          "$ref": "#/definitions/TurnStatus"
-        }
-      },
-      "required": [
-        "id",
-        "items",
-        "status"
-      ],
-      "type": "object"
-    },
-    "TurnError": {
-      "properties": {
-        "additionalDetails": {
-          "default": null,
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "codexErrorInfo": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/CodexErrorInfo"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "message": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "message"
-      ],
-      "type": "object"
-    },
-    "TurnItemsView": {
-      "oneOf": [
-        {
-          "description": "`items` was not loaded for this turn. The field is intentionally empty.",
-          "enum": [
-            "notLoaded"
-          ],
-          "type": "string"
-        },
-        {
-          "description": "`items` contains only a display summary for this turn.",
-          "enum": [
-            "summary"
-          ],
-          "type": "string"
-        },
-        {
-          "description": "`items` contains every ThreadItem available from persisted app-server history for this turn.",
-          "enum": [
-            "full"
-          ],
-          "type": "string"
-        }
-      ]
-    },
-    "TurnStatus": {
-      "enum": [
-        "completed",
-        "interrupted",
-        "failed",
-        "inProgress"
-      ],
-      "type": "string"
-    },
-    "UserInput": {
-      "oneOf": [
-        {
-          "properties": {
-            "text": {
-              "type": "string"
-            },
-            "text_elements": {
-              "default": [],
-              "description": "UI-defined spans within `text` used to render or persist special elements.",
-              "items": {
-                "$ref": "#/definitions/TextElement"
-              },
-              "type": "array"
-            },
-            "type": {
-              "enum": [
-                "text"
-              ],
-              "title": "TextUserInputType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "text",
-            "type"
-          ],
-          "title": "TextUserInput",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "type": {
-              "enum": [
-                "image"
-              ],
-              "title": "ImageUserInputType",
-              "type": "string"
-            },
-            "url": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "url"
-          ],
-          "title": "ImageUserInput",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "path": {
-              "type": "string"
-            },
-            "type": {
-              "enum": [
-                "localImage"
-              ],
-              "title": "LocalImageUserInputType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "path",
-            "type"
-          ],
-          "title": "LocalImageUserInput",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "name": {
-              "type": "string"
-            },
-            "path": {
-              "type": "string"
-            },
-            "type": {
-              "enum": [
-                "skill"
-              ],
-              "title": "SkillUserInputType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "name",
-            "path",
-            "type"
-          ],
-          "title": "SkillUserInput",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "name": {
-              "type": "string"
-            },
-            "path": {
-              "type": "string"
-            },
-            "type": {
-              "enum": [
-                "mention"
-              ],
-              "title": "MentionUserInputType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "name",
-            "path",
-            "type"
-          ],
-          "title": "MentionUserInput",
-          "type": "object"
-        }
-      ]
-    },
-    "WebSearchAction": {
-      "oneOf": [
-        {
-          "properties": {
-            "queries": {
-              "items": {
-                "type": "string"
-              },
-              "type": [
-                "array",
-                "null"
-              ]
-            },
-            "query": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "type": {
-              "enum": [
-                "search"
-              ],
-              "title": "SearchWebSearchActionType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "title": "SearchWebSearchAction",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "type": {
-              "enum": [
-                "openPage"
-              ],
-              "title": "OpenPageWebSearchActionType",
-              "type": "string"
-            },
-            "url": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "title": "OpenPageWebSearchAction",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "pattern": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "type": {
-              "enum": [
-                "findInPage"
-              ],
-              "title": "FindInPageWebSearchActionType",
-              "type": "string"
-            },
-            "url": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "title": "FindInPageWebSearchAction",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "type": {
-              "enum": [
-                "other"
-              ],
-              "title": "OtherWebSearchActionType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "title": "OtherWebSearchAction",
-          "type": "object"
-        }
-      ]
-    }
-  },
-  "properties": {
-    "thread": {
-      "$ref": "#/definitions/Thread"
     }
   },
   "required": [
     "thread"
-  ],
-  "title": "ThreadReadResponse",
-  "type": "object"
+  ]
 }

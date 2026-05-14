@@ -16,16 +16,14 @@ workspace = true
 codex-protocol = { workspace = true }
 codex-shell-command = { workspace = true }
 edgerun-error = { workspace = true }
-edgerun-json = { workspace = true, features = ["serde"] }
+edgerun-json = { workspace = true }
 edgerun-similar = { workspace = true }
 schemars = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
 edgerun-strum-macros = { workspace = true }
 rmcp = { workspace = true, default-features = false, features = [
     "base64",
     "macros",
 ] }
-ts-rs = { workspace = true }
 edgerun-inventory = { workspace = true }
 tracing = { workspace = true }
 

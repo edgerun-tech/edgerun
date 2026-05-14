@@ -1,227 +1,168 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "definitions": {
-    "InputModality": {
-      "description": "Canonical user-input modality tags advertised by a model.",
-      "oneOf": [
-        {
-          "description": "Plain text turns and tool payloads.",
-          "enum": [
-            "text"
-          ],
-          "type": "string"
-        },
-        {
-          "description": "Image attachments included in user turns.",
-          "enum": [
-            "image"
-          ],
-          "type": "string"
-        }
-      ]
-    },
-    "Model": {
-      "properties": {
-        "additionalSpeedTiers": {
-          "default": [],
-          "description": "Deprecated: use `serviceTiers` instead.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "availabilityNux": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/ModelAvailabilityNux"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "defaultReasoningEffort": {
-          "$ref": "#/definitions/ReasoningEffort"
-        },
-        "description": {
-          "type": "string"
-        },
-        "displayName": {
-          "type": "string"
-        },
-        "hidden": {
-          "type": "boolean"
-        },
-        "id": {
-          "type": "string"
-        },
-        "inputModalities": {
-          "default": [
-            "text",
-            "image"
-          ],
-          "items": {
-            "$ref": "#/definitions/InputModality"
-          },
-          "type": "array"
-        },
-        "isDefault": {
-          "type": "boolean"
-        },
-        "model": {
-          "type": "string"
-        },
-        "serviceTiers": {
-          "default": [],
-          "items": {
-            "$ref": "#/definitions/ModelServiceTier"
-          },
-          "type": "array"
-        },
-        "supportedReasoningEfforts": {
-          "items": {
-            "$ref": "#/definitions/ReasoningEffortOption"
-          },
-          "type": "array"
-        },
-        "supportsPersonality": {
-          "default": false,
-          "type": "boolean"
-        },
-        "upgrade": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "upgradeInfo": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/ModelUpgradeInfo"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "required": [
-        "defaultReasoningEffort",
-        "description",
-        "displayName",
-        "hidden",
-        "id",
-        "isDefault",
-        "model",
-        "supportedReasoningEfforts"
-      ],
-      "type": "object"
-    },
-    "ModelAvailabilityNux": {
-      "properties": {
-        "message": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "message"
-      ],
-      "type": "object"
-    },
-    "ModelServiceTier": {
-      "properties": {
-        "description": {
-          "type": "string"
-        },
-        "id": {
-          "type": "string"
-        },
-        "name": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "description",
-        "id",
-        "name"
-      ],
-      "type": "object"
-    },
-    "ModelUpgradeInfo": {
-      "properties": {
-        "migrationMarkdown": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "model": {
-          "type": "string"
-        },
-        "modelLink": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "upgradeCopy": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "model"
-      ],
-      "type": "object"
-    },
-    "ReasoningEffort": {
-      "description": "See https://platform.openai.com/docs/guides/reasoning?api-mode=responses#get-started-with-reasoning",
-      "enum": [
-        "none",
-        "minimal",
-        "low",
-        "medium",
-        "high",
-        "xhigh"
-      ],
-      "type": "string"
-    },
-    "ReasoningEffortOption": {
-      "properties": {
-        "description": {
-          "type": "string"
-        },
-        "reasoningEffort": {
-          "$ref": "#/definitions/ReasoningEffort"
-        }
-      },
-      "required": [
-        "description",
-        "reasoningEffort"
-      ],
-      "type": "object"
-    }
-  },
+  "title": "ModelListResponse",
+  "type": "object",
   "properties": {
     "data": {
+      "type": "array",
       "items": {
-        "$ref": "#/definitions/Model"
-      },
-      "type": "array"
+        "title": "Model",
+        "type": "object",
+        "properties": {
+          "additionalSpeedTiers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "availabilityNux": {
+            "title": "ModelAvailabilityNux",
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "message"
+            ]
+          },
+          "defaultReasoningEffort": {
+            "title": "ReasoningEffort",
+            "type": "string",
+            "enum": [
+              "none",
+              "minimal",
+              "low",
+              "medium",
+              "high",
+              "xhigh"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "inputModalities": {
+            "type": "array",
+            "items": {
+              "title": "InputModality",
+              "type": "string",
+              "enum": [
+                "text",
+                "image"
+              ]
+            }
+          },
+          "isDefault": {
+            "type": "boolean"
+          },
+          "model": {
+            "type": "string"
+          },
+          "serviceTiers": {
+            "type": "array",
+            "items": {
+              "title": "ModelServiceTier",
+              "type": "object",
+              "properties": {
+                "description": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "name",
+                "description"
+              ]
+            }
+          },
+          "supportedReasoningEfforts": {
+            "type": "array",
+            "items": {
+              "title": "ReasoningEffortOption",
+              "type": "object",
+              "properties": {
+                "description": {
+                  "type": "string"
+                },
+                "reasoningEffort": {
+                  "title": "ReasoningEffort",
+                  "type": "string",
+                  "enum": [
+                    "none",
+                    "minimal",
+                    "low",
+                    "medium",
+                    "high",
+                    "xhigh"
+                  ]
+                }
+              },
+              "required": [
+                "reasoningEffort",
+                "description"
+              ]
+            }
+          },
+          "supportsPersonality": {
+            "type": "boolean"
+          },
+          "upgrade": {
+            "type": "string"
+          },
+          "upgradeInfo": {
+            "title": "ModelUpgradeInfo",
+            "type": "object",
+            "properties": {
+              "migrationMarkdown": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "modelLink": {
+                "type": "string"
+              },
+              "upgradeCopy": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "model"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "model",
+          "displayName",
+          "description",
+          "hidden",
+          "supportedReasoningEfforts",
+          "defaultReasoningEffort",
+          "isDefault"
+        ]
+      }
     },
     "nextCursor": {
-      "description": "Opaque cursor to pass to the next call to continue after the last item. If None, there are no more items to return.",
-      "type": [
-        "string",
-        "null"
-      ]
+      "type": "string"
     }
   },
   "required": [
     "data"
-  ],
-  "title": "ModelListResponse",
-  "type": "object"
+  ]
 }

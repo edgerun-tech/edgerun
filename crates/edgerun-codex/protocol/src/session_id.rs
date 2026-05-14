@@ -2,17 +2,17 @@ use std::fmt::Display;
 
 use crate::local_uuid;
 use crate::local_uuid::Uuid;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
+use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
+use edgerun_json::ToJson;
+use edgerun_json::Value;
 use schemars::JsonSchema;
 use schemars::r#gen::SchemaGenerator;
 use schemars::schema::Schema;
-use ts_rs::TS;
 
 use crate::ThreadId;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, TS, Hash)]
-#[ts(type = "string")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SessionId {
     pub(crate) uuid: Uuid,
 }
@@ -77,23 +77,16 @@ impl Display for SessionId {
     }
 }
 
-impl Serialize for SessionId {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: edgerun_serde::Serializer,
-    {
-        serializer.collect_str(&self.uuid)
+impl ToJson for SessionId {
+    fn to_json(&self) -> Value {
+        self.to_string().to_json()
     }
 }
 
-impl<'de> Deserialize<'de> for SessionId {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: edgerun_serde::Deserializer<'de>,
-    {
-        let value = String::deserialize(deserializer)?;
-        let uuid = Uuid::parse_str(&value).map_err(edgerun_serde::de::Error::custom)?;
-        Ok(Self { uuid })
+impl FromJson for SessionId {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let value = String::from_json(value)?;
+        Self::from_string(&value).map_err(|err| JsonValueError::WrongType(err.to_string()))
     }
 }
 

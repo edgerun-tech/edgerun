@@ -16,12 +16,9 @@ use edgerun_json::JsonValueError;
 use edgerun_json::Map;
 use edgerun_json::ToJson;
 use edgerun_json::Value;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
 use schemars::JsonSchema;
 use std::num::NonZeroUsize;
 use std::path::PathBuf;
-use ts_rs::TS;
 
 v2_enum_from_core! {
     pub enum NetworkApprovalProtocol from CoreNetworkApprovalProtocol {
@@ -32,34 +29,10 @@ v2_enum_from_core! {
     }
 }
 
-impl ToJson for NetworkApprovalProtocol {
-    fn to_json(&self) -> Value {
-        Value::from(match self {
-            Self::Http => "http",
-            Self::Https => "https",
-            Self::Socks5Tcp => "socks5Tcp",
-            Self::Socks5Udp => "socks5Udp",
-        })
-    }
-}
 
-impl FromJson for NetworkApprovalProtocol {
-    fn from_json(value: Value) -> Result<Self, JsonValueError> {
-        match String::from_json(value)?.as_str() {
-            "http" => Ok(Self::Http),
-            "https" => Ok(Self::Https),
-            "socks5Tcp" => Ok(Self::Socks5Tcp),
-            "socks5Udp" => Ok(Self::Socks5Udp),
-            other => Err(JsonValueError::WrongType(format!(
-                "unknown network approval protocol `{other}`"
-            ))),
-        }
-    }
-}
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct NetworkApprovalContext {
     pub host: String,
     pub protocol: NetworkApprovalProtocol,
@@ -84,19 +57,16 @@ impl From<CoreNetworkApprovalContext> for NetworkApprovalContext {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct AdditionalFileSystemPermissions {
     /// This will be removed in favor of `entries`.
     pub read: Option<Vec<AbsolutePathBuf>>,
     /// This will be removed in favor of `entries`.
     pub write: Option<Vec<AbsolutePathBuf>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub glob_scan_max_depth: Option<NonZeroUsize>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub entries: Option<Vec<FileSystemSandboxEntry>>,
 }
 
@@ -186,9 +156,8 @@ impl From<AdditionalFileSystemPermissions> for CoreFileSystemPermissions {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct AdditionalNetworkPermissions {
     pub enabled: Option<bool>,
 }
@@ -234,33 +203,10 @@ v2_enum_from_core!(
     }
 );
 
-impl ToJson for FileSystemAccessMode {
-    fn to_json(&self) -> Value {
-        Value::from(match self {
-            Self::Read => "read",
-            Self::Write => "write",
-            Self::None => "none",
-        })
-    }
-}
 
-impl FromJson for FileSystemAccessMode {
-    fn from_json(value: Value) -> Result<Self, JsonValueError> {
-        match String::from_json(value)?.as_str() {
-            "read" => Ok(Self::Read),
-            "write" => Ok(Self::Write),
-            "none" => Ok(Self::None),
-            other => Err(JsonValueError::WrongType(format!(
-                "unknown file system access mode `{other}`"
-            ))),
-        }
-    }
-}
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
-#[ts(tag = "kind")]
-#[ts(export_to = "v2/")]
 pub enum FileSystemSpecialPath {
     Root,
     Minimal,
@@ -361,10 +307,8 @@ impl From<FileSystemSpecialPath> for CoreFileSystemSpecialPath {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[ts(tag = "type")]
-#[ts(export_to = "v2/")]
 pub enum FileSystemPath {
     Path { path: AbsolutePathBuf },
     GlobPattern { pattern: String },
@@ -437,9 +381,8 @@ impl From<FileSystemPath> for CoreFileSystemPath {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct FileSystemSandboxEntry {
     pub path: FileSystemPath,
     pub access: FileSystemAccessMode,
@@ -546,9 +489,8 @@ fn optional_nonzero_usize(value: Option<Value>) -> Result<Option<NonZeroUsize>, 
         .ok_or_else(|| JsonValueError::WrongType("expected non-zero usize".to_string()))
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[serde(transparent)]
-#[ts(type = "Array<string>", export_to = "v2/")]
 pub struct ExecPolicyAmendment {
     pub command: Vec<String>,
 }
@@ -587,30 +529,10 @@ v2_enum_from_core!(
     }
 );
 
-impl ToJson for NetworkPolicyRuleAction {
-    fn to_json(&self) -> Value {
-        Value::from(match self {
-            Self::Allow => "allow",
-            Self::Deny => "deny",
-        })
-    }
-}
 
-impl FromJson for NetworkPolicyRuleAction {
-    fn from_json(value: Value) -> Result<Self, JsonValueError> {
-        match String::from_json(value)?.as_str() {
-            "allow" => Ok(Self::Allow),
-            "deny" => Ok(Self::Deny),
-            other => Err(JsonValueError::WrongType(format!(
-                "unknown network policy rule action `{other}`"
-            ))),
-        }
-    }
-}
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct NetworkPolicyAmendment {
     pub host: String,
     pub action: NetworkPolicyRuleAction,

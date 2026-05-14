@@ -18,15 +18,11 @@ std = []
 yaml = []
 toml = []
 derive = ["dep:edgerun-json-derive"]
-serde = ["dep:serde"]
 schemars = ["dep:schemars"]
-ts-rs = ["dep:ts_rs"]
 
 [dependencies]
 edgerun-json-derive = { version = "0.1", path = "../edgerun-json-derive", optional = true }
-serde = { package = "edgerun-serde", version = "0.1", path = "../edgerun-serde", default-features = false, features = ["alloc"], optional = true }
 schemars = { package = "edgerun-schemars", version = "0.1", path = "../edgerun-schemars", optional = true }
-ts_rs = { package = "edgerun-ts-rs", version = "0.1", path = "../edgerun-ts-rs", optional = true }
 
 [[test]]
 name = "derive"

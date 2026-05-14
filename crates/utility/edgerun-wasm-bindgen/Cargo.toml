@@ -37,18 +37,14 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/wasm-bindgen/wasm-bindgen"
 
 [package.metadata.docs.rs]
-features = ["serde-serialize"]
+features = []
 
 [features]
 default = ["std"]
 enable-interning = ["std"]
 gg-alloc = []
 msrv = []
-serde-serialize = [
-    "serde",
-    "dep:edgerun-json",
-    "std",
-]
+serde-serialize = []
 spans = []
 std = []
 strict-macro = ["wasm-bindgen-macro/strict-macro"]
@@ -67,11 +63,6 @@ path = "../edgerun-cfg-if"
 version = "1.12"
 path = "../edgerun-once-cell"
 default-features = false
-
-[dependencies.serde]
-version = "1.0"
-path = "../edgerun-serde-upstream"
-optional = true
 
 [dependencies.edgerun-json]
 version = "0.1"

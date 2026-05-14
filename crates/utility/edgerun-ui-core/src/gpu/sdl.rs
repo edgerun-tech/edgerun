@@ -105,6 +105,7 @@ impl SdlEventResult {
 #[derive(Clone, Debug, PartialEq)]
 pub enum SdlInputEvent {
     CloseRequested,
+    Tick,
     KeyDown { key: i32 },
     MouseWheel { y: f32 },
     MouseMotion { x: f32, y: f32 },
@@ -299,11 +300,25 @@ fn run_sdl_gl_window_backend(
     let renderer = unsafe { GlRenderer::new_current_context_with_font(&atlas)? };
     let mut scene = GpuScene::new(options.clear);
     let mut running = true;
-    let mut dirty = true;
     let mut rendered_frames = 0u32;
     let mut runtime = UiRuntimeState::default();
     let mut pointer_x = 0.0_f32;
     let mut pointer_y = 0.0_f32;
+
+    sync_window_size(
+        window.0,
+        options.min_width,
+        options.min_height,
+        &mut width,
+        &mut height,
+    );
+    render(&mut scene, &atlas, width, height, Some(&runtime));
+    renderer.render(width, height, &scene);
+    unsafe {
+        SDL_GL_SwapWindow(window.0);
+    }
+    rendered_frames = rendered_frames.saturating_add(1);
+    let mut dirty = false;
 
     while running {
         let mut event = RawSdlEvent { data: [0; 56] };
@@ -413,19 +428,22 @@ fn run_sdl_gl_window_backend(
             }
         }
 
-        let mut current_w = 0;
-        let mut current_h = 0;
-        unsafe {
-            SDL_GetWindowSize(window.0, &mut current_w, &mut current_h);
-        }
-        if current_w > 0 && current_h > 0 && (current_w != width || current_h != height) {
-            width = current_w.max(options.min_width);
-            height = current_h.max(options.min_height);
+        if sync_window_size(
+            window.0,
+            options.min_width,
+            options.min_height,
+            &mut width,
+            &mut height,
+        ) {
             dirty = true;
             let result = on_event(SdlInputEvent::Resized { width, height });
             dirty |= result.dirty;
             running &= !result.quit;
         }
+
+        let result = on_event(SdlInputEvent::Tick);
+        dirty |= result.dirty;
+        running &= !result.quit;
 
         if dirty {
             render(&mut scene, &atlas, width, height, Some(&runtime));
@@ -447,6 +465,31 @@ fn run_sdl_gl_window_backend(
     }
 
     Ok(())
+}
+
+fn sync_window_size(
+    window: *mut SDL_Window,
+    min_width: i32,
+    min_height: i32,
+    width: &mut i32,
+    height: &mut i32,
+) -> bool {
+    let mut current_w = 0;
+    let mut current_h = 0;
+    unsafe {
+        SDL_GetWindowSize(window, &mut current_w, &mut current_h);
+    }
+    if current_w <= 0 || current_h <= 0 {
+        return false;
+    }
+    let next_w = current_w.max(min_width);
+    let next_h = current_h.max(min_height);
+    if next_w == *width && next_h == *height {
+        return false;
+    }
+    *width = next_w;
+    *height = next_h;
+    true
 }
 
 fn init_sdl() -> Result<Sdl, String> {

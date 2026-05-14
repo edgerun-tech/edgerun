@@ -12,22 +12,16 @@ use edgerun_json::JsonValueError;
 use edgerun_json::Map;
 use edgerun_json::ToJson;
 use edgerun_json::Value as JsonValue;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
 use schemars::JsonSchema;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use ts_rs::TS;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(tag = "type", rename_all = "camelCase")]
-#[ts(tag = "type")]
-#[ts(export_to = "v2/")]
 pub enum ConfigLayerSource {
     /// Managed preferences layer delivered by MDM (macOS only).
     #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
     Mdm {
         domain: String,
         key: String,
@@ -35,7 +29,6 @@ pub enum ConfigLayerSource {
 
     /// Managed config layer from a file (usually `managed_config.toml`).
     #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
     System {
         /// This is the path to the system config.toml file, though it is not
         /// guaranteed to exist.
@@ -47,7 +40,6 @@ pub enum ConfigLayerSource {
     /// - writable by the user
     /// - generally outside the workspace directory
     #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
     User {
         /// This is the path to the user's config.toml file, though it is not
         /// guaranteed to exist.
@@ -57,7 +49,6 @@ pub enum ConfigLayerSource {
     /// Path to a .codex/ folder within a project. There could be multiple of
     /// these between `cwd` and the project/repo root.
     #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
     Project {
         dot_codex_folder: AbsolutePathBuf,
     },
@@ -70,7 +61,6 @@ pub enum ConfigLayerSource {
     /// work out as intended, but we keep this variant as a "best effort" while
     /// we phase out `managed_config.toml` in favor of `requirements.toml`.
     #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
     LegacyManagedConfigTomlFromFile {
         file: AbsolutePathBuf,
     },
@@ -102,17 +92,15 @@ impl PartialOrd for ConfigLayerSource {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
-#[ts(export_to = "v2/")]
 pub struct ToolsV2 {
     pub web_search: Option<WebSearchToolConfig>,
     pub view_image: Option<bool>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
-#[ts(export_to = "v2/")]
 pub struct ProfileV2 {
     pub model: Option<String>,
     pub model_provider: Option<String>,
@@ -131,27 +119,32 @@ pub struct ProfileV2 {
     pub additional: HashMap<String, JsonValue>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+impl crate::experimental_api::ExperimentalApi for ProfileV2 {
+    fn experimental_reason(&self) -> Option<&'static str> {
+        self.approvals_reviewer
+            .is_some()
+            .then_some("config/read.approvalsReviewer")
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
-#[ts(export_to = "v2/")]
 pub struct AnalyticsConfig {
     pub enabled: Option<bool>,
     #[serde(default, flatten)]
     pub additional: HashMap<String, JsonValue>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
-#[ts(export_to = "v2/")]
 pub enum AppToolApproval {
     Auto,
     Prompt,
     Approve,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
-#[ts(export_to = "v2/")]
 pub struct AppsDefaultConfig {
     #[serde(default = "default_enabled")]
     pub enabled: bool,
@@ -161,25 +154,22 @@ pub struct AppsDefaultConfig {
     pub open_world_enabled: bool,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
-#[ts(export_to = "v2/")]
 pub struct AppToolConfig {
     pub enabled: Option<bool>,
     pub approval_mode: Option<AppToolApproval>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
-#[ts(export_to = "v2/")]
 pub struct AppToolsConfig {
     #[serde(default, flatten)]
     pub tools: HashMap<String, AppToolConfig>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
-#[ts(export_to = "v2/")]
 pub struct AppConfig {
     #[serde(default = "default_enabled")]
     pub enabled: bool,
@@ -190,9 +180,8 @@ pub struct AppConfig {
     pub tools: Option<AppToolsConfig>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
-#[ts(export_to = "v2/")]
 pub struct AppsConfig {
     #[serde(default, rename = "_default")]
     pub default: Option<AppsDefaultConfig>,
@@ -200,9 +189,8 @@ pub struct AppsConfig {
     pub apps: HashMap<String, AppConfig>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
-#[ts(export_to = "v2/")]
 pub struct Config {
     pub model: Option<String>,
     pub review_model: Option<String>,
@@ -233,17 +221,26 @@ pub struct Config {
     pub additional: HashMap<String, JsonValue>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+impl crate::experimental_api::ExperimentalApi for Config {
+    fn experimental_reason(&self) -> Option<&'static str> {
+        if self.approvals_reviewer.is_some() {
+            return Some("config/read.approvalsReviewer");
+        }
+        self.profiles
+            .values()
+            .find_map(crate::experimental_api::ExperimentalApi::experimental_reason)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ConfigLayerMetadata {
     pub name: ConfigLayerSource,
     pub version: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ConfigLayer {
     pub name: ConfigLayerSource,
     pub version: String,
@@ -252,34 +249,30 @@ pub struct ConfigLayer {
     pub disabled_reason: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub enum MergeStrategy {
     Replace,
     Upsert,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub enum WriteStatus {
     Ok,
     OkOverridden,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct OverriddenMetadata {
     pub message: String,
     pub overriding_layer: ConfigLayerMetadata,
     pub effective_value: JsonValue,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ConfigWriteResponse {
     pub status: WriteStatus,
     pub version: String,
@@ -288,9 +281,8 @@ pub struct ConfigWriteResponse {
     pub overridden_metadata: Option<OverriddenMetadata>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub enum ConfigWriteErrorCode {
     ConfigLayerReadonly,
     ConfigVersionConflict,
@@ -300,22 +292,19 @@ pub enum ConfigWriteErrorCode {
     UserLayerNotFound,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ConfigReadParams {
     #[serde(default)]
     pub include_layers: bool,
     /// Optional working directory to resolve project config layers. If specified,
     /// return the effective config as seen from that directory (i.e., including any
     /// project layers between `cwd` and the project/repo root).
-    #[ts(optional = nullable)]
     pub cwd: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ConfigReadResponse {
     pub config: Config,
     pub origins: HashMap<String, ConfigLayerMetadata>,
@@ -323,9 +312,8 @@ pub struct ConfigReadResponse {
     pub layers: Option<Vec<ConfigLayer>>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ConfigRequirements {
     pub allowed_approvals_reviewers: Option<Vec<ApprovalsReviewer>>,
     pub allowed_web_search_modes: Option<Vec<WebSearchMode>>,
@@ -335,70 +323,54 @@ pub struct ConfigRequirements {
     pub network: Option<NetworkRequirements>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ManagedHooksRequirements {
     pub managed_dir: Option<PathBuf>,
     pub windows_managed_dir: Option<PathBuf>,
     #[serde(rename = "PreToolUse")]
-    #[ts(rename = "PreToolUse")]
     pub pre_tool_use: Vec<ConfiguredHookMatcherGroup>,
     #[serde(rename = "PostToolUse")]
-    #[ts(rename = "PostToolUse")]
     pub post_tool_use: Vec<ConfiguredHookMatcherGroup>,
     #[serde(rename = "PreCompact")]
-    #[ts(rename = "PreCompact")]
     pub pre_compact: Vec<ConfiguredHookMatcherGroup>,
     #[serde(rename = "PostCompact")]
-    #[ts(rename = "PostCompact")]
     pub post_compact: Vec<ConfiguredHookMatcherGroup>,
     #[serde(rename = "SessionStart")]
-    #[ts(rename = "SessionStart")]
     pub session_start: Vec<ConfiguredHookMatcherGroup>,
     #[serde(rename = "UserPromptSubmit")]
-    #[ts(rename = "UserPromptSubmit")]
     pub user_prompt_submit: Vec<ConfiguredHookMatcherGroup>,
     #[serde(rename = "Stop")]
-    #[ts(rename = "Stop")]
     pub stop: Vec<ConfiguredHookMatcherGroup>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ConfiguredHookMatcherGroup {
     pub matcher: Option<String>,
     pub hooks: Vec<ConfiguredHookHandler>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(tag = "type")]
-#[ts(tag = "type", export_to = "v2/")]
 pub enum ConfiguredHookHandler {
     #[serde(rename = "command")]
-    #[ts(rename = "command")]
     Command {
         command: String,
         #[serde(rename = "timeoutSec")]
-        #[ts(rename = "timeoutSec")]
         timeout_sec: Option<u64>,
         r#async: bool,
         #[serde(rename = "statusMessage")]
-        #[ts(rename = "statusMessage")]
         status_message: Option<String>,
     },
     #[serde(rename = "prompt")]
-    #[ts(rename = "prompt")]
     Prompt {},
     #[serde(rename = "agent")]
-    #[ts(rename = "agent")]
     Agent {},
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct NetworkRequirements {
     pub enabled: Option<bool>,
     pub http_port: Option<u16>,
@@ -474,9 +446,8 @@ impl FromJson for NetworkRequirements {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "lowercase")]
-#[ts(export_to = "v2/")]
 pub enum NetworkDomainPermission {
     Allow,
     Deny,
@@ -503,9 +474,8 @@ impl FromJson for NetworkDomainPermission {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "lowercase")]
-#[ts(export_to = "v2/")]
 pub enum NetworkUnixSocketPermission {
     Allow,
     None,
@@ -532,50 +502,38 @@ impl FromJson for NetworkUnixSocketPermission {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub enum ResidencyRequirement {
     Us,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ConfigRequirementsReadResponse {
     /// Null if no requirements are configured (e.g. no requirements.toml/MDM entries).
     pub requirements: Option<ConfigRequirements>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Hash, JsonSchema, TS)]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, JsonSchema, edgerun_json::ToJson)]
 pub enum ExternalAgentConfigMigrationItemType {
     #[serde(rename = "AGENTS_MD")]
-    #[ts(rename = "AGENTS_MD")]
     AgentsMd,
     #[serde(rename = "CONFIG")]
-    #[ts(rename = "CONFIG")]
     Config,
     #[serde(rename = "SKILLS")]
-    #[ts(rename = "SKILLS")]
     Skills,
     #[serde(rename = "PLUGINS")]
-    #[ts(rename = "PLUGINS")]
     Plugins,
     #[serde(rename = "MCP_SERVER_CONFIG")]
-    #[ts(rename = "MCP_SERVER_CONFIG")]
     McpServerConfig,
     #[serde(rename = "SUBAGENTS")]
-    #[ts(rename = "SUBAGENTS")]
     Subagents,
     #[serde(rename = "HOOKS")]
-    #[ts(rename = "HOOKS")]
     Hooks,
     #[serde(rename = "COMMANDS")]
-    #[ts(rename = "COMMANDS")]
     Commands,
     #[serde(rename = "SESSIONS")]
-    #[ts(rename = "SESSIONS")]
     Sessions,
 }
 
@@ -598,15 +556,12 @@ impl FromJson for ExternalAgentConfigMigrationItemType {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct PluginsMigration {
     #[serde(rename = "marketplaceName")]
-    #[ts(rename = "marketplaceName")]
     pub marketplace_name: String,
     #[serde(rename = "pluginNames")]
-    #[ts(rename = "pluginNames")]
     pub plugin_names: Vec<String>,
 }
 
@@ -620,9 +575,8 @@ impl FromJson for PluginsMigration {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct SessionMigration {
     pub path: PathBuf,
     pub cwd: PathBuf,
@@ -640,9 +594,8 @@ impl FromJson for SessionMigration {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct McpServerMigration {
     pub name: String,
 }
@@ -656,9 +609,8 @@ impl FromJson for McpServerMigration {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct HookMigration {
     pub name: String,
 }
@@ -672,9 +624,8 @@ impl FromJson for HookMigration {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct SubagentMigration {
     pub name: String,
 }
@@ -688,9 +639,8 @@ impl FromJson for SubagentMigration {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct CommandMigration {
     pub name: String,
 }
@@ -704,9 +654,8 @@ impl FromJson for CommandMigration {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, JsonSchema, edgerun_json::ToJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct MigrationDetails {
     #[serde(default)]
     pub plugins: Vec<PluginsMigration>,
@@ -736,9 +685,8 @@ impl FromJson for MigrationDetails {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ExternalAgentConfigMigrationItem {
     pub item_type: ExternalAgentConfigMigrationItemType,
     pub description: String,
@@ -762,28 +710,24 @@ impl FromJson for ExternalAgentConfigMigrationItem {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ExternalAgentConfigDetectResponse {
     pub items: Vec<ExternalAgentConfigMigrationItem>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ExternalAgentConfigDetectParams {
     /// If true, include detection under the user's home (~/.claude, ~/.codex, etc.).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub include_home: bool,
     /// Zero or more working directories to include for repo-scoped detection.
-    #[ts(optional = nullable)]
     pub cwds: Option<Vec<PathBuf>>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ExternalAgentConfigImportParams {
     pub migration_items: Vec<ExternalAgentConfigMigrationItem>,
 }
@@ -801,57 +745,47 @@ fn json_path_buf(value: String) -> PathBuf {
     PathBuf::from(value)
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ExternalAgentConfigImportResponse {}
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ExternalAgentConfigImportCompletedNotification {}
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ConfigValueWriteParams {
     pub key_path: String,
     pub value: JsonValue,
     pub merge_strategy: MergeStrategy,
     /// Path to the config file to write; defaults to the user's `config.toml` when omitted.
-    #[ts(optional = nullable)]
     pub file_path: Option<String>,
-    #[ts(optional = nullable)]
     pub expected_version: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ConfigBatchWriteParams {
     pub edits: Vec<ConfigEdit>,
     /// Path to the config file to write; defaults to the user's `config.toml` when omitted.
-    #[ts(optional = nullable)]
     pub file_path: Option<String>,
-    #[ts(optional = nullable)]
     pub expected_version: Option<String>,
     /// When true, hot-reload the updated user config into all loaded threads after writing.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub reload_user_config: bool,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ConfigEdit {
     pub key_path: String,
     pub value: JsonValue,
     pub merge_strategy: MergeStrategy,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct TextPosition {
     /// 1-based line number.
     pub line: usize,
@@ -859,17 +793,15 @@ pub struct TextPosition {
     pub column: usize,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct TextRange {
     pub start: TextPosition,
     pub end: TextPosition,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct ConfigWarningNotification {
     /// Concise summary of the warning.
     pub summary: String,
@@ -877,10 +809,8 @@ pub struct ConfigWarningNotification {
     pub details: Option<String>,
     /// Optional path to the config file that triggered the warning.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub path: Option<String>,
     /// Optional range for the error location inside the config file.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub range: Option<TextRange>,
 }

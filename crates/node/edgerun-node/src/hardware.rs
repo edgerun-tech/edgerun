@@ -6,7 +6,7 @@
 //! and wrapped in error handlers so missing hardware is silently skipped.
 
 use alloc::format;
-use alloc::string::String;
+use alloc::string::{String, ToString};
 use alloc::vec;
 use alloc::vec::Vec;
 
@@ -100,6 +100,66 @@ pub fn discover_fingerprint_readers() -> Vec<String> {
     }
 
     readers
+}
+
+#[cfg(feature = "all-hardware")]
+pub fn enroll_first_fingerprint_template(label: &str) -> Result<String, String> {
+    use edgerun_devices::fingerprint::{
+        FingerprintCapturePurpose, FingerprintEnrollRequest, FingerprintReader,
+    };
+
+    let devices = goodix_fingerprint::discover_supported_devices()
+        .map_err(|err| format!("Goodix fingerprint discovery failed: {err}"))?;
+    let device = devices
+        .into_iter()
+        .next()
+        .ok_or_else(|| "no supported Goodix fingerprint reader found".to_string())?;
+    let mut reader = goodix_fingerprint::GoodixFingerprintReader::new(device)
+        .map_err(|err| format!("Goodix reader open failed: {err}"))?;
+    let info = reader
+        .reader_info()
+        .map_err(|err| format!("fingerprint reader info failed: {err}"))?;
+    let request = FingerprintEnrollRequest {
+        label: label.to_string(),
+        samples_required: 1,
+        require_hardware_match: true,
+    };
+    let session = reader
+        .begin_enrollment(&request)
+        .map_err(|err| format!("fingerprint enrollment start failed: {err}"))?;
+    let capture = reader
+        .capture(FingerprintCapturePurpose::Enrollment, 15_000)
+        .map_err(|err| format!("fingerprint capture failed: {err}"))?;
+    let progress = reader
+        .enroll_step(&session.session_id, &capture)
+        .map_err(|err| format!("fingerprint enrollment update failed: {err}"))?;
+    if !progress.complete {
+        return Err(format!(
+            "fingerprint enrollment incomplete: quality {:?}",
+            progress.last_quality
+        ));
+    }
+    let template_id = progress
+        .template_id
+        .as_deref()
+        .unwrap_or(session.session_id.as_str());
+    let template = reader
+        .finish_enrollment(template_id)
+        .map_err(|err| format!("fingerprint enrollment commit failed: {err}"))?;
+    Ok(format!(
+        "{} template {}",
+        info.reader_name,
+        short_id(&template.template_id)
+    ))
+}
+
+#[cfg(not(feature = "all-hardware"))]
+pub fn enroll_first_fingerprint_template(_label: &str) -> Result<String, String> {
+    Err("fingerprint enrollment requires the all-hardware feature".to_string())
+}
+
+fn short_id(value: &str) -> String {
+    value.chars().take(12).collect()
 }
 
 // ===========================================================================

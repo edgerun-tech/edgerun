@@ -1,0 +1,21 @@
+{
+  "title": "ThreadMemoryModeSetParams",
+  "type": "object",
+  "properties": {
+    "mode": {
+      "title": "ThreadMemoryMode",
+      "type": "string",
+      "enum": [
+        "enabled",
+        "disabled"
+      ]
+    },
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "threadId",
+    "mode"
+  ]
+}

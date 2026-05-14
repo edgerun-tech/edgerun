@@ -1,34 +1,27 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "definitions": {
-    "ToolRequestUserInputAnswer": {
-      "description": "EXPERIMENTAL. Captures a user's answer to a request_user_input question.",
-      "properties": {
-        "answers": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "answers"
-      ],
-      "type": "object"
-    }
-  },
-  "description": "EXPERIMENTAL. Response payload mapping question ids to answers.",
+  "title": "ToolRequestUserInputResponse",
+  "type": "object",
   "properties": {
     "answers": {
+      "type": "object",
       "additionalProperties": {
-        "$ref": "#/definitions/ToolRequestUserInputAnswer"
-      },
-      "type": "object"
+        "title": "ToolRequestUserInputAnswer",
+        "type": "object",
+        "properties": {
+          "answers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "answers"
+        ]
+      }
     }
   },
   "required": [
     "answers"
-  ],
-  "title": "ToolRequestUserInputResponse",
-  "type": "object"
+  ]
 }

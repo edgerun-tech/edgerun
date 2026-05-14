@@ -1,5 +1,6 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PluginSkillReadParams",
+  "type": "object",
   "properties": {
     "remoteMarketplaceName": {
       "type": "string"
@@ -15,7 +16,5 @@
     "remoteMarketplaceName",
     "remotePluginId",
     "skillName"
-  ],
-  "title": "PluginSkillReadParams",
-  "type": "object"
+  ]
 }

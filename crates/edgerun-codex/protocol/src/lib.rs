@@ -1,5 +1,4 @@
 extern crate edgerun_strum as strum;
-extern crate serde as edgerun_serde;
 
 pub mod account;
 mod agent_path;

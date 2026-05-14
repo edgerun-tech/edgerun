@@ -1,13 +1,14 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "definitions": {
-    "JSONRPCErrorError": {
+  "title": "JSONRPCError",
+  "type": "object",
+  "properties": {
+    "error": {
+      "title": "JSONRPCErrorError",
+      "type": "object",
       "properties": {
         "code": {
-          "format": "int64",
           "type": "integer"
         },
-        "data": true,
         "message": {
           "type": "string"
         }
@@ -15,34 +16,40 @@
       "required": [
         "code",
         "message"
-      ],
-      "type": "object"
-    },
-    "RequestId": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "format": "int64",
-          "type": "integer"
-        }
       ]
-    }
-  },
-  "description": "A response to a request that indicates an error occurred.",
-  "properties": {
-    "error": {
-      "$ref": "#/definitions/JSONRPCErrorError"
     },
     "id": {
-      "$ref": "#/definitions/RequestId"
+      "title": "RequestId",
+      "oneOf": [
+        {
+          "title": "String",
+          "type": "object",
+          "properties": {
+            "field0": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "field0"
+          ]
+        },
+        {
+          "title": "Integer",
+          "type": "object",
+          "properties": {
+            "field0": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "field0"
+          ]
+        }
+      ]
     }
   },
   "required": [
     "error",
     "id"
-  ],
-  "title": "JSONRPCError",
-  "type": "object"
+  ]
 }

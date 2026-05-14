@@ -300,6 +300,24 @@ impl<T: FromJson> FromJson for Option<T> {
     }
 }
 
+impl ToJson for () {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::Null
+    }
+}
+
+impl FromJson for () {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match value {
+            JsonValue::Null => Ok(()),
+            other => Err(JsonValueError::WrongType(format!(
+                "expected null, found {}",
+                other.variant_name()
+            ))),
+        }
+    }
+}
+
 impl<T: ToJson> ToJson for Vec<T> {
     fn to_json(&self) -> JsonValue {
         JsonValue::array_from_iter(self.iter().map(ToJson::to_json))

@@ -1,10 +1,7 @@
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
 use schemars::JsonSchema;
 use std::path::PathBuf;
-use ts_rs::TS;
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ParsedCommand {
     Read {

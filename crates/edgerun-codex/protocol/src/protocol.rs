@@ -50,12 +50,9 @@ use edgerun_json::JsonValueError;
 use edgerun_json::Map;
 use edgerun_json::ToJson;
 use edgerun_json::Value;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
 use edgerun_strum_macros::Display;
 use schemars::JsonSchema;
 use tracing::error;
-use ts_rs::TS;
 
 pub use crate::approvals::ApplyPatchApprovalRequestEvent;
 pub use crate::approvals::ElicitationAction;
@@ -101,15 +98,14 @@ pub const REALTIME_CONVERSATION_OPEN_TAG: &str = "<realtime_conversation>";
 pub const REALTIME_CONVERSATION_CLOSE_TAG: &str = "</realtime_conversation>";
 pub const USER_MESSAGE_BEGIN: &str = "## My request for Codex:";
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct TurnEnvironmentSelection {
     pub environment_id: String,
     pub cwd: AbsolutePathBuf,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, TS)]
+#[derive(Clone, Debug, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(transparent)]
-#[ts(type = "string")]
 pub struct GitSha(pub String);
 
 impl GitSha {
@@ -119,7 +115,7 @@ impl GitSha {
 }
 
 /// Submission Queue Entry - requests from user
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct Submission {
     /// Unique id for this Submission to correlate with Events
     pub id: String,
@@ -130,24 +126,22 @@ pub struct Submission {
     pub trace: Option<W3cTraceContext>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, ToJson, FromJson)]
 pub struct W3cTraceContext {
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub traceparent: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub tracestate: Option<String>,
 }
 
 /// Config payload for refreshing MCP servers.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct McpServerRefreshConfig {
     pub mcp_servers: Value,
     pub mcp_oauth_credentials_store_mode: Value,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct ConversationStartParams {
     /// Selects whether the realtime session should produce text or audio output.
     pub output_modality: RealtimeOutputModality,
@@ -166,53 +160,22 @@ pub struct ConversationStartParams {
     pub voice: Option<RealtimeVoice>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[ts(tag = "type")]
 pub enum ConversationStartTransport {
     Websocket,
     Webrtc { sdp: String },
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, ToJson, FromJson)]
 #[serde(rename_all = "snake_case")]
 pub enum RealtimeOutputModality {
     Text,
     Audio,
 }
 
-mod conversation_start_prompt_serde {
-    use edgerun_serde::Deserialize;
-    use edgerun_serde::Deserializer;
-    use edgerun_serde::Serialize;
-    use edgerun_serde::Serializer;
-
-    pub(crate) fn deserialize<'de, D>(deserializer: D) -> Result<Option<Option<String>>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        Option::<String>::deserialize(deserializer).map(Some)
-    }
-
-    pub(crate) fn serialize<S>(
-        value: &Option<Option<String>>,
-        serializer: S,
-    ) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match value {
-            Some(inner) => inner.serialize(serializer),
-            None => serializer.serialize_none(),
-        }
-    }
-}
-
-#[derive(
-    Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, Hash, JsonSchema, TS, Ord, PartialOrd,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, JsonSchema, Ord, PartialOrd, ToJson, FromJson)]
 #[serde(rename_all = "snake_case")]
-#[ts(rename_all = "snake_case")]
 pub enum RealtimeVoice {
     Alloy,
     Arbor,
@@ -261,9 +224,8 @@ impl RealtimeVoice {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
 pub struct RealtimeVoicesList {
     pub v1: Vec<RealtimeVoice>,
     pub v2: Vec<RealtimeVoice>,
@@ -303,7 +265,7 @@ impl RealtimeVoicesList {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct RealtimeAudioFrame {
     pub data: String,
     pub sample_rate: u32,
@@ -314,23 +276,23 @@ pub struct RealtimeAudioFrame {
     pub item_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct RealtimeTranscriptDelta {
     pub delta: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct RealtimeTranscriptDone {
     pub text: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct RealtimeTranscriptEntry {
     pub role: String,
     pub text: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct RealtimeHandoffRequested {
     pub handoff_id: String,
     pub item_id: String,
@@ -338,33 +300,33 @@ pub struct RealtimeHandoffRequested {
     pub active_transcript: Vec<RealtimeTranscriptEntry>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct RealtimeNoopRequested {
     pub call_id: String,
     pub item_id: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct RealtimeInputAudioSpeechStarted {
     pub item_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct RealtimeResponseCancelled {
     pub response_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct RealtimeResponseCreated {
     pub response_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct RealtimeResponseDone {
     pub response_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub enum RealtimeEvent {
     SessionUpdated {
         realtime_session_id: String,
@@ -388,18 +350,18 @@ pub enum RealtimeEvent {
     Error(String),
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct ConversationAudioParams {
     pub frame: RealtimeAudioFrame,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct ConversationTextParams {
     pub text: String,
 }
 
 /// Submission operation
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[allow(clippy::large_enum_variant)]
 #[non_exhaustive]
@@ -708,7 +670,7 @@ pub enum Op {
     },
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, JsonSchema)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "lowercase")]
 pub enum ThreadMemoryMode {
     Enabled,
@@ -726,7 +688,7 @@ impl From<Vec<UserInput>> for Op {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 pub struct InterAgentCommunication {
     pub author: AgentPath,
     pub recipient: AgentPath,
@@ -839,20 +801,7 @@ impl Op {
 
 /// Determines the conditions under which the user is consulted to approve
 /// running the command proposed by Codex.
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    Default,
-    PartialEq,
-    Eq,
-    Hash,
-    Serialize,
-    Deserialize,
-    Display,
-    JsonSchema,
-    TS,
-)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Display, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "kebab-case")]
 #[strum(serialize_all = "kebab-case")]
 pub enum AskForApproval {
@@ -888,7 +837,7 @@ pub enum AskForApproval {
     Never,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, JsonSchema)]
 pub struct GranularApprovalConfig {
     /// Whether to allow prompts triggered by execpolicy `prompt` rules.
     pub rules: bool,
@@ -935,9 +884,7 @@ impl FromJson for GranularApprovalConfig {
 }
 
 /// Represents whether outbound network access is available to the agent.
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Display, Default, JsonSchema, TS,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Display, Default, JsonSchema)]
 #[serde(rename_all = "kebab-case")]
 #[strum(serialize_all = "kebab-case")]
 pub enum NetworkAccess {
@@ -975,7 +922,7 @@ impl FromJson for NetworkAccess {
 }
 
 /// Determines execution restrictions for model shell commands.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Display, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Display, JsonSchema)]
 #[strum(serialize_all = "kebab-case")]
 #[serde(tag = "type", rename_all = "kebab-case")]
 pub enum SandboxPolicy {
@@ -1308,7 +1255,7 @@ impl SandboxPolicy {
 }
 
 /// Event Queue Entry - events from agent
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct Event {
     /// Submission `id` that this event is correlated with.
     pub id: String,
@@ -1318,9 +1265,8 @@ pub struct Event {
 
 /// Response event from the agent
 /// NOTE: Make sure none of these values have optional types, as it will mess up the extension code-gen.
-#[derive(Debug, Clone, Deserialize, Serialize, Display, JsonSchema, TS)]
+#[derive(Debug, Clone, Display, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[ts(tag = "type")]
 #[strum(serialize_all = "snake_case")]
 pub enum EventMsg {
     /// Error while executing a submission
@@ -1512,7 +1458,7 @@ pub enum EventMsg {
     CollabResumeEnd(CollabResumeEndEvent),
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS, EnumIter)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, EnumIter, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
 pub enum HookEventName {
     PreToolUse,
@@ -1524,7 +1470,7 @@ pub enum HookEventName {
     Stop,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
 pub enum HookHandlerType {
     Command,
@@ -1532,21 +1478,21 @@ pub enum HookHandlerType {
     Agent,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
 pub enum HookExecutionMode {
     Sync,
     Async,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
 pub enum HookScope {
     Thread,
     Turn,
 }
 
-#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
 pub enum HookSource {
     System,
@@ -1562,7 +1508,7 @@ pub enum HookSource {
     Unknown,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
 pub enum HookTrustStatus {
     Managed,
@@ -1571,7 +1517,7 @@ pub enum HookTrustStatus {
     Modified,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
 pub enum HookRunStatus {
     Running,
@@ -1581,7 +1527,7 @@ pub enum HookRunStatus {
     Stopped,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
 pub enum HookOutputEntryKind {
     Warning,
@@ -1591,14 +1537,14 @@ pub enum HookOutputEntryKind {
     Error,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
 pub struct HookOutputEntry {
     pub kind: HookOutputEntryKind,
     pub text: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
 pub struct HookRunSummary {
     pub id: String,
@@ -1612,30 +1558,27 @@ pub struct HookRunSummary {
     pub display_order: i64,
     pub status: HookRunStatus,
     pub status_message: Option<String>,
-    #[ts(type = "number")]
     pub started_at: i64,
-    #[ts(type = "number | null")]
     pub completed_at: Option<i64>,
-    #[ts(type = "number | null")]
     pub duration_ms: Option<i64>,
     pub entries: Vec<HookOutputEntry>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
 pub struct HookStartedEvent {
     pub turn_id: Option<String>,
     pub run: HookRunSummary,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
 pub struct HookCompletedEvent {
     pub turn_id: Option<String>,
     pub run: HookRunSummary,
 }
 
-#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
 pub enum RealtimeConversationVersion {
     V1,
@@ -1643,24 +1586,24 @@ pub enum RealtimeConversationVersion {
     V2,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct RealtimeConversationStartedEvent {
     pub realtime_session_id: Option<String>,
     pub version: RealtimeConversationVersion,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct RealtimeConversationRealtimeEvent {
     pub payload: RealtimeEvent,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct RealtimeConversationClosedEvent {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct RealtimeConversationSdpEvent {
     pub sdp: String,
 }
@@ -1726,9 +1669,8 @@ impl From<CollabResumeEndEvent> for EventMsg {
 }
 
 /// Agent lifecycle status, derived from emitted events.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, Default, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
-#[ts(rename_all = "snake_case")]
 pub enum AgentStatus {
     /// Agent is waiting for initialization.
     #[default]
@@ -1770,18 +1712,16 @@ impl ToJson for AgentStatus {
 }
 
 /// Turn kinds that reject same-turn steering.
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
-#[ts(rename_all = "snake_case")]
 pub enum NonSteerableTurnKind {
     Review,
     Compact,
 }
 
 /// Codex errors that we expose to clients.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Clone, Debug, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
-#[ts(rename_all = "snake_case")]
 pub enum CodexErrorInfo {
     ContextWindowExceeded,
     UsageLimitExceeded,
@@ -1837,12 +1777,12 @@ impl CodexErrorInfo {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS, JsonSchema)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct RawResponseItemEvent {
     pub item: ResponseItem,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS, JsonSchema)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct ItemStartedEvent {
     pub thread_id: ThreadId,
     pub turn_id: String,
@@ -1869,7 +1809,7 @@ impl HasLegacyEvent for ItemStartedEvent {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS, JsonSchema)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct ItemCompletedEvent {
     pub thread_id: ThreadId,
     pub turn_id: String,
@@ -1901,7 +1841,7 @@ impl HasLegacyEvent for ItemCompletedEvent {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS, JsonSchema)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct AgentMessageContentDeltaEvent {
     pub thread_id: String,
     pub turn_id: String,
@@ -1915,7 +1855,7 @@ impl HasLegacyEvent for AgentMessageContentDeltaEvent {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS, JsonSchema)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct PlanDeltaEvent {
     pub thread_id: String,
     pub turn_id: String,
@@ -1923,7 +1863,7 @@ pub struct PlanDeltaEvent {
     pub delta: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS, JsonSchema)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct ReasoningContentDeltaEvent {
     pub thread_id: String,
     pub turn_id: String,
@@ -1940,7 +1880,7 @@ impl HasLegacyEvent for ReasoningContentDeltaEvent {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, TS, JsonSchema)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct ReasoningRawContentDeltaEvent {
     pub thread_id: String,
     pub turn_id: String,
@@ -1976,14 +1916,14 @@ impl HasLegacyEvent for EventMsg {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct ExitedReviewModeEvent {
     pub review_output: Option<ReviewOutputEvent>,
 }
 
 // Individual event payload types matching each `EventMsg` variant.
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct ErrorEvent {
     pub message: String,
     #[serde(default)]
@@ -1999,64 +1939,58 @@ impl ErrorEvent {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct WarningEvent {
     pub message: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
-#[ts(rename_all = "snake_case")]
 pub enum ModelRerouteReason {
     HighRiskCyberActivity,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct ModelRerouteEvent {
     pub from_model: String,
     pub to_model: String,
     pub reason: ModelRerouteReason,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
-#[ts(rename_all = "snake_case")]
 pub enum ModelVerification {
     TrustedAccessForCyber,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct ModelVerificationEvent {
     pub verifications: Vec<ModelVerification>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct ContextCompactedEvent;
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct TurnCompleteEvent {
     pub turn_id: String,
     pub last_agent_message: Option<String>,
     /// Unix timestamp (in seconds) when the turn completed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(type = "number | null", optional)]
     pub completed_at: Option<i64>,
     /// Duration between turn start and completion in milliseconds, if known.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(type = "number | null", optional)]
     pub duration_ms: Option<i64>,
     /// Duration between turn start and the first model token in milliseconds, if known.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(type = "number | null", optional)]
     pub time_to_first_token_ms: Option<i64>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct TurnStartedEvent {
     pub turn_id: String,
     /// Unix timestamp (in seconds) when the turn started.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(type = "number | null", optional)]
     pub started_at: Option<i64>,
     // TODO(aibrahim): make this not optional
     pub model_context_window: Option<i64>,
@@ -2064,26 +1998,20 @@ pub struct TurnStartedEvent {
     pub collaboration_mode_kind: ModeKind,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct TokenUsage {
-    #[ts(type = "number")]
     pub input_tokens: i64,
-    #[ts(type = "number")]
     pub cached_input_tokens: i64,
-    #[ts(type = "number")]
     pub output_tokens: i64,
-    #[ts(type = "number")]
     pub reasoning_output_tokens: i64,
-    #[ts(type = "number")]
     pub total_tokens: i64,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct TokenUsageInfo {
     pub total_token_usage: TokenUsage,
     pub last_token_usage: TokenUsage,
     // TODO(aibrahim): make this not optional
-    #[ts(type = "number | null")]
     pub model_context_window: Option<i64>,
 }
 
@@ -2145,13 +2073,13 @@ impl TokenUsageInfo {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct TokenCountEvent {
     pub info: Option<TokenUsageInfo>,
     pub rate_limits: Option<RateLimitSnapshot>,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct RateLimitSnapshot {
     pub limit_id: Option<String>,
     pub limit_name: Option<String>,
@@ -2162,9 +2090,8 @@ pub struct RateLimitSnapshot {
     pub rate_limit_reached_type: Option<RateLimitReachedType>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
-#[ts(rename_all = "snake_case")]
 pub enum RateLimitReachedType {
     RateLimitReached,
     WorkspaceOwnerCreditsDepleted,
@@ -2173,19 +2100,17 @@ pub enum RateLimitReachedType {
     WorkspaceMemberUsageLimitReached,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct RateLimitWindow {
     /// Percentage (0-100) of the window that has been consumed.
     pub used_percent: f64,
     /// Rolling window duration, in minutes.
-    #[ts(type = "number | null")]
     pub window_minutes: Option<i64>,
     /// Unix timestamp (seconds since epoch) when the window resets.
-    #[ts(type = "number | null")]
     pub resets_at: Option<i64>,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct CreditsSnapshot {
     pub has_credits: bool,
     pub unlimited: bool,
@@ -2250,7 +2175,7 @@ impl TokenUsage {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct FinalOutput {
     pub token_usage: TokenUsage,
 }
@@ -2291,7 +2216,7 @@ impl fmt::Display for FinalOutput {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct AgentMessageEvent {
     pub message: String,
     #[serde(default)]
@@ -2300,7 +2225,7 @@ pub struct AgentMessageEvent {
     pub memory_citation: Option<MemoryCitation>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct UserMessageEvent {
     pub message: String,
     /// Image URLs sourced from `UserInput::Image`. These are safe
@@ -2318,17 +2243,17 @@ pub struct UserMessageEvent {
     pub text_elements: Vec<crate::user_input::TextElement>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct AgentReasoningEvent {
     pub text: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct AgentReasoningRawContentEvent {
     pub text: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct AgentReasoningSectionBreakEvent {
     // load with default value so it's backward compatible with the old format.
     #[serde(default)]
@@ -2337,7 +2262,7 @@ pub struct AgentReasoningSectionBreakEvent {
     pub summary_index: i64,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS, PartialEq)]
+#[derive(Debug, Clone, JsonSchema, PartialEq, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct McpInvocation {
     /// Name of the MCP server as defined in the config.
     pub server: String,
@@ -2347,31 +2272,28 @@ pub struct McpInvocation {
     pub arguments: Option<edgerun_json::Value>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS, PartialEq)]
+#[derive(Debug, Clone, JsonSchema, PartialEq, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct McpToolCallBeginEvent {
     /// Identifier so this can be paired with the McpToolCallEnd event.
     pub call_id: String,
     pub invocation: McpInvocation,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub mcp_app_resource_uri: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS, PartialEq)]
+#[derive(Debug, Clone, JsonSchema, PartialEq, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct McpToolCallEndEvent {
     /// Identifier for the corresponding McpToolCallBegin that finished.
     pub call_id: String,
     pub invocation: McpInvocation,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub mcp_app_resource_uri: Option<String>,
-    #[ts(type = "string")]
     pub duration: Duration,
     /// Result of the tool call. Note this could be an error.
     pub result: Result<CallToolResult, String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS, PartialEq)]
+#[derive(Debug, Clone, JsonSchema, PartialEq, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct DynamicToolCallResponseEvent {
     /// Identifier for the corresponding DynamicToolCallRequest.
     pub call_id: String,
@@ -2393,7 +2315,6 @@ pub struct DynamicToolCallResponseEvent {
     /// Optional error text when the tool call failed before producing a response.
     pub error: Option<String>,
     /// The duration of the dynamic tool call.
-    #[ts(type = "string")]
     pub duration: Duration,
 }
 
@@ -2406,53 +2327,51 @@ impl McpToolCallEndEvent {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct WebSearchBeginEvent {
     pub call_id: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct WebSearchEndEvent {
     pub call_id: String,
     pub query: String,
     pub action: WebSearchAction,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct ImageGenerationBeginEvent {
     pub call_id: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct ImageGenerationEndEvent {
     pub call_id: String,
     pub status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub revised_prompt: Option<String>,
     pub result: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub saved_path: Option<AbsolutePathBuf>,
 }
 
 // Conversation kept for backward compatibility.
 /// Response payload for `Op::GetHistory` containing the current session's
 /// in-memory transcript.
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct ConversationPathResponseEvent {
     pub conversation_id: ThreadId,
     pub path: PathBuf,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct ResumedHistory {
     pub conversation_id: ThreadId,
     pub history: Vec<RolloutItem>,
     pub rollout_path: Option<PathBuf>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub enum InitialHistory {
     New,
     Cleared,
@@ -2579,9 +2498,8 @@ fn session_cwd_from_items(items: &[RolloutItem]) -> Option<PathBuf> {
     })
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema, TS, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, JsonSchema, Default, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "lowercase")]
-#[ts(rename_all = "lowercase")]
 pub enum SessionSource {
     Cli,
     #[default]
@@ -2595,9 +2513,8 @@ pub enum SessionSource {
     Unknown,
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
-#[ts(rename_all = "snake_case")]
 pub enum ThreadSource {
     User,
     Subagent,
@@ -2633,16 +2550,14 @@ impl FromStr for ThreadSource {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Clone, Debug, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
-#[ts(rename_all = "snake_case")]
 pub enum InternalSessionSource {
     MemoryConsolidation,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Clone, Debug, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
-#[ts(rename_all = "snake_case")]
 pub enum SubAgentSource {
     Review,
     Compact,
@@ -2782,7 +2697,7 @@ impl fmt::Display for InternalSessionSource {
 /// NOTE: There used to be an `instructions` field here, which stored user_instructions, but we
 /// now save that on TurnContext. base_instructions stores the base instructions for the session,
 /// and should be used when there is no config override.
-#[derive(Serialize, Deserialize, Clone, Debug, JsonSchema, TS)]
+#[derive(Clone, Debug, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct SessionMeta {
     pub id: ThreadId,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2838,7 +2753,7 @@ impl Default for SessionMeta {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct SessionMetaLine {
     #[serde(flatten)]
     pub meta: SessionMeta,
@@ -2846,7 +2761,7 @@ pub struct SessionMetaLine {
     pub git: Option<GitInfo>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(tag = "type", content = "payload", rename_all = "snake_case")]
 pub enum RolloutItem {
     SessionMeta(SessionMetaLine),
@@ -2856,7 +2771,7 @@ pub enum RolloutItem {
     EventMsg(EventMsg),
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, JsonSchema, TS)]
+#[derive(Clone, Debug, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct CompactedItem {
     pub message: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -2876,7 +2791,7 @@ impl From<CompactedItem> for ResponseItem {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Clone, Debug, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct TurnContextNetworkItem {
     pub allowed_domains: Vec<String>,
     pub denied_domains: Vec<String>,
@@ -2886,7 +2801,7 @@ pub struct TurnContextNetworkItem {
 /// context updates, and again after mid-turn compaction when replacement
 /// history re-establishes full context, so resume/fork replay can recover the
 /// latest durable baseline.
-#[derive(Serialize, Deserialize, Clone, Debug, JsonSchema, TS)]
+#[derive(Clone, Debug, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct TurnContextItem {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub turn_id: Option<String>,
@@ -2919,7 +2834,7 @@ pub struct TurnContextItem {
     pub truncation_policy: Option<TruncationPolicy>,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(tag = "mode", content = "limit", rename_all = "snake_case")]
 pub enum TruncationPolicy {
     Bytes(usize),
@@ -2971,14 +2886,14 @@ impl Mul<f64> for TruncationPolicy {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, JsonSchema)]
+#[derive(Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct RolloutLine {
     pub timestamp: String,
     #[serde(flatten)]
     pub item: RolloutItem,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, JsonSchema, TS)]
+#[derive(Clone, Debug, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct GitInfo {
     /// Current commit hash (SHA)
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2991,28 +2906,25 @@ pub struct GitInfo {
     pub repository_url: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
 pub enum ReviewDelivery {
     Inline,
     Detached,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, JsonSchema, TS)]
+#[derive(Clone, Debug, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(tag = "type", rename_all = "camelCase")]
-#[ts(tag = "type")]
 pub enum ReviewTarget {
     /// Review the working tree: staged, unstaged, and untracked files.
     UncommittedChanges,
 
     /// Review changes between the current branch and the given base branch.
     #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
     BaseBranch { branch: String },
 
     /// Review the changes introduced by a specific commit.
     #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
     Commit {
         sha: String,
         /// Optional human-readable label (e.g., commit subject) for UIs.
@@ -3021,21 +2933,19 @@ pub enum ReviewTarget {
 
     /// Arbitrary instructions provided by the user.
     #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
     Custom { instructions: String },
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 /// Review request sent to the review session.
 pub struct ReviewRequest {
     pub target: ReviewTarget,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub user_facing_hint: Option<String>,
 }
 
 /// Structured review result produced by a child review session.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS, FromJson)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, FromJson, edgerun_json::ToJson)]
 pub struct ReviewOutputEvent {
     pub findings: Vec<ReviewFinding>,
     pub overall_correctness: String,
@@ -3055,7 +2965,7 @@ impl Default for ReviewOutputEvent {
 }
 
 /// A single review finding describing an observed issue or recommendation.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS, FromJson)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, FromJson, edgerun_json::ToJson)]
 pub struct ReviewFinding {
     pub title: String,
     pub body: String,
@@ -3065,22 +2975,20 @@ pub struct ReviewFinding {
 }
 
 /// Location of the code related to a review finding.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS, FromJson)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, FromJson, edgerun_json::ToJson)]
 pub struct ReviewCodeLocation {
     pub absolute_file_path: PathBuf,
     pub line_range: ReviewLineRange,
 }
 
 /// Inclusive line range in a file associated with the finding.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS, FromJson)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, FromJson, edgerun_json::ToJson)]
 pub struct ReviewLineRange {
     pub start: u32,
     pub end: u32,
 }
 
-#[derive(
-    Debug, Clone, Copy, Display, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS, Default,
-)]
+#[derive(Debug, Clone, Copy, Display, PartialEq, Eq, JsonSchema, Default, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecCommandSource {
     #[default]
@@ -3090,7 +2998,7 @@ pub enum ExecCommandSource {
     UnifiedExecInteraction,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecCommandStatus {
     Completed,
@@ -3098,13 +3006,12 @@ pub enum ExecCommandStatus {
     Declined,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct ExecCommandBeginEvent {
     /// Identifier so this can be paired with the ExecCommandEnd event.
     pub call_id: String,
     /// Identifier for the underlying PTY process (when available).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub process_id: Option<String>,
     /// Turn ID that this command belongs to.
     pub turn_id: String,
@@ -3120,17 +3027,15 @@ pub struct ExecCommandBeginEvent {
     pub source: ExecCommandSource,
     /// Raw input sent to a unified exec session (if this is an interaction event).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub interaction_input: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct ExecCommandEndEvent {
     /// Identifier for the ExecCommandBegin that finished.
     pub call_id: String,
     /// Identifier for the underlying PTY process (when available).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub process_id: Option<String>,
     /// Turn ID that this command belongs to.
     pub turn_id: String,
@@ -3146,7 +3051,6 @@ pub struct ExecCommandEndEvent {
     pub source: ExecCommandSource,
     /// Raw input sent to a unified exec session (if this is an interaction event).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub interaction_input: Option<String>,
 
     /// Captured stdout
@@ -3159,7 +3063,6 @@ pub struct ExecCommandEndEvent {
     /// The command's exit code.
     pub exit_code: i32,
     /// The duration of the command execution.
-    #[ts(type = "string")]
     pub duration: Duration,
     /// Formatted output from the command, as seen by the model.
     pub formatted_output: String,
@@ -3167,7 +3070,7 @@ pub struct ExecCommandEndEvent {
     pub status: ExecCommandStatus,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct ViewImageToolCallEvent {
     /// Identifier for the originating tool call.
     pub call_id: String,
@@ -3175,14 +3078,14 @@ pub struct ViewImageToolCallEvent {
     pub path: AbsolutePathBuf,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
 pub enum ExecOutputStream {
     Stdout,
     Stderr,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct ExecCommandOutputDeltaEvent {
     /// Identifier for the ExecCommandBegin that produced this chunk.
     pub call_id: String,
@@ -3194,11 +3097,10 @@ pub struct ExecCommandOutputDeltaEvent {
         serialize_with = "exec_output_chunk_serde::serialize"
     )]
     #[schemars(with = "String")]
-    #[ts(type = "string")]
     pub chunk: Vec<u8>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct TerminalInteractionEvent {
     /// Identifier for the ExecCommandBegin that produced this chunk.
     pub call_id: String,
@@ -3208,31 +3110,7 @@ pub struct TerminalInteractionEvent {
     pub stdin: String,
 }
 
-mod exec_output_chunk_serde {
-    use edgerun_encoding::base64::standard_decode;
-    use edgerun_encoding::base64::standard_encode;
-    use edgerun_serde::Deserialize;
-    use edgerun_serde::Deserializer;
-    use edgerun_serde::Serializer;
-    use edgerun_serde::de::Error as _;
-
-    pub(crate) fn deserialize<'de, D>(deserializer: D) -> Result<Vec<u8>, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let encoded = String::deserialize(deserializer)?;
-        standard_decode(&encoded).map_err(D::Error::custom)
-    }
-
-    pub(crate) fn serialize<S>(value: &[u8], serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(&standard_encode(value))
-    }
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct DeprecationNoticeEvent {
     /// Concise summary of what is deprecated.
     pub summary: String,
@@ -3241,13 +3119,13 @@ pub struct DeprecationNoticeEvent {
     pub details: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct ThreadRolledBackEvent {
     /// Number of user turns that were removed from context.
     pub num_turns: u32,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct StreamErrorEvent {
     pub message: String,
     #[serde(default)]
@@ -3259,12 +3137,12 @@ pub struct StreamErrorEvent {
     pub additional_details: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct StreamInfoEvent {
     pub message: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct PatchApplyBeginEvent {
     /// Identifier so this can be paired with the PatchApplyEnd event.
     pub call_id: String,
@@ -3278,7 +3156,7 @@ pub struct PatchApplyBeginEvent {
     pub changes: HashMap<PathBuf, FileChange>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct PatchApplyUpdatedEvent {
     /// Identifier for the originating `apply_patch` tool call.
     pub call_id: String,
@@ -3286,7 +3164,7 @@ pub struct PatchApplyUpdatedEvent {
     pub changes: HashMap<PathBuf, FileChange>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct PatchApplyEndEvent {
     /// Identifier for the PatchApplyBegin that finished.
     pub call_id: String,
@@ -3307,7 +3185,7 @@ pub struct PatchApplyEndEvent {
     pub status: PatchApplyStatus,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
 pub enum PatchApplyStatus {
     Completed,
@@ -3315,12 +3193,12 @@ pub enum PatchApplyStatus {
     Declined,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct TurnDiffEvent {
     pub unified_diff: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct McpStartupUpdateEvent {
     /// Server name being started.
     pub server: String,
@@ -3328,9 +3206,8 @@ pub struct McpStartupUpdateEvent {
     pub status: McpStartupStatus,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case", tag = "state")]
-#[ts(rename_all = "snake_case", tag = "state")]
 pub enum McpStartupStatus {
     Starting,
     Ready,
@@ -3338,22 +3215,21 @@ pub enum McpStartupStatus {
     Cancelled,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS, Default)]
+#[derive(Debug, Clone, JsonSchema, Default, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct McpStartupCompleteEvent {
     pub ready: Vec<String>,
     pub failed: Vec<McpStartupFailure>,
     pub cancelled: Vec<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct McpStartupFailure {
     pub server: String,
     pub error: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
-#[ts(rename_all = "snake_case")]
 pub enum McpAuthStatus {
     Unsupported,
     NotLoggedIn,
@@ -3373,14 +3249,13 @@ impl fmt::Display for McpAuthStatus {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct RealtimeConversationListVoicesResponseEvent {
     pub voices: RealtimeVoicesList,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "lowercase")]
-#[ts(rename_all = "lowercase")]
 pub enum Product {
     #[serde(alias = "CHATGPT")]
     Chatgpt,
@@ -3412,9 +3287,8 @@ impl Product {
         products.is_empty() || products.contains(self)
     }
 }
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
-#[ts(rename_all = "snake_case")]
 pub enum SkillScope {
     User,
     Repo,
@@ -3422,73 +3296,59 @@ pub enum SkillScope {
     Admin,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct SkillMetadata {
     pub name: String,
     pub description: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     /// Legacy short_description from SKILL.md. Prefer SKILL.json interface.short_description.
     pub short_description: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub interface: Option<SkillInterface>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub dependencies: Option<SkillDependencies>,
     pub path: AbsolutePathBuf,
     pub scope: SkillScope,
     pub enabled: bool,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS, PartialEq, Eq)]
+#[derive(Debug, Clone, JsonSchema, PartialEq, Eq, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct SkillInterface {
-    #[ts(optional)]
     pub display_name: Option<String>,
-    #[ts(optional)]
     pub short_description: Option<String>,
-    #[ts(optional)]
     pub icon_small: Option<AbsolutePathBuf>,
-    #[ts(optional)]
     pub icon_large: Option<AbsolutePathBuf>,
-    #[ts(optional)]
     pub brand_color: Option<String>,
-    #[ts(optional)]
     pub default_prompt: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS, PartialEq, Eq)]
+#[derive(Debug, Clone, JsonSchema, PartialEq, Eq, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct SkillDependencies {
     pub tools: Vec<SkillToolDependency>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS, PartialEq, Eq)]
+#[derive(Debug, Clone, JsonSchema, PartialEq, Eq, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct SkillToolDependency {
     #[serde(rename = "type")]
-    #[ts(rename = "type")]
     pub r#type: String,
     pub value: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub description: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub transport: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub command: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub url: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS, PartialEq, Eq)]
+#[derive(Debug, Clone, JsonSchema, PartialEq, Eq, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct SessionNetworkProxyRuntime {
     pub http_addr: String,
     pub socks_addr: String,
 }
 
-#[derive(Debug, Clone, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson)]
 pub struct SessionConfiguredEvent {
     pub session_id: SessionId,
     pub thread_id: ThreadId,
@@ -3500,7 +3360,6 @@ pub struct SessionConfiguredEvent {
 
     /// Optional user-facing thread name (may be unset).
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub thread_name: Option<String>,
 
     /// Tell the client what model is being queried.
@@ -3532,7 +3391,6 @@ pub struct SessionConfiguredEvent {
 
     /// Runtime proxy bind addresses, when the managed proxy was started for this session.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub network_proxy: Option<SessionNetworkProxyRuntime>,
 
     /// Path in which the rollout is stored. Can be `None` for ephemeral threads
@@ -3540,12 +3398,9 @@ pub struct SessionConfiguredEvent {
     pub rollout_path: Option<PathBuf>,
 }
 
-impl<'de> Deserialize<'de> for SessionConfiguredEvent {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: edgerun_serde::Deserializer<'de>,
-    {
-        #[derive(Deserialize)]
+impl FromJson for SessionConfiguredEvent {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        #[derive(edgerun_json::FromJson)]
         struct Wire {
             session_id: SessionId,
             #[serde(default)]
@@ -3567,7 +3422,7 @@ impl<'de> Deserialize<'de> for SessionConfiguredEvent {
             rollout_path: Option<PathBuf>,
         }
 
-        let wire = Wire::deserialize(deserializer)?;
+        let wire = Wire::from_json(value)?;
         Ok(Self {
             session_id: wire.session_id,
             thread_id: wire.thread_id.unwrap_or_else(|| wire.session_id.into()),
@@ -3587,12 +3442,9 @@ impl<'de> Deserialize<'de> for SessionConfiguredEvent {
     }
 }
 
-#[derive(
-    Debug, Clone, Copy, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS, ToJson, FromJson,
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, ToJson, FromJson)]
 #[serde(rename_all = "camelCase")]
 #[json(rename_all = "camelCase")]
-#[ts(export_to = "protocol/")]
 pub enum ThreadGoalStatus {
     Active,
     Paused,
@@ -3614,17 +3466,15 @@ pub fn validate_thread_goal_objective(value: &str) -> Result<(), String> {
     Ok(())
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS, ToJson, FromJson)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, ToJson, FromJson)]
 #[serde(rename_all = "camelCase")]
 #[json(rename_all = "camelCase")]
-#[ts(export_to = "protocol/")]
 pub struct ThreadGoal {
     pub thread_id: ThreadId,
     pub objective: String,
     pub status: ThreadGoalStatus,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[json(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub token_budget: Option<i64>,
     pub tokens_used: i64,
     pub time_used_seconds: i64,
@@ -3632,19 +3482,17 @@ pub struct ThreadGoal {
     pub updated_at: i64,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "protocol/")]
 pub struct ThreadGoalUpdatedEvent {
     pub thread_id: ThreadId,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub turn_id: Option<String>,
     pub goal: ThreadGoal,
 }
 
 /// User's decision in response to an ExecApprovalRequest.
-#[derive(Debug, Default, Clone, Deserialize, Serialize, PartialEq, Eq, Display, JsonSchema, TS)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Display, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
 pub enum ReviewDecision {
     /// User has approved this command and the agent should execute it.
@@ -3701,9 +3549,8 @@ impl ReviewDecision {
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[ts(tag = "type")]
 pub enum FileChange {
     Add {
         content: String,
@@ -3717,7 +3564,7 @@ pub enum FileChange {
     },
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct Chunk {
     /// 1-based line index of the first line in the original file
     pub orig_index: u32,
@@ -3725,21 +3572,19 @@ pub struct Chunk {
     pub inserted_lines: Vec<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema, TS)]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct TurnAbortedEvent {
     pub turn_id: Option<String>,
     pub reason: TurnAbortReason,
     /// Unix timestamp (in seconds) when the turn was aborted.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(type = "number | null", optional)]
     pub completed_at: Option<i64>,
     /// Duration between turn start and abort in milliseconds, if known.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(type = "number | null", optional)]
     pub duration_ms: Option<i64>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
 pub enum TurnAbortReason {
     Interrupted,
@@ -3748,7 +3593,7 @@ pub enum TurnAbortReason {
     BudgetLimited,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct CollabAgentSpawnBeginEvent {
     /// Identifier for the collab tool call.
     pub call_id: String,
@@ -3763,7 +3608,7 @@ pub struct CollabAgentSpawnBeginEvent {
     pub reasoning_effort: ReasoningEffortConfig,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct CollabAgentRef {
     /// Thread ID of the receiver/new agent.
     pub thread_id: ThreadId,
@@ -3775,7 +3620,7 @@ pub struct CollabAgentRef {
     pub agent_role: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct CollabAgentStatusEntry {
     /// Thread ID of the receiver/new agent.
     pub thread_id: ThreadId,
@@ -3789,7 +3634,7 @@ pub struct CollabAgentStatusEntry {
     pub status: AgentStatus,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct CollabAgentSpawnEndEvent {
     /// Identifier for the collab tool call.
     pub call_id: String,
@@ -3816,7 +3661,7 @@ pub struct CollabAgentSpawnEndEvent {
     pub status: AgentStatus,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct CollabAgentInteractionBeginEvent {
     /// Identifier for the collab tool call.
     pub call_id: String,
@@ -3831,7 +3676,7 @@ pub struct CollabAgentInteractionBeginEvent {
     pub prompt: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct CollabAgentInteractionEndEvent {
     /// Identifier for the collab tool call.
     pub call_id: String,
@@ -3854,7 +3699,7 @@ pub struct CollabAgentInteractionEndEvent {
     pub status: AgentStatus,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct CollabWaitingBeginEvent {
     #[serde(default)]
     pub started_at_ms: i64,
@@ -3869,7 +3714,7 @@ pub struct CollabWaitingBeginEvent {
     pub call_id: String,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct CollabWaitingEndEvent {
     /// Thread ID of the sender.
     pub sender_thread_id: ThreadId,
@@ -3884,7 +3729,7 @@ pub struct CollabWaitingEndEvent {
     pub statuses: HashMap<ThreadId, AgentStatus>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct CollabCloseBeginEvent {
     /// Identifier for the collab tool call.
     pub call_id: String,
@@ -3896,7 +3741,7 @@ pub struct CollabCloseBeginEvent {
     pub receiver_thread_id: ThreadId,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct CollabCloseEndEvent {
     /// Identifier for the collab tool call.
     pub call_id: String,
@@ -3917,7 +3762,7 @@ pub struct CollabCloseEndEvent {
     pub status: AgentStatus,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct CollabResumeBeginEvent {
     /// Identifier for the collab tool call.
     pub call_id: String,
@@ -3935,7 +3780,7 @@ pub struct CollabResumeBeginEvent {
     pub receiver_agent_role: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct CollabResumeEndEvent {
     /// Identifier for the collab tool call.
     pub call_id: String,

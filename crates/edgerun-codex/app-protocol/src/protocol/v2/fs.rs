@@ -4,15 +4,11 @@ use edgerun_json::JsonValueError;
 use edgerun_json::Map;
 use edgerun_json::ToJson;
 use edgerun_json::Value;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
 use schemars::JsonSchema;
-use ts_rs::TS;
 
 /// Read a file from the host filesystem.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct FsReadFileParams {
     /// Absolute path to read.
     pub path: AbsolutePathBuf,
@@ -34,9 +30,8 @@ impl FromJson for FsReadFileParams {
 }
 
 /// Base64-encoded file contents returned by `fs/readFile`.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct FsReadFileResponse {
     /// File contents encoded as base64.
     pub data_base64: String,
@@ -58,9 +53,8 @@ impl FromJson for FsReadFileResponse {
 }
 
 /// Write a file on the host filesystem.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct FsWriteFileParams {
     /// Absolute path to write.
     pub path: AbsolutePathBuf,
@@ -88,9 +82,8 @@ impl FromJson for FsWriteFileParams {
 }
 
 /// Successful response for `fs/writeFile`.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct FsWriteFileResponse {}
 
 impl ToJson for FsWriteFileResponse {
@@ -107,14 +100,12 @@ impl FromJson for FsWriteFileResponse {
 }
 
 /// Create a directory on the host filesystem.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct FsCreateDirectoryParams {
     /// Absolute directory path to create.
     pub path: AbsolutePathBuf,
     /// Whether parent directories should also be created. Defaults to `true`.
-    #[ts(optional = nullable)]
     pub recursive: Option<bool>,
 }
 
@@ -138,9 +129,8 @@ impl FromJson for FsCreateDirectoryParams {
 }
 
 /// Successful response for `fs/createDirectory`.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct FsCreateDirectoryResponse {}
 
 impl ToJson for FsCreateDirectoryResponse {
@@ -157,9 +147,8 @@ impl FromJson for FsCreateDirectoryResponse {
 }
 
 /// Request metadata for an absolute path.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct FsGetMetadataParams {
     /// Absolute path to inspect.
     pub path: AbsolutePathBuf,
@@ -181,9 +170,8 @@ impl FromJson for FsGetMetadataParams {
 }
 
 /// Metadata returned by `fs/getMetadata`.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct FsGetMetadataResponse {
     /// Whether the path resolves to a directory.
     pub is_directory: bool,
@@ -192,10 +180,8 @@ pub struct FsGetMetadataResponse {
     /// Whether the path itself is a symbolic link.
     pub is_symlink: bool,
     /// File creation time in Unix milliseconds when available, otherwise `0`.
-    #[ts(type = "number")]
     pub created_at_ms: i64,
     /// File modification time in Unix milliseconds when available, otherwise `0`.
-    #[ts(type = "number")]
     pub modified_at_ms: i64,
 }
 
@@ -225,18 +211,16 @@ impl FromJson for FsGetMetadataResponse {
 }
 
 /// List direct child names for a directory.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct FsReadDirectoryParams {
     /// Absolute directory path to read.
     pub path: AbsolutePathBuf,
 }
 
 /// A directory entry returned by `fs/readDirectory`.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct FsReadDirectoryEntry {
     /// Direct child entry name only, not an absolute or relative path.
     pub file_name: String,
@@ -247,39 +231,33 @@ pub struct FsReadDirectoryEntry {
 }
 
 /// Directory entries returned by `fs/readDirectory`.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct FsReadDirectoryResponse {
     /// Direct child entries in the requested directory.
     pub entries: Vec<FsReadDirectoryEntry>,
 }
 
 /// Remove a file or directory tree from the host filesystem.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct FsRemoveParams {
     /// Absolute path to remove.
     pub path: AbsolutePathBuf,
     /// Whether directory removal should recurse. Defaults to `true`.
-    #[ts(optional = nullable)]
     pub recursive: Option<bool>,
     /// Whether missing paths should be ignored. Defaults to `true`.
-    #[ts(optional = nullable)]
     pub force: Option<bool>,
 }
 
 /// Successful response for `fs/remove`.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct FsRemoveResponse {}
 
 /// Copy a file or directory tree on the host filesystem.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct FsCopyParams {
     /// Absolute source path.
     pub source_path: AbsolutePathBuf,
@@ -314,15 +292,13 @@ impl FromJson for FsCopyParams {
 }
 
 /// Successful response for `fs/copy`.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct FsCopyResponse {}
 
 /// Start filesystem watch notifications for an absolute path.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct FsWatchParams {
     /// Connection-scoped watch identifier used for `fs/unwatch` and `fs/changed`.
     pub watch_id: String,
@@ -331,33 +307,29 @@ pub struct FsWatchParams {
 }
 
 /// Successful response for `fs/watch`.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct FsWatchResponse {
     /// Canonicalized path associated with the watch.
     pub path: AbsolutePathBuf,
 }
 
 /// Stop filesystem watch notifications for a prior `fs/watch`.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct FsUnwatchParams {
     /// Watch identifier previously provided to `fs/watch`.
     pub watch_id: String,
 }
 
 /// Successful response for `fs/unwatch`.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct FsUnwatchResponse {}
 
 /// Filesystem watch notification emitted for `fs/watch` subscribers.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct FsChangedNotification {
     /// Watch identifier previously provided to `fs/watch`.
     pub watch_id: String,

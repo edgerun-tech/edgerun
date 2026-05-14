@@ -43,16 +43,10 @@ rustdoc-args = ["--cfg=docsrs"]
 targets = ["wasm32-unknown-unknown"]
 
 [features]
-serde = ["dep:serde"]
 
 [target."cfg(all(target_family = \"wasm\", target_os = \"unknown\"))".dependencies.js-sys]
 version = "0.3.20"
 path = "../edgerun-js-sys"
-
-[target."cfg(all(target_family = \"wasm\", target_os = \"unknown\"))".dependencies.serde]
-version = "1"
-path = "../edgerun-serde-upstream"
-optional = true
 
 [target."cfg(all(target_family = \"wasm\", target_os = \"unknown\"))".dependencies.wasm-bindgen]
 version = "0.2.70"

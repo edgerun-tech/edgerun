@@ -15,8 +15,16 @@ crate-type = ["rlib"]
 name = "edgerun-apk-api-calls"
 path = "src/bin/apk_api_calls.rs"
 
+[[bin]]
+name = "edgerun-dead-code"
+path = "src/bin/dead_code.rs"
+
+[[bin]]
+name = "edgerun-build"
+path = "src/bin/edgerun_build.rs"
+
 [features]
-default = ["std", "lang-rust"]
+default = ["std", "lang-rust", "vfs"]
 std = ["edgerun-vfs?/std"]
 lang-rust = []
 lang-typescript = []

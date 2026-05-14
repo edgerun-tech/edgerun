@@ -1,887 +1,529 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "definitions": {
-    "AbsolutePathBuf": {
-      "description": "A path that is guaranteed to be absolute and normalized (though it is not guaranteed to be canonicalized or exist on the filesystem).\n\nIMPORTANT: When deserializing an `AbsolutePathBuf`, a base path must be set using [AbsolutePathBufGuard::new]. If no base path is set, the deserialization will fail unless the path being deserialized is already absolute.",
-      "type": "string"
-    },
-    "AnalyticsConfig": {
-      "additionalProperties": true,
+  "title": "ConfigReadResponse",
+  "type": "object",
+  "properties": {
+    "config": {
+      "title": "Config",
+      "type": "object",
       "properties": {
-        "enabled": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        }
-      },
-      "type": "object"
-    },
-    "AppConfig": {
-      "properties": {
-        "default_tools_approval_mode": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/AppToolApproval"
-            },
-            {
-              "type": "null"
-            }
-          ]
+        "additional": {
+          "type": "object",
+          "additionalProperties": true
         },
-        "default_tools_enabled": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "destructive_enabled": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "enabled": {
-          "default": true,
-          "type": "boolean"
-        },
-        "open_world_enabled": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "tools": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/AppToolsConfig"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "type": "object"
-    },
-    "AppToolApproval": {
-      "enum": [
-        "auto",
-        "prompt",
-        "approve"
-      ],
-      "type": "string"
-    },
-    "AppToolConfig": {
-      "properties": {
-        "approval_mode": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/AppToolApproval"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "enabled": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        }
-      },
-      "type": "object"
-    },
-    "AppToolsConfig": {
-      "type": "object"
-    },
-    "ApprovalsReviewer": {
-      "description": "Configures who approval requests are routed to for review. Examples include sandbox escapes, blocked network access, MCP approval prompts, and ARC escalations. Defaults to `user`. `auto_review` uses a carefully prompted subagent to gather relevant context and apply a risk-based decision framework before approving or denying the request. The legacy value `guardian_subagent` is accepted for compatibility.",
-      "enum": [
-        "user",
-        "auto_review",
-        "guardian_subagent"
-      ],
-      "type": "string"
-    },
-    "AppsConfig": {
-      "properties": {
-        "_default": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/AppsDefaultConfig"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null
-        }
-      },
-      "type": "object"
-    },
-    "AppsDefaultConfig": {
-      "properties": {
-        "destructive_enabled": {
-          "default": true,
-          "type": "boolean"
-        },
-        "enabled": {
-          "default": true,
-          "type": "boolean"
-        },
-        "open_world_enabled": {
-          "default": true,
-          "type": "boolean"
-        }
-      },
-      "type": "object"
-    },
-    "AskForApproval": {
-      "oneOf": [
-        {
-          "enum": [
-            "untrusted",
-            "on-failure",
-            "on-request",
-            "never"
-          ],
-          "type": "string"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "granular": {
-              "properties": {
-                "mcp_elicitations": {
-                  "type": "boolean"
-                },
-                "request_permissions": {
-                  "default": false,
-                  "type": "boolean"
-                },
-                "rules": {
-                  "type": "boolean"
-                },
-                "sandbox_approval": {
-                  "type": "boolean"
-                },
-                "skill_approval": {
-                  "default": false,
-                  "type": "boolean"
-                }
-              },
-              "required": [
-                "mcp_elicitations",
-                "rules",
-                "sandbox_approval"
-              ],
-              "type": "object"
-            }
-          },
-          "required": [
-            "granular"
-          ],
-          "title": "GranularAskForApproval",
-          "type": "object"
-        }
-      ]
-    },
-    "Config": {
-      "additionalProperties": true,
-      "properties": {
         "analytics": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/AnalyticsConfig"
+          "title": "AnalyticsConfig",
+          "type": "object",
+          "properties": {
+            "additional": {
+              "type": "object",
+              "additionalProperties": true
             },
-            {
-              "type": "null"
+            "enabled": {
+              "type": "boolean"
             }
-          ]
-        },
-        "approval_policy": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/AskForApproval"
-            },
-            {
-              "type": "null"
-            }
-          ]
+          }
         },
         "approvals_reviewer": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/ApprovalsReviewer"
+          "description": "Configures who approval requests are routed to for review. Examples include sandbox escapes, blocked network access, MCP approval prompts, and ARC escalations. Defaults to `user`. `auto_review` uses a carefully prompted subagent to gather relevant context and apply a risk-based decision framework before approving or denying the request. The legacy value `guardian_subagent` is accepted for compatibility.",
+          "type": "string",
+          "enum": [
+            "user",
+            "auto_review",
+            "guardian_subagent"
+          ]
+        },
+        "apps": {
+          "title": "AppsConfig",
+          "type": "object",
+          "properties": {
+            "_default": {
+              "title": "AppsDefaultConfig",
+              "type": "object",
+              "properties": {
+                "destructive_enabled": {
+                  "type": "boolean"
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "open_world_enabled": {
+                  "type": "boolean"
+                }
+              }
             },
-            {
-              "type": "null"
+            "apps": {
+              "type": "object",
+              "additionalProperties": {
+                "title": "AppConfig",
+                "type": "object",
+                "properties": {
+                  "default_tools_approval_mode": {
+                    "title": "AppToolApproval",
+                    "type": "string",
+                    "enum": [
+                      "Auto",
+                      "Prompt",
+                      "Approve"
+                    ]
+                  },
+                  "default_tools_enabled": {
+                    "type": "boolean"
+                  },
+                  "destructive_enabled": {
+                    "type": "boolean"
+                  },
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "open_world_enabled": {
+                    "type": "boolean"
+                  },
+                  "tools": {
+                    "title": "AppToolsConfig",
+                    "type": "object",
+                    "properties": {
+                      "tools": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "title": "AppToolConfig",
+                          "type": "object",
+                          "properties": {
+                            "approval_mode": {
+                              "title": "AppToolApproval",
+                              "type": "string",
+                              "enum": [
+                                "Auto",
+                                "Prompt",
+                                "Approve"
+                              ]
+                            },
+                            "enabled": {
+                              "type": "boolean"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
             }
-          ],
-          "description": "[UNSTABLE] Optional default for where approval requests are routed for review."
+          }
         },
         "compact_prompt": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": "string"
         },
         "developer_instructions": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": "string"
         },
         "forced_chatgpt_workspace_id": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": "string"
         },
         "forced_login_method": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/ForcedLoginMethod"
-            },
-            {
-              "type": "null"
-            }
+          "title": "ForcedLoginMethod",
+          "type": "string",
+          "enum": [
+            "chatgpt",
+            "api"
           ]
         },
         "instructions": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": "string"
         },
         "model": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": "string"
         },
         "model_auto_compact_token_limit": {
-          "format": "int64",
-          "type": [
-            "integer",
-            "null"
-          ]
+          "type": "integer"
         },
         "model_context_window": {
-          "format": "int64",
-          "type": [
-            "integer",
-            "null"
-          ]
+          "type": "integer"
         },
         "model_provider": {
-          "type": [
-            "string",
-            "null"
-          ]
+          "type": "string"
         },
         "model_reasoning_effort": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/ReasoningEffort"
-            },
-            {
-              "type": "null"
-            }
+          "title": "ReasoningEffort",
+          "type": "string",
+          "enum": [
+            "none",
+            "minimal",
+            "low",
+            "medium",
+            "high",
+            "xhigh"
           ]
         },
         "model_reasoning_summary": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/ReasoningSummary"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "model_verbosity": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/Verbosity"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "profile": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "profiles": {
-          "additionalProperties": {
-            "$ref": "#/definitions/ProfileV2"
-          },
-          "default": {},
-          "type": "object"
-        },
-        "review_model": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "sandbox_mode": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/SandboxMode"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "sandbox_workspace_write": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/SandboxWorkspaceWrite"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "service_tier": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "tools": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/ToolsV2"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "web_search": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/WebSearchMode"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "type": "object"
-    },
-    "ConfigLayer": {
-      "properties": {
-        "config": true,
-        "disabledReason": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "name": {
-          "$ref": "#/definitions/ConfigLayerSource"
-        },
-        "version": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "config",
-        "name",
-        "version"
-      ],
-      "type": "object"
-    },
-    "ConfigLayerMetadata": {
-      "properties": {
-        "name": {
-          "$ref": "#/definitions/ConfigLayerSource"
-        },
-        "version": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "name",
-        "version"
-      ],
-      "type": "object"
-    },
-    "ConfigLayerSource": {
-      "oneOf": [
-        {
-          "description": "Managed preferences layer delivered by MDM (macOS only).",
-          "properties": {
-            "domain": {
-              "type": "string"
-            },
-            "key": {
-              "type": "string"
-            },
-            "type": {
-              "enum": [
-                "mdm"
-              ],
-              "title": "MdmConfigLayerSourceType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "domain",
-            "key",
-            "type"
-          ],
-          "title": "MdmConfigLayerSource",
-          "type": "object"
-        },
-        {
-          "description": "Managed config layer from a file (usually `managed_config.toml`).",
-          "properties": {
-            "file": {
-              "allOf": [
-                {
-                  "$ref": "#/definitions/AbsolutePathBuf"
-                }
-              ],
-              "description": "This is the path to the system config.toml file, though it is not guaranteed to exist."
-            },
-            "type": {
-              "enum": [
-                "system"
-              ],
-              "title": "SystemConfigLayerSourceType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "file",
-            "type"
-          ],
-          "title": "SystemConfigLayerSource",
-          "type": "object"
-        },
-        {
-          "description": "User config layer from $CODEX_HOME/config.toml. This layer is special in that it is expected to be: - writable by the user - generally outside the workspace directory",
-          "properties": {
-            "file": {
-              "allOf": [
-                {
-                  "$ref": "#/definitions/AbsolutePathBuf"
-                }
-              ],
-              "description": "This is the path to the user's config.toml file, though it is not guaranteed to exist."
-            },
-            "type": {
-              "enum": [
-                "user"
-              ],
-              "title": "UserConfigLayerSourceType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "file",
-            "type"
-          ],
-          "title": "UserConfigLayerSource",
-          "type": "object"
-        },
-        {
-          "description": "Path to a .codex/ folder within a project. There could be multiple of these between `cwd` and the project/repo root.",
-          "properties": {
-            "dotCodexFolder": {
-              "$ref": "#/definitions/AbsolutePathBuf"
-            },
-            "type": {
-              "enum": [
-                "project"
-              ],
-              "title": "ProjectConfigLayerSourceType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "dotCodexFolder",
-            "type"
-          ],
-          "title": "ProjectConfigLayerSource",
-          "type": "object"
-        },
-        {
-          "description": "Session-layer overrides supplied via `-c`/`--config`.",
-          "properties": {
-            "type": {
-              "enum": [
-                "sessionFlags"
-              ],
-              "title": "SessionFlagsConfigLayerSourceType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "title": "SessionFlagsConfigLayerSource",
-          "type": "object"
-        },
-        {
-          "description": "`managed_config.toml` was designed to be a config that was loaded as the last layer on top of everything else. This scheme did not quite work out as intended, but we keep this variant as a \"best effort\" while we phase out `managed_config.toml` in favor of `requirements.toml`.",
-          "properties": {
-            "file": {
-              "$ref": "#/definitions/AbsolutePathBuf"
-            },
-            "type": {
-              "enum": [
-                "legacyManagedConfigTomlFromFile"
-              ],
-              "title": "LegacyManagedConfigTomlFromFileConfigLayerSourceType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "file",
-            "type"
-          ],
-          "title": "LegacyManagedConfigTomlFromFileConfigLayerSource",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "type": {
-              "enum": [
-                "legacyManagedConfigTomlFromMdm"
-              ],
-              "title": "LegacyManagedConfigTomlFromMdmConfigLayerSourceType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "title": "LegacyManagedConfigTomlFromMdmConfigLayerSource",
-          "type": "object"
-        }
-      ]
-    },
-    "ForcedLoginMethod": {
-      "enum": [
-        "chatgpt",
-        "api"
-      ],
-      "type": "string"
-    },
-    "ProfileV2": {
-      "additionalProperties": true,
-      "properties": {
-        "approval_policy": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/AskForApproval"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "approvals_reviewer": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/ApprovalsReviewer"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "description": "[UNSTABLE] Optional profile-level override for where approval requests are routed for review. If omitted, the enclosing config default is used."
-        },
-        "chatgpt_base_url": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "model": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "model_provider": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "model_reasoning_effort": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/ReasoningEffort"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "model_reasoning_summary": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/ReasoningSummary"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "model_verbosity": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/Verbosity"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "service_tier": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "tools": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/ToolsV2"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "web_search": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/WebSearchMode"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "type": "object"
-    },
-    "ReasoningEffort": {
-      "description": "See https://platform.openai.com/docs/guides/reasoning?api-mode=responses#get-started-with-reasoning",
-      "enum": [
-        "none",
-        "minimal",
-        "low",
-        "medium",
-        "high",
-        "xhigh"
-      ],
-      "type": "string"
-    },
-    "ReasoningSummary": {
-      "description": "A summary of the reasoning performed by the model. This can be useful for debugging and understanding the model's reasoning process. See https://platform.openai.com/docs/guides/reasoning?api-mode=responses#reasoning-summaries",
-      "oneOf": [
-        {
+          "title": "ReasoningSummary",
+          "type": "string",
           "enum": [
             "auto",
             "concise",
-            "detailed"
-          ],
-          "type": "string"
-        },
-        {
-          "description": "Option to disable reasoning summaries.",
-          "enum": [
+            "detailed",
             "none"
-          ],
-          "type": "string"
-        }
-      ]
-    },
-    "SandboxMode": {
-      "enum": [
-        "read-only",
-        "workspace-write",
-        "danger-full-access"
-      ],
-      "type": "string"
-    },
-    "SandboxWorkspaceWrite": {
-      "properties": {
-        "exclude_slash_tmp": {
-          "default": false,
-          "type": "boolean"
-        },
-        "exclude_tmpdir_env_var": {
-          "default": false,
-          "type": "boolean"
-        },
-        "network_access": {
-          "default": false,
-          "type": "boolean"
-        },
-        "writable_roots": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "type": "object"
-    },
-    "ToolsV2": {
-      "properties": {
-        "view_image": {
-          "type": [
-            "boolean",
-            "null"
           ]
+        },
+        "model_verbosity": {
+          "title": "Verbosity",
+          "type": "string",
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "profile": {
+          "type": "string"
+        },
+        "profiles": {
+          "type": "object",
+          "additionalProperties": {
+            "title": "ProfileV2",
+            "type": "object",
+            "properties": {
+              "additional": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "approvals_reviewer": {
+                "description": "Configures who approval requests are routed to for review. Examples include sandbox escapes, blocked network access, MCP approval prompts, and ARC escalations. Defaults to `user`. `auto_review` uses a carefully prompted subagent to gather relevant context and apply a risk-based decision framework before approving or denying the request. The legacy value `guardian_subagent` is accepted for compatibility.",
+                "type": "string",
+                "enum": [
+                  "user",
+                  "auto_review",
+                  "guardian_subagent"
+                ]
+              },
+              "chatgpt_base_url": {
+                "type": "string"
+              },
+              "model": {
+                "type": "string"
+              },
+              "model_provider": {
+                "type": "string"
+              },
+              "model_reasoning_effort": {
+                "title": "ReasoningEffort",
+                "type": "string",
+                "enum": [
+                  "none",
+                  "minimal",
+                  "low",
+                  "medium",
+                  "high",
+                  "xhigh"
+                ]
+              },
+              "model_reasoning_summary": {
+                "title": "ReasoningSummary",
+                "type": "string",
+                "enum": [
+                  "auto",
+                  "concise",
+                  "detailed",
+                  "none"
+                ]
+              },
+              "model_verbosity": {
+                "title": "Verbosity",
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high"
+                ]
+              },
+              "service_tier": {
+                "type": "string"
+              },
+              "tools": {
+                "title": "ToolsV2",
+                "type": "object",
+                "properties": {
+                  "view_image": {
+                    "type": "boolean"
+                  },
+                  "web_search": {
+                    "title": "WebSearchToolConfig",
+                    "type": "object",
+                    "properties": {
+                      "allowed_domains": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "context_size": {
+                        "title": "WebSearchContextSize",
+                        "type": "string",
+                        "enum": [
+                          "low",
+                          "medium",
+                          "high"
+                        ]
+                      },
+                      "location": {
+                        "title": "WebSearchLocation",
+                        "type": "object",
+                        "properties": {
+                          "city": {
+                            "type": "string"
+                          },
+                          "country": {
+                            "type": "string"
+                          },
+                          "region": {
+                            "type": "string"
+                          },
+                          "timezone": {
+                            "type": "string"
+                          }
+                        },
+                        "additionalProperties": false
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                }
+              },
+              "web_search": {
+                "title": "WebSearchMode",
+                "type": "string",
+                "enum": [
+                  "disabled",
+                  "cached",
+                  "live"
+                ]
+              }
+            }
+          }
+        },
+        "review_model": {
+          "type": "string"
+        },
+        "service_tier": {
+          "type": "string"
+        },
+        "tools": {
+          "title": "ToolsV2",
+          "type": "object",
+          "properties": {
+            "view_image": {
+              "type": "boolean"
+            },
+            "web_search": {
+              "title": "WebSearchToolConfig",
+              "type": "object",
+              "properties": {
+                "allowed_domains": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "context_size": {
+                  "title": "WebSearchContextSize",
+                  "type": "string",
+                  "enum": [
+                    "low",
+                    "medium",
+                    "high"
+                  ]
+                },
+                "location": {
+                  "title": "WebSearchLocation",
+                  "type": "object",
+                  "properties": {
+                    "city": {
+                      "type": "string"
+                    },
+                    "country": {
+                      "type": "string"
+                    },
+                    "region": {
+                      "type": "string"
+                    },
+                    "timezone": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            }
+          }
         },
         "web_search": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/WebSearchToolConfig"
-            },
-            {
-              "type": "null"
-            }
+          "title": "WebSearchMode",
+          "type": "string",
+          "enum": [
+            "disabled",
+            "cached",
+            "live"
           ]
         }
-      },
-      "type": "object"
-    },
-    "Verbosity": {
-      "description": "Controls output length/detail on GPT-5 models via the Responses API. Serialized with lowercase values to match the OpenAI API.",
-      "enum": [
-        "low",
-        "medium",
-        "high"
-      ],
-      "type": "string"
-    },
-    "WebSearchContextSize": {
-      "enum": [
-        "low",
-        "medium",
-        "high"
-      ],
-      "type": "string"
-    },
-    "WebSearchLocation": {
-      "additionalProperties": false,
-      "properties": {
-        "city": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "country": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "region": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "timezone": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "type": "object"
-    },
-    "WebSearchMode": {
-      "enum": [
-        "disabled",
-        "cached",
-        "live"
-      ],
-      "type": "string"
-    },
-    "WebSearchToolConfig": {
-      "additionalProperties": false,
-      "properties": {
-        "allowed_domains": {
-          "items": {
-            "type": "string"
-          },
-          "type": [
-            "array",
-            "null"
-          ]
-        },
-        "context_size": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/WebSearchContextSize"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "location": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/WebSearchLocation"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        }
-      },
-      "type": "object"
-    }
-  },
-  "properties": {
-    "config": {
-      "$ref": "#/definitions/Config"
-    },
-    "layers": {
-      "items": {
-        "$ref": "#/definitions/ConfigLayer"
-      },
-      "type": [
-        "array",
-        "null"
-      ]
+      }
     },
     "origins": {
+      "type": "object",
       "additionalProperties": {
-        "$ref": "#/definitions/ConfigLayerMetadata"
-      },
-      "type": "object"
+        "title": "ConfigLayerMetadata",
+        "type": "object",
+        "properties": {
+          "name": {
+            "title": "ConfigLayerSource",
+            "oneOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "domain": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "Mdm",
+                    "title": "Mdmv2::ConfigReadResponseType"
+                  }
+                },
+                "required": [
+                  "type",
+                  "domain",
+                  "key"
+                ],
+                "additionalProperties": false,
+                "title": "Mdmv2::ConfigReadResponse"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "title": "AbsolutePathBuf",
+                    "type": "object"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "System",
+                    "title": "Systemv2::ConfigReadResponseType"
+                  }
+                },
+                "required": [
+                  "type",
+                  "file"
+                ],
+                "additionalProperties": false,
+                "title": "Systemv2::ConfigReadResponse"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "title": "AbsolutePathBuf",
+                    "type": "object"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "User",
+                    "title": "Userv2::ConfigReadResponseType"
+                  }
+                },
+                "required": [
+                  "type",
+                  "file"
+                ],
+                "additionalProperties": false,
+                "title": "Userv2::ConfigReadResponse"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "dotCodexFolder": {
+                    "title": "AbsolutePathBuf",
+                    "type": "object"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "Project",
+                    "title": "Projectv2::ConfigReadResponseType"
+                  }
+                },
+                "required": [
+                  "type",
+                  "dotCodexFolder"
+                ],
+                "additionalProperties": false,
+                "title": "Projectv2::ConfigReadResponse"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "SessionFlags",
+                    "title": "SessionFlagsv2::ConfigReadResponseType"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": false,
+                "title": "SessionFlagsv2::ConfigReadResponse"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "title": "AbsolutePathBuf",
+                    "type": "object"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "LegacyManagedConfigTomlFromFile",
+                    "title": "LegacyManagedConfigTomlFromFilev2::ConfigReadResponseType"
+                  }
+                },
+                "required": [
+                  "type",
+                  "file"
+                ],
+                "additionalProperties": false,
+                "title": "LegacyManagedConfigTomlFromFilev2::ConfigReadResponse"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "LegacyManagedConfigTomlFromMdm",
+                    "title": "LegacyManagedConfigTomlFromMdmv2::ConfigReadResponseType"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "additionalProperties": false,
+                "title": "LegacyManagedConfigTomlFromMdmv2::ConfigReadResponse"
+              }
+            ]
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "version"
+        ]
+      }
     }
   },
   "required": [
     "config",
     "origins"
-  ],
-  "title": "ConfigReadResponse",
-  "type": "object"
+  ]
 }

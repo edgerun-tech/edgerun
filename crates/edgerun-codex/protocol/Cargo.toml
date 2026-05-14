@@ -16,22 +16,14 @@ workspace = true
 edgerun-encoding = { workspace = true, features = ["text-encoding"] }
 edgerun-error = { workspace = true }
 edgerun-http = { workspace = true }
-edgerun-json = { workspace = true, features = ["derive", "schemars", "serde", "std", "ts-rs"] }
+edgerun-json = { workspace = true, features = ["derive", "schemars", "std"] }
 edgerun-locale = { workspace = true }
 edgerun-time = { workspace = true }
 schemars = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
 edgerun-strum = { workspace = true }
 edgerun-strum-macros = { workspace = true }
 edgerun-tokio = { workspace = true }
 tracing = { workspace = true }
-ts-rs = { workspace = true, features = [
-    "no-serde-warnings",
-] }
-
-[target.'cfg(target_os = "linux")'.dependencies]
-landlock = { workspace = true }
-seccompiler = { workspace = true }
 
 [dev-dependencies]
 anyhow = { package = "edgerun-anyhow", path = "../../utility/edgerun-anyhow" }

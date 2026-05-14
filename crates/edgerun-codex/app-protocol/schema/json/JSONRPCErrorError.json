@@ -1,11 +1,10 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "JSONRPCErrorError",
+  "type": "object",
   "properties": {
     "code": {
-      "format": "int64",
       "type": "integer"
     },
-    "data": true,
     "message": {
       "type": "string"
     }
@@ -13,7 +12,5 @@
   "required": [
     "code",
     "message"
-  ],
-  "title": "JSONRPCErrorError",
-  "type": "object"
+  ]
 }

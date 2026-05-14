@@ -44,29 +44,6 @@ fn aes256_matches_nist_vector() {
     );
 }
 
-#[cfg(feature = "des")]
-#[test]
-fn method2_padding_roundtrips() {
-    let padded = crypto::des::iso9797_method2_pad(b"abc", 8);
-    assert_eq!(padded, vec![b'a', b'b', b'c', 0x80, 0, 0, 0, 0]);
-    assert_eq!(crypto::des::iso9797_method2_unpad(&padded).unwrap(), b"abc");
-}
-
-#[cfg(feature = "des")]
-#[test]
-fn tdes2_cbc_roundtrips() {
-    let key = [
-        0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF,
-        0x01,
-    ];
-    let cipher = crypto::des::Tdes2::new(&key);
-    let iv = [0u8; 8];
-    let plaintext = b"12345678ABCDEFGH";
-    let encrypted = cipher.cbc_encrypt(&iv, plaintext).unwrap();
-    assert_ne!(encrypted, plaintext);
-    assert_eq!(cipher.cbc_decrypt(&iv, &encrypted).unwrap(), plaintext);
-}
-
 fn hex(bytes: &[u8]) -> String {
     const HEX: &[u8; 16] = b"0123456789abcdef";
     let mut out = String::new();

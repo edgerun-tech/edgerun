@@ -1,5 +1,6 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PluginUninstallParams",
+  "type": "object",
   "properties": {
     "pluginId": {
       "type": "string"
@@ -7,7 +8,5 @@
   },
   "required": [
     "pluginId"
-  ],
-  "title": "PluginUninstallParams",
-  "type": "object"
+  ]
 }

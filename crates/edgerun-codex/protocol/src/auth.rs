@@ -3,10 +3,8 @@ use edgerun_json::FromJson;
 use edgerun_json::JsonValue;
 use edgerun_json::JsonValueError;
 use edgerun_json::ToJson;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum PlanType {
     Known(KnownPlan),
@@ -50,7 +48,7 @@ impl FromJson for PlanType {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum KnownPlan {
     Free,

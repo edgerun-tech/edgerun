@@ -14,15 +14,11 @@ use edgerun_json::JsonValueError;
 use edgerun_json::Map;
 use edgerun_json::ToJson;
 use edgerun_json::Value as JsonValue;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
 use schemars::JsonSchema;
 use std::path::PathBuf;
-use ts_rs::TS;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct SkillsListParams {
     /// When empty, defaults to the current session working directory.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -34,7 +30,6 @@ pub struct SkillsListParams {
 
     /// Optional per-cwd extra roots to scan as user-scoped skills.
     #[serde(default)]
-    #[ts(optional = nullable)]
     pub per_cwd_extra_user_roots: Option<Vec<SkillsListExtraRootsForCwd>>,
 }
 
@@ -55,9 +50,8 @@ impl ToJson for SkillsListParams {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct SkillsListExtraRootsForCwd {
     pub cwd: PathBuf,
     pub extra_user_roots: Vec<PathBuf>,
@@ -72,37 +66,31 @@ impl ToJson for SkillsListExtraRootsForCwd {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct SkillsListResponse {
     pub data: Vec<SkillsListEntry>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct HooksListParams {
     /// When empty, defaults to the current session working directory.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub cwds: Vec<PathBuf>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct HooksListResponse {
     pub data: Vec<HooksListEntry>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct MarketplaceAddParams {
     pub source: String,
-    #[ts(optional = nullable)]
     pub ref_name: Option<String>,
-    #[ts(optional = nullable)]
     pub sparse_paths: Option<Vec<String>>,
 }
 
@@ -116,25 +104,22 @@ impl ToJson for MarketplaceAddParams {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct MarketplaceAddResponse {
     pub marketplace_name: String,
     pub installed_root: AbsolutePathBuf,
     pub already_added: bool,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct MarketplaceRemoveParams {
     pub marketplace_name: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct MarketplaceRemoveResponse {
     pub marketplace_name: String,
     pub installed_root: Option<AbsolutePathBuf>,
@@ -156,11 +141,9 @@ impl ToJson for MarketplaceRemoveResponse {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct MarketplaceUpgradeParams {
-    #[ts(optional = nullable)]
     pub marketplace_name: Option<String>,
 }
 
@@ -181,9 +164,8 @@ impl FromJson for MarketplaceUpgradeParams {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct MarketplaceUpgradeResponse {
     pub selected_marketplaces: Vec<String>,
     pub upgraded_roots: Vec<AbsolutePathBuf>,
@@ -208,9 +190,8 @@ impl ToJson for MarketplaceUpgradeResponse {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct MarketplaceUpgradeErrorInfo {
     pub marketplace_name: String,
     pub message: String,
@@ -225,17 +206,14 @@ impl ToJson for MarketplaceUpgradeErrorInfo {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct PluginListParams {
     /// Optional working directories used to discover repo marketplaces. When omitted,
     /// only home-scoped marketplaces and the official curated marketplace are considered.
-    #[ts(optional = nullable)]
     pub cwds: Option<Vec<AbsolutePathBuf>>,
     /// Optional marketplace kind filter. When omitted, only local marketplaces are queried, plus
     /// the default remote catalog when enabled by feature flag.
-    #[ts(optional = nullable)]
     pub marketplace_kinds: Option<Vec<PluginListMarketplaceKind>>,
 }
 
@@ -264,17 +242,13 @@ impl FromJson for PluginListParams {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
 pub enum PluginListMarketplaceKind {
     #[serde(rename = "local")]
-    #[ts(rename = "local")]
     Local,
     #[serde(rename = "workspace-directory")]
-    #[ts(rename = "workspace-directory")]
     WorkspaceDirectory,
     #[serde(rename = "shared-with-me")]
-    #[ts(rename = "shared-with-me")]
     SharedWithMe,
 }
 
@@ -301,9 +275,8 @@ impl FromJson for PluginListMarketplaceKind {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct PluginListResponse {
     pub marketplaces: Vec<PluginMarketplaceEntry>,
     #[serde(default)]
@@ -312,21 +285,17 @@ pub struct PluginListResponse {
     pub featured_plugin_ids: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct MarketplaceLoadErrorInfo {
     pub marketplace_path: AbsolutePathBuf,
     pub message: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct PluginReadParams {
-    #[ts(optional = nullable)]
     pub marketplace_path: Option<AbsolutePathBuf>,
-    #[ts(optional = nullable)]
     pub remote_marketplace_name: Option<String>,
     pub plugin_name: String,
 }
@@ -361,16 +330,14 @@ impl FromJson for PluginReadParams {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct PluginReadResponse {
     pub plugin: PluginDetail,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct PluginSkillReadParams {
     pub remote_marketplace_name: String,
     pub remote_plugin_id: String,
@@ -390,23 +357,18 @@ impl ToJson for PluginSkillReadParams {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct PluginSkillReadResponse {
     pub contents: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct PluginShareSaveParams {
     pub plugin_path: AbsolutePathBuf,
-    #[ts(optional = nullable)]
     pub remote_plugin_id: Option<String>,
-    #[ts(optional = nullable)]
     pub discoverability: Option<PluginShareDiscoverability>,
-    #[ts(optional = nullable)]
     pub share_targets: Option<Vec<PluginShareTarget>>,
 }
 
@@ -421,9 +383,8 @@ impl ToJson for PluginShareSaveParams {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct PluginShareSaveResponse {
     pub remote_plugin_id: String,
     pub share_url: String,
@@ -438,9 +399,8 @@ impl ToJson for PluginShareSaveResponse {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct PluginShareUpdateTargetsParams {
     pub remote_plugin_id: String,
     pub share_targets: Vec<PluginShareTarget>,
@@ -455,9 +415,8 @@ impl ToJson for PluginShareUpdateTargetsParams {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct PluginShareUpdateTargetsResponse {
     pub principals: Vec<PluginSharePrincipal>,
 }
@@ -470,9 +429,8 @@ impl ToJson for PluginShareUpdateTargetsResponse {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct PluginShareListParams {}
 
 impl FromJson for PluginShareListParams {
@@ -482,9 +440,8 @@ impl FromJson for PluginShareListParams {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct PluginShareListResponse {
     pub data: Vec<PluginShareListItem>,
 }
@@ -497,9 +454,8 @@ impl ToJson for PluginShareListResponse {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct PluginShareDeleteParams {
     pub remote_plugin_id: String,
 }
@@ -512,14 +468,12 @@ impl ToJson for PluginShareDeleteParams {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct PluginShareDeleteResponse {}
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct PluginShareListItem {
     pub plugin: PluginSummary,
     pub share_url: String,
@@ -542,17 +496,13 @@ impl ToJson for PluginShareListItem {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::FromJson)]
 pub enum PluginShareDiscoverability {
     #[serde(rename = "LISTED")]
-    #[ts(rename = "LISTED")]
     Listed,
     #[serde(rename = "UNLISTED")]
-    #[ts(rename = "UNLISTED")]
     Unlisted,
     #[serde(rename = "PRIVATE")]
-    #[ts(rename = "PRIVATE")]
     Private,
 }
 
@@ -566,17 +516,13 @@ impl ToJson for PluginShareDiscoverability {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
 pub enum PluginSharePrincipalType {
     #[serde(rename = "user")]
-    #[ts(rename = "user")]
     User,
     #[serde(rename = "group")]
-    #[ts(rename = "group")]
     Group,
     #[serde(rename = "workspace")]
-    #[ts(rename = "workspace")]
     Workspace,
 }
 
@@ -590,9 +536,8 @@ impl ToJson for PluginSharePrincipalType {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct PluginShareTarget {
     pub principal_type: PluginSharePrincipalType,
     pub principal_id: String,
@@ -607,9 +552,8 @@ impl ToJson for PluginShareTarget {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct PluginSharePrincipal {
     pub principal_type: PluginSharePrincipalType,
     pub principal_id: String,
@@ -650,10 +594,8 @@ impl FromJson for PluginSharePrincipalType {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "snake_case")]
-#[ts(rename_all = "snake_case")]
-#[ts(export_to = "v2/")]
 pub enum SkillScope {
     User,
     Repo,
@@ -661,94 +603,73 @@ pub enum SkillScope {
     Admin,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct SkillMetadata {
     pub name: String,
     pub description: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     /// Legacy short_description from SKILL.md. Prefer SKILL.json interface.short_description.
     pub short_description: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub interface: Option<SkillInterface>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub dependencies: Option<SkillDependencies>,
     pub path: AbsolutePathBuf,
     pub scope: SkillScope,
     pub enabled: bool,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct SkillInterface {
-    #[ts(optional)]
     pub display_name: Option<String>,
-    #[ts(optional)]
     pub short_description: Option<String>,
-    #[ts(optional)]
     pub icon_small: Option<AbsolutePathBuf>,
-    #[ts(optional)]
     pub icon_large: Option<AbsolutePathBuf>,
-    #[ts(optional)]
     pub brand_color: Option<String>,
-    #[ts(optional)]
     pub default_prompt: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct SkillDependencies {
     pub tools: Vec<SkillToolDependency>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct SkillToolDependency {
     #[serde(rename = "type")]
-    #[ts(rename = "type")]
     pub r#type: String,
     pub value: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub description: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub transport: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub command: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
     pub url: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct SkillErrorInfo {
     pub path: PathBuf,
     pub message: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct SkillsListEntry {
     pub cwd: PathBuf,
     pub skills: Vec<SkillMetadata>,
     pub errors: Vec<SkillErrorInfo>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct HooksListEntry {
     pub cwd: PathBuf,
     pub hooks: Vec<HookMetadata>,
@@ -756,9 +677,8 @@ pub struct HooksListEntry {
     pub errors: Vec<HookErrorInfo>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct HookMetadata {
     pub key: String,
     pub event_name: HookEventName,
@@ -777,17 +697,15 @@ pub struct HookMetadata {
     pub trust_status: HookTrustStatus,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct HookErrorInfo {
     pub path: PathBuf,
     pub message: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct PluginMarketplaceEntry {
     pub name: String,
     /// Local marketplace file path when the marketplace is backed by a local file.
@@ -814,9 +732,8 @@ impl ToJson for PluginMarketplaceEntry {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct MarketplaceInterface {
     pub display_name: Option<String>,
 }
@@ -829,17 +746,13 @@ impl ToJson for MarketplaceInterface {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
 pub enum PluginInstallPolicy {
     #[serde(rename = "NOT_AVAILABLE")]
-    #[ts(rename = "NOT_AVAILABLE")]
     NotAvailable,
     #[serde(rename = "AVAILABLE")]
-    #[ts(rename = "AVAILABLE")]
     Available,
     #[serde(rename = "INSTALLED_BY_DEFAULT")]
-    #[ts(rename = "INSTALLED_BY_DEFAULT")]
     InstalledByDefault,
 }
 
@@ -866,14 +779,11 @@ impl FromJson for PluginInstallPolicy {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
 pub enum PluginAuthPolicy {
     #[serde(rename = "ON_INSTALL")]
-    #[ts(rename = "ON_INSTALL")]
     OnInstall,
     #[serde(rename = "ON_USE")]
-    #[ts(rename = "ON_USE")]
     OnUse,
 }
 
@@ -898,18 +808,15 @@ impl FromJson for PluginAuthPolicy {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default, JsonSchema, TS)]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, JsonSchema)]
 pub enum PluginAvailability {
     /// Plugin-service currently sends `"ENABLED"` for available remote plugins.
     /// Codex app-server exposes `"AVAILABLE"` in its API; the alias keeps
     /// decoding compatible with that upstream response.
     #[serde(rename = "AVAILABLE", alias = "ENABLED")]
-    #[ts(rename = "AVAILABLE")]
     #[default]
     Available,
     #[serde(rename = "DISABLED_BY_ADMIN")]
-    #[ts(rename = "DISABLED_BY_ADMIN")]
     DisabledByAdmin,
 }
 
@@ -934,9 +841,8 @@ impl FromJson for PluginAvailability {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct PluginSummary {
     pub id: String,
     pub name: String,
@@ -994,9 +900,8 @@ impl FromJson for PluginSummary {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct PluginShareContext {
     pub remote_plugin_id: String,
     pub share_url: Option<String>,
@@ -1033,9 +938,8 @@ impl FromJson for PluginShareContext {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct PluginDetail {
     pub marketplace_name: String,
     pub marketplace_path: Option<AbsolutePathBuf>,
@@ -1047,17 +951,15 @@ pub struct PluginDetail {
     pub mcp_servers: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct PluginHookSummary {
     pub key: String,
     pub event_name: HookEventName,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct SkillSummary {
     pub name: String,
     pub description: String,
@@ -1067,9 +969,8 @@ pub struct SkillSummary {
     pub enabled: bool,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct PluginInterface {
     pub display_name: Option<String>,
     pub short_description: Option<String>,
@@ -1162,16 +1063,12 @@ impl FromJson for PluginInterface {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
 #[serde(tag = "type", rename_all = "camelCase")]
-#[ts(tag = "type")]
-#[ts(export_to = "v2/")]
 pub enum PluginSource {
     #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
     Local { path: AbsolutePathBuf },
     #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
     Git {
         url: String,
         path: Option<String>,
@@ -1233,33 +1130,26 @@ impl FromJson for PluginSource {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct SkillsConfigWriteParams {
     /// Path-based selector.
-    #[ts(optional = nullable)]
     pub path: Option<AbsolutePathBuf>,
     /// Name-based selector.
-    #[ts(optional = nullable)]
     pub name: Option<String>,
     pub enabled: bool,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct SkillsConfigWriteResponse {
     pub effective_enabled: bool,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct PluginInstallParams {
-    #[ts(optional = nullable)]
     pub marketplace_path: Option<AbsolutePathBuf>,
-    #[ts(optional = nullable)]
     pub remote_marketplace_name: Option<String>,
     pub plugin_name: String,
 }
@@ -1294,17 +1184,15 @@ impl FromJson for PluginInstallParams {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct PluginInstallResponse {
     pub auth_policy: PluginAuthPolicy,
     pub apps_needing_auth: Vec<AppSummary>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct PluginUninstallParams {
     pub plugin_id: String,
 }
@@ -1381,9 +1269,8 @@ fn optional_absolute_paths(
         .map(Some)
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 pub struct PluginUninstallResponse {}
 
 impl From<CoreSkillMetadata> for SkillMetadata {
@@ -1449,9 +1336,8 @@ impl From<CoreSkillScope> for SkillScope {
         }
     }
 }
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
 /// Notification emitted when watched local skill files change.
 ///
 /// Treat this as an invalidation signal and re-run `skills/list` with the

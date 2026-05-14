@@ -11,11 +11,9 @@ description = "EdgeRun-owned upstream-compatible bytes crate"
 
 [features]
 default = ["std"]
-serde = ["dep:serde"]
 std = []
 
 [dependencies]
-serde = { path = "../edgerun-serde-upstream", optional = true, default-features = false, features = ["alloc"] }
 
 [lints]
 workspace = true

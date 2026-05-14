@@ -1,10 +1,8 @@
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
 use std::fmt;
 
 /// Identifies a callable tool, preserving the namespace split when the model
 /// provides one.
-#[derive(Clone, Debug, Deserialize, Eq, Hash, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct ToolName {
     pub name: String,
     pub namespace: Option<String>,

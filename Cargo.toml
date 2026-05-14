@@ -139,10 +139,6 @@ members = [
   "crates/utility/edgerun-schemars",
   "crates/utility/edgerun-schemars-derive",
   "crates/utility/edgerun-seccompiler",
-  "crates/utility/edgerun-serde",
-  "crates/utility/edgerun-serde-core",
-  "crates/utility/edgerun-serde-derive",
-  "crates/utility/edgerun-serde-upstream",
   "crates/utility/edgerun-sharded-slab",
   "crates/utility/edgerun-shlex",
   "crates/utility/edgerun-similar",
@@ -174,8 +170,6 @@ members = [
   "crates/utility/edgerun-tracing-opentelemetry",
   "crates/utility/edgerun-tracing-opentelemetry-upstream",
   "crates/utility/edgerun-tracing-subscriber",
-  "crates/utility/edgerun-ts-rs",
-  "crates/utility/edgerun-ts-rs-derive",
   "crates/utility/edgerun-tungstenite",
   "crates/utility/edgerun-ui-core",
   "crates/utility/edgerun-unicode",
@@ -270,7 +264,6 @@ edgerun-url = { version = "0.1", path = "crates/utility/edgerun-url" }
 edgerun-vfs = { version = "0.1", path = "crates/authority/edgerun-vfs", default-features = false }
 edgerun-shlex = { version = "0.1", path = "crates/utility/edgerun-shlex" }
 edgerun-inventory = { version = "0.1", path = "crates/utility/edgerun-inventory" }
-edgerun-serde = { version = "0.1", path = "crates/utility/edgerun-serde" }
 edgerun-strum = { version = "0.1", path = "crates/utility/edgerun-strum" }
 edgerun-strum-macros = { version = "0.1", path = "crates/utility/edgerun-strum-macros" }
 edgerun-time = { version = "0.1", path = "crates/utility/edgerun-time", default-features = false, features = ["chrono"] }
@@ -300,13 +293,10 @@ quote = { path = "crates/utility/edgerun-quote", default-features = false }
 rmcp = { package = "edgerun-rmcp", version = "0.1", path = "crates/utility/edgerun-rmcp", default-features = false }
 schemars = { package = "edgerun-schemars", version = "0.1", path = "crates/utility/edgerun-schemars" }
 seccompiler = { package = "edgerun-seccompiler", version = "0.1", path = "crates/utility/edgerun-seccompiler" }
-serde = { package = "edgerun-serde", version = "0.1", path = "crates/utility/edgerun-serde", features = ["std"] }
 syn = { path = "crates/utility/edgerun-syn", default-features = false }
 synstructure = { path = "crates/utility/edgerun-synstructure", default-features = false }
 tracing = { package = "edgerun-log", version = "0.1", path = "crates/utility/edgerun-log", features = ["tracing-compat"] }
 tracing-opentelemetry = { package = "edgerun-tracing-opentelemetry", version = "0.1", path = "crates/utility/edgerun-tracing-opentelemetry" }
-ts-rs = { package = "edgerun-ts-rs", version = "0.1", path = "crates/utility/edgerun-ts-rs" }
-
 jni = { path = "crates/utility/edgerun-jni" }
 miniz_oxide = { path = "crates/utility/edgerun-miniz-oxide", default-features = false }
 rkyv = { path = "crates/utility/edgerun-rkyv", default-features = false }
@@ -352,9 +342,6 @@ rend = { path = "crates/utility/edgerun-rend" }
 rkyv = { path = "crates/utility/edgerun-rkyv" }
 rkyv_derive = { path = "crates/utility/edgerun-rkyv-derive" }
 quote = { path = "crates/utility/edgerun-quote" }
-serde = { path = "crates/utility/edgerun-serde-upstream" }
-serde_core = { path = "crates/utility/edgerun-serde-core" }
-serde_derive = { path = "crates/utility/edgerun-serde-derive" }
 same-file = { path = "crates/utility/edgerun-same-file" }
 sharded-slab = { path = "crates/utility/edgerun-sharded-slab" }
 simd_cesu8 = { path = "crates/utility/edgerun-simd-cesu8" }

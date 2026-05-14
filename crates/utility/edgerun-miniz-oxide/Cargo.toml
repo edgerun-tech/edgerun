@@ -12,13 +12,11 @@ description = "EdgeRun-owned DEFLATE compression compatibility crate"
 block-boundary = []
 default = ["with-alloc"]
 rustc-dep-of-std = ["adler2/rustc-dep-of-std"]
-serde = ["dep:serde"]
 std = []
 with-alloc = []
 
 [dependencies]
 adler2 = { path = "../edgerun-adler2", default-features = false }
-serde = { path = "../edgerun-serde-upstream", optional = true, features = ["derive"] }
 
 [lints]
 workspace = true

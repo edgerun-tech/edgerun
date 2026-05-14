@@ -106,8 +106,6 @@ mod macros;
 
 #[cfg(feature = "p256_arithmetic")]
 mod array;
-#[cfg(feature = "crypto_bigint_alloc")]
-mod boxed;
 mod checked;
 mod ct_choice;
 mod limb;
@@ -128,9 +126,6 @@ pub use crate::crypto_bigint::{
 };
 pub use crate::subtle;
 
-#[cfg(feature = "crypto_bigint_alloc")]
-pub use crate::crypto_bigint::boxed::uint::BoxedUint;
-
 #[cfg(feature = "p256_arithmetic")]
 pub use {
     crate::crypto_bigint::array::{ArrayDecoding, ArrayEncoding, ByteArray},
@@ -139,9 +134,6 @@ pub use {
 
 #[cfg(feature = "p256_arithmetic")]
 pub use crate::rand_core;
-
-#[cfg(feature = "rlp")]
-pub use rlp;
 
 #[cfg(feature = "p256_arithmetic")]
 pub use crate::zeroize;

@@ -8,14 +8,11 @@ use crate::export::GeneratedSchema;
 use crate::export::write_json_schema;
 use crate::protocol::v1;
 use crate::protocol::v2;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
 use edgerun_strum_macros::Display;
 use schemars::JsonSchema;
-use ts_rs::TS;
 
 /// Authentication mode for OpenAI-backed providers.
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Display, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Display, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "lowercase")]
 pub enum AuthMode {
     /// OpenAI API key provided by the caller and stored by Codex.
@@ -27,12 +24,10 @@ pub enum AuthMode {
     /// ChatGPT auth tokens are supplied by an external host app and are only
     /// stored in memory. Token refresh must be handled by the external host app.
     #[serde(rename = "chatgptAuthTokens")]
-    #[ts(rename = "chatgptAuthTokens")]
     #[strum(serialize = "chatgptAuthTokens")]
     ChatgptAuthTokens,
     /// Programmatic Codex auth backed by a registered Agent Identity.
     #[serde(rename = "agentIdentity")]
-    #[ts(rename = "agentIdentity")]
     #[strum(serialize = "agentIdentity")]
     AgentIdentity,
 }
@@ -58,6 +53,52 @@ macro_rules! experimental_type_entry {
     };
 }
 
+pub(crate) fn experimental_method_reason(method: &str) -> Option<&'static str> {
+    match method {
+        "mock/experimentalMethod"
+        | "thread/goal/set"
+        | "thread/goal/get"
+        | "thread/goal/clear"
+        | "thread/goal/updated"
+        | "thread/goal/cleared"
+        | "thread/realtime/start"
+        | "thread/realtime/appendAudio"
+        | "thread/realtime/appendText"
+        | "thread/realtime/stop"
+        | "thread/realtime/listVoices"
+        | "thread/realtime/started"
+        | "thread/realtime/itemAdded"
+        | "thread/realtime/transcript/delta"
+        | "thread/realtime/transcript/done"
+        | "thread/realtime/outputAudio/delta"
+        | "thread/realtime/sdp"
+        | "thread/realtime/error"
+        | "thread/realtime/closed" => Some(match method {
+            "mock/experimentalMethod" => "mock/experimentalMethod",
+            "thread/goal/set" => "thread/goal/set",
+            "thread/goal/get" => "thread/goal/get",
+            "thread/goal/clear" => "thread/goal/clear",
+            "thread/goal/updated" => "thread/goal/updated",
+            "thread/goal/cleared" => "thread/goal/cleared",
+            "thread/realtime/start" => "thread/realtime/start",
+            "thread/realtime/appendAudio" => "thread/realtime/appendAudio",
+            "thread/realtime/appendText" => "thread/realtime/appendText",
+            "thread/realtime/stop" => "thread/realtime/stop",
+            "thread/realtime/listVoices" => "thread/realtime/listVoices",
+            "thread/realtime/started" => "thread/realtime/started",
+            "thread/realtime/itemAdded" => "thread/realtime/itemAdded",
+            "thread/realtime/transcript/delta" => "thread/realtime/transcript/delta",
+            "thread/realtime/transcript/done" => "thread/realtime/transcript/done",
+            "thread/realtime/outputAudio/delta" => "thread/realtime/outputAudio/delta",
+            "thread/realtime/sdp" => "thread/realtime/sdp",
+            "thread/realtime/error" => "thread/realtime/error",
+            "thread/realtime/closed" => "thread/realtime/closed",
+            _ => unreachable!(),
+        }),
+        _ => None,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ClientRequestSerializationScope {
     Global(&'static str),
@@ -69,6 +110,40 @@ pub enum ClientRequestSerializationScope {
     FuzzyFileSearchSession { session_id: String },
     FsWatch { watch_id: String },
     McpOauth { server_name: String },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProtocolTypeDirection {
+    ClientRequest,
+    ClientNotification,
+    ServerRequest,
+    ServerNotification,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProtocolTypeEntry {
+    pub direction: ProtocolTypeDirection,
+    pub variant: &'static str,
+    pub method: String,
+    pub params: Option<&'static str>,
+    pub response: Option<&'static str>,
+}
+
+fn lower_camel_variant_name(variant: &str) -> String {
+    let mut chars = variant.chars();
+    let Some(first) = chars.next() else {
+        return String::new();
+    };
+    first.to_lowercase().chain(chars).collect()
+}
+
+macro_rules! protocol_method_name {
+    ($variant:ident => $wire:literal) => {
+        $wire.to_string()
+    };
+    ($variant:ident) => {
+        lower_camel_variant_name(stringify!($variant))
+    };
 }
 
 macro_rules! serialization_scope_expr {
@@ -140,8 +215,7 @@ macro_rules! serialization_scope_expr {
 
 /// Generates an `enum ClientRequest` where each variant is a request that the
 /// client can send to the server. Each variant has associated `params` and
-/// `response` types. Also generates a `export_client_responses()` function to
-/// export all response types to TypeScript.
+/// `response` types.
 macro_rules! client_request_definitions {
     (
         $(
@@ -157,12 +231,12 @@ macro_rules! client_request_definitions {
         ),* $(,)?
     ) => {
         /// Request from the client to the server.
-        #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+        #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
         #[serde(tag = "method", rename_all = "camelCase")]
         pub enum ClientRequest {
             $(
                 $(#[doc = $variant_doc])*
-                $(#[serde(rename = $wire)] #[ts(rename = $wire)])?
+                $(#[serde(rename = $wire)])?
                 $variant {
                     #[serde(rename = "id")]
                     request_id: RequestId,
@@ -180,15 +254,9 @@ macro_rules! client_request_definitions {
             }
 
             pub fn method(&self) -> String {
-                edgerun_json::to_serde_value(self)
-                    .ok()
-                    .and_then(|value| {
-                        value
-                            .get("method")
-                            .and_then(edgerun_json::Value::as_str)
-                            .map(str::to_owned)
-                    })
-                    .unwrap_or_else(|| "<unknown>".to_string())
+                match self {
+                    $(Self::$variant { .. } => protocol_method_name!($variant $(=> $wire)?),)*
+                }
             }
 
             pub fn serialization_scope(&self) -> Option<ClientRequestSerializationScope> {
@@ -205,8 +273,20 @@ macro_rules! client_request_definitions {
             }
         }
 
+        impl crate::experimental_api::ExperimentalApi for ClientRequest {
+            fn experimental_reason(&self) -> Option<&'static str> {
+                match self {
+                    $(
+                        Self::$variant { .. } => {
+                            experimental_method_reason(&protocol_method_name!($variant $(=> $wire)?))
+                        }
+                    )*
+                }
+            }
+        }
+
         /// Typed response from the server to the client.
-        #[derive(Serialize, Deserialize, Debug, Clone)]
+        #[derive(Debug, Clone, edgerun_json::ToJson, edgerun_json::FromJson)]
         #[serde(tag = "method", rename_all = "camelCase")]
         pub enum ClientResponse {
             $(
@@ -228,15 +308,9 @@ macro_rules! client_request_definitions {
             }
 
             pub fn method(&self) -> String {
-                edgerun_json::to_serde_value(self)
-                    .ok()
-                    .and_then(|value| {
-                        value
-                            .get("method")
-                            .and_then(edgerun_json::Value::as_str)
-                            .map(str::to_owned)
-                    })
-                    .unwrap_or_else(|| "<unknown>".to_string())
+                match self {
+                    $(Self::$variant { .. } => protocol_method_name!($variant $(=> $wire)?),)*
+                }
             }
 
             pub fn into_jsonrpc_parts(
@@ -351,19 +425,19 @@ macro_rules! client_request_definitions {
             )*
         ];
 
-        pub fn export_client_responses(
-            out_dir: &::std::path::Path,
-        ) -> ::std::result::Result<(), ::ts_rs::ExportError> {
-            $(
-                <$response as ::ts_rs::TS>::export_all_to(out_dir)?;
-            )*
-            Ok(())
-        }
-
-        pub(crate) fn visit_client_response_types(v: &mut impl ::ts_rs::TypeVisitor) {
-            $(
-                v.visit::<$response>();
-            )*
+        #[allow(clippy::vec_init_then_push)]
+        pub fn client_request_type_entries() -> Vec<ProtocolTypeEntry> {
+            vec![
+                $(
+                    ProtocolTypeEntry {
+                        direction: ProtocolTypeDirection::ClientRequest,
+                        variant: stringify!($variant),
+                        method: protocol_method_name!($variant $(=> $wire)?),
+                        params: Some(stringify!($params)),
+                        response: Some(stringify!($response)),
+                    },
+                )*
+            ]
         }
 
         #[allow(clippy::vec_init_then_push)]
@@ -487,7 +561,7 @@ client_request_definitions! {
         response: v2::ThreadMemoryModeSetResponse,
     },
     MemoryReset => "memory/reset" {
-        params: #[ts(type = "undefined")] #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
+        params: #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
         serialization: global("memory"),
         response: v2::MemoryResetResponse,
     },
@@ -769,7 +843,7 @@ client_request_definitions! {
     },
 
     McpServerRefresh => "config/mcpServer/reload" {
-        params: #[ts(type = "undefined")] #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
+        params: #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
         serialization: global("mcp-registry"),
         response: v2::McpServerRefreshResponse,
     },
@@ -806,13 +880,13 @@ client_request_definitions! {
     },
 
     LogoutAccount => "account/logout" {
-        params: #[ts(type = "undefined")] #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
+        params: #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
         serialization: global("account-auth"),
         response: v2::LogoutAccountResponse,
     },
 
     GetAccountRateLimits => "account/rateLimits/read" {
-        params: #[ts(type = "undefined")] #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
+        params: #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
         serialization: None,
         response: v2::GetAccountRateLimitsResponse,
     },
@@ -908,7 +982,7 @@ client_request_definitions! {
     },
 
     ConfigRequirementsRead => "configRequirements/read" {
-        params: #[ts(type = "undefined")] #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
+        params: #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
         serialization: global("config"),
         response: v2::ConfigRequirementsReadResponse,
     },
@@ -975,13 +1049,13 @@ macro_rules! server_request_definitions {
         ),* $(,)?
     ) => {
         /// Request initiated from the server and sent to the client.
-        #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+        #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
         #[allow(clippy::large_enum_variant)]
         #[serde(tag = "method", rename_all = "camelCase")]
         pub enum ServerRequest {
             $(
                 $(#[$variant_meta])*
-                $(#[serde(rename = $wire)] #[ts(rename = $wire)])?
+                $(#[serde(rename = $wire)])?
                 $variant {
                     #[serde(rename = "id")]
                     request_id: RequestId,
@@ -1016,7 +1090,7 @@ macro_rules! server_request_definitions {
         }
 
         /// Typed response from the client to the server.
-        #[derive(Serialize, Deserialize, Debug, Clone)]
+        #[derive(Debug, Clone, edgerun_json::ToJson, edgerun_json::FromJson)]
         #[serde(tag = "method", rename_all = "camelCase")]
         pub enum ServerResponse {
             $(
@@ -1038,15 +1112,9 @@ macro_rules! server_request_definitions {
             }
 
             pub fn method(&self) -> String {
-                edgerun_json::to_serde_value(self)
-                    .ok()
-                    .and_then(|value| {
-                        value
-                            .get("method")
-                            .and_then(edgerun_json::Value::as_str)
-                            .map(str::to_owned)
-                    })
-                    .unwrap_or_else(|| "<unknown>".to_string())
+                match self {
+                    $(Self::$variant { .. } => protocol_method_name!($variant $(=> $wire)?),)*
+                }
             }
         }
 
@@ -1064,19 +1132,18 @@ macro_rules! server_request_definitions {
             }
         }
 
-        pub fn export_server_responses(
-            out_dir: &::std::path::Path,
-        ) -> ::std::result::Result<(), ::ts_rs::ExportError> {
-            $(
-                <$response as ::ts_rs::TS>::export_all_to(out_dir)?;
-            )*
-            Ok(())
-        }
-
-        pub(crate) fn visit_server_response_types(v: &mut impl ::ts_rs::TypeVisitor) {
-            $(
-                v.visit::<$response>();
-            )*
+        pub fn server_request_type_entries() -> Vec<ProtocolTypeEntry> {
+            vec![
+                $(
+                    ProtocolTypeEntry {
+                        direction: ProtocolTypeDirection::ServerRequest,
+                        variant: stringify!($variant),
+                        method: protocol_method_name!($variant $(=> $wire)?),
+                        params: Some(stringify!($params)),
+                        response: Some(stringify!($response)),
+                    },
+                )*
+            ]
         }
 
         #[allow(clippy::vec_init_then_push)]
@@ -1119,22 +1186,14 @@ macro_rules! server_notification_definitions {
         ),* $(,)?
     ) => {
         /// Notification sent from the server to the client.
-        #[derive(
-            Serialize,
-            Deserialize,
-            Debug,
-            Clone,
-            JsonSchema,
-            TS,
-            Display,
-                    )]
+        #[derive(Debug, Clone, JsonSchema, Display, edgerun_json::ToJson, edgerun_json::FromJson)]
         #[allow(clippy::large_enum_variant)]
         #[serde(tag = "method", content = "params", rename_all = "camelCase")]
         #[strum(serialize_all = "camelCase")]
         pub enum ServerNotification {
             $(
                 $(#[$variant_meta])*
-                $(#[serde(rename = $wire)] #[ts(rename = $wire)] #[strum(serialize = $wire)])?
+                $(#[serde(rename = $wire)] #[strum(serialize = $wire)])?
                 $variant($payload),
             )*
         }
@@ -1147,11 +1206,37 @@ macro_rules! server_notification_definitions {
             }
         }
 
+        impl crate::experimental_api::ExperimentalApi for ServerNotification {
+            fn experimental_reason(&self) -> Option<&'static str> {
+                match self {
+                    $(
+                        Self::$variant(..) => {
+                            experimental_method_reason(&protocol_method_name!($variant $(=> $wire)?))
+                        }
+                    )*
+                }
+            }
+        }
+
+        pub fn server_notification_type_entries() -> Vec<ProtocolTypeEntry> {
+            vec![
+                $(
+                    ProtocolTypeEntry {
+                        direction: ProtocolTypeDirection::ServerNotification,
+                        variant: stringify!($variant),
+                        method: protocol_method_name!($variant $(=> $wire)?),
+                        params: Some(stringify!($payload)),
+                        response: None,
+                    },
+                )*
+            ]
+        }
+
         impl TryFrom<JSONRPCNotification> for ServerNotification {
             type Error = edgerun_json::Error;
 
             fn try_from(value: JSONRPCNotification) -> Result<Self, edgerun_json::Error> {
-                edgerun_json::from_serde_value(edgerun_json::to_serde_value(value)?)
+                edgerun_json::from_serde_value(edgerun_json::to_serde_value(&value)?)
             }
         }
 
@@ -1173,7 +1258,7 @@ macro_rules! client_notification_definitions {
             $variant:ident $( ( $payload:ty ) )?
         ),* $(,)?
     ) => {
-        #[derive(Serialize, Deserialize, Debug, Clone, JsonSchema, TS, Display)]
+        #[derive(Debug, Clone, JsonSchema, Display, edgerun_json::ToJson, edgerun_json::FromJson)]
         #[serde(tag = "method", content = "params", rename_all = "camelCase")]
         #[strum(serialize_all = "camelCase")]
         pub enum ClientNotification {
@@ -1181,6 +1266,20 @@ macro_rules! client_notification_definitions {
                 $(#[$variant_meta])*
                 $variant $( ( $payload ) )?,
             )*
+        }
+
+        pub fn client_notification_type_entries() -> Vec<ProtocolTypeEntry> {
+            vec![
+                $(
+                    ProtocolTypeEntry {
+                        direction: ProtocolTypeDirection::ClientNotification,
+                        variant: stringify!($variant),
+                        method: protocol_method_name!($variant),
+                        params: client_notification_payload_type!($($payload)?),
+                        response: None,
+                    },
+                )*
+            ]
         }
 
         pub fn export_client_notification_schemas(
@@ -1193,11 +1292,20 @@ macro_rules! client_notification_definitions {
     };
 }
 
+macro_rules! client_notification_payload_type {
+    () => {
+        None
+    };
+    ($payload:ty) => {
+        Some(stringify!($payload))
+    };
+}
+
 impl TryFrom<JSONRPCRequest> for ServerRequest {
     type Error = edgerun_json::Error;
 
     fn try_from(value: JSONRPCRequest) -> Result<Self, Self::Error> {
-        edgerun_json::from_serde_value(edgerun_json::to_serde_value(value)?)
+        edgerun_json::from_serde_value(edgerun_json::to_serde_value(&value)?)
     }
 }
 
@@ -1255,9 +1363,8 @@ server_request_definitions! {
     },
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
 pub struct FuzzyFileSearchParams {
     pub query: String,
     pub roots: Vec<String>,
@@ -1266,7 +1373,7 @@ pub struct FuzzyFileSearchParams {
 }
 
 /// Superset of [`codex_file_search::FileMatch`]
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct FuzzyFileSearchResult {
     pub root: String,
     pub path: String,
@@ -1276,63 +1383,57 @@ pub struct FuzzyFileSearchResult {
     pub indices: Option<Vec<u32>>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
 pub enum FuzzyFileSearchMatchType {
     File,
     Directory,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct FuzzyFileSearchResponse {
     pub files: Vec<FuzzyFileSearchResult>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
 pub struct FuzzyFileSearchSessionStartParams {
     pub session_id: String,
     pub roots: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS, Default)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, Default, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct FuzzyFileSearchSessionStartResponse {}
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
 pub struct FuzzyFileSearchSessionUpdateParams {
     pub session_id: String,
     pub query: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS, Default)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, Default, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct FuzzyFileSearchSessionUpdateResponse {}
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
 pub struct FuzzyFileSearchSessionStopParams {
     pub session_id: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS, Default)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, Default, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct FuzzyFileSearchSessionStopResponse {}
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
 pub struct FuzzyFileSearchSessionUpdatedNotification {
     pub session_id: String,
     pub query: String,
     pub files: Vec<FuzzyFileSearchResult>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 #[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
 pub struct FuzzyFileSearchSessionCompletedNotification {
     pub session_id: String,
 }
@@ -1409,7 +1510,6 @@ server_notification_definitions! {
     ThreadRealtimeClosed => "thread/realtime/closed" (v2::ThreadRealtimeClosedNotification),
 
     #[serde(rename = "account/login/completed")]
-    #[ts(rename = "account/login/completed")]
     #[strum(serialize = "account/login/completed")]
     AccountLoginCompleted(v2::AccountLoginCompletedNotification),
 
@@ -1417,6 +1517,14 @@ server_notification_definitions! {
 
 client_notification_definitions! {
     Initialized,
+}
+
+pub fn protocol_type_entries() -> Vec<ProtocolTypeEntry> {
+    let mut entries = client_request_type_entries();
+    entries.extend(client_notification_type_entries());
+    entries.extend(server_request_type_entries());
+    entries.extend(server_notification_type_entries());
+    entries
 }
 
 #[cfg(test)]

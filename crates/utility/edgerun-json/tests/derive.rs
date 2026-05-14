@@ -130,9 +130,11 @@ fn derives_deny_unknown_fields() {
             value: "ok".to_string()
         }
     );
-    assert!(StrictArgs::from_json(edgerun_json::json!({
-        "value": "ok",
-        "extra": true,
-    }))
-    .is_err());
+    assert!(
+        StrictArgs::from_json(edgerun_json::json!({
+            "value": "ok",
+            "extra": true,
+        }))
+        .is_err()
+    );
 }
