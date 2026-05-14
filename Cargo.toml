@@ -56,6 +56,7 @@ members = [
   "crates/utility/edgerun-bytecheck",
   "crates/utility/edgerun-bytecheck-derive",
   "crates/utility/edgerun-bytes",
+  "crates/utility/edgerun-cfg-if",
   "crates/utility/edgerun-codex-utils-absolute-path",
   "crates/utility/edgerun-codex-utils-cargo-bin",
   "crates/utility/edgerun-clipboard",
@@ -87,6 +88,7 @@ members = [
   "crates/utility/edgerun-json",
   "crates/utility/edgerun-json-derive",
   "crates/utility/edgerun-landlock",
+  "crates/utility/edgerun-lazy_static",
   "crates/utility/edgerun-litemap",
   "crates/utility/edgerun-locale",
   "crates/utility/edgerun-log",
@@ -120,6 +122,7 @@ members = [
   "crates/utility/edgerun-serde-core",
   "crates/utility/edgerun-serde-derive",
   "crates/utility/edgerun-serde-upstream",
+  "crates/utility/edgerun-sharded-slab",
   "crates/utility/edgerun-shlex",
   "crates/utility/edgerun-similar",
   "crates/utility/edgerun-sixel",
@@ -133,6 +136,7 @@ members = [
   "crates/utility/edgerun-subtle",
   "crates/utility/edgerun-terminal-parser",
   "crates/utility/edgerun-tempfile",
+  "crates/utility/edgerun-thread_local",
   "crates/utility/edgerun-time",
   "crates/utility/edgerun-thiserror",
   "crates/utility/edgerun-thiserror-impl",
@@ -241,6 +245,7 @@ libc = "0.2"
 [patch.crates-io]
 bytecheck = { path = "crates/utility/edgerun-bytecheck" }
 bytecheck_derive = { path = "crates/utility/edgerun-bytecheck-derive" }
+cfg-if = { path = "crates/utility/edgerun-cfg-if" }
 displaydoc = { path = "crates/utility/edgerun-displaydoc" }
 futures-channel = { path = "crates/utility/edgerun-futures-channel" }
 futures-core = { path = "crates/utility/edgerun-futures-core" }
@@ -250,6 +255,7 @@ futures-sink = { path = "crates/utility/edgerun-futures-sink" }
 futures-task = { path = "crates/utility/edgerun-futures-task" }
 futures-util = { path = "crates/utility/edgerun-futures-util" }
 hashbrown = { path = "crates/utility/edgerun-hashbrown" }
+lazy_static = { path = "crates/utility/edgerun-lazy_static" }
 litemap = { path = "crates/utility/edgerun-litemap" }
 log = { path = "crates/utility/edgerun-log-upstream" }
 munge = { path = "crates/utility/edgerun-munge" }
@@ -268,6 +274,7 @@ quote = { path = "crates/utility/edgerun-quote" }
 serde = { path = "crates/utility/edgerun-serde-upstream" }
 serde_core = { path = "crates/utility/edgerun-serde-core" }
 serde_derive = { path = "crates/utility/edgerun-serde-derive" }
+sharded-slab = { path = "crates/utility/edgerun-sharded-slab" }
 slab = { path = "crates/utility/edgerun-slab" }
 smallvec = { path = "crates/utility/edgerun-smallvec" }
 stable_deref_trait = { path = "crates/utility/edgerun-stable-deref-trait" }
@@ -275,6 +282,7 @@ syn = { path = "crates/utility/edgerun-syn" }
 synstructure = { path = "crates/utility/edgerun-synstructure" }
 thiserror = { path = "crates/utility/edgerun-thiserror" }
 thiserror-impl = { path = "crates/utility/edgerun-thiserror-impl" }
+thread_local = { path = "crates/utility/edgerun-thread_local" }
 tinyvec = { path = "crates/utility/edgerun-tinyvec" }
 tinyvec_macros = { path = "crates/utility/edgerun-tinyvec-macros" }
 unicode-ident = { path = "crates/utility/edgerun-unicode-ident" }
