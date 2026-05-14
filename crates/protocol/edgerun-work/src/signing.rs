@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use edgerun_crypto::{Ed25519Signer, Ed25519SigningKey};
+use edgerun_crypto::Ed25519SigningKey;
 
 use crate::codec::blake3_hash;
 use crate::identity::verify_node_identity;
@@ -48,17 +48,7 @@ pub fn verify_signature(
 }
 
 pub fn verify_solana_ed25519(public_key: &PublicKey, preimage: &[u8], signature: &[u8]) -> bool {
-    if signature.len() != 64 {
-        return false;
-    }
-    let Ok(verifying_key) = edgerun_crypto::ed25519_dalek::VerifyingKey::from_bytes(public_key)
-    else {
-        return false;
-    };
-    let Ok(signature) = edgerun_crypto::ed25519_dalek::Signature::from_slice(signature) else {
-        return false;
-    };
-    verifying_key.verify_strict(preimage, &signature).is_ok()
+    edgerun_crypto::verification::ed25519_verify_strict(public_key, preimage, signature).is_ok()
 }
 
 pub fn node_available_preimage(value: &NodeAvailable) -> Vec<u8> {

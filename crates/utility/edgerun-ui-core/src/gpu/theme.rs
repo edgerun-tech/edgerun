@@ -1,4 +1,4 @@
-use super::{palette, preset_recipe_for_style_family, Color4, UiColorScheme};
+use super::{Color4, UiColorScheme, palette, preset_recipe_for_style_family};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UiStyleAuthority {

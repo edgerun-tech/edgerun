@@ -166,8 +166,81 @@ impl FontAtlas {
             })
             .sum()
     }
+
+    pub fn wrap_lines(&self, text: &str, max_width: f32) -> Vec<String> {
+        let mut lines = Vec::new();
+        for raw_line in text.lines() {
+            let mut current = String::new();
+            for word in raw_line.split_whitespace() {
+                let candidate = if current.is_empty() {
+                    word.to_string()
+                } else {
+                    format!("{current} {word}")
+                };
+                if self.text_width(&candidate) <= max_width || current.is_empty() {
+                    current = candidate;
+                } else {
+                    lines.push(current);
+                    current = word.to_string();
+                }
+            }
+            lines.push(current);
+        }
+        if lines.is_empty() {
+            lines.push(String::new());
+        }
+        lines
+    }
+
+    pub fn wrapped_line_count(&self, text: &str, max_width: f32) -> usize {
+        self.wrap_lines(text, max_width).len()
+    }
 }
 
 fn ascii_chars() -> Vec<char> {
     (32u8..=126u8).map(char::from).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_atlas() -> FontAtlas {
+        let mut glyphs = HashMap::new();
+        for ch in ascii_chars() {
+            glyphs.insert(
+                ch,
+                AtlasGlyph {
+                    uv: [0.0; 4],
+                    size: [8.0, 12.0],
+                    bearing: [0.0, 0.0],
+                    advance: 8.0,
+                },
+            );
+        }
+        FontAtlas {
+            width: 1,
+            height: 1,
+            alpha: Vec::new(),
+            glyphs,
+            px: 16.0,
+        }
+    }
+
+    #[test]
+    fn font_atlas_wrap_lines_preserves_newlines() {
+        let atlas = test_atlas();
+
+        assert_eq!(
+            atlas.wrap_lines("alpha beta\ngamma", 500.0),
+            vec!["alpha beta", "gamma"]
+        );
+    }
+
+    #[test]
+    fn font_atlas_wrapped_line_count_uses_width() {
+        let atlas = test_atlas();
+
+        assert_eq!(atlas.wrapped_line_count("alpha beta gamma", 48.0), 3);
+    }
 }

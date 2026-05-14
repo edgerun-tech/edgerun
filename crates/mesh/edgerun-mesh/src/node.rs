@@ -1,6 +1,3 @@
-use edgerun_crypto::p256::ecdsa::Signature;
-use edgerun_crypto::p256::ecdsa::VerifyingKey;
-use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashVerifier;
 use edgerun_hardware_signing::{MESH_PUBLIC_KEY_LENGTH, MESH_SIGNATURE_LENGTH, NodeID};
 
 use super::*;
@@ -13,8 +10,7 @@ use super::*;
 ///
 /// The signature uses domain separation: `SHA-256("edgerun:v0:sig:mesh-frame" || 0x00 || SHA-256(header_bytes || payload))`
 /// This should be called before `to_wire()`.
-pub fn sign_frame(frame: &mut MeshFrame, signing_key: &edgerun_crypto::p256::ecdsa::SigningKey) {
-    use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
+pub fn sign_frame(frame: &mut MeshFrame, signing_key: &edgerun_crypto::P256SigningKey) {
     let preimage = frame.signed_preimage();
     let record_hash = edgerun_protocols::core_protocol::crypto::sha256(&preimage);
     let mut sig_input = Vec::with_capacity(22 + 1 + 32);
@@ -22,10 +18,10 @@ pub fn sign_frame(frame: &mut MeshFrame, signing_key: &edgerun_crypto::p256::ecd
     sig_input.push(0);
     sig_input.extend_from_slice(&record_hash);
     let full_digest = edgerun_protocols::core_protocol::crypto::sha256(&sig_input);
-    let sig: Signature = signing_key
-        .sign_prehash(&full_digest)
+    let sig = signing_key
+        .sign_prehash_fixed(&full_digest)
         .expect("P-256 signing failed");
-    frame.signature.copy_from_slice(&sig.to_bytes());
+    frame.signature.copy_from_slice(&sig);
 }
 
 // ---------------------------------------------------------------------------

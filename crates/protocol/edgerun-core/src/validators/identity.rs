@@ -167,10 +167,10 @@ pub fn validate_identity_record(record: &crate::protocol::IdentityRecord) -> Val
     // The record is self-signed: the public key in the record verifies
     // the signature on the record itself.
     let mut vk_sec1 = [0u8; 65];
-    vk_sec1[0] = 0x04; // Uncompressed point format
+    vk_sec1[0] = crate::crypto::SEC1_UNCOMPRESSED_PREFIX;
     vk_sec1[1..].copy_from_slice(&record.public_key);
 
-    let vk = match edgerun_crypto::p256::ecdsa::VerifyingKey::from_sec1_bytes(&vk_sec1) {
+    let vk = match edgerun_crypto::P256VerifyingKey::from_sec1_bytes(&vk_sec1) {
         Ok(v) => v,
         Err(_) => {
             return reject(
@@ -212,31 +212,23 @@ mod tests {
     use crate::protocol::{IdentityKind, IdentityRef, ObjectKind, ObjectRef, Signature};
 
     fn make_test_keypair() -> (
-        edgerun_crypto::p256::ecdsa::SigningKey,
-        edgerun_crypto::p256::ecdsa::VerifyingKey,
+        edgerun_crypto::P256SigningKey,
+        edgerun_crypto::P256VerifyingKey,
         Vec<u8>,
     ) {
-        use edgerun_crypto::p256::ecdsa::signature::SignerMut;
-        let sk = edgerun_crypto::random_p256_signing_key();
-        let vk = *sk.verifying_key();
-        // Public key without 0x04 prefix (64 bytes)
-        let sec1 = vk.to_encoded_point(false);
-        let pk = sec1.as_bytes()[1..].to_vec();
+        let sk = edgerun_crypto::signing::p256_key();
+        let vk = sk.verifying_key();
+        let sec1 = vk.to_sec1_bytes();
+        let pk = sec1[1..].to_vec();
         (sk, vk, pk)
     }
 
-    fn sign_record(
-        sk: &edgerun_crypto::p256::ecdsa::SigningKey,
-        record: &IdentityRecord,
-    ) -> IdentityRecord {
-        use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
+    fn sign_record(sk: &edgerun_crypto::P256SigningKey, record: &IdentityRecord) -> IdentityRecord {
         let canonical = protocol_wire_bytes(&ProtocolRecord::IdentityRecord(record.clone()), true);
         let record_hash =
             crate::crypto::record_hash(crate::crypto::HASH_DOMAIN_IDENTITY_RECORD, &canonical);
         let sig_input = crate::crypto::signature_input(SIG_DOMAIN_IDENTITY_RECORD, &record_hash);
-        // Sign sig_input directly (per spec §17.11)
-        let sig: edgerun_crypto::p256::ecdsa::Signature = sk.sign_prehash(&sig_input).unwrap();
-        let sig_bytes = sig.to_bytes();
+        let sig_bytes = sk.sign_prehash_fixed(&sig_input).unwrap();
 
         let mut signed = record.clone();
         signed.signature = Some(Signature {

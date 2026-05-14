@@ -1,6 +1,7 @@
 #[cfg(not(feature = "fontdue-text"))]
 use core::marker::PhantomData;
 
+use super::paint::wrap_lines;
 use super::*;
 
 pub struct UiPainter<'a, 'font> {
@@ -79,6 +80,30 @@ impl<'a, 'font> UiPainter<'a, 'font> {
             scale,
             color,
         );
+    }
+
+    pub fn wrapped_label(
+        &mut self,
+        x: f32,
+        y: f32,
+        max_w: f32,
+        text: &str,
+        max_lines: usize,
+        line_h: f32,
+        color: Color4,
+    ) {
+        let lines = wrap_lines(
+            text,
+            max_w,
+            max_lines.max(1),
+            #[cfg(feature = "fontdue-text")]
+            self.atlas,
+        );
+        let mut line_y = y;
+        for line in lines {
+            self.bounded_label(x, line_y, max_w, &line, 2.0, color);
+            line_y += line_h;
+        }
     }
 
     pub fn panel(&mut self, x: f32, y: f32, w: f32, h: f32, radius: f32, color: Color4) {

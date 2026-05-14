@@ -1,7 +1,6 @@
 #![no_std]
 
-use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
-use edgerun_crypto::p256::ecdsa::{Signature, SigningKey};
+use edgerun_crypto::P256SigningKey;
 
 edgerun_unit::no_alloc!();
 edgerun_unit::metadata!(1);
@@ -69,13 +68,15 @@ unsafe fn edgerun_p256_sign_prehash_input(
     }
     let private = core::slice::from_raw_parts(private_ptr as *const u8, PRIVATE_KEY_LEN);
     let input = core::slice::from_raw_parts(input_ptr as *const u8, input_len as usize);
-    let Ok(signing_key) = SigningKey::from_slice(private) else {
+    let Ok(private) = <[u8; PRIVATE_KEY_LEN]>::try_from(private) else {
         return 3;
     };
-    let Ok(signature): Result<Signature, _> = signing_key.sign_prehash(input) else {
+    let Ok(signing_key) = P256SigningKey::from_bytes(&private) else {
+        return 3;
+    };
+    let Ok(signature) = signing_key.sign_prehash_fixed(input) else {
         return 4;
     };
-    let bytes = signature.to_bytes();
-    core::ptr::copy_nonoverlapping(bytes.as_ptr(), out_ptr as *mut u8, SIGNATURE_LEN);
+    core::ptr::copy_nonoverlapping(signature.as_ptr(), out_ptr as *mut u8, SIGNATURE_LEN);
     0
 }

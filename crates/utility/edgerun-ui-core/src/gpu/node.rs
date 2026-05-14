@@ -958,11 +958,7 @@ impl UiNode {
     }
 
     pub fn when(self, condition: bool, child: UiNode) -> Self {
-        if condition {
-            self.child(child)
-        } else {
-            self
-        }
+        if condition { self.child(child) } else { self }
     }
 
     pub fn detail(mut self, value: &str) -> Self {
@@ -1198,12 +1194,14 @@ impl UiNode {
         let hit_start = ui.scene.hit_count();
         match &self.kind {
             UiNodeKind::Text(value) => {
-                ui.bounded_label(
+                let max_lines = (rect.h / 20.0).floor().max(1.0) as usize;
+                ui.wrapped_label(
                     rect.x,
                     rect.y,
                     rect.w,
                     value,
-                    2.0,
+                    max_lines,
+                    20.0,
                     self.style.text.resolve(ui.theme()),
                 );
             }
@@ -2268,7 +2266,10 @@ fn intrinsic_width(child: &UiNode) -> f32 {
 
 fn intrinsic_height(child: &UiNode) -> f32 {
     match &child.kind {
-        UiNodeKind::Text(_) => 20.0,
+        UiNodeKind::Text(value) => {
+            let line_count = value.lines().count().max(1) as f32;
+            (line_count * 20.0).clamp(20.0, 160.0)
+        }
         UiNodeKind::Badge { .. } => 22.0,
         UiNodeKind::Button { .. } => 34.0,
         UiNodeKind::IconButton { .. } => 34.0,

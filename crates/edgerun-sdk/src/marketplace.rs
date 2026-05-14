@@ -1,6 +1,20 @@
 use super::*;
 use edgerun_json::{JsonValue, parse_json};
 
+fn verify_ed25519_signature(
+    public_key: &[u8; 32],
+    domain: &[u8],
+    artifact_hash: &[u8; 32],
+    signature: &[u8],
+) -> bool {
+    edgerun_crypto::verification::ed25519_verify(
+        public_key,
+        &signature_payload_for_domain(domain, artifact_hash),
+        signature,
+    )
+    .is_ok()
+}
+
 pub(crate) fn cmd_sign_app(args: Vec<String>) -> i32 {
     let Some(app_dir) = args.first().map(PathBuf::from) else {
         eprintln!("sign-app requires app dir, app slug, and developer seed");
@@ -1310,22 +1324,12 @@ pub(crate) fn entitlement_unsigned_bytes(entitlement: &edgerun_wire::Entitlement
 }
 
 pub(crate) fn verify_entitlement_signature(entitlement: &edgerun_wire::EntitlementRecord) -> bool {
-    let Ok(signature_bytes) = <[u8; 64]>::try_from(entitlement.signature.as_slice()) else {
-        return false;
-    };
-    let Ok(public_key) = VerifyingKey::from_bytes(&entitlement.store_id) else {
-        return false;
-    };
-    let signature = Signature::from_bytes(&signature_bytes);
-    public_key
-        .verify(
-            &signature_payload_for_domain(
-                EENT_STORE_DOMAIN,
-                &sha256(&entitlement_unsigned_bytes(entitlement)),
-            ),
-            &signature,
-        )
-        .is_ok()
+    verify_ed25519_signature(
+        &entitlement.store_id,
+        EENT_STORE_DOMAIN,
+        &sha256(&entitlement_unsigned_bytes(entitlement)),
+        &entitlement.signature,
+    )
 }
 
 pub(crate) struct ProductBinding {
@@ -1613,41 +1617,21 @@ pub(crate) fn product_store_unsigned_bytes(product: &edgerun_wire::ProductRecord
 }
 
 pub(crate) fn verify_product_developer_signature(product: &edgerun_wire::ProductRecord) -> bool {
-    let Ok(signature_bytes) = <[u8; 64]>::try_from(product.developer_signature.as_slice()) else {
-        return false;
-    };
-    let Ok(public_key) = VerifyingKey::from_bytes(&product.developer_id) else {
-        return false;
-    };
-    let signature = Signature::from_bytes(&signature_bytes);
-    public_key
-        .verify(
-            &signature_payload_for_domain(
-                EPRD_DEVELOPER_DOMAIN,
-                &sha256(&product_developer_unsigned_bytes(product)),
-            ),
-            &signature,
-        )
-        .is_ok()
+    verify_ed25519_signature(
+        &product.developer_id,
+        EPRD_DEVELOPER_DOMAIN,
+        &sha256(&product_developer_unsigned_bytes(product)),
+        &product.developer_signature,
+    )
 }
 
 pub(crate) fn verify_product_store_signature(product: &edgerun_wire::ProductRecord) -> bool {
-    let Ok(signature_bytes) = <[u8; 64]>::try_from(product.store_signature.as_slice()) else {
-        return false;
-    };
-    let Ok(public_key) = VerifyingKey::from_bytes(&product.store_id) else {
-        return false;
-    };
-    let signature = Signature::from_bytes(&signature_bytes);
-    public_key
-        .verify(
-            &signature_payload_for_domain(
-                EPRD_STORE_DOMAIN,
-                &sha256(&product_store_unsigned_bytes(product)),
-            ),
-            &signature,
-        )
-        .is_ok()
+    verify_ed25519_signature(
+        &product.store_id,
+        EPRD_STORE_DOMAIN,
+        &sha256(&product_store_unsigned_bytes(product)),
+        &product.store_signature,
+    )
 }
 
 pub(crate) struct SettlementInput<'a> {
@@ -1695,22 +1679,12 @@ pub(crate) fn settlement_unsigned_bytes(settlement: &edgerun_wire::SettlementRec
 }
 
 pub(crate) fn verify_settlement_signature(settlement: &edgerun_wire::SettlementRecord) -> bool {
-    let Ok(signature_bytes) = <[u8; 64]>::try_from(settlement.signature.as_slice()) else {
-        return false;
-    };
-    let Ok(public_key) = VerifyingKey::from_bytes(&settlement.store_id) else {
-        return false;
-    };
-    let signature = Signature::from_bytes(&signature_bytes);
-    public_key
-        .verify(
-            &signature_payload_for_domain(
-                ESET_STORE_DOMAIN,
-                &sha256(&settlement_unsigned_bytes(settlement)),
-            ),
-            &signature,
-        )
-        .is_ok()
+    verify_ed25519_signature(
+        &settlement.store_id,
+        ESET_STORE_DOMAIN,
+        &sha256(&settlement_unsigned_bytes(settlement)),
+        &settlement.signature,
+    )
 }
 
 pub(crate) fn verify_settlement_entitlements(
@@ -2821,12 +2795,6 @@ pub(crate) fn open_wire_user_profile_with_record(
 pub(crate) fn verify_wire_user_profile_body_signature(
     profile: &edgerun_wire::UserProfileBody,
 ) -> bool {
-    let Ok(public_key) = VerifyingKey::from_bytes(&profile.owner_id) else {
-        return false;
-    };
-    let Ok(signature_bytes) = <[u8; 64]>::try_from(profile.signature.as_slice()) else {
-        return false;
-    };
     if !profile.owner_private_key.is_empty() {
         if profile.owner_key_algorithm != edgerun_wire::USER_PROFILE_OWNER_KEY_ED25519 {
             return false;
@@ -2839,14 +2807,13 @@ pub(crate) fn verify_wire_user_profile_body_signature(
             return false;
         }
     }
-    let signature = Signature::from_bytes(&signature_bytes);
     let unsigned = wire_user_profile_body_unsigned_bytes(profile);
-    public_key
-        .verify(
-            &signature_payload_for_domain(EUPB_DOMAIN, &sha256(&unsigned)),
-            &signature,
-        )
-        .is_ok()
+    verify_ed25519_signature(
+        &profile.owner_id,
+        EUPB_DOMAIN,
+        &sha256(&unsigned),
+        &profile.signature,
+    )
 }
 
 pub(crate) fn user_profile_allows_request(
@@ -3300,20 +3267,13 @@ pub(crate) fn parse_revocation_record(bytes: &[u8]) -> Option<edgerun_wire::Revo
 }
 
 pub(crate) fn verify_revocation_signature(revocation: &edgerun_wire::Revocation) -> bool {
-    let Ok(signature_bytes) = <[u8; 64]>::try_from(revocation.signature.as_slice()) else {
-        return false;
-    };
-    let Ok(public_key) = VerifyingKey::from_bytes(&revocation.issuer) else {
-        return false;
-    };
-    let signature = Signature::from_bytes(&signature_bytes);
     let body = revocation_unsigned_bytes(revocation);
-    public_key
-        .verify(
-            &signature_payload_for_domain(EREV_DOMAIN, &sha256(&body)),
-            &signature,
-        )
-        .is_ok()
+    verify_ed25519_signature(
+        &revocation.issuer,
+        EREV_DOMAIN,
+        &sha256(&body),
+        &revocation.signature,
+    )
 }
 
 pub(crate) fn cmd_write_capability_request(args: Vec<String>) -> i32 {
@@ -4852,16 +4812,12 @@ pub(crate) fn verify_sign_response_signature(
     let Ok(signature_bytes) = <[u8; 64]>::try_from(response.proof.as_slice()) else {
         return false;
     };
-    let Ok(public_key) = VerifyingKey::from_bytes(&public_key_bytes) else {
-        return false;
-    };
-    let signature = Signature::from_bytes(&signature_bytes);
-    public_key
-        .verify(
-            &signature_payload_for_domain(CAPABILITY_RESPONSE_DOMAIN, &request_sha256),
-            &signature,
-        )
-        .is_ok()
+    verify_ed25519_signature(
+        &public_key_bytes,
+        CAPABILITY_RESPONSE_DOMAIN,
+        &request_sha256,
+        &signature_bytes,
+    )
 }
 
 #[derive(Clone, Copy)]
@@ -5165,22 +5121,12 @@ pub(crate) fn payment_store_unsigned_bytes(payment: &edgerun_wire::PaymentRecord
 }
 
 pub(crate) fn verify_payment_payer_signature(payment: &edgerun_wire::PaymentRecord) -> bool {
-    let Ok(signature_bytes) = <[u8; 64]>::try_from(payment.payer_signature.as_slice()) else {
-        return false;
-    };
-    let Ok(public_key) = VerifyingKey::from_bytes(&payment.payer_id) else {
-        return false;
-    };
-    let signature = Signature::from_bytes(&signature_bytes);
-    public_key
-        .verify(
-            &signature_payload_for_domain(
-                EPAY_PAYER_DOMAIN,
-                &sha256(&payment_intent_unsigned_bytes(payment)),
-            ),
-            &signature,
-        )
-        .is_ok()
+    verify_ed25519_signature(
+        &payment.payer_id,
+        EPAY_PAYER_DOMAIN,
+        &sha256(&payment_intent_unsigned_bytes(payment)),
+        &payment.payer_signature,
+    )
 }
 
 pub(crate) fn verify_payment_store_signature(payment: &edgerun_wire::PaymentRecord) -> bool {
@@ -5193,17 +5139,10 @@ pub(crate) fn verify_payment_store_signature(payment: &edgerun_wire::PaymentReco
     let Ok(signature_bytes) = <[u8; 64]>::try_from(payment.store_signature.as_slice()) else {
         return false;
     };
-    let Ok(public_key) = VerifyingKey::from_bytes(&public_key_bytes) else {
-        return false;
-    };
-    let signature = Signature::from_bytes(&signature_bytes);
-    public_key
-        .verify(
-            &signature_payload_for_domain(
-                EPAY_STORE_DOMAIN,
-                &sha256(&payment_store_unsigned_bytes(payment)),
-            ),
-            &signature,
-        )
-        .is_ok()
+    verify_ed25519_signature(
+        &public_key_bytes,
+        EPAY_STORE_DOMAIN,
+        &sha256(&payment_store_unsigned_bytes(payment)),
+        &signature_bytes,
+    )
 }

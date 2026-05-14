@@ -1,8 +1,5 @@
 #![no_std]
 
-use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashVerifier;
-use edgerun_crypto::p256::ecdsa::{Signature, VerifyingKey};
-
 edgerun_unit::no_alloc!();
 edgerun_unit::metadata!(1);
 
@@ -28,7 +25,9 @@ unsafe fn edgerun_p256_raw64_public_key_valid(public_key_ptr: i32, public_key_le
         return 0;
     }
     let public_key = core::slice::from_raw_parts(public_key_ptr as *const u8, PUBLIC_KEY_LEN);
-    verifying_key_from_raw64(public_key).is_some() as i32
+    sec1_from_raw64(public_key)
+        .and_then(|sec1| edgerun_crypto::P256VerifyingKey::from_sec1_bytes(&sec1).ok())
+        .is_some() as i32
 }
 
 #[edgerun_unit::export]
@@ -44,18 +43,19 @@ unsafe fn edgerun_p256_verify_prehash_input(
     let public_key = core::slice::from_raw_parts(public_key_ptr as *const u8, PUBLIC_KEY_LEN);
     let input = core::slice::from_raw_parts(input_ptr as *const u8, input_len as usize);
     let signature = core::slice::from_raw_parts(signature_ptr as *const u8, SIGNATURE_LEN);
-    let Some(verifying_key) = verifying_key_from_raw64(public_key) else {
+    let Some(public_key_sec1) = sec1_from_raw64(public_key) else {
         return 0;
     };
-    let Ok(signature) = Signature::from_slice(signature) else {
-        return 0;
-    };
-    verifying_key.verify_prehash(input, &signature).is_ok() as i32
+    edgerun_crypto::verification::p256_verify_prehash_fixed(&public_key_sec1, input, signature)
+        .is_ok() as i32
 }
 
-fn verifying_key_from_raw64(public_key: &[u8]) -> Option<VerifyingKey> {
+fn sec1_from_raw64(public_key: &[u8]) -> Option<[u8; 65]> {
+    if public_key.len() != PUBLIC_KEY_LEN {
+        return None;
+    }
     let mut sec1 = [0u8; 65];
     sec1[0] = 0x04;
     sec1[1..].copy_from_slice(public_key);
-    VerifyingKey::from_sec1_bytes(&sec1).ok()
+    Some(sec1)
 }

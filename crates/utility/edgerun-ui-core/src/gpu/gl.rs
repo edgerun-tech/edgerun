@@ -23,9 +23,9 @@ const GL_TEXTURE_2D: u32 = 0x0DE1;
 #[cfg(feature = "fontdue-text")]
 const GL_TEXTURE0: u32 = 0x84C0;
 #[cfg(feature = "fontdue-text")]
-const GL_RED: u32 = 0x1903;
+const GL_RGBA: u32 = 0x1908;
 #[cfg(feature = "fontdue-text")]
-const GL_R8: u32 = 0x8229;
+const GL_RGBA8: u32 = 0x8058;
 #[cfg(feature = "fontdue-text")]
 const GL_UNSIGNED_BYTE: u32 = 0x1401;
 #[cfg(feature = "fontdue-text")]
@@ -156,7 +156,7 @@ out vec4 out_color;
 uniform sampler2D u_tex;
 uniform vec4 u_color;
 void main() {
-    float a = texture(u_tex, v_uv).r;
+    float a = texture(u_tex, v_uv).a;
     out_color = vec4(u_color.rgb, u_color.a * a);
 }
 "#;
@@ -342,6 +342,10 @@ impl TextRenderer {
         }
 
         let mut texture = 0;
+        let mut rgba = Vec::with_capacity(atlas.alpha.len() * 4);
+        for alpha in &atlas.alpha {
+            rgba.extend_from_slice(&[255, 255, 255, *alpha]);
+        }
         unsafe {
             glGenTextures(1, &mut texture);
             glBindTexture(GL_TEXTURE_2D, texture);
@@ -353,13 +357,13 @@ impl TextRenderer {
             glTexImage2D(
                 GL_TEXTURE_2D,
                 0,
-                GL_R8 as i32,
+                GL_RGBA8 as i32,
                 atlas.width as i32,
                 atlas.height as i32,
                 0,
-                GL_RED,
+                GL_RGBA,
                 GL_UNSIGNED_BYTE,
-                atlas.alpha.as_ptr().cast(),
+                rgba.as_ptr().cast(),
             );
         }
 

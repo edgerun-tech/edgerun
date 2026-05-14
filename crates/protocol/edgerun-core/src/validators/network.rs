@@ -775,9 +775,9 @@ pub fn validate_route_advertisement(adv: &crate::protocol::RouteAdvertisement) -
         }
 
         let mut vk_sec1 = [0u8; 65];
-        vk_sec1[0] = 0x04;
+        vk_sec1[0] = crate::crypto::SEC1_UNCOMPRESSED_PREFIX;
         vk_sec1[1..].copy_from_slice(key_hint);
-        let vk = match edgerun_crypto::p256::ecdsa::VerifyingKey::from_sec1_bytes(&vk_sec1) {
+        let vk = match edgerun_crypto::P256VerifyingKey::from_sec1_bytes(&vk_sec1) {
             Ok(v) => v,
             Err(_) => {
                 return reject(
@@ -832,39 +832,35 @@ mod proto_tests {
     };
     use crate::protocol::{ReachabilityHint, RouteAdvertisement};
 
-    fn make_test_keypair() -> (edgerun_crypto::p256::ecdsa::SigningKey, Vec<u8>) {
-        let sk = edgerun_crypto::random_p256_signing_key();
-        let vk = *sk.verifying_key();
-        let sec1 = vk.to_encoded_point(false);
-        let pk = sec1.as_bytes()[1..].to_vec();
+    fn make_test_keypair() -> (edgerun_crypto::P256SigningKey, Vec<u8>) {
+        let sk = edgerun_crypto::signing::p256_key();
+        let sec1 = sk.public_key_sec1();
+        let pk = sec1[1..].to_vec();
         (sk, pk)
     }
 
     fn sign_ad(
-        sk: &edgerun_crypto::p256::ecdsa::SigningKey,
+        sk: &edgerun_crypto::P256SigningKey,
         adv: &RouteAdvertisement,
     ) -> RouteAdvertisement {
-        use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
         let canonical = protocol_wire_bytes(&ProtocolRecord::RouteAdvertisement(adv.clone()), true);
         let record_hash =
             crate::crypto::record_hash(crate::crypto::HASH_DOMAIN_ROUTE_ADVERTISEMENT, &canonical);
         let sig_input =
             crate::crypto::signature_input(SIG_DOMAIN_ROUTE_ADVERTISEMENT, &record_hash);
-        // Sign sig_input directly (per spec §17.11)
-        let sig: edgerun_crypto::p256::ecdsa::Signature = sk.sign_prehash(&sig_input).unwrap();
+        let sig = sk.sign_prehash_fixed(&sig_input).unwrap();
         let mut signed = adv.clone();
         signed.signature = Some(Signature {
             algorithm: 1,
-            value: sig.to_bytes().to_vec(),
+            value: sig.to_vec(),
         });
         signed
     }
 
     fn sign_ad_hw_style(
-        sk: &edgerun_crypto::p256::ecdsa::SigningKey,
+        sk: &edgerun_crypto::P256SigningKey,
         adv: &RouteAdvertisement,
     ) -> RouteAdvertisement {
-        use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
         let canonical = protocol_wire_bytes(&ProtocolRecord::RouteAdvertisement(adv.clone()), true);
         let record_hash =
             crate::crypto::record_hash(crate::crypto::HASH_DOMAIN_ROUTE_ADVERTISEMENT, &canonical);
@@ -872,11 +868,11 @@ mod proto_tests {
             crate::crypto::signature_input(SIG_DOMAIN_ROUTE_ADVERTISEMENT, &record_hash);
         let sig_input_digest = crate::crypto::sha256(&sig_input);
         let digest: [u8; 32] = sig_input_digest.try_into().unwrap();
-        let sig: edgerun_crypto::p256::ecdsa::Signature = sk.sign_prehash(&digest).unwrap();
+        let sig = sk.sign_prehash_fixed(&digest).unwrap();
         let mut signed = adv.clone();
         signed.signature = Some(Signature {
             algorithm: 1,
-            value: sig.to_bytes().to_vec(),
+            value: sig.to_vec(),
         });
         signed
     }

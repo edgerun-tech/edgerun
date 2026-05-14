@@ -18,8 +18,8 @@ use core::{
 #[cfg(feature = "p256_ecdsa_alloc")]
 use {
     crate::signature::SignatureEncoding,
+    crate::spki::{SignatureBitStringEncoding, der::asn1::BitString},
     alloc::{boxed::Box, vec::Vec},
-    spki::{SignatureBitStringEncoding, der::asn1::BitString},
 };
 
 #[cfg(feature = "p256_ecdsa_serde")]

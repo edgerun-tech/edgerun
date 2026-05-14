@@ -36,17 +36,17 @@ pub trait GeneratedKeyStore {
 }
 
 pub fn generate_node_signing_key() -> (SigningKey, GeneratedNodeIdentity) {
-    let signing_key = crypto::random_p256_signing_key();
+    let signing_key = edgerun_crypto::signing::p256_key();
     let node_id = node_id_from_signing_key(&signing_key);
     (signing_key, GeneratedNodeIdentity { node_id })
 }
 
 pub fn node_id_from_signing_key(signing_key: &SigningKey) -> NodeId {
-    crypto::verifying_key_to_node_id(signing_key.verifying_key())
+    crypto::verifying_key_to_node_id(&signing_key.verifying_key())
 }
 
 pub fn node_signing_key_from_bytes(bytes: [u8; 32]) -> Result<SigningKey, KeygenError> {
-    SigningKey::from_bytes(&bytes.into()).map_err(|_| KeygenError::InvalidKey)
+    SigningKey::from_bytes(&bytes).map_err(|_| KeygenError::InvalidKey)
 }
 
 pub fn generate_node_identity_into<S: GeneratedKeyStore>(

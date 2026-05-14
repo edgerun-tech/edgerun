@@ -1,7 +1,7 @@
 //! TLS 1.3 server handshake message builders.
 
-use alloc::{vec, vec::Vec};
-use edgerun_crypto::p256::ecdsa::{Signature, SigningKey, signature::SignerMut};
+use alloc::{string::ToString, vec, vec::Vec};
+use edgerun_crypto::P256SigningKey;
 
 use super::super::Result;
 use super::super::cipher::NamedGroup;
@@ -148,7 +148,7 @@ pub fn build_certificate_chain_message(cert_chain_der: &[&[u8]]) -> Vec<u8> {
 /// where `transcript` is the concatenation of all prior handshake messages.
 pub fn build_certificate_verify(
     transcript: &[u8],
-    signing_key: &SigningKey,
+    signing_key: &P256SigningKey,
     hasher: &Hasher,
 ) -> Result<Vec<u8>> {
     let context = b"TLS 1.3, server CertificateVerify";
@@ -164,11 +164,9 @@ pub fn build_certificate_verify(
     padded.push(0x00);
     padded.extend_from_slice(&transcript_hash);
 
-    let mut signer = signing_key.clone();
-    let signature: Signature = <SigningKey as SignerMut<Signature>>::sign(&mut signer, &padded);
-    // RFC 8446 §4.4.3 requires DER-encoded signatures
-    // `to_bytes()` returns raw r||s (64 bytes), but CertificateVerify needs DER encoding
-    let sig_der_bytes = signature.to_der().as_ref().to_vec();
+    let sig_der_bytes = signing_key
+        .sign_sha256_der(&padded)
+        .map_err(|err| super::super::TlsError::Certificate(err.to_string()))?;
 
     let mut msg = Vec::new();
     msg.push(15);

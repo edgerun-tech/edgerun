@@ -4,6 +4,7 @@ use crate::http::runtime::path::{Path, PathBuf};
 
 use crate::http::{Handler, Request, Response, StatusCode};
 use alloc::boxed::Box;
+use alloc::format;
 use alloc::string::{String, ToString};
 use core::future::Future;
 use core::pin::Pin;

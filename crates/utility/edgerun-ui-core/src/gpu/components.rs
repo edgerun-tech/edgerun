@@ -4,7 +4,7 @@
 //! and native hosts only consume the resulting `GpuScene`, keeping application
 //! layout and state out of JavaScript, SDL, and OpenGL glue.
 
-use super::{palette, Axis, ButtonStyle, Color4, HitKind, UiPainter, UiRect};
+use super::{Axis, ButtonStyle, Color4, HitKind, UiPainter, UiRect, palette};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PanelHeader<'a> {
@@ -574,12 +574,17 @@ pub fn text_area(ui: &mut UiPainter<'_, '_>, rect: UiRect, spec: TextArea<'_>) {
             colors.border
         },
     );
-    ui.bounded_label(
-        field_rect.x + 14.0,
-        field_rect.y + 14.0,
-        field_rect.w - 28.0,
+    let text_x = field_rect.x + 14.0;
+    let text_y = field_rect.y + 14.0;
+    let text_w = field_rect.w - 28.0;
+    let max_lines = ((field_rect.h - 24.0) / 22.0).floor().max(1.0) as usize;
+    ui.wrapped_label(
+        text_x,
+        text_y,
+        text_w,
         spec.value,
-        2.0,
+        max_lines,
+        22.0,
         if spec.value.is_empty() {
             colors.muted
         } else {
@@ -862,7 +867,7 @@ fn resolve_component_accent(ui: &UiPainter<'_, '_>, accent: Color4) -> Color4 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::gpu::{palette, GpuScene};
+    use crate::gpu::{GpuScene, palette};
 
     #[test]
     fn stack_lays_out_vertical_children() {
@@ -946,29 +951,41 @@ mod tests {
         }
 
         assert!(scene.rects().len() > 20);
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::Input && hit.id == 6));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::Slider && hit.id == 7));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::TransactionRow && hit.id == 8));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::MenuItem && hit.id == 9));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::Toggle && hit.id == 10));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::ListRow && hit.id == 11));
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Input && hit.id == 6)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Slider && hit.id == 7)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::TransactionRow && hit.id == 8)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::MenuItem && hit.id == 9)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Toggle && hit.id == 10)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::ListRow && hit.id == 11)
+        );
     }
 }

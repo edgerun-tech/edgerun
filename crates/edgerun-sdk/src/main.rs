@@ -1,8 +1,7 @@
 #![cfg(feature = "std")]
 
 use crate::ssh_support::SshTarget;
-use edgerun_crypto::ed25519_dalek::{Signature, Verifier, VerifyingKey};
-use edgerun_crypto::{Ed25519SigningKey as SigningKey, Signer, fill_random};
+use edgerun_crypto::{Ed25519SigningKey as SigningKey, fill_random};
 use edgerun_protocols::seal::{SealKey, seal_with_key, unseal_with_key};
 use edgerun_protocols::wire as edgerun_wire;
 use edgerun_protocols::wire::{

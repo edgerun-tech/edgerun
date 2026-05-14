@@ -8,10 +8,6 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// Need to explicitly bring the crate in for inherent float methods
-#[cfg(feature = "std")]
-extern crate std;
-
 use core::fmt as core_fmt;
 use core::num::Wrapping;
 use core::ops::{Add, Div, Mul, Rem, Sub};

@@ -2554,16 +2554,12 @@ pub(crate) fn verify_signature_for_domain(
     let Ok(signature_bytes) = <[u8; 64]>::try_from(signature.signature.as_slice()) else {
         return false;
     };
-    let Ok(public_key) = VerifyingKey::from_bytes(&public_key_bytes) else {
-        return false;
-    };
-    let signature = Signature::from_bytes(&signature_bytes);
-    public_key
-        .verify(
-            &signature_payload_for_domain(domain, &artifact_hash),
-            &signature,
-        )
-        .is_ok()
+    edgerun_crypto::verification::ed25519_verify(
+        &public_key_bytes,
+        &signature_payload_for_domain(domain, &artifact_hash),
+        &signature_bytes,
+    )
+    .is_ok()
 }
 
 pub(crate) fn verify_binary_signer_policy(

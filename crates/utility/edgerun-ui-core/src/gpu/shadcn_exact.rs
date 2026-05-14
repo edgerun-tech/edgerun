@@ -93,6 +93,158 @@ impl UiShadcnBadgeVariant {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum UiShadcnChatRole {
+    User,
+    #[default]
+    Assistant,
+    ToolRunning,
+    ToolSuccess,
+    ToolError,
+    Error,
+}
+
+impl UiShadcnChatRole {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::User => "user",
+            Self::Assistant => "assistant",
+            Self::ToolRunning => "tool running",
+            Self::ToolSuccess => "tool ok",
+            Self::ToolError => "tool failed",
+            Self::Error => "error",
+        }
+    }
+
+    pub const fn badge_variant(self) -> UiShadcnBadgeVariant {
+        match self {
+            Self::ToolError | Self::Error => UiShadcnBadgeVariant::Destructive,
+            Self::ToolRunning => UiShadcnBadgeVariant::Default,
+            Self::ToolSuccess => UiShadcnBadgeVariant::Secondary,
+            Self::User | Self::Assistant => UiShadcnBadgeVariant::Outline,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum UiShadcnStatusTone {
+    #[default]
+    Neutral,
+    Active,
+    Success,
+    Error,
+}
+
+impl UiShadcnStatusTone {
+    pub const fn badge_variant(self) -> UiShadcnBadgeVariant {
+        match self {
+            Self::Neutral => UiShadcnBadgeVariant::Secondary,
+            Self::Active => UiShadcnBadgeVariant::Default,
+            Self::Success => UiShadcnBadgeVariant::Secondary,
+            Self::Error => UiShadcnBadgeVariant::Destructive,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct UiShadcnConversationMessage<'a> {
+    pub role: UiShadcnChatRole,
+    pub body: &'a str,
+    pub height: f32,
+}
+
+impl<'a> UiShadcnConversationMessage<'a> {
+    pub const fn new(role: UiShadcnChatRole, body: &'a str, height: f32) -> Self {
+        Self { role, body, height }
+    }
+
+    #[cfg(feature = "fontdue-text")]
+    pub fn with_measured_height(
+        role: UiShadcnChatRole,
+        body: &'a str,
+        atlas: &FontAtlas,
+        card_width: f32,
+    ) -> Self {
+        Self::new(
+            role,
+            body,
+            shadcn_chat_message_height(atlas, body, card_width),
+        )
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct UiShadcnChatClientAction<'a> {
+    pub label: &'a str,
+    pub id: u32,
+    pub variant: UiShadcnButtonVariant,
+}
+
+impl<'a> UiShadcnChatClientAction<'a> {
+    pub const fn new(label: &'a str, id: u32, variant: UiShadcnButtonVariant) -> Self {
+        Self { label, id, variant }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct UiShadcnSessionRow<'a> {
+    pub title: &'a str,
+    pub detail: &'a str,
+    pub active: bool,
+}
+
+impl<'a> UiShadcnSessionRow<'a> {
+    pub const fn new(title: &'a str, detail: &'a str, active: bool) -> Self {
+        Self {
+            title,
+            detail,
+            active,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct UiShadcnActivity<'a> {
+    pub title: &'a str,
+    pub detail: &'a str,
+    pub icon: UiIcon,
+}
+
+impl<'a> UiShadcnActivity<'a> {
+    pub const fn new(title: &'a str, detail: &'a str, icon: UiIcon) -> Self {
+        Self {
+            title,
+            detail,
+            icon,
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct UiShadcnChatClientSpec<'a> {
+    pub show_sidebar: bool,
+    pub sidebar_title: &'a str,
+    pub sidebar_detail: &'a str,
+    pub sidebar_actions: &'a [UiShadcnChatClientAction<'a>],
+    pub session_rows: &'a [UiShadcnSessionRow<'a>],
+    pub activity: UiShadcnActivity<'a>,
+    pub footer_lines: &'a [&'a str],
+    pub header_title: &'a str,
+    pub header_status: &'a str,
+    pub header_badges: &'a [&'a str],
+    pub header_tone: UiShadcnStatusTone,
+    pub messages: &'a [UiShadcnConversationMessage<'a>],
+    pub scroll_offset: f32,
+    pub scroll_id: u32,
+    pub input_label: &'a str,
+    pub input_value: &'a str,
+    pub input_id: u32,
+    pub send_label: &'a str,
+    pub send_id: u32,
+    pub busy: bool,
+    pub hints: &'a [&'a str],
+}
+
 pub fn shadcn_button(
     label: &str,
     id: u32,
@@ -242,6 +394,200 @@ pub fn shadcn_combobox(
 
 pub fn shadcn_card(title: &str, detail: &str) -> UiNode {
     card("bg-panel border rounded-lg p-4 gap-3").child(header(title).detail(detail))
+}
+
+pub fn shadcn_chat_message(role: UiShadcnChatRole, body: &str) -> UiNode {
+    shadcn_card(role.label(), "")
+        .child(shadcn_badge(role.label(), role.badge_variant()).class("h-6"))
+        .child(shadcn_label(body).class("h-full text-text"))
+}
+
+#[cfg(feature = "fontdue-text")]
+pub fn shadcn_chat_message_height(atlas: &FontAtlas, body: &str, card_width: f32) -> f32 {
+    let body_width = (card_width - 32.0).max(1.0);
+    58.0 + atlas.wrapped_line_count(body, body_width) as f32 * 22.0
+}
+
+pub fn shadcn_conversation(
+    messages: &[UiShadcnConversationMessage<'_>],
+    scroll_offset: f32,
+    scroll_id: u32,
+) -> UiNode {
+    let mut node = scroll_area("h-full p-4 gap-4", scroll_offset).scroll_id(scroll_id);
+    for message in messages {
+        node = node.child(
+            shadcn_chat_message(message.role, message.body)
+                .class(&format!("h-{}", (message.height / 4.0).max(11.0))),
+        );
+    }
+    node
+}
+
+pub fn shadcn_prompt_composer(
+    label: &str,
+    value: &str,
+    input_id: u32,
+    send_label: &str,
+    send_id: u32,
+    busy: bool,
+    hints: &[&str],
+) -> UiNode {
+    let mut hint_row = row("gap-4 items-center h-6");
+    for hint in hints {
+        hint_row = hint_row.child(shadcn_label(hint).class("h-5 text-muted-foreground"));
+    }
+
+    column("h-full gap-2")
+        .child(
+            shadcn_textarea(label, value)
+                .hit_id(input_id)
+                .class("h-full"),
+        )
+        .child(
+            row("h-8 items-center justify-between gap-3")
+                .child(hint_row)
+                .child(
+                    shadcn_button(
+                        send_label,
+                        send_id,
+                        UiShadcnButtonVariant::Default,
+                        UiShadcnButtonSize::Sm,
+                    )
+                    .disabled(busy),
+                ),
+        )
+}
+
+pub fn shadcn_chat_client_shell(
+    sidebar: Option<UiNode>,
+    header: UiNode,
+    conversation: UiNode,
+    composer: UiNode,
+) -> UiNode {
+    let main = column("h-full flex-1 bg-bg")
+        .child(column("h-14 bg-panel border").child(header))
+        .child(column("flex-1 h-full").child(conversation))
+        .child(column("h-39 bg-panel border p-4").child(composer));
+
+    let mut shell = row("h-full bg-bg");
+    if let Some(sidebar) = sidebar {
+        shell = shell.child(column("w-65 h-full bg-sidebar border").child(sidebar));
+    }
+    shell.child(main)
+}
+
+pub fn shadcn_chat_client(spec: UiShadcnChatClientSpec<'_>) -> UiNode {
+    let sidebar = spec.show_sidebar.then(|| {
+        let actions = spec
+            .sidebar_actions
+            .iter()
+            .map(|action| (action.label, action.id, action.variant))
+            .collect::<Vec<_>>();
+        let session_rows = spec
+            .session_rows
+            .iter()
+            .map(|row| (row.title, row.detail, row.active))
+            .collect::<Vec<_>>();
+        shadcn_session_sidebar(
+            spec.sidebar_title,
+            spec.sidebar_detail,
+            &actions,
+            &session_rows,
+            spec.activity.title,
+            spec.activity.detail,
+            spec.activity.icon,
+            spec.footer_lines,
+        )
+    });
+    shadcn_chat_client_shell(
+        sidebar,
+        shadcn_status_header(
+            spec.header_title,
+            spec.header_status,
+            spec.header_badges,
+            spec.header_tone,
+        ),
+        shadcn_conversation(spec.messages, spec.scroll_offset, spec.scroll_id),
+        shadcn_prompt_composer(
+            spec.input_label,
+            spec.input_value,
+            spec.input_id,
+            spec.send_label,
+            spec.send_id,
+            spec.busy,
+            spec.hints,
+        ),
+    )
+}
+
+pub fn shadcn_status_header(
+    title: &str,
+    status: &str,
+    badges: &[&str],
+    tone: UiShadcnStatusTone,
+) -> UiNode {
+    let mut badge_row = row("gap-2 items-center");
+    for badge_label in badges {
+        badge_row = badge_row
+            .child(shadcn_badge(badge_label, UiShadcnBadgeVariant::Secondary).class("h-7"));
+    }
+
+    row("h-full items-center justify-between gap-4")
+        .child(
+            row("gap-2 items-center flex-1")
+                .child(shadcn_badge("", tone.badge_variant()).class("size-3"))
+                .child(shadcn_label(title).class("h-5 text-text"))
+                .child(shadcn_label(status).class("h-5 text-muted-foreground flex-1")),
+        )
+        .child(badge_row)
+}
+
+pub fn shadcn_session_sidebar(
+    title: &str,
+    detail: &str,
+    actions: &[(&str, u32, UiShadcnButtonVariant)],
+    session_rows: &[(&str, &str, bool)],
+    activity_title: &str,
+    activity_detail: &str,
+    activity_icon: UiIcon,
+    footer_lines: &[&str],
+) -> UiNode {
+    let mut action_row = row("gap-2 items-center h-9");
+    for (label, id, variant) in actions {
+        action_row = action_row.child(shadcn_button(label, *id, *variant, UiShadcnButtonSize::Sm));
+    }
+
+    let mut session_group =
+        column("gap-2").child(shadcn_label("Session").class("h-5 text-muted-foreground"));
+    for (index, (title, detail, active)) in session_rows.iter().enumerate() {
+        session_group = session_group.child(
+            shadcn_item(
+                title,
+                detail,
+                88_000 + index as u32,
+                if *active {
+                    palette::ACCENT
+                } else {
+                    palette::MUTED
+                },
+            )
+            .class("h-8"),
+        );
+    }
+
+    let mut footer = column("gap-1");
+    for line in footer_lines {
+        footer = footer.child(shadcn_label(line).class("h-5 text-muted-foreground"));
+    }
+
+    column("h-full gap-4 p-4")
+        .child(header(title).detail(detail))
+        .child(action_row)
+        .child(session_group)
+        .child(shadcn_label("Activity").class("h-5 text-muted-foreground"))
+        .child(shadcn_alert(activity_title, activity_detail, activity_icon).class("h-14"))
+        .child(spacer("flex-1"))
+        .child(footer)
 }
 
 pub fn shadcn_command(placeholder: &str, id: u32) -> UiNode {
@@ -685,6 +1031,99 @@ mod tests {
         assert!(matches!(
             shadcn_card("Title", "Detail").kind,
             UiNodeKind::Card
+        ));
+        assert!(matches!(
+            shadcn_chat_message(UiShadcnChatRole::Assistant, "Hello\nworld").kind,
+            UiNodeKind::Card
+        ));
+        assert!(matches!(
+            shadcn_conversation(
+                &[UiShadcnConversationMessage::new(
+                    UiShadcnChatRole::Assistant,
+                    "Hello",
+                    88.0
+                )],
+                1.0,
+                77
+            )
+            .kind,
+            UiNodeKind::ScrollArea { .. }
+        ));
+        assert!(matches!(
+            shadcn_status_header(
+                "Codex",
+                "Ready",
+                &["gpt-5.5", "ready"],
+                UiShadcnStatusTone::Success
+            )
+            .kind,
+            UiNodeKind::Row
+        ));
+        assert!(matches!(
+            shadcn_session_sidebar(
+                "edgerun codex",
+                "workspace",
+                &[
+                    ("New", 1, UiShadcnButtonVariant::Default),
+                    ("Clear", 2, UiShadcnButtonVariant::Secondary)
+                ],
+                &[("1 turn", "", true), ("0 tools", "", false)],
+                "Ready",
+                "idle",
+                UiIcon::Check,
+                &["model gpt-5.5"]
+            )
+            .kind,
+            UiNodeKind::Column
+        ));
+        assert!(matches!(
+            shadcn_prompt_composer("Prompt", "Hi", 11, "Send", 12, false, &["Enter sends"]).kind,
+            UiNodeKind::Column
+        ));
+        assert!(matches!(
+            shadcn_chat_client_shell(
+                None,
+                shadcn_status_header("Codex", "Ready", &["ready"], UiShadcnStatusTone::Success),
+                shadcn_conversation(&[], 1.0, 7),
+                shadcn_prompt_composer("Prompt", "Hi", 11, "Send", 12, false, &[])
+            )
+            .kind,
+            UiNodeKind::Row
+        ));
+        assert!(matches!(
+            shadcn_chat_client(UiShadcnChatClientSpec {
+                show_sidebar: true,
+                sidebar_title: "edgerun codex",
+                sidebar_detail: "workspace",
+                sidebar_actions: &[UiShadcnChatClientAction::new(
+                    "New",
+                    1,
+                    UiShadcnButtonVariant::Default
+                )],
+                session_rows: &[UiShadcnSessionRow::new("1 turn", "", true)],
+                activity: UiShadcnActivity::new("Ready", "idle", UiIcon::Check),
+                footer_lines: &["model gpt-5.5"],
+                header_title: "Codex",
+                header_status: "Ready",
+                header_badges: &["ready"],
+                header_tone: UiShadcnStatusTone::Success,
+                messages: &[UiShadcnConversationMessage::new(
+                    UiShadcnChatRole::Assistant,
+                    "Hello",
+                    88.0
+                )],
+                scroll_offset: 1.0,
+                scroll_id: 77,
+                input_label: "Prompt",
+                input_value: "Hi",
+                input_id: 11,
+                send_label: "Send",
+                send_id: 12,
+                busy: false,
+                hints: &["Enter sends"],
+            })
+            .kind,
+            UiNodeKind::Row
         ));
         assert!(matches!(
             shadcn_command("Search...", 7).kind,

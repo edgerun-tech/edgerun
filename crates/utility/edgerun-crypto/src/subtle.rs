@@ -15,10 +15,6 @@
 // It consists of a `Choice` type, and a collection of traits using `Choice`
 // instead of `bool` which are intended to execute in constant-time.
 
-#[cfg(feature = "std")]
-#[macro_use]
-extern crate std;
-
 use core::cmp;
 use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Neg, Not};
 use core::option::Option;

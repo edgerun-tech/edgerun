@@ -5,7 +5,13 @@ use std::thread;
 use std::time::Duration;
 
 use edgerun_ui_core::gpu::gl::GlRenderer;
-use edgerun_ui_core::gpu::{Color4, FontAtlas, GpuHit, GpuRect, GpuScene, HitKind, UiKey};
+use edgerun_ui_core::gpu::{
+    Color4, FontAtlas, GpuScene, UiAction, UiEvent, UiIcon, UiKey, UiPainter, UiRect,
+    UiRuntimeState, UiShadcnActivity, UiShadcnButtonVariant, UiShadcnChatClientAction,
+    UiShadcnChatClientSpec, UiShadcnChatRole, UiShadcnConversationMessage, UiShadcnSessionRow,
+    UiShadcnStatusTone, UiTextBuffer, UiTextBufferAction, shadcn_chat_client,
+    shadcn_chat_message_height,
+};
 
 use super::{AgentEvent, provider, read_chatgpt_auth, run_agent_loop, user_item};
 
@@ -33,21 +39,9 @@ const KMOD_SHIFT: u16 = 0x0003;
 const SEND_ID: u32 = 81_000;
 const NEW_CHAT_ID: u32 = 81_001;
 const CLEAR_ID: u32 = 81_002;
+const TRANSCRIPT_SCROLL_ID: u32 = 81_003;
 
 const BG: Color4 = Color4::rgba(0.035, 0.039, 0.047, 1.0);
-const SIDEBAR: Color4 = Color4::rgba(0.025, 0.029, 0.035, 1.0);
-const PANEL: Color4 = Color4::rgba(0.055, 0.063, 0.075, 1.0);
-const PANEL_2: Color4 = Color4::rgba(0.075, 0.086, 0.102, 1.0);
-const INPUT: Color4 = Color4::rgba(0.021, 0.025, 0.031, 1.0);
-const BORDER: Color4 = Color4::rgba(0.20, 0.23, 0.27, 1.0);
-const TEXT: Color4 = Color4::rgba(0.91, 0.92, 0.90, 1.0);
-const MUTED: Color4 = Color4::rgba(0.55, 0.59, 0.63, 1.0);
-const FAINT: Color4 = Color4::rgba(0.37, 0.41, 0.45, 1.0);
-const ACCENT: Color4 = Color4::rgba(0.11, 0.67, 0.52, 1.0);
-const ACCENT_DIM: Color4 = Color4::rgba(0.065, 0.36, 0.30, 1.0);
-const USER: Color4 = Color4::rgba(0.13, 0.18, 0.22, 1.0);
-const TOOL: Color4 = Color4::rgba(0.13, 0.105, 0.055, 1.0);
-const ERROR: Color4 = Color4::rgba(0.24, 0.07, 0.07, 1.0);
 
 #[repr(C)]
 struct SDL_Window(c_void);
@@ -156,12 +150,14 @@ struct Message {
 #[derive(Debug)]
 struct CodexUi {
     model: String,
-    input: String,
-    input_cursor: usize,
+    input: UiTextBuffer,
     status: String,
     busy: bool,
-    scroll: f32,
-    pressed: Option<u32>,
+    runtime: UiRuntimeState,
+    turns: usize,
+    tools_run: usize,
+    failures: usize,
+    active_tool: Option<String>,
     messages: Vec<Message>,
     command_tx: mpsc::Sender<WorkerCommand>,
     event_rx: mpsc::Receiver<WorkerEvent>,
@@ -199,14 +195,19 @@ pub fn run(options: UiOptions) -> Result<(), String> {
     let (event_tx, event_rx) = mpsc::channel();
     start_worker(options.model.clone(), command_rx, event_tx);
 
+    let mut runtime = UiRuntimeState::default();
+    runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, 1.0);
+
     let mut state = CodexUi {
         model: options.model,
-        input: String::new(),
-        input_cursor: 0,
+        input: UiTextBuffer::new(),
         status: "Starting Codex worker".to_string(),
         busy: true,
-        scroll: 1.0,
-        pressed: None,
+        runtime,
+        turns: 0,
+        tools_run: 0,
+        failures: 0,
+        active_tool: None,
         messages: vec![Message {
             role: Role::Assistant,
             text: "EdgeRun Codex UI is ready for local workspace work.".to_string(),
@@ -346,32 +347,66 @@ fn run_window(frames: Option<u32>, mut state: CodexUi) -> Result<(), String> {
     let mut rendered_frames = 0u32;
 
     while running {
-        state.drain_events();
+        if state.drain_events() {
+            scene_dirty = true;
+        }
         let mut event = SdlEvent { data: [0; 56] };
         while unsafe { SDL_PollEvent(&mut event) } != 0 {
             match event.event_type() {
                 SDL_QUIT => running = false,
                 SDL_KEYDOWN if event.key_sym() == SDLK_ESCAPE => running = false,
                 SDL_KEYDOWN => {
-                    state.handle_key(sdl_key(event.key_sym()), event.key_mod());
+                    let key = sdl_key(event.key_sym());
+                    let action = state
+                        .input
+                        .handle_key(key, event.key_mod() & KMOD_SHIFT != 0);
+                    state.handle_text_action(action);
+                    state.handle_navigation_key(key);
                     scene_dirty = true;
                 }
                 SDL_TEXTINPUT => {
                     if let Some(text) = event.text_input() {
-                        state.insert_text(&text);
+                        let action = state.input.handle_text_input(&text);
+                        state.handle_text_action(action);
                         scene_dirty = true;
                     }
                 }
                 SDL_MOUSEBUTTONDOWN => {
-                    state.pointer_down(&scene, event.mouse_x(), event.mouse_y());
+                    let action = state.runtime.handle_event(
+                        &scene,
+                        UiEvent::PointerDown {
+                            x: event.mouse_x(),
+                            y: event.mouse_y(),
+                        },
+                    );
+                    state.handle_ui_action(action);
                     scene_dirty = true;
                 }
                 SDL_MOUSEBUTTONUP => {
-                    state.pointer_up(&scene, event.mouse_x(), event.mouse_y());
+                    let action = state.runtime.handle_event(
+                        &scene,
+                        UiEvent::PointerUp {
+                            x: event.mouse_x(),
+                            y: event.mouse_y(),
+                        },
+                    );
+                    state.handle_ui_action(action);
                     scene_dirty = true;
                 }
                 SDL_MOUSEWHEEL => {
-                    state.scroll = (state.scroll - event.wheel_y() * 0.08).clamp(0.0, 1.0);
+                    let action = state.runtime.handle_event(
+                        &scene,
+                        UiEvent::Wheel {
+                            x: 0.0,
+                            y: 0.0,
+                            delta_y: -event.wheel_y() * 72.0,
+                        },
+                    );
+                    if matches!(action, UiAction::None) {
+                        state.scroll_transcript_by(-event.wheel_y() * 0.08);
+                    } else {
+                        state.handle_ui_action(action);
+                    }
                     scene_dirty = true;
                 }
                 SDL_WINDOWEVENT if event.window_event() == SDL_WINDOWEVENT_RESIZED => {
@@ -406,8 +441,10 @@ fn run_window(frames: Option<u32>, mut state: CodexUi) -> Result<(), String> {
 }
 
 impl CodexUi {
-    fn drain_events(&mut self) {
+    fn drain_events(&mut self) -> bool {
+        let mut changed = false;
         while let Ok(event) = self.event_rx.try_recv() {
+            changed = true;
             match event {
                 WorkerEvent::Ready => {
                     self.busy = false;
@@ -419,21 +456,27 @@ impl CodexUi {
                         role: Role::Assistant,
                         text,
                     });
-                    self.scroll = 1.0;
+                    self.scroll_transcript_to_bottom();
                 }
                 WorkerEvent::ToolStarted(name) => {
+                    self.active_tool = Some(name.clone());
                     self.messages.push(Message {
                         role: Role::ToolRunning,
                         text: format!("Running {name}"),
                     });
                     self.status = "Tool running".to_string();
-                    self.scroll = 1.0;
+                    self.scroll_transcript_to_bottom();
                 }
                 WorkerEvent::ToolCompleted {
                     name,
                     summary,
                     success,
                 } => {
+                    self.tools_run += 1;
+                    if !success {
+                        self.failures += 1;
+                    }
+                    self.active_tool = None;
                     self.messages.push(Message {
                         role: if success {
                             Role::ToolSuccess
@@ -447,112 +490,90 @@ impl CodexUi {
                     } else {
                         "Tool failed".to_string()
                     };
-                    self.scroll = 1.0;
+                    self.scroll_transcript_to_bottom();
                 }
                 WorkerEvent::Error(error) => {
                     self.busy = false;
+                    self.failures += 1;
+                    self.active_tool = None;
                     self.status = "Error".to_string();
                     self.messages.push(Message {
                         role: Role::Error,
                         text: error,
                     });
-                    self.scroll = 1.0;
+                    self.scroll_transcript_to_bottom();
                 }
                 WorkerEvent::Done => {
                     self.busy = false;
+                    self.active_tool = None;
                     self.status = "Ready".to_string();
                 }
             }
         }
+        changed
     }
 
-    fn handle_key(&mut self, key: UiKey, modifiers: u16) {
+    fn handle_text_action(&mut self, action: UiTextBufferAction) {
+        match action {
+            UiTextBufferAction::Submit => self.submit(),
+            UiTextBufferAction::Changed | UiTextBufferAction::None => {}
+        }
+    }
+
+    fn handle_navigation_key(&mut self, key: UiKey) {
         match key {
-            UiKey::Backspace => {
-                self.delete_before_cursor();
-            }
-            UiKey::Enter if modifiers & KMOD_SHIFT != 0 => self.insert_text("\n"),
-            UiKey::Enter => self.submit(),
-            UiKey::ArrowUp => self.scroll = (self.scroll - 0.06).clamp(0.0, 1.0),
-            UiKey::ArrowDown => self.scroll = (self.scroll + 0.06).clamp(0.0, 1.0),
-            UiKey::ArrowLeft => self.move_cursor_left(),
-            UiKey::ArrowRight => self.move_cursor_right(),
-            UiKey::Escape | UiKey::Tab | UiKey::Other(_) => {}
+            UiKey::ArrowUp => self.scroll_transcript_by(-0.06),
+            UiKey::ArrowDown => self.scroll_transcript_by(0.06),
+            UiKey::PageUp => self.scroll_transcript_by(-0.42),
+            UiKey::PageDown => self.scroll_transcript_by(0.42),
+            _ => {}
         }
     }
 
-    fn insert_text(&mut self, text: &str) {
-        let byte_index = self.cursor_byte_index();
-        self.input.insert_str(byte_index, text);
-        self.input_cursor += text.chars().count();
-    }
-
-    fn delete_before_cursor(&mut self) {
-        if self.input_cursor == 0 {
-            return;
-        }
-        let end = self.cursor_byte_index();
-        self.input_cursor -= 1;
-        let start = self.cursor_byte_index();
-        self.input.replace_range(start..end, "");
-    }
-
-    fn move_cursor_left(&mut self) {
-        self.input_cursor = self.input_cursor.saturating_sub(1);
-    }
-
-    fn move_cursor_right(&mut self) {
-        self.input_cursor = (self.input_cursor + 1).min(self.input.chars().count());
-    }
-
-    fn cursor_byte_index(&self) -> usize {
-        self.input
-            .char_indices()
-            .nth(self.input_cursor)
-            .map(|(index, _)| index)
-            .unwrap_or(self.input.len())
-    }
-
-    fn pointer_down(&mut self, scene: &GpuScene, x: f32, y: f32) {
-        self.pressed = scene.hit_test(x, y).map(|hit| hit.id);
-    }
-
-    fn pointer_up(&mut self, scene: &GpuScene, x: f32, y: f32) {
-        let released = scene.hit_test(x, y).map(|hit| hit.id);
-        let pressed = self.pressed.take();
-        if pressed != released {
-            return;
-        }
-        match released {
-            Some(SEND_ID) => self.submit(),
-            Some(NEW_CHAT_ID) => self.new_chat(),
-            Some(CLEAR_ID) => {
+    fn handle_ui_action(&mut self, action: UiAction) {
+        match action {
+            UiAction::Activated(hit) if hit.id == SEND_ID => self.submit(),
+            UiAction::Submitted { id } if id == 0 => self.submit(),
+            UiAction::Activated(hit) if hit.id == NEW_CHAT_ID => self.new_chat(),
+            UiAction::Activated(hit) if hit.id == CLEAR_ID => {
                 self.messages.clear();
                 self.status = "Transcript cleared".to_string();
+            }
+            UiAction::ScrollChanged { id, offset } if id == TRANSCRIPT_SCROLL_ID => {
+                self.runtime.set_scroll_offset(id, offset);
             }
             _ => {}
         }
     }
 
+    fn scroll_transcript_to_bottom(&mut self) {
+        self.runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, 1.0);
+    }
+
+    fn scroll_transcript_by(&mut self, delta: f32) {
+        let next = self.runtime.scroll_offset(TRANSCRIPT_SCROLL_ID) + delta;
+        self.runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, next);
+    }
+
     fn submit(&mut self) {
-        let prompt = self.input.trim().to_string();
-        if prompt.is_empty() {
-            self.status = "Type a prompt before sending".to_string();
-            return;
-        }
         if self.busy {
             self.status = "Codex is still working".to_string();
+            return;
+        }
+        let prompt = self.input.as_str().trim().to_string();
+        if prompt.is_empty() {
+            self.status = "Type a prompt before sending".to_string();
             return;
         }
         self.messages.push(Message {
             role: Role::User,
             text: prompt.clone(),
         });
+        self.turns += 1;
         self.input.clear();
-        self.input_cursor = 0;
         self.busy = true;
         self.status = "Queued".to_string();
-        self.scroll = 1.0;
+        self.scroll_transcript_to_bottom();
         if self.command_tx.send(WorkerCommand::Prompt(prompt)).is_err() {
             self.busy = false;
             self.status = "Worker disconnected".to_string();
@@ -565,371 +586,151 @@ impl CodexUi {
             role: Role::Assistant,
             text: "New chat started.".to_string(),
         });
-        self.scroll = 1.0;
+        self.turns = 0;
+        self.tools_run = 0;
+        self.failures = 0;
+        self.active_tool = None;
+        self.scroll_transcript_to_bottom();
         let _ = self.command_tx.send(WorkerCommand::Reset);
     }
 }
 
-fn build_scene(
-    scene: &mut GpuScene,
-    atlas: &FontAtlas,
-    state: &CodexUi,
-    width: f32,
-    height: f32,
-) {
+fn build_scene(scene: &mut GpuScene, atlas: &FontAtlas, state: &CodexUi, width: f32, height: f32) {
     scene.clear = BG;
     scene.clear_rects();
 
     let w = width.max(720.0);
     let h = height.max(480.0);
-    let sidebar_w = if w >= 980.0 { 260.0 } else { 0.0 };
-    let main_x = sidebar_w;
-    let main_w = w - sidebar_w;
-    let top_h = 54.0;
-    let composer_h = 154.0;
-    let transcript_y = top_h;
-    let transcript_h = h - top_h - composer_h;
+    let turns = format!("{} turns", state.turns);
+    let tools = format!("{} tools", state.tools_run);
+    let issues = format!("{} issues", state.failures);
+    let model = format!("model {}", state.model);
+    let workspace = workspace_label();
+    let availability = if state.busy { "working" } else { "ready" };
+    let tone = header_tone(state);
+    let (activity_title, activity_detail, activity_icon) = sidebar_activity(state);
+    let main_width = if w >= 980.0 { w - 260.0 } else { w };
+    let messages = conversation_messages(atlas, state, main_width - 48.0);
+    let composer_text = state.input.display_value(
+        "Ask Codex to inspect, edit, run commands, or patch files...",
+        '|',
+    );
 
-    rect(scene, 0.0, 0.0, w, h, 0.0, BG);
-    if sidebar_w > 0.0 {
-        draw_sidebar(scene, atlas, state, sidebar_w, h);
-    }
-    draw_header(scene, atlas, state, main_x, main_w, top_h);
-    draw_transcript(
-        scene,
-        atlas,
-        state,
-        main_x,
-        transcript_y,
-        main_w,
-        transcript_h,
-    );
-    draw_composer(
-        scene,
-        atlas,
-        state,
-        main_x,
-        h - composer_h,
-        main_w,
-        composer_h,
-    );
-}
-
-fn draw_sidebar(scene: &mut GpuScene, atlas: &FontAtlas, state: &CodexUi, width: f32, height: f32) {
-    rect(scene, 0.0, 0.0, width, height, 0.0, SIDEBAR);
-    rect(scene, width - 1.0, 0.0, 1.0, height, 0.0, BORDER);
-    label(scene, 22.0, 18.0, "edgerun codex", TEXT);
-    small_label(scene, 22.0, 48.0, "Native SDL client", MUTED);
-    button(
-        scene,
-        ButtonSpec::new(18.0, 86.0, 106.0, 30.0, "New", NEW_CHAT_ID, ACCENT_DIM),
-    );
-    button(
-        scene,
-        ButtonSpec::new(132.0, 86.0, 88.0, 30.0, "Clear", CLEAR_ID, PANEL_2),
-    );
-    small_label(scene, 22.0, 140.0, "Session", MUTED);
-    side_row(scene, 18.0, 168.0, "Current workspace", true);
-    side_row(scene, 18.0, 206.0, "Tools enabled", false);
-    side_row(scene, 18.0, 244.0, "Proof trail pending", false);
-    small_label(
-        scene,
-        22.0,
-        height - 78.0,
-        &format!("model {}", state.model),
-        MUTED,
-    );
-    small_label(
-        scene,
-        22.0,
-        height - 50.0,
-        "shell, process, apply_patch",
-        FAINT,
-    );
-}
-
-fn draw_header(scene: &mut GpuScene, atlas: &FontAtlas, state: &CodexUi, x: f32, w: f32, height: f32) {
-    rect(scene, x, 0.0, w, height, 0.0, PANEL);
-    rect(scene, x, height - 1.0, w, 1.0, 0.0, BORDER);
-    label(scene, atlas, x + 24.0, 18.0, "Codex", TEXT);
-    small_label(scene, atlas, x + 84.0, 21.0, &state.status, MUTED);
-    pill(scene, atlas, x + w - 252.0, 14.0, 92.0, &state.model);
-    pill(
-        scene,
-        atlas,
-        x + w - 150.0,
-        14.0,
-        126.0,
-        if state.busy { "working" } else { "ready" },
-    );
-}
-
-fn draw_transcript(
-    scene: &mut GpuScene,
-    atlas: &FontAtlas,
-    state: &CodexUi,
-    x: f32,
-    y: f32,
-    w: f32,
-    h: f32,
-) {
-    scene.push_clip(edgerun_ui_core::gpu::GpuClip::new(x, y, w, h));
-    let blocks = message_blocks(atlas, state, w - 48.0);
-    let total_h = blocks.iter().map(|block| block.height + 14.0).sum::<f32>();
-    let overflow = (total_h - h + 36.0).max(0.0);
-    let mut cursor_y = y + 22.0 - overflow * state.scroll;
-    for block in blocks {
-        draw_message(scene, atlas, x + 24.0, cursor_y, w - 48.0, &block);
-        cursor_y += block.height + 14.0;
-    }
-    scene.pop_clip();
-}
-
-fn draw_composer(
-    scene: &mut GpuScene,
-    atlas: &FontAtlas,
-    state: &CodexUi,
-    x: f32,
-    y: f32,
-    w: f32,
-    h: f32,
-) {
-    rect(scene, x, y, w, h, 0.0, PANEL);
-    rect(scene, x, y, w, 1.0, 0.0, BORDER);
-    let input_x = x + 24.0;
-    let input_y = y + 18.0;
-    let input_w = w - 48.0;
-    let input_h = h - 66.0;
-    rect(scene, input_x, input_y, input_w, input_h, 8.0, INPUT);
-    scene.push_rect(GpuRect::border(
-        input_x, input_y, input_w, input_h, 8.0, BORDER,
-    ));
-    let input = if state.input.is_empty() {
-        "Ask Codex to inspect, edit, run commands, or patch files..."
-    } else {
-        state.input.as_str()
-    };
-    let color = if state.input.is_empty() { MUTED } else { TEXT };
-    scene.push_clip(edgerun_ui_core::gpu::GpuClip::new(
-        input_x + 12.0,
-        input_y + 10.0,
-        input_w - 24.0,
-        input_h - 20.0,
-    ));
-    let composer_text = if state.input.is_empty() {
-        input.to_string()
-    } else {
-        input_with_cursor(&state.input, state.input_cursor)
-    };
-    let lines = wrap_lines(atlas, &composer_text, input_w - 32.0);
-    let visible_count = ((input_h - 18.0) / 22.0).floor().max(1.0) as usize;
-    let start = lines.len().saturating_sub(visible_count);
-    let mut text_y = input_y + 18.0;
-    for line in lines.iter().skip(start) {
-        label(scene, atlas, input_x + 16.0, text_y, line, color);
-        text_y += 22.0;
-    }
-    scene.pop_clip();
-    button(
-        scene,
-        atlas,
-        ButtonSpec::new(
-            x + w - 102.0,
-            y + h - 40.0,
-            78.0,
-            28.0,
-            "Send",
-            SEND_ID,
-            if state.busy { ACCENT_DIM } else { ACCENT },
-        ),
-    );
-    small_label(
-        scene,
-        atlas,
-        x + 24.0,
-        y + h - 32.0,
-        "Enter sends. Wheel or arrow keys scroll.",
-        FAINT,
-    );
-    small_label(
-        scene,
-        atlas,
-        x + 250.0,
-        y + h - 32.0,
+    let actions = [
+        UiShadcnChatClientAction::new("New", NEW_CHAT_ID, UiShadcnButtonVariant::Default),
+        UiShadcnChatClientAction::new("Clear", CLEAR_ID, UiShadcnButtonVariant::Secondary),
+    ];
+    let session_rows = [
+        UiShadcnSessionRow::new(turns.as_str(), "selected", true),
+        UiShadcnSessionRow::new(tools.as_str(), "", false),
+        UiShadcnSessionRow::new(issues.as_str(), "", state.failures > 0),
+    ];
+    let footer_lines = [model.as_str(), "shell, process, patch"];
+    let header_badges = [state.model.as_str(), availability];
+    let hints = [
+        "Enter sends. Wheel, arrows, PgUp/PgDn scroll.",
         "Shift+Enter inserts a newline. Left/right move the cursor.",
-        FAINT,
+    ];
+
+    render_node(
+        scene,
+        atlas,
+        UiRect::new(0.0, 0.0, w, h),
+        &state.runtime,
+        shadcn_chat_client(UiShadcnChatClientSpec {
+            show_sidebar: w >= 980.0,
+            sidebar_title: "edgerun codex",
+            sidebar_detail: workspace.as_str(),
+            sidebar_actions: &actions,
+            session_rows: &session_rows,
+            activity: UiShadcnActivity::new(activity_title, activity_detail, activity_icon),
+            footer_lines: &footer_lines,
+            header_title: "Codex",
+            header_status: &state.status,
+            header_badges: &header_badges,
+            header_tone: tone,
+            messages: &messages,
+            scroll_offset: state.runtime.scroll_offset(TRANSCRIPT_SCROLL_ID),
+            scroll_id: TRANSCRIPT_SCROLL_ID,
+            input_label: "Prompt",
+            input_value: &composer_text,
+            input_id: 0,
+            send_label: "Send",
+            send_id: SEND_ID,
+            busy: state.busy,
+            hints: &hints,
+        }),
     );
 }
 
-#[derive(Debug)]
-struct MessageBlock {
-    role: Role,
-    lines: Vec<String>,
-    height: f32,
+fn header_tone(state: &CodexUi) -> UiShadcnStatusTone {
+    if state.failures > 0 {
+        UiShadcnStatusTone::Error
+    } else if state.busy {
+        UiShadcnStatusTone::Active
+    } else {
+        UiShadcnStatusTone::Success
+    }
 }
 
-fn message_blocks(atlas: &FontAtlas, state: &CodexUi, width: f32) -> Vec<MessageBlock> {
+fn conversation_messages<'a>(
+    atlas: &FontAtlas,
+    state: &'a CodexUi,
+    width: f32,
+) -> Vec<UiShadcnConversationMessage<'a>> {
     state
         .messages
         .iter()
         .map(|message| {
-            let lines = wrap_lines(&message.text, width - 32.0);
-            MessageBlock {
-                role: message.role,
-                height: 36.0 + lines.len() as f32 * 22.0,
-                lines,
-            }
+            UiShadcnConversationMessage::new(
+                chat_role(message.role),
+                &message.text,
+                shadcn_chat_message_height(atlas, &message.text, width),
+            )
         })
         .collect()
 }
 
-fn draw_message(
+fn chat_role(role: Role) -> UiShadcnChatRole {
+    match role {
+        Role::User => UiShadcnChatRole::User,
+        Role::Assistant => UiShadcnChatRole::Assistant,
+        Role::ToolRunning => UiShadcnChatRole::ToolRunning,
+        Role::ToolSuccess => UiShadcnChatRole::ToolSuccess,
+        Role::ToolError => UiShadcnChatRole::ToolError,
+        Role::Error => UiShadcnChatRole::Error,
+    }
+}
+
+fn sidebar_activity(state: &CodexUi) -> (&str, &str, UiIcon) {
+    if let Some(tool) = state.active_tool.as_deref() {
+        ("Running", tool, UiIcon::Terminal)
+    } else if state.busy {
+        ("Thinking", state.status.as_str(), UiIcon::Code)
+    } else {
+        ("Ready", state.status.as_str(), UiIcon::Check)
+    }
+}
+
+fn workspace_label() -> String {
+    std::env::current_dir()
+        .ok()
+        .and_then(|path| {
+            path.file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+        })
+        .unwrap_or_else(|| "workspace".to_string())
+}
+
+fn render_node(
     scene: &mut GpuScene,
     atlas: &FontAtlas,
-    x: f32,
-    y: f32,
-    w: f32,
-    block: &MessageBlock,
+    rect: UiRect,
+    runtime: &UiRuntimeState,
+    node: edgerun_ui_core::gpu::UiNode,
 ) {
-    let (role, fill) = match block.role {
-        Role::User => ("user", USER),
-        Role::Assistant => ("assistant", PANEL_2),
-        Role::ToolRunning => ("tool running", TOOL),
-        Role::ToolSuccess => ("tool ok", Color4::rgba(0.06, 0.16, 0.12, 1.0)),
-        Role::ToolError => ("tool failed", ERROR),
-        Role::Error => ("error", ERROR),
-    };
-    rect(scene, x, y, w, block.height, 8.0, fill);
-    scene.push_rect(GpuRect::border(x, y, w, block.height, 8.0, BORDER));
-    small_label(scene, atlas, x + 16.0, y + 12.0, role, MUTED);
-    let mut text_y = y + 36.0;
-    for line in &block.lines {
-        label(scene, atlas, x + 16.0, text_y, line, TEXT);
-        text_y += 22.0;
-    }
-}
-
-fn side_row(scene: &mut GpuScene, atlas: &FontAtlas, x: f32, y: f32, text: &str, active: bool) {
-    rect(
-        scene,
-        x,
-        y,
-        222.0,
-        30.0,
-        7.0,
-        if active {
-            PANEL_2
-        } else {
-            Color4::rgba(0.0, 0.0, 0.0, 0.0)
-        },
-    );
-    small_label(
-        scene,
-        atlas,
-        x + 12.0,
-        y + 9.0,
-        text,
-        if active { TEXT } else { MUTED },
-    );
-}
-
-#[derive(Clone, Copy)]
-struct ButtonSpec<'a> {
-    x: f32,
-    y: f32,
-    w: f32,
-    h: f32,
-    text: &'a str,
-    id: u32,
-    fill: Color4,
-}
-
-impl<'a> ButtonSpec<'a> {
-    const fn new(x: f32, y: f32, w: f32, h: f32, text: &'a str, id: u32, fill: Color4) -> Self {
-        Self {
-            x,
-            y,
-            w,
-            h,
-            text,
-            id,
-            fill,
-        }
-    }
-}
-
-fn button(scene: &mut GpuScene, atlas: &FontAtlas, spec: ButtonSpec<'_>) {
-    rect(scene, spec.x, spec.y, spec.w, spec.h, 7.0, spec.fill);
-    scene.push_rect(GpuRect::border(spec.x, spec.y, spec.w, spec.h, 7.0, BORDER));
-    scene.push_hit(GpuHit::new(
-        HitKind::Button,
-        spec.id,
-        spec.x,
-        spec.y,
-        spec.w,
-        spec.h,
-    ));
-    small_label(scene, atlas, spec.x + 16.0, spec.y + 8.0, spec.text, TEXT);
-}
-
-fn pill(scene: &mut GpuScene, atlas: &FontAtlas, x: f32, y: f32, w: f32, text: &str) {
-    rect(scene, x, y, w, 26.0, 13.0, PANEL_2);
-    scene.push_rect(GpuRect::border(x, y, w, 26.0, 13.0, BORDER));
-    small_label(scene, atlas, x + 12.0, y + 8.0, text, MUTED);
-}
-
-fn wrap_lines(atlas: &FontAtlas, text: &str, max_w: f32) -> Vec<String> {
-    let mut lines = Vec::new();
-    for raw_line in text.lines() {
-        let mut current = String::new();
-        for word in raw_line.split_whitespace() {
-            let candidate = if current.is_empty() {
-                word.to_string()
-            } else {
-                format!("{current} {word}")
-            };
-            if atlas.text_width(&candidate) <= max_w || current.is_empty() {
-                current = candidate;
-            } else {
-                lines.push(current);
-                current = word.to_string();
-            }
-        }
-        if current.is_empty() {
-            lines.push(String::new());
-        } else {
-            lines.push(current);
-        }
-    }
-    if lines.is_empty() {
-        lines.push(String::new());
-    }
-    lines
-}
-
-fn input_with_cursor(input: &str, cursor: usize) -> String {
-    let byte_index = input
-        .char_indices()
-        .nth(cursor)
-        .map(|(index, _)| index)
-        .unwrap_or(input.len());
-    let mut text = String::with_capacity(input.len() + 1);
-    text.push_str(&input[..byte_index]);
-    text.push('|');
-    text.push_str(&input[byte_index..]);
-    text
-}
-
-fn label(scene: &mut GpuScene, atlas: &FontAtlas, x: f32, y: f32, text: &str, color: Color4) {
-    scene.push_font_text(atlas, x, y, text, color);
-}
-
-fn small_label(scene: &mut GpuScene, atlas: &FontAtlas, x: f32, y: f32, text: &str, color: Color4) {
-    scene.push_font_text(atlas, x, y, text, color);
-}
-
-fn rect(scene: &mut GpuScene, x: f32, y: f32, w: f32, h: f32, radius: f32, color: Color4) {
-    scene.push_rect(GpuRect::fill(x, y, w, h, radius, color));
+    let mut ui = UiPainter::with_font(scene, atlas);
+    node.render_with_state(&mut ui, rect, Some(runtime));
 }
 
 fn sdl_key(sym: i32) -> UiKey {
@@ -938,6 +739,11 @@ fn sdl_key(sym: i32) -> UiKey {
         9 => UiKey::Tab,
         13 => UiKey::Enter,
         27 => UiKey::Escape,
+        127 | 1073741907 => UiKey::Delete,
+        1073741898 => UiKey::Home,
+        1073741901 => UiKey::End,
+        1073741899 => UiKey::PageUp,
+        1073741902 => UiKey::PageDown,
         1073741904 => UiKey::ArrowLeft,
         1073741903 => UiKey::ArrowRight,
         1073741906 => UiKey::ArrowUp,
@@ -996,5 +802,68 @@ fn sdl_error() -> String {
         unsafe { CStr::from_ptr(ptr) }
             .to_string_lossy()
             .into_owned()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use edgerun_ui_core::gpu::HitKind;
+
+    #[test]
+    fn build_scene_renders_shadcn_chat_client_controls() {
+        let (command_tx, _command_rx) = std::sync::mpsc::channel();
+        let (_event_tx, event_rx) = std::sync::mpsc::channel();
+        let mut runtime = UiRuntimeState::default();
+        runtime.set_scroll_offset(TRANSCRIPT_SCROLL_ID, 1.0);
+        let state = CodexUi {
+            model: "gpt-5.5".to_string(),
+            input: UiTextBuffer::new(),
+            status: "Ready".to_string(),
+            busy: false,
+            runtime,
+            turns: 1,
+            tools_run: 1,
+            failures: 0,
+            active_tool: None,
+            messages: vec![
+                Message {
+                    role: Role::Assistant,
+                    text: "Ready for local workspace work.".to_string(),
+                },
+                Message {
+                    role: Role::User,
+                    text: "Summarize the project.".to_string(),
+                },
+            ],
+            command_tx,
+            event_rx,
+        };
+        let atlas = FontAtlas::load_inter(18.0).expect("load UI font");
+        let mut scene = GpuScene::new(BG);
+
+        build_scene(&mut scene, &atlas, &state, 1120.0, 720.0);
+
+        assert!(scene.text_quads().len() > 80);
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Button && hit.id == SEND_ID),
+            "scene hits: {:?}",
+            scene.hits()
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Button && hit.id == NEW_CHAT_ID)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Button && hit.id == CLEAR_ID)
+        );
     }
 }

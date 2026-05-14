@@ -205,10 +205,6 @@
 #[cfg(doctest)]
 pub struct ReadmeDoctests;
 
-#[macro_use]
-#[cfg(feature = "std")]
-extern crate std;
-
 pub use crate::num_bigint::BigUint;
 pub use crate::rand_core;
 pub use crate::signature;

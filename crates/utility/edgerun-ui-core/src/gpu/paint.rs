@@ -237,36 +237,41 @@ pub(super) fn wrap_lines(
     #[cfg(feature = "fontdue-text")] atlas: Option<&FontAtlas>,
 ) -> Vec<String> {
     let mut lines = Vec::new();
-    let mut current = String::new();
+    let mut consumed_all = true;
 
-    for word in text.split_whitespace() {
-        let candidate = if current.is_empty() {
-            word.to_string()
-        } else {
-            format!("{current} {word}")
-        };
-        if measure_label_width(
-            &candidate,
-            2.0,
-            #[cfg(feature = "fontdue-text")]
-            atlas,
-        ) <= max_width
-        {
-            current = candidate;
-            continue;
-        }
+    'outer: for raw_line in text.lines() {
+        let mut current = String::new();
+        for word in raw_line.split_whitespace() {
+            let candidate = if current.is_empty() {
+                word.to_string()
+            } else {
+                format!("{current} {word}")
+            };
+            if measure_label_width(
+                &candidate,
+                2.0,
+                #[cfg(feature = "fontdue-text")]
+                atlas,
+            ) <= max_width
+                || current.is_empty()
+            {
+                current = candidate;
+                continue;
+            }
 
-        if !current.is_empty() {
             lines.push(current);
-        }
-        current = word.to_string();
+            current = word.to_string();
 
-        if lines.len() + 1 >= max_lines {
+            if lines.len() >= max_lines {
+                consumed_all = false;
+                break 'outer;
+            }
+        }
+
+        if lines.len() >= max_lines {
+            consumed_all = false;
             break;
         }
-    }
-
-    if !current.is_empty() && lines.len() < max_lines {
         lines.push(current);
     }
 
@@ -274,12 +279,7 @@ pub(super) fn wrap_lines(
         lines.push(String::new());
     }
 
-    let consumed_words = lines
-        .iter()
-        .map(|line| line.split_whitespace().count())
-        .sum::<usize>();
-    let total_words = text.split_whitespace().count();
-    if consumed_words < total_words {
+    if !consumed_all {
         if let Some(last) = lines.last_mut() {
             while !last.is_empty()
                 && measure_label_width(
@@ -367,6 +367,38 @@ pub(super) fn component_label_width(
         #[cfg(feature = "fontdue-text")]
         atlas,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wrap_lines_preserves_explicit_line_breaks() {
+        let lines = wrap_lines(
+            "first line\nsecond line",
+            500.0,
+            4,
+            #[cfg(feature = "fontdue-text")]
+            None,
+        );
+
+        assert_eq!(lines, vec!["first line", "second line"]);
+    }
+
+    #[test]
+    fn wrap_lines_limits_overflow_with_ellipsis() {
+        let lines = wrap_lines(
+            "one two three four five",
+            40.0,
+            2,
+            #[cfg(feature = "fontdue-text")]
+            None,
+        );
+
+        assert_eq!(lines.len(), 2);
+        assert!(lines[1].ends_with("..."));
+    }
 }
 
 pub(super) fn soft_card(

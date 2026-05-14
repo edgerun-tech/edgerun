@@ -1,8 +1,7 @@
 use alloc::vec::Vec;
 
-use edgerun_crypto::ed25519_dalek::VerifyingKey;
 use edgerun_crypto::x25519::{PublicKey as X25519PublicKey, StaticSecret as X25519Secret};
-use edgerun_crypto::{Aes256GcmCipher, Ed25519SigningKey, Nonce, Tag};
+use edgerun_crypto::{Aes256GcmCipher, Ed25519SigningKey, Ed25519VerifyingKey, Nonce, Tag};
 use rkyv::{Archive, Deserialize, Serialize};
 
 use crate::chat_index::{
@@ -64,8 +63,8 @@ pub fn encryption_public_from_ed25519_public(
     public_key: &PublicKey,
 ) -> Result<EncryptionPublicKey, MessageSealError> {
     let verifying_key =
-        VerifyingKey::from_bytes(public_key).map_err(|_| MessageSealError::InvalidKey)?;
-    Ok(verifying_key.to_montgomery().to_bytes())
+        Ed25519VerifyingKey::from_bytes(public_key).map_err(|_| MessageSealError::InvalidKey)?;
+    Ok(verifying_key.to_montgomery_bytes())
 }
 
 pub fn sealed_message_payload_bytes(

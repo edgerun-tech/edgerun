@@ -44,14 +44,11 @@ use super::crypto::ProtectionKeys;
 #[derive(Clone)]
 pub struct CertificateAndKey {
     pub cert_der: Vec<u8>,
-    pub signing_key: Arc<edgerun_crypto::p256::ecdsa::SigningKey>,
+    pub signing_key: Arc<edgerun_crypto::P256SigningKey>,
 }
 
 impl CertificateAndKey {
-    pub fn from_der(
-        cert_der: Vec<u8>,
-        signing_key: edgerun_crypto::p256::ecdsa::SigningKey,
-    ) -> Self {
+    pub fn from_der(cert_der: Vec<u8>, signing_key: edgerun_crypto::P256SigningKey) -> Self {
         Self {
             cert_der,
             signing_key: Arc::new(signing_key),

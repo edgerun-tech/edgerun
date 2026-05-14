@@ -4,8 +4,8 @@ use std::os::raw::{c_char, c_int, c_void};
 use std::ptr;
 
 use edgerun_ui_core::gpu::{
-    build_shadcn_component_preview_by_identifier, build_shadcn_demo_gallery, palette, Color4,
-    GpuRect, GpuScene, RectMode, UiPainter, UiRect,
+    Color4, GpuRect, GpuScene, RectMode, UiPainter, UiRect,
+    build_shadcn_component_preview_by_identifier, build_shadcn_demo_gallery, palette,
 };
 
 const SDL_INIT_VIDEO: u32 = 0x0000_0020;
@@ -227,11 +227,7 @@ fn build_scene(identifier: Option<&str>, width: f32, height: f32) -> Result<GpuS
 
 fn init_sdl() -> Result<Sdl, String> {
     let rc = unsafe { SDL_Init(SDL_INIT_VIDEO) };
-    if rc != 0 {
-        Err(sdl_error())
-    } else {
-        Ok(Sdl)
-    }
+    if rc != 0 { Err(sdl_error()) } else { Ok(Sdl) }
 }
 
 fn rasterize_scene(scene: &GpuScene, pixels: &mut [u8], width: u32, height: u32) {

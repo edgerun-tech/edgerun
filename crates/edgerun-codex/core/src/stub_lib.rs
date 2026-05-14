@@ -45,8 +45,11 @@ pub use codex_protocol::models::ResponseItem;
 pub use codex_protocol::openai_models::ReasoningEffort;
 pub use codex_protocol::protocol::SessionSource;
 pub use codex_protocol::protocol::TokenUsage;
+pub use codex_protocol::SessionId;
+pub use codex_protocol::ThreadId;
 pub use codex_tools::ToolSpec;
 pub use edgerun_json::JsonValue;
+use edgerun_http::HeaderValue;
 
 /// Review thread system prompt placeholder.
 pub const REVIEW_PROMPT: &str = "";
@@ -174,6 +177,10 @@ pub struct TurnOutput {
 /// or rollout logs.
 pub struct ModelClient {
     model: String,
+    session_id: String,
+    thread_id: String,
+    installation_id: String,
+    session_source: SessionSource,
     responses: codex_api::ResponsesClient<Arc<dyn HttpTransport>>,
 }
 
@@ -193,8 +200,14 @@ impl ModelClient {
         auth: codex_api::SharedAuthProvider,
         transport: Arc<dyn HttpTransport>,
     ) -> Self {
+        let thread_id = ThreadId::new();
+        let session_id = SessionId::from(thread_id);
         Self {
             model: model.into(),
+            session_id: session_id.to_string(),
+            thread_id: thread_id.to_string(),
+            installation_id: ThreadId::new().to_string(),
+            session_source: SessionSource::Cli,
             responses: codex_api::ResponsesClient::new(transport, provider, auth),
         }
     }
@@ -336,19 +349,52 @@ impl ModelClient {
             service_tier,
             prompt_cache_key,
             text,
-            client_metadata,
+            client_metadata: Some(self.client_metadata(client_metadata)),
         };
+
+        let session_id = session_id.or_else(|| Some(self.session_id.clone()));
+        let thread_id = thread_id.or_else(|| Some(self.thread_id.clone()));
+        let session_source = session_source.or_else(|| Some(self.session_source.clone()));
+        let prompt_cache_key = api_request
+            .prompt_cache_key
+            .clone()
+            .or_else(|| Some(self.thread_id.clone()));
+        let mut api_request = api_request;
+        api_request.prompt_cache_key = prompt_cache_key;
+
+        let mut extra_headers = edgerun_http::HeaderMap::new();
+        if let Ok(value) = HeaderValue::from_str(&self.installation_id) {
+            extra_headers.insert(X_CODEX_INSTALLATION_ID_HEADER, value);
+        }
+        let window_id = format!("{}:0", self.thread_id);
+        if let Ok(value) = HeaderValue::from_str(&window_id) {
+            extra_headers.insert("x-codex-window-id", value);
+        }
 
         let options = ResponsesOptions {
             session_id,
             thread_id,
             session_source,
-            extra_headers: Default::default(),
+            extra_headers,
             compression,
             turn_state,
         };
 
         Ok((api_request, options))
+    }
+
+    fn client_metadata(
+        &self,
+        existing: Option<HashMap<String, String>>,
+    ) -> HashMap<String, String> {
+        let mut metadata = existing.unwrap_or_default();
+        metadata
+            .entry(X_CODEX_INSTALLATION_ID_HEADER.to_string())
+            .or_insert_with(|| self.installation_id.clone());
+        metadata
+            .entry("x-codex-window-id".to_string())
+            .or_insert_with(|| format!("{}:0", self.thread_id));
+        metadata
     }
 }
 
@@ -419,7 +465,6 @@ mod tests {
     use codex_client::Response;
     use codex_client::StreamResponse;
     use codex_client::TransportError;
-    use edgerun_async_trait::async_trait;
     use edgerun_bytes::Bytes;
     use edgerun_http::HeaderMap;
     use edgerun_http::StatusCode;
@@ -455,21 +500,48 @@ mod tests {
         }
     }
 
-    #[async_trait]
     impl HttpTransport for RecordingTransport {
-        async fn execute(&self, _req: Request) -> Result<Response, TransportError> {
-            Err(TransportError::Build("execute should not run".to_string()))
+        fn execute<'async_trait>(
+            &'async_trait self,
+            _req: Request,
+        ) -> core::pin::Pin<
+            Box<
+                dyn core::future::Future<Output = Result<Response, TransportError>>
+                    + Send
+                    + 'async_trait,
+            >,
+        >
+        where
+            Self: 'async_trait,
+        {
+            Box::pin(async move {
+                Err(TransportError::Build("execute should not run".to_string()))
+            })
         }
 
-        async fn stream(&self, req: Request) -> Result<StreamResponse, TransportError> {
-            self.requests.lock().expect("request log lock").push(req);
-            let bytes = edgerun_futures::stream::iter(vec![Ok::<Bytes, TransportError>(
-                Bytes::from(self.body.clone()),
-            )]);
-            Ok(StreamResponse {
-                status: StatusCode::OK,
-                headers: HeaderMap::new(),
-                bytes: Box::pin(bytes),
+        fn stream<'async_trait>(
+            &'async_trait self,
+            req: Request,
+        ) -> core::pin::Pin<
+            Box<
+                dyn core::future::Future<Output = Result<StreamResponse, TransportError>>
+                    + Send
+                    + 'async_trait,
+            >,
+        >
+        where
+            Self: 'async_trait,
+        {
+            Box::pin(async move {
+                self.requests.lock().expect("request log lock").push(req);
+                let bytes = edgerun_futures::stream::iter(vec![Ok::<Bytes, TransportError>(
+                    Bytes::from(self.body.clone()),
+                )]);
+                Ok(StreamResponse {
+                    status: StatusCode::OK,
+                    headers: HeaderMap::new(),
+                    bytes: Box::pin(bytes),
+                })
             })
         }
     }

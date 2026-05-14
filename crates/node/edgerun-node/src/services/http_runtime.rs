@@ -7,7 +7,6 @@ use crate::network::{HostSocketTransport, TransportAddress};
 use crate::rt::{
     self, AsyncReadExt, AsyncTcpListener, AsyncTcpStream, AsyncWriteExt, CancellationToken,
 };
-use edgerun_crypto::p256::ecdsa::{Signature, VerifyingKey, signature::Verifier};
 
 #[cfg(target_os = "none")]
 use crate::rt::io;
@@ -339,12 +338,7 @@ fn verify_relay_record_signature(
         return Err("nodeId does not match public key identity");
     }
     let signature = base64_decode(&record.signature_base64).ok_or("invalid signature")?;
-    let verifying_key =
-        VerifyingKey::from_sec1_bytes(&public_key).map_err(|_| "invalid P-256 public key")?;
-    let signature =
-        Signature::try_from(signature.as_slice()).map_err(|_| "invalid ECDSA signature")?;
-    verifying_key
-        .verify(signed_payload, &signature)
+    edgerun_crypto::verification::p256_verify_sha256_fixed(&public_key, signed_payload, &signature)
         .map_err(|_| "relay update signature verification failed")
 }
 

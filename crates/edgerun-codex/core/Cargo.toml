@@ -40,6 +40,7 @@ codex-protocol = { workspace = true }
 codex-shell-command = { workspace = true }
 codex-tools = { path = "../tools", default-features = false }
 edgerun-json = { workspace = true }
+edgerun-http = { workspace = true }
 
 [dev-dependencies]
 edgerun-async-trait = { workspace = true }

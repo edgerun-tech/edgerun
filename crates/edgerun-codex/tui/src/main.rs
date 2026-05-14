@@ -35,6 +35,7 @@ mod ui;
 
 const MAX_TOOL_ROUNDS: usize = 16;
 const MAX_TOOL_OUTPUT_BYTES: usize = 24 * 1024;
+const CODEX_BACKEND_VERSION: &str = "0.130.0";
 
 #[derive(Debug)]
 struct ChatGptAuth {
@@ -712,10 +713,7 @@ fn apply_patch_json_tool() -> ToolSpec {
 
 fn provider() -> Provider {
     let mut headers = HeaderMap::new();
-    headers.insert(
-        "version",
-        HeaderValue::from_static(env!("CARGO_PKG_VERSION")),
-    );
+    headers.insert("version", HeaderValue::from_static(CODEX_BACKEND_VERSION));
     Provider {
         name: "OpenAI".to_string(),
         base_url: "https://chatgpt.com/backend-api/codex".to_string(),

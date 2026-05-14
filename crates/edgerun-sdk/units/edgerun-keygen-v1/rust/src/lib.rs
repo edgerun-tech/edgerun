@@ -1,6 +1,6 @@
 #![no_std]
 
-use edgerun_crypto::p256::ecdsa::SigningKey;
+use edgerun_crypto::P256SigningKey;
 
 edgerun_unit::no_alloc!();
 edgerun_unit::metadata!(1);
@@ -27,7 +27,10 @@ unsafe fn edgerun_p256_private_key_valid(private_ptr: i32, private_len: i32) -> 
         return 0;
     }
     let private = core::slice::from_raw_parts(private_ptr as *const u8, PRIVATE_KEY_LEN);
-    SigningKey::from_slice(private).is_ok() as i32
+    let Ok(private) = <[u8; PRIVATE_KEY_LEN]>::try_from(private) else {
+        return 0;
+    };
+    P256SigningKey::from_bytes(&private).is_ok() as i32
 }
 
 #[edgerun_unit::export]
@@ -43,11 +46,17 @@ unsafe fn edgerun_p256_public_key_from_private(
         return 2;
     }
     let private = core::slice::from_raw_parts(private_ptr as *const u8, PRIVATE_KEY_LEN);
-    let Ok(signing_key) = SigningKey::from_slice(private) else {
+    let Ok(private) = <[u8; PRIVATE_KEY_LEN]>::try_from(private) else {
         return 3;
     };
-    let encoded = signing_key.verifying_key().to_encoded_point(false);
-    let bytes = encoded.as_bytes();
-    core::ptr::copy_nonoverlapping(bytes.as_ptr().add(1), out_ptr as *mut u8, PUBLIC_KEY_LEN);
+    let Ok(signing_key) = P256SigningKey::from_bytes(&private) else {
+        return 3;
+    };
+    let public_key = signing_key.public_key_sec1();
+    core::ptr::copy_nonoverlapping(
+        public_key.as_ptr().add(1),
+        out_ptr as *mut u8,
+        PUBLIC_KEY_LEN,
+    );
     0
 }
