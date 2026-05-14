@@ -1511,8 +1511,6 @@ mod tests {
                 cwd: None,
                 env: None,
                 size: None,
-                sandbox_policy: None,
-                permission_profile: None,
             },
         };
         assert_eq!(
@@ -1741,8 +1739,6 @@ mod tests {
                 cwd: None,
                 env: None,
                 size: None,
-                sandbox_policy: None,
-                permission_profile: None,
             },
         };
         assert_eq!(command_exec.serialization_scope(), None);
@@ -2729,32 +2725,6 @@ mod tests {
         };
         let reason = crate::experimental_api::ExperimentalApi::experimental_reason(&request);
         assert_eq!(reason, Some("mock/experimentalMethod"));
-    }
-
-    #[test]
-    fn command_exec_permission_profile_is_marked_experimental() {
-        let request = ClientRequest::OneOffCommandExec {
-            request_id: RequestId::Integer(1),
-            params: v2::CommandExecParams {
-                command: vec!["pwd".to_string()],
-                process_id: None,
-                tty: false,
-                stream_stdin: false,
-                stream_stdout_stderr: false,
-                output_bytes_cap: None,
-                disable_output_cap: false,
-                disable_timeout: false,
-                timeout_ms: None,
-                cwd: None,
-                env: None,
-                size: None,
-                sandbox_policy: None,
-                permission_profile: Some(v2::PermissionProfile::Disabled),
-            },
-        };
-
-        let reason = crate::experimental_api::ExperimentalApi::experimental_reason(&request);
-        assert_eq!(reason, Some("command/exec.permissionProfile"));
     }
 
     #[test]

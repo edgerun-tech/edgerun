@@ -644,8 +644,6 @@ fn command_exec_params_default_optional_streaming_flags() {
             cwd: Some(PathBuf::from("/tmp")),
             env: None,
             size: None,
-            sandbox_policy: None,
-            permission_profile: None,
         }
     );
 }
@@ -665,8 +663,6 @@ fn command_exec_params_round_trips_disable_timeout() {
         cwd: None,
         env: None,
         size: None,
-        sandbox_policy: None,
-        permission_profile: None,
     };
 
     let value = edgerun_json::to_value(&params);
@@ -680,8 +676,6 @@ fn command_exec_params_round_trips_disable_timeout() {
             "cwd": null,
             "env": null,
             "size": null,
-            "sandboxPolicy": null,
-            "permissionProfile": null,
             "outputBytesCap": null,
         })
     );
@@ -797,8 +791,6 @@ fn command_exec_params_round_trips_disable_output_cap() {
         cwd: None,
         env: None,
         size: None,
-        sandbox_policy: None,
-        permission_profile: None,
     };
 
     let value = edgerun_json::to_value(&params);
@@ -814,8 +806,6 @@ fn command_exec_params_round_trips_disable_output_cap() {
             "cwd": null,
             "env": null,
             "size": null,
-            "sandboxPolicy": null,
-            "permissionProfile": null,
         })
     );
 
@@ -843,8 +833,6 @@ fn command_exec_params_round_trips_env_overrides_and_unsets() {
             ("BAZ".to_string(), None),
         ])),
         size: None,
-        sandbox_policy: None,
-        permission_profile: None,
     };
 
     let value = edgerun_json::to_value(&params);
@@ -862,8 +850,6 @@ fn command_exec_params_round_trips_env_overrides_and_unsets() {
                 "BAZ": null,
             },
             "size": null,
-            "sandboxPolicy": null,
-            "permissionProfile": null,
         })
     );
 
@@ -932,8 +918,6 @@ fn command_exec_params_round_trip_with_size() {
             rows: 40,
             cols: 120,
         }),
-        sandbox_policy: None,
-        permission_profile: None,
     };
 
     let value = edgerun_json::to_value(&params);
@@ -951,8 +935,6 @@ fn command_exec_params_round_trip_with_size() {
                 "rows": 40,
                 "cols": 120,
             },
-            "sandboxPolicy": null,
-            "permissionProfile": null,
         })
     );
 

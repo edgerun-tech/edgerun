@@ -1,5 +1,3 @@
-use super::PermissionProfile;
-use super::SandboxPolicy;
 use edgerun_json::FromJson;
 use edgerun_json::JsonValueError;
 use edgerun_json::Map;
@@ -113,19 +111,6 @@ pub struct CommandExecParams {
     /// true.
     #[ts(optional = nullable)]
     pub size: Option<CommandExecTerminalSize>,
-    /// Optional sandbox policy for this command.
-    ///
-    /// Uses the same shape as thread/turn execution sandbox configuration and
-    /// defaults to the user's configured policy when omitted. Cannot be
-    /// combined with `permissionProfile`.
-    #[ts(optional = nullable)]
-    pub sandbox_policy: Option<SandboxPolicy>,
-    /// Optional full permissions profile for this command.
-    ///
-    /// Defaults to the user's configured permissions when omitted. Cannot be
-    /// combined with `sandboxPolicy`.
-    #[ts(optional = nullable)]
-    pub permission_profile: Option<PermissionProfile>,
 }
 
 impl ToJson for CommandExecParams {
@@ -161,8 +146,6 @@ impl ToJson for CommandExecParams {
         );
         object.push_field("env", self.env.to_json());
         object.push_field("size", self.size.to_json());
-        object.push_field("sandboxPolicy", self.sandbox_policy.to_json());
-        object.push_field("permissionProfile", self.permission_profile.to_json());
         Value::Object(object)
     }
 }
@@ -183,8 +166,6 @@ impl FromJson for CommandExecParams {
             cwd: object.take_optional::<String>("cwd")?.map(PathBuf::from),
             env: object.take_optional("env")?,
             size: object.take_optional("size")?,
-            sandbox_policy: object.take_optional("sandboxPolicy")?,
-            permission_profile: object.take_optional("permissionProfile")?,
         })
     }
 }
