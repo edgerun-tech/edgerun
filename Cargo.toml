@@ -53,6 +53,8 @@ members = [
   "crates/utility/edgerun-assert-matches",
   "crates/utility/edgerun-async-channel",
   "crates/utility/edgerun-async-trait",
+  "crates/utility/edgerun-bytecheck",
+  "crates/utility/edgerun-bytecheck-derive",
   "crates/utility/edgerun-bytes",
   "crates/utility/edgerun-codex-utils-absolute-path",
   "crates/utility/edgerun-codex-utils-cargo-bin",
@@ -199,3 +201,5 @@ rkyv = { version = "0.8.16", default-features = true }
 libc = "0.2"
 
 [patch.crates-io]
+bytecheck = { path = "crates/utility/edgerun-bytecheck" }
+bytecheck_derive = { path = "crates/utility/edgerun-bytecheck-derive" }

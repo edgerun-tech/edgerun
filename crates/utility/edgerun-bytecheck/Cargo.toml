@@ -1,0 +1,21 @@
+[package]
+name = "bytecheck"
+version = "0.8.2"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun-owned byte validation framework for archived wire data"
+
+[features]
+default = []
+simdutf8 = []
+
+[dependencies]
+bytecheck_derive = { path = "../edgerun-bytecheck-derive" }
+ptr_meta = "0.3.1"
+rancor = "0.1.1"
+
+[lints]
+workspace = true

@@ -116,3 +116,7 @@ seccompiler = { package = "edgerun-seccompiler", path = "../utility/edgerun-secc
 tracing = { package = "edgerun-log", path = "../utility/edgerun-log", features = ["tracing-compat"] }
 tracing-opentelemetry = { package = "edgerun-tracing-opentelemetry", path = "../utility/edgerun-tracing-opentelemetry" }
 ts-rs = { package = "edgerun-ts-rs", path = "../utility/edgerun-ts-rs" }
+
+[patch.crates-io]
+bytecheck = { path = "../utility/edgerun-bytecheck" }
+bytecheck_derive = { path = "../utility/edgerun-bytecheck-derive" }
