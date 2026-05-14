@@ -120,3 +120,5 @@ ts-rs = { package = "edgerun-ts-rs", path = "../utility/edgerun-ts-rs" }
 [patch.crates-io]
 bytecheck = { path = "../utility/edgerun-bytecheck" }
 bytecheck_derive = { path = "../utility/edgerun-bytecheck-derive" }
+tinyvec = { path = "../utility/edgerun-tinyvec" }
+tinyvec_macros = { path = "../utility/edgerun-tinyvec-macros" }

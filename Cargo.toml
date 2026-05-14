@@ -102,6 +102,8 @@ members = [
   "crates/utility/edgerun-terminal-parser",
   "crates/utility/edgerun-tempfile",
   "crates/utility/edgerun-time",
+  "crates/utility/edgerun-tinyvec",
+  "crates/utility/edgerun-tinyvec-macros",
   "crates/utility/edgerun-tokio",
   "crates/utility/edgerun-tokio-test",
   "crates/utility/edgerun-tokio-tungstenite",
@@ -203,3 +205,5 @@ libc = "0.2"
 [patch.crates-io]
 bytecheck = { path = "crates/utility/edgerun-bytecheck" }
 bytecheck_derive = { path = "crates/utility/edgerun-bytecheck-derive" }
+tinyvec = { path = "crates/utility/edgerun-tinyvec" }
+tinyvec_macros = { path = "crates/utility/edgerun-tinyvec-macros" }
