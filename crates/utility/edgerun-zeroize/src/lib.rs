@@ -71,7 +71,7 @@ impl<T: Zeroize> Zeroizing<T> {
     }
 
     /// Consume the wrapper without running the drop wipe.
-    pub fn into_inner(mut self) -> T {
+    pub fn into_inner(self) -> T {
         // SAFETY: `value` is read out and `self` is forgotten so Drop does not run.
         let value = unsafe { core::ptr::read(&self.0) };
         core::mem::forget(self);

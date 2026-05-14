@@ -2,7 +2,6 @@
 //!
 //! Ioctl numbers verified from kernel headers (`/usr/include/drm/drm_mode.h`).
 
-use crate::libc;
 use crate::libc::{c_int, c_uint, Ioctl};
 
 /// Type alias for ioctl request codes.
