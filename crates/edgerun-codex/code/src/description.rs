@@ -392,23 +392,6 @@ pub fn augment_tool_definition(mut definition: ToolDefinition) -> ToolDefinition
     definition
 }
 
-pub fn enabled_tool_metadata(definition: &ToolDefinition) -> EnabledToolMetadata {
-    EnabledToolMetadata {
-        tool_name: definition.tool_name.clone(),
-        global_name: normalize_code_mode_identifier(&definition.name),
-        description: definition.description.clone(),
-        kind: definition.kind,
-    }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct EnabledToolMetadata {
-    pub tool_name: ToolName,
-    pub global_name: String,
-    pub description: String,
-    pub kind: CodeModeToolKind,
-}
-
 pub fn render_code_mode_sample(
     description: &str,
     tool_name: &str,

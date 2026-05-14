@@ -69,15 +69,15 @@ impl UnifiedExecShellMode {
             && let (Some(shell_zsh_path), Some(main_execve_wrapper_exe)) =
                 (shell_zsh_path, main_execve_wrapper_exe)
             && let (Ok(shell_zsh_path), Ok(main_execve_wrapper_exe)) = (
-                AbsolutePathBuf::try_from(shell_zsh_path.as_path()).inspect_err(|err| {
+                AbsolutePathBuf::try_from(shell_zsh_path.as_path()).inspect_err(|_err| {
                     tracing::warn!(
-                        "Failed to convert shell_zsh_path `{shell_zsh_path:?}`: {err:?}"
+                        "Failed to convert shell_zsh_path `{shell_zsh_path:?}`: {_err:?}"
                     )
                 }),
                 AbsolutePathBuf::try_from(main_execve_wrapper_exe.as_path()).inspect_err(
-                    |err| {
+                    |_err| {
                         tracing::warn!(
-                            "Failed to convert main_execve_wrapper_exe `{main_execve_wrapper_exe:?}`: {err:?}"
+                            "Failed to convert main_execve_wrapper_exe `{main_execve_wrapper_exe:?}`: {_err:?}"
                         )
                     },
                 ),

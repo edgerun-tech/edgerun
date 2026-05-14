@@ -87,11 +87,13 @@ members = [
   "crates/utility/edgerun-opentelemetry",
   "crates/utility/edgerun-opentelemetry-sdk",
   "crates/utility/edgerun-pretty-assertions",
+  "crates/utility/edgerun-proc-macro2",
   "crates/utility/edgerun-ptr-meta",
   "crates/utility/edgerun-ptr-meta-derive",
   "crates/utility/edgerun-pty",
   "crates/utility/edgerun-rancor",
   "crates/utility/edgerun-random",
+  "crates/utility/edgerun-quote",
   "crates/utility/edgerun-reqwest",
   "crates/utility/edgerun-rend",
   "crates/utility/edgerun-rmcp",
@@ -110,6 +112,7 @@ members = [
   "crates/utility/edgerun-sixel",
   "crates/utility/edgerun-strum",
   "crates/utility/edgerun-strum-macros",
+  "crates/utility/edgerun-syn",
   "crates/utility/edgerun-subtle",
   "crates/utility/edgerun-terminal-parser",
   "crates/utility/edgerun-tempfile",
@@ -126,6 +129,7 @@ members = [
   "crates/utility/edgerun-tungstenite",
   "crates/utility/edgerun-ui-core",
   "crates/utility/edgerun-unicode",
+  "crates/utility/edgerun-unicode-ident",
   "crates/utility/edgerun-unit-macros",
   "crates/utility/edgerun-url",
   "crates/utility/edgerun-wiremock",
@@ -220,14 +224,18 @@ bytecheck_derive = { path = "crates/utility/edgerun-bytecheck-derive" }
 hashbrown = { path = "crates/utility/edgerun-hashbrown" }
 munge = { path = "crates/utility/edgerun-munge" }
 munge_macro = { path = "crates/utility/edgerun-munge-macro" }
+proc-macro2 = { path = "crates/utility/edgerun-proc-macro2" }
 ptr_meta = { path = "crates/utility/edgerun-ptr-meta" }
 ptr_meta_derive = { path = "crates/utility/edgerun-ptr-meta-derive" }
 rancor = { path = "crates/utility/edgerun-rancor" }
 rend = { path = "crates/utility/edgerun-rend" }
 rkyv = { path = "crates/utility/edgerun-rkyv" }
 rkyv_derive = { path = "crates/utility/edgerun-rkyv-derive" }
+quote = { path = "crates/utility/edgerun-quote" }
 serde = { path = "crates/utility/edgerun-serde-upstream" }
 serde_core = { path = "crates/utility/edgerun-serde-core" }
 serde_derive = { path = "crates/utility/edgerun-serde-derive" }
+syn = { path = "crates/utility/edgerun-syn" }
 tinyvec = { path = "crates/utility/edgerun-tinyvec" }
 tinyvec_macros = { path = "crates/utility/edgerun-tinyvec-macros" }
+unicode-ident = { path = "crates/utility/edgerun-unicode-ident" }
