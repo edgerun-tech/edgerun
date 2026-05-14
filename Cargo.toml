@@ -48,6 +48,7 @@ members = [
   "crates/protocol/edgerun-protocols",
   "crates/protocol/edgerun-wire",
   "crates/protocol/edgerun-work",
+  "crates/utility/edgerun-adler2",
   "crates/utility/edgerun-anyhow",
   "crates/utility/edgerun-assert-cmd",
   "crates/utility/edgerun-assert-matches",
@@ -94,6 +95,7 @@ members = [
   "crates/utility/edgerun-log",
   "crates/utility/edgerun-log-upstream",
   "crates/utility/edgerun-log-macros",
+  "crates/utility/edgerun-miniz-oxide",
   "crates/utility/edgerun-munge",
   "crates/utility/edgerun-munge-macro",
   "crates/utility/edgerun-opentelemetry",
@@ -243,6 +245,7 @@ rkyv = { version = "0.8.16", default-features = true }
 libc = "0.2"
 
 [patch.crates-io]
+adler2 = { path = "crates/utility/edgerun-adler2" }
 bytecheck = { path = "crates/utility/edgerun-bytecheck" }
 bytecheck_derive = { path = "crates/utility/edgerun-bytecheck-derive" }
 cfg-if = { path = "crates/utility/edgerun-cfg-if" }
@@ -258,6 +261,7 @@ hashbrown = { path = "crates/utility/edgerun-hashbrown" }
 lazy_static = { path = "crates/utility/edgerun-lazy_static" }
 litemap = { path = "crates/utility/edgerun-litemap" }
 log = { path = "crates/utility/edgerun-log-upstream" }
+miniz_oxide = { path = "crates/utility/edgerun-miniz-oxide" }
 munge = { path = "crates/utility/edgerun-munge" }
 munge_macro = { path = "crates/utility/edgerun-munge-macro" }
 once_cell = { path = "crates/utility/edgerun-once-cell" }
