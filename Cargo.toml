@@ -168,6 +168,7 @@ members = [
   "crates/utility/edgerun-tracing-core",
   "crates/utility/edgerun-tracing-log",
   "crates/utility/edgerun-tracing-opentelemetry",
+  "crates/utility/edgerun-tracing-subscriber",
   "crates/utility/edgerun-ts-rs",
   "crates/utility/edgerun-ts-rs-derive",
   "crates/utility/edgerun-tungstenite",
@@ -331,6 +332,7 @@ tracing = { path = "crates/utility/edgerun-tracing" }
 tracing-attributes = { path = "crates/utility/edgerun-tracing-attributes" }
 tracing-core = { path = "crates/utility/edgerun-tracing-core" }
 tracing-log = { path = "crates/utility/edgerun-tracing-log" }
+tracing-subscriber = { path = "crates/utility/edgerun-tracing-subscriber" }
 unicode-ident = { path = "crates/utility/edgerun-unicode-ident" }
 valuable = { path = "crates/utility/edgerun-valuable" }
 walkdir = { path = "crates/utility/edgerun-walkdir" }
