@@ -54,6 +54,7 @@ members = [
   "crates/utility/edgerun-assert-matches",
   "crates/utility/edgerun-async-channel",
   "crates/utility/edgerun-async-trait",
+  "crates/utility/edgerun-bumpalo",
   "crates/utility/edgerun-bytecheck",
   "crates/utility/edgerun-bytecheck-derive",
   "crates/utility/edgerun-bytes",
@@ -97,6 +98,8 @@ members = [
   "crates/utility/edgerun-icu-provider",
   "crates/utility/edgerun-icu-provider-upstream",
   "crates/utility/edgerun-inventory",
+  "crates/utility/edgerun-itoa",
+  "crates/utility/edgerun-js-sys",
   "crates/utility/edgerun-jni",
   "crates/utility/edgerun-jni-macros",
   "crates/utility/edgerun-jni-sys",
@@ -140,6 +143,7 @@ members = [
   "crates/utility/edgerun-runtime",
   "crates/utility/edgerun-rkyv",
   "crates/utility/edgerun-rkyv-derive",
+  "crates/utility/edgerun-rustversion",
   "crates/utility/edgerun-same-file",
   "crates/utility/edgerun-schemars",
   "crates/utility/edgerun-schemars-derive",
@@ -147,6 +151,7 @@ members = [
   "crates/utility/edgerun-serde",
   "crates/utility/edgerun-serde-core",
   "crates/utility/edgerun-serde-derive",
+  "crates/utility/edgerun-serde-json",
   "crates/utility/edgerun-serde-upstream",
   "crates/utility/edgerun-sharded-slab",
   "crates/utility/edgerun-shlex",
@@ -192,6 +197,11 @@ members = [
   "crates/utility/edgerun-url",
   "crates/utility/edgerun-valuable",
   "crates/utility/edgerun-walkdir",
+  "crates/utility/edgerun-wasm-bindgen",
+  "crates/utility/edgerun-wasm-bindgen-macro",
+  "crates/utility/edgerun-wasm-bindgen-macro-support",
+  "crates/utility/edgerun-wasm-bindgen-shared",
+  "crates/utility/edgerun-web-time",
   "crates/utility/edgerun-wiremock",
   "crates/utility/edgerun-writeable",
   "crates/utility/edgerun-yoke",
@@ -204,6 +214,7 @@ members = [
   "crates/utility/edgerun-zerocopy-derive",
   "crates/utility/edgerun-zerovec",
   "crates/utility/edgerun-zerovec-derive",
+  "crates/utility/edgerun-zmij",
   "crates/utility/edgerun-zstd",
 ]
 
@@ -290,6 +301,7 @@ libc = "0.2"
 
 [patch.crates-io]
 adler2 = { path = "crates/utility/edgerun-adler2" }
+bumpalo = { path = "crates/utility/edgerun-bumpalo" }
 bytecheck = { path = "crates/utility/edgerun-bytecheck" }
 bytecheck_derive = { path = "crates/utility/edgerun-bytecheck-derive" }
 bytes = { path = "crates/utility/edgerun-bytes-upstream" }
@@ -313,6 +325,8 @@ icu_locale = { path = "crates/utility/edgerun-icu-locale" }
 icu_locale_core = { path = "crates/utility/edgerun-icu-locale-core-upstream" }
 icu_locale_data = { path = "crates/utility/edgerun-icu-locale-data" }
 icu_provider = { path = "crates/utility/edgerun-icu-provider-upstream" }
+itoa = { path = "crates/utility/edgerun-itoa" }
+js-sys = { path = "crates/utility/edgerun-js-sys" }
 jni = { path = "crates/utility/edgerun-jni" }
 jni-macros = { path = "crates/utility/edgerun-jni-macros" }
 jni-sys = { path = "crates/utility/edgerun-jni-sys" }
@@ -342,9 +356,11 @@ rend = { path = "crates/utility/edgerun-rend" }
 rkyv = { path = "crates/utility/edgerun-rkyv" }
 rkyv_derive = { path = "crates/utility/edgerun-rkyv-derive" }
 quote = { path = "crates/utility/edgerun-quote" }
+rustversion = { path = "crates/utility/edgerun-rustversion" }
 serde = { path = "crates/utility/edgerun-serde-upstream" }
 serde_core = { path = "crates/utility/edgerun-serde-core" }
 serde_derive = { path = "crates/utility/edgerun-serde-derive" }
+serde_json = { path = "crates/utility/edgerun-serde-json" }
 same-file = { path = "crates/utility/edgerun-same-file" }
 sharded-slab = { path = "crates/utility/edgerun-sharded-slab" }
 simd_cesu8 = { path = "crates/utility/edgerun-simd-cesu8" }
@@ -369,6 +385,11 @@ tracing-subscriber = { path = "crates/utility/edgerun-tracing-subscriber" }
 unicode-ident = { path = "crates/utility/edgerun-unicode-ident" }
 valuable = { path = "crates/utility/edgerun-valuable" }
 walkdir = { path = "crates/utility/edgerun-walkdir" }
+wasm-bindgen = { path = "crates/utility/edgerun-wasm-bindgen" }
+wasm-bindgen-macro = { path = "crates/utility/edgerun-wasm-bindgen-macro" }
+wasm-bindgen-macro-support = { path = "crates/utility/edgerun-wasm-bindgen-macro-support" }
+wasm-bindgen-shared = { path = "crates/utility/edgerun-wasm-bindgen-shared" }
+web-time = { path = "crates/utility/edgerun-web-time" }
 writeable = { path = "crates/utility/edgerun-writeable" }
 yoke = { path = "crates/utility/edgerun-yoke" }
 yoke-derive = { path = "crates/utility/edgerun-yoke-derive" }
@@ -379,3 +400,4 @@ zerocopy-derive = { path = "crates/utility/edgerun-zerocopy-derive" }
 zerotrie = { path = "crates/utility/edgerun-zerotrie" }
 zerovec = { path = "crates/utility/edgerun-zerovec" }
 zerovec-derive = { path = "crates/utility/edgerun-zerovec-derive" }
+zmij = { path = "crates/utility/edgerun-zmij" }
