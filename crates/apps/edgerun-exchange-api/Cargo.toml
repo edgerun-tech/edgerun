@@ -15,6 +15,7 @@ edgerun-wallet = { version = "0.1", path = "../../edgerun-wallet" }
 edgerun-node = { version = "0.1", path = "../../node/edgerun-node", default-features = false, features = ["server"] }
 edgerun-json = { workspace = true }
 edgerun-sdk = { version = "0.1", path = "../../edgerun-sdk", default-features = false, features = ["runtime-api"] }
+edgerun-time = { workspace = true }
 
 [lints]
 workspace = true

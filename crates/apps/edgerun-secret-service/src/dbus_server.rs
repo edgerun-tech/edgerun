@@ -368,10 +368,7 @@ impl Server {
         }
 
         // Verify all sessions for this client
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_micros() as u64;
+        let now = edgerun_time::now_unix_micros();
 
         self.sessions.verify_client(client, bio_state.clone(), now);
 
@@ -430,10 +427,7 @@ impl Server {
         }
 
         // Check biometric verification
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_micros() as u64;
+        let now = edgerun_time::now_unix_micros();
 
         if !session.is_verified(now) {
             return Msg::err(

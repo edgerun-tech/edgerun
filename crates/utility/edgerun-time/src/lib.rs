@@ -21,6 +21,32 @@ pub fn canonical_rfc3339_utc(value: &str) -> Option<String> {
     edgerun_encoding::rfc3339::canonical_time_string(value)
 }
 
+#[cfg(feature = "std")]
+pub fn now_unix_millis() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+#[cfg(not(feature = "std"))]
+pub const fn now_unix_millis() -> u64 {
+    0
+}
+
+#[cfg(feature = "std")]
+pub fn now_unix_micros() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_micros() as u64)
+        .unwrap_or(0)
+}
+
+#[cfg(not(feature = "std"))]
+pub const fn now_unix_micros() -> u64 {
+    0
+}
+
 #[cfg(feature = "chrono")]
 pub mod chrono {
     use super::DateTimeUtc;

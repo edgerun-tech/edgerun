@@ -441,6 +441,7 @@ dependencies = [
  "edgerun-node",
  "edgerun-protocols",
  "edgerun-sdk",
+ "edgerun-time",
  "edgerun-wallet",
 ]
 
@@ -767,6 +768,7 @@ dependencies = [
  "edgerun-node",
  "edgerun-protocols",
  "edgerun-storage",
+ "edgerun-time",
 ]
 
 [[package]]

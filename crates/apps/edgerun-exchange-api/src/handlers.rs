@@ -16,19 +16,7 @@ use crate::types::*;
 use crate::{with_ctx, with_policy, with_providers, with_store};
 
 fn now_epoch_millis() -> u64 {
-    #[cfg(feature = "std")]
-    {
-        use std::time::{SystemTime, UNIX_EPOCH};
-        return SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0);
-    }
-
-    #[cfg(not(feature = "std"))]
-    {
-        0
-    }
+    edgerun_time::now_unix_millis()
 }
 
 /// POST /v1/quote — routes to best provider via route_quote.

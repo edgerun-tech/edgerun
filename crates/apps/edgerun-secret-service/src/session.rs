@@ -219,10 +219,7 @@ impl SessionManager {
 }
 
 fn now_us() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap()
-        .as_micros() as u64
+    edgerun_time::now_unix_micros()
 }
 
 #[cfg(test)]

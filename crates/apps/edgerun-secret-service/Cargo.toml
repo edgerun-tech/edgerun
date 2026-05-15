@@ -21,6 +21,7 @@ edgerun-encoding = { workspace = true, default-features = false }
 edgerun-json = { workspace = true, default-features = false }
 edgerun-log = { workspace = true }
 edgerun-node = { version = "0.1", path = "../../node/edgerun-node", default-features = false }
+edgerun-time = { workspace = true }
 
 [features]
 std = []
