@@ -17,9 +17,9 @@ proc-macro = [
 ]
 
 [dependencies]
-proc-macro2 = { path = "../edgerun-proc-macro2", default-features = false }
-quote = { path = "../edgerun-quote", default-features = false }
-syn = { path = "../edgerun-syn", default-features = false, features = [
+proc-macro2 = { workspace = true, default-features = false }
+quote = { workspace = true, default-features = false }
+syn = { workspace = true, default-features = false, features = [
     "clone-impls",
     "derive",
     "extra-traits",

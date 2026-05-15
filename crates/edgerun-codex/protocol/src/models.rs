@@ -2173,10 +2173,10 @@ impl std::fmt::Display for FunctionCallOutputPayload {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use anyhow::Result;
-    use pretty_assertions::assert_eq;
     use std::path::PathBuf;
     use tempfile::tempdir;
+
+    type Result<T, E = Box<dyn std::error::Error + Send + Sync>> = core::result::Result<T, E>;
 
     fn from_json_str<T: FromJson>(json: &str) -> T {
         edgerun_json::from_value(edgerun_json::from_str(json).expect("parse json"))

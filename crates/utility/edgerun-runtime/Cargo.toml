@@ -18,7 +18,7 @@ node-core = [
 ]
 
 [dependencies]
-edgerun-log = { version = "0.1", path = "../edgerun-log" }
+edgerun-log = { workspace = true }
 edgerun-platform = { version = "0.1", path = "../../edgerun-platform" }
 edgerun-protocols = { workspace = true, optional = true }
 

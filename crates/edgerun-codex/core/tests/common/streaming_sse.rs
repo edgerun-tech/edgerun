@@ -284,7 +284,6 @@ fn unix_ms_now() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pretty_assertions::assert_eq;
     use edgerun_reqwest::StatusCode;
     use edgerun_tokio::net::TcpStream;
     use edgerun_tokio::time::Duration;

@@ -112,7 +112,7 @@ async fn fork_thread_twice_drops_to_first_message() {
 
     // GetHistory on fork1 flushed; the file is ready.
     let fork1_items = read_rollout_items(&fork1_path);
-    pretty_assertions::assert_eq!(
+    assert_eq!(
         edgerun_json::to_value(&&fork1_items),
         edgerun_json::to_value(&&expected_after_first)
     );
@@ -143,7 +143,7 @@ async fn fork_thread_twice_drops_to_first_message() {
         .unwrap_or(0);
     let expected_after_second: Vec<RolloutItem> = fork1_items[..cut_last_on_fork1].to_vec();
     let fork2_items = read_rollout_items(&fork2_path);
-    pretty_assertions::assert_eq!(
+    assert_eq!(
         edgerun_json::to_value(&&fork2_items),
         edgerun_json::to_value(&&expected_after_second)
     );

@@ -9,7 +9,7 @@ name = "edgerun-frontend"
 path = "src/main.rs"
 
 [dependencies]
-edgerun-ui-core = { workspace = true, features = ["fontdue-text", "gpu-gl"] }
+edgerun-ui-core = { workspace = true, features = ["sdl"] }
 
 [lints]
 workspace = true

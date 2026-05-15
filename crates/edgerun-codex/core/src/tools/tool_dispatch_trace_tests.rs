@@ -7,7 +7,6 @@ use codex_protocol::protocol::SessionSource;
 use codex_rollout_trace::ExecutionStatus;
 use codex_rollout_trace::ThreadStartedTraceMetadata;
 use codex_rollout_trace::ToolCallRequester;
-use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 use edgerun_tokio_util::sync::CancellationToken;
 

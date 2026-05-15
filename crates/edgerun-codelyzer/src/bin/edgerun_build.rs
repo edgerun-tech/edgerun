@@ -55,6 +55,7 @@ struct Workspace {
 struct Package {
     name: String,
     dir: String,
+    version: String,
     edition: String,
     features: BTreeMap<String, Vec<String>>,
     deps: BTreeMap<String, Dep>,
@@ -62,6 +63,7 @@ struct Package {
     bins: Vec<Target>,
     examples: Vec<Target>,
     build_cfgs: Vec<String>,
+    build_envs: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone)]
@@ -85,9 +87,11 @@ enum TargetKind {
 struct Dep {
     package: String,
     rename: String,
+    path: Option<String>,
     optional: bool,
     default_features: bool,
     features: Vec<String>,
+    workspace: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -104,8 +108,10 @@ struct BuiltArtifact {
 #[derive(Debug, Default, Clone)]
 struct Manifest {
     package_name: Option<String>,
+    version: Option<String>,
     edition: Option<String>,
     workspace_edition: Option<String>,
+    workspace_version: Option<String>,
     workspace_members: Vec<String>,
     features: BTreeMap<String, Vec<String>>,
     deps: BTreeMap<String, Dep>,
@@ -313,6 +319,10 @@ fn index_workspace(
         .workspace_edition
         .clone()
         .unwrap_or_else(|| "2021".to_string());
+    let workspace_version = root_toml
+        .workspace_version
+        .clone()
+        .unwrap_or_else(|| "0.0.0".to_string());
     let members = root_toml.workspace_members;
     let mut member_dirs = BTreeSet::new();
     for item in members {
@@ -320,48 +330,132 @@ fn index_workspace(
     }
     let mut packages = BTreeMap::new();
     for dir in member_dirs {
-        let manifest_path = format!("{dir}/Cargo.toml");
-        let Some(text) = vfs.read_str(&manifest_path) else {
-            continue;
-        };
-        let toml = parse_manifest(text);
-        let Some(name) = toml.package_name.as_deref() else {
-            continue;
-        };
-        let edition = toml
-            .edition
-            .clone()
-            .unwrap_or_else(|| workspace_edition.clone());
-        let features = toml.features.clone();
-        let deps = toml.deps.clone();
-        let lib = target_lib(vfs, &toml, &dir, name);
-        let bins = target_bins(vfs, &toml, &dir);
-        let examples = target_examples(vfs, &toml, &dir);
-        let host_cfg = args
-            .target
-            .as_deref()
-            .map(HostCfg::from_target_triple)
-            .unwrap_or_else(HostCfg::current);
-        let build_cfgs = parse_build_cfgs(
-            vfs.read_str(&format!("{dir}/build.rs")).unwrap_or(""),
-            &host_cfg,
-        );
-        packages.insert(
-            name.to_string(),
-            Package {
-                name: name.to_string(),
-                dir,
-                edition,
-                features,
-                deps,
-                lib,
-                bins,
-                examples,
-                build_cfgs,
-            },
-        );
+        add_indexed_package(
+            args,
+            vfs,
+            &workspace_edition,
+            &workspace_version,
+            &root_toml.deps,
+            &dir,
+            &mut packages,
+        )?;
+    }
+    let mut grew = true;
+    while grew {
+        grew = false;
+        let path_deps = packages
+            .values()
+            .flat_map(|pkg| {
+                pkg.deps
+                    .values()
+                    .filter_map(|dep| {
+                        dep.path
+                            .as_deref()
+                            .map(|path| (pkg.dir.clone(), path.to_string()))
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        for (base_dir, path) in path_deps {
+            let dir = join_manifest_path(&base_dir, &path);
+            let before = packages.len();
+            add_indexed_package(
+                args,
+                vfs,
+                &workspace_edition,
+                &workspace_version,
+                &root_toml.deps,
+                &dir,
+                &mut packages,
+            )?;
+            if packages.len() != before {
+                grew = true;
+            }
+        }
     }
     Ok(Workspace { packages })
+}
+
+fn add_indexed_package(
+    args: &Args,
+    vfs: &edgerun_vfs::VirtualFileSystem,
+    workspace_edition: &str,
+    workspace_version: &str,
+    workspace_deps: &BTreeMap<String, Dep>,
+    dir: &str,
+    packages: &mut BTreeMap<String, Package>,
+) -> Result<(), String> {
+    let manifest_path = format!("{dir}/Cargo.toml");
+    let Some(text) = vfs.read_str(&manifest_path) else {
+        return Ok(());
+    };
+    let toml = parse_manifest(text);
+    let Some(name) = toml.package_name.as_deref() else {
+        return Ok(());
+    };
+    if packages.contains_key(name) {
+        return Ok(());
+    }
+    let edition = toml
+        .edition
+        .clone()
+        .unwrap_or_else(|| workspace_edition.to_string());
+    let version = toml
+        .version
+        .clone()
+        .unwrap_or_else(|| workspace_version.to_string());
+    let features = toml.features.clone();
+    let mut deps = toml.deps.clone();
+    apply_workspace_deps(&mut deps, workspace_deps);
+    let lib = target_lib(vfs, &toml, dir, name);
+    let bins = target_bins(vfs, &toml, dir);
+    let examples = target_examples(vfs, &toml, dir);
+    let host_cfg = args
+        .target
+        .as_deref()
+        .map(HostCfg::from_target_triple)
+        .unwrap_or_else(HostCfg::current);
+    let build_outputs = parse_build_outputs(
+        vfs.read_str(&format!("{dir}/build.rs")).unwrap_or(""),
+        &host_cfg,
+        vfs,
+        dir,
+    );
+    packages.insert(
+        name.to_string(),
+        Package {
+            name: name.to_string(),
+            dir: dir.to_string(),
+            version,
+            edition,
+            features,
+            deps,
+            lib,
+            bins,
+            examples,
+            build_cfgs: build_outputs.cfgs,
+            build_envs: build_outputs.envs,
+        },
+    );
+    Ok(())
+}
+
+fn join_manifest_path(base_dir: &str, dep_path: &str) -> String {
+    let mut parts = base_dir
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    for part in norm(dep_path).split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                parts.pop();
+            }
+            part => parts.push(part.to_string()),
+        }
+    }
+    parts.join("/")
 }
 
 fn expand_member(vfs: &edgerun_vfs::VirtualFileSystem, pattern: &str, out: &mut BTreeSet<String>) {
@@ -525,15 +619,25 @@ fn parse_manifest(source: &str) -> Manifest {
             "workspace.package" if key == "edition" => {
                 manifest.workspace_edition = parse_string(value)
             }
+            "workspace.package" if key == "version" => {
+                manifest.workspace_version = parse_string(value)
+            }
             "package" if key == "name" => manifest.package_name = parse_string(value),
+            "package" if key == "version" => manifest.version = parse_string(value),
             "package" if key == "edition" => manifest.edition = parse_string(value),
             "features" => {
                 manifest
                     .features
                     .insert(key.to_string(), parse_string_array(value));
             }
-            "dependencies" | "dev-dependencies" | "build-dependencies" => {
-                manifest.deps.insert(key.to_string(), parse_dep(key, value));
+            section if is_dependency_section(section) => {
+                if let Some(dep_name) = key.strip_suffix(".workspace") {
+                    let mut dep = default_dep(dep_name);
+                    dep.workspace = parse_bool(value).unwrap_or(false);
+                    add_manifest_dep(&mut manifest.deps, dep_name, dep);
+                    continue;
+                }
+                add_manifest_dep(&mut manifest.deps, key, parse_dep(key, value));
             }
             "lib" if key == "path" => manifest.lib_path = parse_string(value),
             "lib" if key == "proc-macro" => {
@@ -595,8 +699,46 @@ fn parse_manifest(source: &str) -> Manifest {
 
 fn flush_dep_table(manifest: &mut Manifest, dep_table: &mut Option<(String, Dep)>) {
     if let Some((name, dep)) = dep_table.take() {
-        manifest.deps.insert(name, dep);
+        add_manifest_dep(&mut manifest.deps, &name, dep);
     }
+}
+
+fn add_manifest_dep(deps: &mut BTreeMap<String, Dep>, key: &str, dep: Dep) {
+    if let Some(existing) = deps.get_mut(key) {
+        merge_dep(existing, dep);
+    } else {
+        deps.insert(key.to_string(), dep);
+    }
+}
+
+fn merge_dep(existing: &mut Dep, incoming: Dep) {
+    let incoming_package = incoming.package.clone();
+    let incoming_rename = incoming.rename.clone();
+    if existing.package == existing.rename && incoming_package != incoming_rename {
+        existing.package = incoming_package;
+    }
+    if existing.rename == crate_name(&existing.package) && incoming_rename != crate_name(&incoming.package)
+    {
+        existing.rename = incoming_rename;
+    }
+    if existing.path.is_none() {
+        existing.path = incoming.path;
+    }
+    existing.optional = existing.optional && incoming.optional;
+    existing.default_features = existing.default_features && incoming.default_features;
+    existing.workspace |= incoming.workspace;
+    existing.features.extend(incoming.features);
+    existing.features.sort();
+    existing.features.dedup();
+}
+
+fn is_dependency_section(section: &str) -> bool {
+    matches!(
+        section,
+        "dependencies" | "dev-dependencies" | "build-dependencies" | "workspace.dependencies"
+    ) || section.ends_with(".dependencies")
+        || section.ends_with(".dev-dependencies")
+        || section.ends_with(".build-dependencies")
 }
 
 fn dependency_subtable_name(section: &str) -> Option<&str> {
@@ -624,9 +766,11 @@ fn update_dep_field(dep: &mut Dep, key: &str, value: &str) {
                 dep.package = package;
             }
         }
+        "path" => dep.path = parse_string(value).map(|path| norm(&path)),
         "optional" => dep.optional = parse_bool(value).unwrap_or(false),
         "default-features" => dep.default_features = parse_bool(value).unwrap_or(true),
         "features" => dep.features = parse_string_array(value),
+        "workspace" => dep.workspace = parse_bool(value).unwrap_or(false),
         _ => {}
     }
 }
@@ -710,9 +854,33 @@ fn default_dep(name: &str) -> Dep {
     Dep {
         package: name.to_string(),
         rename: crate_name(name),
+        path: None,
         optional: false,
         default_features: true,
         features: Vec::new(),
+        workspace: false,
+    }
+}
+
+fn apply_workspace_deps(deps: &mut BTreeMap<String, Dep>, workspace_deps: &BTreeMap<String, Dep>) {
+    for (key, dep) in deps {
+        if !dep.workspace {
+            continue;
+        }
+        let Some(workspace_dep) = workspace_deps.get(key) else {
+            continue;
+        };
+        let local_features = dep.features.clone();
+        let local_rename = dep.rename.clone();
+        let local_optional = dep.optional;
+        let local_default_features = dep.default_features;
+        *dep = workspace_dep.clone();
+        dep.rename = local_rename;
+        dep.optional = local_optional;
+        dep.default_features = dep.default_features && local_default_features;
+        dep.features.extend(local_features);
+        dep.features.sort();
+        dep.features.dedup();
     }
 }
 
@@ -950,9 +1118,7 @@ fn expand_package_features(pkg: &Package, features: &mut BTreeSet<String>) {
                 if features.insert(format!("dep:{dep}")) {
                     queue.push_back(format!("dep:{dep}"));
                 }
-            } else if item.contains('/') {
-                features.insert(item.clone());
-            } else if !item.contains('/') && features.insert(item.clone()) {
+            } else if features.insert(item.clone()) {
                 queue.push_back(item.clone());
             }
         }
@@ -1800,6 +1966,7 @@ fn materialize_closure(
         .map(|node| ws.packages[&node.package].dir.clone())
         .collect::<Vec<_>>();
     let mut current_files = BTreeSet::new();
+    let mut extra_files = BTreeSet::new();
     for (path, bytes) in vfs.files() {
         if dirs
             .iter()
@@ -1812,7 +1979,35 @@ fn materialize_closure(
                     .map_err(|err| format!("mkdir {}: {err}", parent.display()))?;
             }
             write_if_changed(&dest, bytes)?;
+            if path.ends_with(".rs") {
+                for include in literal_include_bytes_paths(path, String::from_utf8_lossy(bytes).as_ref()) {
+                    if vfs.read(&include).is_some() {
+                        extra_files.insert(include);
+                    }
+                }
+            }
         }
+    }
+    for node in nodes {
+        for (_, value) in &ws.packages[&node.package].build_envs {
+            if let Some(path) = value.strip_prefix("$EDGERUN_SRC_ROOT/") {
+                if vfs.read(path).is_some() {
+                    extra_files.insert(path.to_string());
+                }
+            }
+        }
+    }
+    for path in extra_files {
+        let Some(bytes) = vfs.read(&path) else {
+            continue;
+        };
+        current_files.insert(path.clone());
+        let dest = src_root.join(path);
+        if let Some(parent) = dest.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|err| format!("mkdir {}: {err}", parent.display()))?;
+        }
+        write_if_changed(&dest, bytes.as_ref())?;
     }
     remove_stale_materialized_files(src_root, &current_files)?;
     Ok(())
@@ -1961,6 +2156,7 @@ fn compile_target(
             return Ok(BuiltArtifact { path });
         }
     }
+    ensure_build_script_outputs(pkg, out_dir)?;
     let mut cmd = Command::new("rustc");
     cmd.arg("--crate-name")
         .arg(&target_crate_name)
@@ -1973,6 +2169,7 @@ fn compile_target(
         .arg(format!("dependency={}", out_dir.display()))
         .arg("--color")
         .arg("never");
+    add_cargo_env(&mut cmd, pkg, target, src_root, out_dir);
     if let Some(target_triple) = &args.target {
         if target.kind != TargetKind::ProcMacro {
             cmd.arg("--target").arg(target_triple);
@@ -2008,7 +2205,7 @@ fn compile_target(
         cmd.arg("-O");
     }
     for feature in &node.enabled_features {
-        if !feature.starts_with("dep:") {
+        if !feature.starts_with("dep:") && !feature.contains('/') {
             cmd.arg("--cfg").arg(format!("feature=\"{feature}\""));
         }
     }
@@ -2063,6 +2260,7 @@ fn compile_fingerprint(
     target.crate_types.hash(&mut hasher);
     node.enabled_features.hash(&mut hasher);
     pkg.build_cfgs.hash(&mut hasher);
+    pkg.build_envs.hash(&mut hasher);
     hash_dir(&src_root.join(&pkg.dir), &mut hasher)?;
     for (name, artifact) in artifacts {
         name.hash(&mut hasher);
@@ -2123,6 +2321,7 @@ fn compile_tests(
     let Some(lib) = &pkg.lib else {
         return Ok(());
     };
+    ensure_build_script_outputs(pkg, out_dir)?;
     let test_bin = out_dir.join(format!("{}_tests", crate_name(root)));
     let mut cmd = Command::new("rustc");
     cmd.arg("--test")
@@ -2137,11 +2336,12 @@ fn compile_tests(
         .arg(format!("dependency={}", out_dir.display()))
         .arg("--color")
         .arg("never");
+    add_cargo_env(&mut cmd, pkg, lib, src_root, out_dir);
     if lib.kind == TargetKind::ProcMacro {
         cmd.arg("--extern").arg("proc_macro");
     }
     for feature in &node.enabled_features {
-        if !feature.starts_with("dep:") {
+        if !feature.starts_with("dep:") && !feature.contains('/') {
             cmd.arg("--cfg").arg(format!("feature=\"{feature}\""));
         }
     }
@@ -2179,6 +2379,69 @@ fn run_rustc(cmd: &mut Command) -> Result<(), String> {
     } else {
         Err(format!("rustc exited with {status}"))
     }
+}
+
+fn add_cargo_env(
+    cmd: &mut Command,
+    pkg: &Package,
+    target: &Target,
+    src_root: &Path,
+    out_dir: &Path,
+) {
+    let (major, minor, patch, pre) = version_parts(&pkg.version);
+    cmd.env("CARGO_PKG_NAME", &pkg.name)
+        .env("CARGO_PKG_VERSION", &pkg.version)
+        .env("CARGO_PKG_VERSION_MAJOR", major)
+        .env("CARGO_PKG_VERSION_MINOR", minor)
+        .env("CARGO_PKG_VERSION_PATCH", patch)
+        .env("CARGO_PKG_VERSION_PRE", pre)
+        .env("CARGO_CRATE_NAME", crate_name(&target.name))
+        .env("CARGO_MANIFEST_DIR", src_root.join(&pkg.dir))
+        .env("OUT_DIR", build_script_out_dir(out_dir, pkg));
+    for (key, value) in &pkg.build_envs {
+        if let Some(path) = value.strip_prefix("$EDGERUN_SRC_ROOT/") {
+            cmd.env(key, src_root.join(path));
+        } else {
+            cmd.env(key, value);
+        }
+    }
+    if matches!(target.kind, TargetKind::Bin | TargetKind::Example) {
+        cmd.env("CARGO_BIN_NAME", &target.name);
+    }
+}
+
+fn build_script_out_dir(out_dir: &Path, pkg: &Package) -> PathBuf {
+    out_dir.join("build").join(crate_name(&pkg.name)).join("out")
+}
+
+fn ensure_build_script_outputs(pkg: &Package, out_dir: &Path) -> Result<(), String> {
+    let out_dir = build_script_out_dir(out_dir, pkg);
+    fs::create_dir_all(&out_dir).map_err(|err| format!("mkdir {}: {err}", out_dir.display()))?;
+    if pkg.name == "thiserror" {
+        let (_, _, patch, _) = version_parts(&pkg.version);
+        let module = format!(
+            "\
+#[doc(hidden)]
+pub mod __private{patch} {{
+    #[doc(hidden)]
+    pub use crate::private::*;
+}}
+"
+        );
+        write_if_changed(&out_dir.join("private.rs"), module.as_bytes())?;
+    }
+    Ok(())
+}
+
+fn version_parts(version: &str) -> (&str, &str, &str, &str) {
+    let (core, pre) = version.split_once('-').unwrap_or((version, ""));
+    let mut parts = core.split('.');
+    (
+        parts.next().unwrap_or("0"),
+        parts.next().unwrap_or("0"),
+        parts.next().unwrap_or("0"),
+        pre,
+    )
 }
 
 fn find_artifact(
@@ -2252,13 +2515,24 @@ fn proc_macro_artifact_prefix(crate_name: &str) -> String {
     }
 }
 
-fn parse_build_cfgs(source: &str, host: &HostCfg) -> Vec<String> {
-    let mut out = Vec::new();
+#[derive(Debug, Default)]
+struct BuildOutputs {
+    cfgs: Vec<String>,
+    envs: Vec<(String, String)>,
+}
+
+fn parse_build_outputs(
+    source: &str,
+    host: &HostCfg,
+    vfs: &edgerun_vfs::VirtualFileSystem,
+    dir: &str,
+) -> BuildOutputs {
+    let mut out = BuildOutputs::default();
     if source.contains("procmacro2_semver_exempt") {
         return out;
     }
     if source.contains("curve25519_dalek_bits") {
-        out.push(format!(
+        out.cfgs.push(format!(
             "curve25519_dalek_bits=\"{}\"",
             if host.pointer_width == "64" {
                 "64"
@@ -2268,38 +2542,161 @@ fn parse_build_cfgs(source: &str, host: &HostCfg) -> Vec<String> {
         ));
     }
     if source.contains("curve25519_dalek_backend") {
-        out.push("curve25519_dalek_backend=\"serial\"".to_string());
+        out.cfgs
+            .push("curve25519_dalek_backend=\"serial\"".to_string());
     }
     if source.contains("has_i128") && host.os != "none" {
-        out.push("has_i128".to_string());
+        out.cfgs.push("has_i128".to_string());
     }
     if source.contains("arch_enabled") {
-        out.push("arch_enabled".to_string());
+        out.cfgs.push("arch_enabled".to_string());
     }
     if source.contains("x86_no_sse") && host.arch == "x86" {
-        out.push("x86_no_sse".to_string());
+        out.cfgs.push("x86_no_sse".to_string());
     }
-    for line in source.lines().map(str::trim) {
-        if let Some(cfg) = literal_rustc_cfg(line) {
-            if cfg != "x86_no_sse" {
-                out.push(cfg);
+    if source.contains("SCHEMA_FILE_HASH") {
+        if let Some(schema) = vfs.read_str(&format!("{dir}/src/lib.rs")) {
+            let mut hasher = DefaultHasher::new();
+            hasher.write(schema.as_bytes());
+            out.envs
+                .push(("SCHEMA_FILE_HASH".to_string(), hasher.finish().to_string()));
+        }
+    }
+    if source.contains("WBG_VERSION") {
+        if let Ok(rev) = Command::new("git").arg("rev-parse").arg("HEAD").output() {
+            if let Ok(rev) = String::from_utf8(rev.stdout) {
+                let rev = rev.trim();
+                if rev.len() >= 9 {
+                    out.envs
+                        .push(("WBG_VERSION".to_string(), rev[..9].to_string()));
+                }
             }
         }
     }
-    out.sort();
-    out.dedup();
+    if source.contains("CODEX_GL_INTER_FONT") {
+        let font = "crates/edgerun-term/edgerun-term-core/assets/DejaVuSansMono.ttf";
+        if vfs.read(font).is_some() {
+            out.envs.push((
+                "CODEX_GL_INTER_FONT".to_string(),
+                format!("$EDGERUN_SRC_ROOT/{font}"),
+            ));
+        }
+    }
+    for line in source.lines().map(str::trim) {
+        if let Some(cfg) = literal_rustc_cfg(line) {
+            if cfg != "x86_no_sse"
+                && !(cfg == "use_fls_attach_guard" && host.os != "windows")
+                && cfg != "error_generic_member_access"
+                && cfg != "thiserror_nightly_testing"
+                && cfg != "thiserror_no_backtrace_type"
+                && !cfg.contains('{')
+            {
+                out.cfgs.push(cfg);
+            }
+        }
+        if let Some((key, value)) = literal_rustc_env(line) {
+            if !value.contains('{') {
+                out.envs.push((key, value));
+            }
+        }
+    }
+    out.cfgs.sort();
+    out.cfgs.dedup();
+    out.envs.sort();
+    out.envs.dedup();
     out
 }
 
 fn literal_rustc_cfg(line: &str) -> Option<String> {
-    let pos = line.find("cargo:rustc-cfg=")?;
-    if line.contains('{') || line.contains("format!") || line.starts_with("//") {
+    if line.contains("format!") || line.starts_with("//") {
         return None;
     }
-    let cfg = line[pos + "cargo:rustc-cfg=".len()..]
-        .trim_matches(|ch| matches!(ch, '"' | '\'' | ')' | ';' | ' ' | '\t'))
-        .to_string();
+    let cfg = literal_cargo_directive(line, "cargo:rustc-cfg=")?;
     (!cfg.is_empty()).then_some(cfg)
+}
+
+fn literal_rustc_env(line: &str) -> Option<(String, String)> {
+    if line.contains("format!") || line.starts_with("//") {
+        return None;
+    }
+    let env = literal_cargo_directive(line, "cargo:rustc-env=")?;
+    let (key, value) = env.split_once('=')?;
+    (!key.is_empty()).then(|| (key.to_string(), value.to_string()))
+}
+
+fn literal_cargo_directive(line: &str, prefix: &str) -> Option<String> {
+    let pos = line.find(prefix)?;
+    let mut out = String::new();
+    let mut chars = line[pos + prefix.len()..].chars();
+    while let Some(ch) = chars.next() {
+        match ch {
+            '\\' => match chars.next() {
+                Some('"') => out.push('"'),
+                Some('\\') => out.push('\\'),
+                Some('n') => out.push('\n'),
+                Some('r') => out.push('\r'),
+                Some('t') => out.push('\t'),
+                Some(other) => out.push(other),
+                None => break,
+            },
+            '"' | '\'' | ')' | ';' => break,
+            ch => out.push(ch),
+        }
+    }
+    let out = out.trim().to_string();
+    (!out.is_empty()).then_some(out)
+}
+
+fn literal_include_bytes_paths(source_path: &str, source: &str) -> Vec<String> {
+    let Some(parent) = source_path.rsplit_once('/').map(|(parent, _)| parent) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for line in source.lines() {
+        let Some(pos) = line.find("include_bytes!(") else {
+            continue;
+        };
+        let tail = line[pos + "include_bytes!(".len()..].trim_start();
+        let Some(rest) = tail.strip_prefix('"') else {
+            continue;
+        };
+        let mut literal = String::new();
+        let mut chars = rest.chars();
+        while let Some(ch) = chars.next() {
+            match ch {
+                '\\' => {
+                    if let Some(next) = chars.next() {
+                        literal.push(next);
+                    }
+                }
+                '"' => break,
+                ch => literal.push(ch),
+            }
+        }
+        if literal.starts_with('/') {
+            continue;
+        }
+        out.push(normalize_virtual_path(parent, &literal));
+    }
+    out
+}
+
+fn normalize_virtual_path(base: &str, relative: &str) -> String {
+    let mut parts = base
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    for part in relative.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                parts.pop();
+            }
+            part => parts.push(part.to_string()),
+        }
+    }
+    parts.join("/")
 }
 
 fn print_graph(ws: &Workspace, nodes: &[BuildNode]) {

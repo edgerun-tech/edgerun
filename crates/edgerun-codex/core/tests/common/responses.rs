@@ -343,7 +343,6 @@ pub fn namespace_child_tool<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pretty_assertions::assert_eq;
     use wiremock::http::HeaderMap;
     use wiremock::http::Method;
 

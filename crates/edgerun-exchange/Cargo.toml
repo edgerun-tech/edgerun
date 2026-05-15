@@ -9,11 +9,11 @@ homepage.workspace = true
 description = "EdgeRun Exchange — provider adapters and routing"
 
 [dependencies]
-edgerun-protocols = { version = "0.1", path = "../protocol/edgerun-protocols", default-features = false, features = ["core", "wire"] }
+edgerun-protocols = { workspace = true, default-features = false, features = ["core", "wire"] }
 edgerun-wallet = { version = "0.1", path = "../edgerun-wallet" }
 edgerun-node = { version = "0.1", path = "../node/edgerun-node", default-features = false, features = ["client"], optional = true }
-edgerun-json = { version = "0.1", path = "../utility/edgerun-json" }
-edgerun-log = { version = "0.1", path = "../utility/edgerun-log" }
+edgerun-json = { workspace = true }
+edgerun-log = { workspace = true }
 
 [dev-dependencies]
 

@@ -22,7 +22,7 @@ schemars = ["dep:schemars"]
 
 [dependencies]
 edgerun-json-derive = { version = "0.1", path = "../edgerun-json-derive", optional = true }
-schemars = { package = "edgerun-schemars", version = "0.1", path = "../edgerun-schemars", optional = true }
+schemars = { workspace = true, optional = true }
 
 [[test]]
 name = "derive"

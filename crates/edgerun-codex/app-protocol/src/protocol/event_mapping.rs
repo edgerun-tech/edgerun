@@ -457,7 +457,6 @@ mod tests {
     use codex_protocol::protocol::CollabResumeEndEvent;
     use codex_protocol::protocol::ExecCommandOutputDeltaEvent;
     use codex_protocol::protocol::ExecOutputStream;
-    use pretty_assertions::assert_eq;
 
     fn assert_item_started_server_notification(
         notification: ServerNotification,

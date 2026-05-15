@@ -4,7 +4,6 @@ use codex_api::TextControls;
 use codex_api::create_text_param_for_request;
 use codex_protocol::config_types::ServiceTier;
 use codex_protocol::models::FunctionCallOutputPayload;
-use pretty_assertions::assert_eq;
 
 use super::*;
 

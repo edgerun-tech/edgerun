@@ -3,7 +3,6 @@ use super::JsonSchema;
 use super::JsonSchemaPrimitiveType;
 use super::JsonSchemaType;
 use super::parse_tool_input_schema;
-use pretty_assertions::assert_eq;
 use std::collections::BTreeMap;
 
 // Tests in this section exercise normalization transforms that mutate badly

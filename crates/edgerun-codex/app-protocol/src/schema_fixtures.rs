@@ -200,7 +200,6 @@ fn collect_files_recursive(root: &Path) -> Result<BTreeMap<PathBuf, Vec<u8>>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pretty_assertions::assert_eq;
 
     #[test]
     fn canonicalize_json_sorts_string_arrays() {

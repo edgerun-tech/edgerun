@@ -876,7 +876,6 @@ pub fn print_summary(
 mod tests {
     use super::*;
     use crate::file_system::LOCAL_FS;
-    use pretty_assertions::assert_eq;
     use std::fs;
     use std::string::ToString;
     use tempfile::tempdir;

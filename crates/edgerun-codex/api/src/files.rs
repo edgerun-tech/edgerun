@@ -315,7 +315,6 @@ fn parse_download_link_response(body: &str) -> Result<DownloadLinkResponse, Json
 mod tests {
     use super::*;
     use edgerun_reqwest::header::HeaderValue;
-    use pretty_assertions::assert_eq;
     use std::sync::Arc;
     use std::sync::atomic::AtomicUsize;
     use std::sync::atomic::Ordering;

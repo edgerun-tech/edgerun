@@ -5,7 +5,6 @@ use codex_protocol::models::ContentItem;
 use codex_protocol::models::ReasoningItemReasoningSummary;
 use codex_protocol::protocol::InterAgentCommunication;
 use codex_protocol::protocol::ThreadRolledBackEvent;
-use pretty_assertions::assert_eq;
 
 fn user_msg(text: &str) -> ResponseItem {
     ResponseItem::Message {

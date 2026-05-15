@@ -1,5 +1,4 @@
 use super::StreamOutput;
-use pretty_assertions::assert_eq;
 
 #[test]
 fn test_utf8_shell_output() {

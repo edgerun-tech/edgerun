@@ -1771,7 +1771,6 @@ mod tests {
     use codex_protocol::local_uuid::Uuid;
     use edgerun_error::Context;
     type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
-    use pretty_assertions::assert_eq;
     use std::collections::BTreeSet;
     use std::path::Path;
     use std::path::PathBuf;

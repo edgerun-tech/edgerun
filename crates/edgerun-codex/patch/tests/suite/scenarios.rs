@@ -1,5 +1,4 @@
 use codex_utils_cargo_bin::repo_root;
-use pretty_assertions::assert_eq;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::Path;

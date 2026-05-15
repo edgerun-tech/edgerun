@@ -16,8 +16,8 @@ proxy = ["edgerun-tungstenite/proxy"]
 stream = []
 
 [dependencies]
-edgerun-tungstenite = { version = "0.1", path = "../edgerun-tungstenite", features = ["deflate"] }
-edgerun-futures = { version = "0.1", path = "../edgerun-futures" }
+edgerun-tungstenite = { workspace = true, features = ["deflate", "proxy"] }
+edgerun-futures = { workspace = true }
 edgerun-tokio = { version = "0.1", path = "../edgerun-tokio", default-features = false, features = ["edgerun-runtime", "net"] }
 
 [lints]

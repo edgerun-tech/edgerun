@@ -1,8 +1,8 @@
+#[cfg(all(feature = "fontdue-text", feature = "tabler-svg-atlas"))]
+use super::{tabler_svg_icon_atlas, IconQuad};
 use super::{Color4, GpuRect, GpuScene, RectMode};
 #[cfg(feature = "fontdue-text")]
 use super::{FontAtlas, TextQuad};
-#[cfg(all(feature = "fontdue-text", feature = "tabler-svg-atlas"))]
-use super::{IconQuad, tabler_svg_icon_atlas};
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_int, c_void};
 use std::ptr;

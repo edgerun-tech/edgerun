@@ -1,5 +1,4 @@
 use super::parse_freeform_args;
-use pretty_assertions::assert_eq;
 
 #[test]
 fn parse_freeform_args_without_pragma() {

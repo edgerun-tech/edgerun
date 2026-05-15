@@ -5,7 +5,6 @@ use codex_features::Feature;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use core_test_support::PathBufExt;
 use core_test_support::TempDirExt;
-use pretty_assertions::assert_eq;
 use std::fs;
 use std::path::PathBuf;
 use tempfile::TempDir;

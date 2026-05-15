@@ -9,7 +9,6 @@ use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::config_types::Verbosity;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_utils_absolute_path::test_support::PathExt;
-use pretty_assertions::assert_eq;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;

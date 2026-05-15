@@ -139,7 +139,6 @@ fn reasoning_effort_preset(effort: ReasoningEffort) -> ReasoningEffortPreset {
 
 #[cfg(test)]
 mod tests {
-    use pretty_assertions::assert_eq;
 
     use super::*;
 

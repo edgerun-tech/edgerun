@@ -69,7 +69,6 @@ use dunce::canonicalize as normalize_path;
 use edgerun_json::json;
 use codex_protocol::local_uuid::Uuid;
 use edgerun_futures::StreamExt;
-use pretty_assertions::assert_eq;
 use std::io::Write;
 use std::num::NonZeroU64;
 use std::sync::Arc;
@@ -1833,7 +1832,7 @@ async fn configured_reasoning_summary_is_sent() -> anyhow::Result<()> {
     let request = resp_mock.single_request();
     let request_body = request.body_json();
 
-    pretty_assertions::assert_eq!(
+    assert_eq!(
         request_body
             .get("reasoning")
             .and_then(|reasoning| reasoning.get("summary"))
@@ -1906,7 +1905,7 @@ async fn user_turn_explicit_reasoning_summary_overrides_model_catalog_default() 
 
     let request_body = resp_mock.single_request().body_json();
 
-    pretty_assertions::assert_eq!(
+    assert_eq!(
         request_body
             .get("reasoning")
             .and_then(|reasoning| reasoning.get("summary"))
@@ -1952,7 +1951,7 @@ async fn reasoning_summary_is_omitted_when_disabled() -> anyhow::Result<()> {
     let request = resp_mock.single_request();
     let request_body = request.body_json();
 
-    pretty_assertions::assert_eq!(
+    assert_eq!(
         request_body
             .get("reasoning")
             .and_then(|reasoning| reasoning.get("summary")),
@@ -2008,7 +2007,7 @@ async fn reasoning_summary_none_overrides_model_catalog_default() -> anyhow::Res
     wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 
     let request_body = resp_mock.single_request().body_json();
-    pretty_assertions::assert_eq!(
+    assert_eq!(
         request_body
             .get("reasoning")
             .and_then(|reasoning| reasoning.get("summary")),
@@ -2489,7 +2488,7 @@ async fn token_count_includes_rate_limits_snapshot() {
     };
 
     let rate_limit_json = edgerun_json::to_value(&&rate_limit_only);
-    pretty_assertions::assert_eq!(
+    assert_eq!(
         rate_limit_json,
         json!({
             "info": null,
@@ -2524,7 +2523,7 @@ async fn token_count_includes_rate_limits_snapshot() {
     };
     // Assert full JSON for the final token count event (usage + rate limits)
     let final_json = edgerun_json::to_value(&&final_payload);
-    pretty_assertions::assert_eq!(
+    assert_eq!(
         final_json,
         json!({
             "info": {
@@ -2658,7 +2657,7 @@ async fn usage_limit_error_emits_rate_limit_event() -> anyhow::Result<()> {
 
     let event_json =
         edgerun_json::to_value(&&event);
-    pretty_assertions::assert_eq!(
+    assert_eq!(
         event_json,
         json!({
             "info": null,

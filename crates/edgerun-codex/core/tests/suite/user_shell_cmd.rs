@@ -26,7 +26,6 @@ use core_test_support::test_codex::turn_permission_fields;
 use core_test_support::wait_for_event;
 use core_test_support::wait_for_event_match;
 use core_test_support::wait_for_event_with_timeout;
-use pretty_assertions::assert_eq;
 use regex_lite::escape;
 use std::path::PathBuf;
 use tempfile::TempDir;

@@ -96,7 +96,6 @@ const UNIX_CORE_ENV_VARS: &[&str] = &[
 #[cfg(test)]
 mod non_windows_tests {
     use super::*;
-    use pretty_assertions::assert_eq;
 
     fn make_vars(pairs: &[(&str, &str)]) -> Vec<(String, String)> {
         pairs

@@ -1625,18 +1625,14 @@ mod tests {
             "scene hits: {:?}",
             scene.hits()
         );
-        assert!(
-            scene
-                .hits()
-                .iter()
-                .any(|hit| hit.kind == HitKind::Button && hit.id == 2)
-        );
-        assert!(
-            scene
-                .hits()
-                .iter()
-                .any(|hit| hit.kind == HitKind::Button && hit.id == 3)
-        );
+        assert!(scene
+            .hits()
+            .iter()
+            .any(|hit| hit.kind == HitKind::Button && hit.id == 2));
+        assert!(scene
+            .hits()
+            .iter()
+            .any(|hit| hit.kind == HitKind::Button && hit.id == 3));
         assert!(
             scene
                 .hits()
@@ -1645,12 +1641,10 @@ mod tests {
             "scene hits: {:?}",
             scene.hits()
         );
-        assert!(
-            scene
-                .hits()
-                .iter()
-                .any(|hit| hit.kind == HitKind::Button && hit.id == 12)
-        );
+        assert!(scene
+            .hits()
+            .iter()
+            .any(|hit| hit.kind == HitKind::Button && hit.id == 12));
     }
 
     #[test]

@@ -35,11 +35,11 @@ esp32s3-wifi-ram-phy-patch = ["esp32s3-wifi-blob", "edgerun-platform/esp32s3-wif
 [dependencies]
 edgerun-platform = { version = "0.1", path = "../edgerun-platform" }
 edgerun-node = { version = "0.1", path = "../node/edgerun-node", default-features = false, features = ["http"], optional = true }
-edgerun-protocols = { version = "0.1", path = "../protocol/edgerun-protocols", default-features = false, optional = true }
+edgerun-protocols = { workspace = true, default-features = false, optional = true }
 edgerun-tpm = { version = "0.1", path = "../identity/edgerun-tpm", default-features = false, optional = true }
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
-edgerun-virtio = { version = "0.1", path = "../edgerun-virtio", optional = true }
+edgerun-virtio = { workspace = true, optional = true }
 
 [target.'cfg(target_arch = "xtensa")'.dependencies]
 

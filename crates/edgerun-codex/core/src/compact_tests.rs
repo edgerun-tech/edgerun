@@ -2,7 +2,6 @@ use super::*;
 use codex_model_provider_info::ModelProviderInfo;
 use codex_model_provider_info::WireApi;
 use codex_protocol::models::DEFAULT_IMAGE_DETAIL;
-use pretty_assertions::assert_eq;
 
 async fn process_compacted_history_with_test_session(
     compacted_history: Vec<ResponseItem>,

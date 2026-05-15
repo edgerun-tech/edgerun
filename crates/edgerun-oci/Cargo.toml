@@ -9,13 +9,13 @@ homepage.workspace = true
 description = "OCI container runtime and registry client — pull, push, login, create, start, exec containers"
 
 [dependencies]
-edgerun-json = { version = "0.1", path = "../utility/edgerun-json", default-features = false }
+edgerun-json = { workspace = true, default-features = false }
 edgerun-crypto = { workspace = true, default-features = false, features = ["digest"] }
 edgerun-node = { version = "0.1", path = "../node/edgerun-node", default-features = false, features = ["https"], optional = true }
 edgerun-storage = { workspace = true, optional = true }
-edgerun-secret-service = { version = "0.1", path = "../apps/edgerun-secret-service", optional = true }
+edgerun-secret-service = { workspace = true, optional = true }
 edgerun-protocols = { workspace = true, default-features = false, features = ["oci"] }
-edgerun-encoding = { version = "0.1", path = "../utility/edgerun-encoding" }
+edgerun-encoding = { workspace = true }
 
 [features]
 default = []

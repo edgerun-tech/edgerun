@@ -5,7 +5,6 @@ use codex_protocol::config_types::WebSearchUserLocation;
 use codex_protocol::config_types::WebSearchUserLocationType;
 use codex_tools::ResponsesApiWebSearchFilters;
 use codex_tools::ResponsesApiWebSearchUserLocation;
-use pretty_assertions::assert_eq;
 
 #[test]
 fn image_generation_tool_matches_expected_spec() {

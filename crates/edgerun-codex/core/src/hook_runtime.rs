@@ -553,7 +553,6 @@ mod tests {
     use codex_protocol::protocol::HookRunStatus;
     use codex_protocol::protocol::HookScope;
     use codex_protocol::protocol::HookSource;
-    use pretty_assertions::assert_eq;
 
     use super::additional_context_messages;
     use super::hook_run_analytics_payload;

@@ -33,7 +33,6 @@ use core_test_support::wait_for_event;
 use core_test_support::wait_for_event_match;
 use edgerun_encoding::base64::standard_decode;
 use edgerun_json::Value;
-use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fs;

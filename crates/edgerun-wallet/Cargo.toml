@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "EdgeRun Wallet Instant Settlement — core types and logic"
 
 [dependencies]
-edgerun-protocols = { version = "0.1", path = "../protocol/edgerun-protocols", default-features = false, features = ["core"] }
+edgerun-protocols = { workspace = true, default-features = false, features = ["core"] }
 
 [dev-dependencies]
 

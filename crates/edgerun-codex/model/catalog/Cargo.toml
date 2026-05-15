@@ -22,5 +22,4 @@ edgerun-tokio = { workspace = true, features = ["fs", "macros", "sync", "time"] 
 tracing = { workspace = true }
 
 [dev-dependencies]
-pretty_assertions = { package = "edgerun-pretty-assertions", path = "../../../utility/edgerun-pretty-assertions" }
 tempfile = { package = "edgerun-tempfile", path = "../../../utility/edgerun-tempfile" }

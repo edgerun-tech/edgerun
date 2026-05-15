@@ -744,7 +744,6 @@ mod tests {
     use codex_protocol::ToolName;
     use edgerun_json::Value as JsonValue;
     use edgerun_json::json;
-    use pretty_assertions::assert_eq;
     use std::collections::BTreeMap;
 
     fn mcp_call_tool_result_schema(structured_content_schema: JsonValue) -> JsonValue {

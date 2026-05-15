@@ -1,6 +1,6 @@
 use super::{
-    ButtonStyle, Color4, HitKind, UiAction, UiIcon, UiNode, button, card, column,
-    progress_bar_node, row, shadcn_input, text,
+    button, card, column, progress_bar_node, row, shadcn_input, text, ButtonStyle, Color4, HitKind,
+    UiAction, UiIcon, UiNode,
 };
 use crate::initial_setup::PASSWORD_MIN_LEN;
 

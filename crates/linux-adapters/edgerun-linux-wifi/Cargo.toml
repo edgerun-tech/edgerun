@@ -11,12 +11,12 @@ autobins = false
 
 [dependencies]
 edgerun-devices.workspace = true
-edgerun-capabilities = { version = "0.1", path = "../../capability/edgerun-capabilities" }
+edgerun-capabilities = { workspace = true }
 edgerun-linux-netif = { version = "0.1", path = "../edgerun-linux-netif" }
 edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
-edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding" }
+edgerun-encoding = { workspace = true }
 edgerun-crypto = { workspace = true, default-features = false, features = ["hmac", "sha1"] }
-edgerun-log = { version = "0.1", path = "../../utility/edgerun-log" }
+edgerun-log = { workspace = true }
 
 [features]
 std = []

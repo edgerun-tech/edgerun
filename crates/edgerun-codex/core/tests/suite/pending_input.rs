@@ -30,7 +30,6 @@ use core_test_support::wait_for_event;
 use edgerun_json::Value;
 use edgerun_json::from_slice;
 use edgerun_json::json;
-use pretty_assertions::assert_eq;
 use edgerun_tokio::sync::oneshot;
 
 fn ev_message_item_done(id: &str, text: &str) -> Value {

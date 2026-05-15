@@ -40,7 +40,6 @@ SOURCE: /[\s\S]+/
 mod tests {
     use super::*;
     use codex_tools::ToolName;
-    use pretty_assertions::assert_eq;
 
     #[test]
     fn create_code_mode_tool_matches_expected_spec() {

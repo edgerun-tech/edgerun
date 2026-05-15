@@ -15,11 +15,11 @@ path = "src/lib.rs"
 
 [dependencies]
 edgerun-devices.workspace = true
-edgerun-storage = { version = "0.1", path = "../../authority/edgerun-storage" }
-edgerun-protocols = { version = "0.1", path = "../../protocol/edgerun-protocols", default-features = false, features = ["core", "wire", "dbus"] }
-edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding", default-features = false }
-edgerun-json = { version = "0.1", path = "../../utility/edgerun-json", default-features = false }
-edgerun-log = { version = "0.1", path = "../../utility/edgerun-log" }
+edgerun-storage = { workspace = true }
+edgerun-protocols = { workspace = true, default-features = false, features = ["core", "wire", "dbus"] }
+edgerun-encoding = { workspace = true, default-features = false }
+edgerun-json = { workspace = true, default-features = false }
+edgerun-log = { workspace = true }
 edgerun-node = { version = "0.1", path = "../../node/edgerun-node", default-features = false }
 
 [features]

@@ -128,7 +128,6 @@ mod tests {
     use crate::session::tests::make_session_and_context;
     use crate::tools::context::ToolCallSource;
     use crate::turn_diff_tracker::TurnDiffTracker;
-    use pretty_assertions::assert_eq;
     use edgerun_json::json;
     use std::time::Duration;
     use edgerun_tokio::sync::Mutex;

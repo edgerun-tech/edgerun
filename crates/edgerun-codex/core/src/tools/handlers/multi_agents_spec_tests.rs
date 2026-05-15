@@ -4,7 +4,6 @@ use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::openai_models::ReasoningEffortPreset;
 use codex_tools::JsonSchemaPrimitiveType;
 use codex_tools::JsonSchemaType;
-use pretty_assertions::assert_eq;
 use edgerun_json::json;
 
 fn model_preset(id: &str, show_in_picker: bool) -> ModelPreset {

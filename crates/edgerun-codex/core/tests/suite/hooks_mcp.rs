@@ -23,7 +23,6 @@ use core_test_support::stdio_server_bin;
 use core_test_support::test_codex::test_codex;
 use edgerun_json::Value;
 use edgerun_json::json;
-use pretty_assertions::assert_eq;
 
 const RMCP_SERVER: &str = "rmcp";
 const RMCP_NAMESPACE: &str = "mcp__rmcp__";

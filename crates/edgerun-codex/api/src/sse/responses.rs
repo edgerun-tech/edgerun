@@ -687,7 +687,6 @@ mod tests {
     use edgerun_http::StatusCode;
     use edgerun_json::json;
     use edgerun_tokio::sync::mpsc;
-    use pretty_assertions::assert_eq;
     use tokio_test::io::Builder as IoBuilder;
 
     async fn collect_events(chunks: &[&[u8]]) -> Vec<Result<ResponseEvent, ApiError>> {

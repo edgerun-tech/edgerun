@@ -46,5 +46,4 @@ walkdir = { workspace = true }
 wiremock = { workspace = true }
 
 [dev-dependencies]
-pretty_assertions = { workspace = true }
 edgerun-reqwest = { workspace = true }

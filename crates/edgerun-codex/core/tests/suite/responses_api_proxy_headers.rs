@@ -23,7 +23,6 @@ use core_test_support::test_codex::TestCodex;
 use core_test_support::test_codex::test_codex;
 use core_test_support::test_codex::turn_permission_fields;
 use edgerun_json::json;
-use pretty_assertions::assert_eq;
 use std::time::Duration;
 
 const PARENT_PROMPT: &str = "spawn a subagent and report when it is started";

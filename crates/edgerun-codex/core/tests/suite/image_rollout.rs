@@ -22,7 +22,6 @@ use core_test_support::test_codex::turn_permission_fields;
 use core_test_support::wait_for_event;
 use image::ImageBuffer;
 use image::Rgba;
-use pretty_assertions::assert_eq;
 use std::path::Path;
 use std::time::Duration;
 

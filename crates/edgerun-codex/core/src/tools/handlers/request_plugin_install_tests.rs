@@ -16,7 +16,6 @@ use codex_rmcp_client::ElicitationResponse;
 use codex_tools::DiscoverablePluginInfo;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use core_test_support::PathExt;
-use pretty_assertions::assert_eq;
 use rmcp::model::ElicitationAction;
 use edgerun_json::json;
 use tempfile::tempdir;

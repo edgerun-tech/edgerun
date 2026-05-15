@@ -10,7 +10,6 @@ use codex_protocol::openai_models::ModelsResponse;
 use edgerun_json::json;
 use edgerun_time::chrono::ChronoDuration;
 use edgerun_time::chrono::ChronoUtc as Utc;
-use pretty_assertions::assert_eq;
 use std::collections::VecDeque;
 use std::path::Path;
 use std::sync::Arc;

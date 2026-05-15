@@ -113,8 +113,6 @@ impl Drop for CodeModeTurnWorker {
 mod tests {
     use std::collections::HashMap;
 
-    use pretty_assertions::assert_eq;
-
     use super::CodeModeService;
     use crate::runtime::ExecuteRequest;
     use crate::runtime::RuntimeResponse;

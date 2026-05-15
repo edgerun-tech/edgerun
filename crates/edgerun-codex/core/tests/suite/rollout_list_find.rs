@@ -18,7 +18,6 @@ use codex_state::StateRuntime;
 use codex_state::ThreadMetadataBuilder;
 use edgerun_time::chrono::ChronoUtc as Utc;
 use codex_protocol::local_uuid::Uuid;
-use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 
 /// Create <subdir>/YYYY/MM/DD and write a minimal rollout file containing the

@@ -203,7 +203,6 @@ mod tests {
     use codex_tools::ResponsesApiNamespace;
     use codex_tools::ResponsesApiNamespaceTool;
     use codex_tools::ResponsesApiTool;
-    use pretty_assertions::assert_eq;
     use rmcp::model::Tool;
     use std::sync::Arc;
 

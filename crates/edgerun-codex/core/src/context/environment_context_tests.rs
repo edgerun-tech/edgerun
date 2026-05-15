@@ -3,7 +3,6 @@ use crate::shell::ShellType;
 use super::*;
 use codex_utils_absolute_path::test_support::PathBufExt;
 use core_test_support::test_path_buf;
-use pretty_assertions::assert_eq;
 use std::path::PathBuf;
 
 fn fake_shell_name() -> String {

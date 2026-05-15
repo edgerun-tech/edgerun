@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use anyhow::Result;
 use codex_api::AuthProvider;
 use codex_api::Compression;
 use codex_api::Provider;
@@ -18,7 +17,8 @@ use edgerun_futures::StreamExt;
 use edgerun_http::HeaderMap;
 use edgerun_http::StatusCode;
 use edgerun_json::Value;
-use pretty_assertions::assert_eq;
+
+type Result<T, E = Box<dyn std::error::Error + Send + Sync>> = core::result::Result<T, E>;
 
 #[derive(Clone)]
 struct FixtureSseTransport {

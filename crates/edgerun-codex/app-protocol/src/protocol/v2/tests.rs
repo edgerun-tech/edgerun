@@ -28,7 +28,6 @@ use codex_protocol::protocol::AgentStatus as CoreAgentStatus;
 use codex_protocol::user_input::UserInput as CoreUserInput;
 use edgerun_json::Value as JsonValue;
 use edgerun_json::json;
-use pretty_assertions::assert_eq;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::num::NonZeroUsize;

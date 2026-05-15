@@ -9,13 +9,13 @@ homepage.workspace = true
 description = "OAuth helpers for Edgerun service authentication"
 
 [dependencies]
-edgerun-crypto = { version = "0.1", path = "../../utility/edgerun-crypto", default-features = false, features = ["hmac", "p256", "rsa"] }
+edgerun-crypto = { workspace = true, default-features = false, features = ["hmac", "p256", "rsa"] }
 edgerun-node = { version = "0.1", path = "../../node/edgerun-node", default-features = false, features = ["client", "tls"] }
-edgerun-log = { version = "0.1", path = "../../utility/edgerun-log" }
-edgerun-json = { version = "0.1", path = "../../utility/edgerun-json" }
-edgerun-secret-service = { version = "0.1", path = "../edgerun-secret-service" }
-edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding", default-features = false }
-edgerun-protocols = { version = "0.1", path = "../../protocol/edgerun-protocols", default-features = false, features = ["oauth"] }
+edgerun-log = { workspace = true }
+edgerun-json = { workspace = true }
+edgerun-secret-service = { workspace = true }
+edgerun-encoding = { workspace = true, default-features = false }
+edgerun-protocols = { workspace = true, default-features = false, features = ["oauth"] }
 
 [lints]
 workspace = true

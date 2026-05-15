@@ -6,7 +6,6 @@ use super::wrap_realtime_delegation_input;
 use codex_protocol::protocol::RealtimeHandoffRequested;
 use codex_protocol::protocol::RealtimeTranscriptEntry;
 use edgerun_async_channel::bounded;
-use pretty_assertions::assert_eq;
 
 #[test]
 fn prefers_handoff_input_transcript_over_active_transcript() {

@@ -2,7 +2,6 @@ use super::mcp_call_tool_result_output_schema;
 use super::parse_mcp_tool;
 use crate::JsonSchema;
 use crate::ToolDefinition;
-use pretty_assertions::assert_eq;
 use std::collections::BTreeMap;
 
 fn mcp_tool(name: &str, description: &str, input_schema: edgerun_json::Value) -> rmcp::model::Tool {

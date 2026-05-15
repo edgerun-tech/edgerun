@@ -9,10 +9,10 @@ homepage.workspace = true
 description = "Identity-routed mesh primitives for Edgerun"
 
 [dependencies]
-edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-hardware-signing" }
+edgerun-hardware-signing = { workspace = true }
 edgerun-crypto = { workspace = true, default-features = false, features = ["aead", "p256"] }
 edgerun-protocols = { workspace = true, default-features = false, features = ["core"] }
-edgerun-json = { version = "0.1", path = "../../utility/edgerun-json", default-features = false }
+edgerun-json = { workspace = true, default-features = false }
 
 [lints]
 workspace = true

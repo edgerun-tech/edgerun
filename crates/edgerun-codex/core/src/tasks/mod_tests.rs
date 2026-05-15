@@ -13,7 +13,6 @@ use opentelemetry_sdk::metrics::data::AggregatedMetrics;
 use opentelemetry_sdk::metrics::data::Metric;
 use opentelemetry_sdk::metrics::data::MetricData;
 use opentelemetry_sdk::metrics::data::ResourceMetrics;
-use pretty_assertions::assert_eq;
 use std::collections::BTreeMap;
 
 fn test_session_telemetry() -> SessionTelemetry {

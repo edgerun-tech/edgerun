@@ -64,7 +64,6 @@ members = [
   "crates/protocol/edgerun-wire",
   "crates/protocol/edgerun-work",
   "crates/utility/edgerun-adler2",
-  "crates/utility/edgerun-anyhow",
   "crates/utility/edgerun-assert-cmd",
   "crates/utility/edgerun-assert-matches",
   "crates/utility/edgerun-async-channel",
@@ -116,14 +115,11 @@ members = [
   "crates/utility/edgerun-miniz-oxide",
   "crates/utility/edgerun-munge",
   "crates/utility/edgerun-munge-macro",
-  "crates/utility/edgerun-opentelemetry",
   "crates/utility/edgerun-opentelemetry-upstream",
-  "crates/utility/edgerun-opentelemetry-sdk",
   "crates/utility/edgerun-opentelemetry-sdk-upstream",
   "crates/utility/edgerun-once-cell",
   "crates/utility/edgerun-percent-encoding-upstream",
   "crates/utility/edgerun-pin-project-lite",
-  "crates/utility/edgerun-pretty-assertions",
   "crates/utility/edgerun-proc-macro2",
   "crates/utility/edgerun-ptr-meta",
   "crates/utility/edgerun-ptr-meta-derive",
@@ -167,7 +163,6 @@ members = [
   "crates/utility/edgerun-tracing-attributes",
   "crates/utility/edgerun-tracing-core",
   "crates/utility/edgerun-tracing-log",
-  "crates/utility/edgerun-tracing-opentelemetry",
   "crates/utility/edgerun-tracing-opentelemetry-upstream",
   "crates/utility/edgerun-tracing-subscriber",
   "crates/utility/edgerun-tungstenite",
@@ -260,7 +255,7 @@ edgerun-eventsource-stream = { version = "0.1", path = "crates/utility/edgerun-e
 edgerun-futures = { version = "0.1", path = "crates/utility/edgerun-futures" }
 edgerun-http = { version = "0.1", path = "crates/utility/edgerun-http" }
 edgerun-ui-core = { version = "0.1", path = "crates/utility/edgerun-ui-core" }
-edgerun-url = { version = "0.1", path = "crates/utility/edgerun-url" }
+edgerun-url = { version = "0.1", path = "crates/utility/edgerun-url", default-features = false }
 edgerun-vfs = { version = "0.1", path = "crates/authority/edgerun-vfs", default-features = false }
 edgerun-shlex = { version = "0.1", path = "crates/utility/edgerun-shlex" }
 edgerun-inventory = { version = "0.1", path = "crates/utility/edgerun-inventory" }
@@ -286,8 +281,8 @@ edgerun-tokio-tungstenite = { version = "0.1", path = "crates/utility/edgerun-to
 edgerun-tokio-util = { version = "0.1", path = "crates/utility/edgerun-tokio-util" }
 edgerun-tungstenite = { version = "0.1", path = "crates/utility/edgerun-tungstenite", default-features = false, features = ["deflate", "proxy"] }
 landlock = { package = "edgerun-landlock", version = "0.1", path = "crates/utility/edgerun-landlock" }
-opentelemetry = { package = "edgerun-opentelemetry", version = "0.1", path = "crates/utility/edgerun-opentelemetry" }
-opentelemetry_sdk = { package = "edgerun-opentelemetry-sdk", version = "0.1", path = "crates/utility/edgerun-opentelemetry-sdk" }
+opentelemetry = { path = "crates/utility/edgerun-opentelemetry-upstream" }
+opentelemetry_sdk = { path = "crates/utility/edgerun-opentelemetry-sdk-upstream" }
 proc-macro2 = { path = "crates/utility/edgerun-proc-macro2", default-features = false }
 quote = { path = "crates/utility/edgerun-quote", default-features = false }
 rmcp = { package = "edgerun-rmcp", version = "0.1", path = "crates/utility/edgerun-rmcp", default-features = false }
@@ -296,7 +291,7 @@ seccompiler = { package = "edgerun-seccompiler", version = "0.1", path = "crates
 syn = { path = "crates/utility/edgerun-syn", default-features = false }
 synstructure = { path = "crates/utility/edgerun-synstructure", default-features = false }
 tracing = { package = "edgerun-log", version = "0.1", path = "crates/utility/edgerun-log", features = ["tracing-compat"] }
-tracing-opentelemetry = { package = "edgerun-tracing-opentelemetry", version = "0.1", path = "crates/utility/edgerun-tracing-opentelemetry" }
+tracing-opentelemetry = { path = "crates/utility/edgerun-tracing-opentelemetry-upstream" }
 jni = { path = "crates/utility/edgerun-jni" }
 miniz_oxide = { path = "crates/utility/edgerun-miniz-oxide", default-features = false }
 rkyv = { path = "crates/utility/edgerun-rkyv", default-features = false }

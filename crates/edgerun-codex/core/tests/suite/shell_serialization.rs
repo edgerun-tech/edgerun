@@ -19,7 +19,6 @@ use core_test_support::test_codex::TestCodexBuilder;
 use core_test_support::test_codex::test_codex;
 use edgerun_json::Value;
 use edgerun_json::json;
-use pretty_assertions::assert_eq;
 use regex_lite::Regex;
 use std::fs;
 use test_case::test_case;

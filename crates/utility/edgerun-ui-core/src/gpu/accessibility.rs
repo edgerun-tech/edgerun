@@ -457,11 +457,10 @@ mod tests {
         assert_eq!(tree.find_by_id(1).unwrap().role, UiA11yRole::Button);
         assert_eq!(tree.find_by_id(1).unwrap().label, "Save");
         assert!(tree.find_by_id(2).unwrap().has_state(&UiA11yState::Checked));
-        assert!(
-            tree.find_by_id(3)
-                .unwrap()
-                .has_state(&UiA11yState::Value("a@b.test".to_string()))
-        );
+        assert!(tree
+            .find_by_id(3)
+            .unwrap()
+            .has_state(&UiA11yState::Value("a@b.test".to_string())));
     }
 
     #[test]

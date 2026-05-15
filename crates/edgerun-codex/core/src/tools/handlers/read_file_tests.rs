@@ -1,7 +1,6 @@
 use super::indentation::read_block;
 use super::slice::read;
 use super::*;
-use pretty_assertions::assert_eq;
 use tempfile::NamedTempFile;
 
 #[edgerun_tokio::test]

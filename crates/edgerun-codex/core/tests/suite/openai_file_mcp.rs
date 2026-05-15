@@ -23,7 +23,6 @@ use core_test_support::responses::start_mock_server;
 use core_test_support::test_codex::test_codex;
 use edgerun_json::Value;
 use edgerun_json::json;
-use pretty_assertions::assert_eq;
 use wiremock::Mock;
 use wiremock::ResponseTemplate;
 use wiremock::matchers::body_json;

@@ -1,7 +1,6 @@
 use super::*;
 use crate::DiscoverablePluginInfo;
 use edgerun_json::ToJson;
-use pretty_assertions::assert_eq;
 
 #[test]
 fn build_request_plugin_install_elicitation_request_uses_expected_shape() {

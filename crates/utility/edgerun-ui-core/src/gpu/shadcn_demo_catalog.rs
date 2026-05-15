@@ -1626,24 +1626,20 @@ mod tests {
             manifest.status_summary(UiShadcnDemoStatus::Cataloged).count,
             0
         );
-        assert!(
-            manifest
-                .category_summaries()
-                .iter()
-                .any(
-                    |summary| summary.category == UiShadcnDemoCategory::Foundation
-                        && summary.count == 1
-                )
-        );
-        assert!(
-            manifest
-                .status_summaries()
-                .iter()
-                .any(
-                    |summary| summary.status == UiShadcnDemoStatus::NativePrimitive
-                        && summary.count == 0
-                )
-        );
+        assert!(manifest
+            .category_summaries()
+            .iter()
+            .any(
+                |summary| summary.category == UiShadcnDemoCategory::Foundation
+                    && summary.count == 1
+            ));
+        assert!(manifest
+            .status_summaries()
+            .iter()
+            .any(
+                |summary| summary.status == UiShadcnDemoStatus::NativePrimitive
+                    && summary.count == 0
+            ));
         assert_eq!(slugs, ["button", "card", "dialog"]);
         assert_eq!(missing, ["UnknownThing"]);
     }

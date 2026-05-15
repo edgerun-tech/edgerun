@@ -20,6 +20,6 @@ workspace = true
 
 [dependencies]
 edgerun-node = { version = "0.1", path = "../../node/edgerun-node", default-features = false }
-edgerun-log = { version = "0.1", path = "../../utility/edgerun-log" }
+edgerun-log = { workspace = true }
 edgerun-protocols = { workspace = true, default-features = false, features = ["imap", "lmtp", "smtp"] }
-edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding" }
+edgerun-encoding = { workspace = true }

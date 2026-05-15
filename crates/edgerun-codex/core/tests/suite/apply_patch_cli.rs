@@ -6,7 +6,6 @@ use core_test_support::responses::ev_apply_patch_custom_tool_call;
 use core_test_support::responses::ev_shell_command_call;
 use core_test_support::test_codex::ApplyPatchModelOutput;
 use edgerun_encoding::base64::standard_encode;
-use pretty_assertions::assert_eq;
 use std::sync::atomic::AtomicI32;
 use std::sync::atomic::Ordering;
 use std::time::Duration;

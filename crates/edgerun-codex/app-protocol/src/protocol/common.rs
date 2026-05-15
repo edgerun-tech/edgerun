@@ -1533,7 +1533,6 @@ mod tests {
     use codex_protocol::protocol::RealtimeVoice;
     type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
     use edgerun_json::json;
-    use pretty_assertions::assert_eq;
     use std::path::PathBuf;
 
     fn absolute_path_string(path: &str) -> String {

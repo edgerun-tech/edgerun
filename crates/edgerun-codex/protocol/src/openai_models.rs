@@ -524,7 +524,6 @@ fn nearest_effort(target: ReasoningEffort, supported: &[ReasoningEffort]) -> Rea
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pretty_assertions::assert_eq;
 
     fn test_model(spec: Option<ModelMessages>) -> ModelInfo {
         ModelInfo {

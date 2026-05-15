@@ -22,7 +22,7 @@ http1 = ["http"]
 http2 = ["http", "edgerun-protocols/http2-server", "dep:edgerun-hpack"]
 http3 = ["http", "tls", "edgerun-protocols/http3", "edgerun-protocols/quic"]
 tls = [
-    "dep:edgerun-protocols",
+    "http",
     "dep:edgerun-crypto",
     "dep:edgerun-encoding",
     "edgerun-protocols/tls",
@@ -39,7 +39,7 @@ tls = [
 edgerun-crypto = { workspace = true, default-features = false, optional = true }
 edgerun-encoding = { workspace = true, default-features = false, optional = true }
 edgerun-hpack = { version = "0.1", path = "../edgerun-hpack", optional = true }
-edgerun-log = { version = "0.1", path = "../edgerun-log" }
+edgerun-log = { workspace = true }
 edgerun-protocols = { workspace = true, optional = true }
 edgerun-runtime = { version = "0.1", path = "../edgerun-runtime", default-features = false, features = ["std"] }
 

@@ -8,7 +8,7 @@ description = "Wayland compositor — zero external C dependencies, direct Linux
 autobins = false
 
 [dependencies]
-edgerun-devices = { version = "0.1", path = "../device-types/edgerun-devices" }
-edgerun-protocols = { version = "0.1", path = "../protocol/edgerun-protocols", default-features = false, features = ["wayland"] }
-edgerun-evdev-input = { version = "0.1", path = "../linux-adapters/edgerun-evdev-input" }
+edgerun-devices = { workspace = true }
+edgerun-protocols = { workspace = true, default-features = false, features = ["wayland"] }
+edgerun-evdev-input = { workspace = true }
 edgerun-ui-core = { version = "0.1", path = "../utility/edgerun-ui-core", default-features = false }

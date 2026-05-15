@@ -9,7 +9,6 @@ use core_test_support::skip_if_no_network;
 use core_test_support::test_codex::test_codex;
 use edgerun_json::Value;
 use edgerun_json::json;
-use pretty_assertions::assert_eq;
 use std::sync::Arc;
 
 #[allow(clippy::expect_used)]

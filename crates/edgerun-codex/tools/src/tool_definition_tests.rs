@@ -1,6 +1,5 @@
 use super::ToolDefinition;
 use crate::JsonSchema;
-use pretty_assertions::assert_eq;
 use std::collections::BTreeMap;
 
 fn tool_definition() -> ToolDefinition {

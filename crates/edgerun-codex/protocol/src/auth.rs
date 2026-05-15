@@ -154,7 +154,6 @@ pub enum RefreshTokenFailedReason {
 mod tests {
     use super::KnownPlan;
     use super::PlanType;
-    use pretty_assertions::assert_eq;
 
     #[test]
     fn plan_type_deserializes_raw_aliases() {

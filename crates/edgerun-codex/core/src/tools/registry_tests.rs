@@ -2,7 +2,6 @@ use super::*;
 use crate::tools::handlers::GetGoalHandler;
 use crate::tools::handlers::goal_spec::GET_GOAL_TOOL_NAME;
 use crate::tools::handlers::goal_spec::create_get_goal_tool;
-use pretty_assertions::assert_eq;
 
 struct TestHandler {
     tool_name: codex_tools::ToolName,

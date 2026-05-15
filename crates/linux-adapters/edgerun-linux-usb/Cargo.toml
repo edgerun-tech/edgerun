@@ -11,7 +11,7 @@ autobins = false
 
 [dependencies]
 edgerun-devices.workspace = true
-edgerun-capabilities = { version = "0.1", path = "../../capability/edgerun-capabilities" }
+edgerun-capabilities = { workspace = true }
 edgerun-linux-sysfs = { version = "0.1", path = "../edgerun-linux-sysfs" }
 
 [features]

@@ -8,7 +8,6 @@ use codex_protocol::models::ResponseItem;
 use codex_tools::ResponsesApiNamespaceTool;
 use codex_tools::ToolName;
 use codex_tools::ToolSpec;
-use pretty_assertions::assert_eq;
 use edgerun_json::json;
 
 use super::ToolCall;

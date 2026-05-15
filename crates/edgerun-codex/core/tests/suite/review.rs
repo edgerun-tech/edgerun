@@ -26,7 +26,6 @@ use core_test_support::skip_if_no_network;
 use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
 use codex_protocol::local_uuid::Uuid;
-use pretty_assertions::assert_eq;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tempfile::TempDir;

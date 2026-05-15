@@ -224,7 +224,6 @@ mod tests {
     use codex_protocol::protocol::RealtimeVoice;
     use edgerun_async_trait::async_trait;
     use edgerun_http::StatusCode;
-    use pretty_assertions::assert_eq;
     use std::sync::Mutex;
     use std::time::Duration;
 

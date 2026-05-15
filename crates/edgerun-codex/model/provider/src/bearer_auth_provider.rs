@@ -49,7 +49,6 @@ impl AuthProvider for BearerAuthProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pretty_assertions::assert_eq;
 
     #[test]
     fn bearer_auth_provider_reports_when_auth_header_will_attach() {

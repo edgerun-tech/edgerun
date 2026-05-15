@@ -2,7 +2,6 @@ use super::*;
 use codex_app_server_protocol::AppInfo;
 use edgerun_json::ToJson;
 use edgerun_json::json;
-use pretty_assertions::assert_eq;
 
 #[test]
 fn discoverable_tool_enums_use_expected_wire_names() {

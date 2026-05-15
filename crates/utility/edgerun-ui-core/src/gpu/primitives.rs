@@ -191,4 +191,51 @@ impl UiWorkProjection {
             storage_payload_verified: false,
         }
     }
+
+    pub fn parse_key_values(input: &str) -> Option<Self> {
+        let mut projection = Self::preview();
+        let mut saw_field = false;
+
+        for line in input.lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            let (key, value) = line.split_once('=')?;
+            let key = key.trim();
+            let value = value.trim();
+            saw_field = true;
+
+            match key {
+                "local_node" => projection.local_node = value.into(),
+                "admission_node" => projection.admission_node = value.into(),
+                "relay_node" => projection.relay_node = value.into(),
+                "channel" => projection.channel = value.into(),
+                "policy_hash" => projection.policy_hash = value.into(),
+                "request_hash" => projection.request_hash = value.into(),
+                "admission_hash" => projection.admission_hash = value.into(),
+                "route_commitment" => projection.route_commitment = value.into(),
+                "storage_payload_hash" => projection.storage_payload_hash = value.into(),
+                "manifest_hash" => projection.manifest_hash = value.into(),
+                "admitted_budget" => projection.admitted_budget = value.parse().ok()?,
+                "retrieval_cost" => projection.retrieval_cost = value.parse().ok()?,
+                "request_verified" => projection.request_verified = parse_bool_field(value)?,
+                "admission_verified" => projection.admission_verified = parse_bool_field(value)?,
+                "storage_payload_verified" => {
+                    projection.storage_payload_verified = parse_bool_field(value)?;
+                }
+                _ => return None,
+            }
+        }
+
+        saw_field.then_some(projection)
+    }
+}
+
+fn parse_bool_field(value: &str) -> Option<bool> {
+    match value {
+        "true" | "1" | "yes" => Some(true),
+        "false" | "0" | "no" => Some(false),
+        _ => None,
+    }
 }

@@ -3,7 +3,6 @@ use super::*;
 use codex_execpolicy::Decision;
 use codex_execpolicy::NetworkRuleProtocol;
 use codex_execpolicy::Policy;
-use pretty_assertions::assert_eq;
 
 #[test]
 fn higher_precedence_profile_network_overlays_domain_entries() {

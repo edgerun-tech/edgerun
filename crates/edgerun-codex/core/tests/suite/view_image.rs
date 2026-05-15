@@ -46,7 +46,6 @@ use image::GenericImageView;
 use image::ImageBuffer;
 use image::Rgba;
 use image::load_from_memory;
-use pretty_assertions::assert_eq;
 use std::fs;
 use std::io::Cursor;
 use std::path::PathBuf;

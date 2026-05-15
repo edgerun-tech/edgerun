@@ -14,7 +14,7 @@ default = ["proc-macro"]
 proc-macro = ["proc-macro2/proc-macro"]
 
 [dependencies]
-proc-macro2 = { path = "../edgerun-proc-macro2", default-features = false }
+proc-macro2 = { workspace = true, default-features = false }
 
 [lints]
 workspace = true

@@ -362,7 +362,6 @@ mod tests {
     use super::*;
     use codex_protocol::models::ContentItem;
     use codex_protocol::models::MessagePhase;
-    use pretty_assertions::assert_eq;
     use edgerun_tokio::sync::mpsc;
     use edgerun_tokio_util::sync::CancellationToken;
 

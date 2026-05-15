@@ -1004,7 +1004,11 @@ impl UiNode {
     }
 
     pub fn when(self, condition: bool, child: UiNode) -> Self {
-        if condition { self.child(child) } else { self }
+        if condition {
+            self.child(child)
+        } else {
+            self
+        }
     }
 
     pub fn detail(mut self, value: &str) -> Self {

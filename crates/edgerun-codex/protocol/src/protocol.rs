@@ -4061,12 +4061,12 @@ mod tests {
     use crate::permissions::FileSystemSandboxPolicy;
     use crate::permissions::FileSystemSpecialPath;
     use crate::permissions::NetworkSandboxPolicy;
-    use anyhow::Result;
     use edgerun_json::json;
-    use pretty_assertions::assert_eq;
     use std::path::PathBuf;
     use tempfile::NamedTempFile;
     use tempfile::TempDir;
+
+    type Result<T, E = Box<dyn std::error::Error + Send + Sync>> = core::result::Result<T, E>;
 
     fn sorted_writable_roots(roots: Vec<WritableRoot>) -> Vec<(PathBuf, Vec<PathBuf>)> {
         let mut sorted_roots: Vec<(PathBuf, Vec<PathBuf>)> = roots

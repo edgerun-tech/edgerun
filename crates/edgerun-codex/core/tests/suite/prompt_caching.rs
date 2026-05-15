@@ -27,7 +27,6 @@ use core_test_support::test_codex::TestCodex;
 use core_test_support::test_codex::test_codex;
 use core_test_support::test_codex::turn_permission_fields;
 use core_test_support::wait_for_event;
-use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 
 fn text_user_input(text: String) -> edgerun_json::Value {
@@ -97,7 +96,6 @@ fn normalize_newlines(text: &str) -> String {
 #[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn prompt_tools_are_consistent_across_requests() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
-    use pretty_assertions::assert_eq;
 
     let server = start_mock_server().await;
     let req1 = mount_sse_once(
@@ -214,7 +212,6 @@ async fn prompt_tools_are_consistent_across_requests() -> anyhow::Result<()> {
 #[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn gpt_5_tools_without_apply_patch_append_apply_patch_instructions() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
-    use pretty_assertions::assert_eq;
 
     let server = start_mock_server().await;
     let req1 = mount_sse_once(
@@ -296,7 +293,6 @@ async fn gpt_5_tools_without_apply_patch_append_apply_patch_instructions() -> an
 async fn prefixes_context_and_instructions_once_and_consistently_across_requests()
 -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
-    use pretty_assertions::assert_eq;
 
     let server = start_mock_server().await;
     let req1 = mount_sse_once(
@@ -390,7 +386,6 @@ async fn prefixes_context_and_instructions_once_and_consistently_across_requests
 #[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn overrides_turn_context_but_keeps_cached_prefix_and_key_constant() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
-    use pretty_assertions::assert_eq;
 
     let server = start_mock_server().await;
     let req1 = mount_sse_once(
@@ -666,7 +661,6 @@ async fn override_before_first_turn_emits_environment_context() -> anyhow::Resul
 #[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn per_turn_overrides_keep_cached_prefix_and_key_constant() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
-    use pretty_assertions::assert_eq;
 
     let server = start_mock_server().await;
     let req1 = mount_sse_once(
@@ -796,7 +790,6 @@ async fn per_turn_overrides_keep_cached_prefix_and_key_constant() -> anyhow::Res
 #[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn send_user_turn_with_no_changes_does_not_send_environment_context() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
-    use pretty_assertions::assert_eq;
 
     let server = start_mock_server().await;
     let req1 = mount_sse_once(
@@ -925,7 +918,6 @@ async fn send_user_turn_with_no_changes_does_not_send_environment_context() -> a
 #[edgerun_tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn send_user_turn_with_changes_sends_environment_context() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
-    use pretty_assertions::assert_eq;
 
     let server = start_mock_server().await;
 

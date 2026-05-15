@@ -133,7 +133,6 @@ mod tests {
     use super::PlanType;
     use crate::auth::KnownPlan;
     use crate::auth::PlanType as AuthPlanType;
-    use pretty_assertions::assert_eq;
 
     #[test]
     fn usage_based_plan_types_use_expected_wire_names() {

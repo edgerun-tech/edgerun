@@ -17,7 +17,6 @@ use codex_protocol::permissions::FileSystemSandboxEntry;
 use codex_protocol::permissions::FileSystemSandboxPolicy;
 use codex_protocol::permissions::FileSystemSpecialPath;
 use codex_utils_absolute_path::AbsolutePathBuf;
-use pretty_assertions::assert_eq;
 use std::collections::BTreeMap;
 use tempfile::TempDir;
 

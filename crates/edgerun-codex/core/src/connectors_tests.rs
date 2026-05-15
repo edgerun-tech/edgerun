@@ -22,7 +22,6 @@ use codex_features::Feature;
 use codex_mcp::CODEX_APPS_MCP_SERVER_NAME;
 use codex_mcp::ToolInfo;
 use codex_utils_absolute_path::AbsolutePathBuf;
-use pretty_assertions::assert_eq;
 use rmcp::model::JsonObject;
 use rmcp::model::Tool;
 use std::collections::BTreeMap;

@@ -1,6 +1,5 @@
 use super::*;
 use crate::ModelsManagerConfig;
-use pretty_assertions::assert_eq;
 
 #[test]
 fn reasoning_summaries_override_true_enables_support() {

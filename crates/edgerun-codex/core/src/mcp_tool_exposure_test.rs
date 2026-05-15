@@ -13,7 +13,6 @@ use codex_protocol::protocol::SessionSource;
 use codex_tools::ToolName;
 use codex_tools::ToolsConfig;
 use codex_tools::ToolsConfigParams;
-use pretty_assertions::assert_eq;
 use rmcp::model::JsonObject;
 use rmcp::model::Tool;
 

@@ -4,7 +4,6 @@ use codex_features::Features;
 use codex_protocol::config_types::ModeKind;
 use codex_tools::JsonSchema;
 use codex_tools::request_user_input_available_modes;
-use pretty_assertions::assert_eq;
 use std::collections::BTreeMap;
 
 fn default_mode_enabled_available_modes() -> Vec<ModeKind> {

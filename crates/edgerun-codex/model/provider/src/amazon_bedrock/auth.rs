@@ -136,7 +136,6 @@ impl AuthProvider for BedrockMantleSigV4AuthProvider {
 mod tests {
     use codex_api::AuthProvider;
     use edgerun_http::HeaderValue;
-    use pretty_assertions::assert_eq;
 
     use super::*;
 

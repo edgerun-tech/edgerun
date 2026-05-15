@@ -1,5 +1,4 @@
 use super::*;
-use pretty_assertions::assert_eq;
 
 #[test]
 fn map_api_error_maps_server_overloaded() {

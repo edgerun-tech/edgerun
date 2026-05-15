@@ -14,8 +14,8 @@ path = "src/lib.rs"
 proc-macro = true
 
 [dependencies]
-quote = { path = "../edgerun-quote" }
-syn = { path = "../edgerun-syn", features = ["full"] }
+quote = { workspace = true, features = ["proc-macro"] }
+syn = { workspace = true, features = ["clone-impls", "derive", "full", "parsing", "printing", "proc-macro"] }
 
 [lints]
 workspace = true

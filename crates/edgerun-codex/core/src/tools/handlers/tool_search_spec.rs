@@ -65,7 +65,6 @@ pub(crate) fn create_tool_search_tool(
 mod tests {
     use super::*;
     use codex_tools::JsonSchema;
-    use pretty_assertions::assert_eq;
     use std::collections::BTreeMap;
 
     #[test]

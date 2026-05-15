@@ -1,6 +1,6 @@
+use super::runtime::GpuHit;
 #[cfg(feature = "tabler-svg-atlas")]
 use super::UiIconAtlasRect;
-use super::runtime::GpuHit;
 #[cfg(feature = "fontdue-text")]
 use super::{FontAtlas, TextQuad};
 use std::vec::Vec;

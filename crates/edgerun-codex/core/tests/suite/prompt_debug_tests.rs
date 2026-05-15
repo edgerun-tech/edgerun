@@ -5,7 +5,6 @@ use codex_core::config::ConfigOverrides;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::user_input::UserInput;
-use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 
 #[edgerun_tokio::test]

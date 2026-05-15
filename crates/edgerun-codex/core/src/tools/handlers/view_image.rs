@@ -252,7 +252,6 @@ impl ToolOutput for ViewImageOutput {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pretty_assertions::assert_eq;
     use edgerun_json::json;
 
     #[test]

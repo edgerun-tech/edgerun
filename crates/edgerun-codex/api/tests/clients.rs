@@ -2,7 +2,6 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 
-use anyhow::Result;
 use codex_api::ApiError;
 use codex_api::AuthError;
 use codex_api::AuthProvider;
@@ -26,7 +25,8 @@ use edgerun_bytes::Bytes;
 use edgerun_http::HeaderMap;
 use edgerun_http::HeaderValue;
 use edgerun_http::StatusCode;
-use pretty_assertions::assert_eq;
+
+type Result<T, E = Box<dyn std::error::Error + Send + Sync>> = core::result::Result<T, E>;
 
 fn assert_path_ends_with(requests: &[Request], suffix: &str) {
     assert_eq!(requests.len(), 1);

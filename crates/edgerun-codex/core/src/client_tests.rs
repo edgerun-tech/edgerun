@@ -29,7 +29,6 @@ use codex_rollout_trace::RolloutTrace;
 use codex_rollout_trace::TraceWriter;
 use codex_rollout_trace::replay_bundle;
 use edgerun_futures::StreamExt;
-use pretty_assertions::assert_eq;
 use edgerun_json::json;
 use std::collections::BTreeMap;
 use std::collections::VecDeque;

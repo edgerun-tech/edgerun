@@ -6,7 +6,6 @@ use codex_protocol::models::ManagedFileSystemPermissions;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::permissions::NetworkSandboxPolicy;
 use codex_protocol::protocol::SandboxPolicy;
-use pretty_assertions::assert_eq;
 
 fn permission_profile_for_sandbox_policy(sandbox_policy: &SandboxPolicy) -> PermissionProfile {
     PermissionProfile::from_legacy_sandbox_policy(sandbox_policy)

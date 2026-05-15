@@ -51,7 +51,6 @@ pub(crate) fn create_wait_tool() -> ToolSpec {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pretty_assertions::assert_eq;
 
     #[test]
     fn create_wait_tool_matches_expected_spec() {

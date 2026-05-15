@@ -18,7 +18,7 @@ proxy = ["handshake"]
 bytes = { package = "edgerun-bytes", version = "0.1", path = "../edgerun-bytes" }
 edgerun-crypto = { workspace = true, default-features = false, features = ["sha1"] }
 edgerun-encoding = { workspace = true, default-features = false }
-edgerun-http = { version = "0.1", path = "../edgerun-http" }
+edgerun-http = { workspace = true }
 
 [lints]
 workspace = true

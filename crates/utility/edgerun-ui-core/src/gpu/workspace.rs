@@ -1,5 +1,5 @@
 use super::app_registry::{
-    CHAT_APP_ID, STORAGE_APP_ID, TRUST_MANAGER_APP_ID, app_id_for_kind, app_surface_for_kind,
+    app_id_for_kind, app_surface_for_kind, CHAT_APP_ID, STORAGE_APP_ID, TRUST_MANAGER_APP_ID,
 };
 use super::{
     GpuClip, GpuScene, HitKind, UiAction, UiComponentPreviewState, UiEvent, UiIcon, UiPainter,

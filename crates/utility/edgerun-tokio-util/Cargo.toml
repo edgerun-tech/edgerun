@@ -22,8 +22,8 @@ sync = []
 time = []
 
 [dependencies]
-edgerun-bytes = { version = "0.1", path = "../edgerun-bytes" }
-edgerun-futures = { version = "0.1", path = "../edgerun-futures" }
+edgerun-bytes = { workspace = true }
+edgerun-futures = { workspace = true }
 edgerun-tokio = { version = "0.1", path = "../edgerun-tokio", default-features = false, features = ["edgerun-runtime"], optional = true }
 
 [lints]

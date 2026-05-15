@@ -110,7 +110,6 @@ fn completion_budget_report(goal: &ThreadGoal) -> Option<String> {
 mod tests {
     use super::*;
     use codex_protocol::ThreadId;
-    use pretty_assertions::assert_eq;
 
     #[test]
     fn completed_budgeted_goal_response_reports_final_usage() {

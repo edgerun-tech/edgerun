@@ -1,13 +1,16 @@
+use std::cell::RefCell;
 use std::ffi::{CStr, CString};
 use std::format;
 use std::os::raw::{c_char, c_int, c_void};
+use std::rc::Rc;
 use std::string::String;
 use std::string::ToString;
 
 use super::gl::GlRenderer;
+use super::{ui_key_from_sdl_key_sym, UiHostSession};
 use super::{
-    Color4, FontAtlas, GpuScene, HitKind, UiAction, UiEvent, UiKey, UiNode, UiPainter, UiRect,
-    UiRuntimeState,
+    Color4, FontAtlas, GpuScene, HitKind, UiAction, UiEvent, UiKey, UiKeyModifiers, UiNode,
+    UiPainter, UiRect, UiRuntimeState,
 };
 
 const SDL_INIT_VIDEO: u32 = 0x0000_0020;
@@ -35,6 +38,8 @@ const SDL_SYSTEM_CURSOR_IBEAM: c_int = 1;
 const SDL_SYSTEM_CURSOR_SIZEWE: c_int = 7;
 const SDL_SYSTEM_CURSOR_SIZENS: c_int = 8;
 const SDL_SYSTEM_CURSOR_HAND: c_int = 11;
+const KMOD_SHIFT: u16 = 0x0003;
+const KMOD_CTRL: u16 = 0x00c0;
 
 pub const SDL_KEY_ESCAPE: i32 = 27;
 pub const SDL_KEY_BACKSPACE: i32 = 8;
@@ -117,7 +122,7 @@ impl SdlEventResult {
 pub enum SdlInputEvent {
     CloseRequested,
     Tick,
-    KeyDown { key: i32 },
+    KeyDown { key: i32, modifiers: UiKeyModifiers },
     TextInput { text: String },
     MouseWheel { y: f32 },
     MouseMotion { x: f32, y: f32 },
@@ -158,6 +163,15 @@ impl RawSdlEvent {
 
     fn key_sym(&self) -> i32 {
         i32::from_ne_bytes([self.data[20], self.data[21], self.data[22], self.data[23]])
+    }
+
+    fn key_modifiers(&self) -> UiKeyModifiers {
+        let raw = u16::from_ne_bytes([self.data[24], self.data[25]]);
+        UiKeyModifiers {
+            shift: raw & KMOD_SHIFT != 0,
+            ctrl: raw & KMOD_CTRL != 0,
+            ..UiKeyModifiers::default()
+        }
     }
 
     fn text_input(&self) -> Option<String> {
@@ -322,18 +336,85 @@ pub fn run_sdl_gl_window(
     run_sdl_gl_layout_window(options, on_event, layout)
 }
 
-fn map_sdl_key(key: i32) -> UiKey {
-    match key {
-        SDL_KEY_BACKSPACE => UiKey::Backspace,
-        SDL_KEY_ENTER => UiKey::Enter,
-        SDL_KEY_ESCAPE => UiKey::Escape,
-        SDL_KEY_TAB => UiKey::Tab,
-        0x4000_0050 => UiKey::ArrowLeft,
-        0x4000_004f => UiKey::ArrowRight,
-        0x4000_0052 => UiKey::ArrowUp,
-        0x4000_0051 => UiKey::ArrowDown,
-        value => UiKey::Other(value as u32),
-    }
+pub const fn map_sdl_key(key: i32) -> UiKey {
+    ui_key_from_sdl_key_sym(key)
+}
+
+pub fn run_edgerun_shell_sdl_window(
+    options: SdlGlWindowOptions<'_>,
+    session: UiHostSession,
+) -> Result<(), String> {
+    let direct = unsafe { SdlDirectDrawCapability::new_unchecked() };
+    let session = Rc::new(RefCell::new(session));
+    let event_session = Rc::clone(&session);
+    let render_session = Rc::clone(&session);
+    run_sdl_gl_window_direct(
+        options,
+        direct,
+        move |event| match event {
+            SdlInputEvent::CloseRequested => SdlEventResult::quit(),
+            SdlInputEvent::KeyDown { key, .. } if key == SDL_KEY_ESCAPE => SdlEventResult::quit(),
+            SdlInputEvent::KeyDown { key, .. } => SdlEventResult {
+                dirty: event_session
+                    .borrow_mut()
+                    .handle_combined_event(UiEvent::KeyDown {
+                        key: map_sdl_key(key),
+                    }),
+                quit: false,
+            },
+            SdlInputEvent::TextInput { text } => SdlEventResult {
+                dirty: event_session
+                    .borrow_mut()
+                    .handle_combined_event(UiEvent::TextInput(text)),
+                quit: false,
+            },
+            SdlInputEvent::MouseWheel { y } => {
+                let hover = {
+                    let session = event_session.borrow();
+                    session
+                        .workspace
+                        .focused_app
+                        .and_then(|id| session.workspace.app(id))
+                        .and_then(|app| app.runtime.hovered())
+                };
+                SdlEventResult {
+                    dirty: event_session
+                        .borrow_mut()
+                        .handle_combined_event(UiEvent::Wheel {
+                            x: hover.map(|hit| hit.x).unwrap_or(0.0),
+                            y: hover.map(|hit| hit.y).unwrap_or(0.0),
+                            delta_y: -y * 120.0,
+                        }),
+                    quit: false,
+                }
+            }
+            SdlInputEvent::MouseMotion { x, y } => SdlEventResult {
+                dirty: event_session
+                    .borrow_mut()
+                    .handle_combined_event(UiEvent::PointerMove { x, y }),
+                quit: false,
+            },
+            SdlInputEvent::MouseDown { x, y } => SdlEventResult {
+                dirty: event_session
+                    .borrow_mut()
+                    .handle_combined_event(UiEvent::PointerDown { x, y }),
+                quit: false,
+            },
+            SdlInputEvent::MouseUp { x, y } => SdlEventResult {
+                dirty: event_session
+                    .borrow_mut()
+                    .handle_combined_event(UiEvent::PointerUp { x, y }),
+                quit: false,
+            },
+            SdlInputEvent::Resized { .. } => SdlEventResult::dirty(),
+            SdlInputEvent::Tick | SdlInputEvent::UiAction { .. } => SdlEventResult::default(),
+        },
+        move |scene, atlas, width, height| {
+            let mut session = render_session.borrow_mut();
+            session.build_combined_frame(atlas, width as f32, height as f32);
+            *scene = session.scene.clone();
+        },
+    )
 }
 
 fn cursor_for_scene_position(scene: &GpuScene, x: f32, y: f32) -> SdlCursorKind {
@@ -480,9 +561,10 @@ fn run_sdl_gl_window_backend(
                 SDL_QUIT => Some(SdlInputEvent::CloseRequested),
                 SDL_KEYDOWN => Some(SdlInputEvent::KeyDown {
                     key: event.key_sym(),
+                    modifiers: event.key_modifiers(),
                 })
                 .inspect(|mapped| {
-                    if let SdlInputEvent::KeyDown { key } = mapped {
+                    if let SdlInputEvent::KeyDown { key, .. } = mapped {
                         let action = runtime.handle_event(
                             &scene,
                             UiEvent::KeyDown {
@@ -683,7 +765,11 @@ fn sync_window_size(
 
 fn init_sdl() -> Result<Sdl, String> {
     let rc = unsafe { SDL_Init(SDL_INIT_VIDEO) };
-    if rc == 0 { Ok(Sdl) } else { Err(sdl_error()) }
+    if rc == 0 {
+        Ok(Sdl)
+    } else {
+        Err(sdl_error())
+    }
 }
 
 fn sdl_error() -> String {

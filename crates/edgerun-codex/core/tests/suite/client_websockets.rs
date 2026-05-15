@@ -45,7 +45,6 @@ use core_test_support::wait_for_event;
 use edgerun_json::json;
 use edgerun_futures::StreamExt;
 use opentelemetry_sdk::metrics::InMemoryMetricExporter;
-use pretty_assertions::assert_eq;
 use std::sync::Arc;
 use std::time::Duration;
 use tempfile::TempDir;
@@ -1214,7 +1213,7 @@ async fn responses_websocket_usage_limit_error_emits_rate_limit_event() {
 
     let event_json =
         edgerun_json::to_value(&&event);
-    pretty_assertions::assert_eq!(
+    assert_eq!(
         event_json,
         json!({
             "info": null,

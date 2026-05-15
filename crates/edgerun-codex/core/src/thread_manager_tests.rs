@@ -24,7 +24,6 @@ use codex_protocol::protocol::UserMessageEvent;
 use core_test_support::PathBufExt;
 use core_test_support::PathExt;
 use core_test_support::responses::mount_models_once;
-use pretty_assertions::assert_eq;
 use std::time::Duration;
 use tempfile::tempdir;
 use wiremock::MockServer;

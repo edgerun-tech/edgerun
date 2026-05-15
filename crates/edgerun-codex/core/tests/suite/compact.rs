@@ -51,7 +51,6 @@ use core_test_support::responses::sse_response;
 use core_test_support::responses::start_mock_server;
 use edgerun_json::Value;
 use edgerun_json::json;
-use pretty_assertions::assert_eq;
 use std::fs;
 use std::path::Path;
 use wiremock::MockServer;

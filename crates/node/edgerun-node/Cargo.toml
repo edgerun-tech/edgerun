@@ -148,17 +148,17 @@ ui-sdl = [
 
 [dependencies]
 edgerun-devices = { workspace = true, optional = true }
-edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding" }
-edgerun-capabilities = { version = "0.1", path = "../../capability/edgerun-capabilities", optional = true }
-edgerun-storage = { version = "0.1", path = "../../authority/edgerun-storage", optional = true }
-edgerun-mesh = { version = "0.1", path = "../../mesh/edgerun-mesh", optional = true }
+edgerun-encoding = { workspace = true }
+edgerun-capabilities = { workspace = true, optional = true }
+edgerun-storage = { workspace = true, optional = true }
+edgerun-mesh = { workspace = true, optional = true }
 edgerun-crypto = { workspace = true, default-features = false, features = ["ed25519", "p256"] }
-edgerun-log = { version = "0.1", path = "../../utility/edgerun-log" }
+edgerun-log = { workspace = true }
 edgerun-platform = { version = "0.1", path = "../../edgerun-platform" }
 edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-hardware-signing", default-features = false, optional = true }
-edgerun-json = { version = "0.1", path = "../../utility/edgerun-json" }
+edgerun-json = { workspace = true }
 edgerun-protocols = { workspace = true, optional = true }
-edgerun-work = { version = "0.1", path = "../../protocol/edgerun-work", default-features = false, features = ["std"], optional = true }
+edgerun-work = { workspace = true, default-features = false, features = ["std"], optional = true }
 edgerun-codelyzer = { version = "0.1", path = "../../edgerun-codelyzer", default-features = false, optional = true }
 edgerun-ui-core = { version = "0.1.1", path = "../../utility/edgerun-ui-core", default-features = false, features = ["gpu-gl", "fontdue-text", "tabler-svg-atlas"], optional = true }
 rkyv = { workspace = true, optional = true }
@@ -166,18 +166,18 @@ edgerun-hpack = { version = "0.1", path = "../../utility/edgerun-hpack", optiona
 
 [target.'cfg(target_os = "linux")'.dependencies]
 edgerun-linux-netif = { version = "0.1", path = "../../linux-adapters/edgerun-linux-netif", optional = true }
-edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-hardware-signing", features = ["tpm", "android-keystore", "yubikey"], optional = true }
+edgerun-hardware-signing = { workspace = true, features = ["tpm", "android-keystore", "yubikey"], optional = true }
 edgerun-tpm = { version = "0.1", path = "../../identity/edgerun-tpm", optional = true }
 edgerun-yubikey = { version = "0.1", path = "../../identity/edgerun-yubikey", optional = true }
-edgerun-evdev-input = { version = "0.1", path = "../../linux-adapters/edgerun-evdev-input", optional = true }
-edgerun-linux-wifi = { version = "0.1", path = "../../linux-adapters/edgerun-linux-wifi", optional = true }
+edgerun-evdev-input = { workspace = true, optional = true }
+edgerun-linux-wifi = { workspace = true, optional = true }
 edgerun-linux-usb = { version = "0.1", path = "../../linux-adapters/edgerun-linux-usb", optional = true }
 edgerun-linux-pci = { version = "0.1", path = "../../linux-adapters/edgerun-linux-pci", optional = true }
 edgerun-linux-sysfs = { version = "0.1", path = "../../linux-adapters/edgerun-linux-sysfs", optional = true }
-edgerun-virtual-disk = { version = "0.1", path = "../../authority/edgerun-virtual-disk", optional = true }
+edgerun-virtual-disk = { workspace = true, optional = true }
 
 [dev-dependencies]
-edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-hardware-signing" }
+edgerun-hardware-signing = { workspace = true }
 edgerun-sdk = { version = "0.1", path = "../../edgerun-sdk", default-features = false, features = ["browser-authoring"] }
 
 [lints]

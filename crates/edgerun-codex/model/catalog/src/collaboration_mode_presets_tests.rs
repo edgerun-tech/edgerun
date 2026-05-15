@@ -1,5 +1,4 @@
 use super::*;
-use pretty_assertions::assert_eq;
 
 #[test]
 fn preset_names_use_mode_display_names() {

@@ -60,7 +60,6 @@ use codex_tools::ToolName;
 use codex_tools::ToolsConfigParams;
 use codex_tools::mcp_call_tool_result_output_schema;
 use codex_tools::request_user_input_available_modes;
-use pretty_assertions::assert_eq;
 use edgerun_json::json;
 use std::collections::BTreeMap;
 use std::collections::HashMap;

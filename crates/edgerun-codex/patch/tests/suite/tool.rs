@@ -1,5 +1,4 @@
 use assert_cmd::Command;
-use pretty_assertions::assert_eq;
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;

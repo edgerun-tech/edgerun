@@ -9,7 +9,6 @@ use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::UserMessageEvent;
 use codex_rollout::ARCHIVED_SESSIONS_SUBDIR;
 use codex_rollout::SESSIONS_SUBDIR;
-use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 use edgerun_tokio::io::AsyncWriteExt;
 

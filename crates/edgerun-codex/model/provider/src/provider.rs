@@ -292,7 +292,6 @@ mod tests {
     use codex_protocol::openai_models::ModelInfo;
     use codex_protocol::openai_models::ModelsResponse;
     use edgerun_json::json;
-    use pretty_assertions::assert_eq;
     #[cfg(feature = "native-transport")]
     use wiremock::Mock;
     #[cfg(feature = "native-transport")]

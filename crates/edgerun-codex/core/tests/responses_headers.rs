@@ -19,7 +19,6 @@ use core_test_support::load_default_config_for_test;
 use core_test_support::responses;
 use core_test_support::test_codex::test_codex;
 use edgerun_futures::StreamExt;
-use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 use wiremock::matchers::header;
 

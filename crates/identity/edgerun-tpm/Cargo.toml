@@ -9,8 +9,8 @@ homepage.workspace = true
 description = "TPM command and signing support for Edgerun"
 
 [dependencies]
-edgerun-crypto = { version = "0.1", path = "../../utility/edgerun-crypto", default-features = false }
-edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding", default-features = false }
+edgerun-crypto = { workspace = true, default-features = false }
+edgerun-encoding = { workspace = true, default-features = false }
 
 [features]
 default = []

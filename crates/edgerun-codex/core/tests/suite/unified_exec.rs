@@ -38,7 +38,6 @@ use core_test_support::wait_for_event_match;
 use core_test_support::wait_for_event_with_timeout;
 use edgerun_json::Value;
 use edgerun_json::json;
-use pretty_assertions::assert_eq;
 use regex_lite::Regex;
 use edgerun_tokio::time::Duration;
 

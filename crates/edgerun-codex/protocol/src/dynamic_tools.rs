@@ -121,7 +121,6 @@ fn missing_field(field: &str) -> JsonValueError {
 mod tests {
     use super::DynamicToolSpec;
     use edgerun_json::json;
-    use pretty_assertions::assert_eq;
 
     #[test]
     fn dynamic_tool_spec_deserializes_defer_loading() {

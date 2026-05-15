@@ -122,7 +122,6 @@ fn is_allowed_cloudflare_cookie_name(name: &str) -> bool {
 mod tests {
     use super::*;
     use edgerun_reqwest::cookie::CookieStore;
-    use pretty_assertions::assert_eq;
 
     #[test]
     fn stores_and_returns_cloudflare_cookies_for_chatgpt_hosts() {

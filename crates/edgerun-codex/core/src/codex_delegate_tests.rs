@@ -22,7 +22,6 @@ use codex_protocol::request_user_input::RequestUserInputQuestion;
 use core_test_support::PathBufExt;
 use core_test_support::test_path_buf;
 use edgerun_async_channel::bounded;
-use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::sync::Arc;
 use edgerun_tokio::sync::Mutex;

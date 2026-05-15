@@ -1018,7 +1018,6 @@ pub fn test_codex() -> TestCodexBuilder {
 mod tests {
     use super::*;
     use edgerun_json::json;
-    use pretty_assertions::assert_eq;
 
     #[test]
     fn custom_tool_call_output_text_returns_output_text() {

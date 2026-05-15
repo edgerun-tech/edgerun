@@ -43,7 +43,6 @@ tracing = { workspace = true }
 [dev-dependencies]
 codex_utils_cargo_bin = { package = "edgerun-codex-utils-cargo-bin", path = "../../utility/edgerun-codex-utils-cargo-bin" }
 edgerun-http-client = { path = "../../utility/edgerun-http-client", default-features = false, features = ["std", "tls"] }
-pretty_assertions = { package = "edgerun-pretty-assertions", path = "../../utility/edgerun-pretty-assertions" }
 tempfile = { package = "edgerun-tempfile", path = "../../utility/edgerun-tempfile" }
 
 [lints]

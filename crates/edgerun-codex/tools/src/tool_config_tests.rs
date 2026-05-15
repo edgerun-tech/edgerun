@@ -9,7 +9,6 @@ use codex_protocol::openai_models::ModelInfo;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::SubAgentSource;
 use edgerun_json::json;
-use pretty_assertions::assert_eq;
 use std::path::PathBuf;
 
 fn model_info() -> ModelInfo {

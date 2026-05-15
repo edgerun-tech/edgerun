@@ -132,7 +132,6 @@ impl From<ResolvedReviewRequest> for ReviewRequest {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pretty_assertions::assert_eq;
 
     #[test]
     fn review_prompt_template_renders_base_branch_backup_variant() {

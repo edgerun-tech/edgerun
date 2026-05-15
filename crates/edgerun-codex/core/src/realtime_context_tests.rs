@@ -21,7 +21,6 @@ use core_test_support::PathBufExt;
 use core_test_support::PathExt;
 use edgerun_time::chrono::ChronoTimeZone;
 use edgerun_time::chrono::ChronoUtc as Utc;
-use pretty_assertions::assert_eq;
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;

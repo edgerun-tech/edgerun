@@ -15,7 +15,6 @@ use core_test_support::test_absolute_path;
 use core_test_support::test_codex::TestCodex;
 use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event_match;
-use pretty_assertions::assert_eq;
 use std::collections::BTreeMap;
 use toml::Value as TomlValue;
 

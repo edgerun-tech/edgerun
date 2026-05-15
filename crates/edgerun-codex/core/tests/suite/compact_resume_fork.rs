@@ -37,7 +37,6 @@ use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
 use edgerun_json::Value;
 use edgerun_json::json;
-use pretty_assertions::assert_eq;
 use std::sync::Arc;
 use tempfile::TempDir;
 use wiremock::MockServer;

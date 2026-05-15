@@ -1,5 +1,4 @@
 use super::canonicalize_command_for_approval;
-use pretty_assertions::assert_eq;
 
 #[test]
 fn canonicalizes_word_only_shell_scripts_to_inner_command() {

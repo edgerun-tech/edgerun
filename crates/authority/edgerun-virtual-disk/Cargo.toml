@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "Virtual block device and network block protocol support for Edgerun"
 
 [dependencies]
-edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding" }
+edgerun-encoding = { workspace = true }
 edgerun-protocols = { workspace = true, default-features = false, features = ["nbd", "websocket"] }
 
 [lints]

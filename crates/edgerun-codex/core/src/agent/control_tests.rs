@@ -30,7 +30,6 @@ use codex_thread_store::ArchiveThreadParams;
 use codex_thread_store::LocalThreadStore;
 use codex_thread_store::LocalThreadStoreConfig;
 use codex_thread_store::ThreadStore;
-use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 use edgerun_tokio::time::Duration;
 use edgerun_tokio::time::sleep;

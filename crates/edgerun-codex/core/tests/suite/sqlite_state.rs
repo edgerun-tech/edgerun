@@ -32,7 +32,6 @@ use core_test_support::wait_for_event;
 use core_test_support::wait_for_event_match;
 use edgerun_json::json;
 use codex_protocol::local_uuid::Uuid;
-use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::fs;
 use edgerun_tokio::time::Duration;

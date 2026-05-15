@@ -851,7 +851,6 @@ mod tests {
     use edgerun_tokio::net::TcpListener;
     use edgerun_tokio_tungstenite::Message;
     use edgerun_tokio_tungstenite::accept_async;
-    use pretty_assertions::assert_eq;
     use std::collections::HashMap;
     use std::time::Duration;
 

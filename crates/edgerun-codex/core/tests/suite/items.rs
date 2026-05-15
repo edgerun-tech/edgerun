@@ -38,7 +38,6 @@ use core_test_support::test_codex::test_codex;
 use core_test_support::test_codex::turn_permission_fields;
 use core_test_support::wait_for_event;
 use core_test_support::wait_for_event_match;
-use pretty_assertions::assert_eq;
 use std::path::Path;
 use std::path::PathBuf;
 

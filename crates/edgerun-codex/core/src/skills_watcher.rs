@@ -94,7 +94,6 @@ impl SkillsWatcher {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pretty_assertions::assert_eq;
     use edgerun_tokio::time::Duration;
     use edgerun_tokio::time::timeout;
 

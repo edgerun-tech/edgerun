@@ -51,7 +51,6 @@ use codex_protocol::protocol::TurnAbortedEvent;
 use codex_protocol::protocol::TurnCompleteEvent;
 use codex_protocol::user_input::UserInput;
 use core_test_support::TempDirExt;
-use pretty_assertions::assert_eq;
 use edgerun_json::json;
 use std::collections::HashMap;
 use std::path::PathBuf;

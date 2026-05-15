@@ -77,7 +77,6 @@ mod tests {
     use edgerun_http::HeaderMap;
     use edgerun_http::StatusCode;
     use edgerun_json::json;
-    use pretty_assertions::assert_eq;
     use std::sync::Arc;
     use std::sync::Mutex;
     use std::time::Duration;

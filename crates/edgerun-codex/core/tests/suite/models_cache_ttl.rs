@@ -30,7 +30,6 @@ use core_test_support::wait_for_event;
 use edgerun_time::chrono::ChronoTimeZone;
 use edgerun_time::chrono::ChronoUtc as Utc;
 use edgerun_time::chrono::ChronoUtcDateTime as DateTime;
-use pretty_assertions::assert_eq;
 use wiremock::MockServer;
 
 const ETAG: &str = "\"models-etag-ttl\"";

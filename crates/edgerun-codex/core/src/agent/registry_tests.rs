@@ -1,6 +1,5 @@
 use super::*;
 use codex_protocol::AgentPath;
-use pretty_assertions::assert_eq;
 use std::collections::HashSet;
 
 fn agent_path(path: &str) -> AgentPath {

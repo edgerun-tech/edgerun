@@ -9,11 +9,11 @@
     rustdoc::missing_crate_level_docs
 )]
 
-use proc_macro2::TokenStream;
+use proc_macro2::{TokenStream, TokenTree};
 use quote::{quote, quote_spanned};
 use syn::{
     Error, Expr, FieldPat, Index, Pat, PatIdent, PatRest, PatSlice, PatStruct, PatTuple,
-    PatTupleStruct, Path, parse, parse_macro_input,
+    PatTupleStruct, parse, parse_macro_input,
     punctuated::Punctuated,
     spanned::Spanned,
     token::{Eq, FatArrow, Let, Semi},
@@ -28,17 +28,32 @@ pub fn munge_with_path(input: proc_macro::TokenStream) -> proc_macro::TokenStrea
         .into()
 }
 
+/// Destructures a value by projecting pointers through the public `munge` crate.
+#[proc_macro]
+pub fn munge(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let destructures = parse_macro_input!(input with Punctuated::<Destructure, Semi>::parse_terminated);
+    destructure(Input {
+        crate_path: quote!(::munge),
+        destructures,
+    })
+    .unwrap_or_else(|e| e.to_compile_error())
+    .into()
+}
+
 struct Input {
-    crate_path: Path,
-    _arrow: FatArrow,
+    crate_path: TokenStream,
     destructures: Punctuated<Destructure, Semi>,
 }
 
 impl parse::Parse for Input {
     fn parse(input: parse::ParseStream) -> parse::Result<Self> {
+        let mut crate_path = TokenStream::new();
+        while !input.peek(FatArrow) {
+            crate_path.extend([input.parse::<TokenTree>()?]);
+        }
+        let _arrow = input.parse::<FatArrow>()?;
         Ok(Input {
-            crate_path: input.parse::<Path>()?,
-            _arrow: input.parse::<FatArrow>()?,
+            crate_path,
             destructures: input.parse_terminated(Destructure::parse, Semi)?,
         })
     }
@@ -62,7 +77,7 @@ impl parse::Parse for Destructure {
     }
 }
 
-fn make_rest_check(crate_path: &Path, rest: &PatRest) -> TokenStream {
+fn make_rest_check(crate_path: &TokenStream, rest: &PatRest) -> TokenStream {
     let span = rest.dot2_token.span();
     let destructurer = quote! { destructurer };
 
@@ -77,7 +92,7 @@ fn make_rest_check(crate_path: &Path, rest: &PatRest) -> TokenStream {
     } }
 }
 
-fn parse_pat(crate_path: &Path, pat: &Pat) -> Result<(TokenStream, TokenStream), Error> {
+fn parse_pat(crate_path: &TokenStream, pat: &Pat) -> Result<(TokenStream, TokenStream), Error> {
     let test_ident = quote_spanned!(pat.span() => test);
     let test_ident_ref = quote_spanned!(pat.span() => &test);
     let test = quote! {

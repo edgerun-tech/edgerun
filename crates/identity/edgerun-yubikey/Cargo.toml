@@ -11,7 +11,7 @@ description = "YubiKey signing provider for Edgerun hardware identities"
 [dependencies]
 edgerun-protocols = { workspace = true, default-features = false, features = ["core"] }
 edgerun-linux-sysfs = { version = "0.1", path = "../../linux-adapters/edgerun-linux-sysfs" }
-edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding" }
+edgerun-encoding = { workspace = true }
 
 [lints]
 workspace = true

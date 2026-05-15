@@ -3,7 +3,6 @@ use notify::event::AccessKind;
 use notify::event::AccessMode;
 use notify::event::CreateKind;
 use notify::event::ModifyKind;
-use pretty_assertions::assert_eq;
 use edgerun_tokio::time::timeout;
 
 const TEST_THROTTLE_INTERVAL: Duration = Duration::from_millis(50);

@@ -9,7 +9,6 @@ use codex_protocol::protocol::CompactedItem;
 use codex_protocol::protocol::InitialHistory;
 use codex_protocol::protocol::InterAgentCommunication;
 use codex_protocol::protocol::ResumedHistory;
-use pretty_assertions::assert_eq;
 use std::path::PathBuf;
 
 fn user_message(text: &str) -> ResponseItem {

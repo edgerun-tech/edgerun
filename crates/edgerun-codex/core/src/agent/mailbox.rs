@@ -74,7 +74,6 @@ impl MailboxReceiver {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pretty_assertions::assert_eq;
 
     fn make_mail(
         author: AgentPath,

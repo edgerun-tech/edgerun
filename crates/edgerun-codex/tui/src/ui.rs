@@ -1,8 +1,8 @@
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
-use std::ffi::{CStr, CString};
-use std::os::raw::{c_char, c_int, c_void};
 use std::path::Path;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
@@ -10,7 +10,10 @@ use std::thread;
 use std::time::Duration;
 use std::time::Instant;
 
-use edgerun_ui_core::gpu::gl::GlRenderer;
+use edgerun_ui_core::gpu::sdl::{
+    SdlDirectDrawCapability, SdlEventResult, SdlGlWindowOptions, SdlInputEvent, map_sdl_key,
+    run_sdl_gl_window_direct,
+};
 use edgerun_ui_core::gpu::{
     Color4, FontAtlas, GpuScene, UiAction, UiEvent, UiIcon, UiKey, UiKeyModifiers, UiNode,
     UiPainter, UiRect, UiRuntimeState, UiShadcnActivity, UiShadcnBadgeVariant,
@@ -28,28 +31,7 @@ use super::{
 use codex_core::TokenUsage;
 use codex_core::protocol::protocol::RateLimitSnapshot;
 
-const SDL_INIT_VIDEO: u32 = 0x0000_0020;
-const SDL_WINDOWPOS_CENTERED: c_int = 0x2fff_0000u32 as c_int;
-const SDL_WINDOW_OPENGL: u32 = 0x0000_0002;
-const SDL_WINDOW_SHOWN: u32 = 0x0000_0004;
-const SDL_WINDOW_RESIZABLE: u32 = 0x0000_0020;
-const SDL_QUIT: u32 = 0x100;
-const SDL_KEYDOWN: u32 = 0x300;
-const SDL_TEXTINPUT: u32 = 0x303;
-const SDL_MOUSEBUTTONDOWN: u32 = 0x401;
-const SDL_MOUSEBUTTONUP: u32 = 0x402;
-const SDL_MOUSEWHEEL: u32 = 0x403;
-const SDL_WINDOWEVENT: u32 = 0x200;
-const SDL_WINDOWEVENT_RESIZED: u8 = 0x05;
-const SDL_WINDOWEVENT_SIZE_CHANGED: u8 = 0x06;
-const SDL_GL_CONTEXT_MAJOR_VERSION: c_int = 17;
-const SDL_GL_CONTEXT_MINOR_VERSION: c_int = 18;
-const SDL_GL_CONTEXT_PROFILE_MASK: c_int = 21;
-const SDL_GL_CONTEXT_PROFILE_CORE: c_int = 0x0001;
-const SDL_GL_DOUBLEBUFFER: c_int = 5;
 const SDLK_ESCAPE: i32 = 27;
-const KMOD_SHIFT: u16 = 0x0003;
-const KMOD_CTRL: u16 = 0x00c0;
 
 const SEND_ID: u32 = 81_000;
 const NEW_CHAT_ID: u32 = 81_001;
@@ -67,95 +49,6 @@ const MAX_PROMPT_HISTORY: usize = 100;
 const MAX_DIFF_DISPLAY_BYTES: usize = 12 * 1024;
 
 const BG: Color4 = Color4::rgba(0.035, 0.039, 0.047, 1.0);
-
-#[repr(C)]
-struct SDL_Window(c_void);
-
-type SdlGlContext = *mut c_void;
-
-#[repr(C)]
-struct SdlEvent {
-    data: [u8; 56],
-}
-
-impl SdlEvent {
-    fn event_type(&self) -> u32 {
-        u32::from_ne_bytes([self.data[0], self.data[1], self.data[2], self.data[3]])
-    }
-
-    fn window_event(&self) -> u8 {
-        self.data[8]
-    }
-
-    fn data1(&self) -> i32 {
-        i32::from_ne_bytes([self.data[16], self.data[17], self.data[18], self.data[19]])
-    }
-
-    fn data2(&self) -> i32 {
-        i32::from_ne_bytes([self.data[20], self.data[21], self.data[22], self.data[23]])
-    }
-
-    fn key_sym(&self) -> i32 {
-        i32::from_ne_bytes([self.data[20], self.data[21], self.data[22], self.data[23]])
-    }
-
-    fn key_mod(&self) -> u16 {
-        u16::from_ne_bytes([self.data[24], self.data[25]])
-    }
-
-    fn mouse_x(&self) -> f32 {
-        i32::from_ne_bytes([self.data[20], self.data[21], self.data[22], self.data[23]]) as f32
-    }
-
-    fn mouse_y(&self) -> f32 {
-        i32::from_ne_bytes([self.data[24], self.data[25], self.data[26], self.data[27]]) as f32
-    }
-
-    fn wheel_y(&self) -> f32 {
-        i32::from_ne_bytes([self.data[24], self.data[25], self.data[26], self.data[27]]) as f32
-    }
-
-    fn text_input(&self) -> Option<String> {
-        let bytes = &self.data[12..44];
-        let len = bytes
-            .iter()
-            .position(|byte| *byte == 0)
-            .unwrap_or(bytes.len());
-        if len == 0 {
-            None
-        } else {
-            std::str::from_utf8(&bytes[..len])
-                .ok()
-                .map(ToString::to_string)
-        }
-    }
-}
-
-#[link(name = "SDL2")]
-unsafe extern "C" {
-    fn SDL_Init(flags: u32) -> c_int;
-    fn SDL_Quit();
-    fn SDL_GetError() -> *const c_char;
-    fn SDL_GL_SetAttribute(attr: c_int, value: c_int) -> c_int;
-    fn SDL_CreateWindow(
-        title: *const c_char,
-        x: c_int,
-        y: c_int,
-        w: c_int,
-        h: c_int,
-        flags: u32,
-    ) -> *mut SDL_Window;
-    fn SDL_DestroyWindow(window: *mut SDL_Window);
-    fn SDL_GL_CreateContext(window: *mut SDL_Window) -> SdlGlContext;
-    fn SDL_GL_DeleteContext(context: SdlGlContext);
-    fn SDL_GL_SetSwapInterval(interval: c_int) -> c_int;
-    fn SDL_GL_SwapWindow(window: *mut SDL_Window);
-    fn SDL_SetWindowMinimumSize(window: *mut SDL_Window, min_w: c_int, min_h: c_int);
-    fn SDL_PollEvent(event: *mut SdlEvent) -> c_int;
-    fn SDL_Delay(ms: u32);
-    fn SDL_StartTextInput();
-    fn SDL_StopTextInput();
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Role {
@@ -1025,71 +918,28 @@ fn send_session_event(
 }
 
 fn run_window(frames: Option<u32>, mut state: CodexUi) -> Result<(), String> {
-    let _sdl = Sdl::init()?;
-    unsafe {
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-        SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-        SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-    }
-
-    let mut width = 1180;
-    let mut height = 760;
-    let title = CString::new("EdgeRun Codex").map_err(|error| error.to_string())?;
-    let window = Window(unsafe {
-        SDL_CreateWindow(
-            title.as_ptr(),
-            SDL_WINDOWPOS_CENTERED,
-            SDL_WINDOWPOS_CENTERED,
-            width,
-            height,
-            SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE,
-        )
-    });
-    if window.0.is_null() {
-        return Err(format!("SDL_CreateWindow failed: {}", sdl_error()));
-    }
-    unsafe {
-        SDL_SetWindowMinimumSize(window.0, 420, 360);
-    }
-
-    let _context = GlContext(unsafe { SDL_GL_CreateContext(window.0) });
-    if _context.0.is_null() {
-        return Err(format!("SDL_GL_CreateContext failed: {}", sdl_error()));
-    }
-    unsafe {
-        SDL_GL_SetSwapInterval(1);
-        SDL_StartTextInput();
-    }
-
-    let atlas = FontAtlas::load_inter(18.0)?;
-    let renderer = unsafe { GlRenderer::new_current_context_with_font(&atlas)? };
-    let mut scene = GpuScene::new(BG);
-    let mut running = true;
-    let mut scene_dirty = true;
-    let mut rendered_frames = 0u32;
-
-    while running {
-        if state.drain_events() {
-            scene_dirty = true;
-        }
-        let mut event = SdlEvent { data: [0; 56] };
-        while unsafe { SDL_PollEvent(&mut event) } != 0 {
-            match event.event_type() {
-                SDL_QUIT => running = false,
-                SDL_KEYDOWN if event.key_sym() == SDLK_ESCAPE => {
-                    if !state.handle_escape() {
-                        running = false;
-                    }
-                    scene_dirty = true;
-                }
-                SDL_KEYDOWN => {
-                    let key = sdl_key(event.key_sym());
-                    let modifiers = UiKeyModifiers {
-                        shift: event.key_mod() & KMOD_SHIFT != 0,
-                        ctrl: event.key_mod() & KMOD_CTRL != 0,
-                        ..UiKeyModifiers::default()
-                    };
+    let options = SdlGlWindowOptions::new("EdgeRun Codex", 1180, 760, BG)
+        .min_size(420, 360)
+        .frames(frames);
+    let direct = unsafe { SdlDirectDrawCapability::new_unchecked() };
+    let state = Rc::new(RefCell::new(state));
+    let wheel_handled = Rc::new(Cell::new(false));
+    let event_state = Rc::clone(&state);
+    let render_state = Rc::clone(&state);
+    let wheel_event_handled = Rc::clone(&wheel_handled);
+    run_sdl_gl_window_direct(
+        options,
+        direct,
+        move |event| {
+            let mut state = event_state.borrow_mut();
+            match event {
+                SdlInputEvent::CloseRequested => SdlEventResult::quit(),
+                SdlInputEvent::KeyDown { key, .. } if key == SDLK_ESCAPE => SdlEventResult {
+                    dirty: true,
+                    quit: !state.handle_escape(),
+                },
+                SdlInputEvent::KeyDown { key, modifiers } => {
+                    let key = map_sdl_key(key);
                     if !state.handle_history_key(key, modifiers)
                         && !state.handle_session_key(key, modifiers)
                         && !state.handle_command_key(key, modifiers)
@@ -1098,90 +948,46 @@ fn run_window(frames: Option<u32>, mut state: CodexUi) -> Result<(), String> {
                         state.handle_text_action(action);
                         state.handle_navigation_key(key);
                     }
-                    scene_dirty = true;
+                    SdlEventResult::dirty()
                 }
-                SDL_TEXTINPUT => {
-                    if let Some(text) = event.text_input() {
-                        let action = state.input.handle_text_input(&text);
-                        state.handle_text_action(action);
-                        scene_dirty = true;
-                    }
+                SdlInputEvent::TextInput { text } => {
+                    let action = state.input.handle_text_input(&text);
+                    state.handle_text_action(action);
+                    SdlEventResult::dirty()
                 }
-                SDL_MOUSEBUTTONDOWN => {
-                    let action = state.runtime.handle_event(
-                        &scene,
-                        UiEvent::PointerDown {
-                            x: event.mouse_x(),
-                            y: event.mouse_y(),
-                        },
-                    );
-                    state.handle_ui_action(action);
-                    scene_dirty = true;
-                }
-                SDL_MOUSEBUTTONUP => {
-                    let action = state.runtime.handle_event(
-                        &scene,
-                        UiEvent::PointerUp {
-                            x: event.mouse_x(),
-                            y: event.mouse_y(),
-                        },
-                    );
-                    state.handle_ui_action(action);
-                    scene_dirty = true;
-                }
-                SDL_MOUSEWHEEL => {
-                    let action = state.runtime.handle_event(
-                        &scene,
-                        UiEvent::Wheel {
-                            x: 0.0,
-                            y: 0.0,
-                            delta_y: -event.wheel_y() * 72.0,
-                        },
-                    );
-                    if matches!(action, UiAction::None) {
-                        state.scroll_transcript_by(-event.wheel_y() * 0.08);
+                SdlInputEvent::MouseWheel { y } => {
+                    if wheel_event_handled.replace(false) {
+                        SdlEventResult::dirty()
                     } else {
-                        state.handle_ui_action(action);
+                        state.scroll_transcript_by(-y * 0.08);
+                        SdlEventResult::dirty()
                     }
-                    scene_dirty = true;
                 }
-                SDL_WINDOWEVENT
-                    if matches!(
-                        event.window_event(),
-                        SDL_WINDOWEVENT_RESIZED | SDL_WINDOWEVENT_SIZE_CHANGED
-                    ) =>
-                {
-                    width = event.data1().max(420);
-                    height = event.data2().max(360);
-                    scene_dirty = true;
+                SdlInputEvent::UiAction { action } => {
+                    if matches!(action, UiAction::ScrollChanged { .. }) {
+                        wheel_event_handled.set(true);
+                    }
+                    state.handle_ui_action(action);
+                    SdlEventResult::dirty()
                 }
-                _ => {}
+                SdlInputEvent::Resized { .. } => SdlEventResult::dirty(),
+                SdlInputEvent::Tick => SdlEventResult {
+                    dirty: state.drain_events() || state.busy || state.sessions.any_busy(),
+                    quit: false,
+                },
+                SdlInputEvent::MouseMotion { .. }
+                | SdlInputEvent::MouseDown { .. }
+                | SdlInputEvent::MouseUp { .. } => SdlEventResult::default(),
             }
-        }
-
-        if scene_dirty {
+        },
+        move |scene, atlas, width, height| {
+            let mut state = render_state.borrow_mut();
             if state.busy || state.sessions.any_busy() {
                 state.animation_tick = state.animation_tick.wrapping_add(1);
             }
-            build_scene(&mut scene, &atlas, &mut state, width as f32, height as f32);
-            renderer.render(width, height, &scene);
-            unsafe {
-                SDL_GL_SwapWindow(window.0);
-            }
-            rendered_frames = rendered_frames.saturating_add(1);
-            scene_dirty = false;
-        }
-        if frames.is_some_and(|limit| rendered_frames >= limit) {
-            running = false;
-        } else if frames.is_some() || state.busy || state.sessions.any_busy() {
-            scene_dirty = true;
-        }
-        unsafe {
-            SDL_Delay(8);
-        }
-        thread::sleep(Duration::from_millis(1));
-    }
-    Ok(())
+            build_scene(scene, atlas, &mut state, width as f32, height as f32);
+        },
+    )
 }
 
 impl CodexUi {
@@ -2496,78 +2302,6 @@ fn render_node(
 ) {
     let mut ui = UiPainter::with_font(scene, atlas);
     node.render_with_state(&mut ui, rect, Some(runtime));
-}
-
-fn sdl_key(sym: i32) -> UiKey {
-    match sym {
-        8 => UiKey::Backspace,
-        9 => UiKey::Tab,
-        13 => UiKey::Enter,
-        27 => UiKey::Escape,
-        127 | 1073741907 => UiKey::Delete,
-        1073741898 => UiKey::Home,
-        1073741901 => UiKey::End,
-        1073741899 => UiKey::PageUp,
-        1073741902 => UiKey::PageDown,
-        1073741904 => UiKey::ArrowLeft,
-        1073741903 => UiKey::ArrowRight,
-        1073741906 => UiKey::ArrowUp,
-        1073741905 => UiKey::ArrowDown,
-        other => UiKey::Other(other as u32),
-    }
-}
-
-struct Sdl;
-
-impl Sdl {
-    fn init() -> Result<Self, String> {
-        let rc = unsafe { SDL_Init(SDL_INIT_VIDEO) };
-        if rc == 0 { Ok(Self) } else { Err(sdl_error()) }
-    }
-}
-
-impl Drop for Sdl {
-    fn drop(&mut self) {
-        unsafe {
-            SDL_StopTextInput();
-            SDL_Quit();
-        }
-    }
-}
-
-struct Window(*mut SDL_Window);
-
-impl Drop for Window {
-    fn drop(&mut self) {
-        if !self.0.is_null() {
-            unsafe {
-                SDL_DestroyWindow(self.0);
-            }
-        }
-    }
-}
-
-struct GlContext(SdlGlContext);
-
-impl Drop for GlContext {
-    fn drop(&mut self) {
-        if !self.0.is_null() {
-            unsafe {
-                SDL_GL_DeleteContext(self.0);
-            }
-        }
-    }
-}
-
-fn sdl_error() -> String {
-    let ptr = unsafe { SDL_GetError() };
-    if ptr.is_null() {
-        "unknown SDL error".to_string()
-    } else {
-        unsafe { CStr::from_ptr(ptr) }
-            .to_string_lossy()
-            .into_owned()
-    }
 }
 
 #[cfg(test)]

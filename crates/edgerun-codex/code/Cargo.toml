@@ -23,4 +23,3 @@ edgerun-tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] 
 edgerun-tokio-util = { workspace = true, features = ["rt"] }
 
 [dev-dependencies]
-pretty_assertions = { package = "edgerun-pretty-assertions", path = "../../utility/edgerun-pretty-assertions" }

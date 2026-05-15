@@ -88,7 +88,6 @@ mod tests {
     use codex_exec_server::REMOTE_ENVIRONMENT_ID;
     use codex_protocol::protocol::TurnEnvironmentSelection;
     use codex_utils_absolute_path::AbsolutePathBuf;
-    use pretty_assertions::assert_eq;
 
     use super::*;
 

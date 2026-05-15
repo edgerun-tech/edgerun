@@ -34,6 +34,9 @@ mod internal;
 
 #[doc(hidden)]
 pub use munge_macro::munge_with_path;
+#[allow(unused_extern_crates)]
+extern crate self as munge;
+pub use munge_macro::munge;
 
 /// Destructures a type using a pattern.
 ///
@@ -69,11 +72,6 @@ pub use munge_macro::munge_with_path;
 /// assert_eq!(init.b.0, 'x');
 /// assert_eq!(init.b.1, 3.14);
 /// ```
-#[macro_export]
-macro_rules! munge {
-    ($($t:tt)*) => { $crate::munge_with_path!($crate => $($t)*) }
-}
-
 /// A type that can be destructured into its constituent parts.
 ///
 /// See the [crate docs](index.html#examples) for an example of implementing
@@ -156,6 +154,7 @@ impl<T: Destructure> internal::DestructuringFor<T> for Move {
 
 #[cfg(test)]
 mod tests {
+    use crate::munge;
     use core::{cell::Cell, mem::MaybeUninit};
 
     #[test]

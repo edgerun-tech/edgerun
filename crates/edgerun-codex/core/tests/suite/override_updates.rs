@@ -17,7 +17,6 @@ use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
 use core_test_support::test_codex::test_codex;
 use core_test_support::wait_for_event;
-use pretty_assertions::assert_eq;
 use std::path::Path;
 use std::time::Duration;
 use tempfile::TempDir;

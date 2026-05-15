@@ -18,7 +18,7 @@ edgerun-codelyzer = { path = "../../edgerun-codelyzer", default-features = false
 edgerun-http = { workspace = true }
 edgerun-json = { workspace = true }
 edgerun-tokio = { workspace = true, features = ["rt", "sync"] }
-edgerun-ui-core = { workspace = true, features = ["fontdue-text", "gpu-gl", "tabler-svg-atlas"] }
+edgerun-ui-core = { workspace = true, features = ["sdl", "tabler-svg-atlas"] }
 edgerun-vfs = { workspace = true, features = ["std"] }
 
 [lints]

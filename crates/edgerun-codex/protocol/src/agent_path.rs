@@ -194,7 +194,6 @@ fn validate_relative_reference(reference: &str) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::AgentPath;
-    use pretty_assertions::assert_eq;
 
     #[test]
     fn root_has_expected_name() {

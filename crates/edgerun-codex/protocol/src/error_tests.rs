@@ -6,7 +6,6 @@ use edgerun_time::chrono::ChronoDuration;
 use edgerun_time::chrono::ChronoTimeZone;
 use edgerun_time::chrono::ChronoUtc as Utc;
 use edgerun_time::chrono::ChronoUtcDateTime as DateTime;
-use pretty_assertions::assert_eq;
 
 fn rate_limit_snapshot() -> RateLimitSnapshot {
     let primary_reset_at = Utc

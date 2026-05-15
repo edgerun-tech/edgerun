@@ -42,7 +42,6 @@ version = "0.1.1"
 dependencies = [
  "codex-client",
  "codex-protocol",
- "edgerun-anyhow",
  "edgerun-assert-matches",
  "edgerun-async-channel",
  "edgerun-async-trait",
@@ -54,7 +53,6 @@ dependencies = [
  "edgerun-http",
  "edgerun-json",
  "edgerun-log",
- "edgerun-pretty-assertions",
  "edgerun-reqwest",
  "edgerun-tempfile",
  "edgerun-time",
@@ -78,7 +76,6 @@ dependencies = [
  "edgerun-inventory",
  "edgerun-json",
  "edgerun-log",
- "edgerun-pretty-assertions",
  "edgerun-rmcp",
  "edgerun-schemars",
  "edgerun-similar",
@@ -95,7 +92,6 @@ dependencies = [
  "edgerun-async-trait",
  "edgerun-codex-utils-cargo-bin",
  "edgerun-error",
- "edgerun-pretty-assertions",
  "edgerun-similar",
  "edgerun-tempfile",
  "edgerun-tokio",
@@ -117,7 +113,6 @@ dependencies = [
  "edgerun-http-client",
  "edgerun-json",
  "edgerun-log",
- "edgerun-pretty-assertions",
  "edgerun-reqwest",
  "edgerun-tempfile",
  "edgerun-tokio",
@@ -130,7 +125,6 @@ dependencies = [
  "codex-protocol",
  "edgerun-async-trait",
  "edgerun-json",
- "edgerun-pretty-assertions",
  "edgerun-tokio",
  "edgerun-tokio-util",
 ]
@@ -183,7 +177,6 @@ dependencies = [
  "edgerun-http",
  "edgerun-json",
  "edgerun-log",
- "edgerun-pretty-assertions",
  "edgerun-tokio",
  "edgerun-wiremock",
 ]
@@ -197,7 +190,6 @@ dependencies = [
  "codex-protocol",
  "edgerun-http",
  "edgerun-json",
- "edgerun-pretty-assertions",
  "edgerun-schemars",
  "edgerun-tempfile",
 ]
@@ -211,7 +203,6 @@ dependencies = [
  "edgerun-async-trait",
  "edgerun-json",
  "edgerun-log",
- "edgerun-pretty-assertions",
  "edgerun-tempfile",
  "edgerun-time",
  "edgerun-tokio",
@@ -221,14 +212,12 @@ dependencies = [
 name = "codex-protocol"
 version = "0.1.1"
 dependencies = [
- "edgerun-anyhow",
  "edgerun-encoding",
  "edgerun-error",
  "edgerun-http",
  "edgerun-json",
  "edgerun-locale",
  "edgerun-log",
- "edgerun-pretty-assertions",
  "edgerun-schemars",
  "edgerun-strum",
  "edgerun-strum-macros",
@@ -245,7 +234,6 @@ dependencies = [
  "edgerun-encoding",
  "edgerun-http",
  "edgerun-json",
- "edgerun-pretty-assertions",
 ]
 
 [[package]]
@@ -268,7 +256,6 @@ dependencies = [
  "codex-protocol",
  "edgerun-json",
  "edgerun-log",
- "edgerun-pretty-assertions",
  "edgerun-rmcp",
 ]
 
@@ -292,10 +279,6 @@ dependencies = [
  "bytes",
  "memchr",
 ]
-
-[[package]]
-name = "edgerun-anyhow"
-version = "0.1.1"
 
 [[package]]
 name = "edgerun-assert-cmd"
@@ -691,29 +674,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "edgerun-opentelemetry"
-version = "0.1.1"
-dependencies = [
- "opentelemetry",
-]
-
-[[package]]
-name = "edgerun-opentelemetry-sdk"
-version = "0.1.1"
-dependencies = [
- "opentelemetry_sdk",
-]
-
-[[package]]
 name = "edgerun-platform"
 version = "0.1.0"
 dependencies = [
  "edgerun-protocols",
 ]
-
-[[package]]
-name = "edgerun-pretty-assertions"
-version = "0.1.1"
 
 [[package]]
 name = "edgerun-protocols"
@@ -910,13 +875,6 @@ version = "0.1.1"
 dependencies = [
  "edgerun-crypto",
  "edgerun-encoding",
-]
-
-[[package]]
-name = "edgerun-tracing-opentelemetry"
-version = "0.1.1"
-dependencies = [
- "tracing-opentelemetry",
 ]
 
 [[package]]

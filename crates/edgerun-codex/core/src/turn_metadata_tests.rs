@@ -9,7 +9,6 @@ use core_test_support::PathBufExt;
 use core_test_support::PathExt;
 use edgerun_json::Value;
 use edgerun_tokio::process::Command;
-use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use tempfile::TempDir;
 

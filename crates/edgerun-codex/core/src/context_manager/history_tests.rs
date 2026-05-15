@@ -24,7 +24,6 @@ use image::ImageBuffer;
 use image::ImageFormat;
 use image::Luma;
 use image::Rgba;
-use pretty_assertions::assert_eq;
 use regex_lite::Regex;
 use std::path::PathBuf;
 

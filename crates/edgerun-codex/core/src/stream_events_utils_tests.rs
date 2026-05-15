@@ -15,7 +15,6 @@ use codex_protocol::models::LocalShellStatus;
 use codex_protocol::models::MessagePhase;
 use codex_protocol::models::ResponseItem;
 use codex_utils_absolute_path::test_support::PathExt;
-use pretty_assertions::assert_eq;
 
 fn assistant_output_text(text: &str) -> ResponseItem {
     assistant_output_text_with_phase(text, /*phase*/ None)

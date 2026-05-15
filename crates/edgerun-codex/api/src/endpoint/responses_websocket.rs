@@ -766,7 +766,6 @@ async fn send_websocket_request(
 mod tests {
     use super::*;
     use edgerun_json::json;
-    use pretty_assertions::assert_eq;
 
     #[test]
     fn websocket_config_enables_permessage_deflate() {

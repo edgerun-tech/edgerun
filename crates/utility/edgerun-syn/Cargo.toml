@@ -23,8 +23,8 @@ visit = []
 visit-mut = []
 
 [dependencies]
-proc-macro2 = { path = "../edgerun-proc-macro2", default-features = false }
-quote = { path = "../edgerun-quote", optional = true, default-features = false }
+proc-macro2 = { workspace = true, default-features = false }
+quote = { workspace = true, default-features = false, optional = true }
 unicode-ident = { path = "../edgerun-unicode-ident" }
 
 [lints]

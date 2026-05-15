@@ -1,7 +1,6 @@
 use super::*;
 use codex_protocol::config_types::ShellEnvironmentPolicyInherit;
 use maplit::hashmap;
-use pretty_assertions::assert_eq;
 
 fn make_vars(pairs: &[(&str, &str)]) -> Vec<(String, String)> {
     pairs

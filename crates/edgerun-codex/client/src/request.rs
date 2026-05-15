@@ -135,7 +135,6 @@ impl Request {
 mod tests {
     use super::*;
     use edgerun_json::json;
-    use pretty_assertions::assert_eq;
 
     #[test]
     fn prepare_body_for_send_serializes_json_and_sets_content_type() {

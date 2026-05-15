@@ -10,11 +10,11 @@ description = "Machine inventory reporting across Edgerun hardware adapters"
 
 [dependencies]
 edgerun-devices.workspace = true
-edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding" }
+edgerun-encoding = { workspace = true }
 edgerun-linux-netif = { version = "0.1", path = "../../linux-adapters/edgerun-linux-netif" }
 edgerun-linux-pci = { version = "0.1", path = "../../linux-adapters/edgerun-linux-pci" }
 edgerun-linux-usb = { version = "0.1", path = "../../linux-adapters/edgerun-linux-usb" }
-edgerun-linux-wifi = { version = "0.1", path = "../../linux-adapters/edgerun-linux-wifi" }
+edgerun-linux-wifi = { workspace = true }
 
 [[bin]]
 name = "edgerun-machine-report"

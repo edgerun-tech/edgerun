@@ -457,7 +457,6 @@ mod tests {
     use super::ContextSnapshotRenderMode;
     use super::format_response_items_snapshot;
     use edgerun_json::json;
-    use pretty_assertions::assert_eq;
 
     #[test]
     fn full_text_mode_preserves_unredacted_text() {

@@ -342,7 +342,6 @@ fn normalize_limit_id(name: impl Into<String>) -> String {
 mod tests {
     use super::*;
     use edgerun_http::HeaderValue;
-    use pretty_assertions::assert_eq;
 
     #[test]
     fn parse_rate_limit_for_limit_defaults_to_codex_headers() {

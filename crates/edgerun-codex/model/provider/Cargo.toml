@@ -33,5 +33,4 @@ edgerun-tokio = { workspace = true, features = ["sync", "time"] }
 tracing = { workspace = true }
 
 [dev-dependencies]
-pretty_assertions = { package = "edgerun-pretty-assertions", path = "../../../utility/edgerun-pretty-assertions" }
 wiremock = { package = "edgerun-wiremock", path = "../../../utility/edgerun-wiremock" }

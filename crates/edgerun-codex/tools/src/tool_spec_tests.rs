@@ -16,7 +16,6 @@ use codex_protocol::config_types::WebSearchUserLocation as ConfigWebSearchUserLo
 use codex_protocol::config_types::WebSearchUserLocationType;
 use edgerun_json::ToJson;
 use edgerun_json::json;
-use pretty_assertions::assert_eq;
 use std::collections::BTreeMap;
 
 #[test]

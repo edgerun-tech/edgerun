@@ -10,9 +10,9 @@ description = "Remote capability request and response protocol for Edgerun"
 
 [dependencies]
 edgerun-devices.workspace = true
-edgerun-capabilities = { version = "0.1", path = "../edgerun-capabilities" }
+edgerun-capabilities = { workspace = true }
 
-edgerun-hardware-signing = { version = "0.1", path = "../../identity/edgerun-hardware-signing" }
+edgerun-hardware-signing = { workspace = true }
 edgerun-protocols = { workspace = true, default-features = false, features = ["core", "wire"] }
 
 [lints]

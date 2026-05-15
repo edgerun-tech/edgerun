@@ -2,7 +2,6 @@ use super::*;
 use codex_protocol::protocol::TurnAbortReason;
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 use edgerun_json::json;
-use pretty_assertions::assert_eq;
 
 #[test]
 fn client_response_payload_returns_jsonrpc_parts_and_client_response() -> Result<()> {

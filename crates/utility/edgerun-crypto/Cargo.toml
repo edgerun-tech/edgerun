@@ -11,7 +11,7 @@ build = "build.rs"
 
 [dependencies]
 
-edgerun-encoding = { version = "0.1", path = "../edgerun-encoding", default-features = false }
+edgerun-encoding = { workspace = true, default-features = false }
 
 [features]
 default = []

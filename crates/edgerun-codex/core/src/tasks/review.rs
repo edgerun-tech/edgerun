@@ -297,7 +297,6 @@ fn normalize_review_template_line_endings(template: &str) -> Cow<'_, str> {
 mod tests {
     use super::normalize_review_template_line_endings;
     use super::render_review_exit_success;
-    use pretty_assertions::assert_eq;
 
     #[test]
     fn render_review_exit_success_replaces_results_placeholder() {

@@ -3,7 +3,6 @@ use codex_apply_patch::AppliedPatchDelta;
 use codex_apply_patch::MaybeApplyPatchVerified;
 use codex_exec_server::LOCAL_FS;
 use codex_utils_absolute_path::AbsolutePathBuf;
-use pretty_assertions::assert_eq;
 use std::fs;
 use std::path::Path;
 use tempfile::tempdir;

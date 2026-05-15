@@ -13,7 +13,6 @@ use codex_protocol::protocol::SessionMeta;
 use codex_protocol::protocol::SessionMetaLine;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::UserMessageEvent;
-use pretty_assertions::assert_eq;
 use std::io;
 use std::path::Path;
 use tempfile::TempDir;

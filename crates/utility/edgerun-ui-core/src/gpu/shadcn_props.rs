@@ -2295,11 +2295,9 @@ mod tests {
             shadcn_props_surface_for_source_component("Select").map(|surface| surface.slug),
             Some("select")
         );
-        assert!(
-            shadcn_props_surface_for_slug("select")
-                .map(|surface| surface.stateful && surface.event_adapter)
-                .unwrap_or(false)
-        );
+        assert!(shadcn_props_surface_for_slug("select")
+            .map(|surface| surface.stateful && surface.event_adapter)
+            .unwrap_or(false));
 
         let summary = shadcn_props_surface_summary();
         assert_eq!(summary.total, SHADCN_PROPS_SURFACES.len());
@@ -2329,12 +2327,10 @@ mod tests {
             resolved_select.resolve_kind,
             UiShadcnResolveKind::ModulePath
         );
-        assert!(
-            resolved_select
-                .parity
-                .unwrap()
-                .supports_interaction("select")
-        );
+        assert!(resolved_select
+            .parity
+            .unwrap()
+            .supports_interaction("select"));
 
         let resolved_card_slot = resolve_shadcn_props_surface("CardHeader").unwrap();
         assert_eq!(resolved_card_slot.surface.slug, "card");

@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "no_std-friendly Linux sysfs parsing and access helpers"
 
 [dependencies]
-edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding" }
+edgerun-encoding = { workspace = true }
 
 [lints]
 workspace = true

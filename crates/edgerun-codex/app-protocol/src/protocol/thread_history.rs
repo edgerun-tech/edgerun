@@ -1229,7 +1229,6 @@ mod tests {
     use codex_protocol::protocol::TurnStartedEvent;
     use codex_protocol::protocol::UserMessageEvent;
     use codex_protocol::protocol::WebSearchEndEvent;
-    use pretty_assertions::assert_eq;
     use std::path::PathBuf;
     use std::time::Duration;
 

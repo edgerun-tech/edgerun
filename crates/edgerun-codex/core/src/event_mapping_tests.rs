@@ -11,7 +11,6 @@ use codex_protocol::models::ReasoningItemReasoningSummary;
 use codex_protocol::models::ResponseItem;
 use codex_protocol::models::WebSearchAction;
 use codex_protocol::user_input::UserInput;
-use pretty_assertions::assert_eq;
 
 #[test]
 fn parses_user_message_with_text_and_two_images() {

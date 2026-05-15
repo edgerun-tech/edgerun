@@ -49,7 +49,6 @@ fn should_collect_unavailable_tool(name: &str, namespace: Option<&str>) -> bool 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pretty_assertions::assert_eq;
 
     fn function_call(name: &str, namespace: Option<&str>) -> ResponseItem {
         ResponseItem::FunctionCall {

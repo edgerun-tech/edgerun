@@ -2,7 +2,6 @@ use super::*;
 use crate::session::tests::make_session_configuration_for_tests;
 use codex_protocol::protocol::CreditsSnapshot;
 use codex_protocol::protocol::RateLimitWindow;
-use pretty_assertions::assert_eq;
 
 #[edgerun_tokio::test]
 // Verifies connector merging deduplicates repeated IDs.

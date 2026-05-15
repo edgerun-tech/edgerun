@@ -97,7 +97,6 @@ mod tests {
     use edgerun_http::HeaderMap;
     use edgerun_http::HeaderValue;
     use edgerun_http::StatusCode;
-    use pretty_assertions::assert_eq;
 
     #[test]
     fn extract_response_debug_context_decodes_identity_headers() {

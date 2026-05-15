@@ -31,7 +31,6 @@ use codex_protocol::models::PermissionProfile;
 use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::SandboxPolicy;
 use codex_utils_absolute_path::AbsolutePathBuf;
-use pretty_assertions::assert_eq;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::path::Path;
@@ -2248,7 +2247,6 @@ mod requirements_exec_policy_tests {
     use codex_execpolicy::Evaluation;
     use codex_execpolicy::RuleMatch;
     use codex_utils_absolute_path::AbsolutePathBuf;
-    use pretty_assertions::assert_eq;
     use std::path::Path;
     use tempfile::tempdir;
     use toml::Value as TomlValue;

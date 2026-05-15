@@ -433,7 +433,6 @@ mod tests {
     use crate::file_system::LOCAL_FS;
     use crate::unified_diff_from_chunks;
     use assert_matches::assert_matches;
-    use pretty_assertions::assert_eq;
     use std::fs;
     use std::path::PathBuf;
     use std::string::ToString;

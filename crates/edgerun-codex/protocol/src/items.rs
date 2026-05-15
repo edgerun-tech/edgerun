@@ -635,7 +635,6 @@ impl TurnItem {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pretty_assertions::assert_eq;
 
     #[test]
     fn hook_prompt_roundtrips_multiple_fragments() {

@@ -9,13 +9,13 @@ homepage.workspace = true
 description = "Transport-independent protocol parsers, encoders, and state machines"
 
 [dependencies]
-edgerun-crypto = { version = "0.1", path = "../../utility/edgerun-crypto", default-features = false, optional = true }
-edgerun-core = { version = "0.1", path = "../edgerun-core", default-features = false, optional = true }
-edgerun-encoding = { version = "0.1", path = "../../utility/edgerun-encoding", default-features = false, optional = true }
+edgerun-crypto = { workspace = true, default-features = false, optional = true }
+edgerun-core = { workspace = true, default-features = false, optional = true }
+edgerun-encoding = { workspace = true, default-features = false, optional = true }
 edgerun-hpack = { version = "0.1", path = "../../utility/edgerun-hpack", optional = true }
-edgerun-json = { version = "0.1", path = "../../utility/edgerun-json", default-features = false, optional = true }
-edgerun-url = { version = "0.1", path = "../../utility/edgerun-url", default-features = false, optional = true }
-edgerun-wire = { version = "0.1", path = "../edgerun-wire", default-features = false, optional = true }
+edgerun-json = { workspace = true, default-features = false, optional = true }
+edgerun-url = { workspace = true, default-features = false, optional = true }
+edgerun-wire = { workspace = true, default-features = false, optional = true }
 
 [features]
 default = []

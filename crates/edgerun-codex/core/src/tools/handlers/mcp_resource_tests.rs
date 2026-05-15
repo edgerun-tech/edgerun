@@ -1,6 +1,5 @@
 use super::*;
 use edgerun_json::json;
-use pretty_assertions::assert_eq;
 use rmcp::model::AnnotateAble;
 
 fn resource(uri: &str, name: &str) -> Resource {
