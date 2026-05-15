@@ -11,7 +11,7 @@
 
 [package]
 edition = "2018"
-rust-version = "1.56.0"
+rust-version.workspace = true
 name = "tracing-log"
 version = "0.2.0"
 authors = ["Tokio Contributors <team@tokio.rs>"]

@@ -207,7 +207,7 @@ pub use shadcn_props::{
 };
 #[cfg(any(feature = "fontdue-text", test))]
 use shell::render_edgerun_shell_overlay;
-pub use shell::{UiShellAction, UiShellState};
+pub use shell::{UiShellAction, UiShellState, UiShellWorkspaceAction};
 pub use source_captures::{EXTRACTED_SOURCE_CAPTURES, UiExtractedSourceCapture};
 pub use style::{AlignItems, Axis, JustifyContent, UiColorToken, UiStyle, UiStyleColor};
 pub use style_family::{

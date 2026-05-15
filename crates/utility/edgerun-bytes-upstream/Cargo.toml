@@ -2,7 +2,7 @@
 name = "bytes"
 version = "1.11.1"
 edition = "2021"
-rust-version = "1.57"
+rust-version.workspace = true
 license = "MIT"
 publish.workspace = true
 repository.workspace = true

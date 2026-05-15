@@ -17,7 +17,7 @@ EdgeRun cargo shim
 This repository routes Cargo-shaped commands to edgerun-build.
 
 Supported commands:
-  cargo doctor|check|build|test|run|clean|tree|metadata [common package/feature flags]
+  cargo doctor|check|build|test|run|daemon|clean|tree|metadata [common package/feature flags]
 
 Supported common flags:
   -p NAME, --package NAME
@@ -27,10 +27,16 @@ Supported common flags:
   --bins
   --example NAME
   --examples
+  --all-targets
   --features a,b
   --all-features
   --no-default-features
   --release
+  --keep-going
+  -j N, --jobs N
+  --background              daemon only; spawn and return
+  daemon status|stop|restart
+  --poll-ms N               daemon only; polling interval
   --target TRIPLE
   --keep-ram
   --fresh
@@ -140,7 +146,7 @@ fi
 shift || true
 
 case "$cmd" in
-    doctor|check|build|test|run)
+    doctor|check|build|test|run|daemon)
         edge_cmd="$cmd"
         ;;
     clean)
@@ -222,8 +228,30 @@ while [[ $# -gt 0 ]]; do
         --features=*)
             edge_args+=("--features" "${arg#--features=}")
             ;;
-        --all-features|--no-default-features|--release|--keep-ram|--fresh)
+        --all-features|--no-default-features|--release|--keep-going|--keep-ram|--fresh)
             edge_args+=("$arg")
+            ;;
+        --background|--daemon-child)
+            edge_args+=("$arg")
+            ;;
+        --poll-ms)
+            value="$(need_value "$arg" "${1-}")"
+            shift
+            edge_args+=("--poll-ms" "$value")
+            ;;
+        --poll-ms=*)
+            edge_args+=("--poll-ms" "${arg#--poll-ms=}")
+            ;;
+        -j|--jobs)
+            value="$(need_value "$arg" "${1-}")"
+            shift
+            edge_args+=("--jobs" "$value")
+            ;;
+        -j*)
+            edge_args+=("${arg}")
+            ;;
+        --jobs=*)
+            edge_args+=("--jobs" "${arg#--jobs=}")
             ;;
         --out)
             value="$(need_value "$arg" "${1-}")"
@@ -258,15 +286,18 @@ while [[ $# -gt 0 ]]; do
         --target=*)
             edge_args+=("--target" "${arg#--target=}")
             ;;
-        --message-format|--config|--profile|--timings|--jobs|-j)
+        --message-format|--config|--profile|--timings)
             value="$(need_value "$arg" "${1-}")"
             shift
             fail_missing "${arg} ${value}"
             ;;
-        --message-format=*|--config=*|--profile=*|--timings=*|--jobs=*)
+        --message-format=*|--config=*|--profile=*|--timings=*)
             fail_missing "$arg"
             ;;
-        --test|--tests|--all-targets|--no-run|--exclude)
+        --all-targets)
+            edge_args+=("--all-targets")
+            ;;
+        --test|--tests|--no-run|--exclude)
             fail_missing "$arg"
             ;;
         --)
@@ -278,7 +309,11 @@ while [[ $# -gt 0 ]]; do
             fail_missing "$arg"
             ;;
         *)
-            fail_missing "positional argument '${arg}' for cargo ${cmd}"
+            if [[ "$cmd" == "daemon" ]]; then
+                edge_args+=("$arg")
+            else
+                fail_missing "positional argument '${arg}' for cargo ${cmd}"
+            fi
             ;;
     esac
 done

@@ -3,8 +3,12 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::env;
 use std::fs;
 use std::hash::{Hash, Hasher};
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 extern crate edgerun_vfs;
 
@@ -25,10 +29,16 @@ struct Args {
     lib_only: bool,
     example: Option<String>,
     examples: bool,
+    all_targets: bool,
     features: BTreeSet<String>,
     all_features: bool,
     no_default_features: bool,
     release: bool,
+    keep_going: bool,
+    jobs: Option<usize>,
+    daemon_background: bool,
+    daemon_child: bool,
+    daemon_poll_ms: u64,
     keep_ram: bool,
     fresh: bool,
     target: Option<String>,
@@ -95,6 +105,7 @@ struct BuiltArtifact {
 struct Manifest {
     package_name: Option<String>,
     edition: Option<String>,
+    workspace_edition: Option<String>,
     workspace_members: Vec<String>,
     features: BTreeMap<String, Vec<String>>,
     deps: BTreeMap<String, Dep>,
@@ -139,6 +150,22 @@ impl HostCfg {
 
 fn run() -> Result<(), String> {
     let args = parse_args()?;
+    if args.cmd == "daemon" && daemon_action(&args) == "status" {
+        return daemon_status(&args);
+    }
+    if args.cmd == "daemon" && daemon_action(&args) == "stop" {
+        return daemon_stop(&args);
+    }
+    if args.cmd == "daemon" && daemon_action(&args) == "restart" {
+        daemon_stop(&args).ok();
+        return spawn_daemon_child(&args);
+    }
+    if args.cmd == "daemon" && args.daemon_background && !args.daemon_child {
+        return spawn_daemon_child(&args);
+    }
+    if args.cmd == "daemon" {
+        return daemon_command(args);
+    }
     let vfs = load_vfs(path_str(&args.workspace)?)?;
     let ws = index_workspace(&args, args.workspace.clone(), &vfs)?;
     match args.cmd.as_str() {
@@ -171,10 +198,16 @@ fn parse_args() -> Result<Args, String> {
         lib_only: false,
         example: None,
         examples: false,
+        all_targets: false,
         features: BTreeSet::new(),
         all_features: false,
         no_default_features: false,
         release: false,
+        keep_going: false,
+        jobs: None,
+        daemon_background: false,
+        daemon_child: false,
+        daemon_poll_ms: 1500,
         keep_ram: true,
         fresh: false,
         target: None,
@@ -194,6 +227,7 @@ fn parse_args() -> Result<Args, String> {
                 args.example = Some(arg["--example=".len()..].to_string())
             }
             "--examples" => args.examples = true,
+            "--all-targets" => args.all_targets = true,
             "--features" => {
                 for feature in need_value(&mut raw, "--features")?.split(',') {
                     let feature = feature.trim();
@@ -205,6 +239,22 @@ fn parse_args() -> Result<Args, String> {
             "--all-features" => args.all_features = true,
             "--no-default-features" => args.no_default_features = true,
             "--release" => args.release = true,
+            "--keep-going" => args.keep_going = true,
+            "-j" | "--jobs" => args.jobs = Some(parse_jobs(&need_value(&mut raw, "--jobs")?)?),
+            arg if arg.starts_with("-j") && arg.len() > 2 => {
+                args.jobs = Some(parse_jobs(&arg["-j".len()..])?)
+            }
+            arg if arg.starts_with("--jobs=") => {
+                args.jobs = Some(parse_jobs(&arg["--jobs=".len()..])?)
+            }
+            "--background" => args.daemon_background = true,
+            "--daemon-child" => args.daemon_child = true,
+            "--poll-ms" => {
+                args.daemon_poll_ms = parse_poll_ms(&need_value(&mut raw, "--poll-ms")?)?
+            }
+            arg if arg.starts_with("--poll-ms=") => {
+                args.daemon_poll_ms = parse_poll_ms(&arg["--poll-ms=".len()..])?
+            }
             "--keep-ram" => args.keep_ram = true,
             "--fresh" => args.fresh = true,
             "--target" => args.target = Some(need_value(&mut raw, "--target")?),
@@ -230,6 +280,26 @@ fn need_value(raw: &mut impl Iterator<Item = String>, flag: &str) -> Result<Stri
     raw.next().ok_or_else(|| format!("{flag} requires a value"))
 }
 
+fn parse_jobs(value: &str) -> Result<usize, String> {
+    let jobs = value
+        .parse::<usize>()
+        .map_err(|_| format!("--jobs requires a positive integer, got {value}"))?;
+    if jobs == 0 {
+        return Err("--jobs requires a positive integer".to_string());
+    }
+    Ok(jobs)
+}
+
+fn parse_poll_ms(value: &str) -> Result<u64, String> {
+    let poll_ms = value
+        .parse::<u64>()
+        .map_err(|_| format!("--poll-ms requires a positive integer, got {value}"))?;
+    if poll_ms == 0 {
+        return Err("--poll-ms requires a positive integer".to_string());
+    }
+    Ok(poll_ms)
+}
+
 fn index_workspace(
     args: &Args,
     _root: PathBuf,
@@ -239,6 +309,10 @@ fn index_workspace(
         .read_str("Cargo.toml")
         .ok_or_else(|| "missing workspace Cargo.toml".to_string())?;
     let root_toml = parse_manifest(root_manifest);
+    let workspace_edition = root_toml
+        .workspace_edition
+        .clone()
+        .unwrap_or_else(|| "2021".to_string());
     let members = root_toml.workspace_members;
     let mut member_dirs = BTreeSet::new();
     for item in members {
@@ -254,7 +328,10 @@ fn index_workspace(
         let Some(name) = toml.package_name.as_deref() else {
             continue;
         };
-        let edition = toml.edition.clone().unwrap_or_else(|| "2021".to_string());
+        let edition = toml
+            .edition
+            .clone()
+            .unwrap_or_else(|| workspace_edition.clone());
         let features = toml.features.clone();
         let deps = toml.deps.clone();
         let lib = target_lib(vfs, &toml, &dir, name);
@@ -444,6 +521,9 @@ fn parse_manifest(source: &str) -> Manifest {
         match section.as_str() {
             "workspace" if key == "members" => {
                 manifest.workspace_members = parse_string_array(value)
+            }
+            "workspace.package" if key == "edition" => {
+                manifest.workspace_edition = parse_string(value)
             }
             "package" if key == "name" => manifest.package_name = parse_string(value),
             "package" if key == "edition" => manifest.edition = parse_string(value),
@@ -915,10 +995,124 @@ fn build_command(
     ws: &Workspace,
     vfs: &edgerun_vfs::VirtualFileSystem,
 ) -> Result<(), String> {
-    let root = select_package(args, ws)?;
-    let nodes = resolve_closure(ws, &root, args)?;
-    validate_requested_targets(args, ws, &root, &nodes)?;
-    let ram = ram_root(args)?;
+    let roots = select_build_packages(args, ws)?;
+    let outcome = build_roots(args, ws, vfs, roots)?;
+    if !outcome.failed.is_empty() && !args.keep_going {
+        return Err(outcome.failed.into_iter().next().unwrap());
+    }
+    finish_failures(outcome.failed)
+}
+
+#[derive(Debug, Default)]
+struct BuildRootsOutcome {
+    built: Vec<String>,
+    failed: Vec<String>,
+}
+
+fn build_roots(
+    args: &Args,
+    ws: &Workspace,
+    vfs: &edgerun_vfs::VirtualFileSystem,
+    roots: Vec<String>,
+) -> Result<BuildRootsOutcome, String> {
+    let jobs = build_jobs(args).min(roots.len().max(1));
+    if jobs <= 1 || roots.len() <= 1 || args.out.is_some() {
+        let mut outcome = BuildRootsOutcome::default();
+        for root in roots {
+            match build_package_command(args, ws, vfs, &root) {
+                Ok(()) => outcome.built.push(root),
+                Err(err) if args.keep_going => outcome.failed.push(format!("{root}: {err}")),
+                Err(err) => return Err(err),
+            }
+        }
+        return Ok(outcome);
+    }
+
+    eprintln!("= edgerun-build jobs {jobs}");
+    let queue = Arc::new(Mutex::new(VecDeque::from(roots)));
+    let built = Arc::new(Mutex::new(Vec::new()));
+    let failures = Arc::new(Mutex::new(Vec::new()));
+    thread::scope(|scope| {
+        for _ in 0..jobs {
+            let queue = Arc::clone(&queue);
+            let built = Arc::clone(&built);
+            let failures = Arc::clone(&failures);
+            scope.spawn(move || loop {
+                let root = {
+                    let mut queue = queue.lock().expect("build queue poisoned");
+                    queue.pop_front()
+                };
+                let Some(root) = root else {
+                    break;
+                };
+                match build_package_command(args, ws, vfs, &root) {
+                    Ok(()) => {
+                        let mut built = built.lock().expect("build success collector poisoned");
+                        built.push(root);
+                    }
+                    Err(err) => {
+                        let mut failures = failures.lock().expect("build failures poisoned");
+                        failures.push(format!("{root}: {err}"));
+                    }
+                }
+            });
+        }
+    });
+    let mut built = Arc::try_unwrap(built)
+        .map_err(|_| "build success collector still shared".to_string())?
+        .into_inner()
+        .map_err(|_| "build success collector poisoned".to_string())?;
+    let mut failures = Arc::try_unwrap(failures)
+        .map_err(|_| "build failure collector still shared".to_string())?
+        .into_inner()
+        .map_err(|_| "build failures poisoned".to_string())?;
+    built.sort();
+    failures.sort();
+    Ok(BuildRootsOutcome {
+        built,
+        failed: failures,
+    })
+}
+
+fn build_jobs(args: &Args) -> usize {
+    args.jobs.unwrap_or_else(|| {
+        thread::available_parallelism()
+            .map(usize::from)
+            .unwrap_or(1)
+    })
+}
+
+fn finish_failures(failures: Vec<String>) -> Result<(), String> {
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "{} build failure(s):\n{}",
+            failures.len(),
+            failures.join("\n")
+        ))
+    }
+}
+
+fn select_build_packages(args: &Args, ws: &Workspace) -> Result<Vec<String>, String> {
+    if matches!(args.cmd.as_str(), "run") || args.package.is_some() {
+        return select_package(args, ws).map(|package| vec![package]);
+    }
+    if ws.packages.len() == 1 {
+        return Ok(vec![ws.packages.keys().next().unwrap().clone()]);
+    }
+    Ok(ws.packages.keys().cloned().collect())
+}
+
+fn build_package_command(
+    args: &Args,
+    ws: &Workspace,
+    vfs: &edgerun_vfs::VirtualFileSystem,
+    root: &str,
+) -> Result<(), String> {
+    let nodes = resolve_closure(ws, root, args)?;
+    validate_requested_targets(args, ws, root, &nodes)?;
+    let ram = ram_root(args, Some(root))?;
     if ram.exists() && args.fresh {
         let _ = fs::remove_dir_all(&ram);
     }
@@ -954,8 +1148,16 @@ fn build_command(
                 if !target_required_features_met(bin, &node.enabled_features) {
                     continue;
                 }
-                let artifact =
-                    compile_target(args, pkg, bin, node, &src_root, &out_dir, &artifacts, false)?;
+                let artifact = match compile_target(
+                    args, pkg, bin, node, &src_root, &out_dir, &artifacts, false,
+                ) {
+                    Ok(artifact) => artifact,
+                    Err(err) if args.keep_going => {
+                        eprintln!("error: {} bin {}: {err}", pkg.name, bin.name);
+                        continue;
+                    }
+                    Err(err) => return Err(err),
+                };
                 if args.cmd == "run" {
                     if let Some(target) = &args.target {
                         return Err(format!(
@@ -977,14 +1179,29 @@ fn build_command(
                 if !example_selected(args, example) {
                     continue;
                 }
-                compile_target(
+                if let Err(err) = compile_target(
                     args, pkg, example, node, &src_root, &out_dir, &artifacts, false,
-                )?;
+                ) {
+                    if args.keep_going {
+                        eprintln!("error: {} example {}: {err}", pkg.name, example.name);
+                    } else {
+                        return Err(err);
+                    }
+                }
             }
         }
     }
-    if args.cmd == "test" {
-        compile_tests(args, ws, &root, &nodes, &src_root, &out_dir, &artifacts)?;
+    if args.cmd == "test" || args.all_targets {
+        compile_tests(
+            args,
+            ws,
+            root,
+            &nodes,
+            &src_root,
+            &out_dir,
+            &artifacts,
+            args.cmd == "test",
+        )?;
     }
     if let Some(out) = &args.out {
         fs::create_dir_all(out).map_err(|err| format!("mkdir {}: {err}", out.display()))?;
@@ -1000,6 +1217,575 @@ fn build_command(
     if !args.keep_ram {
         let _ = fs::remove_dir_all(&ram);
     }
+    Ok(())
+}
+
+fn daemon_command(args: Args) -> Result<(), String> {
+    let action = daemon_action(&args);
+    if action != "run" {
+        return Err(format!("unknown daemon action: {action}"));
+    }
+    fs::create_dir_all(daemon_dir(&args))
+        .map_err(|err| format!("mkdir {}: {err}", daemon_dir(&args).display()))?;
+    let _lock = acquire_daemon_lock(&args)?;
+    write_if_changed(
+        &daemon_dir(&args).join("pid"),
+        std::process::id().to_string().as_bytes(),
+    )?;
+    eprintln!(
+        "= edgerun-build daemon pid {} workspace {} poll-ms {} jobs {}",
+        std::process::id(),
+        args.workspace.display(),
+        args.daemon_poll_ms,
+        build_jobs(&args)
+    );
+    write_daemon_status(
+        &args,
+        &DaemonStatus {
+            state: "starting".to_string(),
+            pid: Some(std::process::id()),
+            message: "daemon starting".to_string(),
+            changed: Vec::new(),
+            built: Vec::new(),
+            failed: Vec::new(),
+        },
+    )?;
+    let mut state = read_daemon_state(&args)?;
+    loop {
+        match daemon_build_once(&args, &mut state) {
+            Ok(DaemonCycle::UpdatedSelf) => restart_daemon(&args)?,
+            Ok(DaemonCycle::Built {
+                changed,
+                roots,
+                failed,
+            }) => {
+                write_daemon_state(&args, &state)?;
+                let status = if failed.is_empty() {
+                    "built"
+                } else {
+                    "partial"
+                };
+                write_daemon_status(
+                    &args,
+                    &DaemonStatus {
+                        state: status.to_string(),
+                        pid: Some(std::process::id()),
+                        message: if failed.is_empty() {
+                            format!("built {}", roots.join(","))
+                        } else {
+                            format!("built {} failed {}", roots.len(), failed.len())
+                        },
+                        changed,
+                        built: roots,
+                        failed,
+                    },
+                )?;
+            }
+            Ok(DaemonCycle::Idle) => {
+                write_daemon_status(
+                    &args,
+                    &DaemonStatus {
+                        state: "idle".to_string(),
+                        pid: Some(std::process::id()),
+                        message: "workspace unchanged".to_string(),
+                        changed: Vec::new(),
+                        built: Vec::new(),
+                        failed: Vec::new(),
+                    },
+                )?;
+            }
+            Err(err) => {
+                write_daemon_status(
+                    &args,
+                    &DaemonStatus {
+                        state: "error".to_string(),
+                        pid: Some(std::process::id()),
+                        message: err.clone(),
+                        changed: Vec::new(),
+                        built: Vec::new(),
+                        failed: Vec::new(),
+                    },
+                )?;
+                eprintln!("error: daemon cycle failed: {err}");
+            }
+        }
+        thread::sleep(Duration::from_millis(args.daemon_poll_ms));
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum DaemonCycle {
+    Idle,
+    Built {
+        changed: Vec<String>,
+        roots: Vec<String>,
+        failed: Vec<String>,
+    },
+    UpdatedSelf,
+}
+
+fn daemon_build_once(
+    args: &Args,
+    state: &mut BTreeMap<String, String>,
+) -> Result<DaemonCycle, String> {
+    let vfs = load_vfs(path_str(&args.workspace)?)?;
+    let ws = index_workspace(args, args.workspace.clone(), &vfs)?;
+    let signatures = package_signatures(args, &ws, &vfs)?;
+    let mut changed = changed_packages(&signatures, state);
+    if changed.is_empty() {
+        return Ok(DaemonCycle::Idle);
+    }
+    changed = debounce_changed_packages(args, state, changed)?;
+    if changed.is_empty() {
+        return Ok(DaemonCycle::Idle);
+    }
+    let roots = changed_with_reverse_dependents(&ws, &changed);
+    eprintln!(
+        "= daemon changed {} rebuild {}",
+        changed.iter().cloned().collect::<Vec<_>>().join(","),
+        roots.join(",")
+    );
+    let mut build_args = args.clone();
+    build_args.cmd = "build".to_string();
+    build_args.package = None;
+    build_args.keep_going = true;
+    build_args.all_targets = true;
+    build_args.out = None;
+    let outcome = build_roots(&build_args, &ws, &vfs, roots)?;
+    for root in &outcome.built {
+        if let Some(signature) = signatures.get(root) {
+            state.insert(root.clone(), signature.clone());
+        }
+    }
+    if changed.contains("edgerun-codelyzer")
+        && !outcome
+            .failed
+            .iter()
+            .any(|err| err.starts_with("edgerun-codelyzer:"))
+    {
+        let ram = ram_root(&build_args, Some("edgerun-codelyzer"))?;
+        let out_dir = ram.join(if build_args.release {
+            "release"
+        } else {
+            "debug"
+        });
+        install_replacement_builder(args, &out_dir)?;
+        write_daemon_state(args, state)?;
+        return Ok(DaemonCycle::UpdatedSelf);
+    }
+    Ok(DaemonCycle::Built {
+        changed: changed.into_iter().collect(),
+        roots: outcome.built,
+        failed: outcome.failed,
+    })
+}
+
+fn debounce_changed_packages(
+    args: &Args,
+    state: &BTreeMap<String, String>,
+    mut changed: BTreeSet<String>,
+) -> Result<BTreeSet<String>, String> {
+    let settle = Duration::from_millis(args.daemon_poll_ms.min(750).max(50));
+    loop {
+        thread::sleep(settle);
+        let vfs = load_vfs(path_str(&args.workspace)?)?;
+        let ws = index_workspace(args, args.workspace.clone(), &vfs)?;
+        let signatures = package_signatures(args, &ws, &vfs)?;
+        let next = changed_packages(&signatures, state);
+        if next == changed {
+            return Ok(changed);
+        }
+        changed = next;
+        if changed.is_empty() {
+            return Ok(changed);
+        }
+    }
+}
+
+fn package_signatures(
+    args: &Args,
+    ws: &Workspace,
+    vfs: &edgerun_vfs::VirtualFileSystem,
+) -> Result<BTreeMap<String, String>, String> {
+    let mut out = BTreeMap::new();
+    for (name, pkg) in &ws.packages {
+        let mut hasher = DefaultHasher::new();
+        "edgerun-build-daemon-v1".hash(&mut hasher);
+        args.all_targets.hash(&mut hasher);
+        args.features.hash(&mut hasher);
+        args.all_features.hash(&mut hasher);
+        args.no_default_features.hash(&mut hasher);
+        args.release.hash(&mut hasher);
+        args.target.hash(&mut hasher);
+        if let Some(root) = vfs.read_str("Cargo.toml") {
+            root.hash(&mut hasher);
+        }
+        for (path, bytes) in vfs.files() {
+            if path == &pkg.dir || path.starts_with(&format!("{}/", pkg.dir)) {
+                path.hash(&mut hasher);
+                bytes.hash(&mut hasher);
+            }
+        }
+        out.insert(name.clone(), format!("{:016x}", hasher.finish()));
+    }
+    Ok(out)
+}
+
+fn changed_packages(
+    signatures: &BTreeMap<String, String>,
+    state: &BTreeMap<String, String>,
+) -> BTreeSet<String> {
+    signatures
+        .iter()
+        .filter_map(|(package, signature)| {
+            if state.get(package) == Some(signature) {
+                None
+            } else {
+                Some(package.clone())
+            }
+        })
+        .collect()
+}
+
+fn changed_with_reverse_dependents(ws: &Workspace, changed: &BTreeSet<String>) -> Vec<String> {
+    let mut roots = changed.clone();
+    let mut grew = true;
+    while grew {
+        grew = false;
+        for (name, pkg) in &ws.packages {
+            if roots.contains(name) {
+                continue;
+            }
+            if pkg.deps.values().any(|dep| roots.contains(&dep.package)) {
+                roots.insert(name.clone());
+                grew = true;
+            }
+        }
+    }
+    roots.into_iter().collect()
+}
+
+#[derive(Debug, Clone)]
+struct DaemonStatus {
+    state: String,
+    pid: Option<u32>,
+    message: String,
+    changed: Vec<String>,
+    built: Vec<String>,
+    failed: Vec<String>,
+}
+
+struct DaemonLock {
+    path: PathBuf,
+}
+
+impl Drop for DaemonLock {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+    }
+}
+
+fn daemon_action(args: &Args) -> &str {
+    args.rest.first().map(String::as_str).unwrap_or("run")
+}
+
+fn daemon_dir(args: &Args) -> PathBuf {
+    args.workspace.join(".edgerun/build-daemon")
+}
+
+fn daemon_state_path(args: &Args) -> PathBuf {
+    daemon_dir(args).join("state")
+}
+
+fn daemon_lock_path(args: &Args) -> PathBuf {
+    daemon_dir(args).join("lock")
+}
+
+fn daemon_pid_path(args: &Args) -> PathBuf {
+    daemon_dir(args).join("pid")
+}
+
+fn daemon_status_path(args: &Args) -> PathBuf {
+    daemon_dir(args).join("status.json")
+}
+
+fn acquire_daemon_lock(args: &Args) -> Result<DaemonLock, String> {
+    fs::create_dir_all(daemon_dir(args))
+        .map_err(|err| format!("mkdir {}: {err}", daemon_dir(args).display()))?;
+    let path = daemon_lock_path(args);
+    match fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&path)
+    {
+        Ok(_) => {
+            write_if_changed(&path, std::process::id().to_string().as_bytes())?;
+            Ok(DaemonLock { path })
+        }
+        Err(err) if err.kind() == ErrorKind::AlreadyExists => {
+            let pid = read_pid(&path).or_else(|| read_pid(&daemon_pid_path(args)));
+            if pid.is_some_and(process_is_alive) {
+                return Err(format!(
+                    "edgerun-build daemon is already running with pid {}",
+                    pid.unwrap()
+                ));
+            }
+            let _ = fs::remove_file(&path);
+            acquire_daemon_lock(args)
+        }
+        Err(err) => Err(format!("create daemon lock {}: {err}", path.display())),
+    }
+}
+
+fn read_pid(path: &Path) -> Option<u32> {
+    fs::read_to_string(path).ok()?.trim().parse().ok()
+}
+
+fn process_is_alive(pid: u32) -> bool {
+    Path::new("/proc").join(pid.to_string()).exists()
+}
+
+fn daemon_status(args: &Args) -> Result<(), String> {
+    let pid = read_pid(&daemon_pid_path(args));
+    let running = pid.is_some_and(process_is_alive);
+    let status_path = daemon_status_path(args);
+    if running {
+        if let Ok(status) = fs::read_to_string(&status_path) {
+            println!("{status}");
+            return Ok(());
+        }
+    }
+    {
+        println!(
+            "{{\"state\":\"{}\",\"pid\":{},\"message\":\"{}\"}}",
+            if running { "running" } else { "stopped" },
+            pid.map(|pid| pid.to_string())
+                .unwrap_or_else(|| "null".to_string()),
+            if running {
+                "daemon running"
+            } else {
+                "daemon not running"
+            }
+        );
+    }
+    Ok(())
+}
+
+fn daemon_stop(args: &Args) -> Result<(), String> {
+    let Some(pid) = read_pid(&daemon_pid_path(args)) else {
+        println!("edgerun-build daemon is not running");
+        return Ok(());
+    };
+    if !process_is_alive(pid) {
+        let _ = fs::remove_file(daemon_pid_path(args));
+        let _ = fs::remove_file(daemon_lock_path(args));
+        println!("edgerun-build daemon pid {pid} is not running");
+        return Ok(());
+    }
+    let status = Command::new("kill")
+        .arg("-TERM")
+        .arg(pid.to_string())
+        .status()
+        .map_err(|err| format!("stop daemon pid {pid}: {err}"))?;
+    if !status.success() {
+        return Err(format!("kill -TERM {pid} exited with {status}"));
+    }
+    for _ in 0..30 {
+        if !process_is_alive(pid) {
+            let _ = fs::remove_file(daemon_pid_path(args));
+            let _ = fs::remove_file(daemon_lock_path(args));
+            println!("edgerun-build daemon stopped pid {pid}");
+            return Ok(());
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    Err(format!("daemon pid {pid} did not stop after SIGTERM"))
+}
+
+fn read_daemon_state(args: &Args) -> Result<BTreeMap<String, String>, String> {
+    let mut out = BTreeMap::new();
+    let path = daemon_state_path(args);
+    let Ok(text) = fs::read_to_string(&path) else {
+        return Ok(out);
+    };
+    for line in text.lines() {
+        let Some((package, signature)) = line.split_once(' ') else {
+            continue;
+        };
+        out.insert(package.to_string(), signature.to_string());
+    }
+    Ok(out)
+}
+
+fn write_daemon_state(args: &Args, state: &BTreeMap<String, String>) -> Result<(), String> {
+    let mut text = String::new();
+    for (package, signature) in state {
+        text.push_str(package);
+        text.push(' ');
+        text.push_str(signature);
+        text.push('\n');
+    }
+    write_if_changed(&daemon_state_path(args), text.as_bytes())
+}
+
+fn write_daemon_status(args: &Args, status: &DaemonStatus) -> Result<(), String> {
+    let json = format!(
+        "{{\"state\":\"{}\",\"pid\":{},\"time_ms\":{},\"message\":\"{}\",\"changed\":{},\"built\":{},\"failed\":{}}}\n",
+        json_escape(&status.state),
+        status
+            .pid
+            .map(|pid| pid.to_string())
+            .unwrap_or_else(|| "null".to_string()),
+        now_ms(),
+        json_escape(&status.message),
+        json_array(&status.changed),
+        json_array(&status.built),
+        json_array(&status.failed),
+    );
+    write_if_changed(&daemon_status_path(args), json.as_bytes())
+}
+
+fn json_array(values: &[String]) -> String {
+    let mut out = String::from("[");
+    for (index, value) in values.iter().enumerate() {
+        if index > 0 {
+            out.push(',');
+        }
+        out.push('"');
+        out.push_str(&json_escape(value));
+        out.push('"');
+    }
+    out.push(']');
+    out
+}
+
+fn json_escape(value: &str) -> String {
+    let mut out = String::new();
+    for ch in value.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            ch if ch.is_control() => out.push(' '),
+            ch => out.push(ch),
+        }
+    }
+    out
+}
+
+fn now_ms() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or(0)
+}
+
+fn install_replacement_builder(args: &Args, out_dir: &Path) -> Result<(), String> {
+    let source = find_artifact(out_dir, "edgerun_build", TargetKind::Bin, false)?;
+    let current = env::current_exe().map_err(|err| format!("current exe: {err}"))?;
+    let staged = current.with_extension(format!("edgerun-new-{}", std::process::id()));
+    let previous = current.with_extension("prev");
+    copy_if_changed(&source, &staged)?;
+    let status = Command::new(&staged)
+        .arg("doctor")
+        .arg("--workspace")
+        .arg(&args.workspace)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|err| format!("verify staged builder {}: {err}", staged.display()))?;
+    if !status.success() {
+        let _ = fs::remove_file(&staged);
+        return Err(format!("staged builder doctor exited with {status}"));
+    }
+    if current.exists() {
+        let _ = fs::copy(&current, &previous).map_err(|err| {
+            format!(
+                "backup {} -> {}: {err}",
+                current.display(),
+                previous.display()
+            )
+        })?;
+    }
+    fs::rename(&staged, &current).map_err(|err| {
+        let _ = fs::copy(&previous, &current);
+        format!("replace {} with staged builder: {err}", current.display())
+    })?;
+    if let Some(parent) = current.parent() {
+        copy_if_changed(&current, &parent.join("edgerun-build"))?;
+        copy_if_changed(&current, &parent.join("edgerun_build"))?;
+    }
+    Ok(())
+}
+
+fn restart_daemon(args: &Args) -> Result<(), String> {
+    eprintln!("= edgerun-build daemon replaced itself; restarting");
+    let exe = env::current_exe().map_err(|err| format!("current exe: {err}"))?;
+    let mut cmd = Command::new(exe);
+    for arg in env::args_os().skip(1) {
+        if arg.to_string_lossy() != "--daemon-child" {
+            cmd.arg(arg);
+        }
+    }
+    cmd.arg("--daemon-child")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .current_dir(&args.workspace);
+    cmd.spawn()
+        .map_err(|err| format!("restart daemon: {err}"))?;
+    std::process::exit(0);
+}
+
+fn spawn_daemon_child(args: &Args) -> Result<(), String> {
+    fs::create_dir_all(daemon_dir(args))
+        .map_err(|err| format!("mkdir {}: {err}", daemon_dir(args).display()))?;
+    if let Some(pid) = read_pid(&daemon_pid_path(args)) {
+        if process_is_alive(pid) {
+            return Err(format!(
+                "edgerun-build daemon is already running with pid {pid}"
+            ));
+        }
+    }
+    let log_path = daemon_dir(args).join("daemon.log");
+    let log = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+        .map_err(|err| format!("open {}: {err}", log_path.display()))?;
+    let err_log = log
+        .try_clone()
+        .map_err(|err| format!("clone daemon log: {err}"))?;
+    let exe = env::current_exe().map_err(|err| format!("current exe: {err}"))?;
+    let mut cmd = Command::new(exe);
+    for arg in env::args_os().skip(1) {
+        let arg_text = arg.to_string_lossy();
+        if arg_text != "--background"
+            && arg_text != "--daemon-child"
+            && arg_text != "status"
+            && arg_text != "stop"
+            && arg_text != "restart"
+        {
+            cmd.arg(arg);
+        }
+    }
+    let child = cmd
+        .arg("--daemon-child")
+        .stdin(Stdio::null())
+        .stdout(Stdio::from(log))
+        .stderr(Stdio::from(err_log))
+        .current_dir(&args.workspace)
+        .spawn()
+        .map_err(|err| format!("spawn daemon: {err}"))?;
+    write_if_changed(
+        &daemon_dir(args).join("pid"),
+        child.id().to_string().as_bytes(),
+    )?;
+    println!("edgerun-build daemon pid {}", child.id());
+    println!("log {}", log_path.display());
     Ok(())
 }
 
@@ -1072,8 +1858,19 @@ fn copy_if_changed(source: &Path, dest: &Path) -> Result<(), String> {
     if let Some(parent) = dest.parent() {
         fs::create_dir_all(parent).map_err(|err| format!("mkdir {}: {err}", parent.display()))?;
     }
-    fs::write(dest, source_bytes)
-        .map_err(|err| format!("copy {} -> {}: {err}", source.display(), dest.display()))
+    let tmp = dest.with_extension(format!("edgerun-tmp-{}", std::process::id()));
+    fs::write(&tmp, source_bytes)
+        .map_err(|err| format!("copy {} -> {}: {err}", source.display(), tmp.display()))?;
+    if let Ok(meta) = fs::metadata(source) {
+        let _ = fs::set_permissions(&tmp, meta.permissions());
+    }
+    fs::rename(&tmp, dest).map_err(|err| {
+        format!(
+            "replace {} with {}: {err}",
+            dest.display(),
+            source.display()
+        )
+    })
 }
 
 fn validate_requested_targets(
@@ -1313,8 +2110,9 @@ fn compile_tests(
     src_root: &Path,
     out_dir: &Path,
     artifacts: &BTreeMap<String, BuiltArtifact>,
+    execute: bool,
 ) -> Result<(), String> {
-    if args.target.as_deref() == Some("wasm32-unknown-unknown") {
+    if execute && args.target.as_deref() == Some("wasm32-unknown-unknown") {
         return Err("wasm32-unknown-unknown test execution is not supported yet; add wasm test harness support to edgerun-build".to_string());
     }
     let node = nodes
@@ -1339,6 +2137,9 @@ fn compile_tests(
         .arg(format!("dependency={}", out_dir.display()))
         .arg("--color")
         .arg("never");
+    if lib.kind == TargetKind::ProcMacro {
+        cmd.arg("--extern").arg("proc_macro");
+    }
     for feature in &node.enabled_features {
         if !feature.starts_with("dep:") {
             cmd.arg("--cfg").arg(format!("feature=\"{feature}\""));
@@ -1354,6 +2155,9 @@ fn compile_tests(
         }
     }
     run_rustc(&mut cmd)?;
+    if !execute {
+        return Ok(());
+    }
     let status = Command::new(&test_bin)
         .status()
         .map_err(|err| format!("run tests {}: {err}", test_bin.display()))?;
@@ -1415,7 +2219,7 @@ fn target_required_features_met(target: &Target, features: &BTreeSet<String>) ->
 
 fn should_compile_bins(args: &Args) -> bool {
     matches!(args.cmd.as_str(), "build" | "run" | "test")
-        && !examples_requested(args)
+        && (!examples_requested(args) || args.all_targets)
         && (!args.lib_only || args.bin.is_some() || args.bins)
 }
 
@@ -1427,7 +2231,7 @@ fn bin_selected(args: &Args, target: &Target) -> bool {
 }
 
 fn examples_requested(args: &Args) -> bool {
-    args.examples || args.example.is_some()
+    args.all_targets || args.examples || args.example.is_some()
 }
 
 fn example_selected(args: &Args, target: &Target) -> bool {
@@ -1516,7 +2320,7 @@ fn print_graph(ws: &Workspace, nodes: &[BuildNode]) {
 
 fn doctor(args: &Args) -> Result<(), String> {
     println!("workspace={}", args.workspace.display());
-    println!("ram-root={}", ram_root(args)?.display());
+    println!("ram-root={}", ram_root(args, None)?.display());
     println!("ram-reuse={}", if args.fresh { "fresh" } else { "enabled" });
     println!("disk-cache=none");
     println!("cargo-metadata=never");
@@ -1532,19 +2336,23 @@ fn doctor(args: &Args) -> Result<(), String> {
 }
 
 fn clean_ram() -> Result<(), String> {
-    let root = PathBuf::from("/dev/shm/edgerun-build");
+    let root = ram_base();
     if root.exists() {
         fs::remove_dir_all(&root).map_err(|err| format!("remove {}: {err}", root.display()))?;
     }
     Ok(())
 }
 
-fn ram_root(args: &Args) -> Result<PathBuf, String> {
-    let base = if Path::new("/dev/shm").is_dir() {
+fn ram_base() -> PathBuf {
+    if Path::new("/dev/shm").is_dir() {
         PathBuf::from("/dev/shm/edgerun-build")
     } else {
         env::temp_dir().join("edgerun-build")
-    };
+    }
+}
+
+fn ram_root(args: &Args, root_package: Option<&str>) -> Result<PathBuf, String> {
+    let base = ram_base();
     let ws = args
         .workspace
         .file_name()
@@ -1558,11 +2366,13 @@ fn ram_root(args: &Args) -> Result<PathBuf, String> {
     args.lib_only.hash(&mut hasher);
     args.example.hash(&mut hasher);
     args.examples.hash(&mut hasher);
+    args.all_targets.hash(&mut hasher);
     args.features.hash(&mut hasher);
     args.all_features.hash(&mut hasher);
     args.no_default_features.hash(&mut hasher);
     args.release.hash(&mut hasher);
     args.target.hash(&mut hasher);
+    root_package.hash(&mut hasher);
     Ok(base.join(format!("{ws}-{:016x}", hasher.finish())))
 }
 
@@ -1585,6 +2395,6 @@ fn path_str(path: &Path) -> Result<&str, String> {
 fn print_help() {
     println!(
         "edgerun-build <doctor|graph|check|build|test|run|clean> [options]\n\
-         options: -p NAME --lib --bin NAME --bins --example NAME --examples --features a,b --all-features --no-default-features --release --target TRIPLE --workspace PATH --out PATH --keep-ram --fresh"
+         options: -p NAME --lib --bin NAME --bins --example NAME --examples --all-targets --features a,b --all-features --no-default-features --release --target TRIPLE --workspace PATH --out PATH --keep-going -j N --jobs N --keep-ram --fresh"
     );
 }

@@ -146,6 +146,16 @@ pub enum UiWorkspaceAction {
     AppAction { app_id: u32, action: UiAction },
 }
 
+impl UiWorkspaceAction {
+    pub const fn needs_redraw(&self) -> bool {
+        match self {
+            Self::None => false,
+            Self::AppAction { action, .. } => action.needs_redraw(),
+            Self::FocusedApp(_) | Self::ClosedApp(_) | Self::SplitRequested { .. } => true,
+        }
+    }
+}
+
 pub(super) const WORKSPACE_CHROME_H: f32 = 34.0;
 const WORKSPACE_GAP: f32 = 6.0;
 
@@ -178,6 +188,18 @@ impl UiWorkspace {
             focused_app: Some(CHAT_APP_ID),
             user_style: UiComponentPreviewState::default(),
         }
+    }
+
+    pub fn edgerun_lock_screen() -> Self {
+        Self::full_screen(app_surface_for_kind(UiAppKind::LockScreen))
+    }
+
+    pub fn edgerun_capability_request() -> Self {
+        Self::full_screen(app_surface_for_kind(UiAppKind::CapabilityRequest))
+    }
+
+    pub fn edgerun_component_gallery() -> Self {
+        Self::single(app_surface_for_kind(UiAppKind::ComponentGallery))
     }
 
     pub fn single(app: UiAppSurface) -> Self {

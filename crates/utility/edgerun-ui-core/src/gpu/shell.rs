@@ -7,7 +7,7 @@ use super::{
 };
 use super::{
     GpuHit, GpuScene, HitKind, UiAction, UiAppKind, UiComponentPreviewState, UiEvent,
-    UiRuntimeState, app_spec_for_launch_id,
+    UiRuntimeState, UiWorkspace, UiWorkspaceAction, app_spec_for_launch_id,
 };
 
 #[derive(Clone, Debug, Default)]
@@ -23,6 +23,45 @@ pub enum UiShellAction {
     ToggledLauncher(bool),
     OpenApp { app_id: u32, kind: UiAppKind },
     Runtime(UiAction),
+}
+
+impl UiShellAction {
+    pub fn apply_to_workspace(&self, workspace: &mut UiWorkspace) -> bool {
+        match self {
+            Self::OpenApp { kind, .. } => {
+                workspace.open_or_focus(*kind);
+                true
+            }
+            Self::None => false,
+            Self::ToggledLauncher(_) => true,
+            Self::Runtime(action) => action.needs_redraw(),
+        }
+    }
+
+    pub const fn needs_redraw(&self) -> bool {
+        match self {
+            Self::None => false,
+            Self::ToggledLauncher(_) | Self::OpenApp { .. } => true,
+            Self::Runtime(action) => action.needs_redraw(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum UiShellWorkspaceAction {
+    None,
+    Shell(UiShellAction),
+    Workspace(UiWorkspaceAction),
+}
+
+impl UiShellWorkspaceAction {
+    pub const fn needs_redraw(&self) -> bool {
+        match self {
+            Self::None => false,
+            Self::Shell(action) => action.needs_redraw(),
+            Self::Workspace(action) => action.needs_redraw(),
+        }
+    }
 }
 
 impl UiShellState {
@@ -54,6 +93,37 @@ impl UiShellState {
             }
             UiAction::None => UiShellAction::None,
             other => UiShellAction::Runtime(other),
+        }
+    }
+
+    pub fn owns_hit(hit: GpuHit) -> bool {
+        matches!(hit.kind, HitKind::ShellLauncher | HitKind::AppLauncherItem)
+    }
+
+    pub fn handle_then_workspace(
+        &mut self,
+        workspace: &mut UiWorkspace,
+        combined_scene: &GpuScene,
+        workspace_scene: &GpuScene,
+        event: UiEvent,
+    ) -> UiShellWorkspaceAction {
+        let shell_target = match event {
+            UiEvent::PointerDown { x, y }
+            | UiEvent::PointerMove { x, y }
+            | UiEvent::PointerUp { x, y }
+            | UiEvent::Wheel { x, y, .. } => {
+                combined_scene.hit_test(x, y).is_some_and(Self::owns_hit)
+            }
+            UiEvent::KeyDown { .. } => self.runtime.focused().is_some(),
+            UiEvent::TextInput(_) | UiEvent::Blur => false,
+        };
+        if shell_target {
+            let action = self.handle_event(combined_scene, event);
+            action.apply_to_workspace(workspace);
+            UiShellWorkspaceAction::Shell(action)
+        } else {
+            let action = workspace.handle_event(workspace_scene, event);
+            UiShellWorkspaceAction::Workspace(action)
         }
     }
 }

@@ -5,9 +5,8 @@ use std::time::Duration;
 
 use edgerun_ui_core::gpu::gl::GlRenderer;
 use edgerun_ui_core::gpu::{
-    FontAtlas, GpuHit, GpuScene, HitKind, UiAppSurface, UiColorScheme, UiEvent, UiKey,
-    UiShellAction, UiShellState, UiWorkspace, UnifiedChatState,
-    build_edgerun_workspace_with_shell_with_font, palette,
+    FontAtlas, GpuScene, UiColorScheme, UiEvent, UiKey, UiShellState, UiWorkspace,
+    UnifiedChatState, build_edgerun_workspace_with_shell_with_font, palette,
 };
 
 const SDL_INIT_VIDEO: u32 = 0x0000_0020;
@@ -198,10 +197,9 @@ fn run() -> Result<(), String> {
                     let _ = workspace.handle_event(&scene, UiEvent::KeyDown { key: UiKey::Escape });
                 }
                 SDL_KEYDOWN => {
-                    handle_shell_then_workspace(
-                        &scene,
-                        &mut shell,
+                    shell.handle_then_workspace(
                         &mut workspace,
+                        &scene,
                         &scene,
                         UiEvent::KeyDown {
                             key: sdl_key(event.key_sym()),
@@ -220,7 +218,7 @@ fn run() -> Result<(), String> {
                         x: event.mouse_x(),
                         y: event.mouse_y(),
                     };
-                    handle_shell_then_workspace(&scene, &mut shell, &mut workspace, &scene, event);
+                    shell.handle_then_workspace(&mut workspace, &scene, &scene, event);
                     scene_dirty = true;
                 }
                 SDL_MOUSEMOTION => {
@@ -228,7 +226,7 @@ fn run() -> Result<(), String> {
                         x: event.mouse_x(),
                         y: event.mouse_y(),
                     };
-                    handle_shell_then_workspace(&scene, &mut shell, &mut workspace, &scene, event);
+                    shell.handle_then_workspace(&mut workspace, &scene, &scene, event);
                     scene_dirty = true;
                 }
                 SDL_MOUSEBUTTONUP => {
@@ -236,7 +234,7 @@ fn run() -> Result<(), String> {
                         x: event.mouse_x(),
                         y: event.mouse_y(),
                     };
-                    handle_shell_then_workspace(&scene, &mut shell, &mut workspace, &scene, event);
+                    shell.handle_then_workspace(&mut workspace, &scene, &scene, event);
                     scene_dirty = true;
                 }
                 SDL_MOUSEWHEEL => {
@@ -323,40 +321,6 @@ fn build_surface(
     scene.apply_color_scheme(scheme);
 }
 
-fn handle_shell_then_workspace(
-    combined_scene: &GpuScene,
-    shell: &mut UiShellState,
-    workspace: &mut UiWorkspace,
-    workspace_scene: &GpuScene,
-    event: UiEvent,
-) {
-    let shell_target = match event {
-        UiEvent::PointerDown { x, y }
-        | UiEvent::PointerMove { x, y }
-        | UiEvent::PointerUp { x, y }
-        | UiEvent::Wheel { x, y, .. } => combined_scene
-            .hit_test(x, y)
-            .is_some_and(|hit| is_shell_hit(hit)),
-        UiEvent::KeyDown { .. } => shell.runtime.focused().is_some(),
-        UiEvent::TextInput(_) | UiEvent::Blur => false,
-    };
-    if shell_target {
-        match shell.handle_event(combined_scene, event) {
-            UiShellAction::OpenApp { kind, .. } => {
-                workspace.open_or_focus(kind);
-            }
-            UiShellAction::None | UiShellAction::ToggledLauncher(_) | UiShellAction::Runtime(_) => {
-            }
-        }
-    } else {
-        workspace.handle_event(workspace_scene, event);
-    }
-}
-
-fn is_shell_hit(hit: GpuHit) -> bool {
-    matches!(hit.kind, HitKind::ShellLauncher | HitKind::AppLauncherItem)
-}
-
 fn default_workspace() -> UiWorkspace {
     UiWorkspace::edgerun_default()
 }
@@ -384,9 +348,9 @@ impl PreviewSurface {
         match self {
             Self::Workspace => default_workspace(),
             Self::Codex => default_workspace(),
-            Self::Lock => UiWorkspace::full_screen(UiAppSurface::lock_screen(10)),
-            Self::Capability => UiWorkspace::full_screen(UiAppSurface::capability_request(11)),
-            Self::Gallery => UiWorkspace::single(UiAppSurface::component_gallery(5)),
+            Self::Lock => UiWorkspace::edgerun_lock_screen(),
+            Self::Capability => UiWorkspace::edgerun_capability_request(),
+            Self::Gallery => UiWorkspace::edgerun_component_gallery(),
         }
     }
 

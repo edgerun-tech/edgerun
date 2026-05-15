@@ -2,7 +2,7 @@
 name = "jni-sys"
 version = "0.4.1"
 edition = "2021"
-rust-version = "1.76.0"
+rust-version.workspace = true
 license = "MIT OR Apache-2.0"
 publish.workspace = true
 repository.workspace = true

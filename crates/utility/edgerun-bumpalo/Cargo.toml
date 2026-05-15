@@ -11,7 +11,7 @@
 
 [package]
 edition = "2021"
-rust-version = "1.71.1"
+rust-version.workspace = true
 name = "bumpalo"
 version = "3.20.2"
 authors = ["Nick Fitzgerald <fitzgen@gmail.com>"]

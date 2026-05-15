@@ -11,7 +11,7 @@
 
 [package]
 edition = "2018"
-rust-version = "1.65.0"
+rust-version.workspace = true
 name = "tracing-subscriber"
 version = "0.3.23"
 authors = [

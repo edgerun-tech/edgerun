@@ -1,10 +1,14 @@
 use std::cell::RefCell;
 
+use edgerun_ui_core::gpu::webgl2::{
+    HIT_FLOAT_STRIDE, PackedGpuScene, RECT_FLOAT_STRIDE, TEXT_VERTEX_FLOAT_STRIDE, hit_kind_code,
+    rect_mode_code,
+};
 use edgerun_ui_core::gpu::{
-    FontAtlas, GpuHit, GpuRect, GpuScene, HitKind, RectMode, TextQuad, UiAction, UiAppSurface,
-    UiColorScheme, UiEvent, UiKey, UiShellAction, UiShellState, UiWorkProjection, UiWorkspace,
-    UiWorkspaceAction, UnifiedChatState, build_edgerun_shell_overlay_with_font,
-    build_edgerun_workspace_shell_with_font_and_work, palette,
+    FontAtlas, GpuHit, GpuScene, HitKind, UiAction, UiColorScheme, UiEvent, UiKey, UiShellAction,
+    UiShellState, UiWorkProjection, UiWorkspace, UiWorkspaceAction, UnifiedChatState,
+    build_edgerun_shell_overlay_with_font, build_edgerun_workspace_shell_with_font_and_work,
+    palette,
 };
 
 thread_local! {
@@ -12,12 +16,8 @@ thread_local! {
     static SHELL_SCENE: RefCell<GpuScene> = RefCell::new(GpuScene::new(edgerun_ui_core::gpu::Color4::rgba(0.0, 0.0, 0.0, 0.0)));
     static WORKSPACE: RefCell<UiWorkspace> = RefCell::new(default_workspace());
     static SHELL: RefCell<UiShellState> = RefCell::new(UiShellState::default());
-    static PACKED_RECTS: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
-    static PACKED_TEXT_VERTICES: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
-    static PACKED_HITS: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
-    static SHELL_PACKED_RECTS: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
-    static SHELL_PACKED_TEXT_VERTICES: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
-    static SHELL_PACKED_HITS: RefCell<Vec<f32>> = const { RefCell::new(Vec::new()) };
+    static PACKED_SCENE: RefCell<PackedGpuScene> = RefCell::new(PackedGpuScene::default());
+    static SHELL_PACKED_SCENE: RefCell<PackedGpuScene> = RefCell::new(PackedGpuScene::default());
     static INPUT_BYTES: RefCell<Vec<u8>> = RefCell::new(vec![0; 4096]);
     static SELECTED_CONTACT: RefCell<usize> = const { RefCell::new(0) };
     static COLOR_SCHEME: RefCell<UiColorScheme> = const { RefCell::new(UiColorScheme::Dark) };
@@ -31,11 +31,11 @@ fn default_workspace() -> UiWorkspace {
 }
 
 fn lock_workspace() -> UiWorkspace {
-    UiWorkspace::full_screen(UiAppSurface::lock_screen(10))
+    UiWorkspace::edgerun_lock_screen()
 }
 
 fn capability_request_workspace() -> UiWorkspace {
-    UiWorkspace::full_screen(UiAppSurface::capability_request(11))
+    UiWorkspace::edgerun_capability_request()
 }
 
 #[unsafe(no_mangle)]
@@ -160,121 +160,11 @@ pub extern "C" fn edgerun_frontend_build_shell_frame(
 }
 
 fn pack_scene(scene: &GpuScene) {
-    PACKED_RECTS.with_borrow_mut(|packed| {
-        packed.clear();
-        packed.reserve(scene.rects().len() * 11);
-        for rect in scene.rects() {
-            push_packed_rect(packed, rect);
-        }
-    });
-
-    PACKED_TEXT_VERTICES.with_borrow_mut(|packed| {
-        packed.clear();
-        packed.reserve(scene.text_quads().len() * 48);
-        for quad in scene.text_quads() {
-            push_packed_text_quad(packed, quad);
-        }
-    });
-
-    PACKED_HITS.with_borrow_mut(|packed| {
-        packed.clear();
-        packed.reserve(scene.hits().len() * 6);
-        for hit in scene.hits() {
-            packed.extend_from_slice(&[
-                hit_kind_code(hit.kind) as f32,
-                (hit.id & 0x00ff_ffff) as f32,
-                hit.x,
-                hit.y,
-                hit.w,
-                hit.h,
-            ]);
-        }
-    });
+    PACKED_SCENE.with_borrow_mut(|packed| packed.pack(scene));
 }
 
 fn pack_shell_scene(scene: &GpuScene) {
-    SHELL_PACKED_RECTS.with_borrow_mut(|packed| {
-        packed.clear();
-        packed.reserve(scene.rects().len() * 11);
-        for rect in scene.rects() {
-            push_packed_rect(packed, rect);
-        }
-    });
-
-    SHELL_PACKED_TEXT_VERTICES.with_borrow_mut(|packed| {
-        packed.clear();
-        packed.reserve(scene.text_quads().len() * 48);
-        for quad in scene.text_quads() {
-            push_packed_text_quad(packed, quad);
-        }
-    });
-
-    SHELL_PACKED_HITS.with_borrow_mut(|packed| {
-        packed.clear();
-        packed.reserve(scene.hits().len() * 6);
-        for hit in scene.hits() {
-            packed.extend_from_slice(&[
-                hit_kind_code(hit.kind) as f32,
-                (hit.id & 0x00ff_ffff) as f32,
-                hit.x,
-                hit.y,
-                hit.w,
-                hit.h,
-            ]);
-        }
-    });
-}
-
-fn push_packed_rect(packed: &mut Vec<f32>, rect: &GpuRect) {
-    packed.extend_from_slice(&[
-        rect.x,
-        rect.y,
-        rect.w,
-        rect.h,
-        rect.radius,
-        rect.shadow,
-        rect.color.r,
-        rect.color.g,
-        rect.color.b,
-        rect.color.a,
-        rect_mode_code(rect.mode) as f32,
-    ]);
-}
-
-fn push_packed_text_quad(packed: &mut Vec<f32>, quad: &TextQuad) {
-    push_text_vertex(packed, quad.x, quad.y, quad.u0, quad.v0, quad);
-    push_text_vertex(packed, quad.x + quad.w, quad.y, quad.u1, quad.v0, quad);
-    push_text_vertex(
-        packed,
-        quad.x + quad.w,
-        quad.y + quad.h,
-        quad.u1,
-        quad.v1,
-        quad,
-    );
-    push_text_vertex(packed, quad.x, quad.y, quad.u0, quad.v0, quad);
-    push_text_vertex(
-        packed,
-        quad.x + quad.w,
-        quad.y + quad.h,
-        quad.u1,
-        quad.v1,
-        quad,
-    );
-    push_text_vertex(packed, quad.x, quad.y + quad.h, quad.u0, quad.v1, quad);
-}
-
-fn push_text_vertex(packed: &mut Vec<f32>, x: f32, y: f32, u: f32, v: f32, quad: &TextQuad) {
-    packed.extend_from_slice(&[
-        x,
-        y,
-        u,
-        v,
-        quad.color.r,
-        quad.color.g,
-        quad.color.b,
-        quad.color.a,
-    ]);
+    SHELL_PACKED_SCENE.with_borrow_mut(|packed| packed.pack(scene));
 }
 
 #[unsafe(no_mangle)]
@@ -449,42 +339,16 @@ fn handle_shell_event(event: UiEvent) -> u32 {
 }
 
 fn shell_action_dirty(action: UiShellAction) -> u32 {
-    match action {
-        UiShellAction::None => 0,
-        UiShellAction::ToggledLauncher(_) => 1,
-        UiShellAction::Runtime(action) => ui_action_dirty(action),
-        UiShellAction::OpenApp { kind, .. } => {
-            WORKSPACE.with_borrow_mut(|workspace| {
-                workspace.open_or_focus(kind);
-            });
-            1
-        }
-    }
+    WORKSPACE.with_borrow_mut(|workspace| action.apply_to_workspace(workspace) as u32)
 }
 
 fn workspace_action_dirty(action: UiWorkspaceAction) -> u32 {
     match action {
-        UiWorkspaceAction::None => 0,
-        UiWorkspaceAction::AppAction { action, .. } => ui_action_dirty(action),
-        UiWorkspaceAction::FocusedApp(_)
-        | UiWorkspaceAction::ClosedApp(_)
-        | UiWorkspaceAction::SplitRequested { .. } => 1,
-    }
-}
-
-fn ui_action_dirty(action: UiAction) -> u32 {
-    match action {
-        UiAction::None | UiAction::Hovered(_) => 0,
-        UiAction::Activated(hit) => activate_hit(hit),
-        UiAction::TabSelected { .. }
-        | UiAction::Toggled { .. }
-        | UiAction::SliderChanged { .. }
-        | UiAction::OpenChanged { .. }
-        | UiAction::ScrollChanged { .. }
-        | UiAction::TextChanged { .. }
-        | UiAction::Focused(_)
-        | UiAction::Submitted { .. }
-        | UiAction::Cancelled => 1,
+        UiWorkspaceAction::AppAction {
+            action: UiAction::Activated(hit),
+            ..
+        } if matches!(hit.kind, HitKind::Contact) => activate_hit(hit),
+        other => other.needs_redraw() as u32,
     }
 }
 
@@ -534,75 +398,47 @@ pub extern "C" fn edgerun_frontend_hit_count() -> u32 {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn edgerun_frontend_hit_float_stride() -> u32 {
-    6
+    HIT_FLOAT_STRIDE
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn edgerun_frontend_hit_buffer_len() -> u32 {
-    PACKED_HITS.with_borrow(|packed| packed.len() as u32)
+    PACKED_SCENE.with_borrow(|packed| packed.hit_buffer().len() as u32)
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn edgerun_frontend_hit_buffer_ptr() -> *const f32 {
-    PACKED_HITS.with_borrow(|packed| packed.as_ptr())
+    PACKED_SCENE.with_borrow(|packed| packed.hit_buffer().as_ptr())
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn edgerun_frontend_shell_rect_buffer_len() -> u32 {
-    SHELL_PACKED_RECTS.with_borrow(|packed| packed.len() as u32)
+    SHELL_PACKED_SCENE.with_borrow(|packed| packed.rect_buffer().len() as u32)
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn edgerun_frontend_shell_rect_buffer_ptr() -> *const f32 {
-    SHELL_PACKED_RECTS.with_borrow(|packed| packed.as_ptr())
+    SHELL_PACKED_SCENE.with_borrow(|packed| packed.rect_buffer().as_ptr())
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn edgerun_frontend_shell_text_vertex_buffer_len() -> u32 {
-    SHELL_PACKED_TEXT_VERTICES.with_borrow(|packed| packed.len() as u32)
+    SHELL_PACKED_SCENE.with_borrow(|packed| packed.text_vertex_buffer().len() as u32)
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn edgerun_frontend_shell_text_vertex_buffer_ptr() -> *const f32 {
-    SHELL_PACKED_TEXT_VERTICES.with_borrow(|packed| packed.as_ptr())
+    SHELL_PACKED_SCENE.with_borrow(|packed| packed.text_vertex_buffer().as_ptr())
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn edgerun_frontend_shell_hit_buffer_len() -> u32 {
-    SHELL_PACKED_HITS.with_borrow(|packed| packed.len() as u32)
+    SHELL_PACKED_SCENE.with_borrow(|packed| packed.hit_buffer().len() as u32)
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn edgerun_frontend_shell_hit_buffer_ptr() -> *const f32 {
-    SHELL_PACKED_HITS.with_borrow(|packed| packed.as_ptr())
-}
-
-fn hit_kind_code(kind: HitKind) -> u32 {
-    match kind {
-        HitKind::Contact => 1,
-        HitKind::Composer => 2,
-        HitKind::Send => 3,
-        HitKind::Button => 4,
-        HitKind::Tab => 5,
-        HitKind::Toggle => 6,
-        HitKind::ListRow => 7,
-        HitKind::Input => 8,
-        HitKind::TextArea => 9,
-        HitKind::Slider => 10,
-        HitKind::MenuItem => 11,
-        HitKind::TransactionRow => 12,
-        HitKind::Scrollbar => 13,
-        HitKind::WorkspaceTab => 14,
-        HitKind::WorkspaceClose => 15,
-        HitKind::WorkspaceSplit => 16,
-        HitKind::Checkbox => 17,
-        HitKind::Radio => 18,
-        HitKind::Select => 19,
-        HitKind::Breadcrumb => 20,
-        HitKind::TreeItem => 21,
-        HitKind::AppLauncherItem => 22,
-        HitKind::ShellLauncher => 23,
-    }
+    SHELL_PACKED_SCENE.with_borrow(|packed| packed.hit_buffer().as_ptr())
 }
 
 #[unsafe(no_mangle)]
@@ -612,32 +448,32 @@ pub extern "C" fn edgerun_frontend_text_quad_count() -> u32 {
 
 #[unsafe(no_mangle)]
 pub extern "C" fn edgerun_frontend_rect_float_stride() -> u32 {
-    11
+    RECT_FLOAT_STRIDE
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn edgerun_frontend_rect_buffer_len() -> u32 {
-    PACKED_RECTS.with_borrow(|packed| packed.len() as u32)
+    PACKED_SCENE.with_borrow(|packed| packed.rect_buffer().len() as u32)
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn edgerun_frontend_rect_buffer_ptr() -> *const f32 {
-    PACKED_RECTS.with_borrow(|packed| packed.as_ptr())
+    PACKED_SCENE.with_borrow(|packed| packed.rect_buffer().as_ptr())
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn edgerun_frontend_text_vertex_float_stride() -> u32 {
-    8
+    TEXT_VERTEX_FLOAT_STRIDE
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn edgerun_frontend_text_vertex_buffer_len() -> u32 {
-    PACKED_TEXT_VERTICES.with_borrow(|packed| packed.len() as u32)
+    PACKED_SCENE.with_borrow(|packed| packed.text_vertex_buffer().len() as u32)
 }
 
 #[unsafe(no_mangle)]
 pub extern "C" fn edgerun_frontend_text_vertex_buffer_ptr() -> *const f32 {
-    PACKED_TEXT_VERTICES.with_borrow(|packed| packed.as_ptr())
+    PACKED_SCENE.with_borrow(|packed| packed.text_vertex_buffer().as_ptr())
 }
 
 #[unsafe(no_mangle)]
@@ -808,14 +644,6 @@ fn text_field(index: u32, field: impl FnOnce(&edgerun_ui_core::gpu::TextQuad) ->
             .map(field)
             .unwrap_or(0.0)
     })
-}
-
-fn rect_mode_code(mode: RectMode) -> u32 {
-    match mode {
-        RectMode::Fill => 0,
-        RectMode::Shadow => 1,
-        RectMode::Border => 2,
-    }
 }
 
 fn frame_active(time_ms: f64) -> bool {

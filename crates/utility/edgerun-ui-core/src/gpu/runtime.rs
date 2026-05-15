@@ -101,6 +101,12 @@ pub enum UiAction {
     Cancelled,
 }
 
+impl UiAction {
+    pub const fn needs_redraw(&self) -> bool {
+        !matches!(self, Self::None | Self::Hovered(_))
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UiTextBufferAction {
     None,
