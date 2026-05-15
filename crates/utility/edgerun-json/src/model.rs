@@ -1,8 +1,17 @@
 use crate::prelude::*;
 
 use alloc::collections::BTreeMap;
+use alloc::sync::Arc;
+use core::fmt::Display;
+use core::hash::Hash;
+use core::num::NonZeroUsize;
+use core::str::FromStr;
 #[cfg(feature = "std")]
 use std::collections::HashMap;
+#[cfg(feature = "std")]
+use std::path::PathBuf;
+#[cfg(feature = "std")]
+use std::time::Duration;
 
 use crate::{JsonNumber, JsonValue, JsonValueError, Map};
 
@@ -31,6 +40,29 @@ pub fn to_json_vec<T: ToJson + ?Sized>(value: &T) -> Result<Vec<u8>, crate::Json
     let mut out = Vec::with_capacity(crate::util::initial_json_capacity(&value));
     crate::util::write_json_value(&mut out, &value)?;
     Ok(out)
+}
+
+pub fn to_json_string_pretty<T: ToJson + ?Sized>(value: &T) -> Result<String, crate::JsonError> {
+    let out = to_json_vec_pretty(value)?;
+    Ok(String::from_utf8(out).expect("JSON serialization produced invalid UTF-8"))
+}
+
+pub fn to_json_vec_pretty<T: ToJson + ?Sized>(value: &T) -> Result<Vec<u8>, crate::JsonError> {
+    let value = value.to_json();
+    let mut out = Vec::with_capacity(crate::util::initial_json_capacity(&value) + 16);
+    crate::util::write_json_value_pretty(&mut out, &value, 0)?;
+    Ok(out)
+}
+
+#[cfg(feature = "schemars")]
+impl schemars::JsonSchema for JsonValue {
+    fn schema_name() -> String {
+        "JsonValue".to_string()
+    }
+
+    fn json_schema(_generator: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
+        schemars::schema::Schema::Bool(true)
+    }
 }
 
 pub fn from_json_value<T: FromJson>(value: JsonValue) -> Result<T, JsonValueError> {
@@ -163,6 +195,30 @@ impl ToJson for &str {
     }
 }
 
+impl ToJson for char {
+    fn to_json(&self) -> JsonValue {
+        self.to_string().to_json()
+    }
+}
+
+impl FromJson for char {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let value = String::from_json(value)?;
+        let mut chars = value.chars();
+        let Some(ch) = chars.next() else {
+            return Err(JsonValueError::WrongType(
+                "expected char, found empty string".to_string(),
+            ));
+        };
+        if chars.next().is_some() {
+            return Err(JsonValueError::WrongType(
+                "expected char, found string".to_string(),
+            ));
+        }
+        Ok(ch)
+    }
+}
+
 impl ToJson for String {
     fn to_json(&self) -> JsonValue {
         JsonValue::String(self.clone())
@@ -199,6 +255,7 @@ impl_to_from_json_number!(u32);
 impl_to_from_json_number!(u64);
 impl_to_from_json_number!(usize);
 impl_to_from_json_number!(f64);
+impl_to_from_json_number!(f32);
 impl_to_from_json_number!(i128);
 impl_to_from_json_number!(u128);
 impl_to_from_json_unsigned_cast!(u8);
@@ -284,6 +341,24 @@ impl<T: FromJson> FromJson for Option<T> {
     }
 }
 
+impl ToJson for () {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::Null
+    }
+}
+
+impl FromJson for () {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match value {
+            JsonValue::Null => Ok(()),
+            other => Err(JsonValueError::WrongType(format!(
+                "expected null, found {}",
+                other.variant_name()
+            ))),
+        }
+    }
+}
+
 impl<T: ToJson> ToJson for Vec<T> {
     fn to_json(&self) -> JsonValue {
         JsonValue::array_from_iter(self.iter().map(ToJson::to_json))
@@ -314,6 +389,24 @@ impl<T: FromJson> FromJson for Box<T> {
     }
 }
 
+impl<T: ToJson + ?Sized> ToJson for Arc<T> {
+    fn to_json(&self) -> JsonValue {
+        self.as_ref().to_json()
+    }
+}
+
+impl<T: FromJson> FromJson for Arc<T> {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        T::from_json(value).map(Arc::new)
+    }
+}
+
+impl FromJson for Arc<str> {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        String::from_json(value).map(Arc::<str>::from)
+    }
+}
+
 impl<T: ToJson> ToJson for BTreeMap<String, T> {
     fn to_json(&self) -> JsonValue {
         let mut object: Map = Map::with_capacity(self.len());
@@ -341,30 +434,100 @@ impl<T: FromJson> FromJson for BTreeMap<String, T> {
 }
 
 #[cfg(feature = "std")]
-impl<T: ToJson> ToJson for HashMap<String, T> {
+impl<K, T> ToJson for HashMap<K, T>
+where
+    K: Display + Eq + Hash,
+    T: ToJson,
+{
     fn to_json(&self) -> JsonValue {
         let mut object: Map = Map::with_capacity(self.len());
         for (key, value) in self {
-            object.push_field(key.clone(), value.to_json());
+            object.push_field(key.to_string(), value.to_json());
         }
         object.into()
     }
 }
 
 #[cfg(feature = "std")]
-impl<T: FromJson> FromJson for HashMap<String, T> {
+impl<K, T> FromJson for HashMap<K, T>
+where
+    K: FromStr + Eq + Hash,
+    K::Err: Display,
+    T: FromJson,
+{
     fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
         match value {
             JsonValue::Object(object) => object
                 .into_vec()
                 .into_iter()
-                .map(|(key, value)| T::from_json(value).map(|value| (key, value)))
+                .map(|(key, value)| {
+                    let key = K::from_str(&key)
+                        .map_err(|err| JsonValueError::WrongType(err.to_string()))?;
+                    T::from_json(value).map(|value| (key, value))
+                })
                 .collect(),
             other => Err(JsonValueError::WrongType(format!(
                 "expected object, found {}",
                 other.variant_name()
             ))),
         }
+    }
+}
+
+#[cfg(feature = "std")]
+impl ToJson for PathBuf {
+    fn to_json(&self) -> JsonValue {
+        self.to_string_lossy().to_string().to_json()
+    }
+}
+
+#[cfg(feature = "std")]
+impl FromJson for PathBuf {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        Ok(PathBuf::from(String::from_json(value)?))
+    }
+}
+
+impl ToJson for NonZeroUsize {
+    fn to_json(&self) -> JsonValue {
+        self.get().to_json()
+    }
+}
+
+impl FromJson for NonZeroUsize {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let value = usize::from_json(value)?;
+        NonZeroUsize::new(value)
+            .ok_or_else(|| JsonValueError::WrongType("expected non-zero usize".to_string()))
+    }
+}
+
+#[cfg(feature = "std")]
+impl ToJson for Duration {
+    fn to_json(&self) -> JsonValue {
+        self.as_millis().to_json()
+    }
+}
+
+#[cfg(feature = "std")]
+impl FromJson for Duration {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        Ok(Duration::from_millis(u64::from_json(value)?))
+    }
+}
+
+impl<T: ToJson, E: ToJson> ToJson for Result<T, E> {
+    fn to_json(&self) -> JsonValue {
+        match self {
+            Ok(value) => value.to_json(),
+            Err(error) => error.to_json(),
+        }
+    }
+}
+
+impl<T: FromJson, E> FromJson for Result<T, E> {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        Ok(Ok(T::from_json(value)?))
     }
 }
 

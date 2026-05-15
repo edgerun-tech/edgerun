@@ -339,7 +339,7 @@ mod tests {
         assert_eq!(request.method, Method::POST);
         assert_eq!(request.url, "https://api.openai.com/v1/realtime/calls");
         assert_eq!(
-            request.headers.get(CONTENT_TYPE).unwrap(),
+            request.headers.get(CONTENT_TYPE).cloned().unwrap(),
             HeaderValue::from_static("application/sdp")
         );
         assert_eq!(
@@ -419,7 +419,7 @@ mod tests {
         assert_eq!(request.method, Method::POST);
         assert_eq!(request.url, "https://api.openai.com/v1/realtime/calls");
         assert_eq!(
-            request.headers.get(CONTENT_TYPE).unwrap(),
+            request.headers.get(CONTENT_TYPE).cloned().unwrap(),
             HeaderValue::from_static(MULTIPART_CONTENT_TYPE)
         );
         let Some(RequestBody::Raw(body)) = request.body else {
@@ -491,13 +491,12 @@ mod tests {
             .remove("id");
         assert_eq!(
             request.body,
-            Some(RequestBody::Json(
-                to_value(BackendRealtimeCallRequest {
-                    sdp: "v=offer\r\n",
-                    session: &expected_session,
-                })
-                .expect("request should encode")
-            ))
+            Some(RequestBody::Json({
+                let mut body = Map::new();
+                body.push_field("sdp", "v=offer\r\n");
+                body.push_field("session", expected_session);
+                body.into()
+            }))
         );
     }
 

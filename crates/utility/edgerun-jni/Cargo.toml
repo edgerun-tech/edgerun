@@ -1,0 +1,31 @@
+[package]
+name = "jni"
+version = "0.22.4"
+edition = "2024"
+rust-version = "1.85.0"
+license = "MIT OR Apache-2.0"
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun-owned JNI compatibility crate without Windows support"
+build = "build.rs"
+
+[features]
+_cfg_test = []
+default = []
+invocation = []
+
+[dependencies]
+cfg-if = { path = "../edgerun-cfg-if" }
+combine = { path = "../edgerun-combine" }
+jni-macros = { path = "../edgerun-jni-macros" }
+jni-sys = { path = "../edgerun-jni-sys" }
+log = { path = "../edgerun-log-upstream" }
+simd_cesu8 = { path = "../edgerun-simd-cesu8" }
+thiserror = { path = "../edgerun-thiserror" }
+
+[dev-dependencies]
+assert_matches = { package = "edgerun-assert-matches", path = "../edgerun-assert-matches" }
+
+[lints]
+workspace = true

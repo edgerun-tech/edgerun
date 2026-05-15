@@ -14,14 +14,9 @@ default = []
 html-ui = []
 event-virtio = ["dep:edgerun-virtio"]
 runtime = [
-  "dep:edgerun-devices",
   "dep:edgerun-node",
   "dep:edgerun-protocols",
-  "dep:edgerun-encoding",
   "dep:edgerun-tpm",
-  "dep:edgerun-oci",
-  "dep:edgerun-storage",
-  "dep:edgerun-capabilities",
   "edgerun-protocols/dhcp",
   "edgerun-protocols/ethernet-ipv4",
   "edgerun-protocols/tftp",
@@ -38,22 +33,23 @@ esp32s3-wifi-phy-probe = ["esp32s3-wifi-blob", "edgerun-platform/esp32s3-wifi-ph
 esp32s3-wifi-ram-phy-patch = ["esp32s3-wifi-blob", "edgerun-platform/esp32s3-wifi-ram-phy-patch"]
 
 [dependencies]
-edgerun-devices = { version = "0.1", path = "../device-types/edgerun-devices", optional = true }
 edgerun-platform = { version = "0.1", path = "../edgerun-platform" }
 edgerun-node = { version = "0.1", path = "../node/edgerun-node", default-features = false, features = ["http"], optional = true }
 edgerun-protocols = { version = "0.1", path = "../protocol/edgerun-protocols", default-features = false, optional = true }
-edgerun-encoding = { version = "0.1", path = "../utility/edgerun-encoding", default-features = false, optional = true }
 edgerun-tpm = { version = "0.1", path = "../identity/edgerun-tpm", default-features = false, optional = true }
-edgerun-crypto = { version = "0.1", path = "../utility/edgerun-crypto", default-features = false }
-edgerun-oci = { version = "0.1", path = "../edgerun-oci", default-features = false, features = ["registry-client", "edgefs"], optional = true }
-edgerun-storage = { version = "0.1", path = "../authority/edgerun-storage", optional = true }
-edgerun-capabilities = { version = "0.1", path = "../capability/edgerun-capabilities", optional = true }
-edgerun-network-driver = { version = "0.1", path = "../edgerun-network-driver", default-features = false, features = ["virtio"], optional = true }
 
 [target.'cfg(target_arch = "x86_64")'.dependencies]
 edgerun-virtio = { version = "0.1", path = "../edgerun-virtio", optional = true }
 
 [target.'cfg(target_arch = "xtensa")'.dependencies]
+
+[package.metadata.cargo-machete]
+ignored = [
+  "edgerun-node",
+  "edgerun-platform",
+  "edgerun-protocols",
+  "edgerun-tpm",
+]
 
 [workspace]
 

@@ -1,192 +1,156 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "definitions": {
-    "AbsolutePathBuf": {
-      "description": "A path that is guaranteed to be absolute and normalized (though it is not guaranteed to be canonicalized or exist on the filesystem).\n\nIMPORTANT: When deserializing an `AbsolutePathBuf`, a base path must be set using [AbsolutePathBufGuard::new]. If no base path is set, the deserialization will fail unless the path being deserialized is already absolute.",
-      "type": "string"
-    },
-    "HookErrorInfo": {
-      "properties": {
-        "message": {
-          "type": "string"
-        },
-        "path": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "message",
-        "path"
-      ],
-      "type": "object"
-    },
-    "HookEventName": {
-      "enum": [
-        "preToolUse",
-        "permissionRequest",
-        "postToolUse",
-        "preCompact",
-        "postCompact",
-        "sessionStart",
-        "userPromptSubmit",
-        "stop"
-      ],
-      "type": "string"
-    },
-    "HookHandlerType": {
-      "enum": [
-        "command",
-        "prompt",
-        "agent"
-      ],
-      "type": "string"
-    },
-    "HookMetadata": {
-      "properties": {
-        "command": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "currentHash": {
-          "type": "string"
-        },
-        "displayOrder": {
-          "format": "int64",
-          "type": "integer"
-        },
-        "enabled": {
-          "type": "boolean"
-        },
-        "eventName": {
-          "$ref": "#/definitions/HookEventName"
-        },
-        "handlerType": {
-          "$ref": "#/definitions/HookHandlerType"
-        },
-        "isManaged": {
-          "type": "boolean"
-        },
-        "key": {
-          "type": "string"
-        },
-        "matcher": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "pluginId": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "source": {
-          "$ref": "#/definitions/HookSource"
-        },
-        "sourcePath": {
-          "$ref": "#/definitions/AbsolutePathBuf"
-        },
-        "statusMessage": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "timeoutSec": {
-          "format": "uint64",
-          "minimum": 0.0,
-          "type": "integer"
-        },
-        "trustStatus": {
-          "$ref": "#/definitions/HookTrustStatus"
-        }
-      },
-      "required": [
-        "currentHash",
-        "displayOrder",
-        "enabled",
-        "eventName",
-        "handlerType",
-        "isManaged",
-        "key",
-        "source",
-        "sourcePath",
-        "timeoutSec",
-        "trustStatus"
-      ],
-      "type": "object"
-    },
-    "HookSource": {
-      "enum": [
-        "system",
-        "user",
-        "project",
-        "mdm",
-        "sessionFlags",
-        "plugin",
-        "cloudRequirements",
-        "legacyManagedConfigFile",
-        "legacyManagedConfigMdm",
-        "unknown"
-      ],
-      "type": "string"
-    },
-    "HookTrustStatus": {
-      "enum": [
-        "managed",
-        "untrusted",
-        "trusted",
-        "modified"
-      ],
-      "type": "string"
-    },
-    "HooksListEntry": {
-      "properties": {
-        "cwd": {
-          "type": "string"
-        },
-        "errors": {
-          "items": {
-            "$ref": "#/definitions/HookErrorInfo"
-          },
-          "type": "array"
-        },
-        "hooks": {
-          "items": {
-            "$ref": "#/definitions/HookMetadata"
-          },
-          "type": "array"
-        },
-        "warnings": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "cwd",
-        "errors",
-        "hooks",
-        "warnings"
-      ],
-      "type": "object"
-    }
-  },
+  "title": "HooksListResponse",
+  "type": "object",
   "properties": {
     "data": {
+      "type": "array",
       "items": {
-        "$ref": "#/definitions/HooksListEntry"
-      },
-      "type": "array"
+        "title": "HooksListEntry",
+        "type": "object",
+        "properties": {
+          "cwd": {
+            "type": "string"
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "title": "HookErrorInfo",
+              "type": "object",
+              "properties": {
+                "message": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "path",
+                "message"
+              ]
+            }
+          },
+          "hooks": {
+            "type": "array",
+            "items": {
+              "title": "HookMetadata",
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string"
+                },
+                "currentHash": {
+                  "type": "string"
+                },
+                "displayOrder": {
+                  "type": "integer"
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "eventName": {
+                  "title": "HookEventName",
+                  "type": "string",
+                  "enum": [
+                    "PreToolUse",
+                    "PostToolUse",
+                    "PreCompact",
+                    "PostCompact",
+                    "SessionStart",
+                    "UserPromptSubmit",
+                    "Stop"
+                  ]
+                },
+                "handlerType": {
+                  "title": "HookHandlerType",
+                  "type": "string",
+                  "enum": [
+                    "Command",
+                    "Prompt",
+                    "Agent"
+                  ]
+                },
+                "isManaged": {
+                  "type": "boolean"
+                },
+                "key": {
+                  "type": "string"
+                },
+                "matcher": {
+                  "type": "string"
+                },
+                "pluginId": {
+                  "type": "string"
+                },
+                "source": {
+                  "title": "HookSource",
+                  "type": "string",
+                  "enum": [
+                    "System",
+                    "User",
+                    "Project",
+                    "Mdm",
+                    "SessionFlags",
+                    "Plugin",
+                    "CloudRequirements",
+                    "LegacyManagedConfigFile",
+                    "LegacyManagedConfigMdm",
+                    "Unknown"
+                  ]
+                },
+                "sourcePath": {
+                  "title": "AbsolutePathBuf",
+                  "type": "object"
+                },
+                "statusMessage": {
+                  "type": "string"
+                },
+                "timeoutSec": {
+                  "type": "integer"
+                },
+                "trustStatus": {
+                  "title": "HookTrustStatus",
+                  "type": "string",
+                  "enum": [
+                    "Managed",
+                    "Untrusted",
+                    "Trusted",
+                    "Modified"
+                  ]
+                }
+              },
+              "required": [
+                "key",
+                "eventName",
+                "handlerType",
+                "timeoutSec",
+                "sourcePath",
+                "source",
+                "displayOrder",
+                "enabled",
+                "isManaged",
+                "currentHash",
+                "trustStatus"
+              ]
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "cwd",
+          "hooks",
+          "warnings",
+          "errors"
+        ]
+      }
     }
   },
   "required": [
     "data"
-  ],
-  "title": "HooksListResponse",
-  "type": "object"
+  ]
 }

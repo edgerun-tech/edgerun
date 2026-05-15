@@ -9,10 +9,27 @@ homepage.workspace = true
 autobins = false
 
 [lib]
-crate-type = ["rlib", "cdylib"]
+crate-type = ["rlib"]
+
+[[bin]]
+name = "edgerun-apk-api-calls"
+path = "src/bin/apk_api_calls.rs"
+
+[[bin]]
+name = "edgerun-dead-code"
+path = "src/bin/dead_code.rs"
+
+[[bin]]
+name = "edgerun-build"
+path = "src/bin/edgerun_build.rs"
+
+[[bin]]
+name = "edgerun-work-wire-gen"
+path = "src/bin/work_wire_gen.rs"
 
 [features]
-default = ["lang-rust"]
+default = ["std", "lang-rust", "vfs"]
+std = ["edgerun-vfs?/std"]
 lang-rust = []
 lang-typescript = []
 lang-c = []
@@ -21,10 +38,11 @@ lang-go = []
 lang-java = []
 lang-javascript = []
 mount = ["vfs"]
-vfs = []
+vfs = ["dep:edgerun-vfs"]
+wire-rkyv = ["dep:rkyv"]
 
 [dependencies]
-edgerun-crypto = { workspace = true, default-features = false, features = ["sha1"] }
 edgerun-json = { workspace = true, features = ["toml"] }
-edgerun-log.workspace = true
-rkyv.workspace = true
+edgerun-encoding = { workspace = true, features = ["compression"] }
+edgerun-vfs = { workspace = true, optional = true }
+rkyv = { workspace = true, features = ["std", "bytecheck"], optional = true }

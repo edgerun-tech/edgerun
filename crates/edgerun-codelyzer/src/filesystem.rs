@@ -4,7 +4,6 @@
 ///
 /// Scans directories for tracked source files, computes a fast content hash,
 /// and diffs snapshots to detect new / modified / deleted files.
-use rkyv::{Archive, Deserialize as RkyvDeserialize, Serialize as RkyvSerialize};
 use std::{
     collections::HashMap,
     hash::{Hash, Hasher},
@@ -169,24 +168,62 @@ pub fn rolling_hash(bytes: &[u8]) -> u64 {
 
 #[cfg(feature = "vfs")]
 pub fn load_vfs(root_dir: &str) -> Result<crate::vfs::SharedVFS, String> {
-    let vfs = crate::vfs::VirtualFileSystem::load_excluding(root_dir, IGNORED_DIRS)?;
-    Ok(std::sync::Arc::new(std::sync::RwLock::new(vfs)))
+    let vfs = load_vfs_from_dir(root_dir, IGNORED_DIRS)?;
+    Ok(crate::vfs::shared_vfs(vfs))
+}
+
+#[cfg(feature = "vfs")]
+pub fn load_vfs_from_dir(
+    root_dir: &str,
+    ignored_dirs: &[&str],
+) -> Result<crate::vfs::VirtualFileSystem, String> {
+    let root = Path::new(root_dir);
+    let mut entries = Vec::new();
+    collect_vfs_entries(root, root, ignored_dirs, &mut entries)?;
+    crate::vfs::VirtualFileSystem::from_entries_with_root(root_dir, entries)
+}
+
+#[cfg(feature = "vfs")]
+fn collect_vfs_entries(
+    root: &Path,
+    current: &Path,
+    ignored_dirs: &[&str],
+    out: &mut Vec<(String, Vec<u8>)>,
+) -> Result<(), String> {
+    for entry in std::fs::read_dir(current).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let path = entry.path();
+        let name = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("");
+        if path.is_dir() {
+            if ignored_dirs.contains(&name) {
+                continue;
+            }
+            collect_vfs_entries(root, &path, ignored_dirs, out)?;
+        } else {
+            let rel = path
+                .strip_prefix(root)
+                .unwrap_or(&path)
+                .to_string_lossy()
+                .replace('\\', "/");
+            let bytes = std::fs::read(&path).map_err(|error| error.to_string())?;
+            out.push((rel, bytes));
+        }
+    }
+    Ok(())
 }
 
 // ─── Parse Cache ──────────────────────────────────────────────
 
 /// A cache entry for a single parsed file.
-#[derive(Debug, Clone, Archive, RkyvSerialize, RkyvDeserialize)]
+#[derive(Debug, Clone)]
 pub struct CacheEntry {
     pub file_hash: u64,
     pub mtime: u64,
     pub functions: Vec<crate::parser::RawFunctionOwned>,
     pub calls: Vec<crate::parser::RawCallOwned>,
-}
-
-#[derive(Debug, Clone, Archive, RkyvSerialize, RkyvDeserialize)]
-struct ParseCacheEntries {
-    entries: HashMap<String, CacheEntry>,
 }
 
 /// Persistent parse cache that stores parsed results on disk.
@@ -207,15 +244,9 @@ impl ParseCache {
         let cache_file = cache_file_path(&cache_dir, root_dir);
 
         let entries = if cache_file.exists() {
-            std::fs::read(&cache_file)
+            std::fs::read_to_string(&cache_file)
                 .ok()
-                .and_then(|bytes| {
-                    let archived =
-                        rkyv::access::<ArchivedParseCacheEntries, rkyv::rancor::Error>(&bytes)
-                            .ok()?;
-                    rkyv::deserialize::<ParseCacheEntries, rkyv::rancor::Error>(archived).ok()
-                })
-                .map(|cache| cache.entries)
+                .and_then(|cache| decode_parse_cache(&cache))
                 .unwrap_or_default()
         } else {
             HashMap::new()
@@ -239,17 +270,8 @@ impl ParseCache {
             return;
         }
         let cache_file = cache_file_path(&cache_dir, &self.root_dir);
-        let cache = ParseCacheEntries {
-            entries: self.entries.clone(),
-        };
-        let bytes = match rkyv::to_bytes::<rkyv::rancor::Error>(&cache) {
-            Ok(bytes) => bytes,
-            Err(e) => {
-                eprintln!("warn: failed to encode rkyv cache: {e}");
-                return;
-            }
-        };
-        if let Err(e) = std::fs::write(&cache_file, bytes) {
+        let cache = encode_parse_cache(&self.entries);
+        if let Err(e) = std::fs::write(&cache_file, cache) {
             eprintln!("warn: failed to write cache: {e}");
         }
         self.dirty = false;
@@ -305,5 +327,152 @@ fn cache_file_path(cache_dir: &Path, root_dir: &str) -> PathBuf {
     let mut hasher = DefaultHasher::new();
     root_dir.hash(&mut hasher);
     let hash = hasher.finish();
-    cache_dir.join(format!("{hash:x}.bin"))
+    cache_dir.join(format!("{hash:x}.cache"))
+}
+
+fn encode_parse_cache(entries: &HashMap<String, CacheEntry>) -> String {
+    let mut out = String::from("edgerun-codelyzer-cache-v1\n");
+    let mut keys: Vec<&String> = entries.keys().collect();
+    keys.sort();
+    for path in keys {
+        let entry = &entries[path];
+        out.push_str("file\t");
+        push_escaped(&mut out, path);
+        out.push('\t');
+        out.push_str(&entry.file_hash.to_string());
+        out.push('\t');
+        out.push_str(&entry.mtime.to_string());
+        out.push('\t');
+        out.push_str(&entry.functions.len().to_string());
+        out.push('\t');
+        out.push_str(&entry.calls.len().to_string());
+        out.push('\n');
+        for function in &entry.functions {
+            out.push_str("fn\t");
+            push_escaped(&mut out, &function.name);
+            out.push('\t');
+            out.push_str(&function.start_byte.to_string());
+            out.push('\t');
+            out.push_str(&function.end_byte.to_string());
+            out.push('\t');
+            out.push_str(if function.is_static { "1" } else { "0" });
+            out.push('\t');
+            out.push_str(if function.is_macro_def { "1" } else { "0" });
+            out.push('\n');
+        }
+        for call in &entry.calls {
+            out.push_str("call\t");
+            push_escaped(&mut out, &call.callee_name);
+            out.push('\t');
+            out.push_str(&call.start_byte.to_string());
+            out.push('\t');
+            out.push_str(&call.end_byte.to_string());
+            out.push('\t');
+            out.push_str(call.kind.label());
+            out.push('\n');
+        }
+    }
+    out
+}
+
+fn decode_parse_cache(input: &str) -> Option<HashMap<String, CacheEntry>> {
+    let mut lines = input.lines();
+    if lines.next()? != "edgerun-codelyzer-cache-v1" {
+        return None;
+    }
+    let mut entries = HashMap::new();
+    while let Some(line) = lines.next() {
+        let fields = split_escaped_fields(line)?;
+        if fields.len() != 6 || fields[0] != "file" {
+            return None;
+        }
+        let path = fields[1].clone();
+        let file_hash = fields[2].parse().ok()?;
+        let mtime = fields[3].parse().ok()?;
+        let function_count: usize = fields[4].parse().ok()?;
+        let call_count: usize = fields[5].parse().ok()?;
+        let mut functions = Vec::with_capacity(function_count);
+        let mut calls = Vec::with_capacity(call_count);
+        for _ in 0..function_count {
+            let fields = split_escaped_fields(lines.next()?)?;
+            if fields.len() != 6 || fields[0] != "fn" {
+                return None;
+            }
+            functions.push(crate::parser::RawFunctionOwned {
+                name: fields[1].clone(),
+                start_byte: fields[2].parse().ok()?,
+                end_byte: fields[3].parse().ok()?,
+                is_static: fields[4] == "1",
+                is_macro_def: fields[5] == "1",
+            });
+        }
+        for _ in 0..call_count {
+            let fields = split_escaped_fields(lines.next()?)?;
+            if fields.len() != 5 || fields[0] != "call" {
+                return None;
+            }
+            calls.push(crate::parser::RawCallOwned {
+                callee_name: fields[1].clone(),
+                start_byte: fields[2].parse().ok()?,
+                end_byte: fields[3].parse().ok()?,
+                kind: parse_call_kind(&fields[4])?,
+            });
+        }
+        entries.insert(
+            path,
+            CacheEntry {
+                file_hash,
+                mtime,
+                functions,
+                calls,
+            },
+        );
+    }
+    Some(entries)
+}
+
+fn push_escaped(out: &mut String, value: &str) {
+    for ch in value.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\t' => out.push_str("\\t"),
+            '\r' => out.push_str("\\r"),
+            _ => out.push(ch),
+        }
+    }
+}
+
+fn split_escaped_fields(line: &str) -> Option<Vec<String>> {
+    let mut fields = Vec::new();
+    let mut current = String::new();
+    let mut chars = line.chars();
+    while let Some(ch) = chars.next() {
+        match ch {
+            '\t' => {
+                fields.push(current);
+                current = String::new();
+            }
+            '\\' => match chars.next()? {
+                '\\' => current.push('\\'),
+                'n' => current.push('\n'),
+                't' => current.push('\t'),
+                'r' => current.push('\r'),
+                _ => return None,
+            },
+            _ => current.push(ch),
+        }
+    }
+    fields.push(current);
+    Some(fields)
+}
+
+fn parse_call_kind(value: &str) -> Option<crate::uir::CallKind> {
+    match value {
+        "direct" => Some(crate::uir::CallKind::Direct),
+        "indirect" => Some(crate::uir::CallKind::Indirect),
+        "macro" => Some(crate::uir::CallKind::Macro),
+        "unknown" => Some(crate::uir::CallKind::Unknown),
+        _ => None,
+    }
 }

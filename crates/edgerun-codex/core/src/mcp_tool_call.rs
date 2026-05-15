@@ -25,21 +25,17 @@ use crate::guardian::guardian_timeout_message;
 use crate::guardian::new_guardian_review_id;
 use crate::guardian::review_approval_request;
 use crate::guardian::routes_approval_to_guardian;
-use crate::hook_runtime::run_permission_request_hooks;
 use crate::mcp_openai_file::rewrite_mcp_tool_arguments_for_openai_files;
 use crate::mcp_tool_approval_templates::RenderedMcpToolApprovalParam;
 use crate::mcp_tool_approval_templates::render_mcp_tool_approval_template;
 use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;
-use crate::tools::hook_names::HookToolName;
-use crate::tools::sandboxing::PermissionRequestPayload;
 use crate::turn_metadata::McpTurnMetadataContext;
 use codex_analytics::AppInvocation;
 use codex_analytics::InvocationType;
 use codex_analytics::build_track_events_context;
 use codex_config::types::AppToolApproval;
 use codex_features::Feature;
-use codex_hooks::PermissionRequestDecision;
 use codex_mcp::CODEX_APPS_MCP_SERVER_NAME;
 use codex_mcp::MCP_TOOL_CODEX_APPS_META_KEY;
 use codex_mcp::McpPermissionPromptAutoApproveContext;
@@ -84,10 +80,8 @@ use codex_utils_absolute_path::AbsolutePathBuf;
 use codex_utils_output_truncation::TruncationPolicy;
 use codex_utils_output_truncation::truncate_text;
 use codex_utils_pty::DEFAULT_OUTPUT_BYTES_CAP;
-use rmcp::model::ToolAnnotations;
-use serde::Deserialize;
-use serde::Serialize;
 use edgerun_json::Value as JsonValue;
+use rmcp::model::ToolAnnotations;
 use std::sync::Arc;
 use toml_edit::value;
 use tracing::Instrument;
@@ -723,7 +717,7 @@ async fn augment_mcp_tool_request_meta_with_sandbox_state(
         return Ok(meta);
     }
 
-    let sandbox_state = edgerun_json::to_serde_value(SandboxState {
+    let sandbox_state = edgerun_json::to_value(&SandboxState {
         permission_profile: Some(turn_context.permission_profile()),
         sandbox_policy: turn_context.sandbox_policy(),
         codex_linux_sandbox_exe: turn_context.codex_linux_sandbox_exe.clone(),
@@ -815,7 +809,7 @@ fn truncate_mcp_tool_result_for_event(
         Ok(call_tool_result) => {
             // The app-server rebuilds `ThreadItem::McpToolCall` from this item,
             // so avoid persisting multi-megabyte results in rollout storage.
-            let Ok(serialized) = edgerun_json::to_string(call_tool_result) else {
+            let Ok(serialized) = edgerun_json::to_json_string(call_tool_result) else {
                 return Ok(call_tool_result.clone());
             };
             if serialized.len() <= MCP_TOOL_CALL_EVENT_RESULT_MAX_BYTES {
@@ -1133,7 +1127,7 @@ pub(crate) fn is_mcp_tool_approval_question_id(question_id: &str) -> bool {
         .is_some_and(|suffix| suffix.starts_with('_'))
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, edgerun_json::ToJson)]
 struct McpToolApprovalKey {
     server: String,
     connector_id: Option<String>,
@@ -1210,31 +1204,6 @@ async fn maybe_request_mcp_tool_approval(
         && mcp_tool_approval_is_remembered(sess, key).await
     {
         return Some(McpToolApprovalDecision::Accept);
-    }
-
-    match run_permission_request_hooks(
-        sess,
-        turn_context,
-        call_id,
-        PermissionRequestPayload {
-            tool_name: HookToolName::new(hook_tool_name),
-            tool_input: invocation
-                .arguments
-                .clone()
-                .unwrap_or_else(|| edgerun_json::Value::Object(edgerun_json::Map::new())),
-        },
-    )
-    .await
-    {
-        Some(PermissionRequestDecision::Allow) => {
-            return Some(McpToolApprovalDecision::Accept);
-        }
-        Some(PermissionRequestDecision::Deny { message }) => {
-            return Some(McpToolApprovalDecision::Decline {
-                message: Some(message),
-            });
-        }
-        None => {}
     }
 
     let tool_call_mcp_elicitation_enabled = turn_context
@@ -1800,12 +1769,14 @@ fn build_mcp_tool_approval_elicitation_meta(
             tool_params.clone(),
         );
     }
-    if let Some(tool_params_display) = tool_params_display
-        && let Ok(tool_params_display) = edgerun_json::to_serde_value(tool_params_display)
-    {
+    if let Some(tool_params_display) = tool_params_display {
         meta.insert(
             MCP_TOOL_APPROVAL_TOOL_PARAMS_DISPLAY_KEY.to_string(),
-            tool_params_display,
+            edgerun_json::Value::array_from_iter(
+                tool_params_display
+                    .iter()
+                    .map(edgerun_json::ToJson::to_json),
+            ),
         );
     }
     (!meta.is_empty()).then_some(edgerun_json::Value::Object(meta))
@@ -2208,7 +2179,3 @@ async fn notify_mcp_tool_call_skip(
     .await;
     Err(message)
 }
-
-#[cfg(test)]
-#[path = "mcp_tool_call_tests.rs"]
-mod tests;

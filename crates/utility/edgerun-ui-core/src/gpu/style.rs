@@ -89,6 +89,7 @@ pub struct UiStyle {
     pub direction: Axis,
     pub gap: f32,
     pub padding: [f32; 4],
+    pub margin: [f32; 4],
     pub width: Option<f32>,
     pub height: Option<f32>,
     pub grow: bool,
@@ -101,6 +102,7 @@ pub struct UiStyle {
     pub border: bool,
     pub radius: f32,
     pub truncate: bool,
+    pub clip: bool,
     pub disabled: bool,
     pub loading: bool,
 }
@@ -111,6 +113,7 @@ impl Default for UiStyle {
             direction: Axis::Vertical,
             gap: 0.0,
             padding: [0.0; 4],
+            margin: [0.0; 4],
             width: None,
             height: None,
             grow: false,
@@ -123,6 +126,7 @@ impl Default for UiStyle {
             border: false,
             radius: 0.0,
             truncate: false,
+            clip: false,
             disabled: false,
             loading: false,
         }
@@ -166,6 +170,7 @@ impl UiStyle {
             "col" | "column" | "flex-col" => self.direction = Axis::Vertical,
             "flex-1" | "grow" => self.grow = true,
             "truncate" => self.truncate = true,
+            "overflow-hidden" | "overflow-clip" => self.clip = true,
             "disabled" => self.disabled = true,
             "loading" => self.loading = true,
             "border" | "border-border" | "border-input" | "border-dashed" | "ring" | "ring-1"
@@ -250,6 +255,30 @@ impl UiStyle {
         } else if let Some(value) = class.strip_prefix("py-").and_then(spacing_value) {
             self.padding[0] = value;
             self.padding[2] = value;
+        } else if let Some(value) = class.strip_prefix("pt-").and_then(spacing_value) {
+            self.padding[0] = value;
+        } else if let Some(value) = class.strip_prefix("pr-").and_then(spacing_value) {
+            self.padding[1] = value;
+        } else if let Some(value) = class.strip_prefix("pb-").and_then(spacing_value) {
+            self.padding[2] = value;
+        } else if let Some(value) = class.strip_prefix("pl-").and_then(spacing_value) {
+            self.padding[3] = value;
+        } else if let Some(value) = class.strip_prefix("m-").and_then(spacing_value) {
+            self.margin = [value; 4];
+        } else if let Some(value) = class.strip_prefix("mx-").and_then(spacing_value) {
+            self.margin[1] = value;
+            self.margin[3] = value;
+        } else if let Some(value) = class.strip_prefix("my-").and_then(spacing_value) {
+            self.margin[0] = value;
+            self.margin[2] = value;
+        } else if let Some(value) = class.strip_prefix("mt-").and_then(spacing_value) {
+            self.margin[0] = value;
+        } else if let Some(value) = class.strip_prefix("mr-").and_then(spacing_value) {
+            self.margin[1] = value;
+        } else if let Some(value) = class.strip_prefix("mb-").and_then(spacing_value) {
+            self.margin[2] = value;
+        } else if let Some(value) = class.strip_prefix("ml-").and_then(spacing_value) {
+            self.margin[3] = value;
         } else {
             return false;
         }
@@ -275,16 +304,20 @@ impl UiStyle {
     }
 
     pub(super) fn layout_rect(&self, bounds: UiRect) -> UiRect {
+        let x = bounds.x + self.margin[3];
+        let y = bounds.y + self.margin[0];
+        let available_w = (bounds.w - self.margin[1] - self.margin[3]).max(0.0);
+        let available_h = (bounds.h - self.margin[0] - self.margin[2]).max(0.0);
         UiRect {
-            x: bounds.x,
-            y: bounds.y,
+            x,
+            y,
             w: match self.width {
-                Some(value) if value >= 0.0 => value.min(bounds.w),
-                _ => bounds.w,
+                Some(value) if value >= 0.0 => value.min(available_w),
+                _ => available_w,
             },
             h: match self.height {
-                Some(value) if value >= 0.0 => value.min(bounds.h),
-                _ => bounds.h,
+                Some(value) if value >= 0.0 => value.min(available_h),
+                _ => available_h,
             },
         }
     }
@@ -414,6 +447,14 @@ mod tests {
     }
 
     #[test]
+    fn parses_axis_and_side_padding_and_margin_classes() {
+        let style = UiStyle::parse("p-2 pt-1 pr-3 pb-4 pl-5 m-1 mx-2 my-3 mt-4 mr-5 mb-6 ml-7");
+
+        assert_eq!(style.padding, [4.0, 12.0, 16.0, 20.0]);
+        assert_eq!(style.margin, [16.0, 20.0, 24.0, 28.0]);
+    }
+
+    #[test]
     fn parses_alignment_classes() {
         let style = UiStyle::parse("row items-center justify-between");
 
@@ -522,5 +563,12 @@ mod tests {
         assert_eq!(style.text, UiStyleColor::semantic(UiColorToken::Text));
         assert_eq!(style.width, None);
         assert_eq!(style.height, None);
+    }
+
+    #[test]
+    fn parses_overflow_clip_classes() {
+        assert!(UiStyle::parse("overflow-hidden").clip);
+        assert!(UiStyle::parse("overflow-clip").clip);
+        assert!(!UiStyle::parse("overflow-visible").clip);
     }
 }

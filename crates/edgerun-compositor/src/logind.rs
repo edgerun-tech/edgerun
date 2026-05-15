@@ -347,14 +347,6 @@ fn authenticate_dbus(fd: RawFd) -> io::Result<()> {
     }
 }
 
-/// Send BEGIN and negotiate unix FDs.
-fn send_begin(fd: RawFd) -> io::Result<()> {
-    // NEGOTIATE_UNIX_FD\r\n (we want FD support)
-    send_all_raw(fd, b"NEGOTIATE_UNIX_FD\r\n")?;
-    send_all_raw(fd, b"BEGIN\r\n")?;
-    Ok(())
-}
-
 // ─── D-Bus message building ─────────────────────────────────
 
 fn build_method_call(

@@ -2,8 +2,6 @@
 
 use std::io::{Read, Write};
 use std::pin::Pin;
-#[cfg(feature = "rustls-tls-native-roots")]
-use std::sync::Arc;
 use std::task::{Context, Poll};
 
 use edgerun_futures::Sink;
@@ -27,18 +25,6 @@ pub use edgerun_tungstenite::http;
 #[derive(Clone)]
 pub enum Connector {
     Plain,
-    #[cfg(feature = "rustls-tls-native-roots")]
-    Rustls(Arc<rustls::ClientConfig>),
-}
-
-#[cfg(feature = "rustls-tls-native-roots")]
-impl From<Connector> for edgerun_tungstenite::Connector {
-    fn from(value: Connector) -> Self {
-        match value {
-            Connector::Plain => Self::Plain,
-            Connector::Rustls(config) => Self::Rustls(config),
-        }
-    }
 }
 
 #[cfg(feature = "stream")]
@@ -54,10 +40,6 @@ where
 {
     fn plain(stream: S) -> Self {
         Self(edgerun_tungstenite::MaybeTlsStream::Plain(stream))
-    }
-
-    fn from_inner(inner: edgerun_tungstenite::MaybeTlsStream<S>) -> Self {
-        Self(inner)
     }
 
     pub fn get_ref(&self) -> &S {
@@ -247,51 +229,6 @@ fn request_addr(request: &http::Request<()>) -> Result<String, Error> {
     Ok(format!("{host}:{port}"))
 }
 
-#[cfg(all(feature = "connect", feature = "rustls-tls-native-roots"))]
-fn is_tls_request(request: &http::Request<()>) -> bool {
-    request.uri().scheme_str() == Some("wss")
-}
-
-#[cfg(all(feature = "connect", feature = "rustls-tls-native-roots"))]
-pub async fn connect_async_tls_with_config<R>(
-    request: R,
-    config: Option<WebSocketConfig>,
-    _disable_nagle: bool,
-    connector: Option<Connector>,
-) -> Result<
-    (
-        WebSocketStream<MaybeTlsStream<TcpStream>>,
-        http::Response<Option<Vec<u8>>>,
-    ),
-    Error,
->
-where
-    R: IntoClientRequest + Unpin,
-{
-    let request = request.into_client_request()?;
-    let stream = TcpStream::connect(request_addr(&request)?)
-        .await
-        .map_err(|error| Error::Io(std::io::Error::other(error.to_string())))?;
-
-    if is_tls_request(&request) {
-        let (ws, response) = edgerun_tungstenite::client_tls_with_config(
-            request,
-            stream,
-            config,
-            connector.map(Into::into),
-        )?;
-        let config = ws.get_config();
-        let stream = MaybeTlsStream::from_inner(ws.into_inner());
-        let ws =
-            edgerun_tungstenite::WebSocket::from_raw_socket(stream, Role::Client, Some(config));
-        Ok((WebSocketStream::direct(ws), response))
-    } else {
-        let stream = MaybeTlsStream::plain(stream);
-        let (ws, response) = edgerun_tungstenite::client_with_config(request, stream, config)?;
-        Ok((WebSocketStream::direct(ws), response))
-    }
-}
-
 #[cfg(feature = "connect")]
 pub async fn connect_async<R>(
     request: R,
@@ -323,66 +260,13 @@ pub async fn connect_async_with_config<R>(
 where
     R: IntoClientRequest + Unpin,
 {
-    #[cfg(feature = "rustls-tls-native-roots")]
-    {
-        connect_async_tls_with_config(request, config, disable_nagle, None).await
-    }
-    #[cfg(not(feature = "rustls-tls-native-roots"))]
-    {
-        let request = request.into_client_request()?;
-        let stream = TcpStream::connect(request_addr(&request)?)
-            .await
-            .map_err(|error| Error::Io(std::io::Error::other(error.to_string())))?;
-        let stream = MaybeTlsStream::plain(stream);
-        let (ws, response) = edgerun_tungstenite::client_with_config(request, stream, config)?;
-        Ok((WebSocketStream::direct(ws), response))
-    }
-}
-
-#[cfg(feature = "rustls-tls-native-roots")]
-pub async fn client_async_tls<R, S>(
-    request: R,
-    stream: S,
-) -> Result<
-    (
-        WebSocketStream<MaybeTlsStream<S>>,
-        http::Response<Option<Vec<u8>>>,
-    ),
-    Error,
->
-where
-    R: IntoClientRequest + Unpin,
-    S: Read + Write + Send + Unpin + 'static,
-{
-    client_async_tls_with_config(request, stream, None, None).await
-}
-
-#[cfg(feature = "rustls-tls-native-roots")]
-pub async fn client_async_tls_with_config<R, S>(
-    request: R,
-    stream: S,
-    config: Option<WebSocketConfig>,
-    connector: Option<Connector>,
-) -> Result<
-    (
-        WebSocketStream<MaybeTlsStream<S>>,
-        http::Response<Option<Vec<u8>>>,
-    ),
-    Error,
->
-where
-    R: IntoClientRequest + Unpin,
-    S: Read + Write + Send + Unpin + 'static,
-{
-    let (ws, response) = edgerun_tungstenite::client_tls_with_config(
-        request,
-        stream,
-        config,
-        connector.map(Into::into),
-    )?;
-    let config = ws.get_config();
-    let stream = MaybeTlsStream::from_inner(ws.into_inner());
-    let ws = edgerun_tungstenite::WebSocket::from_raw_socket(stream, Role::Client, Some(config));
+    let _ = disable_nagle;
+    let request = request.into_client_request()?;
+    let stream = TcpStream::connect(request_addr(&request)?)
+        .await
+        .map_err(|error| Error::Io(std::io::Error::other(error.to_string())))?;
+    let stream = MaybeTlsStream::plain(stream);
+    let (ws, response) = edgerun_tungstenite::client_with_config(request, stream, config)?;
     Ok((WebSocketStream::direct(ws), response))
 }
 

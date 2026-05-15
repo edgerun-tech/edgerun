@@ -16,10 +16,11 @@ default = []
 workspace = true
 
 [dependencies]
-edgerun-async-channel = { workspace = true }
 edgerun-async-trait = { workspace = true }
 codex-protocol = { workspace = true }
 edgerun-json = { workspace = true }
 edgerun-tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }
 edgerun-tokio-util = { workspace = true, features = ["rt"] }
-tracing = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { package = "edgerun-pretty-assertions", path = "../../utility/edgerun-pretty-assertions" }

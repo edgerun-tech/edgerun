@@ -221,11 +221,11 @@ fn build_program_vfs(
     let mut changes = ChangeSet::default();
 
     // Phase 1: Read all files from VFS
-    let vfs_guard = vfs.read().unwrap();
+    let vfs_guard = vfs.read();
     let file_list: Vec<(String, String)> = vfs_guard
         .files()
         .filter_map(|(path, content)| {
-            let rel_path = path.to_string_lossy().to_string();
+            let rel_path = path.clone();
             let source = String::from_utf8(content.to_vec()).ok()?;
             Some((rel_path, source))
         })

@@ -1,29 +1,40 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "definitions": {
-    "RequestId": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "format": "int64",
-          "type": "integer"
-        }
-      ]
-    }
-  },
-  "description": "A successful (non-error) response to a request.",
+  "title": "JSONRPCResponse",
+  "type": "object",
   "properties": {
     "id": {
-      "$ref": "#/definitions/RequestId"
+      "title": "RequestId",
+      "oneOf": [
+        {
+          "title": "String",
+          "type": "object",
+          "properties": {
+            "field0": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "field0"
+          ]
+        },
+        {
+          "title": "Integer",
+          "type": "object",
+          "properties": {
+            "field0": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "field0"
+          ]
+        }
+      ]
     },
     "result": true
   },
   "required": [
     "id",
     "result"
-  ],
-  "title": "JSONRPCResponse",
-  "type": "object"
+  ]
 }

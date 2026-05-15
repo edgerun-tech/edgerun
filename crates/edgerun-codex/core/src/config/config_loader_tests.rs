@@ -426,7 +426,6 @@ async fn includes_thread_config_layers_in_stack() -> anyhow::Result<()> {
 #[cfg(target_os = "macos")]
 #[edgerun_tokio::test]
 async fn managed_preferences_take_highest_precedence() {
-    
     let tmp = tempdir().expect("tempdir");
     let managed_path = tmp.path().join("managed_config.toml");
 
@@ -453,8 +452,9 @@ flag = false
 "#;
 
     let mut overrides = LoaderOverrides::with_managed_config_path_for_tests(managed_path);
-    overrides.managed_preferences_base64 =
-        Some(edgerun_encoding::base64::standard_encode(raw_managed_preferences.as_bytes()));
+    overrides.managed_preferences_base64 = Some(edgerun_encoding::base64::standard_encode(
+        raw_managed_preferences.as_bytes(),
+    ));
 
     let cwd = AbsolutePathBuf::try_from(tmp.path()).expect("cwd");
     let state = load_config_layers_state(
@@ -497,7 +497,6 @@ flag = false
 #[edgerun_tokio::test]
 async fn managed_preferences_expand_home_directory_in_workspace_write_roots() -> anyhow::Result<()>
 {
-    
     let Some(home) = dirs::home_dir() else {
         return Ok(());
     };
@@ -505,16 +504,14 @@ async fn managed_preferences_expand_home_directory_in_workspace_write_roots() ->
 
     let mut loader_overrides =
         LoaderOverrides::with_managed_config_path_for_tests(tmp.path().join("managed_config.toml"));
-    loader_overrides.managed_preferences_base64 = Some(
-        edgerun_encoding::base64::standard_encode(
-            r#"
+    loader_overrides.managed_preferences_base64 = Some(edgerun_encoding::base64::standard_encode(
+        r#"
 sandbox_mode = "workspace-write"
 [sandbox_workspace_write]
 writable_roots = ["~/code"]
 "#
-            .as_bytes(),
-        ),
-    );
+        .as_bytes(),
+    ));
 
     let config = ConfigBuilder::default()
         .codex_home(tmp.path().to_path_buf())
@@ -543,20 +540,18 @@ writable_roots = ["~/code"]
 #[cfg(target_os = "macos")]
 #[edgerun_tokio::test]
 async fn managed_preferences_requirements_are_applied() -> anyhow::Result<()> {
-    
     let tmp = tempdir()?;
 
     let mut loader_overrides =
         LoaderOverrides::with_managed_config_path_for_tests(tmp.path().join("managed_config.toml"));
-    loader_overrides.macos_managed_config_requirements_base64 = Some(
-        edgerun_encoding::base64::standard_encode(
+    loader_overrides.macos_managed_config_requirements_base64 =
+        Some(edgerun_encoding::base64::standard_encode(
             r#"
 allowed_approval_policies = ["never"]
 allowed_sandbox_modes = ["read-only"]
 "#
             .as_bytes(),
-        ),
-    );
+        ));
 
     let state = load_config_layers_state(
         LOCAL_FS.as_ref(),
@@ -605,21 +600,19 @@ allowed_sandbox_modes = ["read-only"]
 #[cfg(target_os = "macos")]
 #[edgerun_tokio::test]
 async fn managed_preferences_requirements_take_precedence() -> anyhow::Result<()> {
-    
     let tmp = tempdir()?;
     let managed_path = tmp.path().join("managed_config.toml");
 
     edgerun_tokio::fs::write(&managed_path, "approval_policy = \"on-request\"\n").await?;
 
     let mut loader_overrides = LoaderOverrides::with_managed_config_path_for_tests(managed_path);
-    loader_overrides.macos_managed_config_requirements_base64 = Some(
-        edgerun_encoding::base64::standard_encode(
+    loader_overrides.macos_managed_config_requirements_base64 =
+        Some(edgerun_encoding::base64::standard_encode(
             r#"
 allowed_approval_policies = ["never"]
 "#
             .as_bytes(),
-        ),
-    );
+        ));
 
     let state = load_config_layers_state(
         LOCAL_FS.as_ref(),
@@ -748,17 +741,15 @@ personality = true
 #[cfg(target_os = "macos")]
 #[edgerun_tokio::test]
 async fn cloud_requirements_take_precedence_over_mdm_requirements() -> anyhow::Result<()> {
-    
     let tmp = tempdir()?;
     let mut loader_overrides = LoaderOverrides::without_managed_config_for_tests();
-    loader_overrides.macos_managed_config_requirements_base64 = Some(
-        edgerun_encoding::base64::standard_encode(
+    loader_overrides.macos_managed_config_requirements_base64 =
+        Some(edgerun_encoding::base64::standard_encode(
             r#"
 allowed_approval_policies = ["on-request"]
 "#
             .as_bytes(),
-        ),
-    );
+        ));
     let state = load_config_layers_state(
         LOCAL_FS.as_ref(),
         tmp.path(),
@@ -1632,7 +1623,8 @@ async fn project_layers_disabled_when_untrusted_or_unknown() -> std::io::Result<
     )
     .await?;
     let untrusted_config_path = codex_home_untrusted.join(CONFIG_TOML_FILE);
-    let untrusted_config_contents = edgerun_tokio::fs::read_to_string(&untrusted_config_path).await?;
+    let untrusted_config_contents =
+        edgerun_tokio::fs::read_to_string(&untrusted_config_path).await?;
     edgerun_tokio::fs::write(
         &untrusted_config_path,
         format!("foo = \"user\"\n{untrusted_config_contents}"),
@@ -2022,7 +2014,8 @@ async fn invalid_project_config_ignored_when_untrusted_or_unknown() -> std::io::
             )
             .await?;
             let config_contents = edgerun_tokio::fs::read_to_string(&config_path).await?;
-            edgerun_tokio::fs::write(&config_path, format!("foo = \"user\"\n{config_contents}")).await?;
+            edgerun_tokio::fs::write(&config_path, format!("foo = \"user\"\n{config_contents}"))
+                .await?;
         } else {
             edgerun_tokio::fs::write(&config_path, "foo = \"user\"\n").await?;
         }

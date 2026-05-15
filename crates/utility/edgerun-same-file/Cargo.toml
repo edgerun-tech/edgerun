@@ -1,0 +1,12 @@
+[package]
+name = "same-file"
+version = "1.0.6"
+edition = "2018"
+license = "Unlicense/MIT"
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun-owned same-file compatibility crate without Windows support"
+
+[lints]
+workspace = true

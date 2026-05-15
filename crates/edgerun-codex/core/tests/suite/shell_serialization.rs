@@ -153,7 +153,7 @@ async fn shell_output_stays_json_without_freeform_apply_patch(
         .and_then(Value::as_str)
         .expect("shell output string");
 
-    let mut parsed: Value = edgerun_json::from_serde_str(output)?;
+    let mut parsed: Value = edgerun_json::from_str(output)?;
     if let Some(metadata) = parsed.get_mut("metadata").and_then(Value::as_object_mut) {
         let _ = metadata.remove("duration_seconds");
     }
@@ -212,7 +212,7 @@ async fn shell_output_is_structured_with_freeform_apply_patch(
         .expect("structured output string");
 
     assert!(
-        edgerun_json::from_serde_str::<Value>(output).is_err(),
+        edgerun_json::from_str(output).is_err(),
         "expected structured shell output to be plain text",
     );
     let expected_pattern = r"(?s)^Exit code: 0
@@ -266,7 +266,7 @@ async fn shell_output_preserves_fixture_json_without_serialization(
         .and_then(Value::as_str)
         .expect("shell output string");
 
-    let mut parsed: Value = edgerun_json::from_serde_str(output)?;
+    let mut parsed: Value = edgerun_json::from_str(output)?;
     if let Some(metadata) = parsed.get_mut("metadata").and_then(Value::as_object_mut) {
         let _ = metadata.remove("duration_seconds");
     }
@@ -337,7 +337,7 @@ async fn shell_output_structures_fixture_with_serialization(
         .expect("structured output string");
 
     assert!(
-        edgerun_json::from_serde_str::<Value>(output).is_err(),
+        edgerun_json::from_str(output).is_err(),
         "expected structured output to be plain text"
     );
     let (header, body) = output
@@ -449,7 +449,7 @@ async fn shell_output_reserializes_truncated_content(output_type: ShellModelOutp
         .expect("truncated output string");
 
     assert!(
-        edgerun_json::from_serde_str::<Value>(output).is_err(),
+        edgerun_json::from_str(output).is_err(),
         "expected truncated shell output to be plain text",
     );
     let truncated_pattern = r#"(?s)^Exit code: 0

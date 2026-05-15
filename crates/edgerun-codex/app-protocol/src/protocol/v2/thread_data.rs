@@ -7,27 +7,27 @@ use codex_protocol::protocol::SessionSource as CoreSessionSource;
 use codex_protocol::protocol::SubAgentSource as CoreSubAgentSource;
 use codex_protocol::protocol::ThreadSource as CoreThreadSource;
 use edgerun_error::Error;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
+use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
+use edgerun_json::Map;
+use edgerun_json::ToJson;
+use edgerun_json::Value as JsonValue;
 use schemars::JsonSchema;
 use std::path::PathBuf;
-use ts_rs::TS;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase", export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
+#[schemars(rename_all = "camelCase")]
 #[derive(Default)]
 pub enum SessionSource {
     Cli,
-    #[serde(rename = "vscode")]
-    #[ts(rename = "vscode")]
+    #[schemars(rename = "vscode")]
     #[default]
     VsCode,
     Exec,
     AppServer,
     Custom(String),
     SubAgent(CoreSubAgentSource),
-    #[serde(other)]
+    #[schemars(other)]
     Unknown,
 }
 
@@ -61,9 +61,44 @@ impl From<SessionSource> for CoreSessionSource {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(rename_all = "snake_case", export_to = "v2/")]
+impl ToJson for SessionSource {
+    fn to_json(&self) -> JsonValue {
+        match self {
+            SessionSource::Cli => JsonValue::from("cli"),
+            SessionSource::VsCode => JsonValue::from("vscode"),
+            SessionSource::Exec => JsonValue::from("exec"),
+            SessionSource::AppServer => JsonValue::from("appServer"),
+            SessionSource::Custom(source) => JsonValue::from(source.clone()),
+            SessionSource::SubAgent(_) => JsonValue::from("subAgent"),
+            SessionSource::Unknown => JsonValue::from("unknown"),
+        }
+    }
+}
+
+impl FromJson for SessionSource {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match value {
+            JsonValue::String(source) => Ok(match source.as_str() {
+                "cli" => SessionSource::Cli,
+                "vscode" => SessionSource::VsCode,
+                "exec" => SessionSource::Exec,
+                "appServer" => SessionSource::AppServer,
+                "unknown" => SessionSource::Unknown,
+                _ => SessionSource::Custom(source),
+            }),
+            JsonValue::Object(_) => Err(JsonValueError::WrongType(
+                "native SessionSource parsing expects a string source".to_string(),
+            )),
+            other => Err(JsonValueError::WrongType(format!(
+                "expected session source string or object, found {}",
+                other.variant_name()
+            ))),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
+#[schemars(rename_all = "snake_case")]
 pub enum ThreadSource {
     User,
     Subagent,
@@ -90,18 +125,60 @@ impl From<ThreadSource> for CoreThreadSource {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+impl ToJson for ThreadSource {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            ThreadSource::User => "user",
+            ThreadSource::Subagent => "subagent",
+            ThreadSource::MemoryConsolidation => "memory_consolidation",
+        })
+    }
+}
+
+impl FromJson for ThreadSource {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "user" => Ok(ThreadSource::User),
+            "subagent" => Ok(ThreadSource::Subagent),
+            "memory_consolidation" => Ok(ThreadSource::MemoryConsolidation),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown thread source `{other}`"
+            ))),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
+#[schemars(rename_all = "camelCase")]
 pub struct GitInfo {
     pub sha: Option<String>,
     pub branch: Option<String>,
     pub origin_url: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+impl ToJson for GitInfo {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(3);
+        object.push_field("sha", self.sha.to_json());
+        object.push_field("branch", self.branch.to_json());
+        object.push_field("originUrl", self.origin_url.to_json());
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for GitInfo {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("GitInfo")?;
+        Ok(Self {
+            sha: object.take_optional("sha")?,
+            branch: object.take_optional("branch")?,
+            origin_url: object.take_optional("originUrl")?,
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct Thread {
     pub id: String,
     /// Session id shared by threads that belong to the same session tree.
@@ -115,10 +192,8 @@ pub struct Thread {
     /// Model provider used for this thread (for example, 'openai').
     pub model_provider: String,
     /// Unix timestamp (in seconds) when the thread was created.
-    #[ts(type = "number")]
     pub created_at: i64,
     /// Unix timestamp (in seconds) when the thread was last updated.
-    #[ts(type = "number")]
     pub updated_at: i64,
     /// Current runtime status for the thread.
     pub status: ThreadStatus,
@@ -147,33 +222,92 @@ pub struct Thread {
     pub turns: Vec<Turn>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+impl FromJson for Thread {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("Thread")?;
+        Ok(Self {
+            id: object.take_required("id")?,
+            session_id: object.take_required("sessionId")?,
+            forked_from_id: object.take_optional("forkedFromId")?,
+            preview: object.take_required("preview")?,
+            ephemeral: object.take_required("ephemeral")?,
+            model_provider: object.take_required("modelProvider")?,
+            created_at: object.take_required("createdAt")?,
+            updated_at: object.take_required("updatedAt")?,
+            status: object.take_required("status")?,
+            path: take_optional_path_buf(&mut object, "path")?,
+            cwd: object.take_required("cwd")?,
+            cli_version: object.take_required("cliVersion")?,
+            source: object.take_required("source")?,
+            thread_source: object.take_optional("threadSource")?,
+            agent_nickname: object.take_optional("agentNickname")?,
+            agent_role: object.take_optional("agentRole")?,
+            git_info: object.take_optional("gitInfo")?,
+            name: object.take_optional("name")?,
+            turns: object.take_optional("turns")?.unwrap_or_default(),
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct Turn {
     pub id: String,
     /// Thread items currently included in this turn payload.
     pub items: Vec<ThreadItem>,
     /// Describes how much of `items` has been loaded for this turn.
-    #[serde(default)]
+    #[schemars(default)]
     pub items_view: TurnItemsView,
     pub status: TurnStatus,
     /// Only populated when the Turn's status is failed.
     pub error: Option<TurnError>,
     /// Unix timestamp (in seconds) when the turn started.
-    #[ts(type = "number | null")]
     pub started_at: Option<i64>,
     /// Unix timestamp (in seconds) when the turn completed.
-    #[ts(type = "number | null")]
     pub completed_at: Option<i64>,
     /// Duration between turn start and completion in milliseconds, if known.
-    #[ts(type = "number | null")]
     pub duration_ms: Option<i64>,
 }
 
-#[derive(Default, Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+impl FromJson for Turn {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("Turn")?;
+        Ok(Self {
+            id: object.take_required("id")?,
+            items: thread_items_from_json(object.remove("items"))?,
+            items_view: object.take_optional("itemsView")?.unwrap_or_default(),
+            status: object.take_required("status")?,
+            error: object.take_optional("error")?,
+            started_at: object.take_optional("startedAt")?,
+            completed_at: object.take_optional("completedAt")?,
+            duration_ms: object.take_optional("durationMs")?,
+        })
+    }
+}
+
+fn thread_items_from_json(value: Option<JsonValue>) -> Result<Vec<ThreadItem>, JsonValueError> {
+    match value {
+        None | Some(JsonValue::Null) => Ok(Vec::new()),
+        Some(JsonValue::Array(items)) if items.is_empty() => Ok(Vec::new()),
+        Some(JsonValue::Array(_)) => Err(JsonValueError::WrongType(
+            "native ThreadItem parsing is not implemented for non-empty turn items".to_string(),
+        )),
+        Some(other) => Err(JsonValueError::WrongType(format!(
+            "expected turn items array, found {}",
+            other.variant_name()
+        ))),
+    }
+}
+
+fn take_optional_path_buf(object: &mut Map, key: &str) -> Result<Option<PathBuf>, JsonValueError> {
+    match object.remove(key) {
+        Some(JsonValue::Null) | None => Ok(None),
+        Some(value) => String::from_json(value).map(PathBuf::from).map(Some),
+    }
+}
+
+#[derive(Default, Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
+#[schemars(rename_all = "camelCase")]
 pub enum TurnItemsView {
     /// `items` was not loaded for this turn. The field is intentionally empty.
     NotLoaded,
@@ -184,13 +318,55 @@ pub enum TurnItemsView {
     Full,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS, Error)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+impl ToJson for TurnItemsView {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            Self::NotLoaded => "notLoaded",
+            Self::Summary => "summary",
+            Self::Full => "full",
+        })
+    }
+}
+
+impl FromJson for TurnItemsView {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "notLoaded" => Ok(Self::NotLoaded),
+            "summary" => Ok(Self::Summary),
+            "full" => Ok(Self::Full),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown turn items view `{other}`"
+            ))),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, JsonSchema, Error, edgerun_json::ToJson)]
+#[schemars(rename_all = "camelCase")]
 #[error("{message}")]
 pub struct TurnError {
     pub message: String,
     pub codex_error_info: Option<CodexErrorInfo>,
-    #[serde(default)]
+    #[schemars(default)]
     pub additional_details: Option<String>,
+}
+
+impl FromJson for TurnError {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("TurnError")?;
+        let codex_error_info = match object.remove("codexErrorInfo") {
+            Some(JsonValue::Null) | None => None,
+            Some(_) => {
+                return Err(JsonValueError::WrongType(
+                    "native TurnError parsing does not support codexErrorInfo yet".to_string(),
+                ));
+            }
+        };
+
+        Ok(Self {
+            message: object.take_required("message")?,
+            codex_error_info,
+            additional_details: object.take_optional("additionalDetails")?,
+        })
+    }
 }

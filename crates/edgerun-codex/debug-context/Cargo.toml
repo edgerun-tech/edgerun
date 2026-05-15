@@ -17,3 +17,6 @@ codex-api = { workspace = true }
 edgerun-encoding = { workspace = true }
 edgerun-http = { workspace = true }
 edgerun-json = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { package = "edgerun-pretty-assertions", path = "../../utility/edgerun-pretty-assertions" }

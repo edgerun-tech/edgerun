@@ -1,0 +1,19 @@
+{
+  "title": "FuzzyFileSearchSessionStartParams",
+  "type": "object",
+  "properties": {
+    "roots": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "sessionId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "sessionId",
+    "roots"
+  ]
+}

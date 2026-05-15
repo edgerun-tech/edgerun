@@ -10,7 +10,6 @@ use crate::guardian::guardian_rejection_message;
 use crate::guardian::guardian_timeout_message;
 use crate::guardian::new_guardian_review_id;
 use crate::guardian::routes_approval_to_guardian;
-use crate::hook_runtime::run_permission_request_hooks;
 use crate::network_policy_decision::network_approval_context_from_payload;
 use crate::tools::network_approval::ActiveNetworkApproval;
 use crate::tools::network_approval::DeferredNetworkApproval;
@@ -26,7 +25,6 @@ use crate::tools::sandboxing::ToolCtx;
 use crate::tools::sandboxing::ToolError;
 use crate::tools::sandboxing::ToolRuntime;
 use crate::tools::sandboxing::default_exec_approval_requirement;
-use codex_hooks::PermissionRequestDecision;
 use codex_otel::ToolDecisionSource;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::SandboxErr;
@@ -161,12 +159,8 @@ impl ToolOrchestrator {
                         network_approval_context: None,
                     };
                     let decision = Self::request_approval(
-                        tool,
-                        req,
-                        tool_ctx.call_id.as_str(),
                         approval_ctx,
                         tool_ctx,
-                        /*evaluate_permission_request_hooks*/ false,
                         &otel,
                     )
                     .await?;
@@ -196,12 +190,8 @@ impl ToolOrchestrator {
                     network_approval_context: None,
                 };
                 let decision = Self::request_approval(
-                    tool,
-                    req,
-                    tool_ctx.call_id.as_str(),
                     approval_ctx,
                     tool_ctx,
-                    /*evaluate_permission_request_hooks*/ !strict_auto_review,
                     &otel,
                 )
                 .await?;
@@ -286,7 +276,7 @@ impl ToolOrchestrator {
                 // Under `Never` or `OnRequest`, do not retry without sandbox;
                 // surface a concise sandbox denial that preserves the
                 // original output.
-                if !tool.wants_no_sandbox_approval(approval_policy) {
+                if !tool.allows_unsandboxed_retry_prompt(approval_policy) {
                     let allow_on_request_network_prompt =
                         matches!(approval_policy, AskForApproval::OnRequest)
                             && network_approval_context.is_some()
@@ -330,14 +320,9 @@ impl ToolOrchestrator {
                         network_approval_context: network_approval_context.clone(),
                     };
 
-                    let permission_request_run_id = format!("{}:retry", tool_ctx.call_id);
                     let decision = Self::request_approval(
-                        tool,
-                        req,
-                        &permission_request_run_id,
                         approval_ctx,
                         tool_ctx,
-                        /*evaluate_permission_request_hooks*/ !strict_auto_review,
                         &otel,
                     )
                     .await?;
@@ -380,56 +365,12 @@ impl ToolOrchestrator {
         }
     }
 
-    // PermissionRequest hooks take top precedence for answering approval
-    // prompts. If no matching hook returns a decision, fall back to the
-    // normal guardian or user approval path.
-    async fn request_approval<Rq, Out, T>(
-        tool: &mut T,
-        req: &Rq,
-        permission_request_run_id: &str,
+    async fn request_approval(
         approval_ctx: ApprovalCtx<'_>,
         tool_ctx: &ToolCtx,
-        evaluate_permission_request_hooks: bool,
         otel: &codex_otel::SessionTelemetry,
     ) -> Result<ReviewDecision, ToolError>
-    where
-        T: ToolRuntime<Rq, Out>,
     {
-        if evaluate_permission_request_hooks
-            && let Some(permission_request) = tool.permission_request_payload(req)
-        {
-            match run_permission_request_hooks(
-                approval_ctx.session,
-                approval_ctx.turn,
-                permission_request_run_id,
-                permission_request,
-            )
-            .await
-            {
-                Some(PermissionRequestDecision::Allow) => {
-                    let decision = ReviewDecision::Approved;
-                    otel.tool_decision(
-                        &tool_ctx.tool_name,
-                        &tool_ctx.call_id,
-                        &decision,
-                        ToolDecisionSource::Config,
-                    );
-                    return Ok(decision);
-                }
-                Some(PermissionRequestDecision::Deny { message }) => {
-                    let decision = ReviewDecision::Denied;
-                    otel.tool_decision(
-                        &tool_ctx.tool_name,
-                        &tool_ctx.call_id,
-                        &decision,
-                        ToolDecisionSource::Config,
-                    );
-                    return Err(ToolError::Rejected(message));
-                }
-                None => {}
-            }
-        }
-
         let otel_source = if approval_ctx.guardian_review_id.is_some() {
             ToolDecisionSource::AutomatedReviewer
         } else {

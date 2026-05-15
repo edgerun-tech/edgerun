@@ -5,8 +5,6 @@
 //!   2. User-defined entries inside `~/.codex/config.toml` under the `model_providers`
 //!      key. These override or extend the defaults at runtime.
 
-extern crate serde as edgerun_serde;
-
 use codex_api::Provider as ApiProvider;
 use codex_api::RetryConfig as ApiRetryConfig;
 use codex_api::is_azure_responses_provider;
@@ -18,8 +16,10 @@ use codex_protocol::error::Result as CodexResult;
 use edgerun_http::HeaderMap;
 use edgerun_http::header::HeaderName;
 use edgerun_http::header::HeaderValue;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
+use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
+use edgerun_json::ToJson;
+use edgerun_json::Value;
 use schemars::JsonSchema;
 use std::collections::HashMap;
 use std::fmt;
@@ -45,12 +45,36 @@ pub const LEGACY_OLLAMA_CHAT_PROVIDER_ID: &str = "ollama-chat";
 pub const OLLAMA_CHAT_PROVIDER_REMOVED_ERROR: &str = "`ollama-chat` is no longer supported.\nHow to fix: replace `ollama-chat` with `ollama` in `model_provider`, `oss_provider`, or `--local-provider`.\nMore info: https://github.com/openai/codex/discussions/7782";
 
 /// Wire protocol that the provider speaks.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, JsonSchema)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, JsonSchema)]
+#[schemars(rename_all = "lowercase")]
 pub enum WireApi {
     /// The Responses API exposed by OpenAI at `/v1/responses`.
     #[default]
     Responses,
+}
+
+impl ToJson for WireApi {
+    fn to_json(&self) -> Value {
+        match self {
+            Self::Responses => "responses",
+        }
+        .to_json()
+    }
+}
+
+impl FromJson for WireApi {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let value = String::from_json(value)?;
+        match value.as_str() {
+            "responses" => Ok(Self::Responses),
+            "chat" => Err(JsonValueError::WrongType(
+                CHAT_WIRE_API_REMOVED_ERROR.to_string(),
+            )),
+            _ => Err(JsonValueError::WrongType(format!(
+                "unknown wire_api variant `{value}`"
+            ))),
+        }
+    }
 }
 
 impl fmt::Display for WireApi {
@@ -62,31 +86,13 @@ impl fmt::Display for WireApi {
     }
 }
 
-impl<'de> Deserialize<'de> for WireApi {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: edgerun_serde::Deserializer<'de>,
-    {
-        let value = String::deserialize(deserializer)?;
-        match value.as_str() {
-            "responses" => Ok(Self::Responses),
-            "chat" => Err(edgerun_serde::de::Error::custom(
-                CHAT_WIRE_API_REMOVED_ERROR,
-            )),
-            _ => Err(edgerun_serde::de::Error::unknown_variant(
-                &value,
-                &["responses"],
-            )),
-        }
-    }
-}
-
 /// Serializable representation of a provider definition.
-#[derive(Debug, Clone, Default, Deserialize, Serialize, PartialEq, JsonSchema)]
+#[derive(Debug, Clone, Default, PartialEq, JsonSchema, ToJson, FromJson)]
 #[schemars(deny_unknown_fields)]
 pub struct ModelProviderInfo {
     /// Friendly display name.
-    #[serde(default)]
+    #[schemars(default)]
+    #[schemars(default)]
     pub name: String,
     /// Base URL for the provider's OpenAI-compatible API.
     pub base_url: Option<String>,
@@ -105,7 +111,8 @@ pub struct ModelProviderInfo {
     /// AWS SigV4 auth configuration for this provider.
     pub aws: Option<ModelProviderAwsAuthInfo>,
     /// Which wire protocol this provider expects.
-    #[serde(default)]
+    #[schemars(default)]
+    #[schemars(default)]
     pub wire_api: WireApi,
     /// Optional query parameters to append to the base URL.
     pub query_params: Option<HashMap<String, String>>,
@@ -131,15 +138,17 @@ pub struct ModelProviderInfo {
     /// user is presented with login screen on first run, and login preference and token/key
     /// are stored in auth.json. If false (which is the default), login screen is skipped,
     /// and API key (if needed) comes from the "env_key" environment variable.
-    #[serde(default)]
+    #[schemars(default)]
+    #[schemars(default)]
     pub requires_openai_auth: bool,
     /// Whether this provider supports the Responses API WebSocket transport.
-    #[serde(default)]
+    #[schemars(default)]
+    #[schemars(default)]
     pub supports_websockets: bool,
 }
 
 /// AWS SigV4 auth configuration for a model provider.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, ToJson, FromJson)]
 #[schemars(deny_unknown_fields)]
 pub struct ModelProviderAwsAuthInfo {
     /// AWS profile name to use. When unset, the AWS SDK default chain decides.

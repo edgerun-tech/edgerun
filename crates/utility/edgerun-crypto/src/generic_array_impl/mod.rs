@@ -1,7 +1,7 @@
 #![allow(missing_docs)]
 
-#[cfg(feature = "serde")]
-extern crate serde;
+#[cfg(feature = "edgerun_json_compat")]
+extern crate edgerun_json_compat;
 
 #[cfg(feature = "zeroize")]
 pub use crate::typenum;
@@ -9,8 +9,8 @@ pub use crate::typenum;
 mod hex;
 mod impls;
 
-#[cfg(feature = "serde")]
-mod impl_serde;
+#[cfg(feature = "edgerun_json_compat")]
+mod impl_json_compat;
 
 #[cfg(feature = "zeroize")]
 mod impl_zeroize;

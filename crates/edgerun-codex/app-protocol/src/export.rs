@@ -1,42 +1,28 @@
-use crate::ClientNotification;
-use crate::ClientRequest;
-use crate::ServerNotification;
-use crate::ServerRequest;
 use crate::experimental_api::experimental_fields;
 use crate::export_client_notification_schemas;
 use crate::export_client_param_schemas;
 use crate::export_client_response_schemas;
-use crate::export_client_responses;
 use crate::export_server_notification_schemas;
 use crate::export_server_param_schemas;
 use crate::export_server_response_schemas;
-use crate::export_server_responses;
-use crate::protocol::common::EXPERIMENTAL_CLIENT_METHOD_PARAM_TYPES;
-use crate::protocol::common::EXPERIMENTAL_CLIENT_METHOD_RESPONSE_TYPES;
-use crate::protocol::common::EXPERIMENTAL_CLIENT_METHODS;
+use crate::protocol::common::ProtocolTypeDirection;
+use crate::protocol::common::experimental_method_reason;
+use crate::protocol::common::protocol_type_entries;
 use codex_protocol::protocol::RolloutLine;
 use edgerun_error::Context;
 use edgerun_error::Result;
 use edgerun_error::anyhow;
 use edgerun_json::Map;
 use edgerun_json::Value;
-use edgerun_serde::Serialize;
 use schemars::JsonSchema;
 use schemars::schema_for;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::ffi::OsStr;
 use std::fs;
-use std::io::Read;
-use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
-use std::process::Command;
-use std::thread;
-use ts_rs::TS;
 
-pub(crate) const GENERATED_TS_HEADER: &str = "// GENERATED CODE! DO NOT MODIFY BY HAND!\n\n";
 const IGNORED_DEFINITIONS: &[&str] = &["Option<()>"];
 const JSON_V1_ALLOWLIST: &[&str] = &["InitializeParams", "InitializeResponse"];
 const SPECIAL_DEFINITIONS: &[&str] = &[
@@ -74,108 +60,8 @@ impl GeneratedSchema {
 
 type JsonSchemaEmitter = fn(&Path) -> Result<GeneratedSchema>;
 pub fn generate_types(out_dir: &Path, prettier: Option<&Path>) -> Result<()> {
-    generate_ts(out_dir, prettier)?;
+    let _ = prettier;
     generate_json(out_dir)?;
-    Ok(())
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct GenerateTsOptions {
-    pub generate_indices: bool,
-    pub ensure_headers: bool,
-    pub run_prettier: bool,
-    pub experimental_api: bool,
-}
-
-impl Default for GenerateTsOptions {
-    fn default() -> Self {
-        Self {
-            generate_indices: true,
-            ensure_headers: true,
-            run_prettier: true,
-            experimental_api: false,
-        }
-    }
-}
-
-pub fn generate_ts(out_dir: &Path, prettier: Option<&Path>) -> Result<()> {
-    generate_ts_with_options(out_dir, prettier, GenerateTsOptions::default())
-}
-
-pub fn generate_ts_with_options(
-    out_dir: &Path,
-    prettier: Option<&Path>,
-    options: GenerateTsOptions,
-) -> Result<()> {
-    let v2_out_dir = out_dir.join("v2");
-    ensure_dir(out_dir)?;
-    ensure_dir(&v2_out_dir)?;
-
-    ClientRequest::export_all_to(out_dir)?;
-    export_client_responses(out_dir)?;
-    ClientNotification::export_all_to(out_dir)?;
-
-    ServerRequest::export_all_to(out_dir)?;
-    export_server_responses(out_dir)?;
-    ServerNotification::export_all_to(out_dir)?;
-
-    if !options.experimental_api {
-        filter_experimental_ts(out_dir)?;
-    }
-
-    if options.generate_indices {
-        generate_index_ts(out_dir)?;
-        generate_index_ts(&v2_out_dir)?;
-    }
-
-    // Ensure our header is present on all TS files (root + subdirs like v2/).
-    let ts_files = ts_files_in_recursive(out_dir)?;
-
-    if options.ensure_headers {
-        let worker_count = thread::available_parallelism()
-            .map_or(1, usize::from)
-            .min(ts_files.len().max(1));
-        let chunk_size = ts_files.len().div_ceil(worker_count);
-        thread::scope(|scope| -> Result<()> {
-            let mut workers = Vec::new();
-            for chunk in ts_files.chunks(chunk_size.max(1)) {
-                workers.push(scope.spawn(move || -> Result<()> {
-                    for file in chunk {
-                        prepend_header_if_missing(file)?;
-                    }
-                    Ok(())
-                }));
-            }
-
-            for worker in workers {
-                worker
-                    .join()
-                    .map_err(|_| anyhow!("TypeScript header worker panicked"))??;
-            }
-
-            Ok(())
-        })?;
-    }
-
-    // Optionally run Prettier on all generated TS files.
-    if options.run_prettier
-        && let Some(prettier_bin) = prettier
-        && !ts_files.is_empty()
-    {
-        let status = Command::new(prettier_bin)
-            .arg("--write")
-            .arg("--log-level")
-            .arg("warn")
-            .args(ts_files.iter().map(|p| p.as_os_str()))
-            .status()
-            .with_context(|| format!("Failed to invoke Prettier at {}", prettier_bin.display()))?;
-        if !status.success() {
-            return Err(anyhow!("Prettier failed with status {status}"));
-        }
-    }
-
-    trim_trailing_whitespace_in_ts_files(&ts_files)?;
-
     Ok(())
 }
 
@@ -240,165 +126,13 @@ pub fn generate_json_with_experimental(out_dir: &Path, experimental_api: bool) -
     Ok(())
 }
 
-fn filter_experimental_ts(out_dir: &Path) -> Result<()> {
-    let registered_fields = experimental_fields();
-    let experimental_method_types = experimental_method_types();
-    // Most generated TS files are filtered by schema processing, but
-    // `ClientRequest.ts` and any type with `#[experimental(...)]` fields need
-    // direct post-processing because they encode method/field information in
-    // file-local unions/interfaces.
-    filter_client_request_ts(out_dir, EXPERIMENTAL_CLIENT_METHODS)?;
-    filter_experimental_type_fields_ts(out_dir, &registered_fields)?;
-    remove_generated_type_files(out_dir, &experimental_method_types, "ts")?;
-    Ok(())
-}
-
-pub(crate) fn filter_experimental_ts_tree(tree: &mut BTreeMap<PathBuf, String>) -> Result<()> {
-    let registered_fields = experimental_fields();
-    let experimental_method_types = experimental_method_types();
-    if let Some(content) = tree.get_mut(Path::new("ClientRequest.ts")) {
-        let filtered =
-            filter_client_request_ts_contents(std::mem::take(content), EXPERIMENTAL_CLIENT_METHODS);
-        *content = filtered;
-    }
-
-    let mut fields_by_type_name: HashMap<String, HashSet<String>> = HashMap::new();
-    for field in registered_fields {
-        fields_by_type_name
-            .entry(field.type_name.to_string())
-            .or_default()
-            .insert(field.field_name.to_string());
-    }
-
-    for (path, content) in tree.iter_mut() {
-        let Some(type_name) = path.file_stem().and_then(|stem| stem.to_str()) else {
-            continue;
-        };
-        let Some(experimental_field_names) = fields_by_type_name.get(type_name) else {
-            continue;
-        };
-        let filtered = filter_experimental_type_fields_ts_contents(
-            std::mem::take(content),
-            experimental_field_names,
-        );
-        *content = filtered;
-    }
-
-    remove_generated_type_entries(tree, &experimental_method_types, "ts");
-    Ok(())
-}
-
-/// Removes union arms from `ClientRequest.ts` for methods marked experimental.
-fn filter_client_request_ts(out_dir: &Path, experimental_methods: &[&str]) -> Result<()> {
-    let path = out_dir.join("ClientRequest.ts");
-    if !path.exists() {
-        return Ok(());
-    }
-    let mut content =
-        fs::read_to_string(&path).with_context(|| format!("Failed to read {}", path.display()))?;
-    content = filter_client_request_ts_contents(content, experimental_methods);
-
-    fs::write(&path, content).with_context(|| format!("Failed to write {}", path.display()))?;
-    Ok(())
-}
-
-fn filter_client_request_ts_contents(mut content: String, experimental_methods: &[&str]) -> String {
-    let Some((prefix, body, suffix)) = split_type_alias(&content) else {
-        return content;
-    };
-    let experimental_methods: HashSet<&str> = experimental_methods
-        .iter()
-        .copied()
-        .filter(|method| !method.is_empty())
-        .collect();
-    let arms = split_top_level(&body, '|');
-    let filtered_arms: Vec<String> = arms
-        .into_iter()
-        .filter(|arm| {
-            extract_method_from_arm(arm)
-                .is_none_or(|method| !experimental_methods.contains(method.as_str()))
-        })
-        .collect();
-    let new_body = filtered_arms.join(" | ");
-    content = format!("{prefix}{new_body}{suffix}");
-    let import_usage_scope = split_type_alias(&content)
-        .map(|(_, filtered_body, _)| filtered_body)
-        .unwrap_or_else(|| new_body.clone());
-    prune_unused_type_imports(content, &import_usage_scope)
-}
-
-/// Removes experimental properties from generated TypeScript type files.
-fn filter_experimental_type_fields_ts(
-    out_dir: &Path,
-    experimental_fields: &[&'static crate::experimental_api::ExperimentalField],
-) -> Result<()> {
-    let mut fields_by_type_name: HashMap<String, HashSet<String>> = HashMap::new();
-    for field in experimental_fields {
-        fields_by_type_name
-            .entry(field.type_name.to_string())
-            .or_default()
-            .insert(field.field_name.to_string());
-    }
-    if fields_by_type_name.is_empty() {
-        return Ok(());
-    }
-
-    for path in ts_files_in_recursive(out_dir)? {
-        let Some(type_name) = path.file_stem().and_then(|stem| stem.to_str()) else {
-            continue;
-        };
-        let Some(experimental_field_names) = fields_by_type_name.get(type_name) else {
-            continue;
-        };
-        filter_experimental_fields_in_ts_file(&path, experimental_field_names)?;
-    }
-
-    Ok(())
-}
-
-fn filter_experimental_fields_in_ts_file(
-    path: &Path,
-    experimental_field_names: &HashSet<String>,
-) -> Result<()> {
-    let mut content =
-        fs::read_to_string(path).with_context(|| format!("Failed to read {}", path.display()))?;
-    content = filter_experimental_type_fields_ts_contents(content, experimental_field_names);
-    fs::write(path, content).with_context(|| format!("Failed to write {}", path.display()))?;
-    Ok(())
-}
-
-fn filter_experimental_type_fields_ts_contents(
-    mut content: String,
-    experimental_field_names: &HashSet<String>,
-) -> String {
-    let Some((open_brace, close_brace)) = type_body_brace_span(&content) else {
-        return content;
-    };
-    let inner = &content[open_brace + 1..close_brace];
-    let fields = split_top_level_multi(inner, &[',', ';']);
-    let filtered_fields: Vec<String> = fields
-        .into_iter()
-        .filter(|field| {
-            let field = strip_leading_block_comments(field);
-            parse_property_name(field)
-                .is_none_or(|name| !experimental_field_names.contains(name.as_str()))
-        })
-        .collect();
-    let new_inner = filtered_fields.join(", ");
-    let prefix = &content[..open_brace + 1];
-    let suffix = &content[close_brace..];
-    content = format!("{prefix}{new_inner}{suffix}");
-    let import_usage_scope = split_type_alias(&content)
-        .map(|(_, body, _)| body)
-        .unwrap_or_else(|| new_inner.clone());
-    prune_unused_type_imports(content, &import_usage_scope)
-}
-
 fn filter_experimental_schema(bundle: &mut Value) -> Result<()> {
     let registered_fields = experimental_fields();
+    let experimental_methods = experimental_client_methods();
     filter_experimental_fields_in_root(bundle, &registered_fields);
     filter_experimental_fields_in_definitions(bundle, &registered_fields);
-    prune_experimental_methods(bundle, EXPERIMENTAL_CLIENT_METHODS);
+    filter_experimental_fields_recursive(bundle, &registered_fields);
+    prune_experimental_methods(bundle, &experimental_methods);
     remove_experimental_method_type_definitions(bundle);
     Ok(())
 }
@@ -452,6 +186,36 @@ fn filter_experimental_fields_in_definitions_map(
     }
 }
 
+fn filter_experimental_fields_recursive(
+    value: &mut Value,
+    experimental_fields: &[&'static crate::experimental_api::ExperimentalField],
+) {
+    let fields_to_remove: Vec<&str> = value
+        .get("title")
+        .and_then(Value::as_str)
+        .map(|title| {
+            experimental_fields
+                .iter()
+                .filter(|field| title == field.type_name)
+                .map(|field| field.field_name)
+                .collect()
+        })
+        .unwrap_or_default();
+    for field_name in fields_to_remove {
+        remove_property_from_schema(value, field_name);
+    }
+
+    if let Value::Object(map) = value {
+        for entry in map.values_mut() {
+            filter_experimental_fields_recursive(entry, experimental_fields);
+        }
+    } else if let Value::Array(items) = value {
+        for item in items {
+            filter_experimental_fields_recursive(item, experimental_fields);
+        }
+    }
+}
+
 fn is_namespace_map(value: &Value) -> bool {
     let Value::Object(map) = value else {
         return false;
@@ -488,10 +252,10 @@ fn remove_property_from_schema(schema: &mut Value, field_name: &str) {
     }
 }
 
-fn prune_experimental_methods(bundle: &mut Value, experimental_methods: &[&str]) {
+fn prune_experimental_methods(bundle: &mut Value, experimental_methods: &[String]) {
     let experimental_methods: HashSet<&str> = experimental_methods
         .iter()
-        .copied()
+        .map(String::as_str)
         .filter(|method| !method.is_empty())
         .collect();
     prune_experimental_methods_inner(bundle, &experimental_methods);
@@ -551,23 +315,29 @@ fn filter_experimental_json_files(out_dir: &Path) -> Result<()> {
 }
 
 fn experimental_method_types() -> HashSet<String> {
-    let mut type_names = HashSet::new();
-    collect_experimental_type_names(EXPERIMENTAL_CLIENT_METHOD_PARAM_TYPES, &mut type_names);
-    collect_experimental_type_names(EXPERIMENTAL_CLIENT_METHOD_RESPONSE_TYPES, &mut type_names);
-    type_names
+    protocol_type_entries()
+        .into_iter()
+        .filter(|entry| entry.direction == ProtocolTypeDirection::ClientRequest)
+        .filter(|entry| experimental_method_reason(&entry.method).is_some())
+        .flat_map(|entry| [entry.params, entry.response])
+        .flatten()
+        .map(type_leaf_name)
+        .filter(|name| !name.is_empty())
+        .map(str::to_string)
+        .collect()
 }
 
-fn collect_experimental_type_names(entries: &[&str], out: &mut HashSet<String>) {
-    for entry in entries {
-        let trimmed = entry.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        let name = trimmed.rsplit("::").next().unwrap_or(trimmed);
-        if !name.is_empty() {
-            out.insert(name.to_string());
-        }
-    }
+fn experimental_client_methods() -> Vec<String> {
+    protocol_type_entries()
+        .into_iter()
+        .filter(|entry| entry.direction == ProtocolTypeDirection::ClientRequest)
+        .filter(|entry| experimental_method_reason(&entry.method).is_some())
+        .map(|entry| entry.method)
+        .collect()
+}
+
+fn type_leaf_name(name: &str) -> &str {
+    name.trim().rsplit("::").next().unwrap_or(name).trim()
 }
 
 fn remove_generated_type_files(
@@ -701,7 +471,7 @@ fn read_json_value(path: &Path) -> Result<Value> {
     let content =
         fs::read_to_string(path).with_context(|| format!("Failed to read {}", path.display()))?;
     edgerun_json::from_json_str(&content)
-        .with_context(|| format!("Failed to parse {}", path.display()))
+        .map_err(|error| anyhow!("Failed to parse {}: {}", path.display(), error))
 }
 
 fn split_type_alias(content: &str) -> Option<(String, String, String)> {
@@ -1057,8 +827,47 @@ fn build_schema_bundle(schemas: Vec<GeneratedSchema>) -> Result<Value> {
     );
     root.insert("type".to_string(), Value::String("object".into()));
     root.insert("definitions".to_string(), Value::Object(definitions));
+    let mut bundle = Value::Object(root);
+    normalize_client_request_method_literals(&mut bundle);
 
-    Ok(Value::Object(root))
+    Ok(bundle)
+}
+
+fn normalize_client_request_method_literals(bundle: &mut Value) {
+    let entries: HashMap<&'static str, String> = protocol_type_entries()
+        .into_iter()
+        .filter(|entry| entry.direction == ProtocolTypeDirection::ClientRequest)
+        .map(|entry| (entry.variant, entry.method))
+        .collect();
+    normalize_client_request_method_literals_inner(bundle, &entries);
+}
+
+fn normalize_client_request_method_literals_inner(
+    value: &mut Value,
+    entries: &HashMap<&'static str, String>,
+) {
+    if let Value::Object(map) = value {
+        if let Some(title) = map.get("title").and_then(Value::as_str)
+            && let Some(variant) = title.strip_suffix("Request")
+            && let Some(method) = entries.get(variant)
+            && let Some(properties) = map.get_mut("properties").and_then(Value::as_object_mut)
+            && let Some(method_schema) = properties.get_mut("method").and_then(Value::as_object_mut)
+        {
+            method_schema.insert("const".to_string(), Value::String(method.clone()));
+            method_schema.insert(
+                "enum".to_string(),
+                Value::Array(vec![Value::String(method.clone())]),
+            );
+        }
+
+        for child in map.values_mut() {
+            normalize_client_request_method_literals_inner(child, entries);
+        }
+    } else if let Value::Array(items) = value {
+        for child in items {
+            normalize_client_request_method_literals_inner(child, entries);
+        }
+    }
 }
 
 /// Build a datamodel-code-generator-friendly v2 bundle from the mixed export.
@@ -1118,9 +927,34 @@ fn build_flat_v2_schema(bundle: &Value) -> Result<Value> {
     flat_root.insert("definitions".to_string(), Value::Object(flat_definitions));
     let mut flat_bundle = Value::Object(flat_root);
     rewrite_ref_prefix(&mut flat_bundle, "#/definitions/v2/", "#/definitions/");
+    add_enum_for_const_string_literals(&mut flat_bundle);
     ensure_no_ref_prefix(&flat_bundle, "#/definitions/v2/", "flat v2")?;
     ensure_referenced_definitions_present(&flat_bundle, "flat v2")?;
     Ok(flat_bundle)
+}
+
+fn add_enum_for_const_string_literals(value: &mut Value) {
+    match value {
+        Value::Object(map) => {
+            if !map.contains_key("enum")
+                && let Some(literal) = map.get("const").and_then(Value::as_str).map(str::to_string)
+            {
+                map.insert(
+                    "enum".to_string(),
+                    Value::Array(vec![Value::String(literal)]),
+                );
+            }
+            for child in map.values_mut() {
+                add_enum_for_const_string_literals(child);
+            }
+        }
+        Value::Array(items) => {
+            for child in items {
+                add_enum_for_const_string_literals(child);
+            }
+        }
+        Value::Null | Value::Bool(_) | Value::Number(_) | Value::String(_) => {}
+    }
 }
 
 fn collect_non_v2_refs(value: &Value) -> HashSet<String> {
@@ -1331,7 +1165,7 @@ where
         annotate_schema(&mut schema_value, Some(file_stem));
     }
     // If the name looks like a namespaced path (e.g., "v2::Type"), mirror
-    // the TypeScript layout and write to out_dir/v2/Type.json. Otherwise
+    // the namespaced schema layout and write to out_dir/v2/Type.json. Otherwise
     // write alongside the legacy files.
     let out_path = if let Some(ns) = raw_namespace {
         let dir = out_dir.join(ns);
@@ -1526,7 +1360,7 @@ where
     write_json_schema_with_return::<T>(out_dir, name)
 }
 
-fn write_pretty_json(path: PathBuf, value: &impl Serialize) -> Result<()> {
+fn write_pretty_json(path: PathBuf, value: &impl edgerun_json::ToJson) -> Result<()> {
     let json = edgerun_json::to_vec_pretty(value)
         .with_context(|| format!("Failed to serialize JSON schema to {}", path.display()))?;
     fs::write(&path, json).with_context(|| format!("Failed to write {}", path.display()))?;
@@ -1929,175 +1763,6 @@ fn rewrite_named_ref_to_namespace(value: &mut Value, ns: &str, name: &str) {
     }
 }
 
-fn prepend_header_if_missing(path: &Path) -> Result<()> {
-    let mut content = String::new();
-    {
-        let mut f = fs::File::open(path)
-            .with_context(|| format!("Failed to open {} for reading", path.display()))?;
-        f.read_to_string(&mut content)
-            .with_context(|| format!("Failed to read {}", path.display()))?;
-    }
-
-    if content.starts_with(GENERATED_TS_HEADER) {
-        return Ok(());
-    }
-
-    let mut f = fs::File::create(path)
-        .with_context(|| format!("Failed to open {} for writing", path.display()))?;
-    f.write_all(GENERATED_TS_HEADER.as_bytes())
-        .with_context(|| format!("Failed to write header to {}", path.display()))?;
-    f.write_all(content.as_bytes())
-        .with_context(|| format!("Failed to write content to {}", path.display()))?;
-    Ok(())
-}
-
-fn ts_files_in(dir: &Path) -> Result<Vec<PathBuf>> {
-    let mut files = Vec::new();
-    for entry in
-        fs::read_dir(dir).with_context(|| format!("Failed to read dir {}", dir.display()))?
-    {
-        let entry = entry?;
-        let path = entry.path();
-        if path.is_file() && path.extension() == Some(OsStr::new("ts")) {
-            files.push(path);
-        }
-    }
-    files.sort();
-    Ok(files)
-}
-
-fn ts_files_in_recursive(dir: &Path) -> Result<Vec<PathBuf>> {
-    let mut files = Vec::new();
-    let mut stack = vec![dir.to_path_buf()];
-    while let Some(d) = stack.pop() {
-        for entry in
-            fs::read_dir(&d).with_context(|| format!("Failed to read dir {}", d.display()))?
-        {
-            let entry = entry?;
-            let path = entry.path();
-            if path.is_dir() {
-                stack.push(path);
-            } else if path.is_file() && path.extension() == Some(OsStr::new("ts")) {
-                files.push(path);
-            }
-        }
-    }
-    files.sort();
-    Ok(files)
-}
-
-fn trim_trailing_whitespace_in_ts_files(paths: &[PathBuf]) -> Result<()> {
-    for path in paths {
-        let content = fs::read_to_string(path)
-            .with_context(|| format!("Failed to read {}", path.display()))?;
-        let trimmed = trim_trailing_line_whitespace(&content);
-        if trimmed != content {
-            fs::write(path, trimmed)
-                .with_context(|| format!("Failed to write {}", path.display()))?;
-        }
-    }
-    Ok(())
-}
-
-pub(crate) fn trim_trailing_line_whitespace(content: &str) -> String {
-    let mut trimmed = String::with_capacity(content.len());
-    for line in content.split_inclusive('\n') {
-        if let Some(line_without_newline) = line.strip_suffix('\n') {
-            trimmed.push_str(line_without_newline.trim_end_matches([' ', '\t']));
-            trimmed.push('\n');
-        } else {
-            trimmed.push_str(line.trim_end_matches([' ', '\t']));
-        }
-    }
-    trimmed
-}
-
-/// Generate an index.ts file that re-exports all generated types.
-/// This allows consumers to import all types from a single file.
-fn generate_index_ts(out_dir: &Path) -> Result<PathBuf> {
-    let nested_v2 = out_dir.join("v2");
-    let content = generated_index_ts_with_header(index_ts_entries(
-        &ts_files_in(out_dir)?
-            .iter()
-            .map(PathBuf::as_path)
-            .collect::<Vec<_>>(),
-        nested_v2.is_dir()
-            && ts_files_in(&nested_v2)
-                .map(|v| !v.is_empty())
-                .unwrap_or(false),
-    ));
-
-    let index_path = out_dir.join("index.ts");
-    let mut f = fs::File::create(&index_path)
-        .with_context(|| format!("Failed to create {}", index_path.display()))?;
-    f.write_all(content.as_bytes())
-        .with_context(|| format!("Failed to write {}", index_path.display()))?;
-    Ok(index_path)
-}
-
-pub(crate) fn generate_index_ts_tree(tree: &mut BTreeMap<PathBuf, String>) {
-    let root_entries = tree
-        .keys()
-        .filter(|path| path.components().count() == 1)
-        .map(PathBuf::as_path)
-        .collect::<Vec<_>>();
-    let has_v2_ts = tree.keys().any(|path| {
-        path.parent()
-            .is_some_and(|parent| parent == Path::new("v2"))
-            && path.extension() == Some(OsStr::new("ts"))
-            && path.file_stem().is_some_and(|stem| stem != "index")
-    });
-    tree.insert(
-        PathBuf::from("index.ts"),
-        index_ts_entries(&root_entries, has_v2_ts),
-    );
-
-    let v2_entries = tree
-        .keys()
-        .filter(|path| {
-            path.parent()
-                .is_some_and(|parent| parent == Path::new("v2"))
-        })
-        .map(PathBuf::as_path)
-        .collect::<Vec<_>>();
-    if !v2_entries.is_empty() {
-        tree.insert(
-            PathBuf::from("v2").join("index.ts"),
-            index_ts_entries(&v2_entries, /*has_v2_ts*/ false),
-        );
-    }
-}
-
-fn generated_index_ts_with_header(content: String) -> String {
-    let mut with_header = String::with_capacity(GENERATED_TS_HEADER.len() + content.len());
-    with_header.push_str(GENERATED_TS_HEADER);
-    with_header.push_str(&content);
-    with_header
-}
-
-fn index_ts_entries(paths: &[&Path], has_v2_ts: bool) -> String {
-    let mut stems: Vec<String> = paths
-        .iter()
-        .filter(|path| path.extension() == Some(OsStr::new("ts")))
-        .filter_map(|path| {
-            let stem = path.file_stem()?.to_string_lossy().into_owned();
-            if stem == "index" { None } else { Some(stem) }
-        })
-        .filter(|stem| stem != "EventMsg")
-        .collect();
-    stems.sort();
-    stems.dedup();
-
-    let mut entries = String::new();
-    for name in stems {
-        entries.push_str(&format!("export type {{ {name} }} from \"./{name}\";\n"));
-    }
-    if has_v2_ts {
-        entries.push_str("export * as v2 from \"./v2\";\n");
-    }
-    entries
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2105,275 +1770,11 @@ mod tests {
     use crate::schema_fixtures::read_schema_fixture_subtree;
     use codex_protocol::local_uuid::Uuid;
     use edgerun_error::Context;
-    use edgerun_error::Result;
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
     use pretty_assertions::assert_eq;
     use std::collections::BTreeSet;
     use std::path::Path;
     use std::path::PathBuf;
-
-    #[test]
-    fn generated_ts_optional_nullable_fields_only_in_params() -> Result<()> {
-        // Assert that "?: T | null" only appears in generated *Params types.
-        let fixture_tree = read_schema_fixture_subtree(&schema_root()?, "typescript")?;
-
-        let client_request_ts = std::str::from_utf8(
-            fixture_tree
-                .get(Path::new("ClientRequest.ts"))
-                .ok_or_else(|| edgerun_error::anyhow!("missing ClientRequest.ts fixture"))?,
-        )?;
-        assert_eq!(client_request_ts.contains("mock/experimentalMethod"), false);
-        assert_eq!(
-            client_request_ts.contains("MockExperimentalMethodParams"),
-            false
-        );
-        let typescript_index = std::str::from_utf8(
-            fixture_tree
-                .get(Path::new("index.ts"))
-                .ok_or_else(|| edgerun_error::anyhow!("missing index.ts fixture"))?,
-        )?;
-        assert_eq!(typescript_index.contains("export type { EventMsg }"), false);
-        let thread_start_ts = std::str::from_utf8(
-            fixture_tree
-                .get(Path::new("v2/ThreadStartParams.ts"))
-                .ok_or_else(|| edgerun_error::anyhow!("missing v2/ThreadStartParams.ts fixture"))?,
-        )?;
-        assert_eq!(thread_start_ts.contains("mockExperimentalField"), false);
-        assert_eq!(
-            fixture_tree.contains_key(Path::new("v2/MockExperimentalMethodParams.ts")),
-            false
-        );
-        assert_eq!(
-            fixture_tree.contains_key(Path::new("v2/MockExperimentalMethodResponse.ts")),
-            false
-        );
-
-        let mut undefined_offenders = Vec::new();
-        let mut optional_nullable_offenders = BTreeSet::new();
-        for (path, contents) in &fixture_tree {
-            if !matches!(path.extension().and_then(|ext| ext.to_str()), Some("ts")) {
-                continue;
-            }
-
-            // Only allow "?: T | null" in objects representing JSON-RPC requests,
-            // which we assume are called "*Params".
-            let allow_optional_nullable = path
-                .file_stem()
-                .and_then(|stem| stem.to_str())
-                .is_some_and(|stem| {
-                    stem.ends_with("Params")
-                        || stem == "InitializeCapabilities"
-                        || matches!(
-                            stem,
-                            "CollabAgentRef"
-                                | "CollabAgentStatusEntry"
-                                | "CollabAgentSpawnEndEvent"
-                                | "CollabAgentInteractionEndEvent"
-                                | "CollabCloseEndEvent"
-                                | "CollabResumeBeginEvent"
-                                | "CollabResumeEndEvent"
-                        )
-                });
-
-            let contents = std::str::from_utf8(contents)?;
-            if contents.contains("| undefined") {
-                undefined_offenders.push(path.clone());
-            }
-
-            const SKIP_PREFIXES: &[&str] = &[
-                "const ",
-                "let ",
-                "var ",
-                "export const ",
-                "export let ",
-                "export var ",
-            ];
-
-            let mut search_start = 0;
-            while let Some(idx) = contents[search_start..].find("| null") {
-                let abs_idx = search_start + idx;
-                // Find the property-colon for this field by scanning forward
-                // from the start of the segment and ignoring nested braces,
-                // brackets, and parens. This avoids colons inside nested
-                // type literals like `{ [k in string]?: string }`.
-
-                let line_start_idx = contents[..abs_idx].rfind('\n').map(|i| i + 1).unwrap_or(0);
-
-                let mut segment_start_idx = line_start_idx;
-                if let Some(rel_idx) = contents[line_start_idx..abs_idx].rfind(',') {
-                    segment_start_idx = segment_start_idx.max(line_start_idx + rel_idx + 1);
-                }
-                if let Some(rel_idx) = contents[line_start_idx..abs_idx].rfind('{') {
-                    segment_start_idx = segment_start_idx.max(line_start_idx + rel_idx + 1);
-                }
-                if let Some(rel_idx) = contents[line_start_idx..abs_idx].rfind('}') {
-                    segment_start_idx = segment_start_idx.max(line_start_idx + rel_idx + 1);
-                }
-
-                // Scan forward for the colon that separates the field name from its type.
-                let mut level_brace = 0_i32;
-                let mut level_brack = 0_i32;
-                let mut level_paren = 0_i32;
-                let mut in_single = false;
-                let mut in_double = false;
-                let mut escape = false;
-                let mut prop_colon_idx = None;
-                for (i, ch) in contents[segment_start_idx..abs_idx].char_indices() {
-                    let idx_abs = segment_start_idx + i;
-                    if escape {
-                        escape = false;
-                        continue;
-                    }
-                    match ch {
-                        '\\' => {
-                            if in_single || in_double {
-                                escape = true;
-                            }
-                        }
-                        '\'' => {
-                            if !in_double {
-                                in_single = !in_single;
-                            }
-                        }
-                        '"' => {
-                            if !in_single {
-                                in_double = !in_double;
-                            }
-                        }
-                        '{' if !in_single && !in_double => level_brace += 1,
-                        '}' if !in_single && !in_double => level_brace -= 1,
-                        '[' if !in_single && !in_double => level_brack += 1,
-                        ']' if !in_single && !in_double => level_brack -= 1,
-                        '(' if !in_single && !in_double => level_paren += 1,
-                        ')' if !in_single && !in_double => level_paren -= 1,
-                        ':' if !in_single
-                            && !in_double
-                            && level_brace == 0
-                            && level_brack == 0
-                            && level_paren == 0 =>
-                        {
-                            prop_colon_idx = Some(idx_abs);
-                            break;
-                        }
-                        _ => {}
-                    }
-                }
-
-                let Some(colon_idx) = prop_colon_idx else {
-                    search_start = abs_idx + 5;
-                    continue;
-                };
-
-                let mut field_prefix = contents[segment_start_idx..colon_idx].trim();
-                if field_prefix.is_empty() {
-                    search_start = abs_idx + 5;
-                    continue;
-                }
-
-                if let Some(comment_idx) = field_prefix.rfind("*/") {
-                    field_prefix = field_prefix[comment_idx + 2..].trim_start();
-                }
-
-                if field_prefix.is_empty() {
-                    search_start = abs_idx + 5;
-                    continue;
-                }
-
-                if SKIP_PREFIXES
-                    .iter()
-                    .any(|prefix| field_prefix.starts_with(prefix))
-                {
-                    search_start = abs_idx + 5;
-                    continue;
-                }
-
-                if field_prefix.contains('(') {
-                    search_start = abs_idx + 5;
-                    continue;
-                }
-
-                // If the last non-whitespace before ':' is '?', then this is an
-                // optional field with a nullable type (i.e., "?: T | null").
-                // These are only allowed in *Params types.
-                if field_prefix.chars().rev().find(|c| !c.is_whitespace()) == Some('?')
-                    && !allow_optional_nullable
-                {
-                    let line_number =
-                        contents[..abs_idx].chars().filter(|c| *c == '\n').count() + 1;
-                    let offending_line_end = contents[line_start_idx..]
-                        .find('\n')
-                        .map(|i| line_start_idx + i)
-                        .unwrap_or(contents.len());
-                    let offending_snippet = contents[line_start_idx..offending_line_end].trim();
-
-                    optional_nullable_offenders.insert(format!(
-                        "{}:{}: {offending_snippet}",
-                        path.display(),
-                        line_number
-                    ));
-                }
-
-                search_start = abs_idx + 5;
-            }
-        }
-
-        assert!(
-            undefined_offenders.is_empty(),
-            "Generated TypeScript still includes unions with `undefined` in {undefined_offenders:?}"
-        );
-
-        // If this assertion fails, it means a field was generated as "?: T | null",
-        // which is both optional (undefined) and nullable (null), for a type not ending
-        // in "Params" (which represent JSON-RPC requests).
-        assert!(
-            optional_nullable_offenders.is_empty(),
-            "Generated TypeScript has optional nullable fields outside *Params types (disallowed '?: T | null'):\n{optional_nullable_offenders:?}"
-        );
-
-        Ok(())
-    }
-
-    fn schema_root() -> Result<PathBuf> {
-        let typescript_index = codex_utils_cargo_bin::find_resource!("schema/typescript/index.ts")
-            .context("resolve TypeScript schema index.ts")?;
-        let schema_root = typescript_index
-            .parent()
-            .and_then(|parent| parent.parent())
-            .context("derive schema root from schema/typescript/index.ts")?
-            .to_path_buf();
-        Ok(schema_root)
-    }
-
-    #[test]
-    fn generate_ts_with_experimental_api_retains_experimental_entries() -> Result<()> {
-        let client_request_ts = ClientRequest::export_to_string()?;
-        assert_eq!(client_request_ts.contains("mock/experimentalMethod"), true);
-        assert_eq!(
-            client_request_ts.contains("MockExperimentalMethodParams"),
-            true
-        );
-        assert_eq!(
-            v2::MockExperimentalMethodParams::export_to_string()?
-                .contains("MockExperimentalMethodParams"),
-            true
-        );
-        assert_eq!(
-            v2::MockExperimentalMethodResponse::export_to_string()?
-                .contains("MockExperimentalMethodResponse"),
-            true
-        );
-
-        let thread_start_ts = v2::ThreadStartParams::export_to_string()?;
-        assert_eq!(thread_start_ts.contains("mockExperimentalField"), true);
-        let command_execution_request_approval_ts =
-            v2::CommandExecutionRequestApprovalParams::export_to_string()?;
-        assert_eq!(
-            command_execution_request_approval_ts.contains("additionalPermissions"),
-            true
-        );
-
-        Ok(())
-    }
-
     #[test]
     fn stable_schema_filter_removes_mock_thread_start_field() -> Result<()> {
         let output_dir = std::env::temp_dir().join(format!("codex_schema_{}", Uuid::now_v7()));
@@ -2615,7 +2016,11 @@ mod tests {
             definitions.contains_key("ServerRequestResolvedNotificationPayload"),
             true
         );
-        let client_request_titles: BTreeSet<String> = definitions["ClientRequest"]["oneOf"]
+        let client_request_titles: BTreeSet<String> = definitions
+            .get("ClientRequest")
+            .expect("ClientRequest definition")
+            .get("oneOf")
+            .expect("ClientRequest oneOf")
             .as_array()
             .expect("ClientRequest should remain a oneOf")
             .iter()
@@ -2634,7 +2039,11 @@ mod tests {
                 "StartRequest".to_string(),
             ])
         );
-        let notification_titles: BTreeSet<String> = definitions["ServerNotification"]["oneOf"]
+        let notification_titles: BTreeSet<String> = definitions
+            .get("ServerNotification")
+            .expect("ServerNotification definition")
+            .get("oneOf")
+            .expect("ServerNotification oneOf")
             .as_array()
             .expect("ServerNotification should remain a oneOf")
             .iter()
@@ -2660,162 +2069,6 @@ mod tests {
 
         Ok(())
     }
-
-    #[test]
-    fn experimental_type_fields_ts_filter_handles_interface_shape() -> Result<()> {
-        let output_dir = std::env::temp_dir().join(format!("codex_ts_filter_{}", Uuid::now_v7()));
-        fs::create_dir_all(&output_dir)?;
-
-        struct TempDirGuard(PathBuf);
-
-        impl Drop for TempDirGuard {
-            fn drop(&mut self) {
-                let _ = fs::remove_dir_all(&self.0);
-            }
-        }
-
-        let _guard = TempDirGuard(output_dir.clone());
-        let path = output_dir.join("CustomParams.ts");
-        let content = r#"export interface CustomParams {
-  stableField: string | null;
-  unstableField: string | null;
-  otherStableField: boolean;
-}
-"#;
-        fs::write(&path, content)?;
-
-        static CUSTOM_FIELD: crate::experimental_api::ExperimentalField =
-            crate::experimental_api::ExperimentalField {
-                type_name: "CustomParams",
-                field_name: "unstableField",
-                reason: "custom/unstableField",
-            };
-        filter_experimental_type_fields_ts(&output_dir, &[&CUSTOM_FIELD])?;
-
-        let filtered = fs::read_to_string(&path)?;
-        assert_eq!(filtered.contains("unstableField"), false);
-        assert_eq!(filtered.contains("stableField"), true);
-        assert_eq!(filtered.contains("otherStableField"), true);
-        Ok(())
-    }
-
-    #[test]
-    fn experimental_type_fields_ts_filter_keeps_imports_used_in_intersection_suffix() -> Result<()>
-    {
-        let output_dir = std::env::temp_dir().join(format!("codex_ts_filter_{}", Uuid::now_v7()));
-        fs::create_dir_all(&output_dir)?;
-
-        struct TempDirGuard(PathBuf);
-
-        impl Drop for TempDirGuard {
-            fn drop(&mut self) {
-                let _ = fs::remove_dir_all(&self.0);
-            }
-        }
-
-        let _guard = TempDirGuard(output_dir.clone());
-        let path = output_dir.join("Config.ts");
-        let content = r#"import type { JsonValue } from "../serde_json/JsonValue";
-import type { Keep } from "./Keep";
-
-export type Config = { stableField: Keep, unstableField: string | null } & ({ [key in string]?: number | string | boolean | Array<JsonValue> | { [key in string]?: JsonValue } | null });
-"#;
-        fs::write(&path, content)?;
-
-        static CUSTOM_FIELD: crate::experimental_api::ExperimentalField =
-            crate::experimental_api::ExperimentalField {
-                type_name: "Config",
-                field_name: "unstableField",
-                reason: "custom/unstableField",
-            };
-        filter_experimental_type_fields_ts(&output_dir, &[&CUSTOM_FIELD])?;
-
-        let filtered = fs::read_to_string(&path)?;
-        assert_eq!(filtered.contains("unstableField"), false);
-        assert_eq!(
-            filtered.contains(r#"import type { JsonValue } from "../serde_json/JsonValue";"#),
-            true
-        );
-        assert_eq!(
-            filtered.contains(r#"import type { Keep } from "./Keep";"#),
-            true
-        );
-        Ok(())
-    }
-
-    #[test]
-    fn experimental_type_fields_ts_filter_handles_generated_command_params_shape() -> Result<()> {
-        let output_dir = std::env::temp_dir().join(format!("codex_ts_filter_{}", Uuid::now_v7()));
-        fs::create_dir_all(&output_dir)?;
-
-        struct TempDirGuard(PathBuf);
-
-        impl Drop for TempDirGuard {
-            fn drop(&mut self) {
-                let _ = fs::remove_dir_all(&self.0);
-            }
-        }
-
-        let _guard = TempDirGuard(output_dir.clone());
-        let path = output_dir.join("CommandExecParams.ts");
-        let content = r#"import type { CommandExecTerminalSize } from "./CommandExecTerminalSize";
-import type { PermissionProfile } from "./PermissionProfile";
-import type { SandboxPolicy } from "./SandboxPolicy";
-
-export type CommandExecParams = {/**
- * Command argv vector. Empty arrays are rejected.
- */
-command: Array<string>, /**
- * Optional environment overrides merged into the server-computed
- * environment.
- */
-env?: { [key in string]?: string | null } | null, /**
- * Optional initial PTY size in character cells. Only valid when `tty` is
- * true.
- */
-size?: CommandExecTerminalSize | null, /**
- * Optional sandbox policy for this command.
- *
- * Uses the same shape as thread/turn execution sandbox configuration and
- * defaults to the user's configured policy when omitted. Cannot be
- * combined with `permissionProfile`.
- */
-sandboxPolicy?: SandboxPolicy | null,
-/**
- * Optional full permissions profile for this command.
- *
- * Defaults to the user's configured permissions when omitted. Cannot be
- * combined with `sandboxPolicy`.
- */
-permissionProfile?: PermissionProfile | null};
-"#;
-        fs::write(&path, content)?;
-
-        static CUSTOM_FIELD: crate::experimental_api::ExperimentalField =
-            crate::experimental_api::ExperimentalField {
-                type_name: "CommandExecParams",
-                field_name: "permissionProfile",
-                reason: "command/exec.permissionProfile",
-            };
-        filter_experimental_type_fields_ts(&output_dir, &[&CUSTOM_FIELD])?;
-
-        let filtered = fs::read_to_string(&path)?;
-        assert_eq!(
-            filtered.contains("permissionProfile?: PermissionProfile"),
-            false
-        );
-        assert_eq!(
-            filtered.contains(r#"import type { PermissionProfile } from "./PermissionProfile";"#),
-            false
-        );
-        assert_eq!(filtered.contains("sandboxPolicy?: SandboxPolicy"), true);
-        assert_eq!(
-            filtered.contains(r#"import type { SandboxPolicy } from "./SandboxPolicy";"#),
-            true
-        );
-        Ok(())
-    }
-
     #[test]
     fn stable_schema_filter_removes_mock_experimental_method() -> Result<()> {
         let output_dir = std::env::temp_dir().join(format!("codex_schema_{}", Uuid::now_v7()));
@@ -2885,7 +2138,11 @@ permissionProfile?: PermissionProfile | null};
         let definitions = flat_v2_bundle["definitions"]
             .as_object()
             .expect("flat v2 bundle should include definitions");
-        let client_request_methods: BTreeSet<String> = definitions["ClientRequest"]["oneOf"]
+        let client_request_methods: BTreeSet<String> = definitions
+            .get("ClientRequest")
+            .expect("ClientRequest definition")
+            .get("oneOf")
+            .expect("ClientRequest oneOf")
             .as_array()
             .expect("flat v2 ClientRequest should remain a oneOf")
             .iter()
@@ -2910,19 +2167,22 @@ permissionProfile?: PermissionProfile | null};
         .map(str::to_string)
         .collect();
         assert_eq!(missing_client_request_methods, Vec::<String>::new());
-        let server_notification_methods: BTreeSet<String> =
-            definitions["ServerNotification"]["oneOf"]
-                .as_array()
-                .expect("flat v2 ServerNotification should remain a oneOf")
-                .iter()
-                .filter_map(|variant| {
-                    variant["properties"]["method"]["enum"]
-                        .as_array()
-                        .and_then(|values| values.first())
-                        .and_then(Value::as_str)
-                        .map(str::to_string)
-                })
-                .collect();
+        let server_notification_methods: BTreeSet<String> = definitions
+            .get("ServerNotification")
+            .expect("ServerNotification definition")
+            .get("oneOf")
+            .expect("ServerNotification oneOf")
+            .as_array()
+            .expect("flat v2 ServerNotification should remain a oneOf")
+            .iter()
+            .filter_map(|variant| {
+                variant["properties"]["method"]["enum"]
+                    .as_array()
+                    .and_then(|values| values.first())
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            })
+            .collect();
         let missing_server_notification_methods: Vec<String> = [
             "fuzzyFileSearch/sessionCompleted",
             "fuzzyFileSearch/sessionUpdated",

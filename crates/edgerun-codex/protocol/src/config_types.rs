@@ -1,8 +1,9 @@
 use crate::compat::absolute_path::AbsolutePathBuf;
 use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
+use edgerun_json::Map;
 use edgerun_json::ToJson;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
+use edgerun_json::Value;
 use edgerun_strum_macros::Display;
 use edgerun_strum_macros::EnumIter;
 use schemars::JsonSchema;
@@ -15,29 +16,14 @@ use std::collections::HashMap;
 use std::fmt;
 use std::num::NonZeroU64;
 use std::time::Duration;
-use ts_rs::TS;
 
 use crate::openai_models::ReasoningEffort;
 
 /// A summary of the reasoning performed by the model. This can be useful for
 /// debugging and understanding the model's reasoning process.
 /// See https://platform.openai.com/docs/guides/reasoning?api-mode=responses#reasoning-summaries
-#[derive(
-    Debug,
-    Serialize,
-    Deserialize,
-    Default,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Display,
-    JsonSchema,
-    TS,
-    ToJson,
-    FromJson,
-)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Display, JsonSchema, ToJson, FromJson)]
+#[schemars(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum ReasoningSummary {
     #[default]
@@ -51,22 +37,9 @@ pub enum ReasoningSummary {
 /// Controls output length/detail on GPT-5 models via the Responses API.
 /// Serialized with lowercase values to match the OpenAI API.
 #[derive(
-    Hash,
-    Debug,
-    Serialize,
-    Deserialize,
-    Default,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    Display,
-    JsonSchema,
-    TS,
-    ToJson,
-    FromJson,
+    Hash, Debug, Default, Clone, Copy, PartialEq, Eq, Display, JsonSchema, ToJson, FromJson,
 )]
-#[serde(rename_all = "lowercase")]
+#[schemars(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum Verbosity {
     Low,
@@ -76,25 +49,32 @@ pub enum Verbosity {
 }
 
 #[derive(
-    Deserialize, Debug, Clone, Copy, PartialEq, Default, Serialize, Display, JsonSchema, TS,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Default,
+    Display,
+    JsonSchema,
+    edgerun_json::ToJson,
+    edgerun_json::FromJson,
 )]
-#[serde(rename_all = "kebab-case")]
+#[schemars(rename_all = "kebab-case")]
 #[strum(serialize_all = "kebab-case")]
 pub enum SandboxMode {
-    #[serde(rename = "read-only")]
+    #[schemars(rename = "read-only")]
     #[default]
     ReadOnly,
 
-    #[serde(rename = "workspace-write")]
+    #[schemars(rename = "workspace-write")]
     WorkspaceWrite,
 
-    #[serde(rename = "danger-full-access")]
+    #[schemars(rename = "danger-full-access")]
     DangerFullAccess,
 }
 
-#[derive(Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Display, TS)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Display)]
 #[strum(serialize_all = "snake_case")]
-#[ts(type = r#""user" | "auto_review" | "guardian_subagent""#)]
 /// Configures who approval requests are routed to for review. Examples
 /// include sandbox escapes, blocked network access, MCP approval prompts, and
 /// ARC escalations. Defaults to `user`. `auto_review` uses a carefully
@@ -102,9 +82,7 @@ pub enum SandboxMode {
 /// decision framework before approving or denying the request.
 pub enum ApprovalsReviewer {
     #[default]
-    #[serde(rename = "user")]
     User,
-    #[serde(rename = "guardian_subagent", alias = "auto_review")]
     #[strum(serialize = "guardian_subagent")]
     AutoReview,
 }
@@ -122,8 +100,32 @@ impl JsonSchema for ApprovalsReviewer {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default, JsonSchema)]
-#[serde(rename_all = "kebab-case")]
+impl ToJson for ApprovalsReviewer {
+    fn to_json(&self) -> Value {
+        match self {
+            Self::User => "user",
+            Self::AutoReview => "guardian_subagent",
+        }
+        .to_json()
+    }
+}
+
+impl FromJson for ApprovalsReviewer {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "user" => Ok(Self::User),
+            "auto_review" | "guardian_subagent" => Ok(Self::AutoReview),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown approvals reviewer `{other}`"
+            ))),
+        }
+    }
+}
+
+#[derive(
+    Debug, Clone, PartialEq, Eq, Default, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "kebab-case")]
 pub enum ShellEnvironmentPolicyInherit {
     /// "Core" environment variables for the platform. On UNIX, this would
     /// include HOME, LOGNAME, PATH, SHELL, and USER, among others.
@@ -137,7 +139,9 @@ pub enum ShellEnvironmentPolicyInherit {
     None,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Default, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, PartialOrd, Default, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
 pub struct EnvironmentVariablePattern {
     pattern: Vec<char>,
     case_insensitive: bool,
@@ -301,35 +305,20 @@ fn string_enum_schema_with_description(values: &[&str], description: &str) -> Sc
 }
 
 #[derive(
-    Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Display, JsonSchema, TS,
-)]
-#[serde(rename_all = "kebab-case")]
-#[strum(serialize_all = "kebab-case")]
-pub enum WindowsSandboxLevel {
-    #[default]
-    Disabled,
-    RestrictedToken,
-    Elevated,
-}
-
-#[derive(
     Debug,
-    Serialize,
-    Deserialize,
     Clone,
     Copy,
     PartialEq,
     Eq,
     Display,
     JsonSchema,
-    TS,
     PartialOrd,
     Ord,
     EnumIter,
     ToJson,
     FromJson,
 )]
-#[serde(rename_all = "lowercase")]
+#[schemars(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum Personality {
     None,
@@ -338,9 +327,18 @@ pub enum Personality {
 }
 
 #[derive(
-    Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Display, JsonSchema, TS, Default,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Display,
+    JsonSchema,
+    Default,
+    edgerun_json::ToJson,
+    edgerun_json::FromJson,
 )]
-#[serde(rename_all = "lowercase")]
+#[schemars(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum WebSearchMode {
     Disabled,
@@ -349,8 +347,18 @@ pub enum WebSearchMode {
     Live,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Display, JsonSchema, TS)]
-#[serde(rename_all = "lowercase")]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Display,
+    JsonSchema,
+    edgerun_json::ToJson,
+    edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum WebSearchContextSize {
     Low,
@@ -358,7 +366,9 @@ pub enum WebSearchContextSize {
     High,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq, Eq, JsonSchema, TS)]
+#[derive(
+    Debug, Clone, Default, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
 #[schemars(deny_unknown_fields)]
 pub struct WebSearchLocation {
     pub country: Option<String>,
@@ -378,7 +388,9 @@ impl WebSearchLocation {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq, Eq, JsonSchema, TS)]
+#[derive(
+    Debug, Clone, Default, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
 #[schemars(deny_unknown_fields)]
 pub struct WebSearchToolConfig {
     pub context_size: Option<WebSearchContextSize>,
@@ -404,26 +416,39 @@ impl WebSearchToolConfig {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq, Eq, JsonSchema, TS)]
+#[derive(
+    Debug, Clone, Default, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
 #[schemars(deny_unknown_fields)]
 pub struct WebSearchFilters {
     pub allowed_domains: Option<Vec<String>>,
 }
 
 #[derive(
-    Debug, Serialize, Deserialize, Clone, Copy, Default, PartialEq, Eq, Display, JsonSchema, TS,
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    PartialEq,
+    Eq,
+    Display,
+    JsonSchema,
+    edgerun_json::ToJson,
+    edgerun_json::FromJson,
 )]
-#[serde(rename_all = "lowercase")]
+#[schemars(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum WebSearchUserLocationType {
     #[default]
     Approximate,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq, Eq, JsonSchema, TS)]
+#[derive(
+    Debug, Clone, Default, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
 #[schemars(deny_unknown_fields)]
 pub struct WebSearchUserLocation {
-    #[serde(default)]
+    #[schemars(default)]
     pub r#type: WebSearchUserLocationType,
     pub country: Option<String>,
     pub region: Option<String>,
@@ -431,7 +456,9 @@ pub struct WebSearchUserLocation {
     pub timezone: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq, Eq, JsonSchema, TS)]
+#[derive(
+    Debug, Clone, Default, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
 #[schemars(deny_unknown_fields)]
 pub struct WebSearchConfig {
     pub filters: Option<WebSearchFilters>,
@@ -465,8 +492,18 @@ impl From<WebSearchToolConfig> for WebSearchConfig {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Display, JsonSchema, TS)]
-#[serde(rename_all = "lowercase")]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Display,
+    JsonSchema,
+    edgerun_json::ToJson,
+    edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum ServiceTier {
     Fast,
@@ -490,8 +527,18 @@ impl ServiceTier {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Display, JsonSchema, TS)]
-#[serde(rename_all = "lowercase")]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Display,
+    JsonSchema,
+    edgerun_json::ToJson,
+    edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum ForcedLoginMethod {
     Chatgpt,
@@ -502,27 +549,27 @@ const DEFAULT_PROVIDER_AUTH_TIMEOUT_MS: u64 = 5_000;
 const DEFAULT_PROVIDER_AUTH_REFRESH_INTERVAL_MS: u64 = 300_000;
 
 /// Configuration for obtaining a provider bearer token from a command.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, JsonSchema)]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
 #[schemars(deny_unknown_fields)]
 pub struct ModelProviderAuthInfo {
     /// Command to execute. Bare names are resolved via `PATH`; paths are resolved against `cwd`.
     pub command: String,
 
     /// Command arguments.
-    #[serde(default)]
+    #[schemars(default)]
     pub args: Vec<String>,
 
     /// Maximum time to wait for the token command to exit successfully.
-    #[serde(default = "default_provider_auth_timeout_ms")]
+    #[schemars(default = "default_provider_auth_timeout_ms")]
     pub timeout_ms: NonZeroU64,
 
     /// Maximum age for the cached token before rerunning the command.
     /// Set to `0` to disable proactive refresh and only rerun after a 401 retry path.
-    #[serde(default = "default_provider_auth_refresh_interval_ms")]
+    #[schemars(default = "default_provider_auth_refresh_interval_ms")]
     pub refresh_interval_ms: u64,
 
     /// Working directory used when running the token command.
-    #[serde(default = "default_provider_auth_cwd")]
+    #[schemars(default = "default_provider_auth_cwd")]
     #[schemars(skip_serializing_if = "is_default_provider_auth_cwd")]
     pub cwd: AbsolutePathBuf,
 }
@@ -534,6 +581,41 @@ impl ModelProviderAuthInfo {
 
     pub fn refresh_interval(&self) -> Option<Duration> {
         NonZeroU64::new(self.refresh_interval_ms).map(|value| Duration::from_millis(value.get()))
+    }
+}
+
+impl ToJson for ModelProviderAuthInfo {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        object.push_field("command", self.command.to_json());
+        object.push_field("args", self.args.to_json());
+        object.push_field("timeout_ms", self.timeout_ms.get().to_json());
+        object.push_field("refresh_interval_ms", self.refresh_interval_ms.to_json());
+        if !is_default_provider_auth_cwd(&self.cwd) {
+            object.push_field("cwd", self.cwd.to_json());
+        }
+        Value::Object(object)
+    }
+}
+
+impl FromJson for ModelProviderAuthInfo {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ModelProviderAuthInfo")?;
+        let timeout_ms = object
+            .take_optional_any::<u64>(&["timeout_ms"])?
+            .map(|value| non_zero_u64(value, "model_providers.<id>.auth.timeout_ms"))
+            .unwrap_or_else(default_provider_auth_timeout_ms);
+        Ok(Self {
+            command: object.take_required_any(&["command"])?,
+            args: object.take_optional_any(&["args"])?.unwrap_or_default(),
+            timeout_ms,
+            refresh_interval_ms: object
+                .take_optional_any(&["refresh_interval_ms"])?
+                .unwrap_or_else(default_provider_auth_refresh_interval_ms),
+            cwd: object
+                .take_optional_any(&["cwd"])?
+                .unwrap_or_else(default_provider_auth_cwd),
+        })
     }
 }
 
@@ -556,12 +638,6 @@ fn non_zero_u64(value: u64, field_name: &str) -> NonZeroU64 {
 }
 
 fn default_provider_auth_cwd() -> AbsolutePathBuf {
-    let deserializer =
-        edgerun_serde::de::value::StrDeserializer::<edgerun_serde::de::value::Error>::new(".");
-    if let Ok(cwd) = AbsolutePathBuf::deserialize(deserializer) {
-        return cwd;
-    }
-
     match AbsolutePathBuf::current_dir() {
         Ok(cwd) => cwd,
         Err(err) => panic!("provider auth cwd must resolve: {err}"),
@@ -572,10 +648,22 @@ fn is_default_provider_auth_cwd(path: &AbsolutePathBuf) -> bool {
     path == &default_provider_auth_cwd()
 }
 
+const _: fn(&AbsolutePathBuf) -> bool = is_default_provider_auth_cwd;
+
 /// Represents the trust level for a project directory.
 /// This determines the approval policy and sandbox mode applied.
-#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Display, JsonSchema, TS)]
-#[serde(rename_all = "lowercase")]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Display,
+    JsonSchema,
+    edgerun_json::ToJson,
+    edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum TrustLevel {
     Trusted,
@@ -603,9 +691,18 @@ pub enum TrustLevel {
 ///
 /// The CLI flag `--no-alt-screen` can override this setting at runtime.
 #[derive(
-    Debug, Serialize, Deserialize, Default, Clone, Copy, PartialEq, Eq, Display, JsonSchema, TS,
+    Debug,
+    Default,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Display,
+    JsonSchema,
+    edgerun_json::ToJson,
+    edgerun_json::FromJson,
 )]
-#[serde(rename_all = "lowercase")]
+#[schemars(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum AltScreenMode {
     /// Auto-detect: disable alternate screen in Zellij, enable elsewhere.
@@ -618,14 +715,12 @@ pub enum AltScreenMode {
 }
 
 /// Initial collaboration mode to use when the TUI starts.
-#[derive(
-    Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash, JsonSchema, TS, Default,
-)]
-#[serde(rename_all = "snake_case")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, JsonSchema, Default)]
+#[schemars(rename_all = "snake_case")]
 pub enum ModeKind {
     Plan,
     #[default]
-    #[serde(
+    #[schemars(
         alias = "code",
         alias = "pair_programming",
         alias = "execute",
@@ -633,14 +728,12 @@ pub enum ModeKind {
     )]
     Default,
     #[doc(hidden)]
-    #[serde(skip_serializing, skip_deserializing)]
+    #[schemars(skip_serializing, skip_deserializing)]
     #[schemars(skip)]
-    #[ts(skip)]
     PairProgramming,
     #[doc(hidden)]
-    #[serde(skip_serializing, skip_deserializing)]
+    #[schemars(skip_serializing, skip_deserializing)]
     #[schemars(skip)]
-    #[ts(skip)]
     Execute,
 }
 
@@ -665,9 +758,33 @@ impl ModeKind {
     }
 }
 
+impl ToJson for ModeKind {
+    fn to_json(&self) -> Value {
+        match self {
+            Self::Plan => "plan",
+            Self::Default | Self::PairProgramming | Self::Execute => "default",
+        }
+        .to_json()
+    }
+}
+
+impl FromJson for ModeKind {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "plan" => Ok(Self::Plan),
+            "default" | "code" | "pair_programming" | "execute" | "custom" => Ok(Self::Default),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown collaboration mode `{other}`"
+            ))),
+        }
+    }
+}
+
 /// Collaboration mode for a Codex session.
-#[derive(Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize, JsonSchema, TS)]
-#[serde(rename_all = "lowercase")]
+#[derive(
+    Clone, PartialEq, Eq, Hash, Debug, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "lowercase")]
 pub struct CollaborationMode {
     pub mode: ModeKind,
     pub settings: Settings,
@@ -736,7 +853,9 @@ impl CollaborationMode {
 }
 
 /// Settings for a collaboration mode.
-#[derive(Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(
+    Clone, PartialEq, Eq, Hash, Debug, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
 pub struct Settings {
     pub model: String,
     pub reasoning_effort: Option<ReasoningEffort>,
@@ -745,7 +864,9 @@ pub struct Settings {
 
 /// A mask for collaboration mode settings, allowing partial updates.
 /// All fields except `name` are optional, enabling selective updates.
-#[derive(Clone, PartialEq, Eq, Hash, Debug, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(
+    Clone, PartialEq, Eq, Hash, Debug, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
 pub struct CollaborationModeMask {
     pub name: String,
     pub mode: Option<ModeKind>,
@@ -792,7 +913,7 @@ mod tests {
     fn mode_kind_deserializes_alias_values_to_default() {
         for alias in ["code", "pair_programming", "execute", "custom"] {
             let json = format!("\"{alias}\"");
-            let mode: ModeKind = edgerun_json::from_str(&json).expect("deserialize mode");
+            let mode: ModeKind = edgerun_json::from_json_str(&json).expect("deserialize mode");
             assert_eq!(ModeKind::Default, mode);
         }
     }
@@ -801,18 +922,19 @@ mod tests {
     fn approvals_reviewer_serializes_auto_review_and_accepts_legacy_guardian_subagent() {
         assert_eq!(ApprovalsReviewer::User.to_string(), "user");
         assert_eq!(
-            edgerun_json::to_string(&ApprovalsReviewer::User).expect("serialize reviewer"),
+            edgerun_json::to_json_string(&ApprovalsReviewer::User).expect("serialize reviewer"),
             "\"user\""
         );
         assert_eq!(
-            edgerun_json::to_string(&ApprovalsReviewer::AutoReview).expect("serialize reviewer"),
+            edgerun_json::to_json_string(&ApprovalsReviewer::AutoReview)
+                .expect("serialize reviewer"),
             "\"guardian_subagent\""
         );
 
         for value in ["user", "auto_review", "guardian_subagent"] {
             let json = format!("\"{value}\"");
             let reviewer: ApprovalsReviewer =
-                edgerun_json::from_str(&json).expect("deserialize reviewer");
+                edgerun_json::from_json_str(&json).expect("deserialize reviewer");
             let expected = if value == "user" {
                 ApprovalsReviewer::User
             } else {

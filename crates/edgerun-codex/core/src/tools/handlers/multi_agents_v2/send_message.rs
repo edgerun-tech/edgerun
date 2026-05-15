@@ -29,7 +29,7 @@ impl ToolHandler for Handler {
 
     async fn handle(&self, invocation: ToolInvocation) -> Result<Self::Output, FunctionCallError> {
         let arguments = function_arguments(invocation.payload.clone())?;
-        let args: SendMessageArgs = parse_arguments(&arguments)?;
+    let args: SendMessageArgs = parse_json_arguments(&arguments)?;
         handle_message_string_tool(
             invocation,
             MessageDeliveryMode::QueueOnly,

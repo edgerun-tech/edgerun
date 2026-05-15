@@ -1,0 +1,19 @@
+[package]
+name = "futures-task"
+version = "0.3.32"
+edition = "2018"
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun-owned futures task compatibility crate"
+
+[features]
+alloc = []
+cfg-target-has-atomic = []
+default = ["std"]
+std = ["alloc"]
+unstable = []
+
+[lints]
+workspace = true

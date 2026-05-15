@@ -24,6 +24,35 @@ impl UiRect {
         }
     }
 
+    pub fn inset_ltrb(self, left: f32, top: f32, right: f32, bottom: f32) -> Self {
+        Self {
+            x: self.x + left,
+            y: self.y + top,
+            w: (self.w - left - right).max(0.0),
+            h: (self.h - top - bottom).max(0.0),
+        }
+    }
+
+    pub fn with_height_centered(self, h: f32) -> Self {
+        let h = h.min(self.h).max(0.0);
+        Self {
+            x: self.x,
+            y: self.y + (self.h - h) * 0.5,
+            w: self.w,
+            h,
+        }
+    }
+
+    pub fn with_width_centered(self, w: f32) -> Self {
+        let w = w.min(self.w).max(0.0);
+        Self {
+            x: self.x + (self.w - w) * 0.5,
+            y: self.y,
+            w,
+            h: self.h,
+        }
+    }
+
     pub fn right(self, w: f32) -> Self {
         Self {
             x: self.x + self.w - w,

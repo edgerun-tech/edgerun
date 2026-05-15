@@ -131,7 +131,7 @@ fn read_hook_inputs(path: &Path) -> Vec<Value> {
     text.lines()
         .filter(|line| !line.trim().is_empty())
         .map(|line| {
-            edgerun_json::from_serde_str(line)
+            edgerun_json::from_json_str(line)
                 .unwrap_or_else(|err| panic!("failed to parse hook input log line: {err}"))
         })
         .collect()
@@ -518,7 +518,7 @@ async fn summarize_context_three_requests_and_instructions() {
         if trimmed.is_empty() {
             continue;
         }
-        let Ok(entry): Result<RolloutLine, _> = edgerun_json::from_serde_str(trimmed) else {
+        let Ok(entry): Result<RolloutLine, _> = edgerun_json::from_json_str(trimmed) else {
             continue;
         };
         match entry.item {
@@ -2328,7 +2328,7 @@ async fn auto_compact_persists_rollout_entries() {
         if trimmed.is_empty() {
             continue;
         }
-        let Ok(entry): Result<RolloutLine, _> = edgerun_json::from_serde_str(trimmed) else {
+        let Ok(entry): Result<RolloutLine, _> = edgerun_json::from_json_str(trimmed) else {
             continue;
         };
         match entry.item {
@@ -3284,10 +3284,7 @@ async fn snapshot_request_shape_pre_turn_compaction_including_incoming_user_mess
     codex
         .submit(Op::OverrideTurnContext {
             cwd: Some(PathBuf::from(PRETURN_CONTEXT_DIFF_CWD)),
-            approval_policy: None,
             approvals_reviewer: None,
-            sandbox_policy: None,
-            permission_profile: None,
             windows_sandbox_level: None,
             model: None,
             effort: None,

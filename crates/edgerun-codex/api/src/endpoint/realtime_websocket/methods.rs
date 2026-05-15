@@ -17,7 +17,6 @@ use crate::error::ApiError;
 use crate::provider::Provider;
 use codex_client::backoff;
 use codex_protocol::protocol::RealtimeTranscriptDelta;
-use edgerun_futures::SinkExt;
 use edgerun_futures::StreamExt;
 use edgerun_http::HeaderMap;
 use edgerun_http::HeaderValue;
@@ -43,8 +42,6 @@ use tracing::error;
 use tracing::info;
 use tracing::trace;
 use tracing::warn;
-
-const REALTIME_WIRE_LOG_TARGET: &str = "codex_api::realtime_websocket::wire";
 
 struct WsStream {
     tx_command: mpsc::Sender<WsCommand>,
@@ -85,8 +82,8 @@ impl WsStream {
                                 debug!("realtime websocket sending message");
                                 let result = inner.send(message).await;
                                 let should_break = result.is_err();
-                                if let Err(err) = &result {
-                                    error!("realtime websocket send failed: {err}");
+                                if let Err(_err) = &result {
+                                    error!("realtime websocket send failed: {_err}");
                                 }
                                 let _ = tx_result.send(result);
                                 if should_break {
@@ -96,8 +93,8 @@ impl WsStream {
                             WsCommand::Close { tx_result } => {
                                 info!("realtime websocket sending close");
                                 let result = inner.close(None).await;
-                                if let Err(err) = &result {
-                                    error!("realtime websocket close failed: {err}");
+                                if let Err(_err) = &result {
+                                    error!("realtime websocket close failed: {_err}");
                                 }
                                 let _ = tx_result.send(result);
                                 break;
@@ -125,16 +122,16 @@ impl WsStream {
                                 let is_close = matches!(message, Message::Close(_));
                                 match &message {
                                     Message::Text(_) => trace!("realtime websocket received text frame"),
-                                    Message::Binary(binary) => {
+                                    Message::Binary(_binary) => {
                                         error!(
-                                            payload_len = binary.len(),
+                                            payload_len = _binary.len(),
                                             "realtime websocket received unexpected binary frame"
                                         );
                                     }
-                                    Message::Close(frame) => info!(
+                                    Message::Close(_frame) => info!(
                                         "realtime websocket received close frame: code={:?} reason={:?}",
-                                        frame.as_ref().map(|frame| frame.code),
-                                        frame.as_ref().map(|frame| frame.reason.as_str())
+                                        _frame.as_ref().map(|frame| frame.code),
+                                        _frame.as_ref().map(|frame| frame.reason.as_str())
                                     ),
                                     Message::Frame(_) => {
                                         trace!("realtime websocket received raw frame");
@@ -361,7 +358,7 @@ impl RealtimeWebsocketWriter {
             ));
         }
 
-        trace!(target: REALTIME_WIRE_LOG_TARGET, "realtime websocket request: {payload}");
+        trace!("realtime websocket request: {payload}");
         self.stream
             .send(Message::Text(payload.into()))
             .await
@@ -395,7 +392,7 @@ impl RealtimeWebsocketEvents {
 
             match msg {
                 Message::Text(text) => {
-                    trace!(target: REALTIME_WIRE_LOG_TARGET, "realtime websocket event: {text}");
+                    trace!("realtime websocket event: {text}");
                     if let Some(mut event) = parse_realtime_event(&text, self.event_parser) {
                         self.update_active_transcript(&mut event).await;
                         debug!(?event, "realtime websocket parsed event");
@@ -403,12 +400,12 @@ impl RealtimeWebsocketEvents {
                     }
                     debug!("realtime websocket ignored unsupported text frame");
                 }
-                Message::Close(frame) => {
+                Message::Close(_frame) => {
                     self.is_closed.store(true, Ordering::SeqCst);
                     info!(
                         "realtime websocket closed: code={:?} reason={:?}",
-                        frame.as_ref().map(|frame| frame.code),
-                        frame.as_ref().map(|frame| frame.reason.as_str())
+                        _frame.as_ref().map(|frame| frame.code),
+                        _frame.as_ref().map(|frame| frame.reason.as_str())
                     );
                     return Ok(None);
                 }
@@ -600,13 +597,13 @@ impl RealtimeWebsocketClient {
                 .await;
             match result {
                 Ok(connection) => return Ok(connection),
-                Err(err) if attempt < self.provider.retry.max_attempts => {
+                Err(_err) if attempt < self.provider.retry.max_attempts => {
                     let delay = backoff(self.provider.retry.base_delay, attempt + 1);
                     warn!(
                         attempt = attempt + 1,
                         call_id,
                         delay_ms = delay.as_millis(),
-                        "realtime sideband websocket connect failed; retrying: {err}"
+                        "realtime sideband websocket connect failed; retrying: {_err}"
                     );
                     sleep(delay).await;
                 }
@@ -658,7 +655,7 @@ impl RealtimeWebsocketClient {
         extend_ws_headers(request.headers_mut(), &headers)?;
 
         info!("connecting realtime websocket: {ws_url}");
-        let (stream, response) = edgerun_tokio_tungstenite::connect_async_with_config(
+        let (stream, _response) = edgerun_tokio_tungstenite::connect_async_with_config(
             request,
             Some(websocket_config()),
             false,
@@ -667,7 +664,7 @@ impl RealtimeWebsocketClient {
         .map_err(|err| ApiError::Stream(format!("failed to connect realtime websocket: {err}")))?;
         info!(
             ws_url = %ws_url,
-            status = %response.status(),
+            status = %_response.status(),
             "realtime websocket connected"
         );
 
@@ -1387,7 +1384,7 @@ mod tests {
         )
         .expect("build ws url");
         assert_eq!(
-            url.as_str(),
+            url.to_string(),
             "ws://127.0.0.1:8011/v1/realtime?intent=quicksilver"
         );
     }
@@ -1403,7 +1400,7 @@ mod tests {
         )
         .expect("build ws url");
         assert_eq!(
-            url.as_str(),
+            url.to_string(),
             "wss://example.com/v1/realtime?intent=quicksilver&model=realtime-test-model"
         );
     }
@@ -1419,7 +1416,7 @@ mod tests {
         )
         .expect("build ws url");
         assert_eq!(
-            url.as_str(),
+            url.to_string(),
             "wss://api.openai.com/v1/realtime?intent=quicksilver&model=snapshot"
         );
     }
@@ -1435,7 +1432,7 @@ mod tests {
         )
         .expect("build ws url");
         assert_eq!(
-            url.as_str(),
+            url.to_string(),
             "wss://example.com/openai/v1/realtime?intent=quicksilver&model=snapshot"
         );
     }
@@ -1454,7 +1451,7 @@ mod tests {
         )
         .expect("build ws url");
         assert_eq!(
-            url.as_str(),
+            url.to_string(),
             "wss://example.com/v1/realtime?foo=bar&intent=quicksilver&model=snapshot&trace=1"
         );
     }
@@ -1470,7 +1467,7 @@ mod tests {
         )
         .expect("build ws url");
         assert_eq!(
-            url.as_str(),
+            url.to_string(),
             "wss://example.com/v1/realtime?intent=quicksilver"
         );
     }
@@ -1489,7 +1486,7 @@ mod tests {
         )
         .expect("build ws url");
         assert_eq!(
-            url.as_str(),
+            url.to_string(),
             "wss://example.com/v1/realtime?foo=bar&model=snapshot&trace=1"
         );
     }
@@ -1504,7 +1501,7 @@ mod tests {
             RealtimeSessionMode::Transcription,
         )
         .expect("build ws url");
-        assert_eq!(url.as_str(), "wss://example.com/v1/realtime");
+        assert_eq!(url.to_string(), "wss://example.com/v1/realtime");
     }
 
     #[test]
@@ -1518,7 +1515,7 @@ mod tests {
         )
         .expect("build ws url");
         assert_eq!(
-            url.as_str(),
+            url.to_string(),
             "wss://api.openai.com/v1/realtime?call_id=rtc_test"
         );
     }

@@ -57,7 +57,7 @@ fn rollout_developer_texts(text: &str) -> Vec<String> {
         if trimmed.is_empty() {
             continue;
         }
-        let rollout: RolloutLine = match edgerun_json::from_serde_str(trimmed) {
+        let rollout: RolloutLine = match edgerun_json::from_json_str(trimmed) {
             Ok(rollout) => rollout,
             Err(_) => continue,
         };
@@ -82,7 +82,7 @@ fn rollout_environment_texts(text: &str) -> Vec<String> {
         if trimmed.is_empty() {
             continue;
         }
-        let rollout: RolloutLine = match edgerun_json::from_serde_str(trimmed) {
+        let rollout: RolloutLine = match edgerun_json::from_json_str(trimmed) {
             Ok(rollout) => rollout,
             Err(_) => continue,
         };
@@ -115,10 +115,7 @@ async fn override_turn_context_without_user_turn_does_not_record_permissions_upd
     test.codex
         .submit(Op::OverrideTurnContext {
             cwd: None,
-            approval_policy: Some(AskForApproval::Never),
             approvals_reviewer: None,
-            sandbox_policy: None,
-            permission_profile: None,
             windows_sandbox_level: None,
             model: None,
             effort: None,
@@ -158,10 +155,7 @@ async fn override_turn_context_without_user_turn_does_not_record_environment_upd
     test.codex
         .submit(Op::OverrideTurnContext {
             cwd: Some(new_cwd.path().to_path_buf()),
-            approval_policy: None,
             approvals_reviewer: None,
-            sandbox_policy: None,
-            permission_profile: None,
             windows_sandbox_level: None,
             model: None,
             effort: None,
@@ -198,10 +192,7 @@ async fn override_turn_context_without_user_turn_does_not_record_collaboration_u
     test.codex
         .submit(Op::OverrideTurnContext {
             cwd: None,
-            approval_policy: None,
             approvals_reviewer: None,
-            sandbox_policy: None,
-            permission_profile: None,
             windows_sandbox_level: None,
             model: None,
             effort: None,

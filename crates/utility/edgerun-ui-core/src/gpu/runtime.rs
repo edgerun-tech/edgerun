@@ -59,9 +59,14 @@ impl GpuHit {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UiKey {
     Backspace,
+    Delete,
     Enter,
     Escape,
     Tab,
+    Home,
+    End,
+    PageUp,
+    PageDown,
     ArrowLeft,
     ArrowRight,
     ArrowUp,
@@ -94,6 +99,272 @@ pub enum UiAction {
     TextChanged { id: u32, value: String },
     Submitted { id: u32 },
     Cancelled,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum UiTextBufferAction {
+    None,
+    Changed,
+    Submit,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct UiKeyModifiers {
+    pub shift: bool,
+    pub ctrl: bool,
+    pub alt: bool,
+    pub meta: bool,
+}
+
+impl UiKeyModifiers {
+    pub const fn shift(shift: bool) -> Self {
+        Self {
+            shift,
+            ctrl: false,
+            alt: false,
+            meta: false,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct UiTextBuffer {
+    value: String,
+    cursor: usize,
+}
+
+impl UiTextBuffer {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.value
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.value.is_empty()
+    }
+
+    pub fn clear(&mut self) {
+        self.value.clear();
+        self.cursor = 0;
+    }
+
+    pub fn set_text(&mut self, text: impl Into<String>) {
+        self.value = text.into();
+        self.cursor = self.value.chars().count();
+    }
+
+    pub fn insert(&mut self, text: &str) {
+        let byte_index = self.cursor_byte_index();
+        self.value.insert_str(byte_index, text);
+        self.cursor += text.chars().count();
+    }
+
+    pub fn handle_text_input(&mut self, text: &str) -> UiTextBufferAction {
+        let before = self.value.len();
+        for ch in text.chars().filter(|ch| !ch.is_control()) {
+            if self.value.len() >= 4096 {
+                break;
+            }
+            self.insert(&ch.to_string());
+        }
+        if self.value.len() == before {
+            UiTextBufferAction::None
+        } else {
+            UiTextBufferAction::Changed
+        }
+    }
+
+    pub fn handle_key(&mut self, key: UiKey, shift: bool) -> UiTextBufferAction {
+        self.handle_key_with_modifiers(key, UiKeyModifiers::shift(shift))
+    }
+
+    pub fn handle_key_with_modifiers(
+        &mut self,
+        key: UiKey,
+        modifiers: UiKeyModifiers,
+    ) -> UiTextBufferAction {
+        match key {
+            UiKey::Other(code)
+                if modifiers.ctrl && (code == b'a' as u32 || code == b'A' as u32) =>
+            {
+                self.move_cursor_to_start();
+                UiTextBufferAction::Changed
+            }
+            UiKey::Other(code)
+                if modifiers.ctrl && (code == b'e' as u32 || code == b'E' as u32) =>
+            {
+                self.move_cursor_to_end();
+                UiTextBufferAction::Changed
+            }
+            UiKey::Other(code)
+                if modifiers.ctrl && (code == b'u' as u32 || code == b'U' as u32) =>
+            {
+                let before = self.value.len();
+                self.delete_before_cursor_all();
+                if self.value.len() == before {
+                    UiTextBufferAction::None
+                } else {
+                    UiTextBufferAction::Changed
+                }
+            }
+            UiKey::Other(code)
+                if modifiers.ctrl && (code == b'k' as u32 || code == b'K' as u32) =>
+            {
+                let before = self.value.len();
+                self.delete_after_cursor_all();
+                if self.value.len() == before {
+                    UiTextBufferAction::None
+                } else {
+                    UiTextBufferAction::Changed
+                }
+            }
+            UiKey::Other(code)
+                if modifiers.ctrl && (code == b'w' as u32 || code == b'W' as u32) =>
+            {
+                let before = self.value.len();
+                self.delete_word_before_cursor();
+                if self.value.len() == before {
+                    UiTextBufferAction::None
+                } else {
+                    UiTextBufferAction::Changed
+                }
+            }
+            UiKey::Backspace => {
+                let before = self.value.len();
+                self.delete_before_cursor();
+                if self.value.len() == before {
+                    UiTextBufferAction::None
+                } else {
+                    UiTextBufferAction::Changed
+                }
+            }
+            UiKey::Delete => {
+                let before = self.value.len();
+                self.delete_after_cursor();
+                if self.value.len() == before {
+                    UiTextBufferAction::None
+                } else {
+                    UiTextBufferAction::Changed
+                }
+            }
+            UiKey::Enter if modifiers.shift => {
+                self.insert("\n");
+                UiTextBufferAction::Changed
+            }
+            UiKey::Enter => UiTextBufferAction::Submit,
+            UiKey::ArrowLeft => {
+                self.move_cursor_left();
+                UiTextBufferAction::Changed
+            }
+            UiKey::ArrowRight => {
+                self.move_cursor_right();
+                UiTextBufferAction::Changed
+            }
+            UiKey::Home => {
+                self.move_cursor_to_start();
+                UiTextBufferAction::Changed
+            }
+            UiKey::End => {
+                self.move_cursor_to_end();
+                UiTextBufferAction::Changed
+            }
+            _ => UiTextBufferAction::None,
+        }
+    }
+
+    pub fn delete_before_cursor(&mut self) {
+        if self.cursor == 0 {
+            return;
+        }
+        let end = self.cursor_byte_index();
+        self.cursor -= 1;
+        let start = self.cursor_byte_index();
+        self.value.replace_range(start..end, "");
+    }
+
+    pub fn delete_after_cursor(&mut self) {
+        let start = self.cursor_byte_index();
+        if start == self.value.len() {
+            return;
+        }
+        self.cursor += 1;
+        let end = self.cursor_byte_index();
+        self.cursor -= 1;
+        self.value.replace_range(start..end, "");
+    }
+
+    pub fn delete_before_cursor_all(&mut self) {
+        let end = self.cursor_byte_index();
+        self.value.replace_range(..end, "");
+        self.cursor = 0;
+    }
+
+    pub fn delete_after_cursor_all(&mut self) {
+        let start = self.cursor_byte_index();
+        self.value.truncate(start);
+    }
+
+    pub fn delete_word_before_cursor(&mut self) {
+        if self.cursor == 0 {
+            return;
+        }
+        let chars = self.value.chars().collect::<Vec<_>>();
+        let end = self.cursor_byte_index();
+        let mut start_cursor = self.cursor.min(chars.len());
+        while start_cursor > 0 && chars[start_cursor - 1].is_whitespace() {
+            start_cursor -= 1;
+        }
+        while start_cursor > 0 && !chars[start_cursor - 1].is_whitespace() {
+            start_cursor -= 1;
+        }
+        self.cursor = start_cursor;
+        let start = self.cursor_byte_index();
+        self.value.replace_range(start..end, "");
+    }
+
+    pub fn move_cursor_left(&mut self) {
+        self.cursor = self.cursor.saturating_sub(1);
+    }
+
+    pub fn move_cursor_right(&mut self) {
+        self.cursor = (self.cursor + 1).min(self.value.chars().count());
+    }
+
+    pub fn move_cursor_to_start(&mut self) {
+        self.cursor = 0;
+    }
+
+    pub fn move_cursor_to_end(&mut self) {
+        self.cursor = self.value.chars().count();
+    }
+
+    pub fn value_with_cursor(&self, marker: char) -> String {
+        let byte_index = self.cursor_byte_index();
+        let mut text = String::with_capacity(self.value.len() + marker.len_utf8());
+        text.push_str(&self.value[..byte_index]);
+        text.push(marker);
+        text.push_str(&self.value[byte_index..]);
+        text
+    }
+
+    pub fn display_value(&self, placeholder: &str, cursor_marker: char) -> String {
+        if self.value.is_empty() {
+            placeholder.to_string()
+        } else {
+            self.value_with_cursor(cursor_marker)
+        }
+    }
+
+    fn cursor_byte_index(&self) -> usize {
+        self.value
+            .char_indices()
+            .nth(self.cursor)
+            .map(|(index, _)| index)
+            .unwrap_or(self.value.len())
+    }
 }
 
 #[derive(Clone, Debug, Default)]
@@ -619,5 +890,108 @@ mod tests {
         assert!(state.open_value(1, false));
         assert!(!state.open_value(2, true));
         assert_eq!(state.active_focus_scope_id(), None);
+    }
+
+    #[test]
+    fn text_buffer_edits_at_cursor_with_utf8() {
+        let mut buffer = UiTextBuffer::new();
+        buffer.set_text("hello");
+
+        assert_eq!(buffer.value_with_cursor('|'), "hello|");
+        buffer.clear();
+        buffer.insert("hé");
+        buffer.move_cursor_left();
+        buffer.insert("!");
+
+        assert_eq!(buffer.as_str(), "h!é");
+        assert_eq!(buffer.value_with_cursor('|'), "h!|é");
+
+        buffer.delete_before_cursor();
+
+        assert_eq!(buffer.as_str(), "hé");
+        assert_eq!(buffer.value_with_cursor('|'), "h|é");
+
+        assert_eq!(
+            buffer.handle_key(UiKey::Home, false),
+            UiTextBufferAction::Changed
+        );
+        assert_eq!(buffer.value_with_cursor('|'), "|hé");
+        assert_eq!(
+            buffer.handle_key(UiKey::Delete, false),
+            UiTextBufferAction::Changed
+        );
+        assert_eq!(buffer.as_str(), "é");
+        assert_eq!(
+            buffer.handle_key(UiKey::End, false),
+            UiTextBufferAction::Changed
+        );
+        assert_eq!(buffer.value_with_cursor('|'), "é|");
+        assert_eq!(UiTextBuffer::new().display_value("Ask...", '|'), "Ask...");
+        assert_eq!(buffer.display_value("Ask...", '|'), "é|");
+    }
+
+    #[test]
+    fn text_buffer_reports_keyboard_actions() {
+        let mut buffer = UiTextBuffer::new();
+
+        assert_eq!(buffer.handle_text_input("a"), UiTextBufferAction::Changed);
+        assert_eq!(
+            buffer.handle_key(UiKey::Enter, true),
+            UiTextBufferAction::Changed
+        );
+        assert_eq!(buffer.as_str(), "a\n");
+        assert_eq!(
+            buffer.handle_key(UiKey::Enter, false),
+            UiTextBufferAction::Submit
+        );
+    }
+
+    #[test]
+    fn text_buffer_supports_terminal_editing_shortcuts() {
+        let ctrl = UiKeyModifiers {
+            ctrl: true,
+            ..UiKeyModifiers::default()
+        };
+        let mut buffer = UiTextBuffer::new();
+        buffer.insert("alpha beta gamma");
+
+        assert_eq!(
+            buffer.handle_key_with_modifiers(UiKey::Other(b'a' as u32), ctrl),
+            UiTextBufferAction::Changed
+        );
+        assert_eq!(buffer.value_with_cursor('|'), "|alpha beta gamma");
+        assert_eq!(
+            buffer.handle_key_with_modifiers(UiKey::Other(b'e' as u32), ctrl),
+            UiTextBufferAction::Changed
+        );
+        assert_eq!(buffer.value_with_cursor('|'), "alpha beta gamma|");
+
+        buffer.move_cursor_left();
+        buffer.move_cursor_left();
+        assert_eq!(
+            buffer.handle_key_with_modifiers(UiKey::Other(b'u' as u32), ctrl),
+            UiTextBufferAction::Changed
+        );
+        assert_eq!(buffer.value_with_cursor('|'), "|ma");
+
+        buffer.insert("delta ");
+        buffer.move_cursor_left();
+        assert_eq!(
+            buffer.handle_key_with_modifiers(UiKey::Other(b'k' as u32), ctrl),
+            UiTextBufferAction::Changed
+        );
+        assert_eq!(buffer.value_with_cursor('|'), "delta|");
+
+        buffer.insert(" beta gamma");
+        assert_eq!(
+            buffer.handle_key_with_modifiers(UiKey::Other(b'w' as u32), ctrl),
+            UiTextBufferAction::Changed
+        );
+        assert_eq!(buffer.value_with_cursor('|'), "delta beta |");
+        assert_eq!(
+            buffer.handle_key_with_modifiers(UiKey::Other(b'w' as u32), ctrl),
+            UiTextBufferAction::Changed
+        );
+        assert_eq!(buffer.value_with_cursor('|'), "delta |");
     }
 }

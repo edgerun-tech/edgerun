@@ -1482,10 +1482,10 @@ impl Terminal {
         if self.should_combine_with_prev(ch, prev_idx.map(|i| &self.cells[i])) {
             if let Some(idx) = prev_idx {
                 if debug_width_enabled() {
-                    let ch_dbg = ch.escape_default().to_string();
+                    let _ch_dbg = ch.escape_default().to_string();
                     edgerun_log::debug!(
                         "width combine: ch='{}' cursor=({}, {})",
-                        ch_dbg,
+                        _ch_dbg,
                         self.cursor_col,
                         self.cursor_row
                     );
@@ -1505,10 +1505,10 @@ impl Terminal {
             .saturating_add(1);
         if width > 1 && self.cursor_col + width > line_limit {
             if debug_width_enabled() {
-                let ch_dbg = ch.escape_default().to_string();
+                let _ch_dbg = ch.escape_default().to_string();
                 edgerun_log::debug!(
                     "width wrap: ch='{}' width={} cursor_col={} line_limit={}",
-                    ch_dbg,
+                    _ch_dbg,
                     width,
                     self.cursor_col,
                     line_limit
@@ -1521,10 +1521,10 @@ impl Terminal {
         let idx = self.cursor_row * self.cols + self.cursor_col;
         if idx < self.cells.len() {
             if debug_width_enabled() {
-                let ch_dbg = ch.escape_default().to_string();
+                let _ch_dbg = ch.escape_default().to_string();
                 edgerun_log::debug!(
                     "width put: ch='{}' width={} cursor=({}, {}) cols={}",
-                    ch_dbg,
+                    _ch_dbg,
                     width,
                     self.cursor_col,
                     self.cursor_row,
@@ -2511,8 +2511,8 @@ impl Perform for GridPerformer<'_> {
                         && let Ok(decoded) = standard_decode(encoded)
                     {
                         if let Ok(text) = String::from_utf8(decoded) {
-                            if let Err(e) = write_clipboard_text(&text) {
-                                edgerun_log::error!("Failed to write clipboard text: {}", e);
+                            if let Err(_e) = write_clipboard_text(&text) {
+                                edgerun_log::error!("Failed to write clipboard text: {}", _e);
                             }
                         }
                     }
@@ -2677,15 +2677,15 @@ impl Perform for GridPerformer<'_> {
                 let encoded = merged.get(2).copied().or_else(|| merged.get(1).copied());
                 if let Some(encoded) = encoded {
                     if encoded.is_empty() {
-                        if let Err(e) = write_clipboard_text("") {
-                            edgerun_log::error!("Failed to write clipboard text: {}", e);
+                        if let Err(_e) = write_clipboard_text("") {
+                            edgerun_log::error!("Failed to write clipboard text: {}", _e);
                         }
                     } else if let Ok(encoded) = std::str::from_utf8(encoded)
                         && let Ok(decoded) = standard_decode(encoded)
                     {
                         if let Ok(text) = String::from_utf8(decoded) {
-                            if let Err(e) = write_clipboard_text(&text) {
-                                edgerun_log::error!("Failed to write clipboard text: {}", e);
+                            if let Err(_e) = write_clipboard_text(&text) {
+                                edgerun_log::error!("Failed to write clipboard text: {}", _e);
                             }
                         }
                     }

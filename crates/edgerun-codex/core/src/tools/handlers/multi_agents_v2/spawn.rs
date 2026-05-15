@@ -52,7 +52,7 @@ impl ToolHandler for Handler {
             ..
         } = invocation;
         let arguments = function_arguments(payload)?;
-        let args: SpawnAgentArgs = parse_arguments(&arguments)?;
+        let args: SpawnAgentArgs = parse_json_arguments(&arguments)?;
         let fork_mode = args.fork_mode()?;
         let role_name = args
             .agent_type
@@ -228,8 +228,8 @@ impl ToolHandler for Handler {
     }
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Debug, FromJson)]
+#[schemars(deny_unknown_fields)]
 struct SpawnAgentArgs {
     message: String,
     task_name: String,
@@ -277,8 +277,7 @@ impl SpawnAgentArgs {
     }
 }
 
-#[derive(Debug, Serialize)]
-#[serde(untagged)]
+#[derive(Debug)]
 pub(crate) enum SpawnAgentResult {
     WithNickname {
         task_name: String,
@@ -287,6 +286,23 @@ pub(crate) enum SpawnAgentResult {
     HiddenMetadata {
         task_name: String,
     },
+}
+
+impl ToJson for SpawnAgentResult {
+    fn to_json(&self) -> JsonValue {
+        match self {
+            Self::WithNickname {
+                task_name,
+                nickname,
+            } => edgerun_json::json!({
+                "task_name": task_name,
+                "nickname": nickname,
+            }),
+            Self::HiddenMetadata { task_name } => edgerun_json::json!({
+                "task_name": task_name,
+            }),
+        }
+    }
 }
 
 impl ToolOutput for SpawnAgentResult {

@@ -113,8 +113,8 @@ async fn fork_thread_twice_drops_to_first_message() {
     // GetHistory on fork1 flushed; the file is ready.
     let fork1_items = read_rollout_items(&fork1_path);
     pretty_assertions::assert_eq!(
-        edgerun_json::to_serde_value(&fork1_items).unwrap(),
-        edgerun_json::to_serde_value(&expected_after_first).unwrap()
+        edgerun_json::to_value(&&fork1_items),
+        edgerun_json::to_value(&&expected_after_first)
     );
 
     // Fork again with n=0 → drops the (new) last user message, leaving only the first.
@@ -144,8 +144,8 @@ async fn fork_thread_twice_drops_to_first_message() {
     let expected_after_second: Vec<RolloutItem> = fork1_items[..cut_last_on_fork1].to_vec();
     let fork2_items = read_rollout_items(&fork2_path);
     pretty_assertions::assert_eq!(
-        edgerun_json::to_serde_value(&fork2_items).unwrap(),
-        edgerun_json::to_serde_value(&expected_after_second).unwrap()
+        edgerun_json::to_value(&&fork2_items),
+        edgerun_json::to_value(&&expected_after_second)
     );
 }
 
@@ -210,11 +210,11 @@ async fn fork_thread_from_history_does_not_require_source_rollout_path() {
     let forked_items = read_rollout_items(&forked_path);
     let forked_items = forked_items
         .iter()
-        .map(|item| edgerun_json::to_serde_value(item).unwrap())
+        .map(|item| edgerun_json::to_value(&item))
         .collect::<Vec<_>>();
     let source_items = source_items
         .iter()
-        .map(|item| edgerun_json::to_serde_value(item).unwrap())
+        .map(|item| edgerun_json::to_value(&item))
         .collect::<Vec<_>>();
     assert!(
         forked_items.starts_with(&source_items),
@@ -232,11 +232,11 @@ fn read_rollout_items(path: &std::path::Path) -> Vec<RolloutItem> {
         if line.trim().is_empty() {
             continue;
         }
-        let v: edgerun_json::Value = match edgerun_json::from_serde_str(line) {
+        let v: edgerun_json::Value = match edgerun_json::from_json_str(line) {
             Ok(value) => value,
             Err(err) => panic!("failed to parse rollout JSON line `{line}`: {err}"),
         };
-        let rl: RolloutLine = match edgerun_json::from_serde_value(v) {
+        let rl: RolloutLine = match edgerun_json::from_json_value(v) {
             Ok(line) => line,
             Err(err) => panic!("failed to parse rollout line `{line}`: {err}"),
         };

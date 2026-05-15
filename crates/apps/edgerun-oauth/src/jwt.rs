@@ -315,11 +315,8 @@ impl IdToken {
                         "expected ES256 verifier but got HMAC".into(),
                     ));
                 };
-                use edgerun_crypto::p256::ecdsa::signature::Verifier;
-                let sig = edgerun_crypto::p256::ecdsa::Signature::from_der(&signature_bytes)
-                    .map_err(|e| OAuthError::JwtError(format!("ES256 DER parse: {e}")))?;
                 verifying_key
-                    .verify(signing_input.as_bytes(), &sig)
+                    .verify_sha256_fixed(signing_input.as_bytes(), &signature_bytes)
                     .map_err(|e| OAuthError::JwtError(format!("ES256 verification failed: {e}")))?;
             }
             "RS256" => {
@@ -361,7 +358,7 @@ pub enum JwtVerifier {
     Hmac { key: Vec<u8> },
     /// ECDSA P-256 SHA-256 verification (ES256).
     Es256 {
-        verifying_key: edgerun_crypto::p256::ecdsa::VerifyingKey,
+        verifying_key: edgerun_crypto::P256VerifyingKey,
     },
     /// RSA PKCS#1 v1.5 SHA-256 verification (RS256).
     Rs256 {
@@ -377,38 +374,21 @@ impl JwtVerifier {
 
     /// Create an ES256 verifier from a raw P-256 public key (uncompressed, 65 bytes starting with 0x04).
     pub fn es256_from_raw_bytes(bytes: &[u8]) -> OAuthResult<Self> {
-        use edgerun_crypto::elliptic_curve::sec1::FromEncodedPoint;
-        use edgerun_crypto::p256::ecdsa::VerifyingKey;
-        use edgerun_crypto::p256::{EncodedPoint, PublicKey};
-
         if bytes.len() != 65 || bytes[0] != 0x04 {
             return Err(OAuthError::JwtError(
                 "ES256 public key must be 65 bytes uncompressed starting with 0x04".into(),
             ));
         }
 
-        let x = &bytes[1..33];
-        let y = &bytes[33..65];
-        let point = EncodedPoint::from_affine_coordinates(
-            edgerun_crypto::p256::FieldBytes::from_slice(x),
-            edgerun_crypto::p256::FieldBytes::from_slice(y),
-            false,
-        );
-
-        let pub_key = PublicKey::from_encoded_point(&point)
-            .into_option()
-            .ok_or_else(|| OAuthError::JwtError("ES256 point decode failed".into()))?;
-        let verifying_key = VerifyingKey::from(&pub_key);
+        let verifying_key = edgerun_crypto::P256VerifyingKey::from_sec1_bytes(bytes)
+            .map_err(|_| OAuthError::JwtError("ES256 point decode failed".into()))?;
 
         Ok(JwtVerifier::Es256 { verifying_key })
     }
 
     /// Create an ES256 verifier from a PEM-encoded P-256 public key.
     pub fn es256_from_pem(pem: &str) -> OAuthResult<Self> {
-        use edgerun_crypto::elliptic_curve::pkcs8::DecodePublicKey;
-        use edgerun_crypto::p256::ecdsa::VerifyingKey;
-
-        let verifying_key = VerifyingKey::from_public_key_pem(pem)
+        let verifying_key = edgerun_crypto::P256VerifyingKey::from_public_key_pem(pem)
             .map_err(|e| OAuthError::JwtError(format!("ES256 PEM parse: {e}")))?;
 
         Ok(JwtVerifier::Es256 { verifying_key })
@@ -416,8 +396,8 @@ impl JwtVerifier {
 
     /// Create an RS256 verifier from a PEM-encoded RSA public key.
     pub fn rs256_from_pem(pem: &str) -> OAuthResult<Self> {
-        use edgerun_crypto::rsa::pkcs8::DecodePublicKey;
         use edgerun_crypto::rsa::RsaPublicKey;
+        use edgerun_crypto::rsa::pkcs8::DecodePublicKey;
 
         let verifying_key = RsaPublicKey::from_public_key_pem(pem)
             .map_err(|e| OAuthError::JwtError(format!("RS256 PEM parse: {e}")))?;
@@ -427,8 +407,8 @@ impl JwtVerifier {
 
     /// Create an RS256 verifier from DER-encoded RSA public key (PKCS#1 or PKCS#8).
     pub fn rs256_from_der(der: &[u8]) -> OAuthResult<Self> {
-        use edgerun_crypto::rsa::pkcs8::DecodePublicKey;
         use edgerun_crypto::rsa::RsaPublicKey;
+        use edgerun_crypto::rsa::pkcs8::DecodePublicKey;
 
         let verifying_key = RsaPublicKey::from_public_key_der(der)
             .map_err(|e| OAuthError::JwtError(format!("RS256 DER parse: {e}")))?;

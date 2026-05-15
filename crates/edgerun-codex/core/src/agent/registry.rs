@@ -214,7 +214,10 @@ impl AgentRegistry {
                 .map(|name| format_agent_nickname(name, active_agents.nickname_reset_count))
                 .filter(|name| !active_agents.used_agent_nicknames.contains(name))
                 .collect();
-            if let Some(name) = edgerun_random::choose(&available_names) {
+            if let Some(name) = edgerun_crypto::random_choice(&available_names)
+                .ok()
+                .flatten()
+            {
                 name.clone()
             } else {
                 active_agents.used_agent_nicknames.clear();
@@ -227,7 +230,7 @@ impl AgentRegistry {
                     );
                 }
                 format_agent_nickname(
-                    edgerun_random::choose(names)?,
+                    edgerun_crypto::random_choice(names).ok().flatten()?,
                     active_agents.nickname_reset_count,
                 )
             }

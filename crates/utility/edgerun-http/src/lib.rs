@@ -306,6 +306,10 @@ impl HeaderMap {
         Self::new()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+
     pub fn insert<K: IntoHeaderName>(&mut self, key: K, value: HeaderValue) -> Option<HeaderValue> {
         self.inner.insert(key.into_header_name(), value)
     }

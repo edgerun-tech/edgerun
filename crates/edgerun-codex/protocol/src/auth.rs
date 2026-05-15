@@ -3,11 +3,8 @@ use edgerun_json::FromJson;
 use edgerun_json::JsonValue;
 use edgerun_json::JsonValueError;
 use edgerun_json::ToJson;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(untagged)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PlanType {
     Known(KnownPlan),
     Unknown(String),
@@ -50,8 +47,7 @@ impl FromJson for PlanType {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KnownPlan {
     Free,
     Go,
@@ -59,14 +55,10 @@ pub enum KnownPlan {
     Pro,
     ProLite,
     Team,
-    #[serde(rename = "self_serve_business_usage_based")]
     SelfServeBusinessUsageBased,
     Business,
-    #[serde(rename = "enterprise_cbp_usage_based")]
     EnterpriseCbpUsageBased,
-    #[serde(alias = "hc")]
     Enterprise,
-    #[serde(alias = "education")]
     Edu,
 }
 
@@ -167,11 +159,11 @@ mod tests {
     #[test]
     fn plan_type_deserializes_raw_aliases() {
         assert_eq!(
-            edgerun_json::from_str::<PlanType>("\"hc\"").expect("hc should deserialize"),
+            edgerun_json::from_json_str::<PlanType>("\"hc\"").expect("hc should deserialize"),
             PlanType::Known(KnownPlan::Enterprise)
         );
         assert_eq!(
-            edgerun_json::from_str::<PlanType>("\"education\"")
+            edgerun_json::from_json_str::<PlanType>("\"education\"")
                 .expect("education should deserialize"),
             PlanType::Known(KnownPlan::Edu)
         );

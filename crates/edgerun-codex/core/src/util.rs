@@ -87,7 +87,7 @@ pub(crate) fn emit_feedback_auth_recovery_tags(
 pub fn backoff(attempt: u64) -> Duration {
     let exp = BACKOFF_FACTOR.powi(attempt.saturating_sub(1) as i32);
     let base = (INITIAL_DELAY_MS as f64 * exp) as u64;
-    let jitter = edgerun_random::f64_range(0.9..1.1);
+    let jitter = edgerun_crypto::random_f64_range(0.9..1.1).unwrap_or(1.0);
     Duration::from_millis((base as f64 * jitter) as u64)
 }
 

@@ -9,14 +9,9 @@ pub mod absolute_path {
     use edgerun_json::JsonValueError;
     use edgerun_json::ToJson;
     use edgerun_json::Value;
-    use edgerun_serde::Deserialize;
-    use edgerun_serde::Deserializer;
-    use edgerun_serde::Serialize;
-    use edgerun_serde::de::Error as _;
     use schemars::JsonSchema;
-    use ts_rs::TS;
 
-    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, JsonSchema, TS)]
+    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, JsonSchema)]
     pub struct AbsolutePathBuf(PathBuf);
 
     impl AbsolutePathBuf {
@@ -128,16 +123,6 @@ pub mod absolute_path {
         }
     }
 
-    impl<'de> Deserialize<'de> for AbsolutePathBuf {
-        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where
-            D: Deserializer<'de>,
-        {
-            let path = PathBuf::deserialize(deserializer)?;
-            Self::from_absolute_path(path).map_err(D::Error::custom)
-        }
-    }
-
     impl ToJson for AbsolutePathBuf {
         fn to_json(&self) -> Value {
             self.to_string_lossy().into_owned().to_json()
@@ -147,17 +132,20 @@ pub mod absolute_path {
     impl FromJson for AbsolutePathBuf {
         fn from_json(value: Value) -> Result<Self, JsonValueError> {
             let path = String::from_json(value)?;
-            Self::from_absolute_path(PathBuf::from(path))
-                .map_err(|err| JsonValueError::WrongType(err.to_string()))
+            Self::from_absolute_path(PathBuf::from(path)).map_err(|err| {
+                if err.kind() == std::io::ErrorKind::InvalidInput {
+                    JsonValueError::WrongType(
+                        "AbsolutePathBuf deserialized without a base path".to_string(),
+                    )
+                } else {
+                    JsonValueError::WrongType(err.to_string())
+                }
+            })
         }
     }
 
     pub fn canonicalize_preserving_symlinks(path: &Path) -> std::io::Result<PathBuf> {
-        if path.exists() {
-            std::fs::canonicalize(path)
-        } else {
-            Ok(AbsolutePathBuf::from_absolute_path(path)?.into_path_buf())
-        }
+        Ok(AbsolutePathBuf::from_absolute_path(path)?.into_path_buf())
     }
 
     fn normalize(path: &Path) -> PathBuf {
@@ -172,6 +160,25 @@ pub mod absolute_path {
             }
         }
         out
+    }
+
+    pub mod test_support {
+        use super::AbsolutePathBuf;
+        use std::path::PathBuf;
+
+        pub trait PathBufExt {
+            fn abs(self) -> AbsolutePathBuf;
+        }
+
+        impl PathBufExt for PathBuf {
+            fn abs(self) -> AbsolutePathBuf {
+                AbsolutePathBuf::from_absolute_path(self).expect("absolute test path")
+            }
+        }
+
+        pub fn test_path_buf(path: &str) -> PathBuf {
+            PathBuf::from(path)
+        }
     }
 }
 
@@ -286,12 +293,19 @@ pub mod image {
             Some("jpg" | "jpeg") => "image/jpeg",
             Some("webp") => "image/webp",
             Some("gif") => "image/gif",
+            Some("svg") => "image/svg+xml",
+            Some("json") => "application/json",
             _ => {
                 return Err(ImageProcessingError::UnsupportedImageFormat {
                     mime: "unknown".to_string(),
                 });
             }
         };
+        if !mime.starts_with("image/") || mime == "image/svg+xml" {
+            return Err(ImageProcessingError::UnsupportedImageFormat {
+                mime: mime.to_string(),
+            });
+        }
         Ok(EncodedImage {
             bytes: file_bytes,
             mime: mime.to_string(),
@@ -300,18 +314,16 @@ pub mod image {
 }
 
 pub mod network_proxy {
-    use edgerun_serde::Deserialize;
-
-    #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-    #[serde(rename_all = "snake_case")]
+    #[derive(Debug, Clone, PartialEq, Eq, edgerun_json::FromJson)]
+    #[schemars(rename_all = "snake_case")]
     pub enum NetworkDecisionSource {
         Decider,
         User,
         Config,
     }
 
-    #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-    #[serde(rename_all = "snake_case")]
+    #[derive(Debug, Clone, PartialEq, Eq, edgerun_json::FromJson)]
+    #[schemars(rename_all = "snake_case")]
     pub enum NetworkPolicyDecision {
         Allow,
         Deny,

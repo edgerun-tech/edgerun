@@ -39,16 +39,6 @@ pub enum SandboxErr {
         network_policy_decision: Option<NetworkPolicyDecisionPayload>,
     },
 
-    /// Error from linux seccomp filter setup
-    #[cfg(target_os = "linux")]
-    #[error("seccomp setup error")]
-    SeccompInstall(#[from] seccompiler::Error),
-
-    /// Error from linux seccomp backend
-    #[cfg(target_os = "linux")]
-    #[error("seccomp backend error")]
-    SeccompBackend(#[from] seccompiler::BackendError),
-
     /// Command timed out
     #[error("command timed out")]
     Timeout { output: Box<ExecToolCallOutput> },
@@ -56,10 +46,6 @@ pub enum SandboxErr {
     /// Command was killed by a signal
     #[error("command was killed by a signal")]
     Signal(i32),
-
-    /// Error from linux landlock
-    #[error("Landlock was not able to fully enforce all sandbox rules")]
-    LandlockRestrict,
 }
 
 #[derive(Error, Debug)]
@@ -132,8 +118,6 @@ pub enum CodexErr {
     /// Sandbox error
     #[error("sandbox error: {0}")]
     Sandbox(#[from] SandboxErr),
-    #[error("codex-linux-sandbox was required but not provided")]
-    LandlockSandboxExecutableNotProvided,
     #[error("unsupported operation: {0}")]
     UnsupportedOperation(String),
     #[error("{0}")]
@@ -147,12 +131,6 @@ pub enum CodexErr {
     Io(#[from] io::Error),
     #[error(transparent)]
     Json(#[from] edgerun_json::JsonError),
-    #[cfg(target_os = "linux")]
-    #[error(transparent)]
-    LandlockRuleset(#[from] landlock::RulesetError),
-    #[cfg(target_os = "linux")]
-    #[error(transparent)]
-    LandlockPathFd(#[from] landlock::PathFdError),
     #[error(transparent)]
     TokioJoin(#[from] JoinError),
     #[error("{0}")]
@@ -179,7 +157,6 @@ impl CodexErr {
             | CodexErr::RefreshTokenFailed(_)
             | CodexErr::UnsupportedOperation(_)
             | CodexErr::Sandbox(_)
-            | CodexErr::LandlockSandboxExecutableNotProvided
             | CodexErr::RetryLimit(_)
             | CodexErr::ContextWindowExceeded
             | CodexErr::ThreadNotFound(_)
@@ -199,8 +176,6 @@ impl CodexErr {
             | CodexErr::Io(_)
             | CodexErr::Json(_)
             | CodexErr::TokioJoin(_) => true,
-            #[cfg(target_os = "linux")]
-            CodexErr::LandlockRuleset(_) | CodexErr::LandlockPathFd(_) => false,
         }
     }
 

@@ -1,116 +1,142 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "definitions": {
-    "CommandExecutionApprovalDecision": {
-      "oneOf": [
-        {
-          "description": "User approved the command.",
-          "enum": [
-            "accept"
-          ],
-          "type": "string"
-        },
-        {
-          "description": "User approved the command and future prompts in the same session-scoped approval cache should run without prompting.",
-          "enum": [
-            "acceptForSession"
-          ],
-          "type": "string"
-        },
-        {
-          "additionalProperties": false,
-          "description": "User approved the command, and wants to apply the proposed execpolicy amendment so future matching commands can run without prompting.",
-          "properties": {
-            "acceptWithExecpolicyAmendment": {
-              "properties": {
-                "execpolicy_amendment": {
-                  "items": {
-                    "type": "string"
-                  },
-                  "type": "array"
-                }
-              },
-              "required": [
-                "execpolicy_amendment"
-              ],
-              "type": "object"
-            }
-          },
-          "required": [
-            "acceptWithExecpolicyAmendment"
-          ],
-          "title": "AcceptWithExecpolicyAmendmentCommandExecutionApprovalDecision",
-          "type": "object"
-        },
-        {
-          "additionalProperties": false,
-          "description": "User chose a persistent network policy rule (allow/deny) for this host.",
-          "properties": {
-            "applyNetworkPolicyAmendment": {
-              "properties": {
-                "network_policy_amendment": {
-                  "$ref": "#/definitions/NetworkPolicyAmendment"
-                }
-              },
-              "required": [
-                "network_policy_amendment"
-              ],
-              "type": "object"
-            }
-          },
-          "required": [
-            "applyNetworkPolicyAmendment"
-          ],
-          "title": "ApplyNetworkPolicyAmendmentCommandExecutionApprovalDecision",
-          "type": "object"
-        },
-        {
-          "description": "User denied the command. The agent will continue the turn.",
-          "enum": [
-            "decline"
-          ],
-          "type": "string"
-        },
-        {
-          "description": "User denied the command. The turn will also be immediately interrupted.",
-          "enum": [
-            "cancel"
-          ],
-          "type": "string"
-        }
-      ]
-    },
-    "NetworkPolicyAmendment": {
-      "properties": {
-        "action": {
-          "$ref": "#/definitions/NetworkPolicyRuleAction"
-        },
-        "host": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "action",
-        "host"
-      ],
-      "type": "object"
-    },
-    "NetworkPolicyRuleAction": {
-      "enum": [
-        "allow",
-        "deny"
-      ],
-      "type": "string"
-    }
-  },
+  "title": "CommandExecutionRequestApprovalResponse",
+  "type": "object",
   "properties": {
     "decision": {
-      "$ref": "#/definitions/CommandExecutionApprovalDecision"
+      "title": "CommandExecutionApprovalDecision",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "Accept",
+              "title": "AcceptCommandExecutionRequestApprovalResponseType"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false,
+          "title": "AcceptCommandExecutionRequestApprovalResponse"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "AcceptForSession",
+              "title": "AcceptForSessionCommandExecutionRequestApprovalResponseType"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false,
+          "title": "AcceptForSessionCommandExecutionRequestApprovalResponse"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "execpolicyAmendment": {
+              "title": "ExecPolicyAmendment",
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              },
+              "required": [
+                "command"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "AcceptWithExecpolicyAmendment",
+              "title": "AcceptWithExecpolicyAmendmentCommandExecutionRequestApprovalResponseType"
+            }
+          },
+          "required": [
+            "type",
+            "execpolicyAmendment"
+          ],
+          "additionalProperties": false,
+          "title": "AcceptWithExecpolicyAmendmentCommandExecutionRequestApprovalResponse"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "networkPolicyAmendment": {
+              "title": "NetworkPolicyAmendment",
+              "type": "object",
+              "properties": {
+                "action": {
+                  "title": "NetworkPolicyRuleAction",
+                  "type": "string",
+                  "enum": [
+                    "Allow",
+                    "Deny"
+                  ]
+                },
+                "host": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "host",
+                "action"
+              ]
+            },
+            "type": {
+              "type": "string",
+              "const": "ApplyNetworkPolicyAmendment",
+              "title": "ApplyNetworkPolicyAmendmentCommandExecutionRequestApprovalResponseType"
+            }
+          },
+          "required": [
+            "type",
+            "networkPolicyAmendment"
+          ],
+          "additionalProperties": false,
+          "title": "ApplyNetworkPolicyAmendmentCommandExecutionRequestApprovalResponse"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "Decline",
+              "title": "DeclineCommandExecutionRequestApprovalResponseType"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false,
+          "title": "DeclineCommandExecutionRequestApprovalResponse"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "Cancel",
+              "title": "CancelCommandExecutionRequestApprovalResponseType"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false,
+          "title": "CancelCommandExecutionRequestApprovalResponse"
+        }
+      ]
     }
   },
   "required": [
     "decision"
-  ],
-  "title": "CommandExecutionRequestApprovalResponse",
-  "type": "object"
+  ]
 }

@@ -54,6 +54,7 @@ var/bin/
 var/ci/
 var/go-build-cache/
 var/coverage/
+.edgerun/
 /release/
 
 # Compiled binaries and archives
@@ -87,6 +88,8 @@ rfc*.html
 docs/*_spec.html
 docs/*.pdf
 QWEN.md
+/apk-analysis/
+/tmp/
 
 # Embedded git repos (cloned test/spec repos)
 specs/h1spec/

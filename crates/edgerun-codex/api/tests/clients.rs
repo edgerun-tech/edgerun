@@ -71,20 +71,45 @@ impl RecordingTransport {
     }
 }
 
-#[async_trait]
 impl HttpTransport for RecordingTransport {
-    async fn execute(&self, _req: Request) -> Result<Response, TransportError> {
-        Err(TransportError::Build("execute should not run".to_string()))
+    fn execute<'async_trait>(
+        &'async_trait self,
+        _req: Request,
+    ) -> core::pin::Pin<
+        Box<
+            dyn core::future::Future<Output = Result<Response, TransportError>>
+                + Send
+                + 'async_trait,
+        >,
+    >
+    where
+        Self: 'async_trait,
+    {
+        Box::pin(async move { Err(TransportError::Build("execute should not run".to_string())) })
     }
 
-    async fn stream(&self, req: Request) -> Result<StreamResponse, TransportError> {
-        self.state.record(req);
+    fn stream<'async_trait>(
+        &'async_trait self,
+        req: Request,
+    ) -> core::pin::Pin<
+        Box<
+            dyn core::future::Future<Output = Result<StreamResponse, TransportError>>
+                + Send
+                + 'async_trait,
+        >,
+    >
+    where
+        Self: 'async_trait,
+    {
+        Box::pin(async move {
+            self.state.record(req);
 
-        let stream = edgerun_futures::stream::iter(Vec::<Result<Bytes, TransportError>>::new());
-        Ok(StreamResponse {
-            status: StatusCode::OK,
-            headers: HeaderMap::new(),
-            bytes: Box::pin(stream),
+            let stream = edgerun_futures::stream::iter(Vec::<Result<Bytes, TransportError>>::new());
+            Ok(StreamResponse {
+                status: StatusCode::OK,
+                headers: HeaderMap::new(),
+                bytes: Box::pin(stream),
+            })
         })
     }
 }
@@ -219,34 +244,59 @@ impl AuthProvider for FailsOnceAuth {
     }
 }
 
-#[async_trait]
 impl HttpTransport for FlakyTransport {
-    async fn execute(&self, _req: Request) -> Result<Response, TransportError> {
-        Err(TransportError::Build("execute should not run".to_string()))
+    fn execute<'async_trait>(
+        &'async_trait self,
+        _req: Request,
+    ) -> core::pin::Pin<
+        Box<
+            dyn core::future::Future<Output = Result<Response, TransportError>>
+                + Send
+                + 'async_trait,
+        >,
+    >
+    where
+        Self: 'async_trait,
+    {
+        Box::pin(async move { Err(TransportError::Build("execute should not run".to_string())) })
     }
 
-    async fn stream(&self, _req: Request) -> Result<StreamResponse, TransportError> {
-        let mut attempts = self
-            .state
-            .lock()
-            .unwrap_or_else(|err| panic!("mutex poisoned: {err}"));
-        *attempts += 1;
+    fn stream<'async_trait>(
+        &'async_trait self,
+        _req: Request,
+    ) -> core::pin::Pin<
+        Box<
+            dyn core::future::Future<Output = Result<StreamResponse, TransportError>>
+                + Send
+                + 'async_trait,
+        >,
+    >
+    where
+        Self: 'async_trait,
+    {
+        Box::pin(async move {
+            let mut attempts = self
+                .state
+                .lock()
+                .unwrap_or_else(|err| panic!("mutex poisoned: {err}"));
+            *attempts += 1;
 
-        if *attempts == 1 {
-            return Err(TransportError::Network("first attempt fails".to_string()));
-        }
+            if *attempts == 1 {
+                return Err(TransportError::Network("first attempt fails".to_string()));
+            }
 
-        let stream = edgerun_futures::stream::iter(vec![Ok(Bytes::from(
-            r#"event: message
+            let stream = edgerun_futures::stream::iter(vec![Ok(Bytes::from(
+                r#"event: message
 data: {"id":"resp-1","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hi"}]}]}
 
 "#,
-        ))]);
+            ))]);
 
-        Ok(StreamResponse {
-            status: StatusCode::OK,
-            headers: HeaderMap::new(),
-            bytes: Box::pin(stream),
+            Ok(StreamResponse {
+                status: StatusCode::OK,
+                headers: HeaderMap::new(),
+                bytes: Box::pin(stream),
+            })
         })
     }
 }

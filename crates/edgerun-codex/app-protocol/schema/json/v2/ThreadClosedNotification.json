@@ -1,5 +1,6 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ThreadClosedNotification",
+  "type": "object",
   "properties": {
     "threadId": {
       "type": "string"
@@ -7,7 +8,5 @@
   },
   "required": [
     "threadId"
-  ],
-  "title": "ThreadClosedNotification",
-  "type": "object"
+  ]
 }

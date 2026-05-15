@@ -12,7 +12,7 @@ use edgerun_protocols::core_protocol::protocol::edgerun_wallet_v0::{
     Order, PaymentRequest, Quote, QuoteRequest, Receipt,
 };
 use edgerun_protocols::core_protocol::protocol::{
-    command_envelope, AppIntent, CommandEnvelope, IdentityRef, NodeRef, Timestamp,
+    AppIntent, CommandEnvelope, IdentityRef, NodeRef, Timestamp, command_envelope,
 };
 
 #[derive(Clone, Debug, PartialEq)]

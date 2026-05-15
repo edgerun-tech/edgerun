@@ -104,7 +104,7 @@ fn network_approval_context_maps_http_https_and_socks_protocols() {
 
 #[test]
 fn network_policy_decision_payload_deserializes_proxy_protocol_aliases() {
-    let payload: NetworkPolicyDecisionPayload = edgerun_json::from_serde_str(
+    let payload: NetworkPolicyDecisionPayload = edgerun_json::from_json_str(
         r#"{
                 "decision":"ask",
                 "source":"decider",
@@ -117,7 +117,7 @@ fn network_policy_decision_payload_deserializes_proxy_protocol_aliases() {
     .expect("payload should deserialize");
     assert_eq!(payload.protocol, Some(NetworkApprovalProtocol::Https));
 
-    let payload: NetworkPolicyDecisionPayload = edgerun_json::from_serde_str(
+    let payload: NetworkPolicyDecisionPayload = edgerun_json::from_json_str(
         r#"{
                 "decision":"ask",
                 "source":"decider",

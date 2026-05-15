@@ -27,12 +27,6 @@ use core::{
 #[cfg(feature = "p256_ecdsa_der")]
 use {crate::ecdsa_core::der, core::ops::Add};
 
-#[cfg(feature = "p256_ecdsa_pem")]
-use {
-    crate::elliptic_curve::pkcs8::{DecodePrivateKey, EncodePrivateKey, SecretDocument},
-    core::str::FromStr,
-};
-
 #[cfg(feature = "p256_ecdsa_pkcs8")]
 use crate::{
     der::AnyRef,
@@ -605,35 +599,5 @@ where
 
     fn try_from(private_key_info: crate::pkcs8::PrivateKeyInfo<'_>) -> crate::pkcs8::Result<Self> {
         SecretKey::try_from(private_key_info).map(Into::into)
-    }
-}
-
-#[cfg(feature = "p256_ecdsa_pem")]
-impl<C> EncodePrivateKey for SigningKey<C>
-where
-    C: AssociatedOid + PrimeCurve + CurveArithmetic,
-    AffinePoint<C>: FromEncodedPoint<C> + ToEncodedPoint<C>,
-    FieldBytesSize<C>: sec1::ModulusSize,
-    Scalar<C>: Invert<Output = CtOption<Scalar<C>>> + SignPrimitive<C>,
-    SignatureSize<C>: ArrayLength<u8>,
-{
-    fn to_pkcs8_der(&self) -> crate::pkcs8::Result<SecretDocument> {
-        SecretKey::from(self.secret_scalar).to_pkcs8_der()
-    }
-}
-
-#[cfg(feature = "p256_ecdsa_pem")]
-impl<C> FromStr for SigningKey<C>
-where
-    C: PrimeCurve + AssociatedOid + CurveArithmetic,
-    AffinePoint<C>: FromEncodedPoint<C> + ToEncodedPoint<C>,
-    FieldBytesSize<C>: sec1::ModulusSize,
-    Scalar<C>: Invert<Output = CtOption<Scalar<C>>> + SignPrimitive<C>,
-    SignatureSize<C>: ArrayLength<u8>,
-{
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self> {
-        Self::from_pkcs8_pem(s).map_err(|_| Error::new())
     }
 }

@@ -1,6 +1,5 @@
 //! Turn-scoped state and active turn metadata scaffolding.
 
-use codex_sandboxing::policy_transforms::merge_permission_profiles;
 use indexmap::IndexMap;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -11,17 +10,13 @@ use edgerun_tokio_util::task::AbortOnDropHandle;
 
 use codex_protocol::dynamic_tools::DynamicToolResponse;
 use codex_protocol::models::ResponseInputItem;
-use codex_protocol::request_permissions::RequestPermissionProfile;
-use codex_protocol::request_permissions::RequestPermissionsResponse;
 use codex_protocol::request_user_input::RequestUserInputResponse;
 use codex_rmcp_client::ElicitationResponse;
-use codex_utils_absolute_path::AbsolutePathBuf;
 use rmcp::model::RequestId;
 use edgerun_tokio::sync::oneshot;
 
 use crate::session::turn_context::TurnContext;
 use crate::tasks::AnySessionTask;
-use codex_protocol::models::AdditionalPermissionProfile;
 use codex_protocol::protocol::ReviewDecision;
 use codex_protocol::protocol::TokenUsage;
 
@@ -109,23 +104,15 @@ impl ActiveTurn {
 #[derive(Default)]
 pub(crate) struct TurnState {
     pending_approvals: HashMap<String, oneshot::Sender<ReviewDecision>>,
-    pending_request_permissions: HashMap<String, PendingRequestPermissions>,
     pending_user_input: HashMap<String, oneshot::Sender<RequestUserInputResponse>>,
     pending_elicitations: HashMap<(String, RequestId), oneshot::Sender<ElicitationResponse>>,
     pending_dynamic_tools: HashMap<String, oneshot::Sender<DynamicToolResponse>>,
     pending_input: Vec<ResponseInputItem>,
     mailbox_delivery_phase: MailboxDeliveryPhase,
-    granted_permissions: Option<AdditionalPermissionProfile>,
     strict_auto_review_enabled: bool,
     pub(crate) tool_calls: u64,
     pub(crate) has_memory_citation: bool,
     pub(crate) token_usage_at_turn_start: TokenUsage,
-}
-
-pub(crate) struct PendingRequestPermissions {
-    pub(crate) tx_response: oneshot::Sender<RequestPermissionsResponse>,
-    pub(crate) requested_permissions: RequestPermissionProfile,
-    pub(crate) cwd: AbsolutePathBuf,
 }
 
 impl TurnState {
@@ -146,27 +133,10 @@ impl TurnState {
 
     pub(crate) fn clear_pending(&mut self) {
         self.pending_approvals.clear();
-        self.pending_request_permissions.clear();
         self.pending_user_input.clear();
         self.pending_elicitations.clear();
         self.pending_dynamic_tools.clear();
         self.pending_input.clear();
-    }
-
-    pub(crate) fn insert_pending_request_permissions(
-        &mut self,
-        key: String,
-        pending_request_permissions: PendingRequestPermissions,
-    ) -> Option<PendingRequestPermissions> {
-        self.pending_request_permissions
-            .insert(key, pending_request_permissions)
-    }
-
-    pub(crate) fn remove_pending_request_permissions(
-        &mut self,
-        key: &str,
-    ) -> Option<PendingRequestPermissions> {
-        self.pending_request_permissions.remove(key)
     }
 
     pub(crate) fn insert_pending_user_input(
@@ -255,15 +225,6 @@ impl TurnState {
 
     pub(crate) fn set_mailbox_delivery_phase(&mut self, phase: MailboxDeliveryPhase) {
         self.mailbox_delivery_phase = phase;
-    }
-
-    pub(crate) fn record_granted_permissions(&mut self, permissions: AdditionalPermissionProfile) {
-        self.granted_permissions =
-            merge_permission_profiles(self.granted_permissions.as_ref(), Some(&permissions));
-    }
-
-    pub(crate) fn granted_permissions(&self) -> Option<AdditionalPermissionProfile> {
-        self.granted_permissions.clone()
     }
 
     pub(crate) fn enable_strict_auto_review(&mut self) {

@@ -129,15 +129,15 @@ pub use client::{DeviceFlowCallback, OAuthClient};
 pub use discovery::{Jwk, JwksDocument, OidcDiscoveryDocument};
 pub use edgerun_encoding::base64::{base64url_decode, base64url_encode, base64url_nopad_encode};
 pub use errors::{DeviceError, OAuthError};
-pub use jwt::{verifier_from_jwk, IdToken, JwtHeader, JwtPayload, JwtVerifier};
+pub use jwt::{IdToken, JwtHeader, JwtPayload, JwtVerifier, verifier_from_jwk};
 pub use oauth_client::{AutoRefreshMiddleware, BearerTokenMiddleware, OAuthClientBuilder};
 pub use pkce::PkcePair;
-pub use token_store::{default_token_path, TokenStore};
+pub use token_store::{TokenStore, default_token_path};
 
 // Re-export edgerun-node http middleware types for convenience
 pub use edgerun_node::http::client_middleware::{
-    client_middleware_fn, Chain as ClientChain, Client, ClientExtensions, ClientMiddleware,
-    ClientNext, ClientRequest, ClientTransport,
+    Chain as ClientChain, Client, ClientExtensions, ClientMiddleware, ClientNext, ClientRequest,
+    ClientTransport, client_middleware_fn,
 };
 pub use types::{
     ClientConfig, Credentials, DeviceAuthorizationRequest, DeviceAuthorizationResponse, GrantType,

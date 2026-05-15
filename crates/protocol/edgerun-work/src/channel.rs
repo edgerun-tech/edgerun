@@ -1,10 +1,8 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use rkyv::{Archive, Deserialize, Serialize};
-
 use crate::protocol::{
-    Hash, NodeId, NodeIdentity, WORK_WIRE_ABI_VERSION, WorkPacket, WorkSignature,
+    Hash, NodeId, NodeIdentity, WorkPacket, WorkSignature, WORK_WIRE_ABI_VERSION,
 };
 
 pub const CHANNEL_KIND_MEMORY: u16 = 1;
@@ -19,8 +17,7 @@ pub const CHANNEL_KIND_WEBTRANSPORT: u16 = 9;
 
 pub type ChannelId = [u8; 32];
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ChannelEndpoint {
     pub abi_version: u16,
     pub channel_id: ChannelId,
@@ -41,8 +38,7 @@ impl ChannelEndpoint {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 /// Runtime route binding installed by admission/runtime state.
 ///
 /// This is derived state, not a signed node claim. Work authority still comes
@@ -57,8 +53,7 @@ pub struct RouteBinding {
     pub valid_until_unix_ms: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ChannelEnvelope {
     pub abi_version: u16,
     pub channel_id: ChannelId,
@@ -108,8 +103,7 @@ impl ChannelEnvelope {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ChannelProof {
     pub abi_version: u16,
     pub channel_id: ChannelId,

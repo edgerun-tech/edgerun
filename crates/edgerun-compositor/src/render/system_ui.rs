@@ -33,7 +33,13 @@ pub fn draw_system_ui_overlay(pixels: &mut [u8], width: u32, height: u32, pitch:
     painter.rect_alpha(Rect::new(0, 0, width, 84), Color::rgba(0, 0, 0, 72));
     painter.shadow_card(panel, theme);
 
-    painter.text(panel.x + 20, panel.y + 18, "EdgeRun", theme.text, TextSize::Hero);
+    painter.text(
+        panel.x + 20,
+        panel.y + 18,
+        "EdgeRun",
+        theme.text,
+        TextSize::Hero,
+    );
     painter.text(
         panel.x + 22,
         panel.y + 66,
@@ -69,8 +75,18 @@ pub fn draw_system_ui_overlay(pixels: &mut [u8], width: u32, height: u32, pitch:
     );
 
     let button_y = panel.y + panel.h as i32 - 48;
-    painter.button(Rect::new(panel.x + panel.w as i32 - 230, button_y, 98, 32), "Trust", theme, false);
-    painter.button(Rect::new(panel.x + panel.w as i32 - 120, button_y, 96, 32), "Open", theme, true);
+    painter.button(
+        Rect::new(panel.x + panel.w as i32 - 230, button_y, 98, 32),
+        "Trust",
+        theme,
+        false,
+    );
+    painter.button(
+        Rect::new(panel.x + panel.w as i32 - 120, button_y, 96, 32),
+        "Open",
+        theme,
+        true,
+    );
 }
 
 fn stat_chip(painter: &mut Painter<'_>, rect: Rect, label: &str, value: &str, accent: Color) {

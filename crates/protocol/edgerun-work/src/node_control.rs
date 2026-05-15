@@ -1,17 +1,13 @@
-use rkyv::{Archive, Deserialize, Serialize};
-
 use crate::channel::ChannelEndpoint;
 use crate::protocol::{Hash, NodeId, NodeIdentity, WorkSignature};
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RelayEndpoint {
     pub relay_node_id: NodeId,
     pub channel: ChannelEndpoint,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NodeAvailable {
     pub abi_version: u16,
     pub node: NodeIdentity,
@@ -23,8 +19,7 @@ pub struct NodeAvailable {
     pub signature: WorkSignature,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NodeHeartbeat {
     pub abi_version: u16,
     pub node: NodeIdentity,
@@ -35,8 +30,7 @@ pub struct NodeHeartbeat {
     pub signature: WorkSignature,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RelayAssignment {
     pub abi_version: u16,
     pub node_id: NodeId,

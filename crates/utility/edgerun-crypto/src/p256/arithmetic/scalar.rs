@@ -25,12 +25,6 @@ use core::{
     ops::{Add, AddAssign, Mul, MulAssign, Neg, Shr, ShrAssign, Sub, SubAssign},
 };
 
-#[cfg(feature = "p256_bits")]
-use {crate::elliptic_curve::group::ff::PrimeFieldBits, crate::p256::ScalarBits};
-
-#[cfg(feature = "p256_serde")]
-use serdect::serde::{Deserialize, Serialize, de, ser};
-
 /// Constant representing the modulus
 /// n = FFFFFFFF 00000000 FFFFFFFF FFFFFFFF BCE6FAAD A7179E84 F3B9CAC2 FC632551
 pub(crate) const MODULUS: U256 = NistP256::ORDER;
@@ -73,9 +67,9 @@ pub const MU: [u64; 5] = [
 ///
 /// Please see the documentation for the relevant traits for more information.
 ///
-/// # `serde` support
+/// # `edgerun_json_compat` support
 ///
-/// When the `serde` feature of this crate is enabled, the `Serialize` and
+/// When the `edgerun_json_compat` feature of this crate is enabled, the `Serialize` and
 /// `Deserialize` traits are impl'd for this type.
 ///
 /// The serialization is a fixed-width big endian encoding. When used with
@@ -312,23 +306,6 @@ impl PrimeField for Scalar {
     }
 }
 
-#[cfg(feature = "p256_bits")]
-impl PrimeFieldBits for Scalar {
-    #[cfg(target_pointer_width = "32")]
-    type ReprBits = [u32; 8];
-
-    #[cfg(target_pointer_width = "64")]
-    type ReprBits = [u64; 4];
-
-    fn to_le_bits(&self) -> ScalarBits {
-        self.into()
-    }
-
-    fn char_le_bits() -> ScalarBits {
-        NistP256::ORDER.to_words().into()
-    }
-}
-
 impl DefaultIsZeroes for Scalar {}
 
 impl Eq for Scalar {}
@@ -525,13 +502,6 @@ impl From<&Scalar> for U256 {
     }
 }
 
-#[cfg(feature = "p256_bits")]
-impl From<&Scalar> for ScalarBits {
-    fn from(scalar: &Scalar) -> ScalarBits {
-        scalar.0.to_words().into()
-    }
-}
-
 impl Add<Scalar> for Scalar {
     type Output = Scalar;
 
@@ -722,105 +692,5 @@ impl ConstantTimeEq for Scalar {
 impl Debug for Scalar {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Scalar(0x{:X})", &self.0)
-    }
-}
-
-#[cfg(feature = "p256_serde")]
-impl Serialize for Scalar {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: ser::Serializer,
-    {
-        ScalarPrimitive::from(self).serialize(serializer)
-    }
-}
-
-#[cfg(feature = "p256_serde")]
-impl<'de> Deserialize<'de> for Scalar {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: de::Deserializer<'de>,
-    {
-        Ok(ScalarPrimitive::deserialize(deserializer)?.into())
-    }
-}
-
-#[cfg(all(test, feature = "p256_internal_tests"))]
-mod tests {
-    use super::Scalar;
-    use crate::elliptic_curve::group::ff::{Field, PrimeField};
-    use crate::p256::{FieldBytes, SecretKey};
-    use crate::primeorder::{
-        impl_field_identity_tests, impl_field_invert_tests, impl_field_sqrt_tests,
-        impl_primefield_tests,
-    };
-
-    /// t = (modulus - 1) >> S
-    const T: [u64; 4] = [
-        0x4f3b9cac2fc63255,
-        0xfbce6faada7179e8,
-        0x0fffffffffffffff,
-        0x0ffffffff0000000,
-    ];
-
-    impl_field_identity_tests!(Scalar);
-    impl_field_invert_tests!(Scalar);
-    impl_field_sqrt_tests!(Scalar);
-    impl_primefield_tests!(Scalar, T);
-
-    #[test]
-    fn from_to_bytes_roundtrip() {
-        let k: u64 = 42;
-        let mut bytes = FieldBytes::default();
-        bytes[24..].copy_from_slice(k.to_be_bytes().as_ref());
-
-        let scalar = Scalar::from_repr(bytes).unwrap();
-        assert_eq!(bytes, scalar.to_bytes());
-    }
-
-    /// Basic tests that multiplication works.
-    #[test]
-    fn multiply() {
-        let one = Scalar::ONE;
-        let two = one + &one;
-        let three = two + &one;
-        let six = three + &three;
-        assert_eq!(six, two * &three);
-
-        let minus_two = -two;
-        let minus_three = -three;
-        assert_eq!(two, -minus_two);
-
-        assert_eq!(minus_three * &minus_two, minus_two * &minus_three);
-        assert_eq!(six, minus_two * &minus_three);
-    }
-
-    /// Tests that a Scalar can be safely converted to a SecretKey and back
-    #[test]
-    fn from_ec_secret() {
-        let scalar = Scalar::ONE;
-        let secret = SecretKey::from_bytes(&scalar.to_bytes()).unwrap();
-        let rederived_scalar = Scalar::from(&secret);
-        assert_eq!(scalar.0, rederived_scalar.0);
-    }
-
-    #[test]
-    #[cfg(all(feature = "p256_bits", target_pointer_width = "32"))]
-    fn scalar_into_scalarbits() {
-        use crate::p256::ScalarBits;
-
-        let minus_one = ScalarBits::from([
-            0xfc63_2550,
-            0xf3b9_cac2,
-            0xa717_9e84,
-            0xbce6_faad,
-            0xffff_ffff,
-            0xffff_ffff,
-            0x0000_0000,
-            0xffff_ffff,
-        ]);
-
-        let scalar_bits = ScalarBits::from(&-Scalar::from(1u32));
-        assert_eq!(minus_one, scalar_bits);
     }
 }

@@ -5,9 +5,12 @@
 //! keeps that protocol surface owned without pulling the upstream landlock
 //! crate into the native binary.
 
-extern crate std;
+#![cfg_attr(not(feature = "std"), no_std)]
 
-use std::fmt;
+extern crate alloc;
+
+use alloc::string::String;
+use core::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RulesetError {
@@ -28,6 +31,7 @@ impl fmt::Display for RulesetError {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for RulesetError {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,4 +53,5 @@ impl fmt::Display for PathFdError {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for PathFdError {}

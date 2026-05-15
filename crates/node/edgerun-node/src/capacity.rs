@@ -3,7 +3,9 @@
 /// Tracks total hardware capacity and currently-allocated resources
 /// across running workloads. New workloads are rejected if they would
 /// exceed available capacity.
+use std::string::String;
 use std::sync::RwLock;
+use std::vec::Vec;
 
 mod libc {
     pub const _SC_PAGESIZE: i32 = 30;

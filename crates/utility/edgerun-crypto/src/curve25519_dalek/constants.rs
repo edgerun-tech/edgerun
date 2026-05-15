@@ -12,29 +12,16 @@
 
 #![allow(non_snake_case)]
 
-use crate::cfg_if;
-
 use crate::curve25519_dalek::edwards::CompressedEdwardsY;
 use crate::curve25519_dalek::montgomery::MontgomeryPoint;
 use crate::curve25519_dalek::ristretto::{CompressedRistretto, RistrettoPoint};
 use crate::curve25519_dalek::scalar::Scalar;
 
-#[cfg(feature = "precomputed-tables")]
-use crate::curve25519_dalek::edwards::EdwardsBasepointTable;
+#[cfg(curve25519_dalek_bits = "32")]
+pub use crate::curve25519_dalek::backend::serial::u32::constants::*;
 
-cfg_if! {
-    if #[cfg(curve25519_dalek_backend = "fiat")] {
-        #[cfg(curve25519_dalek_bits = "32")]
-        pub use crate::curve25519_dalek::backend::serial::fiat_u32::constants::*;
-        #[cfg(curve25519_dalek_bits = "64")]
-        pub use crate::curve25519_dalek::backend::serial::fiat_u64::constants::*;
-    } else {
-        #[cfg(curve25519_dalek_bits = "32")]
-        pub use crate::curve25519_dalek::backend::serial::u32::constants::*;
-        #[cfg(curve25519_dalek_bits = "64")]
-        pub use crate::curve25519_dalek::backend::serial::u64::constants::*;
-    }
-}
+#[cfg(curve25519_dalek_bits = "64")]
+pub use crate::curve25519_dalek::backend::serial::u64::constants::*;
 
 /// The Ed25519 basepoint, in `CompressedEdwardsY` format.
 ///
@@ -78,17 +65,6 @@ pub(crate) const BASEPOINT_ORDER_PRIVATE: Scalar = Scalar {
         0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x10,
     ],
-};
-
-#[cfg(feature = "precomputed-tables")]
-use crate::curve25519_dalek::ristretto::RistrettoBasepointTable;
-
-/// The Ristretto basepoint, as a `RistrettoBasepointTable` for scalar multiplication.
-#[cfg(feature = "precomputed-tables")]
-pub static RISTRETTO_BASEPOINT_TABLE: &RistrettoBasepointTable = unsafe {
-    // SAFETY: `RistrettoBasepointTable` is a `#[repr(transparent)]` newtype of
-    // `EdwardsBasepointTable`
-    &*(ED25519_BASEPOINT_TABLE as *const EdwardsBasepointTable as *const RistrettoBasepointTable)
 };
 
 #[cfg(curve25519_dalek_upstream_tests)]
@@ -144,7 +120,7 @@ mod test {
 
     /// Test that d = -121665/121666
     #[test]
-    #[cfg(all(curve25519_dalek_bits = "32", not(curve25519_dalek_backend = "fiat")))]
+    #[cfg(curve25519_dalek_bits = "32")]
     fn test_d_vs_ratio() {
         use crate::curve25519_dalek::backend::serial::u32::field::FieldElement2625;
         let a = -&FieldElement2625([121665, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
@@ -157,7 +133,7 @@ mod test {
 
     /// Test that d = -121665/121666
     #[test]
-    #[cfg(all(curve25519_dalek_bits = "64", not(curve25519_dalek_backend = "fiat")))]
+    #[cfg(curve25519_dalek_bits = "64")]
     fn test_d_vs_ratio() {
         use crate::curve25519_dalek::backend::serial::u64::field::FieldElement51;
         let a = -&FieldElement51([121665, 0, 0, 0, 0]);

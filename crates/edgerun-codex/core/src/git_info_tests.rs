@@ -604,7 +604,7 @@ fn test_git_info_serialization() {
     };
 
     let json = edgerun_json::to_string(&git_info).expect("Should serialize GitInfo");
-    let parsed: edgerun_json::Value = edgerun_json::from_serde_str(&json).expect("Should parse JSON");
+    let parsed: edgerun_json::Value = edgerun_json::from_str(&json).expect("Should parse JSON");
 
     assert_eq!(parsed["commit_hash"], "abc123def456");
     assert_eq!(parsed["branch"], "main");
@@ -623,7 +623,7 @@ fn test_git_info_serialization_with_nones() {
     };
 
     let json = edgerun_json::to_string(&git_info).expect("Should serialize GitInfo");
-    let parsed: edgerun_json::Value = edgerun_json::from_serde_str(&json).expect("Should parse JSON");
+    let parsed: edgerun_json::Value = edgerun_json::from_str(&json).expect("Should parse JSON");
 
     // Fields with None values should be omitted due to skip_serializing_if
     assert!(!parsed.as_object().unwrap().contains_key("commit_hash"));

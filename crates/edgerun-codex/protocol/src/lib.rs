@@ -1,5 +1,4 @@
 extern crate edgerun_strum as strum;
-extern crate serde as edgerun_serde;
 
 pub mod account;
 mod agent_path;
@@ -30,7 +29,6 @@ pub mod parse_command;
 pub mod permissions;
 pub mod plan_tool;
 pub mod protocol;
-pub mod request_permissions;
 pub mod request_user_input;
 pub mod shell_environment;
 pub mod user_input;

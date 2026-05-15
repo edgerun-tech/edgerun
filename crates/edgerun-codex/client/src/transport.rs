@@ -121,12 +121,9 @@ fn request_body_for_trace(req: &Request) -> String {
 impl HttpTransport for ReqwestTransport {
     async fn execute(&self, req: Request) -> Result<Response, TransportError> {
         if enabled!(Level::TRACE) {
-            trace!(
-                "{} to {}: {}",
-                req.method,
-                req.url,
-                request_body_for_trace(&req)
-            );
+            let body = request_body_for_trace(&req);
+            let _ = &body;
+            trace!("{} to {}: {}", req.method, req.url, body);
         }
 
         let url = req.url.clone();
@@ -153,12 +150,9 @@ impl HttpTransport for ReqwestTransport {
 
     async fn stream(&self, req: Request) -> Result<StreamResponse, TransportError> {
         if enabled!(Level::TRACE) {
-            trace!(
-                "{} to {}: {}",
-                req.method,
-                req.url,
-                request_body_for_trace(&req)
-            );
+            let body = request_body_for_trace(&req);
+            let _ = &body;
+            trace!("{} to {}: {}", req.method, req.url, body);
         }
 
         let url = req.url.clone();

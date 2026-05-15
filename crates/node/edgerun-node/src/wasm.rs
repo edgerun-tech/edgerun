@@ -10,7 +10,6 @@ use alloc::vec::Vec;
 use core::sync::atomic::{AtomicPtr, AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
 
-use edgerun_crypto::ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use edgerun_crypto::sha::sha256;
 use edgerun_protocols::wire::{
     AppGraphRecord, AppStoreCatalogRecord, SDK_WIRE_ABI_VERSION, SdkWireRecord, WireError,
@@ -570,17 +569,12 @@ fn app_store_catalog_json(catalog: &AppStoreCatalogRecord) -> String {
 const APP_STORE_CATALOG_DOMAIN: &[u8] = b"edgerun-sdk.ecat.v1.store-catalog";
 
 fn app_store_catalog_signature_is_valid(catalog: &AppStoreCatalogRecord) -> bool {
-    let Ok(signature) = Signature::try_from(catalog.signature.as_slice()) else {
-        return false;
-    };
-    let Ok(verifying_key) = VerifyingKey::from_bytes(&catalog.store_id) else {
-        return false;
-    };
     let mut unsigned = catalog.clone();
     unsigned.signature.clear();
     let unsigned_bytes = sdk_wire_bytes(&SdkWireRecord::AppStoreCatalog(unsigned));
     let payload = signature_payload_for_domain(APP_STORE_CATALOG_DOMAIN, &sha256(&unsigned_bytes));
-    verifying_key.verify(&payload, &signature).is_ok()
+    edgerun_crypto::verification::ed25519_verify(&catalog.store_id, &payload, &catalog.signature)
+        .is_ok()
 }
 
 fn signature_payload_for_domain(domain: &[u8], artifact_hash: &[u8; 32]) -> Vec<u8> {
@@ -640,7 +634,7 @@ fn extract_json_string(raw: &str, key: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use edgerun_crypto::{Ed25519SigningKey as SigningKey, Signer};
+    use edgerun_crypto::Ed25519SigningKey as SigningKey;
 
     #[test]
     fn app_store_catalog_signature_must_verify() {
@@ -656,11 +650,11 @@ mod tests {
             signature: Vec::new(),
         };
         let unsigned_bytes = sdk_wire_bytes(&SdkWireRecord::AppStoreCatalog(catalog.clone()));
-        let signature = key.sign(&signature_payload_for_domain(
+        let signature = key.sign_bytes(&signature_payload_for_domain(
             APP_STORE_CATALOG_DOMAIN,
             &sha256(&unsigned_bytes),
         ));
-        catalog.signature = signature.to_bytes().to_vec();
+        catalog.signature = signature.to_vec();
 
         assert!(app_store_catalog_signature_is_valid(&catalog));
 

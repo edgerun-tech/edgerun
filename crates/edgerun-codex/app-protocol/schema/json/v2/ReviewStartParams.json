@@ -1,129 +1,101 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "definitions": {
-    "ReviewDelivery": {
+  "title": "ReviewStartParams",
+  "type": "object",
+  "properties": {
+    "delivery": {
+      "title": "ReviewDelivery",
+      "type": "string",
       "enum": [
-        "inline",
-        "detached"
-      ],
-      "type": "string"
+        "Inline",
+        "Detached"
+      ]
     },
-    "ReviewTarget": {
+    "target": {
+      "title": "ReviewTarget",
       "oneOf": [
         {
-          "description": "Review the working tree: staged, unstaged, and untracked files.",
+          "type": "object",
           "properties": {
             "type": {
-              "enum": [
-                "uncommittedChanges"
-              ],
-              "title": "UncommittedChangesReviewTargetType",
-              "type": "string"
+              "type": "string",
+              "const": "UncommittedChanges",
+              "title": "UncommittedChangesv2::ReviewStartParamsType"
             }
           },
           "required": [
             "type"
           ],
-          "title": "UncommittedChangesReviewTarget",
-          "type": "object"
+          "additionalProperties": false,
+          "title": "UncommittedChangesv2::ReviewStartParams"
         },
         {
-          "description": "Review changes between the current branch and the given base branch.",
+          "type": "object",
           "properties": {
             "branch": {
               "type": "string"
             },
             "type": {
-              "enum": [
-                "baseBranch"
-              ],
-              "title": "BaseBranchReviewTargetType",
-              "type": "string"
+              "type": "string",
+              "const": "BaseBranch",
+              "title": "BaseBranchv2::ReviewStartParamsType"
             }
           },
           "required": [
-            "branch",
-            "type"
+            "type",
+            "branch"
           ],
-          "title": "BaseBranchReviewTarget",
-          "type": "object"
+          "additionalProperties": false,
+          "title": "BaseBranchv2::ReviewStartParams"
         },
         {
-          "description": "Review the changes introduced by a specific commit.",
+          "type": "object",
           "properties": {
             "sha": {
               "type": "string"
             },
             "title": {
-              "description": "Optional human-readable label (e.g., commit subject) for UIs.",
-              "type": [
-                "string",
-                "null"
-              ]
+              "type": "string"
             },
             "type": {
-              "enum": [
-                "commit"
-              ],
-              "title": "CommitReviewTargetType",
-              "type": "string"
+              "type": "string",
+              "const": "Commit",
+              "title": "Commitv2::ReviewStartParamsType"
             }
           },
           "required": [
-            "sha",
-            "type"
+            "type",
+            "sha"
           ],
-          "title": "CommitReviewTarget",
-          "type": "object"
+          "additionalProperties": false,
+          "title": "Commitv2::ReviewStartParams"
         },
         {
-          "description": "Arbitrary instructions, equivalent to the old free-form prompt.",
+          "type": "object",
           "properties": {
             "instructions": {
               "type": "string"
             },
             "type": {
-              "enum": [
-                "custom"
-              ],
-              "title": "CustomReviewTargetType",
-              "type": "string"
+              "type": "string",
+              "const": "Custom",
+              "title": "Customv2::ReviewStartParamsType"
             }
           },
           "required": [
-            "instructions",
-            "type"
+            "type",
+            "instructions"
           ],
-          "title": "CustomReviewTarget",
-          "type": "object"
+          "additionalProperties": false,
+          "title": "Customv2::ReviewStartParams"
         }
       ]
-    }
-  },
-  "properties": {
-    "delivery": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/ReviewDelivery"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "default": null,
-      "description": "Where to run the review: inline (default) on the current thread or detached on a new thread (returned in `reviewThreadId`)."
-    },
-    "target": {
-      "$ref": "#/definitions/ReviewTarget"
     },
     "threadId": {
       "type": "string"
     }
   },
   "required": [
-    "target",
-    "threadId"
-  ],
-  "title": "ReviewStartParams",
-  "type": "object"
+    "threadId",
+    "target"
+  ]
 }

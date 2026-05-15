@@ -12,12 +12,14 @@ rust-version = "1.95"
 default = ["tabler-icons"]
 std = []
 gpu-gl = ["std"]
+sdl = ["gpu-gl", "fontdue-text"]
 fontdue-text = ["std", "dep:fontdue"]
 tabler-icons = []
 tabler-svg-atlas = []
 
 [dependencies]
-fontdue = { version = "0.9", default-features = false, optional = true }
+edgerun-crypto = { workspace = true, default-features = false, features = ["aead", "alloc", "sha2"] }
+fontdue = { package = "edgerun-fontdue", path = "../edgerun-fontdue", optional = true }
 
 [[bin]]
 name = "ui-preview-sdl-font-icons"

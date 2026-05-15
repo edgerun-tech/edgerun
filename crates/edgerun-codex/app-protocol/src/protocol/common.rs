@@ -8,15 +8,22 @@ use crate::export::GeneratedSchema;
 use crate::export::write_json_schema;
 use crate::protocol::v1;
 use crate::protocol::v2;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
 use edgerun_strum_macros::Display;
 use schemars::JsonSchema;
-use ts_rs::TS;
 
 /// Authentication mode for OpenAI-backed providers.
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Display, JsonSchema, TS)]
-#[serde(rename_all = "lowercase")]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Display,
+    JsonSchema,
+    edgerun_json::ToJson,
+    edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "lowercase")]
 pub enum AuthMode {
     /// OpenAI API key provided by the caller and stored by Codex.
     ApiKey,
@@ -26,13 +33,11 @@ pub enum AuthMode {
     ///
     /// ChatGPT auth tokens are supplied by an external host app and are only
     /// stored in memory. Token refresh must be handled by the external host app.
-    #[serde(rename = "chatgptAuthTokens")]
-    #[ts(rename = "chatgptAuthTokens")]
+    #[schemars(rename = "chatgptAuthTokens")]
     #[strum(serialize = "chatgptAuthTokens")]
     ChatgptAuthTokens,
     /// Programmatic Codex auth backed by a registered Agent Identity.
-    #[serde(rename = "agentIdentity")]
-    #[ts(rename = "agentIdentity")]
+    #[schemars(rename = "agentIdentity")]
     #[strum(serialize = "agentIdentity")]
     AgentIdentity,
 }
@@ -58,6 +63,52 @@ macro_rules! experimental_type_entry {
     };
 }
 
+pub(crate) fn experimental_method_reason(method: &str) -> Option<&'static str> {
+    match method {
+        "mock/experimentalMethod"
+        | "thread/goal/set"
+        | "thread/goal/get"
+        | "thread/goal/clear"
+        | "thread/goal/updated"
+        | "thread/goal/cleared"
+        | "thread/realtime/start"
+        | "thread/realtime/appendAudio"
+        | "thread/realtime/appendText"
+        | "thread/realtime/stop"
+        | "thread/realtime/listVoices"
+        | "thread/realtime/started"
+        | "thread/realtime/itemAdded"
+        | "thread/realtime/transcript/delta"
+        | "thread/realtime/transcript/done"
+        | "thread/realtime/outputAudio/delta"
+        | "thread/realtime/sdp"
+        | "thread/realtime/error"
+        | "thread/realtime/closed" => Some(match method {
+            "mock/experimentalMethod" => "mock/experimentalMethod",
+            "thread/goal/set" => "thread/goal/set",
+            "thread/goal/get" => "thread/goal/get",
+            "thread/goal/clear" => "thread/goal/clear",
+            "thread/goal/updated" => "thread/goal/updated",
+            "thread/goal/cleared" => "thread/goal/cleared",
+            "thread/realtime/start" => "thread/realtime/start",
+            "thread/realtime/appendAudio" => "thread/realtime/appendAudio",
+            "thread/realtime/appendText" => "thread/realtime/appendText",
+            "thread/realtime/stop" => "thread/realtime/stop",
+            "thread/realtime/listVoices" => "thread/realtime/listVoices",
+            "thread/realtime/started" => "thread/realtime/started",
+            "thread/realtime/itemAdded" => "thread/realtime/itemAdded",
+            "thread/realtime/transcript/delta" => "thread/realtime/transcript/delta",
+            "thread/realtime/transcript/done" => "thread/realtime/transcript/done",
+            "thread/realtime/outputAudio/delta" => "thread/realtime/outputAudio/delta",
+            "thread/realtime/sdp" => "thread/realtime/sdp",
+            "thread/realtime/error" => "thread/realtime/error",
+            "thread/realtime/closed" => "thread/realtime/closed",
+            _ => unreachable!(),
+        }),
+        _ => None,
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ClientRequestSerializationScope {
     Global(&'static str),
@@ -69,6 +120,40 @@ pub enum ClientRequestSerializationScope {
     FuzzyFileSearchSession { session_id: String },
     FsWatch { watch_id: String },
     McpOauth { server_name: String },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProtocolTypeDirection {
+    ClientRequest,
+    ClientNotification,
+    ServerRequest,
+    ServerNotification,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProtocolTypeEntry {
+    pub direction: ProtocolTypeDirection,
+    pub variant: &'static str,
+    pub method: String,
+    pub params: Option<&'static str>,
+    pub response: Option<&'static str>,
+}
+
+fn lower_camel_variant_name(variant: &str) -> String {
+    let mut chars = variant.chars();
+    let Some(first) = chars.next() else {
+        return String::new();
+    };
+    first.to_lowercase().chain(chars).collect()
+}
+
+macro_rules! protocol_method_name {
+    ($variant:ident => $wire:literal) => {
+        $wire.to_string()
+    };
+    ($variant:ident) => {
+        lower_camel_variant_name(stringify!($variant))
+    };
 }
 
 macro_rules! serialization_scope_expr {
@@ -140,8 +225,7 @@ macro_rules! serialization_scope_expr {
 
 /// Generates an `enum ClientRequest` where each variant is a request that the
 /// client can send to the server. Each variant has associated `params` and
-/// `response` types. Also generates a `export_client_responses()` function to
-/// export all response types to TypeScript.
+/// `response` types.
 macro_rules! client_request_definitions {
     (
         $(
@@ -157,19 +241,18 @@ macro_rules! client_request_definitions {
         ),* $(,)?
     ) => {
         /// Request from the client to the server.
-        #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-        #[serde(tag = "method", rename_all = "camelCase")]
+        #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+        #[schemars(tag = "method", rename_all = "camelCase")]
         pub enum ClientRequest {
             $(
                 $(#[doc = $variant_doc])*
-                $(#[serde(rename = $wire)] #[ts(rename = $wire)])?
+                $(#[schemars(rename = $wire)])?
                 $variant {
-                    #[serde(rename = "id")]
+                    #[schemars(rename = "id")]
                     request_id: RequestId,
                     $(#[$params_meta])*
                     params: $params,
-                },
-            )*
+                },)*
         }
 
         impl ClientRequest {
@@ -180,15 +263,9 @@ macro_rules! client_request_definitions {
             }
 
             pub fn method(&self) -> String {
-                edgerun_json::to_serde_value(self)
-                    .ok()
-                    .and_then(|value| {
-                        value
-                            .get("method")
-                            .and_then(edgerun_json::Value::as_str)
-                            .map(str::to_owned)
-                    })
-                    .unwrap_or_else(|| "<unknown>".to_string())
+                match self {
+                    $(Self::$variant { .. } => protocol_method_name!($variant $(=> $wire)?),)*
+                }
             }
 
             pub fn serialization_scope(&self) -> Option<ClientRequestSerializationScope> {
@@ -205,19 +282,30 @@ macro_rules! client_request_definitions {
             }
         }
 
+        impl crate::experimental_api::ExperimentalApi for ClientRequest {
+            fn experimental_reason(&self) -> Option<&'static str> {
+                match self {
+                    $(
+                        Self::$variant { .. } => {
+                            experimental_method_reason(&protocol_method_name!($variant $(=> $wire)?))
+                        }
+                    )*
+                }
+            }
+        }
+
         /// Typed response from the server to the client.
-        #[derive(Serialize, Deserialize, Debug, Clone)]
-        #[serde(tag = "method", rename_all = "camelCase")]
+        #[derive(Debug, Clone, edgerun_json::ToJson, edgerun_json::FromJson)]
+        #[schemars(tag = "method", rename_all = "camelCase")]
         pub enum ClientResponse {
             $(
                 $(#[doc = $variant_doc])*
-                $(#[serde(rename = $wire)])?
+                $(#[schemars(rename = $wire)])?
                 $variant {
-                    #[serde(rename = "id")]
+                    #[schemars(rename = "id")]
                     request_id: RequestId,
                     response: $response,
-                },
-            )*
+                },)*
         }
 
         impl ClientResponse {
@@ -228,24 +316,17 @@ macro_rules! client_request_definitions {
             }
 
             pub fn method(&self) -> String {
-                edgerun_json::to_serde_value(self)
-                    .ok()
-                    .and_then(|value| {
-                        value
-                            .get("method")
-                            .and_then(edgerun_json::Value::as_str)
-                            .map(str::to_owned)
-                    })
-                    .unwrap_or_else(|| "<unknown>".to_string())
+                match self {
+                    $(Self::$variant { .. } => protocol_method_name!($variant $(=> $wire)?),)*
+                }
             }
 
             pub fn into_jsonrpc_parts(
-                self,
-            ) -> std::result::Result<(RequestId, crate::Result), edgerun_json::Error> {
+                self) -> std::result::Result<(RequestId, crate::Result), edgerun_json::Error> {
                 match self {
                     $(
                         Self::$variant { request_id, response } => {
-                            edgerun_json::to_serde_value(response).map(|result| (request_id, result))
+                            Ok((request_id, edgerun_json::to_value(&response)))
                         }
                     )*
                 }
@@ -255,27 +336,26 @@ macro_rules! client_request_definitions {
         #[derive(Debug, Clone)]
         #[allow(clippy::large_enum_variant)]
         pub enum ClientResponsePayload {
-            $( $variant($response), )*
+            $( $variant($response),)*
             InterruptConversation(v1::InterruptConversationResponse),
         }
 
         impl ClientResponsePayload {
             pub fn into_jsonrpc_parts_and_payload(
                 self,
-                request_id: RequestId,
-            ) -> std::result::Result<
+                request_id: RequestId) -> std::result::Result<
                 (RequestId, crate::Result, Option<ClientResponsePayload>),
                 edgerun_json::Error,
             > {
                 match self {
                     $(
                         Self::$variant(response) => {
-                            let result = edgerun_json::to_serde_value(&response)?;
+                            let result = edgerun_json::to_value(&response);
                             Ok((request_id, result, Some(Self::$variant(response))))
                         }
                     )*
                     Self::InterruptConversation(response) => {
-                        edgerun_json::to_serde_value(response).map(|result| (request_id, result, None))
+                        Ok((request_id, edgerun_json::to_value(&response), None))
                     }
                 }
             }
@@ -296,23 +376,21 @@ macro_rules! client_request_definitions {
 
             pub fn into_jsonrpc_parts(
                 self,
-                request_id: RequestId,
-            ) -> std::result::Result<(RequestId, crate::Result), edgerun_json::Error> {
+                request_id: RequestId) -> std::result::Result<(RequestId, crate::Result), edgerun_json::Error> {
                 self.to_jsonrpc_parts(request_id)
             }
 
             pub fn to_jsonrpc_parts(
                 &self,
-                request_id: RequestId,
-            ) -> std::result::Result<(RequestId, crate::Result), edgerun_json::Error> {
+                request_id: RequestId) -> std::result::Result<(RequestId, crate::Result), edgerun_json::Error> {
                 match self {
                     $(
                         Self::$variant(response) => {
-                            edgerun_json::to_serde_value(response).map(|result| (request_id, result))
+                            Ok((request_id, edgerun_json::to_value(response)))
                         }
                     )*
                     Self::InterruptConversation(response) => {
-                        edgerun_json::to_serde_value(response).map(|result| (request_id, result))
+                        Ok((request_id, edgerun_json::to_value(response)))
                     }
                 }
             }
@@ -337,39 +415,34 @@ macro_rules! client_request_definitions {
 
         pub(crate) const EXPERIMENTAL_CLIENT_METHODS: &[&str] = &[
             $(
-                experimental_method_entry!($(#[experimental($reason)])? $(=> $wire)?),
-            )*
+                experimental_method_entry!($(#[experimental($reason)])? $(=> $wire)?),)*
         ];
         pub(crate) const EXPERIMENTAL_CLIENT_METHOD_PARAM_TYPES: &[&str] = &[
             $(
-                experimental_type_entry!($(#[experimental($reason)])? $params),
-            )*
+                experimental_type_entry!($(#[experimental($reason)])? $params),)*
         ];
         pub(crate) const EXPERIMENTAL_CLIENT_METHOD_RESPONSE_TYPES: &[&str] = &[
             $(
-                experimental_type_entry!($(#[experimental($reason)])? $response),
-            )*
+                experimental_type_entry!($(#[experimental($reason)])? $response),)*
         ];
 
-        pub fn export_client_responses(
-            out_dir: &::std::path::Path,
-        ) -> ::std::result::Result<(), ::ts_rs::ExportError> {
-            $(
-                <$response as ::ts_rs::TS>::export_all_to(out_dir)?;
-            )*
-            Ok(())
-        }
-
-        pub(crate) fn visit_client_response_types(v: &mut impl ::ts_rs::TypeVisitor) {
-            $(
-                v.visit::<$response>();
-            )*
+        #[allow(clippy::vec_init_then_push)]
+        pub fn client_request_type_entries() -> Vec<ProtocolTypeEntry> {
+            vec![
+                $(
+                    ProtocolTypeEntry {
+                        direction: ProtocolTypeDirection::ClientRequest,
+                        variant: stringify!($variant),
+                        method: protocol_method_name!($variant $(=> $wire)?),
+                        params: Some(stringify!($params)),
+                        response: Some(stringify!($response)),
+                    },)*
+            ]
         }
 
         #[allow(clippy::vec_init_then_push)]
         pub fn export_client_response_schemas(
-            out_dir: &::std::path::Path,
-        ) -> ::edgerun_error::Result<Vec<GeneratedSchema>> {
+            out_dir: &::std::path::Path) -> ::edgerun_error::Result<Vec<GeneratedSchema>> {
             let mut schemas = Vec::new();
             $(
                 schemas.push(write_json_schema::<$response>(out_dir, stringify!($response))?);
@@ -379,8 +452,7 @@ macro_rules! client_request_definitions {
 
         #[allow(clippy::vec_init_then_push)]
         pub fn export_client_param_schemas(
-            out_dir: &::std::path::Path,
-        ) -> ::edgerun_error::Result<Vec<GeneratedSchema>> {
+            out_dir: &::std::path::Path) -> ::edgerun_error::Result<Vec<GeneratedSchema>> {
             let mut schemas = Vec::new();
             $(
                 schemas.push(write_json_schema::<$params>(out_dir, stringify!($params))?);
@@ -487,7 +559,7 @@ client_request_definitions! {
         response: v2::ThreadMemoryModeSetResponse,
     },
     MemoryReset => "memory/reset" {
-        params: #[ts(type = "undefined")] #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
+        params: #[schemars(skip_serializing_if = "Option::is_none")] Option<()>,
         serialization: global("memory"),
         response: v2::MemoryResetResponse,
     },
@@ -769,7 +841,7 @@ client_request_definitions! {
     },
 
     McpServerRefresh => "config/mcpServer/reload" {
-        params: #[ts(type = "undefined")] #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
+        params: #[schemars(skip_serializing_if = "Option::is_none")] Option<()>,
         serialization: global("mcp-registry"),
         response: v2::McpServerRefreshResponse,
     },
@@ -792,17 +864,6 @@ client_request_definitions! {
         response: v2::McpServerToolCallResponse,
     },
 
-    WindowsSandboxSetupStart => "windowsSandbox/setupStart" {
-        params: v2::WindowsSandboxSetupStartParams,
-        serialization: global("windows-sandbox-setup"),
-        response: v2::WindowsSandboxSetupStartResponse,
-    },
-    WindowsSandboxReadiness => "windowsSandbox/readiness" {
-        params: #[ts(type = "undefined")] #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
-        serialization: global("config"),
-        response: v2::WindowsSandboxReadinessResponse,
-    },
-
     LoginAccount => "account/login/start" {
         params: v2::LoginAccountParams,
         inspect_params: true,
@@ -817,13 +878,13 @@ client_request_definitions! {
     },
 
     LogoutAccount => "account/logout" {
-        params: #[ts(type = "undefined")] #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
+        params: #[schemars(skip_serializing_if = "Option::is_none")] Option<()>,
         serialization: global("account-auth"),
         response: v2::LogoutAccountResponse,
     },
 
     GetAccountRateLimits => "account/rateLimits/read" {
-        params: #[ts(type = "undefined")] #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
+        params: #[schemars(skip_serializing_if = "Option::is_none")] Option<()>,
         serialization: None,
         response: v2::GetAccountRateLimitsResponse,
     },
@@ -919,7 +980,7 @@ client_request_definitions! {
     },
 
     ConfigRequirementsRead => "configRequirements/read" {
-        params: #[ts(type = "undefined")] #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
+        params: #[schemars(skip_serializing_if = "Option::is_none")] Option<()>,
         serialization: global("config"),
         response: v2::ConfigRequirementsReadResponse,
     },
@@ -986,19 +1047,18 @@ macro_rules! server_request_definitions {
         ),* $(,)?
     ) => {
         /// Request initiated from the server and sent to the client.
-        #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+        #[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
         #[allow(clippy::large_enum_variant)]
-        #[serde(tag = "method", rename_all = "camelCase")]
+        #[schemars(tag = "method", rename_all = "camelCase")]
         pub enum ServerRequest {
             $(
                 $(#[$variant_meta])*
-                $(#[serde(rename = $wire)] #[ts(rename = $wire)])?
+                $(#[schemars(rename = $wire)])?
                 $variant {
-                    #[serde(rename = "id")]
+                    #[schemars(rename = "id")]
                     request_id: RequestId,
                     params: $params,
-                },
-            )*
+                },)*
         }
 
         impl ServerRequest {
@@ -1010,12 +1070,11 @@ macro_rules! server_request_definitions {
 
             pub fn response_from_result(
                 &self,
-                result: crate::Result,
-            ) -> edgerun_json::Result<ServerResponse> {
+                result: crate::Result) -> edgerun_json::Result<ServerResponse> {
                 match self {
                     $(
                         Self::$variant { request_id, .. } => {
-                            let response = edgerun_json::from_serde_value::<$response>(result)?;
+                            let response = edgerun_json::from_json_value::<$response>(result)?;
                             Ok(ServerResponse::$variant {
                                 request_id: request_id.clone(),
                                 response,
@@ -1027,18 +1086,17 @@ macro_rules! server_request_definitions {
         }
 
         /// Typed response from the client to the server.
-        #[derive(Serialize, Deserialize, Debug, Clone)]
-        #[serde(tag = "method", rename_all = "camelCase")]
+        #[derive(Debug, Clone, edgerun_json::ToJson, edgerun_json::FromJson)]
+        #[schemars(tag = "method", rename_all = "camelCase")]
         pub enum ServerResponse {
             $(
                 $(#[$variant_meta])*
-                $(#[serde(rename = $wire)])?
+                $(#[schemars(rename = $wire)])?
                 $variant {
-                    #[serde(rename = "id")]
+                    #[schemars(rename = "id")]
                     request_id: RequestId,
                     response: $response,
-                },
-            )*
+                },)*
         }
 
         impl ServerResponse {
@@ -1049,22 +1107,16 @@ macro_rules! server_request_definitions {
             }
 
             pub fn method(&self) -> String {
-                edgerun_json::to_serde_value(self)
-                    .ok()
-                    .and_then(|value| {
-                        value
-                            .get("method")
-                            .and_then(edgerun_json::Value::as_str)
-                            .map(str::to_owned)
-                    })
-                    .unwrap_or_else(|| "<unknown>".to_string())
+                match self {
+                    $(Self::$variant { .. } => protocol_method_name!($variant $(=> $wire)?),)*
+                }
             }
         }
 
         #[derive(Debug, Clone, PartialEq, JsonSchema)]
         #[allow(clippy::large_enum_variant)]
         pub enum ServerRequestPayload {
-            $( $variant($params), )*
+            $( $variant($params),)*
         }
 
         impl ServerRequestPayload {
@@ -1075,45 +1127,39 @@ macro_rules! server_request_definitions {
             }
         }
 
-        pub fn export_server_responses(
-            out_dir: &::std::path::Path,
-        ) -> ::std::result::Result<(), ::ts_rs::ExportError> {
-            $(
-                <$response as ::ts_rs::TS>::export_all_to(out_dir)?;
-            )*
-            Ok(())
-        }
-
-        pub(crate) fn visit_server_response_types(v: &mut impl ::ts_rs::TypeVisitor) {
-            $(
-                v.visit::<$response>();
-            )*
+        pub fn server_request_type_entries() -> Vec<ProtocolTypeEntry> {
+            vec![
+                $(
+                    ProtocolTypeEntry {
+                        direction: ProtocolTypeDirection::ServerRequest,
+                        variant: stringify!($variant),
+                        method: protocol_method_name!($variant $(=> $wire)?),
+                        params: Some(stringify!($params)),
+                        response: Some(stringify!($response)),
+                    },)*
+            ]
         }
 
         #[allow(clippy::vec_init_then_push)]
         pub fn export_server_response_schemas(
-            out_dir: &Path,
-        ) -> ::edgerun_error::Result<Vec<GeneratedSchema>> {
+            out_dir: &Path) -> ::edgerun_error::Result<Vec<GeneratedSchema>> {
             let mut schemas = Vec::new();
             $(
                 schemas.push(crate::export::write_json_schema::<$response>(
                     out_dir,
-                    concat!(stringify!($variant), "Response"),
-                )?);
+                    concat!(stringify!($variant), "Response"))?);
             )*
             Ok(schemas)
         }
 
         #[allow(clippy::vec_init_then_push)]
         pub fn export_server_param_schemas(
-            out_dir: &Path,
-        ) -> ::edgerun_error::Result<Vec<GeneratedSchema>> {
+            out_dir: &Path) -> ::edgerun_error::Result<Vec<GeneratedSchema>> {
             let mut schemas = Vec::new();
             $(
                 schemas.push(crate::export::write_json_schema::<$params>(
                     out_dir,
-                    concat!(stringify!($variant), "Params"),
-                )?);
+                    concat!(stringify!($variant), "Params"))?);
             )*
             Ok(schemas)
         }
@@ -1130,46 +1176,61 @@ macro_rules! server_notification_definitions {
         ),* $(,)?
     ) => {
         /// Notification sent from the server to the client.
-        #[derive(
-            Serialize,
-            Deserialize,
-            Debug,
-            Clone,
-            JsonSchema,
-            TS,
-            Display,
-                    )]
+        #[derive(Debug, Clone, JsonSchema, Display, edgerun_json::ToJson, edgerun_json::FromJson)]
         #[allow(clippy::large_enum_variant)]
-        #[serde(tag = "method", content = "params", rename_all = "camelCase")]
+        #[schemars(tag = "method", content = "params", rename_all = "camelCase")]
         #[strum(serialize_all = "camelCase")]
         pub enum ServerNotification {
             $(
                 $(#[$variant_meta])*
-                $(#[serde(rename = $wire)] #[ts(rename = $wire)] #[strum(serialize = $wire)])?
-                $variant($payload),
-            )*
+                $(#[schemars(rename = $wire)] #[strum(serialize = $wire)])?
+                $variant($payload),)*
         }
 
         impl ServerNotification {
             pub fn to_params(self) -> Result<edgerun_json::Value, edgerun_json::Error> {
                 match self {
-                    $(Self::$variant(params) => edgerun_json::to_serde_value(params),)*
+                    $(Self::$variant(params) => Ok(edgerun_json::to_value(&params)),)*
                 }
             }
+        }
+
+        impl crate::experimental_api::ExperimentalApi for ServerNotification {
+            fn experimental_reason(&self) -> Option<&'static str> {
+                match self {
+                    $(
+                        Self::$variant(..) => {
+                            experimental_method_reason(&protocol_method_name!($variant $(=> $wire)?))
+                        }
+                    )*
+                }
+            }
+        }
+
+        pub fn server_notification_type_entries() -> Vec<ProtocolTypeEntry> {
+            vec![
+                $(
+                    ProtocolTypeEntry {
+                        direction: ProtocolTypeDirection::ServerNotification,
+                        variant: stringify!($variant),
+                        method: protocol_method_name!($variant $(=> $wire)?),
+                        params: Some(stringify!($payload)),
+                        response: None,
+                    },)*
+            ]
         }
 
         impl TryFrom<JSONRPCNotification> for ServerNotification {
             type Error = edgerun_json::Error;
 
             fn try_from(value: JSONRPCNotification) -> Result<Self, edgerun_json::Error> {
-                edgerun_json::from_serde_value(edgerun_json::to_serde_value(value)?)
+                edgerun_json::from_json_value(edgerun_json::to_value(&value)).map_err(Into::into)
             }
         }
 
         #[allow(clippy::vec_init_then_push)]
         pub fn export_server_notification_schemas(
-            out_dir: &::std::path::Path,
-        ) -> ::edgerun_error::Result<Vec<GeneratedSchema>> {
+            out_dir: &::std::path::Path) -> ::edgerun_error::Result<Vec<GeneratedSchema>> {
             let mut schemas = Vec::new();
             $(schemas.push(crate::export::write_json_schema::<$payload>(out_dir, stringify!($payload))?);)*
             Ok(schemas)
@@ -1184,19 +1245,30 @@ macro_rules! client_notification_definitions {
             $variant:ident $( ( $payload:ty ) )?
         ),* $(,)?
     ) => {
-        #[derive(Serialize, Deserialize, Debug, Clone, JsonSchema, TS, Display)]
-        #[serde(tag = "method", content = "params", rename_all = "camelCase")]
+        #[derive(Debug, Clone, JsonSchema, Display, edgerun_json::ToJson, edgerun_json::FromJson)]
+        #[schemars(tag = "method", content = "params", rename_all = "camelCase")]
         #[strum(serialize_all = "camelCase")]
         pub enum ClientNotification {
             $(
                 $(#[$variant_meta])*
-                $variant $( ( $payload ) )?,
-            )*
+                $variant $( ( $payload ) )?,)*
+        }
+
+        pub fn client_notification_type_entries() -> Vec<ProtocolTypeEntry> {
+            vec![
+                $(
+                    ProtocolTypeEntry {
+                        direction: ProtocolTypeDirection::ClientNotification,
+                        variant: stringify!($variant),
+                        method: protocol_method_name!($variant),
+                        params: client_notification_payload_type!($($payload)?),
+                        response: None,
+                    })*
+            ]
         }
 
         pub fn export_client_notification_schemas(
-            _out_dir: &::std::path::Path,
-        ) -> ::edgerun_error::Result<Vec<GeneratedSchema>> {
+            _out_dir: &::std::path::Path) -> ::edgerun_error::Result<Vec<GeneratedSchema>> {
             let schemas = Vec::new();
             $( $(schemas.push(crate::export::write_json_schema::<$payload>(_out_dir, stringify!($payload))?);)? )*
             Ok(schemas)
@@ -1204,11 +1276,20 @@ macro_rules! client_notification_definitions {
     };
 }
 
+macro_rules! client_notification_payload_type {
+    () => {
+        None
+    };
+    ($payload:ty) => {
+        Some(stringify!($payload))
+    };
+}
+
 impl TryFrom<JSONRPCRequest> for ServerRequest {
     type Error = edgerun_json::Error;
 
     fn try_from(value: JSONRPCRequest) -> Result<Self, Self::Error> {
-        edgerun_json::from_serde_value(edgerun_json::to_serde_value(value)?)
+        edgerun_json::from_json_value(edgerun_json::to_value(&value)).map_err(Into::into)
     }
 }
 
@@ -1240,12 +1321,6 @@ server_request_definitions! {
         response: v2::McpServerElicitationRequestResponse,
     },
 
-    /// Request approval for additional permissions from the user.
-    PermissionsRequestApproval => "item/permissions/requestApproval" {
-        params: v2::PermissionsRequestApprovalParams,
-        response: v2::PermissionsRequestApprovalResponse,
-    },
-
     /// Execute a dynamic tool call on the client.
     DynamicToolCall => "item/tool/call" {
         params: v2::DynamicToolCallParams,
@@ -1272,9 +1347,8 @@ server_request_definitions! {
     },
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct FuzzyFileSearchParams {
     pub query: String,
     pub roots: Vec<String>,
@@ -1283,7 +1357,7 @@ pub struct FuzzyFileSearchParams {
 }
 
 /// Superset of [`codex_file_search::FileMatch`]
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct FuzzyFileSearchResult {
     pub root: String,
     pub path: String,
@@ -1293,63 +1367,65 @@ pub struct FuzzyFileSearchResult {
     pub indices: Option<Vec<u32>>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "camelCase")]
 pub enum FuzzyFileSearchMatchType {
     File,
     Directory,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct FuzzyFileSearchResponse {
     pub files: Vec<FuzzyFileSearchResult>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct FuzzyFileSearchSessionStartParams {
     pub session_id: String,
     pub roots: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS, Default)]
+#[derive(
+    Debug, Clone, PartialEq, JsonSchema, Default, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
 pub struct FuzzyFileSearchSessionStartResponse {}
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct FuzzyFileSearchSessionUpdateParams {
     pub session_id: String,
     pub query: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS, Default)]
+#[derive(
+    Debug, Clone, PartialEq, JsonSchema, Default, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
 pub struct FuzzyFileSearchSessionUpdateResponse {}
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct FuzzyFileSearchSessionStopParams {
     pub session_id: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS, Default)]
+#[derive(
+    Debug, Clone, PartialEq, JsonSchema, Default, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
 pub struct FuzzyFileSearchSessionStopResponse {}
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct FuzzyFileSearchSessionUpdatedNotification {
     pub session_id: String,
     pub query: String,
     pub files: Vec<FuzzyFileSearchResult>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct FuzzyFileSearchSessionCompletedNotification {
     pub session_id: String,
 }
@@ -1425,12 +1501,7 @@ server_notification_definitions! {
     ThreadRealtimeError => "thread/realtime/error" (v2::ThreadRealtimeErrorNotification),
     ThreadRealtimeClosed => "thread/realtime/closed" (v2::ThreadRealtimeClosedNotification),
 
-    /// Notifies the user of world-writable directories on Windows, which cannot be protected by the sandbox.
-    WindowsWorldWritableWarning => "windows/worldWritableWarning" (v2::WindowsWorldWritableWarningNotification),
-    WindowsSandboxSetupCompleted => "windowsSandbox/setupCompleted" (v2::WindowsSandboxSetupCompletedNotification),
-
-    #[serde(rename = "account/login/completed")]
-    #[ts(rename = "account/login/completed")]
+    #[schemars(rename = "account/login/completed")]
     #[strum(serialize = "account/login/completed")]
     AccountLoginCompleted(v2::AccountLoginCompletedNotification),
 
@@ -1438,6 +1509,14 @@ server_notification_definitions! {
 
 client_notification_definitions! {
     Initialized,
+}
+
+pub fn protocol_type_entries() -> Vec<ProtocolTypeEntry> {
+    let mut entries = client_request_type_entries();
+    entries.extend(client_notification_type_entries());
+    entries.extend(server_request_type_entries());
+    entries.extend(server_notification_type_entries());
+    entries
 }
 
 #[cfg(test)]
@@ -1452,7 +1531,7 @@ mod tests {
     use codex_protocol::protocol::RealtimeConversationVersion;
     use codex_protocol::protocol::RealtimeOutputModality;
     use codex_protocol::protocol::RealtimeVoice;
-    use edgerun_error::Result;
+    type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
     use edgerun_json::json;
     use pretty_assertions::assert_eq;
     use std::path::PathBuf;
@@ -1532,8 +1611,6 @@ mod tests {
                 cwd: None,
                 env: None,
                 size: None,
-                sandbox_policy: None,
-                permission_profile: None,
             },
         };
         assert_eq!(
@@ -1762,8 +1839,6 @@ mod tests {
                 cwd: None,
                 env: None,
                 size: None,
-                sandbox_policy: None,
-                permission_profile: None,
             },
         };
         assert_eq!(command_exec.serialization_scope(), None);
@@ -1827,7 +1902,7 @@ mod tests {
                     "conversationId": "67e55044-10b1-426f-9247-bb680e5fe0c8"
                 }
             }),
-            edgerun_json::to_serde_value(&request)?,
+            edgerun_json::to_value(&request)
         );
         Ok(())
     }
@@ -1871,14 +1946,14 @@ mod tests {
                     }
                 }
             }),
-            edgerun_json::to_serde_value(&request)?,
+            edgerun_json::to_value(&request)
         );
         Ok(())
     }
 
     #[test]
     fn deserialize_initialize_with_opt_out_notification_methods() -> Result<()> {
-        let request: ClientRequest = edgerun_json::from_serde_value(json!({
+        let request: ClientRequest = edgerun_json::from_json_value(json!({
             "method": "initialize",
             "id": 42,
             "params": {
@@ -1926,7 +2001,7 @@ mod tests {
 
         assert_eq!(
             json!("67e55044-10b1-426f-9247-bb680e5fe0c8"),
-            edgerun_json::to_serde_value(id)?
+            edgerun_json::to_value(&id)
         );
         Ok(())
     }
@@ -1934,11 +2009,11 @@ mod tests {
     #[test]
     fn conversation_id_deserializes_from_plain_string() -> Result<()> {
         let id: ThreadId =
-            edgerun_json::from_serde_value(json!("67e55044-10b1-426f-9247-bb680e5fe0c8"))?;
+            edgerun_json::from_json_value(json!("67e55044-10b1-426f-9247-bb680e5fe0c8"))?;
 
         assert_eq!(
             ThreadId::from_string("67e55044-10b1-426f-9247-bb680e5fe0c8")?,
-            id,
+            id
         );
         Ok(())
     }
@@ -1951,7 +2026,7 @@ mod tests {
             json!({
                 "method": "initialized",
             }),
-            edgerun_json::to_serde_value(&notification)?,
+            edgerun_json::to_value(&notification)
         );
         Ok(())
     }
@@ -1994,7 +2069,7 @@ mod tests {
                     ]
                 }
             }),
-            edgerun_json::to_serde_value(&request)?,
+            edgerun_json::to_value(&request)
         );
 
         let payload = ServerRequestPayload::ExecCommandApproval(params);
@@ -2021,7 +2096,7 @@ mod tests {
                     "previousAccountId": "org-123"
                 }
             }),
-            edgerun_json::to_serde_value(&request)?,
+            edgerun_json::to_value(&request)
         );
         Ok(())
     }
@@ -2045,14 +2120,14 @@ mod tests {
                     "decision": "acceptForSession"
                 }
             }),
-            edgerun_json::to_serde_value(&response)?,
+            edgerun_json::to_value(&response)
         );
         Ok(())
     }
 
     #[test]
     fn serialize_mcp_server_elicitation_request() -> Result<()> {
-        let requested_schema: v2::McpElicitationSchema = edgerun_json::from_serde_value(json!({
+        let requested_schema: v2::McpElicitationSchema = edgerun_json::from_json_value(json!({
             "type": "object",
             "properties": {
                 "confirmed": {
@@ -2098,7 +2173,7 @@ mod tests {
                     }
                 }
             }),
-            edgerun_json::to_serde_value(&request)?,
+            edgerun_json::to_value(&request)
         );
 
         let payload = ServerRequestPayload::McpServerElicitationRequest(params);
@@ -2120,7 +2195,7 @@ mod tests {
                 "method": "account/rateLimits/read",
                 "id": 1,
             }),
-            edgerun_json::to_serde_value(&request)?,
+            edgerun_json::to_value(&request)
         );
         Ok(())
     }
@@ -2157,11 +2232,7 @@ mod tests {
                 service_tier: None,
                 cwd,
                 instruction_sources: vec![absolute_path("/tmp/AGENTS.md")],
-                approval_policy: v2::AskForApproval::OnFailure,
                 approvals_reviewer: v2::ApprovalsReviewer::User,
-                sandbox: v2::SandboxPolicy::DangerFullAccess,
-                permission_profile: None,
-                active_permission_profile: None,
                 reasoning_effort: None,
             },
         };
@@ -2201,17 +2272,11 @@ mod tests {
                     "serviceTier": null,
                     "cwd": absolute_path_string("tmp"),
                     "instructionSources": [absolute_path_string("tmp/AGENTS.md")],
-                    "approvalPolicy": "on-failure",
                     "approvalsReviewer": "user",
-                    "sandbox": {
-                        "type": "dangerFullAccess"
-                    },
-                    "permissionProfile": null,
-                    "activePermissionProfile": null,
                     "reasoningEffort": null
                 }
             }),
-            edgerun_json::to_serde_value(&response)?,
+            edgerun_json::to_value(&response)
         );
         Ok(())
     }
@@ -2227,7 +2292,7 @@ mod tests {
                 "method": "configRequirements/read",
                 "id": 1,
             }),
-            edgerun_json::to_serde_value(&request)?,
+            edgerun_json::to_value(&request)
         );
         Ok(())
     }
@@ -2249,7 +2314,7 @@ mod tests {
                     "apiKey": "secret"
                 }
             }),
-            edgerun_json::to_serde_value(&request)?,
+            edgerun_json::to_value(&request)
         );
         Ok(())
     }
@@ -2270,7 +2335,7 @@ mod tests {
                     "type": "chatgpt"
                 }
             }),
-            edgerun_json::to_serde_value(&request)?,
+            edgerun_json::to_value(&request)
         );
         Ok(())
     }
@@ -2292,7 +2357,7 @@ mod tests {
                     "codexStreamlinedLogin": true
                 }
             }),
-            edgerun_json::to_serde_value(&request)?,
+            edgerun_json::to_value(&request)
         );
         Ok(())
     }
@@ -2311,7 +2376,7 @@ mod tests {
                     "type": "chatgptDeviceCode"
                 }
             }),
-            edgerun_json::to_serde_value(&request)?,
+            edgerun_json::to_value(&request)
         );
         Ok(())
     }
@@ -2327,7 +2392,7 @@ mod tests {
                 "method": "account/logout",
                 "id": 5,
             }),
-            edgerun_json::to_serde_value(&request)?,
+            edgerun_json::to_value(&request)
         );
         Ok(())
     }
@@ -2353,7 +2418,7 @@ mod tests {
                     "chatgptPlanType": "business"
                 }
             }),
-            edgerun_json::to_serde_value(&request)?,
+            edgerun_json::to_value(&request)
         );
         Ok(())
     }
@@ -2374,7 +2439,7 @@ mod tests {
                     "refreshToken": false
                 }
             }),
-            edgerun_json::to_serde_value(&request)?,
+            edgerun_json::to_value(&request)
         );
         Ok(())
     }
@@ -2386,7 +2451,7 @@ mod tests {
             json!({
                 "type": "apiKey",
             }),
-            edgerun_json::to_serde_value(&api_key)?,
+            edgerun_json::to_value(&api_key)
         );
 
         let chatgpt = v2::Account::Chatgpt {
@@ -2399,7 +2464,7 @@ mod tests {
                 "email": "user@example.com",
                 "planType": "plus",
             }),
-            edgerun_json::to_serde_value(&chatgpt)?,
+            edgerun_json::to_value(&chatgpt)
         );
 
         Ok(())
@@ -2421,7 +2486,7 @@ mod tests {
                     "includeHidden": null
                 }
             }),
-            edgerun_json::to_serde_value(&request)?,
+            edgerun_json::to_value(&request)
         );
         Ok(())
     }
@@ -2438,7 +2503,7 @@ mod tests {
                 "id": 7,
                 "params": {}
             }),
-            edgerun_json::to_serde_value(&request)?,
+            edgerun_json::to_value(&request)
         );
         Ok(())
     }
@@ -2455,7 +2520,7 @@ mod tests {
                 "id": 7,
                 "params": {}
             }),
-            edgerun_json::to_serde_value(&request)?,
+            edgerun_json::to_value(&request)
         );
         Ok(())
     }
@@ -2476,7 +2541,7 @@ mod tests {
                     "threadId": null
                 }
             }),
-            edgerun_json::to_serde_value(&request)?,
+            edgerun_json::to_value(&request)
         );
         Ok(())
     }
@@ -2497,7 +2562,7 @@ mod tests {
                     "path": absolute_path_string("tmp/example")
                 }
             }),
-            edgerun_json::to_serde_value(&request)?,
+            edgerun_json::to_value(&request)
         );
         Ok(())
     }
@@ -2520,7 +2585,7 @@ mod tests {
                     "path": absolute_path_string("tmp/repo/.git")
                 }
             }),
-            edgerun_json::to_serde_value(&request)?,
+            edgerun_json::to_value(&request)
         );
         Ok(())
     }
@@ -2540,7 +2605,7 @@ mod tests {
                     "limit": null
                 }
             }),
-            edgerun_json::to_serde_value(&request)?,
+            edgerun_json::to_value(&request)
         );
         Ok(())
     }
@@ -2561,7 +2626,7 @@ mod tests {
                     "threadId": "thr_123"
                 }
             }),
-            edgerun_json::to_serde_value(&request)?,
+            edgerun_json::to_value(&request)
         );
         Ok(())
     }
@@ -2592,7 +2657,7 @@ mod tests {
                     "voice": "marin"
                 }
             }),
-            edgerun_json::to_serde_value(&request)?,
+            edgerun_json::to_value(&request)
         );
         Ok(())
     }
@@ -2622,7 +2687,7 @@ mod tests {
                     "voice": null
                 }
             }),
-            edgerun_json::to_serde_value(&default_prompt_request)?,
+            edgerun_json::to_value(&default_prompt_request)
         );
 
         let null_prompt_request = ClientRequest::ThreadRealtimeStart {
@@ -2649,7 +2714,7 @@ mod tests {
                     "voice": null
                 }
             }),
-            edgerun_json::to_serde_value(&null_prompt_request)?,
+            edgerun_json::to_value(&null_prompt_request)
         );
 
         let default_prompt_value = json!({
@@ -2664,8 +2729,8 @@ mod tests {
             }
         });
         assert_eq!(
-            edgerun_json::from_serde_value::<ClientRequest>(default_prompt_value)?,
-            default_prompt_request,
+            edgerun_json::from_json_value::<ClientRequest>(default_prompt_value)?,
+            default_prompt_request
         );
 
         let null_prompt_value = json!({
@@ -2681,8 +2746,8 @@ mod tests {
             }
         });
         assert_eq!(
-            edgerun_json::from_serde_value::<ClientRequest>(null_prompt_value)?,
-            null_prompt_request,
+            edgerun_json::from_json_value::<ClientRequest>(null_prompt_value)?,
+            null_prompt_request
         );
 
         Ok(())
@@ -2705,7 +2770,7 @@ mod tests {
                     },
                 }
             }),
-            edgerun_json::to_serde_value(&notification)?,
+            edgerun_json::to_value(&notification)
         );
         Ok(())
     }
@@ -2738,7 +2803,7 @@ mod tests {
                     }
                 }
             }),
-            edgerun_json::to_serde_value(&notification)?,
+            edgerun_json::to_value(&notification)
         );
         Ok(())
     }
@@ -2751,32 +2816,6 @@ mod tests {
         };
         let reason = crate::experimental_api::ExperimentalApi::experimental_reason(&request);
         assert_eq!(reason, Some("mock/experimentalMethod"));
-    }
-
-    #[test]
-    fn command_exec_permission_profile_is_marked_experimental() {
-        let request = ClientRequest::OneOffCommandExec {
-            request_id: RequestId::Integer(1),
-            params: v2::CommandExecParams {
-                command: vec!["pwd".to_string()],
-                process_id: None,
-                tty: false,
-                stream_stdin: false,
-                stream_stdout_stderr: false,
-                output_bytes_cap: None,
-                disable_output_cap: false,
-                disable_timeout: false,
-                timeout_ms: None,
-                cwd: None,
-                env: None,
-                size: None,
-                sandbox_policy: None,
-                permission_profile: Some(v2::PermissionProfile::Disabled),
-            },
-        };
-
-        let reason = crate::experimental_api::ExperimentalApi::experimental_reason(&request);
-        assert_eq!(reason, Some("command/exec.permissionProfile"));
     }
 
     #[test]
@@ -2893,39 +2932,6 @@ mod tests {
         );
         let reason = crate::experimental_api::ExperimentalApi::experimental_reason(&notification);
         assert_eq!(reason, Some("thread/realtime/outputAudio/delta"));
-    }
-
-    #[test]
-    fn command_execution_request_approval_additional_permissions_is_marked_experimental() {
-        let params = v2::CommandExecutionRequestApprovalParams {
-            thread_id: "thr_123".to_string(),
-            turn_id: "turn_123".to_string(),
-            item_id: "call_123".to_string(),
-            started_at_ms: 0,
-            approval_id: None,
-            reason: None,
-            network_approval_context: None,
-            command: Some("cat file".to_string()),
-            cwd: None,
-            command_actions: None,
-            additional_permissions: Some(v2::AdditionalPermissionProfile {
-                network: None,
-                file_system: Some(v2::AdditionalFileSystemPermissions {
-                    read: Some(vec![absolute_path("/tmp/allowed")]),
-                    write: None,
-                    glob_scan_max_depth: None,
-                    entries: None,
-                }),
-            }),
-            proposed_execpolicy_amendment: None,
-            proposed_network_policy_amendments: None,
-            available_decisions: None,
-        };
-        let reason = crate::experimental_api::ExperimentalApi::experimental_reason(&params);
-        assert_eq!(
-            reason,
-            Some("item/commandExecution/requestApproval.additionalPermissions")
-        );
     }
 }
 

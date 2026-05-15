@@ -48,35 +48,6 @@
 // # }
 // ```
 //
-// It's easy to generate large random numbers:
-//
-#![cfg_attr(feature = "std", doc = " ```")]
-#![cfg_attr(not(feature = "std"), doc = " ```ignore")]
-//
-// # #[cfg(feature = "rand")]
-// extern crate rand;
-// extern crate num_bigint_dig as bigint;
-//
-// # #[cfg(feature = "rand")]
-// # fn main() {
-// use bigint::{ToBigInt, RandBigInt};
-//
-// let mut rng = rand::thread_rng();
-// let a = rng.gen_bigint(1000);
-//
-// let low = -10000.to_bigint().unwrap();
-// let high = 10000.to_bigint().unwrap();
-// let b = rng.gen_bigint_range(&low, &high);
-//
-// // Probably an even larger number.
-// //println!("{}", a * b);
-// # }
-//
-// # #[cfg(not(feature = "rand"))]
-// # fn main() {
-// # }
-// ```
-//
 // ## Compatibility
 //
 // The `num-bigint-dig` crate is tested for rustc 1.56 and greater.
@@ -115,15 +86,11 @@ use core::fmt;
 #[cfg(feature = "std")]
 use std::error::Error;
 
-pub mod libm {
-    include!("libm_impl.rs");
-}
 include!("num_traits_impl.rs");
 
 #[macro_use]
 mod macros;
 
-mod bigint;
 mod biguint;
 pub mod integer;
 mod smallvec_impl;
@@ -131,16 +98,7 @@ mod smallvec_impl;
 pub use integer::{Integer, sqrt};
 pub use smallvec_impl::*;
 
-#[cfg(feature = "prime")]
-pub mod prime;
-
 pub mod algorithms;
-pub mod traits;
-
-pub use crate::num_bigint::traits::*;
-
-#[cfg(feature = "rand")]
-mod bigrand;
 
 #[cfg(target_pointer_width = "32")]
 type UsizePromotion = u32;
@@ -201,18 +159,6 @@ impl Error for ParseBigIntError {
 pub use crate::num_bigint::biguint::BigUint;
 pub use crate::num_bigint::biguint::IntoBigUint;
 pub use crate::num_bigint::biguint::ToBigUint;
-
-pub use crate::num_bigint::bigint::BigInt;
-pub use crate::num_bigint::bigint::IntoBigInt;
-pub use crate::num_bigint::bigint::Sign;
-pub use crate::num_bigint::bigint::ToBigInt;
-pub use crate::num_bigint::bigint::negate_sign;
-
-#[cfg(feature = "rand")]
-pub use crate::num_bigint::bigrand::{RandBigInt, RandomBits, UniformBigInt, UniformBigUint};
-
-#[cfg(feature = "prime")]
-pub use bigrand::RandPrime;
 
 #[cfg(not(feature = "u64_digit"))]
 pub const VEC_SIZE: usize = 8;

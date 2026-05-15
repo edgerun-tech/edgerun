@@ -8,14 +8,10 @@ use std::collections::BTreeMap;
 fn mcp_tool(name: &str, description: &str, input_schema: edgerun_json::Value) -> rmcp::model::Tool {
     rmcp::model::Tool {
         name: name.to_string().into(),
-        title: None,
         description: Some(description.to_string().into()),
         input_schema: std::sync::Arc::new(rmcp::model::object(input_schema)),
         output_schema: None,
         annotations: None,
-        execution: None,
-        icons: None,
-        meta: None,
     }
 }
 

@@ -14,7 +14,6 @@ use crate::tools::handlers::LocalShellHandler;
 use crate::tools::handlers::McpHandler;
 use crate::tools::handlers::PlanHandler;
 use crate::tools::handlers::ReadMcpResourceHandler;
-use crate::tools::handlers::RequestPermissionsHandler;
 use crate::tools::handlers::RequestPluginInstallHandler;
 use crate::tools::handlers::RequestUserInputHandler;
 use crate::tools::handlers::ShellCommandHandler;
@@ -71,8 +70,6 @@ pub fn build_tool_registry_builder(
     params: ToolRegistryBuildParams<'_>,
 ) -> ToolRegistryBuilder {
     let mut builder = ToolRegistryBuilder::new(config.code_mode_enabled);
-    let exec_permission_approvals_enabled = config.exec_permission_approvals_enabled;
-
     if config.code_mode_enabled {
         let namespace_descriptions = params
             .tool_namespaces
@@ -123,9 +120,7 @@ pub fn build_tool_registry_builder(
             matches!(config.environment_mode, ToolEnvironmentMode::Multiple);
         match &config.shell_type {
             ConfigShellToolType::Default => {
-                builder.register_handler(Arc::new(ShellHandler::new(ShellToolOptions {
-                    exec_permission_approvals_enabled,
-                })));
+                builder.register_handler(Arc::new(ShellHandler::new(ShellToolOptions)));
             }
             ConfigShellToolType::Local => {
                 builder.register_handler(Arc::new(LocalShellHandler::new()));
@@ -134,7 +129,6 @@ pub fn build_tool_registry_builder(
                 builder.register_handler(Arc::new(ExecCommandHandler::new(
                     ExecCommandHandlerOptions {
                         allow_login_shell: config.allow_login_shell,
-                        exec_permission_approvals_enabled,
                         include_environment_id,
                     },
                 )));
@@ -146,7 +140,6 @@ pub fn build_tool_registry_builder(
                     ShellCommandHandlerOptions {
                         backend_config: config.shell_command_backend,
                         allow_login_shell: config.allow_login_shell,
-                        exec_permission_approvals_enabled,
                     },
                 )));
             }
@@ -204,10 +197,6 @@ pub fn build_tool_registry_builder(
     builder.register_handler(Arc::new(RequestUserInputHandler {
         available_modes: config.request_user_input_available_modes.clone(),
     }));
-
-    if config.request_permissions_tool_enabled {
-        builder.register_handler(Arc::new(RequestPermissionsHandler));
-    }
 
     let deferred_dynamic_tools = params
         .dynamic_tools

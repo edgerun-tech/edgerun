@@ -7,7 +7,7 @@ use crate::function_tool::FunctionCallError;
 use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;
 use crate::tools::handlers::multi_agents::build_agent_spawn_config;
-use crate::tools::handlers::parse_arguments;
+use crate::tools::handlers::parse_json_arguments;
 use codex_protocol::ThreadId;
 use codex_protocol::error::CodexErr;
 use codex_protocol::protocol::AgentStatus;
@@ -18,8 +18,8 @@ use codex_utils_absolute_path::AbsolutePathBuf;
 use edgerun_time::chrono::ChronoUtc as Utc;
 use edgerun_futures::StreamExt;
 use edgerun_futures::stream::FuturesUnordered;
-use serde::Deserialize;
-use serde::Serialize;
+use edgerun_json::FromJson;
+use edgerun_json::ToJson;
 use edgerun_json::Value;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -42,7 +42,7 @@ const MAX_AGENT_JOB_CONCURRENCY: usize = 64;
 const STATUS_POLL_INTERVAL: Duration = Duration::from_millis(250);
 const DEFAULT_AGENT_JOB_ITEM_TIMEOUT: Duration = Duration::from_secs(60 * 30);
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, FromJson)]
 struct SpawnAgentsOnCsvArgs {
     csv_path: String,
     instruction: String,
@@ -54,7 +54,7 @@ struct SpawnAgentsOnCsvArgs {
     max_runtime_seconds: Option<u64>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, FromJson)]
 struct ReportAgentJobResultArgs {
     job_id: String,
     item_id: String,
@@ -62,7 +62,7 @@ struct ReportAgentJobResultArgs {
     stop: Option<bool>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, ToJson)]
 struct SpawnAgentsOnCsvResult {
     job_id: String,
     status: String,
@@ -74,14 +74,14 @@ struct SpawnAgentsOnCsvResult {
     failed_item_errors: Option<Vec<AgentJobFailureSummary>>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, ToJson)]
 struct AgentJobFailureSummary {
     item_id: String,
     source_id: Option<String>,
     last_error: String,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, ToJson)]
 struct ReportAgentJobResultToolResult {
     accepted: bool,
 }
@@ -545,10 +545,10 @@ fn build_worker_prompt(
     let output_schema = job
         .output_schema_json
         .as_ref()
-        .map(edgerun_json::to_string_pretty)
+        .map(edgerun_json::to_json_string_pretty)
         .transpose()?
         .unwrap_or_else(|| "{}".to_string());
-    let row_json = edgerun_json::to_string_pretty(&item.row_json)?;
+    let row_json = edgerun_json::to_json_string_pretty(&item.row_json)?;
     Ok(format!(
         "You are processing one item for a generic agent job.\n\
 Job ID: {job_id}\n\

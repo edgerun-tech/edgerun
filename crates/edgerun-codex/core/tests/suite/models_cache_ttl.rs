@@ -31,8 +31,6 @@ use edgerun_time::chrono::ChronoTimeZone;
 use edgerun_time::chrono::ChronoUtc as Utc;
 use edgerun_time::chrono::ChronoUtcDateTime as DateTime;
 use pretty_assertions::assert_eq;
-use serde::Deserialize;
-use serde::Serialize;
 use wiremock::MockServer;
 
 const ETAG: &str = "\"models-etag-ttl\"";
@@ -294,7 +292,7 @@ async fn rewrite_cache_timestamp(path: &Path, fetched_at: DateTime) -> Result<()
 
 async fn read_cache(path: &Path) -> Result<ModelsCache> {
     let contents = edgerun_tokio::fs::read(path).await?;
-    let cache = edgerun_json::from_serde_slice(&contents)?;
+    let cache = edgerun_json::from_slice(&contents)?;
     Ok(cache)
 }
 
@@ -310,12 +308,12 @@ fn write_cache_sync(path: &Path, cache: &ModelsCache) -> Result<()> {
     Ok(())
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, edgerun_json::ToJson, edgerun_json::FromJson)]
 struct ModelsCache {
     fetched_at: DateTime,
-    #[serde(default)]
+    #[schemars(default)]
     etag: Option<String>,
-    #[serde(default)]
+    #[schemars(default)]
     client_version: Option<String>,
     models: Vec<ModelInfo>,
 }

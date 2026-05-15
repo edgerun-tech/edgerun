@@ -1,8 +1,7 @@
 use alloc::vec::Vec;
 
-use rkyv::{Archive, Deserialize, Serialize};
-
 use crate::codec::{blake3_hash, wire_bytes, wire_from_bytes};
+use crate::generated_wire::ArchivedCapabilityEnvelope;
 use crate::preimage::HashBuilder;
 use crate::protocol::*;
 
@@ -33,8 +32,7 @@ pub const CAPABILITY_OPERATION_STREAM_END: u16 = 21;
 pub const CAPABILITY_OPERATION_INPUT_EVENT: u16 = 30;
 pub const CAPABILITY_OPERATION_RENDER_COMMAND: u16 = 40;
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CapabilityEnvelope {
     pub abi_version: u16,
     pub session_id: Hash,

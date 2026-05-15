@@ -1,18 +1,17 @@
 use codex_protocol::config_types::ApprovalsReviewer as CoreApprovalsReviewer;
-use codex_protocol::config_types::SandboxMode as CoreSandboxMode;
-use codex_protocol::protocol::AskForApproval as CoreAskForApproval;
 use codex_protocol::protocol::CodexErrorInfo as CoreCodexErrorInfo;
-use codex_protocol::protocol::GranularApprovalConfig as CoreGranularApprovalConfig;
 use codex_protocol::protocol::NonSteerableTurnKind as CoreNonSteerableTurnKind;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
+use edgerun_json::FromJson;
+use edgerun_json::JsonValue;
+use edgerun_json::JsonValueError;
+use edgerun_json::Map;
+use edgerun_json::ToJson;
 use schemars::JsonSchema;
 use schemars::r#gen::SchemaGenerator;
 use schemars::schema::InstanceType;
 use schemars::schema::Metadata;
 use schemars::schema::Schema;
 use schemars::schema::SchemaObject;
-use ts_rs::TS;
 
 // Macro to declare a camelCased API v2 enum mirroring a core enum which
 // tends to use either snake_case or kebab-case.
@@ -23,10 +22,9 @@ macro_rules! v2_enum_from_core {
             $( $(#[$variant_meta:meta])* $Variant:ident ),+ $(,)?
         }
     ) => {
-        #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
         $(#[$enum_meta])*
-        #[serde(rename_all = "camelCase")]
-        #[ts(export_to = "v2/")]
+        #[schemars(rename_all = "camelCase")]
         pub enum $Name {
             $( $(#[$variant_meta])* $Variant ),+
         }
@@ -51,35 +49,40 @@ pub(super) const fn default_enabled() -> bool {
     true
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub enum NonSteerableTurnKind {
     Review,
     Compact,
+}
+
+impl ToJson for NonSteerableTurnKind {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            Self::Review => "review",
+            Self::Compact => "compact",
+        })
+    }
 }
 
 /// This translation layer make sure that we expose codex error code in camel case.
 ///
 /// When an upstream HTTP status is available (for example, from the Responses API or a provider),
 /// it is forwarded in `httpStatusCode` on the relevant `codexErrorInfo` variant.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub enum CodexErrorInfo {
     ContextWindowExceeded,
     UsageLimitExceeded,
     ServerOverloaded,
     CyberPolicy,
     HttpConnectionFailed {
-        #[serde(rename = "httpStatusCode")]
-        #[ts(rename = "httpStatusCode")]
+        #[schemars(rename = "httpStatusCode")]
         http_status_code: Option<u16>,
     },
     /// Failed to connect to the response SSE stream.
     ResponseStreamConnectionFailed {
-        #[serde(rename = "httpStatusCode")]
-        #[ts(rename = "httpStatusCode")]
+        #[schemars(rename = "httpStatusCode")]
         http_status_code: Option<u16>,
     },
     InternalServerError,
@@ -89,24 +92,65 @@ pub enum CodexErrorInfo {
     SandboxError,
     /// The response SSE stream disconnected in the middle of a turn before completion.
     ResponseStreamDisconnected {
-        #[serde(rename = "httpStatusCode")]
-        #[ts(rename = "httpStatusCode")]
+        #[schemars(rename = "httpStatusCode")]
         http_status_code: Option<u16>,
     },
     /// Reached the retry limit for responses.
     ResponseTooManyFailedAttempts {
-        #[serde(rename = "httpStatusCode")]
-        #[ts(rename = "httpStatusCode")]
+        #[schemars(rename = "httpStatusCode")]
         http_status_code: Option<u16>,
     },
     /// Returned when `turn/start` or `turn/steer` is submitted while the current active turn
     /// cannot accept same-turn steering, for example `/review` or manual `/compact`.
     ActiveTurnNotSteerable {
-        #[serde(rename = "turnKind")]
-        #[ts(rename = "turnKind")]
+        #[schemars(rename = "turnKind")]
         turn_kind: NonSteerableTurnKind,
     },
     Other,
+}
+
+impl ToJson for CodexErrorInfo {
+    fn to_json(&self) -> JsonValue {
+        match self {
+            Self::ContextWindowExceeded => JsonValue::from("contextWindowExceeded"),
+            Self::UsageLimitExceeded => JsonValue::from("usageLimitExceeded"),
+            Self::ServerOverloaded => JsonValue::from("serverOverloaded"),
+            Self::CyberPolicy => JsonValue::from("cyberPolicy"),
+            Self::InternalServerError => JsonValue::from("internalServerError"),
+            Self::Unauthorized => JsonValue::from("unauthorized"),
+            Self::BadRequest => JsonValue::from("badRequest"),
+            Self::ThreadRollbackFailed => JsonValue::from("threadRollbackFailed"),
+            Self::SandboxError => JsonValue::from("sandboxError"),
+            Self::Other => JsonValue::from("other"),
+            Self::HttpConnectionFailed { http_status_code } => {
+                http_status_error("httpConnectionFailed", *http_status_code)
+            }
+            Self::ResponseStreamConnectionFailed { http_status_code } => {
+                http_status_error("responseStreamConnectionFailed", *http_status_code)
+            }
+            Self::ResponseStreamDisconnected { http_status_code } => {
+                http_status_error("responseStreamDisconnected", *http_status_code)
+            }
+            Self::ResponseTooManyFailedAttempts { http_status_code } => {
+                http_status_error("responseTooManyFailedAttempts", *http_status_code)
+            }
+            Self::ActiveTurnNotSteerable { turn_kind } => {
+                let mut payload = Map::with_capacity(1);
+                payload.push_field("turnKind", turn_kind.to_json());
+                let mut object = Map::with_capacity(1);
+                object.push_field("activeTurnNotSteerable", JsonValue::Object(payload));
+                JsonValue::Object(object)
+            }
+        }
+    }
+}
+
+fn http_status_error(variant: &str, http_status_code: Option<u16>) -> JsonValue {
+    let mut payload = Map::with_capacity(1);
+    payload.push_field("httpStatusCode", http_status_code.to_json());
+    let mut object = Map::with_capacity(1);
+    object.push_field(variant, JsonValue::Object(payload));
+    JsonValue::Object(object)
 }
 
 impl From<CoreCodexErrorInfo> for CodexErrorInfo {
@@ -152,83 +196,14 @@ impl From<CoreNonSteerableTurnKind> for NonSteerableTurnKind {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "kebab-case")]
-#[ts(rename_all = "kebab-case", export_to = "v2/")]
-pub enum AskForApproval {
-    #[serde(rename = "untrusted")]
-    #[ts(rename = "untrusted")]
-    UnlessTrusted,
-    OnFailure,
-    OnRequest,
-    Granular {
-        sandbox_approval: bool,
-        rules: bool,
-        #[serde(default)]
-        skill_approval: bool,
-        #[serde(default)]
-        request_permissions: bool,
-        mcp_elicitations: bool,
-    },
-    Never,
-}
-
-impl AskForApproval {
-    pub fn to_core(self) -> CoreAskForApproval {
-        match self {
-            AskForApproval::UnlessTrusted => CoreAskForApproval::UnlessTrusted,
-            AskForApproval::OnFailure => CoreAskForApproval::OnFailure,
-            AskForApproval::OnRequest => CoreAskForApproval::OnRequest,
-            AskForApproval::Granular {
-                sandbox_approval,
-                rules,
-                skill_approval,
-                request_permissions,
-                mcp_elicitations,
-            } => CoreAskForApproval::Granular(CoreGranularApprovalConfig {
-                sandbox_approval,
-                rules,
-                skill_approval,
-                request_permissions,
-                mcp_elicitations,
-            }),
-            AskForApproval::Never => CoreAskForApproval::Never,
-        }
-    }
-}
-
-impl From<CoreAskForApproval> for AskForApproval {
-    fn from(value: CoreAskForApproval) -> Self {
-        match value {
-            CoreAskForApproval::UnlessTrusted => AskForApproval::UnlessTrusted,
-            CoreAskForApproval::OnFailure => AskForApproval::OnFailure,
-            CoreAskForApproval::OnRequest => AskForApproval::OnRequest,
-            CoreAskForApproval::Granular(granular_config) => AskForApproval::Granular {
-                sandbox_approval: granular_config.sandbox_approval,
-                rules: granular_config.rules,
-                skill_approval: granular_config.skill_approval,
-                request_permissions: granular_config.request_permissions,
-                mcp_elicitations: granular_config.mcp_elicitations,
-            },
-            CoreAskForApproval::Never => AskForApproval::Never,
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, TS)]
-#[ts(
-    type = r#""user" | "auto_review" | "guardian_subagent""#,
-    export_to = "v2/"
-)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// Configures who approval requests are routed to for review. Examples
 /// include sandbox escapes, blocked network access, MCP approval prompts, and
 /// ARC escalations. Defaults to `user`. `auto_review` uses a carefully
 /// prompted subagent to gather relevant context and apply a risk-based
 /// decision framework before approving or denying the request.
 pub enum ApprovalsReviewer {
-    #[serde(rename = "user")]
     User,
-    #[serde(rename = "guardian_subagent", alias = "auto_review")]
     AutoReview,
 }
 
@@ -242,6 +217,30 @@ impl JsonSchema for ApprovalsReviewer {
             &["user", "auto_review", "guardian_subagent"],
             "Configures who approval requests are routed to for review. Examples include sandbox escapes, blocked network access, MCP approval prompts, and ARC escalations. Defaults to `user`. `auto_review` uses a carefully prompted subagent to gather relevant context and apply a risk-based decision framework before approving or denying the request. The legacy value `guardian_subagent` is accepted for compatibility.",
         )
+    }
+}
+
+impl ToJson for ApprovalsReviewer {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::String(
+            match self {
+                Self::User => "user",
+                Self::AutoReview => "guardian_subagent",
+            }
+            .to_string(),
+        )
+    }
+}
+
+impl FromJson for ApprovalsReviewer {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "user" => Ok(Self::User),
+            "auto_review" | "guardian_subagent" => Ok(Self::AutoReview),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown approvals reviewer `{other}`"
+            ))),
+        }
     }
 }
 
@@ -277,35 +276,6 @@ impl From<CoreApprovalsReviewer> for ApprovalsReviewer {
         match value {
             CoreApprovalsReviewer::User => ApprovalsReviewer::User,
             CoreApprovalsReviewer::AutoReview => ApprovalsReviewer::AutoReview,
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "kebab-case")]
-#[ts(rename_all = "kebab-case", export_to = "v2/")]
-pub enum SandboxMode {
-    ReadOnly,
-    WorkspaceWrite,
-    DangerFullAccess,
-}
-
-impl SandboxMode {
-    pub fn to_core(self) -> CoreSandboxMode {
-        match self {
-            SandboxMode::ReadOnly => CoreSandboxMode::ReadOnly,
-            SandboxMode::WorkspaceWrite => CoreSandboxMode::WorkspaceWrite,
-            SandboxMode::DangerFullAccess => CoreSandboxMode::DangerFullAccess,
-        }
-    }
-}
-
-impl From<CoreSandboxMode> for SandboxMode {
-    fn from(value: CoreSandboxMode) -> Self {
-        match value {
-            CoreSandboxMode::ReadOnly => SandboxMode::ReadOnly,
-            CoreSandboxMode::WorkspaceWrite => SandboxMode::WorkspaceWrite,
-            CoreSandboxMode::DangerFullAccess => SandboxMode::DangerFullAccess,
         }
     }
 }

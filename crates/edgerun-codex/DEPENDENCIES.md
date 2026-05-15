@@ -4,8 +4,8 @@ Normal dependencies from the lifted workspace after pruning and the first Edgeru
 
 | Crate | Direct normal dependencies |
 | --- | --- |
-| `codex-app-server-protocol` | `anyhow`, `codex-protocol`, `codex-shell-command`, `edgerun-clap`, `inventory`, `rmcp`, `schemars`, `serde`, `serde_json`, `serde_with`, `strum_macros`, `thiserror`, `tracing`, `ts-rs`, `uuid` |
-| `codex-protocol` | `chardetng`, `chrono`, `edgerun-encoding`, `edgerun-glob`, `encoding_rs`, `icu_decimal`, `icu_locale_core`, `icu_provider`, `landlock`, `quick-xml`, `reqwest`, `schemars`, `seccompiler`, `serde`, `serde_json`, `serde_with`, `strum`, `strum_macros`, `sys-locale`, `thiserror`, `tokio`, `tracing`, `ts-rs`, `uuid` |
+| `codex-app-server-protocol` | `anyhow`, `codex-protocol`, `codex-shell-command`, `edgerun-clap`, `inventory`, `rmcp`, `schemars`, `serde`, `serde_json`, `serde_with`, `strum_macros`, `thiserror`, `tracing`, `uuid` |
+| `codex-protocol` | `chardetng`, `chrono`, `edgerun-encoding`, `edgerun-glob`, `encoding_rs`, `icu_decimal`, `icu_locale_core`, `icu_provider`, `quick-xml`, `reqwest`, `schemars`, `serde`, `serde_json`, `serde_with`, `strum`, `strum_macros`, `sys-locale`, `thiserror`, `tokio`, `tracing`, `uuid` |
 | `codex-shell-command` | `codex-protocol`, `edgerun-encoding`, `edgerun-json`, `edgerun-shlex`, `edgerun-url`, `regex`, `tree-sitter`, `tree-sitter-bash` |
 | `codex-apply-patch` | `anyhow`, `async-trait`, `similar`, `thiserror`, `tokio`, `tree-sitter`, `tree-sitter-bash` |
 | `codex-code-mode` | `async-channel`, `async-trait`, `codex-protocol`, `deno_core_icudata`, `serde`, `serde_json`, `tokio`, `tokio-util`, `tracing`, `v8` |

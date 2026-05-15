@@ -20,12 +20,6 @@ use alloc::boxed::Box;
 #[cfg(feature = "p256_ecdsa_der")]
 use {crate::ecdsa_core::der, core::ops::Add};
 
-#[cfg(feature = "p256_ecdsa_pem")]
-use {
-    crate::elliptic_curve::pkcs8::{DecodePublicKey, EncodePublicKey},
-    core::str::FromStr,
-};
-
 #[cfg(feature = "p256_ecdsa_pkcs8")]
 use crate::elliptic_curve::pkcs8::{
     self, AssociatedOid, ObjectIdentifier,
@@ -40,9 +34,6 @@ use {
     },
     crate::sha2::{Sha224, Sha256, Sha384, Sha512},
 };
-
-#[cfg(all(feature = "p256_ecdsa_pem", feature = "p256_ecdsa_serde"))]
-use serdect::serde::{Deserialize, Serialize, de, ser};
 
 /// ECDSA public key used for verifying signatures. Generic over prime order
 /// elliptic curves (e.g. NIST P-curves)
@@ -62,9 +53,9 @@ use serdect::serde::{Deserialize, Serialize, de, ser};
 /// See the [`p256` crate](https://docs.rs/p256/latest/p256/ecdsa/index.html)
 /// for examples of using this type with a concrete elliptic curve.
 ///
-/// # `serde` support
+/// # `edgerun_json_compat` support
 ///
-/// When the `serde` feature of this crate is enabled, it provides support for
+/// When the `edgerun_json_compat` feature of this crate is enabled, it provides support for
 /// serializing and deserializing ECDSA signatures using the `Serialize` and
 /// `Deserialize` traits.
 ///
@@ -420,61 +411,5 @@ where
         spki: crate::pkcs8::SubjectPublicKeyInfoRef<'_>,
     ) -> crate::pkcs8::spki::Result<Self> {
         PublicKey::try_from(spki).map(|inner| Self { inner })
-    }
-}
-
-#[cfg(feature = "p256_ecdsa_pem")]
-impl<C> EncodePublicKey for VerifyingKey<C>
-where
-    C: PrimeCurve + AssociatedOid + CurveArithmetic + PointCompression,
-    AffinePoint<C>: FromEncodedPoint<C> + ToEncodedPoint<C>,
-    FieldBytesSize<C>: sec1::ModulusSize,
-{
-    fn to_public_key_der(&self) -> crate::pkcs8::spki::Result<crate::pkcs8::Document> {
-        self.inner.to_public_key_der()
-    }
-}
-
-#[cfg(feature = "p256_ecdsa_pem")]
-impl<C> FromStr for VerifyingKey<C>
-where
-    C: PrimeCurve + AssociatedOid + CurveArithmetic + PointCompression,
-    AffinePoint<C>: FromEncodedPoint<C> + ToEncodedPoint<C>,
-    FieldBytesSize<C>: sec1::ModulusSize,
-{
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self> {
-        Self::from_public_key_pem(s).map_err(|_| Error::new())
-    }
-}
-
-#[cfg(all(feature = "p256_ecdsa_pem", feature = "p256_ecdsa_serde"))]
-impl<C> Serialize for VerifyingKey<C>
-where
-    C: PrimeCurve + AssociatedOid + CurveArithmetic + PointCompression,
-    AffinePoint<C>: FromEncodedPoint<C> + ToEncodedPoint<C>,
-    FieldBytesSize<C>: sec1::ModulusSize,
-{
-    fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
-    where
-        S: ser::Serializer,
-    {
-        self.inner.serialize(serializer)
-    }
-}
-
-#[cfg(all(feature = "p256_ecdsa_pem", feature = "p256_ecdsa_serde"))]
-impl<'de, C> Deserialize<'de> for VerifyingKey<C>
-where
-    C: PrimeCurve + AssociatedOid + CurveArithmetic + PointCompression,
-    AffinePoint<C>: FromEncodedPoint<C> + ToEncodedPoint<C>,
-    FieldBytesSize<C>: sec1::ModulusSize,
-{
-    fn deserialize<D>(deserializer: D) -> core::result::Result<Self, D::Error>
-    where
-        D: de::Deserializer<'de>,
-    {
-        PublicKey::<C>::deserialize(deserializer).map(Into::into)
     }
 }

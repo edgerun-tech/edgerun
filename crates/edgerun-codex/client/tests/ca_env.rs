@@ -9,18 +9,13 @@
 //! locally generated certificates, including through a TLS-intercepting CONNECT proxy.
 
 use codex_utils_cargo_bin::cargo_bin;
-use rcgen::BasicConstraints;
-use rcgen::CertificateParams;
-use rcgen::CertifiedIssuer;
-use rcgen::DistinguishedName;
-use rcgen::DnType;
-use rcgen::ExtendedKeyUsagePurpose;
-use rcgen::IsCa;
-use rcgen::KeyPair;
-use rcgen::KeyUsagePurpose;
-use rcgen::PKCS_ECDSA_P256_SHA256;
-use rustls_pki_types::CertificateDer;
-use rustls_pki_types::PrivateKeyDer;
+use edgerun_http_client::rt::AsyncRead;
+use edgerun_http_client::rt::AsyncReadExt;
+use edgerun_http_client::rt::AsyncWrite;
+use edgerun_http_client::rt::AsyncWriteExt;
+use edgerun_http_client::tls::AsyncTlsServerStream;
+use edgerun_http_client::tls::CertificateAndKey;
+use edgerun_http_client::tls::generate_self_signed;
 use std::fs;
 use std::io;
 use std::io::Read;
@@ -30,7 +25,6 @@ use std::net::TcpStream;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::Command;
-use std::sync::Arc;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
@@ -59,8 +53,7 @@ const TRUSTED_TEST_CERT: &str = include_str!("fixtures/test-ca-trusted.pem");
 
 struct Tls13Material {
     ca_cert_pem: String,
-    server_cert: CertificateDer<'static>,
-    server_key: PrivateKeyDer<'static>,
+    cert: CertificateAndKey,
 }
 
 struct Tls13TestServer {
@@ -143,27 +136,20 @@ fn run_probe_posting_through_tls_intercepting_proxy(
 }
 
 fn spawn_tls13_test_server() -> Tls13TestServer {
-    codex_utils_rustls_provider::ensure_rustls_crypto_provider();
     let material = generate_tls13_material();
-    let listener = TcpListener::bind(("127.0.0.1", 0))
+    let runtime = test_runtime("TLS test server");
+    let listener = runtime
+        .block_on(edgerun_tokio::net::TcpListener::bind("127.0.0.1:0"))
         .unwrap_or_else(|error| panic!("bind TLS test server: {error}"));
-    listener
-        .set_nonblocking(true)
-        .unwrap_or_else(|error| panic!("set TLS test server nonblocking: {error}"));
     let port = listener
         .local_addr()
         .unwrap_or_else(|error| panic!("TLS test server addr: {error}"))
         .port();
-    let config = Arc::new(
-        rustls::ServerConfig::builder_with_protocol_versions(&[&rustls::version::TLS13])
-            .with_no_client_auth()
-            .with_single_cert(vec![material.server_cert], material.server_key)
-            .unwrap_or_else(|error| panic!("TLS 1.3 server config: {error}")),
-    );
     let (request_tx, request_rx) = mpsc::channel();
+    let cert = material.cert.clone();
 
     thread::spawn(move || {
-        let result = accept_tls13_request(listener, config);
+        let result = runtime.block_on(accept_tls13_request(listener, cert));
         let _ = request_tx.send(result.map_err(|error| error.to_string()));
     });
 
@@ -198,27 +184,20 @@ fn spawn_plain_http_origin() -> PlainHttpOrigin {
 }
 
 fn spawn_tls_intercepting_proxy() -> TlsInterceptingProxy {
-    codex_utils_rustls_provider::ensure_rustls_crypto_provider();
     let material = generate_tls13_material();
-    let listener = TcpListener::bind(("127.0.0.1", 0))
+    let runtime = test_runtime("TLS intercepting proxy");
+    let listener = runtime
+        .block_on(edgerun_tokio::net::TcpListener::bind("127.0.0.1:0"))
         .unwrap_or_else(|error| panic!("bind TLS intercepting proxy: {error}"));
-    listener
-        .set_nonblocking(true)
-        .unwrap_or_else(|error| panic!("set TLS intercepting proxy nonblocking: {error}"));
     let port = listener
         .local_addr()
         .unwrap_or_else(|error| panic!("TLS intercepting proxy addr: {error}"))
         .port();
-    let config = Arc::new(
-        rustls::ServerConfig::builder_with_protocol_versions(&[&rustls::version::TLS13])
-            .with_no_client_auth()
-            .with_single_cert(vec![material.server_cert], material.server_key)
-            .unwrap_or_else(|error| panic!("TLS intercepting proxy config: {error}")),
-    );
     let (request_tx, request_rx) = mpsc::channel();
+    let cert = material.cert.clone();
 
     thread::spawn(move || {
-        let result = accept_tls_intercepting_proxy_request(listener, config);
+        let result = runtime.block_on(accept_tls_intercepting_proxy_request(listener, cert));
         let _ = request_tx.send(result.map_err(|error| error.to_string()));
     });
 
@@ -230,36 +209,21 @@ fn spawn_tls_intercepting_proxy() -> TlsInterceptingProxy {
 }
 
 fn generate_tls13_material() -> Tls13Material {
-    let mut ca_params = CertificateParams::default();
-    ca_params.is_ca = IsCa::Ca(BasicConstraints::Unconstrained);
-    ca_params.key_usages = vec![KeyUsagePurpose::KeyCertSign, KeyUsagePurpose::CrlSign];
-    let mut ca_distinguished_name = DistinguishedName::new();
-    ca_distinguished_name.push(DnType::CommonName, "codex test CA");
-    ca_params.distinguished_name = ca_distinguished_name;
-    let ca_key_pair = KeyPair::generate_for(&PKCS_ECDSA_P256_SHA256)
-        .unwrap_or_else(|error| panic!("generate test CA key pair: {error}"));
-    let ca = CertifiedIssuer::self_signed(ca_params, ca_key_pair)
-        .unwrap_or_else(|error| panic!("generate test CA certificate: {error}"));
-
-    let mut server_params =
-        CertificateParams::new(vec!["localhost".to_string(), "127.0.0.1".to_string()])
-            .unwrap_or_else(|error| panic!("create test server certificate params: {error}"));
-    server_params.extended_key_usages = vec![ExtendedKeyUsagePurpose::ServerAuth];
-    server_params.key_usages = vec![
-        KeyUsagePurpose::DigitalSignature,
-        KeyUsagePurpose::KeyEncipherment,
-    ];
-    let server_key_pair = KeyPair::generate_for(&PKCS_ECDSA_P256_SHA256)
-        .unwrap_or_else(|error| panic!("generate test server key pair: {error}"));
-    let server_cert = server_params
-        .signed_by(&server_key_pair, &ca)
-        .unwrap_or_else(|error| panic!("generate test server certificate: {error}"));
+    let cert = generate_self_signed(&["localhost", "127.0.0.1"])
+        .unwrap_or_else(|error| panic!("generate EdgeRun TLS test certificate: {error}"));
 
     Tls13Material {
-        ca_cert_pem: ca.pem(),
-        server_cert: server_cert.der().clone(),
-        server_key: PrivateKeyDer::from(server_key_pair),
+        ca_cert_pem: cert.cert_pem(),
+        cert,
     }
+}
+
+fn test_runtime(name: &str) -> edgerun_tokio::runtime::Runtime {
+    let mut builder = edgerun_tokio::runtime::Builder::new_current_thread();
+    builder.enable_all();
+    builder
+        .build()
+        .unwrap_or_else(|error| panic!("build {name} runtime: {error}"))
 }
 
 fn accept_plain_http_origin_request(listener: TcpListener) -> io::Result<String> {
@@ -274,50 +238,56 @@ fn accept_plain_http_origin_request(listener: TcpListener) -> io::Result<String>
     Ok(request)
 }
 
-fn accept_tls13_request(
-    listener: TcpListener,
-    config: Arc<rustls::ServerConfig>,
+async fn accept_tls13_request(
+    listener: edgerun_tokio::net::TcpListener,
+    cert: CertificateAndKey,
 ) -> io::Result<String> {
-    let stream = accept_with_timeout(listener, Duration::from_secs(5))?;
-    stream.set_nonblocking(false)?;
-    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
-
-    let connection = rustls::ServerConnection::new(config).map_err(io::Error::other)?;
-    let mut tls = rustls::StreamOwned::new(connection, stream);
-    let request = read_http_message(&mut tls)?;
-    tls.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")?;
-    tls.flush()?;
+    let (stream, _) = listener.accept().await.map_err(map_edgerun_io)?;
+    let mut tls = AsyncTlsServerStream::accept(stream, &cert)
+        .await
+        .map_err(io::Error::other)?;
+    let request = read_http_message_async(&mut tls).await?;
+    tls.write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+        .await
+        .map_err(map_edgerun_io)?;
+    tls.flush().await.map_err(map_edgerun_io)?;
     Ok(request)
 }
 
-fn accept_tls_intercepting_proxy_request(
-    listener: TcpListener,
-    config: Arc<rustls::ServerConfig>,
+async fn accept_tls_intercepting_proxy_request(
+    listener: edgerun_tokio::net::TcpListener,
+    cert: CertificateAndKey,
 ) -> io::Result<String> {
-    let mut stream = accept_with_timeout(listener, Duration::from_secs(5))?;
-    stream.set_nonblocking(false)?;
-    stream.set_read_timeout(Some(Duration::from_secs(5)))?;
-    stream.set_write_timeout(Some(Duration::from_secs(5)))?;
-
-    let connect_request = read_http_message(&mut stream)?;
+    let (mut stream, _) = listener.accept().await.map_err(map_edgerun_io)?;
+    let connect_request = read_http_message_async(&mut stream).await?;
     let origin_authority = connect_authority_from_request(&connect_request)?;
-    stream.write_all(b"HTTP/1.1 200 Connection Established\r\n\r\n")?;
-    stream.flush()?;
+    AsyncWriteExt::write_all(&mut stream, b"HTTP/1.1 200 Connection Established\r\n\r\n")
+        .await
+        .map_err(map_edgerun_io)?;
+    AsyncWriteExt::flush(&mut stream)
+        .await
+        .map_err(map_edgerun_io)?;
 
-    let connection = rustls::ServerConnection::new(config).map_err(io::Error::other)?;
-    let mut tls = rustls::StreamOwned::new(connection, stream);
-    let request = read_http_message(&mut tls)?;
+    let mut tls = AsyncTlsServerStream::accept(stream, &cert)
+        .await
+        .map_err(io::Error::other)?;
+    let request = read_http_message_async(&mut tls).await?;
 
-    let mut origin = TcpStream::connect(origin_authority.as_str())?;
-    origin.set_read_timeout(Some(Duration::from_secs(5)))?;
-    origin.set_write_timeout(Some(Duration::from_secs(5)))?;
-    origin.write_all(request.as_bytes())?;
-    origin.flush()?;
-    let response = read_http_message(&mut origin)?;
+    let mut origin = edgerun_tokio::net::TcpStream::connect(origin_authority.as_str())
+        .await
+        .map_err(io::Error::other)?;
+    AsyncWriteExt::write_all(&mut origin, request.as_bytes())
+        .await
+        .map_err(map_edgerun_io)?;
+    AsyncWriteExt::flush(&mut origin)
+        .await
+        .map_err(map_edgerun_io)?;
+    let response = read_http_message_async(&mut origin).await?;
 
-    tls.write_all(response.as_bytes())?;
-    tls.flush()?;
+    tls.write_all(response.as_bytes())
+        .await
+        .map_err(map_edgerun_io)?;
+    tls.flush().await.map_err(map_edgerun_io)?;
     Ok(request)
 }
 
@@ -364,24 +334,58 @@ fn read_http_message(stream: &mut impl Read) -> io::Result<String> {
             break;
         }
         buffer.extend_from_slice(&chunk[..bytes_read]);
-        if let Some(header_end) = buffer.windows(4).position(|window| window == b"\r\n\r\n") {
-            let body_start = header_end + 4;
-            let headers = String::from_utf8_lossy(&buffer[..body_start]);
-            let content_length = headers
-                .lines()
-                .filter_map(|line| line.split_once(':'))
-                .find_map(|(name, value)| {
-                    name.eq_ignore_ascii_case("content-length")
-                        .then(|| value.trim().parse::<usize>().ok())
-                        .flatten()
-                })
-                .unwrap_or(0);
-            if buffer.len() >= body_start + content_length {
-                break;
-            }
+        if http_message_complete(&buffer) {
+            break;
         }
     }
     Ok(String::from_utf8_lossy(&buffer).into_owned())
+}
+
+async fn read_http_message_async<S>(stream: &mut S) -> io::Result<String>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    let mut buffer = Vec::new();
+    let mut chunk = [0; 1024];
+    loop {
+        let bytes_read = stream.read(&mut chunk).await.map_err(map_edgerun_io)?;
+        if bytes_read == 0 {
+            break;
+        }
+        buffer.extend_from_slice(&chunk[..bytes_read]);
+        if http_message_complete(&buffer) {
+            break;
+        }
+    }
+    Ok(String::from_utf8_lossy(&buffer).into_owned())
+}
+
+fn http_message_complete(buffer: &[u8]) -> bool {
+    if let Some(header_end) = buffer.windows(4).position(|window| window == b"\r\n\r\n") {
+        let body_start = header_end + 4;
+        let headers = String::from_utf8_lossy(&buffer[..body_start]);
+        let content_length = headers
+            .lines()
+            .filter_map(|line| line.split_once(':'))
+            .find_map(|(name, value)| {
+                name.eq_ignore_ascii_case("content-length")
+                    .then(|| value.trim().parse::<usize>().ok())
+                    .flatten()
+            })
+            .unwrap_or(0);
+        return buffer.len() >= body_start + content_length;
+    }
+    false
+}
+
+fn map_edgerun_io(error: edgerun_http_client::rt::IoError) -> io::Error {
+    match error {
+        edgerun_http_client::rt::IoError::UnexpectedEof => {
+            io::Error::from(io::ErrorKind::UnexpectedEof)
+        }
+        edgerun_http_client::rt::IoError::WriteZero => io::Error::from(io::ErrorKind::WriteZero),
+        edgerun_http_client::rt::IoError::Other(message) => io::Error::other(message),
+    }
 }
 
 fn assert_token_exchange_request(request: &str) {

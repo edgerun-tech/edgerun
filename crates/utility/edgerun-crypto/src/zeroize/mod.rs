@@ -710,29 +710,29 @@ where
     }
 }
 
-#[cfg(feature = "serde")]
-impl<Z> serde::Serialize for Zeroizing<Z>
+#[cfg(feature = "edgerun_json_compat")]
+impl<Z> edgerun_json_compat::Serialize for Zeroizing<Z>
 where
-    Z: Zeroize + serde::Serialize,
+    Z: Zeroize + edgerun_json_compat::Serialize,
 {
     #[inline(always)]
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer,
+        S: edgerun_json_compat::Serializer,
     {
         self.0.serialize(serializer)
     }
 }
 
-#[cfg(feature = "serde")]
-impl<'de, Z> serde::Deserialize<'de> for Zeroizing<Z>
+#[cfg(feature = "edgerun_json_compat")]
+impl<'de, Z> edgerun_json_compat::Deserialize<'de> for Zeroizing<Z>
 where
-    Z: Zeroize + serde::Deserialize<'de>,
+    Z: Zeroize + edgerun_json_compat::Deserialize<'de>,
 {
     #[inline(always)]
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>,
+        D: edgerun_json_compat::Deserializer<'de>,
     {
         Ok(Self(Z::deserialize(deserializer)?))
     }

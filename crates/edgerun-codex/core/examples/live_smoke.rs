@@ -47,7 +47,7 @@ fn codex_home() -> PathBuf {
 
 fn read_chatgpt_auth() -> Result<Arc<ChatGptAuth>, Box<dyn Error>> {
     let auth_path = codex_home().join("auth.json");
-    let auth: Value = edgerun_json::from_serde_slice(&std::fs::read(&auth_path)?)?;
+    let auth: Value = edgerun_json::from_slice(&std::fs::read(&auth_path)?)?;
     let access_token = auth
         .get("tokens")
         .and_then(|tokens| tokens.get("access_token"))

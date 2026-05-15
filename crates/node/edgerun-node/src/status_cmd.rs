@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
+#[cfg(feature = "all-hardware")]
 use edgerun_devices::network_interface::NetworkLinkState;
+#[cfg(feature = "all-hardware")]
 use edgerun_linux_netif::discover_network_interfaces;
 use edgerun_storage::fs::scan_event_logs;
 
@@ -29,13 +31,7 @@ pub fn cmd_status(path: &PathBuf) {
         scanned.iter().map(|e| e.event.seq).max().unwrap_or(0)
     );
 
-    let interfaces = discover_network_interfaces().unwrap_or_default();
-    let up_interfaces: Vec<_> = interfaces
-        .iter()
-        .filter(|i| i.link_state == NetworkLinkState::Up && i.name != "lo")
-        .map(|i| &i.name)
-        .collect();
-    println!("  UP interfaces: {:?}", up_interfaces);
+    print_network_interfaces();
 
     // Hardware inventory
     println!();
@@ -45,4 +41,20 @@ pub fn cmd_status(path: &PathBuf) {
     let runtime_id = edgerun_node::runtime::sha256(&genesis.event.stream_id);
     let provider_apps = hw.capability_provider_apps(runtime_id);
     println!("  Provider apps:   {}", provider_apps.len());
+}
+
+#[cfg(feature = "all-hardware")]
+fn print_network_interfaces() {
+    let interfaces = discover_network_interfaces().unwrap_or_default();
+    let up_interfaces: Vec<_> = interfaces
+        .iter()
+        .filter(|i| i.link_state == NetworkLinkState::Up && i.name != "lo")
+        .map(|i| &i.name)
+        .collect();
+    println!("  UP interfaces: {:?}", up_interfaces);
+}
+
+#[cfg(not(feature = "all-hardware"))]
+fn print_network_interfaces() {
+    println!("  UP interfaces: unavailable (all-hardware feature disabled)");
 }

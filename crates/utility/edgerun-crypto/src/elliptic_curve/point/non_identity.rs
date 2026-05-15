@@ -6,9 +6,6 @@ use crate::elliptic_curve::rand_core::{CryptoRng, RngCore};
 use crate::group::{Curve, GroupEncoding, prime::PrimeCurveAffine};
 use crate::subtle::{Choice, ConditionallySelectable, ConstantTimeEq, CtOption};
 
-#[cfg(feature = "elliptic_curve_serde")]
-use serdect::serde::{Deserialize, Serialize, de, ser};
-
 use crate::elliptic_curve::{CurveArithmetic, NonZeroScalar, Scalar};
 
 /// Non-identity point type.
@@ -163,33 +160,6 @@ where
         NonIdentity {
             point: self.point * *rhs.as_ref(),
         }
-    }
-}
-
-#[cfg(feature = "elliptic_curve_serde")]
-impl<P> Serialize for NonIdentity<P>
-where
-    P: Serialize,
-{
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: ser::Serializer,
-    {
-        self.point.serialize(serializer)
-    }
-}
-
-#[cfg(feature = "elliptic_curve_serde")]
-impl<'de, P> Deserialize<'de> for NonIdentity<P>
-where
-    P: ConditionallySelectable + ConstantTimeEq + Default + Deserialize<'de> + GroupEncoding,
-{
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: de::Deserializer<'de>,
-    {
-        Option::from(Self::new(P::deserialize(deserializer)?))
-            .ok_or_else(|| de::Error::custom("expected non-identity point"))
     }
 }
 

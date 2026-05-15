@@ -10,6 +10,6 @@ workspace = true
 [dependencies]
 codex-protocol = { workspace = true }
 edgerun-encoding = { workspace = true }
-edgerun-json = { workspace = true }
+edgerun-json = { workspace = true, features = ["derive"] }
 edgerun-shlex = { workspace = true }
 edgerun-url = { workspace = true }

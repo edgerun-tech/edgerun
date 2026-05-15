@@ -1,6 +1,7 @@
 #[cfg(not(feature = "fontdue-text"))]
 use core::marker::PhantomData;
 
+use super::paint::wrap_lines;
 use super::*;
 
 pub struct UiPainter<'a, 'font> {
@@ -79,6 +80,30 @@ impl<'a, 'font> UiPainter<'a, 'font> {
             scale,
             color,
         );
+    }
+
+    pub fn wrapped_label(
+        &mut self,
+        x: f32,
+        y: f32,
+        max_w: f32,
+        text: &str,
+        max_lines: usize,
+        line_h: f32,
+        color: Color4,
+    ) {
+        let lines = wrap_lines(
+            text,
+            max_w,
+            max_lines.max(1),
+            #[cfg(feature = "fontdue-text")]
+            self.atlas,
+        );
+        let mut line_y = y;
+        for line in lines {
+            self.bounded_label(x, line_y, max_w, &line, 2.0, color);
+            line_y += line_h;
+        }
     }
 
     pub fn panel(&mut self, x: f32, y: f32, w: f32, h: f32, radius: f32, color: Color4) {
@@ -269,6 +294,11 @@ impl<'a, 'font> UiPainter<'a, 'font> {
     }
 
     pub fn icon(&mut self, rect: UiRect, icon: UiIcon, color: Color4) {
+        #[cfg(feature = "tabler-svg-atlas")]
+        if let Some(atlas_rect) = icon.tabler_svg_atlas_rect() {
+            self.scene.push_icon_quad(rect, atlas_rect, color);
+            return;
+        }
         draw_canonical_icon(self.scene, rect, icon, color);
     }
 
@@ -1173,22 +1203,30 @@ impl<'a, 'font> UiPainter<'a, 'font> {
         );
         self.scene
             .push_rect(GpuRect::fill(rect.x, rect.y, 3.0, rect.h, 2.0, accent));
+        let single_line = detail.trim().is_empty() || rect.h < 46.0;
         self.bounded_label(
             rect.x + 16.0,
-            rect.y + 10.0,
+            rect.y
+                + if single_line {
+                    ((rect.h - 16.0) * 0.5).max(5.0)
+                } else {
+                    10.0
+                },
             (rect.w - 32.0).max(0.0),
             title,
             2.0,
             colors.text,
         );
-        self.bounded_label(
-            rect.x + 16.0,
-            rect.y + 31.0,
-            (rect.w - 32.0).max(0.0),
-            detail,
-            2.0,
-            colors.muted,
-        );
+        if !single_line {
+            self.bounded_label(
+                rect.x + 16.0,
+                rect.y + 31.0,
+                (rect.w - 32.0).max(0.0),
+                detail,
+                2.0,
+                colors.muted,
+            );
+        }
     }
 
     pub fn scrollbar(&mut self, rect: UiRect, visible_fraction: f32, offset_fraction: f32) {

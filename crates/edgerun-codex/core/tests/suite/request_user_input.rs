@@ -189,7 +189,7 @@ async fn request_user_input_round_trip_for_mode(mode: ModeKind) -> anyhow::Resul
 
     let req = second_mock.single_request();
     let output_text = call_output(&req, call_id);
-    let output_json: Value = edgerun_json::from_serde_str(&output_text)?;
+    let output_json: Value = edgerun_json::from_str(&output_text)?;
     assert_eq!(
         output_json,
         json!({

@@ -95,10 +95,6 @@
 //! * the `*` operator between a `Scalar` and a `RistrettoPoint`, which
 //! performs constant-time variable-base scalar multiplication;
 //!
-//! * the `*` operator between a `Scalar` and a
-//! `RistrettoBasepointTable`, which performs constant-time fixed-base
-//! scalar multiplication;
-//!
 //! * an implementation of the
 //! [`MultiscalarMul`](../traits/trait.MultiscalarMul.html) trait for
 //! constant-time variable-base multiscalar multiplication;
@@ -195,14 +191,10 @@ use crate::subtle::ConstantTimeEq;
 #[cfg(feature = "zeroize")]
 use crate::zeroize::Zeroize;
 
-#[cfg(feature = "precomputed-tables")]
-use crate::curve25519_dalek::edwards::EdwardsBasepointTable;
 use crate::curve25519_dalek::edwards::EdwardsPoint;
 
 use crate::curve25519_dalek::scalar::Scalar;
 
-#[cfg(feature = "precomputed-tables")]
-use crate::curve25519_dalek::traits::BasepointTable;
 use crate::curve25519_dalek::traits::Identity;
 #[cfg(feature = "alloc")]
 use crate::curve25519_dalek::traits::{
@@ -356,25 +348,25 @@ impl TryFrom<&[u8]> for CompressedRistretto {
 }
 
 // ------------------------------------------------------------------------
-// Serde support
+// JsonCompat support
 // ------------------------------------------------------------------------
 // Serializes to and from `RistrettoPoint` directly, doing compression
 // and decompression internally.  This means that users can create
-// structs containing `RistrettoPoint`s and use Serde's derived
+// structs containing `RistrettoPoint`s and use JsonCompat's derived
 // serializers to serialize those structures.
 
-#[cfg(feature = "serde")]
-use serde::de::Visitor;
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+#[cfg(feature = "edgerun_json_compat")]
+use edgerun_json_compat::de::Visitor;
+#[cfg(feature = "edgerun_json_compat")]
+use edgerun_json_compat::{Deserialize, Deserializer, Serialize, Serializer};
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 impl Serialize for RistrettoPoint {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        use serde::ser::SerializeTuple;
+        use edgerun_json_compat::ser::SerializeTuple;
         let mut tup = serializer.serialize_tuple(32)?;
         for byte in self.compress().as_bytes().iter() {
             tup.serialize_element(byte)?;
@@ -383,13 +375,13 @@ impl Serialize for RistrettoPoint {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 impl Serialize for CompressedRistretto {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        use serde::ser::SerializeTuple;
+        use edgerun_json_compat::ser::SerializeTuple;
         let mut tup = serializer.serialize_tuple(32)?;
         for byte in self.as_bytes().iter() {
             tup.serialize_element(byte)?;
@@ -398,7 +390,7 @@ impl Serialize for CompressedRistretto {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 impl<'de> Deserialize<'de> for RistrettoPoint {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -415,18 +407,18 @@ impl<'de> Deserialize<'de> for RistrettoPoint {
 
             fn visit_seq<A>(self, mut seq: A) -> Result<RistrettoPoint, A::Error>
             where
-                A: serde::de::SeqAccess<'de>,
+                A: edgerun_json_compat::de::SeqAccess<'de>,
             {
                 let mut bytes = [0u8; 32];
                 #[allow(clippy::needless_range_loop)]
                 for i in 0..32 {
-                    bytes[i] = seq
-                        .next_element()?
-                        .ok_or_else(|| serde::de::Error::invalid_length(i, &"expected 32 bytes"))?;
+                    bytes[i] = seq.next_element()?.ok_or_else(|| {
+                        edgerun_json_compat::de::Error::invalid_length(i, &"expected 32 bytes")
+                    })?;
                 }
                 CompressedRistretto(bytes)
                     .decompress()
-                    .ok_or_else(|| serde::de::Error::custom("decompression failed"))
+                    .ok_or_else(|| edgerun_json_compat::de::Error::custom("decompression failed"))
             }
         }
 
@@ -434,7 +426,7 @@ impl<'de> Deserialize<'de> for RistrettoPoint {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 impl<'de> Deserialize<'de> for CompressedRistretto {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -451,14 +443,14 @@ impl<'de> Deserialize<'de> for CompressedRistretto {
 
             fn visit_seq<A>(self, mut seq: A) -> Result<CompressedRistretto, A::Error>
             where
-                A: serde::de::SeqAccess<'de>,
+                A: edgerun_json_compat::de::SeqAccess<'de>,
             {
                 let mut bytes = [0u8; 32];
                 #[allow(clippy::needless_range_loop)]
                 for i in 0..32 {
-                    bytes[i] = seq
-                        .next_element()?
-                        .ok_or_else(|| serde::de::Error::invalid_length(i, &"expected 32 bytes"))?;
+                    bytes[i] = seq.next_element()?.ok_or_else(|| {
+                        edgerun_json_compat::de::Error::invalid_length(i, &"expected 32 bytes")
+                    })?;
                 }
                 Ok(CompressedRistretto(bytes))
             }
@@ -948,19 +940,8 @@ impl<'a, 'b> Mul<&'b RistrettoPoint> for &'a Scalar {
 
 impl RistrettoPoint {
     /// Fixed-base scalar multiplication by the Ristretto base point.
-    ///
-    /// Uses precomputed basepoint tables when the `precomputed-tables` feature
-    /// is enabled, trading off increased code size for ~4x better performance.
     pub fn mul_base(scalar: &Scalar) -> Self {
-        #[cfg(not(feature = "precomputed-tables"))]
-        {
-            scalar * constants::RISTRETTO_BASEPOINT_POINT
-        }
-
-        #[cfg(feature = "precomputed-tables")]
-        {
-            scalar * constants::RISTRETTO_BASEPOINT_TABLE
-        }
+        scalar * constants::RISTRETTO_BASEPOINT_POINT
     }
 }
 
@@ -1067,54 +1048,6 @@ impl RistrettoPoint {
         RistrettoPoint(EdwardsPoint::vartime_double_scalar_mul_basepoint(
             a, &A.0, b,
         ))
-    }
-}
-
-/// A precomputed table of multiples of a basepoint, used to accelerate
-/// scalar multiplication.
-///
-/// A precomputed table of multiples of the Ristretto basepoint is
-/// available in the `constants` module:
-/// ```
-/// use crate::curve25519_dalek::constants::RISTRETTO_BASEPOINT_TABLE;
-/// use crate::curve25519_dalek::scalar::Scalar;
-///
-/// let a = Scalar::from(87329482u64);
-/// let P = &a * RISTRETTO_BASEPOINT_TABLE;
-/// ```
-#[cfg(feature = "precomputed-tables")]
-#[derive(Clone)]
-#[repr(transparent)]
-pub struct RistrettoBasepointTable(pub(crate) EdwardsBasepointTable);
-
-#[cfg(feature = "precomputed-tables")]
-impl<'a, 'b> Mul<&'b Scalar> for &'a RistrettoBasepointTable {
-    type Output = RistrettoPoint;
-
-    fn mul(self, scalar: &'b Scalar) -> RistrettoPoint {
-        RistrettoPoint(&self.0 * scalar)
-    }
-}
-
-#[cfg(feature = "precomputed-tables")]
-impl<'a, 'b> Mul<&'a RistrettoBasepointTable> for &'b Scalar {
-    type Output = RistrettoPoint;
-
-    fn mul(self, basepoint_table: &'a RistrettoBasepointTable) -> RistrettoPoint {
-        RistrettoPoint(self * &basepoint_table.0)
-    }
-}
-
-#[cfg(feature = "precomputed-tables")]
-impl RistrettoBasepointTable {
-    /// Create a precomputed table of multiples of the given `basepoint`.
-    pub fn create(basepoint: &RistrettoPoint) -> RistrettoBasepointTable {
-        RistrettoBasepointTable(EdwardsBasepointTable::create(&basepoint.0))
-    }
-
-    /// Get the basepoint for this table as a `RistrettoPoint`.
-    pub fn basepoint(&self) -> RistrettoPoint {
-        RistrettoPoint(self.0.basepoint())
     }
 }
 
@@ -1287,8 +1220,8 @@ mod test {
     use crate::rand_core::OsRng;
 
     #[test]
-    #[cfg(feature = "serde")]
-    fn serde_bincode_basepoint_roundtrip() {
+    #[cfg(feature = "edgerun_json_compat")]
+    fn edgerun_json_compat_bincode_basepoint_roundtrip() {
         use bincode;
 
         let encoded = bincode::serialize(&constants::RISTRETTO_BASEPOINT_POINT).unwrap();
@@ -1831,7 +1764,7 @@ mod test {
     #[test]
     #[cfg(feature = "alloc")]
     fn vartime_precomputed_vs_nonprecomputed_multiscalar() {
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::rand_core::OsRng;
 
         let static_scalars = (0..128)
             .map(|_| Scalar::random(&mut rng))

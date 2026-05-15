@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 
-use rkyv::{Archive, Deserialize as RkyvDeserialize, Serialize as RkyvSerialize};
-
 /// Unified Intermediate Representation (UIR) for code analysis.
 ///
 /// Core data structures representing functions and call relationships
@@ -9,7 +7,7 @@ use rkyv::{Archive, Deserialize as RkyvDeserialize, Serialize as RkyvSerialize};
 use crate::edit::{FunctionId, Language, Linkage};
 
 /// How a call edge was determined.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Archive, RkyvSerialize, RkyvDeserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CallKind {
     Direct,
     Indirect,

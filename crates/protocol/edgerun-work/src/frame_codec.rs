@@ -1,7 +1,8 @@
 use alloc::vec::Vec;
 
-use crate::channel::{ArchivedChannelEnvelope, ChannelEnvelope};
+use crate::channel::ChannelEnvelope;
 use crate::codec::{wire_bytes, wire_from_bytes};
+use crate::generated_wire::ArchivedChannelEnvelope;
 use crate::protocol::WorkProtocolError;
 
 pub const MAX_CHANNEL_FRAME_LEN: usize = 1024 * 1024;

@@ -1,7 +1,6 @@
 //! Traits related to the key components
 
-use crate::num_bigint::{BigInt, BigUint};
-use crate::zeroize::Zeroize;
+use crate::num_bigint::BigUint;
 
 /// Components of an RSA public key.
 pub trait PublicKeyParts {
@@ -32,34 +31,6 @@ pub trait PrivateKeyParts: PublicKeyParts {
     /// Returns the precomputed dq value, D mod (Q-1)
     fn dq(&self) -> Option<&BigUint>;
 
-    /// Returns the precomputed qinv value, Q^-1 mod P
-    fn qinv(&self) -> Option<&BigInt>;
-
-    /// Returns an iterator over the CRT Values
-    fn crt_values(&self) -> Option<&[CrtValue]>;
-}
-
-/// Contains the precomputed Chinese remainder theorem values.
-#[derive(Debug, Clone)]
-pub struct CrtValue {
-    /// D mod (prime - 1)
-    pub(crate) exp: BigInt,
-    /// R·Coeff ≡ 1 mod Prime.
-    pub(crate) coeff: BigInt,
-    /// product of primes prior to this (inc p and q)
-    pub(crate) r: BigInt,
-}
-
-impl Zeroize for CrtValue {
-    fn zeroize(&mut self) {
-        self.exp.zeroize();
-        self.coeff.zeroize();
-        self.r.zeroize();
-    }
-}
-
-impl Drop for CrtValue {
-    fn drop(&mut self) {
-        self.zeroize();
-    }
+    /// Returns the precomputed qinv value, Q^-1 mod P.
+    fn qinv(&self) -> Option<&BigUint>;
 }

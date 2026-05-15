@@ -604,9 +604,8 @@ impl From<&ToolPayload> for HookToolInput {
                     command: params.command.clone(),
                     workdir: params.workdir.clone(),
                     timeout_ms: params.timeout_ms,
-                    sandbox_permissions: params.sandbox_permissions,
                     prefix_rule: params.prefix_rule.clone(),
-                    justification: params.justification.clone(),
+                    justification: None,
                 },
             },
             ToolPayload::Mcp {

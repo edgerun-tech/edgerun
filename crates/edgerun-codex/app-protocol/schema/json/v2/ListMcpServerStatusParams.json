@@ -1,43 +1,20 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "definitions": {
-    "McpServerStatusDetail": {
-      "enum": [
-        "full",
-        "toolsAndAuthOnly"
-      ],
-      "type": "string"
-    }
-  },
+  "title": "ListMcpServerStatusParams",
+  "type": "object",
   "properties": {
     "cursor": {
-      "description": "Opaque pagination cursor returned by a previous call.",
-      "type": [
-        "string",
-        "null"
-      ]
+      "type": "string"
     },
     "detail": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/McpServerStatusDetail"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "description": "Controls how much MCP inventory data to fetch for each server. Defaults to `Full` when omitted."
+      "title": "McpServerStatusDetail",
+      "type": "string",
+      "enum": [
+        "Full",
+        "ToolsAndAuthOnly"
+      ]
     },
     "limit": {
-      "description": "Optional page size; defaults to a server-defined value.",
-      "format": "uint32",
-      "minimum": 0.0,
-      "type": [
-        "integer",
-        "null"
-      ]
+      "type": "integer"
     }
-  },
-  "title": "ListMcpServerStatusParams",
-  "type": "object"
+  }
 }

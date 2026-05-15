@@ -14,7 +14,7 @@ use crate::tools::context::ToolInvocation;
 use crate::tools::context::ToolOutput;
 use crate::tools::context::ToolPayload;
 pub(crate) use crate::tools::handlers::multi_agents_common::*;
-use crate::tools::handlers::parse_arguments;
+use crate::tools::handlers::parse_json_arguments;
 use crate::tools::registry::ToolHandler;
 use crate::tools::registry::ToolKind;
 use codex_protocol::ThreadId;
@@ -33,8 +33,8 @@ use codex_protocol::protocol::CollabWaitingBeginEvent;
 use codex_protocol::protocol::CollabWaitingEndEvent;
 use codex_protocol::user_input::UserInput;
 use codex_tools::ToolName;
-use serde::Deserialize;
-use serde::Serialize;
+use edgerun_json::FromJson;
+use edgerun_json::ToJson;
 use edgerun_json::Value as JsonValue;
 
 pub(crate) fn parse_agent_id_target(target: &str) -> Result<ThreadId, FunctionCallError> {

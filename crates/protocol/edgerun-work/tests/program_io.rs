@@ -99,6 +99,7 @@ fn output_bytes(response: &WorkServiceResponse) -> Vec<u8> {
     output.bytes.clone()
 }
 
+#[cfg(feature = "std")]
 fn poll_message(
     key: &Ed25519SigningKey,
     from: NodeId,

@@ -92,12 +92,9 @@ fn is_zstd_encoding(value: &str) -> bool {
 
 fn decode_body_bytes(body: &[u8], content_encoding: Option<&str>) -> Vec<u8> {
     if content_encoding.is_some_and(is_zstd_encoding) {
-        edgerun_zstd::stream::decode_all(std::io::Cursor::new(body)).unwrap_or_else(|err| {
-            panic!("failed to decode zstd request body: {err}");
-        })
-    } else {
-        body.to_vec()
+        panic!("zstd request body decoding is unavailable");
     }
+    body.to_vec()
 }
 
 impl ResponsesRequest {
@@ -109,7 +106,7 @@ impl ResponsesRequest {
                 .get("content-encoding")
                 .and_then(|value| value.to_str().ok()),
         );
-        edgerun_json::from_serde_slice(&body).unwrap()
+        edgerun_json::from_slice(&body).unwrap()
     }
 
     pub fn body_bytes(&self) -> Vec<u8> {
@@ -1135,7 +1132,7 @@ pub async fn mount_compact_user_history_with_summary_sequence(
                     .get("content-encoding")
                     .and_then(|value| value.to_str().ok()),
             );
-            let body_json: Value = edgerun_json::from_serde_slice(&body_bytes)
+            let body_json: Value = edgerun_json::from_slice(&body_bytes)
                 .unwrap_or_else(|err| panic!("failed to parse compact request body: {err}"));
             let mut output = body_json
                 .get("input")
@@ -1450,8 +1447,8 @@ pub async fn start_websocket_server_with_headers(
 
 fn parse_ws_request_body(message: Message) -> Option<Value> {
     match message {
-        Message::Text(text) => edgerun_json::from_serde_str(&text).ok(),
-        Message::Binary(bytes) => edgerun_json::from_serde_slice(&bytes).ok(),
+        Message::Text(text) => edgerun_json::from_str(&text).ok(),
+        Message::Binary(bytes) => edgerun_json::from_slice(&bytes).ok(),
         _ => None,
     }
 }
@@ -1597,7 +1594,7 @@ fn validate_request_body_invariants(request: &wiremock::Request) {
             .get("content-encoding")
             .and_then(|value| value.to_str().ok()),
     );
-    let Ok(body): Result<Value, _> = edgerun_json::from_serde_slice(&body_bytes) else {
+    let Ok(body): Result<Value, _> = edgerun_json::from_slice(&body_bytes) else {
         return;
     };
     let Some(items) = body.get("input").and_then(Value::as_array) else {

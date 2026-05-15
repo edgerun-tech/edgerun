@@ -1,114 +1,91 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "definitions": {
-    "FileChange": {
-      "oneOf": [
-        {
-          "properties": {
-            "content": {
-              "type": "string"
-            },
-            "type": {
-              "enum": [
-                "add"
-              ],
-              "title": "AddFileChangeType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "content",
-            "type"
-          ],
-          "title": "AddFileChange",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "content": {
-              "type": "string"
-            },
-            "type": {
-              "enum": [
-                "delete"
-              ],
-              "title": "DeleteFileChangeType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "content",
-            "type"
-          ],
-          "title": "DeleteFileChange",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "move_path": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "type": {
-              "enum": [
-                "update"
-              ],
-              "title": "UpdateFileChangeType",
-              "type": "string"
-            },
-            "unified_diff": {
-              "type": "string"
-            }
-          },
-          "required": [
-            "type",
-            "unified_diff"
-          ],
-          "title": "UpdateFileChange",
-          "type": "object"
-        }
-      ]
-    },
-    "ThreadId": {
-      "type": "string"
-    }
-  },
+  "title": "ApplyPatchApprovalParams",
+  "type": "object",
   "properties": {
     "callId": {
-      "description": "Use to correlate this with [codex_protocol::protocol::PatchApplyBeginEvent] and [codex_protocol::protocol::PatchApplyEndEvent].",
       "type": "string"
     },
     "conversationId": {
-      "$ref": "#/definitions/ThreadId"
+      "type": "string"
     },
     "fileChanges": {
+      "type": "object",
       "additionalProperties": {
-        "$ref": "#/definitions/FileChange"
-      },
-      "type": "object"
+        "title": "FileChange",
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "content": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "Add",
+                "title": "AddApplyPatchApprovalParamsType"
+              }
+            },
+            "required": [
+              "type",
+              "content"
+            ],
+            "additionalProperties": false,
+            "title": "AddApplyPatchApprovalParams"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "content": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "Delete",
+                "title": "DeleteApplyPatchApprovalParamsType"
+              }
+            },
+            "required": [
+              "type",
+              "content"
+            ],
+            "additionalProperties": false,
+            "title": "DeleteApplyPatchApprovalParams"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "movePath": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "const": "Update",
+                "title": "UpdateApplyPatchApprovalParamsType"
+              },
+              "unifiedDiff": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "unifiedDiff"
+            ],
+            "additionalProperties": false,
+            "title": "UpdateApplyPatchApprovalParams"
+          }
+        ]
+      }
     },
     "grantRoot": {
-      "description": "When set, the agent is asking the user to allow writes under this root for the remainder of the session (unclear if this is honored today).",
-      "type": [
-        "string",
-        "null"
-      ]
+      "type": "string"
     },
     "reason": {
-      "description": "Optional explanatory reason (e.g. request for extra write access).",
-      "type": [
-        "string",
-        "null"
-      ]
+      "type": "string"
     }
   },
   "required": [
-    "callId",
     "conversationId",
+    "callId",
     "fileChanges"
-  ],
-  "title": "ApplyPatchApprovalParams",
-  "type": "object"
+  ]
 }

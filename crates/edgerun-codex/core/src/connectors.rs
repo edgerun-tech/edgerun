@@ -20,8 +20,6 @@ use codex_protocol::models::PermissionProfile;
 use codex_tools::DiscoverableTool;
 use edgerun_async_channel::unbounded;
 use rmcp::model::ToolAnnotations;
-use serde::Deserialize;
-use serde::de::DeserializeOwned;
 use tracing::warn;
 
 use crate::config::Config;
@@ -489,7 +487,7 @@ async fn list_directory_connectors_for_tool_suggest_with_auth(
     .await
 }
 
-async fn chatgpt_get_request_with_auth_provider<T: DeserializeOwned>(
+async fn chatgpt_get_request_with_auth_provider<T: edgerun_json::FromJson>(
     config: &Config,
     path: String,
     auth_provider: SharedAuthProvider,

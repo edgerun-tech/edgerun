@@ -32,7 +32,7 @@ impl ToolHandler for Handler {
             ..
         } = invocation;
         let arguments = function_arguments(payload)?;
-        let args: ListAgentsArgs = parse_arguments(&arguments)?;
+        let args: ListAgentsArgs = parse_json_arguments(&arguments)?;
         session
             .services
             .agent_control
@@ -48,13 +48,13 @@ impl ToolHandler for Handler {
     }
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Debug, FromJson)]
+#[schemars(deny_unknown_fields)]
 struct ListAgentsArgs {
     path_prefix: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, ToJson)]
 pub(crate) struct ListAgentsResult {
     agents: Vec<ListedAgent>,
 }

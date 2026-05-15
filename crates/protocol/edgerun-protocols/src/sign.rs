@@ -86,24 +86,24 @@ pub trait MessageSigner {
 #[cfg(feature = "ed25519")]
 #[derive(Clone)]
 pub struct Ed25519MessageSigner {
-    signing_key: edgerun_crypto::ed25519_dalek::SigningKey,
+    signing_key: edgerun_crypto::Ed25519SigningKey,
 }
 
 #[cfg(feature = "ed25519")]
 impl Ed25519MessageSigner {
-    pub const fn new(signing_key: edgerun_crypto::ed25519_dalek::SigningKey) -> Self {
+    pub const fn new(signing_key: edgerun_crypto::Ed25519SigningKey) -> Self {
         Self { signing_key }
     }
 
-    pub fn signing_key(&self) -> &edgerun_crypto::ed25519_dalek::SigningKey {
+    pub fn signing_key(&self) -> &edgerun_crypto::Ed25519SigningKey {
         &self.signing_key
     }
 
     pub fn from_seed(seed: [u8; 32]) -> Self {
-        Self::new(edgerun_crypto::ed25519_dalek::SigningKey::from_bytes(&seed))
+        Self::new(edgerun_crypto::Ed25519SigningKey::from_bytes(&seed))
     }
 
-    pub fn verifying_key(&self) -> edgerun_crypto::ed25519_dalek::VerifyingKey {
+    pub fn verifying_key(&self) -> edgerun_crypto::Ed25519VerifyingKey {
         self.signing_key.verifying_key()
     }
 }
@@ -119,8 +119,7 @@ impl MessageSigner for Ed25519MessageSigner {
     }
 
     fn sign_message(&self, message: &[u8]) -> Result<Vec<u8>, ProtocolSignError> {
-        use edgerun_crypto::Ed25519Signer as _;
-        Ok(self.signing_key.sign(message).to_bytes().to_vec())
+        Ok(self.signing_key.sign_bytes(message).to_vec())
     }
 }
 
@@ -141,7 +140,7 @@ impl P256MessageSigner {
     }
 
     pub fn verifying_key(&self) -> edgerun_core::crypto::VerifyingKey {
-        *self.signing_key.verifying_key()
+        self.signing_key.verifying_key()
     }
 }
 
@@ -152,17 +151,15 @@ impl MessageSigner for P256MessageSigner {
     }
 
     fn public_key_bytes(&self) -> Vec<u8> {
-        edgerun_core::crypto::verifying_key_to_node_id(self.signing_key.verifying_key()).to_vec()
+        edgerun_core::crypto::verifying_key_to_node_id(&self.signing_key.verifying_key()).to_vec()
     }
 
     fn sign_message(&self, message: &[u8]) -> Result<Vec<u8>, ProtocolSignError> {
-        use edgerun_core::crypto::PrehashSigner as _;
         let digest = edgerun_core::crypto::sha256(message);
-        let signature: edgerun_core::crypto::Signature = self
-            .signing_key
-            .sign_prehash(&digest)
-            .map_err(|_| ProtocolSignError::SignerFailed)?;
-        Ok(signature.to_bytes().to_vec())
+        self.signing_key
+            .sign_prehash_fixed(&digest)
+            .map(|signature| signature.to_vec())
+            .map_err(|_| ProtocolSignError::SignerFailed)
     }
 }
 

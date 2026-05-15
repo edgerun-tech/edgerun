@@ -12,10 +12,8 @@ const VT_OPENQRY: libc::c_ulong = 0x5600;
 const VT_ACTIVATE: libc::c_ulong = 0x5606;
 const VT_WAITACTIVE: libc::c_ulong = 0x5607;
 const VT_SETMODE: libc::c_ulong = 0x5602;
-const VT_GETMODE: libc::c_ulong = 0x5603;
 const VT_RELDISP: libc::c_ulong = 0x5605;
 const KDSETMODE: libc::c_ulong = 0x4B3A;
-const KDGETMODE: libc::c_ulong = 0x4B3B;
 
 const VT_AUTO: libc::c_char = 0;
 const VT_PROCESS: libc::c_char = 1;

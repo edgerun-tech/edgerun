@@ -6,13 +6,14 @@
 extern crate alloc;
 
 use crate::provider::*;
-use crate::provider_mapping::map_provider_status;
+use crate::provider_http::{
+    build_client, call_json_api, decimal, mapped_status, object, parse_asset_id, provider_features,
+    provider_order, str_field, supports_pair,
+};
 use alloc::string::String;
 use core::result::Result;
-use edgerun_json::{to_string, JsonValue, Map, ToJson};
-use edgerun_node::http::client_middleware::Chain;
-use edgerun_node::http::{HttpClient, Method};
-use edgerun_node::rt::block_on;
+use edgerun_json::{JsonValue, Map};
+use edgerun_node::http::Method;
 use edgerun_protocols::core_protocol::protocol::edgerun_wallet_v0::{
     AssetRef, Quote, QuoteRequest,
 };
@@ -38,78 +39,12 @@ impl core::fmt::Debug for SideShiftAdapter {
 
 impl SideShiftAdapter {
     pub fn new(api_key: String, affiliate_id: String) -> Self {
-        let http_client = HttpClient::new();
-        let client = Chain::new(http_client).build();
         Self {
             api_key,
             affiliate_id,
             default_commission_bps: 30,
-            client,
+            client: build_client(),
         }
-    }
-
-    fn parse_asset_id(id: &str) -> (String, String) {
-        let parts: Vec<&str> = id.split(':').collect();
-        if parts.len() >= 2 {
-            (parts[0].to_string(), parts[1].to_string())
-        } else {
-            (id.to_string(), "".to_string())
-        }
-    }
-
-    fn call_api(
-        &self,
-        method: Method,
-        path: &str,
-        body: Option<JsonValue>,
-    ) -> Result<JsonValue, WalletError> {
-        let url = format!("{}{}", SIDESHIFT_BASE_URL, path);
-
-        let body_bytes = if let Some(b) = body {
-            let body_str = to_string(&b).map_err(|e| WalletError::Serialization(e.to_string()))?;
-            Some(body_str.into_bytes())
-        } else {
-            None
-        };
-
-        let response = match method {
-            Method::GET => edgerun_node::rt::block_on(async { self.client.get(&url).await }),
-            Method::POST => edgerun_node::rt::block_on(async {
-                self.client
-                    .post(
-                        &url,
-                        body_bytes.as_ref().map(|b| b.as_slice()).unwrap_or(b""),
-                    )
-                    .await
-            }),
-            _ => {
-                return Err(WalletError::HttpError("unsupported method".into()));
-            }
-        }
-        .map_err(|e| WalletError::HttpError(e.to_string()))?;
-
-        if !response.status().is_success() {
-            return Err(WalletError::ProviderError(format!(
-                "SideShift API error: HTTP {}",
-                response.status().as_u16()
-            )));
-        }
-
-        let body = response.body();
-        if body.is_empty() {
-            return Err(WalletError::ProviderError(
-                "SideShift API returned empty response".into(),
-            ));
-        }
-
-        let body_str =
-            core::str::from_utf8(body).map_err(|e| WalletError::Serialization(e.to_string()))?;
-
-        let tape = edgerun_json::parse_json_tape(body_str)
-            .map_err(|e| WalletError::Serialization(e.to_string()))?;
-        tape.root(body_str)
-            .and_then(|value| value.to_json_value())
-            .ok_or_else(|| WalletError::Serialization("missing JSON root value".into()))
     }
 }
 
@@ -119,30 +54,14 @@ impl ExchangeProvider for SideShiftAdapter {
     }
 
     fn features(&self) -> ProviderFeatures {
-        ProviderFeatures {
-            supports_fixed_rate: true,
-            supports_float_rate: true,
-            supports_refund_address: true,
-            requires_destination_tag: false,
-            min_confirmations: 3,
-        }
+        provider_features(ProviderCode::SideShift)
     }
 
     fn supports_quote(&self, req: &QuoteRequest) -> bool {
-        let (settle_sym, _) = Self::parse_asset_id(&req.settlement_asset_id);
-        let (pay_sym, _) = Self::parse_asset_id(&req.pay_asset_id);
-
-        matches!(
-            (
-                settle_sym.to_lowercase().as_str(),
-                pay_sym.to_lowercase().as_str()
-            ),
-            ("usdt", "doge")
-                | ("usdt", "btc")
-                | ("usdt", "eth")
-                | ("btc", "usdt")
-                | ("eth", "usdt")
-                | ("doge", "usdt")
+        supports_pair(
+            ProviderCode::SideShift,
+            &req.settlement_asset_id,
+            &req.pay_asset_id,
         )
     }
 
@@ -151,8 +70,8 @@ impl ExchangeProvider for SideShiftAdapter {
         req: &QuoteRequest,
         _ctx: &ProviderContext,
     ) -> Result<ProviderQuote, WalletError> {
-        let (settle_sym, settle_net) = Self::parse_asset_id(&req.settlement_asset_id);
-        let (pay_sym, _) = Self::parse_asset_id(&req.pay_asset_id);
+        let (settle_sym, settle_net) = parse_asset_id(&req.settlement_asset_id);
+        let (pay_sym, _) = parse_asset_id(&req.pay_asset_id);
 
         let deposit_method = match pay_sym.to_lowercase().as_str() {
             "doge" => "dogecoin",
@@ -199,59 +118,37 @@ impl ExchangeProvider for SideShiftAdapter {
             );
         }
 
-        let response = self.call_api(Method::POST, "/quotes", Some(JsonValue::Object(body)))?;
+        let response = call_json_api(
+            &self.client,
+            SIDESHIFT_BASE_URL,
+            "SideShift",
+            Method::POST,
+            "/quotes",
+            Some(JsonValue::Object(body)),
+        )?;
 
-        let obj = response.as_object().ok_or(WalletError::ProviderError(
-            "Invalid quote response from SideShift".into(),
-        ))?;
-
-        let quote_id = obj
-            .get("id")
-            .and_then(|v| v.as_str())
-            .ok_or(WalletError::ProviderError(
-                "Missing quote ID in SideShift response".into(),
-            ))?;
-
-        let deposit_amount =
-            obj.get("depositAmount")
-                .and_then(|v| v.as_str())
-                .ok_or(WalletError::ProviderError(
-                    "Missing deposit amount in SideShift response".into(),
-                ))?;
-
-        let settle_amount =
-            obj.get("settleAmount")
-                .and_then(|v| v.as_str())
-                .ok_or(WalletError::ProviderError(
-                    "Missing settle amount in SideShift response".into(),
-                ))?;
-
-        let rate = obj
-            .get("rate")
-            .and_then(|v| v.as_str())
-            .ok_or(WalletError::ProviderError(
-                "Missing rate in SideShift response".into(),
-            ))?;
-
-        let expires_at =
-            obj.get("expiresAt")
-                .and_then(|v| v.as_str())
-                .ok_or(WalletError::ProviderError(
-                    "Missing expiresAt in SideShift response".into(),
-                ))?;
+        let obj = object(&response, "Invalid quote response from SideShift")?;
+        let quote_id = str_field(obj, "id", "Missing quote ID in SideShift response")?;
+        let deposit_amount = str_field(
+            obj,
+            "depositAmount",
+            "Missing deposit amount in SideShift response",
+        )?;
+        let settle_amount = str_field(
+            obj,
+            "settleAmount",
+            "Missing settle amount in SideShift response",
+        )?;
+        let rate = str_field(obj, "rate", "Missing rate in SideShift response")?;
+        let expires_at = str_field(obj, "expiresAt", "Missing expiresAt in SideShift response")?;
 
         let expires_ms: u64 = expires_at.parse().map_err(|_| {
             WalletError::ProviderError("Invalid expiresAt format from SideShift".into())
         })?;
 
-        let settlement_amount = DecimalAmount::parse(settle_amount)
-            .ok_or_else(|| WalletError::InvalidDecimal(settle_amount.into()))?;
-
-        let pay_amount = DecimalAmount::parse(deposit_amount)
-            .ok_or_else(|| WalletError::InvalidDecimal(deposit_amount.into()))?;
-
-        let rate_dec =
-            DecimalAmount::parse(rate).ok_or_else(|| WalletError::InvalidDecimal(rate.into()))?;
+        let settlement_amount = decimal(settle_amount)?;
+        let pay_amount = decimal(deposit_amount)?;
+        let rate_dec = decimal(rate)?;
 
         Ok(ProviderQuote {
             provider: ProviderCode::SideShift,
@@ -298,31 +195,22 @@ impl ExchangeProvider for SideShiftAdapter {
             body.insert("refundAddress".into(), JsonValue::String(refund.clone()));
         }
 
-        let response = self.call_api(Method::POST, "/orders", Some(JsonValue::Object(body)))?;
-
-        let obj = response.as_object().ok_or(WalletError::ProviderError(
-            "Invalid order response from SideShift".into(),
-        ))?;
-
-        let order_id = obj
-            .get("id")
-            .and_then(|v| v.as_str())
-            .ok_or(WalletError::ProviderError(
-                "Missing order ID in SideShift response".into(),
-            ))?;
-
-        let deposit_address = obj.get("depositAddress").and_then(|v| v.as_str()).ok_or(
-            WalletError::ProviderError("Missing deposit address in SideShift response".into()),
+        let response = call_json_api(
+            &self.client,
+            SIDESHIFT_BASE_URL,
+            "SideShift",
+            Method::POST,
+            "/orders",
+            Some(JsonValue::Object(body)),
         )?;
 
-        Ok(ProviderOrder {
-            provider: ProviderCode::SideShift,
-            provider_order_id: order_id.into(),
-            order_id: order_id.into(),
-            deposit_address: deposit_address.into(),
-            status: 3,
-            created_at_ms: 0,
-        })
+        provider_order(
+            ProviderCode::SideShift,
+            object(&response, "Invalid order response from SideShift")?,
+            "id",
+            "depositAddress",
+            "SideShift",
+        )
     }
 
     fn get_order_status(
@@ -332,29 +220,21 @@ impl ExchangeProvider for SideShiftAdapter {
     ) -> Result<ProviderStatus, WalletError> {
         let path = format!("/orders/{}", provider_order_id);
 
-        let response = self.call_api(Method::GET, &path, None)?;
+        let response = call_json_api(
+            &self.client,
+            SIDESHIFT_BASE_URL,
+            "SideShift",
+            Method::GET,
+            &path,
+            None,
+        )?;
 
-        let obj = response.as_object().ok_or(WalletError::ProviderError(
-            "Invalid order status response from SideShift".into(),
-        ))?;
-
-        let status_str =
-            obj.get("status")
-                .and_then(|v| v.as_str())
-                .ok_or(WalletError::ProviderError(
-                    "Missing status in SideShift response".into(),
-                ))?;
-
-        let status = map_provider_status(ProviderCode::SideShift.as_str(), status_str);
-
-        Ok(ProviderStatus {
-            provider: ProviderCode::SideShift,
-            provider_order_id: provider_order_id.into(),
-            status,
-            deposit_tx: None,
-            payout_tx: None,
-            status_detail: Some(status_str.into()),
-            updated_at_ms: 0,
-        })
+        let obj = object(&response, "Invalid order status response from SideShift")?;
+        let status_str = str_field(obj, "status", "Missing status in SideShift response")?;
+        Ok(mapped_status(
+            ProviderCode::SideShift,
+            provider_order_id,
+            status_str,
+        ))
     }
 }

@@ -1,11 +1,10 @@
-use super::AdditionalPermissionProfile;
+use super::AdditionalFileSystemPermissions;
 use super::ExecPolicyAmendment;
 use super::McpToolCallError;
 use super::McpToolCallResult;
 use super::NetworkApprovalContext;
 use super::NetworkApprovalProtocol;
 use super::NetworkPolicyAmendment;
-use super::RequestPermissionProfile;
 use super::UserInput;
 use super::shared::v2_enum_from_core;
 use crate::protocol::item_builders::convert_patch_changes;
@@ -29,17 +28,17 @@ use codex_protocol::protocol::GuardianRiskLevel as CoreGuardianRiskLevel;
 use codex_protocol::protocol::GuardianUserAuthorization as CoreGuardianUserAuthorization;
 use codex_protocol::protocol::PatchApplyStatus as CorePatchApplyStatus;
 use codex_protocol::protocol::ReviewDecision as CoreReviewDecision;
+use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
+use edgerun_json::Map;
+use edgerun_json::ToJson;
 use edgerun_json::Value as JsonValue;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
 use schemars::JsonSchema;
 use std::collections::HashMap;
 use std::path::PathBuf;
-use ts_rs::TS;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson)]
+#[schemars(rename_all = "camelCase")]
 pub enum CommandExecutionApprovalDecision {
     /// User approved the command.
     Accept,
@@ -59,6 +58,36 @@ pub enum CommandExecutionApprovalDecision {
     Decline,
     /// User denied the command. The turn will also be immediately interrupted.
     Cancel,
+}
+
+impl FromJson for CommandExecutionApprovalDecision {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        if let Some(value) = value.as_str() {
+            return match value {
+                "accept" => Ok(Self::Accept),
+                "acceptForSession" => Ok(Self::AcceptForSession),
+                "decline" => Ok(Self::Decline),
+                "cancel" => Ok(Self::Cancel),
+                other => Err(JsonValueError::WrongType(format!(
+                    "unknown command approval decision `{other}`"
+                ))),
+            };
+        }
+
+        let mut object = value.into_object("CommandExecutionApprovalDecision")?;
+        let ty: String = object.take_required("type")?;
+        match ty.as_str() {
+            "acceptWithExecpolicyAmendment" => Ok(Self::AcceptWithExecpolicyAmendment {
+                execpolicy_amendment: object.take_required("execpolicyAmendment")?,
+            }),
+            "applyNetworkPolicyAmendment" => Ok(Self::ApplyNetworkPolicyAmendment {
+                network_policy_amendment: object.take_required("networkPolicyAmendment")?,
+            }),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown command approval decision `{other}`"
+            ))),
+        }
+    }
 }
 
 impl From<CoreReviewDecision> for CommandExecutionApprovalDecision {
@@ -83,9 +112,8 @@ impl From<CoreReviewDecision> for CommandExecutionApprovalDecision {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub enum FileChangeApprovalDecision {
     /// User approved the file changes.
     Accept,
@@ -97,10 +125,8 @@ pub enum FileChangeApprovalDecision {
     Cancel,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(tag = "type", rename_all = "camelCase")]
-#[ts(tag = "type")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
+#[schemars(tag = "type", rename_all = "camelCase")]
 pub enum CommandAction {
     Read {
         command: String,
@@ -121,9 +147,75 @@ pub enum CommandAction {
     },
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+impl FromJson for CommandAction {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("CommandAction")?;
+        let ty: String = object.take_required("type")?;
+        match ty.as_str() {
+            "read" => Ok(Self::Read {
+                command: object.take_required("command")?,
+                name: object.take_required("name")?,
+                path: required_absolute_path(object.remove("path"), "path")?,
+            }),
+            "listFiles" => Ok(Self::ListFiles {
+                command: object.take_required("command")?,
+                path: object.take_optional("path")?,
+            }),
+            "search" => Ok(Self::Search {
+                command: object.take_required("command")?,
+                query: object.take_optional("query")?,
+                path: object.take_optional("path")?,
+            }),
+            "unknown" => Ok(Self::Unknown {
+                command: object.take_required("command")?,
+            }),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown command action `{other}`"
+            ))),
+        }
+    }
+}
+
+impl ToJson for CommandAction {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::new();
+        match self {
+            CommandAction::Read {
+                command,
+                name,
+                path,
+            } => {
+                object.push_field("type", "read");
+                object.push_field("command", command.clone());
+                object.push_field("name", name.clone());
+                object.push_field("path", absolute_path_json(path));
+            }
+            CommandAction::ListFiles { command, path } => {
+                object.push_field("type", "listFiles");
+                object.push_field("command", command.clone());
+                object.push_field("path", path.to_json());
+            }
+            CommandAction::Search {
+                command,
+                query,
+                path,
+            } => {
+                object.push_field("type", "search");
+                object.push_field("command", command.clone());
+                object.push_field("query", query.to_json());
+                object.push_field("path", path.to_json());
+            }
+            CommandAction::Unknown { command } => {
+                object.push_field("type", "unknown");
+                object.push_field("command", command.clone());
+            }
+        }
+        JsonValue::Object(object)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct MemoryCitation {
     pub entries: Vec<MemoryCitationEntry>,
     pub thread_ids: Vec<String>,
@@ -138,9 +230,8 @@ impl From<CoreMemoryCitation> for MemoryCitation {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct MemoryCitationEntry {
     pub path: String,
     pub line_start: u32,
@@ -203,46 +294,38 @@ impl CommandAction {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(tag = "type", rename_all = "camelCase")]
-#[ts(tag = "type")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
+#[schemars(tag = "type", rename_all = "camelCase")]
 pub enum ThreadItem {
-    #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     UserMessage { id: String, content: Vec<UserInput> },
-    #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     HookPrompt {
         id: String,
         fragments: Vec<HookPromptFragment>,
     },
-    #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     AgentMessage {
         id: String,
         text: String,
-        #[serde(default)]
+        #[schemars(default)]
         phase: Option<MessagePhase>,
-        #[serde(default)]
+        #[schemars(default)]
         memory_citation: Option<MemoryCitation>,
     },
-    #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     /// EXPERIMENTAL - proposed plan item content. The completed plan item is
     /// authoritative and may not match the concatenation of `PlanDelta` text.
     Plan { id: String, text: String },
-    #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     Reasoning {
         id: String,
-        #[serde(default)]
+        #[schemars(default)]
         summary: Vec<String>,
-        #[serde(default)]
+        #[schemars(default)]
         content: Vec<String>,
     },
-    #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     CommandExecution {
         id: String,
         /// The command to be executed.
@@ -251,7 +334,7 @@ pub enum ThreadItem {
         cwd: AbsolutePathBuf,
         /// Identifier for the underlying PTY process (when available).
         process_id: Option<String>,
-        #[serde(default)]
+        #[schemars(default)]
         source: CommandExecutionSource,
         status: CommandExecutionStatus,
         /// A best-effort parsing of the command to understand the action(s) it will perform.
@@ -263,35 +346,29 @@ pub enum ThreadItem {
         /// The command's exit code.
         exit_code: Option<i32>,
         /// The duration of the command execution in milliseconds.
-        #[ts(type = "number | null")]
         duration_ms: Option<i64>,
     },
-    #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     FileChange {
         id: String,
         changes: Vec<FileUpdateChange>,
         status: PatchApplyStatus,
     },
-    #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     McpToolCall {
         id: String,
         server: String,
         tool: String,
         status: McpToolCallStatus,
         arguments: JsonValue,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         mcp_app_resource_uri: Option<String>,
         result: Option<Box<McpToolCallResult>>,
         error: Option<McpToolCallError>,
         /// The duration of the MCP tool call in milliseconds.
-        #[ts(type = "number | null")]
         duration_ms: Option<i64>,
     },
-    #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     DynamicToolCall {
         id: String,
         namespace: Option<String>,
@@ -301,11 +378,9 @@ pub enum ThreadItem {
         content_items: Option<Vec<DynamicToolCallOutputContentItem>>,
         success: Option<bool>,
         /// The duration of the dynamic tool call in milliseconds.
-        #[ts(type = "number | null")]
         duration_ms: Option<i64>,
     },
-    #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     CollabAgentToolCall {
         /// Unique identifier for this collab tool call.
         id: String,
@@ -327,41 +402,33 @@ pub enum ThreadItem {
         /// Last known status of the target agents, when available.
         agents_states: HashMap<String, CollabAgentState>,
     },
-    #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     WebSearch {
         id: String,
         query: String,
         action: Option<WebSearchAction>,
     },
-    #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     ImageView { id: String, path: AbsolutePathBuf },
-    #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     ImageGeneration {
         id: String,
         status: String,
         revised_prompt: Option<String>,
         result: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         saved_path: Option<AbsolutePathBuf>,
     },
-    #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     EnteredReviewMode { id: String, review: String },
-    #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     ExitedReviewMode { id: String, review: String },
-    #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     ContextCompaction { id: String },
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase", export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct HookPromptFragment {
     pub text: String,
     pub hook_run_id: String,
@@ -390,9 +457,231 @@ impl ThreadItem {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+impl ToJson for ThreadItem {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::new();
+        match self {
+            ThreadItem::UserMessage { id, content } => {
+                object.push_field("type", "userMessage");
+                object.push_field("id", id.clone());
+                object.push_field("content", content.to_json());
+            }
+            ThreadItem::HookPrompt { id, fragments } => {
+                object.push_field("type", "hookPrompt");
+                object.push_field("id", id.clone());
+                object.push_field("fragments", fragments.to_json());
+            }
+            ThreadItem::AgentMessage {
+                id,
+                text,
+                phase,
+                memory_citation,
+            } => {
+                object.push_field("type", "agentMessage");
+                object.push_field("id", id.clone());
+                object.push_field("text", text.clone());
+                object.push_field("phase", message_phase_to_json(phase.clone()));
+                object.push_field("memoryCitation", memory_citation.to_json());
+            }
+            ThreadItem::Plan { id, text } => {
+                object.push_field("type", "plan");
+                object.push_field("id", id.clone());
+                object.push_field("text", text.clone());
+            }
+            ThreadItem::Reasoning {
+                id,
+                summary,
+                content,
+            } => {
+                object.push_field("type", "reasoning");
+                object.push_field("id", id.clone());
+                object.push_field("summary", summary.to_json());
+                object.push_field("content", content.to_json());
+            }
+            ThreadItem::CommandExecution {
+                id,
+                command,
+                cwd,
+                process_id,
+                source,
+                status,
+                command_actions,
+                aggregated_output,
+                exit_code,
+                duration_ms,
+            } => {
+                object.push_field("type", "commandExecution");
+                object.push_field("id", id.clone());
+                object.push_field("command", command.clone());
+                object.push_field("cwd", absolute_path_json(cwd));
+                object.push_field("processId", process_id.to_json());
+                object.push_field("source", source.to_json());
+                object.push_field("status", status.to_json());
+                object.push_field("commandActions", command_actions.to_json());
+                object.push_field("aggregatedOutput", aggregated_output.to_json());
+                object.push_field("exitCode", exit_code.to_json());
+                object.push_field("durationMs", duration_ms.to_json());
+            }
+            ThreadItem::FileChange {
+                id,
+                changes,
+                status,
+            } => {
+                object.push_field("type", "fileChange");
+                object.push_field("id", id.clone());
+                object.push_field("changes", changes.to_json());
+                object.push_field("status", status.to_json());
+            }
+            ThreadItem::McpToolCall {
+                id,
+                server,
+                tool,
+                status,
+                arguments,
+                mcp_app_resource_uri,
+                result,
+                error,
+                duration_ms,
+            } => {
+                object.push_field("type", "mcpToolCall");
+                object.push_field("id", id.clone());
+                object.push_field("server", server.clone());
+                object.push_field("tool", tool.clone());
+                object.push_field("status", status.to_json());
+                object.push_field("arguments", arguments.clone());
+                object.push_opt_field("mcpAppResourceUri", mcp_app_resource_uri.clone());
+                object.push_field("result", result.to_json());
+                object.push_field("error", error.to_json());
+                object.push_field("durationMs", duration_ms.to_json());
+            }
+            ThreadItem::DynamicToolCall {
+                id,
+                namespace,
+                tool,
+                arguments,
+                status,
+                content_items,
+                success,
+                duration_ms,
+            } => {
+                object.push_field("type", "dynamicToolCall");
+                object.push_field("id", id.clone());
+                object.push_field("namespace", namespace.to_json());
+                object.push_field("tool", tool.clone());
+                object.push_field("arguments", arguments.clone());
+                object.push_field("status", status.to_json());
+                object.push_field("contentItems", content_items.to_json());
+                object.push_field("success", success.to_json());
+                object.push_field("durationMs", duration_ms.to_json());
+            }
+            ThreadItem::CollabAgentToolCall {
+                id,
+                tool,
+                status,
+                sender_thread_id,
+                receiver_thread_ids,
+                prompt,
+                model,
+                reasoning_effort,
+                agents_states,
+            } => {
+                object.push_field("type", "collabAgentToolCall");
+                object.push_field("id", id.clone());
+                object.push_field("tool", tool.to_json());
+                object.push_field("status", status.to_json());
+                object.push_field("senderThreadId", sender_thread_id.clone());
+                object.push_field("receiverThreadIds", receiver_thread_ids.to_json());
+                object.push_field("prompt", prompt.to_json());
+                object.push_field("model", model.to_json());
+                object.push_field("reasoningEffort", reasoning_effort.to_json());
+                object.push_field("agentsStates", agents_states.to_json());
+            }
+            ThreadItem::WebSearch { id, query, action } => {
+                object.push_field("type", "webSearch");
+                object.push_field("id", id.clone());
+                object.push_field("query", query.clone());
+                object.push_field("action", action.to_json());
+            }
+            ThreadItem::ImageView { id, path } => {
+                object.push_field("type", "imageView");
+                object.push_field("id", id.clone());
+                object.push_field("path", absolute_path_json(path));
+            }
+            ThreadItem::ImageGeneration {
+                id,
+                status,
+                revised_prompt,
+                result,
+                saved_path,
+            } => {
+                object.push_field("type", "imageGeneration");
+                object.push_field("id", id.clone());
+                object.push_field("status", status.clone());
+                object.push_field("revisedPrompt", revised_prompt.to_json());
+                object.push_field("result", result.clone());
+                if let Some(saved_path) = saved_path {
+                    object.push_field("savedPath", absolute_path_json(saved_path));
+                }
+            }
+            ThreadItem::EnteredReviewMode { id, review } => {
+                object.push_field("type", "enteredReviewMode");
+                object.push_field("id", id.clone());
+                object.push_field("review", review.clone());
+            }
+            ThreadItem::ExitedReviewMode { id, review } => {
+                object.push_field("type", "exitedReviewMode");
+                object.push_field("id", id.clone());
+                object.push_field("review", review.clone());
+            }
+            ThreadItem::ContextCompaction { id } => {
+                object.push_field("type", "contextCompaction");
+                object.push_field("id", id.clone());
+            }
+        }
+        JsonValue::Object(object)
+    }
+}
+
+impl ToJson for HookPromptFragment {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(2);
+        object.push_field("text", self.text.clone());
+        object.push_field("hookRunId", self.hook_run_id.clone());
+        JsonValue::Object(object)
+    }
+}
+
+impl ToJson for MemoryCitation {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(2);
+        object.push_field("entries", self.entries.to_json());
+        object.push_field("threadIds", self.thread_ids.to_json());
+        JsonValue::Object(object)
+    }
+}
+
+impl ToJson for MemoryCitationEntry {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(4);
+        object.push_field("path", self.path.clone());
+        object.push_field("lineStart", self.line_start as u64);
+        object.push_field("lineEnd", self.line_end as u64);
+        object.push_field("note", self.note.clone());
+        JsonValue::Object(object)
+    }
+}
+
+fn message_phase_to_json(value: Option<MessagePhase>) -> JsonValue {
+    value.map_or(JsonValue::Null, |phase| {
+        JsonValue::from(match phase {
+            MessagePhase::Commentary => "commentary",
+            MessagePhase::FinalAnswer => "final_answer",
+        })
+    })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
+#[schemars(rename_all = "camelCase")]
 /// [UNSTABLE] Lifecycle state for an approval auto-review.
 pub enum GuardianApprovalReviewStatus {
     InProgress,
@@ -402,9 +691,37 @@ pub enum GuardianApprovalReviewStatus {
     Aborted,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+impl ToJson for GuardianApprovalReviewStatus {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            Self::InProgress => "inProgress",
+            Self::Approved => "approved",
+            Self::Denied => "denied",
+            Self::TimedOut => "timedOut",
+            Self::Aborted => "aborted",
+        })
+    }
+}
+
+impl FromJson for GuardianApprovalReviewStatus {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "inProgress" => Ok(Self::InProgress),
+            "approved" => Ok(Self::Approved),
+            "denied" => Ok(Self::Denied),
+            "timedOut" => Ok(Self::TimedOut),
+            "aborted" => Ok(Self::Aborted),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown guardian approval review status `{other}`"
+            ))),
+        }
+    }
+}
+
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "camelCase")]
 /// [UNSTABLE] Source that produced a terminal approval auto-review decision.
 pub enum AutoReviewDecisionSource {
     Agent,
@@ -418,15 +735,39 @@ impl From<CoreGuardianAssessmentDecisionSource> for AutoReviewDecisionSource {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "lowercase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
+#[schemars(rename_all = "lowercase")]
 /// [UNSTABLE] Risk level assigned by approval auto-review.
 pub enum GuardianRiskLevel {
     Low,
     Medium,
     High,
     Critical,
+}
+
+impl ToJson for GuardianRiskLevel {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+            Self::Critical => "critical",
+        })
+    }
+}
+
+impl FromJson for GuardianRiskLevel {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "low" => Ok(Self::Low),
+            "medium" => Ok(Self::Medium),
+            "high" => Ok(Self::High),
+            "critical" => Ok(Self::Critical),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown guardian risk level `{other}`"
+            ))),
+        }
+    }
 }
 
 impl From<CoreGuardianRiskLevel> for GuardianRiskLevel {
@@ -440,15 +781,39 @@ impl From<CoreGuardianRiskLevel> for GuardianRiskLevel {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "lowercase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
+#[schemars(rename_all = "lowercase")]
 /// [UNSTABLE] Authorization level assigned by approval auto-review.
 pub enum GuardianUserAuthorization {
     Unknown,
     Low,
     Medium,
     High,
+}
+
+impl ToJson for GuardianUserAuthorization {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            Self::Unknown => "unknown",
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+        })
+    }
+}
+
+impl FromJson for GuardianUserAuthorization {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "unknown" => Ok(Self::Unknown),
+            "low" => Ok(Self::Low),
+            "medium" => Ok(Self::Medium),
+            "high" => Ok(Self::High),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown guardian user authorization `{other}`"
+            ))),
+        }
+    }
 }
 
 impl From<CoreGuardianUserAuthorization> for GuardianUserAuthorization {
@@ -465,9 +830,8 @@ impl From<CoreGuardianUserAuthorization> for GuardianUserAuthorization {
 /// [UNSTABLE] Temporary approval auto-review payload used by
 /// `item/autoApprovalReview/*` notifications. This shape is expected to change
 /// soon.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
+#[schemars(rename_all = "camelCase")]
 pub struct GuardianApprovalReview {
     pub status: GuardianApprovalReviewStatus,
     pub risk_level: Option<GuardianRiskLevel>,
@@ -475,13 +839,55 @@ pub struct GuardianApprovalReview {
     pub rationale: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+impl ToJson for GuardianApprovalReview {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(4);
+        object.push_field("status", self.status.to_json());
+        object.push_field("riskLevel", self.risk_level.to_json());
+        object.push_field("userAuthorization", self.user_authorization.to_json());
+        object.push_field("rationale", self.rationale.to_json());
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for GuardianApprovalReview {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("GuardianApprovalReview")?;
+        Ok(Self {
+            status: object.take_required("status")?,
+            risk_level: object.take_optional("riskLevel")?,
+            user_authorization: object.take_optional("userAuthorization")?,
+            rationale: object.take_optional("rationale")?,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
+#[schemars(rename_all = "camelCase")]
 pub enum GuardianCommandSource {
     Shell,
     UnifiedExec,
+}
+
+impl ToJson for GuardianCommandSource {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            Self::Shell => "shell",
+            Self::UnifiedExec => "unifiedExec",
+        })
+    }
+}
+
+impl FromJson for GuardianCommandSource {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        match String::from_json(value)?.as_str() {
+            "shell" => Ok(Self::Shell),
+            "unifiedExec" => Ok(Self::UnifiedExec),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown guardian command source `{other}`"
+            ))),
+        }
+    }
 }
 
 impl From<CoreGuardianCommandSource> for GuardianCommandSource {
@@ -502,18 +908,16 @@ impl From<GuardianCommandSource> for CoreGuardianCommandSource {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct GuardianCommandReviewAction {
     pub source: GuardianCommandSource,
     pub command: String,
     pub cwd: AbsolutePathBuf,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct GuardianExecveReviewAction {
     pub source: GuardianCommandSource,
     pub program: String,
@@ -521,17 +925,15 @@ pub struct GuardianExecveReviewAction {
     pub cwd: AbsolutePathBuf,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct GuardianApplyPatchReviewAction {
     pub cwd: AbsolutePathBuf,
     pub files: Vec<AbsolutePathBuf>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct GuardianNetworkAccessReviewAction {
     pub target: String,
     pub host: String,
@@ -539,9 +941,8 @@ pub struct GuardianNetworkAccessReviewAction {
     pub port: u16,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct GuardianMcpToolCallReviewAction {
     pub server: String,
     pub tool_name: String,
@@ -550,50 +951,35 @@ pub struct GuardianMcpToolCallReviewAction {
     pub tool_title: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
-pub struct GuardianRequestPermissionsReviewAction {
-    pub reason: Option<String>,
-    pub permissions: RequestPermissionProfile,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(tag = "type", rename_all = "camelCase")]
-#[ts(tag = "type", rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
+#[schemars(tag = "type", rename_all = "camelCase")]
 pub enum GuardianApprovalReviewAction {
-    #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     Command {
         source: GuardianCommandSource,
         command: String,
         cwd: AbsolutePathBuf,
     },
-    #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     Execve {
         source: GuardianCommandSource,
         program: String,
         argv: Vec<String>,
         cwd: AbsolutePathBuf,
     },
-    #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     ApplyPatch {
         cwd: AbsolutePathBuf,
         files: Vec<AbsolutePathBuf>,
     },
-    #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     NetworkAccess {
         target: String,
         host: String,
         protocol: NetworkApprovalProtocol,
         port: u16,
     },
-    #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     McpToolCall {
         server: String,
         tool_name: String,
@@ -601,12 +987,108 @@ pub enum GuardianApprovalReviewAction {
         connector_name: Option<String>,
         tool_title: Option<String>,
     },
-    #[serde(rename_all = "camelCase")]
-    #[ts(rename_all = "camelCase")]
-    RequestPermissions {
-        reason: Option<String>,
-        permissions: RequestPermissionProfile,
-    },
+}
+
+impl ToJson for GuardianApprovalReviewAction {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::new();
+        match self {
+            Self::Command {
+                source,
+                command,
+                cwd,
+            } => {
+                object.push_field("type", "command");
+                object.push_field("source", source.to_json());
+                object.push_field("command", command.clone());
+                object.push_field("cwd", absolute_path_json(cwd));
+            }
+            Self::Execve {
+                source,
+                program,
+                argv,
+                cwd,
+            } => {
+                object.push_field("type", "execve");
+                object.push_field("source", source.to_json());
+                object.push_field("program", program.clone());
+                object.push_field("argv", argv.to_json());
+                object.push_field("cwd", absolute_path_json(cwd));
+            }
+            Self::ApplyPatch { cwd, files } => {
+                object.push_field("type", "applyPatch");
+                object.push_field("cwd", absolute_path_json(cwd));
+                object.push_field("files", absolute_paths_json(files));
+            }
+            Self::NetworkAccess {
+                target,
+                host,
+                protocol,
+                port,
+            } => {
+                object.push_field("type", "networkAccess");
+                object.push_field("target", target.clone());
+                object.push_field("host", host.clone());
+                object.push_field("protocol", protocol.to_json());
+                object.push_field("port", *port as u64);
+            }
+            Self::McpToolCall {
+                server,
+                tool_name,
+                connector_id,
+                connector_name,
+                tool_title,
+            } => {
+                object.push_field("type", "mcpToolCall");
+                object.push_field("server", server.clone());
+                object.push_field("toolName", tool_name.clone());
+                object.push_field("connectorId", connector_id.to_json());
+                object.push_field("connectorName", connector_name.to_json());
+                object.push_field("toolTitle", tool_title.to_json());
+            }
+        }
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for GuardianApprovalReviewAction {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("GuardianApprovalReviewAction")?;
+        let ty: String = object.take_required("type")?;
+        match ty.as_str() {
+            "command" => Ok(Self::Command {
+                source: object.take_required("source")?,
+                command: object.take_required("command")?,
+                cwd: required_absolute_path(object.remove("cwd"), "cwd")?,
+            }),
+            "execve" => Ok(Self::Execve {
+                source: object.take_required("source")?,
+                program: object.take_required("program")?,
+                argv: object.take_required("argv")?,
+                cwd: required_absolute_path(object.remove("cwd"), "cwd")?,
+            }),
+            "applyPatch" => Ok(Self::ApplyPatch {
+                cwd: required_absolute_path(object.remove("cwd"), "cwd")?,
+                files: required_absolute_paths(object.remove("files"), "files")?,
+            }),
+            "networkAccess" => Ok(Self::NetworkAccess {
+                target: object.take_required("target")?,
+                host: object.take_required("host")?,
+                protocol: object.take_required("protocol")?,
+                port: object.take_required("port")?,
+            }),
+            "mcpToolCall" => Ok(Self::McpToolCall {
+                server: object.take_required("server")?,
+                tool_name: object.take_required("toolName")?,
+                connector_id: object.take_optional("connectorId")?,
+                connector_name: object.take_optional("connectorName")?,
+                tool_title: object.take_optional("toolTitle")?,
+            }),
+            other => Err(JsonValueError::WrongType(format!(
+                "unknown guardian approval review action `{other}`"
+            ))),
+        }
+    }
 }
 
 impl From<CoreGuardianAssessmentAction> for GuardianApprovalReviewAction {
@@ -658,13 +1140,6 @@ impl From<CoreGuardianAssessmentAction> for GuardianApprovalReviewAction {
                 connector_id,
                 connector_name,
                 tool_title,
-            },
-            CoreGuardianAssessmentAction::RequestPermissions {
-                reason,
-                permissions,
-            } => Self::RequestPermissions {
-                reason,
-                permissions: permissions.into(),
             },
         }
     }
@@ -720,21 +1195,12 @@ impl From<GuardianApprovalReviewAction> for CoreGuardianAssessmentAction {
                 connector_name,
                 tool_title,
             },
-            GuardianApprovalReviewAction::RequestPermissions {
-                reason,
-                permissions,
-            } => Self::RequestPermissions {
-                reason,
-                permissions: permissions.into(),
-            },
         }
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(tag = "type", rename_all = "camelCase")]
-#[ts(tag = "type", rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
+#[schemars(tag = "type", rename_all = "camelCase")]
 pub enum WebSearchAction {
     Search {
         query: Option<String>,
@@ -747,8 +1213,34 @@ pub enum WebSearchAction {
         url: Option<String>,
         pattern: Option<String>,
     },
-    #[serde(other)]
+    #[schemars(other)]
     Other,
+}
+
+impl ToJson for WebSearchAction {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::new();
+        match self {
+            WebSearchAction::Search { query, queries } => {
+                object.push_field("type", "search");
+                object.push_field("query", query.to_json());
+                object.push_field("queries", queries.to_json());
+            }
+            WebSearchAction::OpenPage { url } => {
+                object.push_field("type", "openPage");
+                object.push_field("url", url.to_json());
+            }
+            WebSearchAction::FindInPage { url, pattern } => {
+                object.push_field("type", "findInPage");
+                object.push_field("url", url.to_json());
+                object.push_field("pattern", pattern.to_json());
+            }
+            WebSearchAction::Other => {
+                object.push_field("type", "other");
+            }
+        }
+        JsonValue::Object(object)
+    }
 }
 
 impl From<codex_protocol::models::WebSearchAction> for WebSearchAction {
@@ -865,14 +1357,24 @@ impl From<codex_protocol::items::HookPromptFragment> for HookPromptFragment {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub enum CommandExecutionStatus {
     InProgress,
     Completed,
     Failed,
     Declined,
+}
+
+impl ToJson for CommandExecutionStatus {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            CommandExecutionStatus::InProgress => "inProgress",
+            CommandExecutionStatus::Completed => "completed",
+            CommandExecutionStatus::Failed => "failed",
+            CommandExecutionStatus::Declined => "declined",
+        })
+    }
 }
 
 impl From<CoreExecCommandStatus> for CommandExecutionStatus {
@@ -902,9 +1404,8 @@ v2_enum_from_core! {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub enum CollabAgentTool {
     SpawnAgent,
     SendInput,
@@ -913,33 +1414,82 @@ pub enum CollabAgentTool {
     CloseAgent,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+impl ToJson for CollabAgentTool {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            CollabAgentTool::SpawnAgent => "spawnAgent",
+            CollabAgentTool::SendInput => "sendInput",
+            CollabAgentTool::ResumeAgent => "resumeAgent",
+            CollabAgentTool::Wait => "wait",
+            CollabAgentTool::CloseAgent => "closeAgent",
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct FileUpdateChange {
     pub path: String,
     pub kind: PatchChangeKind,
     pub diff: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(tag = "type", rename_all = "camelCase")]
-#[ts(tag = "type")]
-#[ts(export_to = "v2/")]
+impl ToJson for FileUpdateChange {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(3);
+        object.push_field("path", self.path.clone());
+        object.push_field("kind", self.kind.to_json());
+        object.push_field("diff", self.diff.clone());
+        JsonValue::Object(object)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
+#[schemars(tag = "type", rename_all = "camelCase")]
 pub enum PatchChangeKind {
     Add,
     Delete,
     Update { move_path: Option<PathBuf> },
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+impl ToJson for PatchChangeKind {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::new();
+        match self {
+            PatchChangeKind::Add => object.push_field("type", "add"),
+            PatchChangeKind::Delete => object.push_field("type", "delete"),
+            PatchChangeKind::Update { move_path } => {
+                object.push_field("type", "update");
+                object.push_field(
+                    "movePath",
+                    move_path.as_ref().map_or(JsonValue::Null, |path| {
+                        JsonValue::String(path.as_path().to_string_lossy().into_owned())
+                    }),
+                );
+            }
+        }
+        JsonValue::Object(object)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub enum PatchApplyStatus {
     InProgress,
     Completed,
     Failed,
     Declined,
+}
+
+impl ToJson for PatchApplyStatus {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            PatchApplyStatus::InProgress => "inProgress",
+            PatchApplyStatus::Completed => "completed",
+            PatchApplyStatus::Failed => "failed",
+            PatchApplyStatus::Declined => "declined",
+        })
+    }
 }
 
 impl From<CorePatchApplyStatus> for PatchApplyStatus {
@@ -968,36 +1518,62 @@ impl From<CoreMcpToolCallStatus> for McpToolCallStatus {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub enum McpToolCallStatus {
     InProgress,
     Completed,
     Failed,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+impl ToJson for McpToolCallStatus {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            McpToolCallStatus::InProgress => "inProgress",
+            McpToolCallStatus::Completed => "completed",
+            McpToolCallStatus::Failed => "failed",
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub enum DynamicToolCallStatus {
     InProgress,
     Completed,
     Failed,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+impl ToJson for DynamicToolCallStatus {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            DynamicToolCallStatus::InProgress => "inProgress",
+            DynamicToolCallStatus::Completed => "completed",
+            DynamicToolCallStatus::Failed => "failed",
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub enum CollabAgentToolCallStatus {
     InProgress,
     Completed,
     Failed,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+impl ToJson for CollabAgentToolCallStatus {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            CollabAgentToolCallStatus::InProgress => "inProgress",
+            CollabAgentToolCallStatus::Completed => "completed",
+            CollabAgentToolCallStatus::Failed => "failed",
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub enum CollabAgentStatus {
     PendingInit,
     Running,
@@ -1008,12 +1584,34 @@ pub enum CollabAgentStatus {
     NotFound,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+impl ToJson for CollabAgentStatus {
+    fn to_json(&self) -> JsonValue {
+        JsonValue::from(match self {
+            CollabAgentStatus::PendingInit => "pendingInit",
+            CollabAgentStatus::Running => "running",
+            CollabAgentStatus::Interrupted => "interrupted",
+            CollabAgentStatus::Completed => "completed",
+            CollabAgentStatus::Errored => "errored",
+            CollabAgentStatus::Shutdown => "shutdown",
+            CollabAgentStatus::NotFound => "notFound",
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct CollabAgentState {
     pub status: CollabAgentStatus,
     pub message: Option<String>,
+}
+
+impl ToJson for CollabAgentState {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(2);
+        object.push_field("status", self.status.to_json());
+        object.push_field("message", self.message.to_json());
+        JsonValue::Object(object)
+    }
 }
 
 impl From<CoreAgentStatus> for CollabAgentState {
@@ -1051,28 +1649,24 @@ impl From<CoreAgentStatus> for CollabAgentState {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct ItemStartedNotification {
     pub item: ThreadItem,
     pub thread_id: String,
     pub turn_id: String,
     /// Unix timestamp (in milliseconds) when this item lifecycle started.
-    #[ts(type = "number")]
     pub started_at_ms: i64,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 /// [UNSTABLE] Temporary notification payload for approval auto-review. This
 /// shape is expected to change soon.
 pub struct ItemGuardianApprovalReviewStartedNotification {
     pub thread_id: String,
     pub turn_id: String,
     /// Unix timestamp (in milliseconds) when this review started.
-    #[ts(type = "number")]
     pub started_at_ms: i64,
     /// Stable identifier for this review.
     pub review_id: String,
@@ -1092,19 +1686,16 @@ pub struct ItemGuardianApprovalReviewStartedNotification {
     pub action: GuardianApprovalReviewAction,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 /// [UNSTABLE] Temporary notification payload for approval auto-review. This
 /// shape is expected to change soon.
 pub struct ItemGuardianApprovalReviewCompletedNotification {
     pub thread_id: String,
     pub turn_id: String,
     /// Unix timestamp (in milliseconds) when this review started.
-    #[ts(type = "number")]
     pub started_at_ms: i64,
     /// Unix timestamp (in milliseconds) when this review completed.
-    #[ts(type = "number")]
     pub completed_at_ms: i64,
     /// Stable identifier for this review.
     pub review_id: String,
@@ -1125,21 +1716,18 @@ pub struct ItemGuardianApprovalReviewCompletedNotification {
     pub action: GuardianApprovalReviewAction,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct ItemCompletedNotification {
     pub item: ThreadItem,
     pub thread_id: String,
     pub turn_id: String,
     /// Unix timestamp (in milliseconds) when this item lifecycle completed.
-    #[ts(type = "number")]
     pub completed_at_ms: i64,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct RawResponseItemCompletedNotification {
     pub thread_id: String,
     pub turn_id: String,
@@ -1147,9 +1735,8 @@ pub struct RawResponseItemCompletedNotification {
 }
 
 // Item-specific progress notifications
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct AgentMessageDeltaNotification {
     pub thread_id: String,
     pub turn_id: String,
@@ -1157,9 +1744,8 @@ pub struct AgentMessageDeltaNotification {
     pub delta: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 /// EXPERIMENTAL - proposed plan streaming deltas for plan items. Clients should
 /// not assume concatenated deltas match the completed plan item content.
 pub struct PlanDeltaNotification {
@@ -1169,44 +1755,37 @@ pub struct PlanDeltaNotification {
     pub delta: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct ReasoningSummaryTextDeltaNotification {
     pub thread_id: String,
     pub turn_id: String,
     pub item_id: String,
     pub delta: String,
-    #[ts(type = "number")]
     pub summary_index: i64,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct ReasoningSummaryPartAddedNotification {
     pub thread_id: String,
     pub turn_id: String,
     pub item_id: String,
-    #[ts(type = "number")]
     pub summary_index: i64,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct ReasoningTextDeltaNotification {
     pub thread_id: String,
     pub turn_id: String,
     pub item_id: String,
     pub delta: String,
-    #[ts(type = "number")]
     pub content_index: i64,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct TerminalInteractionNotification {
     pub thread_id: String,
     pub turn_id: String,
@@ -1215,21 +1794,102 @@ pub struct TerminalInteractionNotification {
     pub stdin: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
+#[schemars(rename_all = "camelCase")]
 pub struct CommandExecutionOutputDeltaNotification {
     pub thread_id: String,
     pub turn_id: String,
     pub item_id: String,
     pub delta: String,
 }
+
+impl ToJson for CommandExecutionOutputDeltaNotification {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::with_capacity(4);
+        object.push_field("threadId", self.thread_id.clone());
+        object.push_field("turnId", self.turn_id.clone());
+        object.push_field("itemId", self.item_id.clone());
+        object.push_field("delta", self.delta.clone());
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for CommandExecutionOutputDeltaNotification {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object: Map = Map::try_from(value)?;
+        Ok(Self {
+            thread_id: object.take_required("threadId")?,
+            turn_id: object.take_required("turnId")?,
+            item_id: object.take_required("itemId")?,
+            delta: object.take_required("delta")?,
+        })
+    }
+}
+
+fn optional_absolute_path(
+    value: Option<JsonValue>,
+) -> Result<Option<AbsolutePathBuf>, JsonValueError> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    if value.is_null() {
+        return Ok(None);
+    }
+    let path = String::from_json(value)?;
+    AbsolutePathBuf::try_from(PathBuf::from(&path))
+        .map(Some)
+        .map_err(|_| JsonValueError::WrongType(format!("expected absolute path, found `{path}`")))
+}
+
+fn absolute_path_json(path: &AbsolutePathBuf) -> JsonValue {
+    JsonValue::from(path.as_path().display().to_string())
+}
+
+fn absolute_paths_json(paths: &[AbsolutePathBuf]) -> JsonValue {
+    JsonValue::Array(paths.iter().map(absolute_path_json).collect())
+}
+
+fn optional_absolute_paths(
+    value: Option<JsonValue>,
+) -> Result<Option<Vec<AbsolutePathBuf>>, JsonValueError> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    if value.is_null() {
+        return Ok(None);
+    }
+    Vec::<String>::from_json(value)?
+        .into_iter()
+        .map(|path| {
+            AbsolutePathBuf::try_from(PathBuf::from(&path)).map_err(|_| {
+                JsonValueError::WrongType(format!("expected absolute path, found `{path}`"))
+            })
+        })
+        .collect::<Result<Vec<_>, _>>()
+        .map(Some)
+}
+
+fn required_absolute_paths(
+    value: Option<JsonValue>,
+    field: &str,
+) -> Result<Vec<AbsolutePathBuf>, JsonValueError> {
+    optional_absolute_paths(value)?
+        .ok_or_else(|| JsonValueError::WrongType(format!("missing required field `{field}`")))
+}
+
+fn required_absolute_path(
+    value: Option<JsonValue>,
+    field: &str,
+) -> Result<AbsolutePathBuf, JsonValueError> {
+    optional_absolute_path(value)?
+        .ok_or_else(|| JsonValueError::WrongType(format!("missing required field `{field}`")))
+}
+
 /// Deprecated legacy notification for `apply_patch` textual output.
 ///
 /// The server no longer emits this notification.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct FileChangeOutputDeltaNotification {
     pub thread_id: String,
     pub turn_id: String,
@@ -1237,9 +1897,8 @@ pub struct FileChangeOutputDeltaNotification {
     pub delta: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct FileChangePatchUpdatedNotification {
     pub thread_id: String,
     pub turn_id: String,
@@ -1247,15 +1906,13 @@ pub struct FileChangePatchUpdatedNotification {
     pub changes: Vec<FileUpdateChange>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct CommandExecutionRequestApprovalParams {
     pub thread_id: String,
     pub turn_id: String,
     pub item_id: String,
     /// Unix timestamp (in milliseconds) when this approval request started.
-    #[ts(type = "number")]
     pub started_at_ms: i64,
     /// Unique identifier for this specific approval callback.
     ///
@@ -1264,91 +1921,93 @@ pub struct CommandExecutionRequestApprovalParams {
     /// For zsh-exec-bridge subcommand approvals, multiple callbacks can belong to
     /// one parent `itemId`, so `approvalId` is a distinct opaque callback id
     /// (a UUID) used to disambiguate routing.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional = nullable)]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub approval_id: Option<String>,
     /// Optional explanatory reason (e.g. request for network access).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional = nullable)]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
     /// Optional context for a managed-network approval prompt.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional = nullable)]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub network_approval_context: Option<NetworkApprovalContext>,
     /// The command to be executed.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional = nullable)]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
     /// The command's working directory.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional = nullable)]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub cwd: Option<AbsolutePathBuf>,
     /// Best-effort parsed command actions for friendly display.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional = nullable)]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub command_actions: Option<Vec<CommandAction>>,
-    /// Optional additional permissions requested for this command.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional = nullable)]
-    pub additional_permissions: Option<AdditionalPermissionProfile>,
     /// Optional proposed execpolicy amendment to allow similar commands without prompting.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional = nullable)]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub proposed_execpolicy_amendment: Option<ExecPolicyAmendment>,
     /// Optional proposed network policy amendments (allow/deny host) for future requests.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional = nullable)]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub proposed_network_policy_amendments: Option<Vec<NetworkPolicyAmendment>>,
     /// Ordered list of decisions the client may present for this prompt.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional = nullable)]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub available_decisions: Option<Vec<CommandExecutionApprovalDecision>>,
+    /// [UNSTABLE] Additional filesystem permissions requested for this command.
+    pub additional_permissions: Option<AdditionalFileSystemPermissions>,
+}
+
+impl FromJson for CommandExecutionRequestApprovalParams {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("CommandExecutionRequestApprovalParams")?;
+        Ok(Self {
+            thread_id: object.take_required("threadId")?,
+            turn_id: object.take_required("turnId")?,
+            item_id: object.take_required("itemId")?,
+            started_at_ms: object.take_required("startedAtMs")?,
+            approval_id: object.take_optional("approvalId")?,
+            reason: object.take_optional("reason")?,
+            network_approval_context: object.take_optional("networkApprovalContext")?,
+            command: object.take_optional("command")?,
+            cwd: optional_absolute_path(object.remove("cwd"))?,
+            command_actions: object.take_optional("commandActions")?,
+            proposed_execpolicy_amendment: object.take_optional("proposedExecpolicyAmendment")?,
+            proposed_network_policy_amendments: object
+                .take_optional("proposedNetworkPolicyAmendments")?,
+            available_decisions: object.take_optional("availableDecisions")?,
+            additional_permissions: object.take_optional("additionalPermissions")?,
+        })
+    }
 }
 
 impl CommandExecutionRequestApprovalParams {
     pub fn strip_experimental_fields(&mut self) {
-        // TODO: Avoid hardcoding individual experimental fields here.
-        // We need a generic outbound compatibility design for stripping or
-        // otherwise handling experimental server->client payloads.
         self.additional_permissions = None;
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct CommandExecutionRequestApprovalResponse {
     pub decision: CommandExecutionApprovalDecision,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct FileChangeRequestApprovalParams {
     pub thread_id: String,
     pub turn_id: String,
     pub item_id: String,
     /// Unix timestamp (in milliseconds) when this approval request started.
-    #[ts(type = "number")]
     pub started_at_ms: i64,
     /// Optional explanatory reason (e.g. request for extra write access).
-    #[ts(optional = nullable)]
     pub reason: Option<String>,
     /// [UNSTABLE] When set, the agent is asking the user to allow writes under this root
     /// for the remainder of the session (unclear if this is honored today).
-    #[ts(optional = nullable)]
     pub grant_root: Option<PathBuf>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct FileChangeRequestApprovalResponse {
     pub decision: FileChangeApprovalDecision,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct DynamicToolCallParams {
     pub thread_id: String,
     pub turn_id: String,
@@ -1358,23 +2017,46 @@ pub struct DynamicToolCallParams {
     pub arguments: JsonValue,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct DynamicToolCallResponse {
     pub content_items: Vec<DynamicToolCallOutputContentItem>,
     pub success: bool,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(tag = "type", rename_all = "camelCase")]
-#[ts(tag = "type")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
+#[schemars(tag = "type", rename_all = "camelCase")]
 pub enum DynamicToolCallOutputContentItem {
-    #[serde(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     InputText { text: String },
-    #[serde(rename_all = "camelCase")]
+    #[schemars(rename_all = "camelCase")]
     InputImage { image_url: String },
+}
+
+impl ToJson for DynamicToolCallOutputContentItem {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::new();
+        match self {
+            Self::InputText { text } => {
+                object.push_field("type", "inputText");
+                object.push_field("text", text);
+            }
+            Self::InputImage { image_url } => {
+                object.push_field("type", "inputImage");
+                object.push_field("imageUrl", image_url);
+            }
+        }
+        JsonValue::Object(object)
+    }
+}
+
+impl ToJson for DynamicToolCallResponse {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::new();
+        object.push_field("contentItems", self.content_items.to_json());
+        object.push_field("success", self.success);
+        JsonValue::Object(object)
+    }
 }
 
 impl From<DynamicToolCallOutputContentItem>
@@ -1390,33 +2072,30 @@ impl From<DynamicToolCallOutputContentItem>
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 /// EXPERIMENTAL. Defines a single selectable option for request_user_input.
 pub struct ToolRequestUserInputOption {
     pub label: String,
     pub description: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 /// EXPERIMENTAL. Represents one request_user_input question and its required options.
 pub struct ToolRequestUserInputQuestion {
     pub id: String,
     pub header: String,
     pub question: String,
-    #[serde(default)]
+    #[schemars(default)]
     pub is_other: bool,
-    #[serde(default)]
+    #[schemars(default)]
     pub is_secret: bool,
     pub options: Option<Vec<ToolRequestUserInputOption>>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 /// EXPERIMENTAL. Params sent with a request_user_input event.
 pub struct ToolRequestUserInputParams {
     pub thread_id: String,
@@ -1425,17 +2104,15 @@ pub struct ToolRequestUserInputParams {
     pub questions: Vec<ToolRequestUserInputQuestion>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 /// EXPERIMENTAL. Captures a user's answer to a request_user_input question.
 pub struct ToolRequestUserInputAnswer {
     pub answers: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 /// EXPERIMENTAL. Response payload mapping question ids to answers.
 pub struct ToolRequestUserInputResponse {
     pub answers: HashMap<String, ToolRequestUserInputAnswer>,

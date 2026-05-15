@@ -1,283 +1,166 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "definitions": {
-    "AppBranding": {
-      "description": "EXPERIMENTAL - app metadata returned by app-list APIs.",
-      "properties": {
-        "category": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "developer": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "isDiscoverableApp": {
-          "type": "boolean"
-        },
-        "privacyPolicy": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "termsOfService": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "website": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "isDiscoverableApp"
-      ],
-      "type": "object"
-    },
-    "AppInfo": {
-      "description": "EXPERIMENTAL - app metadata returned by app-list APIs.",
-      "properties": {
-        "appMetadata": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/AppMetadata"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "branding": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/AppBranding"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "description": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "distributionChannel": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "id": {
-          "type": "string"
-        },
-        "installUrl": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "isAccessible": {
-          "default": false,
-          "type": "boolean"
-        },
-        "isEnabled": {
-          "default": true,
-          "description": "Whether this app is enabled in config.toml. Example: ```toml [apps.bad_app] enabled = false ```",
-          "type": "boolean"
-        },
-        "labels": {
-          "additionalProperties": {
-            "type": "string"
-          },
-          "type": [
-            "object",
-            "null"
-          ]
-        },
-        "logoUrl": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "logoUrlDark": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "name": {
-          "type": "string"
-        },
-        "pluginDisplayNames": {
-          "default": [],
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "required": [
-        "id",
-        "name"
-      ],
-      "type": "object"
-    },
-    "AppMetadata": {
-      "properties": {
-        "categories": {
-          "items": {
-            "type": "string"
-          },
-          "type": [
-            "array",
-            "null"
-          ]
-        },
-        "developer": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "firstPartyRequiresInstall": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "firstPartyType": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "review": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/AppReview"
-            },
-            {
-              "type": "null"
-            }
-          ]
-        },
-        "screenshots": {
-          "items": {
-            "$ref": "#/definitions/AppScreenshot"
-          },
-          "type": [
-            "array",
-            "null"
-          ]
-        },
-        "seoDescription": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "showInComposerWhenUnlinked": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "subCategories": {
-          "items": {
-            "type": "string"
-          },
-          "type": [
-            "array",
-            "null"
-          ]
-        },
-        "version": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "versionId": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "versionNotes": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "type": "object"
-    },
-    "AppReview": {
-      "properties": {
-        "status": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "status"
-      ],
-      "type": "object"
-    },
-    "AppScreenshot": {
-      "properties": {
-        "fileId": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "url": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "userPrompt": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "userPrompt"
-      ],
-      "type": "object"
-    }
-  },
-  "description": "EXPERIMENTAL - app list response.",
+  "title": "AppsListResponse",
+  "type": "object",
   "properties": {
     "data": {
+      "type": "array",
       "items": {
-        "$ref": "#/definitions/AppInfo"
-      },
-      "type": "array"
+        "title": "AppInfo",
+        "type": "object",
+        "properties": {
+          "appMetadata": {
+            "title": "AppMetadata",
+            "type": "object",
+            "properties": {
+              "categories": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "developer": {
+                "type": "string"
+              },
+              "firstPartyRequiresInstall": {
+                "type": "boolean"
+              },
+              "firstPartyType": {
+                "type": "string"
+              },
+              "review": {
+                "title": "AppReview",
+                "type": "object",
+                "properties": {
+                  "status": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "status"
+                ]
+              },
+              "screenshots": {
+                "type": "array",
+                "items": {
+                  "title": "AppScreenshot",
+                  "type": "object",
+                  "properties": {
+                    "fileId": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "type": "string"
+                    },
+                    "userPrompt": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "userPrompt"
+                  ]
+                }
+              },
+              "seoDescription": {
+                "type": "string"
+              },
+              "showInComposerWhenUnlinked": {
+                "type": "boolean"
+              },
+              "subCategories": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "version": {
+                "type": "string"
+              },
+              "versionId": {
+                "type": "string"
+              },
+              "versionNotes": {
+                "type": "string"
+              }
+            }
+          },
+          "branding": {
+            "title": "AppBranding",
+            "type": "object",
+            "properties": {
+              "category": {
+                "type": "string"
+              },
+              "developer": {
+                "type": "string"
+              },
+              "isDiscoverableApp": {
+                "type": "boolean"
+              },
+              "privacyPolicy": {
+                "type": "string"
+              },
+              "termsOfService": {
+                "type": "string"
+              },
+              "website": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "isDiscoverableApp"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "distributionChannel": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "installUrl": {
+            "type": "string"
+          },
+          "isAccessible": {
+            "type": "boolean"
+          },
+          "isEnabled": {
+            "type": "boolean"
+          },
+          "labels": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "logoUrl": {
+            "type": "string"
+          },
+          "logoUrlDark": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pluginDisplayNames": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "name"
+        ]
+      }
     },
     "nextCursor": {
-      "description": "Opaque cursor to pass to the next call to continue after the last item. If None, there are no more items to return.",
-      "type": [
-        "string",
-        "null"
-      ]
+      "type": "string"
     }
   },
   "required": [
     "data"
-  ],
-  "title": "AppsListResponse",
-  "type": "object"
+  ]
 }

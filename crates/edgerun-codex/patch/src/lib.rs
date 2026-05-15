@@ -876,7 +876,6 @@ pub fn print_summary(
 mod tests {
     use super::*;
     use crate::file_system::LOCAL_FS;
-    use codex_utils_absolute_path::test_support::PathExt;
     use pretty_assertions::assert_eq;
     use std::fs;
     use std::string::ToString;
@@ -925,7 +924,7 @@ mod tests {
     #[edgerun_tokio::test]
     async fn test_apply_patch_hunks_accept_relative_and_absolute_paths() {
         let dir = tempdir().unwrap();
-        let cwd = dir.path().abs();
+        let cwd = AbsolutePathBuf::from_absolute_path(dir.path()).unwrap();
         let relative_add = dir.path().join("relative-add.txt");
         let absolute_add = dir.path().join("absolute-add.txt");
         let relative_delete = dir.path().join("relative-delete.txt");
@@ -1379,7 +1378,7 @@ mod tests {
             [Hunk::UpdateFile { chunks, .. }] => chunks,
             _ => panic!("Expected a single UpdateFile hunk"),
         };
-        let path_abs = path.as_path().abs();
+        let path_abs = AbsolutePathBuf::from_absolute_path(&path).unwrap();
         let diff = unified_diff_from_chunks(
             &path_abs,
             update_file_chunks,
@@ -1427,7 +1426,7 @@ mod tests {
             _ => panic!("Expected a single UpdateFile hunk"),
         };
 
-        let path_abs = path.as_path().abs();
+        let path_abs = AbsolutePathBuf::from_absolute_path(&path).unwrap();
         let diff =
             unified_diff_from_chunks(&path_abs, chunks, LOCAL_FS.as_ref(), /*sandbox*/ None)
                 .await
@@ -1469,7 +1468,7 @@ mod tests {
             _ => panic!("Expected a single UpdateFile hunk"),
         };
 
-        let path_abs = path.as_path().abs();
+        let path_abs = AbsolutePathBuf::from_absolute_path(&path).unwrap();
         let diff =
             unified_diff_from_chunks(&path_abs, chunks, LOCAL_FS.as_ref(), /*sandbox*/ None)
                 .await
@@ -1509,7 +1508,7 @@ mod tests {
             _ => panic!("Expected a single UpdateFile hunk"),
         };
 
-        let path_abs = path.as_path().abs();
+        let path_abs = AbsolutePathBuf::from_absolute_path(&path).unwrap();
         let diff =
             unified_diff_from_chunks(&path_abs, chunks, LOCAL_FS.as_ref(), /*sandbox*/ None)
                 .await
@@ -1560,7 +1559,7 @@ mod tests {
             _ => panic!("Expected a single UpdateFile hunk"),
         };
 
-        let path_abs = path.as_path().abs();
+        let path_abs = AbsolutePathBuf::from_absolute_path(&path).unwrap();
         let diff =
             unified_diff_from_chunks(&path_abs, chunks, LOCAL_FS.as_ref(), /*sandbox*/ None)
                 .await

@@ -4,8 +4,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::RwLock;
 
-use codex_utils_string::to_ascii_json_string;
-use serde::Serialize;
+use edgerun_json::ToJson;
 use edgerun_json::Value;
 use edgerun_tokio::task::JoinHandle;
 
@@ -44,14 +43,27 @@ impl WorkspaceGitMetadata {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Default)]
+#[derive(Clone, Debug, Default)]
 struct TurnMetadataWorkspace {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     associated_remote_urls: Option<BTreeMap<String, String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     latest_git_commit_hash: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     has_changes: Option<bool>,
+}
+
+impl ToJson for TurnMetadataWorkspace {
+    fn to_json(&self) -> Value {
+        let mut object = edgerun_json::Map::new();
+        object.push_opt_field(
+            "associated_remote_urls",
+            self.associated_remote_urls.clone(),
+        );
+        object.push_opt_field(
+            "latest_git_commit_hash",
+            self.latest_git_commit_hash.clone(),
+        );
+        object.push_opt_field("has_changes", self.has_changes);
+        Value::Object(object)
+    }
 }
 
 impl From<WorkspaceGitMetadata> for TurnMetadataWorkspace {
@@ -64,26 +76,55 @@ impl From<WorkspaceGitMetadata> for TurnMetadataWorkspace {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Default)]
+#[derive(Clone, Debug, Default)]
 pub(crate) struct TurnMetadataBag {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     session_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     thread_id: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     thread_source: Option<ThreadSource>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     turn_id: Option<String>,
-    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     workspaces: BTreeMap<String, TurnMetadataWorkspace>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     sandbox: Option<String>,
+}
+
+impl ToJson for TurnMetadataBag {
+    fn to_json(&self) -> Value {
+        let mut object = edgerun_json::Map::new();
+        object.push_opt_field("session_id", self.session_id.clone());
+        object.push_opt_field("thread_id", self.thread_id.clone());
+        object.push_opt_field(
+            "thread_source",
+            self.thread_source.map(|source| source.as_str().to_string()),
+        );
+        object.push_opt_field("turn_id", self.turn_id.clone());
+        if !self.workspaces.is_empty() {
+            object.push_field("workspaces", self.workspaces.to_json());
+        }
+        object.push_opt_field("sandbox", self.sandbox.clone());
+        Value::Object(object)
+    }
 }
 
 impl TurnMetadataBag {
     fn to_header_value(&self) -> Option<String> {
-        to_ascii_json_string(self).ok()
+        to_ascii_json_string(&self.to_json())
     }
+}
+
+fn to_ascii_json_string(value: &Value) -> Option<String> {
+    let json = edgerun_json::to_json_string(value).ok()?;
+    let mut ascii = String::with_capacity(json.len());
+    for ch in json.chars() {
+        if ch.is_ascii() {
+            ascii.push(ch);
+        } else {
+            let mut units = [0; 2];
+            for unit in ch.encode_utf16(&mut units) {
+                use std::fmt::Write as _;
+                write!(&mut ascii, "\\u{unit:04x}").ok()?;
+            }
+        }
+    }
+    Some(ascii)
 }
 
 fn merge_turn_metadata(
@@ -95,7 +136,10 @@ fn merge_turn_metadata(
         return None;
     }
 
-    let mut metadata = edgerun_json::from_str(header).ok()?.into_object("turn metadata").ok()?;
+    let mut metadata = edgerun_json::from_str(header)
+        .ok()?
+        .into_object("turn metadata")
+        .ok()?;
     if let Some(turn_started_at_unix_ms) = turn_started_at_unix_ms {
         metadata.insert(
             TURN_STARTED_AT_UNIX_MS_KEY.to_string(),
@@ -112,7 +156,7 @@ fn merge_turn_metadata(
                 .or_insert_with(|| Value::String(value.clone()));
         }
     }
-    to_ascii_json_string(&metadata).ok()
+    to_ascii_json_string(&Value::Object(metadata))
 }
 
 fn build_turn_metadata_bag(
@@ -269,7 +313,10 @@ impl TurnMetadataState {
         context: McpTurnMetadataContext<'_>,
     ) -> Option<edgerun_json::Value> {
         let header = self.current_header_value()?;
-        let mut metadata = edgerun_json::from_str(&header).ok()?.into_object("turn metadata").ok()?;
+        let mut metadata = edgerun_json::from_str(&header)
+            .ok()?
+            .into_object("turn metadata")
+            .ok()?;
         metadata.insert(
             MODEL_KEY.to_string(),
             Value::String(context.model.to_string()),

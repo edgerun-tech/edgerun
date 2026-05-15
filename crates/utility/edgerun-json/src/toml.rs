@@ -19,6 +19,13 @@ mod tests {
     }
 
     #[test]
+    fn parses_basic_double_quoted_toml_string() {
+        let value = from_toml_str("name = \"test\"").unwrap();
+        assert_eq!(value.get("name").and_then(|v| v.as_str()), Some("test"));
+        assert_eq!(toml_to_json(value)["name"].as_str(), Some("test"));
+    }
+
+    #[test]
     fn parses_toml_array() {
         let value = from_toml_str("items = ['a', 'b', 3]").unwrap();
         assert_eq!(

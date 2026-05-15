@@ -3,11 +3,11 @@ use alloc::vec::Vec;
 
 use crate::protocol::Hash;
 use crate::storage_payload::{
-    ObjectRetrieveRequest, ObjectRetrieveResponse, ObjectStoreRequest,
-    retrieve_response_from_store_request,
+    retrieve_response_from_store_request, ObjectRetrieveRequest, ObjectRetrieveResponse,
+    ObjectStoreRequest,
 };
 #[cfg(any(feature = "std", feature = "virtual-disk"))]
-use crate::storage_payload::{StoragePayload, storage_payload_bytes, storage_payload_from_bytes};
+use crate::storage_payload::{storage_payload_bytes, storage_payload_from_bytes, StoragePayload};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum StorageAdapterError {

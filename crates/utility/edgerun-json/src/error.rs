@@ -175,15 +175,3 @@ impl JsonError {
         Self::Io
     }
 }
-
-impl serde::ser::Error for JsonError {
-    fn custom<T: fmt::Display>(msg: T) -> Self {
-        Self::Message(msg.to_string())
-    }
-}
-
-impl serde::de::Error for JsonError {
-    fn custom<T: fmt::Display>(msg: T) -> Self {
-        Self::Message(msg.to_string())
-    }
-}

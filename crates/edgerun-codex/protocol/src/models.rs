@@ -10,11 +10,6 @@ use edgerun_json::JsonValueError;
 use edgerun_json::Map;
 use edgerun_json::ToJson;
 use edgerun_json::Value;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Deserializer;
-use edgerun_serde::Serialize;
-use edgerun_serde::ser::Serializer;
-use ts_rs::TS;
 
 use crate::compat::absolute_path::AbsolutePathBuf;
 use crate::compat::image::ImageProcessingError;
@@ -31,42 +26,7 @@ use schemars::JsonSchema;
 
 use crate::mcp::CallToolResult;
 
-/// Controls the per-command sandbox override requested by a shell-like tool call.
-#[derive(
-    Debug, Clone, Copy, Default, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema, TS,
-)]
-#[serde(rename_all = "snake_case")]
-pub enum SandboxPermissions {
-    /// Run with the turn's configured sandbox policy unchanged.
-    #[default]
-    UseDefault,
-    /// Request to run outside the sandbox.
-    RequireEscalated,
-    /// Request to stay in the sandbox while widening permissions for this
-    /// command only.
-    WithAdditionalPermissions,
-}
-
-impl SandboxPermissions {
-    /// True if SandboxPermissions requires full unsandboxed execution (i.e. RequireEscalated)
-    pub fn requires_escalated_permissions(self) -> bool {
-        matches!(self, SandboxPermissions::RequireEscalated)
-    }
-
-    /// True if SandboxPermissions requests any explicit per-command override
-    /// beyond `UseDefault`.
-    pub fn requests_sandbox_override(self) -> bool {
-        !matches!(self, SandboxPermissions::UseDefault)
-    }
-
-    /// True if SandboxPermissions uses the sandboxed per-command permission
-    /// widening flow.
-    pub fn uses_additional_permissions(self) -> bool {
-        matches!(self, SandboxPermissions::WithAdditionalPermissions)
-    }
-}
-
-#[derive(Debug, Clone, Default, Eq, Hash, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, Default, Eq, Hash, PartialEq, JsonSchema)]
 pub struct FileSystemPermissions {
     pub entries: Vec<FileSystemSandboxEntry>,
     pub glob_scan_max_depth: Option<NonZeroUsize>,
@@ -142,71 +102,108 @@ impl FileSystemPermissions {
     }
 }
 
-#[derive(Debug, Clone, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(
+    Debug, Clone, Default, Eq, Hash, PartialEq, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(deny_unknown_fields)]
 struct LegacyFileSystemPermissions {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     read: Option<Vec<AbsolutePathBuf>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     write: Option<Vec<AbsolutePathBuf>>,
 }
 
-#[derive(Debug, Clone, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(
+    Debug, Clone, Default, Eq, Hash, PartialEq, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(deny_unknown_fields)]
 struct CanonicalFileSystemPermissions {
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[schemars(default, skip_serializing_if = "Vec::is_empty")]
     entries: Vec<FileSystemSandboxEntry>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     glob_scan_max_depth: Option<NonZeroUsize>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(untagged)]
+#[derive(Debug, Clone, edgerun_json::FromJson)]
+#[schemars(untagged)]
 enum FileSystemPermissionsDe {
     Canonical(CanonicalFileSystemPermissions),
     Legacy(LegacyFileSystemPermissions),
 }
 
-impl Serialize for FileSystemPermissions {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
+impl ToJson for FileSystemPermissions {
+    fn to_json(&self) -> Value {
         if let Some(legacy) = self.as_legacy_permissions() {
-            legacy.serialize(serializer)
-        } else {
-            CanonicalFileSystemPermissions {
-                entries: self.entries.clone(),
-                glob_scan_max_depth: self.glob_scan_max_depth,
+            let mut object = Map::new();
+            if let Some(read) = legacy.read {
+                object.push_field("read", read.to_json());
             }
-            .serialize(serializer)
+            if let Some(write) = legacy.write {
+                object.push_field("write", write.to_json());
+            }
+            return Value::Object(object);
         }
+
+        let mut object = Map::new();
+        if !self.entries.is_empty() {
+            object.push_field("entries", self.entries.to_json());
+        }
+        if let Some(depth) = self.glob_scan_max_depth {
+            object.push_field("glob_scan_max_depth", depth.get());
+        }
+        Value::Object(object)
     }
 }
 
-impl<'de> Deserialize<'de> for FileSystemPermissions {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        match FileSystemPermissionsDe::deserialize(deserializer)? {
-            FileSystemPermissionsDe::Canonical(CanonicalFileSystemPermissions {
+impl FromJson for FileSystemPermissions {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("FileSystemPermissions")?;
+        if object.get("entries").is_some() || object.get("glob_scan_max_depth").is_some() {
+            let entries = object.take_optional("entries")?.unwrap_or_default();
+            let glob_scan_max_depth = object
+                .take_optional::<usize>("glob_scan_max_depth")?
+                .map(|depth| {
+                    NonZeroUsize::new(depth).ok_or_else(|| {
+                        JsonValueError::WrongType(
+                            "glob_scan_max_depth must be greater than zero".to_string(),
+                        )
+                    })
+                })
+                .transpose()?;
+            return Ok(Self {
                 entries,
                 glob_scan_max_depth,
-            }) => Ok(Self {
-                entries,
-                glob_scan_max_depth,
-            }),
-            FileSystemPermissionsDe::Legacy(LegacyFileSystemPermissions { read, write }) => {
-                Ok(Self::from_read_write_roots(read, write))
-            }
+            });
         }
+
+        let read = object.take_optional("read")?;
+        let write = object.take_optional("write")?;
+        Ok(Self::from_read_write_roots(read, write))
     }
 }
 
-#[derive(Debug, Clone, Default, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
+#[derive(Debug, Clone, Default, Eq, Hash, PartialEq, JsonSchema)]
 pub struct NetworkPermissions {
     pub enabled: Option<bool>,
+}
+
+impl ToJson for NetworkPermissions {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        if let Some(enabled) = self.enabled {
+            object.push_field("enabled", enabled);
+        }
+        Value::Object(object)
+    }
+}
+
+impl FromJson for NetworkPermissions {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("NetworkPermissions")?;
+        Ok(Self {
+            enabled: object.take_optional("enabled")?,
+        })
+    }
 }
 
 impl NetworkPermissions {
@@ -215,24 +212,19 @@ impl NetworkPermissions {
     }
 }
 
-/// Partial permission overlay used for per-command requests and approved
-/// session/turn grants.
-#[derive(Debug, Clone, Default, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
-pub struct AdditionalPermissionProfile {
-    pub network: Option<NetworkPermissions>,
-    pub file_system: Option<FileSystemPermissions>,
-}
-
-impl AdditionalPermissionProfile {
-    pub fn is_empty(&self) -> bool {
-        self.network.is_none() && self.file_system.is_none()
-    }
-}
-
 #[derive(
-    Debug, Clone, Copy, Default, Eq, Hash, PartialEq, Serialize, Deserialize, JsonSchema, TS,
+    Debug,
+    Clone,
+    Copy,
+    Default,
+    Eq,
+    Hash,
+    PartialEq,
+    JsonSchema,
+    edgerun_json::ToJson,
+    edgerun_json::FromJson,
 )]
-#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 pub enum SandboxEnforcement {
     /// Codex owns sandbox construction for this profile.
     #[default]
@@ -254,17 +246,14 @@ impl SandboxEnforcement {
 }
 
 /// Filesystem permissions for profiles where Codex owns sandbox construction.
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize, JsonSchema, TS)]
-#[serde(tag = "type", rename_all = "snake_case")]
-#[ts(tag = "type")]
+#[derive(Debug, Clone, Eq, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(tag = "type", rename_all = "snake_case")]
 pub enum ManagedFileSystemPermissions {
     /// Apply a managed filesystem sandbox from the listed entries.
-    #[serde(rename_all = "snake_case")]
-    #[ts(rename_all = "snake_case")]
+    #[schemars(rename_all = "snake_case")]
     Restricted {
         entries: Vec<FileSystemSandboxEntry>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         glob_scan_max_depth: Option<NonZeroUsize>,
     },
     /// Apply a managed sandbox that allows all filesystem access.
@@ -303,13 +292,11 @@ impl ManagedFileSystemPermissions {
 }
 
 /// Canonical active runtime permissions for a conversation, turn, or command.
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, JsonSchema, TS)]
-#[serde(tag = "type", rename_all = "snake_case")]
-#[ts(tag = "type")]
+#[derive(Debug, Clone, Eq, PartialEq, JsonSchema, edgerun_json::ToJson)]
+#[schemars(tag = "type", rename_all = "snake_case")]
 pub enum PermissionProfile {
     /// Codex owns sandbox construction for this profile.
-    #[serde(rename_all = "snake_case")]
-    #[ts(rename_all = "snake_case")]
+    #[schemars(rename_all = "snake_case")]
     Managed {
         file_system: ManagedFileSystemPermissions,
         network: NetworkSandboxPolicy,
@@ -317,62 +304,8 @@ pub enum PermissionProfile {
     /// Do not apply an outer sandbox.
     Disabled,
     /// Filesystem isolation is enforced by an external caller.
-    #[serde(rename_all = "snake_case")]
-    #[ts(rename_all = "snake_case")]
+    #[schemars(rename_all = "snake_case")]
     External { network: NetworkSandboxPolicy },
-}
-
-/// Metadata for the named or implicit built-in permissions profile that
-/// produced the active `PermissionProfile`.
-///
-/// The runtime must honor `PermissionProfile`; this sidecar exists so clients
-/// can display stable profile identity without trying to reverse-engineer a
-/// name from the compiled permissions.
-#[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize, JsonSchema, TS)]
-pub struct ActivePermissionProfile {
-    /// Profile identifier from `default_permissions` or the implicit built-in
-    /// default, such as `:workspace` or a user-defined `[permissions.<id>]`
-    /// profile.
-    pub id: String,
-
-    /// Optional parent profile identifier once permissions profiles support
-    /// inheritance. This is always `None` until that config feature exists.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub extends: Option<String>,
-
-    /// Bounded user-requested modifications applied on top of the named
-    /// profile, if any.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub modifications: Vec<ActivePermissionProfileModification>,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize, JsonSchema, TS)]
-#[serde(tag = "type", rename_all = "snake_case")]
-#[ts(tag = "type")]
-pub enum ActivePermissionProfileModification {
-    /// Additional concrete directory that should be writable.
-    #[serde(rename_all = "snake_case")]
-    #[ts(rename_all = "snake_case")]
-    AdditionalWritableRoot { path: AbsolutePathBuf },
-}
-
-impl ActivePermissionProfile {
-    pub fn new(id: impl Into<String>) -> Self {
-        Self {
-            id: id.into(),
-            extends: None,
-            modifications: Vec::new(),
-        }
-    }
-
-    pub fn with_modifications(
-        mut self,
-        modifications: Vec<ActivePermissionProfileModification>,
-    ) -> Self {
-        self.modifications = modifications;
-        self
-    }
 }
 
 impl Default for PermissionProfile {
@@ -546,16 +479,16 @@ impl PermissionProfile {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, Clone, edgerun_json::FromJson)]
+#[schemars(tag = "type", rename_all = "snake_case")]
 enum TaggedPermissionProfile {
-    #[serde(rename_all = "snake_case")]
+    #[schemars(rename_all = "snake_case")]
     Managed {
         file_system: ManagedFileSystemPermissions,
         network: NetworkSandboxPolicy,
     },
     Disabled,
-    #[serde(rename_all = "snake_case")]
+    #[schemars(rename_all = "snake_case")]
     External {
         network: NetworkSandboxPolicy,
     },
@@ -579,8 +512,8 @@ impl From<TaggedPermissionProfile> for PermissionProfile {
 
 /// Pre-tagged shape written to rollout files before `PermissionProfile`
 /// represented enforcement explicitly.
-#[derive(Debug, Clone, Default, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Debug, Clone, Default, edgerun_json::FromJson)]
+#[schemars(deny_unknown_fields)]
 struct LegacyPermissionProfile {
     network: Option<NetworkPermissions>,
     file_system: Option<FileSystemPermissions>,
@@ -606,19 +539,16 @@ impl From<LegacyPermissionProfile> for PermissionProfile {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(untagged)]
+#[derive(Debug, Clone, edgerun_json::FromJson)]
+#[schemars(untagged)]
 enum PermissionProfileDe {
     Tagged(TaggedPermissionProfile),
     Legacy(LegacyPermissionProfile),
 }
 
-impl<'de> Deserialize<'de> for PermissionProfile {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        Ok(match PermissionProfileDe::deserialize(deserializer)? {
+impl FromJson for PermissionProfile {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        Ok(match PermissionProfileDe::from_json(value)? {
             PermissionProfileDe::Tagged(tagged) => tagged.into(),
             PermissionProfileDe::Legacy(legacy) => legacy.into(),
         })
@@ -661,19 +591,17 @@ impl From<&FileSystemPermissions> for FileSystemSandboxPolicy {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema, TS)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::FromJson)]
+#[schemars(tag = "type", rename_all = "snake_case")]
 pub enum ResponseInputItem {
     Message {
         role: String,
         content: Vec<ContentItem>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         phase: Option<MessagePhase>,
     },
     FunctionCallOutput {
         call_id: String,
-        #[ts(as = "FunctionCallOutputBody")]
         #[schemars(with = "FunctionCallOutputBody")]
         output: FunctionCallOutputPayload,
     },
@@ -683,10 +611,8 @@ pub enum ResponseInputItem {
     },
     CustomToolCallOutput {
         call_id: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         name: Option<String>,
-        #[ts(as = "FunctionCallOutputBody")]
         #[schemars(with = "FunctionCallOutputBody")]
         output: FunctionCallOutputPayload,
     },
@@ -694,21 +620,79 @@ pub enum ResponseInputItem {
         call_id: String,
         status: String,
         execution: String,
-        #[ts(type = "unknown[]")]
         tools: Vec<edgerun_json::Value>,
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema, TS)]
-#[serde(tag = "type", rename_all = "snake_case")]
+impl ToJson for ResponseInputItem {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        match self {
+            Self::Message {
+                role,
+                content,
+                phase,
+            } => {
+                object.push_field("type", "message");
+                object.push_field("role", role.clone());
+                object.push_field("content", content.to_json());
+                object.push_opt_field("phase", phase.as_ref().map(ToJson::to_json));
+            }
+            Self::FunctionCallOutput { call_id, output } => {
+                object.push_field("type", "function_call_output");
+                object.push_field("call_id", call_id.clone());
+                object.push_field("output", output.to_json());
+            }
+            Self::McpToolCallOutput { call_id, output } => {
+                object.push_field("type", "mcp_tool_call_output");
+                object.push_field("call_id", call_id.clone());
+                object.push_field("output", call_tool_result_to_json(output));
+            }
+            Self::CustomToolCallOutput {
+                call_id,
+                name,
+                output,
+            } => {
+                object.push_field("type", "custom_tool_call_output");
+                object.push_field("call_id", call_id.clone());
+                object.push_opt_field("name", name.clone());
+                object.push_field("output", output.to_json());
+            }
+            Self::ToolSearchOutput {
+                call_id,
+                status,
+                execution,
+                tools,
+            } => {
+                object.push_field("type", "tool_search_output");
+                object.push_field("call_id", call_id.clone());
+                object.push_field("status", status.clone());
+                object.push_field("execution", execution.clone());
+                object.push_field("tools", tools.to_json());
+            }
+        }
+        Value::Object(object)
+    }
+}
+
+fn call_tool_result_to_json(output: &CallToolResult) -> Value {
+    let mut object = Map::with_capacity(5);
+    object.push_field("content", output.content.to_json());
+    object.push_opt_field("structuredContent", output.structured_content.clone());
+    object.push_opt_field("isError", output.is_error);
+    object.push_opt_field("_meta", output.meta.clone());
+    Value::Object(object)
+}
+
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
+#[schemars(tag = "type", rename_all = "snake_case")]
 pub enum ContentItem {
     InputText {
         text: String,
     },
     InputImage {
         image_url: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         detail: Option<ImageDetail>,
     },
     OutputText {
@@ -716,8 +700,8 @@ pub enum ContentItem {
     },
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, JsonSchema)]
+#[schemars(rename_all = "lowercase")]
 pub enum ImageDetail {
     Auto,
     Low,
@@ -727,8 +711,8 @@ pub enum ImageDetail {
 
 pub const DEFAULT_IMAGE_DETAIL: ImageDetail = ImageDetail::High;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
+#[schemars(rename_all = "snake_case")]
 /// Classifies an assistant message as interim commentary or final answer text.
 ///
 /// Providers do not emit this consistently, so callers must treat `None` as
@@ -743,37 +727,32 @@ pub enum MessagePhase {
     FinalAnswer,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema, TS)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
+#[schemars(tag = "type", rename_all = "snake_case")]
 pub enum ResponseItem {
     Message {
-        #[serde(default, skip_serializing)]
-        #[ts(skip)]
+        #[schemars(default, skip_serializing)]
         id: Option<String>,
         role: String,
         content: Vec<ContentItem>,
         // Optional output-message phase (for example: "commentary", "final_answer").
         // Availability varies by provider/model, so downstream consumers must
         // preserve fallback behavior when this is absent.
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         phase: Option<MessagePhase>,
     },
     Reasoning {
-        #[serde(default, skip_serializing)]
-        #[ts(skip)]
+        #[schemars(default, skip_serializing)]
         #[schemars(skip)]
         id: String,
         summary: Vec<ReasoningItemReasoningSummary>,
-        #[serde(default, skip_serializing_if = "should_serialize_reasoning_content")]
-        #[ts(optional)]
+        #[schemars(default, skip_serializing_if = "should_serialize_reasoning_content")]
         content: Option<Vec<ReasoningItemContent>>,
         encrypted_content: Option<String>,
     },
     LocalShellCall {
         /// Legacy id field retained for compatibility with older payloads.
-        #[serde(default, skip_serializing)]
-        #[ts(skip)]
+        #[schemars(default, skip_serializing)]
         id: Option<String>,
         /// Set when using the Responses API.
         call_id: Option<String>,
@@ -781,12 +760,10 @@ pub enum ResponseItem {
         action: LocalShellAction,
     },
     FunctionCall {
-        #[serde(default, skip_serializing)]
-        #[ts(skip)]
+        #[schemars(default, skip_serializing)]
         id: Option<String>,
         name: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         namespace: Option<String>,
         // The Responses API returns the function call arguments as a *string* that contains
         // JSON, not as an already‑parsed object. We keep it as a raw string here and let
@@ -795,15 +772,12 @@ pub enum ResponseItem {
         call_id: String,
     },
     ToolSearchCall {
-        #[serde(default, skip_serializing)]
-        #[ts(skip)]
+        #[schemars(default, skip_serializing)]
         id: Option<String>,
         call_id: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         status: Option<String>,
         execution: String,
-        #[ts(type = "unknown")]
         arguments: edgerun_json::Value,
     },
     // NOTE: The `output` field for `function_call_output` uses a dedicated payload type with
@@ -813,16 +787,13 @@ pub enum ResponseItem {
     // We keep this behavior centralized in `FunctionCallOutputPayload`.
     FunctionCallOutput {
         call_id: String,
-        #[ts(as = "FunctionCallOutputBody")]
         #[schemars(with = "FunctionCallOutputBody")]
         output: FunctionCallOutputPayload,
     },
     CustomToolCall {
-        #[serde(default, skip_serializing)]
-        #[ts(skip)]
+        #[schemars(default, skip_serializing)]
         id: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         status: Option<String>,
 
         call_id: String,
@@ -834,10 +805,8 @@ pub enum ResponseItem {
     // text or structured content items.
     CustomToolCallOutput {
         call_id: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         name: Option<String>,
-        #[ts(as = "FunctionCallOutputBody")]
         #[schemars(with = "FunctionCallOutputBody")]
         output: FunctionCallOutputPayload,
     },
@@ -845,7 +814,6 @@ pub enum ResponseItem {
         call_id: Option<String>,
         status: String,
         execution: String,
-        #[ts(type = "unknown[]")]
         tools: Vec<edgerun_json::Value>,
     },
     // Emitted by the Responses API when the agent triggers a web search.
@@ -857,14 +825,11 @@ pub enum ResponseItem {
     //   "action": {"type":"search","query":"weather: San Francisco, CA"}
     // }
     WebSearchCall {
-        #[serde(default, skip_serializing)]
-        #[ts(skip)]
+        #[schemars(default, skip_serializing)]
         id: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         status: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         action: Option<WebSearchAction>,
     },
     // Emitted by the Responses API when the agent triggers image generation.
@@ -879,19 +844,17 @@ pub enum ResponseItem {
     ImageGenerationCall {
         id: String,
         status: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         revised_prompt: Option<String>,
         result: String,
     },
-    #[serde(alias = "compaction_summary")]
+    #[schemars(alias = "compaction_summary")]
     Compaction { encrypted_content: String },
     ContextCompaction {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         encrypted_content: Option<String>,
     },
-    #[serde(other)]
+    #[schemars(other)]
     Other,
 }
 
@@ -1390,7 +1353,7 @@ impl ToJson for ResponseItem {
             }
             Self::ContextCompaction { encrypted_content } => {
                 object.push_field("type", "context_compaction");
-                object.push_field("encrypted_content", encrypted_content.to_json());
+                object.push_opt_field("encrypted_content", encrypted_content.clone());
             }
             Self::Other => {
                 object.push_field("type", "other");
@@ -1483,8 +1446,8 @@ impl FromJson for ResponseItem {
 pub const BASE_INSTRUCTIONS_DEFAULT: &str = include_str!("prompts/base_instructions/default.md");
 
 /// Base instructions for the model in a thread. Corresponds to the `instructions` field in the ResponsesAPI.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema, TS)]
-#[serde(rename = "base_instructions", rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename = "base_instructions", rename_all = "snake_case")]
 pub struct BaseInstructions {
     pub text: String,
 }
@@ -1726,21 +1689,21 @@ impl From<ResponseInputItem> for ResponseItem {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
+#[schemars(rename_all = "snake_case")]
 pub enum LocalShellStatus {
     Completed,
     InProgress,
     Incomplete,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema, TS)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
+#[schemars(tag = "type", rename_all = "snake_case")]
 pub enum LocalShellAction {
     Exec(LocalShellExecAction),
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
 pub struct LocalShellExecAction {
     pub command: Vec<String>,
     pub timeout_ms: Option<u64>,
@@ -1749,44 +1712,39 @@ pub struct LocalShellExecAction {
     pub user: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema, TS)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
+#[schemars(tag = "type", rename_all = "snake_case")]
 #[schemars(rename = "ResponsesApiWebSearchAction")]
 pub enum WebSearchAction {
     Search {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         query: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         queries: Option<Vec<String>>,
     },
     OpenPage {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         url: Option<String>,
     },
     FindInPage {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         url: Option<String>,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         pattern: Option<String>,
     },
 
-    #[serde(other)]
+    #[schemars(other)]
     Other,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema, TS)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
+#[schemars(tag = "type", rename_all = "snake_case")]
 pub enum ReasoningItemReasoningSummary {
     SummaryText { text: String },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema, TS)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
+#[schemars(tag = "type", rename_all = "snake_case")]
 pub enum ReasoningItemContent {
     ReasoningText { text: String },
     Text { text: String },
@@ -1835,68 +1793,82 @@ impl From<Vec<UserInput>> for ResponseInputItem {
         }
     }
 }
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct SearchToolCallParams {
     pub query: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub limit: Option<usize>,
 }
 
 /// If the `name` of a `ResponseItem::FunctionCall` is either `container.exec`
 /// or `shell`, the `arguments` field should deserialize to this struct.
-#[derive(Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
 pub struct ShellToolCallParams {
     pub command: Vec<String>,
     pub workdir: Option<String>,
 
     /// This is the maximum time in milliseconds that the command is allowed to run.
-    #[serde(alias = "timeout")]
+    #[schemars(alias = "timeout")]
     pub timeout_ms: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub sandbox_permissions: Option<SandboxPermissions>,
     /// Suggests a command prefix to persist for future sessions
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub prefix_rule: Option<Vec<String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub additional_permissions: Option<AdditionalPermissionProfile>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub justification: Option<String>,
+}
+
+impl FromJson for ShellToolCallParams {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ShellToolCallParams")?;
+        let timeout_ms = match object.remove("timeout_ms") {
+            Some(Value::Null) | None => object.take_optional("timeout")?,
+            Some(value) => Some(u64::from_json(value)?),
+        };
+        Ok(Self {
+            command: object.take_required("command")?,
+            workdir: object.take_optional("workdir")?,
+            timeout_ms,
+            prefix_rule: object.take_optional("prefix_rule")?,
+        })
+    }
 }
 
 /// If the `name` of a `ResponseItem::FunctionCall` is `shell_command`, the
 /// `arguments` field should deserialize to this struct.
-#[derive(Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
 pub struct ShellCommandToolCallParams {
     pub command: String,
     pub workdir: Option<String>,
 
     /// Whether to run the shell with login shell semantics
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub login: Option<bool>,
     /// This is the maximum time in milliseconds that the command is allowed to run.
-    #[serde(alias = "timeout")]
+    #[schemars(alias = "timeout")]
     pub timeout_ms: Option<u64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub sandbox_permissions: Option<SandboxPermissions>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub prefix_rule: Option<Vec<String>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
-    pub additional_permissions: Option<AdditionalPermissionProfile>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub justification: Option<String>,
+}
+
+impl FromJson for ShellCommandToolCallParams {
+    fn from_json(value: Value) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ShellCommandToolCallParams")?;
+        let timeout_ms = match object.remove("timeout_ms") {
+            Some(Value::Null) | None => object.take_optional("timeout")?,
+            Some(value) => Some(u64::from_json(value)?),
+        };
+        Ok(Self {
+            command: object.take_required("command")?,
+            workdir: object.take_optional("workdir")?,
+            login: object.take_optional("login")?,
+            timeout_ms,
+            prefix_rule: object.take_optional("prefix_rule")?,
+        })
+    }
 }
 
 /// Responses API compatible content items that can be returned by a tool call.
 /// This is a subset of ContentItem with the types we support as function call outputs.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema, TS)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
+#[schemars(tag = "type", rename_all = "snake_case")]
 pub enum FunctionCallOutputContentItem {
     // Do not rename, these are serialized and used directly in the responses API.
     InputText {
@@ -1905,8 +1877,7 @@ pub enum FunctionCallOutputContentItem {
     // Do not rename, these are serialized and used directly in the responses API.
     InputImage {
         image_url: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         detail: Option<ImageDetail>,
     },
 }
@@ -1965,14 +1936,14 @@ impl From<crate::dynamic_tools::DynamicToolCallOutputContentItem>
 ///
 /// `body` serializes directly as the wire value for `function_call_output.output`.
 /// `success` remains internal metadata for downstream handling.
-#[derive(Debug, Default, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Default, Clone, PartialEq, JsonSchema)]
 pub struct FunctionCallOutputPayload {
     pub body: FunctionCallOutputBody,
     pub success: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, JsonSchema, TS)]
-#[serde(untagged)]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
+#[schemars(untagged)]
 pub enum FunctionCallOutputBody {
     Text(String),
     ContentItems(Vec<FunctionCallOutputContentItem>),
@@ -2046,31 +2017,6 @@ impl FunctionCallOutputPayload {
 // `function_call_output.output` is encoded as either:
 //   - an array of structured content items
 //   - a plain string
-impl Serialize for FunctionCallOutputPayload {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        match &self.body {
-            FunctionCallOutputBody::Text(content) => serializer.serialize_str(content),
-            FunctionCallOutputBody::ContentItems(items) => items.serialize(serializer),
-        }
-    }
-}
-
-impl<'de> Deserialize<'de> for FunctionCallOutputPayload {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let body = FunctionCallOutputBody::deserialize(deserializer)?;
-        Ok(FunctionCallOutputPayload {
-            body,
-            success: None,
-        })
-    }
-}
-
 impl CallToolResult {
     pub fn from_result(result: Result<Self, String>) -> Self {
         match result {
@@ -2228,10 +2174,14 @@ impl std::fmt::Display for FunctionCallOutputPayload {
 mod tests {
     use super::*;
     use anyhow::Result;
-    use codex_execpolicy::Policy;
     use pretty_assertions::assert_eq;
     use std::path::PathBuf;
     use tempfile::tempdir;
+
+    fn from_json_str<T: FromJson>(json: &str) -> T {
+        edgerun_json::from_value(edgerun_json::from_str(json).expect("parse json"))
+            .expect("deserialize json value")
+    }
 
     #[test]
     fn response_input_message_conversion_preserves_phase() {
@@ -2254,41 +2204,6 @@ mod tests {
                 phase: Some(MessagePhase::Commentary),
             }
         );
-    }
-
-    #[test]
-    fn sandbox_permissions_helpers_match_documented_semantics() {
-        let cases = [
-            (SandboxPermissions::UseDefault, false, false, false),
-            (SandboxPermissions::RequireEscalated, true, true, false),
-            (
-                SandboxPermissions::WithAdditionalPermissions,
-                false,
-                true,
-                true,
-            ),
-        ];
-
-        for (
-            sandbox_permissions,
-            requires_escalated_permissions,
-            requests_sandbox_override,
-            uses_additional_permissions,
-        ) in cases
-        {
-            assert_eq!(
-                sandbox_permissions.requires_escalated_permissions(),
-                requires_escalated_permissions
-            );
-            assert_eq!(
-                sandbox_permissions.requests_sandbox_override(),
-                requests_sandbox_override
-            );
-            assert_eq!(
-                sandbox_permissions.uses_additional_permissions(),
-                uses_additional_permissions
-            );
-        }
     }
 
     #[test]
@@ -2353,20 +2268,6 @@ mod tests {
     }
 
     #[test]
-    fn additional_permission_profile_is_empty_when_all_fields_are_none() {
-        assert_eq!(AdditionalPermissionProfile::default().is_empty(), true);
-    }
-
-    #[test]
-    fn additional_permission_profile_is_not_empty_when_field_is_present_but_nested_empty() {
-        let permission_profile = AdditionalPermissionProfile {
-            network: Some(NetworkPermissions { enabled: None }),
-            file_system: None,
-        };
-        assert_eq!(permission_profile.is_empty(), false);
-    }
-
-    #[test]
     fn permission_profile_round_trip_preserves_glob_scan_max_depth() {
         let mut file_system_sandbox_policy =
             FileSystemSandboxPolicy::restricted(vec![FileSystemSandboxEntry {
@@ -2408,7 +2309,7 @@ mod tests {
             },
         });
 
-        let permission_profile: PermissionProfile = edgerun_json::from_value(legacy)?;
+        let permission_profile: PermissionProfile = edgerun_json::from_json_value(legacy)?;
 
         assert_eq!(
             permission_profile,
@@ -2552,12 +2453,7 @@ mod tests {
 
     #[test]
     fn file_system_permissions_with_glob_scan_depth_uses_canonical_json() -> Result<()> {
-        let path = AbsolutePathBuf::try_from(PathBuf::from(if cfg!(windows) {
-            r"C:\tmp\allowed"
-        } else {
-            "/tmp/allowed"
-        }))
-        .expect("absolute path");
+        let path = AbsolutePathBuf::try_from(PathBuf::from("/tmp/allowed")).expect("absolute path");
         let file_system_permissions = FileSystemPermissions {
             entries: vec![FileSystemSandboxEntry {
                 path: FileSystemPath::Path { path },
@@ -2566,7 +2462,7 @@ mod tests {
             glob_scan_max_depth: NonZeroUsize::new(2),
         };
 
-        let serialized = edgerun_json::to_value(&file_system_permissions)?;
+        let serialized = edgerun_json::to_value(&file_system_permissions);
 
         assert_eq!(serialized.get("read"), None);
         assert_eq!(serialized.get("write"), None);
@@ -2576,7 +2472,8 @@ mod tests {
         );
         assert!(serialized.get("entries").is_some());
         assert_eq!(
-            edgerun_json::from_value::<FileSystemPermissions>(serialized)?,
+            edgerun_json::from_value::<FileSystemPermissions>(serialized)
+                .expect("filesystem permissions"),
             file_system_permissions
         );
         Ok(())
@@ -2679,7 +2576,7 @@ mod tests {
 
     #[test]
     fn function_call_deserializes_optional_namespace() {
-        let item: ResponseItem = edgerun_json::from_value(edgerun_json::json!({
+        let item: ResponseItem = edgerun_json::from_json_value(edgerun_json::json!({
             "type": "function_call",
             "name": "mcp__codex_apps__gmail_get_recent_emails",
             "namespace": "mcp__codex_apps__gmail",
@@ -2738,18 +2635,11 @@ mod tests {
 
     #[test]
     fn format_allow_prefixes_limits_output() {
-        let mut exec_policy = Policy::empty();
-        for i in 0..200 {
-            exec_policy
-                .add_prefix_rule(
-                    &[format!("tool-{i:03}"), "x".repeat(500)],
-                    codex_execpolicy::Decision::Allow,
-                )
-                .expect("add rule");
-        }
+        let prefixes = (0..200)
+            .map(|i| vec![format!("tool-{i:03}"), "x".repeat(500)])
+            .collect();
 
-        let output =
-            format_allow_prefixes(exec_policy.get_allowed_prefixes()).expect("formatted prefixes");
+        let output = format_allow_prefixes(prefixes).expect("formatted prefixes");
         assert!(
             output.len() <= MAX_ALLOW_PREFIX_TEXT_BYTES + TRUNCATED_MARKER.len(),
             "output length exceeds expected limit: {output}",
@@ -2955,7 +2845,7 @@ mod tests {
             {"type": "input_image", "image_url": "data:image/png;base64,XYZ"}
         ]"#;
 
-        let payload: FunctionCallOutputPayload = edgerun_json::from_str(json)?;
+        let payload: FunctionCallOutputPayload = from_json_str(json);
 
         assert_eq!(payload.success, None);
         let expected_items = vec![
@@ -2983,7 +2873,7 @@ mod tests {
     fn deserializes_compaction_alias() -> Result<()> {
         let json = r#"{"type":"compaction_summary","encrypted_content":"abc"}"#;
 
-        let item: ResponseItem = edgerun_json::from_str(json)?;
+        let item: ResponseItem = from_json_str(json);
 
         assert_eq!(
             item,
@@ -2998,7 +2888,7 @@ mod tests {
     fn deserializes_context_compaction() -> Result<()> {
         let json = r#"{"type":"context_compaction","encrypted_content":"abc"}"#;
 
-        let item: ResponseItem = edgerun_json::from_str(json)?;
+        let item: ResponseItem = from_json_str(json);
 
         assert_eq!(
             item,
@@ -3016,7 +2906,7 @@ mod tests {
         };
 
         assert_eq!(
-            edgerun_json::to_value(item)?,
+            edgerun_json::to_value(&item),
             edgerun_json::json!({
                 "type": "context_compaction",
             })
@@ -3036,7 +2926,7 @@ mod tests {
             }
         }"#;
 
-        let item: ResponseItem = edgerun_json::from_str(json)?;
+        let item: ResponseItem = from_json_str(json);
 
         assert_eq!(item, ResponseItem::Other);
         Ok(())
@@ -3112,7 +3002,7 @@ mod tests {
 
         for (json_literal, expected_id, expected_action, expected_status, expect_roundtrip) in cases
         {
-            let parsed: ResponseItem = edgerun_json::from_str(json_literal)?;
+            let parsed: ResponseItem = from_json_str(json_literal);
             let expected = ResponseItem::WebSearchCall {
                 id: expected_id.clone(),
                 status: expected_status.clone(),
@@ -3120,7 +3010,7 @@ mod tests {
             };
             assert_eq!(parsed, expected);
 
-            let serialized = edgerun_json::to_value(&parsed)?;
+            let serialized = edgerun_json::to_value(&parsed);
             let mut expected_serialized: edgerun_json::Value =
                 edgerun_json::from_str(json_literal)?;
             if !expect_roundtrip && let Some(obj) = expected_serialized.as_object_mut() {
@@ -3140,16 +3030,13 @@ mod tests {
             "timeout": 1000
         }"#;
 
-        let params: ShellToolCallParams = edgerun_json::from_str(json)?;
+        let params: ShellToolCallParams = from_json_str(json);
         assert_eq!(
             ShellToolCallParams {
                 command: vec!["ls".to_string(), "-l".to_string()],
                 workdir: Some("/tmp".to_string()),
                 timeout_ms: Some(1000),
-                sandbox_permissions: None,
                 prefix_rule: None,
-                additional_permissions: None,
-                justification: None,
             },
             params
         );
@@ -3188,7 +3075,7 @@ mod tests {
 
     #[test]
     fn tool_search_call_roundtrips() -> Result<()> {
-        let parsed: ResponseItem = edgerun_json::from_str(
+        let parsed: ResponseItem = from_json_str(
             r#"{
                 "type": "tool_search_call",
                 "call_id": "search-1",
@@ -3198,7 +3085,7 @@ mod tests {
                     "limit": 1
                 }
             }"#,
-        )?;
+        );
 
         assert_eq!(
             parsed,
@@ -3215,7 +3102,7 @@ mod tests {
         );
 
         assert_eq!(
-            edgerun_json::to_value(&parsed)?,
+            edgerun_json::to_value(&parsed),
             edgerun_json::json!({
                 "type": "tool_search_call",
                 "call_id": "search-1",
@@ -3275,7 +3162,7 @@ mod tests {
         );
 
         assert_eq!(
-            edgerun_json::to_value(input)?,
+            edgerun_json::to_value(&input),
             edgerun_json::json!({
                 "type": "tool_search_output",
                 "call_id": "search-1",
@@ -3303,7 +3190,7 @@ mod tests {
 
     #[test]
     fn tool_search_server_items_allow_null_call_id() -> Result<()> {
-        let parsed_call: ResponseItem = edgerun_json::from_str(
+        let parsed_call: ResponseItem = from_json_str(
             r#"{
                 "type": "tool_search_call",
                 "execution": "server",
@@ -3313,7 +3200,7 @@ mod tests {
                     "paths": ["crm"]
                 }
             }"#,
-        )?;
+        );
         assert_eq!(
             parsed_call,
             ResponseItem::ToolSearchCall {
@@ -3327,7 +3214,7 @@ mod tests {
             }
         );
 
-        let parsed_output: ResponseItem = edgerun_json::from_str(
+        let parsed_output: ResponseItem = from_json_str(
             r#"{
                 "type": "tool_search_output",
                 "execution": "server",
@@ -3335,7 +3222,7 @@ mod tests {
                 "status": "completed",
                 "tools": []
             }"#,
-        )?;
+        );
         assert_eq!(
             parsed_output,
             ResponseItem::ToolSearchOutput {

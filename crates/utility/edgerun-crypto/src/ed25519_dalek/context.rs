@@ -19,7 +19,7 @@ use crate::ed25519_dalek::{InternalError, SignatureError};
 /// # fn main() {
 /// use ed25519_dalek::{Signature, SigningKey, VerifyingKey, Sha512};
 /// # use crate::curve25519_dalek::digest::Digest;
-/// # use rand::rngs::OsRng;
+/// # use crate::rand_core::OsRng;
 /// use ed25519_dalek::{DigestSigner, DigestVerifier};
 ///
 /// # let mut csprng = OsRng;
@@ -71,38 +71,5 @@ impl<'k, 'v, K> Context<'k, 'v, K> {
     /// Borrow the context string value.
     pub fn value(&self) -> &'v [u8] {
         self.value
-    }
-}
-
-#[cfg(all(test, feature = "digest", ed25519_dalek_upstream_tests))]
-mod test {
-    #![allow(clippy::unwrap_used)]
-
-    use crate::curve25519_dalek::digest::Digest;
-    use crate::ed25519::signature::{DigestSigner, DigestVerifier};
-    use crate::ed25519_dalek::{Signature, SigningKey, VerifyingKey};
-    use crate::sha2::Sha512;
-    use rand::rngs::OsRng;
-
-    #[test]
-    fn context_correctness() {
-        let mut csprng = OsRng;
-        let signing_key: SigningKey = SigningKey::generate(&mut csprng);
-        let verifying_key: VerifyingKey = signing_key.verifying_key();
-
-        let context_str = b"Local Channel 3";
-        let prehashed_message = Sha512::default().chain_update(b"Stay tuned for more news at 7");
-
-        // Signer
-        let signing_context = signing_key.with_context(context_str).unwrap();
-        let signature: Signature = signing_context.sign_digest(prehashed_message.clone());
-
-        // Verifier
-        let verifying_context = verifying_key.with_context(context_str).unwrap();
-        let verified: bool = verifying_context
-            .verify_digest(prehashed_message, &signature)
-            .is_ok();
-
-        assert!(verified);
     }
 }

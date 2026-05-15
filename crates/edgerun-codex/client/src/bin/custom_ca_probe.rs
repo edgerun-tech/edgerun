@@ -49,7 +49,7 @@ async fn run_probe() -> Result<(), String> {
     let target_url = env::var(PROBE_URL_ENV).ok();
     let mut builder = edgerun_reqwest::Client::builder();
     if target_url.is_some() {
-        builder = builder.timeout(Duration::from_secs(5));
+        builder = builder.timeout(Duration::from_secs(5)).http1_only();
     }
     if env::var_os(PROBE_TLS13_ENV).is_some() {
         builder = builder.min_tls_version(edgerun_reqwest::tls::Version::TLS_1_3);

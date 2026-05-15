@@ -14,9 +14,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
 #[cfg(feature = "http-compression")]
-use edgerun_encoding::byteorder::{push_u32_le, read_u16_le, read_u32_le};
-#[cfg(feature = "http-compression")]
-use edgerun_encoding::crc32::crc32;
+use edgerun_encoding::compression;
 
 /// Supported content encodings
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -151,55 +149,13 @@ pub fn decompress_body(body: &[u8], headers: &HeaderMap) -> Option<Vec<u8>> {
 /// Compress to gzip format
 #[cfg(feature = "http-compression")]
 fn compress_gzip(data: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(data.len() + 18);
-    out.extend_from_slice(&[0x1f, 0x8b, 0x08, 0x00, 0, 0, 0, 0, 0x00, 0xff]);
-    out.extend_from_slice(&miniz_oxide::deflate::compress_to_vec(data, 6));
-    push_u32_le(&mut out, crc32(data));
-    push_u32_le(&mut out, data.len() as u32);
-    out
+    compression::gzip_compress(data, 6)
 }
 
 /// Decompress gzip data
 #[cfg(feature = "http-compression")]
 fn decompress_gzip(data: &[u8]) -> Option<Vec<u8>> {
-    if data.len() < 18 || data[0] != 0x1f || data[1] != 0x8b || data[2] != 8 {
-        return None;
-    }
-
-    let flags = data[3];
-    if flags & 0xe0 != 0 {
-        return None;
-    }
-
-    let mut pos = 10;
-    if flags & 0x04 != 0 {
-        if pos + 2 > data.len() {
-            return None;
-        }
-        let xlen = read_u16_le(data, pos) as usize;
-        pos = pos.checked_add(2 + xlen)?;
-    }
-    if flags & 0x08 != 0 {
-        pos = skip_zero_terminated(data, pos)?;
-    }
-    if flags & 0x10 != 0 {
-        pos = skip_zero_terminated(data, pos)?;
-    }
-    if flags & 0x02 != 0 {
-        pos = pos.checked_add(2)?;
-    }
-    if pos + 8 > data.len() {
-        return None;
-    }
-
-    let footer = data.len() - 8;
-    let result = miniz_oxide::inflate::decompress_to_vec(&data[pos..footer]).ok()?;
-    let expected_crc = read_u32_le(data, footer);
-    let expected_len = read_u32_le(data, footer + 4);
-    if expected_crc != crc32(&result) || expected_len != result.len() as u32 {
-        return None;
-    }
-    Some(result)
+    compression::gzip_decompress(data).ok()
 }
 
 // ---------------------------------------------------------------------------
@@ -209,7 +165,7 @@ fn decompress_gzip(data: &[u8]) -> Option<Vec<u8>> {
 /// Compress to zlib/deflate format
 #[cfg(feature = "http-compression")]
 fn compress_deflate(data: &[u8]) -> Vec<u8> {
-    miniz_oxide::deflate::compress_to_vec_zlib(data, 6)
+    compression::zlib_compress(data, 6)
 }
 
 /// Decompress zlib/deflate data
@@ -219,19 +175,7 @@ fn decompress_deflate(data: &[u8]) -> Option<Vec<u8>> {
         return None;
     }
 
-    miniz_oxide::inflate::decompress_to_vec_zlib(data).ok()
-}
-
-#[cfg(feature = "http-compression")]
-fn skip_zero_terminated(data: &[u8], mut pos: usize) -> Option<usize> {
-    while pos < data.len() {
-        let byte = data[pos];
-        pos += 1;
-        if byte == 0 {
-            return Some(pos);
-        }
-    }
-    None
+    compression::zlib_decompress(data).ok()
 }
 
 // ---------------------------------------------------------------------------

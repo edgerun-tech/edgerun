@@ -13,6 +13,7 @@ pub enum UiNodeKind {
     Card,
     ScrollArea {
         offset: f32,
+        offset_px: Option<f32>,
         id: Option<u32>,
     },
     Text(String),
@@ -188,6 +189,7 @@ pub enum UiNodeKind {
         value: String,
         helper: String,
         focused: bool,
+        masked: bool,
         id: Option<u32>,
     },
     TextArea {
@@ -248,6 +250,22 @@ pub struct UiNode {
     pub(super) kind: UiNodeKind,
     pub(super) style: UiStyle,
     pub(super) children: Vec<UiNode>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct UiResolvedLayout {
+    pub kind: &'static str,
+    pub rect: UiRect,
+    pub children: Vec<UiResolvedLayout>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct UiLayoutIssue {
+    pub path: String,
+    pub kind: &'static str,
+    pub rect: UiRect,
+    pub parent: UiRect,
+    pub message: &'static str,
 }
 
 impl UiNode {
@@ -315,7 +333,25 @@ impl UiNode {
         let mut style = UiStyle::parse(classes);
         style.direction = Axis::Vertical;
         Self {
-            kind: UiNodeKind::ScrollArea { offset, id: None },
+            kind: UiNodeKind::ScrollArea {
+                offset,
+                offset_px: None,
+                id: None,
+            },
+            style,
+            children: Vec::new(),
+        }
+    }
+
+    pub fn scroll_area_px(classes: &str, offset_px: f32) -> Self {
+        let mut style = UiStyle::parse(classes);
+        style.direction = Axis::Vertical;
+        Self {
+            kind: UiNodeKind::ScrollArea {
+                offset: 0.0,
+                offset_px: Some(offset_px.max(0.0)),
+                id: None,
+            },
             style,
             children: Vec::new(),
         }
@@ -753,6 +789,7 @@ impl UiNode {
                 value: value.to_string(),
                 helper: String::new(),
                 focused: false,
+                masked: false,
                 id: None,
             },
             style: UiStyle::default(),
@@ -889,14 +926,14 @@ impl UiNode {
     pub fn class(mut self, classes: &str) -> Self {
         let mut parsed = UiStyle::parse(classes);
         self.apply_parsed_style(&mut parsed);
-        self.style = parsed;
+        overlay_style(&mut self.style, parsed);
         self
     }
 
     pub fn class_for_width(mut self, classes: &str, width: f32) -> Self {
         let mut parsed = UiStyle::parse_for_width(classes, width);
         self.apply_parsed_style(&mut parsed);
-        self.style = parsed;
+        overlay_style(&mut self.style, parsed);
         self
     }
 
@@ -932,10 +969,19 @@ impl UiNode {
     pub fn scroll_offset(mut self, offset: f32) -> Self {
         if let UiNodeKind::ScrollArea {
             offset: node_offset,
+            offset_px,
             ..
         } = &mut self.kind
         {
             *node_offset = offset;
+            *offset_px = None;
+        }
+        self
+    }
+
+    pub fn scroll_offset_px(mut self, offset_px_value: f32) -> Self {
+        if let UiNodeKind::ScrollArea { offset_px, .. } = &mut self.kind {
+            *offset_px = Some(offset_px_value.max(0.0));
         }
         self
     }
@@ -958,11 +1004,7 @@ impl UiNode {
     }
 
     pub fn when(self, condition: bool, child: UiNode) -> Self {
-        if condition {
-            self.child(child)
-        } else {
-            self
-        }
+        if condition { self.child(child) } else { self }
     }
 
     pub fn detail(mut self, value: &str) -> Self {
@@ -1119,6 +1161,13 @@ impl UiNode {
         self
     }
 
+    pub fn masked(mut self, masked_value: bool) -> Self {
+        if let UiNodeKind::Field { masked, .. } = &mut self.kind {
+            *masked = masked_value;
+        }
+        self
+    }
+
     pub fn active(mut self, active: bool) -> Self {
         if let UiNodeKind::IconButton {
             active: node_active,
@@ -1188,6 +1237,64 @@ impl UiNode {
         self.render_with_state(ui, bounds, None);
     }
 
+    pub fn resolve_layout(&self, bounds: UiRect) -> UiResolvedLayout {
+        self.resolve_layout_with_state(bounds, None)
+    }
+
+    pub fn resolve_layout_with_state(
+        &self,
+        bounds: UiRect,
+        state: Option<&UiRuntimeState>,
+    ) -> UiResolvedLayout {
+        let rect = self.style.layout_rect(bounds);
+        self.resolve_layout_resolved(rect, state)
+    }
+
+    pub fn layout_issues(&self, bounds: UiRect) -> Vec<UiLayoutIssue> {
+        let layout = self.resolve_layout(bounds);
+        let mut issues = Vec::new();
+        collect_layout_issues(&layout, "$", &mut issues);
+        issues
+    }
+
+    fn resolve_layout_resolved(
+        &self,
+        rect: UiRect,
+        state: Option<&UiRuntimeState>,
+    ) -> UiResolvedLayout {
+        let children = match &self.kind {
+            UiNodeKind::Grid { columns } => {
+                resolve_grid_children(rect, &self.style, *columns, &self.children, state)
+            }
+            UiNodeKind::ScrollArea {
+                offset,
+                offset_px,
+                id,
+                ..
+            } => {
+                let offset = id
+                    .and_then(|id| {
+                        state.map(|state| ScrollOffset::Fraction(state.scroll_offset(id)))
+                    })
+                    .or_else(|| offset_px.map(ScrollOffset::Pixels))
+                    .unwrap_or(ScrollOffset::Fraction(*offset));
+                resolve_scroll_children(rect, &self.style, offset, &self.children, state)
+            }
+            UiNodeKind::Row | UiNodeKind::Column | UiNodeKind::Card => {
+                resolve_stack_children(rect, &self.style, &self.children, state)
+            }
+            UiNodeKind::Dialog { .. } => {
+                resolve_stack_children(rect.inset(18.0, 88.0), &self.style, &self.children, state)
+            }
+            _ => Vec::new(),
+        };
+        UiResolvedLayout {
+            kind: self.kind_name(),
+            rect,
+            children,
+        }
+    }
+
     pub fn render_with_state(
         &self,
         ui: &mut UiPainter<'_, '_>,
@@ -1195,17 +1302,32 @@ impl UiNode {
         state: Option<&UiRuntimeState>,
     ) {
         let rect = self.style.layout_rect(bounds);
+        self.render_resolved_with_state(ui, rect, state);
+    }
+
+    fn render_resolved_with_state(
+        &self,
+        ui: &mut UiPainter<'_, '_>,
+        rect: UiRect,
+        state: Option<&UiRuntimeState>,
+    ) {
         let hit_start = ui.scene.hit_count();
         match &self.kind {
             UiNodeKind::Text(value) => {
-                ui.bounded_label(
-                    rect.x,
-                    rect.y,
-                    rect.w,
-                    value,
-                    2.0,
-                    self.style.text.resolve(ui.theme()),
-                );
+                let color = self.style.text.resolve(ui.theme());
+                if self.style.truncate {
+                    ui.bounded_label(
+                        rect.x,
+                        rect.y,
+                        rect.w,
+                        value.lines().next().unwrap_or(""),
+                        2.0,
+                        color,
+                    );
+                } else {
+                    let max_lines = (rect.h / 20.0).floor().max(1.0) as usize;
+                    ui.wrapped_label(rect.x, rect.y, rect.w, value, max_lines, 20.0, color);
+                }
             }
             UiNodeKind::Badge { label, color } => {
                 ui.badge(rect.x, rect.y, label, *color);
@@ -1448,11 +1570,17 @@ impl UiNode {
                 value,
                 helper,
                 focused,
+                masked,
                 id,
             } => {
                 let value = id
                     .and_then(|id| state.map(|state| state.text_value(id, value)))
                     .unwrap_or(value);
+                let display_value = if *masked && !value.is_empty() {
+                    "•".repeat(value.chars().count())
+                } else {
+                    value.to_string()
+                };
                 let focused = *focused
                     || state.is_some_and(|state| {
                         state
@@ -1464,7 +1592,7 @@ impl UiNode {
                     rect,
                     self::components::Field {
                         label,
-                        value,
+                        value: &display_value,
                         helper,
                         focused,
                         id: *id,
@@ -1668,12 +1796,25 @@ impl UiNode {
                         }
                     }
                 }
+                let clipped = self.style.clip
+                    && ui
+                        .scene
+                        .push_clip(GpuClip::new(rect.x, rect.y, rect.w, rect.h));
                 if let UiNodeKind::Grid { columns } = &self.kind {
                     render_grid_children(ui, rect, &self.style, *columns, &self.children, state);
-                } else if let UiNodeKind::ScrollArea { offset, id } = &self.kind {
+                } else if let UiNodeKind::ScrollArea {
+                    offset,
+                    offset_px,
+                    id,
+                    ..
+                } = &self.kind
+                {
                     let offset = id
-                        .and_then(|id| state.map(|state| state.scroll_offset(id)))
-                        .unwrap_or(*offset);
+                        .and_then(|id| {
+                            state.map(|state| ScrollOffset::Fraction(state.scroll_offset(id)))
+                        })
+                        .or_else(|| offset_px.map(ScrollOffset::Pixels))
+                        .unwrap_or(ScrollOffset::Fraction(*offset));
                     render_scroll_children(
                         ui,
                         rect,
@@ -1686,16 +1827,45 @@ impl UiNode {
                 } else {
                     render_children(ui, rect, &self.style, &self.children, state);
                 }
+                if clipped {
+                    ui.scene.pop_clip();
+                }
             }
         }
         let added_hits = &ui.scene.hits()[hit_start..];
+        let hovered_rect = state.and_then(|state| {
+            let hovered = state.hovered()?;
+            node_owns_hit(&self.kind, hovered).then(|| {
+                added_hits
+                    .iter()
+                    .copied()
+                    .find(|hit| hit.kind == hovered.kind && hit.id == hovered.id)
+            })?
+        });
+        let active_rect = state.and_then(|state| {
+            let active = state.active()?;
+            node_owns_hit(&self.kind, active).then(|| {
+                added_hits
+                    .iter()
+                    .copied()
+                    .find(|hit| hit.kind == active.kind && hit.id == active.id)
+            })?
+        });
         let focused_rect = state.and_then(|state| {
             let focused = state.focused()?;
+            if !node_owns_hit(&self.kind, focused) {
+                return None;
+            }
             added_hits
                 .iter()
                 .copied()
                 .find(|hit| hit.kind == focused.kind && hit.id == focused.id)
         });
+        if let Some(active) = active_rect {
+            draw_interaction_state(ui, active, self.kind_interaction_radius(ui), true);
+        } else if let Some(hovered) = hovered_rect {
+            draw_interaction_state(ui, hovered, self.kind_interaction_radius(ui), false);
+        }
         if let Some(focused) = focused_rect {
             ui.border_rect(
                 UiRect::new(focused.x, focused.y, focused.w, focused.h),
@@ -1725,6 +1895,146 @@ impl UiNode {
             );
         }
     }
+
+    fn kind_name(&self) -> &'static str {
+        match self.kind {
+            UiNodeKind::Row => "row",
+            UiNodeKind::Column => "column",
+            UiNodeKind::Grid { .. } => "grid",
+            UiNodeKind::Card => "card",
+            UiNodeKind::ScrollArea { .. } => "scroll_area",
+            UiNodeKind::Text(_) => "text",
+            UiNodeKind::Badge { .. } => "badge",
+            UiNodeKind::Button { .. } => "button",
+            UiNodeKind::IconButton { .. } => "icon_button",
+            UiNodeKind::Icon { .. } => "icon",
+            UiNodeKind::Checkbox { .. } => "checkbox",
+            UiNodeKind::Radio { .. } => "radio",
+            UiNodeKind::Select { .. } => "select",
+            UiNodeKind::Tooltip { .. } => "tooltip",
+            UiNodeKind::Dialog { .. } => "dialog",
+            UiNodeKind::Toast { .. } => "toast",
+            UiNodeKind::EmptyState { .. } => "empty_state",
+            UiNodeKind::Skeleton => "skeleton",
+            UiNodeKind::ProgressRing { .. } => "progress_ring",
+            UiNodeKind::Table { .. } => "table",
+            UiNodeKind::Breadcrumb { .. } => "breadcrumb",
+            UiNodeKind::CommandPalette { .. } => "command_palette",
+            UiNodeKind::TreeItem { .. } => "tree_item",
+            UiNodeKind::Section { .. } => "section",
+            UiNodeKind::IdentityCard { .. } => "identity_card",
+            UiNodeKind::ContactCard { .. } => "contact_card",
+            UiNodeKind::ThreadRow { .. } => "thread_row",
+            UiNodeKind::AttachmentPreview { .. } => "attachment_preview",
+            UiNodeKind::CapabilityGrantRow { .. } => "capability_grant_row",
+            UiNodeKind::ProofEventRow { .. } => "proof_event_row",
+            UiNodeKind::RoutePath { .. } => "route_path",
+            UiNodeKind::PackageCard { .. } => "package_card",
+            UiNodeKind::ReceiptRow { .. } => "receipt_row",
+            UiNodeKind::AppLauncherItem { .. } => "app_launcher_item",
+            UiNodeKind::Toggle { .. } => "toggle",
+            UiNodeKind::Avatar { .. } => "avatar",
+            UiNodeKind::ProgressBar { .. } => "progress_bar",
+            UiNodeKind::Tabs { .. } => "tabs",
+            UiNodeKind::PanelHeader { .. } => "panel_header",
+            UiNodeKind::MetricCard { .. } => "metric_card",
+            UiNodeKind::Field { .. } => "field",
+            UiNodeKind::TextArea { .. } => "text_area",
+            UiNodeKind::Slider { .. } => "slider",
+            UiNodeKind::BarChart { .. } => "bar_chart",
+            UiNodeKind::TransactionRow { .. } => "transaction_row",
+            UiNodeKind::MenuItem { .. } => "menu_item",
+            UiNodeKind::ListRow { .. } => "list_row",
+            UiNodeKind::ControlRow { .. } => "control_row",
+            UiNodeKind::Divider => "divider",
+            UiNodeKind::Spacer => "spacer",
+        }
+    }
+}
+
+impl UiNode {
+    fn kind_interaction_radius(&self, ui: &UiPainter<'_, '_>) -> f32 {
+        match self.kind {
+            UiNodeKind::Button { .. }
+            | UiNodeKind::IconButton { .. }
+            | UiNodeKind::Checkbox { .. }
+            | UiNodeKind::Radio { .. }
+            | UiNodeKind::Select { .. }
+            | UiNodeKind::CommandPalette { .. }
+            | UiNodeKind::Toggle { .. }
+            | UiNodeKind::Tabs { .. }
+            | UiNodeKind::Field { .. }
+            | UiNodeKind::TextArea { .. }
+            | UiNodeKind::Slider { .. } => ui.theme().radius.control,
+            _ => ui.theme().radius.card,
+        }
+    }
+}
+
+fn draw_interaction_state(ui: &mut UiPainter<'_, '_>, hit: GpuHit, radius: f32, active: bool) {
+    let colors = ui.theme().colors;
+    let rect = UiRect::new(hit.x, hit.y, hit.w, hit.h);
+    let (fill, border) = if active {
+        (
+            colors.accent.with_alpha(0.12),
+            colors.accent.with_alpha(0.62),
+        )
+    } else {
+        (colors.row.with_alpha(0.24), colors.accent.with_alpha(0.24))
+    };
+    ui.fill_rect(rect, radius, fill);
+    ui.border_rect(rect, radius, border);
+}
+
+fn node_owns_hit(kind: &UiNodeKind, hit: GpuHit) -> bool {
+    match kind {
+        UiNodeKind::Button { id, .. } | UiNodeKind::IconButton { id, .. } => {
+            hit.kind == HitKind::Button && hit.id == *id
+        }
+        UiNodeKind::Checkbox { id, .. } => hit.kind == HitKind::Checkbox && hit.id == *id,
+        UiNodeKind::Radio { id, .. } => hit.kind == HitKind::Radio && hit.id == *id,
+        UiNodeKind::Select { id, .. } => hit.kind == HitKind::Select && hit.id == *id,
+        UiNodeKind::CommandPalette { id, .. } => hit.kind == HitKind::Input && hit.id == *id,
+        UiNodeKind::TreeItem { id, .. } => hit.kind == HitKind::TreeItem && hit.id == *id,
+        UiNodeKind::IdentityCard { id, .. }
+        | UiNodeKind::ContactCard { id, .. }
+        | UiNodeKind::ThreadRow { id, .. }
+        | UiNodeKind::AttachmentPreview { id, .. }
+        | UiNodeKind::CapabilityGrantRow { id, .. }
+        | UiNodeKind::ProofEventRow { id, .. }
+        | UiNodeKind::PackageCard { id, .. }
+        | UiNodeKind::AppLauncherItem { id, .. }
+        | UiNodeKind::ListRow { id, .. } => hit.kind == HitKind::ListRow && hit.id == *id,
+        UiNodeKind::ReceiptRow { id, .. } | UiNodeKind::TransactionRow { id, .. } => {
+            hit.kind == HitKind::TransactionRow && hit.id == *id
+        }
+        UiNodeKind::Toggle { id, .. } => hit.kind == HitKind::Toggle && hit.id == *id,
+        UiNodeKind::Tabs {
+            labels, base_id, ..
+        } => {
+            hit.kind == HitKind::Tab
+                && hit.id >= *base_id
+                && hit.id < base_id.saturating_add(labels.len() as u32)
+        }
+        UiNodeKind::Table { rows, id_base, .. } => {
+            hit.kind == HitKind::ListRow
+                && hit.id >= *id_base
+                && hit.id < id_base.saturating_add(rows.len() as u32)
+        }
+        UiNodeKind::Breadcrumb { items, base_id, .. } => {
+            hit.kind == HitKind::Breadcrumb
+                && hit.id >= *base_id
+                && hit.id < base_id.saturating_add(items.len() as u32)
+        }
+        UiNodeKind::Field { id: Some(id), .. } => hit.kind == HitKind::Input && hit.id == *id,
+        UiNodeKind::TextArea { id: Some(id), .. } => hit.kind == HitKind::TextArea && hit.id == *id,
+        UiNodeKind::Slider { id, .. } => hit.kind == HitKind::Slider && hit.id == *id,
+        UiNodeKind::MenuItem { id, .. } => hit.kind == HitKind::MenuItem && hit.id == *id,
+        UiNodeKind::ControlRow { id: Some(id), .. } => {
+            hit.kind == HitKind::ListRow && hit.id == *id
+        }
+        _ => false,
+    }
 }
 
 pub fn row(classes: &str) -> UiNode {
@@ -1753,6 +2063,10 @@ pub fn card(classes: &str) -> UiNode {
 
 pub fn scroll_area(classes: &str, offset: f32) -> UiNode {
     UiNode::scroll_area(classes, offset)
+}
+
+pub fn scroll_area_px(classes: &str, offset_px: f32) -> UiNode {
+    UiNode::scroll_area_px(classes, offset_px)
 }
 
 pub fn text(value: &str) -> UiNode {
@@ -1951,6 +2265,58 @@ pub fn spacer(classes: &str) -> UiNode {
     UiNode::spacer(classes)
 }
 
+fn overlay_style(style: &mut UiStyle, parsed: UiStyle) {
+    let default = UiStyle::default();
+
+    if parsed.direction != default.direction {
+        style.direction = parsed.direction;
+    }
+    if parsed.gap != default.gap {
+        style.gap = parsed.gap;
+    }
+    for index in 0..style.padding.len() {
+        if parsed.padding[index] != default.padding[index] {
+            style.padding[index] = parsed.padding[index];
+        }
+        if parsed.margin[index] != default.margin[index] {
+            style.margin[index] = parsed.margin[index];
+        }
+    }
+    if parsed.width.is_some() {
+        style.width = parsed.width;
+    }
+    if parsed.height.is_some() {
+        style.height = parsed.height;
+    }
+    style.grow |= parsed.grow;
+    if parsed.grid_cols.is_some() {
+        style.grid_cols = parsed.grid_cols;
+    }
+    if parsed.col_span != default.col_span {
+        style.col_span = parsed.col_span;
+    }
+    if parsed.align != default.align {
+        style.align = parsed.align;
+    }
+    if parsed.justify != default.justify {
+        style.justify = parsed.justify;
+    }
+    if parsed.bg.is_some() {
+        style.bg = parsed.bg;
+    }
+    if parsed.text != default.text {
+        style.text = parsed.text;
+    }
+    style.border |= parsed.border;
+    if parsed.radius != default.radius {
+        style.radius = parsed.radius;
+    }
+    style.truncate |= parsed.truncate;
+    style.clip |= parsed.clip;
+    style.disabled |= parsed.disabled;
+    style.loading |= parsed.loading;
+}
+
 #[macro_export]
 macro_rules! gpu_ui {
     ($node:expr) => {
@@ -1987,11 +2353,11 @@ fn render_children(
     let mut fixed = 0.0;
     let mut grow_count = 0usize;
     for child in children {
-        if child.style.grow {
+        if child.style.grow || child_main_fills_parent(child, style.direction) {
             grow_count += 1;
             continue;
         }
-        fixed += child_main_size(child, style.direction);
+        fixed += child_outer_main_size(child, style.direction);
     }
     let gap_total = style.gap * children.len().saturating_sub(1) as f32;
     let grow_size = if grow_count > 0 {
@@ -1999,15 +2365,16 @@ fn render_children(
     } else {
         0.0
     };
-    let mut main_sizes = Vec::with_capacity(children.len());
-    for child in children {
-        main_sizes.push(if child.style.grow {
-            grow_size
-        } else {
-            child_main_size(child, style.direction)
-        });
-    }
-    let main_sum: f32 = main_sizes.iter().sum();
+    let main_sum: f32 = children
+        .iter()
+        .map(|child| {
+            if child.style.grow || child_main_fills_parent(child, style.direction) {
+                grow_size
+            } else {
+                child_outer_main_size(child, style.direction)
+            }
+        })
+        .sum();
     let mut gap = style.gap;
     let slack = (main_available - main_sum - gap_total).max(0.0);
     let start_offset = if grow_count > 0 {
@@ -2027,23 +2394,131 @@ fn render_children(
         Axis::Horizontal => content.x + start_offset,
         Axis::Vertical => content.y + start_offset,
     };
-    for (child, main) in children.iter().zip(main_sizes) {
+    for child in children {
+        let main = if child.style.grow || child_main_fills_parent(child, style.direction) {
+            grow_size
+        } else {
+            child_outer_main_size(child, style.direction)
+        };
         let child_rect = match style.direction {
             Axis::Horizontal => {
                 let cross =
                     aligned_cross(content.y, content.h, child, Axis::Horizontal, style.align);
-                let w = main.max(0.0).min((content.x + content.w - cursor).max(0.0));
-                UiRect::new(cursor, cross.0, w, cross.1)
+                let x = cursor + child.style.margin[3];
+                let w = (main - child.style.margin[1] - child.style.margin[3]).max(0.0);
+                UiRect::new(x, cross.0, w, cross.1)
             }
             Axis::Vertical => {
                 let cross = aligned_cross(content.x, content.w, child, Axis::Vertical, style.align);
-                let h = main.max(0.0).min((content.y + content.h - cursor).max(0.0));
-                UiRect::new(cross.0, cursor, cross.1, h)
+                let y = cursor + child.style.margin[0];
+                let h = (main - child.style.margin[0] - child.style.margin[2]).max(0.0);
+                UiRect::new(cross.0, y, cross.1, h)
             }
         };
-        child.render_with_state(ui, child_rect, state);
+        child.render_resolved_with_state(ui, child_rect, state);
         cursor += main + gap;
     }
+}
+
+fn resolve_stack_children(
+    rect: UiRect,
+    style: &UiStyle,
+    children: &[UiNode],
+    state: Option<&UiRuntimeState>,
+) -> Vec<UiResolvedLayout> {
+    stack_child_rects(rect, style, children)
+        .into_iter()
+        .zip(children)
+        .map(|(rect, child)| child.resolve_layout_resolved(rect, state))
+        .collect()
+}
+
+fn stack_child_rects(rect: UiRect, style: &UiStyle, children: &[UiNode]) -> Vec<UiRect> {
+    if children.is_empty() {
+        return Vec::new();
+    }
+    let content = content_rect(rect, style, 0.0);
+    let main_available = match style.direction {
+        Axis::Horizontal => content.w,
+        Axis::Vertical => content.h,
+    };
+    let mut fixed = 0.0;
+    let mut grow_count = 0usize;
+    for child in children {
+        if child.style.grow || child_main_fills_parent(child, style.direction) {
+            grow_count += 1;
+            continue;
+        }
+        fixed += child_outer_main_size(child, style.direction);
+    }
+    let gap_total = style.gap * children.len().saturating_sub(1) as f32;
+    let grow_size = if grow_count > 0 {
+        ((main_available - fixed - gap_total).max(0.0)) / grow_count as f32
+    } else {
+        0.0
+    };
+    let main_sum: f32 = children
+        .iter()
+        .map(|child| {
+            if child.style.grow || child_main_fills_parent(child, style.direction) {
+                grow_size
+            } else {
+                child_outer_main_size(child, style.direction)
+            }
+        })
+        .sum();
+    let gap_total = style.gap * children.len().saturating_sub(1) as f32;
+    let mut gap = style.gap;
+    let slack = (main_available - main_sum - gap_total).max(0.0);
+    let start_offset = if grow_count > 0 {
+        0.0
+    } else {
+        match style.justify {
+            JustifyContent::Start | JustifyContent::Between => 0.0,
+            JustifyContent::Center => slack * 0.5,
+            JustifyContent::End => slack,
+        }
+    };
+    if grow_count == 0 && matches!(style.justify, JustifyContent::Between) && children.len() > 1 {
+        gap = (main_available - main_sum).max(0.0) / children.len().saturating_sub(1) as f32;
+    }
+
+    let mut rects = Vec::with_capacity(children.len());
+    let mut cursor = match style.direction {
+        Axis::Horizontal => content.x + start_offset,
+        Axis::Vertical => content.y + start_offset,
+    };
+    for child in children {
+        let main = if child.style.grow || child_main_fills_parent(child, style.direction) {
+            grow_size
+        } else {
+            child_outer_main_size(child, style.direction)
+        };
+        let child_rect = match style.direction {
+            Axis::Horizontal => {
+                let cross =
+                    aligned_cross(content.y, content.h, child, Axis::Horizontal, style.align);
+                UiRect::new(
+                    cursor + child.style.margin[3],
+                    cross.0,
+                    (main - child.style.margin[1] - child.style.margin[3]).max(0.0),
+                    cross.1,
+                )
+            }
+            Axis::Vertical => {
+                let cross = aligned_cross(content.x, content.w, child, Axis::Vertical, style.align);
+                UiRect::new(
+                    cross.0,
+                    cursor + child.style.margin[0],
+                    cross.1,
+                    (main - child.style.margin[0] - child.style.margin[2]).max(0.0),
+                )
+            }
+        };
+        rects.push(child_rect);
+        cursor += main + gap;
+    }
+    rects
 }
 
 fn aligned_cross(
@@ -2057,18 +2532,28 @@ fn aligned_cross(
         Axis::Horizontal => child.style.height,
         Axis::Vertical => child.style.width,
     };
+    let cross_margin_start = match parent_axis {
+        Axis::Horizontal => child.style.margin[0],
+        Axis::Vertical => child.style.margin[3],
+    };
+    let cross_margin_end = match parent_axis {
+        Axis::Horizontal => child.style.margin[2],
+        Axis::Vertical => child.style.margin[1],
+    };
+    let available = (content_size - cross_margin_start - cross_margin_end).max(0.0);
     let size = match explicit {
-        Some(value) if value >= 0.0 => value.min(content_size),
-        _ if matches!(align, AlignItems::Stretch) => content_size,
-        _ => child_cross_size(child, parent_axis).min(content_size),
+        Some(value) if value >= 0.0 => value.min(available),
+        Some(_) => available,
+        _ if matches!(align, AlignItems::Stretch) => available,
+        _ => child_cross_size(child, parent_axis).min(available),
     }
     .max(0.0);
     let offset = match align {
         AlignItems::Start | AlignItems::Stretch => 0.0,
-        AlignItems::Center => (content_size - size).max(0.0) * 0.5,
-        AlignItems::End => (content_size - size).max(0.0),
+        AlignItems::Center => (available - size).max(0.0) * 0.5,
+        AlignItems::End => (available - size).max(0.0),
     };
-    (content_start + offset, size)
+    (content_start + cross_margin_start + offset, size)
 }
 
 fn render_grid_children(
@@ -2104,7 +2589,7 @@ fn render_grid_children(
             if row_col > 0 && row_col + span > columns {
                 break;
             }
-            row_h = row_h.max(child_main_size(child, Axis::Vertical));
+            row_h = row_h.max(child_outer_main_size(child, Axis::Vertical));
             row_col += span;
             index += 1;
             if row_col >= columns {
@@ -2116,20 +2601,107 @@ fn render_grid_children(
         for child in &children[row_start..index] {
             let span = child.style.col_span.max(1).min(columns as u16) as usize;
             let w = track_w * span as f32 + gap * span.saturating_sub(1) as f32;
-            let h = child_main_size(child, Axis::Vertical).min(content.y + content.h - row_y);
+            let outer_h = child_outer_main_size(child, Axis::Vertical);
+            let h = child_main_size(child, Axis::Vertical)
+                .min(content.y + content.h - row_y)
+                .max(0.0);
             let x = content.x + col as f32 * (track_w + gap);
-            child.render_with_state(ui, UiRect::new(x, row_y, w, h), state);
+            child.render_resolved_with_state(
+                ui,
+                UiRect::new(
+                    x + child.style.margin[3],
+                    row_y + child.style.margin[0],
+                    (w - child.style.margin[1] - child.style.margin[3]).max(0.0),
+                    h.min((outer_h - child.style.margin[0] - child.style.margin[2]).max(0.0)),
+                ),
+                state,
+            );
             col += span;
         }
         row_y += row_h + gap;
     }
 }
 
+fn resolve_grid_children(
+    rect: UiRect,
+    style: &UiStyle,
+    columns: u16,
+    children: &[UiNode],
+    state: Option<&UiRuntimeState>,
+) -> Vec<UiResolvedLayout> {
+    grid_child_rects(rect, style, columns, children)
+        .into_iter()
+        .zip(children)
+        .map(|(rect, child)| child.resolve_layout_resolved(rect, state))
+        .collect()
+}
+
+fn grid_child_rects(
+    rect: UiRect,
+    style: &UiStyle,
+    columns: u16,
+    children: &[UiNode],
+) -> Vec<UiRect> {
+    if children.is_empty() {
+        return Vec::new();
+    }
+    let content = content_rect(rect, style, 0.0);
+    let columns = columns.max(1) as usize;
+    let gap = style.gap;
+    let track_w = ((content.w - gap * columns.saturating_sub(1) as f32) / columns as f32).max(0.0);
+    let mut rects = Vec::with_capacity(children.len());
+    let mut row_y = content.y;
+    let mut index = 0usize;
+
+    while index < children.len() {
+        let row_start = index;
+        let mut row_col = 0usize;
+        let mut row_h = 0.0_f32;
+        while index < children.len() {
+            let child = &children[index];
+            let span = child.style.col_span.max(1).min(columns as u16) as usize;
+            if row_col > 0 && row_col + span > columns {
+                break;
+            }
+            row_h = row_h.max(child_outer_main_size(child, Axis::Vertical));
+            row_col += span;
+            index += 1;
+            if row_col >= columns {
+                break;
+            }
+        }
+
+        let mut col = 0usize;
+        for child in &children[row_start..index] {
+            let span = child.style.col_span.max(1).min(columns as u16) as usize;
+            let w = track_w * span as f32 + gap * span.saturating_sub(1) as f32;
+            let h = child_main_size(child, Axis::Vertical);
+            let x = content.x + col as f32 * (track_w + gap);
+            rects.push(UiRect::new(
+                x + child.style.margin[3],
+                row_y + child.style.margin[0],
+                (w - child.style.margin[1] - child.style.margin[3]).max(0.0),
+                h,
+            ));
+            col += span;
+        }
+        row_y += row_h + gap;
+    }
+
+    rects
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum ScrollOffset {
+    Fraction(f32),
+    Pixels(f32),
+}
+
 fn render_scroll_children(
     ui: &mut UiPainter<'_, '_>,
     rect: UiRect,
     style: &UiStyle,
-    offset: f32,
+    offset: ScrollOffset,
     id: Option<u32>,
     children: &[UiNode],
     state: Option<&UiRuntimeState>,
@@ -2149,23 +2721,41 @@ fn render_scroll_children(
 
     let total: f32 = children
         .iter()
-        .map(|child| child_main_size(child, Axis::Vertical))
+        .map(|child| child_outer_main_size(child, Axis::Vertical))
         .sum::<f32>()
         + style.gap * children.len().saturating_sub(1) as f32;
     let scrollable = (total - content.h).max(0.0);
-    let scroll_y = scrollable * offset.clamp(0.0, 1.0);
+    let scroll_y = match offset {
+        ScrollOffset::Fraction(offset) => scrollable * offset.clamp(0.0, 1.0),
+        ScrollOffset::Pixels(offset) => offset.clamp(0.0, scrollable),
+    };
+    let offset_fraction = if scrollable > 0.0 {
+        (scroll_y / scrollable).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
     let mut cursor = content.y - scroll_y;
 
     let clipped = ui
         .scene
         .push_clip(GpuClip::new(content.x, content.y, content.w, content.h));
     for child in children {
+        let outer_h = child_outer_main_size(child, Axis::Vertical);
         let h = child_main_size(child, Axis::Vertical);
-        let bottom = cursor + h;
+        let bottom = cursor + outer_h;
         if bottom >= content.y && cursor <= content.y + content.h && clipped {
-            child.render_with_state(ui, UiRect::new(content.x, cursor, content.w, h), state);
+            child.render_resolved_with_state(
+                ui,
+                UiRect::new(
+                    content.x + child.style.margin[3],
+                    cursor + child.style.margin[0],
+                    (content.w - child.style.margin[1] - child.style.margin[3]).max(0.0),
+                    h,
+                ),
+                state,
+            );
         }
-        cursor += h + style.gap;
+        cursor += outer_h + style.gap;
     }
     if clipped {
         ui.scene.pop_clip();
@@ -2183,8 +2773,126 @@ fn render_scroll_children(
                 scrollbar.h,
             );
         }
-        ui.scrollbar(scrollbar, content.h / total, offset);
+        ui.scrollbar(scrollbar, content.h / total, offset_fraction);
     }
+}
+
+fn resolve_scroll_children(
+    rect: UiRect,
+    style: &UiStyle,
+    offset: ScrollOffset,
+    children: &[UiNode],
+    state: Option<&UiRuntimeState>,
+) -> Vec<UiResolvedLayout> {
+    scroll_child_rects(rect, style, offset, children)
+        .into_iter()
+        .zip(children)
+        .map(|(rect, child)| child.resolve_layout_resolved(rect, state))
+        .collect()
+}
+
+fn scroll_child_rects(
+    rect: UiRect,
+    style: &UiStyle,
+    offset: ScrollOffset,
+    children: &[UiNode],
+) -> Vec<UiRect> {
+    if children.is_empty() {
+        return Vec::new();
+    }
+    let content = content_rect(rect, style, 10.0);
+    if content.w <= 0.0 || content.h <= 0.0 {
+        return Vec::new();
+    }
+
+    let total: f32 = children
+        .iter()
+        .map(|child| child_outer_main_size(child, Axis::Vertical))
+        .sum::<f32>()
+        + style.gap * children.len().saturating_sub(1) as f32;
+    let scrollable = (total - content.h).max(0.0);
+    let scroll_y = match offset {
+        ScrollOffset::Fraction(offset) => scrollable * offset.clamp(0.0, 1.0),
+        ScrollOffset::Pixels(offset) => offset.clamp(0.0, scrollable),
+    };
+    let mut rects = Vec::with_capacity(children.len());
+    let mut cursor = content.y - scroll_y;
+    for child in children {
+        let h = child_main_size(child, Axis::Vertical);
+        rects.push(UiRect::new(
+            content.x + child.style.margin[3],
+            cursor + child.style.margin[0],
+            (content.w - child.style.margin[1] - child.style.margin[3]).max(0.0),
+            h,
+        ));
+        cursor += child_outer_main_size(child, Axis::Vertical) + style.gap;
+    }
+    rects
+}
+
+fn content_rect(rect: UiRect, style: &UiStyle, trailing_reserved_w: f32) -> UiRect {
+    UiRect {
+        x: rect.x + style.padding[3],
+        y: rect.y + style.padding[0],
+        w: (rect.w - style.padding[1] - style.padding[3] - trailing_reserved_w).max(0.0),
+        h: (rect.h - style.padding[0] - style.padding[2]).max(0.0),
+    }
+}
+
+fn collect_layout_issues(layout: &UiResolvedLayout, path: &str, issues: &mut Vec<UiLayoutIssue>) {
+    for (index, child) in layout.children.iter().enumerate() {
+        let child_path = format!("{path}/{index}:{}", child.kind);
+        if child.kind != "spacer" && rect_has_invalid_size(child.rect) {
+            issues.push(UiLayoutIssue {
+                path: child_path.clone(),
+                kind: child.kind,
+                rect: child.rect,
+                parent: layout.rect,
+                message: "invalid or zero-size layout rect",
+            });
+        }
+        if layout.kind != "scroll_area" && rect_exceeds(child.rect, layout.rect) {
+            issues.push(UiLayoutIssue {
+                path: child_path.clone(),
+                kind: child.kind,
+                rect: child.rect,
+                parent: layout.rect,
+                message: "child exceeds parent bounds",
+            });
+        }
+        for (other_index, other) in layout.children.iter().enumerate().skip(index + 1) {
+            if rects_overlap(child.rect, other.rect) {
+                issues.push(UiLayoutIssue {
+                    path: format!("{child_path} overlaps sibling {other_index}:{}", other.kind),
+                    kind: child.kind,
+                    rect: child.rect,
+                    parent: layout.rect,
+                    message: "sibling layout rects overlap",
+                });
+            }
+        }
+        collect_layout_issues(child, &child_path, issues);
+    }
+}
+
+fn rect_has_invalid_size(rect: UiRect) -> bool {
+    rect.w <= 0.5 || rect.h <= 0.5 || !rect.w.is_finite() || !rect.h.is_finite()
+}
+
+fn rect_exceeds(rect: UiRect, parent: UiRect) -> bool {
+    const EPSILON: f32 = 0.5;
+    rect.x < parent.x - EPSILON
+        || rect.y < parent.y - EPSILON
+        || rect.x + rect.w > parent.x + parent.w + EPSILON
+        || rect.y + rect.h > parent.y + parent.h + EPSILON
+}
+
+fn rects_overlap(a: UiRect, b: UiRect) -> bool {
+    const EPSILON: f32 = 0.5;
+    a.x < b.x + b.w - EPSILON
+        && a.x + a.w > b.x + EPSILON
+        && a.y < b.y + b.h - EPSILON
+        && a.y + a.h > b.y + EPSILON
 }
 
 fn child_main_size(child: &UiNode, axis: Axis) -> f32 {
@@ -2197,6 +2905,21 @@ fn child_main_size(child: &UiNode, axis: Axis) -> f32 {
     }
 }
 
+fn child_outer_main_size(child: &UiNode, axis: Axis) -> f32 {
+    let margin = match axis {
+        Axis::Horizontal => child.style.margin[1] + child.style.margin[3],
+        Axis::Vertical => child.style.margin[0] + child.style.margin[2],
+    };
+    child_main_size(child, axis) + margin
+}
+
+fn child_main_fills_parent(child: &UiNode, axis: Axis) -> bool {
+    match axis {
+        Axis::Horizontal => child.style.width.is_some_and(|value| value < 0.0),
+        Axis::Vertical => child.style.height.is_some_and(|value| value < 0.0),
+    }
+}
+
 fn child_cross_size(child: &UiNode, parent_axis: Axis) -> f32 {
     match parent_axis {
         Axis::Horizontal => child
@@ -2205,6 +2928,104 @@ fn child_cross_size(child: &UiNode, parent_axis: Axis) -> f32 {
             .unwrap_or_else(|| intrinsic_height(child)),
         Axis::Vertical => child.style.width.unwrap_or_else(|| intrinsic_width(child)),
     }
+}
+
+fn child_outer_cross_size(child: &UiNode, parent_axis: Axis) -> f32 {
+    let margin = match parent_axis {
+        Axis::Horizontal => child.style.margin[0] + child.style.margin[2],
+        Axis::Vertical => child.style.margin[1] + child.style.margin[3],
+    };
+    child_cross_size(child, parent_axis) + margin
+}
+
+fn padding_horizontal(style: &UiStyle) -> f32 {
+    style.padding[1] + style.padding[3]
+}
+
+fn padding_vertical(style: &UiStyle) -> f32 {
+    style.padding[0] + style.padding[2]
+}
+
+fn intrinsic_row_width(node: &UiNode) -> f32 {
+    let children = node.children.len();
+    padding_horizontal(&node.style)
+        + node
+            .children
+            .iter()
+            .map(|child| child_outer_main_size(child, Axis::Horizontal))
+            .sum::<f32>()
+        + node.style.gap * children.saturating_sub(1) as f32
+}
+
+fn intrinsic_column_width(node: &UiNode) -> f32 {
+    padding_horizontal(&node.style)
+        + node
+            .children
+            .iter()
+            .map(|child| child_outer_cross_size(child, Axis::Vertical))
+            .fold(0.0_f32, f32::max)
+}
+
+fn intrinsic_grid_width(node: &UiNode, columns: u16) -> f32 {
+    let columns = columns.max(1) as f32;
+    let widest = node
+        .children
+        .iter()
+        .map(|child| child_outer_main_size(child, Axis::Horizontal))
+        .fold(120.0_f32, f32::max);
+    padding_horizontal(&node.style) + widest * columns + node.style.gap * (columns - 1.0)
+}
+
+fn intrinsic_row_height(node: &UiNode) -> f32 {
+    padding_vertical(&node.style)
+        + node
+            .children
+            .iter()
+            .map(|child| child_outer_cross_size(child, Axis::Horizontal))
+            .fold(0.0_f32, f32::max)
+}
+
+fn intrinsic_column_height(node: &UiNode) -> f32 {
+    let children = node.children.len();
+    padding_vertical(&node.style)
+        + node
+            .children
+            .iter()
+            .map(|child| child_outer_main_size(child, Axis::Vertical))
+            .sum::<f32>()
+        + node.style.gap * children.saturating_sub(1) as f32
+}
+
+fn intrinsic_grid_height(node: &UiNode, columns: u16) -> f32 {
+    let columns = columns.max(1) as usize;
+    let mut index = 0usize;
+    let mut height = padding_vertical(&node.style);
+    let mut row_count = 0usize;
+
+    while index < node.children.len() {
+        let mut row_col = 0usize;
+        let mut row_h = 0.0_f32;
+        while index < node.children.len() {
+            let child = &node.children[index];
+            let span = child.style.col_span.max(1).min(columns as u16) as usize;
+            if row_col > 0 && row_col + span > columns {
+                break;
+            }
+            row_h = row_h.max(child_outer_main_size(child, Axis::Vertical));
+            row_col += span;
+            index += 1;
+            if row_col >= columns {
+                break;
+            }
+        }
+        if row_count > 0 {
+            height += node.style.gap;
+        }
+        height += row_h;
+        row_count += 1;
+    }
+
+    height
 }
 
 fn intrinsic_width(child: &UiNode) -> f32 {
@@ -2261,14 +3082,20 @@ fn intrinsic_width(child: &UiNode) -> f32 {
         UiNodeKind::ControlRow { .. } => 260.0,
         UiNodeKind::Divider => 1.0,
         UiNodeKind::Spacer => child.style.width.unwrap_or(12.0),
-        UiNodeKind::ScrollArea { .. } => child.style.width.unwrap_or(240.0),
-        _ => child.style.width.unwrap_or(120.0),
+        UiNodeKind::Row => intrinsic_row_width(child).max(1.0),
+        UiNodeKind::Column | UiNodeKind::Card | UiNodeKind::ScrollArea { .. } => {
+            intrinsic_column_width(child).max(1.0)
+        }
+        UiNodeKind::Grid { columns } => intrinsic_grid_width(child, *columns).max(1.0),
     }
 }
 
 fn intrinsic_height(child: &UiNode) -> f32 {
     match &child.kind {
-        UiNodeKind::Text(_) => 20.0,
+        UiNodeKind::Text(value) => {
+            let line_count = value.lines().count().max(1) as f32;
+            (line_count * 20.0).clamp(20.0, 160.0)
+        }
         UiNodeKind::Badge { .. } => 22.0,
         UiNodeKind::Button { .. } => 34.0,
         UiNodeKind::IconButton { .. } => 34.0,
@@ -2315,7 +3142,155 @@ fn intrinsic_height(child: &UiNode) -> f32 {
         UiNodeKind::ControlRow { .. } => 58.0,
         UiNodeKind::Divider => 1.0,
         UiNodeKind::Spacer => child.style.height.unwrap_or(12.0),
+        UiNodeKind::Row => intrinsic_row_height(child).max(1.0),
+        UiNodeKind::Column | UiNodeKind::Card => intrinsic_column_height(child).max(1.0),
+        UiNodeKind::Grid { columns } => intrinsic_grid_height(child, *columns).max(1.0),
         UiNodeKind::ScrollArea { .. } => child.style.height.unwrap_or(180.0),
-        _ => child.style.height.unwrap_or(44.0),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn grid_intrinsic_height_tracks_child_rows() {
+        let grid = UiNode::grid("grid grid-cols-2 gap-4 p-2", 2)
+            .child(UiNode::text("one").class("h-10"))
+            .child(UiNode::text("two").class("h-12"))
+            .child(UiNode::text("three").class("h-8"));
+
+        assert_eq!(intrinsic_height(&grid), 16.0 + 48.0 + 16.0 + 32.0);
+    }
+
+    #[test]
+    fn column_intrinsic_height_includes_padding_and_gaps() {
+        let column = UiNode::column("gap-3 py-2")
+            .child(UiNode::text("one").class("h-5"))
+            .child(UiNode::text("two").class("h-7"));
+
+        assert_eq!(intrinsic_height(&column), 16.0 + 20.0 + 12.0 + 28.0);
+    }
+
+    #[test]
+    fn stack_layout_applies_child_margins() {
+        let column = UiNode::column("gap-2 p-1")
+            .child(UiNode::text("one").class("h-5 mt-1 mb-2 mx-3"))
+            .child(UiNode::text("two").class("h-5"));
+
+        let layout = column.resolve_layout(UiRect::new(0.0, 0.0, 200.0, 120.0));
+
+        assert_eq!(layout.children[0].rect, UiRect::new(16.0, 8.0, 168.0, 20.0));
+        assert_eq!(layout.children[1].rect, UiRect::new(4.0, 44.0, 192.0, 20.0));
+    }
+
+    #[test]
+    fn scroll_area_px_preserves_pixel_offset() {
+        let node = UiNode::scroll_area_px("h-40", 96.0);
+        let UiNodeKind::ScrollArea {
+            offset,
+            offset_px,
+            id,
+        } = node.kind
+        else {
+            panic!("expected scroll area");
+        };
+
+        assert_eq!(offset, 0.0);
+        assert_eq!(offset_px, Some(96.0));
+        assert_eq!(id, None);
+    }
+
+    #[test]
+    fn class_appends_without_erasing_existing_layout() {
+        let node = UiNode::grid_auto_for_width(
+            "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 h-36",
+            1180.0,
+        )
+        .class("w-full overflow-hidden");
+
+        assert_eq!(node.style.grid_cols, Some(4));
+        assert_eq!(node.style.gap, 16.0);
+        assert_eq!(node.style.height, Some(144.0));
+        assert_eq!(node.style.width, Some(-1.0));
+        assert!(node.style.clip);
+    }
+
+    #[test]
+    fn class_overlay_keeps_padding_when_only_axis_is_changed() {
+        let node = UiNode::card("p-4 gap-2").class("px-2");
+
+        assert_eq!(node.style.padding, [16.0, 8.0, 16.0, 8.0]);
+        assert_eq!(node.style.gap, 8.0);
+    }
+
+    #[test]
+    fn layout_issues_report_overflowing_children() {
+        let node = UiNode::column("h-8").child(UiNode::text("too tall").class("h-12"));
+
+        let issues = node.layout_issues(UiRect::new(0.0, 0.0, 200.0, 32.0));
+
+        assert!(issues.iter().any(|issue| {
+            issue.kind == "text" && issue.message == "child exceeds parent bounds"
+        }));
+    }
+
+    #[test]
+    fn layout_issues_allow_scroll_content_to_extend() {
+        let node = UiNode::scroll_area_px("h-8", 0.0)
+            .child(UiNode::text("one").class("h-12"))
+            .child(UiNode::text("two").class("h-12"));
+
+        let issues = node.layout_issues(UiRect::new(0.0, 0.0, 200.0, 32.0));
+
+        assert!(issues.is_empty(), "{issues:?}");
+    }
+
+    #[test]
+    fn layout_issues_allow_collapsed_spacers() {
+        let node = UiNode::column("h-8")
+            .child(UiNode::text("fixed").class("h-8"))
+            .child(UiNode::spacer("flex-1"));
+
+        let issues = node.layout_issues(UiRect::new(0.0, 0.0, 200.0, 32.0));
+
+        assert!(issues.is_empty(), "{issues:?}");
+    }
+
+    #[test]
+    fn render_with_state_paints_hover_feedback_for_owned_hit() {
+        let node = UiNode::button("Run", 42, ButtonStyle::Primary);
+        let bounds = UiRect::new(0.0, 0.0, 120.0, 40.0);
+        let mut scene = GpuScene::new(Color4::rgba(0.0, 0.0, 0.0, 1.0));
+        let mut ui = UiPainter::new(&mut scene);
+        node.render(&mut ui, bounds);
+
+        let mut state = UiRuntimeState::default();
+        let action = state.handle_event(&scene, UiEvent::PointerMove { x: 12.0, y: 12.0 });
+        assert!(matches!(action, UiAction::Hovered(Some(hit)) if hit.id == 42));
+
+        let mut hovered_scene = GpuScene::new(Color4::rgba(0.0, 0.0, 0.0, 1.0));
+        let mut hovered_ui = UiPainter::new(&mut hovered_scene);
+        node.render_with_state(&mut hovered_ui, bounds, Some(&state));
+
+        assert!(hovered_scene.rects().iter().any(|rect| {
+            rect.mode == RectMode::Fill
+                && rect.color == UiResolvedTheme::default().colors.row.with_alpha(0.24)
+        }));
+    }
+
+    #[test]
+    fn truncate_text_renders_single_line_in_compact_layouts() {
+        let node = UiNode::text("first\nsecond").class("truncate h-12");
+        let mut scene = GpuScene::new(Color4::rgba(0.0, 0.0, 0.0, 1.0));
+        let mut ui = UiPainter::new(&mut scene);
+
+        node.render(&mut ui, UiRect::new(0.0, 0.0, 160.0, 48.0));
+
+        assert!(
+            scene.rects().iter().all(|rect| rect.y < 20.0),
+            "{:?}",
+            scene.rects()
+        );
     }
 }

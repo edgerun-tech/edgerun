@@ -88,7 +88,7 @@ fn read_post_tool_use_hook_inputs(home: &Path) -> Result<Vec<Value>> {
         .lines()
         .filter(|line| !line.trim().is_empty())
         .map(|line| {
-            edgerun_json::from_serde_str(line).context("parse post tool use hook input")
+            edgerun_json::from_json_str(line).context("parse post tool use hook input")
         })
         .collect()
 }
@@ -200,7 +200,7 @@ async fn codex_apps_file_params_upload_local_paths_before_mcp_tool_call() -> Res
         .unwrap_or_default()
         .into_iter()
         .find_map(|request| {
-            let body: Value = edgerun_json::from_serde_slice(&request.body).ok()?;
+            let body: Value = edgerun_json::from_slice(&request.body).ok()?;
             (request.url.path() == "/api/codex/apps"
                 && body.get("method").and_then(Value::as_str) == Some("tools/call")
                 && body.pointer("/params/name").and_then(Value::as_str)

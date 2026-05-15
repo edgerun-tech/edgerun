@@ -68,7 +68,6 @@ impl Drop for BlockingStdinPipe {
     }
 }
 
-#[cfg(not(target_os = "windows"))]
 fn assert_posix_snapshot_sections(snapshot: &str) {
     assert!(snapshot.contains("# Snapshot file"));
     assert!(snapshot.contains("aliases "));
@@ -395,17 +394,6 @@ async fn linux_bash_snapshot_includes_sections() -> Result<()> {
 async fn linux_sh_snapshot_includes_sections() -> Result<()> {
     let snapshot = get_snapshot(ShellType::Sh).await?;
     assert_posix_snapshot_sections(&snapshot);
-    Ok(())
-}
-
-#[cfg(target_os = "windows")]
-#[ignore]
-#[edgerun_tokio::test]
-async fn windows_powershell_snapshot_includes_sections() -> Result<()> {
-    let snapshot = get_snapshot(ShellType::PowerShell).await?;
-    assert!(snapshot.contains("# Snapshot file"));
-    assert!(snapshot.contains("aliases "));
-    assert!(snapshot.contains("exports "));
     Ok(())
 }
 

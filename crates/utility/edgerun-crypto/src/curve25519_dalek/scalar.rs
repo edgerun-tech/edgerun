@@ -149,45 +149,21 @@ use crate::zeroize::Zeroize;
 use crate::curve25519_dalek::backend;
 use crate::curve25519_dalek::constants;
 
-cfg_if! {
-    if #[cfg(curve25519_dalek_backend = "fiat")] {
-        /// An `UnpackedScalar` represents an element of the field GF(l), optimized for speed.
-        ///
-        /// This is a type alias for one of the scalar types in the `backend`
-        /// module.
-        #[cfg(curve25519_dalek_bits = "32")]
-        #[cfg_attr(
-            docsrs,
-            doc(cfg(all(feature = "fiat_backend", curve25519_dalek_bits = "32")))
-        )]
-        type UnpackedScalar = backend::serial::fiat_u32::scalar::Scalar29;
+/// An `UnpackedScalar` represents an element of the field GF(l), optimized for speed.
+///
+/// This is a type alias for one of the scalar types in the `backend`
+/// module.
+#[cfg(curve25519_dalek_bits = "64")]
+#[cfg_attr(docsrs, doc(cfg(curve25519_dalek_bits = "64")))]
+type UnpackedScalar = backend::serial::u64::scalar::Scalar52;
 
-        /// An `UnpackedScalar` represents an element of the field GF(l), optimized for speed.
-        ///
-        /// This is a type alias for one of the scalar types in the `backend`
-        /// module.
-        #[cfg(curve25519_dalek_bits = "64")]
-        #[cfg_attr(
-            docsrs,
-            doc(cfg(all(feature = "fiat_backend", curve25519_dalek_bits = "64")))
-        )]
-        type UnpackedScalar = backend::serial::fiat_u64::scalar::Scalar52;
-    } else if #[cfg(curve25519_dalek_bits = "64")] {
-        /// An `UnpackedScalar` represents an element of the field GF(l), optimized for speed.
-        ///
-        /// This is a type alias for one of the scalar types in the `backend`
-        /// module.
-        #[cfg_attr(docsrs, doc(cfg(curve25519_dalek_bits = "64")))]
-        type UnpackedScalar = backend::serial::u64::scalar::Scalar52;
-    } else {
-        /// An `UnpackedScalar` represents an element of the field GF(l), optimized for speed.
-        ///
-        /// This is a type alias for one of the scalar types in the `backend`
-        /// module.
-        #[cfg_attr(docsrs, doc(cfg(curve25519_dalek_bits = "64")))]
-        type UnpackedScalar = backend::serial::u32::scalar::Scalar29;
-    }
-}
+/// An `UnpackedScalar` represents an element of the field GF(l), optimized for speed.
+///
+/// This is a type alias for one of the scalar types in the `backend`
+/// module.
+#[cfg(curve25519_dalek_bits = "32")]
+#[cfg_attr(docsrs, doc(cfg(curve25519_dalek_bits = "32")))]
+type UnpackedScalar = backend::serial::u32::scalar::Scalar29;
 
 /// The `Scalar` struct holds an element of \\(\mathbb Z / \ell\mathbb Z \\).
 #[allow(clippy::derived_hash_with_manual_eq)]
@@ -212,9 +188,9 @@ pub struct Scalar {
     /// a canonical representative of an element of \\( \mathbb Z / \ell\mathbb Z \\). This is
     /// stronger than invariant #1. It also sometimes has to be broken.
     ///
-    /// This invariant is deliberately broken in the implementation of `EdwardsPoint::{mul_clamped,
-    /// mul_base_clamped}`, `MontgomeryPoint::{mul_clamped, mul_base_clamped}`, and
-    /// `BasepointTable::mul_base_clamped`. This is not an issue though. As mentioned above,
+    /// This invariant is deliberately broken in the implementation of
+    /// `EdwardsPoint::{mul_clamped, mul_base_clamped}` and
+    /// `MontgomeryPoint::{mul_clamped, mul_base_clamped}`. This is not an issue though. As mentioned above,
     /// scalar-point multiplication is defined for any choice of `bytes` that satisfies invariant
     /// #1. Since clamping guarantees invariant #1 is satisfied, these operations are well defined.
     ///
@@ -397,19 +373,19 @@ impl ConditionallySelectable for Scalar {
     }
 }
 
-#[cfg(feature = "serde")]
-use serde::de::Visitor;
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+#[cfg(feature = "edgerun_json_compat")]
+use edgerun_json_compat::de::Visitor;
+#[cfg(feature = "edgerun_json_compat")]
+use edgerun_json_compat::{Deserialize, Deserializer, Serialize, Serializer};
 
-#[cfg(feature = "serde")]
-#[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
+#[cfg(feature = "edgerun_json_compat")]
+#[cfg_attr(docsrs, doc(cfg(feature = "edgerun_json_compat")))]
 impl Serialize for Scalar {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
     {
-        use serde::ser::SerializeTuple;
+        use edgerun_json_compat::ser::SerializeTuple;
         let mut tup = serializer.serialize_tuple(32)?;
         for byte in self.as_bytes().iter() {
             tup.serialize_element(byte)?;
@@ -418,8 +394,8 @@ impl Serialize for Scalar {
     }
 }
 
-#[cfg(feature = "serde")]
-#[cfg_attr(docsrs, doc(cfg(feature = "serde")))]
+#[cfg(feature = "edgerun_json_compat")]
+#[cfg_attr(docsrs, doc(cfg(feature = "edgerun_json_compat")))]
 impl<'de> Deserialize<'de> for Scalar {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -439,17 +415,18 @@ impl<'de> Deserialize<'de> for Scalar {
 
             fn visit_seq<A>(self, mut seq: A) -> Result<Scalar, A::Error>
             where
-                A: serde::de::SeqAccess<'de>,
+                A: edgerun_json_compat::de::SeqAccess<'de>,
             {
                 let mut bytes = [0u8; 32];
                 #[allow(clippy::needless_range_loop)]
                 for i in 0..32 {
-                    bytes[i] = seq
-                        .next_element()?
-                        .ok_or_else(|| serde::de::Error::invalid_length(i, &"expected 32 bytes"))?;
+                    bytes[i] = seq.next_element()?.ok_or_else(|| {
+                        edgerun_json_compat::de::Error::invalid_length(i, &"expected 32 bytes")
+                    })?;
                 }
-                Option::from(Scalar::from_canonical_bytes(bytes))
-                    .ok_or_else(|| serde::de::Error::custom("scalar was not canonically encoded"))
+                Option::from(Scalar::from_canonical_bytes(bytes)).ok_or_else(|| {
+                    edgerun_json_compat::de::Error::custom("scalar was not canonically encoded")
+                })
             }
         }
 
@@ -1019,7 +996,7 @@ impl Scalar {
 
     /// Returns a size hint indicating how many entries of the return
     /// value of `to_radix_2w` are nonzero.
-    #[cfg(any(feature = "alloc", all(test, feature = "precomputed-tables")))]
+    #[cfg(feature = "alloc")]
     pub(crate) fn to_radix_2w_size_hint(w: usize) -> usize {
         debug_assert!(w >= 4);
         debug_assert!(w <= 8);
@@ -1056,7 +1033,7 @@ impl Scalar {
     /// $$
     /// with \\(-2\^w/2 \leq a_i < 2\^w/2\\) for \\(0 \leq i < (n-1)\\) and \\(-2\^w/2 \leq a_{n-1} \leq 2\^w/2\\).
     ///
-    #[cfg(any(feature = "alloc", feature = "precomputed-tables"))]
+    #[cfg(feature = "alloc")]
     pub(crate) fn as_radix_2w(&self, w: usize) -> [i8; 64] {
         debug_assert!(w >= 4);
         debug_assert!(w <= 8);
@@ -1553,7 +1530,7 @@ pub(crate) mod test {
 
     #[test]
     fn non_adjacent_form_random() {
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::rand_core::OsRng;
         for _ in 0..1_000 {
             let x = Scalar::random(&mut rng);
             for w in &[5, 6, 7, 8] {
@@ -1803,8 +1780,8 @@ pub(crate) mod test {
     }
 
     #[test]
-    #[cfg(feature = "serde")]
-    fn serde_bincode_scalar_roundtrip() {
+    #[cfg(feature = "edgerun_json_compat")]
+    fn edgerun_json_compat_bincode_scalar_roundtrip() {
         use bincode;
         let encoded = bincode::serialize(&X).unwrap();
         let parsed: Scalar = bincode::deserialize(&encoded).unwrap();
@@ -1853,49 +1830,6 @@ pub(crate) mod test {
 
         for (a, b) in v1.iter().zip(v2.iter()) {
             assert_eq!(a * b, Scalar::ONE);
-        }
-    }
-
-    #[cfg(feature = "precomputed-tables")]
-    fn test_pippenger_radix_iter(scalar: Scalar, w: usize) {
-        let digits_count = Scalar::to_radix_2w_size_hint(w);
-        let digits = scalar.as_radix_2w(w);
-
-        let radix = Scalar::from((1 << w) as u64);
-        let mut term = Scalar::ONE;
-        let mut recovered_scalar = Scalar::ZERO;
-        for digit in &digits[0..digits_count] {
-            let digit = *digit;
-            if digit != 0 {
-                let sdigit = if digit < 0 {
-                    -Scalar::from((-(digit as i64)) as u64)
-                } else {
-                    Scalar::from(digit as u64)
-                };
-                recovered_scalar += term * sdigit;
-            }
-            term *= radix;
-        }
-        // When the input is unreduced, we may only recover the scalar mod l.
-        assert_eq!(recovered_scalar, scalar.reduce());
-    }
-
-    #[test]
-    #[cfg(feature = "precomputed-tables")]
-    fn test_pippenger_radix() {
-        use core::iter;
-        // For each valid radix it tests that 1000 random-ish scalars can be restored
-        // from the produced representation precisely.
-        let cases = (2..100)
-            .map(|s| Scalar::from(s as u64).invert())
-            // The largest unreduced scalar, s = 2^255-1. This is not reduced mod l. Scalar mult
-            // still works though.
-            .chain(iter::once(LARGEST_UNREDUCED_SCALAR));
-
-        for scalar in cases {
-            test_pippenger_radix_iter(scalar, 6);
-            test_pippenger_radix_iter(scalar, 7);
-            test_pippenger_radix_iter(scalar, 8);
         }
     }
 
@@ -2047,7 +1981,7 @@ pub(crate) mod test {
     // was reduced and b was clamped and unreduced. This checks that that was always well-defined.
     #[test]
     fn test_mul_reduction_invariance() {
-        let mut rng = rand::thread_rng();
+        let mut rng = crate::rand_core::OsRng;
 
         for _ in 0..10 {
             // Also define c that's clamped. We'll make sure that clamping doesn't affect

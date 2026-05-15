@@ -33,7 +33,7 @@ impl ToolHandler for Handler {
             ..
         } = invocation;
         let arguments = function_arguments(payload)?;
-        let args: CloseAgentArgs = parse_arguments(&arguments)?;
+        let args: CloseAgentArgs = parse_json_arguments(&arguments)?;
         let agent_id = resolve_agent_target(&session, &turn, &args.target).await?;
         let receiver_agent = session
             .services
@@ -118,13 +118,13 @@ impl ToolHandler for Handler {
     }
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Debug, FromJson)]
+#[schemars(deny_unknown_fields)]
 struct CloseAgentArgs {
     target: String,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, ToJson)]
 pub(crate) struct CloseAgentResult {
     pub(crate) previous_status: AgentStatus,
 }

@@ -37,7 +37,10 @@ impl std::fmt::Debug for OpenAiModelsEndpoint {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("OpenAiModelsEndpoint")
             .field("provider_info", &self.provider_info)
-            .field("auth_manager", &self.auth_manager.as_ref().map(|_| "<auth-manager>"))
+            .field(
+                "auth_manager",
+                &self.auth_manager.as_ref().map(|_| "<auth-manager>"),
+            )
             .field("transport", &"<http-transport>")
             .finish()
     }

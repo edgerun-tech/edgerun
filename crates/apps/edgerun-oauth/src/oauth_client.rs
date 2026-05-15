@@ -416,7 +416,7 @@ impl OAuthClient {
         timeout_secs: u64,
         initial_interval: u64,
     ) -> std::result::Result<Credentials, OAuthError> {
-        use edgerun_node::rt::{sleep, Duration, Instant};
+        use edgerun_node::rt::{Duration, Instant, sleep};
 
         let start = Instant::now();
         let mut interval = Duration::from_secs(initial_interval);
@@ -460,10 +460,10 @@ impl OAuthClient {
                         continue;
                     }
                     "expired_token" => {
-                        return Err(OAuthError::DeviceError(crate::errors::DeviceError::Expired))
+                        return Err(OAuthError::DeviceError(crate::errors::DeviceError::Expired));
                     }
                     "access_denied" => {
-                        return Err(OAuthError::DeviceError(crate::errors::DeviceError::Denied))
+                        return Err(OAuthError::DeviceError(crate::errors::DeviceError::Denied));
                     }
                     _ => {
                         let desc = token_resp

@@ -2,8 +2,8 @@ use super::canonicalize;
 use super::config_schema_json;
 use super::write_config_schema;
 
-use pretty_assertions::assert_eq;
 use edgerun_similar::TextDiff;
+use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 
 fn trim_single_trailing_newline(contents: &str) -> &str {
@@ -16,10 +16,10 @@ fn config_schema_matches_fixture() {
         .expect("resolve config schema fixture path");
     let fixture = std::fs::read_to_string(fixture_path).expect("read config schema fixture");
     let fixture_value: edgerun_json::Value =
-        edgerun_json::from_serde_str(&fixture).expect("parse config schema fixture");
+        edgerun_json::from_json_str(&fixture).expect("parse config schema fixture");
     let schema_json = config_schema_json().expect("serialize config schema");
     let schema_value: edgerun_json::Value =
-        edgerun_json::from_serde_slice(&schema_json).expect("decode schema json");
+        edgerun_json::from_slice(&schema_json).expect("decode schema json");
     let fixture_value = canonicalize(&fixture_value);
     let schema_value = canonicalize(&schema_value);
     if fixture_value != schema_value {
@@ -58,7 +58,7 @@ Run `just write-config-schema` to overwrite with your changes.\n\n{diff}"
 fn config_schema_hides_unsupported_inline_mcp_bearer_token() {
     let schema_json = config_schema_json().expect("serialize config schema");
     let schema_value: edgerun_json::Value =
-        edgerun_json::from_serde_slice(&schema_json).expect("decode schema json");
+        edgerun_json::from_slice(&schema_json).expect("decode schema json");
     let properties = schema_value
         .pointer("/definitions/RawMcpServerConfig/properties")
         .expect("RawMcpServerConfig properties should exist")

@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt::Debug;
-use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
@@ -27,7 +26,6 @@ use crate::context::AvailableSkillsInstructions;
 use crate::context::CollaborationModeInstructions;
 use crate::context::ContextualUserFragment;
 use crate::context::NetworkRuleSaved;
-use crate::context::PermissionsInstructions;
 use crate::context::PersonalitySpecInstructions;
 use crate::default_skill_metadata_budget;
 use crate::environment_selection::ResolvedTurnEnvironments;
@@ -85,8 +83,6 @@ use codex_protocol::dynamic_tools::DynamicToolSpec;
 use codex_protocol::items::TurnItem;
 use codex_protocol::items::UserMessageItem;
 use codex_protocol::mcp::CallToolResult;
-use codex_protocol::models::ActivePermissionProfile;
-use codex_protocol::models::AdditionalPermissionProfile;
 use codex_protocol::models::BaseInstructions;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::models::SandboxEnforcement;
@@ -109,11 +105,6 @@ use codex_protocol::protocol::TurnAbortReason;
 use codex_protocol::protocol::TurnContextItem;
 use codex_protocol::protocol::TurnContextNetworkItem;
 use codex_protocol::protocol::W3cTraceContext;
-use codex_protocol::request_permissions::PermissionGrantScope;
-use codex_protocol::request_permissions::RequestPermissionProfile;
-use codex_protocol::request_permissions::RequestPermissionsArgs;
-use codex_protocol::request_permissions::RequestPermissionsEvent;
-use codex_protocol::request_permissions::RequestPermissionsResponse;
 use codex_protocol::request_user_input::RequestUserInputArgs;
 use codex_protocol::request_user_input::RequestUserInputResponse;
 use codex_rmcp_client::ElicitationResponse;
@@ -121,7 +112,6 @@ use codex_rollout::state_db;
 use codex_rollout_trace::AgentResultTracePayload;
 use codex_rollout_trace::ThreadStartedTraceMetadata;
 use codex_rollout_trace::ThreadTraceContext;
-use codex_sandboxing::policy_transforms::intersect_permission_profiles;
 use codex_shell_command::parse_command::parse_command;
 use codex_terminal_detection::user_agent;
 use codex_thread_store::CreateThreadParams;
@@ -286,7 +276,6 @@ use crate::skills_watcher::SkillsWatcher;
 use crate::skills_watcher::SkillsWatcherEvent;
 use crate::state::ActiveTurn;
 use crate::state::MailboxDeliveryPhase;
-use crate::state::PendingRequestPermissions;
 use crate::state::SessionServices;
 use crate::state::SessionState;
 #[cfg(test)]
@@ -614,7 +603,6 @@ impl Codex {
             approval_policy: config.permissions.approval_policy.clone(),
             approvals_reviewer: config.approvals_reviewer,
             permission_profile: config.permissions.permission_profile.clone(),
-            active_permission_profile: config.permissions.active_permission_profile(),
             windows_sandbox_level: WindowsSandboxLevel::from_config(&config),
             cwd: config.cwd.clone(),
             codex_home: config.codex_home.clone(),
@@ -1909,7 +1897,6 @@ impl Session {
         reason: Option<String>,
         network_approval_context: Option<NetworkApprovalContext>,
         proposed_execpolicy_amendment: Option<ExecPolicyAmendment>,
-        additional_permissions: Option<AdditionalPermissionProfile>,
         available_decisions: Option<Vec<ReviewDecision>>,
     ) -> ReviewDecision {
         //  command-level approvals use `call_id`.
@@ -1949,7 +1936,6 @@ impl Session {
                 network_approval_context.as_ref(),
                 proposed_execpolicy_amendment.as_ref(),
                 proposed_network_policy_amendments.as_deref(),
-                additional_permissions.as_ref(),
             )
         });
         let event = EventMsg::ExecApprovalRequest(ExecApprovalRequestEvent {
@@ -1963,7 +1949,6 @@ impl Session {
             network_approval_context,
             proposed_execpolicy_amendment,
             proposed_network_policy_amendments,
-            additional_permissions,
             available_decisions: Some(available_decisions),
             parsed_cmd,
         });
@@ -2010,181 +1995,6 @@ impl Session {
         });
         self.send_event(turn_context, event).await;
         rx_approve
-    }
-
-    pub async fn request_permissions(
-        self: &Arc<Self>,
-        turn_context: &Arc<TurnContext>,
-        call_id: String,
-        args: RequestPermissionsArgs,
-        cancellation_token: CancellationToken,
-    ) -> Option<RequestPermissionsResponse> {
-        self.request_permissions_for_cwd(
-            turn_context,
-            call_id,
-            args,
-            turn_context.cwd.clone(),
-            cancellation_token,
-        )
-        .await
-    }
-
-    #[expect(
-        clippy::await_holding_invalid_type,
-        reason = "active turn checks and turn state updates must remain atomic"
-    )]
-    pub(crate) async fn request_permissions_for_cwd(
-        self: &Arc<Self>,
-        turn_context: &Arc<TurnContext>,
-        call_id: String,
-        args: RequestPermissionsArgs,
-        cwd: AbsolutePathBuf,
-        cancellation_token: CancellationToken,
-    ) -> Option<RequestPermissionsResponse> {
-        match turn_context.as_ref().approval_policy.value() {
-            AskForApproval::Never => {
-                return Some(RequestPermissionsResponse {
-                    permissions: RequestPermissionProfile::default(),
-                    scope: PermissionGrantScope::Turn,
-                    strict_auto_review: false,
-                });
-            }
-            AskForApproval::Granular(granular_config)
-                if !granular_config.allows_request_permissions() =>
-            {
-                return Some(RequestPermissionsResponse {
-                    permissions: RequestPermissionProfile::default(),
-                    scope: PermissionGrantScope::Turn,
-                    strict_auto_review: false,
-                });
-            }
-            AskForApproval::OnFailure
-            | AskForApproval::OnRequest
-            | AskForApproval::UnlessTrusted
-            | AskForApproval::Granular(_) => {}
-        }
-
-        let requested_permissions = args.permissions;
-
-        if crate::guardian::routes_approval_to_guardian(turn_context.as_ref()) {
-            let originating_turn_state = {
-                let active = self.active_turn.lock().await;
-                active.as_ref().map(|active| Arc::clone(&active.turn_state))
-            };
-            let review_id = crate::guardian::new_guardian_review_id();
-            let session = Arc::clone(self);
-            let turn = Arc::clone(turn_context);
-            let request = crate::guardian::GuardianApprovalRequest::RequestPermissions {
-                id: call_id,
-                turn_id: turn_context.sub_id.clone(),
-                reason: args.reason,
-                permissions: requested_permissions.clone(),
-            };
-            let review_rx = crate::guardian::spawn_approval_request_review(
-                session,
-                turn,
-                review_id,
-                request,
-                /*retry_reason*/ None,
-                codex_analytics::GuardianApprovalRequestSource::MainTurn,
-                cancellation_token.clone(),
-            );
-            let decision = edgerun_tokio::select! {
-                biased;
-                _ = cancellation_token.cancelled() => return None,
-                decision = review_rx => decision.unwrap_or(ReviewDecision::Denied),
-            };
-            let response = match decision {
-                ReviewDecision::Approved | ReviewDecision::ApprovedExecpolicyAmendment { .. } => {
-                    RequestPermissionsResponse {
-                        permissions: requested_permissions.clone(),
-                        scope: PermissionGrantScope::Turn,
-                        strict_auto_review: false,
-                    }
-                }
-                ReviewDecision::ApprovedForSession => RequestPermissionsResponse {
-                    permissions: requested_permissions.clone(),
-                    scope: PermissionGrantScope::Session,
-                    strict_auto_review: false,
-                },
-                ReviewDecision::NetworkPolicyAmendment {
-                    network_policy_amendment,
-                } => match network_policy_amendment.action {
-                    NetworkPolicyRuleAction::Allow => RequestPermissionsResponse {
-                        permissions: requested_permissions.clone(),
-                        scope: PermissionGrantScope::Turn,
-                        strict_auto_review: false,
-                    },
-                    NetworkPolicyRuleAction::Deny => RequestPermissionsResponse {
-                        permissions: RequestPermissionProfile::default(),
-                        scope: PermissionGrantScope::Turn,
-                        strict_auto_review: false,
-                    },
-                },
-                ReviewDecision::Abort | ReviewDecision::Denied | ReviewDecision::TimedOut => {
-                    RequestPermissionsResponse {
-                        permissions: RequestPermissionProfile::default(),
-                        scope: PermissionGrantScope::Turn,
-                        strict_auto_review: false,
-                    }
-                }
-            };
-            let response = Self::normalize_request_permissions_response(
-                requested_permissions,
-                response,
-                cwd.as_path(),
-            );
-            self.record_granted_request_permissions_for_turn(
-                &response,
-                originating_turn_state.as_ref(),
-            )
-            .await;
-            return Some(response);
-        }
-
-        let (tx_response, rx_response) = oneshot::channel();
-        let prev_entry = {
-            let mut active = self.active_turn.lock().await;
-            match active.as_mut() {
-                Some(at) => {
-                    let mut ts = at.turn_state.lock().await;
-                    ts.insert_pending_request_permissions(
-                        call_id.clone(),
-                        PendingRequestPermissions {
-                            tx_response,
-                            requested_permissions: requested_permissions.clone(),
-                            cwd: cwd.clone(),
-                        },
-                    )
-                }
-                None => None,
-            }
-        };
-        if prev_entry.is_some() {
-            warn!("Overwriting existing pending request_permissions for call_id: {call_id}");
-        }
-
-        let event = EventMsg::RequestPermissions(RequestPermissionsEvent {
-            call_id: call_id.clone(),
-            turn_id: turn_context.sub_id.clone(),
-            started_at_ms: now_unix_timestamp_ms(),
-            reason: args.reason,
-            permissions: requested_permissions,
-            cwd: Some(cwd),
-        });
-        self.send_event(turn_context.as_ref(), event).await;
-        edgerun_tokio::select! {
-            biased;
-            _ = cancellation_token.cancelled() => {
-                let mut active = self.active_turn.lock().await;
-                if let Some(at) = active.as_mut() {
-                    let mut ts = at.turn_state.lock().await;
-                    let _ = ts.remove_pending_request_permissions(&call_id);
-                }
-                None
-            }
-            response = rx_response => response.ok(),
-        }
     }
 
     #[expect(
@@ -2254,114 +2064,6 @@ impl Session {
 
     #[expect(
         clippy::await_holding_invalid_type,
-        reason = "active turn checks and turn state updates must remain atomic"
-    )]
-    pub async fn notify_request_permissions_response(
-        &self,
-        call_id: &str,
-        response: RequestPermissionsResponse,
-    ) {
-        let (entry, originating_turn_state) = {
-            let mut active = self.active_turn.lock().await;
-            match active.as_mut() {
-                Some(at) => {
-                    let mut ts = at.turn_state.lock().await;
-                    let entry = ts.remove_pending_request_permissions(call_id);
-                    let originating_turn_state = entry.as_ref().map(|_| Arc::clone(&at.turn_state));
-                    (entry, originating_turn_state)
-                }
-                None => (None, None),
-            }
-        };
-        match entry {
-            Some(entry) => {
-                let response = Self::normalize_request_permissions_response(
-                    entry.requested_permissions,
-                    response,
-                    entry.cwd.as_path(),
-                );
-                self.record_granted_request_permissions_for_turn(
-                    &response,
-                    originating_turn_state.as_ref(),
-                )
-                .await;
-                entry.tx_response.send(response).ok();
-            }
-            None => {
-                warn!("No pending request_permissions found for call_id: {call_id}");
-            }
-        }
-    }
-
-    fn normalize_request_permissions_response(
-        requested_permissions: RequestPermissionProfile,
-        response: RequestPermissionsResponse,
-        cwd: &Path,
-    ) -> RequestPermissionsResponse {
-        if response.strict_auto_review && matches!(response.scope, PermissionGrantScope::Session) {
-            return RequestPermissionsResponse {
-                permissions: RequestPermissionProfile::default(),
-                scope: PermissionGrantScope::Turn,
-                strict_auto_review: false,
-            };
-        }
-
-        if response.permissions.is_empty() {
-            return response;
-        }
-
-        RequestPermissionsResponse {
-            permissions: intersect_permission_profiles(
-                requested_permissions.into(),
-                response.permissions.into(),
-                cwd,
-            )
-            .into(),
-            scope: response.scope,
-            strict_auto_review: response.strict_auto_review,
-        }
-    }
-
-    async fn record_granted_request_permissions_for_turn(
-        &self,
-        response: &RequestPermissionsResponse,
-        originating_turn_state: Option<&Arc<Mutex<crate::state::TurnState>>>,
-    ) {
-        if response.permissions.is_empty() {
-            return;
-        }
-        match response.scope {
-            PermissionGrantScope::Turn => {
-                if let Some(turn_state) = originating_turn_state {
-                    let mut ts = turn_state.lock().await;
-                    let permissions: AdditionalPermissionProfile =
-                        response.permissions.clone().into();
-                    ts.record_granted_permissions(permissions);
-                    if response.strict_auto_review {
-                        ts.enable_strict_auto_review();
-                    }
-                }
-            }
-            PermissionGrantScope::Session => {
-                let mut state = self.state.lock().await;
-                state.record_granted_permissions(response.permissions.clone().into());
-            }
-        }
-    }
-
-    #[expect(
-        clippy::await_holding_invalid_type,
-        reason = "active turn reads must stay consistent with the matching turn state"
-    )]
-    pub(crate) async fn granted_turn_permissions(&self) -> Option<AdditionalPermissionProfile> {
-        let active = self.active_turn.lock().await;
-        let active = active.as_ref()?;
-        let ts = active.turn_state.lock().await;
-        ts.granted_permissions()
-    }
-
-    #[expect(
-        clippy::await_holding_invalid_type,
         reason = "active turn reads must stay consistent with the matching turn state"
     )]
     pub(crate) async fn strict_auto_review_enabled_for_turn(&self) -> bool {
@@ -2371,11 +2073,6 @@ impl Session {
         };
         let ts = active.turn_state.lock().await;
         ts.strict_auto_review_enabled()
-    }
-
-    pub(crate) async fn granted_session_permissions(&self) -> Option<AdditionalPermissionProfile> {
-        let state = self.state.lock().await;
-        state.granted_permissions()
     }
 
     #[expect(
@@ -2611,24 +2308,6 @@ impl Session {
             )
         {
             developer_sections.push(model_switch_message);
-        }
-        if turn_context.config.include_permissions_instructions {
-            developer_sections.push(
-                PermissionsInstructions::from_permission_profile(
-                    &turn_context.permission_profile,
-                    turn_context.approval_policy.value(),
-                    turn_context.config.approvals_reviewer,
-                    self.services.exec_policy.current().as_ref(),
-                    &turn_context.cwd,
-                    turn_context
-                        .features
-                        .enabled(Feature::ExecPermissionApprovals),
-                    turn_context
-                        .features
-                        .enabled(Feature::RequestPermissionsTool),
-                )
-                .render(),
-            );
         }
         let separate_guardian_developer_message =
             crate::guardian::is_guardian_reviewer_source(&session_source);
@@ -3369,6 +3048,3 @@ async fn build_hooks_for_config(
         shell_args: hook_shell_argv,
     })
 }
-
-#[cfg(test)]
-pub(crate) mod tests;

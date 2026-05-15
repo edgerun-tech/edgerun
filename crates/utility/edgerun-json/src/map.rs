@@ -14,8 +14,21 @@ use crate::value::JsonValueError;
 use core::marker::PhantomData;
 use core::ops::{Deref, DerefMut};
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct Map<K = String, V = JsonValue>(pub(crate) Vec<(String, JsonValue)>, PhantomData<(K, V)>);
+
+impl<K, V> PartialEq for Map<K, V> {
+    fn eq(&self, other: &Self) -> bool {
+        if self.0.len() != other.0.len() {
+            return false;
+        }
+        self.0
+            .iter()
+            .all(|(key, value)| other.get(key).is_some_and(|other| other == value))
+    }
+}
+
+impl<K, V> Eq for Map<K, V> {}
 
 pub enum Entry<'a, K = String, V = JsonValue> {
     Occupied(OccupiedEntry<'a, K, V>),
@@ -263,6 +276,15 @@ impl<K, V> Map<K, V> {
             .iter()
             .position(|(candidate, _)| candidate == key)
             .map(|index| self.0.remove(index).1)
+    }
+
+    pub fn remove_any(&mut self, keys: &[&str]) -> Option<JsonValue> {
+        for key in keys {
+            if let Some(value) = self.remove(key) {
+                return Some(value);
+            }
+        }
+        None
     }
 
     pub fn take_required<T: FromJson>(&mut self, key: &str) -> Result<T, JsonValueError> {

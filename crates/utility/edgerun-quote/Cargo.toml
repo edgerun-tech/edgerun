@@ -1,0 +1,20 @@
+[package]
+name = "quote"
+version = "1.0.45"
+edition = "2021"
+license.workspace = true
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun-owned quasi-quoting macro"
+build = "build.rs"
+
+[features]
+default = ["proc-macro"]
+proc-macro = ["proc-macro2/proc-macro"]
+
+[dependencies]
+proc-macro2 = { path = "../edgerun-proc-macro2", default-features = false }
+
+[lints]
+workspace = true

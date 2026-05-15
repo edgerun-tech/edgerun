@@ -16,7 +16,6 @@ use codex_protocol::protocol::RealtimeTranscriptDelta;
 use codex_protocol::protocol::RealtimeTranscriptDone;
 use codex_protocol::protocol::RealtimeTranscriptEntry;
 use codex_protocol::protocol::RealtimeVoice;
-use edgerun_futures::SinkExt;
 use edgerun_futures::StreamExt;
 use edgerun_http::HeaderMap;
 use edgerun_json::Value;
@@ -85,7 +84,7 @@ async fn realtime_ws_e2e_session_create_and_event_flow() {
             .expect("first msg ok")
             .into_text()
             .expect("text");
-        let first_json: Value = edgerun_json::from_serde_str(&first).expect("json");
+        let first_json: Value = edgerun_json::from_str(&first).expect("json");
         assert_eq!(first_json["type"], "session.update");
         assert_eq!(
             first_json["session"]["type"],
@@ -122,7 +121,7 @@ async fn realtime_ws_e2e_session_create_and_event_flow() {
             .expect("second msg ok")
             .into_text()
             .expect("text");
-        let second_json: Value = edgerun_json::from_serde_str(&second).expect("json");
+        let second_json: Value = edgerun_json::from_str(&second).expect("json");
         assert_eq!(second_json["type"], "input_audio_buffer.append");
 
         ws.send(Message::Text(
@@ -221,7 +220,7 @@ async fn realtime_ws_connect_webrtc_sideband_retries_join_until_server_is_availa
             .expect("first msg ok")
             .into_text()
             .expect("text");
-        let first_json: Value = edgerun_json::from_serde_str(&first).expect("json");
+        let first_json: Value = edgerun_json::from_str(&first).expect("json");
         assert_eq!(first_json["type"], "session.update");
         assert_eq!(
             first_json["session"]["instructions"],
@@ -290,7 +289,7 @@ async fn realtime_ws_e2e_send_while_next_event_waits() {
             .expect("first msg ok")
             .into_text()
             .expect("text");
-        let first_json: Value = edgerun_json::from_serde_str(&first).expect("json");
+        let first_json: Value = edgerun_json::from_str(&first).expect("json");
         assert_eq!(first_json["type"], "session.update");
 
         let second = ws
@@ -300,7 +299,7 @@ async fn realtime_ws_e2e_send_while_next_event_waits() {
             .expect("second msg ok")
             .into_text()
             .expect("text");
-        let second_json: Value = edgerun_json::from_serde_str(&second).expect("json");
+        let second_json: Value = edgerun_json::from_str(&second).expect("json");
         assert_eq!(second_json["type"], "input_audio_buffer.append");
 
         ws.send(Message::Text(
@@ -377,7 +376,7 @@ async fn realtime_ws_e2e_disconnected_emitted_once() {
             .expect("first msg ok")
             .into_text()
             .expect("text");
-        let first_json: Value = edgerun_json::from_serde_str(&first).expect("json");
+        let first_json: Value = edgerun_json::from_str(&first).expect("json");
         assert_eq!(first_json["type"], "session.update");
 
         ws.send(Message::Close(None)).await.expect("send close");
@@ -421,7 +420,7 @@ async fn realtime_ws_e2e_ignores_unknown_text_events() {
             .expect("first msg ok")
             .into_text()
             .expect("text");
-        let first_json: Value = edgerun_json::from_serde_str(&first).expect("json");
+        let first_json: Value = edgerun_json::from_str(&first).expect("json");
         assert_eq!(first_json["type"], "session.update");
 
         ws.send(Message::Text(
@@ -493,7 +492,7 @@ async fn realtime_ws_e2e_realtime_v2_parser_emits_handoff_requested() {
             .expect("first msg ok")
             .into_text()
             .expect("text");
-        let first_json: Value = edgerun_json::from_serde_str(&first).expect("json");
+        let first_json: Value = edgerun_json::from_str(&first).expect("json");
         assert_eq!(first_json["type"], "session.update");
 
         ws.send(Message::Text(

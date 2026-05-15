@@ -2845,11 +2845,11 @@ mod tests {
     };
     use crate::protocol::{CapabilityKind, DelegationPolicy, ScopeKind};
     use crate::result::Verdict;
-    use edgerun_crypto::p256::ecdsa::SigningKey;
+    use edgerun_crypto::P256SigningKey as SigningKey;
 
     fn test_signing_key() -> SigningKey {
         let bytes: [u8; 32] = [7u8; 32];
-        SigningKey::from_bytes(&bytes.into()).unwrap()
+        SigningKey::from_bytes(&bytes).unwrap()
     }
 
     const TEST_NODE_ID: [u8; 64] = [
@@ -2957,8 +2957,14 @@ mod tests {
     }
 
     fn key_hint_for(key: &SigningKey) -> Vec<u8> {
-        let encoded = key.verifying_key().to_encoded_point(false);
-        encoded.as_bytes()[1..65].to_vec()
+        key.public_key_sec1()[1..65].to_vec()
+    }
+
+    fn node_id_for(key: &SigningKey) -> [u8; 64] {
+        let public_key = key.public_key_sec1();
+        let mut node_id = [0u8; 64];
+        node_id.copy_from_slice(&public_key[1..65]);
+        node_id
     }
 
     fn make_signed_command(key: &SigningKey, key_hint: Option<Vec<u8>>) -> CommandEnvelope {
@@ -3106,13 +3112,7 @@ mod tests {
     #[test]
     fn command_target_mismatch_is_rejected() {
         let key = test_signing_key();
-        let vk = key.verifying_key();
-        let node_id: [u8; 64] = {
-            let encoded = vk.to_encoded_point(false);
-            let mut bytes = [0u8; 64];
-            bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
-            bytes
-        };
+        let node_id = node_id_for(&key);
         let hint: Vec<u8> = node_id.to_vec();
 
         let cmd = make_signed_command_for_other_node(&key, Some(hint));
@@ -3124,13 +3124,7 @@ mod tests {
     #[test]
     fn valid_command_is_accepted() {
         let key = test_signing_key();
-        let vk = key.verifying_key();
-        let node_id: [u8; 64] = {
-            let encoded = vk.to_encoded_point(false);
-            let mut bytes = [0u8; 64];
-            bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
-            bytes
-        };
+        let node_id = node_id_for(&key);
         let hint: Vec<u8> = node_id.to_vec();
 
         let mut ctx = default_ctx();
@@ -3144,13 +3138,7 @@ mod tests {
     #[test]
     fn command_missing_issued_at_is_rejected() {
         let key = test_signing_key();
-        let vk = key.verifying_key();
-        let node_id: [u8; 64] = {
-            let encoded = vk.to_encoded_point(false);
-            let mut bytes = [0u8; 64];
-            bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
-            bytes
-        };
+        let node_id = node_id_for(&key);
         let hint: Vec<u8> = node_id.to_vec();
 
         let mut cmd = make_signed_command(&key, Some(hint));
@@ -3168,13 +3156,7 @@ mod tests {
     #[test]
     fn command_issued_in_future_defers() {
         let key = test_signing_key();
-        let vk = key.verifying_key();
-        let node_id: [u8; 64] = {
-            let encoded = vk.to_encoded_point(false);
-            let mut bytes = [0u8; 64];
-            bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
-            bytes
-        };
+        let node_id = node_id_for(&key);
         let hint: Vec<u8> = node_id.to_vec();
 
         let mut cmd = make_signed_command(&key, Some(hint));
@@ -3195,13 +3177,7 @@ mod tests {
     #[test]
     fn unknown_command_type_is_rejected() {
         let key = test_signing_key();
-        let vk = key.verifying_key();
-        let node_id: [u8; 64] = {
-            let encoded = vk.to_encoded_point(false);
-            let mut bytes = [0u8; 64];
-            bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
-            bytes
-        };
+        let node_id = node_id_for(&key);
         let hint: Vec<u8> = node_id.to_vec();
 
         let mut cmd = make_signed_command(&key, Some(hint));
@@ -3453,13 +3429,7 @@ mod tests {
     #[test]
     fn replay_same_command_hash_is_duplicate() {
         let key = test_signing_key();
-        let vk = key.verifying_key();
-        let node_id: [u8; 64] = {
-            let encoded = vk.to_encoded_point(false);
-            let mut bytes = [0u8; 64];
-            bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
-            bytes
-        };
+        let node_id = node_id_for(&key);
         let hint: Vec<u8> = node_id.to_vec();
 
         let cmd = make_signed_command(&key, Some(hint.clone()));
@@ -3482,13 +3452,7 @@ mod tests {
     fn different_command_same_id_is_distinct() {
         // §5.1 makes command_hash the replay key; command_id is only an idempotency hint.
         let key = test_signing_key();
-        let vk = key.verifying_key();
-        let node_id: [u8; 64] = {
-            let encoded = vk.to_encoded_point(false);
-            let mut bytes = [0u8; 64];
-            bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
-            bytes
-        };
+        let node_id = node_id_for(&key);
         let hint: Vec<u8> = node_id.to_vec();
 
         let cmd = make_signed_command(&key, Some(hint.clone()));
@@ -3508,13 +3472,7 @@ mod tests {
     #[test]
     fn expired_command_is_rejected() {
         let key = test_signing_key();
-        let vk = key.verifying_key();
-        let node_id: [u8; 64] = {
-            let encoded = vk.to_encoded_point(false);
-            let mut bytes = [0u8; 64];
-            bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
-            bytes
-        };
+        let node_id = node_id_for(&key);
         let hint: Vec<u8> = node_id.to_vec();
 
         let mut cmd = make_signed_command(&key, Some(hint));
@@ -3537,13 +3495,7 @@ mod tests {
     #[test]
     fn not_before_defers() {
         let key = test_signing_key();
-        let vk = key.verifying_key();
-        let node_id: [u8; 64] = {
-            let encoded = vk.to_encoded_point(false);
-            let mut bytes = [0u8; 64];
-            bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
-            bytes
-        };
+        let node_id = node_id_for(&key);
         let hint: Vec<u8> = node_id.to_vec();
 
         let mut cmd = make_signed_command(&key, Some(hint));
@@ -3591,13 +3543,7 @@ mod tests {
         use crate::protocol::CapabilityDescriptor;
 
         let key = test_signing_key();
-        let vk = key.verifying_key();
-        let node_id: [u8; 64] = {
-            let encoded = vk.to_encoded_point(false);
-            let mut bytes = [0u8; 64];
-            bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
-            bytes
-        };
+        let node_id = node_id_for(&key);
 
         let mut ctx = default_ctx();
         ctx.local_node_id = &TEST_NODE_ID;
@@ -5928,13 +5874,7 @@ mod tests {
         use crate::protocol::CapabilityDescriptor;
 
         let key = test_signing_key();
-        let vk = key.verifying_key();
-        let node_id: [u8; 64] = {
-            let encoded = vk.to_encoded_point(false);
-            let mut bytes = [0u8; 64];
-            bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
-            bytes
-        };
+        let node_id = node_id_for(&key);
 
         let mut revoked = HashSet::new();
         revoked.insert(b"deleg-1".to_vec());
@@ -5996,13 +5936,7 @@ mod tests {
     fn command_with_unspecified_assurance_is_accepted() {
         // When requested_assurance is None or has unspecified class, no check is needed
         let key = test_signing_key();
-        let vk = key.verifying_key();
-        let node_id: [u8; 64] = {
-            let encoded = vk.to_encoded_point(false);
-            let mut bytes = [0u8; 64];
-            bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
-            bytes
-        };
+        let node_id = node_id_for(&key);
         let hint: Vec<u8> = node_id.to_vec();
 
         let mut ctx = default_ctx();
@@ -6021,13 +5955,7 @@ mod tests {
         use crate::protocol::AssuranceRequirement;
 
         let key = test_signing_key();
-        let vk = key.verifying_key();
-        let node_id: [u8; 64] = {
-            let encoded = vk.to_encoded_point(false);
-            let mut bytes = [0u8; 64];
-            bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
-            bytes
-        };
+        let node_id = node_id_for(&key);
         let hint: Vec<u8> = node_id.to_vec();
 
         let mut ctx = default_ctx();
@@ -6058,13 +5986,7 @@ mod tests {
         use crate::protocol::AssuranceRequirement;
 
         let key = test_signing_key();
-        let vk = key.verifying_key();
-        let node_id: [u8; 64] = {
-            let encoded = vk.to_encoded_point(false);
-            let mut bytes = [0u8; 64];
-            bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
-            bytes
-        };
+        let node_id = node_id_for(&key);
         let hint: Vec<u8> = node_id.to_vec();
 
         let mut ctx = default_ctx();
@@ -6328,13 +6250,7 @@ mod tests {
         use crate::protocol::AssuranceRequirement;
 
         let key = test_signing_key();
-        let vk = key.verifying_key();
-        let node_id: [u8; 64] = {
-            let encoded = vk.to_encoded_point(false);
-            let mut bytes = [0u8; 64];
-            bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
-            bytes
-        };
+        let node_id = node_id_for(&key);
         let hint: Vec<u8> = node_id.to_vec();
 
         let mut ctx = default_ctx();
@@ -6369,13 +6285,7 @@ mod tests {
         use crate::protocol::AssuranceRequirement;
 
         let key = test_signing_key();
-        let vk = key.verifying_key();
-        let node_id: [u8; 64] = {
-            let encoded = vk.to_encoded_point(false);
-            let mut bytes = [0u8; 64];
-            bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
-            bytes
-        };
+        let node_id = node_id_for(&key);
         let hint: Vec<u8> = node_id.to_vec();
 
         let mut ctx = default_ctx();
@@ -6409,13 +6319,7 @@ mod tests {
         use crate::protocol::AssuranceRequirement;
 
         let key = test_signing_key();
-        let vk = key.verifying_key();
-        let node_id: [u8; 64] = {
-            let encoded = vk.to_encoded_point(false);
-            let mut bytes = [0u8; 64];
-            bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
-            bytes
-        };
+        let node_id = node_id_for(&key);
         let hint: Vec<u8> = node_id.to_vec();
 
         let mut ctx = default_ctx();
@@ -6445,13 +6349,7 @@ mod tests {
     fn delegation_chain_root_not_in_trusted_roots_is_rejected() {
         // Delegation chain where root issuer is NOT in trusted_root_ids
         let key = test_signing_key();
-        let vk = key.verifying_key();
-        let node_id: [u8; 64] = {
-            let encoded = vk.to_encoded_point(false);
-            let mut bytes = [0u8; 64];
-            bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
-            bytes
-        };
+        let node_id = node_id_for(&key);
         let hint: Vec<u8> = node_id.to_vec();
 
         let trusted = vec![vec![99, 99, 99]]; // Different identity, not the root
@@ -7313,13 +7211,7 @@ mod tests {
     #[test]
     fn delegation_chain_root_in_trusted_roots_passes() {
         let key = test_signing_key();
-        let vk = key.verifying_key();
-        let node_id: [u8; 64] = {
-            let encoded = vk.to_encoded_point(false);
-            let mut bytes = [0u8; 64];
-            bytes.copy_from_slice(&encoded.as_bytes()[1..65]);
-            bytes
-        };
+        let node_id = node_id_for(&key);
         let hint: Vec<u8> = node_id.to_vec();
 
         let root_issuer_id = vec![1, 2, 3];

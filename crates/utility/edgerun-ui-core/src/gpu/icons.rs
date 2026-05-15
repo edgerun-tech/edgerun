@@ -53,6 +53,7 @@ pub enum UiIcon {
     Key,
     Lock,
     Menu,
+    MessagePlus,
     Network,
     Route,
     Search,
@@ -64,6 +65,7 @@ pub enum UiIcon {
     Storage,
     Terminal,
     Trust,
+    Trash,
     User,
     Wallet,
     Warning,
@@ -87,6 +89,7 @@ impl UiIcon {
             Self::Key => "key",
             Self::Lock => "lock",
             Self::Menu => "menu",
+            Self::MessagePlus => "message-plus",
             Self::Network => "network",
             Self::Route => "route",
             Self::Search => "search",
@@ -98,6 +101,7 @@ impl UiIcon {
             Self::Storage => "storage",
             Self::Terminal => "terminal",
             Self::Trust => "trust",
+            Self::Trash => "trash",
             Self::User => "user",
             Self::Wallet => "wallet",
             Self::Warning => "warning",
@@ -149,16 +153,18 @@ impl UiIcon {
             Self::Key => "key",
             Self::Lock => "lock",
             Self::Menu => "menu-2",
+            Self::MessagePlus => "message-plus",
             Self::Network => "network",
             Self::Route => "route",
             Self::Search => "search",
-            Self::Send => "send",
+            Self::Send => "arrow-up",
             Self::Server => "server",
             Self::Settings => "settings",
             Self::Shield | Self::Trust => "shield-check",
             Self::Sparkles => "sparkles",
             Self::Terminal => "terminal-2",
             Self::User => "user",
+            Self::Trash => "trash",
             Self::Wallet => "wallet",
             Self::Warning => "alert-triangle",
             Self::X => "x",
@@ -181,16 +187,18 @@ impl UiIcon {
             Self::Key => "key",
             Self::Lock => "lock",
             Self::Menu => "menu",
+            Self::MessagePlus => "message-circle-plus",
             Self::Network => "network",
             Self::Route => "route",
             Self::Search => "search",
-            Self::Send => "send",
+            Self::Send => "arrow-up",
             Self::Server => "server",
             Self::Settings => "settings",
             Self::Shield | Self::Trust => "shield-check",
             Self::Sparkles => "sparkles",
             Self::Terminal => "square-terminal",
             Self::User => "user",
+            Self::Trash => "trash-2",
             Self::Wallet => "wallet",
             Self::Warning => "triangle-alert",
             Self::X => "x",
@@ -214,12 +222,14 @@ pub(super) fn draw_canonical_icon(scene: &mut GpuScene, rect: UiRect, icon: UiIc
             icon_line(scene, p(5.0, 12.5), p(10.0, 17.0), stroke, color);
             icon_line(scene, p(10.0, 17.0), p(20.0, 7.0), stroke, color);
         }
-        UiIcon::ChevronRight | UiIcon::Send => {
+        UiIcon::ChevronRight => {
             icon_line(scene, p(8.0, 5.0), p(16.0, 12.0), stroke, color);
             icon_line(scene, p(16.0, 12.0), p(8.0, 19.0), stroke, color);
-            if icon == UiIcon::Send {
-                icon_line(scene, p(4.0, 12.0), p(16.0, 12.0), stroke, color);
-            }
+        }
+        UiIcon::Send => {
+            icon_line(scene, p(12.0, 5.0), p(12.0, 19.0), stroke, color);
+            icon_line(scene, p(12.0, 5.0), p(6.5, 10.5), stroke, color);
+            icon_line(scene, p(12.0, 5.0), p(17.5, 10.5), stroke, color);
         }
         UiIcon::Menu => {
             for y in [7.0, 12.0, 17.0] {
@@ -380,8 +390,24 @@ pub(super) fn draw_canonical_icon(scene: &mut GpuScene, rect: UiRect, icon: UiIc
         | UiIcon::Settings
         | UiIcon::Activity
         | UiIcon::Chat
+        | UiIcon::MessagePlus
         | UiIcon::Sparkles => {
             draw_symbolic_icon(scene, rect, icon, color, stroke);
+        }
+        UiIcon::Trash => {
+            icon_line(scene, p(5.0, 7.0), p(19.0, 7.0), stroke, color);
+            icon_line(scene, p(10.0, 4.0), p(14.0, 4.0), stroke, color);
+            icon_line(scene, p(9.0, 4.0), p(15.0, 4.0), stroke, color);
+            scene.push_rect(GpuRect::border(
+                ox + size * 6.0 / 24.0,
+                oy + size * 7.0 / 24.0,
+                size * 12.0 / 24.0,
+                size * 13.0 / 24.0,
+                size * 1.5 / 24.0,
+                color,
+            ));
+            icon_line(scene, p(10.0, 11.0), p(10.0, 17.0), stroke * 0.65, color);
+            icon_line(scene, p(14.0, 11.0), p(14.0, 17.0), stroke * 0.65, color);
         }
     }
 }
@@ -434,6 +460,19 @@ fn draw_symbolic_icon(
                 color,
             ));
             icon_line(scene, p(9.0, 17.0), p(6.0, 21.0), stroke, color);
+        }
+        UiIcon::MessagePlus => {
+            scene.push_rect(GpuRect::border(
+                ox + size * 4.0 / 24.0,
+                oy + size * 5.0 / 24.0,
+                size * 16.0 / 24.0,
+                size * 12.0 / 24.0,
+                size * 4.0 / 24.0,
+                color,
+            ));
+            icon_line(scene, p(9.0, 17.0), p(6.0, 21.0), stroke, color);
+            icon_line(scene, p(12.0, 8.5), p(12.0, 13.5), stroke, color);
+            icon_line(scene, p(9.5, 11.0), p(14.5, 11.0), stroke, color);
         }
         UiIcon::Eye => {
             icon_ellipse(

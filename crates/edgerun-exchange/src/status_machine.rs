@@ -3,7 +3,7 @@
 //! Wraps the wallet status machine with order-specific logic.
 //! Order status is derived from events, not from mutable provider status.
 
-use edgerun_wallet::{can_transition, is_terminal, CanonicalOrderStatus, WalletError};
+use edgerun_wallet::{CanonicalOrderStatus, WalletError, can_transition, is_terminal};
 
 /// Status machine for exchange orders.
 #[derive(Debug, Default)]

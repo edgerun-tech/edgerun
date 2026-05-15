@@ -30,7 +30,6 @@ NATIVE_ONLY_DEPS = {
     "rustls-pki-types",
     "landlock",
     "seccompiler",
-    "edgerun-zstd",
 }
 
 HEAVY_DEPS = {

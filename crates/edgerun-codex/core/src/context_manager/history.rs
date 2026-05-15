@@ -3,7 +3,6 @@ use crate::event_mapping::has_non_contextual_dev_message_content;
 use crate::event_mapping::is_contextual_dev_message_content;
 use crate::event_mapping::is_contextual_user_message_content;
 use crate::session::turn_context::TurnContext;
-use edgerun_encoding::base64::standard_decode;
 use codex_protocol::models::BaseInstructions;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::FunctionCallOutputBody;
@@ -24,6 +23,7 @@ use codex_utils_output_truncation::approx_token_count;
 use codex_utils_output_truncation::approx_tokens_from_byte_count_i64;
 use codex_utils_output_truncation::truncate_function_output_items_with_policy;
 use codex_utils_output_truncation::truncate_text;
+use edgerun_encoding::base64::standard_decode;
 use std::num::NonZeroUsize;
 use std::ops::Deref;
 use std::sync::LazyLock;
@@ -541,7 +541,7 @@ pub(crate) fn estimate_response_item_model_visible_bytes(item: &ResponseItem) ->
             encrypted_content: Some(content),
         } => i64::try_from(estimate_reasoning_length(content.len())).unwrap_or(i64::MAX),
         item => {
-            let raw = edgerun_json::to_string(item)
+            let raw = edgerun_json::to_json_string(item)
                 .map(|serialized| i64::try_from(serialized.len()).unwrap_or(i64::MAX))
                 .unwrap_or_default();
             let (payload_bytes, replacement_bytes) = image_data_url_estimate_adjustment(item);

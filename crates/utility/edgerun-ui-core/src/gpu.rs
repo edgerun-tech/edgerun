@@ -24,6 +24,7 @@ mod extracted_system;
 #[cfg(all(feature = "gpu-gl", not(target_arch = "wasm32")))]
 pub mod gl;
 mod icons;
+mod initial_setup_ui;
 mod node;
 mod paint;
 mod painter;
@@ -32,6 +33,8 @@ mod preset_code;
 mod primitives;
 mod runtime;
 mod scene;
+#[cfg(all(feature = "sdl", not(target_arch = "wasm32")))]
+pub mod sdl;
 mod shadcn_demo_catalog;
 mod shadcn_demo_preview;
 mod shadcn_events;
@@ -47,14 +50,18 @@ mod theme;
 pub mod webgl2;
 mod workspace;
 pub use accessibility::{
-    accessibility_tree, accessibility_tree_with_state, UiA11yNode, UiA11yRole, UiA11yState,
+    UiA11yNode, UiA11yRole, UiA11yState, accessibility_tree, accessibility_tree_with_state,
 };
 pub use app_registry::{
-    app_spec, app_spec_for_launch_id, UiAppPlacement, UiAppSpec, CAPABILITY_REQUEST_APP_ID,
-    CHAT_APP_ID, COMPONENT_GALLERY_APP_ID, EDGERUN_APP_REGISTRY, LAUNCH_CAPABILITY_REQUEST_ITEM_ID,
-    LAUNCH_CHAT_ITEM_ID, LAUNCH_COMPONENT_GALLERY_ITEM_ID, LAUNCH_LOCK_SCREEN_ITEM_ID,
-    LAUNCH_STORAGE_ITEM_ID, LAUNCH_TRUST_MANAGER_ITEM_ID, LOCK_SCREEN_APP_ID,
-    SHELL_LAUNCHER_BUTTON_ID, STORAGE_APP_ID, TRUST_MANAGER_APP_ID,
+    CAPABILITY_REQUEST_APP_ID, CHAT_APP_ID, COMPONENT_GALLERY_APP_ID, EDGERUN_APP_REGISTRY,
+    LAUNCH_CAPABILITY_REQUEST_ITEM_ID, LAUNCH_CHAT_ITEM_ID, LAUNCH_COMPONENT_GALLERY_ITEM_ID,
+    LAUNCH_LOCK_SCREEN_ITEM_ID, LAUNCH_STORAGE_ITEM_ID, LAUNCH_TRUST_MANAGER_ITEM_ID,
+    LOCK_SCREEN_APP_ID, SHELL_LAUNCHER_BUTTON_ID, STORAGE_APP_ID, TRUST_MANAGER_APP_ID,
+    UiAppPlacement, UiAppSpec, app_spec, app_spec_for_launch_id,
+};
+pub use apps::{
+    CAPABILITY_ALLOW_BUTTON_ID, CAPABILITY_DENY_BUTTON_ID, CAPABILITY_DETAILS_BUTTON_ID,
+    LOCK_UNLOCK_BUTTON_ID, LOCK_UNLOCK_FIELD_ID, build_unified_chat_shell,
 };
 #[cfg(feature = "fontdue-text")]
 pub use apps::{
@@ -63,52 +70,55 @@ pub use apps::{
     build_edgerun_workspace_with_shell_with_font, build_unified_chat_shell_with_font,
     build_unified_chat_shell_with_font_and_runtime,
 };
-pub use apps::{
-    build_unified_chat_shell, CAPABILITY_ALLOW_BUTTON_ID, CAPABILITY_DENY_BUTTON_ID,
-    CAPABILITY_DETAILS_BUTTON_ID, LOCK_UNLOCK_BUTTON_ID, LOCK_UNLOCK_FIELD_ID,
-};
 #[cfg(test)]
 use apps::{render_capability_request_app, render_component_gallery_app, render_lock_screen_app};
 pub use component_inventory::{
+    EXTRACTED_COMPONENT_KINDS, EXTRACTED_COMPONENTS, EXTRACTED_PATTERN_KINDS, EXTRACTED_PATTERNS,
+    EXTRACTED_SLOTS, EXTRACTED_SOURCE_ICONS, EXTRACTED_STATE_KINDS, EXTRACTED_STATES,
     UiExtractedComponentKind, UiExtractedComponentSpec, UiExtractedIconSpec,
     UiExtractedPatternKind, UiExtractedPatternSpec, UiExtractedSlotSpec, UiExtractedStateKind,
-    UiExtractedStateSpec, EXTRACTED_COMPONENTS, EXTRACTED_COMPONENT_KINDS, EXTRACTED_PATTERNS,
-    EXTRACTED_PATTERN_KINDS, EXTRACTED_SLOTS, EXTRACTED_SOURCE_ICONS, EXTRACTED_STATES,
-    EXTRACTED_STATE_KINDS,
+    UiExtractedStateSpec,
 };
 pub use components::{
-    bar_chart, control_row, field, menu_item, metric_card, panel_header, slider, text_area,
-    transaction_row, BarChart, ControlAccessory, ControlRow, Field, MenuItem, MetricCard,
-    PanelHeader, Slider, TextArea, TransactionRow, UiGrid, UiStack,
+    BarChart, ControlAccessory, ControlRow, Field, MenuItem, MetricCard, PanelHeader, Slider,
+    TextArea, TransactionRow, UiGrid, UiStack, bar_chart, control_row, field, menu_item,
+    metric_card, panel_header, slider, text_area, transaction_row,
 };
 pub use extracted_blocks::{
-    build_extracted_block, component_studio, data_feedback_block, directory_block, finance_block,
-    input_group_block, network_app_block, overlay_selection_block, style_authority_panel,
-    style_family_picker_block, trust_activity_block, UiExtractedBlockId, UiExtractedBlockKind,
-    UiExtractedBlockSpec, EXTRACTED_BLOCKS, EXTRACTED_BLOCK_IDS, EXTRACTED_BLOCK_KINDS,
-    EXTRACTED_ICON_LIBRARY,
+    EXTRACTED_BLOCK_IDS, EXTRACTED_BLOCK_KINDS, EXTRACTED_BLOCKS, EXTRACTED_ICON_LIBRARY,
+    UiExtractedBlockId, UiExtractedBlockKind, UiExtractedBlockSpec, build_extracted_block,
+    component_studio, data_feedback_block, directory_block, finance_block, input_group_block,
+    network_app_block, overlay_selection_block, style_authority_panel, style_family_picker_block,
+    trust_activity_block,
 };
 pub use extracted_system::{
-    UiExtractedBlockKindSummary, UiExtractedCatalogCounts, UiExtractedComponentKindSummary,
-    UiExtractedCoverageReport, UiExtractedDesignSystem, UiExtractedInventoryKind,
-    UiExtractedInventorySection, UiExtractedPatternKindSummary, UiExtractedPatternReferenceReport,
-    UiExtractedStateKindSummary, UiExtractedStyleTokenKindSummary, UiExtractedWorkItem,
-    UiExtractedWorkItemKind, UiShadcnCompatibilityReport, UiShadcnDemoCategorySummary,
-    UiShadcnDemoStatusSummary, EDGERUN_EXTRACTED_UI_SYSTEM, EXTRACTED_INVENTORY_KINDS,
+    EDGERUN_EXTRACTED_UI_SYSTEM, EXTRACTED_INVENTORY_KINDS, UiExtractedBlockKindSummary,
+    UiExtractedCatalogCounts, UiExtractedComponentKindSummary, UiExtractedCoverageReport,
+    UiExtractedDesignSystem, UiExtractedInventoryKind, UiExtractedInventorySection,
+    UiExtractedPatternKindSummary, UiExtractedPatternReferenceReport, UiExtractedStateKindSummary,
+    UiExtractedStyleTokenKindSummary, UiExtractedWorkItem, UiExtractedWorkItemKind,
+    UiShadcnCompatibilityReport, UiShadcnDemoCategorySummary, UiShadcnDemoStatusSummary,
 };
-use icons::{draw_canonical_icon, icon_circle, icon_line};
-#[cfg(feature = "tabler-svg-atlas")]
-pub use icons::{tabler_svg_icon_atlas, UiIconAtlas};
 pub use icons::{UiIcon, UiIconAtlasRect, UiIconSet};
+#[cfg(feature = "tabler-svg-atlas")]
+pub use icons::{UiIconAtlas, tabler_svg_icon_atlas};
+use icons::{draw_canonical_icon, icon_circle, icon_line};
+pub use initial_setup_ui::{
+    INITIAL_SETUP_CONFIRM_FIELD_ID, INITIAL_SETUP_CREATE_BUTTON_ID,
+    INITIAL_SETUP_PASSWORD_FIELD_ID, InitialSetupUiIntent, InitialSetupUiState,
+    YUBIKEY_GRANT_PIN_FIELD_ID, YUBIKEY_GRANT_SIGN_BUTTON_ID, YubiKeyGrantCeremonyIntent,
+    YubiKeyGrantCeremonyState, build_initial_setup_surface, build_yubikey_grant_ceremony_surface,
+};
 pub use node::{
-    app_launcher_item, attachment_preview, avatar_node, badge, bar_chart_labels, bar_chart_node,
-    breadcrumb, button, capability_grant_row, card, checkbox, column, command_palette,
-    contact_card, control_row_node, dialog, divider, empty_state, field_node, grid, grid_auto,
-    grid_auto_for_width, header, icon, icon_button, identity_card, list_row_node, menu_item_node,
-    metric, package_card, progress_bar_node, progress_ring, proof_event_row, radio, receipt_row,
-    route_path, row, scroll_area, section, select_node, skeleton, slider_node, spacer, tab_labels,
-    table_labels, tabs_node, text, text_area_node, thread_row, toast, toggle_node, tooltip,
-    transaction_node, tree_item, UiNode, UiNodeKind,
+    UiLayoutIssue, UiNode, UiNodeKind, UiResolvedLayout, app_launcher_item, attachment_preview,
+    avatar_node, badge, bar_chart_labels, bar_chart_node, breadcrumb, button, capability_grant_row,
+    card, checkbox, column, command_palette, contact_card, control_row_node, dialog, divider,
+    empty_state, field_node, grid, grid_auto, grid_auto_for_width, header, icon, icon_button,
+    identity_card, list_row_node, menu_item_node, metric, package_card, progress_bar_node,
+    progress_ring, proof_event_row, radio, receipt_row, route_path, row, scroll_area,
+    scroll_area_px, section, select_node, skeleton, slider_node, spacer, tab_labels, table_labels,
+    tabs_node, text, text_area_node, thread_row, toast, toggle_node, tooltip, transaction_node,
+    tree_item,
 };
 use paint::{
     component_label_width, contact_initial, draw_contact_row, draw_message, draw_pill, panel,
@@ -116,59 +126,68 @@ use paint::{
 };
 pub use painter::UiPainter;
 pub use preset_code::{
-    decode_preset_code, encode_preset_code, is_preset_code, preset_recipe_for_style_family,
-    UiPresetRecipe, PRESET_CODE_ALPHABET,
+    PRESET_CODE_ALPHABET, UiPresetRecipe, decode_preset_code, encode_preset_code, is_preset_code,
+    preset_recipe_for_style_family,
 };
 pub use primitives::{
     ButtonStyle, UiControlAccessory, UiRect, UiWorkProjection, UnifiedChatState, UnifiedContact,
     UnifiedContactKind, UnifiedMessage,
 };
-pub use runtime::{GpuHit, HitKind, UiAction, UiEvent, UiKey, UiRuntimeState};
+pub use runtime::{
+    GpuHit, HitKind, UiAction, UiEvent, UiKey, UiKeyModifiers, UiRuntimeState, UiTextBuffer,
+    UiTextBufferAction,
+};
+#[cfg(feature = "tabler-svg-atlas")]
+pub use scene::IconQuad;
 pub use scene::{Color4, GpuClip, GpuRect, GpuScene, RectMode, UiColorScheme};
 pub use shadcn_demo_catalog::{
-    find_shadcn_demo_by_slug, find_shadcn_demo_by_source_component, resolve_shadcn_demo_identifier,
-    shadcn_components_missing_parity_contract, shadcn_demos_by_category,
-    shadcn_demos_by_edge_builder, shadcn_demos_using_slot, shadcn_demos_using_state,
-    shadcn_exact_demo_count, shadcn_exact_parity_count, shadcn_native_demo_count,
-    shadcn_parity_contract_for_slug, shadcn_port_manifest, shadcn_port_mapping_for_identifier,
-    UiShadcnDemoCategory, UiShadcnDemoSpec, UiShadcnDemoStatus, UiShadcnParityContract,
-    UiShadcnPortCategorySummary, UiShadcnPortManifest, UiShadcnPortMapping,
-    UiShadcnPortStatusSummary, UiShadcnResolveKind, UiShadcnResolvedDemo, SHADCN_DEMO_CATEGORIES,
-    SHADCN_DEMO_COMPONENTS, SHADCN_DEMO_STATUSES,
+    SHADCN_DEMO_CATEGORIES, SHADCN_DEMO_COMPONENTS, SHADCN_DEMO_STATUSES, UiShadcnDemoCategory,
+    UiShadcnDemoSpec, UiShadcnDemoStatus, UiShadcnParityContract, UiShadcnPortCategorySummary,
+    UiShadcnPortManifest, UiShadcnPortMapping, UiShadcnPortStatusSummary, UiShadcnResolveKind,
+    UiShadcnResolvedDemo, find_shadcn_demo_by_slug, find_shadcn_demo_by_source_component,
+    resolve_shadcn_demo_identifier, shadcn_components_missing_parity_contract,
+    shadcn_demos_by_category, shadcn_demos_by_edge_builder, shadcn_demos_using_slot,
+    shadcn_demos_using_state, shadcn_exact_demo_count, shadcn_exact_parity_count,
+    shadcn_native_demo_count, shadcn_parity_contract_for_slug, shadcn_port_manifest,
+    shadcn_port_mapping_for_identifier,
 };
 pub use shadcn_demo_preview::{
-    build_shadcn_component_preview, build_shadcn_component_preview_by_identifier,
+    SHADCN_DEMO_PREVIEW_BASE_ID, build_shadcn_component_preview,
+    build_shadcn_component_preview_by_identifier,
     build_shadcn_component_preview_by_source_component, build_shadcn_demo_gallery,
     build_shadcn_demo_preview, build_shadcn_demo_preview_by_identifier,
-    SHADCN_DEMO_PREVIEW_BASE_ID,
 };
 pub use shadcn_events::{
-    shadcn_event_from_action, shadcn_event_from_action_with_context, UiShadcnEvent,
-    UiShadcnEventContext, UiShadcnEventValue,
+    UiShadcnEvent, UiShadcnEventContext, UiShadcnEventValue, shadcn_event_from_action,
+    shadcn_event_from_action_with_context,
 };
 pub use shadcn_exact::{
-    shadcn_accordion, shadcn_alert, shadcn_alert_dialog, shadcn_aspect_ratio, shadcn_avatar,
-    shadcn_badge, shadcn_breadcrumb, shadcn_button, shadcn_button_group, shadcn_calendar,
-    shadcn_card, shadcn_carousel, shadcn_chart, shadcn_checkbox, shadcn_collapsible,
-    shadcn_combobox, shadcn_command, shadcn_context_menu, shadcn_data_table, shadcn_date_picker,
-    shadcn_dialog, shadcn_direction, shadcn_drawer, shadcn_dropdown_menu, shadcn_empty,
-    shadcn_field, shadcn_hover_card, shadcn_input, shadcn_input_group, shadcn_input_otp,
-    shadcn_item, shadcn_kbd, shadcn_label, shadcn_menubar, shadcn_native_select,
-    shadcn_navigation_menu, shadcn_pagination, shadcn_popover, shadcn_progress, shadcn_radio_group,
-    shadcn_resizable, shadcn_scroll_area, shadcn_select, shadcn_separator, shadcn_sheet,
-    shadcn_sidebar, shadcn_skeleton, shadcn_slider, shadcn_sonner, shadcn_switch, shadcn_table,
-    shadcn_tabs, shadcn_textarea, shadcn_toast, shadcn_toggle, shadcn_toggle_group, shadcn_tooltip,
-    UiShadcnBadgeVariant, UiShadcnButtonSize, UiShadcnButtonVariant,
+    UiShadcnActivity, UiShadcnBadgeVariant, UiShadcnButtonSize, UiShadcnButtonVariant,
+    UiShadcnChatClientAction, UiShadcnChatClientIconAction, UiShadcnChatClientSpec,
+    UiShadcnChatRole, UiShadcnComposerNotice, UiShadcnConversationMessage, UiShadcnSessionRow,
+    UiShadcnSessionState, UiShadcnStatusTone, shadcn_accordion, shadcn_alert, shadcn_alert_dialog,
+    shadcn_aspect_ratio, shadcn_avatar, shadcn_badge, shadcn_breadcrumb, shadcn_button,
+    shadcn_button_group, shadcn_calendar, shadcn_card, shadcn_carousel, shadcn_chart,
+    shadcn_chat_client, shadcn_chat_client_shell, shadcn_chat_message, shadcn_checkbox,
+    shadcn_collapsible, shadcn_combobox, shadcn_command, shadcn_context_menu, shadcn_conversation,
+    shadcn_data_table, shadcn_date_picker, shadcn_dialog, shadcn_direction, shadcn_drawer,
+    shadcn_dropdown_menu, shadcn_empty, shadcn_field, shadcn_hover_card, shadcn_input,
+    shadcn_input_group, shadcn_input_otp, shadcn_item, shadcn_kbd, shadcn_label, shadcn_menubar,
+    shadcn_native_select, shadcn_navigation_menu, shadcn_pagination, shadcn_popover,
+    shadcn_progress, shadcn_prompt_composer, shadcn_radio_group, shadcn_resizable,
+    shadcn_scroll_area, shadcn_select, shadcn_separator, shadcn_session_sidebar, shadcn_sheet,
+    shadcn_sidebar, shadcn_skeleton, shadcn_slider, shadcn_sonner, shadcn_status_header,
+    shadcn_switch, shadcn_table, shadcn_tabs, shadcn_textarea, shadcn_toast, shadcn_toggle,
+    shadcn_toggle_group, shadcn_tooltip,
 };
+#[cfg(feature = "fontdue-text")]
+pub use shadcn_exact::{shadcn_chat_message_height, shadcn_chat_message_height_for_role};
 pub use shadcn_props::{
-    resolve_shadcn_props_surface, shadcn_event_adapted_props_surfaces, shadcn_props_surface_count,
-    shadcn_props_surface_for_slug, shadcn_props_surface_for_source_component,
-    shadcn_props_surface_summary, shadcn_resolved_props_surfaces, shadcn_stateful_props_surfaces,
-    shadcn_static_props_surfaces, UiShadcnAccordionProps, UiShadcnAlertDialogProps,
-    UiShadcnAlertProps, UiShadcnAspectRatioProps, UiShadcnAvatarProps, UiShadcnBadgeProps,
-    UiShadcnBreadcrumbProps, UiShadcnButtonGroupProps, UiShadcnButtonProps, UiShadcnCalendarProps,
-    UiShadcnCardProps, UiShadcnCarouselProps, UiShadcnChartProps, UiShadcnCheckboxProps,
-    UiShadcnCollapsibleProps, UiShadcnComboboxProps, UiShadcnCommandProps,
+    SHADCN_PROPS_SURFACE_MANIFEST, SHADCN_PROPS_SURFACES, UiShadcnAccordionProps,
+    UiShadcnAlertDialogProps, UiShadcnAlertProps, UiShadcnAspectRatioProps, UiShadcnAvatarProps,
+    UiShadcnBadgeProps, UiShadcnBreadcrumbProps, UiShadcnButtonGroupProps, UiShadcnButtonProps,
+    UiShadcnCalendarProps, UiShadcnCardProps, UiShadcnCarouselProps, UiShadcnChartProps,
+    UiShadcnCheckboxProps, UiShadcnCollapsibleProps, UiShadcnComboboxProps, UiShadcnCommandProps,
     UiShadcnContextMenuProps, UiShadcnDataTableProps, UiShadcnDatePickerProps, UiShadcnDialogProps,
     UiShadcnDirectionProps, UiShadcnDrawerProps, UiShadcnDropdownMenuProps, UiShadcnEmptyProps,
     UiShadcnFieldProps, UiShadcnHoverCardProps, UiShadcnInputGroupProps, UiShadcnInputOtpProps,
@@ -181,23 +200,26 @@ pub use shadcn_props::{
     UiShadcnSheetProps, UiShadcnSidebarProps, UiShadcnSkeletonProps, UiShadcnSliderProps,
     UiShadcnSonnerProps, UiShadcnSwitchProps, UiShadcnTableProps, UiShadcnTabsProps,
     UiShadcnTextareaProps, UiShadcnToastProps, UiShadcnToggleGroupProps, UiShadcnToggleProps,
-    UiShadcnTooltipProps, SHADCN_PROPS_SURFACES, SHADCN_PROPS_SURFACE_MANIFEST,
+    UiShadcnTooltipProps, resolve_shadcn_props_surface, shadcn_event_adapted_props_surfaces,
+    shadcn_props_surface_count, shadcn_props_surface_for_slug,
+    shadcn_props_surface_for_source_component, shadcn_props_surface_summary,
+    shadcn_resolved_props_surfaces, shadcn_stateful_props_surfaces, shadcn_static_props_surfaces,
 };
 #[cfg(any(feature = "fontdue-text", test))]
 use shell::render_edgerun_shell_overlay;
 pub use shell::{UiShellAction, UiShellState};
-pub use source_captures::{UiExtractedSourceCapture, EXTRACTED_SOURCE_CAPTURES};
+pub use source_captures::{EXTRACTED_SOURCE_CAPTURES, UiExtractedSourceCapture};
 pub use style::{AlignItems, Axis, JustifyContent, UiColorToken, UiStyle, UiStyleColor};
 pub use style_family::{
-    colors_for_style_family, UiExtractedStyleToken, UiExtractedStyleTokenKind, UiStyleFamilySpec,
-    EXTRACTED_STYLE_TOKENS, EXTRACTED_STYLE_TOKEN_KINDS, STYLE_FAMILY_SPECS,
+    EXTRACTED_STYLE_TOKEN_KINDS, EXTRACTED_STYLE_TOKENS, STYLE_FAMILY_SPECS, UiExtractedStyleToken,
+    UiExtractedStyleTokenKind, UiStyleFamilySpec, colors_for_style_family,
 };
 #[cfg(feature = "fontdue-text")]
 pub use text::{FontAtlas, TextQuad};
 pub use theme::{
-    accent_color, style_family_from_name, UiAccentPreset, UiComponentPreviewState, UiDensity,
-    UiRadiusPreset, UiRadiusScale, UiResolvedTheme, UiSemanticColors, UiStyleAuthority,
-    UiStyleFamily, UiStylePreset, UI_STYLE_FAMILIES,
+    UI_STYLE_FAMILIES, UiAccentPreset, UiComponentPreviewState, UiDensity, UiRadiusPreset,
+    UiRadiusScale, UiResolvedTheme, UiSemanticColors, UiStyleAuthority, UiStyleFamily,
+    UiStylePreset, accent_color, style_family_from_name,
 };
 #[cfg(test)]
 use workspace::WORKSPACE_CHROME_H;
@@ -263,22 +285,30 @@ mod tests {
         }
 
         assert!(scene.rects().len() > 20);
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::Tab && hit.id == 81));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::ListRow && hit.id == 83));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::Toggle && hit.id == 84));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::ListRow && hit.id == 85));
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Tab && hit.id == 81)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::ListRow && hit.id == 83)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Toggle && hit.id == 84)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::ListRow && hit.id == 85)
+        );
     }
 
     #[test]
@@ -337,18 +367,24 @@ mod tests {
         }
 
         assert!(scene.rects().len() > 25);
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::Toggle && hit.id == 68));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::Button && hit.id == 69));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::Button && hit.id == 70));
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Toggle && hit.id == 68)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Button && hit.id == 69)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Button && hit.id == 70)
+        );
     }
 
     #[test]
@@ -437,23 +473,31 @@ mod tests {
             .filter(|hit| hit.kind == HitKind::ListRow)
             .count();
         assert!((1..10).contains(&visible_rows));
-        assert!(!scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::ListRow && hit.id == 100));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::ListRow && hit.id == 109));
-        assert!(scene
-            .hits()
-            .iter()
-            .filter(|hit| hit.kind == HitKind::ListRow)
-            .all(|hit| hit.y >= 8.0 && hit.y + hit.h <= 152.0));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::Scrollbar && hit.id == 99));
+        assert!(
+            !scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::ListRow && hit.id == 100)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::ListRow && hit.id == 109)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .filter(|hit| hit.kind == HitKind::ListRow)
+                .all(|hit| hit.y >= 8.0 && hit.y + hit.h <= 152.0)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Scrollbar && hit.id == 99)
+        );
     }
 
     #[test]
@@ -562,14 +606,18 @@ mod tests {
                 .render_with_state(&mut ui, UiRect::new(0.0, 0.0, 320.0, 150.0), Some(&runtime));
         }
 
-        assert!(!scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::ListRow && hit.id == 130));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::ListRow && hit.id == 137));
+        assert!(
+            !scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::ListRow && hit.id == 130)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::ListRow && hit.id == 137)
+        );
     }
 
     #[test]
@@ -611,19 +659,25 @@ mod tests {
         let second = workspace.app(2).and_then(UiAppSurface::bounds).unwrap();
         assert!(first.x + first.w <= second.x);
         assert!(first.h <= 360.0 - WORKSPACE_CHROME_H);
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::WorkspaceTab && hit.id == 1));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::WorkspaceClose && hit.id == 2));
-        assert!(scene
-            .hits()
-            .iter()
-            .filter(|hit| hit.kind == HitKind::Button)
-            .all(|hit| hit.y >= WORKSPACE_CHROME_H));
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::WorkspaceTab && hit.id == 1)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::WorkspaceClose && hit.id == 2)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .filter(|hit| hit.kind == HitKind::Button)
+                .all(|hit| hit.y >= WORKSPACE_CHROME_H)
+        );
     }
 
     #[test]
@@ -651,22 +705,30 @@ mod tests {
             );
         }
 
-        assert!(scene
-            .rects()
-            .iter()
-            .any(|rect| rect.color == theme.colors.topbar && rect.radius == theme.radius.card));
-        assert!(scene
-            .rects()
-            .iter()
-            .any(|rect| rect.color == theme.colors.accent.with_alpha(0.68)));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::WorkspaceTab && hit.id == 7));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::Button && hit.id == 107));
+        assert!(
+            scene
+                .rects()
+                .iter()
+                .any(|rect| rect.color == theme.colors.topbar && rect.radius == theme.radius.card)
+        );
+        assert!(
+            scene
+                .rects()
+                .iter()
+                .any(|rect| rect.color == theme.colors.accent.with_alpha(0.68))
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::WorkspaceTab && hit.id == 7)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Button && hit.id == 107)
+        );
     }
 
     #[test]
@@ -708,9 +770,11 @@ mod tests {
                 action: UiAction::Toggled { id: 55, on: true }
             }
         );
-        assert!(workspace
-            .app(7)
-            .is_some_and(|app| app.runtime.toggle_value(55, false)));
+        assert!(
+            workspace
+                .app(7)
+                .is_some_and(|app| app.runtime.toggle_value(55, false))
+        );
     }
 
     #[test]
@@ -777,10 +841,12 @@ mod tests {
             render_edgerun_shell_overlay(&mut ui, UiRect::new(0.0, 0.0, 900.0, 600.0), &mut shell);
         }
 
-        assert!(scene
-            .rects()
-            .iter()
-            .any(|rect| rect.color == theme.colors.topbar));
+        assert!(
+            scene
+                .rects()
+                .iter()
+                .any(|rect| rect.color == theme.colors.topbar)
+        );
         let launcher_hit = scene
             .hits()
             .iter()
@@ -824,10 +890,12 @@ mod tests {
 
         let bounds = workspace.app(10).and_then(UiAppSurface::bounds).unwrap();
         assert_eq!(bounds, UiRect::new(0.0, 0.0, 640.0, 360.0));
-        assert!(!scene
-            .hits()
-            .iter()
-            .any(|hit| matches!(hit.kind, HitKind::WorkspaceTab | HitKind::WorkspaceClose)));
+        assert!(
+            !scene
+                .hits()
+                .iter()
+                .any(|hit| matches!(hit.kind, HitKind::WorkspaceTab | HitKind::WorkspaceClose))
+        );
     }
 
     #[test]
@@ -838,14 +906,18 @@ mod tests {
             let app = UiAppSurface::lock_screen(10);
             render_lock_screen_app(&mut ui, UiRect::new(0.0, 0.0, 800.0, 520.0), &app);
         }
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::Button && hit.id == LOCK_UNLOCK_BUTTON_ID));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::Input && hit.id == LOCK_UNLOCK_FIELD_ID));
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Button && hit.id == LOCK_UNLOCK_BUTTON_ID)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Input && hit.id == LOCK_UNLOCK_FIELD_ID)
+        );
 
         scene.clear_rects();
         {
@@ -853,14 +925,18 @@ mod tests {
             let app = UiAppSurface::capability_request(11);
             render_capability_request_app(&mut ui, UiRect::new(0.0, 0.0, 900.0, 620.0), &app);
         }
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::Button && hit.id == CAPABILITY_ALLOW_BUTTON_ID));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::Button && hit.id == CAPABILITY_DENY_BUTTON_ID));
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Button && hit.id == CAPABILITY_ALLOW_BUTTON_ID)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Button && hit.id == CAPABILITY_DENY_BUTTON_ID)
+        );
     }
 
     #[test]
@@ -1061,14 +1137,18 @@ mod tests {
         }
 
         assert_eq!(user_scene.hits(), author_scene.hits());
-        assert!(user_scene
-            .rects()
-            .iter()
-            .any(|rect| rect.color == user_theme.colors.accent));
-        assert!(author_scene
-            .rects()
-            .iter()
-            .any(|rect| rect.color == author_theme.colors.accent));
+        assert!(
+            user_scene
+                .rects()
+                .iter()
+                .any(|rect| rect.color == user_theme.colors.accent)
+        );
+        assert!(
+            author_scene
+                .rects()
+                .iter()
+                .any(|rect| rect.color == author_theme.colors.accent)
+        );
         assert_ne!(user_theme.colors.accent, author_theme.colors.accent);
     }
 
@@ -1111,22 +1191,30 @@ mod tests {
         }
 
         assert_eq!(user_scene.hits(), author_scene.hits());
-        assert!(user_scene
-            .rects()
-            .iter()
-            .any(|rect| rect.color == user_theme.colors.composer));
-        assert!(author_scene
-            .rects()
-            .iter()
-            .any(|rect| rect.color == author_theme.colors.composer));
-        assert!(user_scene
-            .rects()
-            .iter()
-            .any(|rect| rect.color == user_theme.colors.accent));
-        assert!(author_scene
-            .rects()
-            .iter()
-            .any(|rect| rect.color == author_theme.colors.accent));
+        assert!(
+            user_scene
+                .rects()
+                .iter()
+                .any(|rect| rect.color == user_theme.colors.composer)
+        );
+        assert!(
+            author_scene
+                .rects()
+                .iter()
+                .any(|rect| rect.color == author_theme.colors.composer)
+        );
+        assert!(
+            user_scene
+                .rects()
+                .iter()
+                .any(|rect| rect.color == user_theme.colors.accent)
+        );
+        assert!(
+            author_scene
+                .rects()
+                .iter()
+                .any(|rect| rect.color == author_theme.colors.accent)
+        );
     }
 
     #[test]
@@ -1151,22 +1239,30 @@ mod tests {
             app_tree.render(&mut ui, UiRect::new(0.0, 0.0, 180.0, 60.0));
         }
 
-        assert!(user_scene
-            .rects()
-            .iter()
-            .any(|rect| rect.color == user_theme.colors.panel));
-        assert!(author_scene
-            .rects()
-            .iter()
-            .any(|rect| rect.color == author_theme.colors.panel));
-        assert!(user_scene
-            .rects()
-            .iter()
-            .any(|rect| rect.color == user_theme.colors.accent));
-        assert!(author_scene
-            .rects()
-            .iter()
-            .any(|rect| rect.color == author_theme.colors.accent));
+        assert!(
+            user_scene
+                .rects()
+                .iter()
+                .any(|rect| rect.color == user_theme.colors.panel)
+        );
+        assert!(
+            author_scene
+                .rects()
+                .iter()
+                .any(|rect| rect.color == author_theme.colors.panel)
+        );
+        assert!(
+            user_scene
+                .rects()
+                .iter()
+                .any(|rect| rect.color == user_theme.colors.accent)
+        );
+        assert!(
+            author_scene
+                .rects()
+                .iter()
+                .any(|rect| rect.color == author_theme.colors.accent)
+        );
     }
 
     #[cfg(feature = "tabler-svg-atlas")]
@@ -1273,6 +1369,29 @@ mod tests {
     }
 
     #[test]
+    fn full_cross_axis_size_survives_non_stretch_alignment() {
+        let mut scene = GpuScene::new(palette::BG);
+        {
+            let mut ui = UiPainter::new(&mut scene);
+            row("bg-panel border rounded-md p-2 items-end")
+                .children([
+                    text_area_node("", "full height")
+                        .hit_id(82)
+                        .class("h-full flex-1"),
+                    icon_button(UiIcon::Send, 83).class("size-9"),
+                ])
+                .render(&mut ui, UiRect::new(0.0, 0.0, 360.0, 96.0));
+        }
+
+        let hit = scene
+            .hits()
+            .iter()
+            .find(|hit| hit.kind == HitKind::TextArea && hit.id == 82)
+            .expect("textarea hit");
+        assert!(hit.h > 70.0, "hit: {hit:?}");
+    }
+
+    #[test]
     fn column_children_stretch_by_default() {
         let mut scene = GpuScene::new(palette::BG);
         {
@@ -1323,6 +1442,79 @@ mod tests {
             UiIcon::Terminal.provider_name(UiIconSet::Lucide),
             "square-terminal"
         );
+        assert_eq!(
+            UiIcon::MessagePlus.provider_name(UiIconSet::Tabler),
+            "message-plus"
+        );
+        assert_eq!(UiIcon::Trash.provider_name(UiIconSet::Tabler), "trash");
+        assert_eq!(UiIcon::Send.provider_name(UiIconSet::Tabler), "arrow-up");
+    }
+
+    #[cfg(feature = "tabler-svg-atlas")]
+    #[test]
+    fn canonical_tabler_icons_have_svg_atlas_entries() {
+        let icons = [
+            UiIcon::Activity,
+            UiIcon::App,
+            UiIcon::Bell,
+            UiIcon::Chat,
+            UiIcon::Check,
+            UiIcon::ChevronRight,
+            UiIcon::Code,
+            UiIcon::Cpu,
+            UiIcon::Database,
+            UiIcon::Eye,
+            UiIcon::File,
+            UiIcon::Key,
+            UiIcon::Lock,
+            UiIcon::Menu,
+            UiIcon::MessagePlus,
+            UiIcon::Network,
+            UiIcon::Route,
+            UiIcon::Search,
+            UiIcon::Send,
+            UiIcon::Server,
+            UiIcon::Settings,
+            UiIcon::Shield,
+            UiIcon::Sparkles,
+            UiIcon::Storage,
+            UiIcon::Terminal,
+            UiIcon::Trust,
+            UiIcon::Trash,
+            UiIcon::User,
+            UiIcon::Wallet,
+            UiIcon::Warning,
+            UiIcon::X,
+        ];
+        for icon in icons {
+            assert!(
+                icon.tabler_svg_atlas_rect().is_some(),
+                "missing Tabler atlas entry for {} ({})",
+                icon.name(),
+                icon.provider_name(UiIconSet::Tabler)
+            );
+        }
+    }
+
+    #[cfg(feature = "tabler-svg-atlas")]
+    #[test]
+    fn icon_node_prefers_tabler_svg_atlas_quads() {
+        let mut scene = GpuScene::new(palette::BG);
+        {
+            let mut ui = UiPainter::new(&mut scene);
+            row("row gap-2")
+                .child(icon(UiIcon::MessagePlus).class("size-8"))
+                .child(icon_button(UiIcon::Trash, 91).class("size-8"))
+                .render(&mut ui, UiRect::new(0.0, 0.0, 120.0, 48.0));
+        }
+
+        assert!(scene.icon_quads().len() >= 2);
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Button && hit.id == 91)
+        );
     }
 
     #[test]
@@ -1336,11 +1528,16 @@ mod tests {
                 .render(&mut ui, UiRect::new(0.0, 0.0, 120.0, 48.0));
         }
 
+        #[cfg(feature = "tabler-svg-atlas")]
+        assert!(scene.icon_quads().len() >= 2);
+        #[cfg(not(feature = "tabler-svg-atlas"))]
         assert!(scene.rects().len() > 8);
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::Button && hit.id == 91));
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Button && hit.id == 91)
+        );
     }
 
     #[test]
@@ -1356,18 +1553,24 @@ mod tests {
                 .render(&mut ui, UiRect::new(0.0, 0.0, 360.0, 190.0));
         }
 
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::Checkbox && hit.id == 201));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::Radio && hit.id == 202));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::Select && hit.id == 203));
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Checkbox && hit.id == 201)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Radio && hit.id == 202)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Select && hit.id == 203)
+        );
 
         let mut runtime = UiRuntimeState::default();
         let down = runtime.handle_event(&scene, UiEvent::PointerDown { x: 18.0, y: 18.0 });
@@ -1438,22 +1641,30 @@ mod tests {
                 .render(&mut ui, UiRect::new(0.0, 0.0, 640.0, 420.0));
         }
 
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::Breadcrumb && hit.id == 302));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::Input && hit.id == 310));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::ListRow && hit.id == 320));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::TreeItem && hit.id == 331));
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Breadcrumb && hit.id == 302)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::Input && hit.id == 310)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::ListRow && hit.id == 320)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::TreeItem && hit.id == 331)
+        );
     }
 
     #[test]
@@ -1484,17 +1695,23 @@ mod tests {
                 .render(&mut ui, UiRect::new(0.0, 0.0, 760.0, 620.0));
         }
 
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::ListRow && hit.id == 400));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::ListRow && hit.id == 406));
-        assert!(scene
-            .hits()
-            .iter()
-            .any(|hit| hit.kind == HitKind::TransactionRow && hit.id == 407));
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::ListRow && hit.id == 400)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::ListRow && hit.id == 406)
+        );
+        assert!(
+            scene
+                .hits()
+                .iter()
+                .any(|hit| hit.kind == HitKind::TransactionRow && hit.id == 407)
+        );
     }
 }

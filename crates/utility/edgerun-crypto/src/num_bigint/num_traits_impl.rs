@@ -8,17 +8,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-// Need to explicitly bring the crate in for inherent float methods
-#[cfg(feature = "std")]
-extern crate std;
-
 use core::fmt as core_fmt;
 use core::num::Wrapping;
 use core::ops::{Add, Div, Mul, Rem, Sub};
 use core::ops::{AddAssign, DivAssign, MulAssign, RemAssign, SubAssign};
 
 pub use crate::num_bigint::bounds::Bounded;
-#[cfg(any(feature = "std", feature = "libm"))]
+#[cfg(feature = "std")]
 pub use crate::num_bigint::float::Float;
 pub use crate::num_bigint::float::FloatConst;
 // pub use real::{FloatCore, Real}; // NOTE: Don't do this, it breaks `use crate::num_bigint::*;`.
@@ -57,8 +53,6 @@ pub mod int;
 pub mod ops;
 #[path = "num_traits_impl/pow.rs"]
 pub mod pow;
-#[path = "num_traits_impl/real.rs"]
-pub mod real;
 #[path = "num_traits_impl/sign.rs"]
 pub mod sign;
 

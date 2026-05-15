@@ -4,7 +4,7 @@ use alloc::vec::Vec;
 
 use crate::sign::{ProtocolSignError, ProtocolSigner, ProtocolSigningOutput};
 use crate::verify::ProtocolFamily;
-use edgerun_core::crypto::{self, PrehashSigner, SigningKey};
+use edgerun_core::crypto::{self, SigningKey};
 use edgerun_core::protocol::{ProtocolRecord, Signature};
 
 #[derive(Clone)]
@@ -22,7 +22,7 @@ impl P256ProtocolSigner {
     }
 
     pub fn verifying_key(&self) -> crypto::VerifyingKey {
-        *self.signing_key.verifying_key()
+        self.signing_key.verifying_key()
     }
 
     pub fn raw_public_key(&self) -> [u8; crypto::ECDSA_P256_PUBLIC_KEY_LEN] {
@@ -54,11 +54,10 @@ impl ProtocolSigner for P256ProtocolSigner {
         _family: ProtocolFamily,
         signature_input: &[u8],
     ) -> Result<Vec<u8>, ProtocolSignError> {
-        let signature: crypto::Signature = self
-            .signing_key
-            .sign_prehash(signature_input)
-            .map_err(|_| ProtocolSignError::SignerFailed)?;
-        Ok(signature.to_bytes().to_vec())
+        self.signing_key
+            .sign_prehash_fixed(signature_input)
+            .map(|signature| signature.to_vec())
+            .map_err(|_| ProtocolSignError::SignerFailed)
     }
 }
 
@@ -86,7 +85,7 @@ mod tests {
 
     fn test_signing_key() -> SigningKey {
         let bytes: [u8; 32] = [9u8; 32];
-        SigningKey::from_bytes(&bytes.into()).unwrap()
+        SigningKey::from_bytes(&bytes).unwrap()
     }
 
     #[test]

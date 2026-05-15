@@ -18,9 +18,6 @@ use core::{
 };
 use generic_array::{GenericArray, typenum::Unsigned};
 
-#[cfg(feature = "elliptic_curve_serde")]
-use serdect::serde::{Deserialize, Serialize, de, ser};
-
 /// Non-zero scalar type.
 ///
 /// This type ensures that its value is not zero, ala `core::num::NonZero*`.
@@ -351,34 +348,6 @@ where
         } else {
             Err(Error)
         }
-    }
-}
-
-#[cfg(feature = "elliptic_curve_serde")]
-impl<C> Serialize for NonZeroScalar<C>
-where
-    C: CurveArithmetic,
-{
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: ser::Serializer,
-    {
-        ScalarPrimitive::from(self).serialize(serializer)
-    }
-}
-
-#[cfg(feature = "elliptic_curve_serde")]
-impl<'de, C> Deserialize<'de> for NonZeroScalar<C>
-where
-    C: CurveArithmetic,
-{
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: de::Deserializer<'de>,
-    {
-        let scalar = ScalarPrimitive::deserialize(deserializer)?;
-        Option::from(Self::new(scalar.into()))
-            .ok_or_else(|| de::Error::custom("expected non-zero scalar"))
     }
 }
 

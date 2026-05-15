@@ -1,443 +1,714 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "definitions": {
-    "ApprovalsReviewer": {
-      "description": "Configures who approval requests are routed to for review. Examples include sandbox escapes, blocked network access, MCP approval prompts, and ARC escalations. Defaults to `user`. `auto_review` uses a carefully prompted subagent to gather relevant context and apply a risk-based decision framework before approving or denying the request. The legacy value `guardian_subagent` is accepted for compatibility.",
-      "enum": [
-        "user",
-        "auto_review",
-        "guardian_subagent"
-      ],
-      "type": "string"
-    },
-    "AskForApproval": {
-      "oneOf": [
-        {
-          "enum": [
-            "untrusted",
-            "on-failure",
-            "on-request",
-            "never"
-          ],
-          "type": "string"
-        },
-        {
-          "additionalProperties": false,
-          "properties": {
-            "granular": {
-              "properties": {
-                "mcp_elicitations": {
-                  "type": "boolean"
-                },
-                "request_permissions": {
-                  "default": false,
-                  "type": "boolean"
-                },
-                "rules": {
-                  "type": "boolean"
-                },
-                "sandbox_approval": {
-                  "type": "boolean"
-                },
-                "skill_approval": {
-                  "default": false,
-                  "type": "boolean"
-                }
-              },
-              "required": [
-                "mcp_elicitations",
-                "rules",
-                "sandbox_approval"
-              ],
-              "type": "object"
-            }
-          },
-          "required": [
-            "granular"
-          ],
-          "title": "GranularAskForApproval",
-          "type": "object"
-        }
-      ]
-    },
-    "ConfigRequirements": {
+  "title": "ConfigRequirementsReadResponse",
+  "type": "object",
+  "properties": {
+    "requirements": {
+      "title": "ConfigRequirements",
+      "type": "object",
       "properties": {
-        "allowedApprovalPolicies": {
+        "allowedApprovalsReviewers": {
+          "type": "array",
           "items": {
-            "$ref": "#/definitions/AskForApproval"
-          },
-          "type": [
-            "array",
-            "null"
-          ]
-        },
-        "allowedSandboxModes": {
-          "items": {
-            "$ref": "#/definitions/SandboxMode"
-          },
-          "type": [
-            "array",
-            "null"
-          ]
+            "description": "Configures who approval requests are routed to for review. Examples include sandbox escapes, blocked network access, MCP approval prompts, and ARC escalations. Defaults to `user`. `auto_review` uses a carefully prompted subagent to gather relevant context and apply a risk-based decision framework before approving or denying the request. The legacy value `guardian_subagent` is accepted for compatibility.",
+            "type": "string",
+            "enum": [
+              "user",
+              "auto_review",
+              "guardian_subagent"
+            ]
+          }
         },
         "allowedWebSearchModes": {
+          "type": "array",
           "items": {
-            "$ref": "#/definitions/WebSearchMode"
-          },
-          "type": [
-            "array",
-            "null"
-          ]
+            "title": "WebSearchMode",
+            "type": "string",
+            "enum": [
+              "disabled",
+              "cached",
+              "live"
+            ]
+          }
         },
         "enforceResidency": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/ResidencyRequirement"
-            },
-            {
-              "type": "null"
-            }
+          "title": "ResidencyRequirement",
+          "type": "string",
+          "enum": [
+            "Us"
           ]
         },
         "featureRequirements": {
+          "type": "object",
           "additionalProperties": {
             "type": "boolean"
-          },
-          "type": [
-            "object",
-            "null"
-          ]
-        }
-      },
-      "type": "object"
-    },
-    "ConfiguredHookHandler": {
-      "oneOf": [
-        {
+          }
+        },
+        "hooks": {
+          "title": "ManagedHooksRequirements",
+          "type": "object",
           "properties": {
-            "async": {
+            "PostCompact": {
+              "type": "array",
+              "items": {
+                "title": "ConfiguredHookMatcherGroup",
+                "type": "object",
+                "properties": {
+                  "hooks": {
+                    "type": "array",
+                    "items": {
+                      "title": "ConfiguredHookHandler",
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "command": {
+                              "type": "string"
+                            },
+                            "r#async": {
+                              "type": "boolean"
+                            },
+                            "statusMessage": {
+                              "type": "string"
+                            },
+                            "timeoutSec": {
+                              "type": "integer"
+                            },
+                            "type": {
+                              "type": "string",
+                              "const": "command",
+                              "title": "Commandv2::ConfigRequirementsReadResponseType"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "command",
+                            "r#async"
+                          ],
+                          "additionalProperties": false,
+                          "title": "Commandv2::ConfigRequirementsReadResponse"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "prompt",
+                              "title": "Promptv2::ConfigRequirementsReadResponseType"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false,
+                          "title": "Promptv2::ConfigRequirementsReadResponse"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "agent",
+                              "title": "Agentv2::ConfigRequirementsReadResponseType"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false,
+                          "title": "Agentv2::ConfigRequirementsReadResponse"
+                        }
+                      ]
+                    }
+                  },
+                  "matcher": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "hooks"
+                ]
+              }
+            },
+            "PostToolUse": {
+              "type": "array",
+              "items": {
+                "title": "ConfiguredHookMatcherGroup",
+                "type": "object",
+                "properties": {
+                  "hooks": {
+                    "type": "array",
+                    "items": {
+                      "title": "ConfiguredHookHandler",
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "command": {
+                              "type": "string"
+                            },
+                            "r#async": {
+                              "type": "boolean"
+                            },
+                            "statusMessage": {
+                              "type": "string"
+                            },
+                            "timeoutSec": {
+                              "type": "integer"
+                            },
+                            "type": {
+                              "type": "string",
+                              "const": "command",
+                              "title": "Commandv2::ConfigRequirementsReadResponseType"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "command",
+                            "r#async"
+                          ],
+                          "additionalProperties": false,
+                          "title": "Commandv2::ConfigRequirementsReadResponse"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "prompt",
+                              "title": "Promptv2::ConfigRequirementsReadResponseType"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false,
+                          "title": "Promptv2::ConfigRequirementsReadResponse"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "agent",
+                              "title": "Agentv2::ConfigRequirementsReadResponseType"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false,
+                          "title": "Agentv2::ConfigRequirementsReadResponse"
+                        }
+                      ]
+                    }
+                  },
+                  "matcher": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "hooks"
+                ]
+              }
+            },
+            "PreCompact": {
+              "type": "array",
+              "items": {
+                "title": "ConfiguredHookMatcherGroup",
+                "type": "object",
+                "properties": {
+                  "hooks": {
+                    "type": "array",
+                    "items": {
+                      "title": "ConfiguredHookHandler",
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "command": {
+                              "type": "string"
+                            },
+                            "r#async": {
+                              "type": "boolean"
+                            },
+                            "statusMessage": {
+                              "type": "string"
+                            },
+                            "timeoutSec": {
+                              "type": "integer"
+                            },
+                            "type": {
+                              "type": "string",
+                              "const": "command",
+                              "title": "Commandv2::ConfigRequirementsReadResponseType"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "command",
+                            "r#async"
+                          ],
+                          "additionalProperties": false,
+                          "title": "Commandv2::ConfigRequirementsReadResponse"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "prompt",
+                              "title": "Promptv2::ConfigRequirementsReadResponseType"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false,
+                          "title": "Promptv2::ConfigRequirementsReadResponse"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "agent",
+                              "title": "Agentv2::ConfigRequirementsReadResponseType"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false,
+                          "title": "Agentv2::ConfigRequirementsReadResponse"
+                        }
+                      ]
+                    }
+                  },
+                  "matcher": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "hooks"
+                ]
+              }
+            },
+            "PreToolUse": {
+              "type": "array",
+              "items": {
+                "title": "ConfiguredHookMatcherGroup",
+                "type": "object",
+                "properties": {
+                  "hooks": {
+                    "type": "array",
+                    "items": {
+                      "title": "ConfiguredHookHandler",
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "command": {
+                              "type": "string"
+                            },
+                            "r#async": {
+                              "type": "boolean"
+                            },
+                            "statusMessage": {
+                              "type": "string"
+                            },
+                            "timeoutSec": {
+                              "type": "integer"
+                            },
+                            "type": {
+                              "type": "string",
+                              "const": "command",
+                              "title": "Commandv2::ConfigRequirementsReadResponseType"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "command",
+                            "r#async"
+                          ],
+                          "additionalProperties": false,
+                          "title": "Commandv2::ConfigRequirementsReadResponse"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "prompt",
+                              "title": "Promptv2::ConfigRequirementsReadResponseType"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false,
+                          "title": "Promptv2::ConfigRequirementsReadResponse"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "agent",
+                              "title": "Agentv2::ConfigRequirementsReadResponseType"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false,
+                          "title": "Agentv2::ConfigRequirementsReadResponse"
+                        }
+                      ]
+                    }
+                  },
+                  "matcher": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "hooks"
+                ]
+              }
+            },
+            "SessionStart": {
+              "type": "array",
+              "items": {
+                "title": "ConfiguredHookMatcherGroup",
+                "type": "object",
+                "properties": {
+                  "hooks": {
+                    "type": "array",
+                    "items": {
+                      "title": "ConfiguredHookHandler",
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "command": {
+                              "type": "string"
+                            },
+                            "r#async": {
+                              "type": "boolean"
+                            },
+                            "statusMessage": {
+                              "type": "string"
+                            },
+                            "timeoutSec": {
+                              "type": "integer"
+                            },
+                            "type": {
+                              "type": "string",
+                              "const": "command",
+                              "title": "Commandv2::ConfigRequirementsReadResponseType"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "command",
+                            "r#async"
+                          ],
+                          "additionalProperties": false,
+                          "title": "Commandv2::ConfigRequirementsReadResponse"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "prompt",
+                              "title": "Promptv2::ConfigRequirementsReadResponseType"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false,
+                          "title": "Promptv2::ConfigRequirementsReadResponse"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "agent",
+                              "title": "Agentv2::ConfigRequirementsReadResponseType"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false,
+                          "title": "Agentv2::ConfigRequirementsReadResponse"
+                        }
+                      ]
+                    }
+                  },
+                  "matcher": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "hooks"
+                ]
+              }
+            },
+            "Stop": {
+              "type": "array",
+              "items": {
+                "title": "ConfiguredHookMatcherGroup",
+                "type": "object",
+                "properties": {
+                  "hooks": {
+                    "type": "array",
+                    "items": {
+                      "title": "ConfiguredHookHandler",
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "command": {
+                              "type": "string"
+                            },
+                            "r#async": {
+                              "type": "boolean"
+                            },
+                            "statusMessage": {
+                              "type": "string"
+                            },
+                            "timeoutSec": {
+                              "type": "integer"
+                            },
+                            "type": {
+                              "type": "string",
+                              "const": "command",
+                              "title": "Commandv2::ConfigRequirementsReadResponseType"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "command",
+                            "r#async"
+                          ],
+                          "additionalProperties": false,
+                          "title": "Commandv2::ConfigRequirementsReadResponse"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "prompt",
+                              "title": "Promptv2::ConfigRequirementsReadResponseType"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false,
+                          "title": "Promptv2::ConfigRequirementsReadResponse"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "agent",
+                              "title": "Agentv2::ConfigRequirementsReadResponseType"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false,
+                          "title": "Agentv2::ConfigRequirementsReadResponse"
+                        }
+                      ]
+                    }
+                  },
+                  "matcher": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "hooks"
+                ]
+              }
+            },
+            "UserPromptSubmit": {
+              "type": "array",
+              "items": {
+                "title": "ConfiguredHookMatcherGroup",
+                "type": "object",
+                "properties": {
+                  "hooks": {
+                    "type": "array",
+                    "items": {
+                      "title": "ConfiguredHookHandler",
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "command": {
+                              "type": "string"
+                            },
+                            "r#async": {
+                              "type": "boolean"
+                            },
+                            "statusMessage": {
+                              "type": "string"
+                            },
+                            "timeoutSec": {
+                              "type": "integer"
+                            },
+                            "type": {
+                              "type": "string",
+                              "const": "command",
+                              "title": "Commandv2::ConfigRequirementsReadResponseType"
+                            }
+                          },
+                          "required": [
+                            "type",
+                            "command",
+                            "r#async"
+                          ],
+                          "additionalProperties": false,
+                          "title": "Commandv2::ConfigRequirementsReadResponse"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "prompt",
+                              "title": "Promptv2::ConfigRequirementsReadResponseType"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false,
+                          "title": "Promptv2::ConfigRequirementsReadResponse"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "agent",
+                              "title": "Agentv2::ConfigRequirementsReadResponseType"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false,
+                          "title": "Agentv2::ConfigRequirementsReadResponse"
+                        }
+                      ]
+                    }
+                  },
+                  "matcher": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "hooks"
+                ]
+              }
+            },
+            "managedDir": {
+              "type": "string"
+            },
+            "windowsManagedDir": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "PreToolUse",
+            "PostToolUse",
+            "PreCompact",
+            "PostCompact",
+            "SessionStart",
+            "UserPromptSubmit",
+            "Stop"
+          ]
+        },
+        "network": {
+          "title": "NetworkRequirements",
+          "type": "object",
+          "properties": {
+            "allowLocalBinding": {
               "type": "boolean"
             },
-            "command": {
-              "type": "string"
+            "allowUnixSockets": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             },
-            "statusMessage": {
-              "type": [
-                "string",
-                "null"
-              ]
+            "allowUpstreamProxy": {
+              "type": "boolean"
             },
-            "timeoutSec": {
-              "format": "uint64",
-              "minimum": 0.0,
-              "type": [
-                "integer",
-                "null"
-              ]
+            "allowedDomains": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
             },
-            "type": {
-              "enum": [
-                "command"
-              ],
-              "title": "CommandConfiguredHookHandlerType",
-              "type": "string"
+            "dangerouslyAllowAllUnixSockets": {
+              "type": "boolean"
+            },
+            "dangerouslyAllowNonLoopbackProxy": {
+              "type": "boolean"
+            },
+            "deniedDomains": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "domains": {
+              "type": "object",
+              "additionalProperties": {
+                "title": "NetworkDomainPermission",
+                "type": "string",
+                "enum": [
+                  "allow",
+                  "deny"
+                ]
+              }
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "httpPort": {
+              "type": "integer"
+            },
+            "managedAllowedDomainsOnly": {
+              "type": "boolean"
+            },
+            "socksPort": {
+              "type": "integer"
+            },
+            "unixSockets": {
+              "type": "object",
+              "additionalProperties": {
+                "title": "NetworkUnixSocketPermission",
+                "type": "string",
+                "enum": [
+                  "allow",
+                  "none"
+                ]
+              }
             }
-          },
-          "required": [
-            "async",
-            "command",
-            "type"
-          ],
-          "title": "CommandConfiguredHookHandler",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "type": {
-              "enum": [
-                "prompt"
-              ],
-              "title": "PromptConfiguredHookHandlerType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "title": "PromptConfiguredHookHandler",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "type": {
-              "enum": [
-                "agent"
-              ],
-              "title": "AgentConfiguredHookHandlerType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "title": "AgentConfiguredHookHandler",
-          "type": "object"
+          }
         }
-      ]
-    },
-    "ConfiguredHookMatcherGroup": {
-      "properties": {
-        "hooks": {
-          "items": {
-            "$ref": "#/definitions/ConfiguredHookHandler"
-          },
-          "type": "array"
-        },
-        "matcher": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "hooks"
-      ],
-      "type": "object"
-    },
-    "ManagedHooksRequirements": {
-      "properties": {
-        "PermissionRequest": {
-          "items": {
-            "$ref": "#/definitions/ConfiguredHookMatcherGroup"
-          },
-          "type": "array"
-        },
-        "PostCompact": {
-          "items": {
-            "$ref": "#/definitions/ConfiguredHookMatcherGroup"
-          },
-          "type": "array"
-        },
-        "PostToolUse": {
-          "items": {
-            "$ref": "#/definitions/ConfiguredHookMatcherGroup"
-          },
-          "type": "array"
-        },
-        "PreCompact": {
-          "items": {
-            "$ref": "#/definitions/ConfiguredHookMatcherGroup"
-          },
-          "type": "array"
-        },
-        "PreToolUse": {
-          "items": {
-            "$ref": "#/definitions/ConfiguredHookMatcherGroup"
-          },
-          "type": "array"
-        },
-        "SessionStart": {
-          "items": {
-            "$ref": "#/definitions/ConfiguredHookMatcherGroup"
-          },
-          "type": "array"
-        },
-        "Stop": {
-          "items": {
-            "$ref": "#/definitions/ConfiguredHookMatcherGroup"
-          },
-          "type": "array"
-        },
-        "UserPromptSubmit": {
-          "items": {
-            "$ref": "#/definitions/ConfiguredHookMatcherGroup"
-          },
-          "type": "array"
-        },
-        "managedDir": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "windowsManagedDir": {
-          "type": [
-            "string",
-            "null"
-          ]
-        }
-      },
-      "required": [
-        "PermissionRequest",
-        "PostCompact",
-        "PostToolUse",
-        "PreCompact",
-        "PreToolUse",
-        "SessionStart",
-        "Stop",
-        "UserPromptSubmit"
-      ],
-      "type": "object"
-    },
-    "NetworkDomainPermission": {
-      "enum": [
-        "allow",
-        "deny"
-      ],
-      "type": "string"
-    },
-    "NetworkRequirements": {
-      "properties": {
-        "allowLocalBinding": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "allowUnixSockets": {
-          "description": "Legacy compatibility view derived from `unix_sockets`.",
-          "items": {
-            "type": "string"
-          },
-          "type": [
-            "array",
-            "null"
-          ]
-        },
-        "allowUpstreamProxy": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "allowedDomains": {
-          "description": "Legacy compatibility view derived from `domains`.",
-          "items": {
-            "type": "string"
-          },
-          "type": [
-            "array",
-            "null"
-          ]
-        },
-        "dangerouslyAllowAllUnixSockets": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "dangerouslyAllowNonLoopbackProxy": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "deniedDomains": {
-          "description": "Legacy compatibility view derived from `domains`.",
-          "items": {
-            "type": "string"
-          },
-          "type": [
-            "array",
-            "null"
-          ]
-        },
-        "domains": {
-          "additionalProperties": {
-            "$ref": "#/definitions/NetworkDomainPermission"
-          },
-          "description": "Canonical network permission map for `experimental_network`.",
-          "type": [
-            "object",
-            "null"
-          ]
-        },
-        "enabled": {
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "httpPort": {
-          "format": "uint16",
-          "minimum": 0.0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "managedAllowedDomainsOnly": {
-          "description": "When true, only managed allowlist entries are respected while managed network enforcement is active.",
-          "type": [
-            "boolean",
-            "null"
-          ]
-        },
-        "socksPort": {
-          "format": "uint16",
-          "minimum": 0.0,
-          "type": [
-            "integer",
-            "null"
-          ]
-        },
-        "unixSockets": {
-          "additionalProperties": {
-            "$ref": "#/definitions/NetworkUnixSocketPermission"
-          },
-          "description": "Canonical unix socket permission map for `experimental_network`.",
-          "type": [
-            "object",
-            "null"
-          ]
-        }
-      },
-      "type": "object"
-    },
-    "NetworkUnixSocketPermission": {
-      "enum": [
-        "allow",
-        "none"
-      ],
-      "type": "string"
-    },
-    "ResidencyRequirement": {
-      "enum": [
-        "us"
-      ],
-      "type": "string"
-    },
-    "SandboxMode": {
-      "enum": [
-        "read-only",
-        "workspace-write",
-        "danger-full-access"
-      ],
-      "type": "string"
-    },
-    "WebSearchMode": {
-      "enum": [
-        "disabled",
-        "cached",
-        "live"
-      ],
-      "type": "string"
+      }
     }
-  },
-  "properties": {
-    "requirements": {
-      "anyOf": [
-        {
-          "$ref": "#/definitions/ConfigRequirements"
-        },
-        {
-          "type": "null"
-        }
-      ],
-      "description": "Null if no requirements are configured (e.g. no requirements.toml/MDM entries)."
-    }
-  },
-  "title": "ConfigRequirementsReadResponse",
-  "type": "object"
+  }
 }

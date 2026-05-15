@@ -17,6 +17,7 @@ const SDL_WINDOW_SHOWN: u32 = 0x0000_0004;
 const SDL_WINDOW_RESIZABLE: u32 = 0x0000_0020;
 const SDL_QUIT: u32 = 0x100;
 const SDL_KEYDOWN: u32 = 0x300;
+const SDL_TEXTINPUT: u32 = 0x303;
 const SDL_MOUSEMOTION: u32 = 0x400;
 const SDL_MOUSEBUTTONDOWN: u32 = 0x401;
 const SDL_MOUSEBUTTONUP: u32 = 0x402;
@@ -72,6 +73,21 @@ impl SdlEvent {
     fn wheel_y(&self) -> f32 {
         i32::from_ne_bytes([self.data[24], self.data[25], self.data[26], self.data[27]]) as f32
     }
+
+    fn text_input(&self) -> Option<String> {
+        let bytes = &self.data[12..44];
+        let len = bytes
+            .iter()
+            .position(|byte| *byte == 0)
+            .unwrap_or(bytes.len());
+        if len == 0 {
+            None
+        } else {
+            std::str::from_utf8(&bytes[..len])
+                .ok()
+                .map(ToString::to_string)
+        }
+    }
 }
 
 #[link(name = "SDL2")]
@@ -95,6 +111,8 @@ unsafe extern "C" {
     fn SDL_GL_SwapWindow(window: *mut SDL_Window);
     fn SDL_PollEvent(event: *mut SdlEvent) -> c_int;
     fn SDL_Delay(ms: u32);
+    fn SDL_StartTextInput();
+    fn SDL_StopTextInput();
 }
 
 fn main() {
@@ -138,7 +156,7 @@ fn run() -> Result<(), String> {
 
     let mut width = 1120;
     let mut height = 720;
-    let title = CString::new("EdgeRun Unified Chat").map_err(|error| error.to_string())?;
+    let title = CString::new(args.surface.title()).map_err(|error| error.to_string())?;
     let window = Window(unsafe {
         SDL_CreateWindow(
             title.as_ptr(),
@@ -159,6 +177,7 @@ fn run() -> Result<(), String> {
     }
     unsafe {
         SDL_GL_SetSwapInterval(1);
+        SDL_StartTextInput();
     }
 
     let atlas = FontAtlas::load_inter(18.0)?;
@@ -188,6 +207,12 @@ fn run() -> Result<(), String> {
                             key: sdl_key(event.key_sym()),
                         },
                     );
+                    scene_dirty = true;
+                }
+                SDL_TEXTINPUT => {
+                    if let Some(text) = event.text_input() {
+                        workspace.handle_event(&scene, UiEvent::TextInput(text));
+                    }
                     scene_dirty = true;
                 }
                 SDL_MOUSEBUTTONDOWN => {
@@ -346,8 +371,9 @@ struct Args {
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum PreviewSurface {
-    #[default]
     Workspace,
+    #[default]
+    Codex,
     Lock,
     Capability,
     Gallery,
@@ -357,9 +383,20 @@ impl PreviewSurface {
     fn workspace(self) -> UiWorkspace {
         match self {
             Self::Workspace => default_workspace(),
+            Self::Codex => default_workspace(),
             Self::Lock => UiWorkspace::full_screen(UiAppSurface::lock_screen(10)),
             Self::Capability => UiWorkspace::full_screen(UiAppSurface::capability_request(11)),
             Self::Gallery => UiWorkspace::single(UiAppSurface::component_gallery(5)),
+        }
+    }
+
+    const fn title(self) -> &'static str {
+        match self {
+            Self::Workspace => "EdgeRun Unified Chat",
+            Self::Codex => "EdgeRun Codex",
+            Self::Lock => "EdgeRun Lock",
+            Self::Capability => "EdgeRun Capability",
+            Self::Gallery => "EdgeRun UI Gallery",
         }
     }
 }
@@ -386,14 +423,14 @@ impl Args {
                     parsed.scheme = parse_scheme(&value)?;
                 }
                 "--surface" => {
-                    let value = args
-                        .next()
-                        .ok_or("--surface requires workspace, lock, capability, or gallery")?;
+                    let value = args.next().ok_or(
+                        "--surface requires codex, workspace, lock, capability, or gallery",
+                    )?;
                     parsed.surface = parse_surface(&value)?;
                 }
                 "--help" | "-h" => {
                     println!(
-                        "Usage: edgerun-frontend [--frames N] [--dump-scene] [--scheme dark|light|terminal] [--surface workspace|lock|capability|gallery]"
+                        "Usage: edgerun-frontend [--frames N] [--dump-scene] [--scheme dark|light|terminal] [--surface codex|workspace|lock|capability|gallery]"
                     );
                     std::process::exit(0);
                 }
@@ -406,6 +443,7 @@ impl Args {
 
 fn parse_surface(value: &str) -> Result<PreviewSurface, String> {
     match value {
+        "codex" => Ok(PreviewSurface::Codex),
         "workspace" => Ok(PreviewSurface::Workspace),
         "lock" => Ok(PreviewSurface::Lock),
         "capability" => Ok(PreviewSurface::Capability),
@@ -435,6 +473,7 @@ impl Sdl {
 impl Drop for Sdl {
     fn drop(&mut self) {
         unsafe {
+            SDL_StopTextInput();
             SDL_Quit();
         }
     }

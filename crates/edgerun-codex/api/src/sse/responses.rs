@@ -12,8 +12,6 @@ use codex_protocol::protocol::ModelVerification;
 use codex_protocol::protocol::TokenUsage;
 use edgerun_eventsource_stream::Eventsource;
 use edgerun_futures::StreamExt;
-#[cfg(any(feature = "native-transport", test))]
-use edgerun_futures::TryStreamExt;
 use edgerun_json::FromJson;
 use edgerun_json::JsonValueError;
 use edgerun_json::Value;
@@ -549,8 +547,8 @@ pub async fn process_sse(
 
         let event: ResponsesStreamEvent = match edgerun_json::from_json_str(&sse.data) {
             Ok(event) => event,
-            Err(e) => {
-                debug!("Failed to parse SSE event: {e}, data: {}", &sse.data);
+            Err(_e) => {
+                debug!("Failed to parse SSE event: {_e}, data: {}", &sse.data);
                 continue;
             }
         };

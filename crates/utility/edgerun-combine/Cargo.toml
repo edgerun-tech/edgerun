@@ -1,0 +1,42 @@
+[package]
+name = "combine"
+version = "4.6.7"
+edition = "2018"
+license = "MIT"
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun-owned parser combinator compatibility crate"
+autoexamples = false
+
+[features]
+alloc = []
+default = ["std"]
+std = [
+    "memchr/std",
+    "bytes",
+    "alloc",
+]
+
+[dependencies]
+bytes = { path = "../edgerun-bytes-upstream", optional = true }
+memchr = { path = "../edgerun-memchr", default-features = false }
+
+[lints]
+workspace = true
+
+[[example]]
+name = "date"
+path = "examples/date.rs"
+
+[[example]]
+name = "ini"
+path = "examples/ini.rs"
+
+[[example]]
+name = "number"
+path = "examples/number.rs"
+
+[[example]]
+name = "combine_readme"
+path = "examples/readme.rs"

@@ -3,42 +3,48 @@ use edgerun_json::JsonValue;
 use edgerun_json::ToJson;
 
 #[derive(Debug, PartialEq, ToJson, FromJson)]
-#[json(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 struct ToolRequest {
     request_id: u64,
-    #[json(rename = "toolName")]
+    #[schemars(rename = "toolName")]
     tool_name: String,
-    #[json(default)]
+    #[schemars(default)]
     retries: u32,
-    #[json(default = "default_priority")]
+    #[schemars(default = "default_priority")]
     priority: u32,
-    #[json(alias = "legacy_timeout_ms")]
+    #[schemars(alias = "legacy_timeout_ms")]
     timeout_ms: Option<u64>,
-    #[json(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     note: Option<String>,
-    #[json(default, skip_serializing, skip_deserializing)]
+    #[schemars(default, skip_serializing, skip_deserializing)]
     internal_only: bool,
 }
 
 #[derive(Debug, PartialEq, ToJson, FromJson)]
-#[json(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
 enum Mode {
     FastPath,
-    #[json(rename = "safe")]
+    #[schemars(rename = "safe")]
     SafeMode,
 }
 
 #[derive(Debug, PartialEq, ToJson, FromJson)]
-#[serde(tag = "type", rename_all = "snake_case")]
+#[schemars(tag = "type", rename_all = "snake_case")]
 enum TaggedEvent {
     Created,
     MessageDelta {
         id: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         text: Option<String>,
-        #[serde(default, skip_serializing)]
+        #[schemars(default, skip_serializing)]
         internal_id: Option<String>,
     },
+}
+
+#[derive(Debug, PartialEq, FromJson)]
+#[schemars(deny_unknown_fields)]
+struct StrictArgs {
+    value: String,
 }
 
 fn default_priority() -> u32 {
@@ -113,5 +119,22 @@ fn derives_tagged_enum_json() {
     assert_eq!(
         TaggedEvent::from_json(edgerun_json::json!({"type": "created"})).unwrap(),
         TaggedEvent::Created
+    );
+}
+
+#[test]
+fn derives_deny_unknown_fields() {
+    assert_eq!(
+        StrictArgs::from_json(edgerun_json::json!({ "value": "ok" })).unwrap(),
+        StrictArgs {
+            value: "ok".to_string()
+        }
+    );
+    assert!(
+        StrictArgs::from_json(edgerun_json::json!({
+            "value": "ok",
+            "extra": true,
+        }))
+        .is_err()
     );
 }

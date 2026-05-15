@@ -1,5 +1,4 @@
 use super::*;
-use edgerun_encoding::base64::standard_encode;
 use codex_protocol::AgentPath;
 use codex_protocol::config_types::ReasoningSummary;
 use codex_protocol::models::BaseInstructions;
@@ -16,12 +15,11 @@ use codex_protocol::models::ReasoningItemContent;
 use codex_protocol::models::ReasoningItemReasoningSummary;
 use codex_protocol::openai_models::InputModality;
 use codex_protocol::openai_models::default_input_modalities;
-use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::InterAgentCommunication;
-use codex_protocol::protocol::SandboxPolicy;
 use codex_protocol::protocol::TurnContextItem;
 use codex_utils_output_truncation::TruncationPolicy;
 use codex_utils_output_truncation::truncate_text;
+use edgerun_encoding::base64::standard_encode;
 use image::ImageBuffer;
 use image::ImageFormat;
 use image::Luma;
@@ -124,11 +122,7 @@ fn reference_context_item() -> TurnContextItem {
         cwd: PathBuf::from("/tmp/reference-cwd"),
         current_date: Some("2026-03-23".to_string()),
         timezone: Some("America/Los_Angeles".to_string()),
-        approval_policy: AskForApproval::OnRequest,
-        sandbox_policy: SandboxPolicy::new_read_only_policy(),
-        permission_profile: None,
         network: None,
-        file_system_sandbox_policy: None,
         model: "gpt-test".to_string(),
         personality: None,
         collaboration_mode: None,
@@ -925,9 +919,9 @@ fn drop_last_n_user_turns_trims_context_updates_above_rolled_back_turn() {
         ]
     );
     assert_eq!(
-        edgerun_json::to_serde_value(history.reference_context_item())
+        edgerun_json::to_value(&history.reference_context_item())
             .expect("serialize retained reference context item"),
-        edgerun_json::to_serde_value(Some(reference_context_item))
+        edgerun_json::to_value(&Some(reference_context_item))
             .expect("serialize expected reference context item")
     );
 }
@@ -1755,7 +1749,9 @@ fn non_base64_image_urls_are_unchanged() {
     );
     assert_eq!(
         estimate_response_item_model_visible_bytes(&function_output_item),
-        edgerun_json::to_string(&function_output_item).unwrap().len() as i64
+        edgerun_json::to_string(&function_output_item)
+            .unwrap()
+            .len() as i64
     );
 }
 

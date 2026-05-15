@@ -7,7 +7,7 @@ use crate::codec::ArchivedWorkPacketFrame;
 use crate::protocol::{Hash, NodeId, WorkPacket};
 use crate::route_table::RouteState;
 use crate::std_runtime::framing::unix_ms;
-use crate::std_runtime::tcp_server::{TcpPacketServer, send_encoded_packet_to_route};
+use crate::std_runtime::tcp_server::{send_encoded_packet_to_route, TcpPacketServer};
 use crate::work_channel::{WorkChannel, WorkChannelError};
 
 #[derive(Debug)]

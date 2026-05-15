@@ -67,7 +67,6 @@ mod api;
 mod borrowed_value;
 mod error;
 mod index;
-mod interop;
 pub mod io;
 mod json_macro;
 mod map;
@@ -85,16 +84,6 @@ pub use api::{
     to_vec_pretty,
 };
 pub use api::{from_reader, to_writer, to_writer_pretty};
-pub use api::{from_serde_slice, from_serde_str, from_serde_value, to_serde_value};
-pub mod serde_bridge {
-    pub trait Serialize: serde::Serialize {}
-
-    impl<T: serde::Serialize + ?Sized> Serialize for T {}
-
-    pub trait DeserializeOwned: serde::de::DeserializeOwned {}
-
-    impl<T: serde::de::DeserializeOwned> DeserializeOwned for T {}
-}
 pub use borrowed_value::BorrowedJsonValue;
 pub use error::{JsonError, JsonParseError};
 pub type Error = JsonError;
@@ -103,7 +92,7 @@ pub use index::ValueIndex;
 pub use map::Map;
 pub use model::{
     FromJson, ToJson, from_json_slice, from_json_str, from_json_value, from_value, to_json_string,
-    to_json_value, to_json_vec, to_value,
+    to_json_string_pretty, to_json_value, to_json_vec, to_json_vec_pretty, to_value,
 };
 pub use number::JsonNumber;
 pub use tape::{

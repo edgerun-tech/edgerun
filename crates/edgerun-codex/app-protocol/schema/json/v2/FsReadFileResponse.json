@@ -1,15 +1,12 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "description": "Base64-encoded file contents returned by `fs/readFile`.",
+  "title": "FsReadFileResponse",
+  "type": "object",
   "properties": {
     "dataBase64": {
-      "description": "File contents encoded as base64.",
       "type": "string"
     }
   },
   "required": [
     "dataBase64"
-  ],
-  "title": "FsReadFileResponse",
-  "type": "object"
+  ]
 }

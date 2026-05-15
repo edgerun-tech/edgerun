@@ -57,7 +57,7 @@ impl Certificate {
 
     /// Parse a certificate from PEM format
     pub fn from_pem(pem: &str) -> Result<Self, String> {
-        let der = edgerun_crypto::x509_cert_from_pem(pem)
+        let der = edgerun_crypto::certs::cert_from_pem(pem)
             .ok_or_else(|| "Failed to parse PEM certificate".to_string())?;
         Self::from_der(&der)
     }
@@ -209,17 +209,12 @@ fn verify_ecdsa_certificate_signature(
         alg => return Err(format!("Unsupported ECDSA signature algorithm: {alg:?}")),
     };
 
-    let verifying_key = edgerun_crypto::p256::ecdsa::VerifyingKey::from_sec1_bytes(
+    edgerun_crypto::verification::p256_verify_prehash_der(
         issuer.subject_public_key.as_slice(),
+        &hash,
+        &cert.signature_value,
     )
-    .map_err(|e| format!("Failed to parse issuer ECDSA public key: {e}"))?;
-    let signature = edgerun_crypto::p256::ecdsa::Signature::from_der(&cert.signature_value)
-        .map_err(|e| format!("Failed to parse ECDSA signature: {e}"))?;
-
-    use edgerun_crypto::signature::hazmat::PrehashVerifier;
-    verifying_key
-        .verify_prehash(&hash, &signature)
-        .map_err(|e| format!("ECDSA signature verification failed ({hasher_name} over P-256): {e}"))
+    .map_err(|e| format!("ECDSA signature verification failed ({hasher_name} over P-256): {e}"))
 }
 
 #[cfg(feature = "tls-rsa")]
@@ -344,14 +339,12 @@ fn verify_ed25519_certificate_signature(
         .as_slice()
         .try_into()
         .map_err(|_| "Invalid Ed25519 public key length".to_string())?;
-    let verifying_key = edgerun_crypto::ed25519_dalek::VerifyingKey::from_bytes(&public_key)
-        .map_err(|e| format!("Failed to parse issuer Ed25519 public key: {e}"))?;
-    let signature = edgerun_crypto::ed25519_dalek::Signature::from_slice(&cert.signature_value)
-        .map_err(|e| format!("Failed to parse Ed25519 signature: {e}"))?;
-    use edgerun_crypto::ed25519_dalek::Verifier;
-    verifying_key
-        .verify(&cert.tbs_certificate_der, &signature)
-        .map_err(|e| format!("Ed25519 certificate signature verification failed: {e}"))
+    edgerun_crypto::verification::ed25519_verify(
+        &public_key,
+        &cert.tbs_certificate_der,
+        &cert.signature_value,
+    )
+    .map_err(|e| format!("Ed25519 certificate signature verification failed: {e}"))
 }
 
 #[derive(Clone, Copy)]

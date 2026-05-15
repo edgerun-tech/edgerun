@@ -15,7 +15,6 @@ use codex_protocol::config_types::WindowsSandboxLevel;
 use codex_protocol::error::CodexErr;
 use codex_protocol::error::Result as CodexResult;
 use codex_protocol::mcp::CallToolResult;
-use codex_protocol::models::ActivePermissionProfile;
 use codex_protocol::models::ContentItem;
 use codex_protocol::models::PermissionProfile;
 use codex_protocol::models::ResponseInputItem;
@@ -39,12 +38,12 @@ use codex_thread_store::ThreadMetadataPatch;
 use codex_thread_store::ThreadStoreError;
 use codex_thread_store::ThreadStoreResult;
 use codex_utils_absolute_path::AbsolutePathBuf;
+use edgerun_tokio::sync::Mutex;
+use edgerun_tokio::sync::watch;
 use rmcp::model::ReadResourceRequestParams;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
-use edgerun_tokio::sync::Mutex;
-use edgerun_tokio::sync::watch;
 
 use codex_rollout::state_db::StateDbHandle;
 
@@ -56,7 +55,6 @@ pub struct ThreadConfigSnapshot {
     pub approval_policy: AskForApproval,
     pub approvals_reviewer: ApprovalsReviewer,
     pub permission_profile: PermissionProfile,
-    pub active_permission_profile: Option<ActivePermissionProfile>,
     pub cwd: AbsolutePathBuf,
     pub ephemeral: bool,
     pub reasoning_effort: Option<ReasoningEffort>,
@@ -81,11 +79,7 @@ impl ThreadConfigSnapshot {
 #[derive(Clone, Default)]
 pub struct CodexThreadTurnContextOverrides {
     pub cwd: Option<PathBuf>,
-    pub approval_policy: Option<AskForApproval>,
     pub approvals_reviewer: Option<ApprovalsReviewer>,
-    pub sandbox_policy: Option<SandboxPolicy>,
-    pub permission_profile: Option<PermissionProfile>,
-    pub active_permission_profile: Option<ActivePermissionProfile>,
     pub windows_sandbox_level: Option<WindowsSandboxLevel>,
     pub model: Option<String>,
     pub effort: Option<Option<ReasoningEffort>>,
@@ -240,11 +234,7 @@ impl CodexThread {
     ) -> ConstraintResult<()> {
         let CodexThreadTurnContextOverrides {
             cwd,
-            approval_policy,
             approvals_reviewer,
-            sandbox_policy,
-            permission_profile,
-            active_permission_profile,
             windows_sandbox_level,
             model,
             effort,
@@ -265,11 +255,7 @@ impl CodexThread {
 
         let updates = SessionSettingsUpdate {
             cwd,
-            approval_policy,
             approvals_reviewer,
-            sandbox_policy,
-            permission_profile,
-            active_permission_profile,
             windows_sandbox_level,
             collaboration_mode: Some(collaboration_mode),
             reasoning_summary: summary,
@@ -488,7 +474,7 @@ impl CodexThread {
             )
             .await?;
 
-        Ok(edgerun_json::to_serde_value(result)?)
+        Ok(edgerun_json::ToJson::to_json(&result))
     }
 
     pub async fn call_mcp_tool(

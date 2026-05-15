@@ -2,20 +2,14 @@ use edgerun_json::FromJson;
 use edgerun_json::JsonValueError;
 use edgerun_json::ToJson;
 use edgerun_json::Value;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
 use schemars::JsonSchema;
 use std::fmt;
 use std::ops::Deref;
 use std::str::FromStr;
-use ts_rs::TS;
 
-#[derive(
-    Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema, TS,
-)]
-#[serde(try_from = "String", into = "String")]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, JsonSchema)]
+#[schemars(try_from = "String", into = "String")]
 #[schemars(with = "String")]
-#[ts(type = "string")]
 pub struct AgentPath(String);
 
 impl AgentPath {

@@ -5,10 +5,7 @@ use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::openai_models::default_input_modalities;
 use codex_protocol::protocol::ModelRerouteReason as CoreModelRerouteReason;
 use codex_protocol::protocol::ModelVerification as CoreModelVerification;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
 use schemars::JsonSchema;
-use ts_rs::TS;
 
 v2_enum_from_core!(
     pub enum ModelRerouteReason from CoreModelRerouteReason {
@@ -22,38 +19,35 @@ v2_enum_from_core!(
     }
 );
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Default, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "camelCase")]
 pub struct ModelProviderCapabilitiesReadParams {}
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct ModelProviderCapabilitiesReadResponse {
     pub namespace_tools: bool,
     pub image_generation: bool,
     pub web_search: bool,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(
+    Debug, Clone, PartialEq, Default, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "camelCase")]
 pub struct ModelListParams {
     /// Opaque pagination cursor returned by a previous call.
-    #[ts(optional = nullable)]
     pub cursor: Option<String>,
     /// Optional page size; defaults to a reasonable server-side value.
-    #[ts(optional = nullable)]
     pub limit: Option<u32>,
     /// When true, include models that are hidden from the default picker list.
-    #[ts(optional = nullable)]
     pub include_hidden: Option<bool>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct ModelAvailabilityNux {
     pub message: String,
 }
@@ -66,18 +60,16 @@ impl From<CoreModelAvailabilityNux> for ModelAvailabilityNux {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct ModelServiceTier {
     pub id: String,
     pub name: String,
     pub description: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct Model {
     pub id: String,
     pub model: String,
@@ -89,22 +81,21 @@ pub struct Model {
     pub hidden: bool,
     pub supported_reasoning_efforts: Vec<ReasoningEffortOption>,
     pub default_reasoning_effort: ReasoningEffort,
-    #[serde(default = "default_input_modalities")]
+    #[schemars(default = "default_input_modalities")]
     pub input_modalities: Vec<InputModality>,
-    #[serde(default)]
+    #[schemars(default)]
     pub supports_personality: bool,
     /// Deprecated: use `serviceTiers` instead.
-    #[serde(default)]
+    #[schemars(default)]
     pub additional_speed_tiers: Vec<String>,
-    #[serde(default)]
+    #[schemars(default)]
     pub service_tiers: Vec<ModelServiceTier>,
     // Only one model should be marked as default.
     pub is_default: bool,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct ModelUpgradeInfo {
     pub model: String,
     pub upgrade_copy: Option<String>,
@@ -112,17 +103,15 @@ pub struct ModelUpgradeInfo {
     pub migration_markdown: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct ReasoningEffortOption {
     pub reasoning_effort: ReasoningEffort,
     pub description: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct ModelListResponse {
     pub data: Vec<Model>,
     /// Opaque cursor to pass to the next call to continue after the last item.
@@ -130,9 +119,8 @@ pub struct ModelListResponse {
     pub next_cursor: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct ModelReroutedNotification {
     pub thread_id: String,
     pub turn_id: String,
@@ -141,9 +129,8 @@ pub struct ModelReroutedNotification {
     pub reason: ModelRerouteReason,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct ModelVerificationNotification {
     pub thread_id: String,
     pub turn_id: String,

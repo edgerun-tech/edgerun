@@ -19,12 +19,15 @@ edgerun-error = { workspace = true }
 edgerun-json = { workspace = true }
 edgerun-similar = { workspace = true }
 schemars = { workspace = true }
-serde = { workspace = true, features = ["derive"] }
 edgerun-strum-macros = { workspace = true }
 rmcp = { workspace = true, default-features = false, features = [
     "base64",
     "macros",
 ] }
-ts-rs = { workspace = true }
 edgerun-inventory = { workspace = true }
 tracing = { workspace = true }
+
+[dev-dependencies]
+codex_utils_cargo_bin = { package = "edgerun-codex-utils-cargo-bin", path = "../../utility/edgerun-codex-utils-cargo-bin" }
+pretty_assertions = { package = "edgerun-pretty-assertions", path = "../../utility/edgerun-pretty-assertions" }
+tempfile = { package = "edgerun-tempfile", path = "../../utility/edgerun-tempfile" }

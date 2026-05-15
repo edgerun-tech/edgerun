@@ -32,7 +32,7 @@ fn find_user_message_with_image(text: &str) -> Option<ResponseItem> {
         if trimmed.is_empty() {
             continue;
         }
-        let rollout: RolloutLine = match edgerun_json::from_serde_str(trimmed) {
+        let rollout: RolloutLine = match edgerun_json::from_json_str(trimmed) {
             Ok(rollout) => rollout,
             Err(_) => continue,
         };

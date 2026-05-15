@@ -7,7 +7,6 @@ use crate::{FrameType, LocalNode, MeshFrame, MeshFrameHeader, MeshRoute, sign_fr
 use crate::{discovery::DiscoveryPacket, router::MeshRouter};
 use alloc::vec;
 use alloc::vec::Vec;
-use edgerun_crypto::p256::ecdsa::SigningKey;
 use edgerun_hardware_signing::{MESH_PUBLIC_KEY_LENGTH, MESH_SIGNATURE_LENGTH, NodeID};
 
 // -----------------------------------------------------------------------
@@ -25,20 +24,17 @@ fn broadcast_id() -> NodeID {
 }
 
 /// Creates a real P-256 keypair and returns (NodeID, signing_key).
-fn make_real_keypair() -> (NodeID, SigningKey) {
-    let mut bytes = [0u8; 32];
-    edgerun_crypto::fill_random(&mut bytes).expect("random generation failed");
-    let signing_key = SigningKey::from_bytes(&bytes.into()).unwrap();
-    let encoded = signing_key.verifying_key().to_encoded_point(false);
-    let b = encoded.as_bytes();
+fn make_real_keypair() -> (NodeID, edgerun_crypto::P256SigningKey) {
+    let signing_key = edgerun_crypto::signing::p256_key();
+    let public_key = signing_key.public_key_sec1();
     let mut node_bytes = [0u8; 64];
-    node_bytes.copy_from_slice(&b[1..65]);
+    node_bytes.copy_from_slice(&public_key[1..65]);
     (NodeID(node_bytes), signing_key)
 }
 
 /// Builds a signed mesh frame for testing.
 fn make_signed_frame(
-    src_key: &SigningKey,
+    src_key: &edgerun_crypto::P256SigningKey,
     src_id: NodeID,
     dest: NodeID,
     ttl: u8,

@@ -15,10 +15,6 @@
 // It consists of a `Choice` type, and a collection of traits using `Choice`
 // instead of `bool` which are intended to execute in constant-time.
 
-#[cfg(feature = "std")]
-#[macro_use]
-extern crate std;
-
 use core::cmp;
 use core::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Neg, Not};
 use core::option::Option;
@@ -496,25 +492,6 @@ impl ConditionallySelectable for Choice {
     #[inline]
     fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
         Choice(u8::conditional_select(&a.0, &b.0, choice))
-    }
-}
-
-#[cfg(feature = "const-generics")]
-impl<T, const N: usize> ConditionallySelectable for [T; N]
-where
-    T: ConditionallySelectable,
-{
-    #[inline]
-    fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
-        let mut output = *a;
-        output.conditional_assign(b, choice);
-        output
-    }
-
-    fn conditional_assign(&mut self, other: &Self, choice: Choice) {
-        for (a_i, b_i) in self.iter_mut().zip(other) {
-            a_i.conditional_assign(b_i, choice)
-        }
     }
 }
 

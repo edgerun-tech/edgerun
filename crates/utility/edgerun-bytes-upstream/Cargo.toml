@@ -1,0 +1,19 @@
+[package]
+name = "bytes"
+version = "1.11.1"
+edition = "2021"
+rust-version = "1.57"
+license = "MIT"
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun-owned upstream-compatible bytes crate"
+
+[features]
+default = ["std"]
+std = []
+
+[dependencies]
+
+[lints]
+workspace = true

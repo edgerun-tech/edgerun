@@ -49,6 +49,8 @@ pub enum Command {
     BindCheck {
         standard_ports: bool,
     },
+    #[cfg(feature = "ui-sdl")]
+    Ui,
     #[cfg(feature = "xray")]
     XrayServer {
         root: PathBuf,
@@ -232,6 +234,8 @@ pub fn parse_args() -> Result<Command, String> {
             }
             Ok(Command::BindCheck { standard_ports })
         }
+        #[cfg(feature = "ui-sdl")]
+        "ui" => Ok(Command::Ui),
         #[cfg(feature = "xray")]
         "xray-server" => {
             let mut root = PathBuf::from(".");
@@ -312,6 +316,13 @@ pub fn main() {
         Command::BindCheck { standard_ports } => {
             cmd_bind_check(standard_ports);
         }
+        #[cfg(feature = "ui-sdl")]
+        Command::Ui => {
+            if let Err(error) = edgerun_node::ui_sdl::run_window() {
+                eprintln!("edgerun-node-ui: {error}");
+                std::process::exit(1);
+            }
+        }
         #[cfg(feature = "xray")]
         Command::XrayServer { root, listen } => {
             edgerun_node::xray::cmd_xray_server(root.to_string_lossy().into_owned(), listen);
@@ -321,6 +332,10 @@ pub fn main() {
 
 fn help_text() -> String {
     let mut text = "edgerun Node Daemon\n\nCommands:\n  init              Generate node identity and genesis event\n  init-encrypted    Generate encrypted software identity\n  init-provisioned  Generate provisioned node identity\n  provision         Provision a node with a controller\n  status            Show node event-log status\n  bind-check        Bind enabled service listeners and report them".to_string();
+    #[cfg(feature = "ui-sdl")]
+    {
+        text.push_str("\n  ui                Open native SDL machine report");
+    }
     #[cfg(feature = "xray")]
     {
         text.push_str(

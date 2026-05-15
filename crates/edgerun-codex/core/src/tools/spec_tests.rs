@@ -129,7 +129,7 @@ fn deferred_responses_api_tool_serializes_with_defer_loading() {
         }),
     );
 
-    let serialized = edgerun_json::to_serde_value(ToolSpec::Function(
+    let serialized = edgerun_json::to_value(&ToolSpec::Function(
         mcp_tool_to_deferred_responses_api_tool(
             &ToolName::namespaced("mcp__codex_apps__", "lookup_order"),
             &tool,

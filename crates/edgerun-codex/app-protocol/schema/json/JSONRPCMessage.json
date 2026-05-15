@@ -1,137 +1,190 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "anyOf": [
+  "title": "JSONRPCMessage",
+  "oneOf": [
     {
-      "$ref": "#/definitions/JSONRPCRequest"
-    },
-    {
-      "$ref": "#/definitions/JSONRPCNotification"
-    },
-    {
-      "$ref": "#/definitions/JSONRPCResponse"
-    },
-    {
-      "$ref": "#/definitions/JSONRPCError"
-    }
-  ],
-  "definitions": {
-    "JSONRPCError": {
-      "description": "A response to a request that indicates an error occurred.",
+      "title": "Request",
+      "type": "object",
       "properties": {
-        "error": {
-          "$ref": "#/definitions/JSONRPCErrorError"
-        },
-        "id": {
-          "$ref": "#/definitions/RequestId"
-        }
-      },
-      "required": [
-        "error",
-        "id"
-      ],
-      "type": "object"
-    },
-    "JSONRPCErrorError": {
-      "properties": {
-        "code": {
-          "format": "int64",
-          "type": "integer"
-        },
-        "data": true,
-        "message": {
-          "type": "string"
-        }
-      },
-      "required": [
-        "code",
-        "message"
-      ],
-      "type": "object"
-    },
-    "JSONRPCNotification": {
-      "description": "A notification which does not expect a response.",
-      "properties": {
-        "method": {
-          "type": "string"
-        },
-        "params": true
-      },
-      "required": [
-        "method"
-      ],
-      "type": "object"
-    },
-    "JSONRPCRequest": {
-      "description": "A request that expects a response.",
-      "properties": {
-        "id": {
-          "$ref": "#/definitions/RequestId"
-        },
-        "method": {
-          "type": "string"
-        },
-        "params": true,
-        "trace": {
-          "anyOf": [
-            {
-              "$ref": "#/definitions/W3cTraceContext"
+        "field0": {
+          "title": "JSONRPCRequest",
+          "type": "object",
+          "properties": {
+            "id": {
+              "title": "RequestId",
+              "oneOf": [
+                {
+                  "title": "String",
+                  "type": "object",
+                  "properties": {
+                    "field0": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "field0"
+                  ]
+                },
+                {
+                  "title": "Integer",
+                  "type": "object",
+                  "properties": {
+                    "field0": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "field0"
+                  ]
+                }
+              ]
             },
-            {
-              "type": "null"
+            "method": {
+              "type": "string"
             }
-          ],
-          "description": "Optional W3C Trace Context for distributed tracing."
+          },
+          "required": [
+            "id",
+            "method"
+          ]
         }
       },
       "required": [
-        "id",
-        "method"
-      ],
-      "type": "object"
-    },
-    "JSONRPCResponse": {
-      "description": "A successful (non-error) response to a request.",
-      "properties": {
-        "id": {
-          "$ref": "#/definitions/RequestId"
-        },
-        "result": true
-      },
-      "required": [
-        "id",
-        "result"
-      ],
-      "type": "object"
-    },
-    "RequestId": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "format": "int64",
-          "type": "integer"
-        }
+        "field0"
       ]
     },
-    "W3cTraceContext": {
+    {
+      "title": "Notification",
+      "type": "object",
       "properties": {
-        "traceparent": {
-          "type": [
-            "string",
-            "null"
-          ]
-        },
-        "tracestate": {
-          "type": [
-            "string",
-            "null"
+        "field0": {
+          "title": "JSONRPCNotification",
+          "type": "object",
+          "properties": {
+            "method": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "method"
           ]
         }
       },
-      "type": "object"
+      "required": [
+        "field0"
+      ]
+    },
+    {
+      "title": "Response",
+      "type": "object",
+      "properties": {
+        "field0": {
+          "title": "JSONRPCResponse",
+          "type": "object",
+          "properties": {
+            "id": {
+              "title": "RequestId",
+              "oneOf": [
+                {
+                  "title": "String",
+                  "type": "object",
+                  "properties": {
+                    "field0": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "field0"
+                  ]
+                },
+                {
+                  "title": "Integer",
+                  "type": "object",
+                  "properties": {
+                    "field0": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "field0"
+                  ]
+                }
+              ]
+            },
+            "result": true
+          },
+          "required": [
+            "id",
+            "result"
+          ]
+        }
+      },
+      "required": [
+        "field0"
+      ]
+    },
+    {
+      "title": "Error",
+      "type": "object",
+      "properties": {
+        "field0": {
+          "title": "JSONRPCError",
+          "type": "object",
+          "properties": {
+            "error": {
+              "title": "JSONRPCErrorError",
+              "type": "object",
+              "properties": {
+                "code": {
+                  "type": "integer"
+                },
+                "message": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "code",
+                "message"
+              ]
+            },
+            "id": {
+              "title": "RequestId",
+              "oneOf": [
+                {
+                  "title": "String",
+                  "type": "object",
+                  "properties": {
+                    "field0": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "field0"
+                  ]
+                },
+                {
+                  "title": "Integer",
+                  "type": "object",
+                  "properties": {
+                    "field0": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "field0"
+                  ]
+                }
+              ]
+            }
+          },
+          "required": [
+            "error",
+            "id"
+          ]
+        }
+      },
+      "required": [
+        "field0"
+      ]
     }
-  },
-  "description": "Refers to any valid JSON-RPC object that can be decoded off the wire, or encoded to be sent.",
-  "title": "JSONRPCMessage"
+  ]
 }

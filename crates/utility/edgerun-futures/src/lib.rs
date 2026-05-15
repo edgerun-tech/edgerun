@@ -1,17 +1,20 @@
 //! Small EdgeRun-owned async primitives used by Codex.
 
-extern crate std;
+#![cfg_attr(not(feature = "std"), no_std)]
 
-use std::boxed::Box;
-use std::collections::VecDeque;
-use std::future::Future as StdFuture;
-use std::marker::PhantomPinned;
-use std::pin::Pin;
+extern crate alloc;
+
+use alloc::boxed::Box;
+use alloc::collections::VecDeque;
+use alloc::vec::Vec;
+use core::future::Future as StdFuture;
+use core::marker::PhantomPinned;
+use core::pin::Pin;
+use core::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
+#[cfg(feature = "std")]
 use std::sync::{Arc, Mutex};
-use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
-use std::vec::Vec;
 
-pub use std::future::Future;
+pub use core::future::Future;
 
 pub trait Stream {
     type Item;
@@ -65,7 +68,7 @@ where
 pub mod future {
     use super::*;
 
-    pub type BoxFuture<'a, T> = Pin<Box<dyn StdFuture<Output = T> + std::marker::Send + 'a>>;
+    pub type BoxFuture<'a, T> = Pin<Box<dyn StdFuture<Output = T> + core::marker::Send + 'a>>;
 
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub enum Either<L, R> {
@@ -157,6 +160,7 @@ pub mod future {
         }
     }
 
+    #[cfg(feature = "std")]
     pub struct Shared<F>
     where
         F: StdFuture,
@@ -164,6 +168,7 @@ pub mod future {
         state: Arc<Mutex<SharedState<F>>>,
     }
 
+    #[cfg(feature = "std")]
     struct SharedState<F>
     where
         F: StdFuture,
@@ -173,6 +178,7 @@ pub mod future {
         wakers: Vec<Waker>,
     }
 
+    #[cfg(feature = "std")]
     impl<F> Clone for Shared<F>
     where
         F: StdFuture,
@@ -184,6 +190,7 @@ pub mod future {
         }
     }
 
+    #[cfg(feature = "std")]
     impl<F> Shared<F>
     where
         F: StdFuture,
@@ -199,6 +206,7 @@ pub mod future {
         }
     }
 
+    #[cfg(feature = "std")]
     impl<F> StdFuture for Shared<F>
     where
         F: StdFuture + Unpin,
@@ -239,7 +247,7 @@ pub mod future {
 pub mod stream {
     use super::*;
 
-    pub type BoxStream<'a, T> = Pin<Box<dyn Stream<Item = T> + std::marker::Send + 'a>>;
+    pub type BoxStream<'a, T> = Pin<Box<dyn Stream<Item = T> + core::marker::Send + 'a>>;
 
     pub fn iter<I>(iter: I) -> Iter<I::IntoIter>
     where
@@ -269,12 +277,12 @@ pub mod stream {
 
     pub fn pending<T>() -> Pending<T> {
         Pending {
-            _marker: std::marker::PhantomData,
+            _marker: core::marker::PhantomData,
         }
     }
 
     pub struct Pending<T> {
-        _marker: std::marker::PhantomData<T>,
+        _marker: core::marker::PhantomData<T>,
     }
 
     impl<T> Unpin for Pending<T> {}
@@ -454,11 +462,12 @@ pub mod stream {
 pub trait FutureExt: StdFuture + Sized {
     fn boxed<'a>(self) -> future::BoxFuture<'a, Self::Output>
     where
-        Self: std::marker::Send + 'a,
+        Self: core::marker::Send + 'a,
     {
         Box::pin(self)
     }
 
+    #[cfg(feature = "std")]
     fn shared(self) -> future::Shared<Self>
     where
         Self: Unpin,
@@ -673,7 +682,7 @@ pub trait SinkExt<Item>: Sink<Item> + Sized {
     {
         Close {
             sink: self,
-            _item: std::marker::PhantomData,
+            _item: core::marker::PhantomData,
         }
     }
 }
@@ -726,7 +735,7 @@ where
     S: Sink<Item> + Unpin + ?Sized,
 {
     sink: &'a mut S,
-    _item: std::marker::PhantomData<Item>,
+    _item: core::marker::PhantomData<Item>,
 }
 
 impl<S, Item> StdFuture for Close<'_, S, Item>
@@ -752,13 +761,13 @@ pub mod prelude {
 
 fn noop_waker() -> Waker {
     const VTABLE: RawWakerVTable = RawWakerVTable::new(
-        |_| RawWaker::new(std::ptr::null(), &VTABLE),
+        |_| RawWaker::new(core::ptr::null(), &VTABLE),
         |_| {},
         |_| {},
         |_| {},
     );
     // SAFETY: the no-op vtable never dereferences the null data pointer.
-    unsafe { Waker::from_raw(RawWaker::new(std::ptr::null(), &VTABLE)) }
+    unsafe { Waker::from_raw(RawWaker::new(core::ptr::null(), &VTABLE)) }
 }
 
 #[allow(dead_code)]

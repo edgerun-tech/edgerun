@@ -1,5 +1,35 @@
-#![no_std]
+//! A macro for defining `#[cfg]` if-else statements.
+//!
+//! The macro provided by this crate, `cfg_if`, is similar to the `if/elif` C
+//! preprocessor macro by allowing definition of a cascade of `#[cfg]` cases,
+//! emitting the implementation which matches first.
+//!
+//! This allows you to conveniently provide a long list `#[cfg]`'d blocks of code
+//! without having to rewrite each clause multiple times.
+//!
+//! # Example
+//!
+//! ```
+//! cfg_if::cfg_if! {
+//!     if #[cfg(unix)] {
+//!         fn foo() { /* unix specific functionality */ }
+//!     } else if #[cfg(target_pointer_width = "32")] {
+//!         fn foo() { /* non-unix, 32-bit functionality */ }
+//!     } else {
+//!         fn foo() { /* fallback implementation */ }
+//!     }
+//! }
+//!
+//! # fn main() {}
+//! ```
 
+#![no_std]
+#![doc(html_root_url = "https://docs.rs/cfg-if")]
+#![deny(missing_docs)]
+#![cfg_attr(test, allow(unexpected_cfgs))] // we test with features that do not exist
+
+/// The main macro provided by this crate. See crate documentation for more
+/// information.
 #[macro_export]
 macro_rules! cfg_if {
     (
@@ -23,24 +53,43 @@ macro_rules! cfg_if {
         }
     };
 
+    // Internal and recursive macro to emit all the items
+    //
+    // Collects all the previous cfgs in a list at the beginning, so they can be
+    // negated. After the semicolon are all the remaining items.
     (@__items ( $( ($($_:tt)*) , )* ) ; ) => {};
     (
         @__items ( $( ($($no:tt)+) , )* ) ;
         (( $( $($yes:tt)+ )? ) ( $( $tokens:tt )* )),
         $( $rest:tt , )*
     ) => {
+        // Emit all items within one block, applying an appropriate #[cfg]. The
+        // #[cfg] will require all `$yes` matchers specified and must also negate
+        // all previous matchers.
         #[cfg(all(
             $( $($yes)+ , )?
             not(any( $( $($no)+ ),* ))
         ))]
+        // Subtle: You might think we could put `$( $tokens )*` here. But if
+        // that contains multiple items then the `#[cfg(all(..))]` above would
+        // only apply to the first one. By wrapping `$( $tokens )*` in this
+        // macro call, we temporarily group the items into a single thing (the
+        // macro call) that will be included/excluded by the `#[cfg(all(..))]`
+        // as appropriate. If the `#[cfg(all(..))]` succeeds, the macro call
+        // will be included, and then evaluated, producing `$( $tokens )*`. See
+        // also the "issue #90" test below.
         $crate::cfg_if! { @__temp_group $( $tokens )* }
 
+        // Recurse to emit all other items in `$rest`, and when we do so add all
+        // our `$yes` matchers to the list of `$no` matchers as future emissions
+        // will have to negate everything we just matched as well.
         $crate::cfg_if! {
             @__items ( $( ($($no)+) , )* $( ($($yes)+) , )? ) ;
             $( $rest , )*
         }
     };
 
+    // See the "Subtle" comment above.
     (@__temp_group $( $tokens:tt )* ) => {
         $( $tokens )*
     };
@@ -90,6 +139,11 @@ mod tests {
         }
     }
 
+    // In issue #90 there was a bug that caused only the first item within a
+    // block to be annotated with the produced `#[cfg(...)]`. In this example,
+    // it meant that the first `type _B` wasn't being omitted as it should have
+    // been, which meant we had two `type _B`s, which caused an error. See also
+    // the "Subtle" comment above.
     cfg_if!(
         if #[cfg(target_os = "no-such-operating-system-good-sir!")] {
             type _A = usize;
@@ -100,6 +154,17 @@ mod tests {
         }
     );
 
+    #[cfg(not(msrv_test))]
+    cfg_if! {
+        if #[cfg(false)] {
+            fn works6() -> bool { false }
+        } else if #[cfg(true)] {
+            fn works6() -> bool { true }
+        } else if #[cfg(false)] {
+            fn works6() -> bool { false }
+        }
+    }
+
     #[test]
     fn it_works() {
         assert!(works1().is_some());
@@ -107,17 +172,40 @@ mod tests {
         assert!(works3());
         assert!(works4().is_some());
         assert!(works5());
+        #[cfg(not(msrv_test))]
+        assert!(works6());
     }
 
     #[test]
+    #[allow(clippy::assertions_on_constants)]
     fn test_usage_within_a_function() {
         cfg_if! {
             if #[cfg(debug_assertions)] {
+                // we want to put more than one thing here to make sure that they
+                // all get configured properly.
                 assert!(cfg!(debug_assertions));
                 assert_eq!(4, 2 + 2);
             } else {
                 assert!(works1().is_some());
                 assert_eq!(10, 5 + 5);
+            }
+        }
+    }
+
+    #[allow(dead_code)]
+    trait Trait {
+        fn blah(&self);
+    }
+
+    #[allow(dead_code)]
+    struct Struct;
+
+    impl Trait for Struct {
+        cfg_if! {
+            if #[cfg(feature = "blah")] {
+                fn blah(&self) { unimplemented!(); }
+            } else {
+                fn blah(&self) { unimplemented!(); }
             }
         }
     }

@@ -269,12 +269,12 @@ fn serialize_environment_context_prefers_environment_shell_when_present() {
             EnvironmentContextEnvironment {
                 id: "local".to_string(),
                 cwd: local_cwd.abs(),
-                shell: "powershell".to_string(),
+                shell: "zsh".to_string(),
             },
             EnvironmentContextEnvironment {
                 id: "remote".to_string(),
                 cwd: remote_cwd.abs(),
-                shell: "cmd".to_string(),
+                shell: "bash".to_string(),
             },
         ],
         /*current_date*/ None,
@@ -288,11 +288,11 @@ fn serialize_environment_context_prefers_environment_shell_when_present() {
   <environments>
     <environment id="local">
       <cwd>{}</cwd>
-      <shell>powershell</shell>
+      <shell>zsh</shell>
     </environment>
     <environment id="remote">
       <cwd>{}</cwd>
-      <shell>cmd</shell>
+      <shell>bash</shell>
     </environment>
   </environments>
 </environment_context>"#,

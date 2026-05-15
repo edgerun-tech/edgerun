@@ -5,27 +5,19 @@ use codex_protocol::protocol::CreditsSnapshot as CoreCreditsSnapshot;
 use codex_protocol::protocol::RateLimitReachedType as CoreRateLimitReachedType;
 use codex_protocol::protocol::RateLimitSnapshot as CoreRateLimitSnapshot;
 use codex_protocol::protocol::RateLimitWindow as CoreRateLimitWindow;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
 use schemars::JsonSchema;
 use std::collections::HashMap;
-use ts_rs::TS;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(tag = "type", rename_all = "camelCase")]
-#[ts(tag = "type")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(tag = "type", rename_all = "camelCase")]
 pub enum Account {
-    #[serde(rename = "apiKey", rename_all = "camelCase")]
-    #[ts(rename = "apiKey", rename_all = "camelCase")]
+    #[schemars(rename = "apiKey", rename_all = "camelCase")]
     ApiKey {},
 
-    #[serde(rename = "chatgpt", rename_all = "camelCase")]
-    #[ts(rename = "chatgpt", rename_all = "camelCase")]
+    #[schemars(rename = "chatgpt", rename_all = "camelCase")]
     Chatgpt { email: String, plan_type: PlanType },
 
-    #[serde(rename = "amazonBedrock", rename_all = "camelCase")]
-    #[ts(rename = "amazonBedrock", rename_all = "camelCase")]
+    #[schemars(rename = "amazonBedrock", rename_all = "camelCase")]
     AmazonBedrock {},
 }
 
@@ -39,31 +31,24 @@ impl From<ProviderAccount> for Account {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(tag = "type")]
-#[ts(tag = "type")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(tag = "type")]
 pub enum LoginAccountParams {
-    #[serde(rename = "apiKey", rename_all = "camelCase")]
-    #[ts(rename = "apiKey", rename_all = "camelCase")]
+    #[schemars(rename = "apiKey", rename_all = "camelCase")]
     ApiKey {
-        #[serde(rename = "apiKey")]
-        #[ts(rename = "apiKey")]
+        #[schemars(rename = "apiKey")]
         api_key: String,
     },
-    #[serde(rename = "chatgpt", rename_all = "camelCase")]
-    #[ts(rename = "chatgpt", rename_all = "camelCase")]
+    #[schemars(rename = "chatgpt", rename_all = "camelCase")]
     Chatgpt {
-        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        #[schemars(default, skip_serializing_if = "std::ops::Not::not")]
         codex_streamlined_login: bool,
     },
-    #[serde(rename = "chatgptDeviceCode")]
-    #[ts(rename = "chatgptDeviceCode")]
+    #[schemars(rename = "chatgptDeviceCode")]
     ChatgptDeviceCode,
     /// [UNSTABLE] FOR OPENAI INTERNAL USE ONLY - DO NOT USE.
     /// The access token must contain the same scopes that Codex-managed ChatGPT auth tokens have.
-    #[serde(rename = "chatgptAuthTokens", rename_all = "camelCase")]
-    #[ts(rename = "chatgptAuthTokens", rename_all = "camelCase")]
+    #[schemars(rename = "chatgptAuthTokens", rename_all = "camelCase")]
     ChatgptAuthTokens {
         /// Access token (JWT) supplied by the client.
         /// This token is used for backend API requests and email extraction.
@@ -74,32 +59,26 @@ pub enum LoginAccountParams {
         ///
         /// When `null`, Codex attempts to derive the plan type from access-token
         /// claims. If unavailable, the plan defaults to `unknown`.
-        #[ts(optional = nullable)]
         chatgpt_plan_type: Option<String>,
     },
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(tag = "type", rename_all = "camelCase")]
-#[ts(tag = "type")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(tag = "type", rename_all = "camelCase")]
 pub enum LoginAccountResponse {
-    #[serde(rename = "apiKey", rename_all = "camelCase")]
-    #[ts(rename = "apiKey", rename_all = "camelCase")]
+    #[schemars(rename = "apiKey", rename_all = "camelCase")]
     ApiKey {},
-    #[serde(rename = "chatgpt", rename_all = "camelCase")]
-    #[ts(rename = "chatgpt", rename_all = "camelCase")]
+    #[schemars(rename = "chatgpt", rename_all = "camelCase")]
     Chatgpt {
-        // Use plain String for identifiers to avoid TS/JSON Schema quirks around uuid-specific types.
+        // Use plain String for identifiers to avoid JSON Schema quirks around uuid-specific types.
         // Convert to/from UUIDs at the application layer as needed.
         login_id: String,
         /// URL the client should open in a browser to initiate the OAuth flow.
         auth_url: String,
     },
-    #[serde(rename = "chatgptDeviceCode", rename_all = "camelCase")]
-    #[ts(rename = "chatgptDeviceCode", rename_all = "camelCase")]
+    #[schemars(rename = "chatgptDeviceCode", rename_all = "camelCase")]
     ChatgptDeviceCode {
-        // Use plain String for identifiers to avoid TS/JSON Schema quirks around uuid-specific types.
+        // Use plain String for identifiers to avoid JSON Schema quirks around uuid-specific types.
         // Convert to/from UUIDs at the application layer as needed.
         login_id: String,
         /// URL the client should open in a browser to complete device code authorization.
@@ -107,50 +86,44 @@ pub enum LoginAccountResponse {
         /// One-time code the user must enter after signing in.
         user_code: String,
     },
-    #[serde(rename = "chatgptAuthTokens", rename_all = "camelCase")]
-    #[ts(rename = "chatgptAuthTokens", rename_all = "camelCase")]
+    #[schemars(rename = "chatgptAuthTokens", rename_all = "camelCase")]
     ChatgptAuthTokens {},
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct CancelLoginAccountParams {
     pub login_id: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub enum CancelLoginAccountStatus {
     Canceled,
     NotFound,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct CancelLoginAccountResponse {
     pub status: CancelLoginAccountStatus,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct LogoutAccountResponse {}
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "camelCase")]
 pub enum ChatgptAuthTokensRefreshReason {
     /// Codex attempted a backend request and received `401 Unauthorized`.
     Unauthorized,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct ChatgptAuthTokensRefreshParams {
     pub reason: ChatgptAuthTokensRefreshReason,
     /// Workspace/account identifier that Codex was previously using.
@@ -160,22 +133,19 @@ pub struct ChatgptAuthTokensRefreshParams {
     ///
     /// This may be `null` when the prior auth state did not include a workspace
     /// identifier (`chatgpt_account_id`).
-    #[ts(optional = nullable)]
     pub previous_account_id: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct ChatgptAuthTokensRefreshResponse {
     pub access_token: String,
     pub chatgpt_account_id: String,
     pub chatgpt_plan_type: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct GetAccountRateLimitsResponse {
     /// Backward-compatible single-bucket view; mirrors the historical payload.
     pub rate_limits: RateLimitSnapshot,
@@ -183,75 +153,70 @@ pub struct GetAccountRateLimitsResponse {
     pub rate_limits_by_limit_id: Option<HashMap<String, RateLimitSnapshot>>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct SendAddCreditsNudgeEmailParams {
     pub credit_type: AddCreditsNudgeCreditType,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(export_to = "v2/", rename_all = "snake_case")]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "snake_case")]
 pub enum AddCreditsNudgeCreditType {
     Credits,
     UsageLimit,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct SendAddCreditsNudgeEmailResponse {
     pub status: AddCreditsNudgeEmailStatus,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(export_to = "v2/", rename_all = "snake_case")]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "snake_case")]
 pub enum AddCreditsNudgeEmailStatus {
     Sent,
     CooldownActive,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct GetAccountParams {
     /// When `true`, requests a proactive token refresh before returning.
     ///
     /// In managed auth mode this triggers the normal refresh-token flow. In
     /// external auth mode this flag is ignored. Clients should refresh tokens
     /// themselves and call `account/login/start` with `chatgptAuthTokens`.
-    #[serde(default)]
+    #[schemars(default)]
     pub refresh_token: bool,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct GetAccountResponse {
     pub account: Option<Account>,
     pub requires_openai_auth: bool,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct AccountUpdatedNotification {
     pub auth_mode: Option<AuthMode>,
     pub plan_type: Option<PlanType>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct AccountRateLimitsUpdatedNotification {
     pub rate_limits: RateLimitSnapshot,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct RateLimitSnapshot {
     pub limit_id: Option<String>,
     pub limit_name: Option<String>,
@@ -278,9 +243,10 @@ impl From<CoreRateLimitSnapshot> for RateLimitSnapshot {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, JsonSchema, TS)]
-#[serde(rename_all = "snake_case")]
-#[ts(export_to = "v2/", rename_all = "snake_case")]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "snake_case")]
 pub enum RateLimitReachedType {
     RateLimitReached,
     WorkspaceOwnerCreditsDepleted,
@@ -329,14 +295,11 @@ impl From<RateLimitReachedType> for CoreRateLimitReachedType {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct RateLimitWindow {
     pub used_percent: i32,
-    #[ts(type = "number | null")]
     pub window_duration_mins: Option<i64>,
-    #[ts(type = "number | null")]
     pub resets_at: Option<i64>,
 }
 
@@ -350,9 +313,8 @@ impl From<CoreRateLimitWindow> for RateLimitWindow {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct CreditsSnapshot {
     pub has_credits: bool,
     pub unlimited: bool,
@@ -369,11 +331,10 @@ impl From<CoreCreditsSnapshot> for CreditsSnapshot {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-#[ts(export_to = "v2/")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct AccountLoginCompletedNotification {
-    // Use plain String for identifiers to avoid TS/JSON Schema quirks around uuid-specific types.
+    // Use plain String for identifiers to avoid JSON Schema quirks around uuid-specific types.
     // Convert to/from UUIDs at the application layer as needed.
     pub login_id: Option<String>,
     pub success: bool,

@@ -1,3 +1,8 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
+
+use alloc::string::String;
 use core::fmt;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -19,6 +24,7 @@ impl fmt::Display for Error {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for Error {}
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -40,4 +46,5 @@ impl fmt::Display for BackendError {
     }
 }
 
+#[cfg(feature = "std")]
 impl std::error::Error for BackendError {}

@@ -15,7 +15,7 @@
 
 use core::borrow::Borrow;
 
-use crate::curve25519_dalek::scalar::{Scalar, clamp_integer};
+use crate::curve25519_dalek::scalar::Scalar;
 use crate::subtle::ConstantTimeEq;
 
 // ------------------------------------------------------------------------
@@ -44,33 +44,6 @@ where
 {
     fn is_identity(&self) -> bool {
         self.ct_eq(&T::identity()).into()
-    }
-}
-
-/// A precomputed table of basepoints, for optimising scalar multiplications.
-pub trait BasepointTable {
-    /// The type of point contained within this table.
-    type Point;
-
-    /// Generate a new precomputed basepoint table from the given basepoint.
-    fn create(basepoint: &Self::Point) -> Self;
-
-    /// Retrieve the original basepoint from this table.
-    fn basepoint(&self) -> Self::Point;
-
-    /// Multiply a `scalar` by this precomputed basepoint table, in constant time.
-    fn mul_base(&self, scalar: &Scalar) -> Self::Point;
-
-    /// Multiply `clamp_integer(bytes)` by this precomputed basepoint table, in constant time. For
-    /// a description of clamping, see [`clamp_integer`].
-    fn mul_base_clamped(&self, bytes: [u8; 32]) -> Self::Point {
-        // Basepoint multiplication is defined for all values of `bytes` up to and including
-        // 2^255 - 1. The limit comes from the fact that scalar.as_radix_16() doesn't work for
-        // most scalars larger than 2^255.
-        let s = Scalar {
-            bytes: clamp_integer(bytes),
-        };
-        self.mul_base(&s)
     }
 }
 

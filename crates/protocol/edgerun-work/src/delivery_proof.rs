@@ -3,14 +3,14 @@ use alloc::vec::Vec;
 use edgerun_crypto::Ed25519SigningKey;
 
 use crate::channel::ChannelProof;
-use crate::channel_order::{OrderedChannelEnvelope, ordered_message_hash};
+use crate::channel_order::{ordered_message_hash, OrderedChannelEnvelope};
 use crate::preimage::{HashBuilder, PreimageBuilder};
 use crate::protocol::{
-    Hash, NodeId, NodeIdentity, WORK_WIRE_ABI_VERSION, WorkPacket, WorkProtocolError,
+    Hash, NodeId, NodeIdentity, WorkPacket, WorkProtocolError, WORK_WIRE_ABI_VERSION,
 };
 use crate::recipient_policy::{
-    RecipientMessagePolicy, RecipientPolicyError, recipient_message_policy_allows,
-    recipient_message_policy_hash,
+    recipient_message_policy_allows, recipient_message_policy_hash, RecipientMessagePolicy,
+    RecipientPolicyError,
 };
 use crate::signing::{empty_signature, sign_ed25519, verify_signature};
 

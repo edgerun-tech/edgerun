@@ -1,3 +1,4 @@
+#[cfg(feature = "native-transport")]
 use codex_protocol::account::PlanType;
 use codex_protocol::protocol::CreditsSnapshot;
 use codex_protocol::protocol::RateLimitSnapshot;
@@ -97,6 +98,7 @@ pub fn parse_rate_limit_for_limit(
 }
 
 #[derive(Debug)]
+#[cfg(feature = "native-transport")]
 struct RateLimitEventWindow {
     used_percent: f64,
     window_minutes: Option<i64>,
@@ -104,18 +106,21 @@ struct RateLimitEventWindow {
 }
 
 #[derive(Debug)]
+#[cfg(feature = "native-transport")]
 struct RateLimitEventDetails {
     primary: Option<RateLimitEventWindow>,
     secondary: Option<RateLimitEventWindow>,
 }
 
 #[derive(Debug)]
+#[cfg(feature = "native-transport")]
 struct RateLimitEventCredits {
     has_credits: bool,
     unlimited: bool,
     balance: Option<String>,
 }
 
+#[cfg(feature = "native-transport")]
 struct RateLimitEvent {
     kind: String,
     plan_type: Option<PlanType>,
@@ -125,6 +130,7 @@ struct RateLimitEvent {
     limit_name: Option<String>,
 }
 
+#[cfg(feature = "native-transport")]
 pub fn parse_rate_limit_event(payload: &str) -> Option<RateLimitSnapshot> {
     let event = parse_rate_limit_event_tape(payload)?;
     if event.kind != "codex.rate_limits" {
@@ -158,6 +164,7 @@ pub fn parse_rate_limit_event(payload: &str) -> Option<RateLimitSnapshot> {
     })
 }
 
+#[cfg(feature = "native-transport")]
 fn parse_rate_limit_event_tape(payload: &str) -> Option<RateLimitEvent> {
     let tape = edgerun_json::parse_json_tape(payload).ok()?;
     let root = tape.root(payload)?;
@@ -205,6 +212,7 @@ fn parse_rate_limit_event_tape(payload: &str) -> Option<RateLimitEvent> {
     })
 }
 
+#[cfg(feature = "native-transport")]
 fn parse_rate_limit_event_window(
     value: edgerun_json::TapeValue<'_>,
 ) -> Option<RateLimitEventWindow> {
@@ -215,6 +223,7 @@ fn parse_rate_limit_event_window(
     })
 }
 
+#[cfg(feature = "native-transport")]
 fn parse_plan_type(value: &str) -> PlanType {
     match value {
         "free" => PlanType::Free,
@@ -232,6 +241,7 @@ fn parse_plan_type(value: &str) -> PlanType {
     }
 }
 
+#[cfg(feature = "native-transport")]
 fn map_event_window(window: Option<&RateLimitEventWindow>) -> Option<RateLimitWindow> {
     let window = window?;
     Some(RateLimitWindow {

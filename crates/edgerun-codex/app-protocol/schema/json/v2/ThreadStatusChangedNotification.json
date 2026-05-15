@@ -1,101 +1,90 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "definitions": {
-    "ThreadActiveFlag": {
-      "enum": [
-        "waitingOnApproval",
-        "waitingOnUserInput"
-      ],
-      "type": "string"
-    },
-    "ThreadStatus": {
-      "oneOf": [
-        {
-          "properties": {
-            "type": {
-              "enum": [
-                "notLoaded"
-              ],
-              "title": "NotLoadedThreadStatusType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "title": "NotLoadedThreadStatus",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "type": {
-              "enum": [
-                "idle"
-              ],
-              "title": "IdleThreadStatusType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "title": "IdleThreadStatus",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "type": {
-              "enum": [
-                "systemError"
-              ],
-              "title": "SystemErrorThreadStatusType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "title": "SystemErrorThreadStatus",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "activeFlags": {
-              "items": {
-                "$ref": "#/definitions/ThreadActiveFlag"
-              },
-              "type": "array"
-            },
-            "type": {
-              "enum": [
-                "active"
-              ],
-              "title": "ActiveThreadStatusType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "activeFlags",
-            "type"
-          ],
-          "title": "ActiveThreadStatus",
-          "type": "object"
-        }
-      ]
-    }
-  },
+  "title": "ThreadStatusChangedNotification",
+  "type": "object",
   "properties": {
     "status": {
-      "$ref": "#/definitions/ThreadStatus"
+      "title": "ThreadStatus",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "NotLoaded",
+              "title": "NotLoadedv2::ThreadStatusChangedNotificationType"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false,
+          "title": "NotLoadedv2::ThreadStatusChangedNotification"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "Idle",
+              "title": "Idlev2::ThreadStatusChangedNotificationType"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false,
+          "title": "Idlev2::ThreadStatusChangedNotification"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "type": {
+              "type": "string",
+              "const": "SystemError",
+              "title": "SystemErrorv2::ThreadStatusChangedNotificationType"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "additionalProperties": false,
+          "title": "SystemErrorv2::ThreadStatusChangedNotification"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "activeFlags": {
+              "type": "array",
+              "items": {
+                "title": "ThreadActiveFlag",
+                "type": "string",
+                "enum": [
+                  "WaitingOnApproval",
+                  "WaitingOnUserInput"
+                ]
+              }
+            },
+            "type": {
+              "type": "string",
+              "const": "Active",
+              "title": "Activev2::ThreadStatusChangedNotificationType"
+            }
+          },
+          "required": [
+            "type",
+            "activeFlags"
+          ],
+          "additionalProperties": false,
+          "title": "Activev2::ThreadStatusChangedNotification"
+        }
+      ]
     },
     "threadId": {
       "type": "string"
     }
   },
   "required": [
-    "status",
-    "threadId"
-  ],
-  "title": "ThreadStatusChangedNotification",
-  "type": "object"
+    "threadId",
+    "status"
+  ]
 }

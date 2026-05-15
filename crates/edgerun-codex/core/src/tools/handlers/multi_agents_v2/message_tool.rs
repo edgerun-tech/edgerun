@@ -30,16 +30,16 @@ impl MessageDeliveryMode {
     }
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Debug, FromJson)]
+#[schemars(deny_unknown_fields)]
 /// Input for the MultiAgentV2 `send_message` tool.
 pub(crate) struct SendMessageArgs {
     pub(crate) target: String,
     pub(crate) message: String,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Debug, FromJson)]
+#[schemars(deny_unknown_fields)]
 /// Input for the MultiAgentV2 `followup_task` tool.
 pub(crate) struct FollowupTaskArgs {
     pub(crate) target: String,

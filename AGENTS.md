@@ -1,68 +1,109 @@
-# EdgeRun product and agent guidance
+# EdgeRun Agent Guide
 
-This repository is building EdgeRun: user-owned internet infrastructure for identity, apps, storage, routing, compute, publishing, and payments.
+This repository builds EdgeRun: user-owned internet infrastructure for identity,
+apps, storage, routing, compute, publishing, and proof-backed payments.
 
-EdgeRun is not a token-first crypto project and not a generic cloud clone. It is usage-first infrastructure where users and developers can run, publish, host, sell, cache, relay, store, compute, and settle through verifiable work. Payments follow proof of useful work.
+EdgeRun is not a token-first crypto product and not a generic cloud clone. It is
+usage-first infrastructure where users and developers can run, publish, host,
+sell, cache, relay, store, compute, and settle through verifiable work. Payments
+follow proof of useful work.
 
-## Product thesis
+## Engineering Standard
 
-EdgeRun gives users freedom and accountability at the same time.
+The goal is not to merely get tests green. The goal is to produce code that is
+small, coherent, defensible, and good enough to present publicly and depend on
+daily with a clear conscience.
 
-Freedom:
+Work by these rules:
 
-- Users own their identity, data, local app cache, contacts, keys, and proof history.
-- Users can own admission nodes that enforce their personal or organizational policy before any work enters the network.
-- Users are not only consumers. With identity routing and built-in internet protocols, every user can become a publisher, host, app seller, website owner, data source, or service provider.
-- Developers can publish and sell apps without Apple, Google, Meta, Stripe, Cloudflare, or AWS as required gatekeepers.
-- Anyone can run useful nodes and earn from bandwidth, storage, relay, compute, hosting, and app distribution.
-- Apps and sites are content-addressed and can be served by the network.
+- Always read the existing code before writing. Inspect the relevant modules,
+  tests, call sites, feature flags, and existing patterns first.
+- Do not claim behavior, compatibility, performance, security, or correctness
+  without proof. Run the relevant checks, inspect the output, and state exactly
+  what was verified.
+- Do not add external dependencies. Use the standard library, existing workspace
+  crates, or small local code that fits the existing design. If a dependency is
+  truly unavoidable, stop and get explicit approval before changing manifests.
+- Design portable logic as `no_std + alloc` first so it can run in browser WASM.
+  Native `std` code is thin OS glue, not the home for protocol, policy, wire,
+  storage, routing, or app semantics.
+- Move data across boundaries through `edgerun-wire` records and rkyv bytes.
+  Do not invent side-channel structs or ad hoc serialization for browser/native
+  crossings.
+- Prefer deleting, consolidating, and simplifying code over adding new layers.
+  Remove dead paths, duplicate models, stale compatibility shims, and redundant
+  abstractions whenever it is safe and in scope.
+- Keep one canonical implementation for each concept. Do not create parallel
+  app/package/protocol/wire/policy models just to make a local task easier.
+- Treat tests as evidence, not the finish line. A change that passes tests but
+  leaves unclear ownership, duplicated logic, hidden protocol drift, or fragile
+  behavior is not done.
+- Preserve auditability. Important behavior should have a verifier, a test, a
+  proof trail, or a clearly documented reason it cannot yet be proven.
+- When uncertain, narrow the change and prove the smaller claim instead of
+  expanding scope.
 
-Accountability:
+## Product Direction
 
-- Identities, packages, policies, routes, requests, admissions, proofs, and receipts are signed or hash-addressed.
-- Admission nodes enforce policy, budget, replay protection, route choice, and whether work may enter the network at all.
-- Nodes get paid only for verifiable work.
-- App access, caching, payments, and capabilities are governed by explicit content-addressed policies.
-- Users see what they are signing and can inspect proof trails.
+Keep this public framing:
 
-The public framing should be:
+> Own your identity and data. Run apps from verified network storage. Cache
+> locally when you want. Publish from your own node. Enforce your own policy.
+> Developers sell directly. Infrastructure gets paid for useful work.
 
-> Own your identity and data. Run apps from verified network storage. Cache locally when you want. Publish from your own node. Enforce your own policy. Developers sell directly. Infrastructure gets paid for useful work.
+Prefer these terms in user-facing UX:
 
-Avoid presenting the product as merely “decentralized cloud” or “DRM”. Internally, policy can enforce app licensing and accountability, but externally the better language is verifiable licensing, publisher-defined access policy, user-owned execution, and proof-backed payments.
+- "Run" instead of "Install".
+- "Verify & cache" instead of "Install".
+- "Cached" instead of "Installed".
+- "Remove cache" instead of "Uninstall".
+- "Network app" instead of "catalog app".
+- "Trust Container" for the sealed local profile/root.
+- "Proof dashboard" for Trust Manager.
+- "Publisher policy" or "app policy" instead of "DRM".
+- "Import/sync source" for Gmail, Drive, GitHub, mailboxes, folders, and other
+  legacy services.
+- "Publish from your node" or "identity-routed publishing" for user-hosted
+  services.
+- "Admission policy" for the user-owned policy gate.
+- "Node instance" for a role-specific WASM/native node with identity, policy,
+  budget, and route scope.
 
-## User model
+Do not present users as only app consumers. The architecture should make it
+natural for a user to become a publisher, host, storage provider, relay, compute
+provider, data source, app seller, or service endpoint.
 
-Every user starts with a browser node.
+## Core Product Model
 
-The browser node should be treated as a first-class local node that can:
+Every user starts with a browser node. Treat the browser node as a first-class
+local node instance that can:
 
-- hold a sealed Trust Container;
-- unlock/sign through password or passkey;
-- verify signed app packages and hashes;
+- hold and unlock a sealed Trust Container;
+- sign through password or passkey;
+- verify signed app packages and content hashes;
 - run apps from network storage;
-- optionally cache verified packages locally;
+- cache verified package bytes locally;
 - request and grant capabilities;
-- record local audit/proof events;
-- eventually earn from useful work when resource sharing is enabled;
-- publish identity-routed services when the user enables them.
+- record local proof/audit events;
+- eventually earn from browser-appropriate useful work;
+- publish identity-routed services when enabled by policy.
 
-The user flow should feel simple:
+The intended user flow is:
 
 ```text
-Create/unlock identity
-→ browser node starts
-→ choose EdgeRun DAO admission or user-owned admission
-→ define node/admission policy
-→ connect contacts and old data sources
-→ run app from network storage
-→ optional local cache
-→ publish or sync what the user chooses
-→ inspect proof in Trust Manager
-→ earn/spend through usage
+create/unlock identity
+-> browser node starts
+-> choose EdgeRun DAO admission or user-owned admission
+-> define node/admission policy
+-> connect contacts and old data sources
+-> run app from network storage
+-> optionally cache verified bytes
+-> publish or sync what the user chooses
+-> inspect proof in Trust Manager
+-> earn/spend through usage
 ```
 
-On first run of a network app, users should see a clear prompt:
+On first run of a network app, the UX should ask:
 
 ```text
 This app runs from EdgeRun network storage.
@@ -73,455 +114,254 @@ Would you like to cache verified bytes locally to avoid repeated retrieval payme
 [Run once] [Verify & cache] [Cancel]
 ```
 
-Use “run” as the primary user action. “Install” is the wrong mental model. Local state is a verified cache, not ownership of a copied app from a centralized store.
+Apps are signed, content-addressed packages stored on the network. Catalogs are
+discovery only. Authority comes from package hash, manifest hash, developer
+identity/signature, release id, app policy hash, and local verification/proof
+events.
 
-## Node instance model
+## Node And Admission Model
 
-The same protocol node should compile to browser/WASM and native.
+Do not model "the node" as one global singleton. Model nodes as role instances:
 
-Browser/WASM nodes:
+```text
+identity + role + policy + budget + route scope + runtime target
+```
 
-- run inside the browser as local node instances;
-- rely on browser-provided transport, storage, and permission adapters;
-- can run admission, relay, compute, app runtime, and other role instances when the role is WASM-capable;
-- are good for user control, policy enforcement, local app execution, lightweight relay/admission, and proof/audit work.
-
-Native nodes:
-
-- run on localhost, VPS, home server, NAS, or other machines;
-- have access to native ports, filesystem/storage, sockets, services, and long-running process features;
-- are the right choice for durable storage nodes, public relays, publishing endpoints, boot/provisioning endpoints, and high-availability service roles.
-
-Users can run multiple instances of the same role with different identities, policies, budgets, and scopes. Example:
+Examples:
 
 ```text
 admission:family
 admission:business
-admission:app-store
 relay:private-devices
 relay:public-paid
 storage:home-nas
 storage:vps-cache
 compute:browser-local
 compute:native-gpu
+publishing:personal-site
 ```
 
-Do not model “the node” as one global singleton. Model nodes as role instances: identity + role + policy + budget + route scope + runtime target.
-
-## Admission model
-
-All workloads enter the network through an admission node.
-
-The admission node is the policy enforcement point. It decides whether a signed `WorkRequest` may enter the network, which relay path should carry it, which routes are acceptable, what budget is admitted, and which content-addressed policy applies.
+All workloads enter the network through an admission node. The browser signs
+intent and submits a `WorkRequest`; an admission node returns a signed
+`WorkAdmission` that defines whether the work may enter the network, the route
+or channel it may use, the admitted budget, the policy hash, and validity.
 
 Default path:
 
 ```text
 user/browser node
-→ EdgeRun DAO admission node
-→ assigned relay/channel
-→ worker/recipient/storage through relay
+-> EdgeRun DAO admission node
+-> assigned relay/channel
+-> worker/recipient/storage through relay
 ```
 
 User-owned path:
 
 ```text
 user/browser node
-→ user-owned admission node
-→ user-approved relay/storage/compute nodes
-→ worker/recipient/storage through relay
+-> user-owned admission node
+-> user-approved relay/storage/compute nodes
+-> worker/recipient/storage through relay
 ```
 
-A user-owned admission node lets the user or organization enforce their own policy:
+Do not bypass admission by sending authoritative user work directly to storage,
+compute, relays, apps, services, or workers. Payload layers may prepare bytes,
+hashes, sealed objects, manifests, packets, and local verification state, but
+network authority comes from the admission chain.
 
-- which browser/user identities may submit work;
-- which worker nodes are trusted;
-- which machines can be storage, relay, compute, or publishing nodes;
-- which relays can carry traffic;
-- which app/data policies are allowed;
-- which budgets and challenge windows apply;
-- which routes are available, draining, or blocked.
-
-Admission nodes can receive policy from other admission nodes. This lets policy enforcement become decentralized and composable:
+Admission policy can be inherited:
 
 ```text
 personal admission
-→ family admission policy
-→ organization admission policy
-→ DAO admission policy
+-> family admission policy
+-> organization admission policy
+-> DAO admission policy
 ```
 
-Each admission node still signs its own admissions and must commit to the policy hash it enforced. Do not hide policy inheritance: Trust Manager should show the policy source chain when available.
-
-Do not model browser nodes as directly dispatching authoritative work to storage/compute nodes. The browser signs intent and sends it to an admission node. The admission node returns a signed `WorkAdmission` telling the browser/node where and how the workload may enter the relay network.
-
-## Users as publishers
-
-A user-owned node can be more than a browser runtime. EdgeRun nodes already aim to include identity routing and common internet protocol capability such as HTTP, TLS, ACME, SSH, iPXE, TFTP, and related service/provisioning protocols.
-
-Compatibility protocols are migration bridges. They let existing clients and infrastructure reach EdgeRun nodes while authority moves to identity routing, content hashes, policies, and proofs.
-
-That means a user can become their own publisher:
-
-```text
-user identity
-→ admission/node policy
-→ signed route / endpoint advertisement
-→ content-addressed site/app/file/API/boot image
-→ HTTP/TLS/ACME or other protocol exposure
-→ proof/audit trail
-→ optional payment/settlement
-```
-
-Examples:
-
-- publish a personal website;
-- host an app or app catalog entry;
-- expose a private API to approved contacts/agents;
-- serve files or package objects from EdgeRun storage;
-- publish boot/provisioning artifacts such as iPXE/TFTP flows;
-- expose an agent service under explicit policy;
-- let contacts message or call directly by identity.
-
-Do not design UX where users are only consumers of apps. The product direction is that users can start as consumers, then become publishers/providers by enabling node policy and route/service capabilities.
-
-## Developer model
-
-Developers publish from the CLI.
-
-The intended developer flow is:
-
-```text
-Register developer identity
-→ pay deposit/status/hosting budget
-→ package app/site with the SDK
-→ sign release
-→ publish package objects to network storage
-→ publish catalog entry/policy
-→ users run by hash or cache locally
-→ developer and infra providers earn from usage
-```
-
-The SDK is the developer-facing business adapter. It should handle or expose:
-
-- developer identity;
-- app/site packaging;
-- release signing;
-- package/content hashing;
-- app policy references;
-- payments/admission integration;
-- publish/deploy helpers;
-- verification helpers for websites using EdgeRun directly.
-
-The current SDK browser-authoring path already produces artifacts such as:
-
-- `app.edapp` — app manifest;
-- `app.eapp` — app graph/package;
-- `developer.esig` — developer signature.
-
-Future work should keep these artifacts aligned with the frontend App Store and network storage model.
-
-## App distribution model
-
-Apps are not primarily installed. Apps are signed, content-addressed packages stored on the network.
-
-Catalogs are discovery only. The catalog must not be treated as the authority. The authority is:
-
-- package hash;
-- manifest hash;
-- developer identity/signature;
-- release id;
-- app policy hash;
-- local verification/proof event.
-
-The frontend `AppDefinition` should be treated as a UI projection, not source of truth. Source of truth is the signed SDK package and its content-addressed artifacts.
-
-Users can choose:
-
-- run from network storage each time;
-- verify and cache locally;
-- run cached copy after hash verification;
-- pay per run/retrieval/cache/license according to the app policy.
-
-App access policy modes currently used in the frontend are:
-
-```text
-free-run
-paid-run
-paid-cache
-license-required
-```
-
-Do not add new protocol types just to represent app-store semantics. Prefer content-addressed policies referenced by `policy_hash`, combined with existing work/request/admission/proof/receipt primitives.
-
-## Data import and personal timeline model
-
-Third-party connections are migration sources, not permanent homes.
-
-Gmail, other mailboxes, Google Drive, GitHub, photos, contacts, calendars, local folders, browser cache, and other sources should be presented as import/sync connectors into user-owned EdgeRun storage and the Trust Container.
-
-The intended direction:
-
-```text
-connect old services
-→ import/sync selected data into EdgeRun storage
-→ build private indexes/timelines/graphs
-→ grant specialized agents scoped access
-→ slowly stop depending on the old services
-```
-
-This enables app-driven visualization of a person’s life. Apps and agents can visualize timelines, relationships, finances, health records, documents, projects, messages, calls, and media, but only through explicit capability grants.
-
-Specialized AI agents should be scoped by assignment and policy, for example:
-
-- finance agent: invoices, receipts, accounts, tax documents;
-- health agent: health documents, wearable data, food logs, habits;
-- memory agent: timeline, notes, messages, photos, contacts;
-- code agent: repos, issues, docs, release history;
-- travel agent: flights, calendars, locations, documents;
-- publishing agent: sites, apps, DNS/ACME, release metadata.
-
-Each agent must have a clear capability scope and should appear in Trust Manager.
-
-## Trust Container and Trust Manager
-
-The Trust Container is the user’s local sealed identity/data root.
-
-It contains, or should be understood as containing:
-
-- owner identity;
-- owner encryption identity;
-- browser node identity;
-- admission node preference/policy;
-- contacts;
-- profile events;
-- app secrets/OAuth tokens;
-- sealed messages/data;
-- local preferences;
-- local proof/audit context.
-
-Identity app should be the friendly view: profile, browser node, passkey status, admission choice, public contact card, and local sealed state.
-
-Trust Manager should be the proof dashboard: identity, browser node, admission policy, cached packages, capability grants, routes, profile events, runtime events, authority refs, and proof refs. Prefer deriving Trust Manager rows from real stores instead of hardcoded mock data.
-
-Important frontend stores/surfaces:
-
-- `useAuth` / `authStore`: real Trust Container, identity, passkey, browser node, contacts, app secrets, profile event log.
-- `browserAppInstallStore`: currently named as install state, but semantically this is verified package cache state.
-- `runtimeEventLogStore`: runtime audit/proof events such as package verification.
-- `localCapabilityGrantsStore`: local app capability grants.
-- `TrustManagerSurface`: should show real projected state.
-- `AppStore`: should present run/cache network apps, package proofs, developer identity, policy, and local cache state.
-- Storage/data-source apps: should present external services as import/sync sources into EdgeRun storage.
-
-## Node responsibilities
-
-Users should understand the node types.
-
-Browser node:
-
-- default node every user gets;
-- signs local actions and user work intent;
-- submits work requests to the configured admission node;
-- verifies app packages;
-- runs network apps;
-- caches verified package bytes;
-- records runtime/proof events;
-- can eventually earn from browser-appropriate work;
-- can become a publisher/service endpoint when enabled by policy.
-
-Admission node:
-
-- checks signed user request, balance/funding, policy, route plan, budget, and validity window;
-- owns/enforces the route table and node policy for work entry;
-- tells the sender which relay/channel/path to use;
-- admits or rejects work before it enters the network;
-- may be the default EdgeRun DAO admission node or a user-owned admission node;
-- may run in browser/WASM for local or scoped policy enforcement;
-- may run natively for durable/public admission service.
-
-Relay node:
-
-- moves ordered encrypted messages/work packets;
-- should not need to understand payload content;
-- earns only from admitted, ordered, proof-backed delivery;
-- may run in browser/WASM for scoped/private relay paths;
-- may run natively for public or durable relay service.
-
-Storage/CDN node:
-
-- stores content-addressed app/site/package/model objects;
-- serves retrievals and ranges;
-- earns from retrieval/storage receipts.
-
-Compute node:
-
-- runs deterministic work;
-- should eventually prove input/program/output relation;
-- useful for AI agents and paid jobs.
-
-Settlement rail:
-
-- pays proof-backed receipts;
-- may use smart contracts/cross-chain settlement;
-- should keep on-chain logic minimal and hash/proof-oriented.
-
-Publishing/service node:
-
-- exposes user-approved services over identity-routed endpoints and standard protocols;
-- can serve websites, APIs, package objects, boot artifacts, or agent endpoints;
-- must obey user policy and emit auditable events.
-
-## Existing protocol primitives
-
-Do not add new protocol objects unless they create a new cryptographic or economic guarantee.
-
-Prefer reusing:
-
-```text
-WorkRequest        = signed user intent submitted to admission
-WorkAdmission      = funded/policy-approved authorization and route/channel assignment
-RouteAdvertisement = reachability/capability announcement
-NetworkMessage     = signed payload transfer through relay path
-ChannelEnvelope    = ordered transport context
-ChannelProof       = recipient acceptance/proof
-WorkReceipt        = payable work claim
-policy_hash        = content-addressed policy commitment
-SettlementLedger   = local settlement model
-```
-
-For app sales, website hosting, package delivery, CDN retrieval, user-to-user payments, passkey payments, and user publishing, use existing primitives where possible:
-
-```text
-User action
-→ WorkRequest to admission
-→ policy_hash
-→ WorkAdmission with assigned relay/channel/path
-→ relay-mediated execution/delivery/retrieval/publication
-→ ChannelProof or typed proof
-→ WorkReceipt
-→ settlement
-```
-
-## Important edgerun-work invariants
-
-Keep these invariants intact:
-
-1. A node identity is valid only if `node_id == derive_node_id(public_key, role)`.
-2. Admission must verify the signed `WorkRequest` before trusting user/request fields.
-3. Admission commits to user, request hash, budget, route/channel, policy hash, validity, and admission node.
-4. Admission is the policy and route gate for work entering the network.
-5. Route signatures prove reachability/state; new work should use available routes.
-6. Ordered channels verify packet hash, route hash, sequence, and previous message hash.
-7. Relays hash each packet they handle and commit transit work into a hash chain.
-8. Recipient delivery proof should be policy-bound: the recipient signs acceptance of an ordered message under a specific content-addressed policy hash.
-9. Relay payment should require receiver delivery proof, transit hash, forwarded packet hash, and admission/policy binding.
-10. Storage proofs must eventually include retrieval or availability proof; store-only receipts are not enough for final production payment.
-11. Generic unchecked receipt settlement must not be used for relay payments.
-12. Batch settlement must be atomic: preflight the whole batch before mutating ledger state.
-13. Do not prune paid receipt/admission tracking until an admission is finalized and its challenge window has closed.
-14. Core protocol code should remain `no_std + alloc`. Sockets, threads, filesystem, and locks belong in `std_runtime`.
-
-## `edgerun-work` module map
-
-Important modules in `crates/protocol/edgerun-work`:
-
-- `protocol.rs`: durable wire/economic objects such as `NodeIdentity`, `NetworkMessage`, `WorkRequest`, `WorkAdmission`, `WorkReceipt`, `WorkPacket`, and acknowledgements.
-- `identity.rs`: `derive_node_id`, `verify_node_identity`, `node_identity_from_key`.
+Each admission node signs its own admission and commits to the policy hash it
+enforced. Trust Manager should expose policy sources and proof refs when
+available.
+
+## Workspace Map
+
+The workspace is a large Rust 2024 monorepo. `Cargo.toml` is the source of
+truth for members. Several excluded crates/devices still exist but are not
+workspace members.
+
+Important families:
+
+- `crates/protocol/*`: core protocol surfaces.
+  - `edgerun-work`: admitted work, routing, channels, proofs, receipts,
+    settlement, storage payloads, capability packets, and std/native runtime
+    adapters.
+  - `edgerun-wire`: rkyv-only wire boundary and shared ABI records.
+  - `edgerun-core`: lower-level protocol types, validation, commands, and
+    crypto-facing helpers.
+  - `edgerun-protocols`: transport-independent parsers, encoders, and protocol
+    state machines for HTTP, TLS, DNS, SMTP, IMAP, WebSocket, TFTP, block, USB,
+    Wi-Fi, and other compatibility protocols.
+- `crates/utility/*`: EdgeRun-owned compatibility crates and shared utilities.
+  Many mirror external crate APIs under local ownership. Avoid casually adding
+  new third-party dependencies when a local compatibility crate already exists.
+- `crates/utility/edgerun-ui-core`: shared Rust UI kit. This is the effective
+  `edgerun-ui` crate in this repo.
+- `crates/node/*`: node orchestration, daemon runtime, machine inventory, and
+  SDL/native UI integration.
+- `crates/authority/*`: storage, VFS, and virtual disk authority/storage
+  surfaces.
+- `crates/capability/*`: capability and remote capability request/response
+  structures.
+- `crates/identity/*`: hardware-backed identities such as TPM and YubiKey.
+- `crates/linux-adapters/*`: Linux device/network adapters.
+- `crates/apps/*`: app/service crates such as email, OAuth, exchange API, and
+  secret service.
+- `crates/edgerun-codex/*`: Codex-derived agent/client/TUI/web/native UI
+  surfaces adapted into the workspace.
+- `crates/edgerun-sdk`, `edgerun-unit`, and `edgerun-unit-macros`: deterministic
+  app/unit authoring path.
+- `crates/edgerun-compositor`, `edgerun-platform`, `edgerun-virtio`,
+  `edgerun-oci`, `edgerun-wallet`, `edgerun-exchange`, `edgerun-network-driver`,
+  `edgerun-term`, `edgerun-codelyzer`: platform, runtime, settlement, terminal,
+  analysis, and infrastructure support.
+- `devices/*`: device firmware/bridge crates; currently excluded from the main
+  workspace.
+
+When scanning the repo, prefer `rg`, `rg --files`, and `cargo metadata
+--no-deps`. Do not assume every directory under `crates/` is a workspace member;
+check the root manifest.
+
+## Rust And Dependency Rules
+
+- The workspace uses Rust edition 2024 and rust-version 1.95.
+- Default new reusable logic to `no_std + alloc` so it can run in browser WASM,
+  firmware, native, tests, and future runtimes.
+- Preserve existing `no_std + alloc` boundaries in protocol and utility crates.
+- Route durable cross-runtime data through `edgerun-wire`. If bytes cross
+  browser/native, worker/main-thread, node/app, transport, storage, or capability
+  boundaries, prefer an explicit wire record over local-only structs or ad hoc
+  encodings.
+- Put sockets, threads, filesystem access, locks, timers, and other OS features
+  behind explicit `std` features or in `std_runtime` modules. `std` should be a
+  thin adapter layer over portable core logic.
+- Do not add external dependencies without explicit approval. Prefer
+  workspace-local utility crates and existing compatibility surfaces. Assume
+  this repository already has the crate you need; prove otherwise before asking
+  to add anything.
+- Keep changes scoped. Do not refactor vendored/compatibility crates unless the
+  task is explicitly about them.
+- Consolidate before extending. If two modules express the same concept, prefer
+  one shared implementation and remove the duplicate path when safe.
+- Remove code that is proven dead, obsolete, or superseded by a clearer local
+  abstraction. Do not keep compatibility shims unless a real caller still needs
+  them.
+- Before changing protocol hashes, signed preimages, or wire records, find all
+  tests and golden fixtures that lock the old behavior and update them
+  deliberately.
+- Use structured builders/parsers already present in the codebase instead of ad
+  hoc string or byte manipulation.
+
+## edgerun-work Focus
+
+`crates/protocol/edgerun-work` is the highest-risk crate. It is not just message
+passing; it models verifiable state transitions for admitted work, routes,
+channels, capabilities, typed payloads, proofs, receipts, and settlement.
+
+Primary files:
+
+- `protocol.rs`: durable wire/economic objects such as `NodeIdentity`,
+  `NetworkMessage`, `WorkRequest`, `WorkAdmission`, `WorkReceipt`, `WorkPacket`,
+  and acknowledgements.
+- `node_control.rs`: node-control structs split out from `protocol.rs`.
+- `identity.rs`: node identity derivation and verification helpers.
 - `signing.rs`: signed-object preimages and `sign_*` / `verify_*` helpers.
-- `codec.rs`: rkyv packet encoding/decoding and packet hash helpers. Do not put signing or identity helpers back in `codec.rs`.
-- `preimage.rs`: `PreimageBuilder` for signed preimages and `HashBuilder` for domain-separated BLAKE3 commitments.
+- `codec.rs`: rkyv encoding/decoding plus packet bytes and packet hashes.
+- `preimage.rs`: `PreimageBuilder` and `HashBuilder`.
 - `request_auth.rs`: signed user `WorkRequest` verification.
-- `route_auth.rs` / `route_plan.rs`: signed route advertisements, snapshots, roots, and route selection.
-- `channel_order.rs`: ordered channel state and ordered message hashes.
+- `route_binding.rs`, `route_builder.rs`, `route_policy.rs`,
+  `admitted_route.rs`: route commitments, route construction, route policy, and
+  admission-defined routing.
+- `channel_order.rs`, `channel.rs`, `memory_channel.rs`, `work_channel.rs`,
+  `transport_channel.rs`, `ws_channel.rs`: ordered channels and transport
+  adapters.
+- `delivery_proof.rs`, `transit_proof.rs`, `relay_role.rs`: recipient delivery
+  proofs, transit commitments, relay receipts, and finalized relay delivery.
+- `storage_payload.rs`, `typed_storage_role.rs`, `object_storage_service.rs`,
+  `storage_adapter.rs`: typed storage payloads and storage role logic.
+- `erasure_storage.rs`: XOR 2+1 proof/test erasure model, not final production
+  erasure coding.
 - `recipient_policy.rs`: recipient-defined content-addressed messaging policy.
-- `delivery_proof.rs` / `transit_proof.rs`: recipient delivery proofs, policy-bound proofs, and relay transit commitments.
-- `relay_role.rs`: relay forwarding, transit receipts, and finalized relay delivery receipts.
-- `storage_payload.rs` / `typed_storage_role.rs`: typed object store/retrieve payloads and typed storage role.
-- `erasure_storage.rs`: XOR 2+1 proof erasure model. This is a proof/test scheme, not final production erasure coding.
-- `settlement.rs` / `batch_settlement.rs`: local settlement model, typed relay delivery settlement, unchecked non-relay receipt settlement, and batch settlement.
-- `std_runtime/*`: std-only runtime code such as TCP, threads, admission runtime, client runtime, and synchronized wrappers.
+- `settlement.rs`, `batch_settlement.rs`: local settlement model, typed relay
+  delivery settlement, unchecked non-relay receipt settlement, and atomic batch
+  settlement.
+- `capability_packet.rs`, `capability_role.rs`, `trust_container_role.rs`:
+  capability envelopes, capability execution, and Trust Container capability
+  behavior.
+- `std_runtime/*`: std-only admission, TCP, WebSocket, threading, storage daemon,
+  process, and settlement runtime code.
 
-## Import boundaries
+Important invariants:
 
-Do not import signing or identity helpers from `codec.rs`.
+1. A node identity is valid only if the claimed node id matches the authority
+   key. Current code treats `node_id == public_key`; older notes may mention
+   role-derived ids. Follow the code and tests in `identity.rs`.
+2. Admission must verify the signed `WorkRequest` before trusting user/request
+   fields.
+3. Admission commits to user, request hash, admitted route/channel/path, budget,
+   policy hash, validity, and admission node.
+4. Admission is the policy and route gate for work entering the network.
+5. Route signatures and admission-defined route commitments prove reachability
+   and state for new work.
+6. Ordered channels verify packet hash, route hash, sequence, and previous
+   message hash.
+7. Relays hash each packet they handle and commit transit work into a hash
+   chain.
+8. Recipient delivery proof should be policy-bound: the recipient signs
+   acceptance under a content-addressed policy hash where the flow requires it.
+9. Relay payment should require receiver delivery proof, transit hash, forwarded
+   packet hash, and admission/policy binding.
+10. Storage proofs must include retrieval or availability evidence before final
+    production payment. Store-only receipts are not enough.
+11. Generic unchecked receipt settlement must not be used for relay payments.
+12. Batch settlement must be atomic: preflight the whole batch before mutating
+    ledger state.
+13. Do not prune paid receipt/admission tracking until an admission is finalized
+    and its challenge window has closed.
+14. Core protocol code must remain `no_std + alloc`; std-only functionality
+    belongs in `std_runtime`.
 
-Use:
+Import boundaries:
 
 ```rust
-use crate::identity::{derive_node_id, node_identity_from_key, verify_node_identity};
+use crate::identity::{node_identity_from_key, verify_node_identity};
 use crate::signing::{empty_signature, sign_work_receipt, verify_work_receipt};
 use crate::codec::{blake3_hash, packet_bytes, packet_hash};
 ```
 
-Do not reintroduce compatibility re-exports from `codec.rs`.
+Do not reintroduce old compatibility re-exports from `codec.rs` for signing or
+identity helpers. If a build fails with imports such as
+`crate::codec::{empty_signature, sign_*, verify_*, node_identity_from_key}`, fix
+the caller to import from `signing.rs` or `identity.rs`.
 
-For new hash/preimage code:
+For protocol/economic hashes:
 
 - Use `PreimageBuilder` for bytes that are signed.
 - Use `HashBuilder` for BLAKE3 commitments and Merkle-like hashes.
-- Every protocol/economic hash must have an explicit domain string.
+- Every protocol/economic hash needs an explicit domain string.
+- If a domain changes, update the golden tests intentionally and explain the
+  compatibility impact.
 
-## Frontend terminology
+Golden hash status:
 
-Prefer:
+- `tests/golden_hashes.rs` exists and locks deterministic fixture hashes.
+- When changing any signed preimage, packet hash, route hash, receipt id,
+  erasure hash, manifest hash, policy hash, or settlement root, run and update
+  the golden fixture deliberately.
+- Do not add new protocol features while golden hashes are failing.
 
-- “Run” instead of “Install”.
-- “Verify & cache” instead of “Install”.
-- “Cached” instead of “Installed”.
-- “Remove cache” instead of “Uninstall”.
-- “Network app” instead of “catalog app” in user-facing copy.
-- “Trust Container” for the sealed local profile/root.
-- “Proof dashboard” for Trust Manager.
-- “Publisher policy” or “app policy” instead of “DRM” in public copy.
-- “Import/sync source” instead of treating Google/GitHub/mail providers as long-term homes.
-- “Publish from your node” or “identity-routed publishing” for user-hosted services.
-- “Admission policy” for the user-owned policy gate that decides what work enters the network.
-- “Node instance” for a role-specific WASM/native node with identity, policy, budget, and route scope.
-
-Internal names may still use `install`/`installed` temporarily for compatibility, but new UX and refactors should move toward cache/run terminology.
-
-## Economic model
-
-EdgeRun should earn from usage, not from selling tokens as the core product.
-
-Revenue sources can include:
-
-- app sales cut;
-- hosting/status deposits;
-- storage/CDN delivery fees;
-- relay fees;
-- compute job fees;
-- marketplace/publisher tooling;
-- website hosting and domain/DNS/ACME automation;
-- AI agent business activity and payments;
-- user-published services and direct identity-routed commerce.
-
-The token/settlement rail exists to clear value between users, publishers, and infrastructure providers. The product should prove utility first: users leave a browser node running, it does useful work, earns, and the user can spend earnings inside the ecosystem.
-
-## UX principles
-
-- Make complex infrastructure feel like normal web actions.
-- Show clear signing/payment/policy summaries before asking for passkey approval.
-- Always expose hashes/proofs for advanced users.
-- Do not fake metrics. If unknown, say unknown. If preview, label preview. If measured, link evidence.
-- Keep platform apps coherent: Help teaches, Identity owns, App Store runs/caches, Trust Manager proves, Storage shows content, Finances shows payments/receipts.
-- Make old services feel like import bridges into EdgeRun, not final destinations.
-- Make publishing feel like a natural next step for any user node, not only professional developers.
-- Make user-owned admission visible: the user can use EdgeRun DAO admission or run their own admission node to enforce their own policy.
-- Make node instances visible: users can run multiple admission/relay/compute/storage instances with different scopes, budgets, and rules.
-
-## Test expectations
-
-Before and after changes to `edgerun-work`, run:
+Required checks for `edgerun-work` changes:
 
 ```bash
 cargo test --manifest-path crates/protocol/edgerun-work/Cargo.toml
-```
-
-Also run no-std and wasm checks when touching core protocol, encoding, signing, route, settlement, storage, or WASM code:
-
-```bash
 cargo test --manifest-path crates/protocol/edgerun-work/Cargo.toml --no-default-features
 cargo build --manifest-path crates/protocol/edgerun-work/Cargo.toml --target wasm32-unknown-unknown --release --no-default-features
 ```
@@ -532,53 +372,141 @@ Run the size script when touching WASM-facing code:
 crates/protocol/edgerun-work/scripts/wasm-size.sh
 ```
 
-For frontend changes, run the frontend type/lint commands used by the project, for example:
+## edgerun-wire Focus
 
-```bash
-cd frontend
-bun run typecheck
-bun run lint
+`crates/protocol/edgerun-wire` is the rkyv-only wire protocol boundary.
+
+Rules:
+
+- `WIRE_PROTOCOL` is `"rkyv"`.
+- Legacy structural wire APIs were intentionally removed. Do not add a second
+  wire format for convenience.
+- Keep the crate `no_std` by default.
+- Treat `edgerun-wire` as the canonical movement boundary. Browser WASM,
+  native hosts, workers, node runtimes, app surfaces, capabilities, storage, and
+  transports should exchange explicit wire records rather than private one-off
+  structs.
+- ABI constants are protocol commitments. Do not renumber statuses, capability
+  kinds, runtime event codes, route schemes, app store statuses, or signature
+  algorithms casually.
+- Wire structs should derive the rkyv traits consistently:
+
+```rust
+#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
+#[rkyv(crate = rkyv)]
 ```
 
-## What to work on next
+- Prefer append-only evolution for records. If fields must change, update
+  version constants/tests and all consumers.
+- `edgerun-wire` should not learn app business policy, admission policy,
+  settlement policy, UI layout, or transport runtime behavior. It owns stable
+  record shapes and ABI constants.
 
-Good next tasks:
+Run for `edgerun-wire` changes:
 
-1. Add first-run app prompt: Run once / Verify & cache / Cancel.
-2. Rename internal install terminology to cache terminology.
-3. Wire Trust Manager actions: open Identity, open App Store, revoke grants, remove cache.
-4. Surface app policy hash and access mode in App Store cards/details.
-5. Add developer CLI publish/status/deposit flow around SDK artifacts.
-6. Show runtime events and package proofs consistently across App Store, Trust Manager, and Identity.
-7. Connect browser node earning mode to profile preferences and onboarding.
-8. Add typed storage retrieval/availability settlement evidence.
-9. Add user publishing UX: publish site/app/API/file from identity-routed node policy.
-10. Add data-source sync UX: Gmail/Drive/GitHub/local imports into EdgeRun storage and personal timeline.
-11. Add user-owned admission UX: choose EdgeRun DAO admission or personal admission node; show admitted routes, relays, workers, and policy hash.
-12. Add node-instance UX: create admission/relay/storage/compute instances with role, runtime target, policy hash, budget, and owner.
+```bash
+cargo test -p edgerun-wire
+cargo test -p edgerun-wire --no-default-features
+```
 
-Avoid:
+Also run affected dependent protocol tests, especially `edgerun-work`, when a
+wire record used by work/admission/capability/runtime code changes.
 
-- adding marketplace-specific protocol types before necessary;
-- creating duplicate app/package models;
-- treating catalogs as authority;
-- hiding app policies or payment terms;
-- weakening proof paths for performance without preserving packet/content hashes;
-- presenting browser nodes as guaranteed high-availability infrastructure;
-- using unchecked receipt settlement for relay receipts;
-- moving std-only functionality into core protocol modules;
-- silently changing protocol hashes without updating golden hash tests;
-- presenting users as only consumers when the architecture makes them publishers;
-- bypassing admission by sending authoritative user work directly to worker nodes;
-- treating admission/relay as fixed backend services rather than user-runnable role instances.
+## edgerun-ui-core Focus
 
-## Review checklist for new protocol/economic objects
+There is no workspace member named `edgerun-ui`; use
+`crates/utility/edgerun-ui-core` for shared UI work.
 
-For every signed/economic/proof object, answer these before merging:
+Architecture rule: Rust builds `GpuScene` command buffers. Hosts render those
+buffers and forward input back into Rust.
+
+Layers:
+
+- EdgeRun Shell owns launcher, trust/status indicators, capability prompts,
+  lock flow, notifications, and future app switching.
+- Workspace owns tiled app placement. Apps do not float over each other and do
+  not own global shell chrome.
+- App surfaces render content into assigned workspace bounds using shared UI
+  nodes and components.
+
+Host rules:
+
+- JS is a byte bridge only.
+- Browser hosts render workspace and shell overlay canvases.
+- Native hosts may render a combined scene but should use the same
+  `UiShellState` and `UiWorkspace` action flow.
+- Hosts must not duplicate app metadata, layout, launching, trust semantics, or
+  capability semantics.
+
+Core modules:
+
+- `src/lib.rs`: no-std software UI primitives and public modules.
+- `src/gpu.rs`: high-level GPU UI module entry point.
+- `src/gpu/scene.rs`: scene buffer types, clipping, fallback text emission, and
+  color-scheme remapping.
+- `src/gpu/node.rs`: JSX-like immediate-mode UI node tree and rendering
+  dispatch.
+- `src/gpu/painter.rs`, `src/gpu/paint.rs`: drawing facade and shared paint
+  helpers.
+- `src/gpu/apps.rs`: scene-build entry points and built-in app surfaces.
+- `src/gpu/app_registry.rs`: canonical app ids, launcher ids, metadata, icons,
+  and app placement.
+- `src/gpu/workspace.rs`: tiled workspace model, app surfaces, tabs, focus, and
+  app event routing.
+- `src/gpu/shell.rs`: shell state, launcher actions, and overlay drawing.
+- `src/gpu/runtime.rs`: hit targets, input events, UI actions, focus, scroll,
+  text input, and runtime controls.
+- `src/gpu/components.rs`: reusable dashboard/form/domain primitives.
+- `src/gpu/icons.rs`, `src/tabler*.rs`: icon mapping and generated icon data.
+- `src/initial_setup.rs`: initial setup/onboarding surface.
+
+UI rules:
+
+- Use `EDGERUN_APP_REGISTRY` for app metadata, launcher rows, default workspace
+  construction, and app opening. Do not duplicate app ids/titles/icons in hosts.
+- App surfaces should receive projected state from real stores where available;
+  label demo/preview data honestly.
+- Use shared components for identity cards, contact cards, proof/audit rows,
+  capability grant rows, route/relay visuals, package/app cards, and
+  receipt/payment rows.
+- Keep controls stable in size. Text must not overlap or resize fixed controls
+  unpredictably.
+- Prefer icons for tool actions and concise labels for commands.
+- Do not put global shell behavior inside an app surface.
+- Do not implement layout in browser JS or SDL host glue when it belongs in
+  Rust scene construction.
+
+Feature notes:
+
+- Default feature is `tabler-icons`.
+- `std` enables the `gpu` module.
+- `gpu-gl` enables native OpenGL support.
+- `sdl` depends on `gpu-gl` and `fontdue-text`.
+- `fontdue-text` enables font rasterization.
+- `tabler-svg-atlas` enables SVG atlas generated assets.
+
+Run for UI changes:
+
+```bash
+cargo test -p edgerun-ui-core
+cargo check -p edgerun-ui-core --features std
+cargo check -p edgerun-ui-core --features fontdue-text
+```
+
+For GPU/SDL/OpenGL changes, also build the relevant preview binary, for example:
+
+```bash
+cargo build -p edgerun-ui-core --features fontdue-text,tabler-svg-atlas --bin ui-preview-sdl-gl-svg
+cargo build -p edgerun-ui-core --features std --bin ui-preview-sdl-shadcn
+```
+
+## Protocol Object Review Checklist
+
+For every signed, economic, proof, or wire object, answer these before merging:
 
 1. What does it claim?
 2. Who signs it?
-3. Which fields are covered by the signature?
+3. Which fields are covered by the signature or hash?
 4. What hash identifies it?
 5. What canonical verifier exists?
 6. What prior object does it depend on?
@@ -587,36 +515,80 @@ For every signed/economic/proof object, answer these before merging:
 9. What makes it slashable or challengeable?
 10. What test proves bad data is rejected?
 
-## Latest edgerun-work handoff
+## Testing Expectations
 
-The broad hash/preimage consolidation pass has been completed across the main protocol modules. These files now use `PreimageBuilder` or `HashBuilder` where appropriate:
+Never report that something works unless you have run a relevant check or can
+point to concrete evidence in the code. If you did not test it, say that
+plainly.
 
-```text
-signing.rs
-request_auth.rs
-route_auth.rs
-delivery_proof.rs
-transit_proof.rs
-batch_settlement.rs
-route_plan.rs
-cost_model.rs
-storage_payload.rs
-erasure_storage.rs
-channel_order.rs
-recipient_policy.rs
-settlement.rs
-std_runtime/admission_v2.rs
-std_runtime/relay_client.rs
+For general Rust changes, prefer the narrowest package test first:
+
+```bash
+cargo test -p <package>
+cargo check -p <package>
 ```
 
-The `codec.rs` compatibility re-exports were intentionally removed. If a build fails with unresolved imports from `crate::codec::{empty_signature, sign_*, verify_*, node_identity_from_key}`, fix the caller to import from `signing.rs` or `identity.rs`; do not add those re-exports back to `codec.rs`.
+For workspace-wide manifest or shared dependency changes, expect broader checks:
 
-Current known post-consolidation status:
+```bash
+cargo check --workspace
+cargo test --workspace
+```
 
-- Tests were reported green after fixing the `codec`/`signing`/`identity` split.
-- `std_runtime/admission_v2.rs` and `std_runtime/relay_client.rs` were patched to use explicit imports and `HashBuilder` domains.
-- `protocol.rs` has been split so node-control structs live in `node_control.rs`, while `protocol.rs` remains focused on core work/economic wire objects.
-- `node_control.rs` is exported from `lib.rs`.
-- Many protocol hash domains changed by design during consolidation. Tests that recompute through canonical helpers should pass; tests with hardcoded old hashes must be updated deliberately.
+For protocol/no-std/WASM-facing changes, include no-default-features and WASM
+checks for the affected crate. For `edgerun-work`, use the exact commands in
+the `edgerun-work` section.
 
-Immediate next task: add `tests/golden_hashes.rs` using deterministic fixtures from the current green state. First add an ignored printer test that emits candidate constants, then fill those constants into non-ignored assertions. Do not add new protocol features before golden hashes are locked.
+For behavior changes, add or update tests that prove the important rejection and
+success paths. Do not rely only on broad "still compiles" evidence when the
+change affects protocol validity, payments, security, storage, routing, UI
+actions, or user-visible state.
+
+For generated files, document the generator command. Do not hand-edit generated
+icon or atlas outputs unless the task is specifically to repair generated output
+and the generator cannot run.
+
+## Current Priority Queue
+
+Good next tasks:
+
+1. Keep `edgerun-work/tests/golden_hashes.rs` green and update it deliberately
+   when protocol hash domains or preimages change.
+2. Add or refine first-run network app prompt: Run once / Verify & cache /
+   Cancel.
+3. Rename internal install terminology toward cache/run terminology where it
+   does not create churn.
+4. Wire Trust Manager actions: open Identity, open App Store, revoke grants,
+   remove cache.
+5. Surface app policy hash and access mode in App Store cards/details.
+6. Add developer CLI publish/status/deposit flow around SDK artifacts.
+7. Show runtime events and package proofs consistently across App Store, Trust
+   Manager, and Identity.
+8. Connect browser node earning mode to profile preferences and onboarding.
+9. Add typed storage retrieval/availability settlement evidence.
+10. Add user publishing UX for site/app/API/file from identity-routed node
+    policy.
+11. Add data-source sync UX for Gmail/Drive/GitHub/local imports into EdgeRun
+    storage and personal timeline.
+12. Add user-owned admission UX showing routes, relays, workers, budgets, and
+    policy hash.
+13. Add node-instance UX for admission/relay/storage/compute instances with
+    role, runtime target, policy hash, budget, and owner.
+
+Avoid:
+
+- adding marketplace-specific protocol types before necessary;
+- creating duplicate app/package models;
+- treating catalogs as authority;
+- hiding app policies or payment terms;
+- weakening proof paths for performance without preserving packet/content
+  hashes;
+- presenting browser nodes as guaranteed high-availability infrastructure;
+- using unchecked receipt settlement for relay receipts;
+- moving std-only functionality into core protocol modules;
+- silently changing protocol hashes without updating golden tests;
+- presenting users as only consumers;
+- bypassing admission by sending authoritative user work directly to worker
+  nodes;
+- treating admission/relay as fixed backend services instead of user-runnable
+  role instances.

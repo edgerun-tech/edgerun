@@ -2,58 +2,12 @@
 //!
 //! This crate supports several schemes described in [RFC8017]:
 //!
-//! - [OAEP encryption scheme](#oaep-encryption)
-//! - [PKCS#1 v1.5 encryption scheme](#pkcs1-v15-encryption)
 //! - [PKCS#1 v1.5 signature scheme](#pkcs1-v15-signatures)
 //! - [PSS signature scheme](#pss-signatures)
 //!
 //! These schemes are described below.
 //!
 //! # Usage
-//!
-//! ## OAEP encryption
-//!
-//! Note: requires `sha2` feature of `rsa` crate is enabled.
-//!
-//! use rsa::{RsaPrivateKey, RsaPublicKey, Oaep, sha2::Sha256};
-//!
-//! let mut rng = rand::thread_rng(); // rand@0.8
-//!
-//! let bits = 2048;
-//! let private_key = RsaPrivateKey::new(&mut rng, bits).expect("failed to generate a key");
-//! let public_key = RsaPublicKey::from(&private_key);
-//!
-//! // Encrypt
-//! let data = b"hello world";
-//! let padding = Oaep::new::<Sha256>();
-//! let enc_data = public_key.encrypt(&mut rng, padding, &data[..]).expect("failed to encrypt");
-//! assert_ne!(&data[..], &enc_data[..]);
-//!
-//! // Decrypt
-//! let padding = Oaep::new::<Sha256>();
-//! let dec_data = private_key.decrypt(padding, &enc_data).expect("failed to decrypt");
-//! assert_eq!(&data[..], &dec_data[..]);
-//! ```ignore
-//!
-//! ## PKCS#1 v1.5 encryption
-//! ```ignore
-//! use rsa::{RsaPrivateKey, RsaPublicKey, Pkcs1v15Encrypt};
-//!
-//! let mut rng = rand::thread_rng(); // rand@0.8
-//!
-//! let bits = 2048;
-//! let private_key = RsaPrivateKey::new(&mut rng, bits).expect("failed to generate a key");
-//! let public_key = RsaPublicKey::from(&private_key);
-//!
-//! // Encrypt
-//! let data = b"hello world";
-//! let enc_data = public_key.encrypt(&mut rng, Pkcs1v15Encrypt, &data[..]).expect("failed to encrypt");
-//! assert_ne!(&data[..], &enc_data[..]);
-//!
-//! // Decrypt
-//! let dec_data = private_key.decrypt(Pkcs1v15Encrypt, &enc_data).expect("failed to decrypt");
-//! assert_eq!(&data[..], &dec_data[..]);
-//! ```ignore
 //!
 //! ## PKCS#1 v1.5 signatures
 //!
@@ -64,7 +18,7 @@
 //! use rsa::signature::{Keypair, RandomizedSigner, SignatureEncoding, Verifier};
 //! use rsa::sha2::{Digest, Sha256};
 //!
-//! let mut rng = rand::thread_rng(); // rand@0.8
+//! let mut rng = crate::rand_core::OsRng;
 //!
 //! let bits = 2048;
 //! let private_key = RsaPrivateKey::new(&mut rng, bits).expect("failed to generate a key");
@@ -89,7 +43,7 @@
 //! use rsa::signature::{Keypair,RandomizedSigner, SignatureEncoding, Verifier};
 //! use rsa::sha2::{Digest, Sha256};
 //!
-//! let mut rng = rand::thread_rng(); // rand@0.8
+//! let mut rng = crate::rand_core::OsRng;
 //!
 //! let bits = 2048;
 //! let private_key = RsaPrivateKey::new(&mut rng, bits).expect("failed to generate a key");
@@ -205,17 +159,12 @@
 #[cfg(doctest)]
 pub struct ReadmeDoctests;
 
-#[macro_use]
-#[cfg(feature = "std")]
-extern crate std;
-
 pub use crate::num_bigint::BigUint;
 pub use crate::rand_core;
 pub use crate::signature;
 
 mod algorithms;
 pub mod errors;
-pub mod oaep;
 pub mod pkcs1v15;
 pub mod pss;
 pub mod traits;
@@ -232,10 +181,8 @@ pub use crate::sha2;
 pub use crate::rsa::{
     errors::{Error, Result},
     key::{RsaPrivateKey, RsaPublicKey},
-    oaep::Oaep,
-    pkcs1v15::{Pkcs1v15Encrypt, Pkcs1v15Sign},
+    pkcs1v15::Pkcs1v15Sign,
     pss::Pss,
-    traits::keys::CrtValue,
 };
 
 #[cfg(feature = "rsa_hazmat")]

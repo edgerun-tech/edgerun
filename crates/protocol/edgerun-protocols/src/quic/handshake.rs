@@ -298,19 +298,8 @@ impl CertificateValidator {
             Ok(public_key) => public_key,
             Err(_) => return false,
         };
-        let verifying_key =
-            match edgerun_crypto::ed25519_dalek::VerifyingKey::from_bytes(&public_key) {
-                Ok(key) => key,
-                Err(_) => return false,
-            };
-        let signature = match edgerun_crypto::ed25519_dalek::Signature::from_slice(signature) {
-            Ok(signature) => signature,
-            Err(_) => return false,
-        };
         let signed_input = certificate_verify_signed_input(transcript, hasher);
-
-        use edgerun_crypto::ed25519_dalek::Verifier;
-        verifying_key.verify(&signed_input, &signature).is_ok()
+        edgerun_crypto::verification::ed25519_verify(&public_key, &signed_input, signature).is_ok()
     }
 
     /// Verify an RSA-PSS CertificateVerify signature.
@@ -380,21 +369,14 @@ impl CertificateValidator {
             Ok(cert) => cert,
             Err(_) => return false,
         };
-        let verifying_key = match edgerun_crypto::p256::ecdsa::VerifyingKey::from_sec1_bytes(
-            cert.subject_public_key.as_slice(),
-        ) {
-            Ok(key) => key,
-            Err(_) => return false,
-        };
-        let signature = match edgerun_crypto::p256::ecdsa::Signature::from_der(signature) {
-            Ok(signature) => signature,
-            Err(_) => return false,
-        };
-
         let signed_input = certificate_verify_signed_input(transcript, hasher);
 
-        use edgerun_crypto::p256::ecdsa::signature::Verifier;
-        verifying_key.verify(&signed_input, &signature).is_ok()
+        edgerun_crypto::verification::p256_verify_sha256_der(
+            cert.subject_public_key.as_slice(),
+            &signed_input,
+            signature,
+        )
+        .is_ok()
     }
 }
 
@@ -1363,26 +1345,25 @@ mod tests {
 
     #[test]
     fn certificate_verify_accepts_ed25519_signature() {
-        let signing_key = edgerun_crypto::random_ed25519_signing_key();
+        let signing_key = edgerun_crypto::signing::ed25519_key();
         let verifying_key = signing_key.verifying_key();
         let cert_der = fake_certificate_with_spki(&[0x2b, 0x65, 0x70], verifying_key.as_bytes());
         let transcript = b"prior tls handshake messages";
         let signed_input = certificate_verify_signed_input(transcript, &Hasher::Sha256);
-        use edgerun_crypto::ed25519_dalek::Signer;
-        let signature = signing_key.sign(&signed_input);
+        let signature = signing_key.sign_bytes(&signed_input);
         let validator = CertificateValidator::new(Some("example.com"));
 
         assert!(validator.verify_certificate_signature(
             &cert_der,
             0x0807,
-            signature.to_bytes().as_slice(),
+            signature.as_slice(),
             transcript,
             &Hasher::Sha256
         ));
         assert!(!validator.verify_certificate_signature(
             &cert_der,
             0x0807,
-            signature.to_bytes().as_slice(),
+            signature.as_slice(),
             b"tampered transcript",
             &Hasher::Sha256
         ));

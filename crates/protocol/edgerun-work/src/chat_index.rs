@@ -1,8 +1,7 @@
 use alloc::vec::Vec;
 
-use rkyv::{Archive, Deserialize, Serialize};
-
 use crate::codec::{blake3_hash, wire_bytes, wire_from_bytes};
+use crate::generated_wire::{ArchivedContactBook, ArchivedMessageObject, ArchivedThreadObject};
 use crate::preimage::HashBuilder;
 use crate::protocol::{Hash, NodeId, WORK_WIRE_ABI_VERSION};
 
@@ -35,8 +34,7 @@ pub enum ChatIndexError {
     WrongPreviousMessage,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ContactPublicId {
     pub kind: u16,
     pub value: Vec<u8>,
@@ -44,16 +42,14 @@ pub struct ContactPublicId {
     pub verified_at_unix_ms: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExternalContactRef {
     pub kind: u16,
     pub value: Vec<u8>,
     pub label: Vec<u8>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ContactObject {
     pub abi_version: u16,
     pub contact_id: Hash,
@@ -65,8 +61,7 @@ pub struct ContactObject {
     pub updated_unix_ms: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MessageObject {
     pub abi_version: u16,
     pub message_id: Hash,
@@ -83,8 +78,7 @@ pub struct MessageObject {
     pub previous_message_hash: Hash,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ThreadMessageRef {
     pub message_id: Hash,
     pub payload_hash: Hash,
@@ -94,8 +88,7 @@ pub struct ThreadMessageRef {
     pub message_kind: u16,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ThreadObject {
     pub abi_version: u16,
     pub thread_id: Hash,
@@ -110,8 +103,7 @@ pub struct ThreadObject {
     pub thread_hash: Hash,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ContactBookContactRef {
     pub contact_id: Hash,
     pub primary_node_id: NodeId,
@@ -119,8 +111,7 @@ pub struct ContactBookContactRef {
     pub avatar_payload_hash: Hash,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ContactBookThreadRef {
     pub thread_id: Hash,
     pub participant_a: NodeId,
@@ -130,8 +121,7 @@ pub struct ContactBookThreadRef {
     pub updated_unix_ms: u64,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ContactBook {
     pub abi_version: u16,
     pub owner: NodeId,
@@ -372,7 +362,11 @@ pub fn contact_book_from_bytes(bytes: &[u8]) -> Result<ContactBook, ChatIndexErr
 }
 
 fn ordered_participants(a: NodeId, b: NodeId) -> (NodeId, NodeId) {
-    if a <= b { (a, b) } else { (b, a) }
+    if a <= b {
+        (a, b)
+    } else {
+        (b, a)
+    }
 }
 
 fn thread_has_participants(thread: &ThreadObject, from: NodeId, to: NodeId) -> bool {

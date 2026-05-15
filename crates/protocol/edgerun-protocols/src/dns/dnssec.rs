@@ -248,12 +248,6 @@ fn verify_signature(
             if public_key.len() != 64 && public_key.len() != 65 {
                 return DnssecResult::BadSignature;
             }
-            // Verify ECDSA P-256 signature using edgerun-crypto
-            // ECDSA P-256-SHA256: the library hashes signed_data internally via Sha256
-            use edgerun_crypto::p256::EncodedPoint;
-            use edgerun_crypto::p256::ecdsa::{Signature, VerifyingKey};
-            use edgerun_crypto::signature::Verifier;
-
             let point_bytes;
             let public_key = if public_key.len() == 64 {
                 point_bytes = {
@@ -267,18 +261,17 @@ fn verify_signature(
                 public_key.as_slice()
             };
 
-            if let Ok(point) = EncodedPoint::from_bytes(public_key) {
-                if let Ok(vk) = VerifyingKey::from_encoded_point(&point) {
-                    if let Ok(sig) = Signature::from_slice(signature) {
-                        return if vk.verify(signed_data, &sig).is_ok() {
-                            DnssecResult::Valid
-                        } else {
-                            DnssecResult::BadSignature
-                        };
-                    }
-                }
+            if edgerun_crypto::verification::p256_verify_sha256_fixed(
+                public_key,
+                signed_data,
+                signature,
+            )
+            .is_ok()
+            {
+                DnssecResult::Valid
+            } else {
+                DnssecResult::BadSignature
             }
-            DnssecResult::BadSignature
         }
         // ED25519 (RFC 8080)
         15 => {
@@ -617,7 +610,7 @@ pub fn find_nsec3_covering<'a>(
     for rr in nsec3_records {
         if let DnsRecordData::NSEC3 { .. } = &rr.data {
             let owner_hash = rr.name.split('.').next().unwrap_or("");
-            if owner_hash < &query_b32 {
+            if owner_hash < query_b32.as_str() {
                 if let Some(current) = best {
                     let current_hash = current.name.split('.').next().unwrap_or("");
                     if owner_hash > current_hash {
@@ -656,11 +649,9 @@ pub fn generate_dnskey_ecdsap256(
     name: String,
     flags: u16,
     ttl: u32,
-) -> (DnsRecord, edgerun_crypto::p256::ecdsa::SigningKey) {
-    let signing_key = edgerun_crypto::random_p256_signing_key();
-    let vk = signing_key.verifying_key();
-    let encoded = vk.to_encoded_point(false);
-    let public_key_bytes = encoded.as_bytes()[1..].to_vec();
+) -> (DnsRecord, edgerun_crypto::P256SigningKey) {
+    let signing_key = edgerun_crypto::signing::p256_key();
+    let public_key_bytes = signing_key.public_key_sec1()[1..].to_vec();
     let dnskey = DnsRecord::dnskey(name, flags, 3, 13, public_key_bytes, ttl);
     (dnskey, signing_key)
 }
@@ -718,14 +709,13 @@ pub fn sign_rrsig_ed25519(
 /// Sign an RRset using ECDSAP256-SHA256 (DNSSEC algorithm 13). Returns an RRSIG record.
 pub fn sign_rrset_ecdsap256(
     rrset: &[DnsRecord],
-    signing_key: &edgerun_crypto::p256::ecdsa::SigningKey,
+    signing_key: &edgerun_crypto::P256SigningKey,
     dnskey_record: &DnsRecord,
     signer_name: String,
     inception: u32,
     expiration: u32,
     original_ttl: u32,
 ) -> DnsRecord {
-    use edgerun_crypto::p256::ecdsa::signature::hazmat::PrehashSigner;
     let key_tag = compute_key_tag(dnskey_record);
     let labels = rrset[0].name.split('.').filter(|l| !l.is_empty()).count() as u8;
 
@@ -753,10 +743,10 @@ pub fn sign_rrset_ecdsap256(
     let mut hasher = Sha256::new();
     hasher.update(&signed_data);
     let digest = hasher.finalize();
-    let signature: edgerun_crypto::p256::ecdsa::Signature =
-        signing_key.sign_prehash(&digest).expect("ECDSA sign ok");
-    use edgerun_crypto::p256::ecdsa::signature::SignatureEncoding;
-    let signature = signature.to_bytes().to_vec();
+    let signature = signing_key
+        .sign_prehash_fixed(&digest)
+        .expect("ECDSA sign ok")
+        .to_vec();
 
     DnsRecord::rrsig(
         rrset[0].name.clone(),
@@ -816,7 +806,7 @@ pub fn sign_zone_ed25519(
 pub fn sign_zone_ecdsap256(
     zone: &crate::dns::zone::DnsZone,
     dnskey: &DnsRecord,
-    signing_key: &edgerun_crypto::p256::ecdsa::SigningKey,
+    signing_key: &edgerun_crypto::P256SigningKey,
     inception: u32,
     expiration: u32,
 ) -> Vec<DnsRecord> {

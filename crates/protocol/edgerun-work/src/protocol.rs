@@ -1,8 +1,6 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use rkyv::{Archive, Deserialize, Serialize};
-
 use crate::channel::ChannelEndpoint;
 pub use crate::node_control::{NodeAvailable, NodeHeartbeat, RelayAssignment, RelayEndpoint};
 
@@ -16,6 +14,7 @@ pub const NODE_ROLE_COMPUTE: u16 = 3;
 pub const NODE_ROLE_ADMISSION: u16 = 4;
 pub const NODE_ROLE_MESSAGE: u16 = 5;
 pub const NODE_ROLE_CAPABILITY: u16 = 6;
+pub const NODE_ROLE_NOTARY: u16 = 7;
 
 pub const WORK_TYPE_MESSAGE_DELIVER: u16 = 1;
 pub const WORK_TYPE_OBJECT_STORE: u16 = 2;
@@ -31,6 +30,8 @@ pub const WORK_TYPE_CAPABILITY_REQUEST: u16 = 11;
 pub const WORK_TYPE_CAPABILITY_INVOKE: u16 = 12;
 pub const WORK_TYPE_CAPABILITY_EVENT: u16 = 13;
 pub const WORK_TYPE_CAPABILITY_CLOSE: u16 = 14;
+pub const WORK_TYPE_NOTARY_SEAL: u16 = 15;
+pub const WORK_TYPE_NOTARY_UNSEAL: u16 = 16;
 
 pub const DEPARTMENT_ADMISSION: u16 = 1;
 pub const DEPARTMENT_RELAY: u16 = 2;
@@ -39,6 +40,7 @@ pub const DEPARTMENT_STORAGE: u16 = 4;
 pub const DEPARTMENT_RETRIEVAL: u16 = 5;
 pub const DEPARTMENT_COMPUTE: u16 = 6;
 pub const DEPARTMENT_CAPABILITY: u16 = 7;
+pub const DEPARTMENT_NOTARY: u16 = 8;
 
 pub const SIGNATURE_ALGORITHM_SOLANA_ED25519: u16 = 101;
 
@@ -62,24 +64,21 @@ pub enum WorkProtocolError {
     Unsupported,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WorkSignature {
     pub algorithm: u16,
     pub public_key: Vec<u8>,
     pub signature: Vec<u8>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NodeIdentity {
     pub node_id: NodeId,
     pub role: u16,
     pub public_key: PublicKey,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NetworkMessage {
     pub abi_version: u16,
     pub message_id: Hash,
@@ -95,8 +94,7 @@ pub struct NetworkMessage {
     pub signature: WorkSignature,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WorkRequest {
     pub abi_version: u16,
     pub request_id: Hash,
@@ -112,8 +110,7 @@ pub struct WorkRequest {
     pub signature: WorkSignature,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WorkAdmission {
     pub abi_version: u16,
     pub admission_id: Hash,
@@ -131,8 +128,7 @@ pub struct WorkAdmission {
     pub signature: WorkSignature,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WorkReceipt {
     pub abi_version: u16,
     pub receipt_id: Hash,
@@ -148,8 +144,7 @@ pub struct WorkReceipt {
     pub signature: WorkSignature,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WorkPacket {
     NodeAvailable(NodeAvailable),
     NodeHeartbeat(NodeHeartbeat),
@@ -161,8 +156,7 @@ pub enum WorkPacket {
     Ack(WorkAck),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WorkAck {
     pub ok: bool,
     pub code: u16,

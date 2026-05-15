@@ -12,54 +12,10 @@ use core::ops::{
 };
 use core::str::{self, FromStr};
 use core::{cmp, fmt, mem};
-use core::{f32, f64};
 use core::{u8, u32, u64};
 
-#[cfg(feature = "serde")]
-use serde;
-
-#[cfg(not(feature = "std"))]
-use crate::num_bigint::libm;
-
-#[cfg(feature = "std")]
-fn sqrt(a: f64) -> f64 {
-    a.sqrt()
-}
-
-#[cfg(not(feature = "std"))]
-fn sqrt(a: f64) -> f64 {
-    libm::sqrt(a)
-}
-
-#[cfg(feature = "std")]
-fn ln(a: f64) -> f64 {
-    a.ln()
-}
-
-#[cfg(not(feature = "std"))]
-fn ln(a: f64) -> f64 {
-    libm::log(a)
-}
-
-#[cfg(feature = "std")]
-fn cbrt(a: f64) -> f64 {
-    a.cbrt()
-}
-
-#[cfg(not(feature = "std"))]
-fn cbrt(a: f64) -> f64 {
-    libm::cbrt(a)
-}
-
-#[cfg(feature = "std")]
-fn exp(a: f64) -> f64 {
-    a.exp()
-}
-
-#[cfg(not(feature = "std"))]
-fn exp(a: f64) -> f64 {
-    libm::exp(a)
-}
+#[cfg(feature = "edgerun_json_compat")]
+use edgerun_json_compat;
 
 use crate::num_bigint::float::FloatCore;
 use crate::num_bigint::integer::{Integer, Roots};
@@ -67,8 +23,6 @@ use crate::num_bigint::{
     CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, FromPrimitive, Num, One, Pow, ToPrimitive,
     Unsigned, Zero,
 };
-
-use crate::num_bigint::BigInt;
 
 use crate::num_bigint::big_digit::{self, BigDigit};
 
@@ -83,8 +37,6 @@ use crate::num_bigint::algorithms::{__add2, __sub2rev, add2, sub2, sub2rev};
 use crate::num_bigint::algorithms::{biguint_shl, biguint_shr};
 use crate::num_bigint::algorithms::{cmp_slice, fls, idiv_ceil, ilog2};
 use crate::num_bigint::algorithms::{div_rem, div_rem_digit, mac_with_carry, mul3, scalar_mul};
-use crate::num_bigint::algorithms::{extended_gcd, mod_inverse};
-use crate::num_bigint::traits::{ExtendedGcd, ModInverse};
 
 use crate::num_bigint::ParseBigIntError;
 use crate::num_bigint::UsizePromotion;
@@ -929,18 +881,6 @@ impl<'a, 'b> Mul<&'b BigUint> for &'a BigUint {
     }
 }
 
-impl<'a, 'b> Mul<&'a BigInt> for &'b BigUint {
-    type Output = BigInt;
-
-    #[inline]
-    fn mul(self, other: &BigInt) -> BigInt {
-        BigInt {
-            data: mul3(&self.data[..], &other.digits()[..]),
-            sign: other.sign,
-        }
-    }
-}
-
 impl<'a> MulAssign<&'a BigUint> for BigUint {
     #[inline]
     fn mul_assign(&mut self, other: &'a BigUint) {
@@ -1418,8 +1358,16 @@ impl Integer for BigUint {
     // The result is always positive.
     #[inline]
     fn gcd(&self, other: &Self) -> Self {
-        let (res, _, _) = extended_gcd(Cow::Borrowed(self), Cow::Borrowed(other), false);
-        res.into_biguint().unwrap()
+        let mut a = self.clone();
+        let mut b = other.clone();
+
+        while !b.is_zero() {
+            let r = &a % &b;
+            a = b;
+            b = r;
+        }
+
+        a
     }
 
     // Calculates the Lowest Common Multiple (LCM) of the number and `other`.
@@ -1520,22 +1468,7 @@ impl Roots for BigUint {
 
         let max_bits = bits / n as usize + 1;
 
-        let guess = if let Some(f) = self.to_f64() {
-            // We fit in `f64` (lossy), so get a better initial guess from that.
-            BigUint::from_f64(exp(ln(f) / f64::from(n))).unwrap()
-        } else {
-            // Try to guess by scaling down such that it does fit in `f64`.
-            // With some (x * 2ⁿᵏ), its nth root ≈ (ⁿ√x * 2ᵏ)
-            let nsz = n as usize;
-            let extra_bits = bits - (f64::MAX_EXP as usize - 1);
-            let root_scale = (extra_bits + (nsz - 1)) / nsz;
-            let scale = root_scale * nsz;
-            if scale < bits && bits - scale > nsz {
-                (self >> scale).nth_root(n) << root_scale
-            } else {
-                BigUint::one() << max_bits
-            }
-        };
+        let guess = BigUint::one() << max_bits;
 
         let n_min_1 = n - 1;
         fixpoint(guess, max_bits, move |s| {
@@ -1560,17 +1493,7 @@ impl Roots for BigUint {
         let bits = self.bits();
         let max_bits = bits / 2 as usize + 1;
 
-        let guess = if let Some(f) = self.to_f64() {
-            // We fit in `f64` (lossy), so get a better initial guess from that.
-            BigUint::from_f64(sqrt(f)).unwrap()
-        } else {
-            // Try to guess by scaling down such that it does fit in `f64`.
-            // With some (x * 2²ᵏ), its sqrt ≈ (√x * 2ᵏ)
-            let extra_bits = bits - (f64::MAX_EXP as usize - 1);
-            let root_scale = (extra_bits + 1) / 2;
-            let scale = root_scale * 2;
-            (self >> scale).sqrt() << root_scale
-        };
+        let guess = BigUint::one() << max_bits;
 
         fixpoint(guess, max_bits, move |s| {
             let q = self / s;
@@ -1592,17 +1515,7 @@ impl Roots for BigUint {
         let bits = self.bits();
         let max_bits = bits / 3 as usize + 1;
 
-        let guess = if let Some(f) = self.to_f64() {
-            // We fit in `f64` (lossy), so get a better initial guess from that.
-            BigUint::from_f64(cbrt(f)).unwrap()
-        } else {
-            // Try to guess by scaling down such that it does fit in `f64`.
-            // With some (x * 2³ᵏ), its cbrt ≈ (∛x * 2ᵏ)
-            let extra_bits = bits - (f64::MAX_EXP as usize - 1);
-            let root_scale = (extra_bits + 2) / 3;
-            let scale = root_scale * 3;
-            (self >> scale).cbrt() << root_scale
-        };
+        let guess = BigUint::one() << max_bits;
 
         fixpoint(guess, max_bits, move |s| {
             let q = self / (s * s);
@@ -2529,12 +2442,12 @@ fn u32_from_u128(n: u128) -> (u32, u32, u32, u32) {
     )
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 #[cfg(not(feature = "u64_digit"))]
-impl serde::Serialize for BigUint {
+impl edgerun_json_compat::Serialize for BigUint {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer,
+        S: edgerun_json_compat::Serializer,
     {
         // Note: do not change the serialization format, or it may break forward
         // and backward compatibility of serialized data!  If we ever change the
@@ -2544,12 +2457,12 @@ impl serde::Serialize for BigUint {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 #[cfg(feature = "u64_digit")]
-impl serde::Serialize for BigUint {
+impl edgerun_json_compat::Serialize for BigUint {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer,
+        S: edgerun_json_compat::Serializer,
     {
         let last = if self.data.is_empty() {
             0
@@ -2572,11 +2485,11 @@ impl serde::Serialize for BigUint {
     }
 }
 
-#[cfg(feature = "serde")]
-impl<'de> serde::Deserialize<'de> for BigUint {
+#[cfg(feature = "edgerun_json_compat")]
+impl<'de> edgerun_json_compat::Deserialize<'de> for BigUint {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>,
+        D: edgerun_json_compat::Deserializer<'de>,
     {
         let data: Vec<u32> = Vec::deserialize(deserializer)?;
         Ok(BigUint::new(data))
@@ -3264,97 +3177,6 @@ fn test_u128_u32_roundtrip() {
     for val in &values {
         let (a, b, c, d) = u32_from_u128(*val);
         assert_eq!(u32_to_u128(a, b, c, d), *val);
-    }
-}
-
-// Mod Inverse
-
-impl<'a> ModInverse<&'a BigUint> for BigUint {
-    type Output = BigInt;
-    fn mod_inverse(self, m: &'a BigUint) -> Option<BigInt> {
-        mod_inverse(Cow::Owned(self), Cow::Borrowed(m))
-    }
-}
-
-impl ModInverse<BigUint> for BigUint {
-    type Output = BigInt;
-    fn mod_inverse(self, m: BigUint) -> Option<BigInt> {
-        mod_inverse(Cow::Owned(self), Cow::Owned(m))
-    }
-}
-
-impl<'a> ModInverse<&'a BigInt> for BigUint {
-    type Output = BigInt;
-    fn mod_inverse(self, m: &'a BigInt) -> Option<BigInt> {
-        mod_inverse(Cow::Owned(self), Cow::Owned(m.to_biguint().unwrap()))
-    }
-}
-impl ModInverse<BigInt> for BigUint {
-    type Output = BigInt;
-    fn mod_inverse(self, m: BigInt) -> Option<BigInt> {
-        mod_inverse(Cow::Owned(self), Cow::Owned(m.into_biguint().unwrap()))
-    }
-}
-
-impl<'a, 'b> ModInverse<&'b BigUint> for &'a BigUint {
-    type Output = BigInt;
-
-    fn mod_inverse(self, m: &'b BigUint) -> Option<BigInt> {
-        mod_inverse(Cow::Borrowed(self), Cow::Borrowed(m))
-    }
-}
-
-impl<'a> ModInverse<BigUint> for &'a BigUint {
-    type Output = BigInt;
-
-    fn mod_inverse(self, m: BigUint) -> Option<BigInt> {
-        mod_inverse(Cow::Borrowed(self), Cow::Owned(m))
-    }
-}
-
-impl<'a, 'b> ModInverse<&'b BigInt> for &'a BigUint {
-    type Output = BigInt;
-
-    fn mod_inverse(self, m: &'b BigInt) -> Option<BigInt> {
-        mod_inverse(Cow::Borrowed(self), Cow::Owned(m.to_biguint().unwrap()))
-    }
-}
-
-// Extended GCD
-
-impl<'a> ExtendedGcd<&'a BigUint> for BigUint {
-    fn extended_gcd(self, other: &'a BigUint) -> (BigInt, BigInt, BigInt) {
-        let (a, b, c) = extended_gcd(Cow::Owned(self), Cow::Borrowed(other), true);
-        (a, b.unwrap(), c.unwrap())
-    }
-}
-
-impl<'a> ExtendedGcd<&'a BigInt> for BigUint {
-    fn extended_gcd(self, other: &'a BigInt) -> (BigInt, BigInt, BigInt) {
-        let (a, b, c) = extended_gcd(
-            Cow::Owned(self),
-            Cow::Owned(other.to_biguint().unwrap()),
-            true,
-        );
-        (a, b.unwrap(), c.unwrap())
-    }
-}
-
-impl<'a, 'b> ExtendedGcd<&'b BigInt> for &'a BigUint {
-    fn extended_gcd(self, other: &'b BigInt) -> (BigInt, BigInt, BigInt) {
-        let (a, b, c) = extended_gcd(
-            Cow::Borrowed(self),
-            Cow::Owned(other.to_biguint().unwrap()),
-            true,
-        );
-        (a, b.unwrap(), c.unwrap())
-    }
-}
-
-impl<'a, 'b> ExtendedGcd<&'b BigUint> for &'a BigUint {
-    fn extended_gcd(self, other: &'b BigUint) -> (BigInt, BigInt, BigInt) {
-        let (a, b, c) = extended_gcd(Cow::Borrowed(self), Cow::Borrowed(other), true);
-        (a, b.unwrap(), c.unwrap())
     }
 }
 

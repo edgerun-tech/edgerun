@@ -291,7 +291,7 @@ async fn resume_includes_initial_messages_and_sends_prior_items() {
         }],
         phase: None,
     };
-    let prior_user_json = edgerun_json::to_serde_value(&prior_user).unwrap();
+    let prior_user_json = edgerun_json::to_value(&&prior_user);
     writeln!(
         f,
         "{}",
@@ -312,7 +312,7 @@ async fn resume_includes_initial_messages_and_sends_prior_items() {
         }],
         phase: None,
     };
-    let prior_system_json = edgerun_json::to_serde_value(&prior_system).unwrap();
+    let prior_system_json = edgerun_json::to_value(&&prior_system);
     writeln!(
         f,
         "{}",
@@ -333,7 +333,7 @@ async fn resume_includes_initial_messages_and_sends_prior_items() {
         }],
         phase: Some(MessagePhase::Commentary),
     };
-    let prior_item_json = edgerun_json::to_serde_value(&prior_item).unwrap();
+    let prior_item_json = edgerun_json::to_value(&&prior_item);
     writeln!(
         f,
         "{}",
@@ -374,7 +374,7 @@ async fn resume_includes_initial_messages_and_sends_prior_items() {
         .initial_messages
         .clone()
         .expect("expected initial messages option for resumed session");
-    let initial_json = edgerun_json::to_serde_value(&initial_msgs).unwrap();
+    let initial_json = edgerun_json::to_value(&&initial_msgs);
     let expected_initial_json = json!([]);
     assert_eq!(initial_json, expected_initial_json);
 
@@ -2488,7 +2488,7 @@ async fn token_count_includes_rate_limits_snapshot() {
         _ => unreachable!(),
     };
 
-    let rate_limit_json = edgerun_json::to_serde_value(&rate_limit_only).unwrap();
+    let rate_limit_json = edgerun_json::to_value(&&rate_limit_only);
     pretty_assertions::assert_eq!(
         rate_limit_json,
         json!({
@@ -2523,7 +2523,7 @@ async fn token_count_includes_rate_limits_snapshot() {
         _ => unreachable!(),
     };
     // Assert full JSON for the final token count event (usage + rate limits)
-    let final_json = edgerun_json::to_serde_value(&final_payload).unwrap();
+    let final_json = edgerun_json::to_value(&&final_payload);
     pretty_assertions::assert_eq!(
         final_json,
         json!({
@@ -2657,7 +2657,7 @@ async fn usage_limit_error_emits_rate_limit_event() -> anyhow::Result<()> {
     };
 
     let event_json =
-        edgerun_json::to_serde_value(&event).expect("serialize token count event");
+        edgerun_json::to_value(&&event);
     pretty_assertions::assert_eq!(
         event_json,
         json!({

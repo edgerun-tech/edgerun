@@ -124,7 +124,7 @@ fn read_hook_inputs(home: &Path, log_name: &str) -> Result<Vec<Value>> {
         .lines()
         .filter(|line| !line.trim().is_empty())
         .map(|line| {
-            edgerun_json::from_serde_str(line)
+            edgerun_json::from_json_str(line)
                 .with_context(|| format!("parse {log_name} line"))
         })
         .collect()

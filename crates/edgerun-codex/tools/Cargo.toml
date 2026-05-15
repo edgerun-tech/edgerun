@@ -21,3 +21,6 @@ rmcp = { workspace = true, default-features = false, features = [
     "macros",
 ], optional = true }
 tracing = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { package = "edgerun-pretty-assertions", path = "../../utility/edgerun-pretty-assertions" }

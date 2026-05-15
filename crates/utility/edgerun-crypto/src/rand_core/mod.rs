@@ -83,7 +83,7 @@ mod os;
 /// - `Debug` with a custom implementation which *does not* print any internal
 ///   state (at least, [`CryptoRng`]s should not risk leaking state through
 ///   `Debug`).
-/// - `Serialize` and `Deserialize` (from Serde), preferably making Serde
+/// - `Serialize` and `Deserialize` (from JsonCompat), preferably making JsonCompat
 ///   support optional at the crate level in PRNG libs.
 /// - `Clone`, if possible.
 /// - *never* implement `Copy` (accidental copies may cause repeated values).
@@ -381,24 +381,18 @@ pub trait SeedableRng: Sized {
         Ok(Self::from_seed(seed))
     }
 
-    /// Creates a new instance of the RNG seeded via [`getrandom`].
+    /// Creates a new instance of the RNG seeded via the EdgeRun random source.
     ///
     /// This method is the recommended way to construct non-deterministic PRNGs
     /// since it is convenient and secure.
     ///
-    /// In case the overhead of using [`getrandom`] to seed *many* PRNGs is an
-    /// issue, one may prefer to seed from a local PRNG, e.g.
-    /// `from_rng(thread_rng()).unwrap()`.
-    ///
     /// # Panics
     ///
-    /// If [`getrandom`] is unable to provide secure entropy this method will panic.
-    ///
-    /// [`getrandom`]: https://docs.rs/getrandom
+    /// If EdgeRun is unable to provide secure entropy this method will panic.
     #[cfg(feature = "rng_core_getrandom")]
     fn from_entropy() -> Self {
         let mut seed = Self::Seed::default();
-        if let Err(err) = getrandom::getrandom(seed.as_mut()) {
+        if let Err(err) = crate::rng::fill_random(seed.as_mut()) {
             panic!("from_entropy failed: {}", err);
         }
         Self::from_seed(seed)

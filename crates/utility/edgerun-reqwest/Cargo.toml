@@ -9,16 +9,16 @@ homepage.workspace = true
 description = "Edgerun-owned Reqwest-compatible HTTP client facade"
 
 [features]
-default = ["cookies", "native", "http1", "http2", "http3", "rustls-tls-native-roots"]
+default = ["cookies", "native", "http1", "http2", "http3", "tls"]
 cookies = []
 http1 = ["native", "edgerun-http-client/http1"]
 http2 = ["native", "edgerun-http-client/http2"]
 http3 = ["native", "edgerun-http-client/http3"]
-full = ["cookies", "json", "stream", "http1", "http2", "http3", "rustls-tls-native-roots"]
-json = ["edgerun-json/serde"]
+full = ["cookies", "json", "stream", "http1", "http2", "http3", "tls"]
+json = []
 native = ["dep:edgerun-http-client", "edgerun-http-client/std"]
 native-root = ["native"]
-rustls-tls-native-roots = ["native", "edgerun-http-client/tls"]
+tls = ["native", "edgerun-http-client/tls"]
 stream = []
 
 [dependencies]

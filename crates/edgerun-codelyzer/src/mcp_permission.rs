@@ -2,9 +2,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use rkyv::{Archive, Deserialize as RkyvDeserialize, Serialize as RkyvSerialize};
-
-#[derive(Debug, Clone, Archive, RkyvSerialize, RkyvDeserialize)]
+#[derive(Debug, Clone)]
 struct PermissionRequest {
     kind: String,
     token: String,
@@ -33,14 +31,14 @@ pub fn require_text_edit_permission(
         return Ok(PermissionGrant {
             approved: true,
             token: "env-allow".to_string(),
-            request_path: request_dir().join("env-allow.rkyv"),
+            request_path: request_dir().join("env-allow.json"),
         });
     }
 
     let token = stable_token(repo_root, operation, target_path);
     let dir = request_dir();
     fs::create_dir_all(&dir).map_err(|err| format!("failed to create permission dir: {err}"))?;
-    let request_path = dir.join(format!("{token}.rkyv"));
+    let request_path = dir.join(format!("{token}.json"));
     let grant_path = dir.join(format!("{token}.approved"));
 
     if approval_token == Some(token.as_str()) && grant_path.exists() {
@@ -62,10 +60,7 @@ pub fn require_text_edit_permission(
         note: "Text edits require explicit user approval. Prefer rust_ast for Rust files."
             .to_string(),
     };
-    let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&body)
-        .map(|bytes| bytes.to_vec())
-        .map_err(|err| err.to_string())?;
-    fs::write(&request_path, bytes)
+    fs::write(&request_path, permission_request_json(&body))
         .map_err(|err| format!("failed to write permission request: {err}"))?;
 
     Err(format!(
@@ -74,6 +69,46 @@ pub fn require_text_edit_permission(
         token,
         grant_path.display()
     ))
+}
+
+fn permission_request_json(request: &PermissionRequest) -> String {
+    let mut out = String::from("{");
+    write_json_field(&mut out, "kind", &request.kind, false);
+    write_json_field(&mut out, "token", &request.token, true);
+    write_json_field(&mut out, "repo_root", &request.repo_root, true);
+    write_json_field(&mut out, "operation", &request.operation, true);
+    write_json_field(&mut out, "target_path", &request.target_path, true);
+    out.push_str(",\"requested_at_ms\":");
+    out.push_str(&request.requested_at_ms.to_string());
+    write_json_field(&mut out, "approval_file", &request.approval_file, true);
+    write_json_field(&mut out, "note", &request.note, true);
+    out.push('}');
+    out
+}
+
+fn write_json_field(out: &mut String, key: &str, value: &str, comma: bool) {
+    if comma {
+        out.push(',');
+    }
+    out.push('"');
+    out.push_str(key);
+    out.push_str("\":\"");
+    push_json_escaped(out, value);
+    out.push('"');
+}
+
+fn push_json_escaped(out: &mut String, value: &str) {
+    for ch in value.chars() {
+        match ch {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if c.is_control() => out.push_str(&format!("\\u{:04x}", c as u32)),
+            c => out.push(c),
+        }
+    }
 }
 
 pub fn request_dir() -> PathBuf {

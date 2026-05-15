@@ -1,12 +1,27 @@
-[workspace]
-
 [package]
-name = "edgerun-itoa"
-version = "0.1.0"
-edition = "2024"
+edition = "2021"
+rust-version = "1.68"
+name = "itoa"
+version = "1.0.18"
+authors = ["David Tolnay <dtolnay@gmail.com>"]
+build = false
+autolib = false
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
+description = "Fast integer primitive to string conversion"
+documentation = "https://docs.rs/itoa"
+readme = "README.md"
+keywords = ["integer"]
+categories = [
+    "value-formatting",
+    "no-std",
+    "no-std::no-alloc",
+]
 license = "MIT OR Apache-2.0"
-publish = false
-description = "Edgerun-owned itoa crate: fast integer to string conversion"
+repository = "https://github.com/dtolnay/itoa"
 
 [lib]
+name = "itoa"
 path = "src/lib.rs"

@@ -126,11 +126,11 @@ impl CodexRequestBuilder {
                 Ok(response)
             }
             Err(error) => {
-                let status = error.status();
+                let _status = error.status();
                 tracing::debug!(
                     method = %self.method,
                     url = %self.url,
-                    status = status.map(|s| s.as_u16()),
+                    status = _status.map(|s| s.as_u16()),
                     error = %error,
                     "Request failed"
                 );

@@ -5,12 +5,9 @@ use crate::environment_selection::ResolvedTurnEnvironments;
 use codex_model_provider::SharedModelProvider;
 use codex_model_provider::create_model_provider;
 use codex_protocol::SessionId;
-use codex_protocol::models::AdditionalPermissionProfile;
 use codex_protocol::protocol::ThreadSource;
 use codex_protocol::protocol::TurnEnvironmentSelection;
 use codex_sandboxing::compatibility_sandbox_policy_for_permission_profile;
-use codex_sandboxing::policy_transforms::effective_file_system_sandbox_policy;
-use codex_sandboxing::policy_transforms::effective_network_sandbox_policy;
 use edgerun_time::chrono::ChronoLocal as Local;
 use edgerun_time::chrono::ChronoUtc as Utc;
 use std::sync::atomic::AtomicBool;
@@ -294,20 +291,9 @@ impl TurnContext {
             .map_or_else(|| self.cwd.clone(), |path| self.cwd.join(path))
     }
 
-    pub(crate) fn file_system_sandbox_context(
-        &self,
-        additional_permissions: Option<AdditionalPermissionProfile>,
-    ) -> FileSystemSandboxContext {
-        let (base_file_system_sandbox_policy, base_network_sandbox_policy) =
+    pub(crate) fn file_system_sandbox_context(&self) -> FileSystemSandboxContext {
+        let (file_system_sandbox_policy, network_sandbox_policy) =
             self.permission_profile.to_runtime_permissions();
-        let file_system_sandbox_policy = effective_file_system_sandbox_policy(
-            &base_file_system_sandbox_policy,
-            additional_permissions.as_ref(),
-        );
-        let network_sandbox_policy = effective_network_sandbox_policy(
-            base_network_sandbox_policy,
-            additional_permissions.as_ref(),
-        );
         let permissions = PermissionProfile::from_runtime_permissions_with_enforcement(
             self.permission_profile.enforcement(),
             &file_system_sandbox_policy,
@@ -325,21 +311,6 @@ impl TurnContext {
         }
     }
 
-    fn non_legacy_file_system_sandbox_policy(&self) -> Option<FileSystemSandboxPolicy> {
-        // Omit the derived split filesystem policy when it is equivalent to
-        // the legacy sandbox policy. This keeps turn-context payloads stable
-        // while both fields exist; once callers consume only the split policy,
-        // this comparison and the legacy projection should go away.
-        let legacy_file_system_sandbox_policy =
-            FileSystemSandboxPolicy::from_legacy_sandbox_policy_for_cwd(
-                &self.sandbox_policy(),
-                &self.cwd,
-            );
-        let file_system_sandbox_policy = self.file_system_sandbox_policy();
-        (file_system_sandbox_policy != legacy_file_system_sandbox_policy)
-            .then_some(file_system_sandbox_policy)
-    }
-
     pub(crate) fn compact_prompt(&self) -> &str {
         self.compact_prompt
             .as_deref()
@@ -353,11 +324,7 @@ impl TurnContext {
             cwd: self.cwd.to_path_buf(),
             current_date: self.current_date.clone(),
             timezone: self.timezone.clone(),
-            approval_policy: self.approval_policy.value(),
-            sandbox_policy: self.sandbox_policy(),
-            permission_profile: Some(self.permission_profile()),
             network: self.turn_context_network_item(),
-            file_system_sandbox_policy: self.non_legacy_file_system_sandbox_policy(),
             model: self.model_info.slug.clone(),
             personality: self.personality,
             collaboration_mode: Some(self.collaboration_mode.clone()),

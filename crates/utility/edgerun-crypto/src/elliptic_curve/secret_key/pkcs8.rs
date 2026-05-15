@@ -22,14 +22,6 @@ use {
     crate::pkcs8::{EncodePrivateKey, der},
 };
 
-// Imports for actual PEM support
-#[cfg(feature = "elliptic_curve_pem")]
-use {
-    crate::elliptic_curve::{Result, error::Error},
-    crate::pkcs8::DecodePrivateKey,
-    core::str::FromStr,
-};
-
 impl<C> AssociatedAlgorithmIdentifier for SecretKey<C>
 where
     C: AssociatedOid + Curve,
@@ -79,18 +71,5 @@ where
         let ec_private_key = self.to_sec1_der()?;
         let pkcs8_key = crate::pkcs8::PrivateKeyInfo::new(algorithm_identifier, &ec_private_key);
         Ok(crate::der::SecretDocument::encode_msg(&pkcs8_key)?)
-    }
-}
-
-#[cfg(feature = "elliptic_curve_pem")]
-impl<C> FromStr for SecretKey<C>
-where
-    C: Curve + AssociatedOid + ValidatePublicKey,
-    FieldBytesSize<C>: ModulusSize,
-{
-    type Err = Error;
-
-    fn from_str(s: &str) -> Result<Self> {
-        Self::from_pkcs8_pem(s).map_err(|_| Error)
     }
 }

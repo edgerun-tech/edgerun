@@ -27,7 +27,6 @@ use codex_network_proxy::normalize_host;
 use codex_network_proxy::validate_policy_against_constraints;
 use codex_utils_absolute_path::AbsolutePathBuf;
 use edgerun_async_trait::async_trait;
-use serde::Deserialize;
 use std::sync::Arc;
 use edgerun_tokio::sync::RwLock;
 
@@ -172,7 +171,7 @@ fn apply_network_constraints(network: NetworkToml, constraints: &mut NetworkProx
     }
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, edgerun_json::FromJson)]
 struct NetworkTablesToml {
     default_permissions: Option<String>,
     permissions: Option<PermissionsToml>,

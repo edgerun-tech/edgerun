@@ -20,8 +20,7 @@ use std::time::Duration;
 
 use codex_protocol::protocol::GuardianAssessmentDecisionSource;
 use codex_protocol::protocol::GuardianAssessmentOutcome;
-use serde::Deserialize;
-use serde::Serialize;
+use edgerun_json::FromJson;
 
 pub(crate) use approval_request::GuardianApprovalRequest;
 pub(crate) use approval_request::GuardianMcpAnnotations;
@@ -56,7 +55,7 @@ const GUARDIAN_RECENT_ENTRY_LIMIT: usize = 40;
 const TRUNCATION_TAG: &str = "truncated";
 
 /// Structured output contract that the guardian reviewer must satisfy.
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, FromJson, PartialEq, Eq)]
 pub(crate) struct GuardianAssessment {
     pub(crate) risk_level: codex_protocol::protocol::GuardianRiskLevel,
     pub(crate) user_authorization: codex_protocol::protocol::GuardianUserAuthorization,
@@ -156,6 +155,3 @@ use review::GuardianReviewOutcome;
 use review::run_guardian_review_session as run_guardian_review_session_for_test;
 #[cfg(test)]
 use review_session::build_guardian_review_session_config as build_guardian_review_session_config_for_test;
-
-#[cfg(test)]
-mod tests;

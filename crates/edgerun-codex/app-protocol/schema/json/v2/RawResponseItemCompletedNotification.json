@@ -1,549 +1,369 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
-  "definitions": {
-    "ContentItem": {
+  "title": "RawResponseItemCompletedNotification",
+  "type": "object",
+  "properties": {
+    "item": {
+      "title": "ResponseItem",
       "oneOf": [
         {
-          "properties": {
-            "text": {
-              "type": "string"
-            },
-            "type": {
-              "enum": [
-                "input_text"
-              ],
-              "title": "InputTextContentItemType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "text",
-            "type"
-          ],
-          "title": "InputTextContentItem",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "detail": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/ImageDetail"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "image_url": {
-              "type": "string"
-            },
-            "type": {
-              "enum": [
-                "input_image"
-              ],
-              "title": "InputImageContentItemType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "image_url",
-            "type"
-          ],
-          "title": "InputImageContentItem",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "text": {
-              "type": "string"
-            },
-            "type": {
-              "enum": [
-                "output_text"
-              ],
-              "title": "OutputTextContentItemType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "text",
-            "type"
-          ],
-          "title": "OutputTextContentItem",
-          "type": "object"
-        }
-      ]
-    },
-    "FunctionCallOutputBody": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "items": {
-            "$ref": "#/definitions/FunctionCallOutputContentItem"
-          },
-          "type": "array"
-        }
-      ]
-    },
-    "FunctionCallOutputContentItem": {
-      "description": "Responses API compatible content items that can be returned by a tool call. This is a subset of ContentItem with the types we support as function call outputs.",
-      "oneOf": [
-        {
-          "properties": {
-            "text": {
-              "type": "string"
-            },
-            "type": {
-              "enum": [
-                "input_text"
-              ],
-              "title": "InputTextFunctionCallOutputContentItemType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "text",
-            "type"
-          ],
-          "title": "InputTextFunctionCallOutputContentItem",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "detail": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/ImageDetail"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "image_url": {
-              "type": "string"
-            },
-            "type": {
-              "enum": [
-                "input_image"
-              ],
-              "title": "InputImageFunctionCallOutputContentItemType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "image_url",
-            "type"
-          ],
-          "title": "InputImageFunctionCallOutputContentItem",
-          "type": "object"
-        }
-      ]
-    },
-    "ImageDetail": {
-      "enum": [
-        "auto",
-        "low",
-        "high",
-        "original"
-      ],
-      "type": "string"
-    },
-    "LocalShellAction": {
-      "oneOf": [
-        {
-          "properties": {
-            "command": {
-              "items": {
-                "type": "string"
-              },
-              "type": "array"
-            },
-            "env": {
-              "additionalProperties": {
-                "type": "string"
-              },
-              "type": [
-                "object",
-                "null"
-              ]
-            },
-            "timeout_ms": {
-              "format": "uint64",
-              "minimum": 0.0,
-              "type": [
-                "integer",
-                "null"
-              ]
-            },
-            "type": {
-              "enum": [
-                "exec"
-              ],
-              "title": "ExecLocalShellActionType",
-              "type": "string"
-            },
-            "user": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "working_directory": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          },
-          "required": [
-            "command",
-            "type"
-          ],
-          "title": "ExecLocalShellAction",
-          "type": "object"
-        }
-      ]
-    },
-    "LocalShellStatus": {
-      "enum": [
-        "completed",
-        "in_progress",
-        "incomplete"
-      ],
-      "type": "string"
-    },
-    "MessagePhase": {
-      "description": "Classifies an assistant message as interim commentary or final answer text.\n\nProviders do not emit this consistently, so callers must treat `None` as \"phase unknown\" and keep compatibility behavior for legacy models.",
-      "oneOf": [
-        {
-          "description": "Mid-turn assistant text (for example preamble/progress narration).\n\nAdditional tool calls or assistant output may follow before turn completion.",
-          "enum": [
-            "commentary"
-          ],
-          "type": "string"
-        },
-        {
-          "description": "The assistant's terminal answer text for the current turn.",
-          "enum": [
-            "final_answer"
-          ],
-          "type": "string"
-        }
-      ]
-    },
-    "ReasoningItemContent": {
-      "oneOf": [
-        {
-          "properties": {
-            "text": {
-              "type": "string"
-            },
-            "type": {
-              "enum": [
-                "reasoning_text"
-              ],
-              "title": "ReasoningTextReasoningItemContentType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "text",
-            "type"
-          ],
-          "title": "ReasoningTextReasoningItemContent",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "text": {
-              "type": "string"
-            },
-            "type": {
-              "enum": [
-                "text"
-              ],
-              "title": "TextReasoningItemContentType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "text",
-            "type"
-          ],
-          "title": "TextReasoningItemContent",
-          "type": "object"
-        }
-      ]
-    },
-    "ReasoningItemReasoningSummary": {
-      "oneOf": [
-        {
-          "properties": {
-            "text": {
-              "type": "string"
-            },
-            "type": {
-              "enum": [
-                "summary_text"
-              ],
-              "title": "SummaryTextReasoningItemReasoningSummaryType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "text",
-            "type"
-          ],
-          "title": "SummaryTextReasoningItemReasoningSummary",
-          "type": "object"
-        }
-      ]
-    },
-    "ResponseItem": {
-      "oneOf": [
-        {
+          "type": "object",
           "properties": {
             "content": {
+              "type": "array",
               "items": {
-                "$ref": "#/definitions/ContentItem"
-              },
-              "type": "array"
-            },
-            "id": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "writeOnly": true
-            },
-            "phase": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/MessagePhase"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+                "title": "ContentItem",
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string",
+                        "const": "InputText",
+                        "title": "InputTextv2::RawResponseItemCompletedNotificationType"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "text"
+                    ],
+                    "additionalProperties": false,
+                    "title": "InputTextv2::RawResponseItemCompletedNotification"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "imageUrl": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string",
+                        "const": "InputImage",
+                        "title": "InputImagev2::RawResponseItemCompletedNotificationType"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "imageUrl"
+                    ],
+                    "additionalProperties": false,
+                    "title": "InputImagev2::RawResponseItemCompletedNotification"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string",
+                        "const": "OutputText",
+                        "title": "OutputTextv2::RawResponseItemCompletedNotificationType"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "text"
+                    ],
+                    "additionalProperties": false,
+                    "title": "OutputTextv2::RawResponseItemCompletedNotification"
+                  }
+                ]
+              }
             },
             "role": {
               "type": "string"
             },
             "type": {
-              "enum": [
-                "message"
-              ],
-              "title": "MessageResponseItemType",
-              "type": "string"
+              "type": "string",
+              "const": "Message",
+              "title": "Messagev2::RawResponseItemCompletedNotificationType"
             }
           },
           "required": [
-            "content",
+            "type",
             "role",
-            "type"
+            "content"
           ],
-          "title": "MessageResponseItem",
-          "type": "object"
+          "additionalProperties": false,
+          "title": "Messagev2::RawResponseItemCompletedNotification"
         },
         {
+          "type": "object",
           "properties": {
-            "content": {
-              "default": null,
-              "items": {
-                "$ref": "#/definitions/ReasoningItemContent"
-              },
-              "type": [
-                "array",
-                "null"
-              ]
-            },
-            "encrypted_content": {
-              "type": [
-                "string",
-                "null"
-              ]
+            "encryptedContent": {
+              "type": "string"
             },
             "summary": {
+              "type": "array",
               "items": {
-                "$ref": "#/definitions/ReasoningItemReasoningSummary"
-              },
-              "type": "array"
+                "title": "ReasoningItemReasoningSummary",
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "text": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "type": "string",
+                        "const": "SummaryText",
+                        "title": "SummaryTextv2::RawResponseItemCompletedNotificationType"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "text"
+                    ],
+                    "additionalProperties": false,
+                    "title": "SummaryTextv2::RawResponseItemCompletedNotification"
+                  }
+                ]
+              }
             },
             "type": {
-              "enum": [
-                "reasoning"
-              ],
-              "title": "ReasoningResponseItemType",
-              "type": "string"
+              "type": "string",
+              "const": "Reasoning",
+              "title": "Reasoningv2::RawResponseItemCompletedNotificationType"
             }
           },
           "required": [
-            "summary",
-            "type"
+            "type",
+            "summary"
           ],
-          "title": "ReasoningResponseItem",
-          "type": "object"
+          "additionalProperties": false,
+          "title": "Reasoningv2::RawResponseItemCompletedNotification"
         },
         {
+          "type": "object",
           "properties": {
             "action": {
-              "$ref": "#/definitions/LocalShellAction"
-            },
-            "call_id": {
-              "description": "Set when using the Responses API.",
-              "type": [
-                "string",
-                "null"
+              "title": "LocalShellAction",
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "field0": {
+                      "title": "LocalShellExecAction",
+                      "type": "object",
+                      "properties": {
+                        "command": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "env": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string"
+                          }
+                        },
+                        "timeout_ms": {
+                          "type": "integer"
+                        },
+                        "user": {
+                          "type": "string"
+                        },
+                        "working_directory": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "command"
+                      ]
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "Exec",
+                      "title": "Execv2::RawResponseItemCompletedNotificationType"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "field0"
+                  ],
+                  "additionalProperties": false,
+                  "title": "Execv2::RawResponseItemCompletedNotification"
+                }
               ]
             },
-            "id": {
-              "description": "Legacy id field retained for compatibility with older payloads.",
-              "type": [
-                "string",
-                "null"
-              ],
-              "writeOnly": true
+            "callId": {
+              "type": "string"
             },
             "status": {
-              "$ref": "#/definitions/LocalShellStatus"
+              "title": "LocalShellStatus",
+              "type": "string",
+              "enum": [
+                "Completed",
+                "InProgress",
+                "Incomplete"
+              ]
             },
             "type": {
-              "enum": [
-                "local_shell_call"
-              ],
-              "title": "LocalShellCallResponseItemType",
-              "type": "string"
+              "type": "string",
+              "const": "LocalShellCall",
+              "title": "LocalShellCallv2::RawResponseItemCompletedNotificationType"
             }
           },
           "required": [
-            "action",
+            "type",
             "status",
-            "type"
+            "action"
           ],
-          "title": "LocalShellCallResponseItem",
-          "type": "object"
+          "additionalProperties": false,
+          "title": "LocalShellCallv2::RawResponseItemCompletedNotification"
         },
         {
+          "type": "object",
           "properties": {
             "arguments": {
               "type": "string"
             },
-            "call_id": {
+            "callId": {
               "type": "string"
-            },
-            "id": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "writeOnly": true
             },
             "name": {
               "type": "string"
             },
-            "namespace": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
             "type": {
-              "enum": [
-                "function_call"
-              ],
-              "title": "FunctionCallResponseItemType",
-              "type": "string"
+              "type": "string",
+              "const": "FunctionCall",
+              "title": "FunctionCallv2::RawResponseItemCompletedNotificationType"
             }
           },
           "required": [
-            "arguments",
-            "call_id",
+            "type",
             "name",
-            "type"
+            "arguments",
+            "callId"
           ],
-          "title": "FunctionCallResponseItem",
-          "type": "object"
+          "additionalProperties": false,
+          "title": "FunctionCallv2::RawResponseItemCompletedNotification"
         },
         {
+          "type": "object",
           "properties": {
             "arguments": true,
-            "call_id": {
-              "type": [
-                "string",
-                "null"
-              ]
+            "callId": {
+              "type": "string"
             },
             "execution": {
               "type": "string"
             },
-            "id": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "writeOnly": true
-            },
-            "status": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
             "type": {
-              "enum": [
-                "tool_search_call"
-              ],
-              "title": "ToolSearchCallResponseItemType",
-              "type": "string"
+              "type": "string",
+              "const": "ToolSearchCall",
+              "title": "ToolSearchCallv2::RawResponseItemCompletedNotificationType"
             }
           },
           "required": [
-            "arguments",
+            "type",
             "execution",
-            "type"
+            "arguments"
           ],
-          "title": "ToolSearchCallResponseItem",
-          "type": "object"
+          "additionalProperties": false,
+          "title": "ToolSearchCallv2::RawResponseItemCompletedNotification"
         },
         {
+          "type": "object",
           "properties": {
-            "call_id": {
+            "callId": {
               "type": "string"
             },
             "output": {
-              "$ref": "#/definitions/FunctionCallOutputBody"
+              "title": "FunctionCallOutputBody",
+              "oneOf": [
+                {
+                  "title": "Text",
+                  "type": "object",
+                  "properties": {
+                    "field0": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "field0"
+                  ]
+                },
+                {
+                  "title": "ContentItems",
+                  "type": "object",
+                  "properties": {
+                    "field0": {
+                      "type": "array",
+                      "items": {
+                        "title": "FunctionCallOutputContentItem",
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "text": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "const": "InputText",
+                                "title": "InputTextv2::RawResponseItemCompletedNotificationType"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "text"
+                            ],
+                            "additionalProperties": false,
+                            "title": "InputTextv2::RawResponseItemCompletedNotification"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "imageUrl": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "const": "InputImage",
+                                "title": "InputImagev2::RawResponseItemCompletedNotificationType"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "imageUrl"
+                            ],
+                            "additionalProperties": false,
+                            "title": "InputImagev2::RawResponseItemCompletedNotification"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "field0"
+                  ]
+                }
+              ]
             },
             "type": {
-              "enum": [
-                "function_call_output"
-              ],
-              "title": "FunctionCallOutputResponseItemType",
-              "type": "string"
+              "type": "string",
+              "const": "FunctionCallOutput",
+              "title": "FunctionCallOutputv2::RawResponseItemCompletedNotificationType"
             }
           },
           "required": [
-            "call_id",
-            "output",
-            "type"
+            "type",
+            "callId",
+            "output"
           ],
-          "title": "FunctionCallOutputResponseItem",
-          "type": "object"
+          "additionalProperties": false,
+          "title": "FunctionCallOutputv2::RawResponseItemCompletedNotification"
         },
         {
+          "type": "object",
           "properties": {
-            "call_id": {
+            "callId": {
               "type": "string"
-            },
-            "id": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "writeOnly": true
             },
             "input": {
               "type": "string"
@@ -551,66 +371,118 @@
             "name": {
               "type": "string"
             },
-            "status": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
             "type": {
-              "enum": [
-                "custom_tool_call"
-              ],
-              "title": "CustomToolCallResponseItemType",
-              "type": "string"
+              "type": "string",
+              "const": "CustomToolCall",
+              "title": "CustomToolCallv2::RawResponseItemCompletedNotificationType"
             }
           },
           "required": [
-            "call_id",
-            "input",
+            "type",
+            "callId",
             "name",
-            "type"
+            "input"
           ],
-          "title": "CustomToolCallResponseItem",
-          "type": "object"
+          "additionalProperties": false,
+          "title": "CustomToolCallv2::RawResponseItemCompletedNotification"
         },
         {
+          "type": "object",
           "properties": {
-            "call_id": {
+            "callId": {
               "type": "string"
-            },
-            "name": {
-              "type": [
-                "string",
-                "null"
-              ]
             },
             "output": {
-              "$ref": "#/definitions/FunctionCallOutputBody"
+              "title": "FunctionCallOutputBody",
+              "oneOf": [
+                {
+                  "title": "Text",
+                  "type": "object",
+                  "properties": {
+                    "field0": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "field0"
+                  ]
+                },
+                {
+                  "title": "ContentItems",
+                  "type": "object",
+                  "properties": {
+                    "field0": {
+                      "type": "array",
+                      "items": {
+                        "title": "FunctionCallOutputContentItem",
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "text": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "const": "InputText",
+                                "title": "InputTextv2::RawResponseItemCompletedNotificationType"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "text"
+                            ],
+                            "additionalProperties": false,
+                            "title": "InputTextv2::RawResponseItemCompletedNotification"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "imageUrl": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "const": "InputImage",
+                                "title": "InputImagev2::RawResponseItemCompletedNotificationType"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "imageUrl"
+                            ],
+                            "additionalProperties": false,
+                            "title": "InputImagev2::RawResponseItemCompletedNotification"
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "field0"
+                  ]
+                }
+              ]
             },
             "type": {
-              "enum": [
-                "custom_tool_call_output"
-              ],
-              "title": "CustomToolCallOutputResponseItemType",
-              "type": "string"
+              "type": "string",
+              "const": "CustomToolCallOutput",
+              "title": "CustomToolCallOutputv2::RawResponseItemCompletedNotificationType"
             }
           },
           "required": [
-            "call_id",
-            "output",
-            "type"
+            "type",
+            "callId",
+            "output"
           ],
-          "title": "CustomToolCallOutputResponseItem",
-          "type": "object"
+          "additionalProperties": false,
+          "title": "CustomToolCallOutputv2::RawResponseItemCompletedNotification"
         },
         {
+          "type": "object",
           "properties": {
-            "call_id": {
-              "type": [
-                "string",
-                "null"
-              ]
+            "callId": {
+              "type": "string"
             },
             "execution": {
               "type": "string"
@@ -619,66 +491,41 @@
               "type": "string"
             },
             "tools": {
-              "items": true,
-              "type": "array"
+              "type": "array",
+              "items": true
             },
             "type": {
-              "enum": [
-                "tool_search_output"
-              ],
-              "title": "ToolSearchOutputResponseItemType",
-              "type": "string"
+              "type": "string",
+              "const": "ToolSearchOutput",
+              "title": "ToolSearchOutputv2::RawResponseItemCompletedNotificationType"
             }
           },
           "required": [
-            "execution",
+            "type",
             "status",
-            "tools",
-            "type"
+            "execution",
+            "tools"
           ],
-          "title": "ToolSearchOutputResponseItem",
-          "type": "object"
+          "additionalProperties": false,
+          "title": "ToolSearchOutputv2::RawResponseItemCompletedNotification"
         },
         {
+          "type": "object",
           "properties": {
-            "action": {
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/ResponsesApiWebSearchAction"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "id": {
-              "type": [
-                "string",
-                "null"
-              ],
-              "writeOnly": true
-            },
-            "status": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
             "type": {
-              "enum": [
-                "web_search_call"
-              ],
-              "title": "WebSearchCallResponseItemType",
-              "type": "string"
+              "type": "string",
+              "const": "WebSearchCall",
+              "title": "WebSearchCallv2::RawResponseItemCompletedNotificationType"
             }
           },
           "required": [
             "type"
           ],
-          "title": "WebSearchCallResponseItem",
-          "type": "object"
+          "additionalProperties": false,
+          "title": "WebSearchCallv2::RawResponseItemCompletedNotification"
         },
         {
+          "type": "object",
           "properties": {
             "id": {
               "type": "string"
@@ -686,197 +533,74 @@
             "result": {
               "type": "string"
             },
-            "revised_prompt": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
             "status": {
               "type": "string"
             },
             "type": {
-              "enum": [
-                "image_generation_call"
-              ],
-              "title": "ImageGenerationCallResponseItemType",
-              "type": "string"
+              "type": "string",
+              "const": "ImageGenerationCall",
+              "title": "ImageGenerationCallv2::RawResponseItemCompletedNotificationType"
             }
           },
           "required": [
+            "type",
             "id",
-            "result",
             "status",
-            "type"
+            "result"
           ],
-          "title": "ImageGenerationCallResponseItem",
-          "type": "object"
+          "additionalProperties": false,
+          "title": "ImageGenerationCallv2::RawResponseItemCompletedNotification"
         },
         {
+          "type": "object",
           "properties": {
-            "encrypted_content": {
+            "encryptedContent": {
               "type": "string"
             },
             "type": {
-              "enum": [
-                "compaction"
-              ],
-              "title": "CompactionResponseItemType",
-              "type": "string"
+              "type": "string",
+              "const": "Compaction",
+              "title": "Compactionv2::RawResponseItemCompletedNotificationType"
             }
           },
           "required": [
-            "encrypted_content",
-            "type"
+            "type",
+            "encryptedContent"
           ],
-          "title": "CompactionResponseItem",
-          "type": "object"
+          "additionalProperties": false,
+          "title": "Compactionv2::RawResponseItemCompletedNotification"
         },
         {
+          "type": "object",
           "properties": {
-            "encrypted_content": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
             "type": {
-              "enum": [
-                "context_compaction"
-              ],
-              "title": "ContextCompactionResponseItemType",
-              "type": "string"
+              "type": "string",
+              "const": "ContextCompaction",
+              "title": "ContextCompactionv2::RawResponseItemCompletedNotificationType"
             }
           },
           "required": [
             "type"
           ],
-          "title": "ContextCompactionResponseItem",
-          "type": "object"
+          "additionalProperties": false,
+          "title": "ContextCompactionv2::RawResponseItemCompletedNotification"
         },
         {
+          "type": "object",
           "properties": {
             "type": {
-              "enum": [
-                "other"
-              ],
-              "title": "OtherResponseItemType",
-              "type": "string"
+              "type": "string",
+              "const": "Other",
+              "title": "Otherv2::RawResponseItemCompletedNotificationType"
             }
           },
           "required": [
             "type"
           ],
-          "title": "OtherResponseItem",
-          "type": "object"
+          "additionalProperties": false,
+          "title": "Otherv2::RawResponseItemCompletedNotification"
         }
       ]
-    },
-    "ResponsesApiWebSearchAction": {
-      "oneOf": [
-        {
-          "properties": {
-            "queries": {
-              "items": {
-                "type": "string"
-              },
-              "type": [
-                "array",
-                "null"
-              ]
-            },
-            "query": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "type": {
-              "enum": [
-                "search"
-              ],
-              "title": "SearchResponsesApiWebSearchActionType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "title": "SearchResponsesApiWebSearchAction",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "type": {
-              "enum": [
-                "open_page"
-              ],
-              "title": "OpenPageResponsesApiWebSearchActionType",
-              "type": "string"
-            },
-            "url": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "title": "OpenPageResponsesApiWebSearchAction",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "pattern": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "type": {
-              "enum": [
-                "find_in_page"
-              ],
-              "title": "FindInPageResponsesApiWebSearchActionType",
-              "type": "string"
-            },
-            "url": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "title": "FindInPageResponsesApiWebSearchAction",
-          "type": "object"
-        },
-        {
-          "properties": {
-            "type": {
-              "enum": [
-                "other"
-              ],
-              "title": "OtherResponsesApiWebSearchActionType",
-              "type": "string"
-            }
-          },
-          "required": [
-            "type"
-          ],
-          "title": "OtherResponsesApiWebSearchAction",
-          "type": "object"
-        }
-      ]
-    }
-  },
-  "properties": {
-    "item": {
-      "$ref": "#/definitions/ResponseItem"
     },
     "threadId": {
       "type": "string"
@@ -886,10 +610,8 @@
     }
   },
   "required": [
-    "item",
     "threadId",
-    "turnId"
-  ],
-  "title": "RawResponseItemCompletedNotification",
-  "type": "object"
+    "turnId",
+    "item"
+  ]
 }

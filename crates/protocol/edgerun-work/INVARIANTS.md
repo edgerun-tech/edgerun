@@ -185,10 +185,30 @@ work for that user's resources must originate from the user's signature. No
 capability node, relay, transport adapter, or derived route cache can create
 authority for user resources on its own.
 
+Admission authority is scoped. Work inside a user's own authority may be
+admitted by that user's local or delegated admission node. Work that crosses
+into another user, organization, app, storage domain, or route scope must be
+submitted as a signed `WorkRequest` to the admission authority that governs the
+destination. If that destination authority accepts the request, it returns a
+signed `WorkAdmission` with the relay/channel/path the sender may use. The
+sender then hands that admission/route grant to the payload layer that will feed
+bytes into the assigned relay path.
+
+The payload layer does not create network authority. A VFS, object store,
+message client, package fetcher, or app runtime may prepare bytes, hashes,
+sealed objects, manifests, packets, and local verification state, but it must
+not choose relays, bypass admission, or send authoritative work directly to a
+destination. For example, a VFS may turn a file tree into content-addressed,
+compressed, sealed packets; the right to move those packets comes only from the
+local user's admission for local work or from the destination-governing
+admission for external work.
+
 A `WorkAdmission` means a DAO-authorized admission node claims:
 
 ```text
-This signed user request passed admission policy and may enter the network with this budget, predefined relay path, and validity window.
+This signed user request passed admission policy and may enter the network with
+this budget, predefined relay path, and validity window under the authority of
+this admission node.
 ```
 
 Admission must commit to:
@@ -205,13 +225,23 @@ Admission must commit to:
 - `sequence`
 - `valid_until_unix_ms`
 
-The admission-defined route is the only canonical route for new work. It must be derived from the signed `WorkRequest`, signed `WorkAdmission`, source node id, target role, and admission-assigned relay path.
+The admission-defined route is the only canonical route for new work. It must be
+derived from the signed `WorkRequest`, signed `WorkAdmission`, source node id,
+target role, and admission-assigned relay path. When the work crosses an
+authority boundary, the relevant admission is the destination-governing
+admission that accepted the sender's request, not a relay, sender-side route
+cache, storage node, or VFS manifest.
 
 `assigned_route_commitment` is an admission commitment to the selected route or
 channel state. It is not node-authored availability and it is not accepted
 unless it is inside a valid admission chain.
 
-Node route bindings are not protocol authority. A node cannot bind itself into availability, select its own relay path, authorize its own capability access, or cause another node to accept work. Availability comes from admission state, and work access comes from the user/admission signature chain.
+Node route bindings are not protocol authority. A node cannot bind itself into
+availability, select its own relay path, authorize its own capability access, or
+cause another node to accept work. Availability comes from admission state, and
+work access comes from the user/admission signature chain. External delivery is
+authorized by the destination admission's signed route grant; local delivery is
+authorized by the user's own admission authority.
 
 Workers do not re-check user balances. Workers validate that work belongs to an admitted chain, that the packet matches the admitted role/department/work type, and then execute local role rules.
 
@@ -234,6 +264,14 @@ admission
 ```
 
 Relays connect to admission and to each other. Every non-relay node connects to its assigned relay. A sender feeds packets to its relay. The destination receives packets from its relay. If the destination is behind another relay, the route is a predefined relay path signed into the work admission.
+
+All inter-authority movement goes through relay, even when the payload is a file,
+folder, sealed object, app package, message, storage request, or retrieval
+response. This is what lets browser nodes, mobile devices, NATed machines,
+private storage nodes, and intermittently connected capabilities communicate
+without requiring direct reachability. A sender that receives a destination
+admission does not connect directly to the destination; it feeds the admitted
+payload packets to the relay/channel/path assigned by that admission.
 
 Admission must be able to route through multiple relays:
 
@@ -368,6 +406,49 @@ Generic unchecked receipt settlement must not be used for relay payments. Relay 
 ## Storage invariant
 
 Storage work must use typed payloads, not opaque bytes.
+
+Storage and VFS object transfer are relay-mediated work. A VFS may compress,
+packetize, and verify file or folder content before transport. Sealing should
+prefer a Trust Container, notary, TPM-backed host capability, or equivalent
+admitted sealing authority. The VFS prepares a seal request with payload bytes,
+content hash, compression metadata, and AAD; the sealing authority returns an
+opaque sealed envelope. The VFS may then packetize that envelope, but it should
+not see or hold the sealing key.
+
+Storage may store sealed object packets or transport objects without assembling
+plaintext. Neither VFS nor storage receives authority from the object hash, tree
+manifest, packet hash, or sealed envelope alone. The store, retrieve, forward,
+or return operation is valid only when it is part of an admitted relay path.
+
+For object and file transfer, keep responsibilities separate:
+
+- VFS/content layer: content hashes, file refs, tree manifests, compression,
+  seal/unseal requests, packetization, reassembly, decompress, and local
+  verification.
+- Trust Container/notary/sealing capability: key ownership, TPM/device-bound
+  sealing, unsealing, and policy around which admitted session can access
+  plaintext or sealed envelopes.
+- Admission layer: policy, budget, destination authority, allowed relays,
+  route/channel assignment, and validity window.
+- Relay layer: packet movement, ordering context, transit hashes, and delivery
+  evidence.
+- Storage layer: typed store/retrieve payload verification and storage-specific
+  proof evidence.
+
+The notary role owns the sealing key boundary. `NotaryRole` can seal admitted
+plaintext into an opaque envelope, and can unseal an admitted envelope only when
+the request supplies matching AAD. A successful unseal emits a signed
+`NotaryDeliveryReport` that binds the requester, original request message id,
+request payload hash, relay id, sequence, AAD hash, sealed envelope hash,
+plaintext hash, and open time.
+
+That report is a plaintext-access report: it proves the notary received the
+sealed envelope and released plaintext for that admitted request. It is useful
+when a VFS cannot or should not sign for file receipt itself, because asking for
+plaintext creates a signed notary event. It does not replace relay
+`ChannelProof`, typed storage evidence, or admission/policy binding for payment.
+Future settlement paths may consume notary reports only when the payable claim
+explicitly requires plaintext-access evidence.
 
 A store request must verify:
 

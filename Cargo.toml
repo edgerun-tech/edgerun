@@ -1,9 +1,10 @@
 [workspace]
 resolver = "2"
 exclude = [
-  "crates/edgerun-codex",
   "crates/edgerun-exec-runner",
   "crates/edgerun-unikernel",
+  "devices/edgerun-tcl-bridge-esp32s3",
+  "devices/edgerun-tcl-usb-ap-bridge",
 ]
 
 members = [
@@ -11,12 +12,29 @@ members = [
   "crates/apps/edgerun-exchange-api",
   "crates/apps/edgerun-oauth",
   "crates/apps/edgerun-secret-service",
-  "crates/apps/edgerun-tuya",
   "crates/authority/edgerun-storage",
+  "crates/authority/edgerun-vfs",
   "crates/authority/edgerun-virtual-disk",
   "crates/capability/edgerun-capabilities",
   "crates/capability/edgerun-remote-capability",
   "crates/device-types/edgerun-devices",
+  "crates/edgerun-codex/api",
+  "crates/edgerun-codex/app-protocol",
+  "crates/edgerun-codex/client",
+  "crates/edgerun-codex/code",
+  "crates/edgerun-codex/core",
+  "crates/edgerun-codex/debug-context",
+  "crates/edgerun-codex/host",
+  "crates/edgerun-codex/model/catalog",
+  "crates/edgerun-codex/model/info",
+  "crates/edgerun-codex/model/provider",
+  "crates/edgerun-codex/patch",
+  "crates/edgerun-codex/protocol",
+  "crates/edgerun-codex/shell",
+  "crates/edgerun-codex/tools",
+  "crates/edgerun-codex/tui",
+  "crates/edgerun-codex/ui-native",
+  "crates/edgerun-codex/ui-web",
   "crates/edgerun-codelyzer",
   "crates/edgerun-compositor",
   "crates/edgerun-exchange",
@@ -24,7 +42,6 @@ members = [
   "crates/edgerun-oci",
   "crates/edgerun-platform",
   "crates/edgerun-sdk",
-  "crates/edgerun-tcl-ac",
   "crates/edgerun-term/edgerun-term-core",
   "crates/edgerun-unit",
   "crates/edgerun-virtio",
@@ -46,63 +63,128 @@ members = [
   "crates/protocol/edgerun-protocols",
   "crates/protocol/edgerun-wire",
   "crates/protocol/edgerun-work",
+  "crates/utility/edgerun-adler2",
+  "crates/utility/edgerun-anyhow",
+  "crates/utility/edgerun-assert-cmd",
+  "crates/utility/edgerun-assert-matches",
   "crates/utility/edgerun-async-channel",
   "crates/utility/edgerun-async-trait",
+  "crates/utility/edgerun-bumpalo",
+  "crates/utility/edgerun-bytecheck",
+  "crates/utility/edgerun-bytecheck-derive",
   "crates/utility/edgerun-bytes",
-  "crates/utility/edgerun-clipboard",
+  "crates/utility/edgerun-bytes-upstream",
+  "crates/utility/edgerun-cfg-if",
+  "crates/utility/edgerun-codex-utils-absolute-path",
+  "crates/utility/edgerun-codex-utils-cargo-bin",
+  "crates/utility/edgerun-combine",
   "crates/utility/edgerun-crypto",
-  "crates/utility/edgerun-deno-core-icudata",
   "crates/utility/edgerun-emoji",
   "crates/utility/edgerun-encoding",
   "crates/utility/edgerun-error",
   "crates/utility/edgerun-error-derive",
   "crates/utility/edgerun-eventsource-stream",
+  "crates/utility/edgerun-fontdue",
   "crates/utility/edgerun-futures",
+  "crates/utility/edgerun-futures-channel",
+  "crates/utility/edgerun-futures-core",
+  "crates/utility/edgerun-futures-executor",
+  "crates/utility/edgerun-futures-macro",
+  "crates/utility/edgerun-futures-sink",
+  "crates/utility/edgerun-futures-task",
+  "crates/utility/edgerun-futures-util",
+  "crates/utility/edgerun-hashbrown",
   "crates/utility/edgerun-hpack",
   "crates/utility/edgerun-http-client",
   "crates/utility/edgerun-http",
-  "crates/utility/edgerun-icu-decimal",
-  "crates/utility/edgerun-icu-locale-core",
-  "crates/utility/edgerun-icu-provider",
   "crates/utility/edgerun-inventory",
+  "crates/utility/edgerun-itoa",
+  "crates/utility/edgerun-js-sys",
+  "crates/utility/edgerun-jni",
+  "crates/utility/edgerun-jni-macros",
+  "crates/utility/edgerun-jni-sys",
+  "crates/utility/edgerun-jni-sys-macros",
   "crates/utility/edgerun-json",
   "crates/utility/edgerun-json-derive",
   "crates/utility/edgerun-landlock",
+  "crates/utility/edgerun-lazy_static",
   "crates/utility/edgerun-locale",
   "crates/utility/edgerun-log",
+  "crates/utility/edgerun-log-upstream",
   "crates/utility/edgerun-log-macros",
+  "crates/utility/edgerun-memchr",
+  "crates/utility/edgerun-miniz-oxide",
+  "crates/utility/edgerun-munge",
+  "crates/utility/edgerun-munge-macro",
   "crates/utility/edgerun-opentelemetry",
+  "crates/utility/edgerun-opentelemetry-upstream",
   "crates/utility/edgerun-opentelemetry-sdk",
-  "crates/utility/edgerun-pty",
-  "crates/utility/edgerun-random",
+  "crates/utility/edgerun-opentelemetry-sdk-upstream",
+  "crates/utility/edgerun-once-cell",
+  "crates/utility/edgerun-percent-encoding-upstream",
+  "crates/utility/edgerun-pin-project-lite",
+  "crates/utility/edgerun-pretty-assertions",
+  "crates/utility/edgerun-proc-macro2",
+  "crates/utility/edgerun-ptr-meta",
+  "crates/utility/edgerun-ptr-meta-derive",
+  "crates/utility/edgerun-rancor",
+  "crates/utility/edgerun-quote",
   "crates/utility/edgerun-reqwest",
+  "crates/utility/edgerun-rend",
   "crates/utility/edgerun-rmcp",
   "crates/utility/edgerun-runtime",
+  "crates/utility/edgerun-rkyv",
+  "crates/utility/edgerun-rkyv-derive",
+  "crates/utility/edgerun-same-file",
   "crates/utility/edgerun-schemars",
   "crates/utility/edgerun-schemars-derive",
   "crates/utility/edgerun-seccompiler",
-  "crates/utility/edgerun-serde",
+  "crates/utility/edgerun-sharded-slab",
   "crates/utility/edgerun-shlex",
   "crates/utility/edgerun-similar",
+  "crates/utility/edgerun-simd-cesu8",
+  "crates/utility/edgerun-simdutf8",
   "crates/utility/edgerun-sixel",
+  "crates/utility/edgerun-slab",
+  "crates/utility/edgerun-smallvec",
   "crates/utility/edgerun-strum",
   "crates/utility/edgerun-strum-macros",
-  "crates/utility/edgerun-subtle",
+  "crates/utility/edgerun-syn",
+  "crates/utility/edgerun-synstructure",
   "crates/utility/edgerun-terminal-parser",
+  "crates/utility/edgerun-tempfile",
+  "crates/utility/edgerun-thread_local",
   "crates/utility/edgerun-time",
+  "crates/utility/edgerun-thiserror",
+  "crates/utility/edgerun-thiserror-impl",
+  "crates/utility/edgerun-tinyvec",
+  "crates/utility/edgerun-tinyvec-macros",
   "crates/utility/edgerun-tokio",
+  "crates/utility/edgerun-tokio-test",
   "crates/utility/edgerun-tokio-tungstenite",
   "crates/utility/edgerun-tokio-util",
+  "crates/utility/edgerun-tracing",
+  "crates/utility/edgerun-tracing-attributes",
+  "crates/utility/edgerun-tracing-core",
+  "crates/utility/edgerun-tracing-log",
   "crates/utility/edgerun-tracing-opentelemetry",
-  "crates/utility/edgerun-ts-rs",
-  "crates/utility/edgerun-ts-rs-derive",
+  "crates/utility/edgerun-tracing-opentelemetry-upstream",
+  "crates/utility/edgerun-tracing-subscriber",
   "crates/utility/edgerun-tungstenite",
   "crates/utility/edgerun-ui-core",
   "crates/utility/edgerun-unicode",
+  "crates/utility/edgerun-unicode-ident",
   "crates/utility/edgerun-unit-macros",
   "crates/utility/edgerun-url",
+  "crates/utility/edgerun-valuable",
+  "crates/utility/edgerun-walkdir",
+  "crates/utility/edgerun-wasm-bindgen",
+  "crates/utility/edgerun-wasm-bindgen-macro",
+  "crates/utility/edgerun-wasm-bindgen-macro-support",
+  "crates/utility/edgerun-wasm-bindgen-shared",
+  "crates/utility/edgerun-web-time",
+  "crates/utility/edgerun-wiremock",
   "crates/utility/edgerun-zeroize",
-  "crates/utility/edgerun-zstd",
 ]
 
 [workspace.package]
@@ -142,6 +224,19 @@ deprecated = "allow"
 function_casts_as_integer = "allow"
 
 [workspace.dependencies]
+codex-api = { path = "crates/edgerun-codex/api", default-features = false }
+codex-app-server-protocol = { path = "crates/edgerun-codex/app-protocol" }
+codex-apply-patch = { path = "crates/edgerun-codex/patch" }
+codex-client = { path = "crates/edgerun-codex/client", default-features = false }
+codex-code-mode = { path = "crates/edgerun-codex/code" }
+codex-core = { path = "crates/edgerun-codex/core", default-features = false }
+codex-model-provider = { path = "crates/edgerun-codex/model/provider", default-features = false }
+codex-model-provider-info = { path = "crates/edgerun-codex/model/info" }
+codex-models-manager = { path = "crates/edgerun-codex/model/catalog" }
+codex-protocol = { path = "crates/edgerun-codex/protocol" }
+codex-response-debug-context = { path = "crates/edgerun-codex/debug-context" }
+codex-shell-command = { path = "crates/edgerun-codex/shell" }
+codex-tools = { path = "crates/edgerun-codex/tools" }
 edgerun-core = { version = "0.1", path = "crates/protocol/edgerun-core", default-features = false }
 edgerun-protocols = { version = "0.1", path = "crates/protocol/edgerun-protocols", default-features = false }
 edgerun-storage = { version = "0.1", path = "crates/authority/edgerun-storage" }
@@ -155,35 +250,122 @@ edgerun-devices = { version = "0.1", path = "crates/device-types/edgerun-devices
 edgerun-bluetooth-gatt = { version = "0.1", path = "crates/linux-adapters/edgerun-bluetooth-gatt" }
 edgerun-async-channel = { version = "0.1", path = "crates/utility/edgerun-async-channel" }
 edgerun-async-trait = { version = "0.1", path = "crates/utility/edgerun-async-trait" }
+edgerun-bytes = { version = "0.1", path = "crates/utility/edgerun-bytes" }
 edgerun-linux-wifi = { version = "0.1", path = "crates/linux-adapters/edgerun-linux-wifi" }
 edgerun-evdev-input = { version = "0.1", path = "crates/linux-adapters/edgerun-evdev-input" }
 edgerun-oci = { version = "0.1", path = "crates/edgerun-oci" }
 edgerun-encoding = { version = "0.1", path = "crates/utility/edgerun-encoding", default-features = false }
+edgerun-error = { version = "0.1", path = "crates/utility/edgerun-error", features = ["anyhow-compat"] }
+edgerun-eventsource-stream = { version = "0.1", path = "crates/utility/edgerun-eventsource-stream" }
 edgerun-futures = { version = "0.1", path = "crates/utility/edgerun-futures" }
+edgerun-http = { version = "0.1", path = "crates/utility/edgerun-http" }
+edgerun-ui-core = { version = "0.1", path = "crates/utility/edgerun-ui-core" }
 edgerun-url = { version = "0.1", path = "crates/utility/edgerun-url" }
+edgerun-vfs = { version = "0.1", path = "crates/authority/edgerun-vfs", default-features = false }
 edgerun-shlex = { version = "0.1", path = "crates/utility/edgerun-shlex" }
 edgerun-inventory = { version = "0.1", path = "crates/utility/edgerun-inventory" }
-edgerun-serde = { version = "0.1", path = "crates/utility/edgerun-serde" }
 edgerun-strum = { version = "0.1", path = "crates/utility/edgerun-strum" }
 edgerun-strum-macros = { version = "0.1", path = "crates/utility/edgerun-strum-macros" }
-edgerun-time = { version = "0.1", path = "crates/utility/edgerun-time" }
-edgerun-reqwest = { version = "0.1", path = "crates/utility/edgerun-reqwest" }
+edgerun-time = { version = "0.1", path = "crates/utility/edgerun-time", default-features = false, features = ["chrono"] }
+edgerun-reqwest = { version = "0.1", path = "crates/utility/edgerun-reqwest", default-features = false }
 edgerun-log = { version = "0.1", path = "crates/utility/edgerun-log" }
 edgerun-wire = { version = "0.1", path = "crates/protocol/edgerun-wire", default-features = false }
 edgerun-work = { version = "0.1", path = "crates/protocol/edgerun-work", default-features = false }
 edgerun-crypto = { version = "0.1", path = "crates/utility/edgerun-crypto", default-features = false }
 edgerun-json = { version = "0.1", path = "crates/utility/edgerun-json", default-features = false }
-edgerun-locale = { version = "0.1", path = "crates/utility/edgerun-locale", default-features = false }
-edgerun-random = { version = "0.1", path = "crates/utility/edgerun-random" }
-edgerun-error = { version = "0.1", path = "crates/utility/edgerun-error" }
+edgerun-locale = { version = "0.1", path = "crates/utility/edgerun-locale", features = ["std"] }
 edgerun-emoji = { version = "0.1", path = "crates/utility/edgerun-emoji" }
 edgerun-sixel = { version = "0.1", path = "crates/utility/edgerun-sixel" }
 edgerun-terminal-parser = { version = "0.1", path = "crates/utility/edgerun-terminal-parser" }
 edgerun-virtio = { version = "0.1", path = "crates/edgerun-virtio" }
 edgerun-network-driver = { version = "0.1", path = "crates/edgerun-network-driver", default-features = false }
 edgerun-unicode = { version = "0.1", path = "crates/utility/edgerun-unicode" }
-
-rkyv = { version = "0.8.16", default-features = true }
-libc = "0.2"
+edgerun-similar = { version = "0.1", path = "crates/utility/edgerun-similar" }
+edgerun-tokio = { version = "0.1", path = "crates/utility/edgerun-tokio" }
+edgerun-tokio-tungstenite = { version = "0.1", path = "crates/utility/edgerun-tokio-tungstenite", default-features = false, features = ["connect", "handshake", "proxy", "stream"] }
+edgerun-tokio-util = { version = "0.1", path = "crates/utility/edgerun-tokio-util" }
+edgerun-tungstenite = { version = "0.1", path = "crates/utility/edgerun-tungstenite", default-features = false, features = ["deflate", "proxy"] }
+landlock = { package = "edgerun-landlock", version = "0.1", path = "crates/utility/edgerun-landlock" }
+opentelemetry = { package = "edgerun-opentelemetry", version = "0.1", path = "crates/utility/edgerun-opentelemetry" }
+opentelemetry_sdk = { package = "edgerun-opentelemetry-sdk", version = "0.1", path = "crates/utility/edgerun-opentelemetry-sdk" }
+proc-macro2 = { path = "crates/utility/edgerun-proc-macro2", default-features = false }
+quote = { path = "crates/utility/edgerun-quote", default-features = false }
+rmcp = { package = "edgerun-rmcp", version = "0.1", path = "crates/utility/edgerun-rmcp", default-features = false }
+schemars = { package = "edgerun-schemars", version = "0.1", path = "crates/utility/edgerun-schemars" }
+seccompiler = { package = "edgerun-seccompiler", version = "0.1", path = "crates/utility/edgerun-seccompiler" }
+syn = { path = "crates/utility/edgerun-syn", default-features = false }
+synstructure = { path = "crates/utility/edgerun-synstructure", default-features = false }
+tracing = { package = "edgerun-log", version = "0.1", path = "crates/utility/edgerun-log", features = ["tracing-compat"] }
+tracing-opentelemetry = { package = "edgerun-tracing-opentelemetry", version = "0.1", path = "crates/utility/edgerun-tracing-opentelemetry" }
+jni = { path = "crates/utility/edgerun-jni" }
+miniz_oxide = { path = "crates/utility/edgerun-miniz-oxide", default-features = false }
+rkyv = { path = "crates/utility/edgerun-rkyv", default-features = false }
 
 [patch.crates-io]
+adler2 = { path = "crates/utility/edgerun-adler2" }
+bumpalo = { path = "crates/utility/edgerun-bumpalo" }
+bytecheck = { path = "crates/utility/edgerun-bytecheck" }
+bytecheck_derive = { path = "crates/utility/edgerun-bytecheck-derive" }
+bytes = { path = "crates/utility/edgerun-bytes-upstream" }
+cfg-if = { path = "crates/utility/edgerun-cfg-if" }
+combine = { path = "crates/utility/edgerun-combine" }
+futures-channel = { path = "crates/utility/edgerun-futures-channel" }
+futures-core = { path = "crates/utility/edgerun-futures-core" }
+futures-executor = { path = "crates/utility/edgerun-futures-executor" }
+futures-macro = { path = "crates/utility/edgerun-futures-macro" }
+futures-sink = { path = "crates/utility/edgerun-futures-sink" }
+futures-task = { path = "crates/utility/edgerun-futures-task" }
+futures-util = { path = "crates/utility/edgerun-futures-util" }
+hashbrown = { path = "crates/utility/edgerun-hashbrown" }
+itoa = { path = "crates/utility/edgerun-itoa" }
+js-sys = { path = "crates/utility/edgerun-js-sys" }
+jni = { path = "crates/utility/edgerun-jni" }
+jni-macros = { path = "crates/utility/edgerun-jni-macros" }
+jni-sys = { path = "crates/utility/edgerun-jni-sys" }
+jni-sys-macros = { path = "crates/utility/edgerun-jni-sys-macros" }
+lazy_static = { path = "crates/utility/edgerun-lazy_static" }
+log = { path = "crates/utility/edgerun-log-upstream" }
+memchr = { path = "crates/utility/edgerun-memchr" }
+miniz_oxide = { path = "crates/utility/edgerun-miniz-oxide" }
+munge = { path = "crates/utility/edgerun-munge" }
+munge_macro = { path = "crates/utility/edgerun-munge-macro" }
+once_cell = { path = "crates/utility/edgerun-once-cell" }
+opentelemetry = { path = "crates/utility/edgerun-opentelemetry-upstream" }
+opentelemetry_sdk = { path = "crates/utility/edgerun-opentelemetry-sdk-upstream" }
+percent-encoding = { path = "crates/utility/edgerun-percent-encoding-upstream" }
+pin-project-lite = { path = "crates/utility/edgerun-pin-project-lite" }
+proc-macro2 = { path = "crates/utility/edgerun-proc-macro2" }
+ptr_meta = { path = "crates/utility/edgerun-ptr-meta" }
+ptr_meta_derive = { path = "crates/utility/edgerun-ptr-meta-derive" }
+rancor = { path = "crates/utility/edgerun-rancor" }
+rend = { path = "crates/utility/edgerun-rend" }
+rkyv = { path = "crates/utility/edgerun-rkyv" }
+rkyv_derive = { path = "crates/utility/edgerun-rkyv-derive" }
+quote = { path = "crates/utility/edgerun-quote" }
+same-file = { path = "crates/utility/edgerun-same-file" }
+sharded-slab = { path = "crates/utility/edgerun-sharded-slab" }
+simd_cesu8 = { path = "crates/utility/edgerun-simd-cesu8" }
+simdutf8 = { path = "crates/utility/edgerun-simdutf8" }
+slab = { path = "crates/utility/edgerun-slab" }
+smallvec = { path = "crates/utility/edgerun-smallvec" }
+syn = { path = "crates/utility/edgerun-syn" }
+synstructure = { path = "crates/utility/edgerun-synstructure" }
+thiserror = { path = "crates/utility/edgerun-thiserror" }
+thiserror-impl = { path = "crates/utility/edgerun-thiserror-impl" }
+thread_local = { path = "crates/utility/edgerun-thread_local" }
+tinyvec = { path = "crates/utility/edgerun-tinyvec" }
+tinyvec_macros = { path = "crates/utility/edgerun-tinyvec-macros" }
+tracing = { path = "crates/utility/edgerun-tracing" }
+tracing-attributes = { path = "crates/utility/edgerun-tracing-attributes" }
+tracing-core = { path = "crates/utility/edgerun-tracing-core" }
+tracing-log = { path = "crates/utility/edgerun-tracing-log" }
+tracing-opentelemetry = { path = "crates/utility/edgerun-tracing-opentelemetry-upstream" }
+tracing-subscriber = { path = "crates/utility/edgerun-tracing-subscriber" }
+unicode-ident = { path = "crates/utility/edgerun-unicode-ident" }
+valuable = { path = "crates/utility/edgerun-valuable" }
+walkdir = { path = "crates/utility/edgerun-walkdir" }
+wasm-bindgen = { path = "crates/utility/edgerun-wasm-bindgen" }
+wasm-bindgen-macro = { path = "crates/utility/edgerun-wasm-bindgen-macro" }
+wasm-bindgen-macro-support = { path = "crates/utility/edgerun-wasm-bindgen-macro-support" }
+wasm-bindgen-shared = { path = "crates/utility/edgerun-wasm-bindgen-shared" }
+web-time = { path = "crates/utility/edgerun-web-time" }

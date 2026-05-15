@@ -383,9 +383,9 @@ mod routing_tests {
         ExchangeProvider, ProviderCode, ProviderContext, ProviderFeatures, ProviderOrder,
         ProviderOrderRequest, ProviderQuote, ProviderStatus,
     };
-    use edgerun_exchange::router::{route_quote, QuoteRoutingResult};
-    use edgerun_node::http::client_middleware::Chain;
+    use edgerun_exchange::router::{QuoteRoutingResult, route_quote};
     use edgerun_node::http::HttpClient;
+    use edgerun_node::http::client_middleware::Chain;
     use edgerun_protocols::core_protocol::protocol::edgerun_wallet_v0::{
         AssetRef, Quote, QuoteRequest,
     };
@@ -506,29 +506,35 @@ mod routing_tests {
 
 mod status_machine_tests {
     use edgerun_exchange::status_machine::StatusMachine;
-    use edgerun_wallet::{is_terminal, CanonicalOrderStatus};
+    use edgerun_wallet::{CanonicalOrderStatus, is_terminal};
 
     #[test]
     fn test_valid_transitions() {
         let machine = StatusMachine;
-        assert!(machine
-            .validate_transition(
-                CanonicalOrderStatus::Created,
-                CanonicalOrderStatus::AwaitingDeposit
-            )
-            .is_ok());
-        assert!(machine
-            .validate_transition(
-                CanonicalOrderStatus::Exchanging,
-                CanonicalOrderStatus::Sending
-            )
-            .is_ok());
-        assert!(machine
-            .validate_transition(
-                CanonicalOrderStatus::Sending,
-                CanonicalOrderStatus::Completed
-            )
-            .is_ok());
+        assert!(
+            machine
+                .validate_transition(
+                    CanonicalOrderStatus::Created,
+                    CanonicalOrderStatus::AwaitingDeposit
+                )
+                .is_ok()
+        );
+        assert!(
+            machine
+                .validate_transition(
+                    CanonicalOrderStatus::Exchanging,
+                    CanonicalOrderStatus::Sending
+                )
+                .is_ok()
+        );
+        assert!(
+            machine
+                .validate_transition(
+                    CanonicalOrderStatus::Sending,
+                    CanonicalOrderStatus::Completed
+                )
+                .is_ok()
+        );
     }
 
     #[test]

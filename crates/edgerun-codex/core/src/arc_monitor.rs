@@ -42,9 +42,7 @@ impl ToJson for ArcMonitorRequest {
         if let Some(input) = &self.input {
             object.push_field(
                 "input",
-                edgerun_json::Value::array_from_iter(input.iter().map(|item| {
-                    edgerun_json::to_serde_value(item).unwrap_or(edgerun_json::Value::Null)
-                })),
+                edgerun_json::Value::array_from_iter(input.iter().map(ToJson::to_json)),
             );
         }
         if let Some(policies) = &self.policies {

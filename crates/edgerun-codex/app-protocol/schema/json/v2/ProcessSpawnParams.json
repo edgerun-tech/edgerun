@@ -1,0 +1,46 @@
+{
+  "title": "ProcessSpawnParams",
+  "type": "object",
+  "properties": {
+    "command": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "cwd": {
+      "title": "AbsolutePathBuf",
+      "type": "object"
+    },
+    "env": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "processHandle": {
+      "type": "string"
+    },
+    "size": {
+      "title": "ProcessTerminalSize",
+      "type": "object",
+      "properties": {
+        "cols": {
+          "type": "integer"
+        },
+        "rows": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "rows",
+        "cols"
+      ]
+    }
+  },
+  "required": [
+    "command",
+    "processHandle",
+    "cwd"
+  ]
+}

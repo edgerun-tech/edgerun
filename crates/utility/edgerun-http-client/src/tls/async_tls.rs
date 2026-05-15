@@ -1810,7 +1810,7 @@ async fn async_server_send_encrypted_handshake<S: AsyncRead + AsyncWrite + Unpin
     hash: &Hasher,
     handshake_transcript_hash: &[u8],
     cert_chain_der: &[Vec<u8>],
-    signing_key: &edgerun_crypto::p256::ecdsa::SigningKey,
+    signing_key: &edgerun_crypto::P256SigningKey,
     alpn_protocol: Option<&[u8]>,
 ) -> Result<()> {
     // EncryptedExtensions

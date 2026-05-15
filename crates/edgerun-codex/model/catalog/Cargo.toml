@@ -18,5 +18,9 @@ codex-app-server-protocol = { workspace = true }
 codex-protocol = { workspace = true }
 edgerun-json = { workspace = true }
 edgerun-time = { workspace = true }
-edgerun-tokio = { workspace = true, features = ["fs", "sync", "time"] }
+edgerun-tokio = { workspace = true, features = ["fs", "macros", "sync", "time"] }
 tracing = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { package = "edgerun-pretty-assertions", path = "../../../utility/edgerun-pretty-assertions" }
+tempfile = { package = "edgerun-tempfile", path = "../../../utility/edgerun-tempfile" }

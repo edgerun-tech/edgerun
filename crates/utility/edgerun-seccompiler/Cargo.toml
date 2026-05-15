@@ -8,5 +8,9 @@ repository.workspace = true
 homepage.workspace = true
 description = "EdgeRun seccomp error surface"
 
+[features]
+default = ["std"]
+std = []
+
 [lints]
 workspace = true

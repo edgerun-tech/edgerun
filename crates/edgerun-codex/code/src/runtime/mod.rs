@@ -77,43 +77,6 @@ pub struct CodeModeNestedToolCall {
     pub input: Option<JsonValue>,
 }
 
-#[derive(Debug)]
-pub(crate) enum TurnMessage {
-    ToolCall(CodeModeNestedToolCall),
-    Notify {
-        cell_id: String,
-        call_id: String,
-        text: String,
-    },
-}
-
-#[derive(Debug)]
-pub(crate) enum RuntimeCommand {
-    ToolResponse { id: String, result: JsonValue },
-    ToolError { id: String, error_text: String },
-    Terminate,
-}
-
-#[derive(Debug)]
-pub(crate) enum RuntimeEvent {
-    Started,
-    ContentItem(FunctionCallOutputContentItem),
-    YieldRequested,
-    ToolCall {
-        id: String,
-        name: ToolName,
-        input: Option<JsonValue>,
-    },
-    Notify {
-        call_id: String,
-        text: String,
-    },
-    Result {
-        stored_values: HashMap<String, JsonValue>,
-        error_text: Option<String>,
-    },
-}
-
 pub(crate) fn missing_cell_response(cell_id: String) -> RuntimeResponse {
     RuntimeResponse::Result {
         error_text: Some(format!("exec cell {cell_id} not found")),

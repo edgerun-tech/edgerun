@@ -7,8 +7,10 @@ use core::fmt;
 #[cfg(feature = "p256_arithmetic")]
 use {crate::crypto_bigint::Random, crate::rand_core::CryptoRngCore};
 
-#[cfg(feature = "serde")]
-use serdect::serde::{Deserialize, Deserializer, Serialize, Serializer};
+#[cfg(feature = "edgerun_json_compat")]
+use edgerun_json_compatct::edgerun_json_compat::{
+    Deserialize, Deserializer, Serialize, Serializer,
+};
 
 /// Provides intentionally-wrapped arithmetic on `T`.
 ///
@@ -70,7 +72,7 @@ impl<T: Random> Random for Wrapping<T> {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 impl<'de, T: Deserialize<'de>> Deserialize<'de> for Wrapping<T> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -80,7 +82,7 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Wrapping<T> {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 impl<T: Serialize> Serialize for Wrapping<T> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -90,13 +92,13 @@ impl<T: Serialize> Serialize for Wrapping<T> {
     }
 }
 
-#[cfg(all(test, feature = "serde"))]
+#[cfg(all(test, feature = "edgerun_json_compat"))]
 #[allow(clippy::unwrap_used)]
 mod tests {
     use crate::crypto_bigint::{U64, Wrapping};
 
     #[test]
-    fn serde() {
+    fn edgerun_json_compat() {
         const TEST: Wrapping<U64> = Wrapping(U64::from_u64(0x0011223344556677));
 
         let serialized = bincode::serialize(&TEST).unwrap();
@@ -106,7 +108,7 @@ mod tests {
     }
 
     #[test]
-    fn serde_owned() {
+    fn edgerun_json_compat_owned() {
         const TEST: Wrapping<U64> = Wrapping(U64::from_u64(0x0011223344556677));
 
         let serialized = bincode::serialize(&TEST).unwrap();

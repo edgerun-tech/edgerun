@@ -1,17 +1,14 @@
 use alloc::vec;
 use alloc::vec::Vec;
 
-use edgerun_crypto::Ed25519SigningKey;
-use rkyv::{Archive, Deserialize, Serialize};
-
 use crate::preimage::PreimageBuilder;
 use crate::protocol::*;
 use crate::signing::{empty_signature, sign_ed25519, verify_signature};
+use edgerun_crypto::Ed25519SigningKey;
 
 const RECIPIENT_MESSAGE_POLICY_DOMAIN: &[u8] = b"edgerun:v1:work:recipient-message-policy";
 
-#[derive(Clone, Debug, PartialEq, Eq, Archive, Serialize, Deserialize)]
-#[rkyv(crate = rkyv)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RecipientMessagePolicy {
     pub abi_version: u16,
     pub recipient: NodeIdentity,

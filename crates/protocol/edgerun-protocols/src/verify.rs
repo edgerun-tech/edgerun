@@ -110,16 +110,8 @@ pub fn verify_ed25519_message(
     if signature.len() != 64 {
         return Err(ProtocolVerifyError::InvalidSignatureLength);
     }
-    let public_key: &[u8; 32] = public_key
-        .try_into()
-        .map_err(|_| ProtocolVerifyError::InvalidPublicKey)?;
-    let verifying_key = edgerun_crypto::ed25519_dalek::VerifyingKey::from_bytes(public_key)
-        .map_err(|_| ProtocolVerifyError::InvalidPublicKey)?;
-    let signature = edgerun_crypto::ed25519_dalek::Signature::from_slice(signature)
-        .map_err(|_| ProtocolVerifyError::InvalidSignatureLength)?;
-    use edgerun_crypto::ed25519_dalek::Verifier;
-    verifying_key
-        .verify(message, &signature)
+
+    edgerun_crypto::verification::ed25519_verify(public_key, message, signature)
         .map_err(|_| ProtocolVerifyError::InvalidSignature)
 }
 
@@ -143,12 +135,9 @@ pub fn verify_p256_message(
         _ => crypto::VerifyingKey::from_sec1_bytes(public_key)
             .map_err(|_| ProtocolVerifyError::InvalidPublicKey)?,
     };
-    let signature = crypto::Signature::from_slice(signature)
-        .map_err(|_| ProtocolVerifyError::InvalidSignatureLength)?;
     let digest = crypto::sha256(message);
-    use edgerun_core::crypto::PrehashVerifier as _;
     verifying_key
-        .verify_prehash(&digest, &signature)
+        .verify_prehash_fixed(&digest, signature)
         .map_err(|_| ProtocolVerifyError::InvalidSignature)
 }
 
@@ -524,7 +513,7 @@ mod tests {
     #[test]
     fn verifies_event_envelope_signature_using_protocol_domains() {
         let signing = test_signing_key();
-        let writer = edgerun_core::crypto::verifying_key_to_node_id(signing.verifying_key());
+        let writer = edgerun_core::crypto::verifying_key_to_node_id(&signing.verifying_key());
         let mut event = EventEnvelope {
             envelope_version: 1,
             stream_id: writer.to_vec(),
@@ -550,7 +539,7 @@ mod tests {
     #[test]
     fn rejects_wrong_signature_domain() {
         let signing = test_signing_key();
-        let writer = edgerun_core::crypto::verifying_key_to_node_id(signing.verifying_key());
+        let writer = edgerun_core::crypto::verifying_key_to_node_id(&signing.verifying_key());
         let mut event = EventEnvelope {
             envelope_version: 1,
             stream_id: writer.to_vec(),

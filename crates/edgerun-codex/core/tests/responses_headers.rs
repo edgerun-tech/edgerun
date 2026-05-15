@@ -427,7 +427,7 @@ async fn responses_stream_includes_turn_metadata_header_for_git_workspace_e2e() 
         .header("x-codex-turn-metadata")
         .expect("x-codex-turn-metadata header should be present");
     let initial_parsed: edgerun_json::Value =
-        edgerun_json::from_serde_str(&initial_header)
+        edgerun_json::from_str(&initial_header)
             .expect("x-codex-turn-metadata should be valid JSON");
     let initial_turn_id = initial_parsed
         .get("turn_id")
@@ -528,13 +528,13 @@ async fn responses_stream_includes_turn_metadata_header_for_git_workspace_e2e() 
     let requests = request_log.requests();
     assert_eq!(requests.len(), 2, "expected two requests in one turn");
 
-    let first_parsed: edgerun_json::Value = edgerun_json::from_serde_str(
+    let first_parsed: edgerun_json::Value = edgerun_json::from_str(
         &requests[0]
             .header("x-codex-turn-metadata")
             .expect("first request should include turn metadata"),
     )
     .expect("first metadata should be valid json");
-    let second_parsed: edgerun_json::Value = edgerun_json::from_serde_str(
+    let second_parsed: edgerun_json::Value = edgerun_json::from_str(
         &requests[1]
             .header("x-codex-turn-metadata")
             .expect("second request should include turn metadata"),

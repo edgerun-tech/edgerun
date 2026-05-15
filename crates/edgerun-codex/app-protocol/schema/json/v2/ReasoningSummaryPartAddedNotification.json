@@ -1,11 +1,11 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ReasoningSummaryPartAddedNotification",
+  "type": "object",
   "properties": {
     "itemId": {
       "type": "string"
     },
     "summaryIndex": {
-      "format": "int64",
       "type": "integer"
     },
     "threadId": {
@@ -16,11 +16,9 @@
     }
   },
   "required": [
-    "itemId",
-    "summaryIndex",
     "threadId",
-    "turnId"
-  ],
-  "title": "ReasoningSummaryPartAddedNotification",
-  "type": "object"
+    "turnId",
+    "itemId",
+    "summaryIndex"
+  ]
 }

@@ -22,9 +22,6 @@ use generic_array::{
 #[cfg(feature = "elliptic_curve_alloc")]
 use alloc::boxed::Box;
 
-#[cfg(feature = "elliptic_curve_serde")]
-use serdect::serde::{Deserialize, Serialize, de, ser};
-
 use crate::subtle::{Choice, ConditionallySelectable};
 
 use crate::zeroize::Zeroize;
@@ -382,33 +379,6 @@ where
         crate::base16ct::mixed::decode(hex, &mut buf)
             .map_err(|_| Error::PointEncoding)
             .and_then(Self::from_bytes)
-    }
-}
-
-#[cfg(feature = "elliptic_curve_serde")]
-impl<Size> Serialize for EncodedPoint<Size>
-where
-    Size: ModulusSize,
-{
-    fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
-    where
-        S: ser::Serializer,
-    {
-        serdect::slice::serialize_hex_upper_or_bin(&self.as_bytes(), serializer)
-    }
-}
-
-#[cfg(feature = "elliptic_curve_serde")]
-impl<'de, Size> Deserialize<'de> for EncodedPoint<Size>
-where
-    Size: ModulusSize,
-{
-    fn deserialize<D>(deserializer: D) -> core::result::Result<Self, D::Error>
-    where
-        D: de::Deserializer<'de>,
-    {
-        let bytes = serdect::slice::deserialize_hex_or_bin_vec(deserializer)?;
-        Self::from_bytes(bytes).map_err(de::Error::custom)
     }
 }
 

@@ -6,8 +6,26 @@ use crate::num_bigint::Zero;
 
 use crate::num_bigint::algorithms::cmp_slice;
 use crate::num_bigint::big_digit::{BITS, BigDigit, SignedDoubleBigDigit};
-use crate::num_bigint::bigint::Sign::{self, *};
 use crate::num_bigint::{BigUint, VEC_SIZE};
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum Sign {
+    Minus,
+    NoSign,
+    Plus,
+}
+
+impl core::ops::Mul for Sign {
+    type Output = Sign;
+
+    fn mul(self, other: Sign) -> Sign {
+        match (self, other) {
+            (Sign::NoSign, _) | (_, Sign::NoSign) => Sign::NoSign,
+            (Sign::Plus, Sign::Plus) | (Sign::Minus, Sign::Minus) => Sign::Plus,
+            (Sign::Plus, Sign::Minus) | (Sign::Minus, Sign::Plus) => Sign::Minus,
+        }
+    }
+}
 
 // Subtract with borrow:
 #[inline]
@@ -87,38 +105,13 @@ pub fn sub_sign(a: &[BigDigit], b: &[BigDigit]) -> (Sign, BigUint) {
         Greater => {
             let mut a: SmallVec<[BigDigit; VEC_SIZE]> = a.into();
             sub2(&mut a, b);
-            (Plus, BigUint::new_native(a))
+            (Sign::Plus, BigUint::new_native(a))
         }
         Less => {
             let mut b: SmallVec<[BigDigit; VEC_SIZE]> = b.into();
             sub2(&mut b, a);
-            (Minus, BigUint::new_native(b))
+            (Sign::Minus, BigUint::new_native(b))
         }
-        _ => (NoSign, Zero::zero()),
-    }
-}
-
-#[cfg(all(test, num_bigint_upstream_tests))]
-mod tests {
-    use super::*;
-
-    use crate::num_bigint::Num;
-
-    use crate::num_bigint::BigInt;
-
-    #[test]
-    fn test_sub_sign() {
-        fn sub_sign_i(a: &[BigDigit], b: &[BigDigit]) -> BigInt {
-            let (sign, val) = sub_sign(a, b);
-            BigInt::from_biguint(sign, val)
-        }
-
-        let a = BigUint::from_str_radix("265252859812191058636308480000000", 10).unwrap();
-        let b = BigUint::from_str_radix("26525285981219105863630848000000", 10).unwrap();
-        let a_i = BigInt::from_biguint(Plus, a.clone());
-        let b_i = BigInt::from_biguint(Plus, b.clone());
-
-        assert_eq!(sub_sign_i(&a.data[..], &b.data[..]), &a_i - &b_i);
-        assert_eq!(sub_sign_i(&b.data[..], &a.data[..]), &b_i - &a_i);
+        _ => (Sign::NoSign, Zero::zero()),
     }
 }

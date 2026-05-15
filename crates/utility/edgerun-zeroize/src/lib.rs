@@ -50,7 +50,9 @@ macro_rules! impl_zeroize_int {
     };
 }
 
-impl_zeroize_int!(u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize);
+impl_zeroize_int!(
+    u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize
+);
 
 #[cfg(feature = "alloc")]
 impl Zeroize for alloc::vec::Vec<u8> {
@@ -71,7 +73,7 @@ impl<T: Zeroize> Zeroizing<T> {
     }
 
     /// Consume the wrapper without running the drop wipe.
-    pub fn into_inner(mut self) -> T {
+    pub fn into_inner(self) -> T {
         // SAFETY: `value` is read out and `self` is forgotten so Drop does not run.
         let value = unsafe { core::ptr::read(&self.0) };
         core::mem::forget(self);

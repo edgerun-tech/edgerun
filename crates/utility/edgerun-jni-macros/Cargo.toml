@@ -1,0 +1,25 @@
+[package]
+name = "jni-macros"
+version = "0.22.4"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "EdgeRun-owned procedural macros for the jni crate"
+build = "build.rs"
+
+[lib]
+name = "jni_macros"
+path = "src/lib.rs"
+doctest = false
+proc-macro = true
+
+[dependencies]
+proc-macro2 = { path = "../edgerun-proc-macro2" }
+quote = { path = "../edgerun-quote" }
+simd_cesu8 = { path = "../edgerun-simd-cesu8" }
+syn = { path = "../edgerun-syn", features = ["full"] }
+
+[lints]
+workspace = true

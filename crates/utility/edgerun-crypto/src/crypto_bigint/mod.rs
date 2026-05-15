@@ -95,36 +95,6 @@
 //! That includes modular exponentiation and multiplicative inverses.
 //! These features are described in the [`modular`] module.
 //!
-//! ### Random number generation
-//!
-//! When the `rand_core` or `rand` features of this crate are enabled, it's
-//! possible to generate random numbers using any CSRNG by using the
-//! [`Random`] trait:
-//!
-//! ```
-//! # #[cfg(feature = "rand")]
-//! # {
-//! use edgerun_crypto::crypto_bigint::{Random, U256, crate::rand_core::OsRng};
-//!
-//! let n = U256::random(&mut OsRng);
-//! # }
-//! ```
-//!
-//! #### Modular random number generation
-//!
-//! The [`RandomMod`] trait supports generating random numbers with a uniform
-//! distribution around a given [`NonZero`] modulus.
-//!
-//! ```
-//! # #[cfg(feature = "rand")]
-//! # {
-//! use edgerun_crypto::crypto_bigint::{NonZero, RandomMod, U256, crate::rand_core::OsRng};
-//!
-//! let modulus = NonZero::new(U256::from(3u8)).unwrap();
-//! let n = U256::random_mod(&mut OsRng, &modulus);
-//! # }
-//! ```
-//!
 //! [`Add`]: core::ops::Add
 //! [`Div`]: core::ops::Div
 //! [`Mul`]: core::ops::Mul
@@ -136,8 +106,6 @@ mod macros;
 
 #[cfg(feature = "p256_arithmetic")]
 mod array;
-#[cfg(feature = "crypto_bigint_alloc")]
-mod boxed;
 mod checked;
 mod ct_choice;
 mod limb;
@@ -158,9 +126,6 @@ pub use crate::crypto_bigint::{
 };
 pub use crate::subtle;
 
-#[cfg(feature = "crypto_bigint_alloc")]
-pub use crate::crypto_bigint::boxed::uint::BoxedUint;
-
 #[cfg(feature = "p256_arithmetic")]
 pub use {
     crate::crypto_bigint::array::{ArrayDecoding, ArrayEncoding, ByteArray},
@@ -169,9 +134,6 @@ pub use {
 
 #[cfg(feature = "p256_arithmetic")]
 pub use crate::rand_core;
-
-#[cfg(feature = "rlp")]
-pub use rlp;
 
 #[cfg(feature = "p256_arithmetic")]
 pub use crate::zeroize;

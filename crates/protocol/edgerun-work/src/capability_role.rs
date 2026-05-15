@@ -1,10 +1,10 @@
 use alloc::vec::Vec;
 
-use crate::capability_packet::{CapabilityEnvelope, verify_capability_message_payload};
+use crate::capability_packet::{verify_capability_message_payload, CapabilityEnvelope};
 use crate::protocol::*;
 use crate::roles::{
-    ROLE_STATUS_ACCEPTED, ROLE_STATUS_REJECTED, RoleContext, RoleInput, RoleOutput, WorkRole,
-    network_message_for_role,
+    network_message_for_role, RoleContext, RoleInput, RoleOutput, WorkRole, ROLE_STATUS_ACCEPTED,
+    ROLE_STATUS_REJECTED,
 };
 
 #[derive(Clone, Debug, Default)]

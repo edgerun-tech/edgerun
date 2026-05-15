@@ -1,6 +1,6 @@
 //! Source capture provenance for the extracted UI system.
 
-use super::{preset_recipe_for_style_family, UiPresetRecipe, UiStyleFamily};
+use super::{UiPresetRecipe, UiStyleFamily, preset_recipe_for_style_family};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct UiExtractedSourceCapture {

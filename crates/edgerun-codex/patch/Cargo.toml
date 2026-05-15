@@ -21,3 +21,10 @@ edgerun-async-trait = { workspace = true }
 edgerun-error = { workspace = true }
 edgerun-similar = { workspace = true }
 edgerun-tokio = { workspace = true, features = ["fs", "macros", "rt"] }
+
+[dev-dependencies]
+assert_cmd = { package = "edgerun-assert-cmd", path = "../../utility/edgerun-assert-cmd" }
+assert_matches = { package = "edgerun-assert-matches", path = "../../utility/edgerun-assert-matches" }
+codex_utils_cargo_bin = { package = "edgerun-codex-utils-cargo-bin", path = "../../utility/edgerun-codex-utils-cargo-bin" }
+pretty_assertions = { package = "edgerun-pretty-assertions", path = "../../utility/edgerun-pretty-assertions" }
+tempfile = { package = "edgerun-tempfile", path = "../../utility/edgerun-tempfile" }

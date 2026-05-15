@@ -6,8 +6,6 @@ use codex_protocol::config_types::ModeKind;
 use codex_protocol::config_types::TUI_VISIBLE_COLLABORATION_MODES;
 use codex_protocol::config_types::WebSearchConfig;
 use codex_protocol::config_types::WebSearchMode;
-use codex_protocol::config_types::WindowsSandboxLevel;
-use codex_protocol::models::PermissionProfile;
 use codex_protocol::openai_models::ApplyPatchToolType;
 use codex_protocol::openai_models::ConfigShellToolType;
 use codex_protocol::openai_models::InputModality;
@@ -28,9 +26,7 @@ pub enum ShellCommandBackendConfig {
 pub enum ToolUserShellType {
     Zsh,
     Bash,
-    PowerShell,
     Sh,
-    Cmd,
 }
 
 pub fn request_user_input_available_modes(features: &Features) -> Vec<ModeKind> {
@@ -69,15 +65,15 @@ impl UnifiedExecShellMode {
             && let (Some(shell_zsh_path), Some(main_execve_wrapper_exe)) =
                 (shell_zsh_path, main_execve_wrapper_exe)
             && let (Ok(shell_zsh_path), Ok(main_execve_wrapper_exe)) = (
-                AbsolutePathBuf::try_from(shell_zsh_path.as_path()).inspect_err(|err| {
+                AbsolutePathBuf::try_from(shell_zsh_path.as_path()).inspect_err(|_err| {
                     tracing::warn!(
-                        "Failed to convert shell_zsh_path `{shell_zsh_path:?}`: {err:?}"
+                        "Failed to convert shell_zsh_path `{shell_zsh_path:?}`: {_err:?}"
                     )
                 }),
                 AbsolutePathBuf::try_from(main_execve_wrapper_exe.as_path()).inspect_err(
-                    |err| {
+                    |_err| {
                         tracing::warn!(
-                            "Failed to convert main_execve_wrapper_exe `{main_execve_wrapper_exe:?}`: {err:?}"
+                            "Failed to convert main_execve_wrapper_exe `{main_execve_wrapper_exe:?}`: {_err:?}"
                         )
                     },
                 ),
@@ -109,8 +105,6 @@ pub struct ToolsConfig {
     pub search_tool: bool,
     pub namespace_tools: bool,
     pub tool_suggest: bool,
-    pub exec_permission_approvals_enabled: bool,
-    pub request_permissions_tool_enabled: bool,
     pub code_mode_enabled: bool,
     pub code_mode_only_enabled: bool,
     pub can_request_original_image_detail: bool,
@@ -136,8 +130,6 @@ pub struct ToolsConfigParams<'a> {
     pub image_generation_tool_auth_allowed: bool,
     pub web_search_mode: Option<WebSearchMode>,
     pub session_source: SessionSource,
-    pub permission_profile: &'a PermissionProfile,
-    pub windows_sandbox_level: WindowsSandboxLevel,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -190,8 +182,6 @@ impl ToolsConfig {
         let include_image_gen_tool = *image_generation_tool_auth_allowed
             && features.enabled(Feature::ImageGeneration)
             && supports_image_generation(model_info);
-        let exec_permission_approvals_enabled = features.enabled(Feature::ExecPermissionApprovals);
-        let request_permissions_tool_enabled = features.enabled(Feature::RequestPermissionsTool);
         let shell_command_backend =
             if features.enabled(Feature::ShellTool) && features.enabled(Feature::ShellZshFork) {
                 ShellCommandBackendConfig::ZshFork
@@ -247,8 +237,6 @@ impl ToolsConfig {
             search_tool: include_search_tool,
             namespace_tools: true,
             tool_suggest: include_tool_suggest,
-            exec_permission_approvals_enabled,
-            request_permissions_tool_enabled,
             code_mode_enabled: include_code_mode,
             code_mode_only_enabled: include_code_mode_only,
             can_request_original_image_detail: include_original_image_detail,
@@ -380,7 +368,7 @@ impl ToolsConfig {
 }
 
 fn conpty_supported() -> bool {
-    cfg!(windows)
+    false
 }
 
 fn supports_image_generation(model_info: &ModelInfo) -> bool {

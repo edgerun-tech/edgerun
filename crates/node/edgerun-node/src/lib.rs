@@ -19,6 +19,8 @@ extern crate std;
 pub mod app_model;
 #[cfg(feature = "node-core")]
 pub mod bootstrap;
+#[cfg(all(feature = "node-core", feature = "std", not(target_arch = "wasm32")))]
+pub mod capacity;
 #[cfg(feature = "node-core")]
 pub mod command_dispatch;
 #[cfg(feature = "node-core")]
@@ -68,6 +70,13 @@ pub mod storage;
 pub mod stream_append;
 #[cfg(feature = "tls")]
 pub mod tls;
+#[cfg(all(
+    feature = "ui-sdl",
+    feature = "node-core",
+    feature = "std",
+    not(target_arch = "wasm32")
+))]
+pub mod ui_sdl;
 #[cfg(target_arch = "wasm32")]
 pub mod wasm;
 #[cfg(all(feature = "http3", feature = "quic"))]

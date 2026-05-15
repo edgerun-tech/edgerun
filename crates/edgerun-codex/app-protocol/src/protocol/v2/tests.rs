@@ -16,9 +16,7 @@ use codex_protocol::items::WebSearchItem;
 use codex_protocol::mcp::CallToolResult;
 use codex_protocol::memory_citation::MemoryCitation as CoreMemoryCitation;
 use codex_protocol::memory_citation::MemoryCitationEntry as CoreMemoryCitationEntry;
-use codex_protocol::models::AdditionalPermissionProfile as CoreAdditionalPermissionProfile;
 use codex_protocol::models::FileSystemPermissions as CoreFileSystemPermissions;
-use codex_protocol::models::ManagedFileSystemPermissions as CoreManagedFileSystemPermissions;
 use codex_protocol::models::MessagePhase;
 use codex_protocol::models::NetworkPermissions as CoreNetworkPermissions;
 use codex_protocol::models::WebSearchAction as CoreWebSearchAction;
@@ -27,10 +25,6 @@ use codex_protocol::permissions::FileSystemPath as CoreFileSystemPath;
 use codex_protocol::permissions::FileSystemSandboxEntry as CoreFileSystemSandboxEntry;
 use codex_protocol::permissions::FileSystemSpecialPath as CoreFileSystemSpecialPath;
 use codex_protocol::protocol::AgentStatus as CoreAgentStatus;
-use codex_protocol::protocol::AskForApproval as CoreAskForApproval;
-use codex_protocol::protocol::GranularApprovalConfig as CoreGranularApprovalConfig;
-use codex_protocol::protocol::NetworkAccess as CoreNetworkAccess;
-use codex_protocol::request_permissions::RequestPermissionProfile as CoreRequestPermissionProfile;
 use codex_protocol::user_input::UserInput as CoreUserInput;
 use edgerun_json::Value as JsonValue;
 use edgerun_json::json;
@@ -58,18 +52,18 @@ fn test_absolute_path() -> AbsolutePathBuf {
 #[test]
 fn approvals_reviewer_serializes_auto_review_and_accepts_legacy_guardian_subagent() {
     assert_eq!(
-        edgerun_json::to_string(&ApprovalsReviewer::User).expect("serialize reviewer"),
+        edgerun_json::to_json_string(&ApprovalsReviewer::User).expect("serialize reviewer"),
         "\"user\""
     );
     assert_eq!(
-        edgerun_json::to_string(&ApprovalsReviewer::AutoReview).expect("serialize reviewer"),
+        edgerun_json::to_json_string(&ApprovalsReviewer::AutoReview).expect("serialize reviewer"),
         "\"guardian_subagent\""
     );
 
     for value in ["user", "auto_review", "guardian_subagent"] {
         let json = format!("\"{value}\"");
         let reviewer: ApprovalsReviewer =
-            edgerun_json::from_serde_str(&json).expect("deserialize reviewer");
+            edgerun_json::from_json_str(&json).expect("deserialize reviewer");
         let expected = if value == "user" {
             ApprovalsReviewer::User
         } else {
@@ -81,7 +75,7 @@ fn approvals_reviewer_serializes_auto_review_and_accepts_legacy_guardian_subagen
 
 #[test]
 fn turn_defaults_legacy_missing_items_view_to_full() {
-    let turn: Turn = edgerun_json::from_serde_value(json!({
+    let turn: Turn = edgerun_json::from_value(json!({
         "id": "turn_123",
         "items": [],
         "status": "completed",
@@ -97,7 +91,7 @@ fn turn_defaults_legacy_missing_items_view_to_full() {
 
 #[test]
 fn thread_turns_list_params_accepts_items_view() {
-    let params = edgerun_json::from_serde_value::<ThreadTurnsListParams>(json!({
+    let params = edgerun_json::from_value::<ThreadTurnsListParams>(json!({
         "threadId": "thr_123",
         "cursor": null,
         "limit": 25,
@@ -121,7 +115,7 @@ fn thread_turns_items_list_round_trips() {
     };
 
     assert_eq!(
-        edgerun_json::to_serde_value(&params).expect("serialize params"),
+        edgerun_json::to_value(&params),
         json!({
             "threadId": "thr_123",
             "turnId": "turn_456",
@@ -139,7 +133,7 @@ fn thread_turns_items_list_round_trips() {
     };
 
     assert_eq!(
-        edgerun_json::to_serde_value(&response).expect("serialize response"),
+        edgerun_json::to_value(&response),
         json!({
             "data": [{"type": "contextCompaction", "id": "item_1"}],
             "nextCursor": null,
@@ -150,7 +144,7 @@ fn thread_turns_items_list_round_trips() {
 
 #[test]
 fn thread_list_params_accepts_single_cwd() {
-    let params = edgerun_json::from_serde_value::<ThreadListParams>(json!({
+    let params = edgerun_json::from_value::<ThreadListParams>(json!({
         "cwd": "/workspace",
     }))
     .expect("single cwd should deserialize");
@@ -164,7 +158,7 @@ fn thread_list_params_accepts_single_cwd() {
 
 #[test]
 fn thread_list_params_accepts_multiple_cwds() {
-    let params = edgerun_json::from_serde_value::<ThreadListParams>(json!({
+    let params = edgerun_json::from_value::<ThreadListParams>(json!({
         "cwd": ["/workspace", "/other-workspace"],
     }))
     .expect("cwd array should deserialize");
@@ -180,7 +174,7 @@ fn thread_list_params_accepts_multiple_cwds() {
 
 #[test]
 fn thread_list_params_accepts_state_db_only_flag() {
-    let params = edgerun_json::from_serde_value::<ThreadListParams>(json!({
+    let params = edgerun_json::from_value::<ThreadListParams>(json!({
         "useStateDbOnly": true,
     }))
     .expect("state db only flag should deserialize");
@@ -201,7 +195,7 @@ fn collab_agent_state_maps_interrupted_status() {
 
 #[test]
 fn external_agent_config_plugins_details_round_trip() {
-    let item: ExternalAgentConfigMigrationItem = edgerun_json::from_serde_value(json!({
+    let item: ExternalAgentConfigMigrationItem = edgerun_json::from_value(json!({
         "itemType": "PLUGINS",
         "description": "Install supported plugins from Claude settings",
         "cwd": absolute_path_string("repo"),
@@ -235,7 +229,7 @@ fn external_agent_config_plugins_details_round_trip() {
 
 #[test]
 fn external_agent_config_import_params_accept_legacy_plugin_details() {
-    let params: ExternalAgentConfigImportParams = edgerun_json::from_serde_value(json!({
+    let params: ExternalAgentConfigImportParams = edgerun_json::from_value(json!({
         "migrationItems": [{
             "itemType": "PLUGINS",
             "description": "Install supported plugins from Claude settings",
@@ -268,141 +262,6 @@ fn external_agent_config_import_params_accept_legacy_plugin_details() {
                 }),
             }],
         }
-    );
-}
-
-#[test]
-fn command_execution_request_approval_rejects_relative_additional_permission_paths() {
-    let err = edgerun_json::from_serde_value::<CommandExecutionRequestApprovalParams>(json!({
-        "threadId": "thr_123",
-        "turnId": "turn_123",
-        "itemId": "call_123",
-        "startedAtMs": 1,
-        "command": "cat file",
-        "cwd": absolute_path_string("tmp"),
-        "commandActions": null,
-        "reason": null,
-        "networkApprovalContext": null,
-        "additionalPermissions": {
-            "network": null,
-            "fileSystem": {
-                "read": ["relative/path"],
-                "write": null
-            }
-        },
-        "proposedExecpolicyAmendment": null,
-        "proposedNetworkPolicyAmendments": null,
-        "availableDecisions": null
-    }))
-    .expect_err("relative additional permission paths should fail");
-    assert!(
-        err.to_string()
-            .contains("AbsolutePathBuf deserialized without a base path"),
-        "unexpected error: {err}"
-    );
-}
-
-#[test]
-fn permissions_request_approval_uses_request_permission_profile() {
-    let read_only_path = if cfg!(windows) {
-        r"C:\tmp\read-only"
-    } else {
-        "/tmp/read-only"
-    };
-    let read_write_path = if cfg!(windows) {
-        r"C:\tmp\read-write"
-    } else {
-        "/tmp/read-write"
-    };
-    let params = edgerun_json::from_serde_value::<PermissionsRequestApprovalParams>(json!({
-        "threadId": "thr_123",
-        "turnId": "turn_123",
-        "itemId": "call_123",
-        "startedAtMs": 1,
-        "cwd": absolute_path_string("repo"),
-        "reason": "Select a workspace root",
-        "permissions": {
-            "network": {
-                "enabled": true,
-            },
-            "fileSystem": {
-                "read": [read_only_path],
-                "write": [read_write_path],
-            },
-        },
-    }))
-    .expect("permissions request should deserialize");
-
-    assert_eq!(params.cwd, absolute_path("repo"));
-    assert_eq!(
-        params.permissions,
-        RequestPermissionProfile {
-            network: Some(AdditionalNetworkPermissions {
-                enabled: Some(true),
-            }),
-            file_system: Some(AdditionalFileSystemPermissions {
-                read: Some(vec![
-                    AbsolutePathBuf::try_from(PathBuf::from(read_only_path))
-                        .expect("path must be absolute"),
-                ]),
-                write: Some(vec![
-                    AbsolutePathBuf::try_from(PathBuf::from(read_write_path))
-                        .expect("path must be absolute"),
-                ]),
-                glob_scan_max_depth: None,
-                entries: None,
-            }),
-        }
-    );
-
-    assert_eq!(
-        CoreRequestPermissionProfile::from(params.permissions),
-        CoreRequestPermissionProfile {
-            network: Some(CoreNetworkPermissions {
-                enabled: Some(true),
-            }),
-            file_system: Some(CoreFileSystemPermissions::from_read_write_roots(
-                Some(vec![
-                    AbsolutePathBuf::try_from(PathBuf::from(read_only_path))
-                        .expect("path must be absolute"),
-                ]),
-                Some(vec![
-                    AbsolutePathBuf::try_from(PathBuf::from(read_write_path))
-                        .expect("path must be absolute"),
-                ]),
-            )),
-        }
-    );
-}
-
-#[test]
-fn permissions_request_approval_rejects_macos_permissions() {
-    let err = edgerun_json::from_serde_value::<PermissionsRequestApprovalParams>(json!({
-        "threadId": "thr_123",
-        "turnId": "turn_123",
-        "itemId": "call_123",
-        "startedAtMs": 1,
-        "cwd": absolute_path_string("repo"),
-        "reason": "Select a workspace root",
-        "permissions": {
-            "network": null,
-            "fileSystem": null,
-            "macos": {
-                "preferences": "read_only",
-                "automations": "none",
-                "launchServices": false,
-                "accessibility": false,
-                "calendar": false,
-                "reminders": false,
-                "contacts": "none",
-            },
-        },
-    }))
-    .expect_err("permissions request should reject macos permissions");
-
-    assert!(
-        err.to_string().contains("unknown field `macos`"),
-        "unexpected error: {err}"
     );
 }
 
@@ -496,7 +355,7 @@ fn additional_file_system_permissions_populates_entries_for_legacy_roots() {
 
 #[test]
 fn additional_file_system_permissions_rejects_zero_glob_scan_depth() {
-    edgerun_json::from_serde_value::<AdditionalFileSystemPermissions>(json!({
+    edgerun_json::from_value::<AdditionalFileSystemPermissions>(json!({
         "read": null,
         "write": null,
         "globScanMaxDepth": 0,
@@ -506,50 +365,8 @@ fn additional_file_system_permissions_rejects_zero_glob_scan_depth() {
 }
 
 #[test]
-fn permission_profile_file_system_permissions_preserves_glob_scan_depth() {
-    let core_permissions = CoreManagedFileSystemPermissions::Restricted {
-        entries: vec![CoreFileSystemSandboxEntry {
-            path: CoreFileSystemPath::GlobPattern {
-                pattern: "**/*.env".to_string(),
-            },
-            access: CoreFileSystemAccessMode::None,
-        }],
-        glob_scan_max_depth: NonZeroUsize::new(2),
-    };
-
-    let permissions = PermissionProfileFileSystemPermissions::from(core_permissions.clone());
-
-    assert_eq!(
-        permissions,
-        PermissionProfileFileSystemPermissions::Restricted {
-            entries: vec![FileSystemSandboxEntry {
-                path: FileSystemPath::GlobPattern {
-                    pattern: "**/*.env".to_string(),
-                },
-                access: FileSystemAccessMode::None,
-            }],
-            glob_scan_max_depth: NonZeroUsize::new(2),
-        }
-    );
-    assert_eq!(
-        CoreManagedFileSystemPermissions::from(permissions),
-        core_permissions
-    );
-}
-
-#[test]
-fn permission_profile_file_system_permissions_rejects_zero_glob_scan_depth() {
-    edgerun_json::from_serde_value::<PermissionProfileFileSystemPermissions>(json!({
-        "type": "restricted",
-        "entries": [],
-        "globScanMaxDepth": 0,
-    }))
-    .expect_err("zero glob scan depth should fail deserialization");
-}
-
-#[test]
 fn legacy_current_working_directory_special_path_deserializes_as_project_roots() {
-    let special_path = edgerun_json::from_serde_value::<FileSystemSpecialPath>(json!({
+    let special_path = edgerun_json::from_value::<FileSystemSpecialPath>(json!({
         "kind": "current_working_directory",
     }))
     .expect("legacy cwd special path should deserialize");
@@ -559,100 +376,12 @@ fn legacy_current_working_directory_special_path_deserializes_as_project_roots()
         FileSystemSpecialPath::ProjectRoots { subpath: None }
     );
     assert_eq!(
-        edgerun_json::to_serde_value(&special_path).expect("serialize special path"),
+        edgerun_json::to_value(&special_path),
         json!({
             "kind": "project_roots",
             "subpath": null,
         })
     );
-}
-
-#[test]
-fn permissions_request_approval_response_uses_granted_permission_profile_without_macos() {
-    let read_only_path = if cfg!(windows) {
-        r"C:\tmp\read-only"
-    } else {
-        "/tmp/read-only"
-    };
-    let read_write_path = if cfg!(windows) {
-        r"C:\tmp\read-write"
-    } else {
-        "/tmp/read-write"
-    };
-    let response = edgerun_json::from_serde_value::<PermissionsRequestApprovalResponse>(json!({
-        "permissions": {
-            "network": {
-                "enabled": true,
-            },
-            "fileSystem": {
-                "read": [read_only_path],
-                "write": [read_write_path],
-            },
-        },
-    }))
-    .expect("permissions response should deserialize");
-
-    assert_eq!(
-        response.permissions,
-        GrantedPermissionProfile {
-            network: Some(AdditionalNetworkPermissions {
-                enabled: Some(true),
-            }),
-            file_system: Some(AdditionalFileSystemPermissions {
-                read: Some(vec![
-                    AbsolutePathBuf::try_from(PathBuf::from(read_only_path))
-                        .expect("path must be absolute"),
-                ]),
-                write: Some(vec![
-                    AbsolutePathBuf::try_from(PathBuf::from(read_write_path))
-                        .expect("path must be absolute"),
-                ]),
-                glob_scan_max_depth: None,
-                entries: None,
-            }),
-        }
-    );
-
-    assert_eq!(
-        CoreAdditionalPermissionProfile::from(response.permissions),
-        CoreAdditionalPermissionProfile {
-            network: Some(CoreNetworkPermissions {
-                enabled: Some(true),
-            }),
-            file_system: Some(CoreFileSystemPermissions::from_read_write_roots(
-                Some(vec![
-                    AbsolutePathBuf::try_from(PathBuf::from(read_only_path))
-                        .expect("path must be absolute"),
-                ]),
-                Some(vec![
-                    AbsolutePathBuf::try_from(PathBuf::from(read_write_path))
-                        .expect("path must be absolute"),
-                ]),
-            )),
-        }
-    );
-}
-
-#[test]
-fn permissions_request_approval_response_defaults_scope_to_turn() {
-    let response = edgerun_json::from_serde_value::<PermissionsRequestApprovalResponse>(json!({
-        "permissions": {},
-    }))
-    .expect("response should deserialize");
-
-    assert_eq!(response.scope, PermissionGrantScope::Turn);
-    assert_eq!(response.strict_auto_review, None);
-}
-
-#[test]
-fn permissions_request_approval_response_accepts_strict_auto_review() {
-    let response = edgerun_json::from_serde_value::<PermissionsRequestApprovalResponse>(json!({
-        "permissions": {},
-        "strictAutoReview": true,
-    }))
-    .expect("response should deserialize");
-
-    assert_eq!(response.strict_auto_review, Some(true));
 }
 
 #[test]
@@ -665,7 +394,7 @@ fn fs_get_metadata_response_round_trips_minimal_fields() {
         modified_at_ms: 456,
     };
 
-    let value = edgerun_json::to_serde_value(&response).expect("serialize fs/getMetadata response");
+    let value = edgerun_json::to_value(&response);
     assert_eq!(
         value,
         json!({
@@ -677,7 +406,7 @@ fn fs_get_metadata_response_round_trips_minimal_fields() {
         })
     );
 
-    let decoded = edgerun_json::from_serde_value::<FsGetMetadataResponse>(value)
+    let decoded = edgerun_json::from_value::<FsGetMetadataResponse>(value)
         .expect("deserialize fs/getMetadata response");
     assert_eq!(decoded, response);
 }
@@ -688,7 +417,7 @@ fn fs_read_file_response_round_trips_base64_data() {
         data_base64: "aGVsbG8=".to_string(),
     };
 
-    let value = edgerun_json::to_serde_value(&response).expect("serialize fs/readFile response");
+    let value = edgerun_json::to_value(&response);
     assert_eq!(
         value,
         json!({
@@ -696,7 +425,7 @@ fn fs_read_file_response_round_trips_base64_data() {
         })
     );
 
-    let decoded = edgerun_json::from_serde_value::<FsReadFileResponse>(value)
+    let decoded = edgerun_json::from_value::<FsReadFileResponse>(value)
         .expect("deserialize fs/readFile response");
     assert_eq!(decoded, response);
 }
@@ -707,7 +436,7 @@ fn fs_read_file_params_round_trip() {
         path: absolute_path("tmp/example.txt"),
     };
 
-    let value = edgerun_json::to_serde_value(&params).expect("serialize fs/readFile params");
+    let value = edgerun_json::to_value(&params);
     assert_eq!(
         value,
         json!({
@@ -715,7 +444,7 @@ fn fs_read_file_params_round_trip() {
         })
     );
 
-    let decoded = edgerun_json::from_serde_value::<FsReadFileParams>(value)
+    let decoded = edgerun_json::from_value::<FsReadFileParams>(value)
         .expect("deserialize fs/readFile params");
     assert_eq!(decoded, params);
 }
@@ -727,7 +456,7 @@ fn fs_create_directory_params_round_trip_with_default_recursive() {
         recursive: None,
     };
 
-    let value = edgerun_json::to_serde_value(&params).expect("serialize fs/createDirectory params");
+    let value = edgerun_json::to_value(&params);
     assert_eq!(
         value,
         json!({
@@ -736,7 +465,7 @@ fn fs_create_directory_params_round_trip_with_default_recursive() {
         })
     );
 
-    let decoded = edgerun_json::from_serde_value::<FsCreateDirectoryParams>(value)
+    let decoded = edgerun_json::from_value::<FsCreateDirectoryParams>(value)
         .expect("deserialize fs/createDirectory params");
     assert_eq!(decoded, params);
 }
@@ -748,7 +477,7 @@ fn fs_write_file_params_round_trip_with_base64_data() {
         data_base64: "AAE=".to_string(),
     };
 
-    let value = edgerun_json::to_serde_value(&params).expect("serialize fs/writeFile params");
+    let value = edgerun_json::to_value(&params);
     assert_eq!(
         value,
         json!({
@@ -757,7 +486,7 @@ fn fs_write_file_params_round_trip_with_base64_data() {
         })
     );
 
-    let decoded = edgerun_json::from_serde_value::<FsWriteFileParams>(value)
+    let decoded = edgerun_json::from_value::<FsWriteFileParams>(value)
         .expect("deserialize fs/writeFile params");
     assert_eq!(decoded, params);
 }
@@ -770,7 +499,7 @@ fn fs_copy_params_round_trip_with_recursive_directory_copy() {
         recursive: true,
     };
 
-    let value = edgerun_json::to_serde_value(&params).expect("serialize fs/copy params");
+    let value = edgerun_json::to_value(&params);
     assert_eq!(
         value,
         json!({
@@ -781,7 +510,7 @@ fn fs_copy_params_round_trip_with_recursive_directory_copy() {
     );
 
     let decoded =
-        edgerun_json::from_serde_value::<FsCopyParams>(value).expect("deserialize fs/copy params");
+        edgerun_json::from_value::<FsCopyParams>(value).expect("deserialize fs/copy params");
     assert_eq!(decoded, params);
 }
 
@@ -792,8 +521,7 @@ fn thread_shell_command_params_round_trip() {
         command: "printf 'hello world\\n'".to_string(),
     };
 
-    let value =
-        edgerun_json::to_serde_value(&params).expect("serialize thread/shellCommand params");
+    let value = edgerun_json::to_value(&params);
     assert_eq!(
         value,
         json!({
@@ -802,7 +530,7 @@ fn thread_shell_command_params_round_trip() {
         })
     );
 
-    let decoded = edgerun_json::from_serde_value::<ThreadShellCommandParams>(value)
+    let decoded = edgerun_json::from_value::<ThreadShellCommandParams>(value)
         .expect("deserialize thread/shellCommand params");
     assert_eq!(decoded, params);
 }
@@ -811,11 +539,10 @@ fn thread_shell_command_params_round_trip() {
 fn thread_shell_command_response_round_trip() {
     let response = ThreadShellCommandResponse {};
 
-    let value =
-        edgerun_json::to_serde_value(&response).expect("serialize thread/shellCommand response");
+    let value = edgerun_json::to_value(&response);
     assert_eq!(value, json!({}));
 
-    let decoded = edgerun_json::from_serde_value::<ThreadShellCommandResponse>(value)
+    let decoded = edgerun_json::from_value::<ThreadShellCommandResponse>(value)
         .expect("deserialize thread/shellCommand response");
     assert_eq!(decoded, response);
 }
@@ -830,8 +557,7 @@ fn fs_changed_notification_round_trips() {
         ],
     };
 
-    let value =
-        edgerun_json::to_serde_value(&notification).expect("serialize fs/changed notification");
+    let value = edgerun_json::to_value(&notification);
     assert_eq!(
         value,
         json!({
@@ -843,14 +569,14 @@ fn fs_changed_notification_round_trips() {
         })
     );
 
-    let decoded = edgerun_json::from_serde_value::<FsChangedNotification>(value)
+    let decoded = edgerun_json::from_value::<FsChangedNotification>(value)
         .expect("deserialize fs/changed notification");
     assert_eq!(decoded, notification);
 }
 
 #[test]
 fn command_exec_params_default_optional_streaming_flags() {
-    let params = edgerun_json::from_serde_value::<CommandExecParams>(json!({
+    let params = edgerun_json::from_value::<CommandExecParams>(json!({
         "command": ["ls", "-la"],
         "timeoutMs": 1000,
         "cwd": "/tmp"
@@ -872,8 +598,6 @@ fn command_exec_params_default_optional_streaming_flags() {
             cwd: Some(PathBuf::from("/tmp")),
             env: None,
             size: None,
-            sandbox_policy: None,
-            permission_profile: None,
         }
     );
 }
@@ -893,11 +617,9 @@ fn command_exec_params_round_trips_disable_timeout() {
         cwd: None,
         env: None,
         size: None,
-        sandbox_policy: None,
-        permission_profile: None,
     };
 
-    let value = edgerun_json::to_serde_value(&params).expect("serialize command/exec params");
+    let value = edgerun_json::to_value(&params);
     assert_eq!(
         value,
         json!({
@@ -908,14 +630,12 @@ fn command_exec_params_round_trips_disable_timeout() {
             "cwd": null,
             "env": null,
             "size": null,
-            "sandboxPolicy": null,
-            "permissionProfile": null,
             "outputBytesCap": null,
         })
     );
 
     let decoded =
-        edgerun_json::from_serde_value::<CommandExecParams>(value).expect("deserialize round-trip");
+        edgerun_json::from_value::<CommandExecParams>(value).expect("deserialize round-trip");
     assert_eq!(decoded, params);
 }
 
@@ -934,7 +654,7 @@ fn process_spawn_params_round_trips_without_sandbox_policy() {
         size: None,
     };
 
-    let value = edgerun_json::to_serde_value(&params).expect("serialize process/spawn params");
+    let value = edgerun_json::to_value(&params);
     assert_eq!(
         value,
         json!({
@@ -946,8 +666,8 @@ fn process_spawn_params_round_trips_without_sandbox_policy() {
         })
     );
 
-    let decoded = edgerun_json::from_serde_value::<ProcessSpawnParams>(value)
-        .expect("deserialize round-trip");
+    let decoded =
+        edgerun_json::from_value::<ProcessSpawnParams>(value).expect("deserialize round-trip");
     assert_eq!(decoded, params);
 }
 
@@ -971,11 +691,11 @@ fn process_spawn_params_distinguish_omitted_null_and_value_limits() {
         env: None,
         size: None,
     };
-    let decoded = edgerun_json::from_serde_value::<ProcessSpawnParams>(base)
-        .expect("deserialize omitted limits");
+    let decoded =
+        edgerun_json::from_value::<ProcessSpawnParams>(base).expect("deserialize omitted limits");
     assert_eq!(decoded, expected_omitted);
 
-    let decoded = edgerun_json::from_serde_value::<ProcessSpawnParams>(json!({
+    let decoded = edgerun_json::from_value::<ProcessSpawnParams>(json!({
         "command": ["sleep", "30"],
         "processHandle": "sleep-1",
         "cwd": absolute_path_string("readable"),
@@ -992,7 +712,7 @@ fn process_spawn_params_distinguish_omitted_null_and_value_limits() {
         }
     );
 
-    let decoded = edgerun_json::from_serde_value::<ProcessSpawnParams>(json!({
+    let decoded = edgerun_json::from_value::<ProcessSpawnParams>(json!({
         "command": ["sleep", "30"],
         "processHandle": "sleep-1",
         "cwd": absolute_path_string("readable"),
@@ -1025,11 +745,9 @@ fn command_exec_params_round_trips_disable_output_cap() {
         cwd: None,
         env: None,
         size: None,
-        sandbox_policy: None,
-        permission_profile: None,
     };
 
-    let value = edgerun_json::to_serde_value(&params).expect("serialize command/exec params");
+    let value = edgerun_json::to_value(&params);
     assert_eq!(
         value,
         json!({
@@ -1042,13 +760,11 @@ fn command_exec_params_round_trips_disable_output_cap() {
             "cwd": null,
             "env": null,
             "size": null,
-            "sandboxPolicy": null,
-            "permissionProfile": null,
         })
     );
 
     let decoded =
-        edgerun_json::from_serde_value::<CommandExecParams>(value).expect("deserialize round-trip");
+        edgerun_json::from_value::<CommandExecParams>(value).expect("deserialize round-trip");
     assert_eq!(decoded, params);
 }
 
@@ -1071,11 +787,9 @@ fn command_exec_params_round_trips_env_overrides_and_unsets() {
             ("BAZ".to_string(), None),
         ])),
         size: None,
-        sandbox_policy: None,
-        permission_profile: None,
     };
 
-    let value = edgerun_json::to_serde_value(&params).expect("serialize command/exec params");
+    let value = edgerun_json::to_value(&params);
     assert_eq!(
         value,
         json!({
@@ -1090,13 +804,11 @@ fn command_exec_params_round_trips_env_overrides_and_unsets() {
                 "BAZ": null,
             },
             "size": null,
-            "sandboxPolicy": null,
-            "permissionProfile": null,
         })
     );
 
     let decoded =
-        edgerun_json::from_serde_value::<CommandExecParams>(value).expect("deserialize round-trip");
+        edgerun_json::from_value::<CommandExecParams>(value).expect("deserialize round-trip");
     assert_eq!(decoded, params);
 }
 
@@ -1108,7 +820,7 @@ fn command_exec_write_round_trips_close_only_payload() {
         close_stdin: true,
     };
 
-    let value = edgerun_json::to_serde_value(&params).expect("serialize command/exec/write params");
+    let value = edgerun_json::to_value(&params);
     assert_eq!(
         value,
         json!({
@@ -1118,8 +830,8 @@ fn command_exec_write_round_trips_close_only_payload() {
         })
     );
 
-    let decoded = edgerun_json::from_serde_value::<CommandExecWriteParams>(value)
-        .expect("deserialize round-trip");
+    let decoded =
+        edgerun_json::from_value::<CommandExecWriteParams>(value).expect("deserialize round-trip");
     assert_eq!(decoded, params);
 }
 
@@ -1129,8 +841,7 @@ fn command_exec_terminate_round_trips() {
         process_id: "proc-8".to_string(),
     };
 
-    let value =
-        edgerun_json::to_serde_value(&params).expect("serialize command/exec/terminate params");
+    let value = edgerun_json::to_value(&params);
     assert_eq!(
         value,
         json!({
@@ -1138,7 +849,7 @@ fn command_exec_terminate_round_trips() {
         })
     );
 
-    let decoded = edgerun_json::from_serde_value::<CommandExecTerminateParams>(value)
+    let decoded = edgerun_json::from_value::<CommandExecTerminateParams>(value)
         .expect("deserialize round-trip");
     assert_eq!(decoded, params);
 }
@@ -1161,11 +872,9 @@ fn command_exec_params_round_trip_with_size() {
             rows: 40,
             cols: 120,
         }),
-        sandbox_policy: None,
-        permission_profile: None,
     };
 
-    let value = edgerun_json::to_serde_value(&params).expect("serialize command/exec params");
+    let value = edgerun_json::to_value(&params);
     assert_eq!(
         value,
         json!({
@@ -1180,13 +889,11 @@ fn command_exec_params_round_trip_with_size() {
                 "rows": 40,
                 "cols": 120,
             },
-            "sandboxPolicy": null,
-            "permissionProfile": null,
         })
     );
 
     let decoded =
-        edgerun_json::from_serde_value::<CommandExecParams>(value).expect("deserialize round-trip");
+        edgerun_json::from_value::<CommandExecParams>(value).expect("deserialize round-trip");
     assert_eq!(decoded, params);
 }
 
@@ -1200,8 +907,7 @@ fn command_exec_resize_round_trips() {
         },
     };
 
-    let value =
-        edgerun_json::to_serde_value(&params).expect("serialize command/exec/resize params");
+    let value = edgerun_json::to_value(&params);
     assert_eq!(
         value,
         json!({
@@ -1213,8 +919,8 @@ fn command_exec_resize_round_trips() {
         })
     );
 
-    let decoded = edgerun_json::from_serde_value::<CommandExecResizeParams>(value)
-        .expect("deserialize round-trip");
+    let decoded =
+        edgerun_json::from_value::<CommandExecResizeParams>(value).expect("deserialize round-trip");
     assert_eq!(decoded, params);
 }
 
@@ -1227,8 +933,7 @@ fn command_exec_output_delta_round_trips() {
         cap_reached: false,
     };
 
-    let value = edgerun_json::to_serde_value(&notification)
-        .expect("serialize command/exec/outputDelta notification");
+    let value = edgerun_json::to_value(&notification);
     assert_eq!(
         value,
         json!({
@@ -1239,7 +944,7 @@ fn command_exec_output_delta_round_trips() {
         })
     );
 
-    let decoded = edgerun_json::from_serde_value::<CommandExecOutputDeltaNotification>(value)
+    let decoded = edgerun_json::from_value::<CommandExecOutputDeltaNotification>(value)
         .expect("deserialize round-trip");
     assert_eq!(decoded, notification);
 }
@@ -1251,7 +956,7 @@ fn process_control_params_round_trip() {
         delta_base64: None,
         close_stdin: true,
     };
-    let value = edgerun_json::to_serde_value(&write).expect("serialize process/writeStdin params");
+    let value = edgerun_json::to_value(&write);
     assert_eq!(
         value,
         json!({
@@ -1260,7 +965,7 @@ fn process_control_params_round_trip() {
             "closeStdin": true,
         })
     );
-    let decoded = edgerun_json::from_serde_value::<ProcessWriteStdinParams>(value)
+    let decoded = edgerun_json::from_value::<ProcessWriteStdinParams>(value)
         .expect("deserialize process/writeStdin params");
     assert_eq!(decoded, write);
 
@@ -1271,7 +976,7 @@ fn process_control_params_round_trip() {
             cols: 160,
         },
     };
-    let value = edgerun_json::to_serde_value(&resize).expect("serialize process/resizePty params");
+    let value = edgerun_json::to_value(&resize);
     assert_eq!(
         value,
         json!({
@@ -1282,22 +987,22 @@ fn process_control_params_round_trip() {
             },
         })
     );
-    let decoded = edgerun_json::from_serde_value::<ProcessResizePtyParams>(value)
+    let decoded = edgerun_json::from_value::<ProcessResizePtyParams>(value)
         .expect("deserialize process/resizePty params");
     assert_eq!(decoded, resize);
 
     let kill = ProcessKillParams {
         process_handle: "proc-7".to_string(),
     };
-    let value = edgerun_json::to_serde_value(&kill).expect("serialize process/kill params");
+    let value = edgerun_json::to_value(&kill);
     assert_eq!(
         value,
         json!({
             "processHandle": "proc-7",
         })
     );
-    let decoded = edgerun_json::from_serde_value::<ProcessKillParams>(value)
-        .expect("deserialize process/kill");
+    let decoded =
+        edgerun_json::from_value::<ProcessKillParams>(value).expect("deserialize process/kill");
     assert_eq!(decoded, kill);
 }
 
@@ -1309,7 +1014,7 @@ fn process_notifications_round_trip() {
         delta_base64: "AQI=".to_string(),
         cap_reached: false,
     };
-    let value = edgerun_json::to_serde_value(&delta).expect("serialize process/outputDelta");
+    let value = edgerun_json::to_value(&delta);
     assert_eq!(
         value,
         json!({
@@ -1319,7 +1024,7 @@ fn process_notifications_round_trip() {
             "capReached": false,
         })
     );
-    let decoded = edgerun_json::from_serde_value::<ProcessOutputDeltaNotification>(value)
+    let decoded = edgerun_json::from_value::<ProcessOutputDeltaNotification>(value)
         .expect("deserialize process/outputDelta");
     assert_eq!(decoded, delta);
 
@@ -1331,7 +1036,7 @@ fn process_notifications_round_trip() {
         stderr: "err".to_string(),
         stderr_cap_reached: true,
     };
-    let value = edgerun_json::to_serde_value(&exited).expect("serialize process/exited");
+    let value = edgerun_json::to_value(&exited);
     assert_eq!(
         value,
         json!({
@@ -1343,7 +1048,7 @@ fn process_notifications_round_trip() {
             "stderrCapReached": true,
         })
     );
-    let decoded = edgerun_json::from_serde_value::<ProcessExitedNotification>(value)
+    let decoded = edgerun_json::from_value::<ProcessExitedNotification>(value)
         .expect("deserialize process/exited");
     assert_eq!(decoded, exited);
 }
@@ -1357,8 +1062,7 @@ fn command_execution_output_delta_round_trips() {
         delta: "\u{fffd}a\n".to_string(),
     };
 
-    let value = edgerun_json::to_serde_value(&notification)
-        .expect("serialize item/commandExecution/outputDelta notification");
+    let value = edgerun_json::to_value(&notification);
     assert_eq!(
         value,
         json!({
@@ -1369,177 +1073,9 @@ fn command_execution_output_delta_round_trips() {
         })
     );
 
-    let decoded = edgerun_json::from_serde_value::<CommandExecutionOutputDeltaNotification>(value)
+    let decoded = edgerun_json::from_value::<CommandExecutionOutputDeltaNotification>(value)
         .expect("deserialize round-trip");
     assert_eq!(decoded, notification);
-}
-
-#[test]
-fn sandbox_policy_round_trips_external_sandbox_network_access() {
-    let v2_policy = SandboxPolicy::ExternalSandbox {
-        network_access: NetworkAccess::Enabled,
-    };
-
-    let core_policy = v2_policy.to_core();
-    assert_eq!(
-        core_policy,
-        codex_protocol::protocol::SandboxPolicy::ExternalSandbox {
-            network_access: CoreNetworkAccess::Enabled,
-        }
-    );
-
-    let back_to_v2 = SandboxPolicy::from(core_policy);
-    assert_eq!(back_to_v2, v2_policy);
-}
-
-#[test]
-fn sandbox_policy_round_trips_read_only_network_access() {
-    let v2_policy = SandboxPolicy::ReadOnly {
-        network_access: true,
-    };
-
-    let core_policy = v2_policy.to_core();
-    assert_eq!(
-        core_policy,
-        codex_protocol::protocol::SandboxPolicy::ReadOnly {
-            network_access: true,
-        }
-    );
-
-    let back_to_v2 = SandboxPolicy::from(core_policy);
-    assert_eq!(back_to_v2, v2_policy);
-}
-
-#[test]
-fn ask_for_approval_granular_round_trips_request_permissions_flag() {
-    let v2_policy = AskForApproval::Granular {
-        sandbox_approval: true,
-        rules: false,
-        skill_approval: false,
-        request_permissions: true,
-        mcp_elicitations: false,
-    };
-
-    let core_policy = v2_policy.to_core();
-    assert_eq!(
-        core_policy,
-        CoreAskForApproval::Granular(CoreGranularApprovalConfig {
-            sandbox_approval: true,
-            rules: false,
-            skill_approval: false,
-            request_permissions: true,
-            mcp_elicitations: false,
-        })
-    );
-
-    let back_to_v2 = AskForApproval::from(core_policy);
-    assert_eq!(back_to_v2, v2_policy);
-}
-
-#[test]
-fn ask_for_approval_granular_defaults_missing_optional_flags_to_false() {
-    let decoded = edgerun_json::from_serde_value::<AskForApproval>(edgerun_json::json!({
-        "granular": {
-            "sandbox_approval": true,
-            "rules": false,
-            "mcp_elicitations": true,
-        }
-    }))
-    .expect("granular approval policy should deserialize");
-
-    assert_eq!(
-        decoded,
-        AskForApproval::Granular {
-            sandbox_approval: true,
-            rules: false,
-            skill_approval: false,
-            request_permissions: false,
-            mcp_elicitations: true,
-        }
-    );
-}
-
-#[test]
-fn ask_for_approval_granular_is_marked_experimental() {
-    let reason =
-        crate::experimental_api::ExperimentalApi::experimental_reason(&AskForApproval::Granular {
-            sandbox_approval: true,
-            rules: false,
-            skill_approval: false,
-            request_permissions: false,
-            mcp_elicitations: true,
-        });
-
-    assert_eq!(reason, Some("askForApproval.granular"));
-    assert_eq!(
-        crate::experimental_api::ExperimentalApi::experimental_reason(&AskForApproval::OnRequest,),
-        None
-    );
-}
-
-#[test]
-fn profile_v2_granular_approval_policy_is_marked_experimental() {
-    let reason = crate::experimental_api::ExperimentalApi::experimental_reason(&ProfileV2 {
-        model: None,
-        model_provider: None,
-        approval_policy: Some(AskForApproval::Granular {
-            sandbox_approval: true,
-            rules: false,
-            skill_approval: false,
-            request_permissions: true,
-            mcp_elicitations: false,
-        }),
-        approvals_reviewer: None,
-        service_tier: None,
-        model_reasoning_effort: None,
-        model_reasoning_summary: None,
-        model_verbosity: None,
-        web_search: None,
-        tools: None,
-        chatgpt_base_url: None,
-        additional: HashMap::new(),
-    });
-
-    assert_eq!(reason, Some("askForApproval.granular"));
-}
-
-#[test]
-fn config_granular_approval_policy_is_marked_experimental() {
-    let reason = crate::experimental_api::ExperimentalApi::experimental_reason(&Config {
-        model: None,
-        review_model: None,
-        model_context_window: None,
-        model_auto_compact_token_limit: None,
-        model_provider: None,
-        approval_policy: Some(AskForApproval::Granular {
-            sandbox_approval: false,
-            rules: true,
-            skill_approval: false,
-            request_permissions: false,
-            mcp_elicitations: true,
-        }),
-        approvals_reviewer: None,
-        sandbox_mode: None,
-        sandbox_workspace_write: None,
-        forced_chatgpt_workspace_id: None,
-        forced_login_method: None,
-        web_search: None,
-        tools: None,
-        profile: None,
-        profiles: HashMap::new(),
-        instructions: None,
-        developer_instructions: None,
-        compact_prompt: None,
-        model_reasoning_effort: None,
-        model_reasoning_summary: None,
-        model_verbosity: None,
-        service_tier: None,
-        analytics: None,
-        apps: None,
-        additional: HashMap::new(),
-    });
-
-    assert_eq!(reason, Some("askForApproval.granular"));
 }
 
 #[test]
@@ -1550,10 +1086,7 @@ fn config_approvals_reviewer_is_marked_experimental() {
         model_context_window: None,
         model_auto_compact_token_limit: None,
         model_provider: None,
-        approval_policy: None,
         approvals_reviewer: Some(ApprovalsReviewer::AutoReview),
-        sandbox_mode: None,
-        sandbox_workspace_write: None,
         forced_chatgpt_workspace_id: None,
         forced_login_method: None,
         web_search: None,
@@ -1576,61 +1109,6 @@ fn config_approvals_reviewer_is_marked_experimental() {
 }
 
 #[test]
-fn config_nested_profile_granular_approval_policy_is_marked_experimental() {
-    let reason = crate::experimental_api::ExperimentalApi::experimental_reason(&Config {
-        model: None,
-        review_model: None,
-        model_context_window: None,
-        model_auto_compact_token_limit: None,
-        model_provider: None,
-        approval_policy: None,
-        approvals_reviewer: None,
-        sandbox_mode: None,
-        sandbox_workspace_write: None,
-        forced_chatgpt_workspace_id: None,
-        forced_login_method: None,
-        web_search: None,
-        tools: None,
-        profile: None,
-        profiles: HashMap::from([(
-            "default".to_string(),
-            ProfileV2 {
-                model: None,
-                model_provider: None,
-                approval_policy: Some(AskForApproval::Granular {
-                    sandbox_approval: true,
-                    rules: false,
-                    skill_approval: false,
-                    request_permissions: false,
-                    mcp_elicitations: true,
-                }),
-                approvals_reviewer: None,
-                service_tier: None,
-                model_reasoning_effort: None,
-                model_reasoning_summary: None,
-                model_verbosity: None,
-                web_search: None,
-                tools: None,
-                chatgpt_base_url: None,
-                additional: HashMap::new(),
-            },
-        )]),
-        instructions: None,
-        developer_instructions: None,
-        compact_prompt: None,
-        model_reasoning_effort: None,
-        model_reasoning_summary: None,
-        model_verbosity: None,
-        service_tier: None,
-        analytics: None,
-        apps: None,
-        additional: HashMap::new(),
-    });
-
-    assert_eq!(reason, Some("askForApproval.granular"));
-}
-
-#[test]
 fn config_nested_profile_approvals_reviewer_is_marked_experimental() {
     let reason = crate::experimental_api::ExperimentalApi::experimental_reason(&Config {
         model: None,
@@ -1638,10 +1116,7 @@ fn config_nested_profile_approvals_reviewer_is_marked_experimental() {
         model_context_window: None,
         model_auto_compact_token_limit: None,
         model_provider: None,
-        approval_policy: None,
         approvals_reviewer: None,
-        sandbox_mode: None,
-        sandbox_workspace_write: None,
         forced_chatgpt_workspace_id: None,
         forced_login_method: None,
         web_search: None,
@@ -1652,7 +1127,6 @@ fn config_nested_profile_approvals_reviewer_is_marked_experimental() {
             ProfileV2 {
                 model: None,
                 model_provider: None,
-                approval_policy: None,
                 approvals_reviewer: Some(ApprovalsReviewer::AutoReview),
                 service_tier: None,
                 model_reasoning_effort: None,
@@ -1680,123 +1154,13 @@ fn config_nested_profile_approvals_reviewer_is_marked_experimental() {
 }
 
 #[test]
-fn config_requirements_granular_allowed_approval_policy_is_marked_experimental() {
-    let reason =
-        crate::experimental_api::ExperimentalApi::experimental_reason(&ConfigRequirements {
-            allowed_approval_policies: Some(vec![AskForApproval::Granular {
-                sandbox_approval: true,
-                rules: true,
-                skill_approval: false,
-                request_permissions: false,
-                mcp_elicitations: false,
-            }]),
-            allowed_approvals_reviewers: None,
-            allowed_sandbox_modes: None,
-            allowed_web_search_modes: None,
-            feature_requirements: None,
-            hooks: None,
-            enforce_residency: None,
-            network: None,
-        });
-
-    assert_eq!(reason, Some("askForApproval.granular"));
-}
-
-#[test]
-fn client_request_thread_start_granular_approval_policy_is_marked_experimental() {
-    let reason = crate::experimental_api::ExperimentalApi::experimental_reason(
-        &crate::ClientRequest::ThreadStart {
-            request_id: crate::RequestId::Integer(1),
-            params: ThreadStartParams {
-                approval_policy: Some(AskForApproval::Granular {
-                    sandbox_approval: true,
-                    rules: false,
-                    skill_approval: false,
-                    request_permissions: true,
-                    mcp_elicitations: false,
-                }),
-                ..Default::default()
-            },
-        },
-    );
-
-    assert_eq!(reason, Some("askForApproval.granular"));
-}
-
-#[test]
-fn client_request_thread_resume_granular_approval_policy_is_marked_experimental() {
-    let reason = crate::experimental_api::ExperimentalApi::experimental_reason(
-        &crate::ClientRequest::ThreadResume {
-            request_id: crate::RequestId::Integer(2),
-            params: ThreadResumeParams {
-                thread_id: "thr_123".to_string(),
-                approval_policy: Some(AskForApproval::Granular {
-                    sandbox_approval: false,
-                    rules: true,
-                    skill_approval: false,
-                    request_permissions: false,
-                    mcp_elicitations: true,
-                }),
-                ..Default::default()
-            },
-        },
-    );
-
-    assert_eq!(reason, Some("askForApproval.granular"));
-}
-
-#[test]
-fn client_request_thread_fork_granular_approval_policy_is_marked_experimental() {
-    let reason = crate::experimental_api::ExperimentalApi::experimental_reason(
-        &crate::ClientRequest::ThreadFork {
-            request_id: crate::RequestId::Integer(3),
-            params: ThreadForkParams {
-                thread_id: "thr_456".to_string(),
-                approval_policy: Some(AskForApproval::Granular {
-                    sandbox_approval: true,
-                    rules: false,
-                    skill_approval: false,
-                    request_permissions: false,
-                    mcp_elicitations: true,
-                }),
-                ..Default::default()
-            },
-        },
-    );
-
-    assert_eq!(reason, Some("askForApproval.granular"));
-}
-
-#[test]
-fn client_request_turn_start_granular_approval_policy_is_marked_experimental() {
-    let reason = crate::experimental_api::ExperimentalApi::experimental_reason(
-        &crate::ClientRequest::TurnStart {
-            request_id: crate::RequestId::Integer(4),
-            params: TurnStartParams {
-                thread_id: "thr_123".to_string(),
-                input: Vec::new(),
-                approval_policy: Some(AskForApproval::Granular {
-                    sandbox_approval: false,
-                    rules: true,
-                    skill_approval: false,
-                    request_permissions: false,
-                    mcp_elicitations: true,
-                }),
-                ..Default::default()
-            },
-        },
-    );
-
-    assert_eq!(reason, Some("askForApproval.granular"));
-}
-
-#[test]
 fn mcp_server_elicitation_response_round_trips_rmcp_result() {
     let rmcp_result = rmcp::model::CreateElicitationResult {
         action: rmcp::model::ElicitationAction::Accept,
-        content: Some(json!({
+        content: Some(rmcp::model::object(json!({
             "confirmed": true,
-        })),
+        }))),
+        meta: None,
     };
 
     let v2_response = McpServerElicitationRequestResponse::from(rmcp_result.clone());
@@ -1854,7 +1218,7 @@ fn mcp_server_elicitation_request_from_core_form_request() {
     })
     .expect("form request should convert");
 
-    let expected_schema: McpElicitationSchema = edgerun_json::from_serde_value(json!({
+    let expected_schema: McpElicitationSchema = edgerun_json::from_value(json!({
         "type": "object",
         "properties": {
             "confirmed": {
@@ -1877,7 +1241,7 @@ fn mcp_server_elicitation_request_from_core_form_request() {
 
 #[test]
 fn mcp_elicitation_schema_matches_mcp_2025_11_25_primitives() {
-    let schema: McpElicitationSchema = edgerun_json::from_serde_value(json!({
+    let schema: McpElicitationSchema = edgerun_json::from_value(json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "properties": {
@@ -1928,7 +1292,7 @@ fn mcp_elicitation_schema_matches_mcp_2025_11_25_primitives() {
                         title: Some("Confirm".to_string()),
                         description: Some("Approve the pending action".to_string()),
                         default: Some(true),
-                    }),
+                    })
                 ),
                 (
                     "count".to_string(),
@@ -1939,7 +1303,7 @@ fn mcp_elicitation_schema_matches_mcp_2025_11_25_primitives() {
                         minimum: Some(1.0),
                         maximum: Some(5.0),
                         default: Some(3.0),
-                    }),
+                    })
                 ),
                 (
                     "email".to_string(),
@@ -1951,7 +1315,7 @@ fn mcp_elicitation_schema_matches_mcp_2025_11_25_primitives() {
                         max_length: None,
                         format: Some(McpElicitationStringFormat::Email),
                         default: Some("dev@example.com".to_string()),
-                    }),
+                    })
                 ),
                 (
                     "legacyChoice".to_string(),
@@ -1963,8 +1327,8 @@ fn mcp_elicitation_schema_matches_mcp_2025_11_25_primitives() {
                             enum_: vec!["allow".to_string(), "deny".to_string()],
                             enum_names: Some(vec!["Allow".to_string(), "Deny".to_string(),]),
                             default: Some("allow".to_string()),
-                        },
-                    )),
+                        }
+                    ))
                 ),
             ]),
             required: Some(vec!["email".to_string(), "confirmed".to_string()]),
@@ -2012,7 +1376,7 @@ fn mcp_server_elicitation_response_serializes_nullable_content() {
     };
 
     assert_eq!(
-        edgerun_json::to_serde_value(response).expect("response should serialize"),
+        edgerun_json::to_value(&response),
         json!({
             "action": "decline",
             "content": null,
@@ -2022,107 +1386,8 @@ fn mcp_server_elicitation_response_serializes_nullable_content() {
 }
 
 #[test]
-fn sandbox_policy_round_trips_workspace_write_access() {
-    let v2_policy = SandboxPolicy::WorkspaceWrite {
-        writable_roots: vec![],
-        network_access: true,
-        exclude_tmpdir_env_var: false,
-        exclude_slash_tmp: false,
-    };
-
-    let core_policy = v2_policy.to_core();
-    assert_eq!(
-        core_policy,
-        codex_protocol::protocol::SandboxPolicy::WorkspaceWrite {
-            writable_roots: vec![],
-            network_access: true,
-            exclude_tmpdir_env_var: false,
-            exclude_slash_tmp: false,
-        }
-    );
-
-    let back_to_v2 = SandboxPolicy::from(core_policy);
-    assert_eq!(back_to_v2, v2_policy);
-}
-
-#[test]
-fn sandbox_policy_deserializes_legacy_read_only_full_access_field() {
-    let policy = edgerun_json::from_serde_value::<SandboxPolicy>(json!({
-        "type": "readOnly",
-        "access": {
-            "type": "fullAccess"
-        },
-        "networkAccess": true
-    }))
-    .expect("read-only policy should ignore legacy fullAccess field");
-    assert_eq!(
-        policy,
-        SandboxPolicy::ReadOnly {
-            network_access: true
-        }
-    );
-}
-
-#[test]
-fn sandbox_policy_deserializes_legacy_workspace_write_full_access_field() {
-    let writable_root = absolute_path("/workspace");
-    let policy = edgerun_json::from_serde_value::<SandboxPolicy>(json!({
-        "type": "workspaceWrite",
-        "writableRoots": [writable_root],
-        "readOnlyAccess": {
-            "type": "fullAccess"
-        },
-        "networkAccess": true,
-        "excludeTmpdirEnvVar": true,
-        "excludeSlashTmp": true
-    }))
-    .expect("workspace-write policy should ignore legacy fullAccess field");
-    assert_eq!(
-        policy,
-        SandboxPolicy::WorkspaceWrite {
-            writable_roots: vec![absolute_path("/workspace")],
-            network_access: true,
-            exclude_tmpdir_env_var: true,
-            exclude_slash_tmp: true,
-        }
-    );
-}
-
-#[test]
-fn sandbox_policy_rejects_legacy_read_only_restricted_access_field() {
-    let err = edgerun_json::from_serde_value::<SandboxPolicy>(json!({
-        "type": "readOnly",
-        "access": {
-            "type": "restricted",
-            "includePlatformDefaults": false,
-            "readableRoots": []
-        }
-    }))
-    .expect_err("read-only policy should reject removed restricted access field");
-    assert!(err.to_string().contains("readOnly.access"));
-}
-
-#[test]
-fn sandbox_policy_rejects_legacy_workspace_write_restricted_read_access_field() {
-    let err = edgerun_json::from_serde_value::<SandboxPolicy>(json!({
-        "type": "workspaceWrite",
-        "writableRoots": [],
-        "readOnlyAccess": {
-            "type": "restricted",
-            "includePlatformDefaults": false,
-            "readableRoots": []
-        },
-        "networkAccess": false,
-        "excludeTmpdirEnvVar": false,
-        "excludeSlashTmp": false
-    }))
-    .expect_err("workspace-write policy should reject removed restricted readOnlyAccess field");
-    assert!(err.to_string().contains("workspaceWrite.readOnlyAccess"));
-}
-
-#[test]
 fn automatic_approval_review_deserializes_aborted_status() {
-    let review: GuardianApprovalReview = edgerun_json::from_serde_value(json!({
+    let review: GuardianApprovalReview = edgerun_json::from_value(json!({
         "status": "aborted",
         "riskLevel": null,
         "userAuthorization": null,
@@ -2149,7 +1414,7 @@ fn guardian_approval_review_action_round_trips_command_shape() {
         "cwd": absolute_path_string("tmp"),
     });
     let action: GuardianApprovalReviewAction =
-        edgerun_json::from_serde_value(value.clone()).expect("guardian review action");
+        edgerun_json::from_value(value.clone()).expect("guardian review action");
 
     assert_eq!(
         action,
@@ -2159,15 +1424,12 @@ fn guardian_approval_review_action_round_trips_command_shape() {
             cwd: absolute_path("tmp"),
         }
     );
-    assert_eq!(
-        edgerun_json::to_serde_value(&action).expect("serialize guardian review action"),
-        value
-    );
+    assert_eq!(edgerun_json::to_value(&action), value);
 }
 
 #[test]
 fn network_requirements_deserializes_legacy_fields() {
-    let requirements: NetworkRequirements = edgerun_json::from_serde_value(json!({
+    let requirements: NetworkRequirements = edgerun_json::from_value(json!({
         "allowedDomains": ["api.openai.com"],
         "deniedDomains": ["blocked.example.com"],
         "allowUnixSockets": ["/tmp/proxy.sock"]
@@ -2228,7 +1490,7 @@ fn network_requirements_serializes_canonical_and_legacy_fields() {
     };
 
     assert_eq!(
-        edgerun_json::to_serde_value(requirements).expect("network requirements should serialize"),
+        edgerun_json::to_value(&requirements),
         json!({
             "enabled": true,
             "httpPort": 8080,
@@ -2510,27 +1772,25 @@ fn core_turn_item_into_thread_item_converts_supported_variants() {
 #[test]
 fn skills_list_params_serialization_uses_force_reload() {
     assert_eq!(
-        edgerun_json::to_serde_value(SkillsListParams {
+        edgerun_json::to_value(&SkillsListParams {
             cwds: Vec::new(),
             force_reload: false,
             per_cwd_extra_user_roots: None,
-        })
-        .unwrap(),
+        }),
         json!({
             "perCwdExtraUserRoots": null,
-        }),
+        })
     );
 
     assert_eq!(
-        edgerun_json::to_serde_value(SkillsListParams {
+        edgerun_json::to_value(&SkillsListParams {
             cwds: vec![PathBuf::from("/repo")],
             force_reload: true,
             per_cwd_extra_user_roots: Some(vec![SkillsListExtraRootsForCwd {
                 cwd: PathBuf::from("/repo"),
                 extra_user_roots: vec![PathBuf::from("/shared/skills"), PathBuf::from("/tmp/x")],
             }]),
-        })
-        .unwrap(),
+        }),
         json!({
             "cwds": ["/repo"],
             "forceReload": true,
@@ -2540,7 +1800,7 @@ fn skills_list_params_serialization_uses_force_reload() {
                     "extraUserRoots": ["/shared/skills", "/tmp/x"],
                 }
             ],
-        }),
+        })
     );
 }
 
@@ -2555,115 +1815,109 @@ fn plugin_source_serializes_local_git_and_remote_variants() {
     let local_path_json = local_path.as_path().display().to_string();
 
     assert_eq!(
-        edgerun_json::to_serde_value(PluginSource::Local { path: local_path }).unwrap(),
+        edgerun_json::to_value(&PluginSource::Local { path: local_path }),
         json!({
             "type": "local",
             "path": local_path_json,
-        }),
+        })
     );
 
     assert_eq!(
-        edgerun_json::to_serde_value(PluginSource::Git {
+        edgerun_json::to_value(&PluginSource::Git {
             url: "https://github.com/openai/example.git".to_string(),
             path: Some("plugins/example".to_string()),
             ref_name: Some("main".to_string()),
             sha: Some("abc123".to_string()),
-        })
-        .unwrap(),
+        }),
         json!({
             "type": "git",
             "url": "https://github.com/openai/example.git",
             "path": "plugins/example",
             "refName": "main",
             "sha": "abc123",
-        }),
+        })
     );
 
     assert_eq!(
-        edgerun_json::to_serde_value(PluginSource::Remote).unwrap(),
+        edgerun_json::to_value(&PluginSource::Remote),
         json!({
             "type": "remote",
-        }),
+        })
     );
 }
 
 #[test]
 fn marketplace_add_params_serialization_uses_optional_ref_name_and_sparse_paths() {
     assert_eq!(
-        edgerun_json::to_serde_value(MarketplaceAddParams {
+        edgerun_json::to_value(&MarketplaceAddParams {
             source: "owner/repo".to_string(),
             ref_name: None,
             sparse_paths: None,
-        })
-        .unwrap(),
+        }),
         json!({
             "source": "owner/repo",
             "refName": null,
             "sparsePaths": null,
-        }),
+        })
     );
 
     assert_eq!(
-        edgerun_json::to_serde_value(MarketplaceAddParams {
+        edgerun_json::to_value(&MarketplaceAddParams {
             source: "owner/repo".to_string(),
             ref_name: Some("main".to_string()),
             sparse_paths: Some(vec!["plugins/foo".to_string()]),
-        })
-        .unwrap(),
+        }),
         json!({
             "source": "owner/repo",
             "refName": "main",
             "sparsePaths": ["plugins/foo"],
-        }),
+        })
     );
 }
 
 #[test]
 fn marketplace_upgrade_params_serialization_uses_optional_marketplace_name() {
     assert_eq!(
-        edgerun_json::to_serde_value(MarketplaceUpgradeParams {
+        edgerun_json::to_value(&MarketplaceUpgradeParams {
             marketplace_name: None,
-        })
-        .unwrap(),
+        }),
         json!({
             "marketplaceName": null,
-        }),
+        })
     );
 
     assert_eq!(
-        edgerun_json::from_serde_value::<MarketplaceUpgradeParams>(json!({})).unwrap(),
+        edgerun_json::from_value::<MarketplaceUpgradeParams>(json!({})).unwrap(),
         MarketplaceUpgradeParams {
             marketplace_name: None,
-        },
+        }
     );
 
     assert_eq!(
-        edgerun_json::to_serde_value(MarketplaceUpgradeParams {
+        edgerun_json::to_value(&MarketplaceUpgradeParams {
             marketplace_name: Some("debug".to_string()),
-        })
-        .unwrap(),
+        }),
         json!({
             "marketplaceName": "debug",
-        }),
+        })
     );
 }
 
 #[test]
 fn plugin_marketplace_entry_serializes_remote_only_path_as_null() {
     assert_eq!(
-        edgerun_json::to_serde_value(PluginMarketplaceEntry {
+        edgerun_json::to_value(&PluginMarketplaceEntry {
             name: "openai-curated".to_string(),
             path: None,
             interface: None,
             plugins: Vec::new(),
-        })
-        .unwrap(),
+        }),
         json!({
             "name": "openai-curated",
             "path": null,
             "interface": null,
             "plugins": [],
-        }),
+        })
     );
 }
 
@@ -2698,7 +1952,7 @@ fn plugin_interface_serializes_local_paths_and_remote_urls_separately() {
     };
 
     assert_eq!(
-        edgerun_json::to_serde_value(interface).unwrap(),
+        edgerun_json::to_value(&interface),
         json!({
             "displayName": "Linear",
             "shortDescription": null,
@@ -2717,14 +1971,14 @@ fn plugin_interface_serializes_local_paths_and_remote_urls_separately() {
             "logoUrl": "https://example.com/linear/logo.png",
             "screenshots": [],
             "screenshotUrls": ["https://example.com/linear/screenshot.png"],
-        }),
+        })
     );
 }
 
 #[test]
 fn plugin_list_params_ignore_removed_force_remote_sync_field() {
     assert_eq!(
-        edgerun_json::from_serde_value::<PluginListParams>(json!({
+        edgerun_json::from_value::<PluginListParams>(json!({
             "cwds": null,
             "forceRemoteSync": true,
         }))
@@ -2732,22 +1986,21 @@ fn plugin_list_params_ignore_removed_force_remote_sync_field() {
         PluginListParams {
             cwds: None,
             marketplace_kinds: None,
-        },
+        }
     );
 }
 
 #[test]
 fn plugin_list_params_serializes_marketplace_kind_filter() {
     assert_eq!(
-        edgerun_json::to_serde_value(PluginListParams {
+        edgerun_json::to_value(&PluginListParams {
             cwds: None,
             marketplace_kinds: Some(vec![
                 PluginListMarketplaceKind::Local,
                 PluginListMarketplaceKind::WorkspaceDirectory,
                 PluginListMarketplaceKind::SharedWithMe,
             ]),
-        })
-        .unwrap(),
+        }),
         json!({
             "cwds": null,
             "marketplaceKinds": [
@@ -2755,7 +2008,7 @@ fn plugin_list_params_serializes_marketplace_kind_filter() {
                 "workspace-directory",
                 "shared-with-me",
             ],
-        }),
+        })
     );
 }
 
@@ -2769,22 +2022,21 @@ fn plugin_read_params_serialization_uses_install_source_fields() {
     let marketplace_path = AbsolutePathBuf::try_from(PathBuf::from(marketplace_path)).unwrap();
     let marketplace_path_json = marketplace_path.as_path().display().to_string();
     assert_eq!(
-        edgerun_json::to_serde_value(PluginReadParams {
+        edgerun_json::to_value(&PluginReadParams {
             marketplace_path: Some(marketplace_path.clone()),
             remote_marketplace_name: None,
             plugin_name: "gmail".to_string(),
-        })
-        .unwrap(),
+        }),
         json!({
-            "marketplacePath": marketplace_path_json,
+            "marketplacePath": marketplace_path_json.clone(),
             "remoteMarketplaceName": null,
             "pluginName": "gmail",
-        }),
+        })
     );
 
     assert_eq!(
-        edgerun_json::from_serde_value::<PluginReadParams>(json!({
-            "marketplacePath": marketplace_path_json,
+        edgerun_json::from_value::<PluginReadParams>(json!({
+            "marketplacePath": marketplace_path_json.clone(),
             "pluginName": "gmail",
             "forceRemoteSync": true,
         }))
@@ -2793,11 +2045,11 @@ fn plugin_read_params_serialization_uses_install_source_fields() {
             marketplace_path: Some(marketplace_path),
             remote_marketplace_name: None,
             plugin_name: "gmail".to_string(),
-        },
+        }
     );
 
     assert_eq!(
-        edgerun_json::from_serde_value::<PluginReadParams>(json!({
+        edgerun_json::from_value::<PluginReadParams>(json!({
             "remoteMarketplaceName": "openai-curated",
             "pluginName": "gmail",
         }))
@@ -2806,7 +2058,7 @@ fn plugin_read_params_serialization_uses_install_source_fields() {
             marketplace_path: None,
             remote_marketplace_name: Some("openai-curated".to_string()),
             plugin_name: "gmail".to_string(),
-        },
+        }
     );
 }
 
@@ -2820,22 +2072,21 @@ fn plugin_install_params_serialization_omits_force_remote_sync() {
     let marketplace_path = AbsolutePathBuf::try_from(PathBuf::from(marketplace_path)).unwrap();
     let marketplace_path_json = marketplace_path.as_path().display().to_string();
     assert_eq!(
-        edgerun_json::to_serde_value(PluginInstallParams {
+        edgerun_json::to_value(&PluginInstallParams {
             marketplace_path: Some(marketplace_path.clone()),
             remote_marketplace_name: None,
             plugin_name: "gmail".to_string(),
-        })
-        .unwrap(),
+        }),
         json!({
-            "marketplacePath": marketplace_path_json,
+            "marketplacePath": marketplace_path_json.clone(),
             "remoteMarketplaceName": null,
             "pluginName": "gmail",
-        }),
+        })
     );
 
     assert_eq!(
-        edgerun_json::from_serde_value::<PluginInstallParams>(json!({
-            "marketplacePath": marketplace_path_json,
+        edgerun_json::from_value::<PluginInstallParams>(json!({
+            "marketplacePath": marketplace_path_json.clone(),
             "pluginName": "gmail",
             "forceRemoteSync": true,
         }))
@@ -2844,11 +2095,11 @@ fn plugin_install_params_serialization_omits_force_remote_sync() {
             marketplace_path: Some(marketplace_path),
             remote_marketplace_name: None,
             plugin_name: "gmail".to_string(),
-        },
+        }
     );
 
     assert_eq!(
-        edgerun_json::from_serde_value::<PluginInstallParams>(json!({
+        edgerun_json::from_value::<PluginInstallParams>(json!({
             "remoteMarketplaceName": "openai-curated",
             "pluginName": "gmail",
             "forceRemoteSync": true,
@@ -2858,24 +2109,23 @@ fn plugin_install_params_serialization_omits_force_remote_sync() {
             marketplace_path: None,
             remote_marketplace_name: Some("openai-curated".to_string()),
             plugin_name: "gmail".to_string(),
-        },
+        }
     );
 }
 
 #[test]
 fn plugin_skill_read_params_serialization_uses_remote_plugin_id() {
     assert_eq!(
-        edgerun_json::to_serde_value(PluginSkillReadParams {
+        edgerun_json::to_value(&PluginSkillReadParams {
             remote_marketplace_name: "chatgpt-global".to_string(),
             remote_plugin_id: "plugins~Plugin_00000000000000000000000000000000".to_string(),
             skill_name: "plan-work".to_string(),
-        })
-        .unwrap(),
+        }),
         json!({
             "remoteMarketplaceName": "chatgpt-global",
             "remotePluginId": "plugins~Plugin_00000000000000000000000000000000",
             "skillName": "plan-work",
-        }),
+        })
     );
 }
 
@@ -2890,25 +2140,24 @@ fn plugin_share_params_and_response_serialization_use_camel_case_fields() {
     let plugin_path_json = plugin_path.as_path().display().to_string();
 
     assert_eq!(
-        edgerun_json::to_serde_value(PluginShareSaveParams {
+        edgerun_json::to_value(&PluginShareSaveParams {
             plugin_path: plugin_path.clone(),
             remote_plugin_id: None,
             discoverability: None,
             share_targets: None,
-        })
-        .unwrap(),
+        }),
         json!({
-            "pluginPath": plugin_path_json,
+            "pluginPath": plugin_path_json.clone(),
             "remotePluginId": null,
             "discoverability": null,
             "shareTargets": null,
-        }),
+        })
     );
 
     assert_eq!(
-        edgerun_json::to_serde_value(PluginShareSaveParams {
+        edgerun_json::to_value(&PluginShareSaveParams {
             plugin_path,
-            remote_plugin_id: Some("plugins~Plugin_00000000000000000000000000000000".to_string(),),
+            remote_plugin_id: Some("plugins~Plugin_00000000000000000000000000000000".to_string()),
             discoverability: Some(PluginShareDiscoverability::Private),
             share_targets: Some(vec![
                 PluginShareTarget {
@@ -2920,10 +2169,9 @@ fn plugin_share_params_and_response_serialization_use_camel_case_fields() {
                     principal_id: "workspace-1".to_string(),
                 },
             ]),
-        })
-        .unwrap(),
+        }),
         json!({
-            "pluginPath": plugin_path_json,
+            "pluginPath": plugin_path_json.clone(),
             "remotePluginId": "plugins~Plugin_00000000000000000000000000000000",
             "discoverability": "PRIVATE",
             "shareTargets": [
@@ -2936,77 +2184,73 @@ fn plugin_share_params_and_response_serialization_use_camel_case_fields() {
                     "principalId": "workspace-1",
                 },
             ],
-        }),
+        })
     );
 
     assert_eq!(
-        edgerun_json::to_serde_value(PluginShareSaveResponse {
+        edgerun_json::to_value(&PluginShareSaveResponse {
             remote_plugin_id: "plugins~Plugin_00000000000000000000000000000000".to_string(),
             share_url: String::new(),
-        })
-        .unwrap(),
+        }),
         json!({
             "remotePluginId": "plugins~Plugin_00000000000000000000000000000000",
             "shareUrl": "",
-        }),
+        })
     );
 
     assert_eq!(
-        edgerun_json::to_serde_value(PluginShareUpdateTargetsParams {
+        edgerun_json::to_value(&PluginShareUpdateTargetsParams {
             remote_plugin_id: "plugins~Plugin_00000000000000000000000000000000".to_string(),
             share_targets: vec![PluginShareTarget {
                 principal_type: PluginSharePrincipalType::Group,
                 principal_id: "group-1".to_string(),
             }],
-        })
-        .unwrap(),
+        }),
         json!({
             "remotePluginId": "plugins~Plugin_00000000000000000000000000000000",
             "shareTargets": [{
                 "principalType": "group",
                 "principalId": "group-1",
             }],
-        }),
+        })
     );
 
     assert_eq!(
-        edgerun_json::to_serde_value(PluginShareUpdateTargetsResponse {
+        edgerun_json::to_value(&PluginShareUpdateTargetsResponse {
             principals: vec![PluginSharePrincipal {
                 principal_type: PluginSharePrincipalType::User,
                 principal_id: "user-1".to_string(),
                 name: "Gavin".to_string(),
             }],
-        })
-        .unwrap(),
+        }),
         json!({
             "principals": [{
                 "principalType": "user",
                 "principalId": "user-1",
                 "name": "Gavin",
             }],
-        }),
-    );
-
-    assert_eq!(
-        edgerun_json::from_serde_value::<PluginShareListParams>(json!({})).unwrap(),
-        PluginShareListParams {},
-    );
-
-    assert_eq!(
-        edgerun_json::to_serde_value(PluginShareDeleteParams {
-            remote_plugin_id: "plugins~Plugin_00000000000000000000000000000000".to_string(),
         })
-        .unwrap(),
+    );
+
+    assert_eq!(
+        edgerun_json::from_value::<PluginShareListParams>(json!({})).unwrap(),
+        PluginShareListParams {}
+    );
+
+    assert_eq!(
+        edgerun_json::to_value(&PluginShareDeleteParams {
+            remote_plugin_id: "plugins~Plugin_00000000000000000000000000000000".to_string(),
+        }),
         json!({
             "remotePluginId": "plugins~Plugin_00000000000000000000000000000000",
-        }),
+        })
     );
 }
 
 #[test]
 fn plugin_share_list_response_serializes_share_items() {
     assert_eq!(
-        edgerun_json::to_serde_value(PluginShareListResponse {
+        edgerun_json::to_value(&PluginShareListResponse {
             data: vec![PluginShareListItem {
                 plugin: PluginSummary {
                     id: "plugins~Plugin_00000000000000000000000000000000".to_string(),
@@ -3024,8 +2268,7 @@ fn plugin_share_list_response_serializes_share_items() {
                 share_url: "https://chatgpt.example/plugins/share/share-key-1".to_string(),
                 local_plugin_path: None,
             }],
-        })
-        .unwrap(),
+        }),
         json!({
             "data": [{
                 "plugin": {
@@ -3044,13 +2287,13 @@ fn plugin_share_list_response_serializes_share_items() {
                 "shareUrl": "https://chatgpt.example/plugins/share/share-key-1",
                 "localPluginPath": null,
             }],
-        }),
+        })
     );
 }
 
 #[test]
 fn plugin_summary_defaults_missing_availability_to_available() {
-    let summary: PluginSummary = edgerun_json::from_serde_value(json!({
+    let summary: PluginSummary = edgerun_json::from_value(json!({
         "id": "plugins~Plugin_00000000000000000000000000000000",
         "name": "gmail",
         "source": { "type": "remote" },
@@ -3068,58 +2311,52 @@ fn plugin_summary_defaults_missing_availability_to_available() {
 
 #[test]
 fn plugin_availability_deserializes_enabled_alias() {
-    let availability: PluginAvailability =
-        edgerun_json::from_serde_value(json!("ENABLED")).unwrap();
+    let availability: PluginAvailability = edgerun_json::from_value(json!("ENABLED")).unwrap();
 
     assert_eq!(availability, PluginAvailability::Available);
-    assert_eq!(
-        edgerun_json::to_serde_value(availability).unwrap(),
-        json!("AVAILABLE")
-    );
+    assert_eq!(edgerun_json::to_value(&availability), json!("AVAILABLE"));
 }
 
 #[test]
 fn plugin_uninstall_params_serialization_omits_force_remote_sync() {
     assert_eq!(
-        edgerun_json::to_serde_value(PluginUninstallParams {
+        edgerun_json::to_value(&PluginUninstallParams {
             plugin_id: "gmail@openai-curated".to_string(),
-        })
-        .unwrap(),
+        }),
         json!({
             "pluginId": "gmail@openai-curated",
-        }),
+        })
     );
 
     assert_eq!(
-        edgerun_json::from_serde_value::<PluginUninstallParams>(json!({
+        edgerun_json::from_value::<PluginUninstallParams>(json!({
             "pluginId": "gmail@openai-curated",
             "forceRemoteSync": true,
         }))
         .unwrap(),
         PluginUninstallParams {
             plugin_id: "gmail@openai-curated".to_string(),
-        },
+        }
     );
 
     assert_eq!(
-        edgerun_json::to_serde_value(PluginUninstallParams {
+        edgerun_json::to_value(&PluginUninstallParams {
             plugin_id: "plugins~Plugin_gmail".to_string(),
-        })
-        .unwrap(),
+        }),
         json!({
             "pluginId": "plugins~Plugin_gmail",
-        }),
+        })
     );
 
     assert_eq!(
-        edgerun_json::from_serde_value::<PluginUninstallParams>(json!({
+        edgerun_json::from_value::<PluginUninstallParams>(json!({
             "pluginId": "plugins~Plugin_gmail",
             "forceRemoteSync": true,
         }))
         .unwrap(),
         PluginUninstallParams {
             plugin_id: "plugins~Plugin_gmail".to_string(),
-        },
+        }
     );
 }
 
@@ -3133,27 +2370,25 @@ fn marketplace_remove_response_serializes_nullable_installed_root() {
     let installed_root = AbsolutePathBuf::try_from(PathBuf::from(installed_root)).unwrap();
     let installed_root_json = installed_root.as_path().display().to_string();
     assert_eq!(
-        edgerun_json::to_serde_value(MarketplaceRemoveResponse {
+        edgerun_json::to_value(&MarketplaceRemoveResponse {
             marketplace_name: "debug".to_string(),
             installed_root: Some(installed_root),
-        })
-        .unwrap(),
+        }),
         json!({
             "marketplaceName": "debug",
             "installedRoot": installed_root_json,
-        }),
+        })
     );
 
     assert_eq!(
-        edgerun_json::to_serde_value(MarketplaceRemoveResponse {
+        edgerun_json::to_value(&MarketplaceRemoveResponse {
             marketplace_name: "debug".to_string(),
             installed_root: None,
-        })
-        .unwrap(),
+        }),
         json!({
             "marketplaceName": "debug",
             "installedRoot": null,
-        }),
+        })
     );
 }
 
@@ -3168,15 +2403,14 @@ fn marketplace_upgrade_response_serializes_camel_case_fields() {
     let upgraded_root_json = upgraded_root.as_path().display().to_string();
 
     assert_eq!(
-        edgerun_json::to_serde_value(MarketplaceUpgradeResponse {
+        edgerun_json::to_value(&MarketplaceUpgradeResponse {
             selected_marketplaces: vec!["debug".to_string()],
             upgraded_roots: vec![upgraded_root],
             errors: vec![MarketplaceUpgradeErrorInfo {
                 marketplace_name: "broken".to_string(),
                 message: "failed to clone".to_string(),
             }],
-        })
-        .unwrap(),
+        }),
         json!({
             "selectedMarketplaces": ["debug"],
             "upgradedRoots": [upgraded_root_json],
@@ -3184,7 +2418,7 @@ fn marketplace_upgrade_response_serializes_camel_case_fields() {
                 "marketplaceName": "broken",
                 "message": "failed to clone",
             }],
-        }),
+        })
     );
 }
 
@@ -3195,7 +2429,7 @@ fn codex_error_info_serializes_http_status_code_in_camel_case() {
     };
 
     assert_eq!(
-        edgerun_json::to_serde_value(value).unwrap(),
+        edgerun_json::to_value(&value),
         json!({
             "responseTooManyFailedAttempts": {
                 "httpStatusCode": 401
@@ -3207,7 +2441,7 @@ fn codex_error_info_serializes_http_status_code_in_camel_case() {
 #[test]
 fn codex_error_info_serializes_cyber_policy_in_camel_case() {
     assert_eq!(
-        edgerun_json::to_serde_value(CodexErrorInfo::CyberPolicy).unwrap(),
+        edgerun_json::to_value(&CodexErrorInfo::CyberPolicy),
         json!("cyberPolicy")
     );
 }
@@ -3219,7 +2453,7 @@ fn codex_error_info_serializes_active_turn_not_steerable_turn_kind_in_camel_case
     };
 
     assert_eq!(
-        edgerun_json::to_serde_value(value).unwrap(),
+        edgerun_json::to_value(&value),
         json!({
             "activeTurnNotSteerable": {
                 "turnKind": "review"
@@ -3230,13 +2464,12 @@ fn codex_error_info_serializes_active_turn_not_steerable_turn_kind_in_camel_case
 
 #[test]
 fn dynamic_tool_response_serializes_content_items() {
-    let value = edgerun_json::to_serde_value(DynamicToolCallResponse {
+    let value = edgerun_json::to_value(&DynamicToolCallResponse {
         content_items: vec![DynamicToolCallOutputContentItem::InputText {
             text: "dynamic-ok".to_string(),
         }],
         success: true,
-    })
-    .unwrap();
+    });
 
     assert_eq!(
         value,
@@ -3254,7 +2487,7 @@ fn dynamic_tool_response_serializes_content_items() {
 
 #[test]
 fn dynamic_tool_response_serializes_text_and_image_content_items() {
-    let value = edgerun_json::to_serde_value(DynamicToolCallResponse {
+    let value = edgerun_json::to_value(&DynamicToolCallResponse {
         content_items: vec![
             DynamicToolCallOutputContentItem::InputText {
                 text: "dynamic-ok".to_string(),
@@ -3264,8 +2497,7 @@ fn dynamic_tool_response_serializes_text_and_image_content_items() {
             },
         ],
         success: true,
-    })
-    .unwrap();
+    });
 
     assert_eq!(
         value,
@@ -3299,7 +2531,7 @@ fn dynamic_tool_spec_deserializes_defer_loading() {
         "deferLoading": true,
     });
 
-    let actual: DynamicToolSpec = edgerun_json::from_serde_value(value).expect("deserialize");
+    let actual: DynamicToolSpec = edgerun_json::from_value(value).expect("deserialize");
 
     assert_eq!(
         actual,
@@ -3330,25 +2562,24 @@ fn dynamic_tool_spec_legacy_expose_to_context_inverts_to_defer_loading() {
         "exposeToContext": false,
     });
 
-    let actual: DynamicToolSpec = edgerun_json::from_serde_value(value).expect("deserialize");
+    let actual: DynamicToolSpec = edgerun_json::from_value(value).expect("deserialize");
 
     assert!(actual.defer_loading);
 }
 
 #[test]
 fn thread_start_params_preserve_explicit_null_service_tier() {
-    let params: ThreadStartParams = edgerun_json::from_serde_value(json!({ "serviceTier": null }))
+    let params: ThreadStartParams = edgerun_json::from_value(json!({ "serviceTier": null }))
         .expect("params should deserialize");
     assert_eq!(params.service_tier, Some(None));
 
-    let serialized = edgerun_json::to_serde_value(&params).expect("params should serialize");
+    let serialized = edgerun_json::to_value(&params);
     assert_eq!(
         serialized.get("serviceTier"),
         Some(&edgerun_json::Value::Null)
     );
 
-    let serialized_without_override = edgerun_json::to_serde_value(ThreadStartParams::default())
-        .expect("params should serialize");
+    let serialized_without_override = edgerun_json::to_value(&ThreadStartParams::default());
     assert_eq!(serialized_without_override.get("serviceTier"), None);
 }
 
@@ -3379,33 +2610,25 @@ fn thread_lifecycle_responses_default_missing_optional_fields() {
         "modelProvider": "openai",
         "serviceTier": null,
         "cwd": absolute_path_string("tmp"),
-        "approvalPolicy": "on-failure",
         "approvalsReviewer": "user",
-        "sandbox": { "type": "dangerFullAccess" },
         "reasoningEffort": null
     });
 
     let start: ThreadStartResponse =
-        edgerun_json::from_serde_value(response.clone()).expect("thread/start response");
+        edgerun_json::from_value(response.clone()).expect("thread/start response");
     let resume: ThreadResumeResponse =
-        edgerun_json::from_serde_value(response.clone()).expect("thread/resume response");
+        edgerun_json::from_value(response.clone()).expect("thread/resume response");
     let fork: ThreadForkResponse =
-        edgerun_json::from_serde_value(response).expect("thread/fork response");
+        edgerun_json::from_value(response).expect("thread/fork response");
 
     assert_eq!(start.instruction_sources, Vec::<AbsolutePathBuf>::new());
     assert_eq!(resume.instruction_sources, Vec::<AbsolutePathBuf>::new());
     assert_eq!(fork.instruction_sources, Vec::<AbsolutePathBuf>::new());
-    assert_eq!(start.permission_profile, None);
-    assert_eq!(resume.permission_profile, None);
-    assert_eq!(fork.permission_profile, None);
-    assert_eq!(start.active_permission_profile, None);
-    assert_eq!(resume.active_permission_profile, None);
-    assert_eq!(fork.active_permission_profile, None);
 }
 
 #[test]
 fn turn_start_params_preserve_explicit_null_service_tier() {
-    let params: TurnStartParams = edgerun_json::from_serde_value(json!({
+    let params: TurnStartParams = edgerun_json::from_value(json!({
         "threadId": "thread_123",
         "input": [],
         "serviceTier": null
@@ -3413,7 +2636,7 @@ fn turn_start_params_preserve_explicit_null_service_tier() {
     .expect("params should deserialize");
     assert_eq!(params.service_tier, Some(None));
 
-    let serialized = edgerun_json::to_serde_value(&params).expect("params should serialize");
+    let serialized = edgerun_json::to_value(&params);
     assert_eq!(
         serialized.get("serviceTier"),
         Some(&edgerun_json::Value::Null)
@@ -3425,10 +2648,7 @@ fn turn_start_params_preserve_explicit_null_service_tier() {
         responsesapi_client_metadata: None,
         environments: None,
         cwd: None,
-        approval_policy: None,
         approvals_reviewer: None,
-        sandbox_policy: None,
-        permissions: None,
         model: None,
         service_tier: None,
         effort: None,
@@ -3437,21 +2657,20 @@ fn turn_start_params_preserve_explicit_null_service_tier() {
         collaboration_mode: None,
         personality: None,
     };
-    let serialized_without_override =
-        edgerun_json::to_serde_value(&without_override).expect("params should serialize");
+    let serialized_without_override = edgerun_json::to_value(&without_override);
     assert_eq!(serialized_without_override.get("serviceTier"), None);
 }
 
 #[test]
 fn turn_start_params_round_trip_environments() {
     let cwd = test_absolute_path();
-    let params: TurnStartParams = edgerun_json::from_serde_value(json!({
+    let params: TurnStartParams = edgerun_json::from_value(json!({
         "threadId": "thread_123",
         "input": [],
         "environments": [
             {
                 "environmentId": "local",
-                "cwd": cwd
+                "cwd": cwd.as_path()
             }
         ],
     }))
@@ -3469,13 +2688,13 @@ fn turn_start_params_round_trip_environments() {
         Some("turn/start.environments")
     );
 
-    let serialized = edgerun_json::to_serde_value(&params).expect("params should serialize");
+    let serialized = edgerun_json::to_value(&params);
     assert_eq!(
         serialized.get("environments"),
         Some(&json!([
             {
                 "environmentId": "local",
-                "cwd": cwd
+                "cwd": cwd.as_path()
             }
         ]))
     );
@@ -3483,7 +2702,7 @@ fn turn_start_params_round_trip_environments() {
 
 #[test]
 fn turn_start_params_preserve_empty_environments() {
-    let params: TurnStartParams = edgerun_json::from_serde_value(json!({
+    let params: TurnStartParams = edgerun_json::from_value(json!({
         "threadId": "thread_123",
         "input": [],
         "environments": [],
@@ -3496,19 +2715,19 @@ fn turn_start_params_preserve_empty_environments() {
         Some("turn/start.environments")
     );
 
-    let serialized = edgerun_json::to_serde_value(&params).expect("params should serialize");
+    let serialized = edgerun_json::to_value(&params);
     assert_eq!(serialized.get("environments"), Some(&json!([])));
 }
 
 #[test]
 fn turn_start_params_treat_null_or_omitted_environments_as_default() {
-    let null_environments: TurnStartParams = edgerun_json::from_serde_value(json!({
+    let null_environments: TurnStartParams = edgerun_json::from_value(json!({
         "threadId": "thread_123",
         "input": [],
         "environments": null,
     }))
     .expect("params should deserialize");
-    let omitted_environments: TurnStartParams = edgerun_json::from_serde_value(json!({
+    let omitted_environments: TurnStartParams = edgerun_json::from_value(json!({
         "threadId": "thread_123",
         "input": [],
     }))
@@ -3528,7 +2747,7 @@ fn turn_start_params_treat_null_or_omitted_environments_as_default() {
 
 #[test]
 fn turn_start_params_reject_relative_environment_cwd() {
-    let err = edgerun_json::from_serde_value::<TurnStartParams>(json!({
+    let err = edgerun_json::from_value::<TurnStartParams>(json!({
         "threadId": "thread_123",
         "input": [],
         "environments": [

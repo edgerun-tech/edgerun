@@ -1,0 +1,1414 @@
+{
+  "title": "ThreadTurnsListResponse",
+  "type": "object",
+  "properties": {
+    "backwardsCursor": {
+      "type": "string"
+    },
+    "data": {
+      "type": "array",
+      "items": {
+        "title": "Turn",
+        "type": "object",
+        "properties": {
+          "completedAt": {
+            "type": "integer"
+          },
+          "durationMs": {
+            "type": "integer"
+          },
+          "error": {
+            "title": "TurnError",
+            "type": "object",
+            "properties": {
+              "additionalDetails": {
+                "type": "string"
+              },
+              "codexErrorInfo": {
+                "title": "CodexErrorInfo",
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "ContextWindowExceeded",
+                        "title": "ContextWindowExceededv2::ThreadTurnsListResponseType"
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ],
+                    "additionalProperties": false,
+                    "title": "ContextWindowExceededv2::ThreadTurnsListResponse"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "UsageLimitExceeded",
+                        "title": "UsageLimitExceededv2::ThreadTurnsListResponseType"
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ],
+                    "additionalProperties": false,
+                    "title": "UsageLimitExceededv2::ThreadTurnsListResponse"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "ServerOverloaded",
+                        "title": "ServerOverloadedv2::ThreadTurnsListResponseType"
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ],
+                    "additionalProperties": false,
+                    "title": "ServerOverloadedv2::ThreadTurnsListResponse"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "CyberPolicy",
+                        "title": "CyberPolicyv2::ThreadTurnsListResponseType"
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ],
+                    "additionalProperties": false,
+                    "title": "CyberPolicyv2::ThreadTurnsListResponse"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "httpStatusCode": {
+                        "type": "integer"
+                      },
+                      "type": {
+                        "type": "string",
+                        "const": "HttpConnectionFailed",
+                        "title": "HttpConnectionFailedv2::ThreadTurnsListResponseType"
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ],
+                    "additionalProperties": false,
+                    "title": "HttpConnectionFailedv2::ThreadTurnsListResponse"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "httpStatusCode": {
+                        "type": "integer"
+                      },
+                      "type": {
+                        "type": "string",
+                        "const": "ResponseStreamConnectionFailed",
+                        "title": "ResponseStreamConnectionFailedv2::ThreadTurnsListResponseType"
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ],
+                    "additionalProperties": false,
+                    "title": "ResponseStreamConnectionFailedv2::ThreadTurnsListResponse"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "InternalServerError",
+                        "title": "InternalServerErrorv2::ThreadTurnsListResponseType"
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ],
+                    "additionalProperties": false,
+                    "title": "InternalServerErrorv2::ThreadTurnsListResponse"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "Unauthorized",
+                        "title": "Unauthorizedv2::ThreadTurnsListResponseType"
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ],
+                    "additionalProperties": false,
+                    "title": "Unauthorizedv2::ThreadTurnsListResponse"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "BadRequest",
+                        "title": "BadRequestv2::ThreadTurnsListResponseType"
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ],
+                    "additionalProperties": false,
+                    "title": "BadRequestv2::ThreadTurnsListResponse"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "ThreadRollbackFailed",
+                        "title": "ThreadRollbackFailedv2::ThreadTurnsListResponseType"
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ],
+                    "additionalProperties": false,
+                    "title": "ThreadRollbackFailedv2::ThreadTurnsListResponse"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "SandboxError",
+                        "title": "SandboxErrorv2::ThreadTurnsListResponseType"
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ],
+                    "additionalProperties": false,
+                    "title": "SandboxErrorv2::ThreadTurnsListResponse"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "httpStatusCode": {
+                        "type": "integer"
+                      },
+                      "type": {
+                        "type": "string",
+                        "const": "ResponseStreamDisconnected",
+                        "title": "ResponseStreamDisconnectedv2::ThreadTurnsListResponseType"
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ],
+                    "additionalProperties": false,
+                    "title": "ResponseStreamDisconnectedv2::ThreadTurnsListResponse"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "httpStatusCode": {
+                        "type": "integer"
+                      },
+                      "type": {
+                        "type": "string",
+                        "const": "ResponseTooManyFailedAttempts",
+                        "title": "ResponseTooManyFailedAttemptsv2::ThreadTurnsListResponseType"
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ],
+                    "additionalProperties": false,
+                    "title": "ResponseTooManyFailedAttemptsv2::ThreadTurnsListResponse"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "turnKind": {
+                        "title": "NonSteerableTurnKind",
+                        "type": "string",
+                        "enum": [
+                          "Review",
+                          "Compact"
+                        ]
+                      },
+                      "type": {
+                        "type": "string",
+                        "const": "ActiveTurnNotSteerable",
+                        "title": "ActiveTurnNotSteerablev2::ThreadTurnsListResponseType"
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "turnKind"
+                    ],
+                    "additionalProperties": false,
+                    "title": "ActiveTurnNotSteerablev2::ThreadTurnsListResponse"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "Other",
+                        "title": "Otherv2::ThreadTurnsListResponseType"
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ],
+                    "additionalProperties": false,
+                    "title": "Otherv2::ThreadTurnsListResponse"
+                  }
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "message"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "title": "ThreadItem",
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "content": {
+                      "type": "array",
+                      "items": {
+                        "title": "UserInput",
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "text": {
+                                "type": "string"
+                              },
+                              "textElements": {
+                                "type": "array",
+                                "items": {
+                                  "title": "TextElement",
+                                  "type": "object",
+                                  "properties": {
+                                    "byteRange": {
+                                      "title": "ByteRange",
+                                      "type": "object",
+                                      "properties": {
+                                        "end": {
+                                          "type": "integer"
+                                        },
+                                        "start": {
+                                          "type": "integer"
+                                        }
+                                      },
+                                      "required": [
+                                        "start",
+                                        "end"
+                                      ]
+                                    },
+                                    "placeholder": {
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "byteRange"
+                                  ]
+                                }
+                              },
+                              "type": {
+                                "type": "string",
+                                "const": "Text",
+                                "title": "Textv2::ThreadTurnsListResponseType"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "text"
+                            ],
+                            "additionalProperties": false,
+                            "title": "Textv2::ThreadTurnsListResponse"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "type": {
+                                "type": "string",
+                                "const": "Image",
+                                "title": "Imagev2::ThreadTurnsListResponseType"
+                              },
+                              "url": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "url"
+                            ],
+                            "additionalProperties": false,
+                            "title": "Imagev2::ThreadTurnsListResponse"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "path": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "const": "LocalImage",
+                                "title": "LocalImagev2::ThreadTurnsListResponseType"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "path"
+                            ],
+                            "additionalProperties": false,
+                            "title": "LocalImagev2::ThreadTurnsListResponse"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "const": "Skill",
+                                "title": "Skillv2::ThreadTurnsListResponseType"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "name",
+                              "path"
+                            ],
+                            "additionalProperties": false,
+                            "title": "Skillv2::ThreadTurnsListResponse"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "name": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "const": "Mention",
+                                "title": "Mentionv2::ThreadTurnsListResponseType"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "name",
+                              "path"
+                            ],
+                            "additionalProperties": false,
+                            "title": "Mentionv2::ThreadTurnsListResponse"
+                          }
+                        ]
+                      }
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "UserMessage",
+                      "title": "UserMessagev2::ThreadTurnsListResponseType"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "id",
+                    "content"
+                  ],
+                  "additionalProperties": false,
+                  "title": "UserMessagev2::ThreadTurnsListResponse"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "fragments": {
+                      "type": "array",
+                      "items": {
+                        "title": "HookPromptFragment",
+                        "type": "object",
+                        "properties": {
+                          "hookRunId": {
+                            "type": "string"
+                          },
+                          "text": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "text",
+                          "hookRunId"
+                        ]
+                      }
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "HookPrompt",
+                      "title": "HookPromptv2::ThreadTurnsListResponseType"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "id",
+                    "fragments"
+                  ],
+                  "additionalProperties": false,
+                  "title": "HookPromptv2::ThreadTurnsListResponse"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "memoryCitation": {
+                      "title": "MemoryCitation",
+                      "type": "object",
+                      "properties": {
+                        "entries": {
+                          "type": "array",
+                          "items": {
+                            "title": "MemoryCitationEntry",
+                            "type": "object",
+                            "properties": {
+                              "lineEnd": {
+                                "type": "integer"
+                              },
+                              "lineStart": {
+                                "type": "integer"
+                              },
+                              "note": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "path",
+                              "lineStart",
+                              "lineEnd",
+                              "note"
+                            ]
+                          }
+                        },
+                        "threadIds": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        }
+                      },
+                      "required": [
+                        "entries",
+                        "threadIds"
+                      ]
+                    },
+                    "phase": {
+                      "title": "MessagePhase",
+                      "type": "string",
+                      "enum": [
+                        "Commentary",
+                        "FinalAnswer"
+                      ]
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "AgentMessage",
+                      "title": "AgentMessagev2::ThreadTurnsListResponseType"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "id",
+                    "text"
+                  ],
+                  "additionalProperties": false,
+                  "title": "AgentMessagev2::ThreadTurnsListResponse"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "Plan",
+                      "title": "Planv2::ThreadTurnsListResponseType"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "id",
+                    "text"
+                  ],
+                  "additionalProperties": false,
+                  "title": "Planv2::ThreadTurnsListResponse"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "content": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "summary": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "Reasoning",
+                      "title": "Reasoningv2::ThreadTurnsListResponseType"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "id"
+                  ],
+                  "additionalProperties": false,
+                  "title": "Reasoningv2::ThreadTurnsListResponse"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "aggregatedOutput": {
+                      "type": "string"
+                    },
+                    "command": {
+                      "type": "string"
+                    },
+                    "commandActions": {
+                      "type": "array",
+                      "items": {
+                        "title": "CommandAction",
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "command": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "title": "AbsolutePathBuf",
+                                "type": "object"
+                              },
+                              "type": {
+                                "type": "string",
+                                "const": "Read",
+                                "title": "Readv2::ThreadTurnsListResponseType"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "command",
+                              "name",
+                              "path"
+                            ],
+                            "additionalProperties": false,
+                            "title": "Readv2::ThreadTurnsListResponse"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "command": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "const": "ListFiles",
+                                "title": "ListFilesv2::ThreadTurnsListResponseType"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "command"
+                            ],
+                            "additionalProperties": false,
+                            "title": "ListFilesv2::ThreadTurnsListResponse"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "command": {
+                                "type": "string"
+                              },
+                              "path": {
+                                "type": "string"
+                              },
+                              "query": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "const": "Search",
+                                "title": "Searchv2::ThreadTurnsListResponseType"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "command"
+                            ],
+                            "additionalProperties": false,
+                            "title": "Searchv2::ThreadTurnsListResponse"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "command": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "const": "Unknown",
+                                "title": "Unknownv2::ThreadTurnsListResponseType"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "command"
+                            ],
+                            "additionalProperties": false,
+                            "title": "Unknownv2::ThreadTurnsListResponse"
+                          }
+                        ]
+                      }
+                    },
+                    "cwd": {
+                      "title": "AbsolutePathBuf",
+                      "type": "object"
+                    },
+                    "durationMs": {
+                      "type": "integer"
+                    },
+                    "exitCode": {
+                      "type": "integer"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "processId": {
+                      "type": "string"
+                    },
+                    "source": {
+                      "title": "CommandExecutionSource",
+                      "type": "string",
+                      "enum": [
+                        "Agent",
+                        "UserShell",
+                        "UnifiedExecStartup",
+                        "UnifiedExecInteraction"
+                      ]
+                    },
+                    "status": {
+                      "title": "CommandExecutionStatus",
+                      "type": "string",
+                      "enum": [
+                        "InProgress",
+                        "Completed",
+                        "Failed",
+                        "Declined"
+                      ]
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "CommandExecution",
+                      "title": "CommandExecutionv2::ThreadTurnsListResponseType"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "id",
+                    "command",
+                    "cwd",
+                    "status",
+                    "commandActions"
+                  ],
+                  "additionalProperties": false,
+                  "title": "CommandExecutionv2::ThreadTurnsListResponse"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "changes": {
+                      "type": "array",
+                      "items": {
+                        "title": "FileUpdateChange",
+                        "type": "object",
+                        "properties": {
+                          "diff": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "title": "PatchChangeKind",
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "const": "Add",
+                                    "title": "Addv2::ThreadTurnsListResponseType"
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ],
+                                "additionalProperties": false,
+                                "title": "Addv2::ThreadTurnsListResponse"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "const": "Delete",
+                                    "title": "Deletev2::ThreadTurnsListResponseType"
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ],
+                                "additionalProperties": false,
+                                "title": "Deletev2::ThreadTurnsListResponse"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "movePath": {
+                                    "type": "string"
+                                  },
+                                  "type": {
+                                    "type": "string",
+                                    "const": "Update",
+                                    "title": "Updatev2::ThreadTurnsListResponseType"
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ],
+                                "additionalProperties": false,
+                                "title": "Updatev2::ThreadTurnsListResponse"
+                              }
+                            ]
+                          },
+                          "path": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "kind",
+                          "diff"
+                        ]
+                      }
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "title": "PatchApplyStatus",
+                      "type": "string",
+                      "enum": [
+                        "InProgress",
+                        "Completed",
+                        "Failed",
+                        "Declined"
+                      ]
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "FileChange",
+                      "title": "FileChangev2::ThreadTurnsListResponseType"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "id",
+                    "changes",
+                    "status"
+                  ],
+                  "additionalProperties": false,
+                  "title": "FileChangev2::ThreadTurnsListResponse"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "arguments": true,
+                    "durationMs": {
+                      "type": "integer"
+                    },
+                    "error": {
+                      "title": "McpToolCallError",
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message"
+                      ]
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "result": {
+                      "title": "McpToolCallResult",
+                      "type": "object",
+                      "properties": {
+                        "_meta": true,
+                        "content": {
+                          "type": "array",
+                          "items": true
+                        },
+                        "structuredContent": true
+                      },
+                      "required": [
+                        "content"
+                      ]
+                    },
+                    "server": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "title": "McpToolCallStatus",
+                      "type": "string",
+                      "enum": [
+                        "InProgress",
+                        "Completed",
+                        "Failed"
+                      ]
+                    },
+                    "tool": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "McpToolCall",
+                      "title": "McpToolCallv2::ThreadTurnsListResponseType"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "id",
+                    "server",
+                    "tool",
+                    "status",
+                    "arguments"
+                  ],
+                  "additionalProperties": false,
+                  "title": "McpToolCallv2::ThreadTurnsListResponse"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "arguments": true,
+                    "contentItems": {
+                      "type": "array",
+                      "items": {
+                        "title": "DynamicToolCallOutputContentItem",
+                        "oneOf": [
+                          {
+                            "type": "object",
+                            "properties": {
+                              "text": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "const": "InputText",
+                                "title": "InputTextv2::ThreadTurnsListResponseType"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "text"
+                            ],
+                            "additionalProperties": false,
+                            "title": "InputTextv2::ThreadTurnsListResponse"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "imageUrl": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "const": "InputImage",
+                                "title": "InputImagev2::ThreadTurnsListResponseType"
+                              }
+                            },
+                            "required": [
+                              "type",
+                              "imageUrl"
+                            ],
+                            "additionalProperties": false,
+                            "title": "InputImagev2::ThreadTurnsListResponse"
+                          }
+                        ]
+                      }
+                    },
+                    "durationMs": {
+                      "type": "integer"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "namespace": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "title": "DynamicToolCallStatus",
+                      "type": "string",
+                      "enum": [
+                        "InProgress",
+                        "Completed",
+                        "Failed"
+                      ]
+                    },
+                    "success": {
+                      "type": "boolean"
+                    },
+                    "tool": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "DynamicToolCall",
+                      "title": "DynamicToolCallv2::ThreadTurnsListResponseType"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "id",
+                    "tool",
+                    "arguments",
+                    "status"
+                  ],
+                  "additionalProperties": false,
+                  "title": "DynamicToolCallv2::ThreadTurnsListResponse"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "agentsStates": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "title": "CollabAgentState",
+                        "type": "object",
+                        "properties": {
+                          "message": {
+                            "type": "string"
+                          },
+                          "status": {
+                            "title": "CollabAgentStatus",
+                            "type": "string",
+                            "enum": [
+                              "PendingInit",
+                              "Running",
+                              "Interrupted",
+                              "Completed",
+                              "Errored",
+                              "Shutdown",
+                              "NotFound"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "status"
+                        ]
+                      }
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "model": {
+                      "type": "string"
+                    },
+                    "prompt": {
+                      "type": "string"
+                    },
+                    "reasoningEffort": {
+                      "title": "ReasoningEffort",
+                      "type": "string",
+                      "enum": [
+                        "none",
+                        "minimal",
+                        "low",
+                        "medium",
+                        "high",
+                        "xhigh"
+                      ]
+                    },
+                    "receiverThreadIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "senderThreadId": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "title": "CollabAgentToolCallStatus",
+                      "type": "string",
+                      "enum": [
+                        "InProgress",
+                        "Completed",
+                        "Failed"
+                      ]
+                    },
+                    "tool": {
+                      "title": "CollabAgentTool",
+                      "type": "string",
+                      "enum": [
+                        "SpawnAgent",
+                        "SendInput",
+                        "ResumeAgent",
+                        "Wait",
+                        "CloseAgent"
+                      ]
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "CollabAgentToolCall",
+                      "title": "CollabAgentToolCallv2::ThreadTurnsListResponseType"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "id",
+                    "tool",
+                    "status",
+                    "senderThreadId",
+                    "receiverThreadIds",
+                    "agentsStates"
+                  ],
+                  "additionalProperties": false,
+                  "title": "CollabAgentToolCallv2::ThreadTurnsListResponse"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "title": "WebSearchAction",
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "queries": {
+                              "type": "array",
+                              "items": {
+                                "type": "string"
+                              }
+                            },
+                            "query": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string",
+                              "const": "Search",
+                              "title": "Searchv2::ThreadTurnsListResponseType"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false,
+                          "title": "Searchv2::ThreadTurnsListResponse"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "OpenPage",
+                              "title": "OpenPagev2::ThreadTurnsListResponseType"
+                            },
+                            "url": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false,
+                          "title": "OpenPagev2::ThreadTurnsListResponse"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "pattern": {
+                              "type": "string"
+                            },
+                            "type": {
+                              "type": "string",
+                              "const": "FindInPage",
+                              "title": "FindInPagev2::ThreadTurnsListResponseType"
+                            },
+                            "url": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false,
+                          "title": "FindInPagev2::ThreadTurnsListResponse"
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "const": "Other",
+                              "title": "Otherv2::ThreadTurnsListResponseType"
+                            }
+                          },
+                          "required": [
+                            "type"
+                          ],
+                          "additionalProperties": false,
+                          "title": "Otherv2::ThreadTurnsListResponse"
+                        }
+                      ]
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "query": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "WebSearch",
+                      "title": "WebSearchv2::ThreadTurnsListResponseType"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "id",
+                    "query"
+                  ],
+                  "additionalProperties": false,
+                  "title": "WebSearchv2::ThreadTurnsListResponse"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "title": "AbsolutePathBuf",
+                      "type": "object"
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "ImageView",
+                      "title": "ImageViewv2::ThreadTurnsListResponseType"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "id",
+                    "path"
+                  ],
+                  "additionalProperties": false,
+                  "title": "ImageViewv2::ThreadTurnsListResponse"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "result": {
+                      "type": "string"
+                    },
+                    "revisedPrompt": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "ImageGeneration",
+                      "title": "ImageGenerationv2::ThreadTurnsListResponseType"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "id",
+                    "status",
+                    "result"
+                  ],
+                  "additionalProperties": false,
+                  "title": "ImageGenerationv2::ThreadTurnsListResponse"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "review": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "EnteredReviewMode",
+                      "title": "EnteredReviewModev2::ThreadTurnsListResponseType"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "id",
+                    "review"
+                  ],
+                  "additionalProperties": false,
+                  "title": "EnteredReviewModev2::ThreadTurnsListResponse"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "review": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "ExitedReviewMode",
+                      "title": "ExitedReviewModev2::ThreadTurnsListResponseType"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "id",
+                    "review"
+                  ],
+                  "additionalProperties": false,
+                  "title": "ExitedReviewModev2::ThreadTurnsListResponse"
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string",
+                      "const": "ContextCompaction",
+                      "title": "ContextCompactionv2::ThreadTurnsListResponseType"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "id"
+                  ],
+                  "additionalProperties": false,
+                  "title": "ContextCompactionv2::ThreadTurnsListResponse"
+                }
+              ]
+            }
+          },
+          "itemsView": {
+            "title": "TurnItemsView",
+            "type": "string",
+            "enum": [
+              "NotLoaded",
+              "Summary",
+              "Full"
+            ]
+          },
+          "startedAt": {
+            "type": "integer"
+          },
+          "status": {
+            "title": "TurnStatus",
+            "type": "string",
+            "enum": [
+              "Completed",
+              "Interrupted",
+              "Failed",
+              "InProgress"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "items",
+          "status"
+        ]
+      }
+    },
+    "nextCursor": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "data"
+  ]
+}

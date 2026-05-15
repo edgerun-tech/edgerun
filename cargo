@@ -1,0 +1,289 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# EdgeRun Cargo compatibility shim.
+#
+# This file intentionally does not exec the real Cargo binary.  If a Cargo
+# command or flag is missing here, improve this shim and/or
+# crates/edgerun-codelyzer/src/bin/edgerun_build.rs so the workflow stays on
+# EdgeRun's in-memory workspace/VFS path instead of bypassing it.
+
+ROOT="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
+usage() {
+    cat <<'USAGE'
+EdgeRun cargo shim
+
+This repository routes Cargo-shaped commands to edgerun-build.
+
+Supported commands:
+  cargo doctor|check|build|test|run|clean|tree|metadata [common package/feature flags]
+
+Supported common flags:
+  -p NAME, --package NAME
+  --manifest-path PATH        inferred to -p <package name>
+  --lib
+  --bin NAME
+  --bins
+  --example NAME
+  --examples
+  --features a,b
+  --all-features
+  --no-default-features
+  --release
+  --target TRIPLE
+  --keep-ram
+  --fresh
+  --out PATH
+  --workspace PATH            EdgeRun extension; defaults to this repo root
+
+Unsupported commands intentionally fail.  Add missing behavior to
+crates/edgerun-codelyzer/src/bin/edgerun_build.rs or this shim; do not bypass
+to the real Cargo binary.
+USAGE
+}
+
+fail_missing() {
+    local what="$1"
+    cat >&2 <<EOF
+edgerun cargo shim: unsupported Cargo behavior: ${what}
+
+This wrapper intentionally does not fall back to the real Cargo binary.
+The fix is to add the missing behavior to:
+
+  crates/edgerun-codelyzer/src/bin/edgerun_build.rs
+  ./cargo
+
+Keep the workflow on EdgeRun's in-memory workspace/VFS path so failures turn
+into tool improvements instead of hidden Cargo dependencies.
+EOF
+    exit 64
+}
+
+need_value() {
+    local flag="$1"
+    local value="${2-}"
+    if [[ -z "$value" ]]; then
+        fail_missing "${flag} requires a value"
+    fi
+    printf '%s\n' "$value"
+}
+
+find_edgerun_build() {
+    if [[ -n "${EDGERUN_BUILD:-}" ]]; then
+        if [[ -x "$EDGERUN_BUILD" ]]; then
+            printf '%s\n' "$EDGERUN_BUILD"
+            return 0
+        fi
+        fail_missing "EDGERUN_BUILD is set but is not executable: ${EDGERUN_BUILD}"
+    fi
+
+    local candidates=(
+        "$ROOT/.edgerun/bin/edgerun_build"
+        "$ROOT/.edgerun/bin/edgerun-build"
+        "$ROOT/target/debug/edgerun_build"
+        "$ROOT/target/debug/edgerun-build"
+        "$ROOT/target/release/edgerun_build"
+        "$ROOT/target/release/edgerun-build"
+    )
+
+    if command -v rustc >/dev/null 2>&1; then
+        local host
+        host="$(rustc -vV | awk '/^host:/ { print $2; exit }')"
+        if [[ -n "$host" ]]; then
+            candidates+=(
+                "$HOME/.cache/cargo-target/$host/debug/edgerun_build"
+                "$HOME/.cache/cargo-target/$host/debug/edgerun-build"
+                "$HOME/.cache/cargo-target/$host/release/edgerun_build"
+                "$HOME/.cache/cargo-target/$host/release/edgerun-build"
+            )
+        fi
+    fi
+
+    local candidate
+    for candidate in "${candidates[@]}"; do
+        if [[ -x "$candidate" ]]; then
+            printf '%s\n' "$candidate"
+            return 0
+        fi
+    done
+
+    if command -v edgerun-build >/dev/null 2>&1; then
+        command -v edgerun-build
+        return 0
+    fi
+
+    fail_missing "edgerun-build executable was not found. Build or install edgerun-build once, or teach this shim how to bootstrap it without Cargo."
+}
+
+manifest_package_name() {
+    local manifest="$1"
+    awk '
+        /^[[:space:]]*\[package\][[:space:]]*$/ { in_package = 1; next }
+        /^[[:space:]]*\[/ { in_package = 0 }
+        in_package && /^[[:space:]]*name[[:space:]]*=/ {
+            sub(/^[^=]*=[[:space:]]*/, "", $0)
+            sub(/[[:space:]]*#.*/, "", $0)
+            gsub(/"/, "", $0)
+            gsub(/^[[:space:]]+|[[:space:]]+$/, "", $0)
+            print $0
+            exit
+        }
+    ' "$manifest"
+}
+
+cmd="${1-}"
+if [[ -z "$cmd" || "$cmd" == "-h" || "$cmd" == "--help" || "$cmd" == "help" ]]; then
+    usage
+    exit 0
+fi
+shift || true
+
+case "$cmd" in
+    doctor|check|build|test|run)
+        edge_cmd="$cmd"
+        ;;
+    clean)
+        edge_cmd="clean"
+        ;;
+    tree|metadata)
+        edge_cmd="graph"
+        ;;
+    clippy|fmt|doc|bench|install|add|remove|update|fetch|vendor|publish|package|login|logout|search|owner|yank)
+        fail_missing "cargo ${cmd}"
+        ;;
+    *)
+        fail_missing "cargo ${cmd}"
+        ;;
+esac
+
+workspace="$ROOT"
+edge_args=("$edge_cmd")
+
+while [[ $# -gt 0 ]]; do
+    arg="$1"
+    shift
+    case "$arg" in
+        -p|--package)
+            value="$(need_value "$arg" "${1-}")"
+            shift
+            edge_args+=("-p" "$value")
+            ;;
+        --package=*)
+            edge_args+=("-p" "${arg#--package=}")
+            ;;
+        --manifest-path)
+            manifest="$(need_value "$arg" "${1-}")"
+            shift
+            [[ "$manifest" = /* ]] || manifest="$PWD/$manifest"
+            [[ -f "$manifest" ]] || fail_missing "--manifest-path points at a missing file: $manifest"
+            package="$(manifest_package_name "$manifest")"
+            [[ -n "$package" ]] || fail_missing "could not infer package name from --manifest-path $manifest"
+            edge_args+=("-p" "$package")
+            ;;
+        --manifest-path=*)
+            manifest="${arg#--manifest-path=}"
+            [[ "$manifest" = /* ]] || manifest="$PWD/$manifest"
+            [[ -f "$manifest" ]] || fail_missing "--manifest-path points at a missing file: $manifest"
+            package="$(manifest_package_name "$manifest")"
+            [[ -n "$package" ]] || fail_missing "could not infer package name from --manifest-path $manifest"
+            edge_args+=("-p" "$package")
+            ;;
+        --lib)
+            edge_args+=("--lib")
+            ;;
+        --bin)
+            value="$(need_value "$arg" "${1-}")"
+            shift
+            edge_args+=("--bin" "$value")
+            ;;
+        --bin=*)
+            edge_args+=("--bin" "${arg#--bin=}")
+            ;;
+        --bins)
+            edge_args+=("--bins")
+            ;;
+        --example)
+            value="$(need_value "$arg" "${1-}")"
+            shift
+            edge_args+=("--example" "$value")
+            ;;
+        --example=*)
+            edge_args+=("--example" "${arg#--example=}")
+            ;;
+        --examples)
+            edge_args+=("--examples")
+            ;;
+        --features)
+            value="$(need_value "$arg" "${1-}")"
+            shift
+            edge_args+=("--features" "$value")
+            ;;
+        --features=*)
+            edge_args+=("--features" "${arg#--features=}")
+            ;;
+        --all-features|--no-default-features|--release|--keep-ram|--fresh)
+            edge_args+=("$arg")
+            ;;
+        --out)
+            value="$(need_value "$arg" "${1-}")"
+            shift
+            edge_args+=("--out" "$value")
+            ;;
+        --out=*)
+            edge_args+=("--out" "${arg#--out=}")
+            ;;
+        --workspace)
+            if [[ $# -gt 0 && "${1-}" != -* ]]; then
+                workspace="$1"
+                shift
+            fi
+            ;;
+        --workspace=*)
+            workspace="${arg#--workspace=}"
+            ;;
+        --color)
+            value="$(need_value "$arg" "${1-}")"
+            shift
+            ;;
+        --color=*)
+            ;;
+        --quiet|-q|--verbose|-v|--locked|--offline|--frozen)
+            ;;
+        --target)
+            value="$(need_value "$arg" "${1-}")"
+            shift
+            edge_args+=("--target" "$value")
+            ;;
+        --target=*)
+            edge_args+=("--target" "${arg#--target=}")
+            ;;
+        --message-format|--config|--profile|--timings|--jobs|-j)
+            value="$(need_value "$arg" "${1-}")"
+            shift
+            fail_missing "${arg} ${value}"
+            ;;
+        --message-format=*|--config=*|--profile=*|--timings=*|--jobs=*)
+            fail_missing "$arg"
+            ;;
+        --test|--tests|--all-targets|--no-run|--exclude)
+            fail_missing "$arg"
+            ;;
+        --)
+            edge_args+=("--")
+            edge_args+=("$@")
+            break
+            ;;
+        -*)
+            fail_missing "$arg"
+            ;;
+        *)
+            fail_missing "positional argument '${arg}' for cargo ${cmd}"
+            ;;
+    esac
+done
+
+[[ "$workspace" = /* ]] || workspace="$PWD/$workspace"
+edge_args+=("--workspace" "$workspace")
+
+exec "$(find_edgerun_build)" "${edge_args[@]}"

@@ -1,14 +1,13 @@
 use crate::approvals::NetworkApprovalProtocol;
 use crate::compat::network_proxy::NetworkDecisionSource;
 use crate::compat::network_proxy::NetworkPolicyDecision;
-use edgerun_serde::Deserialize;
 
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct NetworkPolicyDecisionPayload {
     pub decision: NetworkPolicyDecision,
     pub source: NetworkDecisionSource,
-    #[serde(default)]
+    #[schemars(default)]
     pub protocol: Option<NetworkApprovalProtocol>,
     pub host: Option<String>,
     pub reason: Option<String>,

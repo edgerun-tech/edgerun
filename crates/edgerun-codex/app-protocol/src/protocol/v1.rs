@@ -5,34 +5,37 @@ use codex_protocol::ThreadId;
 use codex_protocol::compat::absolute_path::AbsolutePathBuf;
 use codex_protocol::config_types::ForcedLoginMethod;
 use codex_protocol::config_types::ReasoningSummary;
-use codex_protocol::config_types::SandboxMode;
 use codex_protocol::config_types::Verbosity;
 use codex_protocol::openai_models::ReasoningEffort;
 use codex_protocol::parse_command::ParsedCommand;
-use codex_protocol::protocol::AskForApproval;
 use codex_protocol::protocol::FileChange;
 pub use codex_protocol::protocol::GitSha;
 use codex_protocol::protocol::ReviewDecision;
-use codex_protocol::protocol::SandboxPolicy;
 use codex_protocol::protocol::SessionSource;
 use codex_protocol::protocol::TurnAbortReason;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
+use edgerun_json::FromJson;
+use edgerun_json::JsonValueError;
+use edgerun_json::Map;
+use edgerun_json::ToJson;
+use edgerun_json::Value as JsonValue;
 use schemars::JsonSchema;
-use ts_rs::TS;
 
 use crate::protocol::common::AuthMode;
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(
+    Debug, Clone, PartialEq, Default, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "camelCase")]
 pub struct InitializeParams {
     pub client_info: ClientInfo,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schemars(skip_serializing_if = "Option::is_none")]
     pub capabilities: Option<InitializeCapabilities>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(
+    Debug, Clone, PartialEq, Default, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "camelCase")]
 pub struct ClientInfo {
     pub name: String,
     pub title: Option<String>,
@@ -40,53 +43,52 @@ pub struct ClientInfo {
 }
 
 /// Client-declared capabilities negotiated during initialize.
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Default, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Default, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson,
+)]
+#[schemars(rename_all = "camelCase")]
 pub struct InitializeCapabilities {
     /// Opt into receiving experimental API methods and fields.
-    #[serde(default)]
+    #[schemars(default)]
     pub experimental_api: bool,
     /// Exact notification method names that should be suppressed for this
     /// connection (for example `thread/started`).
-    #[ts(optional = nullable)]
     pub opt_out_notification_methods: Option<Vec<String>>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct InitializeResponse {
     pub user_agent: String,
     /// Absolute path to the server's $CODEX_HOME directory.
     pub codex_home: AbsolutePathBuf,
-    /// Platform family for the running app-server target, for example
-    /// `"unix"` or `"windows"`.
+    /// Platform family for the running app-server target.
     pub platform_family: String,
-    /// Operating system for the running app-server target, for example
-    /// `"macos"`, `"linux"`, or `"windows"`.
+    /// Operating system for the running app-server target.
     pub platform_os: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(untagged)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(untagged)]
 pub enum GetConversationSummaryParams {
     RolloutPath {
-        #[serde(rename = "rolloutPath")]
+        #[schemars(rename = "rolloutPath")]
         rollout_path: PathBuf,
     },
     ThreadId {
-        #[serde(rename = "conversationId")]
+        #[schemars(rename = "conversationId")]
         conversation_id: ThreadId,
     },
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct GetConversationSummaryResponse {
     pub summary: ConversationSummary,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct ConversationSummary {
     pub conversation_id: ThreadId,
     pub path: PathBuf,
@@ -100,29 +102,29 @@ pub struct ConversationSummary {
     pub git_info: Option<ConversationGitInfo>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "snake_case")]
 pub struct ConversationGitInfo {
     pub sha: Option<String>,
     pub branch: Option<String>,
     pub origin_url: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct LoginApiKeyParams {
     pub api_key: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct GitDiffToRemoteResponse {
     pub sha: GitSha,
     pub diff: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, JsonSchema)]
+#[schemars(rename_all = "camelCase")]
 pub struct ApplyPatchApprovalParams {
     pub conversation_id: ThreadId,
     /// Use to correlate this with [codex_protocol::protocol::PatchApplyBeginEvent]
@@ -136,14 +138,56 @@ pub struct ApplyPatchApprovalParams {
     pub grant_root: Option<PathBuf>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
+impl ToJson for ApplyPatchApprovalParams {
+    fn to_json(&self) -> JsonValue {
+        let mut object = Map::new();
+        object.push_field("conversationId", self.conversation_id.to_json());
+        object.push_field("callId", self.call_id.clone());
+        let mut file_changes = Map::new();
+        for (path, change) in &self.file_changes {
+            file_changes.push_field(path.to_string_lossy().to_string(), change.to_json());
+        }
+        object.push_field("fileChanges", JsonValue::Object(file_changes));
+        object.push_opt_field("reason", self.reason.clone());
+        object.push_opt_field(
+            "grantRoot",
+            self.grant_root
+                .as_ref()
+                .map(|path| path.to_string_lossy().to_string()),
+        );
+        JsonValue::Object(object)
+    }
+}
+
+impl FromJson for ApplyPatchApprovalParams {
+    fn from_json(value: JsonValue) -> Result<Self, JsonValueError> {
+        let mut object = value.into_object("ApplyPatchApprovalParams")?;
+        let file_changes_value: JsonValue = object.take_required("fileChanges")?;
+        let file_changes_value = file_changes_value.into_object("fileChanges")?;
+        let mut file_changes = HashMap::new();
+        for (path, change) in file_changes_value.into_vec() {
+            file_changes.insert(PathBuf::from(path), FileChange::from_json(change)?);
+        }
+        Ok(Self {
+            conversation_id: object.take_required("conversationId")?,
+            call_id: object.take_required("callId")?,
+            file_changes,
+            reason: object.take_optional("reason")?,
+            grant_root: object
+                .take_optional::<String>("grantRoot")?
+                .map(PathBuf::from),
+        })
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct ApplyPatchApprovalResponse {
     pub decision: ReviewDecision,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct ExecCommandApprovalParams {
     pub conversation_id: ThreadId,
     /// Use to correlate this with [codex_protocol::protocol::ExecCommandBeginEvent]
@@ -157,47 +201,43 @@ pub struct ExecCommandApprovalParams {
     pub parsed_cmd: Vec<ParsedCommand>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
 pub struct ExecCommandApprovalResponse {
     pub decision: ReviewDecision,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct GitDiffToRemoteParams {
     pub cwd: PathBuf,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct GetAuthStatusParams {
     pub include_token: Option<bool>,
     pub refresh_token: Option<bool>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct ExecOneOffCommandParams {
     pub command: Vec<String>,
     pub timeout_ms: Option<u64>,
     pub cwd: Option<PathBuf>,
-    pub sandbox_policy: Option<SandboxPolicy>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct GetAuthStatusResponse {
     pub auth_method: Option<AuthMode>,
     pub auth_token: Option<String>,
     pub requires_openai_auth: Option<bool>,
 }
 
-#[derive(Deserialize, Debug, Clone, PartialEq, Serialize, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct UserSavedConfig {
-    pub approval_policy: Option<AskForApproval>,
-    pub sandbox_mode: Option<SandboxMode>,
-    pub sandbox_settings: Option<SandboxSettings>,
     pub forced_chatgpt_workspace_id: Option<String>,
     pub forced_login_method: Option<ForcedLoginMethod>,
     pub model: Option<String>,
@@ -209,37 +249,26 @@ pub struct UserSavedConfig {
     pub profiles: HashMap<String, Profile>,
 }
 
-#[derive(Deserialize, Debug, Clone, PartialEq, Serialize, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct Profile {
     pub model: Option<String>,
     pub model_provider: Option<String>,
-    pub approval_policy: Option<AskForApproval>,
     pub model_reasoning_effort: Option<ReasoningEffort>,
     pub model_reasoning_summary: Option<ReasoningSummary>,
     pub model_verbosity: Option<Verbosity>,
     pub chatgpt_base_url: Option<String>,
 }
 
-#[derive(Deserialize, Debug, Clone, PartialEq, Serialize, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct Tools {
     pub web_search: Option<bool>,
     pub view_image: Option<bool>,
 }
 
-#[derive(Deserialize, Debug, Clone, PartialEq, Serialize, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
-pub struct SandboxSettings {
-    #[serde(default)]
-    pub writable_roots: Vec<AbsolutePathBuf>,
-    pub network_access: Option<bool>,
-    pub exclude_tmpdir_env_var: Option<bool>,
-    pub exclude_slash_tmp: Option<bool>,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, JsonSchema, TS)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, JsonSchema, edgerun_json::ToJson, edgerun_json::FromJson)]
+#[schemars(rename_all = "camelCase")]
 pub struct InterruptConversationResponse {
     pub abort_reason: TurnAbortReason,
 }

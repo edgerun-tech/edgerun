@@ -8,8 +8,8 @@ use crate::function_tool::FunctionCallError;
 use crate::tools::context::FunctionToolOutput;
 use codex_protocol::protocol::ThreadGoal;
 use codex_protocol::protocol::ThreadGoalStatus;
-use serde::Deserialize;
-use serde::Serialize;
+use edgerun_json::FromJson;
+use edgerun_json::ToJson;
 use std::fmt::Write as _;
 
 mod create_goal;
@@ -20,21 +20,21 @@ pub use create_goal::CreateGoalHandler;
 pub use get_goal::GetGoalHandler;
 pub use update_goal::UpdateGoalHandler;
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, FromJson)]
+#[schemars(rename_all = "snake_case")]
 struct CreateGoalArgs {
     objective: String,
     token_budget: Option<i64>,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[derive(Debug, FromJson)]
+#[schemars(rename_all = "snake_case")]
 struct UpdateGoalArgs {
     status: ThreadGoalStatus,
 }
 
-#[derive(Debug, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, PartialEq, ToJson)]
+#[schemars(rename_all = "camelCase")]
 struct GoalToolResponse {
     goal: Option<ThreadGoal>,
     remaining_tokens: Option<i64>,
@@ -80,9 +80,11 @@ fn goal_response(
     goal: Option<ThreadGoal>,
     completion_budget_report: CompletionBudgetReport,
 ) -> Result<FunctionToolOutput, FunctionCallError> {
-    let response =
-        edgerun_json::to_string_pretty(&GoalToolResponse::new(goal, completion_budget_report))
-            .map_err(|err| FunctionCallError::Fatal(err.to_string()))?;
+    let response = edgerun_json::to_json_string_pretty(&GoalToolResponse::new(
+        goal,
+        completion_budget_report,
+    ))
+    .map_err(|err| FunctionCallError::Fatal(err.to_string()))?;
     Ok(FunctionToolOutput::from_text(response, Some(true)))
 }
 

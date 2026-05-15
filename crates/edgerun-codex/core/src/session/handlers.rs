@@ -44,7 +44,6 @@ use codex_protocol::protocol::ThreadMemoryMode;
 use codex_protocol::protocol::ThreadRolledBackEvent;
 use codex_protocol::protocol::TurnAbortReason;
 use codex_protocol::protocol::WarningEvent;
-use codex_protocol::request_permissions::RequestPermissionsResponse;
 use codex_protocol::request_user_input::RequestUserInputResponse;
 
 use crate::context_manager::is_user_turn_boundary;
@@ -115,10 +114,7 @@ pub(super) async fn user_input_or_turn_inner(
     let (items, updates, responsesapi_client_metadata) = match op {
         Op::UserTurn {
             cwd,
-            approval_policy,
             approvals_reviewer,
-            sandbox_policy,
-            permission_profile,
             model,
             effort,
             summary,
@@ -143,11 +139,7 @@ pub(super) async fn user_input_or_turn_inner(
                 items,
                 SessionSettingsUpdate {
                     cwd: Some(cwd),
-                    approval_policy: Some(approval_policy),
                     approvals_reviewer,
-                    sandbox_policy: Some(sandbox_policy),
-                    permission_profile,
-                    active_permission_profile: None,
                     windows_sandbox_level: None,
                     collaboration_mode,
                     reasoning_summary: summary,
@@ -163,11 +155,7 @@ pub(super) async fn user_input_or_turn_inner(
         }
         Op::UserInputWithTurnContext {
             cwd,
-            approval_policy,
             approvals_reviewer,
-            sandbox_policy,
-            permission_profile,
-            active_permission_profile,
             windows_sandbox_level,
             model,
             effort,
@@ -195,11 +183,7 @@ pub(super) async fn user_input_or_turn_inner(
                 items,
                 SessionSettingsUpdate {
                     cwd,
-                    approval_policy,
                     approvals_reviewer,
-                    sandbox_policy,
-                    permission_profile,
-                    active_permission_profile,
                     windows_sandbox_level,
                     collaboration_mode,
                     reasoning_summary: summary,
@@ -362,9 +346,7 @@ pub async fn resolve_elicitation(
     };
     let content = match action {
         // Preserve the legacy fallback for clients that only send an action.
-        ElicitationAction::Accept => {
-            Some(content.unwrap_or_else(|| edgerun_json::json!({})))
-        }
+        ElicitationAction::Accept => Some(content.unwrap_or_else(|| edgerun_json::json!({}))),
         ElicitationAction::Decline | ElicitationAction::Cancel => None,
     };
     let response = ElicitationResponse {
@@ -448,15 +430,6 @@ pub async fn request_user_input_response(
     response: RequestUserInputResponse,
 ) {
     sess.notify_user_input_response(&id, response).await;
-}
-
-pub async fn request_permissions_response(
-    sess: &Arc<Session>,
-    id: String,
-    response: RequestPermissionsResponse,
-) {
-    sess.notify_request_permissions_response(&id, response)
-        .await;
 }
 
 pub async fn dynamic_tool_response(sess: &Arc<Session>, id: String, response: DynamicToolResponse) {
@@ -762,10 +735,7 @@ pub(super) async fn submission_loop(
                 }
                 Op::OverrideTurnContext {
                     cwd,
-                    approval_policy,
                     approvals_reviewer,
-                    sandbox_policy,
-                    permission_profile,
                     windows_sandbox_level,
                     model,
                     effort,
@@ -789,10 +759,7 @@ pub(super) async fn submission_loop(
                         sub.id.clone(),
                         SessionSettingsUpdate {
                             cwd,
-                            approval_policy,
                             approvals_reviewer,
-                            sandbox_policy,
-                            permission_profile,
                             windows_sandbox_level,
                             collaboration_mode: Some(collaboration_mode),
                             reasoning_summary: summary,
@@ -828,10 +795,6 @@ pub(super) async fn submission_loop(
                 }
                 Op::UserInputAnswer { id, response } => {
                     request_user_input_response(&sess, id, response).await;
-                    false
-                }
-                Op::RequestPermissionsResponse { id, response } => {
-                    request_permissions_response(&sess, id, response).await;
                     false
                 }
                 Op::DynamicToolResponse { id, response } => {
@@ -921,7 +884,7 @@ async fn approve_guardian_denied_action(sess: &Arc<Session>, event: GuardianAsse
         "action": &event.action,
         "outcome": "allowed",
     });
-    let approved_action_json = match edgerun_json::to_string_pretty(&approved_action) {
+    let approved_action_json = match edgerun_json::to_json_string_pretty(&approved_action) {
         Ok(approved_action_json) => approved_action_json,
         Err(error) => {
             warn!(%error, review_id = event.id.as_str(), "failed to serialize approved Guardian action");

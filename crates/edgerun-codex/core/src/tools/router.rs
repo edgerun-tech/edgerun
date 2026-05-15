@@ -1,5 +1,4 @@
 use crate::function_tool::FunctionCallError;
-use crate::sandboxing::SandboxPermissions;
 use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;
 use crate::tools::context::SharedTurnDiffTracker;
@@ -210,7 +209,7 @@ impl ToolRouter {
                 ..
             } if execution == "client" => {
                 let arguments: SearchToolCallParams =
-                    edgerun_json::from_serde_value(arguments).map_err(|err| {
+                    edgerun_json::from_json_value(arguments).map_err(|err| {
                         FunctionCallError::RespondToModel(format!(
                             "failed to parse tool_search arguments: {err}"
                         ))
@@ -248,10 +247,7 @@ impl ToolRouter {
                             command: exec.command,
                             workdir: exec.working_directory,
                             timeout_ms: exec.timeout_ms,
-                            sandbox_permissions: Some(SandboxPermissions::UseDefault),
-                            additional_permissions: None,
                             prefix_rule: None,
-                            justification: None,
                         };
                         Ok(Some(ToolCall {
                             tool_name: ToolName::plain("local_shell"),

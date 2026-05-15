@@ -4,7 +4,6 @@ use codex_protocol::models::ResponseItem;
 use codex_protocol::protocol::GuardianRiskLevel;
 use codex_protocol::protocol::GuardianUserAuthorization;
 use codex_protocol::user_input::UserInput;
-use serde::Deserialize;
 use edgerun_json::Value;
 
 use crate::compact::content_items_to_text;
@@ -405,7 +404,7 @@ pub(crate) fn collect_guardian_transcript_entries(
             }
             ResponseItem::LocalShellCall { action, .. } => serialized_entry(
                 GuardianTranscriptEntryKind::Tool("tool shell call".to_string()),
-                edgerun_json::to_string(action).ok(),
+                edgerun_json::to_json_string(action).ok(),
             ),
             ResponseItem::FunctionCall {
                 call_id,
@@ -434,7 +433,7 @@ pub(crate) fn collect_guardian_transcript_entries(
             ResponseItem::WebSearchCall { action, .. } => action.as_ref().and_then(|action| {
                 serialized_entry(
                     GuardianTranscriptEntryKind::Tool("tool web_search call".to_string()),
-                    edgerun_json::to_string(action).ok(),
+                    edgerun_json::to_json_string(action).ok(),
                 )
             }),
             ResponseItem::FunctionCallOutput {
@@ -535,13 +534,13 @@ pub(crate) fn parse_guardian_assessment(text: Option<&str>) -> anyhow::Result<Gu
         anyhow::bail!("guardian review completed without an assessment payload");
     };
     let parsed_payload =
-        if let Ok(payload) = edgerun_json::from_serde_str::<GuardianAssessmentPayload>(text) {
+        if let Ok(payload) = edgerun_json::from_json_str::<GuardianAssessmentPayload>(text) {
             payload
         } else if let (Some(start), Some(end)) = (text.find('{'), text.rfind('}'))
             && start < end
             && let Some(slice) = text.get(start..=end)
         {
-            edgerun_json::from_serde_str::<GuardianAssessmentPayload>(slice)?
+            edgerun_json::from_json_str::<GuardianAssessmentPayload>(slice)?
         } else {
             anyhow::bail!("guardian assessment was not valid JSON");
         };
@@ -573,7 +572,7 @@ pub(crate) fn parse_guardian_assessment(text: Option<&str>) -> anyhow::Result<Gu
     })
 }
 
-#[derive(Deserialize)]
+#[derive(FromJson)]
 struct GuardianAssessmentPayload {
     risk_level: Option<GuardianRiskLevel>,
     user_authorization: Option<GuardianUserAuthorization>,

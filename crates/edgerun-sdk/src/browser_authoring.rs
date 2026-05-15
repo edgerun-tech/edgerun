@@ -1,6 +1,6 @@
 use alloc::{string::String, vec, vec::Vec};
 
-use edgerun_crypto::{Ed25519SigningKey as SigningKey, Signer};
+use edgerun_crypto::Ed25519SigningKey as SigningKey;
 use edgerun_wire::{
     AppArtifactRecord, AppGraphRecord, AppHttpRouteRecord, AppManifestRecord,
     AppStoreSubmissionRecord, ArtifactSignature, RuntimeAppInstall, RuntimeCapabilityDeclaration,
@@ -191,14 +191,14 @@ pub fn artifact_signature_bytes(
     domain: &[u8],
 ) -> Vec<u8> {
     let artifact_hash = sha256(artifact_bytes);
-    let signature = signing_key.sign(&signature_payload_for_domain(domain, &artifact_hash));
+    let signature = signing_key.sign_bytes(&signature_payload_for_domain(domain, &artifact_hash));
     sdk_wire_bytes(&SdkWireRecord::ArtifactSignature(ArtifactSignature {
         abi_version: edgerun_wire::SDK_WIRE_ABI_VERSION,
         flags: 1,
         algorithm: SIGN_ALGORITHM_ED25519,
         artifact_sha256: artifact_hash,
         public_key: signing_key.verifying_key().as_bytes().to_vec(),
-        signature: signature.to_bytes().to_vec(),
+        signature: signature.to_vec(),
     }))
 }
 

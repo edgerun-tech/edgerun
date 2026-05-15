@@ -6,8 +6,8 @@ mod hex;
 #[cfg(feature = "pkcs8")]
 pub mod pkcs8;
 
-#[cfg(feature = "serde")]
-mod serde;
+#[cfg(feature = "edgerun_json_compat")]
+mod json_compat;
 
 pub use crate::signature::{self, Error, SignatureEncoding};
 

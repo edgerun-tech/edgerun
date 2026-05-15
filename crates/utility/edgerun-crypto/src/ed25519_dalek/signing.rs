@@ -17,8 +17,8 @@ use crate::ed25519::pkcs8;
 #[cfg(feature = "rand_core")]
 use crate::rand_core::CryptoRngCore;
 
-#[cfg(feature = "serde")]
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+#[cfg(feature = "edgerun_json_compat")]
+use edgerun_json_compat::{Deserialize, Deserializer, Serialize, Serializer};
 
 use crate::sha2::Sha512;
 use crate::subtle::{Choice, ConstantTimeEq};
@@ -187,7 +187,7 @@ impl SigningKey {
     #[cfg_attr(feature = "rand_core", doc = "```")]
     #[cfg_attr(not(feature = "rand_core"), doc = "```ignore")]
     /// # fn main() {
-    /// use rand::rngs::OsRng;
+    /// use crate::rand_core::OsRng;
     /// use ed25519_dalek::{Signature, SigningKey};
     ///
     /// let mut csprng = OsRng;
@@ -239,7 +239,7 @@ impl SigningKey {
     /// use ed25519_dalek::SigningKey;
     /// use ed25519_dalek::Signature;
     /// use crate::sha2::Sha512;
-    /// use rand::rngs::OsRng;
+    /// use crate::rand_core::OsRng;
     ///
     /// # fn main() {
     /// let mut csprng = OsRng;
@@ -284,7 +284,7 @@ impl SigningKey {
     /// # use ed25519_dalek::Signature;
     /// # use ed25519_dalek::SignatureError;
     /// # use crate::sha2::Sha512;
-    /// # use rand::rngs::OsRng;
+    /// # use crate::rand_core::OsRng;
     /// #
     /// # fn do_test() -> Result<Signature, SignatureError> {
     /// # let mut csprng = OsRng;
@@ -363,7 +363,7 @@ impl SigningKey {
     /// use ed25519_dalek::Signature;
     /// use ed25519_dalek::SignatureError;
     /// use crate::sha2::Sha512;
-    /// use rand::rngs::OsRng;
+    /// use crate::rand_core::OsRng;
     ///
     /// # fn do_test() -> Result<(), SignatureError> {
     /// let mut csprng = OsRng;
@@ -744,7 +744,7 @@ impl TryFrom<crate::pkcs8::PrivateKeyInfo<'_>> for SigningKey {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 impl Serialize for SigningKey {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -754,7 +754,7 @@ impl Serialize for SigningKey {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 impl<'d> Deserialize<'d> for SigningKey {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -762,27 +762,30 @@ impl<'d> Deserialize<'d> for SigningKey {
     {
         struct SigningKeyVisitor;
 
-        impl<'de> serde::de::Visitor<'de> for SigningKeyVisitor {
+        impl<'de> edgerun_json_compat::de::Visitor<'de> for SigningKeyVisitor {
             type Value = SigningKey;
 
             fn expecting(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
                 write!(formatter, concat!("An ed25519 signing (private) key"))
             }
 
-            fn visit_bytes<E: serde::de::Error>(self, bytes: &[u8]) -> Result<Self::Value, E> {
+            fn visit_bytes<E: edgerun_json_compat::de::Error>(
+                self,
+                bytes: &[u8],
+            ) -> Result<Self::Value, E> {
                 SigningKey::try_from(bytes).map_err(E::custom)
             }
 
             fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
             where
-                A: serde::de::SeqAccess<'de>,
+                A: edgerun_json_compat::de::SeqAccess<'de>,
             {
                 let mut bytes = [0u8; 32];
                 #[allow(clippy::needless_range_loop)]
                 for i in 0..32 {
-                    bytes[i] = seq
-                        .next_element()?
-                        .ok_or_else(|| serde::de::Error::invalid_length(i, &"expected 32 bytes"))?;
+                    bytes[i] = seq.next_element()?.ok_or_else(|| {
+                        edgerun_json_compat::de::Error::invalid_length(i, &"expected 32 bytes")
+                    })?;
                 }
 
                 let remaining = (0..)
@@ -791,7 +794,7 @@ impl<'d> Deserialize<'d> for SigningKey {
                     .count();
 
                 if remaining > 0 {
-                    return Err(serde::de::Error::invalid_length(
+                    return Err(edgerun_json_compat::de::Error::invalid_length(
                         32 + remaining,
                         &"expected 32 bytes",
                     ));

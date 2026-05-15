@@ -199,11 +199,11 @@ fn drop_lockfile_inputs(lock_config: &mut ConfigToml) {
 }
 
 fn resolved_config_to_toml<Toml>(
-    value: &impl serde::Serialize,
+    value: &impl edgerun_json::ToJson,
     label: &'static str,
 ) -> anyhow::Result<Toml>
 where
-    Toml: serde::de::DeserializeOwned + serde::Serialize,
+    Toml: edgerun_json::FromJson + edgerun_json::ToJson,
 {
     toml_round_trip(value, label).map_err(anyhow::Error::from)
 }

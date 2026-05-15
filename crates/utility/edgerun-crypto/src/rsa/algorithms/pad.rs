@@ -31,25 +31,3 @@ pub(crate) fn uint_to_zeroizing_be_pad(input: BigUint, padded_len: usize) -> Res
     let m = Zeroizing::new(m.to_bytes_be());
     left_pad(&m, padded_len)
 }
-
-#[cfg(all(test, feature = "rsa_internal_tests"))]
-mod tests {
-    use super::*;
-    #[test]
-    fn test_left_pad() {
-        const INPUT_LEN: usize = 3;
-        let input = alloc::vec![0u8; INPUT_LEN];
-
-        // input len < padded len
-        let padded = left_pad(&input, INPUT_LEN + 1).unwrap();
-        assert_eq!(padded.len(), INPUT_LEN + 1);
-
-        // input len == padded len
-        let padded = left_pad(&input, INPUT_LEN).unwrap();
-        assert_eq!(padded.len(), INPUT_LEN);
-
-        // input len > padded len
-        let padded = left_pad(&input, INPUT_LEN - 1);
-        assert!(padded.is_err());
-    }
-}

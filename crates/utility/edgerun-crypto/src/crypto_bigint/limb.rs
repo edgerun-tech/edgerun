@@ -23,8 +23,10 @@ use crate::crypto_bigint::{Bounded, Zero};
 use crate::subtle::{Choice, ConditionallySelectable};
 use core::fmt;
 
-#[cfg(feature = "serde")]
-use serdect::serde::{Deserialize, Deserializer, Serialize, Serializer};
+#[cfg(feature = "edgerun_json_compat")]
+use edgerun_json_compatct::edgerun_json_compat::{
+    Deserialize, Deserializer, Serialize, Serializer,
+};
 
 #[cfg(not(any(target_pointer_width = "32", target_pointer_width = "64")))]
 compile_error!("this crate builds on 32-bit and 64-bit platforms only");
@@ -136,7 +138,7 @@ impl fmt::UpperHex for Limb {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 impl<'de> Deserialize<'de> for Limb {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -146,7 +148,7 @@ impl<'de> Deserialize<'de> for Limb {
     }
 }
 
-#[cfg(feature = "serde")]
+#[cfg(feature = "edgerun_json_compat")]
 impl Serialize for Limb {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where

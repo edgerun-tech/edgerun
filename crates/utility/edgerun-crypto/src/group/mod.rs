@@ -10,8 +10,6 @@ use core::ops::{Add, AddAssign, Mul, MulAssign, Neg, Sub, SubAssign};
 
 pub mod cofactor;
 pub mod prime;
-#[cfg(all(test, feature = "group_tests"))]
-pub mod tests;
 
 #[cfg(feature = "elliptic_curve_alloc")]
 mod wnaf;

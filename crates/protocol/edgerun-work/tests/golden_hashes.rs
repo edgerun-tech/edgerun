@@ -30,11 +30,11 @@ const EXPECTED_GOLDEN_HASHES: &[(&str, &str)] = &[
     ),
     (
         "work_admission_preimage",
-        "ef53f3226fb951072680ebf232780c70ccd23fbf0d3dec4458206eb69a5064f0",
+        "f4179e670b6338adcc9d892d6609c8cf0489d3f9f494d748021ca718cb5e5927",
     ),
     (
         "work_receipt_preimage",
-        "e19ea6f98fdee22c1d3cc71f79e559d194cd024cfc097f1b9fe8ff91ebbcc7d6",
+        "516363d14cb2b9e25a993e83013d50974b58708ea0b47f0bce23633c470cd6ca",
     ),
     (
         "route_binding_preimage",
@@ -46,39 +46,39 @@ const EXPECTED_GOLDEN_HASHES: &[(&str, &str)] = &[
     ),
     (
         "ordered_message_hash",
-        "0c0689315064f8a43c84a1b8d00c259b474e5c5c958e0b9e7f96513898e08cd5",
+        "1a908d9dd29b5a944d81ba2e1322b8a5a3812fc912f0a7c0d8f6f8dd0d30c817",
     ),
     (
         "channel_proof_preimage",
-        "cee915061064ffb1b443fe6b7fc9aa18b0f81a4eafe0c7d0fe98caf0e25f87f9",
+        "886383b38d79d0afffb6685d630e701209fa12838aa6d897c0c806d8d7685912",
     ),
     (
         "channel_proof_hash",
-        "def1b91850b208b961b5d845580ea4110ddbea630a7668b1518cbf3396d90325",
+        "55c6f385b644538fca863caf78d86fd89ad3868f0432b2f93084e10daf826a71",
     ),
     (
         "packet_transit_hash",
-        "65228e6ae18ddf6302d323b469258c5f1a7c9f5c09d827003a6cee6230d94d69",
+        "4193c7ad098049fa7ae3aa2faf19706cf02b4522c09491210f36173a3e0b4e94",
     ),
     (
         "relay_delivery_output_hash",
-        "4b61c6c04bc8c28745c91bb870af6a3e56a0cce0eaa366119227527e0452585a",
+        "6e548268df87d305590bb98e893b6326de69eda937e249decf7099d6ba617be7",
     ),
     (
         "receipt_id_for_claim",
-        "af332cfd1eef1496f3aadca1d2bae74550cf9ca2a437dc48c2dbaa9189cb58f2",
+        "250f9c8bd38ee24a1238a328aaa54e673180e16265b7d49e7065f400e49ba320",
     ),
     (
         "work_admission_hash",
-        "a30630801f3c29accdaf9ef3de50e96fd0b031f7c058c612c68d0d3be952f1f0",
+        "422028742c410603d53e13296732b471491a0ccd236b56d1419c1406dbe4a09a",
     ),
     (
         "work_receipt_hash",
-        "f402d1ca5da9b73a63167236ec8c37e369d50252dc4254ce9631702b620685df",
+        "daa829860824b389b8277b2d325e8d1c1090e7a7b740b807c16978f93607b110",
     ),
     (
         "receipt_batch_root",
-        "102819e63792c8d6380100b854ae96c2592eaea22b3fd6e4ba14c3984a921f6e",
+        "46af630d2fddfbb53aed24f86066e2d7462f22265c9de2e453a1b734283408c9",
     ),
     (
         "erasure_job_id",

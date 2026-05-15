@@ -43,11 +43,12 @@ pub use edgerun_crypto::hkdf;
 pub use edgerun_crypto::hkdf::Hkdf;
 pub use edgerun_crypto::hmac;
 pub use edgerun_crypto::p256;
-pub use edgerun_crypto::p256::ecdsa::signature::hazmat::{PrehashSigner, PrehashVerifier};
-pub use edgerun_crypto::p256::ecdsa::{Signature, SigningKey, VerifyingKey};
 pub use edgerun_crypto::sha::Digest as ShaDigest;
 pub use edgerun_crypto::sha::{Sha256, Sha384, Sha512};
-pub use edgerun_crypto::{hkdf_sha256, hmac_sha256, hmac_sha384, random_p256_signing_key};
+pub use edgerun_crypto::{
+    P256SigningKey as SigningKey, P256VerifyingKey as VerifyingKey, hkdf_sha256, hmac_sha256,
+    hmac_sha384,
+};
 
 // ---------------------------------------------------------------------------
 // Convenience wrappers — drop-in replacements for old inline implementations
@@ -235,20 +236,15 @@ pub fn verify_ecdsa_p256_raw(
     digest: &[u8; 32],
     signature_bytes: &[u8; 64],
 ) -> bool {
-    let mut vk_sec1 = [0u8; 65];
-    vk_sec1[0] = 0x04;
-    vk_sec1[1..].copy_from_slice(public_key_bytes);
-    let vk = match p256::ecdsa::VerifyingKey::from_sec1_bytes(&vk_sec1) {
-        Ok(v) => v,
-        Err(_) => return false,
-    };
-    let r_bytes: [u8; 32] = signature_bytes[..32].try_into().unwrap();
-    let s_bytes: [u8; 32] = signature_bytes[32..].try_into().unwrap();
-    let ecdsa_sig = match p256::ecdsa::Signature::from_scalars(r_bytes, s_bytes) {
-        Ok(sig) => sig,
-        Err(_) => return false,
-    };
-    vk.verify_prehash(digest, &ecdsa_sig).is_ok()
+    let mut public_key_sec1 = [0u8; 65];
+    public_key_sec1[0] = SEC1_UNCOMPRESSED_PREFIX;
+    public_key_sec1[1..].copy_from_slice(public_key_bytes);
+    edgerun_crypto::verification::p256_verify_prehash_fixed(
+        &public_key_sec1,
+        digest,
+        signature_bytes,
+    )
+    .is_ok()
 }
 
 /// Build the signature input: `sig_domain_tag || 0x00 || record_hash`.
@@ -268,10 +264,11 @@ pub fn sign_record(
     private_key: &SigningKey,
     sig_domain_tag: &str,
     record_hash: &[u8],
-) -> Result<Vec<u8>, p256::ecdsa::Error> {
+) -> edgerun_crypto::error::Result<Vec<u8>> {
     let sig_input = signature_input(sig_domain_tag, record_hash);
-    let sig: Signature = private_key.sign_prehash(&sig_input)?;
-    Ok(sig.to_bytes().to_vec())
+    private_key
+        .sign_prehash_fixed(&sig_input)
+        .map(|signature| signature.to_vec())
 }
 
 /// Verify an ECDSA P-256 signature over the signature input.
@@ -281,11 +278,8 @@ pub fn verify_record(
     record_hash: &[u8],
     signature: &[u8],
 ) -> bool {
-    let Ok(sig) = Signature::from_slice(signature) else {
-        return false;
-    };
     public_key
-        .verify_prehash(&signature_input(sig_domain_tag, record_hash), &sig)
+        .verify_prehash_fixed(&signature_input(sig_domain_tag, record_hash), signature)
         .is_ok()
 }
 
@@ -297,7 +291,7 @@ pub fn sign_canonical_record(
     private_key: &SigningKey,
     sig_domain_tag: &str,
     canonical_bytes: &[u8],
-) -> Result<Vec<u8>, p256::ecdsa::Error> {
+) -> edgerun_crypto::error::Result<Vec<u8>> {
     let hash_domain = hash_domain_for_signature_domain(sig_domain_tag).unwrap_or(sig_domain_tag);
     let record_hash = record_hash(hash_domain, canonical_bytes);
     sign_record(private_key, sig_domain_tag, &record_hash)
@@ -323,10 +317,9 @@ pub fn verify_canonical_record(
     let hash_domain = hash_domain_for_signature_domain(sig_domain_tag).unwrap_or(sig_domain_tag);
     let record_hash = record_hash(hash_domain, canonical_bytes);
     let sig_input = signature_input(sig_domain_tag, &record_hash);
-    let Ok(sig) = Signature::from_slice(signature) else {
-        return false;
-    };
-    public_key.verify_prehash(&sig_input, &sig).is_ok()
+    public_key
+        .verify_prehash_fixed(&sig_input, signature)
+        .is_ok()
 }
 
 /// Verify a signature produced by hardware signers that require 32-byte pre-hash.
@@ -346,20 +339,18 @@ pub fn verify_canonical_record_hw(
     let record_hash = record_hash(hash_domain, canonical_bytes);
     let sig_input = signature_input(sig_domain_tag, &record_hash);
     let sig_input_digest = sha256(&sig_input);
-    let Ok(sig) = Signature::from_slice(signature) else {
-        return false;
-    };
     let digest_array: [u8; 32] = match sig_input_digest.try_into() {
         Ok(d) => d,
         Err(_) => return false,
     };
-    public_key.verify_prehash(&digest_array, &sig).is_ok()
+    public_key
+        .verify_prehash_fixed(&digest_array, signature)
+        .is_ok()
 }
 
 /// Convert a verifying key to the 64-byte NodeID format (x || y without 0x04).
 pub fn verifying_key_to_node_id(vk: &VerifyingKey) -> [u8; 64] {
-    let encoded = vk.to_encoded_point(false);
-    let bytes = encoded.as_bytes();
+    let bytes = vk.to_sec1_bytes();
     let mut node_id = [0u8; 64];
     node_id.copy_from_slice(&bytes[1..65]);
     node_id
@@ -368,7 +359,7 @@ pub fn verifying_key_to_node_id(vk: &VerifyingKey) -> [u8; 64] {
 /// Convert a 64-byte NodeID (x || y) back to a VerifyingKey.
 pub fn node_id_to_verifying_key(node_id: &[u8; 64]) -> Option<VerifyingKey> {
     let mut sec1 = [0u8; 65];
-    sec1[0] = 0x04;
+    sec1[0] = SEC1_UNCOMPRESSED_PREFIX;
     sec1[1..].copy_from_slice(node_id);
     VerifyingKey::from_sec1_bytes(&sec1).ok()
 }
@@ -415,7 +406,7 @@ mod tests {
 
     fn test_signing_key() -> SigningKey {
         let bytes: [u8; 32] = [7u8; 32];
-        SigningKey::from_bytes(&bytes.into()).unwrap()
+        SigningKey::from_bytes(&bytes).unwrap()
     }
 
     #[test]
@@ -515,10 +506,7 @@ mod tests {
         let verifying = signing.verifying_key();
         let node_id = verifying_key_to_node_id(&verifying);
         let vk2 = node_id_to_verifying_key(&node_id).unwrap();
-        assert_eq!(
-            verifying.to_encoded_point(false),
-            vk2.to_encoded_point(false)
-        );
+        assert_eq!(verifying.to_sec1_bytes(), vk2.to_sec1_bytes());
     }
 
     #[test]

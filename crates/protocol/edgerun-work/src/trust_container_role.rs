@@ -3,16 +3,16 @@ use alloc::vec::Vec;
 use edgerun_crypto::Ed25519SigningKey;
 
 use crate::capability_packet::{
+    capability_envelope, verify_capability_message_payload, CapabilityEnvelope,
     CAPABILITY_CONTENT_OBJECT, CAPABILITY_OPERATION_OBJECT_GET, CAPABILITY_PACKET_INVOKE,
-    CapabilityEnvelope, capability_envelope, verify_capability_message_payload,
 };
 use crate::identity::node_identity_from_key;
 use crate::message_seal::unseal_message_from_recipient_payload;
 use crate::preimage::HashBuilder;
 use crate::protocol::*;
 use crate::roles::{
-    ROLE_STATUS_ACCEPTED, ROLE_STATUS_REJECTED, RoleContext, RoleInput, RoleOutput, WorkRole,
-    network_message_for_role,
+    network_message_for_role, RoleContext, RoleInput, RoleOutput, WorkRole, ROLE_STATUS_ACCEPTED,
+    ROLE_STATUS_REJECTED,
 };
 
 const TRUST_CONTAINER_CAPABILITY_ID_DOMAIN: &[u8] =

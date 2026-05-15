@@ -16,7 +16,6 @@ edgerun-hpack = { version = "0.1", path = "../../utility/edgerun-hpack", optiona
 edgerun-json = { version = "0.1", path = "../../utility/edgerun-json", default-features = false, optional = true }
 edgerun-url = { version = "0.1", path = "../../utility/edgerun-url", default-features = false, optional = true }
 edgerun-wire = { version = "0.1", path = "../edgerun-wire", default-features = false, optional = true }
-miniz_oxide = { version = "0.8.9", default-features = false, features = ["with-alloc"], optional = true }
 
 [features]
 default = []
@@ -41,7 +40,7 @@ ethernet-ipv4 = ["dep:edgerun-encoding"]
 goodix-fingerprint = ["dep:edgerun-encoding"]
 http = ["dep:edgerun-encoding"]
 http2-server = ["http", "dep:edgerun-hpack"]
-http-compression = ["http", "dep:edgerun-encoding", "dep:miniz_oxide"]
+http-compression = ["http", "dep:edgerun-encoding", "edgerun-encoding/compression"]
 http3 = ["http", "dep:edgerun-encoding"]
 imap = ["dep:edgerun-encoding"]
 keygen = ["sign-p256"]

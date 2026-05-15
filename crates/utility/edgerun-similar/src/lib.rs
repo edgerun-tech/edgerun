@@ -1,5 +1,13 @@
 //! Diff compatibility utilities used by EdgeRun Codex.
 
+#![no_std]
+
+extern crate alloc;
+
+use alloc::string::{String, ToString};
+use alloc::vec;
+use alloc::vec::Vec;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ChangeTag {
     Equal,

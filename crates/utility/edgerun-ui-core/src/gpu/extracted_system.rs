@@ -4,20 +4,19 @@ use super::component_inventory::{
     EXTRACTED_COMPONENT_KINDS, EXTRACTED_PATTERN_KINDS, EXTRACTED_STATE_KINDS,
 };
 use super::extracted_blocks::{EXTRACTED_BLOCK_IDS, EXTRACTED_BLOCK_KINDS};
-use super::source_captures::{UiExtractedSourceCapture, EXTRACTED_SOURCE_CAPTURES};
+use super::source_captures::{EXTRACTED_SOURCE_CAPTURES, UiExtractedSourceCapture};
 use super::style_family::EXTRACTED_STYLE_TOKEN_KINDS;
 use super::{
-    build_extracted_block, build_shadcn_component_preview,
+    EXTRACTED_BLOCKS, EXTRACTED_COMPONENTS, EXTRACTED_PATTERNS, EXTRACTED_SLOTS,
+    EXTRACTED_SOURCE_ICONS, EXTRACTED_STATES, EXTRACTED_STYLE_TOKENS, SHADCN_DEMO_CATEGORIES,
+    SHADCN_DEMO_COMPONENTS, SHADCN_DEMO_STATUSES, STYLE_FAMILY_SPECS, UiExtractedBlockId,
+    UiExtractedBlockKind, UiExtractedBlockSpec, UiExtractedComponentKind, UiExtractedComponentSpec,
+    UiExtractedIconSpec, UiExtractedPatternKind, UiExtractedPatternSpec, UiExtractedSlotSpec,
+    UiExtractedStateKind, UiExtractedStateSpec, UiExtractedStyleToken, UiExtractedStyleTokenKind,
+    UiIcon, UiIconSet, UiNode, UiRect, UiShadcnDemoCategory, UiShadcnDemoSpec, UiShadcnDemoStatus,
+    UiShadcnPortManifest, UiShadcnPortMapping, UiShadcnResolvedDemo, UiStyleFamily,
+    UiStyleFamilySpec, build_extracted_block, build_shadcn_component_preview,
     build_shadcn_component_preview_by_source_component, build_shadcn_demo_preview,
-    UiExtractedBlockId, UiExtractedBlockKind, UiExtractedBlockSpec, UiExtractedComponentKind,
-    UiExtractedComponentSpec, UiExtractedIconSpec, UiExtractedPatternKind, UiExtractedPatternSpec,
-    UiExtractedSlotSpec, UiExtractedStateKind, UiExtractedStateSpec, UiExtractedStyleToken,
-    UiExtractedStyleTokenKind, UiIcon, UiIconSet, UiNode, UiRect, UiShadcnDemoCategory,
-    UiShadcnDemoSpec, UiShadcnDemoStatus, UiShadcnPortManifest, UiShadcnPortMapping,
-    UiShadcnResolvedDemo, UiStyleFamily, UiStyleFamilySpec, EXTRACTED_BLOCKS, EXTRACTED_COMPONENTS,
-    EXTRACTED_PATTERNS, EXTRACTED_SLOTS, EXTRACTED_SOURCE_ICONS, EXTRACTED_STATES,
-    EXTRACTED_STYLE_TOKENS, SHADCN_DEMO_CATEGORIES, SHADCN_DEMO_COMPONENTS, SHADCN_DEMO_STATUSES,
-    STYLE_FAMILY_SPECS,
 };
 use super::{
     build_shadcn_component_preview_by_identifier, build_shadcn_demo_preview_by_identifier,
@@ -1256,20 +1255,26 @@ mod tests {
             "b4xFeBLg4O"
         );
         assert!(system.count_components_by_kind(UiExtractedComponentKind::EdgeRunDomain) >= 4);
-        assert!(system
-            .components_by_source_class("rounded-md")
-            .any(|component| component.name == "Network App Card"));
+        assert!(
+            system
+                .components_by_source_class("rounded-md")
+                .any(|component| component.name == "Network App Card")
+        );
         assert_eq!(
             system.find_slot("dropdown-menu-content").unwrap().kind,
             UiExtractedComponentKind::Overlay
         );
         assert!(system.count_slots_by_kind(UiExtractedComponentKind::Feedback) >= 5);
-        assert!(system
-            .slots_by_kind(UiExtractedComponentKind::Card)
-            .any(|slot| slot.slot == "card-content"));
-        assert!(system
-            .slots_by_source_class("rounded-xl")
-            .any(|slot| slot.slot == "card"));
+        assert!(
+            system
+                .slots_by_kind(UiExtractedComponentKind::Card)
+                .any(|slot| slot.slot == "card-content")
+        );
+        assert!(
+            system
+                .slots_by_source_class("rounded-xl")
+                .any(|slot| slot.slot == "card")
+        );
         assert_eq!(
             system
                 .find_source_icon_by_provider_name(UiIconSet::Lucide, "badge-check")
@@ -1281,12 +1286,16 @@ mod tests {
             system.find_source_icon("loader circle").unwrap().canonical,
             None
         );
-        assert!(system
-            .source_icons_with_canonical()
-            .any(|icon| icon.name == "search"));
-        assert!(system
-            .source_icons_for_canonical(UiIcon::ChevronRight)
-            .any(|icon| icon.lucide_name == "arrow-right"));
+        assert!(
+            system
+                .source_icons_with_canonical()
+                .any(|icon| icon.name == "search")
+        );
+        assert!(
+            system
+                .source_icons_for_canonical(UiIcon::ChevronRight)
+                .any(|icon| icon.lucide_name == "arrow-right")
+        );
         assert_eq!(
             system
                 .find_state_by_selector("focus-visible:ring-ring/50")
@@ -1299,9 +1308,11 @@ mod tests {
             "Validation"
         );
         assert!(system.count_states_by_kind(UiExtractedStateKind::Selection) >= 3);
-        assert!(system
-            .states_by_kind(UiExtractedStateKind::Disclosure)
-            .any(|state| state.name == "open"));
+        assert!(
+            system
+                .states_by_kind(UiExtractedStateKind::Disclosure)
+                .any(|state| state.name == "open")
+        );
         assert_eq!(
             system
                 .find_style_family(UiStyleFamily::Mira)
@@ -1377,28 +1388,44 @@ mod tests {
                 .label,
             "EdgeRun Domain"
         );
-        assert!(system
-            .pattern_kind_summaries()
-            .iter()
-            .any(|summary| summary.kind == UiExtractedPatternKind::Overlay && summary.count >= 2));
-        assert!(system
-            .patterns_by_kind(UiExtractedPatternKind::Overlay)
-            .any(|pattern| pattern.name == "Dialog"));
-        assert!(system
-            .patterns_using_component("Primary Button")
-            .any(|pattern| pattern.name == "Button"));
-        assert!(system
-            .patterns_using_slot("dropdown-menu-content")
-            .any(|pattern| pattern.name == "Dropdown Menu"));
-        assert!(system
-            .patterns_using_state("focus visible")
-            .any(|pattern| pattern.name == "Input Group"));
-        assert!(system
-            .patterns_using_token("success")
-            .any(|pattern| pattern.name == "Network App Card"));
-        assert!(system
-            .patterns_using_icon("x")
-            .any(|pattern| pattern.name == "Dialog"));
+        assert!(
+            system
+                .pattern_kind_summaries()
+                .iter()
+                .any(
+                    |summary| summary.kind == UiExtractedPatternKind::Overlay && summary.count >= 2
+                )
+        );
+        assert!(
+            system
+                .patterns_by_kind(UiExtractedPatternKind::Overlay)
+                .any(|pattern| pattern.name == "Dialog")
+        );
+        assert!(
+            system
+                .patterns_using_component("Primary Button")
+                .any(|pattern| pattern.name == "Button")
+        );
+        assert!(
+            system
+                .patterns_using_slot("dropdown-menu-content")
+                .any(|pattern| pattern.name == "Dropdown Menu")
+        );
+        assert!(
+            system
+                .patterns_using_state("focus visible")
+                .any(|pattern| pattern.name == "Input Group")
+        );
+        assert!(
+            system
+                .patterns_using_token("success")
+                .any(|pattern| pattern.name == "Network App Card")
+        );
+        assert!(
+            system
+                .patterns_using_icon("x")
+                .any(|pattern| pattern.name == "Dialog")
+        );
         assert!(reference_report.complete());
         assert_eq!(reference_report.total_missing(), 0);
     }
@@ -1439,9 +1466,11 @@ mod tests {
                 .preview_aspect_ratio()
                 < 1.0
         );
-        assert!(system
-            .build_block(UiExtractedBlockId::TrustActivity)
-            .is_some());
+        assert!(
+            system
+                .build_block(UiExtractedBlockId::TrustActivity)
+                .is_some()
+        );
     }
 
     #[test]
@@ -1456,9 +1485,11 @@ mod tests {
             system.count_blocks_by_kind(UiExtractedBlockKind::DomainSurface),
             3
         );
-        assert!(system
-            .blocks_by_kind(UiExtractedBlockKind::DomainSurface)
-            .any(|block| block.id == UiExtractedBlockId::NetworkApp));
+        assert!(
+            system
+                .blocks_by_kind(UiExtractedBlockKind::DomainSurface)
+                .any(|block| block.id == UiExtractedBlockId::NetworkApp)
+        );
     }
 
     #[test]
@@ -1472,9 +1503,11 @@ mod tests {
             summaries[0].count,
             system.count_components_by_kind(UiExtractedComponentKind::Shell)
         );
-        assert!(system
-            .components_by_kind(UiExtractedComponentKind::Navigation)
-            .any(|component| component.name == "Breadcrumb"));
+        assert!(
+            system
+                .components_by_kind(UiExtractedComponentKind::Navigation)
+                .any(|component| component.name == "Breadcrumb")
+        );
         assert!(summaries.iter().any(|summary| {
             summary.kind == UiExtractedComponentKind::EdgeRunDomain && summary.count >= 4
         }));
@@ -1494,9 +1527,11 @@ mod tests {
             summaries[0].count,
             system.count_style_tokens_by_kind(UiExtractedStyleTokenKind::Surface)
         );
-        assert!(system
-            .style_tokens_by_kind(UiExtractedStyleTokenKind::Text)
-            .any(|token| token.css_var == "--muted-foreground"));
+        assert!(
+            system
+                .style_tokens_by_kind(UiExtractedStyleTokenKind::Text)
+                .any(|token| token.css_var == "--muted-foreground")
+        );
     }
 
     #[test]
@@ -1510,9 +1545,11 @@ mod tests {
             summaries[0].count,
             system.count_states_by_kind(UiExtractedStateKind::Interaction)
         );
-        assert!(summaries
-            .iter()
-            .any(|summary| summary.kind == UiExtractedStateKind::Loading && summary.count == 1));
+        assert!(
+            summaries
+                .iter()
+                .any(|summary| summary.kind == UiExtractedStateKind::Loading && summary.count == 1)
+        );
     }
 
     #[test]
@@ -1535,13 +1572,18 @@ mod tests {
         assert_eq!(counts.patterns, system.pattern_count());
         assert_eq!(counts.shadcn_demos, system.shadcn_demo_count());
         assert_eq!(counts.total(), system.total_inventory_count());
-        assert!(sections
-            .iter()
-            .any(|section| section.kind == UiExtractedInventoryKind::State && section.count >= 10));
-        assert!(sections
-            .iter()
-            .any(|section| section.kind == UiExtractedInventoryKind::Pattern
-                && section.count == system.pattern_count()));
+        assert!(
+            sections
+                .iter()
+                .any(|section| section.kind == UiExtractedInventoryKind::State
+                    && section.count >= 10)
+        );
+        assert!(
+            sections
+                .iter()
+                .any(|section| section.kind == UiExtractedInventoryKind::Pattern
+                    && section.count == system.pattern_count())
+        );
         assert!(sections.iter().any(|section| section.kind
             == UiExtractedInventoryKind::ShadcnDemo
             && section.count == 57));
@@ -1611,9 +1653,11 @@ mod tests {
                 + system.count_shadcn_demos_by_status(UiShadcnDemoStatus::ExactPort)
         );
         assert_eq!(system.count_native_shadcn_demos(), 57);
-        assert!(system
-            .shadcn_demos_by_category(UiShadcnDemoCategory::Overlay)
-            .any(|demo| demo.slug == "dialog"));
+        assert!(
+            system
+                .shadcn_demos_by_category(UiShadcnDemoCategory::Overlay)
+                .any(|demo| demo.slug == "dialog")
+        );
         assert_eq!(
             system
                 .shadcn_demos_by_status(UiShadcnDemoStatus::Cataloged)
@@ -1621,31 +1665,45 @@ mod tests {
             0
         );
         assert_eq!(system.shadcn_demos_missing_native_renderer().count(), 0);
-        assert!(system
-            .shadcn_demos_by_edge_builder("button")
-            .any(|demo| demo.slug == "button"));
-        assert!(system
-            .shadcn_demos_using_slot("dialog-content")
-            .any(|demo| demo.slug == "dialog"));
-        assert!(system
-            .shadcn_demos_using_state("disabled")
-            .any(|demo| demo.slug == "button"));
+        assert!(
+            system
+                .shadcn_demos_by_edge_builder("button")
+                .any(|demo| demo.slug == "button")
+        );
+        assert!(
+            system
+                .shadcn_demos_using_slot("dialog-content")
+                .any(|demo| demo.slug == "dialog")
+        );
+        assert!(
+            system
+                .shadcn_demos_using_state("disabled")
+                .any(|demo| demo.slug == "button")
+        );
         assert!(system.build_shadcn_demo("button").is_some());
         assert!(system.build_shadcn_demo("accordion").is_some());
-        assert!(system
-            .build_shadcn_demo_by_identifier("@/components/ui/button")
-            .is_some());
+        assert!(
+            system
+                .build_shadcn_demo_by_identifier("@/components/ui/button")
+                .is_some()
+        );
         assert!(system.build_shadcn_component("button").is_some());
-        assert!(system
-            .build_shadcn_component_by_identifier("CardHeader")
-            .is_some());
-        assert!(system
-            .build_shadcn_component_by_source_component("InputGroup")
-            .is_some());
+        assert!(
+            system
+                .build_shadcn_component_by_identifier("CardHeader")
+                .is_some()
+        );
+        assert!(
+            system
+                .build_shadcn_component_by_source_component("InputGroup")
+                .is_some()
+        );
         assert!(system.build_shadcn_component("unknown-demo").is_none());
-        assert!(categories
-            .iter()
-            .any(|summary| summary.category == UiShadcnDemoCategory::Form && summary.count >= 10));
+        assert!(
+            categories.iter().any(
+                |summary| summary.category == UiShadcnDemoCategory::Form && summary.count >= 10
+            )
+        );
         assert!(statuses.iter().any(|summary| {
             summary.status == UiShadcnDemoStatus::NativePrimitive && summary.count == 0
         }));
@@ -1696,9 +1754,11 @@ mod tests {
             )
         );
         assert!(report.uncataloged_source_icons > 0);
-        assert!(system
-            .source_icons_without_canonical()
-            .any(|icon| icon.name == "loader circle"));
+        assert!(
+            system
+                .source_icons_without_canonical()
+                .any(|icon| icon.name == "loader circle")
+        );
         assert_eq!(
             work_items[0].kind,
             UiExtractedWorkItemKind::SourceCaptureCoverage

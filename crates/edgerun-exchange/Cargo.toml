@@ -13,7 +13,6 @@ edgerun-protocols = { version = "0.1", path = "../protocol/edgerun-protocols", d
 edgerun-wallet = { version = "0.1", path = "../edgerun-wallet" }
 edgerun-node = { version = "0.1", path = "../node/edgerun-node", default-features = false, features = ["client"], optional = true }
 edgerun-json = { version = "0.1", path = "../utility/edgerun-json" }
-edgerun-crypto = { version = "0.1", path = "../utility/edgerun-crypto", default-features = false }
 edgerun-log = { version = "0.1", path = "../utility/edgerun-log" }
 
 [dev-dependencies]

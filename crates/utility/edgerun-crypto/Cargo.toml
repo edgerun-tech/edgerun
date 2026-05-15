@@ -20,14 +20,12 @@ alloc = []
 oid = []
 pem = ["alloc"]
 zeroize = []
-libm = []
 i128 = []
 compiler-builtins = []
 unstable-public-internals = []
 full = [
     "aead",
     "aes",
-    "des",
     "ed25519",
     "hmac",
     "p256",
@@ -37,7 +35,6 @@ full = [
 ]
 aead = ["aes"]
 aes = []
-des = []
 ed25519 = ["curve25519", "digest", "sha2", "signature_alloc", "signature_digest"]
 hmac = []
 p256 = ["p256_arithmetic", "p256_ecdh", "p256_ecdsa", "p256_pkcs8"]
@@ -83,7 +80,6 @@ p256_sha256 = ["p256_ecdsa_digest", "p256_ecdsa_hazmat", "sha2"]
 rsa = [
     "digest",
     "i128",
-    "libm",
     "zeroize",
     "alloc",
     "oid",
@@ -108,22 +104,15 @@ rng_core_std = ["rng_core_alloc"]
 rng_core_getrandom = []
 elliptic_curve_alloc = ["zeroize"]
 elliptic_curve_arithmetic = ["elliptic_curve_group"]
-elliptic_curve_bits = ["elliptic_curve_arithmetic"]
-elliptic_curve_dev = ["elliptic_curve_arithmetic", "elliptic_curve_pem", "elliptic_curve_pkcs8"]
 elliptic_curve_ecdh = ["elliptic_curve_arithmetic", "digest"]
 elliptic_curve_group = []
 elliptic_curve_hash2curve = ["elliptic_curve_arithmetic", "digest"]
 elliptic_curve_hazmat = []
-elliptic_curve_jwk = ["elliptic_curve_alloc", "zeroize"]
-elliptic_curve_pem = ["elliptic_curve_alloc", "elliptic_curve_arithmetic", "elliptic_curve_pkcs8", "pem"]
 elliptic_curve_pkcs8 = ["elliptic_curve_sec1"]
 elliptic_curve_sec1 = []
-elliptic_curve_serde = ["elliptic_curve_alloc", "elliptic_curve_pkcs8"]
 elliptic_curve_std = ["elliptic_curve_alloc", "std", "rng_core_std"]
 elliptic_curve_voprf = []
 primeorder_alloc = ["elliptic_curve_alloc"]
-primeorder_dev = []
-primeorder_serde = ["elliptic_curve_serde"]
 primeorder_std = ["primeorder_alloc", "elliptic_curve_std"]
 sha1 = []
 x25519 = ["curve25519"]

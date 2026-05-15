@@ -7,11 +7,11 @@ use codex_protocol::protocol::SandboxPolicy;
 use codex_protocol::protocol::ThreadSource;
 use core_test_support::PathBufExt;
 use core_test_support::PathExt;
-use pretty_assertions::assert_eq;
 use edgerun_json::Value;
+use edgerun_tokio::process::Command;
+use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use tempfile::TempDir;
-use edgerun_tokio::process::Command;
 
 fn test_mcp_turn_metadata_context() -> McpTurnMetadataContext<'static> {
     McpTurnMetadataContext {
@@ -64,7 +64,7 @@ async fn build_turn_metadata_header_includes_has_changes_for_clean_repo() {
         .expect("header");
     assert!(header.is_ascii());
     assert!(!header.contains("東京"));
-    let parsed: Value = edgerun_json::from_serde_str(&header).expect("valid json");
+    let parsed: Value = edgerun_json::from_str(&header).expect("valid json");
     let expected_repo_path = repo_path.to_string_lossy().into_owned();
     let actual_repo_path = parsed
         .get("workspaces")
@@ -104,7 +104,7 @@ fn turn_metadata_state_uses_platform_sandbox_tag() {
     );
 
     let header = state.current_header_value().expect("header");
-    let json: Value = edgerun_json::from_serde_str(&header).expect("json");
+    let json: Value = edgerun_json::from_str(&header).expect("json");
     let sandbox_name = json.get("sandbox").and_then(Value::as_str);
     let session_id = json.get("session_id").and_then(Value::as_str);
     let thread_id = json.get("thread_id").and_then(Value::as_str);
@@ -135,7 +135,7 @@ fn turn_metadata_state_uses_explicit_subagent_thread_source() {
     );
 
     let header = state.current_header_value().expect("header");
-    let json: Value = edgerun_json::from_serde_str(&header).expect("json");
+    let json: Value = edgerun_json::from_str(&header).expect("json");
 
     assert_eq!(json["thread_source"].as_str(), Some("subagent"));
     assert!(json.get("session_source").is_none());
@@ -160,7 +160,7 @@ fn turn_metadata_state_includes_turn_started_at_unix_ms_after_start() {
     state.set_turn_started_at_unix_ms(/*turn_started_at_unix_ms*/ 1_700_000_000_123);
 
     let header = state.current_header_value().expect("header");
-    let json: Value = edgerun_json::from_serde_str(&header).expect("json");
+    let json: Value = edgerun_json::from_str(&header).expect("json");
 
     assert_eq!(
         json["turn_started_at_unix_ms"].as_i64(),
@@ -186,7 +186,7 @@ fn turn_metadata_state_includes_model_and_reasoning_effort_only_in_request_meta(
     );
 
     let header = state.current_header_value().expect("header");
-    let header_json: Value = edgerun_json::from_serde_str(&header).expect("json");
+    let header_json: Value = edgerun_json::from_str(&header).expect("json");
     assert!(header_json.get("model").is_none());
     assert!(header_json.get("reasoning_effort").is_none());
 
@@ -235,7 +235,7 @@ fn turn_metadata_state_ignores_client_turn_started_at_unix_ms_before_start() {
     )]));
 
     let header = state.current_header_value().expect("header");
-    let json: Value = edgerun_json::from_serde_str(&header).expect("json");
+    let json: Value = edgerun_json::from_str(&header).expect("json");
 
     assert!(json.get("turn_started_at_unix_ms").is_none());
 }
@@ -277,7 +277,7 @@ fn turn_metadata_state_merges_client_metadata_without_replacing_reserved_fields(
     let header = state.current_header_value().expect("header");
     assert!(header.is_ascii());
     assert!(!header.contains("東京"));
-    let json: Value = edgerun_json::from_serde_str(&header).expect("json");
+    let json: Value = edgerun_json::from_str(&header).expect("json");
 
     assert_eq!(json["fiber_run_id"].as_str(), Some("fiber-123"));
     assert_eq!(json["origin"].as_str(), Some("東京"));

@@ -1,6 +1,6 @@
 use alloc::vec::Vec;
 
-use crate::channel::{CHANNEL_KIND_WEBSOCKET, ChannelEnvelope, RouteBinding};
+use crate::channel::{ChannelEnvelope, RouteBinding, CHANNEL_KIND_WEBSOCKET};
 use crate::channel_order::{ChannelOrderBook, OrderedChannelEnvelope};
 use crate::frame_codec::channel_envelope_bytes;
 use crate::protocol::{Hash, NodeId, WorkPacket};

@@ -102,7 +102,7 @@ async fn tool_call_output_configured_limit_chars_type() -> Result<()> {
 
     // Expect plain text (not JSON) containing the entire shell output.
     assert!(
-        edgerun_json::from_serde_str::<Value>(&output).is_err(),
+        edgerun_json::from_str(&output).is_err(),
         "expected truncated shell output to be plain text"
     );
 
@@ -183,7 +183,7 @@ async fn tool_call_output_exceeds_limit_truncated_chars_limit() -> Result<()> {
 
     // Expect plain text (not JSON) containing the entire shell output.
     assert!(
-        edgerun_json::from_serde_str::<Value>(&output).is_err(),
+        edgerun_json::from_str(&output).is_err(),
         "expected truncated shell output to be plain text"
     );
 
@@ -263,7 +263,7 @@ async fn tool_call_output_exceeds_limit_truncated_for_model() -> Result<()> {
 
     // Expect plain text (not JSON) containing the entire shell output.
     assert!(
-        edgerun_json::from_serde_str::<Value>(&output).is_err(),
+        edgerun_json::from_str(&output).is_err(),
         "expected truncated shell output to be plain text"
     );
     let truncated_pattern = r#"(?s)^Exit code: 0

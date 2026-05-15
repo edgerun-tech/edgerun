@@ -1853,7 +1853,7 @@ async fn remote_compact_persists_replacement_history_in_rollout() -> Result<()> 
         .map(str::trim)
         .filter(|l| !l.is_empty())
     {
-        let Ok(entry) = edgerun_json::from_serde_str::<RolloutLine>(line) else {
+        let Ok(entry) = edgerun_json::from_json_str::<RolloutLine>(line) else {
             continue;
         };
         if let RolloutItem::Compacted(compacted) = entry.item
@@ -2731,10 +2731,7 @@ async fn snapshot_request_shape_remote_pre_turn_compaction_including_incoming_us
             codex
                 .submit(Op::OverrideTurnContext {
                     cwd: Some(PathBuf::from(PRETURN_CONTEXT_DIFF_CWD)),
-                    approval_policy: None,
                     approvals_reviewer: None,
-                    sandbox_policy: None,
-                    permission_profile: None,
                     windows_sandbox_level: None,
                     model: None,
                     effort: None,
@@ -2847,10 +2844,7 @@ async fn snapshot_request_shape_remote_pre_turn_compaction_strips_incoming_model
     codex
         .submit(Op::OverrideTurnContext {
             cwd: None,
-            approval_policy: None,
             approvals_reviewer: None,
-            sandbox_policy: None,
-            permission_profile: None,
             windows_sandbox_level: None,
             model: Some(next_model.to_string()),
             effort: None,

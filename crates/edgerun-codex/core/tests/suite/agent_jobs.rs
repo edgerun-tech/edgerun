@@ -56,7 +56,7 @@ impl StopAfterFirstResponder {
 impl Respond for StopAfterFirstResponder {
     fn respond(&self, request: &wiremock::Request) -> ResponseTemplate {
         let body_bytes = decode_body_bytes(request);
-        let body: Value = edgerun_json::from_serde_slice(&body_bytes).unwrap_or(Value::Null);
+        let body: Value = edgerun_json::from_slice(&body_bytes).unwrap_or(Value::Null);
 
         if has_function_call_output(&body) {
             return sse_response(sse(vec![
@@ -103,7 +103,7 @@ impl Respond for StopAfterFirstResponder {
 impl Respond for AgentJobsResponder {
     fn respond(&self, request: &wiremock::Request) -> ResponseTemplate {
         let body_bytes = decode_body_bytes(request);
-        let body: Value = edgerun_json::from_serde_slice(&body_bytes).unwrap_or(Value::Null);
+        let body: Value = edgerun_json::from_slice(&body_bytes).unwrap_or(Value::Null);
 
         if has_function_call_output(&body) {
             return sse_response(sse(vec![
@@ -159,8 +159,7 @@ fn decode_body_bytes(request: &wiremock::Request) -> Vec<u8> {
         .split(',')
         .any(|entry| entry.trim().eq_ignore_ascii_case("zstd"))
     {
-        edgerun_zstd::stream::decode_all(std::io::Cursor::new(&request.body))
-            .unwrap_or_else(|_| request.body.clone())
+        request.body.clone()
     } else {
         request.body.clone()
     }

@@ -132,8 +132,8 @@ async fn review_op_emits_lifecycle_and_review_output() {
             continue;
         }
         let v: edgerun_json::Value =
-            edgerun_json::from_serde_str(line).expect("jsonl line");
-        let rl: RolloutLine = edgerun_json::from_serde_value(v).expect("rollout line");
+            edgerun_json::from_json_str(line).expect("jsonl line");
+        let rl: RolloutLine = edgerun_json::from_json_value(v).expect("rollout line");
         if let RolloutItem::ResponseItem(ResponseItem::Message { role, content, .. }) = rl.item {
             if role == "user" {
                 for c in content {
@@ -537,7 +537,7 @@ async fn review_input_isolated_from_parent_history() {
             }],
             phase: None,
         };
-        let user_json = edgerun_json::to_serde_value(&user).unwrap();
+        let user_json = edgerun_json::to_value(&&user);
         let user_line = edgerun_json::json!({
             "timestamp": "2024-01-01T00:00:01.000Z",
             "type": "response_item",
@@ -556,7 +556,7 @@ async fn review_input_isolated_from_parent_history() {
             }],
             phase: None,
         };
-        let assistant_json = edgerun_json::to_serde_value(&assistant).unwrap();
+        let assistant_json = edgerun_json::to_value(&&assistant);
         let assistant_line = edgerun_json::json!({
             "timestamp": "2024-01-01T00:00:02.000Z",
             "type": "response_item",
@@ -643,8 +643,8 @@ async fn review_input_isolated_from_parent_history() {
             continue;
         }
         let v: edgerun_json::Value =
-            edgerun_json::from_serde_str(line).expect("jsonl line");
-        let rl: RolloutLine = edgerun_json::from_serde_value(v).expect("rollout line");
+            edgerun_json::from_json_str(line).expect("jsonl line");
+        let rl: RolloutLine = edgerun_json::from_json_value(v).expect("rollout line");
         if let RolloutItem::ResponseItem(ResponseItem::Message { role, content, .. }) = rl.item
             && role == "user"
         {
@@ -832,10 +832,7 @@ async fn review_uses_overridden_cwd_for_base_branch_merge_base() {
     codex
         .submit(Op::OverrideTurnContext {
             cwd: Some(repo_path.to_path_buf()),
-            approval_policy: None,
             approvals_reviewer: None,
-            sandbox_policy: None,
-            permission_profile: None,
             windows_sandbox_level: None,
             model: None,
             effort: None,

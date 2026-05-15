@@ -1,5 +1,6 @@
 use super::*;
 use codex_app_server_protocol::AppInfo;
+use edgerun_json::ToJson;
 use edgerun_json::json;
 use pretty_assertions::assert_eq;
 
@@ -7,8 +8,8 @@ use pretty_assertions::assert_eq;
 fn discoverable_tool_enums_use_expected_wire_names() {
     assert_eq!(
         json!({
-            "tool_type": DiscoverableToolType::Connector,
-            "action_type": DiscoverableToolAction::Install,
+            "tool_type": DiscoverableToolType::Connector.to_json(),
+            "action_type": DiscoverableToolAction::Install.to_json(),
         }),
         json!({
             "tool_type": "connector",

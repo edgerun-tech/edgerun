@@ -8,13 +8,12 @@ use crate::compat::absolute_path::AbsolutePathBuf;
 use crate::compat::absolute_path::canonicalize_preserving_symlinks;
 use edgerun_json::FromJson;
 use edgerun_json::JsonValueError;
+use edgerun_json::Map;
+use edgerun_json::ToJson;
 use edgerun_json::Value;
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
 use edgerun_strum_macros::Display;
 use schemars::JsonSchema;
 use tracing::error;
-use ts_rs::TS;
 
 use crate::protocol::NetworkAccess;
 use crate::protocol::SandboxPolicy;
@@ -190,10 +189,8 @@ pub fn forbidden_agent_metadata_write(
     None
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Display, Default, JsonSchema, TS,
-)]
-#[serde(rename_all = "kebab-case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Display, Default, JsonSchema, edgerun_json::ToJson)]
+#[schemars(rename_all = "kebab-case")]
 #[strum(serialize_all = "kebab-case")]
 pub enum NetworkSandboxPolicy {
     #[default]
@@ -224,22 +221,8 @@ impl FromJson for NetworkSandboxPolicy {
 /// When two equally specific entries target the same path, we compare these by
 /// conflict precedence rather than by capability breadth: `none` beats
 /// `write`, and `write` beats `read`.
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    Hash,
-    PartialEq,
-    Eq,
-    PartialOrd,
-    Ord,
-    Serialize,
-    Deserialize,
-    Display,
-    JsonSchema,
-    TS,
-)]
-#[serde(rename_all = "lowercase")]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, PartialOrd, Ord, Display, JsonSchema)]
+#[schemars(rename_all = "lowercase")]
 #[strum(serialize_all = "lowercase")]
 pub enum FileSystemAccessMode {
     Read,
@@ -257,6 +240,17 @@ impl FileSystemAccessMode {
     }
 }
 
+impl ToJson for FileSystemAccessMode {
+    fn to_json(&self) -> Value {
+        match self {
+            Self::Read => "read",
+            Self::Write => "write",
+            Self::None => "none",
+        }
+        .to_json()
+    }
+}
+
 impl FromJson for FileSystemAccessMode {
     fn from_json(value: Value) -> Result<Self, JsonValueError> {
         match String::from_json(value)?.as_str() {
@@ -270,16 +264,14 @@ impl FromJson for FileSystemAccessMode {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, TS)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-#[ts(tag = "kind")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, JsonSchema)]
+#[schemars(tag = "kind", rename_all = "snake_case")]
 pub enum FileSystemSpecialPath {
     Root,
     Minimal,
-    #[serde(alias = "current_working_directory")]
+    #[schemars(alias = "current_working_directory")]
     ProjectRoots {
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         subpath: Option<PathBuf>,
     },
     Tmpdir,
@@ -294,8 +286,7 @@ pub enum FileSystemSpecialPath {
     /// without rejecting config authored by a newer release.
     Unknown {
         path: String,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        #[ts(optional)]
+        #[schemars(default, skip_serializing_if = "Option::is_none")]
         subpath: Option<PathBuf>,
     },
 }
@@ -338,16 +329,48 @@ impl FromJson for FileSystemSpecialPath {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, TS)]
+impl ToJson for FileSystemSpecialPath {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        match self {
+            Self::Root => {
+                object.push_field("kind", "root");
+            }
+            Self::Minimal => {
+                object.push_field("kind", "minimal");
+            }
+            Self::ProjectRoots { subpath } => {
+                object.push_field("kind", "project_roots");
+                if let Some(subpath) = subpath {
+                    object.push_field("subpath", subpath.to_string_lossy().into_owned());
+                }
+            }
+            Self::Tmpdir => {
+                object.push_field("kind", "tmpdir");
+            }
+            Self::SlashTmp => {
+                object.push_field("kind", "slash_tmp");
+            }
+            Self::Unknown { path, subpath } => {
+                object.push_field("kind", "unknown");
+                object.push_field("path", path);
+                if let Some(subpath) = subpath {
+                    object.push_field("subpath", subpath.to_string_lossy().into_owned());
+                }
+            }
+        }
+        Value::Object(object)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, JsonSchema)]
 pub struct FileSystemSandboxEntry {
     pub path: FileSystemPath,
     pub access: FileSystemAccessMode,
 }
 
-#[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Display, Default, JsonSchema, TS,
-)]
-#[serde(rename_all = "kebab-case")]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Display, Default, JsonSchema)]
+#[schemars(rename_all = "kebab-case")]
 #[strum(serialize_all = "kebab-case")]
 pub enum FileSystemSandboxKind {
     #[default]
@@ -369,13 +392,23 @@ impl FromJson for FileSystemSandboxKind {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, TS)]
+impl ToJson for FileSystemSandboxKind {
+    fn to_json(&self) -> Value {
+        match self {
+            Self::Restricted => "restricted",
+            Self::Unrestricted => "unrestricted",
+            Self::ExternalSandbox => "external-sandbox",
+        }
+        .to_json()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, JsonSchema)]
 pub struct FileSystemSandboxPolicy {
     pub kind: FileSystemSandboxKind,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    #[ts(optional)]
+    #[schemars(default, skip_serializing_if = "Option::is_none")]
     pub glob_scan_max_depth: Option<usize>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[schemars(default, skip_serializing_if = "Vec::is_empty")]
     pub entries: Vec<FileSystemSandboxEntry>,
 }
 
@@ -389,6 +422,15 @@ impl FromJson for FileSystemSandboxEntry {
     }
 }
 
+impl ToJson for FileSystemSandboxEntry {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        object.push_field("path", self.path.to_json());
+        object.push_field("access", self.access.to_json());
+        Value::Object(object)
+    }
+}
+
 impl FromJson for FileSystemSandboxPolicy {
     fn from_json(value: Value) -> Result<Self, JsonValueError> {
         let mut object = value.into_object("FileSystemSandboxPolicy")?;
@@ -397,6 +439,20 @@ impl FromJson for FileSystemSandboxPolicy {
             glob_scan_max_depth: object.take_optional("glob_scan_max_depth")?,
             entries: object.take_optional("entries")?.unwrap_or_default(),
         })
+    }
+}
+
+impl ToJson for FileSystemSandboxPolicy {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        object.push_field("kind", self.kind.to_json());
+        if let Some(depth) = self.glob_scan_max_depth {
+            object.push_field("glob_scan_max_depth", depth);
+        }
+        if !self.entries.is_empty() {
+            object.push_field("entries", self.entries.to_json());
+        }
+        Value::Object(object)
     }
 }
 
@@ -506,9 +562,8 @@ impl ReadDenyMatcher {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema, TS)]
-#[serde(tag = "type", rename_all = "snake_case")]
-#[ts(tag = "type")]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, JsonSchema)]
+#[schemars(tag = "type", rename_all = "snake_case")]
 pub enum FileSystemPath {
     Path {
         path: AbsolutePathBuf,
@@ -541,6 +596,27 @@ impl FromJson for FileSystemPath {
                 "unknown filesystem path `{other}`"
             ))),
         }
+    }
+}
+
+impl ToJson for FileSystemPath {
+    fn to_json(&self) -> Value {
+        let mut object = Map::new();
+        match self {
+            Self::Path { path } => {
+                object.push_field("type", "path");
+                object.push_field("path", path.to_json());
+            }
+            Self::GlobPattern { pattern } => {
+                object.push_field("type", "glob_pattern");
+                object.push_field("pattern", pattern);
+            }
+            Self::Special { value } => {
+                object.push_field("type", "special");
+                object.push_field("value", value.to_json());
+            }
+        }
+        Value::Object(object)
     }
 }
 
@@ -771,10 +847,16 @@ impl FileSystemSandboxPolicy {
     pub fn from_legacy_sandbox_policy_for_cwd(sandbox_policy: &SandboxPolicy, cwd: &Path) -> Self {
         let mut file_system_policy = Self::from(sandbox_policy);
         if let SandboxPolicy::WorkspaceWrite { writable_roots, .. } = sandbox_policy {
-            if let Ok(cwd_root) = AbsolutePathBuf::from_absolute_path(cwd) {
-                for protected_path in default_read_only_subpaths_for_writable_root(
-                    &cwd_root, /*protect_missing_dot_codex*/ true,
-                ) {
+            let cwd_root = if cwd.is_absolute() {
+                AbsolutePathBuf::from_absolute_path(cwd)
+            } else {
+                std::env::current_dir()
+                    .map(|current_dir| current_dir.join(cwd))
+                    .and_then(AbsolutePathBuf::from_absolute_path)
+            };
+            if let Ok(cwd_root) = cwd_root {
+                for protected_path in default_read_only_subpaths_for_writable_root(&cwd_root, true)
+                {
                     append_default_read_only_path_if_no_explicit_rule(
                         &mut file_system_policy.entries,
                         protected_path,
@@ -1316,7 +1398,7 @@ impl FileSystemSandboxPolicy {
     }
 
     fn resolved_entries_with_cwd(&self, cwd: &Path) -> Vec<ResolvedFileSystemEntry> {
-        let cwd_absolute = AbsolutePathBuf::from_absolute_path(cwd).ok();
+        let cwd_absolute = absolute_cwd(cwd);
         self.entries
             .iter()
             .filter_map(|entry| {
@@ -1407,7 +1489,15 @@ fn resolve_candidate_path(path: &Path, cwd: &Path) -> Option<AbsolutePathBuf> {
     if path.is_absolute() {
         AbsolutePathBuf::from_absolute_path(path).ok()
     } else {
-        Some(AbsolutePathBuf::from_absolute_path(cwd).ok()?.join(path))
+        Some(absolute_cwd(cwd)?.join(path))
+    }
+}
+
+fn absolute_cwd(cwd: &Path) -> Option<AbsolutePathBuf> {
+    if cwd.is_absolute() {
+        AbsolutePathBuf::from_absolute_path(cwd).ok()
+    } else {
+        AbsolutePathBuf::from_absolute_path(std::env::current_dir().ok()?.join(cwd)).ok()
     }
 }
 
@@ -1896,9 +1986,9 @@ fn is_git_pointer_file(path: &AbsolutePathBuf) -> bool {
 fn resolve_gitdir_from_file(dot_git: &AbsolutePathBuf) -> Option<AbsolutePathBuf> {
     let contents = match std::fs::read_to_string(dot_git.as_path()) {
         Ok(contents) => contents,
-        Err(err) => {
+        Err(_err) => {
             error!(
-                "Failed to read {path} for gitdir pointer: {err}",
+                "Failed to read {path} for gitdir pointer: {_err}",
                 path = dot_git.as_path().display()
             );
             return None;
@@ -2089,7 +2179,7 @@ mod tests {
             FileSystemSpecialPath::project_roots(/*subpath*/ None)
         );
         assert_eq!(
-            edgerun_json::to_value(&special_path)?,
+            edgerun_json::to_value(&special_path),
             edgerun_json::json!({
                 "kind": "project_roots",
             })

@@ -74,9 +74,7 @@ mod tests {
     use codex_client::Response;
     use codex_client::StreamResponse;
     use codex_client::TransportError;
-    use edgerun_async_trait::async_trait;
     use edgerun_http::HeaderMap;
-    use edgerun_http::Method;
     use edgerun_http::StatusCode;
     use edgerun_json::json;
     use pretty_assertions::assert_eq;
@@ -87,14 +85,39 @@ mod tests {
     #[derive(Clone, Default)]
     struct DummyTransport;
 
-    #[async_trait]
     impl HttpTransport for DummyTransport {
-        async fn execute(&self, _req: Request) -> Result<Response, TransportError> {
-            Err(TransportError::Build("execute should not run".to_string()))
+        fn execute<'async_trait>(
+            &'async_trait self,
+            _req: Request,
+        ) -> core::pin::Pin<
+            Box<
+                dyn core::future::Future<Output = Result<Response, TransportError>>
+                    + Send
+                    + 'async_trait,
+            >,
+        >
+        where
+            Self: 'async_trait,
+        {
+            Box::pin(
+                async move { Err(TransportError::Build("execute should not run".to_string())) },
+            )
         }
 
-        async fn stream(&self, _req: Request) -> Result<StreamResponse, TransportError> {
-            Err(TransportError::Build("stream should not run".to_string()))
+        fn stream<'async_trait>(
+            &'async_trait self,
+            _req: Request,
+        ) -> core::pin::Pin<
+            Box<
+                dyn core::future::Future<Output = Result<StreamResponse, TransportError>>
+                    + Send
+                    + 'async_trait,
+            >,
+        >
+        where
+            Self: 'async_trait,
+        {
+            Box::pin(async move { Err(TransportError::Build("stream should not run".to_string())) })
         }
     }
 
@@ -120,19 +143,44 @@ mod tests {
         }
     }
 
-    #[async_trait]
     impl HttpTransport for CapturingTransport {
-        async fn execute(&self, req: Request) -> Result<Response, TransportError> {
-            *self.last_request.lock().expect("lock request store") = Some(req);
-            Ok(Response {
-                status: StatusCode::OK,
-                headers: HeaderMap::new(),
-                body: self.response_body.as_ref().clone().into(),
+        fn execute<'async_trait>(
+            &'async_trait self,
+            req: Request,
+        ) -> core::pin::Pin<
+            Box<
+                dyn core::future::Future<Output = Result<Response, TransportError>>
+                    + Send
+                    + 'async_trait,
+            >,
+        >
+        where
+            Self: 'async_trait,
+        {
+            Box::pin(async move {
+                *self.last_request.lock().expect("lock request store") = Some(req);
+                Ok(Response {
+                    status: StatusCode::OK,
+                    headers: HeaderMap::new(),
+                    body: self.response_body.as_ref().clone().into(),
+                })
             })
         }
 
-        async fn stream(&self, _req: Request) -> Result<StreamResponse, TransportError> {
-            Err(TransportError::Build("stream should not run".to_string()))
+        fn stream<'async_trait>(
+            &'async_trait self,
+            _req: Request,
+        ) -> core::pin::Pin<
+            Box<
+                dyn core::future::Future<Output = Result<StreamResponse, TransportError>>
+                    + Send
+                    + 'async_trait,
+            >,
+        >
+        where
+            Self: 'async_trait,
+        {
+            Box::pin(async move { Err(TransportError::Build("stream should not run".to_string())) })
         }
     }
 

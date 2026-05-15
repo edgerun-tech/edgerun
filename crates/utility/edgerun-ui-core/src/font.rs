@@ -134,36 +134,70 @@ impl<'a> Painter<'a> {
 pub fn find_best_ui_font() -> Option<PathBuf> {
     if let Ok(path) = std::env::var("EDGE_UI_FONT") {
         let p = PathBuf::from(path);
-        if p.exists() {
+        if p.exists() && is_usable_ui_font(&p) {
             return Some(p);
         }
     }
 
     let candidates = [
         // Arch/CachyOS common paths.
-        "/usr/share/fonts/Inter/Inter.ttc",
         "/usr/share/fonts/Inter/Inter-Regular.otf",
         "/usr/share/fonts/inter/Inter-Regular.otf",
         "/usr/share/fonts/inter/Inter-Regular.ttf",
         "/usr/share/fonts/TTF/Inter-Regular.ttf",
         "/usr/share/fonts/TTF/InterVariable.ttf",
         "/usr/share/fonts/OTF/Inter-Regular.otf",
+        "/usr/share/fonts/Adwaita/AdwaitaSans-Regular.ttf",
+        "/usr/share/fonts/TTF/OpenSans-Regular.ttf",
+        "/usr/share/fonts/TTF/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/TTF/JetBrainsMono-Regular.ttf",
         "/usr/share/fonts/TTF/JetBrainsMonoNerdFont-Regular.ttf",
         "/usr/share/fonts/TTF/JetBrainsMonoNLNerdFont-Regular.ttf",
         "/usr/share/fonts/TTF/NotoSans-Regular.ttf",
         "/usr/share/fonts/noto/NotoSans-Regular.ttf",
         "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
-        "/usr/share/fonts/TTF/DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        // Collections parse inconsistently across font rasterizers; use them only
+        // after known single-face fonts fail validation.
+        "/usr/share/fonts/Inter/Inter.ttc",
     ];
 
     for path in candidates {
         let p = Path::new(path);
-        if p.exists() {
+        if p.exists() && is_usable_ui_font(p) {
             return Some(p.to_path_buf());
         }
     }
 
     None
+}
+
+fn is_usable_ui_font(path: &Path) -> bool {
+    let Ok(bytes) = fs::read(path) else {
+        return false;
+    };
+    let Ok(font) = fontdue::Font::from_bytes(bytes, fontdue::FontSettings::default()) else {
+        return false;
+    };
+
+    let samples = ['A', 'e', '0'];
+    let mut signatures = Vec::with_capacity(samples.len());
+    for ch in samples {
+        let (metrics, bitmap) = font.rasterize(ch, 18.0);
+        if metrics.width == 0 || metrics.height == 0 || bitmap.iter().all(|alpha| *alpha == 0) {
+            return false;
+        }
+        signatures.push(glyph_signature(metrics.width, metrics.height, &bitmap));
+    }
+
+    signatures.windows(2).any(|pair| pair[0] != pair[1])
+}
+
+fn glyph_signature(width: usize, height: usize, bitmap: &[u8]) -> (usize, usize, u64) {
+    let mut hash = 0xcbf2_9ce4_8422_2325u64;
+    for alpha in bitmap {
+        hash ^= u64::from(*alpha);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    (width, height, hash)
 }

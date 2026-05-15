@@ -1,7 +1,4 @@
-use edgerun_serde::Deserialize;
-use edgerun_serde::Serialize;
 use schemars::JsonSchema;
-use ts_rs::TS;
 
 use edgerun_json::FromJson;
 use edgerun_json::JsonValue;
@@ -11,9 +8,8 @@ use edgerun_json::ToJson;
 use crate::auth::KnownPlan;
 use crate::auth::PlanType as AuthPlanType;
 
-#[derive(Serialize, Deserialize, Copy, Clone, Debug, PartialEq, Eq, JsonSchema, TS, Default)]
-#[serde(rename_all = "lowercase")]
-#[ts(rename_all = "lowercase")]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, JsonSchema, Default)]
+#[schemars(rename_all = "lowercase")]
 pub enum PlanType {
     #[default]
     Free,
@@ -22,16 +18,14 @@ pub enum PlanType {
     Pro,
     ProLite,
     Team,
-    #[serde(rename = "self_serve_business_usage_based")]
-    #[ts(rename = "self_serve_business_usage_based")]
+    #[schemars(rename = "self_serve_business_usage_based")]
     SelfServeBusinessUsageBased,
     Business,
-    #[serde(rename = "enterprise_cbp_usage_based")]
-    #[ts(rename = "enterprise_cbp_usage_based")]
+    #[schemars(rename = "enterprise_cbp_usage_based")]
     EnterpriseCbpUsageBased,
     Enterprise,
     Edu,
-    #[serde(other)]
+    #[schemars(other)]
     Unknown,
 }
 
@@ -144,30 +138,31 @@ mod tests {
     #[test]
     fn usage_based_plan_types_use_expected_wire_names() {
         assert_eq!(
-            edgerun_json::to_string(&PlanType::SelfServeBusinessUsageBased)
+            edgerun_json::to_json_string(&PlanType::SelfServeBusinessUsageBased)
                 .expect("self-serve business usage based should serialize"),
             "\"self_serve_business_usage_based\""
         );
         assert_eq!(
-            edgerun_json::to_string(&PlanType::EnterpriseCbpUsageBased)
+            edgerun_json::to_json_string(&PlanType::EnterpriseCbpUsageBased)
                 .expect("enterprise cbp usage based should serialize"),
             "\"enterprise_cbp_usage_based\""
         );
         assert_eq!(
-            edgerun_json::to_string(&PlanType::ProLite).expect("prolite should serialize"),
+            edgerun_json::to_json_string(&PlanType::ProLite).expect("prolite should serialize"),
             "\"prolite\""
         );
         assert_eq!(
-            edgerun_json::from_str::<PlanType>("\"self_serve_business_usage_based\"")
+            edgerun_json::from_json_str::<PlanType>("\"self_serve_business_usage_based\"")
                 .expect("self-serve business usage based should deserialize"),
             PlanType::SelfServeBusinessUsageBased
         );
         assert_eq!(
-            edgerun_json::from_str::<PlanType>("\"prolite\"").expect("prolite should deserialize"),
+            edgerun_json::from_json_str::<PlanType>("\"prolite\"")
+                .expect("prolite should deserialize"),
             PlanType::ProLite
         );
         assert_eq!(
-            edgerun_json::from_str::<PlanType>("\"enterprise_cbp_usage_based\"")
+            edgerun_json::from_json_str::<PlanType>("\"enterprise_cbp_usage_based\"")
                 .expect("enterprise cbp usage based should deserialize"),
             PlanType::EnterpriseCbpUsageBased
         );
